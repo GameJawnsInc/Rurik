@@ -127,8 +127,9 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 10,
-              "ten maps load", f"{world.census().get('map')}")
+    LEDGER.ok(world.census().get("map", 0) == 11,
+              "eleven maps load (map.280, the Isle, landed 2026-08-16)",
+              f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
               "every table has at least one row", str(world.census()))
@@ -182,7 +183,11 @@ def main():
     # 144 is rung E1d's row (FINDINGS 31): the portal test done legally, which
     # needs a props chunk and therefore a row whose reservation holds one. It
     # points at MFT row 26209 in the C2 archive copies only.
-    ADDED = {143, 144}
+    # 280 is the Isle of the Nameless (studies/isle/PLAN.md rung 5, 2026-08-16):
+    # file id 0x287B3 = 165811 binds MFT row 21641 in all five vault/run copies;
+    # its spawn is OURS (mesh-centre probe, exactly-1 trapezoid on plane 0) and
+    # the retail arrival point replaces it after rung 6's capture.
+    ADDED = {143, 144, 280}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")

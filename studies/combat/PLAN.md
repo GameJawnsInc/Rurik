@@ -249,10 +249,14 @@ unrecorded); monster energy 0 observed; monster skill bars STRUCTURALLY
 UNREACHABLE — ArenaNet never sends them (0 of 11 `0x00DA` name a hostile): bars are
 infer-from-casts forever.
 
-**F9. Projectiles — `0x00A4` has two unreconciled readings. CONTESTED:** GWCA's
-AGENT_PROJECTILE_LAUNCHED (nobody sends it) vs monsterai's positional-oracle reading
-(13 live instances, Vec2 = target's world position). The studies never cross-checked.
-IN-CORPUS (13 samples) for whoever reconciles them.
+**F9. Projectiles — `0x00A4` has two unreconciled readings. ~~CONTESTED~~ RESOLVED
+2026-08-16 (`studies/isle/FINDINGS.md` B5):** the two readings were halves of one
+message. `v[1]` = the shooter, `v[2]` = the target's position at the shot, `v[4]` as
+f32 = **flight time in seconds** — predicts the subsequent damage arrival to mean
+|err| 9.3 ms across all 13 samples. Projectile speed is per-weapon/creature (the one
+NPC shot: 706.2 u / 0.5885 s = 1200.0 u/s exactly). `v[5]` as a skill id is REFUTED;
+`v[7]` (0 wand-session, 1 bow-session) stays CONTESTED between weapon-class flag and
+per-session constant — one Isle melee comparison shot discriminates.
 
 **F10. Unsynchronized shared combat state across the two live threads.** No lock, no
 concurrency test; the snapshot-for-iteration comments guard dict-resize, not
@@ -486,7 +490,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | E6 scheduler: keyed to E5 + recharge? | one measured cycle says yes (+3 ms) | unmeasured on the other 13+ cycles | Step 0b |
 | `0x00E4` in the self-cast cycle: consumed or discarded? | live server sends it in every cycle | in-tree MEASURED: handler returns early on self | Step 0a + step 3's discriminating operator check (C1) |
 | ~~`0x00EE` attr_id 10~~ | **RESOLVED as NOT-A-KILL-SHAPE, §13**: the `[10,0]`+`[0,X]` pair is a broadcast burst marked by `0x009C`, 6 of 7 sightings far from any death | what the burst itself IS remains unknown, and what attr_id 10 means inside it | a capture with marks on the burst |
-| `0x00A4` meaning | GWCA: AGENT_PROJECTILE_LAUNCHED, never sent by anyone | monsterai: positional oracle, 13 live instances | Cross-check both readings against the 13 samples |
+| ~~`0x00A4` meaning~~ | **RESOLVED 2026-08-16, `studies/isle/FINDINGS.md` B5** — both readings were halves of one message: shooter + target-position + flight-time-f32 (13/13, mean err 9.3 ms) | residual: `v[7]` weapon-class-vs-session flag, one Isle melee shot settles it | closed by the rung-3 bench |
 | TargetBuff+0x04 | effect_type (Headquarter) | attribute_level (GWCA) | Step 6 item 3 |
 | ~~Scaling-window values display-literal at scale?~~ | **RESOLVED, §8c + step 4**: the endpoints ARE the displayed values (the interpolator consumes them raw at rank 0 and 15), and GWW's progression templates match all 14 | no transform like `ceil(raw/25)` appears in the path | closed |
 | `0x0037` bytes: used/max or max/used? | contested between lineages | moot only while the value is [0,0] (C12) | Step 6 item 1 |
@@ -577,6 +581,415 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
+
+## §19. The player's windup: the anomaly was skill damage, and §17b was contaminated (2026-08-16)
+
+§17b measured the player's windup ratio at **0.5414, sd 0.2413** against the
+agents' tight **0.4540, sd 0.0520**, and concluded the player "is not the agent
+model with a different constant". It also flagged an anomaly — a player window
+carrying a second damage with no `ATTACK_STARTED` — and raised the possibility
+that ArenaNet sends the player's `ATTACK_STARTED` on **re-engagement** rather
+than per swing, which would make a per-swing windup unmeasurable.
+
+**Both readings were wrong, and the cause is one filter.** The measurement
+counted properties 16/17/18/55 as "damage" and paired them against
+`ATTACK_STARTED`. The player's stream **interleaves auto-attacks and skills**,
+so skill damage was being paired against swing starts.
+
+The clearest instance, conn `:64103` at t=9.744 — the exact instant skill 153's
+E5 fired:
+
+```
+damage prop=55  victim=31 (the PLAYER)  frac=+0.1800   <- a HEAL
+damage prop=55  victim=40 (the Wolf)    frac=-0.1875   <- damage
+```
+
+That is **Vampiric Gaze's life-steal**, both halves, on the armour-ignoring
+property. Neither is a swing. The magnitudes separate the two populations
+cleanly within a connection: auto-attacks land at **−0.0417 / −0.0312**, skills
+at −0.1875, −0.2292, −0.5, −0.625, −0.75.
+
+### What the corrected reading says
+
+**1. `ATTACK_STARTED` is PER SWING, not per engagement. The re-engagement
+hypothesis is REFUTED.** Conn `:64103` carries **7 starts in 18 s** — roughly
+one per attack interval — where a per-engagement message would have produced
+one or two. The "second damage with no start" that suggested otherwise was
+skill damage every time.
+
+**2. The scatter was contamination, not a property of the player.** Isolating
+property 16 at swing magnitude on the one connection with enough auto-attacks
+(`:64103`, declared speed 1.75):
+
+| start | windup | ratio | |
+|---|---|---|---|
+| 5.371 | 1.578 | 0.9017 | first of engagement |
+| 7.597 | 1.094 | 0.6251 | |
+| 15.024 | 0.802 | **0.4583** | in the agent band |
+| 16.744 | 0.817 | **0.4669** | in the agent band |
+
+Two of four sit inside the agents' observed band [0.4263, 0.4600], and the two
+long ones are the **opening swings of an engagement**, which is what closing to
+melee range would look like — the server starts the swing when the attack is
+ordered, and the landing waits on arrival.
+
+**3. But n is 4, and that is the honest headline.** One connection, one weapon
+speed, two clean samples. **This does not establish a player ratio**; what it
+establishes is that §17b's number was measuring something else, and that the
+corpus does **not** refute using the agent model for the player. The earlier
+"the player is different" conclusion is withdrawn.
+
+**Consequence for the unfixed auto-attack windup (§17e item 1):** copying
+`swing_windup`'s ratio to the player is now the *defensible* default rather
+than a guess contradicted by evidence — with the first-swing case explicitly
+unmodelled, since our server does not move the player and cannot express
+"still closing to range".
+
+**NEEDS-CAPTURE to settle it properly:** a run where the operator auto-attacks
+a stationary target **from inside melee range, with no skills pressed**, for
+20+ swings. That isolates the population this corpus only ever gives four of.
+
+## §18. Skill damage moved to cast end, and it is on the wire (2026-08-16)
+
+The first of §17e's three divergences, fixed and verified at a client.
+
+**What changed.** `handle_skill_press` no longer resolves the hit. The pending
+cast entry carries its `target`, and `cast_tick`'s **E5 branch** — the phase
+that IS the cast completing — calls `hit_enemy`. Magnitudes are untouched;
+only the timing moved.
+
+**Verified on the wire** (caged loopback, 38833, map 90 explorable,
+`--enemy --practice-target`, `authsrv-20260816T145306-c1.jsonl`,
+`RUN VERDICT: PASS`, no assert). Two presses of slot 7 (322 Power Attack):
+
+| seq | t | message |
+|---|---|---|
+| 325 | 11.9547 | cast animation — the press |
+| 327 | **12.0024** | **E5, cast end** |
+| 328 | 12.0026 | attack_started |
+| 329 | **12.0028** | **damage 49** |
+
+Damage now follows E5 and is emitted from the world tick. Before this it was
+sent inside `handle_skill_press`, synchronously, ahead of E5.
+
+**The first run could not show the WINDOW, and the second one does.** 322's
+activation is 0.0 s — every skill on the Warrior test bar is instant — so that
+48 ms was world-tick latency and nothing more. Re-run with casting skills in
+the bar via `--skills` (`authsrv-20260816T145726-c1.jsonl`, PASS):
+
+| skill | declared activation | press → E5+damage | error |
+|---|---|---|---|
+| 105 Deathly Swarm | **2.0 s** | **+2.048 s** | +48 ms |
+| 153 Vampiric Gaze | **1.0 s** | **+1.017 s** | +17 ms |
+
+**Two different activations, each tracked** — so the gap is the cast time, not
+a constant latency, which one skill alone could never have shown. The rest of
+the cycle follows from the same instant: E3 at activation + 0.75 s aftercast
+(+2.780, +1.786) and E6 at activation + recharge (+8.007 against 6 s, +9.039
+against 8 s). The residual ~17–48 ms is tick latency on top.
+
+Damage reads 15 rather than 49 in this run because neither skill has a
+`skill_effect` row, so the bonus is 0 and what lands is the plain swing —
+correct, and a reminder that an undeclared skill resolves to no bonus rather
+than to a guess.
+
+**What it bought beyond fidelity**, both now asserted rather than argued:
+
+- **F10 is closed by construction.** `hit_enemy`'s only callers are now
+  `attack_tick` and `cast_tick`, both world-tick. `test_guards` §11 walks the
+  module's own source and reddens if a third appears — proven by re-adding a
+  `handle_skill_press` caller, which produced
+  `callers=['attack_tick', 'cast_tick', 'handle_skill_press']` and a FAIL.
+- **A live hazard on the socket-closing path went with it.** `skill_damage`
+  can raise on a content row whose scale set is disabled, and it used to run
+  on the **connection thread** *outside* the try that wrapped only the
+  `hit_enemy` call. It now runs on the world tick, which catches `ValueError`
+  at the tick body.
+
+`test_guards` §2 was rewritten rather than patched: it asserted the connection
+thread's refusal contract, which is now unreachable by construction, so it
+would have been testing a path that no longer exists. It now checks what
+replaced it — a press sends E4 and the cast animation, spends no health and no
+swing timer, and the hit arrives only when `cast_tick` reaches E5. Floor 37 → 40.
+
+**Still open from §17e:** the player's auto-attack swing has no windup at all
+(`hit_enemy` still sends STARTED, damage and FINISHED in one instant), nothing
+can cancel an in-flight swing or cast, and `GV_ATTACK_STOPPED` is defined but
+never sent. Plus the burrow bug: `swing_lands_at` / `cast_lands_at` survive a
+removal-and-recreate cycle.
+
+## §17. Attack timing: damage does land mid-animation, and the windup is OURS to choose (2026-08-15)
+
+The owner: *"we send the damage the instant the unit starts an animation — that
+isn't how the game works. you can cancel your attack animation before it hits…
+the actual hit is sent mid-animation, and only if not cancelled beforehand."*
+
+Correct on the timing, and the corpus and the client together sharpen it into
+something more actionable than "add a delay".
+
+### 17a. A hypothesis of mine, refuted
+
+I proposed that the player's wide windup spread (0.24–1.62 s) was a **pairing
+artefact** — that a swing landing no damage let a naive "nearest damage within
+4 s" reach forward to the next swing's. A correct pairing was run (a swing's
+damage must precede that attacker's NEXT `ATTACK_STARTED`, unpaired swings
+counted separately) and it **produced the identical 10-sample set**. The spread
+is a property of the data. My explanation was wrong and the number stands.
+
+### 17b. What the corpus says, correctly paired
+
+| | n paired | n unpaired | windup / declared speed |
+|---|---|---|---|
+| **agents** (6 attackers) | 41 | 8 | mean **0.4540**, sd 0.0520 |
+| **player** | 10 | 4 | mean **0.5414**, sd 0.2413 |
+
+The agent figure reproduces the published `SWING_WINDUP_RATIO = 0.4458` from an
+independent pass. **The player's is both larger and four times as scattered**,
+and only 1 of 10 samples lands inside the agents' band — so the player is not
+simply the agent model with a different constant.
+
+A correction to my own framing on the way: **the player's declared attack speed
+is 2.475 in the second capture, not 1.75** — a bow, not the melee class I
+assumed. Both subgroups (1.75, n=7; 2.475, n=3) still sit above the agent band,
+so the scatter is not a weapon-class artefact.
+
+**Two asymmetries that matter more than the ratio:**
+
+1. **For NPCs, damage and `GV_MELEE_ATTACK_FINISHED` are the SAME wire instant** —
+   gap exactly 0.000000 s in **40 of 40** measured swings. That extends
+   `land_swing`'s docstring claim (6 of 6, by byte offset) to the whole corpus.
+   So an NPC swing is: `ATTACK_STARTED` … windup … (`FINISHED` + damage
+   together). That is precisely "the hit lands mid-animation".
+2. **The player NEVER closes with `MELEE_ATTACK_FINISHED` — 0 of 14.** Four close
+   with `GV_ATTACK_STOPPED`, ten have no closing event at all. And one player
+   window carries a SECOND damage with no `ATTACK_STARTED` of its own (n=1),
+   which hints ArenaNet may send the player's `ATTACK_STARTED` on a state
+   transition (new target, re-engage) rather than once per swing the way it does
+   for NPCs. **UNVERIFIED, and it would undercut reading a per-swing windup off
+   the player at all.**
+
+> **SUPERSEDED 2026-08-16 by §19, and the ratio above with it.** The second
+> damage was SKILL damage — the player's stream interleaves auto-attacks and
+> casts, and this pass counted properties 16/17/18/55 alike, pairing life-steal
+> and spell hits against swing starts. `ATTACK_STARTED` **is** per swing (7 in
+> 18 s on one connection), the re-engagement hypothesis is refuted, and the
+> 0.5414/0.2413 figure is contamination rather than a property of the player.
+> Read §19 before using any number in this subsection.
+
+### 17c. Cancellation has no dedicated signal, and the corpus has one candidate
+
+`GV_ATTACK_STOPPED` (3) is the only value that ever marks a swing not landing,
+and it is **overloaded across at least three unrelated causes**: the attacker
+dying mid-swing, the target dying, and the attacker starting a skill (which ends
+the auto-attack as a side effect). The five ids that would read as a distinct
+interrupt — `GV_INTERRUPTED` 35, `GV_ATTACK_SKILL_FINISHED` 46,
+`GV_INSTANT_SKILL_ACTIVATED` 48, `GV_ATTACK_SKILL_STOPPED` 49,
+`GV_SKILL_STOPPED` 59 — occur **zero times in 22,137 decoded GAME_SMSG**.
+
+Of 63 `ATTACK_STARTED` corpus-wide, 7 land no damage: 3 are the attacker dying,
+3 are the capture ending 0–0.4 s later (right-censored, not events), and **one
+is a real candidate** — the player, `ATTACK_STARTED` t=15.434, `ATTACK_STOPPED`
+t=16.578, no damage, no death, no skill press, preceded 57–90 ms earlier by the
+only player action in the window: two c2s `0x00C1` target-selects (clear, then
+select a different agent) while the original target was still alive.
+
+**It stays UNVERIFIED at n=1**, and for a reason worth keeping: **the corpus
+contains zero observed misses** — all 42 `MELEE_ATTACK_FINISHED` are paired with
+damage — so nothing distinguishes "cancelled" from "missed". **NEEDS-CAPTURE**:
+a narrated run where the operator deliberately cancels a swing (retarget, move,
+ESC) with marks, and ideally lands a miss for contrast.
+
+### 17d. The client does not decide when the hit lands — WE do
+
+The strongest result, and it changes what "fixing this" means. The client's
+compiled asserts carry exactly two pieces of this vocabulary —
+`m_attackInterval` and `m_attackModifier` (`AvChar.cpp:4791-4792`). `swing`,
+`windup`, `aftercast` and `interrupt` return **zero** hits; `cancel` returns
+seven, none combat-related. The enclosing function at `0x007F82C0` computes an
+attack duration as `modifier × base`, conditionally × a literal `1.25`
+(`0x950990`, verified as exactly 1.25), and hands one float to a queueing call.
+**No landing-fraction or windup constant exists in that path, and no compiled
+per-weapon attack-speed or animation-length table exists at all** — the
+`arrsize(s_*)` census over 140 sites in 61 files turns up nothing
+attack-timing-shaped.
+
+So attack timing is **server-authored per agent**, which
+`studies/enemy/PLAN.md` §6q already concluded and this re-verified
+independently. The windup is not a client constant we are failing to read; it
+is a number we choose, and the corpus is the only witness to what ArenaNet
+chose.
+
+**An instrument limitation found on the way, and it weakens every "no assert
+names X" answer in the repo:** `asserts.py`'s matcher requires `mov edx / mov
+ecx / call` in 15 contiguous bytes, and at the `m_attackInterval` site the
+compiler scheduled an `fstp st(0)` between `mov ecx` and `call`. That assert is
+therefore invisible to the tool **and does not appear in its three-item
+`--unreadable` list** — it was read by direct disassembly instead. The tool's
+own header already warns its counts are a floor; this is a concrete instance,
+and it means absence answers need a disassembly spot-check before they are
+load-bearing.
+
+### 17e. Our divergences, costed
+
+1. **The player's swing has no mid-animation window at all.** `hit_enemy`
+   (`authsrv.py:2299-2316`) sends STARTED, mutates health, sends damage and
+   sends FINISHED in one synchronous call. Called from **two threads**
+   (`attack_tick` on the world tick, `handle_skill_press` on the connection
+   thread), so any windup must be armed from either and resolved from exactly
+   one — the single-writer discipline `pending_casts`/`cast_tick` already
+   proves under a 200-press two-thread hammer.
+2. **Skill damage lands at press, not at cast end** — already recorded, and the
+   **cheaper fix**: the scheduling machinery exists and is world-tick-only, so
+   moving the `hit_enemy` call into `cast_tick`'s E5 branch also removes
+   `handle_skill_press` as a `hit_enemy` caller, which closes the F10
+   concurrency race the tests currently measure but do not assert.
+3. **`GV_ATTACK_STOPPED` is defined and never sent** (`agents.py:599`, zero uses
+   in `authsrv.py`), so we cannot express a cancel even where we detect one.
+
+**And a real bug found by code reading, not by a run:** nothing clears
+`swing_lands_at` / `cast_lands_at` across a burrow removal-and-recreate cycle.
+`remove_agent` pops the entry untouched, `burrow_tick` never touches those keys,
+and `create_agent_world` reinstalls it verbatim. A spawn can carry both
+`burrow_phase` and `attacks_back`, so a swing armed just before submerging
+survives the whole cycle — invisible while `EFFECT_TRANSITION` blocks
+evaluation — and fires on re-emergence against a stale timestamp, with no
+windup the client ever saw begin. **No test covers this combination.**
+
+## §16. The `cast_anim` probe ran: step 4 confirmed in the client's own words, the animation still needs eyes (2026-08-15)
+
+Caged loopback, build 38833 against its own archive
+(`--exe vault/run/2026-08-13_64fae3b1369b/Gw.exe`,
+`RURIK_DAT=vault/dat_study_38833/Gw.dat`), map 90 explorable, synthetic
+credential. `RUN VERDICT: PASS`, **zero Undecodable**, no assert in `Gw.log`.
+Run: `vault/captures/harness/20260815T182423`.
+
+This was the one combat item §15 left open, and the probe's question is
+whether the cast animation is driven by opcode 228 or by agent property 60.
+
+**CONFIRMED, verbatim and machine-readable — step 4's prediction.** The probe
+said `Gw.log` should carry the client's own `Pending skill %u copy %d not
+found`. It does:
+
+```
+Error: Pending skill 320 copy 0 not found
+```
+
+320 is `bar[4]`, the skill the probe sent, and `copy 0` is the field. So the
+client is telling us in words what `0x00E3`'s third field is called and that it
+matches an entry it never created for us — which is the same mechanism
+`handle_skill_press`'s echo relies on, now witnessed from the client's side.
+
+**ALSO ESTABLISHED, and it is a safety result rather than a semantic one:** the
+client accepted `0x00E4` addressed to the LOCAL PLAYER, then property 60, then
+`0x00E3`, and ran on without asserting. Given §14's crash — an interleaved
+`0x003A` killed it on `CharData.cpp:202` — "these three do not kill it" is
+worth having explicitly.
+
+**NOT SETTLED: whether property 60 plays the animation.** The prediction is
+that 228 does nothing visible locally (its handler returns early on self, which
+§6's step 0a corroborated from the wire: all 7 live `0x00E4`s name the
+receiving connection's own player) and that property 60 is the one that
+animates. **Nobody was watching the screen**, and the frame instrument cannot
+substitute:
+
+| what | result |
+|---|---|
+| 24 hold frames at 1.0 s, per-frame pixel change | **12.77 %–15.35 %, flat** |
+| the frame after 228 (`hold005`) | 14.66 % |
+| the frame after property 60 (`hold008`) | 14.26 % |
+
+The idle scene churns at ~14.5 % a frame all by itself — water, foliage, the
+character's idle animation, camera drift — so a cast animation on one body does
+not separate from the baseline. **This is H5 measured rather than asserted:**
+`shotlabel.py` detects THAT pixels changed, never WHAT, and at this baseline
+that is not enough. `shotlabel --run` also declines the run outright ("no sweep
+sends in the capture") because it is built for the opcode sweep, not for probes.
+
+So the animation half stays operator-visual, which is what H5 said it would.
+
+### §16a. SETTLED the same day, by splitting the variable
+
+The combined probe then failed for a reason worth recording: **the operator saw
+a sparkle and could not attribute it.** They lost count of the gaps, and an
+observation that cannot be tied to a message is not evidence about either one.
+The agent had also quoted the gaps wrong — as ~3 s, when `Step`'s first field
+is a DELAY from the previous step, making the real gaps ~5 s and ~8 s. Both
+halves of that failure are in `_cast_one_steps`' docstring.
+
+The fix was not better timing but **one variable per run**. Two probes,
+`cast_228_only` and `cast_prop60_only`: same bar, same map 90, same hold, the
+message under test firing at **t≈10.85 in both**, and nothing else sent at all.
+The operator answers yes or no, with no counting.
+
+| run | capture | fired at t≈10.9 | operator saw |
+|---|---|---|---|
+| `cast_228_only` | `authsrv-20260815T184213-c1.jsonl` | `0x00E4` (228) | **nothing** |
+| `cast_prop60_only` | `authsrv-20260815T184317-c1.jsonl` | `0x009F` property 60 | **the cast sparkle on the weapon** |
+
+**ANSWERED for the DRIVER, and OVERCLAIMED for the CONTENT — corrected below.**
+Each run is the other's control, and the pair settles which message drives a
+skill's visible effect: **property 60 does, 228 does not.** That closes
+`studies/skills` §8's question of *what triggers* it, by the very method that
+row prescribed — "send each in isolation and watch" — and refutes its own
+guess that the client predicts the animation itself.
+
+> **§16b. THE OWNER CAUGHT AN OVERCLAIM, and the probe's skill choice is why
+> (2026-08-15).** This section first read "property 60 plays the cast
+> animation". The owner's objection: *"there's more to a cast animation than a
+> simple sparkle on the weapon. it probably also has varying animations on the
+> player models themselves."* Correct, and the experiment could not have shown
+> otherwise — **`PROBE_BAR_SKILL + 4` is skill 320, Hamstring: `type_code` 14,
+> an ATTACK skill with `activation = 0.0 s`.** It does not cast at all. A
+> weapon sparkle is the whole of what it has, so "the cast animation" was
+> tested with a skill that has no cast.
+>
+> The client's own table says the same thing, and says it per skill. The six
+> animation ids at `+0x74..+0x88` — resolved as `s_effect` indices by
+> `studies/reconstruction/FINDINGS.md` §2.9.3, with 2077 as the null:
+>
+> | skill | activation | ids at `+0x74..+0x88` |
+> |---|---|---|
+> | 320 Hamstring (tested) | 0.0 s | `[566, –, –, –, –, –]` — one |
+> | 322 Power Attack | 0.0 s | `[568, –, –, –, –, –]` — one, different |
+> | 153 Vampiric Gaze | 1.0 s | `[277, –, 276, –, –, –]` — two |
+> | 105 Deathly Swarm | 2.0 s | `[204, –, 201, –, –, 199]` — three |
+> | 318 Defy Pain | 0.0 s | `[–, 595, –, –, –, –]` — one, different SLOT |
+>
+> So animation content is per-skill and multi-part, spells populate more slots
+> than attack skills, and the slot index carries role. **What is established is
+> the DRIVER (property 60, not 228); what is NOT is that one property-60 send
+> reproduces a full cast** — body animation included. `cast_spell_only` is the
+> follow-up: property 60 with **105 Deathly Swarm**, a 2.0 s spell with three
+> animation components, where a casting stance would be unmistakable.
+>
+> **RAN, and the model animated (2026-08-15).** `cast_spell_only`, caged
+> loopback on 38833, map 90: bar with 105 in slot 5 at t=2.85, property 60 with
+> skill 105 at t=10.86, nothing else sent. Capture
+> `authsrv-20260815T190337-c1.jsonl`, `RUN VERDICT: PASS`. **The operator
+> reports the model itself performed an animation** — not the weapon-only
+> sparkle Hamstring produced.
+>
+> So the corrected claim, with its scope now earned rather than assumed:
+> **property 60 drives the cast, body animation included, and what renders is
+> per-skill** — one animation component for an attack skill, a full casting
+> animation for a 2.0 s spell with three. 228 drives nothing. The overclaim was
+> real but the conclusion survives a properly designed test; what changed is
+> that it is now supported by the experiment rather than by a skill that could
+> not have shown it.
+
+**Three independent witnesses now agree**, which is the part worth keeping:
+
+1. **The handler** — 228 compares the named agent against the local player and
+   returns before reaching AgentView (static, `studies/skills` §8).
+2. **The wire** — all 7 `0x00E4` in the live corpus name the receiving
+   connection's OWN player (§6, step 0a), so ArenaNet broadcasts it uniformly
+   and relies on the client discarding its own.
+3. **The screen** — 228 alone renders nothing; property 60 alone renders the
+   cast.
+
+That also retires the worry §6 step 0a raised against itself: 228 is not the
+caster's own feedback, and our server's use of it for wire fidelity while
+driving the animation from property 60 is the correct shape.
 
 ## §15. Step 3's loopback acceptance RAN, and both halves pass (2026-08-15)
 

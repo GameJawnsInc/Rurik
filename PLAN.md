@@ -357,6 +357,8 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10**, `fbedcfb` — **and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 
+| **R-ISLE** | **The Isle of the Nameless as a calibration range** | Rungs per [studies/isle/PLAN.md](studies/isle/PLAN.md): reader, route, offline bench, loopback probes, plumbing, then the live sessions | 🔶 **rungs 1-5 DONE 2026-08-16/17**, landed `f17cd49`. The arc: [studies/isle/PLAN.md](studies/isle/PLAN.md) (the north-star doc: instruments, skeptic-attacked designs, the ladder) + [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) (rung 3's eight offline answers; rung 4's four operator-confirmed probe results). Headlines: the AoE radii are static (`s_skill +0x6C`: adjacent 156 / nearby 240 / in-the-area 312, +10-16 bounding-radius hypothesis for the Isle markers to test); the Master of Damage's chat numbers are extractable AND rendered ("is now level 17!" on our own client — 0x5D needs its 0x5E tag); the enc_name → nameplate route is PROVEN (station 1470 = the Ascalon City outfitter, operator-read); conditions map 478=Bleeding..486=Weakness (+2077) with degen server-owned; the three damage kinds separate on the client bar (16/17 debit, 18 notifies); `agentroster.py` reads any capture into cross-session-stable stations; `map.280` is in content with the 0x0195 prediction pre-registered; a PvP-only character reaches 280 (owner-confirmed, GWW-corroborated — the ONE PvE area they may enter). **Next: rung 6, LIVE #1** — the ~20-min no-combat roster walk (owner-driven, new PvP character); then rung 7's damage pass inheriting (target, cause, swing-kind). Residuals riding the next loopback pass: the varint send, the overhead channel, skill 2077's render, the energy probe. |
+
 Two structural changes, both argued below in §4.
 
 ### 3.1 What "done" is doing in the table above
@@ -1162,7 +1164,11 @@ versus code:**
   and line** — `P:\Code\Base\Rtl\Random.cpp` plus `fraction <= 1.0f` is a line of their source
   code, and a 477-opcode table of them is a source dump with extra steps. What a derived table may
   carry instead is the *constraint*: opcode, field, bound, address. That is the useful content and
-  it loses almost nothing.
+  it loses almost nothing. **(This bullet was REFINED the next day and must not be read alone —
+  see "REFINED 2026-08-12" three paragraphs down: the refusal is aimed at BULK, and a single
+  assert cited as the evidence for one claim is a measurement. Reading this bullet on its own is
+  what cost 46 hand-rewritten citations, and it had a live route back in via `toolkit/content.py`
+  until 2026-08-16.)**
 - **NAMES AND AUTHORED TEXT: commit the id, resolve at run time.** Item, skill, NPC and dialogue
   strings are individually trivial and in bulk a dump of authored work. A row carrying
   `model_id = 419, name_string_id = 2519` is fully useful to the server and carries no ArenaNet
@@ -1307,13 +1313,87 @@ what the corpus cannot (n56 fires on 0 files; block H on 0 of 20,661, now exerci
 `test_modelfile.py` together with the client's error-0x1D refusal). The full-population
 run also CORRECTED the study's sabotage table — six "clean" variants carry 1–29
 aliasing survivors at n=14,571 (FINDINGS §3.6) — and the measured ceilings are pinned.
-**Next is U2 (name the animation payloads) and U3 (companion chunks + the object
-model), which can run as parallel arcs** — `studies/unitmodels/PLAN.md` §2. Still
-undecoded, honestly: blk2C/blk48's element contents (strides exact, semantics unnamed;
-the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object identity,
-and the mid/tail chunk families. GW1 units read as rigid-segment models — zero skinning
-vocabulary in 19,758 assert sites — which, if it survives U2, makes custom-unit
-authoring markedly simpler than a skinned-mesh format would.
+
+**U2 and U3 both landed the same day, as parallel worktree arcs, each surviving an
+independent adversarial review.** U3 (`studies/mdlrefs/`, `toolkit/mapdata/mdlrefs.py`,
+30,722/30,722 reference chunks closed): the five list chunks share one client reader
+whose record rule is null-word-terminated; the m_skel/m_geom question is ANSWERED — two
+classes, 0x15C/0x11C, distinct deleting destructors; the mid/tail chunk families are
+classified (tails = runtime collision/visibility, mids = MdlDecomp's mirror). U2
+(`studies/anim/`, the typed layer in `skelfile.py`): **the animation payloads are
+NAMED** — blk2C is one record per animated node carrying translation + QUATERNION
+rotation + aux channels as times-prefix SoA, and the node-link byte is the
+rigid-segment hierarchy itself (121,532/121,532 topological) — **the recon's quaternion
+refutation is reversed**: it measured a byte-count-identical, shape-wrong overlay, and
+the review confirmed the reversal from the samplers' address arithmetic plus the
+client's own unit-gated fast-normalize. n40 is the sound-event table indexing FA6;
+MdlAnim:367 is settled; flag bits 1–2 are ORed into one runtime bit. So the
+rigid-segment reading now stands on structure, not just assert absence — custom-unit
+authoring needs no skinning path.
+
+**U4 and U5 landed the same day, the second pair of parallel review-gated arcs — the
+ladder is complete through FIVE of its seven rungs, all in one day.** U4
+(`toolkit/mapdata/unitassembly.py`, `studies/unitassembly/`): **wire → file closure,
+54/54 pooled definitions** resolving to closed sets (1,393 distinct files; hatcher
+definition 1471 = 232 files pinned id-by-id), the COMPOSITED rule derived from the
+archive bit and equal to wire 0x0057-presence 54/54, and content rows resolving to
+IDENTICAL sets — our server can dress a unit from `content/*.toml`. U5
+(`toolkit/mapdata/unitexport.py`, `tools/blender/import_gwunit.py`,
+`studies/unitexport/`): **both anchor bodies export** with the M3 re-interleave holding,
+the FA1 sidecar byte-verbatim plus a typed layer that must equal a fresh decode, and a
+Blender viewer measured headless (predicted-vs-measured silhouettes, exact-zero hidden
+controls) — the flat placement is pinned as the bind pose by a review-measured
+cloud-occupancy statistic. Honest finds recorded: the hatcher's picked diffuse is 99.9%
+transparent texels (its default render is a floating head — the diffuse-slot question
+stays open with AMAT), and the corpus FA8 graph is acyclic at depth 1, so a synthetic
+cycle fixture is what carries the recursion claim.
+
+**U6 landed 2026-08-17 — SIX of seven rungs, and everything that can be proven without
+launching the client is proven.** `toolkit/mapdata/skelwrite.py` re-emits the complete
+population byte-identically — **14,571/14,571 FA1 chunks, 21,420/21,420 whole
+containers** — and the review's mutation test (51 typed-field classes × 8 payloads,
+zero survivors) proves the identity is informative, not vacuous. Identity's own catch:
+header bytes +0x09..+0x0B are NOT padding (non-zero on 5,208 FA1s; consumer unknown).
+The rebuilt-archive round trip holds with the nextStream chain verified; the U7
+modification seam is atomic after the review's one real bug (a mid-span refusal used to
+leave a half-retimed repr); and `skelfile.sound_events()`'s majority-class crash was
+found by this rung and fixed — independently, twice, by two sessions in the same hour.
+
+### ✅ U7 IS MET — the ladder is COMPLETE, and a model we authored renders in the retail client (2026-08-17)
+
+**The summit run happened and it went green.** The hatcher's skeleton, its 85 animated
+node bases scaled ×2 through `skelwrite`, drawn visibly stretched by the pinned 38797
+client reading a `datmove`-rebuilt archive — owner-driven run, OBSERVED, screenshot with
+the record. **Our decode → our typed representation → our encode → our container →
+their renderer.** That is round-trip authorship of unit models, which is the goal this
+arc was scoped around, closed seven rungs after the recon that opened it.
+
+**It took four client runs and three of them failed on the EXPERIMENT, not the chain** —
+recorded in [studies/unitmodels/U7-RUN.md](studies/unitmodels/U7-RUN.md) because the next
+session will otherwise pay the same tolls: (1) the plan's named target was the worm, but
+the harness's `--enemy` spawns the HATCHER and U4 had already proved those file sets
+disjoint — the client never read a modified byte; (2) `Code=007` with and without the
+modification, which exonerated the archive and exposed a real server bug — the 2026-08-14
+crossbuild key fix lived inline in `handle()`'s auth branch and the game branch never got
+it, so a 38797 client got 38833's key and the ARC4 stream was noise (fixed as one shared
+`bind_key_to_build()`, with an AST regression check that both channels reach it); (3) the
+`burrow` probe re-creating a body at a fresh agent id while a combat AI drove the first,
+so three things animated the target at once.
+
+**What the run settled beyond the summit.** A **stored** flags=515 row IS acceptable to
+the client — the arc's named risk candidate, REFUTED, and retail ships that row
+compressed. A COMPOSITED shell's own FA1 poses its creature. And **pose and playback rate
+come from different places**: ×4 on the same file's key times changed nothing visible
+across two operator-reviewed clips, which is a real constraint on `studies/anim`'s timing
+reading and the sharpest open question this arc leaves.
+
+**The standing wall, named precisely**: the shell's first FA8 link (15018) carries 1.5 MB
+of FA1 — 237 sequences against the shell's sparse set — and cannot be written back.
+`datmove` refuses it in its own words ("nothing fits… the largest run datplan will hand
+over is 953,856 B") because retail ships it compressed, we write stored, and no
+compression-8 encoder exists. **Authorship that reaches the full animation set needs that
+encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
+for the owner rather than a gap in this one.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
@@ -1342,6 +1422,52 @@ is called done.
 the corpus and is its own arc), quest names are ArenaNet's string ids rather than ours
 (rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
 per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
+
+**RUNG Q1 LANDED 2026-08-16, and it was the arc's unbanked value.** Fifteen of the nineteen
+quest opcodes were **absent from `schema/overrides.json` entirely** — `QUEST_ADD`,
+`QUEST_DESCRIPTION` and the `0x0080`/`0x0081` dialog pair existed only in a study document,
+invisible to every tool that reads the schema. Now: **12 named, 1 renamed, 4 deliberate
+abstentions**, each with its own evidence chain and confidence.
+
+The evidence for eleven of the twelve is the **frame bus**, and it was made refutable before
+it was used. `studies/quests/FINDINGS.md` had both halves — §1.6's publisher VAs, §2.1's
+handler bodies — in two tables and never multiplied them. The pairing was **predicted**
+structurally (*the two adds share a frame id, the two text-fills share one, the three marker
+ops — one shared payload layout — do not*) and then read out of the pinned image: **11 of 11**.
+It is committed as `toolkit/clientscan/framebus.py` with `test_framebus.py` (18 checks, floor
+14, §1 runs on a bare machine) so every row's `why` is reproducible by RUNNING, not by
+rewriting a scratch script.
+
+**The result worth carrying: `0x004E` VICTORY_BANNER → `QUEST_COMPLETE_PANEL`.** Its body
+`0x0080F670` does `push 0x10000155` / `call 0x00633D70` — posting into the band
+`GmQuestComplete` subscribes to. FINDINGS §7.6 had ruled that question needed *"one narrated
+live session in which the operator completes a mission. Nothing static will substitute."*
+Half the join was in its own §1.6 table. The 2026-08-13 smsgsweep had **already** fired the
+opcode at a client and photographed a centre-screen banner, filed `medium` because a name
+from a picture is a guess about purpose — the static join supplies the purpose, and the two
+lineages share no ancestry. **The reward arc is not unblocked, but it is one loopback run
+from its first real question** (what the panel expects in its three dwords), rather than a
+live capture campaign away from it.
+
+Two process notes, both cheap and both paid for. The **call window** failed twice by
+returning a confident short list rather than an error — §1.6's own scan at 6 bytes lost two
+sites, 24 lost `0x0050`'s (its call sits at +29 behind three payload stores). And naming CMSG
+`0x0014` made `test_dispatch.py` §7 **go red before** its `DROPPED_ON_PURPOSE` row landed,
+which is the tripwire working rather than a gap.
+
+**Q1b(b) is done too:** `toolkit/content.py` no longer declares a single cited assert to be
+refused expression — the trap that would have re-run the 2026-08-12 over-refusal, and the last
+place still carrying the old wording four days after CLAUDE.md fixed it. §7 Q3's REFUSED
+bullet now forward-points to its own refinement; the dated ruling text was left alone.
+**`Q1b(a)` is still open and is a second-gate obligation**: `PLAN.md` §6.1 has no
+Fournux/Tyria-Extractor row (`:33` is the prior-art landscape table and grants nothing), open
+since 2026-08-13.
+
+**Next offline, cheapest first:** the 66/66 coded-string verification is a claim in prose and
+not a check; §6.1's Fournux row; **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
+`0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
+build 38797, none re-checked against 38833.
 
 
 ### Heroes and henchmen — R4c-H MET, hero row renders, next gate NAMED (2026-08-16)

@@ -67,7 +67,10 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=25)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=32)
+# floor 25 -> 32 on 2026-08-16, measured from the green run that added the
+# named-capture selection, the fourth-capture proof and the mode plumbing
+# (studies/isle/PLAN.md rung 5). Every new check runs whenever the vault does.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
 # computed from the module under test, because a symbol appearing in a test file is not
@@ -77,12 +80,21 @@ HOSTILE = {1346, 1420, 1421, 1431, 1432, 1434, 1442}
 HEALTH = {1346: 96, 1434: 8, 1442: 40}
 DECLARATIONS, DEFINITIONS, INSTANTIATED = 126, 54, 48
 SURROGATE_DEFS = {397, 1469, 1473, 1488, 1505, 7809}
+# The corpus every count above was measured on. A LIST OF NAMES, deliberately:
+# the pins are facts about these captures, not about whatever the vault holds.
+CAPTURES = ("20260807T133758", "20260807T143055", "20260810T235916")
 
 
 def main():
     codec = Codec()
     try:
-        caps = npcdefs.live_captures()
+        # NAMED, not globbed. Every pin below (126 declarations, 54 definitions,
+        # the health map) is a fact about THESE THREE captures; unfiltered, the
+        # day a fourth keyed capture lands -- the Isle sessions are exactly that
+        # -- six pins go red at once for a reason that is not a defect
+        # (studies/isle/PLAN.md gap 4). The refusal in live_captures(names=...)
+        # keeps this from silently matching nothing if a stamp is renamed.
+        caps = npcdefs.live_captures(names=CAPTURES)
     except SystemExit:
         caps = []
     if not caps:
@@ -98,6 +110,68 @@ def main():
     # ---- 0. the corpus this is compiled from ---------------------------------
     print("0. the corpus")
     LEDGER.ok(len(caps) == 3, "three keyed live captures", f"{len(caps)}")
+
+    # THE FOURTH-CAPTURE PROOF (studies/isle/PLAN.md rung 5's exit criterion):
+    # a synthetic keyed capture dropped into the vault must not move a single
+    # pin, because the pins select by NAME. Built and removed inside one try --
+    # the suite already writes selftest captures into the vault, so a marker
+    # directory is within precedent, and the finally keeps it from surviving.
+    synth = os.path.join(os.path.dirname(caps[0]), "_synthetic_test_19700101")
+    try:
+        os.makedirs(synth, exist_ok=True)
+        open(os.path.join(synth, "game-synthetic.jsonl"), "w").close()
+        unfiltered = npcdefs.live_captures()
+        named = npcdefs.live_captures(names=CAPTURES)
+        LEDGER.ok(any(os.path.basename(p) == "_synthetic_test_19700101"
+                      for p in unfiltered),
+                  "a fourth keyed capture IS seen by the unfiltered glob",
+                  f"{len(unfiltered)} dirs -- so this check can tell the "
+                  f"filter from a vault that never changed")
+        LEDGER.ok([os.path.basename(p) for p in named] == sorted(CAPTURES),
+                  "and the NAMED selection does not move",
+                  "the pins are facts about these three captures")
+    finally:
+        try:
+            os.remove(os.path.join(synth, "game-synthetic.jsonl"))
+            os.rmdir(synth)
+        except OSError:
+            pass
+
+    # The mode plumbing (gap 5): all three captures predate manifest recording,
+    # so they resolve 'unrecorded'; a declaration fills in; and the refusal that
+    # protects the pooled emit is exercised on a synthetic manifest pair.
+    LEDGER.ok(all(npcdefs.capture_mode(c) == "unrecorded" for c in caps),
+              "all three captures honestly read mode=unrecorded",
+              "their manifests carry game_mode: null")
+    LEDGER.ok(npcdefs.resolve_mode(caps) == "unrecorded"
+              and npcdefs.resolve_mode(caps, declared="base") == "base",
+              "resolve_mode: unrecorded pools default, a declaration fills in")
+    with tempfile.TemporaryDirectory() as td:
+        a_dir = os.path.join(td, "a")
+        b_dir = os.path.join(td, "b")
+        os.makedirs(a_dir)
+        os.makedirs(b_dir)
+        with open(os.path.join(a_dir, "manifest.json"), "w") as fh:
+            fh.write('{"game_mode": "base"}')
+        with open(os.path.join(b_dir, "manifest.json"), "w") as fh:
+            fh.write('{"game_mode": "reforged"}')
+        try:
+            npcdefs.resolve_mode([a_dir, b_dir])
+            mixed_ok = False
+        except npcdefs.NpcDefsError:
+            mixed_ok = True
+        try:
+            npcdefs.resolve_mode([a_dir], declared="reforged")
+            contra_ok = False
+        except npcdefs.NpcDefsError:
+            contra_ok = True
+        LEDGER.ok(mixed_ok, "base + reforged captures REFUSE to pool",
+                  "their stats differ ~20% -- two games, not one dataset")
+        LEDGER.ok(contra_ok, "a declaration contradicting the manifest is REFUSED",
+                  "the manifest was written at capture time")
+        LEDGER.ok(npcdefs.resolve_mode([a_dir]) == "base",
+                  "and a recorded mode is used without any flag",
+                  "gap 5's whole point")
     LEDGER.ok(len(declared) == DEFINITIONS,
               f"{DEFINITIONS} definitions are declared", f"{len(declared)}")
     instantiated = sum(1 for d in declared.values() if d.creates)

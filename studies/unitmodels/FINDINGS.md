@@ -53,7 +53,11 @@ no FA0 chunk — 14,571/14,571, two independent places in the archive**
 (MEASURED). And that same bit is what the wire shows: every 0x0056-only
 definition's file has its own FA0 (**8/8**), every definition that also got a
 0x0057 has a file lacking FA0 (**36/36**), and every 0x0057 model id resolves
-to a file carrying FA0 (**43/43**) — measured on live capture 20260807T143055
+to a file carrying FA0 (**43/43** — *population corrected by U4, 2026-08-16:
+the noun here was wrong; 43 is the PER-DEFINITION pooled count over all
+three captures, not distinct model ids, of which 143055 has 33 (33/33) and
+the pool 40 (40/40) — [../unitassembly/FINDINGS.md](../unitassembly/FINDINGS.md)
+§4 pins every granularity*) — measured on live capture 20260807T143055
 (OBSERVED + MEASURED, two agents, neither knowing the other's result).
 COMPOSITED means "my geometry comes from elsewhere", and 0x0057 is where.
 
@@ -80,10 +84,14 @@ The other headline answers:
   skin-matrix palette; the only skeletal-hierarchy machinery named is
   MdlCombine's push/pop transform stack. RECONSTRUCTION, floor not census:
   GW1 units read as rigid-segment models (§3.10).
-- **What is NOT decoded**: the contents of FA1's two big animation payloads
+- **What is NOT decoded** *(as of the recon; §6 tracks what U2/U3 closed
+  the same day)*: the contents of FA1's two big animation payloads
   (blk2C/blk48 — strides byte-exact, elements unnamed; a quaternion reading
-  was REFUTED at 4/19,460), the mid/tail chain chunk families, chunk 0xFAE,
-  and the ffna8 descriptor's parameter stream. §6 is the honest list.
+  was REFUTED at 4/19,460 — **that refutation is REVERSED in §3.4's dated
+  correction**: wrong overlay, real quaternions), the mid/tail chain chunk
+  families (classified by U3), chunk 0xFAE (named by U2/U3: n3E's
+  model-file table), and the ffna8 descriptor's parameter stream (still
+  open). §6 is the honest list.
 
 ---
 
@@ -307,6 +315,21 @@ recon's one attempt to shortcut this (unit quaternions in the 16-byte groups)
 was **REFUTED by its own test**: 4 of 19,460 within 1e-3 of unit norm, median
 norm 6.07. They stay unnamed; naming from size is this repo's recorded
 mistake.
+
+**REVERSED by U2, 2026-08-16, and the reversal survived adversarial review**
+([../anim/FINDINGS.md](../anim/FINDINGS.md)): the "(w0+w4) 16-byte groups +
+w2 20-byte groups" reading above is the correct BYTE ACCOUNTING and the
+wrong SHAPE — the payload is times-prefix structure-of-arrays channels
+(w2 int32 times, then w2 float4 values), read from the samplers' own
+address arithmetic (`base + 4·count + 16·idx`, `0x00782990`). At that
+alignment the float4s ARE unit quaternions — 16,263,916/16,263,916 within
+1%, and 100.000% at 0.1% too — and the client's nlerp renormalizes through
+a fast path gated on `len² ∈ [0.9, 1.1]`, only correct for unit inputs.
+The 4/19,460 refutation above was TRUE OF THE MISALIGNED OVERLAY and
+reproduces as the control (0.30% at equalized tolerance). The paragraph
+above is kept as written because the walk's strides were never wrong —
+only the shape drawn over them — and a refutation that was itself an
+artifact of a framing is exactly the failure mode worth exhibiting.
 
 An **independent second implementation inside the client agrees term for
 term**: `0x0079E420` (reached from the second FA1 fetch) walks the same header
@@ -717,7 +740,9 @@ connections, via `tape.decode_all` + the schema codec — the same pipeline
 - **The archive rule** (MEASURED, 56/56 ids resolving via
   `file_id_table(raw=True)`, all ffna type-2): every 0x0056-only definition's
   file **has** FA0 (8/8); every definition with a 0x0057 has a file **lacking**
-  FA0 (36/36); every 0x0057 model id **has** FA0 (43/43). No exceptions. This
+  FA0 (36/36); every 0x0057 body **has** FA0 (43/43 — the per-definition
+  pooled count; U4 corrected this row's noun and pinned the distinct-id
+  populations, 33/33 and 40/40). No exceptions. This
   refines `studies/smsg`'s open "what do the composite dwords encode" —
   MEASURED here: they are archive file ids of geometry-bearing files, not
   abstract piece selectors.
@@ -759,14 +784,22 @@ connections, via `tape.decode_all` + the schema codec — the same pipeline
 Ranked; each names the tool that can settle it. These feed the ladder in
 [PLAN.md](PLAN.md).
 
-1. **The animation payload contents** — blk2C's 16/20-byte groups
-   (m_skel+0xB4) and blk48's (m_skel+0xC4). Strides byte-exact; elements
-   unnamed; the quaternion reading refuted. The largest undecoded mass in the
-   format (blk2C fires on all 14,571 files). Read MdlAnim/MdlDecomp's
-   consumers; hooks: MdlAnim:1031 `skel1&&skel2`, MdlAnim:294, MdlDecomp:3016.
-2. **Flag bits 1 and 2** — the only two bits the FA1 parser reads
-   (`test byte [ebx+8], 6` → sets m_skeletonFlags bit 0) and the only two with
-   no corpus correlate over 14,571 chunks.
+1. ~~**The animation payload contents**~~ **NAMED by U2, 2026-08-16, and
+   the framing here was itself wrong**
+   ([../anim/FINDINGS.md](../anim/FINDINGS.md), adversarially reviewed):
+   the "16/20-byte groups" were the wrong overlay — the payloads are
+   times-prefix SoA channels, blk2C is one record per animated node
+   (translation + QUATERNION rotation + aux; the link byte is the
+   hierarchy), blk48 is GrTrans stream-3 tracks. **This document's §3.4
+   quaternion refutation is REVERSED** — see the dated corrections there.
+   Still unnamed inside U2's scope: the aux channel's semantic, blk48's
+   render binding, n44 bodies, the n3C tag enum.
+2. ~~**Flag bits 1 and 2**~~ **ANSWERED by U2**: the parser ORs them into
+   one runtime bit (`m_skeletonFlags & 1`, four consumers: rate fallback +
+   root-node bookkeeping), so they are indistinguishable downstream —
+   which is WHY no corpus correlate exists. What distinguishes them in
+   the header remains unknowable from retail data
+   ([../anim/FINDINGS.md](../anim/FINDINGS.md) §4).
 3. ~~**The object identity** — m_skel vs m_geom (§3.2)~~ **ANSWERED by U3,
    2026-08-16** ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §5,
    review-confirmed): TWO objects of two MdlBuild classes (0x15C geometry /
@@ -775,14 +808,21 @@ Ranked; each names the tool that can settle it. These feed the ladder in
    different fields of different classes sharing only a displacement —
    §3.2's tension was the one-object assumption. B's constructor pre-fills
    the three n14 vec3 slots at +0x48 (defaults the records overwrite).
-4. **MdlAnim:367's actual array**, and the 10 duplicate-key-time files —
-   different array (likely: stride-4 `fild` vs our 8-byte records) or a retail
-   assert those files would trip. Also the 23-byte record's six unnamed fields
-   (MdlSeq `0x00792F56` suggests a frame range at dst+0x08/+0x0C — UNVERIFIED).
+4. ~~**MdlAnim:367's actual array**~~ **SETTLED by U2**: the assert lives
+   in the shared channel-time lookup helpers and reads the payload
+   channels' stride-4 int32 time prefixes, not the n3C table — the 10
+   duplicate-time files trip nothing (the binary search never lands the
+   asserted pair on a duplicate). The 23-byte record's +0x05/+0x09 ARE
+   start/end — but TIMES on the global track clock (MdlSeq `0x00792F56`
+   clamp), not frame indices; four fields stay unnamed
+   ([../anim/FINDINGS.md](../anim/FINDINGS.md) §2.7, §3.5).
 5. **n56's writer** — fires on 0/14,571; only a tool/build that emits it can
    test the stride.
-6. **The second FA1 consumer** `0x0079E860` and its walker `0x0079E420` — a
-   validator or preload/rewrite path, undetermined (relevant to authoring).
+6. ~~**The second FA1 consumer**~~ **NAMED by U2**: `MdlBloat` — the
+   by-id/by-path "anim file" loader for the MdlDecomp export side
+   (its own error strings name it), neither a validator nor a rewrite
+   path; "anim file" is ArenaNet's word for the FA1-only class
+   ([../anim/FINDINGS.md](../anim/FINDINGS.md) §5).
 7. ~~**The mid/tail chain chunk families**~~ **CLASSIFIED by U3, 2026-08-16**
    ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §6, review-confirmed):
    tails = the model's collision/visibility payload consumed at runtime by

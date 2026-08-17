@@ -3079,6 +3079,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
          f"cast animation: player casts {skill_id}")
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
+        # The target rides the pending entry so the DAMAGE can land at cast
+        # end rather than at the press -- see cast_tick's E5 branch. Storing
+        # the id rather than the agent is deliberate: the agent may be dead,
+        # revived or removed by the time the cast completes, and hit_enemy
+        # re-reads it from state and refuses a corpse.
+        "target": target,
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
@@ -3087,40 +3093,35 @@ def handle_skill_press(values, send, state, conn_id, opcode):
           f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
           f"recharge {recharge:.0f}s", flush=True)
 
-    # A skill aimed at something hostile does what a click does, PLUS its own
-    # "+ Damage" if it has one. Since 2026-08-15 the "by how much" is no longer
-    # ours: the magnitude is the client's own scale endpoints interpolated at
-    # the player's rank IN THAT SKILL'S OWN ATTRIBUTE (studies/combat 12), so
-    # Power Attack lands harder than Desperation Blow because Strength 12 beats
-    # Tactics 1 -- which is the whole point of having ranks at all.
+    # NO DAMAGE HERE. It lands at cast end, in cast_tick's E5 branch.
     #
-    # A skill whose scale is not damage adds nothing and the swing stands
-    # alone. That covers most of this bar: two stances, two health buffs and a
-    # condition. Guessing an effect for those is the invention this arc exists
-    # to remove.
+    # Until 2026-08-15 this function resolved the hit synchronously, at the
+    # PRESS -- so a two-second spell dealt its damage before its own casting
+    # animation had begun, and nothing could interrupt it because there was no
+    # interval to interrupt. The owner named it: "we send the damage the
+    # instant the unit starts an animation -- that isn't how the game works...
+    # the actual hit is sent mid-animation, and only if not cancelled". The
+    # corpus agrees, and says it most clearly on the NPC side, where damage and
+    # GV_MELEE_ATTACK_FINISHED are the SAME wire instant 40 of 40 and both sit
+    # a windup after ATTACK_STARTED (studies/combat/PLAN.md 17b).
     #
-    # Damage stays AT PRESS rather than at cast end, and that is still a known
-    # divergence rather than a decision this step revisited: the magnitudes
-    # moved here, the timing did not.
-    bonus = 0.0
-    if target:
-        found = skill_damage(skill_id, player_rank_for_skill(skill_id))
-        if found and found[1] == "additive":
-            bonus = float(found[0])
+    # THREE THINGS THIS BUYS beyond fidelity, and the third was the reason to
+    # do this one first:
+    #   * the cast becomes interruptible in principle -- there is now a real
+    #     window between press and hit for a cancel to land in;
+    #   * the damage computation moves to the WORLD TICK, which catches
+    #     ValueError (its except at the tick body). It used to run here, on
+    #     the connection thread, and `skill_damage` can raise on a content row
+    #     whose scale set is disabled -- outside the try that used to wrap only
+    #     the hit_enemy call. That was a live hazard on the socket-closing path;
+    #   * handle_skill_press stops being a hit_enemy caller at all, so
+    #     hit_enemy is reached from ONE thread and F10's measured-but-unasserted
+    #     concurrency race (test_guards section 11) is closed by construction
+    #     rather than by a lock.
     #
-    # THE SAME ValueError CONTRACT world_tick has, because this runs on the
-    # CONNECTION thread: handle's except tuple is ConnectionError /
-    # socket.timeout / OSError only, so an escaping refusal would run the
-    # finally, close the socket, and disconnect the client over a number that
-    # was -- by design -- never sent. The world tick logs and keeps ticking
-    # (its except at the tick body); a skill press logs and keeps the
-    # connection. Refusing the VALUE must never cost more than the value.
-    if target:
-        try:
-            hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
-        except ValueError as ex:
-            print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
-                  flush=True)
+    # The ValueError catch that used to sit here went with it. Nothing on this
+    # path can raise one now, and a catch guarding nothing is a claim that
+    # something still does.
 
 
 def cast_tick(send, state, conn_id):
@@ -3135,6 +3136,12 @@ def cast_tick(send, state, conn_id):
     Phase order within a cycle is pinned to the observed one: E5, then E3,
     then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
     waits for its E3 rather than closing the cycle early.
+
+    SINCE 2026-08-15 THIS ALSO LANDS THE DAMAGE, in the E5 branch. It used to
+    happen at the press, which put a spell's hit before its own casting
+    animation and left no interval for anything to interrupt. Moving it here
+    is what makes hit_enemy single-threaded: this function is the only caller
+    left besides attack_tick, and both run on the world tick.
     """
     pending = state.get("pending_casts")
     if not pending:
@@ -3149,6 +3156,30 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_RECHARGE(skill {cast['skill_id']}, "
                  f"{cast['recharge']}s)")
             cast["e5_sent"] = True
+            # AND THE HIT LANDS HERE, at cast end rather than at the press.
+            #
+            # E5 is the cast completing -- it is what carries the recharge and
+            # starts it -- so it is the phase a skill's effect belongs to. The
+            # ORDER within this instant (E5 before the damage) is OURS and
+            # UNMEASURED: the corpus shows the player's cast cycle and shows
+            # damage, but no capture pins which of the two the server writes
+            # first. The NPC precedent is the reverse of the intuitive one
+            # (FINISHED then damage, land_swing's docstring), so this is worth
+            # a capture rather than a guess.
+            #
+            # A skill aimed at something hostile still does what a click does,
+            # PLUS its own "+ Damage" if it has one -- unchanged from the press
+            # path, magnitudes and all (studies/combat 12). What changed is
+            # only WHEN. hit_enemy re-reads the target from state, so a corpse,
+            # a removed agent or a revived one is handled there rather than by
+            # anything cached at press time.
+            target = cast.get("target")
+            if target:
+                bonus, found = 0.0, skill_damage(
+                    cast["skill_id"], player_rank_for_skill(cast["skill_id"]))
+                if found and found[1] == "additive":
+                    bonus = float(found[0])
+                hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -4329,11 +4360,19 @@ def spawn_population(send, state, origin, conn_id, area=None):
 
         allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
+        # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
+        # "a name comes from a rendered nameplate or it does not exist" -- and
+        # this used to index `npc["name"]` bare, so every such row threw inside
+        # instance bring-up, where the harness still reported PASS and the map
+        # readback stayed green (studies/isle/PLAN.md gap 2). The fallback label
+        # is OURS and is the npc row's own key: commit the id, resolve the
+        # string at run time. It reaches logs only, never the wire.
+        label = npc.get("name") or str(row["npc"])
         entry = {
             "pos": (x, y), "plane": plane,
             "health": hp, "max_health": hp,
             "dead": False,
-            "name": npc["name"],
+            "name": label,
             "npc": npc,
             "definition": int(row["definition"]),
             "allegiance": allegiance,
@@ -4348,7 +4387,7 @@ def spawn_population(send, state, origin, conn_id, area=None):
                            conn_id=conn_id)
         placed += 1
         note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
-        print(f"[c{conn_id}] {key!r}: {npc['name']} at ({x:.0f}, {y:.0f}) "
+        print(f"[c{conn_id}] {key!r}: {label} at ({x:.0f}, {y:.0f}) "
               f"{how}, {row.get('allegiance', 'hostile')}, {hp:.0f} hp{note}",
               flush=True)
     print(f"[c{conn_id}] area {area!r}: {placed} of {len(rows)} placed",
@@ -5053,6 +5092,55 @@ def recv_exact(sock, n, rec=None):
     return buf
 
 
+def bind_key_to_build(keys, build, conn_id, rec):
+    """Re-select the DH key for the build the client just announced.
+
+    Returns `(keys, ok)`; `ok` False means REFUSE this connection.
+
+    WHY THIS IS ONE FUNCTION CALLED BY BOTH CHANNELS, which is the whole
+    point of it existing. The 2026-08-14 crossbuild fix wrote this logic
+    INLINE in the auth branch, and the game branch -- forty lines below,
+    in the same function -- never got it. On 2026-08-17 that shipped its
+    consequence: a 38797 client authenticated fine (auth re-selected its
+    key) and was then handed 38833's key on the GAME channel, because
+    newest-by-filename is the starting default. The handshake "completed",
+    the ARC4 stream was noise, the client parsed nothing it was sent, and
+    it dropped the connection -- Code=007, no assert, zero c2s. Two runs,
+    with and without a modified archive, failed identically; the archive
+    was innocent.
+
+    That is `sorted()[-1]` picking the wrong build for the FOURTH time in
+    this repo, and the second time the identical fix was written for one
+    path while its twin sat feet away. `studies/crossbuild/FINDINGS.md`
+    says it in the voice of the session that paid for it: "A rule written
+    in one file does not protect the identical line in another." So this
+    is a function, not a paragraph copied twice.
+    """
+    want = KEYS_BY_BUILD.get(build)
+    have_tag = keys.get("build_tag")
+    # Compared by build_tag, not by object identity: the registry loads its
+    # own copy of every file, so `is not` is true even when both are the
+    # same key and the log would claim a swap that did not happen.
+    if want is not None and want.get("build_tag") != have_tag:
+        print(f"[c{conn_id}] keys: re-selected {want.get('build_tag')} to "
+              f"match the client's build {build} (had {have_tag})", flush=True)
+        rec.event("keys_reselected", build=build,
+                  build_tag=want.get("build_tag"), was=have_tag)
+        return want, True
+    if want is None and _build_of_tag(have_tag) not in (None, build):
+        # No key for this build AND the loaded one is for a different, known
+        # build. Refusing beats a wrong key: the client cannot be decrypted
+        # either way, and only one of those says why.
+        msg = (f"no DH key for client build {build}; the loaded key is "
+               f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
+               f"build with make_custom_client.py, or point the client at "
+               f"the run directory matching the key.")
+        print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
+        rec.event("key_build_mismatch", build=build, key_tag=have_tag)
+        return keys, False
+    return keys, True
+
+
 def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
@@ -5082,35 +5170,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                   flush=True)
             rec.event("version", channel="auth", build=build, h0008=h8, h000C=hC)
 
-            # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED. The DH triple is
-            # patched per build, so a key from another build derives a shared
-            # secret the client does not share: the handshake completes, the
-            # ARC4 stream is noise, and the first symptom is `Code=058` on the
-            # client half a minute later -- which names nothing. This costs one
-            # dict lookup and turns that into a line naming both builds.
-            want = KEYS_BY_BUILD.get(build)
-            have_tag = keys.get("build_tag")
-            # Compared by build_tag, not by object identity: the registry loads
-            # its own copy of every file, so `is not` is true even when both are
-            # the same key and the log would claim a swap that did not happen.
-            if want is not None and want.get("build_tag") != have_tag:
-                keys = want
-                print(f"[c{conn_id}] keys: re-selected {keys.get('build_tag')} to "
-                      f"match the client's build {build} (had {have_tag})",
-                      flush=True)
-                rec.event("keys_reselected", build=build,
-                          build_tag=keys.get("build_tag"), was=have_tag)
-            elif want is None and _build_of_tag(have_tag) not in (None, build):
-                # No key for this build AND the loaded one is for a different,
-                # known build. Refusing beats a wrong key: the client cannot be
-                # decrypted either way, and only one of those says why.
-                msg = (f"no DH key for client build {build}; the loaded key is "
-                       f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
-                       f"build with make_custom_client.py, or point the client at "
-                       f"the run directory matching the key.")
-                print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
-                rec.event("key_build_mismatch", build=build, key_tag=have_tag)
-                return
+            # The key is bound to the announced build below, for BOTH
+            # channels -- see bind_key_to_build() for why that is not
+            # written here any more.
         else:
             # 60 more bytes, measured: build, unk1, world_id, map_id, player_id,
             # then the account uuid and the character uuid we handed this client in
@@ -5121,7 +5183,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             account_uuid = body[20:36]
             char_uuid = body[36:52]
             tail = body[52:60]
-            hC = keys["generator"]      # not carried on this channel; keep the check quiet
+            hC = None                   # not carried on this channel; the check below skips
             print(f"[c{conn_id}] GAME version: build={build} world_id={world_id} "
                   f"map_id={map_id} player_id={player_id}", flush=True)
             print(f"[c{conn_id}]   account {wire_to_uuid(account_uuid)}", flush=True)
@@ -5132,7 +5194,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                       char_uuid=wire_to_uuid(char_uuid),
                       tail=binascii.hexlify(tail).decode(),
                       header=hex(header))
-        if hC != keys["generator"]:
+        # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED -- both channels,
+        # one implementation. The DH triple is patched per build, so a key
+        # from another build derives a shared secret the client does not
+        # share: the handshake completes, the ARC4 stream is noise, and the
+        # client drops with no assert and nothing to name the cause.
+        keys, ok = bind_key_to_build(keys, build, conn_id, rec)
+        if not ok:
+            return
+
+        if hC is not None and hC != keys["generator"]:
             print(f"[c{conn_id}] NOTE client generator {hC} != our {keys['generator']}",
                   flush=True)
 
@@ -7100,6 +7171,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       state["settings_buf"]).decode())
                         send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
                              f"REQUEST_RESPONSE(settings {req_id})")
+                elif opcode == 0x0009:  # UPDATE_CHARACTER_SETTINGS
+                    # [req_id, character name, settings blob]. OBSERVED
+                    # 2026-08-16: a client whose account has a STORED character
+                    # sends this ~2 s after entering a map -- persisting its
+                    # char-select settings word ("currently in", appearance) --
+                    # and an unanswered one is FATAL: the client waits, sets
+                    # itself Offline and drops BOTH channels with Code=007.
+                    # Every harness session on every tree died of this the day
+                    # the character store landed (captures 20260816T19*-21*);
+                    # the synthetic-character flow never sent it, which is why
+                    # no arm existed. Ack like the settings upload above; the
+                    # blob is recorded for the character-data arc, not parsed
+                    # here -- persistence design is that arc's, not this arm's.
+                    req_id, char_name, blob = values[1], values[2], values[3]
+                    # array8 decodes to a str of code points here (MEASURED on
+                    # tonight's capture: types [int, int, str, str]); bytes()
+                    # on that str raised, killed this thread, and turned the
+                    # missing-ack death into an instant-reset death.
+                    raw = (bytes(blob) if isinstance(blob, (bytes, bytearray))
+                           else bytes(ord(ch) & 0xFF for ch in blob))
+                    rec.event("character_settings", req_id=req_id,
+                              name_units=[ord(ch) for ch in char_name],
+                              blob=binascii.hexlify(raw).decode())
+                    send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
+                         f"REQUEST_RESPONSE(char settings {req_id})")
+                    print(f"[c{conn_id}] character settings: req {req_id}, "
+                          f"{len(raw)}B recorded and ACKED", flush=True)
                 elif opcode == AUTH_CMSG_SET_PLAYER_STATUS:
                     # Deliberately no reply: the reference server records the
                     # status and returns. Sent on pressing Play, status 1.
