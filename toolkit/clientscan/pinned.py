@@ -194,30 +194,43 @@ def select(spec=None):
     raise SystemExit(f"no such build in the vault: {spec!r}\n  known: {known}")
 
 
-def identify(path, build=None):
-    """('pristine' | 'patched' | 'unknown', human-readable detail).
+def identify_build(path, build=None):
+    """('pristine' | 'patched' | 'unknown', the Build matched or None, detail).
 
     With no `build`, EVERY build in `BUILDS` is considered, so the older vaulted
     client identifies as itself rather than as "not 38797's size". Pass a number
     or a stamp to ask about one build specifically -- which is what `find()`
     does, because there the question is "is this the build I asked for", and a
     file that is honestly some OTHER build is still the wrong answer.
+
+    RETURNS THE MATCHED ROW, and that is why this function exists rather than
+    just `identify()`. Until 2026-08-17 the only answer available here was the
+    STRING "pristine", which names a category and not a build -- so a caller
+    that had identified a file and wanted to print or record which build it was
+    had nowhere to get the number and reached for `BUILD`, the constant. Four
+    of them did: `framebus.py` labelled every image "the pinned build 38797",
+    and `worldmap.py`, `consttable.py` and `heroes_table.py` stamped 38797 onto
+    extracted content rows. All four were reading whatever `--exe` named.
+    `worldmap.image_build` is the one worth reading, because its own docstring
+    says "Never a constant" and it emitted `build: 38797` beside
+    `image: "pristine: build 38833"` -- the contradiction was already in the
+    row and nothing looked at it. See `studies/crossbuild/FINDINGS.md` §8.
     """
     if not os.path.isfile(path):
-        return "unknown", "no such file"
+        return "unknown", None, "no such file"
     size = os.path.getsize(path)
     candidates = [select(build)] if build is not None else list(BUILDS)
     sized = [b for b in candidates if b.size == size]
     if not sized:
         want = ", ".join(f"{b.size:,} (build {name_of(b)})" for b in candidates)
-        return "unknown", f"{size:,} bytes, which is no build we hold -- have {want}"
+        return "unknown", None, f"{size:,} bytes, which is no build we hold -- have {want}"
     digest = sha256(path)
     for b in sized:
         if digest == b.pristine:
-            return "pristine", f"build {name_of(b)}, as ArenaNet shipped it"
+            return "pristine", b, f"build {name_of(b)}, as ArenaNet shipped it"
         if b.patched and digest == b.patched:
-            return "patched", (f"build {name_of(b)}, OUR patched copy -- 9 bytes of "
-                               f".text differ from the shipped client")
+            return "patched", b, (f"build {name_of(b)}, OUR patched copy -- 9 bytes of "
+                                  f".text differ from the shipped client")
     # NAMES EVERY same-size candidate, not `sized[0]`. This said "the size of
     # build {sized[0]}" until 2026-08-14, which was unambiguous only while size
     # was a discriminator -- and 38833 ships at 10,483,904 bytes, exactly 38797's
@@ -227,9 +240,20 @@ def identify(path, build=None):
     # already considers every candidate; only the refusal message did not.
     which = " or ".join(name_of(b) for b in sized)
     plural = "s" if len(sized) > 1 else ""
-    return "unknown", (f"the size of build{plural} {which} but sha256 "
-                       f"{digest[:16]}..., which is no copy we hold of "
-                       f"{'either' if len(sized) > 1 else 'it'}")
+    return "unknown", None, (f"the size of build{plural} {which} but sha256 "
+                             f"{digest[:16]}..., which is no copy we hold of "
+                             f"{'either' if len(sized) > 1 else 'it'}")
+
+
+def identify(path, build=None):
+    """('pristine' | 'patched' | 'unknown', detail). `identify_build` without the row.
+
+    Kept because a dozen callers only ever wanted the category and the sentence.
+    A caller that wants the BUILD must use `identify_build` -- or better,
+    `buildid.of_image`, which also reads a build we have never seen.
+    """
+    kind, _b, detail = identify_build(path, build)
+    return kind, detail
 
 
 def find(build=None, *, verify=True, allow_live=False):

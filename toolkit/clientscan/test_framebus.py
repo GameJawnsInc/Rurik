@@ -24,6 +24,15 @@ a post, an out-of-band id that must be ignored, and the two window boundaries.
 not. It asserts the pairing, including the two SHARED ids, which is the part a
 coincidence would not produce.
 
+§3 runs the CLI against a build that is NOT the pin and reads its header. Added
+2026-08-17: `--exe`'d at the vaulted 38833 client, this tool printed "the pinned
+build 38797", because the label came from `len(blob) == pinned.SIZE` and 38833
+ships at exactly 38797's length. It needs a SECOND real client and skips
+without one -- the defect is invisible against the pin, where the constant
+happens to be right, and that is why it survived. Same shape in three other
+tools that day (`worldmap.py`, `consttable.py`, `heroes_table.py`), all fixed
+through `buildid.of_image`; `test_buildid.py` §5 guards the shared helper.
+
 THE REGRESSION THIS FILE EXISTS FOR is the call window. The `push imm32` and the
 `call` that consumes it are not adjacent -- the body stages the frame payload in
 between -- and a window that is too short does not error. It returns a confident
@@ -34,6 +43,7 @@ red instead of quietly un-measuring an opcode.
 """
 import os
 import struct
+import subprocess
 import sys
 import tempfile
 
@@ -43,12 +53,14 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import checks     # noqa: E402
 import framebus   # noqa: E402
+import vaultpath  # noqa: E402
 
-# MEASURED from the first green run: §1 is 14 unconditional checks, §2 is 4.
-# The floor is 14 -- §1 alone -- and NOT 18, because §2 needs the vault and a
-# floor above what a bare machine produces would make "the client is not here"
-# indistinguishable from "the scan broke". §2 declares a skip instead, which
-# checks.py prints and never scores green.
+# MEASURED from the first green run: §1 is 14 unconditional checks, §2 is 4,
+# and §3 is 5 (2026-08-17, a real green run: 18 -> 23).
+# The floor is 14 -- §1 alone -- and NOT 23, because §2 and §3 both need the
+# vault and a floor above what a bare machine produces would make "the client
+# is not here" indistinguishable from "the scan broke". Both declare skips
+# instead, which checks.py prints and never scores green.
 LEDGER = checks.Ledger("framebus: the quest frame-bus pairing", floor=14)
 check = checks.adopt(LEDGER)
 
@@ -101,6 +113,95 @@ def push_call(frame_id, target, at_va, gap=0):
     call_va = at_va + len(out)
     out += b"\xE8" + struct.pack("<i", target - (call_va + 5))
     return bytes(out)
+
+
+def run_cli(*argv):
+    """`framebus.py` as the operator runs it, returning stdout.
+
+    A SUBPROCESS, and it has to be: the defect this section exists for lived in
+    `main`'s print statement, so anything that imported `framebus` and asked it
+    a question directly would have gone green while the tool on the command
+    line kept saying 38797. The check has to read what the operator reads.
+
+    THIS tree's copy, by absolute path -- `CLAUDE.md`'s worktree rule. A
+    relative `toolkit/clientscan/framebus.py` runs whatever tree the shell
+    happens to sit in, which returns a confident answer about the wrong file.
+    """
+    out = subprocess.run([sys.executable, os.path.join(HERE, "framebus.py"), *argv],
+                         capture_output=True, text=True, timeout=180)
+    # Not the exit code: pointed at a build these VAs were not measured on, the
+    # scan legitimately disagrees with QUEST_EXPECTED and exits 1. What is
+    # asserted here is the LABEL, which must be right either way.
+    return out.stdout
+
+
+def section_label():
+    """The provenance line must name the build of the file actually opened.
+
+    THE DEFECT, observed 2026-08-17: `--exe`'d at the vaulted 38833 client,
+    this tool printed "the pinned build 38797". The label came from
+    `len(blob) == pinned.SIZE`, and 38833 ships at exactly 38797's length --
+    10,483,904 bytes -- so the size check could not tell them apart and said
+    the pin. `pinned.py`'s own BUILDS comment had written down two days
+    earlier that "a size check written anywhere else is now a bug".
+
+    Why it is worth a section rather than a nicer string: addresses drift
+    between these two builds by 0x20..0x160 per region, and
+    `studies/pvpui/FINDINGS.md` §4/§15.0 records two wrong-build readings that
+    each produced a confident wrong answer, one nearly published as a
+    correction. A tool that misreports which image it read is that same failure
+    wearing a friendlier face.
+
+    The negative control is the part that can go red on a lazy fix: it is not
+    enough to print the right number somewhere, the tool must ALSO stop
+    claiming the pin. A label reading "38833 (the pinned build 38797)" passes
+    a check for "38833" and is still the bug.
+    """
+    others = [b for b in framebus.pinned.BUILDS if b.number != framebus.pinned.BUILD]
+    have = [(b, p) for b, p in ((b, os.path.join(vaultpath.vault_root(), "client",
+                                                 b.stamp, "Gw.exe")) for b in others)
+            if os.path.isfile(p)]
+    if not have:
+        LEDGER.skip("the non-default --exe label",
+                    "no vaulted build other than the pin; this section needs a "
+                    "SECOND real client, because the defect was invisible "
+                    "against the pin -- there the constant was correct")
+        return
+
+    build, path = have[-1]
+    text = run_cli("--exe", path)
+    head = text.split("band:")[0]
+    # The one line that carries the claim, for legible failure output.
+    said = next((ln.strip() for ln in head.splitlines() if "build" in ln),
+                "(no build line printed)")
+
+    check(path in head,
+          f"--exe {os.path.basename(os.path.dirname(path))}: the header names "
+          f"the file it was given", head.strip() or "(nothing printed)")
+    check(str(build.number) in head,
+          f"and reports build {build.number}, read from that file",
+          f"said: {said} -- this is the check the size-derived label fails: "
+          f"38833 and 38797 are the same number of bytes")
+    check(f"the pinned build {framebus.pinned.BUILD}" not in head
+          and f"build {framebus.pinned.BUILD}," not in head,
+          f"and does NOT call it build {framebus.pinned.BUILD}",
+          f"said: {said} -- NEGATIVE CONTROL: printing the right build "
+          f"while still claiming the pin somewhere is the same misreport")
+    check("NOT build" in head,
+          "and says out loud that these VAs were not measured on it",
+          f"said: {said} -- the rows below are 38797's offsets applied to "
+          f"another build's bytes, which is a fact about the OUTPUT and not "
+          f"just about the header")
+
+    # POSITIVE CONTROL. Without this the three checks above are satisfied by a
+    # tool that calls everything "not the pin", including the pin.
+    pin_head = run_cli().split("band:")[0]
+    pin_said = next((ln.strip() for ln in pin_head.splitlines()
+                     if "build" in ln), "(no build line printed)")
+    check(str(framebus.pinned.BUILD) in pin_head and "NOT build" not in pin_head,
+          f"CONTROL: the default run still reads as build "
+          f"{framebus.pinned.BUILD} and carries no warning",
+          f"said: {pin_said}")
 
 
 def main():
@@ -195,8 +296,14 @@ def main():
     print("\n2. the pinned client, if it is here")
     try:
         real = framebus.Image()
-        have = real.pinned
-        why = "" if have else f"{real.path} is not the pinned build {framebus.pinned.BUILD}"
+        # `is_pinned`, which READS the build. This was `real.pinned`, a size
+        # check, and it answered True for the 38833 client -- so §2 would have
+        # run the pairing against the wrong build's bytes and reported the
+        # disagreement as a broken scan rather than as the wrong client.
+        have = real.is_pinned
+        why = ("" if have else
+               f"{real.path} is build {real.build}, not the pinned "
+               f"{framebus.pinned.BUILD}")
     except Exception as exc:                                    # noqa: BLE001
         have, why = False, f"{type(exc).__name__}: {exc}"
     if not have:
@@ -226,6 +333,9 @@ def main():
               "positives, not a narrower one",
               f"{stray} -- a negative produced by a smaller scan than the "
               f"positives would be an artefact of the scan")
+
+    print("\n3. the printed provenance names the file that was actually read")
+    section_label()
 
     for p in _TMP:
         try:

@@ -1050,6 +1050,47 @@ def section_emitted(pe, exe, gets, grids, tiles):
               "not 38797 -- the build is measured from the file, never taken "
               "from a constant",
               f"{unknown['build']} / {unknown['image']}")
+
+    # AND THE CASE THE CONTROL ABOVE MISSED, added 2026-08-17. It tested an
+    # image that could not be identified AT ALL, and `image_build` returned
+    # None there for the right reason. What it never tested is a file that IS
+    # a build we recorded and is not the pin -- and that was the live bug:
+    #
+    #     kind, detail = pinned.identify(exe_path)
+    #     build = pinned.BUILD if kind in ("pristine", "patched") else None
+    #
+    # Pointed at the vaulted 38833 client that scored `kind == "pristine"` and
+    # stamped 38797 on every row, beside an `image` string reading "build
+    # 38833, as ArenaNet shipped it". The row contradicted itself and the test
+    # was green, because the guard only ever asked about a file that was not a
+    # client. A control for "unidentifiable" is not a control for "identified,
+    # and not the one you assumed".
+    others = [b for b in pinned.BUILDS if b.number != pinned.BUILD]
+    have = [(b, p) for b, p in ((b, os.path.join(vaultpath.vault_root(), "client",
+                                                 b.stamp, "Gw.exe")) for b in others)
+            if os.path.isfile(p)]
+    if not have:
+        LEDGER.skip("the wrong-build control",
+                    "no vaulted build other than the pin -- this needs a "
+                    "SECOND real client; against the pin the constant is right")
+    else:
+        other, other_path = have[-1]
+        # Deliberately reads the OTHER client's identity while re-using this
+        # run's tiles: the subject is the provenance stamp, not the tile data.
+        wrong = wm.index_payload(pe, other_path, tiles[:4], gets, grids)
+        LEDGER.ok(wrong["build"] == other.number != pinned.BUILD
+                  and all(r["provenance"]["build"] == other.number
+                          for r in wrong["tiles"]),
+                  f"an index read from the build-{other.number} client records "
+                  f"{other.number} on every row, not {pinned.BUILD}",
+                  f"{wrong['build']} / {wrong['image']} -- this is the check "
+                  f"the constant fails, and the missing-file control above "
+                  f"could not")
+        LEDGER.ok(str(other.number) in wrong["image"]
+                  and str(pinned.BUILD) not in wrong["image"],
+                  "and the row's `build` and `image` name the SAME build",
+                  f"{wrong['image']} -- they disagreed inside one row for "
+                  f"three days and nothing looked at them together")
     extractor = os.path.join(os.path.dirname(os.path.dirname(HERE)),
                              "toolkit", "clientscan", "worldmap.py")
     LEDGER.ok(os.path.isfile(extractor),

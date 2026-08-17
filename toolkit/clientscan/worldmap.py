@@ -124,6 +124,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 
+import buildid                                                # noqa: E402
 import consttable                                             # noqa: E402
 import pinned                                                 # noqa: E402
 import vaultpath                                              # noqa: E402
@@ -703,14 +704,27 @@ def image_build(exe_path):
     is the one class of error this repository cannot retrofit away, and
     `pinned.py`'s own docstring is about exactly that failure.
 
-    So the build comes from `pinned.identify()`, which decides by size and
-    sha256 and knows three answers. `unknown` yields a build of None -- the row
-    then says it does not know, which a reader can act on, rather than saying
-    38797, which a reader cannot.
+    So the build comes from `buildid.of_image`, which decides by sha256 against
+    the registry and falls back to the client's own build getter. `unknown`
+    yields a build of None -- the row then says it does not know, which a
+    reader can act on, rather than saying 38797, which a reader cannot.
+
+    AND THIS FUNCTION DID EXACTLY WHAT IT SAYS NOT TO, for three days. It read
+    `kind, detail = pinned.identify(exe_path)` and then
+    `build = pinned.BUILD if kind in ("pristine", "patched") else None` --
+    which is the constant, guarded by a check that the file is SOME build we
+    recorded rather than THE build. Pointed at the vaulted 38833 client it
+    emitted `build: 38797` next to `image: "pristine: build 38833, as ArenaNet
+    shipped it"`, contradicting itself inside one row, on every row.
+    `test_worldmap.py` §7's control caught only the missing-file case, so the
+    guard was one case short of the bug: "no such file" scored None correctly
+    while "a real ArenaNet build that is not the pin" scored 38797. Found
+    2026-08-17 alongside the same defect in `framebus.py`, `consttable.py` and
+    `heroes_table.py`; the control now runs over every build in the vault.
     """
-    kind, detail = pinned.identify(exe_path)
-    build = pinned.BUILD if kind in ("pristine", "patched") else None
-    return build, f"{kind}: {detail}"
+    build, how = buildid.of_image(exe_path)
+    kind, _b, detail = pinned.identify_build(exe_path)
+    return build, f"{kind}: {detail}" if kind != "unknown" else f"{kind}: {how}"
 
 
 def index_payload(pe, exe_path, tile_rows, gets, grid_rows, resolved=None,

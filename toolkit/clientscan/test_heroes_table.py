@@ -30,6 +30,8 @@ sys.path.insert(0, TOOLKIT)
 sys.path.insert(0, HERE)
 import checks           # noqa: E402
 import content          # noqa: E402
+import pinned           # noqa: E402
+import vaultpath        # noqa: E402
 
 # 10, from a real green run. Guessed at 9 first and the count came back
 # higher; the floor is set from what a healthy run produces, never from
@@ -119,6 +121,34 @@ def main():
     except content.ContentError:
         LEDGER.ok(True, "and the gate refuses a row with no extractor",
                   "so the 40/40 above is a result rather than a tautology")
+
+    # The build a row records must be the build it was READ ON. Added
+    # 2026-08-17: it was `pinned.BUILD`, so rows emitted from any client
+    # claimed 38797 and the gate above passed them all -- `_check_provenance`
+    # asks that a build be PRESENT, not that it be true. `--exe` at a second
+    # real client is the only thing that can tell the two apart.
+    others = [b for b in pinned.BUILDS if b.number != pinned.BUILD]
+    have = [(b, p) for b, p in ((b, os.path.join(vaultpath.vault_root(), "client",
+                                                 b.stamp, "Gw.exe")) for b in others)
+            if os.path.isfile(p)]
+    stamped = {r["provenance"]["build"] for r in emitted}
+    LEDGER.ok(stamped == {pinned.BUILD},
+              f"the default emit records build {pinned.BUILD}", str(stamped))
+    if not have:
+        LEDGER.skip("the wrong-build stamp", "only the pinned client is vaulted")
+    else:
+        other, other_path = have[-1]
+        r2 = subprocess.run([sys.executable, os.path.join(HERE, "heroes_table.py"),
+                             "--exe", other_path, "--toml"],
+                            capture_output=True, text=True)
+        got = {row["provenance"]["build"]
+               for row in tomllib.loads(r2.stdout)["hero"]}
+        LEDGER.ok(got == {other.number} and other.number != pinned.BUILD,
+                  f"and `--exe` at the build-{other.number} client records "
+                  f"{other.number}, not {pinned.BUILD}",
+                  f"{got} -- a build stamped from a constant passes the gate "
+                  f"and is still a provenance misreport, because the row is "
+                  f"what gets committed and re-derived")
 
     # ---- 5. no bulk resolution ------------------------------------------------
     print("\n5. ids only")

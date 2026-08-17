@@ -27,6 +27,20 @@ behind three `mov [ebp-x], imm32` -- one of them `0x378` == 888, the "no marker"
 map id. A window too small does not error, it returns a confident short list,
 which is the same failure shape as a stale worktree returning a confident number.
 
+WHICH CLIENT IT READ, and the header now says so from the FILE. Until
+2026-08-17 the label was `len(blob) == pinned.SIZE`, printed as "the pinned
+build 38797" -- and build 38833 ships at exactly 38797's length, 10,483,904
+bytes, so `--exe`'d at the 38833 client this tool reported the pin. Every VA
+below was measured on 38797 and addresses drift between the two by 0x20..0x160
+per region, so that header sat above a table of 38797's offsets applied to
+another build's bytes. `pinned.py`'s own BUILDS comment had already written down
+that "a size check written anywhere else is now a bug"; this was that bug, and
+three sibling tools had it too (`worldmap.py`, `consttable.py`,
+`heroes_table.py`, all stamping 38797 onto extracted content rows). The build
+comes from `buildid.of_image` now -- registry sha256, falling back to the
+client's own build getter -- and a non-pinned image gets a loud warning rather
+than a friendly wrong label. `test_framebus.py` §3 turns it red.
+
 WHAT THIS DOES NOT DO. It reads `push imm32` / `call rel32` and nothing else, so
 an id loaded into a register, or posted through an indirect call, is invisible to
 it. Treat a NEGATIVE ("this body posts nothing") as "nothing in the direct form",
@@ -43,8 +57,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
+import buildid   # noqa: E402
 import pinned    # noqa: E402
 import srctree   # noqa: E402
+
+_UNREAD = object()
 
 # The two bus helpers, MEASURED on build 38797. `studies/quests/FINDINGS.md` §1.6
 # records a refuted reading here worth keeping: a lane reported two subscribe
@@ -107,7 +124,7 @@ class Image:
     def __init__(self, path=None):
         self.path = path or srctree.default_exe()
         self.blob = open(self.path, "rb").read()
-        self.pinned = len(self.blob) == pinned.SIZE
+        self._id = _UNREAD
         e = struct.unpack_from("<I", self.blob, 0x3C)[0]
         nsec = struct.unpack_from("<H", self.blob, e + 6)[0]
         opt = struct.unpack_from("<H", self.blob, e + 20)[0]
@@ -123,6 +140,38 @@ class Image:
             if sva <= va < sva + size:
                 return roff + (va - sva)
         raise ValueError(f"VA {va:#010x} is in no section of {self.path}")
+
+    # WAS A SIZE CHECK, and it was wrong the day 38833 shipped. This read
+    # `self.pinned = len(self.blob) == pinned.SIZE`, and build 38833 is
+    # byte-for-byte the same LENGTH as 38797 -- 10,483,904 -- so `--exe`'d at
+    # the 38833 client the header printed "the pinned build 38797" while every
+    # VA below meant something else. `pinned.py`'s own BUILDS comment had
+    # called it two days earlier: "a size check written anywhere else is now a
+    # bug". This is that bug, found 2026-08-17 by pointing the tool at 38833.
+    #
+    # Lazy because §1 of `test_framebus.py` builds dozens of synthetic images
+    # on a bare machine and none of them wants a sha256 or a PE scan; the label
+    # is read once, in `main`, from the file that was actually opened.
+    @property
+    def identity(self):
+        """(build number or None, how we know) for the file actually opened."""
+        if self._id is _UNREAD:
+            self._id = buildid.of_image(self.path)
+        return self._id
+
+    @property
+    def build(self):
+        return self.identity[0]
+
+    @property
+    def is_pinned(self):
+        """Do this file's bytes mean what the VAs in this module say?
+
+        Addresses drift between builds by 0x20..0x160 per region, so this is
+        the difference between a measurement and a confident wrong number --
+        not a cosmetic label.
+        """
+        return self.build == pinned.BUILD
 
 
 def publishes(img, lo, hi, band=QUEST_BAND):
@@ -177,9 +226,20 @@ def main():
     ap.add_argument("--band", nargs=2, type=lambda s: int(s, 0), default=QUEST_BAND)
     args = ap.parse_args()
 
-    img = Image(args.exe)
-    print(f"exe: {img.path}")
-    print(f"     {len(img.blob)} bytes, {'the pinned build ' + str(pinned.BUILD) if img.pinned else 'NOT the pinned image -- VAs may not mean what this file says'}")
+    exe, why = ((args.exe, "given on the command line") if args.exe
+                else pinned.find())
+    img = Image(exe)
+    build, how = img.identity
+    print(f"client: {exe}")
+    print(f"        ({why})")
+    print(f"        build {build if build is not None else 'UNKNOWN'}, "
+          f"{len(img.blob):,} bytes -- {how}")
+    if not img.is_pinned:
+        print(f"        ^^ this is NOT build {pinned.BUILD}. Every VA in this "
+              f"file was MEASURED on {pinned.BUILD} and addresses drift between "
+              f"builds by 0x20..0x160 per region,\n"
+              f"           so the rows below are not a reading of this client -- "
+              f"they are {pinned.BUILD}'s offsets applied to someone else's bytes.")
     print(f"band: {args.band[0]:#010x}..{args.band[1]:#010x}\n")
 
     if args.at:
