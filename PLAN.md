@@ -1342,7 +1342,33 @@ the exact selector that reaches it. Three sites, each in a block with **one** se
   `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
   an `agentId`.
 
-**A BLOCKER WAS NAMED IN §13 AND THEN PARTLY RETRACTED IN §14 — read §14.** The
+**MEASURED ON THE HARNESS 2026-08-17 (§15-§16). Three loopback runs, build 38833, one
+hero, every site byte-verified in the running process, every run reaching its map:**
+
+- **The ordering hypothesis is REFUTED.** `worker` (our `0x01C2`) fires BEFORE `bulkraise`,
+  so the hero row is already in the container when `0x10000114` is raised.
+- **"Raised into nothing" is REFUTED for this event.** `lookup114`, the client's own
+  subscriber-map read armed off the raise, reports **SUBSCRIBED**. The event is raised and
+  delivered, and GmView's case 90 — the only caller of the commander rebuild — still never
+  runs. `bulk` 0 hits, `create` 0 hits, across every run.
+- `commanderpeek` with the client in the map: commander container **cap=7, count=0**.
+- **§14.2's CONTESTED point is SETTLED in RESKIN's favour (§16).** `0x00858850` is a
+  thiscall whose caller (`0x01B2`'s handler) passes `ecx = [globals+0x4C]+4`, so its
+  `mov [esi+0x50], eax` **is** the `[[globals+0x4C]+0x54]` store. `0x01B2 PARTY_SET_MINE`
+  writes it and `agents.py:434` already sends it. `codescan --field 0x54` missed it because
+  the displacement is `0x50` — the base is pre-biased by four — exactly the blind spot the
+  tool documents. §13.3 is refuted.
+- **§4 is corrected (§15.0):** the harness does NOT default to 38833. `drive_client.py:87`
+  selects by build and :167 excludes it. Running 38833 needs `--exe` **and** `RURIK_DAT`
+  pointed at that run dir's own `Gw.dat`, or `contentids` refuses on maps 146/148.
+
+**So the break is neither delivery nor ordering.** GmView's *subscriber* is `0x004ED055`
+(heroes §36.7), which is not its frame handler `0x004E27D0` — two different doors, and
+case 90 sits behind the second. The open question is now narrow and mechanical: **does
+`0x10000114` ever reach GmView's frame-handler event half at all**, and if not, what
+decides which events its subscriber forwards into the frame.
+
+**Earlier, superseded framing, kept for the record:** The
 retraction matters more than the claim: `[[ctx+0x4C]+0x54]` was already named by
 `agents.py:369` and RESKIN §17.1, and RESKIN §18 **measured** it non-null and equal to 1
 after the party build. So the commander model is reading our rows, not an empty list,
