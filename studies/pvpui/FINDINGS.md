@@ -104,9 +104,14 @@ indirect-call, and the table is a vtable dispatched by UI message number.
 ## 4. FIRST, THE BUILD. Every VA in this arc is build 38833, and the tools default to 38797
 
 The static tools (`codescan.py`, `asserts.py`, `consttable.py`, …) resolve their client
-through `pinned.find()`, which is the **pinned pristine build 38797**. The harness runs
-whatever is staged in `vault/run/`, and on this machine that is **38833**. Heroes §33–36
-and §1 above are all 38833 numbers, taken with `--exe` pointed at the 38833 snapshot.
+through `pinned.find()`, which is the **pinned pristine build 38797**. Heroes §33–36 and §1
+above are all 38833 numbers, taken with `--exe` pointed at the 38833 snapshot.
+
+> **CORRECTED 2026-08-17, §15.0.** This paragraph used to continue "The harness runs
+> whatever is staged in `vault/run/`, and on this machine that is 38833" — **wrong on both
+> halves.** `drive_client.py:87` selects by *build*, and :167 records that 38833 is
+> deliberately excluded so the newest 38797 copy wins. Running 38833 takes `--exe` **and**
+> `RURIK_DAT`; the recipe is in §15.0.
 
 The two are not interchangeable and the drift is per-region, not a constant:
 
@@ -749,3 +754,126 @@ The rule that would have caught both is the same one and it is cheap: **before w
 down a new address, grep the tree for it.** `[[ctx+0x4C]+0x54]` was already named, in two
 places, by an arc that had measured it — and the search cost nothing next to the section
 that had to be retracted.
+
+## 15. MEASURED, on the harness (2026-08-17). The break is not delivery and not ordering
+
+Three runs, loopback, build **38833**, `--game-args "--hero 1"`, one hero. Every site's
+bytes were verified in the running process before arming; every run reached its map
+(`RUN VERDICT: PASS`), so `worker` firing is a live control rather than a hope.
+
+### 15.0 Running 38833 at all, because this cost two false starts
+
+**The harness does NOT default to 38833.** `drive_client.py:87` selects "the newest
+`vault/run/<dir>/Gw.exe` **THAT IS `build`**", and :167 records that 38833 is deliberately
+excluded so the newest 38797 copy wins. §4's sentence "the harness runs whatever is staged
+in `vault/run/`, and on this machine that is 38833" is **wrong on both halves** — the
+selection is by build, and the build is the pinned 38797. Heroes' 38833 traps must have
+passed `--exe`.
+
+The first attempt did not, and `commandertrap.py` refused to arm — all four sites reported
+`BAD … expected … got …`. That guard is the reason this section exists rather than a page
+of confident nonsense; it is the §4 hazard caught from the other side, by the tool.
+
+Two flags are needed, and the second is not obvious:
+
+```bash
+RURIK_DAT="C:/gd/Rurik/vault/run/2026-08-13_64fae3b1369b/Gw.dat" python toolkit/harness/session.py --replace --keep-open --hold 180 --warn 0 --exe "C:/gd/Rurik/vault/run/2026-08-13_64fae3b1369b/Gw.exe" --game-args "--hero 1"
+```
+
+Without `RURIK_DAT`, `contentids.py` refuses the launch: `content/maps.toml` binds maps 146
+and 148 to a file id that `vault/dat_study/Gw.dat` and the 38833 run archive resolve to
+**different files** (row 7982, 1,300,036 B, crc 0xA0AE500A vs row 177262, 1,300,044 B, crc
+0x33F1A289). Pointing the server at the client's own archive makes the pair identical,
+which is what `test_contentids.py:129` already describes as the clean configuration.
+
+### 15.1 Run 1 — the chain stops between the raise and GmView
+
+Sites `worker, bulkraise, bulk, create`:
+
+```
+  +0.000s  worker    0x00859010   party_id 1, msg+8 owner 1, msg+0xc agent 200,
+                                  msg+0x10 heroId 1, msg+0x14 0
+  +0.000s  bulkraise 0x00858850
+  TOTALS   worker 1   bulkraise 1   bulk 0   create 0
+```
+
+- **`worker` fired** — our `0x01C2` reached the client's party worker, with exactly the
+  fields `agents.py` sends. The control holds, so the zeros below are measurements.
+- **`bulkraise` fired** — `0x00858850` ran, and both of its branches raise `0x10000114`
+  (the `arg1 != 0` path at `0x008588AD`, the `arg1 == 0` path via `mov eax,0x10000114` at
+  `0x008588D1` into the shared tail). So the event was raised.
+- **`bulk` did NOT fire** — GmView's case 90, the *only* caller of the commander rebuild
+  `0x00524E00`, was never entered.
+- **`create` did not fire**, which is now a consequence rather than a finding.
+
+**And the order refutes §14.3's ordering hypothesis outright.** `worker` fires *before*
+`bulkraise`: the hero row is already in the container when the event is raised. Lateness
+was the obvious story and it is wrong.
+
+### 15.2 Run 2 — and it is not "raised into nothing" either
+
+Sites `raise114, lookup114, bulk, worker`. `lookup114` is `0x0064CA47` armed off the raise
+and taken down after one hit — the client's own subscriber-map read, so no rehash of
+`0x004920B0` is involved:
+
+```
+  HIT worker
+  HIT raise114   (push 0x10000114)
+  HIT lookup114  SUBSCRIBED -- falls through to `call 0x64c7d0` with the list
+  TOTALS  bulk 0
+```
+
+**`0x10000114` HAS a subscriber at the moment we raise it.** That is the opposite of what
+heroes measured for `0x1000011E` (§34.1), and it kills the second obvious story: the event
+is raised, it is delivered, and GmView's case for it still does not run.
+
+So exactly one of three things is true, and run 3 separates them: the subscriber is not
+GmView; GmView receives it but routes it somewhere other than case 90; or `bulk`'s address
+is not that case body.
+
+### 15.3 The live commander state, read without a breakpoint
+
+`commanderpeek.py --events`, with the client in the map:
+
+```
+  container ctx+0x20   ptr=0x01E8A2F0  cap=7  count=0  alloc=21
+  heroCommanderSlot    ['0x0','0x0','0x0','0x0','0x0','0x0','0x0']
+  => NO COMMANDER EXISTS.
+```
+
+Capacity **7** — the hero-slot count again — and **count 0**. The reader also refused to
+answer the subscriber half, naming its own failed control (`0x100001A4` is known live and
+was not found in the bucket walk). That refusal is why run 2 used the client's own lookup
+instead.
+
+## 16. §14.2's CONTESTED point is SETTLED, and RESKIN was right
+
+`0x00858850` is a thiscall, and its caller is the `0x01B2` handler:
+
+```
+0x008569E0   [RECV] 0x01B2 PARTY_SET_MINE
+  ecx = [globals+0x4C] + 4          <- this, PRE-BIASED BY FOUR
+  push [msg+8] ; push [msg+4] ; call 0x00858850
+
+0x00858850(partyId, flag)
+  esi = ecx
+  partyId == 0 ? eax = [esi+0x50] : eax = [[esi+0x3c] + partyId*4]
+  0x00858872  mov [esi+0x50], eax          <- THE WRITE
+```
+
+`[esi+0x50]` with `esi = [globals+0x4C]+4` **is** `[[globals+0x4C]+0x54]` — the pointer
+`agents.py:369` and RESKIN §17.1 both name as `PyCliGetMyPartyId`, and the one §13.3
+claimed had only two stores in the image, both behind an opcode we never send.
+
+**§13.3 is refuted and §14.2 is closed in RESKIN's favour.** `0x01B2 PARTY_SET_MINE`
+writes it, `agents.py:434` already sends it, and RESKIN §18's measurement of "1 after the
+party build" is exactly this store landing.
+
+The scan missed it for the reason `codescan.py` prints in its own footer: **the
+displacement in the instruction is `0x50`, not `0x54`**, because the object pointer is
+biased by four before the field is addressed. A displacement-anchored search cannot see a
+field whose constant never appears. Resolution (1) of §14.2 — "my scan missed a store,
+that is the way to bet" — was the right bet.
+
+`0x01D9` remains a *second* writer of the same pointer, unsent by us, and nothing here
+requires it.
