@@ -25,6 +25,17 @@ both archives — preflight verified green with `served={449}` against the
 exact archive the harness selects. Kamadan is an outpost in the client's own
 area table, so the title-display step keeps its staging-area chance.
 
+> **Update 2026-08-16, later:** the canonical 38797 archive is repaired —
+> `datwrite --relink-plain 0x1B97D` re-bound the plain id to row 7982, and the
+> preflight is green for 146/148 against the archive the harness selects by
+> default, so `--map 449` is no longer forced for default-selection runs. It
+> **is** still required for a run passing an explicit 38833 `--exe`: that
+> generation's file differs from `dat_study`'s bytes (a same-generation
+> `RURIK_DAT` also clears it). Also corrected: the 38833 copy's file is
+> ArenaNet's own 38833 build — sha-identical to the pristine snapshot and its
+> run-live copy — not a terrain-arc rewrite. Neither probe's procedure needs
+> to change; `--map 449` stays valid either way.
+
 ---
 
 ## Run 1 — `faction_max`

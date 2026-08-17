@@ -184,8 +184,19 @@ Every one of these, in the order they were written:
   blocks through, `check_identity()` stubbed lets the wrong file through, and a
   donor whose compression is flattened leaves the row at 0 **while the payload
   stays byte-identical** -- which is why the compression field is checked
-  separately, since the stored bytes cannot tell those two apart. No vault, no
-  client. 66 checks against a floor of 66, was 34),
+  separately, since the stored bytes cannot tell those two apart. **Section 8
+  (2026-08-16) is `--relink-plain`, the DnArchive re-link minus the download** --
+  a copy caught mid-replacement (file-id table holding `id | 0x80000000`,
+  studies/maprows/FINDINGS.md §8) has its plain id re-bound to the row the
+  rename names, in place, one dword. The fixture's rename is installed longhand
+  so the pristine fixture IS the correct post-relink state, which makes the
+  strongest check one line: the relinked archive must be BYTE-IDENTICAL to the
+  pre-rename file -- table dword, entry-2 crc and MFT self-crc in a single
+  comparison. Refusals each get a check: plain already binds, neither spelling
+  present, the bit-31 spelling as the argument, and a target row failing its
+  own crc (a relink must not make a corrupt row addressable); plan-only without
+  `--confirm` writes nothing, and `--revert` restores the renamed state
+  exactly. No vault, no client. 78 checks against a floor of 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must

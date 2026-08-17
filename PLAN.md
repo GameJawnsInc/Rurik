@@ -1507,7 +1507,7 @@ press rather than at cast end** — magnitudes moved in step 8, timing did not.
 
 **READ THIS FIRST, because it retires the headline this section carried all day.** *It read "the compass on our server is drawing the client's FALLBACK", and every paragraph below was written under that premise.* **Rung C1 — the arc's first client run — put the compass on screen drawing a recognisable crop of Ascalon City on retail map 148**, our server, our DH, caged, loopback, synthetic credential. The metric is §6's own chromatic ratio with the control measured first: the previously-classified fallback frames re-read at **χ +1.154 … +1.160** by the same sampler, and this run's five frames at **+0.250 … +0.279** — against rung S5's *offline* prediction of **+0.286** for map 148's crop, computed before any frame existed and never fitted to one. **`studies/minimap/FINDINGS.md` §6d** carries it.
 
-**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.**
+**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.** *(Since fixed, and on 2026-08-16 the 38797 archive state itself was repaired — that §8 item has the record.)*
 
 **ATTRIBUTION IS NOW CLOSED TOO — rung S13, same day (`studies/minimap/FINDINGS.md` §6e). The cause is the ARCHIVE'S ARMED STATE, and specifically the ATLAS TILE ROWS.**
 
@@ -1515,19 +1515,23 @@ press rather than at cast end** — magnitudes moved in step 8, timing did not.
 
 The other three candidates were each tested and died: the **map file** (height field byte-identical, `MAP_PARAMS`'s rect bytes identical, differing only in a trailing v4 GUID), the **client build** (all 12 `CompassMap.cpp` asserts identical and uniformly displaced +0xA0; ctor, crop, latch and fallback tiler have identical instruction counts and **zero** mnemonic mismatches; the footprint table, `s_worldData` and the tile arrays byte-identical), and the **map-type byte** (map 148's two footprints are the same rect, and a forced `--explorable` run still drew the atlas). **S9's hypothesis 2 was right in substance and refuted for the wrong reason** — the load does fail, but upstream of the loader, in a lookup that never yields a row.
 
-**This is the same defect a third time, and that is the durable lesson.** `archive.file_id_table()` dual-registers a bit-31 id, so it answered "row 44717, present" for a tile the client cannot address. It has now hidden: the map **file** id (caught by crossbuild), the **`contentids`** pre-flight (below, UNFIXED), and rung **S9's tile-presence check** — which cost S9, S12, C1 and S13 to unwind. **One predicate fixes all three: does the id bind in the form it is sent?**
+**This is the same defect a third time, and that is the durable lesson.** `archive.file_id_table()` dual-registers a bit-31 id, so it answered "row 44717, present" for a tile the client cannot address. It has now hidden: the map **file** id (caught by crossbuild), the **`contentids`** pre-flight (below; since fixed), and rung **S9's tile-presence check** — which cost S9, S12, C1 and S13 to unwind. **One predicate fixes all three: does the id bind in the form it is sent?**
 
 **Second result, small and operational:** the ground layer **arrives late** — `final.png` at the map verdict reads χ +1.182 (fallback band) and converges to +0.250 by ~t+26 s. A single early frame is not evidence of a NULL image. **Consequences: C2 and C3 are UNGATED** (they were held behind a vacuous-arm problem that no longer exists), **risk 7 is RETIRED**, and Tier 3's premise survives. Two caveats the run carries: the server ran **without a navmesh** (`Permission denied` — the client holds its own archive open, so give the server a separate copy), and `--shots` is foreground-gated, skipping 4 of 9.
 
 **Everything below this line was written under the fallback premise. The static analysis stands; the framing does not.**
 
-### `file_id_table()`'s dual registration has now hidden three failures — `contentids.py` is the one still UNFIXED (2026-08-14)
+### `file_id_table()`'s dual registration has now hidden three failures — all three CLOSED, and the archive state behind them repaired (2026-08-14 → 2026-08-16)
 
 **Read this as one defect with three victims, not three bugs.** `archive.file_id_table()` registers a bit-31 id under **both** its raw and its masked form — correct for finding a row, and documented in that same file as **not a model of the client**, which compares 32 bits exactly at `0x0047AA20` with no retry. Every caller that asks it "does this id resolve?" gets an answer about *our reader*.
 
 1. **The map file id** — `content/maps.toml` recorded `0x8001B97D`. Caught 2026-08-14 by the crossbuild arc; the row now reads `0x1B97D`.
 2. **Rung S9's atlas-tile presence check** — concluded "all four of map 148's tiles present in the archive the client opened", and through it the minimap arc's entire leading question. **The tiles were present as rows and unaddressable by the client**: 22 of 492 armed, 18 in world 1. It cost rungs S9, S12, C1 and S13 to unwind. Closed by S13.
-3. **`toolkit/contentids.py`** — **STILL UNFIXED**, detailed below.
+3. **`toolkit/contentids.py`** — **FIXED**: `check()` resolves the client's half on the
+   RAW table and the server's half on the masked one, which is not a compromise but the
+   measured model of each side (the gamesrv really did serve a navmesh through the alias
+   on 2026-08-14). `test_contentids.py` §1b/§2 are the regression guards, red on the old
+   code. The account below is kept as the record of the defect.
 
 **The single fix:** a `binds_plainly(archive, file_id)` / `file_id_table(raw=True)` predicate, and every caller that is asking *what the client will do* uses it. Each of the three above becomes a one-line check.
 
@@ -1546,6 +1550,28 @@ The other three candidates were each tested and died: the **map file** (height f
 `contentids` reported `10 of 10 map row(s) agree` for the 38797 pair, comparing row 7982 to row 7982. The run then died at **Code=007** with the client hanging up immediately after `0x0199`. **The guard passed, the launch proceeded, and the failure was silent on our side and unexplained on the client's** — which is the precise shape the guard was written to prevent.
 
 **Fix:** do not change `file_id_table()` — its convenience is load-bearing elsewhere. Have `contentids` resolve on the **raw** table and fail when the id `content/maps.toml` will actually put on the wire is absent from the client's archive *in the form it is sent*. The refusal must name both forms and both rows. `test_contentids.py` needs an arm that goes red on today's code: a fixture pair binding only the renamed form, asked for the plain one.
+
+**RESOLVED, in two layers.** The guard fix above landed (raw table for the client's half,
+masked for the server's, regression-guarded), and **on 2026-08-16 the archive state it
+was refusing was itself repaired**: `datwrite.py --relink-plain 0x1B97D` re-bound the
+plain id to row 7982 in the canonical `vault/run/2026-07-29_221c13772c7a/Gw.dat` — the
+DnArchive re-link minus the download that was never coming, one dword of the file-id
+table plus the two checksums, journalled, with a sha-verified full backup beside the
+archive (`Gw.dat.pre-relink-20260816`) and censuses under
+`vault/research/relink-1b97d-2026-08-16/`. `contentids` preflight now reads **10 of 10
+agree, 0 FATAL** — maps 146/148 included — against the archive `select_run_exe`
+launches, and `datcheck --preflight` holds 10 of 10 open-time rules. The 38797 lane can
+serve Pre-Searing again; the `-c2`/`-probe`/`reskin-roster` copies are deliberately left
+mid-replacement (test_contentids's positive controls need one, and the verb repairs any
+of them in one command). **One premise from the 2026-08-15/16 accounts is REFUTED by
+measurement**: the 38833 copy's `0x1B97D` file is **not** a terrain-arc rewrite — row
+177262's stored bytes are sha-identical across the pristine `client/2026-08-13`
+snapshot, the 38833 run dir and the 38833 `run-live` copy, so it is ArenaNet's own
+38833-generation Pre-Searing map, which simply differs from the 38797 bytes `dat_study`
+paths against. A 38833-exe run therefore still needs `--map 449` or a same-generation
+`RURIK_DAT`. `contentids.default_client_dat()` was also re-aligned to mirror
+`select_run_exe` (pinned build, measured from the exe, canonical stamp dir) instead of
+the newest-mtime rule the harness abandoned.
 
 ### The minimap — the record under the fallback premise (superseded above)
 

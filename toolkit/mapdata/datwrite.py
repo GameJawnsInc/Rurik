@@ -60,7 +60,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
-                     mft_row_offset, MFT_SELF_ROW, FILE_MAGIC)
+                     mft_row_offset, MFT_SELF_ROW, FILE_MAGIC,
+                     FILE_ID_HIGH_BIT, FILE_ID_TABLE_ROW)
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
 
@@ -627,6 +628,138 @@ class Writer:
         print(f"  verified: {donor.size} B read back sha256 {donor.sha256[:16]}")
         return True
 
+    def relink_plain(self, plain_id, confirm=False):
+        """Re-link a bit-31 renamed file id back to its PLAIN spelling, in place.
+
+        `FcArchive` renames a row to `id | 0x80000000` when it has requested a
+        replacement, and the plain id genuinely stops resolving until
+        `DnArchive` installs one and re-links it (studies/maprows/FINDINGS.md
+        section 8 -- the lookup is an exact 32-bit compare, no masking). On a
+        caged loopback copy no replacement is ever coming: the cage has no file
+        server and the updater is dead, so a copy caught mid-replacement stays
+        that way forever and every id it renamed is a map the client cannot
+        load. `contentids.preflight` refuses to launch at exactly that state.
+
+        This is the DnArchive step with no download. The original row is still
+        intact under the renamed spelling, so re-linking the plain id to THAT
+        row restores exactly what the rename suspended: ONE dword changes in
+        the file-id table (entry 2), and the row, its bytes and its crc are
+        untouched. The directory invariant holds on both sides -- the row keeps
+        a file-id record throughout, and no record is orphaned.
+
+        The argument is the PLAIN id, the one that should start resolving.
+
+        An interrupted run leaves entry 2's crc stale over the patched table,
+        which the client detects at open ("Repairing corrupt archive"); the
+        journal is the way back, and the write order puts the payload dword
+        first so the journal always covers it.
+        """
+        if plain_id & FILE_ID_HIGH_BIT:
+            raise SystemExit(
+                f"--relink-plain takes the PLAIN id, and 0x{plain_id:X} has "
+                f"bit 31 set. The plain spelling is 0x{plain_id & ~FILE_ID_HIGH_BIT:X}"
+                f" -- pass that: the renamed form is what gets REPLACED, not "
+                f"what gets linked.")
+        if plain_id == 0:
+            raise SystemExit("file id 0 is never valid input -- FcArchive's own "
+                             "assert is `(int) fileId > 0`.")
+        renamed = plain_id | FILE_ID_HIGH_BIT
+
+        e2 = self.ar.row(FILE_ID_TABLE_ROW)
+        if e2.compression != 0 or e2.size % 8:
+            raise SystemExit(
+                f"entry {FILE_ID_TABLE_ROW} does not look like the file-id "
+                f"table ({e2.size} B, compression {e2.compression}); refusing "
+                f"to edit a table I cannot read whole.")
+        self.fh.seek(e2.offset)
+        table = bytearray(self.fh.read(e2.size))
+        if len(table) != e2.size:
+            raise SystemExit(f"short read of the file-id table: "
+                             f"{len(table)} of {e2.size} bytes")
+
+        plain_slots, renamed_slots = [], []
+        for i in range(len(table) // 8):
+            fid, row = struct.unpack_from("<II", table, i * 8)
+            if fid == plain_id:
+                plain_slots.append((i, row))
+            elif fid == renamed:
+                renamed_slots.append((i, row))
+
+        if plain_slots:
+            also = (f" (the renamed 0x{renamed:X} is ALSO present, which is a "
+                    f"state this tool must not have created -- look before "
+                    f"touching anything)" if renamed_slots else "")
+            raise SystemExit(
+                f"0x{plain_id:X} already binds, to row "
+                f"{plain_slots[0][1]}{also}. Nothing to relink.")
+        if not renamed_slots:
+            raise SystemExit(
+                f"neither 0x{plain_id:X} nor 0x{renamed:X} is in this "
+                f"archive's file-id table. There is no rename to undo.")
+        if len(renamed_slots) > 1:
+            raise SystemExit(
+                f"0x{renamed:X} appears in {len(renamed_slots)} table slots "
+                f"({', '.join(str(s) for s, _ in renamed_slots)}). Nothing "
+                f"says that cannot happen, but nothing here knows what it "
+                f"means either. Refusing.")
+
+        slot, row = renamed_slots[0]
+        try:
+            e = self.ar.row(row)
+        except Exception as exc:                              # noqa: BLE001
+            raise SystemExit(
+                f"0x{renamed:X} names row {row}, which this archive cannot "
+                f"read ({type(exc).__name__}: {exc}). Re-linking the plain id "
+                f"would make a broken row addressable.")
+        if e.flags & 3 != 3:
+            raise SystemExit(
+                f"row {row} has flags {e.flags} -- not USED|FIRST_STREAM. A "
+                f"file-id record must name a first-stream row (the directory "
+                f"invariant, studies/customarea/FINDINGS.md 18.5 Tier 2).")
+        if e.size == 0:
+            raise SystemExit(
+                f"row {row} is zero-length; re-linking would make an id "
+                f"resolve to nothing and hand the client the re-bloat path.")
+        if e.crc:
+            self.fh.seek(e.offset)
+            stored = self.fh.read(e.size)
+            got = binascii.crc32(stored)
+            if got != e.crc:
+                raise SystemExit(
+                    f"row {row} FAILS ITS OWN CRC (stored 0x{e.crc:08X}, "
+                    f"computed 0x{got:08X}). Refusing to make a corrupt row "
+                    f"addressable.")
+            crc_note = f"crc verified 0x{e.crc:08X}"
+        else:
+            crc_note = "crc 0 (the archive's own check is disabled for it)"
+
+        print(f"relink 0x{renamed:X} -> 0x{plain_id:X}, table slot {slot}, "
+              f"row {row}: {e.size:,} B, flags {e.flags}, {crc_note}")
+        if not confirm:
+            raise SystemExit(
+                f"would rewrite one dword of the file-id table at "
+                f"0x{e2.offset + slot * 8:X}, then entry {FILE_ID_TABLE_ROW}'s "
+                f"crc and the MFT self-crc. The row's own bytes are not "
+                f"touched.\n  Re-run with --confirm.")
+
+        struct.pack_into("<I", table, slot * 8, plain_id)
+        self.put(e2.offset + slot * 8, struct.pack("<I", plain_id),
+                 f"file-id table slot {slot}: 0x{renamed:X} -> 0x{plain_id:X} "
+                 f"(row {row})")
+        self.set_entry_crc(FILE_ID_TABLE_ROW, binascii.crc32(bytes(table)))
+        self.fix_mft_self_crc()
+
+        # Read back through the write handle -- same trap read_mft() documents.
+        self.fh.seek(e2.offset)
+        got = self.fh.read(e2.size)
+        if got != bytes(table):
+            raise SystemExit(
+                f"RELINK VERIFY FAILED: the file-id table on disk is not what "
+                f"was written. Revert with the journal and do not use this "
+                f"archive.")
+        print(f"  verified: 0x{plain_id:X} now binds row {row}")
+        return True
+
     def fix_mft_self_crc(self):
         """Recompute row 3's crc from the table as it now stands on disk.
 
@@ -782,7 +915,7 @@ def revert(journal_path, force=False):
 # test_datwrite.py section 2 checks these two tuples against the parser's own
 # actions, so a flag added below and forgotten here goes red instead of going quiet.
 MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc",
-                  "restore")
+                  "restore", "relink_plain")
 
 # The rest: reads, or arguments to something else. Listed only so the drift check
 # can tell "deliberately read-only" from "somebody forgot".
@@ -833,9 +966,18 @@ def build_parser():
     ap.add_argument("--from", dest="from_dat", metavar="DONOR",
                     help="a pristine archive to read the original from "
                          "(read-only; C:\\gw is allowed here and nowhere else)")
+    ap.add_argument("--relink-plain", metavar="FILE_ID",
+                    type=lambda s: int(s, 0),
+                    help="re-link FILE_ID's plain spelling to the row its "
+                         "bit-31 rename (FILE_ID|0x80000000) names, in place: "
+                         "the DnArchive step for a copy whose replacement is "
+                         "never coming. One dword of the file-id table; the "
+                         "row's bytes are untouched. Plan only without "
+                         "--confirm.")
     ap.add_argument("--confirm", action="store_true",
-                    help="actually perform a --restore; without it the plan is "
-                         "printed and nothing is written")
+                    help="actually perform a --restore or --relink-plain; "
+                         "without it the plan is printed and nothing is "
+                         "written")
     ap.add_argument("--revert", metavar="JOURNAL",
                     help="undo every edit recorded in a journal")
     ap.add_argument("--force", action="store_true",
@@ -921,6 +1063,9 @@ def main():
                   f"sha256 {donor.sha256[:16]}")
             check_identity(args.dat, row, donor)
             w.restore(row, donor, confirm=args.confirm)
+
+        if args.relink_plain is not None:
+            w.relink_plain(args.relink_plain, confirm=args.confirm)
 
         if args.corrupt_mft_crc:
             # w.read_mft(), not read_mft(w.ar): combined with another write flag
