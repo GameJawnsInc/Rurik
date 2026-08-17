@@ -112,6 +112,15 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 #                             That is why 0x009215F0 asserts `fraction <= 1.0f`
 #                             at CharPool.cpp:84 -- a setter cannot exceed the
 #                             maximum -- and why sending 100.0 killed the client.
+PROP_LEVEL = 36           # int channel (0x009F): the agent's DISPLAYED level.
+                          # OBSERVED three ways in three days: the player's
+                          # roster row tracked W1/W15/W20 (RESKIN 18.4), the
+                          # HENCHMAN'S row tracked Mo1/Mo15/Mo20 (harness
+                          # 20260817T142147 -- the store is per-agent both
+                          # ways), and the case body is read: int-main
+                          # 0x00812D6E writes entry+0x2C keyed by the agent id
+                          # (unitsetup Q3/Q4). Retail sends it BEFORE the
+                          # player's create (344/366, createburst census).
 PROP_DAMAGE = 16          # SUBTRACTS fraction x max. Floors at 1: cannot kill.
 PROP_HEALTH_ABSOLUTE = 34 # badly named: it SETS health to fraction x max, and is the one the client range-checks. SILENT: no damage number.
 PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum; see below.
