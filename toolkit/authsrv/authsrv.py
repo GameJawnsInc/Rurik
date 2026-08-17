@@ -6935,8 +6935,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_LEVEL, PLAYER_AGENT_ID, START_LEVEL],
                              f"level {START_LEVEL} on the player's AGENT")
-                        # 0x00F0 immediately precedes every kind-5 create,
-                        # 130/130 in the smsg corpus, and the player burst sent
+                        # 0x00F0 precedes every kind-5 create, 130/130 in the
+                        # smsg corpus -- "immediately" ONLY once the clock
+                        # stamp is removed, and that qualifier is load-bearing:
+                        # measured over all five keyed captures 2026-08-17,
+                        # 1131/1131 kind-5/9 creates have their own 0x00F0
+                        # either directly before (567) or one
+                        # WORLD_SIMULATION_TICK before (564), never further and
+                        # never absent. Sending it directly before, as here, is
+                        # what retail does half the time and is inside the
+                        # measured envelope. The player burst sent
                         # NOTHING here until 2026-08-17 (divergence D2's
                         # player-side 0/N, connected in unitsetup 6d). Payload
                         # 0 is the measured kind-5 majority -- 342/366 in the
