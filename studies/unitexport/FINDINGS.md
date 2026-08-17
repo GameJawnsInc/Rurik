@@ -83,10 +83,18 @@ sub-models**, and no sub-model→node binding is measured anywhere
 pose** rather than a hope is a measurement the test pins:
 
 > **All 18 channel-carrying nodes' base positions fall INSIDE the stored
-> mesh's own bounding box** (18/18; the two channel-less nodes, 0 and 19,
-> sit at the origin). MEASURED: mesh bbox [-15.6, -43.2, -172.8] ..
-> [15.6, -9.5, 27.7]; the animated bases span x ±12.2, y -33.9..-12.0,
-> z -155.9..27.1.
+> mesh's own bounding box** — 18 of 20 nodes total; the two channel-less
+> nodes (0 and 19) sit at the origin, which the mesh's y-range excludes,
+> and an unposed node carries no positional claim. MEASURED: mesh bbox
+> [-15.6, -43.2, -172.8] .. [15.6, -9.5, 27.7]; the animated bases span
+> x ±12.2, y -33.9..-12.0, z -155.9..27.1.
+
+*The review measured this statistic's power and its limit (U5 review,
+2026-08-16): the nulls that matter fail decisively — the bases rotated
+90° score 1/18, scaled 2× score 0/18, and the hatcher's 1,463 vertices
+against this bbox score 0/1463 — while a component-shuffle null passes
+18/18, so the check establishes that the base CLOUD occupies the mesh's
+region (exactly what this section claims), not per-node correspondence.*
 
 The stored vertices already stand around their skeleton — the worm's
 segmented spine runs down the mesh, the two mandible chains (nodes 15/16

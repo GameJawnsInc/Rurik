@@ -138,7 +138,11 @@ COVER_MIN = 0.005
 # hatcher's silhouette refuted the guessed 0.02 coverage floor at 0.0147
 # (see COVER_MIN). A check that finds two defects on its first contact with
 # real data is earning its runtime.
-FLOOR = 71
+#
+# 71 -> 72 with the U5 review's RISK-1: the spans-tiling check now runs on
+# the worm's REAL payload too (five span kinds the synthetic never builds),
+# because it is rung U6's precondition and lived only on a fixture.
+FLOOR = 72
 
 
 # ------------------------------------------------------------------ helpers
@@ -507,6 +511,21 @@ def _section2(check, ar, table, by_row, tmp):
           f"byte-for-byte", f"{len(disk)}/{WORM['fa1_bytes']} B")
 
     sk_fresh = Skeleton.decode(raw_fa1)
+    # U5 review RISK-1: the spans-tiling property is rung U6's PRECONDITION
+    # and the synthetic fixture cannot carry it alone -- the worm exercises
+    # five span kinds (n14, n34, n38, n50, n54) the fixture never builds.
+    # A _walk_spans regression on any of them would otherwise ship silently
+    # and surface only in U6.
+    sp = sk_fresh.spans
+    tiled = (sp[0][1] == 0
+             and all(sp[i][1] + sp[i][2] == sp[i + 1][1]
+                     for i in range(len(sp) - 1))
+             and sp[-1][1] + sp[-1][2] == len(raw_fa1))
+    check(tiled,
+          "the decoder's spans tile the worm's REAL payload exactly -- "
+          "gapless, overlap-free, closing on the final byte (rung U6's "
+          "precondition, on span kinds the synthetic cannot exercise)",
+          f"{len(sp)} spans over {len(raw_fa1)} B")
     check(len(skel["sequences"]) == WORM["seqs"]
           and sk_fresh.seq_count == WORM["seqs"],
           f"sequence count off disk == the committed decoder's == "
@@ -574,10 +593,20 @@ def _section2(check, ar, table, by_row, tmp):
     check(skeleton_from_export(hexp) is None,
           "skeleton_from_export reads that absence as None")
 
-    # -- a COMPOSITED shell is refused, not invented ------------------------
-    check(raises(export_unit, 116228, ar, outdir=out, table=table),
-          "the hatcher's geometry-less shell (116228) is REFUSED -- its "
-          "body is rung U4's to assemble, not this module's to invent")
+    # -- a COMPOSITED shell is refused, not invented. The MESSAGE is
+    # asserted (U5 review RISK-3): a bare raises() would pass identically
+    # if 116228 vanished from the id table or the generic not-a-model
+    # branch fired, and could not tell "refused as composited" from
+    # "refused as absent".
+    err = None
+    try:
+        export_unit(116228, ar, outdir=out, table=table)
+    except ValueError as exc:
+        err = exc
+    check(err is not None and "rung U4" in str(err),
+          "the hatcher's geometry-less shell (116228) is REFUSED with the "
+          "message naming the COMPOSITED mechanism and rung U4",
+          str(err) if err else "returned normally")
     return paths
 
 
@@ -677,10 +706,16 @@ def _section3(check, led, args, paths, tmp):
     pred_h = (hi[2] - lo[2]) / scale * res
     got_w = box[1] - box[0] + 1
     got_h = box[3] - box[2] + 1
+    # U5 review RISK-2: when ext_z >= ext_x the ortho scale is set BY the
+    # height, so pred_h == res/1.1 identically -- a framing constant that
+    # carries no model information (both anchors are tall). The WIDTH is
+    # the discriminating half (worm 36.3 vs hatcher 121.6 at 256^2, a
+    # 3.35x spread); read the height comparison as a framing check.
     check(abs(got_w - pred_w) <= SIL_TOL_PX
           and abs(got_h - pred_h) <= SIL_TOL_PX,
-          f"the silhouette's pixel bbox matches the bbox PREDICTED from "
-          f"the export through the dump's ortho scale (+/-{SIL_TOL_PX}px)",
+          f"the silhouette's pixel WIDTH matches the width predicted from "
+          f"the export through the dump's ortho scale (+/-{SIL_TOL_PX}px; "
+          f"the height half is a framing constant, see comment)",
           f"{got_w}x{got_h} px vs {pred_w:.1f}x{pred_h:.1f}")
 
     # ---- the hatcher: a body with no skeleton -----------------------------

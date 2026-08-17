@@ -3205,17 +3205,27 @@ Every one of these, in the order they were written:
   comparison can fail. The pose that shipped is the FLAT placement, and the
   measurement that makes it the BIND POSE rather than a guess is pinned:
   all 18 channel-carrying nodes' bases fall INSIDE the stored mesh's own
-  bbox (the two channel-less ones sit at the origin). No sub-model-to-node
-  binding is measured (3 sub-models, 20 nodes), so per-vertex posing would
-  be invention, and a COMPOSITED shell (116228) is REFUSED outright as rung
-  U4's to assemble. Section 3 drives Blender as a subprocess and measures
+  bbox -- 18 of 20 total; the two channel-less ones sit at the origin,
+  outside the mesh's y-range, carrying no positional claim. The U5 review
+  measured the statistic's power (rotated bases 1/18, scaled 0/18, the
+  hatcher's 1,463 vertices vs this bbox 0/1463) and its limit (a
+  component-shuffle passes: cloud occupancy, not per-node correspondence
+  -- exactly what is claimed). The spans-tiling check runs on the worm's
+  REAL payload too (review RISK-1: five span kinds the synthetic never
+  builds; it is rung U6's precondition). No sub-model-to-node binding is
+  measured (3 sub-models, 20 nodes), so per-vertex posing would be
+  invention, and a COMPOSITED shell (116228) is REFUSED with its MESSAGE
+  asserted -- naming the mechanism and rung U4, not a bare raises() that
+  cannot tell composited from absent. Section 3 drives Blender as a subprocess and measures
   the SCENE, never an eyeball: counts and bbox against the position sidecar
   (z negated, the M4 convention), all 20 node empties at their RAW bases
   with parent = measured link, and the RENDER -- an orthographic silhouette
   whose alpha coverage must be non-zero where the hidden-everything control
-  frame measures EXACTLY zero, and whose pixel bbox must match the extent
+  frame measures EXACTLY zero, and whose pixel WIDTH must match the extent
   predicted from the export's own bbox through the dump's ortho scale,
-  +/-4 px (worm 38x233 vs 36.3x232.7 predicted). The first contact with
+  +/-4 px (worm 38 vs 36.3, hatcher 120 vs 121.6 -- a 3.35x spread; the
+  HEIGHT half is res/1.1 identically whenever the model is taller than
+  wide, a framing constant, and is labeled so). The first contact with
   real data paid twice: 18/20 empties were measured OFF their bases --
   background Blender had not evaluated the parent's matrix_world before the
   parent-inverse was taken from it -- and the hatcher's thin silhouette
@@ -3225,7 +3235,8 @@ Every one of these, in the order they were written:
   prop convention wires texture alpha as transparency, so the default
   render is a floating head over an invisible torso; --opaque at least
   triples the coverage (0.0147 -> 0.1932), and what the alpha channel MEANS
-  on a unit texture stays NOT DECODED with the AMAT chain. Floor 71 from
-  the green run; sections 0-1 (synthetics + the resolve_outdir refusal with
-  its positive controls and the mapexport delegation check) score 28
-  vault-less and go RED; with the archive but no Blender, 52, also RED).
+  on a unit texture stays NOT DECODED with the AMAT chain. Floor 72 from
+  the green run (71 -> 72 with the review's real-data tiling check);
+  sections 0-1 (synthetics + the resolve_outdir refusal with its positive
+  controls and the mapexport delegation check) score 28 vault-less and go
+  RED; with the archive but no Blender, 53, also RED).
