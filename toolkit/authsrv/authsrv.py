@@ -2311,6 +2311,23 @@ HERO_ACTIVATE_ID = None
 # in the default rig so owner-player and owner-agent cannot be told apart.
 # Pair with --player-number to break that. studies/heroes/FINDINGS.md 21.
 HERO_OWNER = None
+# Send 0x01C2 AFTER 0x01B2 instead of inside the 0x01D2..0x01D3 window.
+# THE REASON IS A MEASURED BRANCH, not tidiness. 0x01C2's worker raises its
+# event (0x1000011E -> GmView case 93, the incremental commander path) ONLY on
+# a party-cache MISS: `cmp edi,[mgr+0x4c]; je <epilogue>` at 0x008590AF skips
+# the raise when the party it appended to is already the cached one. Riding
+# inside the window right after 0x01CB is exactly the shape that warms that
+# cache, so our hero may never raise the event at all -- which would explain
+# the commander never binding, and why a wrong msg+0x10 changed nothing (19).
+# studies/heroes/FINDINGS.md 26.
+HERO_POST_COMMIT = False
+# Open a SECOND party immediately before 0x01C2, so the manager's cache at
+# [mgr+0x4c] holds party 2 and our hero-add to party 1 must take the SLOW
+# lookup path -- which is the only way to make `cmp edi,[mgr+0x4c]` at
+# 0x008590AF compare UNEQUAL and let the raise through. --hero-post-commit
+# did NOT test this: post-commit the party is still 1, so the cache still
+# holds it and the condition never changed. studies/heroes/FINDINGS.md 26.
+HERO_BUST_CACHE = False
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6657,8 +6674,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     HERO_ROSTER_ID if (HERO_ROSTER_ID
                                                        is not None and _first)
                                     else _hid),)
+                        _after = ()
+                        if HERO_BUST_CACHE and _inside:
+                            # Warm the cache with party 2, then let the hero-add
+                            # to party 1 miss it. Party 1's build is committed by
+                            # then, so PyCliParty:1228 (a second begin with a
+                            # build OPEN) is not in play.
+                            _after = ((0x01D2, [2], "PARTY_BUILD_BEGIN(2) "
+                                       "[cache-buster]"),) + _inside
+                            _inside = ()
+                        elif HERO_POST_COMMIT:
+                            _after, _inside = _inside, ()
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
+                            send(op, vals, label)
+                        for op, vals, label in _after:
                             send(op, vals, label)
                         # ...and the player-record flag word, in retail's own
                         # position: BEFORE the agent create, 423 sends over 12 of
@@ -7684,6 +7714,15 @@ def main():
                          "also PLAYER_AGENT_ID, and that coincidence is what "
                          "makes 0x01C2's msg+8 undecidable. Set it to something "
                          "else and the two namespaces separate.")
+    ap.add_argument("--hero-bust-cache", action="store_true",
+                    help="Open a second party build right before 0x01C2 so the "
+                         "party-manager cache holds a DIFFERENT party and the "
+                         "hero-add takes the slow lookup. The only arm that "
+                         "actually exercises the conditional raise.")
+    ap.add_argument("--hero-post-commit", action="store_true",
+                    help="Send 0x01C2 after 0x01B2 rather than inside the "
+                         "build window. Tests whether the party-cache hit at "
+                         "0x008590AF is what suppresses the commander event.")
     ap.add_argument("--hero-owner", type=int, default=None, metavar="N",
                     help="Override 0x01C2's msg+8 only (normally the player "
                          "number). With --player-number, this is the arm that "
@@ -7959,6 +7998,10 @@ def main():
         HERO_ACTIVATE_ID = a.hero_activate_id
         global HERO_OWNER
         HERO_OWNER = a.hero_owner
+        global HERO_POST_COMMIT
+        HERO_POST_COMMIT = a.hero_post_commit
+        global HERO_BUST_CACHE
+        HERO_BUST_CACHE = a.hero_bust_cache
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS

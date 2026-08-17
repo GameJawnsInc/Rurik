@@ -1532,8 +1532,22 @@ had gone stale on four items that were since closed, which is the drift the top 
    never runs"** — true of the bulk scan, not the whole story — and confirms §21/§22's mirror
    from a third code path. **Loose end, flagged:** case 93's `[esi+4]`/`[esi+8]` may read past
    the 8-byte payload `0x01C2`'s worker builds, so those exact offsets are RECONSTRUCTION;
-   the structure around them is solid. Resolve that before building on case 93's field
-   semantics.
+   the structure around them is solid. **RESOLVED (§26.1):** the payload's second dword is the
+   ENTRY POINTER (`ecx`, set at `0x00859089`, never reassigned through the six stores), so
+   case 93 dereferences it — and §21's behavioural arms corroborate the semantics without
+   needing the plumbing at all.
+   **NEW, OBSERVED (§26.2): `0x01C2` raises its commander event only on a party-cache MISS.**
+   `cmp edi,[mgr+0x4c]; je <epilogue>` at `0x008590AF` skips the raise when the party is
+   already the cached one — a real, previously unrecorded gate.
+   **It looked like the answer and is REFUTED (§26.3).** `--hero-post-commit` proves nothing
+   (post-commit the party is still 1, so the condition under test never changed — a confound
+   I nearly scored as a result); `--hero-bust-cache`, which opens a build on party **2** first
+   so the hero-add must take the slow lookup, **still asserts identically**.
+   **NEXT IS RUNTIME, NOT MORE STATIC READING.** Three static hypotheses have now been refuted
+   by experiment on this one question, and what is needed is a single measurement of whether
+   the event fires at all — a breakpoint or code-cave trace on `0x008590CA`. `CLAUDE.md`
+   carve-out 3 permits native tooling explicitly, and this is the first thing in the arc that
+   has genuinely warranted it; a fourth guess is worth less than one observation.
 3. **Four desk leftovers**, scoped by a workflow that died on a session limit before
    returning anything: (a) the scan trigger above, (b) `0x0074`'s other **17 unexplained
    fields**, (c) `0x01C2`'s `msg+0x14` (the second `u8`, never varied), (d) the **aiMode

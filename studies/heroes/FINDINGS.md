@@ -1660,6 +1660,68 @@ resolved which**, and the field semantics of case 93 above are therefore RECONST
 OBSERVED — the surrounding structure (same filter, same iterator, slot-index-by-counting) is
 solid, the exact payload offsets are not.
 
+## 26. The loose end resolved, a conditional raise found — and my fix refuted twice
+
+### 26.1 §25.4's loose end is closed
+
+The event payload `0x01C2`'s worker builds is a two-dword buffer, and the second dword is
+**the entry pointer**: `ecx` is set to the new entry at `0x00859089`
+(`lea ecx,[eax+ecx*8]`) and is **never reassigned** through all six field stores or the
+branch that follows, so at `mov [ebp-4],ecx` it still holds it. Payload =
+`{party_id_or_0, entryPtr}`.
+
+So case 93 reaching entry fields is mechanically possible — it dereferences the pointer the
+payload carries. The semantics are independently CORROBORATED by §21's arms, which are
+behavioural and need no plumbing read: `msg+8` = 1 (matching `ctx[0x44][0x2ac]`) bound the
+commander, `msg+8` = 2 did not. That is exactly "filter the entry's +4 against the my-id".
+
+### 26.2 A conditional raise, OBSERVED
+
+Reading that tail turned up something the arc had not seen:
+
+```
+008590AF  cmp edi, [ebx+0x4c]    ; the party appended to vs the manager's cache
+008590B2  je  0x8590e2           ; EQUAL -> epilogue, the raise is SKIPPED
+...
+008590CA  push 0x1000011e ; call 0x633d70
+```
+
+**`0x01C2` raises its commander event only on a party-cache MISS.** `[mgr+0x4c]` is the same
+cache the worker's own fast path consults at the top (`cmp [edi],esi; je <append>`). That is
+a real, previously unrecorded gate.
+
+### 26.3 Two arms, and the honest scoring of each
+
+It made an obvious hypothesis: our `0x01C2` rides straight after `0x01CB` on party 1, warming
+that cache, so the raise never fires.
+
+- **Arm A, `--hero-post-commit`** (send `0x01C2` after `0x01B2`): still asserts. **This arm
+  proves nothing** and I nearly scored it as a refutation. Post-commit the party is *still
+  party 1*, so the cache still holds it and the condition under test never changed — the same
+  confound shape as §10.2's body arm.
+- **Arm B, `--hero-bust-cache`** (open a build on party **2** immediately before the
+  `0x01C2` to party 1, so the manager caches a different party and the hero-add must take the
+  slow lookup): **still asserts, identically.**
+
+Arm B genuinely changes the condition, so the hypothesis is **REFUTED**: the cache-hit gate is
+real but is **not** why the commander fails to bind.
+
+### 26.4 Where that leaves it
+
+`0x00524CC0` (case 93's callee) does reach the get-or-create — its tail runs on to the
+`0x00524C40` call at `0x00524D1B`, so the incremental path *can* create a commander. Two
+possibilities survive and they are not separable from the outside:
+
+1. the event still is not firing, for a reason other than the cache; or
+2. it fires, and `0x00524CC0`'s search finds no entry matching the key it is handed —
+   which loops back to `msg+0x10`, the field §19 measured as inert on every observable.
+
+**What would separate them is runtime observation, not more static reading** — a breakpoint
+or a code-cave trace on `0x008590CA`, which is a native-tooling job (`CLAUDE.md` carve-out 3
+permits it explicitly and it is the first thing in this arc that has genuinely warranted it).
+Three static hypotheses have now been refuted here by experiment; a fourth guess is worth
+less than one measurement of whether the event fires at all.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
