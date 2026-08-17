@@ -1121,3 +1121,122 @@ This is deliberately **not** `--hero-late`. Heroes already deferred the hero *pi
 measured that it still asserted; what has never been deferred is the **raise**. The rows can
 stay exactly where they are — §15.1 measured them landing before the raise, which is the
 order the rebuild needs.
+
+## 20. THE FIX WORKS. A commander exists for the first time in this project
+
+`--party-mine-late 2.0`, one hero, build 38833, loopback. Sites `bulk, create,
+raise114, worker`, all four in the ordered list:
+
+```
+  +0.000s  worker     0x00859010   party_id 1, owner 1, agent 200, heroId 1
+  +0.000s  raise114   0x008588AD   the load-time raise -- into a map without GmView
+  +2.048s  raise114   0x008588AD   OUR LATE RE-SEND
+  +2.048s  bulk       0x004E5D20   GmView's case 90 ENTERED
+  +2.054s  create     0x00524C40   the get-or-create RAN
+  TOTALS   bulk 1   create 1   raise114 2   worker 1
+```
+
+**`0x00524C40` has never run once in this project before this line.** Heroes §26 measured
+it cold; §11 explained the coldness as an empty loop; §19 found the reason the loop never
+ran. Here it runs, 6 ms after the case that calls it, 0 ms after the raise that reaches the
+case. The causal chain is not inferred — it is four timestamps in one list.
+
+And the end state, `commanderpeek.py` with the client still in the map:
+
+```
+  container ctx+0x20   ptr=0x006B6538  cap=7  count=1  alloc=21
+  heroCommanderSlot    ['0x1', '0x0', '0x0', '0x0', '0x0', '0x0', '0x0']
+  => 1 commander(s) EXIST.
+```
+
+Against the same reading before the fix (§15.3): `count=0`, every slot `0x0`. **One
+message, re-sent two seconds later, moves the commander container from empty to bound.**
+
+§19.2's prediction is met on every clause it named: the rebuild ran, `0x00524C40` ran, and
+the commander count is non-zero. None of the three refutations fired.
+
+### 20.1 What is NOT claimed here
+
+- **The party-window hero button has not been clicked.** Whether `GmView:5890` still fires
+  is a separate measurement and it needs a click. Everything above is structure state read
+  out of memory, which is the half that does not need a hand on the mouse.
+- **`commanderpeek.py`'s closing line is a canned message, not a finding.** For `count > 0`
+  it prints "the assert is NOT 'nothing was created' — it is a KEY MISMATCH between what
+  the button passes and what the slots hold." That sentence was written when the tool's
+  author expected the count-positive case to mean something specific; it is a hypothesis
+  printed unconditionally, and nothing in this run tests it. Read it as a prompt, not a
+  result. (Worth fixing in the tool: a verdict string that cannot be wrong is not a
+  verdict.)
+- **`n = 1`.** One run, one hero. The timeline is unambiguous and the before/after on the
+  container is a clean contrast, but the arc's own §3 note stands: this project has had a
+  memorable, clean, completely wrong answer before, and it took a control to catch. The
+  control here is that `worker` and the first `raise114` fire identically in the runs
+  where `bulk` and `create` do NOT (runs 1–6), so the only thing that changed is the
+  second raise.
+
+### 20.2 What this unblocks
+
+The heroes arc's wall was `0x00524C40` never running, and behind it the belief that the
+commander was not server-reachable. Both are gone. The remaining hero questions — whether
+the button works, whether `AgentCommander{slotIndex}` renders, what `0x100001A3`/`0x100001A4`
+do downstream — are now questions about a commander that EXISTS, which is a different and
+much cheaper kind of question.
+
+It also retires the framing this arc opened on. §0 inherited "the commander event
+`0x1000011E` is raised into nothing" as the settled cause. The real cause was a *different*
+event (`0x10000114`), raised into a subscriber map 53 ms too early, and fixed by re-sending
+a message we were already sending. Nothing about the wire fields was ever wrong — §13.1's
+identity, §16's container, §12's payload mapping all held up. What was wrong was **when**.
+
+## 21. The `+4` trap: §13.3 and §16 both need correcting, in opposite directions
+
+A four-agent static fan-out (read-only, build 38833, adversarially verified) went back over
+§14.2's contested point and found something neither §13.3 nor §16 had: **every message
+worker in the party subsystem is called with `this = party_object + 4`.** Verified here by
+hand on the two load-bearing claims.
+
+```
+0x00856310   PyCliGetMyPartyId, and it is NOT 0x00856250
+  call 0x47f660 ; mov eax,[eax+0x4c] ; mov eax,[eax+0x54]
+  test eax,eax ; je -> return 0
+  mov eax,[eax] ; ret          <- returns the container's OFFSET 0, which is partyId
+```
+
+So RESKIN §17.1's "`[[ctx+0x4C]+0x54]` dereferenced" is exactly right, and its measured "1"
+means *m_partyClient is non-null and its partyId is 1*. The VA in `agents.py:369` and
+RESKIN (`0x00856250`) is mid-body of an unrelated function on 38833 — a build slip of the
+same family as §4, in the other direction.
+
+### 21.1 §16 stands; its closing sentence does not
+
+`0x00858872 mov [esi+0x50], eax` in `0x01B2`'s worker **is** the `m_partyClient` store —
+§16 got that right, and the field now has ArenaNet's own name for it, four instructions
+later: `PyCliParty:650 m_partyClient` at `0x00858887`.
+
+But §16 ended "`0x01D9` remains a *second* writer of the same pointer." **That is wrong.**
+`0x00857200`, the `0x01D9` handler, does `add ecx, 4` at `0x00857216` exactly like the
+others — so `0x0085A340`'s `[esi+0x54]` stores are `party_object + 0x58`, a *different*
+field holding an integer party id that is only ever compared, never dereferenced (a
+constructor at `0x008578E5` zeroes `+0x58` separately). **`0x01D9` does not write the
+container pointer at all**, and §13.4's whole experiment — "send `0x01D9` to create the
+default party" — was aimed at a field that has nothing to do with it. Retracted for the
+second time and now for the right reason.
+
+The complete writer set of `m_partyClient`, by this method: `0x008578DE` (constructor,
+zero), `0x00857DA0` (reset, zero), `0x00858872` (the `0x01B2` set), `0x0085887B` (the
+`0x01B2` out-of-range clear). Four sites, one opcode.
+
+### 21.2 So §14.2's two candidate resolutions were both wrong
+
+§14.2 offered "(1) my scan missed a store — that is the way to bet" or "(2) RESKIN misreads
+`PyCliGetMyPartyId`". **Neither.** `codescan --field 0x54` searched correctly and found the
+two `+0x54` stores that exist off the *object* base; it simply cannot see a field addressed
+through a `this` biased by four, where the same field is spelled `0x50`. And RESKIN read its
+function correctly. Both artifacts were right about different things, and the disagreement
+was an artifact of the C++ subobject convention sitting between them.
+
+**The generalisable bit, and it is worth more than this arc:** in `PyCliParty`'s workers,
+*every* displacement is four less than the field's name from the global. `[edi+0x50]` is
+`+0x54`, `[ebx+0x3c]` is `+0x40`, `[edi+0x44]` is `+0x48`. A displacement-anchored search
+over this subsystem must be run at **both** offsets, or it will produce a confident zero.
+That belongs in `codescan.py`'s footer next to the other blind spots it already names.
