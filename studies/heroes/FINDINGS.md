@@ -1722,6 +1722,71 @@ permits it explicitly and it is the first thing in this arc that has genuinely w
 Three static hypotheses have now been refuted here by experiment; a fourth guess is worth
 less than one measurement of whether the event fires at all.
 
+## 27. MEASURED, not guessed: no commander is ever created
+
+§26.4 said the next step was runtime observation rather than a fourth guess. It did not need
+a debugger — the question can be answered by reading the **result** instead of trapping the
+event, and the commander context turns out to be a plain static global.
+
+`toolkit/clientscan/commanderpeek.py` (new, pure `ctypes` through `keytap`'s reader — the
+same `OpenProcess`/`ReadProcessMemory` path the live key capture uses, read-only, no
+breakpoint, no injection). The chain is OBSERVED end to end: `0x004E0B90` is
+`mov eax,[0xC07850]` plus a non-null assert, so the GmHeroCommander context is a **static
+global at `0x00C07850`**; `ctx+0x20` is the container `0x00524DB0` searches; `ctx+0x30..0x4c`
+is `heroCommanderSlot[7]`.
+
+Read from a live client with the hero authored, the roster row drawn and the flag lit:
+
+```
+ctx                 0x01636760
+container ctx+0x20  ptr=0x06C4D4B0  cap=7  count=0  alloc=21
+heroCommanderSlot   0 0 0 0 0 0 0
+```
+
+**`count = 0`, all seven slots empty.** The context is live and the container is allocated —
+`cap=7`, matching `GmHeroCommander`'s own bound, a small corroboration of §3.1 from live
+memory rather than from an assert.
+
+### 27.1 What it settles
+
+§26.4 left two possibilities and this cuts them:
+
+1. ~~the event fires and `0x00524CC0`'s search finds no entry matching its key~~ — **REFUTED.**
+   A key mismatch would still have *created* nothing only if the search failed **and** the
+   create path were never reached; but the container being empty with the party entry
+   present means nothing was created under **any** key. There is no commander filed under the
+   wrong key either.
+2. **the creation path never runs for our hero — CONFIRMED as the live reading.**
+
+And the party entry demonstrably *is* present: the roster row renders with the hero's
+archive-resolved name, and that text is drawn from the same `party+0x24` array §25.1
+identified. So the data is there and the consumer never consumes it.
+
+### 27.2 What it does not settle, and the honest next step
+
+Empty tells us nothing was created; it does not distinguish **the event never being raised**
+from **case 93 running and rejecting the entry at its `my-id` filter**. Both leave the
+container at zero.
+
+Separating them needs the one thing still not measured: whether `0x008590CA` executes. That
+is a trace — a breakpoint or code cave — and `CLAUDE.md` carve-out 3 permits native tooling
+explicitly. The difference from §26.4 is that the case for spending it is now made of a
+measurement instead of a fourth hypothesis.
+
+*(The other half — reading `ctx[0x44][0x2ac]` live to check the filter's own value — is not
+available the same cheap way: `0x0047F660` resolves the root context through **TLS**
+(`mov ecx,[0xc0f300]; mov eax,fs:[0x2c]; mov eax,[eax+ecx*4]`), so it needs the target
+thread's TEB rather than a global read. Worth knowing before someone plans it as a five-minute
+job.)*
+
+### 27.3 The method note, because it is the reusable part
+
+Three static hypotheses were refuted by client runs on this one question, at roughly seven
+minutes each, and the thing that actually moved it was **reading four dwords out of the live
+process**. The commander context was a plain global the whole time. When a question is "what
+is the client's state", prefer measuring the state over predicting it — the same lesson
+`CLAUDE.md`'s "capture the client and read it" states, arrived at the expensive way.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

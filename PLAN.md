@@ -1546,8 +1546,24 @@ had gone stale on four items that were since closed, which is the drift the top 
    **NEXT IS RUNTIME, NOT MORE STATIC READING.** Three static hypotheses have now been refuted
    by experiment on this one question, and what is needed is a single measurement of whether
    the event fires at all — a breakpoint or code-cave trace on `0x008590CA`. `CLAUDE.md`
-   carve-out 3 permits native tooling explicitly, and this is the first thing in the arc that
-   has genuinely warranted it; a fourth guess is worth less than one observation.
+   carve-out 3 permits native tooling explicitly.
+   **DONE, and it needed no debugger (§27).** The commander context is a **plain static global
+   at `0x00C07850`**, so the RESULT can be read instead of the event trapped:
+   `toolkit/clientscan/commanderpeek.py` (new, pure ctypes through `keytap`'s read-only
+   reader). Live, with the hero authored and the roster row drawn:
+   **`container ctx+0x20: cap=7 count=0`, all seven `heroCommanderSlot` entries zero.**
+   **NO COMMANDER IS EVER CREATED** — so §26.4's "key mismatch" branch is REFUTED (nothing is
+   filed under any key) and "the creation path never runs" is confirmed. The party entry IS
+   present, since the roster renders its archive-resolved name from that same `party+0x24`
+   array. **Still open:** empty does not distinguish *the event never fires* from *case 93
+   runs and its my-id filter rejects*; that needs a trace on `0x008590CA`, and the case for
+   spending native tooling is now made of a measurement rather than a hypothesis. Note
+   `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
+   (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
+   **Method note worth carrying:** three static hypotheses were killed by client runs at ~7
+   minutes each, and what actually moved this was reading four dwords out of the live process
+   — the global was there the whole time. When the question is "what is the client's state",
+   measure the state.
 3. **Four desk leftovers**, scoped by a workflow that died on a session limit before
    returning anything: (a) the scan trigger above, (b) `0x0074`'s other **17 unexplained
    fields**, (c) `0x01C2`'s `msg+0x14` (the second `u8`, never varied), (d) the **aiMode
