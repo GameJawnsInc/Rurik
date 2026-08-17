@@ -2474,6 +2474,29 @@ so every registration in the census funnels through one site and the wrapper's *
 what name the UI construction. That is the next read, and it is static: enumerate callers of
 `0x00633BF0` and find which passes `0x1000011E`.
 
+### 36.4 EIGHT subscribers and ONE raiser, enumerated from the image
+
+The wrapper's callers, found by scanning `.text` for the immediate itself
+(`68 1E 01 00 10`, `push 0x1000011E`) and decoding the following `call rel32`:
+
+```
+0x004ED055 -> 0x00633BD0      0x0056ABC9 -> 0x00633BD0
+0x00539380 -> 0x00633BD0      0x0056DEB6 -> 0x00633BD0
+0x00562D94 -> 0x00633BD0      0x005749BB -> 0x00633BD0
+0x00567AB8 -> 0x00633BD0      0x008BB6B0 -> 0x00633BD0
+0x008590CA -> 0x00633D70   <- OURS: the RAISE, 0x01C2's worker
+```
+
+**Eight SUBSCRIBE sites and exactly one RAISE site, and the one raiser is the instruction this
+whole arc has been chasing since 26.4.** The asymmetry is the answer to "who registers it":
+eight different UI constructions each subscribe to the commander event, and the party
+hero-add is the only thing in the image that raises it.
+
+**And the census counted TWO registrations in our session, not eight** -- so six of those
+eight sites belong to UI that our session never constructs. That is now a bounded, purely
+static question: name the eight, and the two that DO run tell us what must exist before a
+hero-add can bind a commander. No further client runs are needed to enumerate them.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.
