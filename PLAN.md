@@ -1307,13 +1307,25 @@ what the corpus cannot (n56 fires on 0 files; block H on 0 of 20,661, now exerci
 `test_modelfile.py` together with the client's error-0x1D refusal). The full-population
 run also CORRECTED the study's sabotage table — six "clean" variants carry 1–29
 aliasing survivors at n=14,571 (FINDINGS §3.6) — and the measured ceilings are pinned.
-**Next is U2 (name the animation payloads) and U3 (companion chunks + the object
-model), which can run as parallel arcs** — `studies/unitmodels/PLAN.md` §2. Still
-undecoded, honestly: blk2C/blk48's element contents (strides exact, semantics unnamed;
-the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object identity,
-and the mid/tail chunk families. GW1 units read as rigid-segment models — zero skinning
-vocabulary in 19,758 assert sites — which, if it survives U2, makes custom-unit
-authoring markedly simpler than a skinned-mesh format would.
+
+**U2 and U3 both landed the same day, as parallel worktree arcs, each surviving an
+independent adversarial review.** U3 (`studies/mdlrefs/`, `toolkit/mapdata/mdlrefs.py`,
+30,722/30,722 reference chunks closed): the five list chunks share one client reader
+whose record rule is null-word-terminated; the m_skel/m_geom question is ANSWERED — two
+classes, 0x15C/0x11C, distinct deleting destructors; the mid/tail chunk families are
+classified (tails = runtime collision/visibility, mids = MdlDecomp's mirror). U2
+(`studies/anim/`, the typed layer in `skelfile.py`): **the animation payloads are
+NAMED** — blk2C is one record per animated node carrying translation + QUATERNION
+rotation + aux channels as times-prefix SoA, and the node-link byte is the
+rigid-segment hierarchy itself (121,532/121,532 topological) — **the recon's quaternion
+refutation is reversed**: it measured a byte-count-identical, shape-wrong overlay, and
+the review confirmed the reversal from the samplers' address arithmetic plus the
+client's own unit-gated fast-normalize. n40 is the sound-event table indexing FA6;
+MdlAnim:367 is settled; flag bits 1–2 are ORed into one runtime bit. So the
+rigid-segment reading now stands on structure, not just assert absence — custom-unit
+authoring needs no skinning path. **Next: U4 (the wire→file assembly resolver) and U5
+(unit body export + measured viewer), both unblocked; then U6 round-trip and the U7
+summit** — `studies/unitmodels/PLAN.md` §2–3.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
