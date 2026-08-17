@@ -355,8 +355,24 @@ by filename: the tools decide from the DH struct, and
 python toolkit/clientpatch/dhbuild.py
 ```
 
-says what every build in the vault is and whether it is where it belongs. The live build
-has no launch path yet, on purpose — see `PLAN.md` §6.2 item 1.
+says what every build in the vault is and whether it is where it belongs. **The live build
+DOES have a launch path** — `toolkit/harness/livesession.py`, and the procedure is
+§"Capturing a live session" below. This line read "no launch path yet, on purpose" until
+2026-08-17, which was true when it was written on 2026-08-06 and false from the next day:
+the driver landed 2026-08-07 and six live captures are in the vault. It sat ten days
+contradicting the section it shares a document with — the exact staleness failure the top
+of `CLAUDE.md` is about, found by an operator following this file to set up a live run.
+
+Which live build to use is a question about the ACCOUNT's client, not about the vault:
+`run-live/2026-07-29_221c13772c7a` is **build 38797** and
+`run-live/2026-08-13_64fae3b1369b` is **build 38833** (`buildid.py --exe <path>`, which
+since 2026-08-17 reads the binary you hand it rather than the pin). The updater is LIVE on
+both by design, so a build older than what ArenaNet currently serves will update itself —
+and the key-tap cave is patched at a build-specific address, so an exe replaced by the
+updater loses its tap. `livesession.py` refuses an untapped build at preflight and again
+when it reads the slot, so this fails loudly rather than producing unrecoverable
+ciphertext; the fix is `make_custom_client.py --no-dh-patch --key-tap` then
+`make_run_dir.py --live` against the current build.
 
 **4. Cage the patched client** (elevated PowerShell, one time per patched exe):
 
