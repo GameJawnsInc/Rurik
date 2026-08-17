@@ -816,7 +816,28 @@ SITES = {
     "create": Site(
         "create", 0x00524C40, bytes.fromhex("558bec5153"),
         "get-or-create. If this fires, a commander object exists and 27's "
-        "count=0 is about a later teardown, not a create that never ran"),
+        "count=0 is about a later teardown, not a create that never ran",
+        # WHICH AGENT, and it is the question left after the fix worked.
+        # studies/pvpui/FINDINGS.md 20 measured a commander existing for the
+        # first time -- count 0 -> 1 -- but `heroCommanderSlot` holds container
+        # KEYS, not agent ids, so it cannot say WHOSE. The caller at 0x00524FA3
+        # pushes `edi = [rec+8]`, the agent id the rebuild copied out of the
+        # party container (11), so the argument here names it directly.
+        #
+        # At the breakpoint `push ebp` has NOT executed, so [esp] is the return
+        # address and [esp+4] is arg0. Both are read: a return address that is
+        # not 0x00524FA9 means the call came from somewhere other than the
+        # rebuild loop, and then the id is about something else.
+        capture=lambda ctx, rd: (lambda w: {
+            "return address": None if not w else w[0],
+            "from the rebuild loop": None if not w else w[0] == 0x00524FA9,
+            "agent id (arg0)": None if not w else w[1],
+            "VERDICT": "unreadable stack" if not w else (
+                f"agent {w[1]} gets the commander"
+                + (" -- the HERO" if w[1] == 200 else
+                   " -- the PLAYER, not the hero" if w[1] == 1 else
+                   " -- neither the hero agent (200) nor the player (1)")),
+        })(_dw(rd, ctx.Esp, 2))),
     "bulk": Site(
         "bulk", 0x004E5D20, bytes.fromhex("8b1eff37895da8"),
         "dispatch case 90, the bulk activeHeroes scan -- the path that DOES "
