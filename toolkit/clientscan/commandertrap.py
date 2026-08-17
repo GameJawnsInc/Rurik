@@ -904,6 +904,35 @@ SITES = {
         "A census of every event id GmView's frame dispatch is entered with -- "
         "0x10000114's presence or absence in it is the measurement.",
         capture=lambda ctx, rd: {"event id (eax)": ctx.Eax}),
+    # GMVIEW'S OWN SUBSCRIBE OF 0x10000114, TIMESTAMPED AGAINST OUR RAISE.
+    #
+    # Run 5's `subscribe` census DID find GmView registering 0x10000114 (outer
+    # return address 0x004ED03F un-slid, which is this call's return), so §18.1
+    # holds: we are on the non-observer branch and GmView takes the event we
+    # raise. What the census could not say is WHEN -- it aggregates, and
+    # aggregated rows carry no timestamps, while the ordered hit list showed
+    # only `worker` and `raise114`, both at +1.710s.
+    #
+    # This site is the same subscribe, anchored on the `call` so it lands in the
+    # ORDERED list. Run it beside `raise114` and the two timestamps answer the
+    # only question left: does GmView subscribe before or after we raise.
+    #
+    # `0x004ED03A` is `call 0x00633BD0` with EAX already holding the computed
+    # event id from `add eax, 0x10000114` five instructions earlier, so the
+    # capture also re-reads which branch of §18's conditional was taken --
+    # making this its own control rather than trusting the static reading.
+    "gmvSub114": Site(
+        "gmvSub114", 0x004ED03A, bytes.fromhex("e8916b1400"),
+        "GmView's CONDITIONAL subscribe call. EAX is the event id it is "
+        "registering -- 0x10000114 on the normal branch, 0x1000012B in observer "
+        "mode. Timestamped against `raise114`.",
+        capture=lambda ctx, rd: {
+            "event being subscribed (eax)": ctx.Eax,
+            "branch": ("NORMAL -- 0x10000114, the event we raise"
+                       if ctx.Eax == 0x10000114 else
+                       "OBSERVER -- 0x1000012B, not the event we raise"
+                       if ctx.Eax == 0x1000012B else "UNEXPECTED"),
+        }),
     "posseMsg": Site(
         "posseMsg", 0x005392AC, bytes.fromhex("8b460483f856"),
         "GmPosseRoster's handler at its switch selector, esi already loaded. "

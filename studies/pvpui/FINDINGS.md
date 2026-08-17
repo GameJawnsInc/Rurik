@@ -1050,3 +1050,74 @@ that fills later — which would make it one cause behind two arcs' worth of sym
 
 **Run 5 times it directly**: the `subscribe` census armed for the whole session alongside
 `raise114`, and the timestamps say which came first.
+
+## 19. ANSWERED. GmView subscribes 53 ms after we raise, and nothing raises again
+
+Run 6, sites `gmvSub114, raise114, bulk, worker`, all four in the ordered hit list so the
+timestamps are directly comparable. `gmvSub114` is `0x004ED03A`, GmView's **conditional**
+subscribe call, with EAX carrying the id it is about to register — so the site re-measures
+§18's branch instead of trusting the static reading:
+
+```
+  +0.000s  worker     0x00859010   party_id 1, owner 1, agent 200, heroId 1
+  +0.000s  raise114   0x008588AD   push 0x10000114
+  +0.053s  gmvSub114  0x004ED03A   event being subscribed (eax) 0x10000114
+                                   branch: NORMAL -- 0x10000114, the event we raise
+  TOTALS   gmvSub114 1   raise114 1   bulk 0   worker 1
+```
+
+**GmView subscribes to `0x10000114` fifty-three milliseconds after we raise it.**
+
+That is the whole chain, and every earlier zero falls out of it:
+
+```
++0.000s   our 0x01C2 appends the hero row to the container          (worker)
++0.000s   our 0x01B2 raises 0x10000114                              (raise114)
+             the subscriber map has SOMEONE in it (run 2) -- not GmView
+             GmView's frame handler is not entered                  (bulk 0, run 4 census)
++0.053s   GmView subscribes to 0x10000114                           (gmvSub114)
+             ...and nothing ever raises it again
+          so the rebuild 0x00524E00 never runs
+          so 0x00524C40 never runs                                  (create 0, run 1)
+          so the commander container stays cap=7 count=0            (commanderpeek)
+          so the party-row click asserts commander / GmView:5890
+```
+
+§18.2 predicted exactly this and named it as the one arrangement consistent with runs 1–4.
+It is now measured rather than inferred, on the ordered list, with the branch re-read at the
+site.
+
+### 19.1 Why this is one cause behind two arcs
+
+Heroes §34 measured `0x1000011E` raised with **no subscriber at all**. GmView's subscribe
+run registers `0x1000011E` too, at `0x004ED055` — eleven instructions after the
+`0x10000114` call this run timestamped, so within the same 53 ms window. Both events are
+raised at instance load, into a map that fills immediately afterwards.
+
+So heroes' finding and this one are the **same defect seen from two events**: our
+party/hero messages arrive before the UI that listens for their consequences exists.
+Nothing about the wire fields was ever wrong.
+
+### 19.2 The fix, and its prediction stated first
+
+**Re-send `0x01B2 PARTY_SET_MINE` a second or two after instance load.** Its handler
+(`0x008569E0` → `0x00858850`) re-resolves the container and raises `0x10000114`
+unconditionally on both branches (§15.1), so a second send is a second raise — this time
+into a map that contains GmView.
+
+> **Predicted:** `bulk` fires (GmView's case 90 entered for the first time in this
+> project), the rebuild `0x00524E00` runs, `0x00524C40` runs once per hero row whose
+> `msg+8` matches `ctx[0x2AC]`, `commanderpeek` reports a non-zero commander count, and the
+> party-row click stops asserting.
+>
+> **Refuted if:** `bulk` fires and `create` does not — then the container the rebuild walks
+> is not the one our rows went into, and §16's identification is wrong somewhere. Or
+> `bulk` does not fire — then GmView's subscription is not what gates case 90 and something
+> else in the frame path does. Or the client asserts on the second `0x01B2` — then
+> PARTY_SET_MINE is once-per-connection like `0x01D2` is (`PyCliParty:1228`), and the
+> re-raise has to come from somewhere else.
+
+This is deliberately **not** `--hero-late`. Heroes already deferred the hero *pipeline* and
+measured that it still asserted; what has never been deferred is the **raise**. The rows can
+stay exactly where they are — §15.1 measured them landing before the raise, which is the
+order the rebuild needs.
