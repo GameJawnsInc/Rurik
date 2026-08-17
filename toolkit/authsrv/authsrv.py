@@ -2334,6 +2334,11 @@ HERO_BUST_CACHE = False
 # says "Goren"), so this asks whether the data-cache message's own name field
 # overrides that table lookup or is ignored. studies/heroes/FINDINGS.md 30.
 HERO_INFO_NAME = None
+# 0x01C2's msg+0x14 -- the SECOND trailing u8, stored to entry+0x14 and never
+# varied by any run in this arc. Its sibling msg+0x10 turned out inert on every
+# observable (30, 19), so the prior is that this one is too; the point is to
+# have asked rather than to have assumed.
+HERO_MSG14 = 0
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6682,7 +6687,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     1, _wa, _wb,
                                     HERO_ROSTER_ID if (HERO_ROSTER_ID
                                                        is not None and _first)
-                                    else _hid),)
+                                    else _hid,
+                                    HERO_MSG14),)
                         _after = ()
                         if HERO_BUST_CACHE and _inside:
                             # Warm the cache with party 2, then let the hero-add
@@ -7723,6 +7729,10 @@ def main():
                          "also PLAYER_AGENT_ID, and that coincidence is what "
                          "makes 0x01C2's msg+8 undecidable. Set it to something "
                          "else and the two namespaces separate.")
+    ap.add_argument("--hero-msg14", type=int, default=0, metavar="N",
+                    help="0x01C2's second trailing u8 (msg+0x14 -> entry+0x14), "
+                         "never varied. Its sibling msg+0x10 is inert on every "
+                         "observable, so this asks rather than assumes.")
     ap.add_argument("--hero-info-name", default=None, metavar="NPC_KEY",
                     help="Put a real EncString on 0x0074's name field, which "
                          "every run so far has sent EMPTY. The hero row takes "
@@ -8018,6 +8028,8 @@ def main():
         HERO_BUST_CACHE = a.hero_bust_cache
         global HERO_INFO_NAME
         HERO_INFO_NAME = a.hero_info_name
+        global HERO_MSG14
+        HERO_MSG14 = a.hero_msg14
         if HERO_INFO_NAME:
             agents.npc_template(HERO_INFO_NAME)      # fail here, not mid-load
         HERO_AI_MODE = a.hero_ai_mode

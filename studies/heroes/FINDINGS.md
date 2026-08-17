@@ -1918,6 +1918,52 @@ family have now carried a real one, and the outcomes are opposite — `0x01BF`'s
 agent-fed label and is ignored (§10.2), `0x0074`'s rides to a table-fed label and is ignored
 too. In neither case does a name on the wire reach the party roster.
 
+## 31. `msg+0x14` and `aiMode` — inert, with one of them uninformative
+
+Both were named leftovers: `0x01C2`'s second trailing `u8` (stored to entry+0x14) had never
+been varied, and `--hero-ai-mode` was wired but untested. Run together, with the confound
+stated up front — if anything had changed I would have had to split them, and nothing did.
+
+Wire: `PARTY_HERO_ADD(party 1, wordA 1, wordB 200, 2, 200)` and
+`HERO_ACTIVATE(hero 2, agent 200, inventory 0, aiMode 2)`. The row is **byte-identical**:
+`Mo1 Goren`, slot 1 bound, flag green.
+
+- **`msg+0x14` is inert on every observable**, exactly as its sibling `msg+0x10` (§19). Both
+  trailing bytes of `0x01C2` now have a measured negative rather than an absent assert.
+- **`aiMode` is inert too — and that result is UNINFORMATIVE**, which matters more than the
+  observation. Our server has no follow AI and no hero combat behaviour, so there is nothing
+  for a Fight/Guard/Avoid-Combat stance to act on. What the run shows is that the stance does
+  not change the ROSTER or the compass; it says nothing about whether the client acts on it,
+  and it must not be read as "stance does nothing". `CHAR_AI_MODES = 3` stays CORROBORATED
+  from the binary and the wiki (§3.2) and untested behaviourally.
+
+## 32. Where this arc stops
+
+The research is at its wall, and the remaining work is of three kinds — none of it more
+reading.
+
+**Needs native tooling.** The commander-panel click. Everything up to it is measured: no
+commander is ever created (§27, live memory), the creation path exists and is reachable from
+`0x01C2` (§25.3), and three static hypotheses plus one live one are refuted (§16, §19, §26,
+§28). What is left is a single question — does `0x008590CA` execute — and it needs a
+breakpoint or code cave. `CLAUDE.md` carve-out 3 permits it; the case for spending it is now
+made of measurements.
+
+**Needs another arc first.** `0x01BF`'s trailing bytes and its wire name (§10.2's measured
+negatives) have one untested candidate left, the **outpost hiring UI** — and the party window
+does not open in an outpost until RESKIN §18.1's explorable gate is solved. That is not this
+arc's to do.
+
+**Ordinary server building, not research.** Follow AI: the movement messages exist and the
+hero stands still because nothing drives it. Unbuilt work with no unknown in it.
+
+**What this arc delivered:** a henchman and a hero authored end to end from our own server,
+both rendering named roster rows on the pinned build; the wire shapes of four messages read
+from the client's own tables, three of which correct or refute their published upstream
+descriptions; `s_heroClientData` located, closed and extracted under the provenance gate; and
+the attribute pair (`0x0037`/`0x003A`) plus `0x00B7` identified as what a hero needs — all of
+which were already in the tree, addressed to the wrong agent.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

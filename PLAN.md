@@ -1576,11 +1576,12 @@ had gone stale on four items that were since closed, which is the drift the top 
    the very next live read produced a clean, memorable, completely FALSE finding, and only a
    built-in positive control caught it. Measure the state; then check the instrument against
    something you already know.
-3. **Four desk leftovers**, scoped by a workflow that died on a session limit before
-   returning anything: (a) the scan trigger above, (b) `0x0074`'s other **17 unexplained
-   fields**, (c) `0x01C2`'s `msg+0x14` (the second `u8`, never varied), (d) the **aiMode
-   consumer** — `--hero-ai-mode` is wired and **UNTESTED**, and nothing yet shows the stance
-   has any effect.
+3. **Desk leftovers, mostly closed.** ~~(a) the scan trigger~~ **DONE (§23, §25).**
+   ~~(c) `msg+0x14`~~ and ~~(d) aiMode~~ **DONE (§31): both inert on every observable** —
+   though the aiMode result is **UNINFORMATIVE and must not be read as "stance does nothing"**,
+   because our server has no follow AI for a stance to act on. Still open: **(b) `0x0074`'s
+   other 17 fields**, where the prior after §12 and §30.2 is that most are inert on the
+   surfaces we can see.
 4. **`0x01BF`'s two trailing bytes and its wire name** — measured negatives, not just missing
    asserts (§10.2). The untested candidate is the **outpost hiring UI**, which needs
    RESKIN §18.1's explorable gate solved first.
