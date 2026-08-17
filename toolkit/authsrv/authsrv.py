@@ -4346,6 +4346,40 @@ def area_population(area):
                 f"npc templates. The definition array is a raw index on the "
                 f"client, so one would silently wear the other's model")
         seen[v] = (key, npc)
+
+    # THE PARTY CO-LOADS WITH EVERY AREA, so its ids are reserved against area
+    # rows even though the rows above are internally consistent. The set checks
+    # above cannot see this collision, and it stayed unguarded for a week
+    # (studies/unitsetup/FINDINGS.md 8 Q9): `--area sculpt --hero 1,2,3` puts
+    # the player (agent 1), the henchman (30, definition 9) and up to seven
+    # hero bodies (200..206, definitions 10..16) into the same instance as the
+    # area's rows. The TEST ENEMY is deliberately NOT reserved -- an area
+    # replaces it (spawn_population and spawn_enemy are mutually exclusive
+    # branches, AST-proven by test_population section 3), so agent 10 and
+    # definition 3 never co-load with an area and refusing them would be
+    # inventing a rule.
+    _MAX_HEROES = 7          # PtPlayer:332 / GmHeroCommander:214, both cmp 7
+    reserved_agents = ({PLAYER_AGENT_ID, HENCHMAN_AGENT_ID}
+                       | {HERO_AGENT_ID + i for i in range(_MAX_HEROES)})
+    reserved_defs = ({HENCHMAN_DEFINITION}
+                     | {HERO_DEFINITION + i for i in range(_MAX_HEROES)})
+    for key, row in rows:
+        if row["agent_id"] in reserved_agents:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} claims agent_id "
+                f"{row['agent_id']}, which the party side reserves (player "
+                f"{PLAYER_AGENT_ID}, henchman {HENCHMAN_AGENT_ID}, heroes "
+                f"{HERO_AGENT_ID}..{HERO_AGENT_ID + _MAX_HEROES - 1}). The "
+                f"collision only bites when someone adds --hero to an --area "
+                f"run, which is exactly when nobody is thinking about ids")
+        if row["definition"] in reserved_defs:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} claims definition "
+                f"{row['definition']}, which the party side reserves "
+                f"(henchman {HENCHMAN_DEFINITION}, heroes {HERO_DEFINITION}.."
+                f"{HERO_DEFINITION + _MAX_HEROES - 1}). Definitions are a raw "
+                f"array on the client, so the area body would silently wear "
+                f"the hero's model or vice versa")
     return rows
 
 
