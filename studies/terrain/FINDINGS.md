@@ -1081,6 +1081,57 @@ them, so every cell was drawn mirrored and each blend ran backwards. Recorded
 because it is the same failure mode as the render this arc has been trusting —
 a picture that looks plausible and is measuring its own bug.
 
+### 7.10 The permutation is LOST AT THE FORMAT BOUNDARY (2026-08-15)
+
+Closing the selector (§7.9) did not make the ground look right, and the owner
+named the symptom precisely from a Blender screenshot: *"tile selection still
+looks random. corners where there should be half-and-half. just mismatched."*
+
+**The layer model is NOT the fault, and that was measured before blaming it.**
+Over 7,156 mixed cells of Kamadan, the UNION of each material group's overlay
+coverage maps to exactly the right PHYSICAL corners -- **0 failures**. (The
+first version of that check compared each overlay against the whole group and
+reported 552 "wrong"; it was the check that was wrong, because `_emit`'s
+two-layer path deliberately splits a group across two quadrants whose union is
+the group. `(25,3,25,25)` emits `{2,3}` and `{0}`, and `{0,2,3}` is right.)
+
+**The defect is in the interchange.** `layers.u16` carries
+
+    bits 0..7 tile   bits 8..9 quadrant   bit 15 rotated
+
+and **no permutation**. Since §7.9 the exporter picks a quadrant whose authored
+alpha covers corners in PERMUTED index space, then hands the consumer only
+`(tile, quadrant, rotated)`; `tools/blender/import_gwmap.py` places that alpha
+by a fixed `LOOP_CORNER` in PHYSICAL space. While `SELECTION` was `"identity"`
+the two spaces coincided and nothing showed. They no longer coincide for
+**about one cell in seven**, and exactly those cells draw their coverage shape
+in the wrong orientation -- a half-edge landing as a corner wedge, which is the
+symptom reported.
+
+**AND THE TEST CANNOT SEE IT.** `test_trnblend`'s "no overlay covers a corner
+that belongs to the base" computes both sides in the same permuted space, so it
+agrees with itself by construction. A check that cannot fail is not a check --
+this file has said so about other people's code twice, and here it is ours.
+
+Two candidate fixes, NEITHER chosen, because choosing by reasoning is what
+produced the last three wrong turns in this arc:
+
+1. **Resolve it in the exporter** -- map the permuted group mask back to a
+   PHYSICAL mask before the `COVER_PRIMARY` lookup, so `(quadrant, rotated)`
+   already lives in the consumer's space. Format and importer unchanged.
+2. **Widen the format** to carry the selector byte and teach the importer to
+   apply it. More invasive, and it pushes client semantics into a consumer
+   deliberately kept dumb.
+
+**What decides between them is a measurement that is already built.** The
+client assembles the packed `(coverage << 16) | tex` array at `[ebp-0x10]`
+immediately before `call 0x757a80` at `0x00761A25`. An `int3` there dumps the
+client's OWN per-cell layer descriptors; diffing those against our `layers.u16`
+for the same tile block settles whether the client's coverage is expressed in
+permuted or physical space, which is precisely what option 1 assumes and has
+not verified. The instrument works (§7.6), and the injection window is the
+first ~6 seconds of the map load.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
@@ -1088,14 +1139,21 @@ a picture that looks plausible and is measuring its own bug.
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
   at 255, so a gamma or a scale-and-bias would fit the corpus equally well
   and none is measured. `--no-lightmap` is the control.
-- ~~The SOURCE of the per-cell corner selector.~~ **READ 2026-08-15, §7.6.**
-  `chunk+0x2B4` holds a per-cell **corner permutation**: 16 distinct bytes, all
-  16 permutations of (0,1,2,3), 85.6% identity. `trnblend.SELECTION =
-  "identity"` is right for six cells in seven and wrong for the seventh.
-  **What replaces it as the open item: what GENERATES the permutation.** The
-  array is regenerated per tile block (two reads seconds apart disagree), and
-  the PRNG pair sits 16 bytes before it at `chunk+0x2A4` — observed live as
-  `reseed(8, 18)`. A consumer must derive the permutation, not capture it.
+- ~~The SOURCE of the per-cell corner selector.~~ ~~What GENERATES it.~~
+  **BOTH CLOSED 2026-08-15, §7.6 and §7.9.** `chunk+0x2B4` is a per-cell corner
+  PERMUTATION, and it is a **selection-sort comparator network** over the four
+  corner types — `[01][02][03][12][13][23]`, swap on strict `>` — reproduced
+  **2048 of 2048 cells** over two captures. Landed as
+  `trnblend.corner_selector`; `SELECTION` is no longer `"identity"`.
+- **THE TOP ITEM NOW: the permutation is lost at the format boundary (§7.10).**
+  `layers.u16` carries `(tile, quadrant, rotated)` and no permutation, so the
+  exporter chooses a quadrant in PERMUTED space and the Blender importer places
+  its alpha in PHYSICAL space. Harmless while `SELECTION` was the identity;
+  wrong for ~1 cell in 7 since it stopped being. **This is what the owner is
+  looking at** — "corners where there should be half-and-half". Two candidate
+  fixes are written up in §7.10 and NEITHER is chosen: the int3 dump of the
+  client's own layer descriptors at `0x00761A25` decides it, and that
+  instrument already works.
 - **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
   `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
   the base tiles continuously and there is no 96-unit repeat; if it does not,
