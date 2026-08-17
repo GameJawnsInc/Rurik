@@ -431,8 +431,45 @@ def party_build(party_id=1, player_number=None, inside_window=()):
          f"PARTY_ADD_MEMBER({party_id}, player {player_number})"),
         *inside_window,
         (0x01D3, [party_id], f"PARTY_BUILD_COMMIT({party_id})"),
-        (0x01B2, [party_id, 1], f"PARTY_SET_MINE({party_id})"),
+        party_set_mine(party_id),
     ]
+
+
+def party_set_mine(party_id=1):
+    """GAME_SMSG 0x01B2 / 434 -- "this party is mine", and it RAISES an event.
+
+    Factored out of `party_build` because it is now sent twice: once as the
+    build's last step, and once again late (`authsrv.PARTY_MINE_LATE`).
+
+    WHAT IT DOES BEYOND SETTING A POINTER, all OBSERVED on build 38833.
+    Handler `0x008569E0` passes `this = [globals+0x4C]+4` and both message
+    fields to `0x00858850`, which:
+
+      * resolves the container -- field 1 == 0 selects the DEFAULT container
+        `[this+0x50]`, i.e. `[[globals+0x4C]+0x54]`; 1..20 index
+        `[[this+0x3c] + n*4]`;
+      * STORES it back to `[this+0x50]`. That store is the one
+        `PyCliGetMyPartyId` (`0x00856250`) reads and RESKIN 17.1/18 measured
+        as 1 after the build -- and the one a displacement scan for `+0x54`
+        cannot see, because the base is pre-biased by four so the instruction
+        reads `0x50` (studies/pvpui/FINDINGS.md 16);
+      * RAISES `0x10000114` on BOTH branches -- at `0x008588AD` when field 2 is
+        non-zero, and via `mov eax,0x10000114` at `0x008588D1` otherwise.
+
+    That raise is why this is worth sending twice. `0x10000114` is the only
+    event whose GmView case calls the commander-model rebuild, and FINDINGS 19
+    timestamped GmView subscribing to it **53 ms after** our first send.
+
+    Returns the same `(opcode, values, label)` triple as everything else here.
+    """
+    if not 0 <= party_id <= 20:
+        raise ValueError(
+            f"party id {party_id} outside 0..20. Zero is NOT invalid here and "
+            f"is not a no-op: it selects the DEFAULT container at "
+            f"[[globals+0x4C]+0x54] rather than a numbered one "
+            f"(studies/pvpui/FINDINGS.md 13.2 -- and read 14.1, which measured "
+            f"that the default container IS party 1, so the two agree here)")
+    return (0x01B2, [party_id, 1], f"PARTY_SET_MINE({party_id})")
 
 
 def party_henchman_add(party_id, agent_id, enc_name, unk_a=0, unk_b=0):
