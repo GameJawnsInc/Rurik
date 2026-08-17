@@ -65,6 +65,26 @@ every question:
 Hold the tab open a few seconds so `--shots` catches it, note the capture
 directory the harness prints, then close the client.
 
+### Attempts
+
+- **2026-08-16, twice, neither a probe result — both diagnosed.**
+  Attempt 1 (38797 client, map 449): client hung up right after `0x0199` —
+  the 38797 run archive cannot satisfy a 449 load (the load burst never got
+  past the map id; same family as the 146/148 condition, different row).
+  Attempt 2 (38833 client via `--exe
+  vault/run/2026-08-13_64fae3b1369b/Gw.exe`, map 449): **the client loaded
+  the map and took the entire burst through `INSTANCE_LOAD_FINISH`** — then
+  OUR gamesrv's handler died: `authsrv.py:6884` `NameError: HERO_ATTRIBS`,
+  dead socket, `Code=007` on screen. That is the heroes-party commit at
+  `main`'s tip (`c96242f`): `HERO_ATTRIBS`, `HERO_SKILLBAR` and
+  `HERO_BODY_NPC` are assigned only inside the `--hero` CLI block with no
+  module-level default, and the load path evaluates `HERO_ATTRIBS`
+  unconditionally — so **every loopback instance load on current main
+  crashes**, probes or not. The fix belongs to the heroes arc (in flight,
+  worktree `sleepy-cartwright-4143ba`); once it lands, relaunch with the
+  38833 `--exe` line above. PLAN.md's rule held: the client was innocent
+  both times until the gamesrv log said otherwise.
+
 ### Result (fill in)
 
 - Date/build:
