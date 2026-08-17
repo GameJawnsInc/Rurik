@@ -119,7 +119,22 @@ Every one of these, in the order they were written:
   way "wrong build" does. The floor moved 99 → 108 against a measured 110, two
   below for the two checks that can legitimately skip; this test cannot run
   vault-less at all — `pinned.find()` refuses first — so unlike `test_origin.py`
-  there is no empty-vault figure to measure against),
+  there is no empty-vault figure to measure against.
+  **And since 2026-08-17, `--hold N` without `--keep-open` HOLDS — it used to be
+  silently inert.** `run_client` gates the hold on `a.keep_open` alone, so a
+  plain `--hold 60` tore the session down at the verdict, and a healthy client's
+  orderly exit — game 0x0008, auth 0x0009, status Offline, then the RST — reads
+  exactly like a client-side death: fourteen launches were misdiagnosed that way
+  on 2026-08-16 (`studies/isle/FINDINGS.md` "Rung 4"). `--hold` has no meaning
+  other than bounding the hold, so `hold_implies_keep_open` implies the hold
+  rather than refusing the combination — the resolution the tape chain already
+  made for the same reason. The checks pin the implication in all three
+  directions (hold alone, neither, keep-open alone) and pin the CALL SITE on the
+  syntax tree, because the crash-dialog section above was also a correct
+  function that `main()` never called. The floor moved 108 → 136 against a
+  measured 138: it had drifted 26 checks stale through five commits, which is
+  the ledger's own defect class, caught by its own rule of measuring from a
+  green run),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
