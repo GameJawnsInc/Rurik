@@ -2411,6 +2411,26 @@ Every one of these, in the order they were written:
   occurs **596 times** in `.text`, so it identifies "a switch" and never "this
   switch" — which is why the dispatchers had to be anchored first, and now are.
   Needs the vault throughout. Floor 39, ~20 s),
+  `toolkit/clientscan/test_commanderpeek.py` (the live hero-commander reader's
+  own instrument check. `commanderpeek.py` reads a running client, so almost
+  nothing about it can be tested offline -- except the part that actually
+  failed. On 2026-08-16 its `--events` mode walked the UI subscriber map and
+  reported **NO SUBSCRIBER** for all three commander events, `0x100001A4`
+  included, which is KNOWN LIVE because the party-window button raises it and
+  the client asserts inside its handler at `GmView.cpp(5890)`. The reading was
+  false, and it fitted the arc's story -- "the event is raised into nothing" --
+  so neatly that it would probably have survived review. The cause: the map
+  hashes through `0x004920B0`, so a plain bucket walk never sees a real key
+  (512/512 slots non-empty, no event-id-shaped value at any offset). The fix
+  was a positive control inside the tool: find `0x100001A4` or give no answer.
+  §1 proves the gate REFUSES on a synthetic map where the wanted event IS
+  present and the control is not -- exactly the shape that would otherwise read
+  as a confident SUBSCRIBED; §2 proves it still answers when the control is
+  there, so §1 is not vacuous; §3 checks `0x00C07850` and `0x00C11BC4` are
+  still loaded by `mov eax,imm32`/`mov ecx,imm32` in the vaulted client, which
+  goes red on a rebuild rather than letting the tool read a stale address, and
+  SKIPs with its reason when the vault is absent; §4 pins that a NULL context
+  is reported rather than dereferenced. Floor 7, instant),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
