@@ -1875,7 +1875,17 @@ Every one of these, in the order they were written:
   message across two of them and requires `decode_all` to recover all three while the
   per-EVENT idiom it replaced loses two and INVENTS two more. That idiom cost the
   corpus 4,251 of 22,137 messages and invented 117 (studies/tape T18). It needs no
-  vault -- a segmentation defect is not a property of any one capture),
+  vault -- a segmentation defect is not a property of any one capture. §9
+  (2026-08-17) pins the REPACKETIZED RETRANSMIT: exact-seq dedupe catches only an
+  identical resend, and TCP may retransmit the same stream bytes split into
+  smaller segments each carrying its own new seq, so every fragment survives
+  `seen` and its bytes are counted twice. Found on live capture 20260817T183756
+  connection …58389, which `load_tape` REFUSED with a 216-byte discrepancy while
+  the seq span was exactly contiguous and `livesession`'s own reassembly agreed --
+  a good channel rejected by a bad sum. `_drop_covered` now trims by covered byte
+  RANGE; the section builds the defect synthetically and its SABOTAGE removes the
+  trim to prove the refusal returns. Wraparound of the 32-bit seq is named as NOT
+  handled rather than assumed away. 30 checks),
   `toolkit/authsrv/test_behaviourrun.py` (the LIVE behaviour run's analyser and its
   operator script, against a session the test builds out of tuples -- no vault, no
   socket, no client. It labels the MONSTER's behaviour where `labelrun` labels the

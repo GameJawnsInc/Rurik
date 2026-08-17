@@ -94,6 +94,62 @@ def _segments(wire_path, conn, direction):
             seen.add(seq)
             out.append((seq, float(r.get("t", 0.0)), bytes.fromhex(r.get("payload") or "")))
     out.sort(key=lambda s: s[0])
+    return _drop_covered(out)
+
+
+def _drop_covered(segs):
+    """Trim bytes an earlier segment already carried. Seq-dedupe is not enough.
+
+    THE EXACT-SEQ DEDUPE ABOVE CATCHES ONLY AN IDENTICAL RETRANSMIT. TCP is
+    free to REPACKETIZE when it retransmits -- resend the same stream bytes
+    split into smaller segments, each with its own starting sequence number.
+    None of those seqs equals the original's, so every one of them survives
+    `seen` and its bytes are counted twice.
+
+    MEASURED 2026-08-17 on live capture 20260817T183756, connection
+    10.0.0.210:58389, and it cost a real channel: the seq span is exactly
+    50,175 bytes with ZERO gaps, `livesession`'s own reassembly agrees
+    (50,175 - 22 handshake = the 50,153 it decrypted), and this function
+    returned 50,391 -- 216 bytes of overlap in two clusters. `load_tape`'s
+    integrity check compares its own sum against the plaintext, so it refused
+    a channel whose bytes were perfectly fine. One cluster reads:
+
+        seq ...278 (22B) ...300 (6B) ...306 (29B) ...335 (6B) ...341 (39B)
+
+    -- five segments chaining to ...380, a boundary already covered by one
+    larger earlier segment. That is repacketization, not corruption.
+
+    So dedupe by the byte RANGE a segment covers rather than by its seq: walk
+    in sequence order, keep only what extends past the furthest byte already
+    held, and trim the overlapping prefix off a partial. The result is the
+    true stream, which is what the timestamp mapping is indexed against.
+
+    THE TIMESTAMP KEPT IS THE FIRST ARRIVAL OF THE BYTES ACTUALLY USED, which
+    is the same rule the seq dedupe above states: a retransmit's later clock
+    would invent a delay the client never experienced.
+
+    NOT HANDLED, AND SAID RATHER THAN HIDDEN: 32-bit sequence WRAPAROUND. The
+    seqs in this capture sit near 4.116e9 against a 2^32 ceiling of 4.295e9,
+    so a long enough session will wrap and the plain `<` comparisons below
+    will mis-order it. Nothing here has seen a wrap, and inventing an untested
+    modular comparison is the guess this repo refuses; `load_tape`'s byte
+    check is the backstop that would catch it loudly.
+    """
+    out, covered = [], None
+    for seq, t, payload in segs:
+        if not payload:
+            continue
+        end = seq + len(payload)
+        if covered is None:
+            out.append((seq, t, payload)); covered = end
+            continue
+        if end <= covered:
+            continue                       # wholly carried by an earlier segment
+        if seq < covered:                  # partial overlap: keep the new tail
+            payload = payload[covered - seq:]
+            seq = covered
+        out.append((seq, t, payload))
+        covered = end
     return out
 
 
