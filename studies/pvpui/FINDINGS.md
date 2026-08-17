@@ -1441,3 +1441,62 @@ other directly.
 
 (The two arms of §24 are `20260817T170549` — `heroData` — and `20260817T170749` —
 `heroData->agentId`.)
+
+## 25. `0x0072` was never sent, and sending it clears the whole GmView chain
+
+`GmView:5898` is `[heroData+4]`. Traced to its only writer, in four hops:
+
+```
+0x0081DA90(this, hero_id, agentId, …)      [rec+4] = arg1      assert :199 if no record
+  one caller   0x00811530  (ecx = [globals+0x2c]+0x584, the same container)
+  one caller   0x0091E2A0  = the RECV handler for opcode 0x0072
+0x0072  HeroActivate (hero, agent, inventoryId, aiMode)   -- the client's own format string
+```
+
+**And `0x0074` zeroes that field itself.** `0x0081DBF8 mov [esi+4], 0` sits in the create
+path of `0x0074`'s worker, so the data-cache message deliberately leaves `agentId` null for
+someone else to fill. §24.2 concluded no `mercenary_info` argument could set it; this is why.
+
+**We had never sent `0x0072`.** `authsrv.py:2298` is `HERO_ACTIVATE = False` and the send
+site reads `for … in (hero_slots() if HERO_ACTIVATE else ())`. Not a payload bug, not a
+missing message in the schema — an opt-in flag that no run of this arc had turned on.
+
+With `--hero-activate` added, the click clears `:5898` and leaves `GmView` entirely.
+
+### 25.1 Four asserts of progress, in one session
+
+| arm | assert |
+|---|---|
+| before this arc | `commander` — `GmView.cpp(5890)` |
+| `--party-mine-late` + `--hero-roster-id 200` | `heroData` — `GmView.cpp(5897)` |
+| `--party-mine-late` | `heroData->agentId` — `GmView.cpp(5898)` |
+| `--party-mine-late --hero-activate` | `inventory` — **`ItCliApi.cpp(488)`** |
+
+The commander chain is **finished**: the commander binds, its `slotIndex` is in range, the
+`AgentCommander` window is constructed, `heroData` resolves, and its `agentId` is set. Every
+assert in `GmView`'s case for `0x100001A4` now passes.
+
+### 25.2 The new blocker is a different subsystem, and probably a known one
+
+`ItCliApi:488` is at `0x0084557C`, inside `0x00845530(owner, slot, out)`:
+
+```
+  [out] = 0
+  assert slot < 9                       :485  ITEM_EQUIP_SLOTS = 9
+  inventory = 0x00844660([globals+0x40] + 0xD4, owner)
+  assert inventory                      :488   <- HERE
+```
+
+That is a **general** "equipped item in slot N" helper — **22 callers** across the UI — so
+the failure is not specific to the commander panel: whatever is now drawing wants the hero's
+gear, and the hero has no inventory registered in the item client's table.
+
+**`--hero-inventory` is NOT the fix.** Its own help text targets `ItCliApi:1194`
+(`inventoryTable.Get(inventoryId)`), a different site; ours is the equip walk, reached with
+the owner rather than an inventory id.
+
+**RECONSTRUCTION, and it should be checked before anyone spends a day on it:** this looks
+like the item-authoring gap the unit-setup arc already listed as open — "`0x006D` NPC weapons
+at create (needs item authoring the content store cannot do yet)". If so, the commander is
+no longer the blocker and hero equipment is, which is a different arc with a known
+prerequisite. Confirm that before treating it as new work.
