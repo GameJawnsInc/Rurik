@@ -1132,6 +1132,67 @@ permuted or physical space, which is precisely what option 1 assumes and has
 not verified. The instrument works (§7.6), and the injection window is the
 first ~6 seconds of the map load.
 
+### 7.11 THE COVERAGE QUADRANT IS NOT A FUNCTION OF THE CORNERS (2026-08-17)
+
+§7.10 named two candidate fixes and said an `int3` at `0x00761A25` would
+decide between them. It ran, and it **refutes the premise both fixes rested
+on**. Neither would have worked.
+
+**THE CAPTURE.** `trnhook/trnlayers.c` patches the `call 0x757a80` at the end
+of `TrnTexBlendHi` and, instead of restoring on the first hit, **emulates the
+5-byte `call rel32`** — push `site+5`, set `Eip` to the callee — so the
+breakpoint stays armed and every cell is captured. 2,716 cells hit, 512 stored,
+injected at t+1.4s, dump at t+6.7s, **client alive afterwards**. Each entry is
+a window of the live frame, which carries the whole answer in one place:
+
+    [ebp-0x10] [ebp-0x0C] [ebp-0x08]   the packed (coverage<<16)|tex descriptors
+    [ebp-0x34] [ebp-0x30] [ebp-0x2C] [ebp-0x28]   the four corner TYPES
+
+Slot 0 is the base and its cover word is the VARIATION quadrant, not a mask —
+confirmed on `(2,4,4,4)`, where slots 1-2 are `q0`+`q1` for the second
+material, exactly what `COVER_PRIMARY[14]`/`COVER_SECOND[14]` predict.
+
+**THE RESULT, and it is a comparison of the client against ITSELF, so it does
+not depend on how we read the bits:** of the 26 corner-type tuples seen more
+than once, **24 produce more than one overlay result.**
+
+    (2,2,2,4) -> 0x8003 x12 | 0x0001 x6 | 0x0003 x4 | 0x8001 x4
+    (2,2,2,3) -> 0x0003 x10 | 0x0001 x4 | 0x8001 x3 | 0x8003 x2
+    (2,2,4,4) -> 0x8000 x5  | 0x0000 x5 | 0x0002 x4
+
+Identical corner configurations, up to four different cover words. **The corner
+types explain at most 50.8% of cells.** And the alternatives are STRUCTURED,
+not noise: `(2,2,2,4)` draws from exactly `{q3, q1, q3R, q1R}`, the four
+single-corner shapes. That is a CANDIDATE SET with a per-cell pick — the same
+shape as §7.7's finding about the selector.
+
+**So `trnblend` cannot reproduce this, structurally.** It is deterministic in
+the corner types and always emits `COVER_PRIMARY[mask]`, one fixed member of
+the candidate set. Measured head-to-head on identical inputs: **65 of 212
+cells, 30.7%.**
+
+**This is what the owner is looking at.** "Tile selection still looks random" —
+part of it *is* random, and we draw one fixed representative everywhere retail
+varies. §7.10's permuted-vs-physical question is not the bug, or not the main
+one.
+
+**WHAT IS NOT ESTABLISHED, and must not be assumed.** What drives the pick. The
+obvious candidate is the PRNG at `chunk+0x2A4` — same generator as the
+variation, same answer-shape as §7.7 — but it is NOT measured, and this arc has
+three retractions from reasoning past the evidence. The next capture should
+record the PRNG state beside each cell and test whether the draw predicts the
+choice; the instrument now captures thousands of cells per run and the client
+survives it, so this is cheap.
+
+**A CAVEAT ON THIS CAPTURE.** 512 cells from one tile block of Lornar's Pass.
+Reconstructing the observed sets through `QUADRANT_COVERS` did NOT line up
+cleanly — single-layer groups accompany physical sets dominated by `{2,3}` and
+`{3}` across every cover word — which suggests the corner indexing in that
+frame may not align with the coverage bit order the way this section assumes.
+**The variability result is independent of that** (client against itself, same
+inputs); the specific candidate-set memberships are softer and should be
+re-derived once the frame's index convention is pinned.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
@@ -1145,7 +1206,16 @@ first ~6 seconds of the map load.
   corner types — `[01][02][03][12][13][23]`, swap on strict `>` — reproduced
   **2048 of 2048 cells** over two captures. Landed as
   `trnblend.corner_selector`; `SELECTION` is no longer `"identity"`.
-- **THE TOP ITEM NOW: the permutation is lost at the format boundary (§7.10).**
+- **THE TOP ITEM NOW: what picks the coverage quadrant (§7.11).** The client's
+  choice is NOT a function of the corner types — 24 of 26 repeated type-tuples
+  give more than one result, types explain at most 50.8% of cells, and
+  `trnblend` matches the client on only 30.7%. The alternatives form a
+  structured CANDIDATE SET, so something per-cell picks among them; the PRNG at
+  `chunk+0x2A4` is the obvious suspect and is NOT measured. Next capture should
+  record the PRNG state beside each cell. Until this is closed, our ground
+  cannot match retail no matter what the importer does.
+- **Demoted by §7.11, not closed: the permutation lost at the format boundary
+  (§7.10).**
   `layers.u16` carries `(tile, quadrant, rotated)` and no permutation, so the
   exporter chooses a quadrant in PERMUTED space and the Blender importer places
   its alpha in PHYSICAL space. Harmless while `SELECTION` was the identity;
