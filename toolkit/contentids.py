@@ -120,20 +120,25 @@ def index(dat, raw=False):
 def default_client_dat():
     """The loopback client's own archive: `vault/run/<stamp>/Gw.dat`, or None.
 
-    Found by walking the vault rather than by naming a build stamp, so it does
-    not go stale on the next client update. `run-live/` is deliberately NOT a
-    fallback -- that directory is ArenaNet's DH and never a loopback target.
+    THIS MIRRORS `drive_client.select_run_exe()` ON PURPOSE: the pinned build,
+    measured out of each candidate exe with `buildid.read()`, then the build's
+    canonical stamp directory within it. It used to mirror the harness's OLD
+    selector -- newest exe by mtime -- and kept mirroring it after the harness
+    moved on, which reproduced the original defect from the auditing side: the
+    day build 38833 was snapshotted, "newest" became the 38833 dir while the
+    harness (pinned to 38797) kept launching the 38797 canonical dir, so the
+    bare CLI reported on an archive no default run was going to open. A
+    pre-flight that checks the wrong archive is worse than none. Selection is
+    by the exe, not by the archive, because the exe is what the harness picks
+    by -- and the build is MEASURED from its bytes, never inferred from the
+    directory name, for the same reason `select_run_exe` gives.
 
-    THIS MIRRORS `drive_client.newest_run_exe()` ON PURPOSE, and it used to
-    return `sorted(...)` FIRST instead. That is a real disagreement and not a
-    tidiness point: the harness launches the run directory whose `Gw.exe` is
-    NEWEST, so a default that answered "alphabetically first" audited an archive
-    no run was going to open. On 2026-08-14 those were different directories AND
-    different answers -- `2026-07-29…` sorts first and cannot bind `0x1B97D` at
-    all, while `2026-08-13…` is what the harness would launch and binds it fine.
-    A pre-flight that checks the wrong archive is worse than none, because it
-    reports on something nobody is about to run. Selection is by mtime of the
-    EXE, not of the archive, because the exe is what the harness picks by.
+    `run-live/` is deliberately NOT a fallback -- that directory is ArenaNet's
+    DH and never a loopback target. A vault with no exe of the pinned build
+    still gets an answer (newest exe of any build, then any archive at all),
+    because a machine mid-assembly must still be able to audit what it has --
+    but the fallback is a guess about a nonstandard vault, where the primary
+    path is the harness's own selection restated.
     """
     try:
         import vaultpath
@@ -156,8 +161,32 @@ def default_client_dat():
             if os.path.isfile(cand):
                 return cand
         return None
-    # `-probe` dirs are experiment copies; prefer a plain build dir, exactly as
-    # `newest_run_exe()` does.
+
+    try:
+        sys.path.insert(0, os.path.join(HERE, "clientscan"))
+        import buildid
+        import pinned
+    except ImportError:
+        buildid = pinned = None
+    if buildid is not None:
+        matched = []
+        for exe, dat in cands:
+            try:
+                number = buildid.read(exe)[0]
+            except BaseException:                          # noqa: BLE001
+                continue           # unreadable: cannot be shown to be pinned
+            if number == pinned.BUILD:
+                matched.append((exe, dat))
+        if matched:
+            stamp = next((b.stamp for b in pinned.BUILDS
+                          if b.number == pinned.BUILD), None)
+            for exe, dat in matched:
+                if stamp and os.path.basename(os.path.dirname(exe)) == stamp:
+                    return dat
+            return max(matched, key=lambda c: os.path.getmtime(c[0]))[1]
+
+    # No measurable exe of the pinned build anywhere: newest of what exists,
+    # preferring a plain build dir over an experiment copy.
     plain = [c for c in cands if not os.path.dirname(c[0]).endswith("-probe")]
     pick = plain or cands
     return max(pick, key=lambda c: os.path.getmtime(c[0]))[1]
