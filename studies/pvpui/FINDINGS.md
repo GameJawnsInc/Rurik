@@ -561,7 +561,14 @@ That is why it was observable, and why it led nowhere: **it reports that the lis
 not that a commander exists.** The commander asserts hang off `0x100001A4` (§10.2), which is
 raised only after the ownership test has already produced a record.
 
-## 13. THE CONTAINER IS THE WRONG ONE. `0x01C2`'s first field selects it, and we send 1
+## 13. ~~THE CONTAINER IS THE WRONG ONE~~ — PARTLY REFUTED, see §14
+
+> **Read §14 first.** §13.2's headline does not survive a measurement already in
+> this repo (RESKIN §18). §13.1 stands; §13.3 stands as a static fact but now
+> CONTESTS RESKIN and may not be quoted either way. §13.4's experiment is withdrawn.
+> The section is kept unedited below because the retraction is the useful part.
+
+### 13.0 (original heading) `0x01C2`'s first field selects the container, and we send 1
 
 Everything above converges here, and it is a two-line experiment.
 
@@ -662,3 +669,83 @@ The addresses, the branch, the two stores, the table entry and the schema shapes
 13.4 is a **PREDICTION** and nothing more until a run either meets or refutes it. Nothing in
 this section has been near a client; it is all static reading, and the arc's history says
 that is exactly when to be most careful about calling it settled.
+
+## 14. §13 IS PARTLY REFUTED, by a measurement already in this repo
+
+§13 was written without searching the tree for the pointer it had just found. That search
+takes thirty seconds and it changes the answer. Recording the retraction in full, because
+the arc's own §3 says the static reading has been right every time and the *guess about
+which branch is cold* has been wrong every time — and §13.2 was exactly such a guess.
+
+### 14.1 What is refuted
+
+**§13.2's conclusion — "we write a numbered container, the commander model reads the
+default one, so it sees an empty list" — does not survive.** `agents.py:369`'s
+`party_build` docstring and `studies/profession/RESKIN.md` §17.1 both name
+`[[ctx+0x4C]+0x54]` as `PyCliGetMyPartyId` at `0x00856250`, the *same pointer*, and
+RESKIN §18 **measured it** after the party build:
+
+> "with the party record built that value is 1, the arm reaches the FrameCreate at
+> `0x004EC1BF`… Prediction stated before the run, hit."
+
+Non-null, dereferencing to **1**. So the default container exists and it *is* party 1 —
+the container our `0x01C2(party_id=1)` writes, reached either through the worker's
+one-entry cache (`[edi] == esi`) or the numbered array. **The commander model is reading
+our rows, not an empty list.** §13.4's experiment would therefore change nothing, and
+§13's headline is withdrawn.
+
+### 14.2 What survives, and one genuine contradiction
+
+- **§13.1 stands** — `ctx[0x44][0x2AC]` reached from the UI side here and from the wire
+  side in heroes §22. CORROBORATED, and the identity is not the blocker.
+- **§13.3's static fact stands, and now CONTESTS RESKIN.** `[c+0x54]` has exactly **two**
+  pointer stores in the image, both inside `0x0085A340`, called from exactly one site,
+  inside the handler for opcode **`0x01D9`** — which nothing in `toolkit/` sends. Yet
+  RESKIN measured the pointer non-null after a build that never sends `0x01D9`.
+
+  **CONTESTED**, and the two candidate resolutions are cheap to separate:
+  1. My scan missed a store. `codescan.py` says so itself in its own footer — a constant
+     held in a register, or an address built in two steps, is invisible to it. **That is
+     the way to bet**, and `--xrefs` on the party-build handlers is the check.
+  2. `PyCliGetMyPartyId` does not read that pointer the way §17.1 describes, and RESKIN's
+     "1" came from somewhere else.
+
+  Until one of those is settled, **neither "0x01D9 installs the container" nor "the
+  container is never installed" may be quoted as fact.**
+
+### 14.3 The corrected chain, and where the cold path actually starts
+
+Working back from `0x00524C40` instead of forward from the container:
+
+```
+0x00524C40   heroes' "never runs"
+  called only from 0x00524FA4, in the rebuild loop
+0x00524E00   the rebuild -- ONE caller in the whole image
+  0x004E5D85, inside GmView's event dispatcher
+  case[90], selected by exactly one event: 0x10000114
+0x10000114   raised at 0x008588AD, inside 0x00858850
+  0x00858850 has ONE caller, 0x008569F7, inside the handler for opcode 0x01B2
+0x01B2       PARTY_SET_MINE -- and `agents.py:434` shows WE ALREADY SEND IT
+```
+
+So the rebuild is not unreachable and its trigger is a message we send. **The live
+question is ordering, not presence:** the rebuild is driven by `0x01B2`, and our hero rows
+`0x01C2` go out *inside* the `0x01D2..0x01D3` build window. If they land after the rebuild
+has already run over an empty container, and nothing re-raises `0x10000114` afterwards,
+the model stays empty and `0x00524C40` stays cold — with every other measurement in the
+heroes arc unchanged.
+
+`authsrv.py:2322` shows this exact ordering already has a flag ("Send `0x01C2` AFTER
+`0x01B2` instead of inside the `0x01D2..0x01D3` window", CLI at :7896). **Whether it has
+ever been run together with a commander check is not recorded anywhere I can find, and
+that — not a new hypothesis — is the next thing to establish.** If it has been run and the
+commander still did not bind, then the trigger ordering is refuted too and the cold path
+starts further up, at whether GmView's case[90] is reached at all.
+
+### 14.4 The method note, because this is the second time in one session
+
+§4 caught a build slip before it was published. §14 catches a repo-search slip **after**.
+The rule that would have caught both is the same one and it is cheap: **before writing
+down a new address, grep the tree for it.** `[[ctx+0x4C]+0x54]` was already named, in two
+places, by an arc that had measured it — and the search cost nothing next to the section
+that had to be retracted.

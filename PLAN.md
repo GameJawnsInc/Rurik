@@ -1342,7 +1342,29 @@ the exact selector that reaches it. Three sites, each in a block with **one** se
   `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
   an `agentId`.
 
-**AND THE BLOCKER IS NAMED (study §13), still without touching a client.** `0x01C2`'s FIRST
+**A BLOCKER WAS NAMED IN §13 AND THEN PARTLY RETRACTED IN §14 — read §14.** The
+retraction matters more than the claim: `[[ctx+0x4C]+0x54]` was already named by
+`agents.py:369` and RESKIN §17.1, and RESKIN §18 **measured** it non-null and equal to 1
+after the party build. So the commander model is reading our rows, not an empty list,
+and §13.4's experiment is withdrawn. What survives:
+
+- **CORROBORATED**: `ctx[0x44][0x2ac]` — reached from the UI side in this arc, from the
+  wire side in heroes §22. Same answer, opposite directions. The identity is not the blocker.
+- **CONTESTED**, and worth settling: `[c+0x54]` has exactly two pointer stores in the image,
+  both reachable only from opcode `0x01D9`, which we never send — yet RESKIN measured the
+  pointer written. Either `codescan.py` missed a store (its own footer says how that
+  happens, and that is the way to bet) or §17.1 misreads `PyCliGetMyPartyId`. Neither
+  side may be quoted as fact until one is checked.
+- **The corrected chain** (§14.3): `0x00524C40` ← the rebuild `0x00524E00` ← its ONE caller
+  in GmView's event dispatcher ← event `0x10000114` ← `0x00858850` ← the handler for
+  **`0x01B2` PARTY_SET_MINE, which `agents.py:434` already sends**. So the trigger is not
+  missing; the live question is **ordering** — our `0x01C2` rows go out inside the
+  `0x01D2..0x01D3` window, and if the rebuild has already run over an empty container
+  nothing re-raises `0x10000114`. `authsrv.py:2322`/:7896 already carry a flag for exactly
+  that ordering. **Whether it has ever been run together with a commander check is not
+  recorded anywhere — establish that before forming a new hypothesis.**
+
+**Original §13 claim, kept for the record:** `0x01C2`'s FIRST
 field is the container selector, not a label: `0` resolves to `[[globals+0x4C]+0x54]`, the
 **default** container — which is byte for byte the only container the commander model reads
 (`0x008563B0(0, n)`, arg0 a literal zero). `1..20` resolve to numbered containers. **We send
