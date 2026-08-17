@@ -2224,6 +2224,68 @@ moves it after the party build, which is as late as the current rig goes).
 `0x01C2` cannot bind a commander, and the authored hero is complete for everything the wire
 governs.
 
+## 35. The timing hypothesis: CORROBORATED, NOT REPRODUCIBLE -- and a retraction
+
+34.4 proposed TIMING as the reason the commander event is raised into nothing, with a
+refutation stated. `--hero-late N` was built for it (`hero_late_tick`, polled from the world
+tick): hold the whole party/roster sequence until N seconds after `INSTANCE_LOAD_FINISH`
+instead of sending it inside the load. The precedent was already in the same handler --
+`UI_OVERLAY_FLAGS` is sent late because "a byte that arrives before the UI exists sets a bit
+nothing is left to read."
+
+### 35.1 The A/B, and it is a real difference
+
+| when `0x01C2` is sent | `raise` | `subscribers(eax)` | `case93` |
+|---|---|---|---|
+| inside the instance load (33, 34) | 1 | **`0x00000000`** | **0** |
+| 20 s after `INSTANCE_LOAD_FINISH` | 1 | **`0x26151EA0`** | **1** |
+
+Same rig otherwise, and the late run's `case93` capture cross-checks itself: `payload+4` =
+`0x2736DD90` = the `entry(ecx)` captured at the raise in the same run, which is 26.1's
+`{0, entryPtr}` payload confirmed from a third direction.
+
+**So the commander UI does subscribe, and later than our hero-add had been arriving.** That
+is a genuine measurement and the subscriber reading behind it is control-verified (34.2).
+
+### 35.2 IT DOES NOT REPRODUCE, and that governs
+
+A second run on the **identical** rig -- `--hero-late 20 --hero-bust-cache`, same map, same
+hero -- reached the worker and stopped:
+
+```
+chain: worker=1 -> filter=0 -> create=0 -> notfound=0
+```
+
+and a third late session, sampled every 8 s for 14 samples, held the commander container at
+`cap=7 count=0` throughout. **No commander is created in any run, early or late.**
+
+**Correction on the record: this was called CONFIRMED mid-session and it is not.** At n=2 the
+late path is **CORROBORATED and NOT REPRODUCIBLE**. One run reached case 93; one did not.
+
+### 35.3 The confound, named
+
+`--hero-late` changes **two** things, not one. It moves the send later, *and* it moves it to a
+moment when the party-manager cache state is far less controlled. The raise is gated on a
+cache MISS (26.2), and `--hero-bust-cache` opens a build on party 2 immediately before -- but
+20 s into a live instance the client has had time to re-cache party 1 in between, which would
+make the hero-add a HIT again and skip the raise entirely.
+
+That predicts run 10's shape exactly: **`raise = 0`**, therefore no case 93, no filter, no
+create. It was not trapped in that run, so it is a hypothesis and not a reading -- but it is
+the same confound shape as 10.2's body arm and 26.3's arm A, both of which this arc has
+already paid for once.
+
+### 35.4 What would settle it
+
+Trap `worker, raise, lookup, case93` on the late rig across several runs. If `raise = 0`
+whenever the chain stalls, the confound is the cache and 35.1's subscriber reading stands
+intact -- and what the rig then needs is a **deterministic** cache miss at a late moment,
+which `--hero-bust-cache` does not guarantee once the instance is live.
+
+**Unchanged either way:** no commander is created in any run measured, so 33.5's practical
+conclusion holds -- at the moment our server can reliably send it, `0x01C2` does not bind a
+commander, and the authored hero is complete for everything the wire governs.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

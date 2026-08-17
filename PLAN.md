@@ -1769,7 +1769,18 @@ everything and would have confirmed the finding falsely — all 32 hits landed i
 burst of a single event, because a hot site's default ceiling is not a sample. A control that
 samples badly does not fail loudly; it agrees with whatever you were about to conclude.)*
 
-**What is left is one UNVERIFIED hypothesis, stated with its refutation.** The census shows
+**2026-08-17, later: that hypothesis was TESTED — CORROBORATED but NOT REPRODUCIBLE, and a
+mid-session "CONFIRMED" is retracted (FINDINGS §35).** `--hero-late N` holds the whole roster
+sequence until N seconds after `INSTANCE_LOAD_FINISH`. One run showed exactly what the
+hypothesis predicted — subscriber `0x26151EA0` instead of `0`, and case 93 **running** — but a
+second run on the identical rig stopped at the worker, and a third held the container at
+`count=0` for 14 samples. **No commander is created in any run, early or late.** The confound
+is named: `--hero-late` moves *two* things, the send time **and** the party-cache state that
+gates the raise, so run 2's stall is probably `raise=0` from a re-cached party 1 — the same
+confound shape as §10.2's body arm and §26.3's arm A. Settle it by trapping
+`worker,raise,lookup,case93` on the late rig over several runs.
+
+**The original framing, kept because the hypothesis is still live:** The census shows
 **eight events whose subscriber state changes mid-session**, so the map is filled as UI
 modules come up. Hence **TIMING**: our `0x01C2` rides inside the instance load and may simply
 arrive before the commander UI subscribes — in which case the same bytes would work sent

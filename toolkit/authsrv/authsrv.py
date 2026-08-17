@@ -2328,6 +2328,10 @@ HERO_POST_COMMIT = False
 # did NOT test this: post-commit the party is still 1, so the cache still
 # holds it and the condition never changed. studies/heroes/FINDINGS.md 26.
 HERO_BUST_CACHE = False
+# Seconds to hold the whole party/roster sequence past INSTANCE_LOAD_FINISH.
+# None = send it inline, which is every run before 2026-08-17. See
+# hero_late_tick() for the hypothesis under test.
+HERO_LATE = None
 # 0x0074's string16(32) name field. EVERY run so far has sent it EMPTY, so the
 # one encstring case this family never tested is the hero's own. The hero row
 # renders its name from s_heroClientData (the body is a hatcher and the row
@@ -2831,6 +2835,38 @@ def begin_attack(send, state, target_id, conn_id):
         agent["last_hit"] = 0.0
         print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
               flush=True)
+
+
+def hero_late_tick(send, state, conn_id):
+    """Flush the held party/hero roster once, N seconds after the load finished.
+
+    THE EXPERIMENT THIS EXISTS FOR, and it is one hypothesis with a stated
+    refutation. `studies/heroes/FINDINGS.md` 34 measured that the commander
+    event `0x1000011E` is raised while the subscriber map holds NOTHING for it
+    -- read out of the client's own lookup -- and that eight other events change
+    subscriber state DURING a session, so the map fills as UI modules come up.
+    If the commander UI subscribes after the instance load, then our `0x01C2`
+    has simply been arriving too early all along, and the same bytes sent later
+    would bind. Refuted if the subscriber is still null at a late send.
+
+    There is already a precedent for the failure mode in this file:
+    `UI_OVERLAY_FLAGS` is deliberately sent after the load because "a byte that
+    arrives before the UI exists sets a bit nothing is left to read."
+
+    Polled from the world tick rather than given a timer thread, for the reason
+    the tick's own comment gives: a second thread calling `send` would interleave
+    with a simulation tick for no gain.
+    """
+    due = state.get("hero_late_due")
+    if due is None or time.perf_counter() < due:
+        return
+    state["hero_late_due"] = None
+    seq = state.pop("hero_late_seq", ())
+    print(f"[c{conn_id}] HERO-LATE: releasing {len(seq)} roster message(s) "
+          f"now, {time.perf_counter() - due + HERO_LATE:.1f}s after the load "
+          f"finished", flush=True)
+    for op, vals, label in seq:
+        send(op, vals, label)
 
 
 def ping_tick(send, state, conn_id):
@@ -5580,6 +5616,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # because a 5 s timer that only runs during combat
                         # would look like a working ping loop in exactly the
                         # sessions nobody is testing it in.
+                        # First, and once: it is a one-shot that must not be
+                        # skipped by anything below it returning early.
+                        hero_late_tick(send, state, conn_id)
                         ping_tick(send, state, conn_id)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
@@ -6619,6 +6658,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # frame lookup by agentId is not a precondition, and if
                         # it does not, adding the body is the next arm rather
                         # than a confound already baked in.
+                        # COLLECTED, not sent, so the whole roster sequence can
+                        # be flushed here (the default) or held for
+                        # --hero-late N. studies/heroes/FINDINGS.md 34.4: the
+                        # commander event is raised into an empty subscriber
+                        # slot, and eight events were measured CHANGING
+                        # subscriber state mid-session, so "our 0x01C2 arrives
+                        # before the commander UI subscribes" is a live
+                        # hypothesis. The precedent is in this same handler --
+                        # UI_OVERLAY_FLAGS is sent after the load for exactly
+                        # this reason, "a byte that arrives before the UI exists
+                        # sets a bit nothing is left to read".
+                        _seq = []
                         _inside = ()
                         if HENCHMAN is not None:
                             _hench = agents.npc_template(HENCHMAN)
@@ -6650,7 +6701,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       ["enc_name"] if HERO_INFO_NAME else "")
                             for _hid, _haid, _hdef in hero_slots():
                                 if HERO_INFO:
-                                    send(*agents.mercenary_info(
+                                    _seq.append(agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))
@@ -6700,11 +6751,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             _inside = ()
                         elif HERO_POST_COMMIT:
                             _after, _inside = _inside, ()
-                        for op, vals, label in agents.party_build(
-                                1, PLAYER_NUMBER, inside_window=_inside):
-                            send(op, vals, label)
-                        for op, vals, label in _after:
-                            send(op, vals, label)
+                        _seq.extend(agents.party_build(
+                            1, PLAYER_NUMBER, inside_window=_inside))
+                        _seq.extend(_after)
+                        if HERO_LATE is None:
+                            for op, vals, label in _seq:
+                                send(op, vals, label)
+                        else:
+                            # Held for the world tick. The DUE time is stamped
+                            # at INSTANCE_LOAD_FINISH rather than here, so the
+                            # delay is measured from the load completing and not
+                            # from the middle of it.
+                            state["hero_late_seq"] = _seq
+                            print(f"[c{conn_id}] HERO-LATE: holding "
+                                  f"{len(_seq)} roster message(s) until "
+                                  f"{HERO_LATE:.1f}s after INSTANCE_LOAD_FINISH",
+                                  flush=True)
                         # ...and the player-record flag word, in retail's own
                         # position: BEFORE the agent create, 423 sends over 12 of
                         # 12 live connections, all inside the instance load. OFF by
@@ -6915,6 +6977,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after spawn where we had it.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                        if state.get("hero_late_seq"):
+                            state["hero_late_due"] = (time.perf_counter()
+                                                      + HERO_LATE)
                         if NETGRAPH_FLAGS is not None:
                             # AFTER the load, not before: the widget this
                             # unlocks is built by a routine that reads the flag
@@ -7738,6 +7803,18 @@ def main():
                          "every run so far has sent EMPTY. The hero row takes "
                          "its name from s_heroClientData; this asks whether "
                          "0x0074's own name overrides that.")
+    ap.add_argument("--hero-late", type=float, default=None, metavar="SECONDS",
+                    help="Hold the ENTIRE party/roster sequence (build window, "
+                         "henchman and hero rows, 0x0074s) until SECONDS after "
+                         "INSTANCE_LOAD_FINISH instead of sending it inside the "
+                         "load. THE TIMING EXPERIMENT of "
+                         "studies/heroes/FINDINGS.md 34.4: the commander event "
+                         "is raised while the subscriber map holds nothing for "
+                         "it, and eight events were measured changing "
+                         "subscriber state mid-session -- so our 0x01C2 may "
+                         "simply arrive before the commander UI subscribes. "
+                         "UI_OVERLAY_FLAGS in this same handler is already sent "
+                         "late for exactly that reason.")
     ap.add_argument("--hero-bust-cache", action="store_true",
                     help="Open a second party build right before 0x01C2 so the "
                          "party-manager cache holds a DIFFERENT party and the "
@@ -8026,6 +8103,8 @@ def main():
         HERO_POST_COMMIT = a.hero_post_commit
         global HERO_BUST_CACHE
         HERO_BUST_CACHE = a.hero_bust_cache
+        global HERO_LATE
+        HERO_LATE = a.hero_late
         global HERO_INFO_NAME
         HERO_INFO_NAME = a.hero_info_name
         global HERO_MSG14
