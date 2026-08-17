@@ -819,6 +819,10 @@ def parse_walk(text):
         W:6         hold the W key for 6 seconds
         zoom:-14    turn the mouse wheel 14 notches; negative pulls the camera OUT
         pitch:300   right-drag 300 px; positive raises the camera's angle
+        yaw:400     right-drag 400 px HORIZONTALLY; positive turns the view right
+        left:2      hold a NAMED key (alt, ctrl, shift, space, left/right/up/down)
+        alt:4       -- ALT held shows every nameplate; pair with --shots
+        shot:1      take a screenshot NOW, on the plan's own clock
         wait:3      do nothing for 3 seconds
 
     -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
@@ -826,6 +830,11 @@ def parse_walk(text):
     One plan rather than a --walk and a separate --camera: reproducing
     FINDINGS 25.5's fault means zooming out, THEN pitching up, THEN backing into
     a corner, and two flags cannot express that sequence.
+
+    yaw/alt/left/shot landed 2026-08-17, and together they retire the "this
+    harness cannot aim" caveat for everything except a world-anchored CLICK:
+    zoom out, yaw toward a known offset, hold ALT, and the shot reads the
+    scene's own labels. The interact: action remains the answer for clicking.
     """
     steps = []
     for spec in str(text).split():
@@ -837,7 +846,7 @@ def parse_walk(text):
             value = float(arg)
         except ValueError:
             raise SystemExit(f"walk step {spec!r}: {arg!r} is not a number")
-        if head in ("zoom", "pitch"):
+        if head in ("zoom", "pitch", "yaw"):
             if value == 0:
                 raise SystemExit(f"walk step {spec!r} moves the camera nowhere")
             steps.append((head, "", value))
@@ -845,13 +854,20 @@ def parse_walk(text):
             if value <= 0:
                 raise SystemExit(f"walk step {spec!r} waits {value}s")
             steps.append(("wait", "", value))
+        elif head == "shot":
+            steps.append(("shot", "", 1.0))
+        elif head in dc.NAMED_KEYS:
+            if value <= 0:
+                raise SystemExit(f"walk step {spec!r} holds for {value}s")
+            steps.append(("key", head, value))
         elif len(head) == 1:
             if value <= 0:
                 raise SystemExit(f"walk step {spec!r} holds for {value}s")
             steps.append(("key", head.upper(), value))
         else:
             raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
-                             f"zoom, pitch or wait")
+                             f"a named key ({', '.join(sorted(dc.NAMED_KEYS))}), "
+                             f"zoom, pitch, yaw, shot or wait")
     return steps
 
 
@@ -918,13 +934,28 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             continue
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if kind == "key":
-            did = dc.hold_key(hwnd, proc.pid, ord(key), value)
+            vk = dc.NAMED_KEYS.get(key) if key in dc.NAMED_KEYS else ord(key)
+            did = dc.hold_key(hwnd, proc.pid, vk, value)
         elif kind == "zoom":
             did = value if dc.scroll(hwnd, proc.pid, value) else 0.0
         elif kind == "pitch":
             # dy is NEGATED: dragging the mouse DOWN raises the camera's angle,
             # so "pitch:300" reads as "raise it" rather than as a screen delta.
             did = value if dc.orbit(hwnd, proc.pid, 0, -value) else 0.0
+        elif kind == "yaw":
+            # dx is passed straight through; the sign convention is VERIFIED
+            # from the validation frames, not assumed: positive drags right,
+            # and the camera turns the view toward the character's right.
+            did = value if dc.orbit(hwnd, proc.pid, value, 0) else 0.0
+        elif kind == "shot":
+            # On the PLAN's clock, which the cadence shooter is not: a state
+            # the plan just arranged (an ALT hold, a fresh yaw) gets its frame
+            # HERE rather than whenever the interval next fires.
+            shot_n[0] += 1
+            p = shot_if_foreground(hwnd, proc.pid,
+                                   os.path.join(outdir,
+                                                f"w{shot_n[0]:03d}-step{i+1}.png"))
+            did = 1.0 if p else 0.0
         elif kind == "wait":
             time.sleep(value)
             did = value
@@ -1404,7 +1435,10 @@ def main():
                          "movement and CAMERA steps: \"zoom:-14 pitch:300 S:8\" "
                          "pulls the camera out 14 notches, raises its angle, "
                          "then backs up for 8s. Steps are W:6 (hold a key), "
-                         "zoom:N, pitch:N and wait:N. "
+                         "zoom:N, pitch:N, yaw:N (drag-turn the view), "
+                         "alt:N / left:N (hold a named key -- ALT shows every "
+                         "nameplate), shot:1 (screenshot on the plan's clock) "
+                         "and wait:N. "
                          "Keyboard rather than a click on purpose -- the server "
                          "answers a held key with a DIRECTION and broadcasts no "
                          "position, so where the client stops is the client's "
@@ -1520,9 +1554,10 @@ def main():
     if a.walk:
         legs = parse_walk(a.walk)
         held = sum(v for k, _, v in legs if k in ("key", "wait"))
-        cam = sum(1 for k, _, _ in legs if k in ("zoom", "pitch"))
+        cam = sum(1 for k, _, _ in legs if k in ("zoom", "pitch", "yaw"))
         print(f"walk plan: {len(legs)} step(s), {held:.1f}s of keys and waits, "
-              f"{cam} camera move(s)")
+              f"{cam} camera move(s), "
+              f"{sum(1 for k, _, _ in legs if k == 'shot')} scripted shot(s)")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          portal_host=a.portal_host,

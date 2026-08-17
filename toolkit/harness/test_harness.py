@@ -62,7 +62,9 @@ import checks  # noqa: E402
 # --hold section (+4): 26 checks could have vanished behind a passing floor,
 # which is exactly the drift this ledger exists to catch. Still two below the
 # measure, for the same two vault-dependent skips as before.
-LEDGER = checks.Ledger("harness", floor=136)
+# FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
+# the camera-verb checks -- set from the run's own count, never arithmetic.
+LEDGER = checks.Ledger("harness", floor=141)
 check = checks.adopt_named(LEDGER)
 
 
@@ -1147,6 +1149,25 @@ def section_hold_key():
               "move of zero, an unknown verb and a non-number all refuse",
               "a typo would otherwise be found after the map has loaded, which "
               "costs the whole run and a client session")
+    LEDGER.ok(session.parse_walk("yaw:400 alt:4 left:2 shot:1")
+              == [("yaw", "", 400.0), ("key", "alt", 4.0),
+                  ("key", "left", 2.0), ("shot", "", 1.0)],
+              "the 2026-08-17 camera verbs parse: yaw, a named-key hold, and "
+              "a scripted shot",
+              "these four retire 'the harness cannot aim' for everything but "
+              "a world-anchored click -- zoom, yaw, ALT and read the labels")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("yaw:0", "alt:0", "alt:x", "lefty:2")),
+              "a yaw of zero, a zero-length ALT, a non-number and a "
+              "near-miss key name all refuse",
+              "'lefty' must not silently become the L key")
+    LEDGER.ok(dc.NAMED_KEYS["alt"] == 0x12 and dc.NAMED_KEYS["left"] == 0x25
+              and dc.NAMED_KEYS["right"] == 0x27 and dc.NAMED_KEYS["up"] == 0x26
+              and dc.NAMED_KEYS["down"] == 0x28
+              and dc.NAMED_KEYS["space"] == 0x20,
+              "the named-key VKs are Windows' own, asserted against LITERALS",
+              "the bounded-search lesson: a table checked against itself "
+              "cannot fail")
 
 
 section_press_key()

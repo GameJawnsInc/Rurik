@@ -45,7 +45,13 @@ Every one of these, in the order they were written:
   the held movement key `--walk` drives, against a fake `user32`: that every
   event carries a NON-ZERO scan code, that the key is released on every exit
   path including an exception mid-hold, that losing the foreground cuts the leg
-  short, and that a client without focus gets nothing at all. The scan code is
+  short, and that a client without focus gets nothing at all. Section 10 also
+  pins the 2026-08-17 camera verbs — `yaw:N`, named-key holds (`alt:4`,
+  `left:2`; ALT is nameplates), `shot:1` on the plan's own clock — parse and
+  refuse correctly, with the named VKs asserted against LITERALS; together
+  they retire "the harness cannot aim" for everything but a world-anchored
+  click (validated live, harness 20260817T151242: zoom, two yaws, an ALT hold
+  and three scripted shots all delivered). The scan code is
   the one that earned the section — a synthetic keydown with `bScan=0` is
   accepted by a UI reader and silently dropped by the raw input path the client
   reads movement through, so the first version held W for 65 seconds into a
