@@ -293,3 +293,44 @@ The map id is a LABEL. 144 is a real entry in the client's own area table (name 
 22216) and the client will print that name over our terrain. It is not a claim about
 the content, and the area table names no map file.
 """
+
+[map.280]
+name = "Isle of the Nameless"
+file_id = 0x287B3
+spawn_x = 1136.0
+spawn_y = -463.0
+plane = 0
+explorable = true
+
+[map.280.provenance]
+source = "measured"
+extractor = "toolkit/mapdata/archive.py"
+verified = """MEASURED in our own archive copies (2026-08-16, scripts in the isle \
+session scratchpad; studies/isle/PLAN.md section 2 pre-registered the prediction). \
+0x287B3 = 165811 and its bit-15 sibling 380638 BOTH bind MFT row 21641 in all five \
+vault/run archive copies checked -- flags 259, 1,516,583 B decompressed, magic ffna, \
+25 chunks -- and 165811 is the low id, the form a server sends \
+(studies/mapdata/FORMAT.md's 397-for-397 rule). The mesh parses to 2,769 trapezoids \
+over 70 planes; the spawn (1136, -463) lands in exactly 1 trapezoid on plane 0, \
+against 0 for Pre-Searing Ascalon's spawn (9826, 8077), the control. The map id \
+binds the row by SIZE + area-table footprint: rows 248/280/784 share the identical \
+footprint rect and 352x320 is unique in the archive (vault/areatable/maprows.json \
+row 21641, exact=true) -- necessary, not sufficient, so the wire check below is \
+still owed."""
+note = """
+THE SPAWN IS OURS AND THE MAP-ID BINDING IS A RECONSTRUCTION UNTIL RUNG 6.
+
+The spawn point is a mesh-centre probe -- where OUR server chooses to put a body,
+verified walkable, not where retail puts an arriving player. Rung 6's Isle capture
+supplies both missing facts at once: the retail arrival position (replace spawn_x/y
+if fidelity to retail matters), and GAME_SMSG 0x0195 field 1 on the instance load,
+whose pre-registered prediction is 165811 -- with the third branch (a shared id like
+the corpus's 8-of-8 113021) pre-registered too, per studies/isle/PLAN.md section 2.
+The size-join cannot separate 248 (Great Temple of Balthazar) from 280 from 784; if
+the wire refutes 165811, this row's file_id is the finding, not the fixture.
+
+Row 280 is the client's own area-table entry: name_id 2972 resolves to the map's
+name at run time (commit the id, resolve the string). type=2, the co-operative
+instance family (flag bit 17); the PvP twin 784 shares the footprint and is NOT
+this row on purpose -- skills convert and the Flux applies there.
+"""

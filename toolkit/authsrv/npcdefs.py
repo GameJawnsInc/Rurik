@@ -58,6 +58,7 @@ than that are honestly unrecorded and stay that way.
 """
 import argparse
 import collections
+import json
 import os
 import struct
 import sys
@@ -157,7 +158,11 @@ class Definition:
     def __init__(self, index):
         self.index = index
         self.payload = None          # the 0x0056 body, minus the definition index
-        self.model_id = None
+        self.model_id = None         # first 0x0057 body -- what row() emits
+        self.model_ids = None        # the FULL 0x0057 list, wire order. Two pooled
+                                     # definitions (1496/1497) carry TWO bodies each,
+                                     # so `model_id` alone under-describes them;
+                                     # unitassembly.py (U4) resolves the whole list.
         self.move_speed = None
         self.attack = None           # (interval, modifier)
         self.health = []             # [(capture, value)]
@@ -259,8 +264,20 @@ def read(capture_dirs, codec=None):
                     d.declare(values, capture, connection)
                 elif opcode == MONSTER_COMPOSITE:
                     d = defs.setdefault(values[1], Definition(values[1]))
-                    models = values[2] if isinstance(values[2], list) else [values[2]]
+                    models = tuple(values[2] if isinstance(values[2], list)
+                                   else [values[2]])
                     if models:
+                        # Same posture as declare(): a repeat must agree. MEASURED:
+                        # 101 composite messages over 43 definitions across three
+                        # captures, ZERO list-level disagreements -- so one is a
+                        # finding, not a merge conflict.
+                        if d.model_ids is not None and d.model_ids != models:
+                            raise NpcDefsError(
+                                f"definition {values[1]} is given two different "
+                                f"0x0057 model lists ({d.model_ids}, {models}). "
+                                f"Every repeat in the vault agrees, so this is "
+                                f"new -- do not pick one.")
+                        d.model_ids = models
                         d.model_id = models[0]
                 elif opcode == CREATE_AGENT:
                     tagged = values[2]
@@ -365,7 +382,7 @@ def to_toml(defs, mode="unrecorded"):
 
 # ---------------------------------------------------------------- cli
 
-def live_captures():
+def live_captures(names=None):
     """Every live capture directory that has a decrypted game channel in it.
 
     Six live directories exist and only three carry decrypted game channels; the other
@@ -373,6 +390,13 @@ def live_captures():
     Selecting by CONTENT rather than by name is the same rule test_codec.py's fixture
     picker learned the hard way -- a directory that looks like a capture and holds no
     channel would otherwise contribute silently nothing.
+
+    `names` narrows to specific capture stamps, and it exists because the glob is a
+    time bomb for any consumer that pins counts: the day a FOURTH keyed capture lands
+    (the Isle sessions are exactly that), every unfiltered pin goes red at once
+    (studies/isle/PLAN.md gap 4). A name that selects nothing is REFUSED rather than
+    silently contributing an empty corpus -- the vaultpath.require_dir rule, one level
+    up.
     """
     root = vaultpath.require_dir("captures", "live",
                                  why="npcdefs compiles definitions out of live captures")
@@ -383,7 +407,65 @@ def live_captures():
             continue
         if any(f.startswith("game-") and f.endswith(".jsonl") for f in os.listdir(path)):
             out.append(path)
+    if names is not None:
+        want = set(names)
+        have = {os.path.basename(p): p for p in out}
+        missing = want - set(have)
+        if missing:
+            raise NpcDefsError(
+                f"no keyed live capture named {sorted(missing)}; the vault holds "
+                f"{sorted(have)}. A selector that silently matches nothing turns "
+                f"every count behind it into a count of an empty corpus.")
+        out = [have[n] for n in sorted(want)]
     return out
+
+
+def capture_mode(capture_dir):
+    """The game mode this capture RECORDED, or 'unrecorded'.
+
+    Read from the capture's own manifest.json, where livesession.py has written the
+    operator's declaration since --mode became required (2026-08-11). Captures older
+    than that carry `game_mode: null` or no manifest at all, and both honestly read
+    'unrecorded' -- content.py accepts that value and never promotes rows carrying it.
+    This closes studies/isle/PLAN.md gap 5's first half: a capture correctly taken
+    with --mode base no longer needs the operator to repeat the flag here.
+    """
+    path = os.path.join(capture_dir, "manifest.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            mode = json.load(fh).get("game_mode")
+    except (OSError, ValueError):
+        return "unrecorded"
+    return mode if mode in ("base", "reforged") else "unrecorded"
+
+
+def resolve_mode(caps, declared=None):
+    """One mode for an emit run, from the captures' own manifests.
+
+    The rules, in order, each a refusal rather than a preference:
+      * base and reforged captures never pool -- their stats differ ~20% and a
+        merged row would average two games.
+      * an operator declaration may not CONTRADICT a recorded mode -- the manifest
+        was written at capture time and is the better witness.
+      * a declaration may FILL IN for captures that predate recording; a mix of
+        recorded and unrecorded captures emits the recorded value only if the
+        declaration agrees or is absent, because the unrecorded half is then being
+        vouched for by the operator, which is exactly what --mode is for.
+    """
+    recorded = {os.path.basename(c): capture_mode(c) for c in caps}
+    real = {m for m in recorded.values() if m != "unrecorded"}
+    if len(real) > 1:
+        raise NpcDefsError(
+            f"refusing to pool captures of different recorded modes: {recorded}. "
+            f"Reforged Mode scales stats ~20%, so these are two datasets.")
+    if declared and real and declared not in real:
+        raise NpcDefsError(
+            f"--mode {declared} contradicts the captures' own manifests: {recorded}. "
+            f"The manifest was written at capture time and is the better witness; "
+            f"if it is wrong, that is a finding about the capture, not a flag.")
+    if real:
+        return next(iter(real))
+    return declared or "unrecorded"
 
 
 def main():
@@ -394,14 +476,19 @@ def main():
                          "it over the tracked rows)")
     ap.add_argument("--hostile-only", action="store_true",
                     help="emit only definitions seen under a hostile allegiance token")
-    ap.add_argument("--mode", default="unrecorded",
-                    choices=("base", "reforged", "unrecorded"),
-                    help="the game mode the captures were taken in. Defaults to "
-                         "unrecorded, which is the honest value for every capture "
-                         "predating livesession.py --mode")
+    ap.add_argument("--mode", default=None,
+                    choices=("base", "reforged"),
+                    help="operator declaration for captures that predate manifest "
+                         "recording. Captures WITH a recorded game_mode use it "
+                         "automatically; a contradicting declaration is refused. "
+                         "Omitted with nothing recorded, rows carry 'unrecorded'.")
+    ap.add_argument("--capture", action="append", default=None, metavar="STAMP",
+                    help="capture directory name under vault/captures/live/ "
+                         "(repeatable; default: every keyed live capture)")
     a = ap.parse_args()
 
-    caps = live_captures()
+    caps = live_captures(names=a.capture)
+    mode = resolve_mode(caps, declared=a.mode)
     defs, _intervals = read(caps)
     declared = {i: d for i, d in defs.items() if d.declared}
     host = hostile(defs)
@@ -426,12 +513,12 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     path = os.path.join(outdir, "npcs.toml")
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(to_toml(chosen, mode=a.mode))
-    print(f"\nwrote {len(chosen)} row(s) -> {path}")
-    if a.mode == "unrecorded":
+        fh.write(to_toml(chosen, mode=mode))
+    print(f"\nwrote {len(chosen)} row(s) -> {path} (mode={mode})")
+    if mode == "unrecorded":
         print("  stats carry mode='unrecorded': Reforged Mode scales health ~20% and "
-              "these captures predate livesession.py --mode. content.py will load them "
-              "and will never promote them.")
+              "no capture in this run recorded a game_mode (nor was one declared). "
+              "content.py will load them and will never promote them.")
     return 0
 
 

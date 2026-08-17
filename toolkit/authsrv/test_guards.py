@@ -30,12 +30,19 @@ import io
 import contextlib
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=37)
+# FLOOR 40, from a green run on 2026-08-15. Was 37 until section 2 was
+# rewritten: moving the damage to cast end made the connection thread's
+# ValueError contract unreachable, so that section now checks what replaced
+# it -- a press opens a cycle and lands nothing -- and carries 5 checks where
+# it carried 3, plus section 11's new single-caller check. Nothing here is
+# conditional, so a short run means a section stopped rather than passed.
+LEDGER = checks.Ledger("guard contract", floor=40)
 check = LEDGER.ok
 
 
@@ -95,52 +102,65 @@ def section_hit_enemy():
 
 
 def section_skill_press():
-    """The connection thread survives a refusal -- world_tick's contract."""
+    """A press opens a cycle and lands NOTHING -- the damage waits for E5.
+
+    REWRITTEN 2026-08-15. This section used to assert the connection thread's
+    own ValueError contract, because `handle_skill_press` resolved the hit
+    synchronously and an escaping refusal there would run `handle`'s finally
+    and close the socket. That contract is now unreachable BY CONSTRUCTION:
+    the press no longer damages, so nothing on that path can raise. The
+    refusal contract moved to the world tick with the damage, where
+    `world_tick`'s own except already covers it (section 11 is where the
+    two-thread claim now lives).
+
+    So what this section checks is the thing that replaced it: a press is
+    ONLY a cycle opening, and the target's health is untouched until the cast
+    completes. Deleting the section would have lost that; keeping the old
+    assertions would have tested a path that no longer exists.
+    """
     import authsrv
 
-    print("\n2. handle_skill_press: a refusal costs the value, not the socket")
+    print("\n2. handle_skill_press: opens the cycle, lands nothing yet")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
-    state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
+    agent = _fresh_agent()
+    state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
     press = [0, 42, 7, 10]   # header slot, skill 42, copy 7, target agent 10
 
-    saved = authsrv.HIT_FRACTION
-    authsrv.HIT_FRACTION = -1.5   # invalid (a heal-shaped damage); see section 1
-    try:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            authsrv.handle_skill_press(press, send, state, 0,
-                                       authsrv.GAME_CMSG_USE_SKILL)
-        # No raise reached us -- that IS the check; an escaping ValueError
-        # here is what handle's except tuple turns into a socket close.
-        check("REFUSED a value" in out.getvalue(),
-              "the refusal is LOGGED, not silent",
-              out.getvalue().strip().splitlines()[-1] if out.getvalue() else
-              "(nothing printed)")
-        ops = [op for op, _, _ in sent]
-        check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
-                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
-              "the valid cycle-opening pair went out; the refused effect "
-              "sent NOTHING",
-              f"ops={ops} -- E4 and the cast animation precede the effect "
-              f"and are valid; refusing them too would cost the client a "
-              f"cycle over a number it never saw. (This pinned a lone "
-              f"immediate 0x00E3 until step 3 replaced the press's answer "
-              f"with the observed cycle.)")
-    finally:
-        authsrv.HIT_FRACTION = saved
-
-    sent.clear()
-    state["agents"][10] = _fresh_agent()
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.handle_skill_press(press, send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
-    check(len(sent) == 5,
-          "control: the in-range press opens the cycle and swings",
-          f"{len(sent)} messages: {[op for op, _, _ in sent]} -- E4, "
-          f"animation, then the swing trio (damage stays at press until "
-          f"step 8)")
+    ops = [op for op, _, _ in sent]
+    check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
+          "the press sends E4 and the cast animation -- and NO damage",
+          f"ops={ops} -- until 2026-08-15 this also sent the swing trio, so a "
+          f"two-second spell dealt its damage before its own casting "
+          f"animation began")
+    check(agent["health"] == 100.0 and agent["last_hit"] == 0.0,
+          "the target is untouched: no health spent, no swing timer consumed",
+          f"health={agent['health']}, last_hit={agent['last_hit']} -- the hit "
+          f"has not happened yet, which is what makes a cancel window exist")
+    check(len(state["pending_casts"]) == 1
+          and state["pending_casts"][0]["target"] == 10,
+          "and the pending cast carries the target for cast_tick to resolve",
+          f"{state['pending_casts']}")
+
+    # THE HIT ARRIVES WHEN THE CAST COMPLETES. Rewind e5_at rather than
+    # sleeping -- the same trick test_castcycle uses, for the same reason.
+    state["pending_casts"][0]["e5_at"] = time.time() - 0.001
+    sent.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.cast_tick(send, state, 0)
+    ops = [op for op, _, _ in sent]
+    check(authsrv.GAME_SMSG_SKILL_RECHARGE in ops
+          and authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET in ops,
+          "at E5 the cast completes AND the damage lands, same tick",
+          f"ops={ops}")
+    check(agent["health"] < 100.0,
+          "and only now is the target's health spent",
+          f"health={agent['health']}")
 
 
 def _refusing_fraction(authsrv):
@@ -453,8 +473,32 @@ def section_concurrency():
     extend this section the day they add new cross-thread state
     (studies/combat/PLAN.md, amendment C9).
     """
+    import inspect
     import threading
     import authsrv
+
+    # F10 IS NOW CLOSED BY CONSTRUCTION, and this is the check that says so.
+    # Until 2026-08-15 hit_enemy had two callers on two threads -- attack_tick
+    # on the world tick and handle_skill_press on the connection thread -- and
+    # the races below were tolerated because nothing locked the agent dicts.
+    # Moving skill damage to cast end removed the connection-thread caller, so
+    # every path into hit_enemy is world-tick-only. That is a stronger
+    # guarantee than a lock and a cheaper one, but it is only true while it is
+    # true: this walks the module's own source and fails if a third caller
+    # appears anywhere else.
+    src = inspect.getsource(authsrv).splitlines()
+    callers = set()
+    for i, line in enumerate(src):
+        if "hit_enemy(" in line and not line.lstrip().startswith("def "):
+            for j in range(i, -1, -1):
+                if src[j].startswith("def "):
+                    callers.add(src[j].split("(")[0][4:])
+                    break
+    check(callers == {"attack_tick", "cast_tick"},
+          "hit_enemy is reached from the WORLD TICK ONLY",
+          f"callers={sorted(callers)} -- both are world-tick functions, so "
+          f"F10's race cannot occur. A new caller on the connection thread "
+          f"reopens it and reddens this line")
 
     print("\n10. concurrent entry: two threads, one agent, nothing raises")
     sent = []

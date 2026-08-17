@@ -178,6 +178,18 @@ MOD_BIT_DISASSEMBLY = 0x2    # FINDINGS 18.4's `test byte [esi+0x1c],2`
 DESCRIPTOR_COUNTER_OFF = 0x04    # the u32 the flush increments
 DESCRIPTOR_COUNT_OFF = 0x0C
 
+# ScanMft reads the file in 1 MiB blocks (the buffer alloc at 0x0047B818, with
+# its own `!(bufferSize % blockSize)` assert, ExeArchive:2592). We match the
+# size because it is the client's, not because anything depends on it.
+GENERATION_SCAN_CHUNK = 1 << 20
+
+# Rows whose stored CRC is not a CRC over a payload: row 1 is the file header's
+# own row, row 3 describes the MFT. `build_archive` writes 0 for both, and the
+# real archive's are structural too. Excluded BY NAME so the count of exceptions
+# is itself assertable -- an unnamed skip is how a sweep quietly measures less
+# than it claims.
+CRC_STRUCTURAL_ROWS = (1, 3)
+
 # FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW and FIRST_CLAIMABLE_ROW are
 # imported from `archive.py` above rather than restated here. They used to be
 # declared in three modules, and `datplan.py`'s copy was then used with the wrong
@@ -586,9 +598,165 @@ def preflight(path, baseline=None):
             "rows changed: %s (containers 0/2/3 changed: %s -- expected after "
             "any write)" % (changed or "none", moved_containers or "none")))
 
+    # THE GENERATION CENSUS IS DELIBERATELY NOT HERE, and it was here for one
+    # test run on 2026-08-17 before the fixtures refuted it. Two reasons, both
+    # of which say the same thing from different directions:
+    #
+    #   1. "Has a fallback generation" is a property of an archive's HISTORY,
+    #      not of its validity. `build_archive` writes one MFT and is perfectly
+    #      healthy; so is any freshly cut copy. Adding the item turned every
+    #      synthetic fixture red and broke nine "nothing ELSE goes red"
+    #      isolation checks in test_datcheck alone -- which is the fixtures
+    #      correctly reporting that the item does not belong in this function.
+    #   2. This pre-flight costs 1.7 s on the real 4.2 GB archive BECAUSE it
+    #      never reads a payload. The generation scan reads the whole file. The
+    #      operating rule that earns this tool its place -- run it before every
+    #      single launch, there is no cost argument -- is worth more than
+    #      folding one more item in, and a check people skip is a check that
+    #      does not exist.
+    #
+    # `--generations` is its own verb, run before an archive is RISKED rather
+    # than before it is opened. studies/archivewrite/FINDINGS.md 5.4/5.6.
     return checks, {"header": header, "rows": n, "invariant": inv,
                     "file_id_sha256": hashlib.sha256(id_blob).hexdigest(),
                     "size_on_disk": size_on_disk}
+
+
+# -------------------------------------------------------------- generations --
+
+def generations(path, block=None):
+    """Every surviving MFT generation in the file, newest first.
+
+    WHY THIS EXISTS, and it is the one pre-flight question nothing else asks.
+    The client's repair (ExeArchive ScanMft) does NOT rebuild an MFT. It reads
+    the whole file at `blockSize` stride hunting the descriptor magic, hands
+    each hit to LoadMft, and adopts the candidate whose +0x04 flush counter is
+    strictly highest. **If no candidate validates it returns 0, and that zero
+    funnels into ArchiveCreate, which writes a fresh empty archive over yours.**
+    So "is a botched write recoverable" is a countable fact about the file: how
+    many older generations are there to fall back to? Before 2026-08-17 nothing
+    in this repo could answer it, and the answer for `dat_study` turned out to
+    be six. studies/archivewrite/FINDINGS.md 5.4.
+
+    THIS IS AN UPPER BOUND, and saying so is the whole honesty of the check.
+    It applies ScanMft's *shape* gate -- magic, +0x08 == 0, count >= 16, extent
+    inside EOF -- and NOT LoadMft's full validation (self-CRC, every offset
+    aligned and in range, every nextStream in [16,count) and acyclic). A
+    candidate counted here may still be rejected by the client. A count of 1 is
+    therefore a hard finding; a count of 6 is an encouraging one.
+
+    The rows a generation declares are also the reason `datplan`/`datalloc` may
+    not allocate into the tail: a writer that overwrites the shadow rotation
+    region destroys the client's own recovery material.
+    """
+    size = os.path.getsize(path)
+    header = read_header(path)
+    block = block or header["block_size"] or 512
+    live = header["mft_offset"]
+    found = []
+    with open(path, "rb") as fh:
+        pos = 0
+        while True:
+            buf = fh.read(GENERATION_SCAN_CHUNK)
+            if not buf:
+                break
+            for off in range(0, len(buf) - ENTRY_SIZE + 1, block):
+                if buf[off:off + 4] != MFT_MAGIC:
+                    continue
+                counter, zero, count = struct.unpack_from(
+                    "<III", buf, off + DESCRIPTOR_COUNTER_OFF)
+                at = pos + off
+                found.append({
+                    "offset": at,
+                    "counter": counter,
+                    "rows": count,
+                    "live": at == live,
+                    # ScanMft's own acceptance shape, and nothing more.
+                    "shape_ok": (zero == 0 and count >= 16
+                                 and at + count * ENTRY_SIZE <= size),
+                    "reserved_bytes": count * ENTRY_SIZE,
+                })
+            pos += len(buf)
+    found.sort(key=lambda g: -g["counter"])
+    return found
+
+
+def generation_checks(path):
+    """`generations()` as pass/fail items, for the pre-flight."""
+    gens = generations(path)
+    ok = [g for g in gens if g["shape_ok"]]
+    live = [g for g in gens if g["live"]]
+    checks = [
+        Check("the header's MFT is one of the candidates", bool(live),
+              "header mft_offset 0x%X %s"
+              % (read_header(path)["mft_offset"],
+                 "found in the scan" if live else
+                 "NOT FOUND by the descriptor scan -- the header and the file "
+                 "disagree about where the MFT is")),
+        Check("a fallback generation exists", len(ok) >= 2,
+              "%d candidate(s) pass ScanMft's shape gate%s -- UPPER BOUND, "
+              "LoadMft's full validation is not applied here"
+              % (len(ok),
+                 "" if len(ok) >= 2 else
+                 "; a repair triggered by damage to the live MFT would have "
+                 "NOTHING to adopt, return 0, and land on ArchiveCreate")),
+    ]
+    return checks, gens
+
+
+# --------------------------------------------------------------- crc sweep --
+
+def crc_sweep(path, limit=None):
+    """Every USED row's payload CRC, recomputed from the bytes on disk.
+
+    WHAT THIS CATCHES THAT THE PRE-FLIGHT CANNOT, and it is why it is worth a
+    whole-file read. The client's repair phase 2 (ScanFiles) CRCs every payload
+    and, on a mismatch, walks the nextStream chain back to its FLAG_FIRST_STREAM
+    head and DELETES THE WHOLE CHAIN -- extents freed, MFT rows memset, file-id
+    record dropped. So one stale CRC costs an entire file, and it costs it the
+    moment repair fires **for an unrelated reason**. A stale CRC is silent until
+    then: all ten open-time rules pass, because none of them reads a payload.
+
+    It is also the only check that can see studies/archivewrite's C-6. Relocate
+    a compression-8 row with `datmove` and the row is marked stored while its
+    bytes are still compressed; the CRC is over the stored bytes and does not
+    move, so every checksum rule and every open-time rule still passes and the
+    file is simply unreadable. This sweep does not catch that by CRC either --
+    it catches it by reporting the compression code beside the row, which is the
+    only place in this module that has ever looked at one.
+
+    Cost is a full read. Measured 2,487 MB/s on this machine, so ~3 s for 4.2 GB.
+    """
+    header = read_header(path)
+    mft = read_mft(path, header)
+    n = row_count(mft)
+    size = os.path.getsize(path)
+    bad, checked, skipped = [], 0, []
+    with open(path, "rb") as fh:
+        for i in range(n):
+            if limit is not None and checked >= limit:
+                break
+            r = row_fields(row_bytes(mft, i))
+            if not (r["alloc_flags"] & FLAG_ENTRY_USED) or not r["size"]:
+                continue
+            if i in CRC_STRUCTURAL_ROWS:
+                # Row 1 is the file header's own row and row 3 describes the
+                # MFT; their stored CRCs are not payload CRCs and comparing
+                # them would make this check permanently red. Named, not
+                # silently skipped -- a skip nobody prints is a check nobody has.
+                skipped.append(i)
+                continue
+            if r["offset"] + r["size"] > size:
+                bad.append((i, r, None, "extent past EOF"))
+                continue
+            fh.seek(r["offset"])
+            got = binascii.crc32(fh.read(r["size"])) & 0xFFFFFFFF
+            checked += 1
+            if got != r["crc"]:
+                bad.append((i, r, got, "stored 0x%08X computed 0x%08X"
+                            % (r["crc"], got)))
+    return {"rows": n, "checked": checked, "skipped": skipped,
+            "bad": bad, "size_on_disk": size}
 
 
 # ----------------------------------------------------------------- snapshot --
@@ -818,12 +986,27 @@ def diff(before, path=None, after=None):
         if bv != av:
             tier2[key] = {"before": bv, "after": av}
 
+    # THE FILE'S OWN LENGTH, which no other tier carries. `snapshot()` has
+    # recorded `size_on_disk` since it was written and nothing ever compared it,
+    # so an archive that GREW read as unchanged -- and growth is precisely the
+    # signal studies/archivewrite Route B is about, precisely what the client
+    # did NOT do in the caged session (studies/datwrite measured both copies at
+    # 4,198,489,600 B), and the one change a 24-byte MFT diff cannot see because
+    # appended bytes past every extent touch no row at all.
+    size_before = before.get("size_on_disk")
+    size_after = after.get("size_on_disk")
+    growth = None
+    if size_before is not None and size_after is not None \
+            and size_before != size_after:
+        growth = {"before": size_before, "after": size_after,
+                  "delta": size_after - size_before}
+
     return {
         "before": before.get("dat"), "after": after.get("dat"),
         "rows_before": nb, "rows_after": na,
         "identified": identity is not None,
         "identity_note": identity_note,
-        "tier0": tier0, "tier2": tier2,
+        "tier0": tier0, "tier2": tier2, "growth": growth,
         "changes": changes, "counts": counts,
         "corroboration": corroboration,
         # `unchanged` means the table is byte for byte what it was, and rows 0,
@@ -831,7 +1014,8 @@ def diff(before, path=None, after=None):
         # because they move on ANY flush and a post-flight that reported them as
         # findings would report three every time -- but "the client flushed" is
         # itself a fact about the run, so it may not be rounded down to nothing.
-        "unchanged": not (tier0 or tier2 or changes or corroboration),
+        "unchanged": not (tier0 or tier2 or changes or corroboration
+                          or growth),
     }
 
 
@@ -845,6 +1029,14 @@ def format_diff(d):
                    % (d.get("identity_note")
                       or "two snapshots were compared with no archive behind "
                          "them, so no row below carries its file id or role."))
+    if d.get("growth"):
+        g = d["growth"]
+        out.append("THE FILE'S LENGTH CHANGED: %d -> %d (%+d bytes)"
+                   % (g["before"], g["after"], g["delta"]))
+        out.append("   No row records this. The client did NOT grow the archive "
+                   "in the one caged session measured (studies/datwrite),")
+        out.append("   so growth is either ours or something nobody has seen "
+                   "before -- either way it is not routine.")
     if d["tier0"]:
         out.append("TIER 0 changed:")
         for k, v in sorted(d["tier0"].items()):
@@ -922,11 +1114,19 @@ def _main(argv=None):
     ap.add_argument("--snapshot", metavar="FILE", help="write a snapshot here")
     ap.add_argument("--diff", metavar="BEFORE",
                     help="compare --dat against this snapshot")
+    ap.add_argument("--generations", action="store_true",
+                    help="every surviving MFT generation -- what a repair "
+                         "would have to adopt (UPPER BOUND; shape gate only)")
+    ap.add_argument("--crc-sweep", action="store_true",
+                    help="recompute every USED row's payload CRC from disk. "
+                         "Reads the whole file (~3 s for 4.2 GB)")
     ap.add_argument("--json", metavar="FILE", help="also write the result as JSON")
     args = ap.parse_args(argv)
 
-    if not (args.preflight or args.snapshot or args.diff):
-        ap.error("nothing to do: pass --preflight, --snapshot or --diff")
+    if not (args.preflight or args.snapshot or args.diff
+            or args.generations or args.crc_sweep):
+        ap.error("nothing to do: pass --preflight, --snapshot, --diff, "
+                 "--generations or --crc-sweep")
 
     rc = 0
     payload = {}
@@ -947,6 +1147,50 @@ def _main(argv=None):
             print("  REFUSE: %s" % ", ".join(c.name for c in bad))
             rc = 1
         payload["preflight"] = [c.to_json() for c in checks]
+
+    if args.generations:
+        gens = generations(args.dat)
+        ok = [g for g in gens if g["shape_ok"]]
+        print("MFT generations: %s" % args.dat)
+        print("  %14s %14s %10s %8s %s"
+              % ("offset", "flush counter", "rows", "shape", ""))
+        for g in gens:
+            print("  0x%012X %14d %10d %8s %s"
+                  % (g["offset"], g["counter"], g["rows"],
+                     "ok" if g["shape_ok"] else "no",
+                     "LIVE" if g["live"] else ""))
+        print("  %d candidate(s), %d passing ScanMft's shape gate"
+              % (len(gens), len(ok)))
+        print("  UPPER BOUND: LoadMft's full validation (self-CRC, alignment, "
+              "nextStream range and acyclicity) is NOT applied here.")
+        if len(ok) < 2:
+            print("  REFUSE: no fallback generation. A repair triggered by "
+                  "damage to the live MFT would have nothing to adopt, return "
+                  "0, and land on ArchiveCreate.")
+            rc = max(rc, 1)
+        payload["generations"] = gens
+
+    if args.crc_sweep:
+        sw = crc_sweep(args.dat)
+        print("crc sweep: %s" % args.dat)
+        print("  %d row(s), %d payload CRCs recomputed, %d structural row(s) "
+              "skipped by name %s"
+              % (sw["rows"], sw["checked"], len(sw["skipped"]), sw["skipped"]))
+        for i, r, got, why in sw["bad"][:20]:
+            print("  [FAIL] row %-7d off 0x%012X size %-10d %s"
+                  % (i, r["offset"], r["size"], why))
+        if sw["bad"]:
+            print("  REFUSE: %d row(s) whose payload does not match its stored "
+                  "CRC. The client's repair deletes the WHOLE nextStream chain "
+                  "of each, the moment it fires for any reason." % len(sw["bad"]))
+            rc = max(rc, 1)
+        else:
+            print("  every payload CRC matches")
+        payload["crc_sweep"] = {
+            "rows": sw["rows"], "checked": sw["checked"],
+            "skipped": sw["skipped"],
+            "bad": [{"row": i, "offset": r["offset"], "size": r["size"],
+                     "detail": why} for i, r, _g, why in sw["bad"]]}
 
     if args.snapshot:
         snap = write_snapshot(args.dat, args.snapshot)

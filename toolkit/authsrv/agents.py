@@ -507,7 +507,8 @@ HEROES = 40          # ChCliApi:4446 `hero < HEROES`, `cmp esi,0x28`. OBSERVED.
 HERO_UNUSED = 0      # ChCliApi:4447, fires only on `test esi,esi`. OBSERVED.
 
 
-def party_hero_add(party_id, word_a, agent_id, hero_key=0, unk_b=0):
+def party_hero_add(party_id, owner_player_number, agent_id, scan_key=0,
+                   unk_b=0):
     """GAME_SMSG 0x01C2 / 450 -- one hero row in the party roster.
 
     THE SHAPE CORRECTS THE UPSTREAM. OpenTyria's GameMsg.h:466-473 gives
@@ -516,33 +517,39 @@ def party_hero_add(party_id, word_a, agent_id, hero_key=0, unk_b=0):
     u8, u8]`, 10 bytes. Three words and two bytes.
     studies/heroes/FINDINGS.md 1.2.
 
-    WHAT EACH IDENTITY FIELD IS, and how sure -- this signature has been
-    renamed twice in one day (2026-08-16) and the names now track the
-    evidence rather than either day's guess:
+    WHAT EACH IDENTITY FIELD IS, and how sure. This signature was renamed
+    FOUR times across 2026-08-16 as the arms ran, and the history is the
+    warning: `word_a` -> `hero_index` (11.1, WRONG) -> `word_a` again (17.3
+    doubted it) -> `owner_player_number` (21 measured it). Each name change
+    tracked a measurement; the one that didn't (hero_index) lasted six
+    hours. 0x01C2 itself carries NO hero identity at all (19) -- identity
+    lives in 0x0074's data-cache record; this message only binds a party
+    slot to an agent.
 
+    * `owner_player_number` is msg+8 (stored to entry+0x4). OBSERVED (21):
+      with --player-number 2 splitting player number from agent id, the
+      roster row renders exactly when this word equals the declared player
+      number, across three rigs. One nuance worth carrying (21.2): the
+      roster UI and GmHeroCommander's scan compare entry+0x4 against
+      DIFFERENT "my id" notions -- the arm that renders the row is the arm
+      whose commander binding vanishes -- so this name is the roster's
+      reading, and the commander's is ctx[0x44][0x2ac], which did not
+      track the declared number.
     * `agent_id` is msg+0xc (stored to entry+0x0). MEASURED, the one thing
       H1/H2 truly settled: the body lived at agent 200, outside every other
       candidate range, and the row rendered only with 200 here (11.1).
-    * `word_a` is msg+8 (stored to entry+0x4). NOT the hero index -- by
-      experiment (18): it carried 1 while the hero was 2 and the row still
-      rendered as Goren. It was 'hero index' for a few hours on 11.1's
-      overstatement. What it IS stays UNVERIFIED but owner-shaped:
-      GmHeroCommander's scan filters this field against ctx[0x44][0x2ac],
-      a "my id" accessor with 45 call sites (17.3), and owner-player-number
-      vs owner-agent-id are still indistinguishable because both are 1 in
-      every rig so far -- separating THOSE needs a player number differing
-      from the player's agent id. The positional name is back on purpose:
-      naming it would bake the remaining confound in.
-    * `hero_key` is msg+0x10 (stored to entry+0x8). What the commander
-      scan reads as its container key is SOURCED (17.1); that the HERO ID
-      belongs in it is RECONSTRUCTION -- sending it did NOT fix the
-      commander click, which 17.2 refuted head-on. Kept because entry+0x8
-      *is* the key and 0 was never a defensible value.
+    * `scan_key` is msg+0x10 (stored to entry+0x8). That the commander
+      scan reads entry+0x8 as its container key is SOURCED (17.1); every
+      OBSERVABLE consequence is indifferent to the value (19.2: a wrong
+      value changes nothing, the right one fixed nothing), consistent with
+      the scan never running in our sessions. Callers send the hero id as
+      the best guess; the name deliberately does NOT say 'hero', because
+      19's headline is that this message carries no hero identity.
 
-    No range guard on word_a or hero_key beyond the wire widths,
-    deliberately: the settling arms themselves had to send out-of-range
-    values (H1 put 200 at msg+8), and a guard here would have refused the
-    experiments that earned these notes.
+    No range guard on owner_player_number or scan_key beyond the wire
+    widths, deliberately: the settling arms themselves had to send
+    out-of-range values (H1 put 200 at msg+8), and a guard here would have
+    refused the experiments that earned these notes.
 
     The client also pushes TWO HARDCODED ZERO DWORDS into entry+0xc and
     +0x10 that never touch the wire -- worth knowing before anyone reads the
@@ -556,15 +563,17 @@ def party_hero_add(party_id, word_a, agent_id, hero_key=0, unk_b=0):
             f"silent-on-zero branch as party_henchman_add, and 0x01C2 uses "
             f"the IDENTICAL [this+0x3c]/[this+0x44] party lookup (OBSERVED), "
             f"so it inherits the same 'party must be built first' gate")
-    for nm, v in (("word_a", word_a), ("agent_id", agent_id)):
+    for nm, v in (("owner_player_number", owner_player_number),
+                  ("agent_id", agent_id)):
         if not 0 <= v <= 0xFFFF:
             raise ValueError(f"{nm}={v} does not fit the u16 the client reads")
-    for nm, v in (("hero_key", hero_key), ("unk_b", unk_b)):
+    for nm, v in (("scan_key", scan_key), ("unk_b", unk_b)):
         if not 0 <= v <= 255:
             raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
-    return (0x01C2, [party_id, word_a, agent_id, hero_key, unk_b],
-            f"PARTY_HERO_ADD(party {party_id}, word_a {word_a}, agent "
-            f"{agent_id}, key {hero_key}, {unk_b})")
+    return (0x01C2, [party_id, owner_player_number, agent_id, scan_key,
+                     unk_b],
+            f"PARTY_HERO_ADD(party {party_id}, owner {owner_player_number}, "
+            f"agent {agent_id}, key {scan_key}, {unk_b})")
 
 
 def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,

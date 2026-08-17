@@ -2247,18 +2247,48 @@ HERO = None
 # An id inside 1..39 would have let both readings fit, which is the confound
 # the henchman arm nearly shipped with.
 HERO_AGENT_ID = 200
+# Up to seven, because that is the client's own cap: PtPlayer:332
+# `heroIndex < arrsize(m_heroAgentId)` and GmHeroCommander:214
+# `heroIndexPlayer != arrsize(activeHeroes)` both read 7, and GmView:4330 names
+# exactly CONST_KEY_COMMAND_HERO1..HERO7. Agent ids and definitions run
+# consecutively from the bases below so no two heroes collide.
+HERO_IDS = []
+
+
+def hero_slots():
+    """[(hero_id, agent_id, definition)] for every hero this run authors.
+
+    One place decides the id arithmetic, because an agent id reused for a second
+    body leaves the client holding one agent's state under another's name -- the
+    same collision ENEMY_AGENT_ID's comment is about, and the reason the henchman
+    got its own id rather than sharing.
+    """
+    return [(h, HERO_AGENT_ID + i, HERO_DEFINITION + i)
+            for i, h in enumerate(HERO_IDS)]
 HERO_DEFINITION = 10
 HERO_BODY = False
+# THESE THREE NEED A MODULE-LEVEL DEFAULT AND IT IS NOT DECORATION. They were
+# assigned only inside the `--hero` CLI block when the arc landed on 2026-08-16,
+# and the world-load path reads them UNCONDITIONALLY -- `hero_slots() if
+# HERO_ATTRIBS else ()` evaluates the name before anything can short-circuit on
+# HERO being None. So a DEFAULT launch, with no --hero at all, died with
+# NameError inside the instance load and the client showed Code=007. Two other
+# sessions hit it the next morning, and one of them first mis-diagnosed it as an
+# archive problem -- a server-side NameError and a bad map row present
+# identically from the client's side, which is what made it expensive.
+# `hero_slots()` returns [] when HERO_IDS is empty, so True here stays inert
+# until a hero is actually authored; the values match the argparse defaults.
+HERO_ATTRIBS = True
+HERO_SKILLBAR = True
+HERO_BODY_NPC = "hatcher"
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
-# say which is which. Where it stands after three rounds the same day
-# (2026-08-16): msg+0xc is the AGENT ID -- solid, H1/H2's one real settlement
-# (studies/heroes/FINDINGS.md 11.1 as narrowed by 17.3) -- and msg+8 is NOT
-# the hero index, by experiment (18: it carried 1 while the hero was 2 and
-# the row rendered Goren). What it IS stays UNVERIFIED but owner-shaped; the
-# remaining tie is owner player number vs owner agent id, both 1 in every
-# rig so far. The default sends PLAYER_NUMBER there; this flag exchanges the
-# words, i.e. re-sends H1, the order that rendered nothing.
+# say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
+# is the AGENT ID (11.1, the H1/H2 settlement) and msg+8 is the OWNER PLAYER
+# NUMBER -- OBSERVED via --player-number 2 (studies/heroes/FINDINGS.md 21),
+# after 'hero index' (11.1) was refuted by the Goren rig (18). The default
+# sends PLAYER_NUMBER there; this flag exchanges the words, i.e. re-sends
+# H1, the order that rendered nothing, as the control arm.
 HERO_SWAP = False
 # 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
 # one day. Its four fields are exactly the client's own format string,
@@ -2272,6 +2302,55 @@ HERO_ACTIVATE = False
 # inventory-table key, an id naming no inventory should trip THAT assert and
 # name the field by experiment. Silence means it is inert on this path.
 HERO_INVENTORY = 0
+# 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
+# key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
+# 0x0072's hero id, which is the only way to tell which message supplies the
+# hero's identity. studies/heroes/FINDINGS.md 19.
+HERO_ROSTER_ID = None
+# 0x0072's hero id, overridable so ACTIVATE can name a different hero from the
+# one 0x0074 created a record for. Three outcomes, all informative: the name
+# follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
+# its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
+HERO_ACTIVATE_ID = None
+# 0x01C2's msg+8, overridable. The tie this knob existed to break is broken:
+# paired with --player-number 2 it proved msg+8 is the OWNER PLAYER NUMBER --
+# the roster row renders exactly when the field equals the declared number,
+# OBSERVED across three rigs (studies/heroes/FINDINGS.md 21). Kept as the
+# control arm, and because 21.2's split (the commander scan reads the same
+# field against a DIFFERENT "my id") is not finished asking questions.
+HERO_OWNER = None
+# Send 0x01C2 AFTER 0x01B2 instead of inside the 0x01D2..0x01D3 window.
+# THE REASON IS A MEASURED BRANCH, not tidiness. 0x01C2's worker raises its
+# event (0x1000011E -> GmView case 93, the incremental commander path) ONLY on
+# a party-cache MISS: `cmp edi,[mgr+0x4c]; je <epilogue>` at 0x008590AF skips
+# the raise when the party it appended to is already the cached one. Riding
+# inside the window right after 0x01CB is exactly the shape that warms that
+# cache, so our hero may never raise the event at all -- which would explain
+# the commander never binding, and why a wrong msg+0x10 changed nothing (19).
+# studies/heroes/FINDINGS.md 26.
+HERO_POST_COMMIT = False
+# Open a SECOND party immediately before 0x01C2, so the manager's cache at
+# [mgr+0x4c] holds party 2 and our hero-add to party 1 must take the SLOW
+# lookup path -- which is the only way to make `cmp edi,[mgr+0x4c]` at
+# 0x008590AF compare UNEQUAL and let the raise through. --hero-post-commit
+# did NOT test this: post-commit the party is still 1, so the cache still
+# holds it and the condition never changed. studies/heroes/FINDINGS.md 26.
+HERO_BUST_CACHE = False
+# Seconds to hold the whole party/roster sequence past INSTANCE_LOAD_FINISH.
+# None = send it inline, which is every run before 2026-08-17. See
+# hero_late_tick() for the hypothesis under test.
+HERO_LATE = None
+# 0x0074's string16(32) name field. EVERY run so far has sent it EMPTY, so the
+# one encstring case this family never tested is the hero's own. The hero row
+# renders its name from s_heroClientData (the body is a hatcher and the row
+# says "Goren"), so this asks whether the data-cache message's own name field
+# overrides that table lookup or is ignored. studies/heroes/FINDINGS.md 30.
+HERO_INFO_NAME = None
+# 0x01C2's msg+0x14 -- the SECOND trailing u8, stored to entry+0x14 and never
+# varied by any run in this arc. Its sibling msg+0x10 turned out inert on every
+# observable (30, 19), so the prior is that this one is too; the point is to
+# have asked rather than to have assumed.
+HERO_MSG14 = 0
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -2766,6 +2845,38 @@ def begin_attack(send, state, target_id, conn_id):
               flush=True)
 
 
+def hero_late_tick(send, state, conn_id):
+    """Flush the held party/hero roster once, N seconds after the load finished.
+
+    THE EXPERIMENT THIS EXISTS FOR, and it is one hypothesis with a stated
+    refutation. `studies/heroes/FINDINGS.md` 34 measured that the commander
+    event `0x1000011E` is raised while the subscriber map holds NOTHING for it
+    -- read out of the client's own lookup -- and that eight other events change
+    subscriber state DURING a session, so the map fills as UI modules come up.
+    If the commander UI subscribes after the instance load, then our `0x01C2`
+    has simply been arriving too early all along, and the same bytes sent later
+    would bind. Refuted if the subscriber is still null at a late send.
+
+    There is already a precedent for the failure mode in this file:
+    `UI_OVERLAY_FLAGS` is deliberately sent after the load because "a byte that
+    arrives before the UI exists sets a bit nothing is left to read."
+
+    Polled from the world tick rather than given a timer thread, for the reason
+    the tick's own comment gives: a second thread calling `send` would interleave
+    with a simulation tick for no gain.
+    """
+    due = state.get("hero_late_due")
+    if due is None or time.perf_counter() < due:
+        return
+    state["hero_late_due"] = None
+    seq = state.pop("hero_late_seq", ())
+    print(f"[c{conn_id}] HERO-LATE: releasing {len(seq)} roster message(s) "
+          f"now, {time.perf_counter() - due + HERO_LATE:.1f}s after the load "
+          f"finished", flush=True)
+    for op, vals, label in seq:
+        send(op, vals, label)
+
+
 def ping_tick(send, state, conn_id):
     """Send `0x000C` every PING_SECONDS. Called from the world tick.
 
@@ -3040,6 +3151,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
          f"cast animation: player casts {skill_id}")
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
+        # The target rides the pending entry so the DAMAGE can land at cast
+        # end rather than at the press -- see cast_tick's E5 branch. Storing
+        # the id rather than the agent is deliberate: the agent may be dead,
+        # revived or removed by the time the cast completes, and hit_enemy
+        # re-reads it from state and refuses a corpse.
+        "target": target,
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
@@ -3048,40 +3165,35 @@ def handle_skill_press(values, send, state, conn_id, opcode):
           f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
           f"recharge {recharge:.0f}s", flush=True)
 
-    # A skill aimed at something hostile does what a click does, PLUS its own
-    # "+ Damage" if it has one. Since 2026-08-15 the "by how much" is no longer
-    # ours: the magnitude is the client's own scale endpoints interpolated at
-    # the player's rank IN THAT SKILL'S OWN ATTRIBUTE (studies/combat 12), so
-    # Power Attack lands harder than Desperation Blow because Strength 12 beats
-    # Tactics 1 -- which is the whole point of having ranks at all.
+    # NO DAMAGE HERE. It lands at cast end, in cast_tick's E5 branch.
     #
-    # A skill whose scale is not damage adds nothing and the swing stands
-    # alone. That covers most of this bar: two stances, two health buffs and a
-    # condition. Guessing an effect for those is the invention this arc exists
-    # to remove.
+    # Until 2026-08-15 this function resolved the hit synchronously, at the
+    # PRESS -- so a two-second spell dealt its damage before its own casting
+    # animation had begun, and nothing could interrupt it because there was no
+    # interval to interrupt. The owner named it: "we send the damage the
+    # instant the unit starts an animation -- that isn't how the game works...
+    # the actual hit is sent mid-animation, and only if not cancelled". The
+    # corpus agrees, and says it most clearly on the NPC side, where damage and
+    # GV_MELEE_ATTACK_FINISHED are the SAME wire instant 40 of 40 and both sit
+    # a windup after ATTACK_STARTED (studies/combat/PLAN.md 17b).
     #
-    # Damage stays AT PRESS rather than at cast end, and that is still a known
-    # divergence rather than a decision this step revisited: the magnitudes
-    # moved here, the timing did not.
-    bonus = 0.0
-    if target:
-        found = skill_damage(skill_id, player_rank_for_skill(skill_id))
-        if found and found[1] == "additive":
-            bonus = float(found[0])
+    # THREE THINGS THIS BUYS beyond fidelity, and the third was the reason to
+    # do this one first:
+    #   * the cast becomes interruptible in principle -- there is now a real
+    #     window between press and hit for a cancel to land in;
+    #   * the damage computation moves to the WORLD TICK, which catches
+    #     ValueError (its except at the tick body). It used to run here, on
+    #     the connection thread, and `skill_damage` can raise on a content row
+    #     whose scale set is disabled -- outside the try that used to wrap only
+    #     the hit_enemy call. That was a live hazard on the socket-closing path;
+    #   * handle_skill_press stops being a hit_enemy caller at all, so
+    #     hit_enemy is reached from ONE thread and F10's measured-but-unasserted
+    #     concurrency race (test_guards section 11) is closed by construction
+    #     rather than by a lock.
     #
-    # THE SAME ValueError CONTRACT world_tick has, because this runs on the
-    # CONNECTION thread: handle's except tuple is ConnectionError /
-    # socket.timeout / OSError only, so an escaping refusal would run the
-    # finally, close the socket, and disconnect the client over a number that
-    # was -- by design -- never sent. The world tick logs and keeps ticking
-    # (its except at the tick body); a skill press logs and keeps the
-    # connection. Refusing the VALUE must never cost more than the value.
-    if target:
-        try:
-            hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
-        except ValueError as ex:
-            print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
-                  flush=True)
+    # The ValueError catch that used to sit here went with it. Nothing on this
+    # path can raise one now, and a catch guarding nothing is a claim that
+    # something still does.
 
 
 def cast_tick(send, state, conn_id):
@@ -3096,6 +3208,12 @@ def cast_tick(send, state, conn_id):
     Phase order within a cycle is pinned to the observed one: E5, then E3,
     then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
     waits for its E3 rather than closing the cycle early.
+
+    SINCE 2026-08-15 THIS ALSO LANDS THE DAMAGE, in the E5 branch. It used to
+    happen at the press, which put a spell's hit before its own casting
+    animation and left no interval for anything to interrupt. Moving it here
+    is what makes hit_enemy single-threaded: this function is the only caller
+    left besides attack_tick, and both run on the world tick.
     """
     pending = state.get("pending_casts")
     if not pending:
@@ -3110,6 +3228,30 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_RECHARGE(skill {cast['skill_id']}, "
                  f"{cast['recharge']}s)")
             cast["e5_sent"] = True
+            # AND THE HIT LANDS HERE, at cast end rather than at the press.
+            #
+            # E5 is the cast completing -- it is what carries the recharge and
+            # starts it -- so it is the phase a skill's effect belongs to. The
+            # ORDER within this instant (E5 before the damage) is OURS and
+            # UNMEASURED: the corpus shows the player's cast cycle and shows
+            # damage, but no capture pins which of the two the server writes
+            # first. The NPC precedent is the reverse of the intuitive one
+            # (FINISHED then damage, land_swing's docstring), so this is worth
+            # a capture rather than a guess.
+            #
+            # A skill aimed at something hostile still does what a click does,
+            # PLUS its own "+ Damage" if it has one -- unchanged from the press
+            # path, magnitudes and all (studies/combat 12). What changed is
+            # only WHEN. hit_enemy re-reads the target from state, so a corpse,
+            # a removed agent or a revived one is handled there rather than by
+            # anything cached at press time.
+            target = cast.get("target")
+            if target:
+                bonus, found = 0.0, skill_damage(
+                    cast["skill_id"], player_rank_for_skill(cast["skill_id"]))
+                if found and found[1] == "additive":
+                    bonus = float(found[0])
+                hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -4290,11 +4432,19 @@ def spawn_population(send, state, origin, conn_id, area=None):
 
         allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
+        # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
+        # "a name comes from a rendered nameplate or it does not exist" -- and
+        # this used to index `npc["name"]` bare, so every such row threw inside
+        # instance bring-up, where the harness still reported PASS and the map
+        # readback stayed green (studies/isle/PLAN.md gap 2). The fallback label
+        # is OURS and is the npc row's own key: commit the id, resolve the
+        # string at run time. It reaches logs only, never the wire.
+        label = npc.get("name") or str(row["npc"])
         entry = {
             "pos": (x, y), "plane": plane,
             "health": hp, "max_health": hp,
             "dead": False,
-            "name": npc["name"],
+            "name": label,
             "npc": npc,
             "definition": int(row["definition"]),
             "allegiance": allegiance,
@@ -4309,7 +4459,7 @@ def spawn_population(send, state, origin, conn_id, area=None):
                            conn_id=conn_id)
         placed += 1
         note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
-        print(f"[c{conn_id}] {key!r}: {npc['name']} at ({x:.0f}, {y:.0f}) "
+        print(f"[c{conn_id}] {key!r}: {label} at ({x:.0f}, {y:.0f}) "
               f"{how}, {row.get('allegiance', 'hostile')}, {hp:.0f} hp{note}",
               flush=True)
     print(f"[c{conn_id}] area {area!r}: {placed} of {len(rows)} placed",
@@ -5014,6 +5164,55 @@ def recv_exact(sock, n, rec=None):
     return buf
 
 
+def bind_key_to_build(keys, build, conn_id, rec):
+    """Re-select the DH key for the build the client just announced.
+
+    Returns `(keys, ok)`; `ok` False means REFUSE this connection.
+
+    WHY THIS IS ONE FUNCTION CALLED BY BOTH CHANNELS, which is the whole
+    point of it existing. The 2026-08-14 crossbuild fix wrote this logic
+    INLINE in the auth branch, and the game branch -- forty lines below,
+    in the same function -- never got it. On 2026-08-17 that shipped its
+    consequence: a 38797 client authenticated fine (auth re-selected its
+    key) and was then handed 38833's key on the GAME channel, because
+    newest-by-filename is the starting default. The handshake "completed",
+    the ARC4 stream was noise, the client parsed nothing it was sent, and
+    it dropped the connection -- Code=007, no assert, zero c2s. Two runs,
+    with and without a modified archive, failed identically; the archive
+    was innocent.
+
+    That is `sorted()[-1]` picking the wrong build for the FOURTH time in
+    this repo, and the second time the identical fix was written for one
+    path while its twin sat feet away. `studies/crossbuild/FINDINGS.md`
+    says it in the voice of the session that paid for it: "A rule written
+    in one file does not protect the identical line in another." So this
+    is a function, not a paragraph copied twice.
+    """
+    want = KEYS_BY_BUILD.get(build)
+    have_tag = keys.get("build_tag")
+    # Compared by build_tag, not by object identity: the registry loads its
+    # own copy of every file, so `is not` is true even when both are the
+    # same key and the log would claim a swap that did not happen.
+    if want is not None and want.get("build_tag") != have_tag:
+        print(f"[c{conn_id}] keys: re-selected {want.get('build_tag')} to "
+              f"match the client's build {build} (had {have_tag})", flush=True)
+        rec.event("keys_reselected", build=build,
+                  build_tag=want.get("build_tag"), was=have_tag)
+        return want, True
+    if want is None and _build_of_tag(have_tag) not in (None, build):
+        # No key for this build AND the loaded one is for a different, known
+        # build. Refusing beats a wrong key: the client cannot be decrypted
+        # either way, and only one of those says why.
+        msg = (f"no DH key for client build {build}; the loaded key is "
+               f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
+               f"build with make_custom_client.py, or point the client at "
+               f"the run directory matching the key.")
+        print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
+        rec.event("key_build_mismatch", build=build, key_tag=have_tag)
+        return keys, False
+    return keys, True
+
+
 def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
@@ -5043,35 +5242,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                   flush=True)
             rec.event("version", channel="auth", build=build, h0008=h8, h000C=hC)
 
-            # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED. The DH triple is
-            # patched per build, so a key from another build derives a shared
-            # secret the client does not share: the handshake completes, the
-            # ARC4 stream is noise, and the first symptom is `Code=058` on the
-            # client half a minute later -- which names nothing. This costs one
-            # dict lookup and turns that into a line naming both builds.
-            want = KEYS_BY_BUILD.get(build)
-            have_tag = keys.get("build_tag")
-            # Compared by build_tag, not by object identity: the registry loads
-            # its own copy of every file, so `is not` is true even when both are
-            # the same key and the log would claim a swap that did not happen.
-            if want is not None and want.get("build_tag") != have_tag:
-                keys = want
-                print(f"[c{conn_id}] keys: re-selected {keys.get('build_tag')} to "
-                      f"match the client's build {build} (had {have_tag})",
-                      flush=True)
-                rec.event("keys_reselected", build=build,
-                          build_tag=keys.get("build_tag"), was=have_tag)
-            elif want is None and _build_of_tag(have_tag) not in (None, build):
-                # No key for this build AND the loaded one is for a different,
-                # known build. Refusing beats a wrong key: the client cannot be
-                # decrypted either way, and only one of those says why.
-                msg = (f"no DH key for client build {build}; the loaded key is "
-                       f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
-                       f"build with make_custom_client.py, or point the client at "
-                       f"the run directory matching the key.")
-                print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
-                rec.event("key_build_mismatch", build=build, key_tag=have_tag)
-                return
+            # The key is bound to the announced build below, for BOTH
+            # channels -- see bind_key_to_build() for why that is not
+            # written here any more.
         else:
             # 60 more bytes, measured: build, unk1, world_id, map_id, player_id,
             # then the account uuid and the character uuid we handed this client in
@@ -5082,7 +5255,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             account_uuid = body[20:36]
             char_uuid = body[36:52]
             tail = body[52:60]
-            hC = keys["generator"]      # not carried on this channel; keep the check quiet
+            hC = None                   # not carried on this channel; the check below skips
             print(f"[c{conn_id}] GAME version: build={build} world_id={world_id} "
                   f"map_id={map_id} player_id={player_id}", flush=True)
             print(f"[c{conn_id}]   account {wire_to_uuid(account_uuid)}", flush=True)
@@ -5093,7 +5266,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                       char_uuid=wire_to_uuid(char_uuid),
                       tail=binascii.hexlify(tail).decode(),
                       header=hex(header))
-        if hC != keys["generator"]:
+        # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED -- both channels,
+        # one implementation. The DH triple is patched per build, so a key
+        # from another build derives a shared secret the client does not
+        # share: the handshake completes, the ARC4 stream is noise, and the
+        # client drops with no assert and nothing to name the cause.
+        keys, ok = bind_key_to_build(keys, build, conn_id, rec)
+        if not ok:
+            return
+
+        if hC is not None and hC != keys["generator"]:
             print(f"[c{conn_id}] NOTE client generator {hC} != our {keys['generator']}",
                   flush=True)
 
@@ -5348,7 +5530,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [1,          # agent_id -- the player's own agent, 1 for the first
+                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
+                              # here until 2026-08-16, which is a trap rather
+                              # than a bug while the constant is also 1: this
+                              # field is what the client stores at
+                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
+                              # GmHeroCommander's scan filters hero entries by
+                              # comparing that value against 0x01C2's msg+8.
+                              # A literal here silently stops tracking the
+                              # constant. studies/heroes/FINDINGS.md 22.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -5434,6 +5624,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # because a 5 s timer that only runs during combat
                         # would look like a working ping loop in exactly the
                         # sessions nobody is testing it in.
+                        # First, and once: it is a one-shot that must not be
+                        # skipped by anything below it returning early.
+                        hero_late_tick(send, state, conn_id)
                         ping_tick(send, state, conn_id)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
@@ -6473,6 +6666,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # frame lookup by agentId is not a precondition, and if
                         # it does not, adding the body is the next arm rather
                         # than a confound already baked in.
+                        # COLLECTED, not sent, so the whole roster sequence can
+                        # be flushed here (the default) or held for
+                        # --hero-late N. studies/heroes/FINDINGS.md 34.4: the
+                        # commander event is raised into an empty subscriber
+                        # slot, and eight events were measured CHANGING
+                        # subscriber state mid-session, so "our 0x01C2 arrives
+                        # before the commander UI subscribes" is a live
+                        # hypothesis. The precedent is in this same handler --
+                        # UI_OVERLAY_FLAGS is sent after the load for exactly
+                        # this reason, "a byte that arrives before the UI exists
+                        # sets a bit nothing is left to read".
+                        _seq = []
                         _inside = ()
                         if HENCHMAN is not None:
                             _hench = agents.npc_template(HENCHMAN)
@@ -6499,45 +6704,106 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # context (+0x584), so it is the only candidate we
                             # have for the thing 0x0072's gate wants to exist.
                             # An ordering hypothesis, stated as one.
-                            if HERO_INFO:
-                                _hb = HERO_BYTES or (0, 0, 0)
-                                send(*agents.mercenary_info(
-                                    HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
-                                    d3=HERO_FLAG, chunk=HERO_CHUNK))
-                            # What 0x01C2's identity words mean, per
-                            # GmHeroCommander's own party scan
-                            # (studies/heroes/FINDINGS.md 17, superseding
-                            # 11.1's overstatement) and the hero-2 rig (18):
-                            #   msg+8    -> entry+0x4 : NOT the hero index --
-                            #               it carried 1 while the hero was 2
-                            #               and the row rendered Goren (18).
-                            #               Filtered against ctx[0x44][0x2ac],
-                            #               a "my id" accessor, so OWNER-shaped
-                            #               but still UNVERIFIED between owner
-                            #               player number and owner agent id
-                            #               (both 1 in every rig so far). We
-                            #               send PLAYER_NUMBER as the
-                            #               better-founded value.
+                            _hb = HERO_BYTES or (0, 0, 0)
+                            _iname = (agents.npc_template(HERO_INFO_NAME)
+                                      ["enc_name"] if HERO_INFO_NAME else "")
+                            for _hid, _haid, _hdef in hero_slots():
+                                if HERO_INFO:
+                                    # BACK IN THE DEFERRED UNIT. 35.6b tried it
+                                    # inline and the assert survived, so the
+                                    # 0x0074-vs-0x0072 inversion was real and was
+                                    # not the cause. What --hero-late must move is
+                                    # the WHOLE hero pipeline as one unit --
+                                    # 0x0074, the party build, the body, the
+                                    # attribute pair, the skill bar and 0x0072 --
+                                    # preserving their relative order and changing
+                                    # only the absolute time. Splitting the
+                                    # pipeline across the load boundary is what
+                                    # kept asserting, in both directions.
+                                    _seq.append(agents.mercenary_info(
+                                        _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                        d3=HERO_FLAG, chunk=HERO_CHUNK,
+                                        enc_name=_iname))
+                            # What 0x01C2's identity words mean, four rounds
+                            # of arms later (studies/heroes/FINDINGS.md 11.1
+                            # -> 17.3 -> 18 -> 21; 19 for msg+0x10):
+                            #   msg+8    -> entry+0x4 : the OWNER PLAYER
+                            #               NUMBER -- OBSERVED (21): with
+                            #               --player-number 2 splitting the
+                            #               candidates, the roster row renders
+                            #               exactly when this equals the
+                            #               declared player number. Nuance
+                            #               (21.2): the commander scan compares
+                            #               the same field against a DIFFERENT
+                            #               "my id" (ctx[0x44][0x2ac]) -- the
+                            #               arm that renders the row loses the
+                            #               commander binding.
                             #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
                             #               the one word H1/H2 actually settled
                             #               (200 rendered only here).
-                            #   msg+0x10 -> entry+0x8 : the key the commander
-                            #               scan reads (SOURCED). Filling it
-                            #               with the hero id is RECONSTRUCTION,
-                            #               kept as better-founded -- 17.2
-                            #               REFUTED the prediction that it
-                            #               fixes the commander click.
+                            #   msg+0x10 -> entry+0x8 : read by the commander
+                            #               scan as its key (SOURCED) but inert
+                            #               on everything observable (19.2);
+                            #               0x01C2 carries NO hero identity
+                            #               (19) -- we send the hero id as the
+                            #               best guess.
                             # --hero-swap still exchanges the two words; it was
                             # the arm that (with player number == hero id == 1)
                             # could not tell owner from hero index apart.
-                            _wa, _agent = PLAYER_NUMBER, HERO_AGENT_ID
-                            if HERO_SWAP:
-                                _wa, _agent = _agent, _wa
-                            _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _agent, hero_key=HERO),)
-                        for op, vals, label in agents.party_build(
-                                1, PLAYER_NUMBER, inside_window=_inside):
-                            send(op, vals, label)
+                                # The experiment flags below apply to the
+                                # FIRST hero only; with several in the party the
+                                # rest carry the corrected values, so a probe arm
+                                # never silently rewrites the whole roster.
+                                _first = _haid == HERO_AGENT_ID
+                                _wa = (PLAYER_NUMBER
+                                       if HERO_OWNER is None or not _first
+                                       else HERO_OWNER)
+                                _wb = _haid
+                                if HERO_SWAP and _first:
+                                    _wa, _wb = _wb, _wa
+                                _inside = _inside + (agents.party_hero_add(
+                                    1, _wa, _wb,
+                                    HERO_ROSTER_ID if (HERO_ROSTER_ID
+                                                       is not None and _first)
+                                    else _hid,
+                                    HERO_MSG14),)
+                        _after = ()
+                        if HERO_BUST_CACHE and _inside:
+                            # Warm the cache with party 2, then let the hero-add
+                            # to party 1 miss it. Party 1's build is committed by
+                            # then, so PyCliParty:1228 (a second begin with a
+                            # build OPEN) is not in play.
+                            _after = ((0x01D2, [2], "PARTY_BUILD_BEGIN(2) "
+                                       "[cache-buster]"),) + _inside
+                            _inside = ()
+                        elif HERO_POST_COMMIT:
+                            _after, _inside = _inside, ()
+                        _seq.extend(agents.party_build(
+                            1, PLAYER_NUMBER, inside_window=_inside))
+                        _seq.extend(_after)
+                        # THE ROUTER for everything downstream. `hsend` is the
+                        # hero pipeline's `send`: inline normally, appended to the
+                        # held sequence under --hero-late. It exists so the body,
+                        # attributes, skill bar and HeroActivate below travel WITH
+                        # the roster binding instead of being split from it.
+                        def hsend(op, vals, label=None, _q=_seq):
+                            if HERO_LATE is None:
+                                send(op, vals, label)
+                            else:
+                                _q.append((op, vals, label))
+                        if HERO_LATE is None:
+                            for op, vals, label in _seq:
+                                send(op, vals, label)
+                        else:
+                            # Held for the world tick. The DUE time is stamped
+                            # at INSTANCE_LOAD_FINISH rather than here, so the
+                            # delay is measured from the load completing and not
+                            # from the middle of it.
+                            state["hero_late_seq"] = _seq
+                            print(f"[c{conn_id}] HERO-LATE: holding "
+                                  f"{len(_seq)} roster message(s) until "
+                                  f"{HERO_LATE:.1f}s after INSTANCE_LOAD_FINISH",
+                                  flush=True)
                         # ...and the player-record flag word, in retail's own
                         # position: BEFORE the agent create, 423 sends over 12 of
                         # 12 live connections, all inside the instance load. OFF by
@@ -6748,6 +7014,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after spawn where we had it.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                        if state.get("hero_late_seq"):
+                            state["hero_late_due"] = (time.perf_counter()
+                                                      + HERO_LATE)
                         if NETGRAPH_FLAGS is not None:
                             # AFTER the load, not before: the widget this
                             # unlocks is built by a routine that reads the flag
@@ -6811,23 +7080,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that the roster row reads the AGENT for its name,
                         # profession and level, so a bodiless hero row would be
                         # expected to render as empty as the henchman's did.
-                        if HERO is not None and HERO_BODY:
+                        for _i, (_hid, _haid, _hdef) in (
+                                enumerate(hero_slots()) if HERO_BODY else ()):
                             _hro = agents.npc_template(HERO_BODY_NPC)
-                            _rx, _ry = pos[0] - 150.0, pos[1]
+                            # Fan them out rather than stacking: bodies sharing a
+                            # spot read as one body, and "nothing appeared" is the
+                            # failure this repo already paid for once.
+                            _rx, _ry = pos[0] - 150.0, pos[1] + 120.0 * _i
                             create_agent_world(
-                                send, state, HERO_AGENT_ID,
+                                hsend, state, _haid,
                                 {"pos": (_rx, _ry), "plane": cfg[2],
                                  "health": 100.0, "max_health": 100.0,
                                  "dead": False, "name": _hro["name"],
                                  "npc": _hro,
-                                 "definition": HERO_DEFINITION,
+                                 "definition": _hdef,
                                  "allegiance": agents.ALLEGIANCE_PLAYER,
                                  "effects": 0,
                                  "attack_speed": ENEMY_ATTACK_SPEED,
                                  "resend_definition": True,
                                  "attacks_back": False,
                                  "skills": [], "skill_ready": []},
-                                "hero body", conn_id=conn_id)
+                                f"hero body (hero {_hid})", conn_id=conn_id)
                         # THE HERO'S ATTRIBUTE STATE, and it is not a new
                         # mechanism -- it is the pair the PLAYER's own agent
                         # already gets, addressed to the hero's agent instead.
@@ -6839,7 +7112,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # which is why a hero can have one at all.
                         # This is the message the arc spent two refuted
                         # hypotheses looking for, and we already had it.
-                        if HERO is not None and HERO_ATTRIBS:
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_ATTRIBS else ()):
                             # 0x00B7 FIRST, and read the reason before moving
                             # it. THERE ARE TWO PROFESSION STORES and this arc
                             # conflated them for a day:
@@ -6868,21 +7142,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # own recorded knowledge re-earning itself.
                             _hprof = (agents.npc_template(HERO_BODY_NPC)
                                       ["profession"] if HERO_BODY else 1)
-                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                                 [HERO_AGENT_ID, ATTRIBUTE_POINTS,
-                                  ATTRIBUTE_POINTS],
+                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                                 [_haid, ATTRIBUTE_POINTS, ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
-                                 f"{HERO_AGENT_ID})")
-                            send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
-                                 spawn_profession_values(_hprof,
-                                                         HERO_AGENT_ID),
+                                 f"{_haid})")
+                            hsend(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                                 spawn_profession_values(_hprof, _haid),
                                  f"PLAYER_UPDATE_PROFESSION(hero agent "
-                                 f"{HERO_AGENT_ID}, prof {_hprof})")
+                                 f"{_haid}, prof {_hprof})")
                             _hcols = attribute_columns()
-                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                                 [HERO_AGENT_ID, _hcols],
+                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+                                 [_haid, _hcols],
                                  f"AGENT_UPDATE_ATTRIBUTES(hero agent "
-                                 f"{HERO_AGENT_ID}, {len(_hcols) // 3} attrs)")
+                                 f"{_haid}, {len(_hcols) // 3} attrs)")
                         # THE HERO'S SKILL BAR, and it is the same message the
                         # player's bar rides -- 0x00DA is
                         # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
@@ -6893,14 +7165,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # shapes, and this is a RECV message this server has
                         # been sending for the player all along. Fourth time
                         # this arc that the mechanism was already in the tree.
-                        if HERO is not None and HERO_SKILLBAR:
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_SKILLBAR else ()):
                             _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
                             _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
-                            send(GAME_SMSG_SKILLBAR_UPDATE,
-                                 [HERO_AGENT_ID, _hskills,
+                            hsend(GAME_SMSG_SKILLBAR_UPDATE,
+                                 [_haid, _hskills,
                                   SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                                  f"SKILLBAR_UPDATE(hero agent "
-                                 f"{HERO_AGENT_ID}){_hskills}")
+                                 f"{_haid}){_hskills}")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -6908,9 +7181,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # charHeroData gate wants. Both outcomes are readouts,
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
-                        if HERO is not None and HERO_ACTIVATE:
-                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
-                                                 HERO_INVENTORY, HERO_AI_MODE))
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_ACTIVATE else ()):
+                            hsend(*agents.hero_activate(
+                                HERO_ACTIVATE_ID
+                                if (HERO_ACTIVATE_ID is not None
+                                    and _haid == HERO_AGENT_ID) else _hid,
+                                _haid, HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7041,6 +7318,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       state["settings_buf"]).decode())
                         send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
                              f"REQUEST_RESPONSE(settings {req_id})")
+                elif opcode == 0x0009:  # UPDATE_CHARACTER_SETTINGS
+                    # [req_id, character name, settings blob]. OBSERVED
+                    # 2026-08-16: a client whose account has a STORED character
+                    # sends this ~2 s after entering a map -- persisting its
+                    # char-select settings word ("currently in", appearance) --
+                    # and an unanswered one is FATAL: the client waits, sets
+                    # itself Offline and drops BOTH channels with Code=007.
+                    # Every harness session on every tree died of this the day
+                    # the character store landed (captures 20260816T19*-21*);
+                    # the synthetic-character flow never sent it, which is why
+                    # no arm existed. Ack like the settings upload above; the
+                    # blob is recorded for the character-data arc, not parsed
+                    # here -- persistence design is that arc's, not this arm's.
+                    req_id, char_name, blob = values[1], values[2], values[3]
+                    # array8 decodes to a str of code points here (MEASURED on
+                    # tonight's capture: types [int, int, str, str]); bytes()
+                    # on that str raised, killed this thread, and turned the
+                    # missing-ack death into an instant-reset death.
+                    raw = (bytes(blob) if isinstance(blob, (bytes, bytearray))
+                           else bytes(ord(ch) & 0xFF for ch in blob))
+                    rec.event("character_settings", req_id=req_id,
+                              name_units=[ord(ch) for ch in char_name],
+                              blob=binascii.hexlify(raw).decode())
+                    send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
+                         f"REQUEST_RESPONSE(char settings {req_id})")
+                    print(f"[c{conn_id}] character settings: req {req_id}, "
+                          f"{len(raw)}B recorded and ACKED", flush=True)
                 elif opcode == AUTH_CMSG_SET_PLAYER_STATUS:
                     # Deliberately no reply: the reference server records the
                     # status and returns. Sent on pressing Play, status 1.
@@ -7474,7 +7778,7 @@ def main():
                          "arm one measured that the row draws with no body at "
                          "all, but with no name and 'Lvl 255'. This asks "
                          "whether the row's CONTENT is what needs the agent.")
-    ap.add_argument("--hero", type=int, default=None, metavar="INDEX",
+    ap.add_argument("--hero", default=None, metavar="INDEX[,INDEX...]",
                     help="Add a HERO row to the party roster: send 0x01C2 "
                          "inside the party build window for s_heroClientData "
                          "index INDEX (1..39; 0 is HERO_UNUSED and 40 is the "
@@ -7494,10 +7798,9 @@ def main():
     ap.add_argument("--hero-swap", action="store_true",
                     help="Exchange 0x01C2's two identity words, i.e. send "
                          "the H1 order (agent id at msg+8), which rendered "
-                         "nothing. msg+0xc = agent id is solid; msg+8 is NOT "
-                         "the hero index (heroes FINDINGS 18, the Goren rig) "
-                         "and the default sends the player number there. "
-                         "This flag is the control arm.")
+                         "nothing. Both words are settled: msg+8 owner "
+                         "player number (heroes FINDINGS 21), msg+0xc agent "
+                         "id (11.1). This flag is the control arm.")
     ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
                     dest="hero_activate",
                     help="Send 0x0072 HeroActivate last. Its four fields are "
@@ -7524,6 +7827,55 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--player-number", type=int, default=None, metavar="N",
+                    help="The in-instance player number, normally 1 -- which is "
+                         "also PLAYER_AGENT_ID, and that coincidence is what "
+                         "makes 0x01C2's msg+8 undecidable. Set it to something "
+                         "else and the two namespaces separate.")
+    ap.add_argument("--hero-msg14", type=int, default=0, metavar="N",
+                    help="0x01C2's second trailing u8 (msg+0x14 -> entry+0x14), "
+                         "never varied. Its sibling msg+0x10 is inert on every "
+                         "observable, so this asks rather than assumes.")
+    ap.add_argument("--hero-info-name", default=None, metavar="NPC_KEY",
+                    help="Put a real EncString on 0x0074's name field, which "
+                         "every run so far has sent EMPTY. The hero row takes "
+                         "its name from s_heroClientData; this asks whether "
+                         "0x0074's own name overrides that.")
+    ap.add_argument("--hero-late", type=float, default=None, metavar="SECONDS",
+                    help="Hold the ENTIRE party/roster sequence (build window, "
+                         "henchman and hero rows, 0x0074s) until SECONDS after "
+                         "INSTANCE_LOAD_FINISH instead of sending it inside the "
+                         "load. THE TIMING EXPERIMENT of "
+                         "studies/heroes/FINDINGS.md 34.4: the commander event "
+                         "is raised while the subscriber map holds nothing for "
+                         "it, and eight events were measured changing "
+                         "subscriber state mid-session -- so our 0x01C2 may "
+                         "simply arrive before the commander UI subscribes. "
+                         "UI_OVERLAY_FLAGS in this same handler is already sent "
+                         "late for exactly that reason.")
+    ap.add_argument("--hero-bust-cache", action="store_true",
+                    help="Open a second party build right before 0x01C2 so the "
+                         "party-manager cache holds a DIFFERENT party and the "
+                         "hero-add takes the slow lookup. The only arm that "
+                         "actually exercises the conditional raise.")
+    ap.add_argument("--hero-post-commit", action="store_true",
+                    help="Send 0x01C2 after 0x01B2 rather than inside the "
+                         "build window. Tests whether the party-cache hit at "
+                         "0x008590AF is what suppresses the commander event.")
+    ap.add_argument("--hero-owner", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+8 only (normally the player "
+                         "number). With --player-number, this is the arm that "
+                         "says whether the field is the owner's PLAYER NUMBER "
+                         "or the owner's AGENT ID.")
+    ap.add_argument("--hero-activate-id", type=int, default=None, metavar="N",
+                    help="Override 0x0072's hero id only, leaving 0x0074 on "
+                         "--hero's value. Splits the last confound: which of "
+                         "the two data-cache messages supplies the identity.")
+    ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
+                         "0x0072 on --hero's value. Three fields normally "
+                         "carry the same hero id, so nothing can say which one "
+                         "the client reads the identity from; this splits them.")
     ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
                     metavar="N",
                     help="HeroActivate's inventoryId (field 3), 0 so far. "
@@ -7745,20 +8097,58 @@ def main():
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
 
+    if a.player_number is not None:
+        global PLAYER_NUMBER
+        if not 1 <= a.player_number <= 255:
+            raise SystemExit("--player-number outside 1..255")
+        PLAYER_NUMBER = a.player_number
+        print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
+              f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
+              f"which is the whole point of the arm.")
+
     if a.hero is not None:
-        global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
+        global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC
+        HERO_IDS = [int(x, 0) for x in str(a.hero).split(",")]
+        if len(HERO_IDS) > 7:
+            raise SystemExit(
+                f"--hero got {len(HERO_IDS)} heroes; the client's own cap is 7 "
+                f"(PtPlayer:332 and GmHeroCommander:214 both `cmp 7`, and "
+                f"GmView:4330 names exactly HERO1..HERO7)")
+        if len(set(HERO_IDS)) != len(HERO_IDS):
+            raise SystemExit(
+                "--hero repeats a hero id: each 0x0074 record is keyed by that "
+                "id, so a duplicate would have two agents selecting one record")
         # Fail HERE, not inside instance bring-up, and mirror the client's own
-        # two asserts rather than inventing a range.
-        agents.party_hero_add(1, PLAYER_NUMBER, HERO_AGENT_ID, hero_key=a.hero)
-        agents.mercenary_info(a.hero)
-        HERO = a.hero
+        # asserts rather than inventing a range.
+        for _i, _h in enumerate(HERO_IDS):
+            agents.party_hero_add(1, PLAYER_NUMBER, HERO_AGENT_ID + _i, _h)
+            agents.mercenary_info(_h)
+        HERO = HERO_IDS[0]
         HERO_BODY = a.hero_body
         HERO_BODY_NPC = a.hero_body_npc
         HERO_SWAP = a.hero_swap
         HERO_ACTIVATE = a.hero_activate
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
+        global HERO_ROSTER_ID
+        HERO_ROSTER_ID = a.hero_roster_id
+        global HERO_ACTIVATE_ID
+        HERO_ACTIVATE_ID = a.hero_activate_id
+        global HERO_OWNER
+        HERO_OWNER = a.hero_owner
+        global HERO_POST_COMMIT
+        HERO_POST_COMMIT = a.hero_post_commit
+        global HERO_BUST_CACHE
+        HERO_BUST_CACHE = a.hero_bust_cache
+        global HERO_LATE
+        HERO_LATE = a.hero_late
+        global HERO_INFO_NAME
+        HERO_INFO_NAME = a.hero_info_name
+        global HERO_MSG14
+        HERO_MSG14 = a.hero_msg14
+        if HERO_INFO_NAME:
+            agents.npc_template(HERO_INFO_NAME)      # fail here, not mid-load
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
@@ -7787,17 +8177,15 @@ def main():
                   f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
-        _wa, _wb = ((HERO_AGENT_ID, PLAYER_NUMBER) if HERO_SWAP
-                    else (PLAYER_NUMBER, HERO_AGENT_ID))
-        print(f"HERO: 0x01C2 msg+8={_wa} msg+0xc={_wb} msg+0x10={HERO} "
-              f"(swap={HERO_SWAP}) inside the build window; "
-              f"0x0074 first={HERO_INFO}; "
+        print(f"HERO: {len(HERO_IDS)} hero(es) {HERO_IDS} at agents "
+              f"{[HERO_AGENT_ID + i for i in range(len(HERO_IDS))]}; "
+              f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
-              f"msg+0xc = agent id is MEASURED; msg+8 is NOT the hero index "
-              f"(the Goren rig) and owner-shaped; msg+0x10 is the "
-              f"commander-scan key, hero id there is RECONSTRUCTION "
-              f"(heroes FINDINGS 11.1, 17, 18).")
+              f"msg+8 = owner player number (OBSERVED, 21) and msg+0xc = "
+              f"agent id (11.1); msg+0x10 is read by the commander scan but "
+              f"inert on everything observable, hero id there is a best "
+              f"guess (heroes FINDINGS 19, 21).")
 
     if a.henchman is not None:
         global HENCHMAN

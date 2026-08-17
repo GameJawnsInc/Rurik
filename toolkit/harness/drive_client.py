@@ -99,11 +99,19 @@ def select_run_exe(build=None):
     changed which client it launches.
 
     Silently is the operative word. It did not fail at the exe: it failed later
-    and elsewhere, because the 38833 run directory's Gw.dat has never had the
-    maps 146/148 replacement installed (file_id 0x8001B97D, bit-31 "replacement
-    pending") while the 38797 directory still carries it. A newest-wins default
-    turns an ArenaNet update into a wrong answer somewhere downstream rather
-    than into an error here.
+    and elsewhere, because the two generations' archives bind maps 146/148 to
+    DIFFERENT bytes than each other and than the server's dat_study. (This
+    paragraph had the two states swapped until 2026-08-16, and the inverted
+    version was load-bearing prose in a function about which client launches,
+    so the measured truth, from the file-id tables themselves: the 38797 run
+    dirs were cut mid-replacement -- 0x1B97D present only as the bit-31 rename
+    0x8001B97D -> row 7982, unresolvable to the client's exact-compare lookup
+    until datwrite --relink-plain re-bound it on 2026-08-16 -- while the 38833
+    dir binds 0x1B97D plainly to ArenaNet's own 38833-generation file, which
+    is sha-identical to the pristine 2026-08-13 snapshot and run-live copies
+    but NOT to the dat_study row the server paths against.) A newest-wins
+    default turns an ArenaNet update into a wrong answer somewhere downstream
+    rather than into an error here.
 
     SO THE BUILD IS MEASURED, never inferred from the directory name -- the same
     rule the vault's DH split lives by. `buildid.read()` reads the client's own
@@ -113,8 +121,8 @@ def select_run_exe(build=None):
     exe says 38797 quite clearly.
 
     Defaults to `pinned.BUILD` -- 38797 -- because that is what every address in
-    `studies/` was measured against and what the map replacement is installed
-    for. Moving the harness to a new build is a re-measurement arc, not a
+    `studies/` was measured against and the generation whose map bytes dat_study
+    serves. Moving the harness to a new build is a re-measurement arc, not a
     side effect of snapshotting one.
 
     NEVER RAISES. `--exe`'s argparse default used to call this eagerly, so a

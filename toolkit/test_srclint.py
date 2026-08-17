@@ -46,7 +46,15 @@ import srclint  # noqa: E402
 # directory holds the two halves of the Blender pipeline, which import `bpy` and so
 # cannot be run outside Blender at all -- exactly the place an unbound name hides
 # longest -- and nothing had ever linted it.
-LEDGER = checks.Ledger("srclint", floor=15)
+#
+# 15 -> 20 on 2026-08-16 with section 8, `conditional_globals`. Section 2 is blind
+# by design to a `global X` that is assigned only inside a CLI block: name
+# resolution is satisfied, runtime ordering is not. Three such names shipped and
+# every DEFAULT launch died with NameError inside the instance load. Set from a
+# real green run, not a guess -- the first write of section 8 asserted `== []`
+# where the honest assertion was narrower, and the floor guard would have taken
+# the wrong number.
+LEDGER = checks.Ledger("srclint", floor=20)
 
 
 def names(src):
@@ -265,6 +273,69 @@ def main():
                   f"and all {len(cited)} tests named in TESTS.md or CLAUDE.md exist",
                   f"STALE: {missing} -- the list reads as complete while "
                   f"covering less than it claims")
+
+    # ---- 8. globals bound only on a conditional path ---------------------------
+    print("\n8. a `global X` with no module-level default")
+    # THE 2026-08-16 DEFECT, RECONSTRUCTED. Section 2's checker reports ZERO on
+    # this shape and is RIGHT to: `global X` really does bind X at module scope
+    # for NAME RESOLUTION. What it cannot see is RUNTIME ORDERING -- the
+    # assignment happens only if the CLI block runs, so every other path reads a
+    # name that does not exist yet. Three names shipped this way and every
+    # DEFAULT launch died with NameError inside the instance load, showing the
+    # client Code=007 -- indistinguishable from a bad map row, which is what
+    # made it expensive for the two sessions that hit it.
+    defect = """
+        HERO_BODY = False
+
+        def handle():
+            for x in (hero_slots() if HERO_ATTRIBS else ()):
+                pass
+
+        def main(a):
+            global HERO_ATTRIBS
+            HERO_ATTRIBS = not a.no_hero_attribs
+        """
+    hits = srclint.conditional_globals(textwrap.dedent(defect))
+    LEDGER.ok([n for _l, n in hits] == ["HERO_ATTRIBS"],
+              "the real defect is caught",
+              f"{hits}")
+    # Section 2 DOES flag `hero_slots` here (it is undefined in this snippet),
+    # so the honest assertion is the narrow one: it never names HERO_ATTRIBS,
+    # which is the name that actually raised NameError in production. Asserting
+    # `== []` passed nothing and failed for the wrong reason on first write.
+    seen2 = [n for _l, n in srclint.check_source(textwrap.dedent(defect))]
+    LEDGER.ok("HERO_ATTRIBS" not in seen2,
+              "and section 2's checker is CONFIRMED blind to THAT name",
+              f"section 2 reports {seen2}; if HERO_ATTRIBS ever appears there, "
+              f"section 8 is redundant and should go")
+    fixed = textwrap.dedent(defect).replace(
+        "HERO_BODY = False", "HERO_BODY = False\nHERO_ATTRIBS = True")
+    LEDGER.ok(srclint.conditional_globals(fixed) == [],
+              "a module-level default clears it")
+    imported = """
+        import os
+
+        def main():
+            global os
+            os = None
+        """
+    LEDGER.ok(srclint.conditional_globals(textwrap.dedent(imported)) == [],
+              "an import counts as a module-level binding",
+              "otherwise every `global` on an imported name is a false positive")
+    live = []
+    for d in (HERE, os.path.join(os.path.dirname(HERE), "tools")):
+        if not os.path.isdir(d):
+            continue
+        for p in srclint.python_files(d):
+            try:
+                live += [(os.path.basename(p), n)
+                         for _l, n in srclint.conditional_globals_file(p)]
+            except SyntaxError:
+                pass
+    LEDGER.ok(not live,
+              "and the whole tree is clean of it",
+              f"CONDITIONAL GLOBALS: {live} -- these raise NameError on any path "
+              f"that does not run the block assigning them")
 
     return LEDGER.verdict()
 

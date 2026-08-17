@@ -92,11 +92,27 @@ UNLICENSED = {"gw-preservation"}
 #
 # The boundary that ruling draws is MEASUREMENT versus EXPRESSION, not bulk versus single
 # and not data versus code. A level, a bound, a stride, an id, an offset: facts about a
-# system, permitted. Asset bytes, decompiled bodies and verbatim assert expressions with
-# their source path and line: ArenaNet's expression, still refused, and no `extractor`
-# field makes them loadable -- this check cannot see them, which is why the ruling names
-# them explicitly and why the third condition (per-row provenance) is the one a human
-# still has to read.
+# system, permitted. Asset bytes, decompiled bodies and BULK DUMPS of assert strings:
+# ArenaNet's expression, still refused, and no `extractor` field makes them loadable --
+# this check cannot see them, which is why the ruling names them explicitly and why the
+# third condition (per-row provenance) is the one a human still has to read.
+#
+# CORRECTED 2026-08-16, and the paragraph above was itself the defect. It used to end
+# "...and verbatim assert expressions with their source path and line", which reads as a
+# blanket refusal of the citation form every evidence chain in this repo is BUILT ON.
+# CLAUDE.md's REFINED 2026-08-12 clause reverses exactly that, and it was written because a
+# session read the old wording literally, rewrote 46 citations across sixteen documents, and
+# had all 46 reverted. The boundary has a SIZE term and a SOURCE term: a SINGLE assert cited
+# as the evidence for ONE claim is a MEASUREMENT -- keep it, with its file and line, because
+# the quote is what lets a reader audit the claim without owning the binary -- and the crash
+# dialog is not extraction, since `Assertion: X / File.cpp(N)` is text the retail client
+# shows any player who crashes. Only the BULK DUMP is refused.
+#
+# This file was the last place still carrying the old wording, four days after CLAUDE.md
+# fixed it, and it is the file a cold session reads FIRST when it wants to know what the
+# gate refuses -- so the over-refusal had a live route back in. `studies/quests/FINDINGS.md`
+# section 7.9 caught it; seven recon lanes before that did not. The direction of error in
+# this repo is over-refusal, and a comment is how it propagates.
 #
 # Names and authored text are the deliberate middle: commit the id, resolve the string at
 # run time from the owner's own archive. That is not a compromise invented for the ruling,

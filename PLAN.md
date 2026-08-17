@@ -351,11 +351,13 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
 | **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. **2026-08-15, the combat arc ([studies/combat/PLAN.md](studies/combat/PLAN.md)):** the kill window is now ArenaNet's three messages rather than one — `0x00F1` death, `0x00EE [0, 26]` reward, `0x0026` flags 8, same tick, the reward byte-identical to the capture — and the richer-looking `0x00EE` PAIR is deliberately REFUSED, because 6 of its 7 sightings fire far from any death inside a `0x009C`-marked broadcast burst (§13). The guard contract was rebuilt red-first so a refused value costs the value and not the socket or the world tick, and **overkill now clamps to a kill instead of silently no-opping** — a bug caught before it could ship, since damage rides the wire as a fraction of max health and a decoded skill exceeding a weak target's pool would have been refused outright. The server also models attribute ranks at last: `0x003A` carries real ranks, so `2 * rank` is no longer 0 (see R4b). **And for one day that message killed the client on every spawn** — `0x003A` is COLUMN-MAJOR (`ids | ranks | ranks`, the handler slices one flat array at `n` and `2n`) and it was sent as interleaved `(id, rank, rank)` triples, which puts attribute ids in the rank column and asserts `level < arrsize(s_attribPoints)` at `CharData.cpp:202`. Fixed 2026-08-15, `studies/combat/PLAN.md` §14, diagnosed statically from the dump's own stack. `arrsize` was a number nobody had read and the one recorded was wrong — `consttable.py` had 14 x 4, it is 13 x 4, corrected with a new structural locator (`clientscan/attribpoints.py`). **CURE VERIFIED the same day** (§14g): caged loopback run, 1,716 messages, last at t=78.2 s, no assert — the payload the client used to die on now goes out at t=0.85 s and it runs on for another seventy-seven seconds. **And L6's attributability criterion is MET on the same run**: `--probe attributes` drove all three steps and the panel followed, with the ranks against the right names (see R4b). Note that two earlier instrumented runs were reported healthy while the crash box was on screen — the assert dialog is modal INSIDE the client, so liveness polling cannot see it, and the run above is watched with `crashwatch.ps1` instead. |
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started, and the combat arc moved it a long way (2026-08-15, `studies/combat/PLAN.md`).** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. ~~No skill resolves an effect.~~ **Skills now resolve damage from the client's own numbers**: the whole `s_skill` scaling window `+0x44..+0x68` is decoded, and damage is the skill's scale endpoints interpolated by the CLIENT's own formula (`0x005A8920`: `max(0, round(lo + (hi−lo)·rank/15.0))`, divisor a literal 15.0 verified by a stdlib read, no upper clamp so ranks above 15 extrapolate). `ENEMY_SKILL_FRACTION = 0.25` — a flat quarter of the player's maximum for every skill, admitted invention — is **gone**. The cast lifecycle is on the wire as ArenaNet sends it (`0x00E4→0x00E5→0x00E3→0x00E6`, with the QUEUE LAW: a press during aftercast schedules from the aftercast's end, which refutes the naive press+activation model by +0.64 s/+0.57 s). **The limit is now semantic, not numeric, and it is a real finding**: the client's table gives a magnitude and never says what it MEANS — `scale0/15` is `+ Damage` on Power Attack and `Healing` on Restore Condition, and `type_code` cannot discriminate. Three of the four skills on our own enemy's bar are a heal, a hex and an enchantment, so meaning is GWW-sourced per skill and unmodelled skills resolve to **None, not 0**. Still absent: conditions, hexes, enchantments, energy and adrenaline costs, and effects other than damage. **2026-08-15, L6's attributability criterion is MET** — `--probe attributes` ran caged and the attribute panel followed all three steps with the ranks against the right names, so the ranks `2 * rank` reads are the ranks the player is shown. That also closes the one gap static analysis could not (`studies/combat/PLAN.md` §8b: whether the panel control binds the local agent at runtime) and confirms §8a's slot reading positionally, since step 3 reverses the rank column while holding the id column's order. The same run is what verified the `0x003A` crash fix — see R4a. **2026-08-15, the cast lifecycle is PLAYED AT A CLIENT** (`studies/combat/PLAN.md` §15, retiring §7's blocker): `0x00E4→0x00E5→0x00E3→0x00E6` had been offline-tested against six live cycles and never rendered. Four complete cycles now, accepted without asserting, max 36 ms against the declared recharge; a repeat press after `E6` gives a full second cycle; and recharge is **per-skill with concurrent timers** — slot 6's 8 s overlaps slot 7's 3 s cycles and each `E6` names its own skill. Operator-confirmed rendered: **both slots swept, slot 6 clearly longer than slot 7**, which is what shows the client honours the message's DURATION rather than flashing an icon. Still absent from this: the cast ANIMATION, which was not watched and is the unrun `cast_anim` probe's question (opcode 228 vs agent property 60), not this acceptance's. |
-| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. **2026-08-15 — the PARTY half of this rung is now scoped, and it is the recoverable half** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md)): heroes and henchmen are the mirror image of monster AI, because a hero is a thing the CLIENT renders, commands and stores. The two party-add messages are shaped from the client's own descriptor tables and traced store-by-store — `0x01BF` PARTY_HENCHMAN_ADD `[u16,u16,string16(20),u8,u8]` (CORROBORATES GWCA independently) and `0x01C2` PARTY_HERO_ADD `[u16,u16,u16,u8,u8]` (**CORRECTS** OpenTyria's "a `uint8` level"); `0x0074`'s upstream `{hero_id,level,primary,secondary}` is **REFUTED** at 20 fields / 127 bytes. The catalogue is located and closed: **`s_heroClientData` = 40 rows × 24 B at `0x00A35E08`**, `HEROES`=40, `HERO_UNUSED`=0, per-player cap **7** (three independent sites) — and the rival 48×12 reading was a misattribution to the **adjacent title table**, settled by reading the client's own assert strings. Extraction is ruled **permitted** under the MEASUREMENT branch. The honest negatives: hero **skill-bar delivery is NOT FOUND** on any wire shape, and the **c2s** direction (stance, flag placement, hiring) is NOT FOUND at every point looked. **The wire cannot teach this** — 0 of 22,524 decoded live GAME_SMSG messages carry opcode 114/116/447/450, because every live session is solo; the only vault appearances are 92 `PROBE[smsgsweep]` sends. A henchman authorship route is **buildable now** (one new message on top of the existing `party_build()`), with acceptance criterion R4c-H in §8. **2026-08-16 — R4c-H IS MET, caged loopback, four arms** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §10): control **1** roster row, treatment **2**, the second reading **`Mo1 Hatcher [Collector]`** — archive-resolved name, Monk, level 1 — from one `0x01BF`. Three results beyond the criterion. **(a)** The row draws with **NO world body** (so `PtRoster:602`'s agentId lookup is not a precondition) but draws EMPTY: `Lvl 255 ...`. **(b) A discriminator arm overturns the upstream reading** — with the wire deliberately carrying a *different* name, profession 6 and level 20 while the body kept Hatcher/Monk/1, the row rendered **the BODY's values in every field**, proven from the captured plaintext. So `0x01BF`'s name string and its two trailing bytes do **not** drive the roster row: the message binds a roster SLOT to an `agent_id` and the client reads the rest from that agent. GWCA/OpenTyria's `profession`/`level` names are **not confirmed**, and the body arm alone *looked* like a confirmation because it was a confound. **(c)** Unpredicted: the **compass flag widget appears** (one group flag + three numbered + clear) from one `0x01BF` even with no body, corroborating the wiki's four-control description and §3.1's index-0 reading from the screen. Henchman authoring is done as a mechanism. **2026-08-16, same day — THE HERO ARM RAN TOO, five arms, closing two of §7.2's three blockers** (§11). **(1) `0x01C2`'s word order is settled BY CONSTRUCTION**: the body was created at agent **200**, deliberately outside the 1..39 hero-index range, so a word carrying it cannot be a legal hero index — and the row renders only in the arm where **msg+0xc (→ entry+0x0) holds the agent id and msg+8 (→ entry+0x4) the hero index**. That yields a structural fact too: **entry+0x0 is the agent id in `0x01BF` AND `0x01C2`** — same storage slot, different wire order, so §1.2's refuted "by analogy" reasoning reached the right offset for the wrong reason. **(2)** The hero row renders `Mo1 Hatcher [Collecto…]` **plus a numbered commander-slot button** the henchman row lacks (`GmHeroCommander`'s per-slot UI), and its text again comes from the AGENT — three arms, two message families, one rule. **(3) `0x0074` MERCENARY_INFO is what creates the `charHeroData` record**, by a single-variable pair: with it the trailing `0x0072` diagnostic asserts `attribState` (`ChCliAttrib.cpp:156`), without it `charHeroData` (`ChCliHero.cpp:199`). Every static route had this NOT FOUND; one arm settled it. **The gate did not vanish, it MOVED** — onto §4's sharpest negative, hero **attributes**, which the client now names itself. **(4) That shaped hypothesis — `0x0074`'s two 5-dword groups as the attribute block — was TESTED AND REFUTED the same day** (§12), with the prediction on record before the run. An arm carrying ten dwords of `12` (the rank cap), the third-copy flag set (a branch never previously exercised) and the leading bytes loaded produced a **byte-identical** `attribState` assert. Reading the assert instead of guessing gives the real shape: `attribState` is a **separate `0x43c`-stride record, binary-searched by a key at +0**, holding **`attrib[51]` of 20 bytes each** (`ChCliAttrib:177` `cmp 0x33`; index math `20*i+4`) — 1020 bytes, against a 40-byte chunk in a different structure. New measurements banked: **51 attributes**, **rank cap 12** (`AcctTemplate:441`). **The live lead is now the TEMPLATE system** — `AcctTemplate:422/423/440` and `TemplatesCode:168`/`TemplatesHelpers:368` bound a struct carrying `attribCount` + `attrib[]` + `attribValue[]`, which *is* a build, and is §4's "packed template blob" candidate with named asserts to find it by. **(5) 2026-08-16, third pass — the template lead was a RED HERRING and the real mechanism was already in our tree** (§13). `AccountTemplateDataSkill` (140 B: profPrimary, profSecondary, attribCount, attrib[12], attribValue[12], skill[8]) is **account-local** — the base64 saved-build feature — and a reachability closure from it contains **zero message handlers**. What actually creates an attribState record is **`GAME_SMSG 0x0037`** (`[agent_id,u8,u8]`, handler `0x0091d8c0` → thunk `0x0080EAA0` → creator `0x008199C0`, whose own guard is `ChCliAttrib:313` `!attribState`), and **`0x003A`** (`[agent_id, array32[48]]`) fills `attrib[]`. **Both are keyed by AGENT id, which is why a hero can have attributes at all — and both have been in `authsrv.py` since the combat arc**, sent to the player's agent every session. Two refuted hypotheses were spent hunting a message already in the tree: the §3 failure in miniature. Sending the pair for a hero **does clear the attribState gate** — but the client then dies on **`profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`, bound 11**, with or without the `0x0072` diagnostic, so it REGRESSES an otherwise-working hero and the flag ships OFF. Two more fixes tried and refuted there: `0x0074`'s `b2`/`b3` (upstream's "primary/secondary" — a second failure to confirm those names) and matching the body's profession to the attribute set. **(6) 2026-08-16, fourth pass — READING THOSE THREE CALLERS CLOSED IT. THE HERO IS AUTHORED** (§14). All three sit in one function, `0x00819EF0`, which takes the attribState record, reads **its agent id**, and looks that agent's primary/secondary up in **`ctx[0x2c]+0x6BC`** — the array `studies/profession/RUNS.md` already knew is written only by **`0x00B7`**, which we had only ever sent for the player. **There are TWO profession stores**: `0x00A6` writes the agent's own bytes (what the roster label reads — why the row already said `Mo1`), `0x00B7` writes `+0x6BC` (what the attribute code reads). Conflating them cost an afternoon. With `0x00B7` sent for the hero, gate 3 cleared and the assert moved to `attribState ChCliAttrib.cpp(435)` — whose fix `authsrv.py`'s own comment already recorded: **points first, profession second**. **Four gates, all cleared:** `charHeroData`→`0x0074`; `attribState:156`→`0x0037`; `ConstChar:1296`→`0x00B7` for the hero's agent; `attribState:435`→ordering `0x0037`→`0x00B7`→`0x003A`. The `0x0072` diagnostic that ASSERTED on 2026-08-12 now **completes silently**. **The payoff is a name**: with the record incomplete the row read `Mo1 Hatcher [Collector]` (the body's name); complete, the same row reads **`Mo1 Norgu`** — `s_heroClientData` row 1. The client SWITCHES name sources once the hero record is satisfied, which measures §0's central claim that a hero resolves its identity through the static table. Also read in passing: **`s_attrib` = 51 rows × 20 B at `0x00A35740`** (profession, self-index, two string ids, an is-primary flag set on exactly ten rows), and attributes 26-28/45-50 carry profession 11 — the PvE title tracks, out of range by design. **(7) 2026-08-16, fifth pass — THE SKILL BAR, and §4's negative was a SCOPING ERROR** (§15). `0x00DA` SKILLBAR_UPDATE is `[agent_id, array32[8], array32[8], u8]` — RECV, **agent-keyed, eight slots** — and this server has been sending it **for the player every session**. §4 searched `0x0074`/`0x01BF`/`0x01C2` and the SEND-direction shapes and concluded "no skill-bar field anywhere"; the answer was outside that space. **Fourth time this arc that the mechanism was already in the tree** (after `0x0037`, `0x003A`, `0x00B7`) — every piece of a hero turned out to be an existing agent-keyed message we only ever addressed to the player. Sent to the hero it is accepted, 75 B, no assert. **HONEST LIMIT: that is delivery, not display** — the hero panel is opened by clicking the commander-slot button and that click CRASHES, so nobody has seen eight icons. **`0x0072` is not a diagnostic, it is HeroActivate**: its four fields are the client's own format string `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, matching the descriptor exactly. Measured, two runs differing only in it — without: the row reads `Mo1 Hatcher [Collector]` (the BODY's name) and flag 1 is greyed; **with: `Mo1 Norgu` and flag 1 goes GREEN**. So `0x0072` promotes a labelled body into a hero, switching the roster label to `s_heroClientData` and binding the `GmHeroCommander` slot. **`aiMode` is field 4, so the Fight/Guard/Avoid stance IS server-settable** — a partial answer to §3.3's oldest open question. **(8) 2026-08-16, sixth pass — `inventoryId` REFUTED as that suspect, twice** (§16). Naming the assert should have come first: the click crash is **`commander` / `GmView.cpp(5890)`**, not any of the eight inventory asserts (`asserts.py` cannot read line 5890 — one of its 371 blind sites, its answers being floors). And `inventoryId = 1` changes nothing: accepted with no assert on the activation path, and the **identical** crash on the click. The field is **inert on every reachable path** and its meaning stays NOT FOUND. **The real cause is now read statically**: commander objects live in a container at `ctx+0x20`, `heroCommanderSlot[7]` at `+0x30` holds **keys into it**, `0x00524C40` is a **get-or-create**, and `0x00524DB0` — the one the click uses — **does not create**, it looks up and asserts. Our hero has no entry. The creator's other caller sits in a loop over the `activeHeroes` stack buffer built by scanning the party's agents (`GmHeroCommander:214`). **Precise next step, desk work only:** does that scan skip our hero, or register it under a key different from the one `GmView:5890` looks up? **(9) 2026-08-16, seventh pass — THE DESK WORK, and it refuted its own prediction** (§17). The whole commander path is now read out of the binary: the iterator `0x008563B0` walks `[ctx+0x4c]`→my-party→`+0x24` with **stride 0x18 — exactly `0x01C2`'s entry size**, so it walks the entries we append; the scan `0x00524E00` filters `[edi+4]` against a widely-used "my id" accessor and takes **`[edi+8]` as the commander key**, which is where `0x01C2`'s `msg+0x10` lands — and we had been sending **0** there. Prediction: put the hero id in `msg+0x10` and the panel click stops asserting. **REFUTED** — identical `commander`/`GmView(5890)`, with no regression (`Mo1 Norgu`, slot bound, flag green), so the change is kept as better-founded but is RECONSTRUCTION, not a fix. **What it eliminates is the value**: the scan has exactly ONE caller, `0x004E5D85`, inside a GmView **event** handler, so the leading explanation is no longer "wrong key" but **"the scan never runs"** — the commander container is filled by a client-side UI event, not by the wire. **Also a self-correction (§17.3): §11.1's "msg+8 is the hero index" is WITHDRAWN.** H1/H2 only showed `msg+8` accepts 1 and rejects 200, and in this rig `PLAYER_NUMBER`, `PLAYER_AGENT_ID` and the hero index are **all 1** — hero index, owner player and owner agent are indistinguishable, and the scan's filter actively suggests *owner*. `msg+0xc` = agent id still stands. **(10) 2026-08-16 — ran that rig: hero index 2, and the confound broke** (§18). With `msg+8`=1, `msg+0xc`=200, `msg+0x10`=2 all distinct, the row rendered **`Mo1 Goren`** — hero 2's own name. So **`msg+8` is definitively NOT the hero index** (it carried 1 while the hero was 2), settling by experiment what §17.3 could only doubt; what it *is* stays UNVERIFIED, narrowed to owner-player-number vs owner-agent-id, which are both 1 here. **And `s_heroClientData` row 2 = `Goren` is now confirmed FROM THE SCREEN**, independently of the recon's `textrec.py` resolution — rows 1 and 2 both verified from two unrelated directions, so the catalogue reading is solid. Remaining confound: `0x0074`, `0x01C2`'s `msg+0x10` and `0x0072` all carried 2, so which message supplies the identity is undetermined; one run separates them (give `msg+0x10` a different value than the other two). |
+| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. **2026-08-15 — the PARTY half of this rung is now scoped, and it is the recoverable half** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md)): heroes and henchmen are the mirror image of monster AI, because a hero is a thing the CLIENT renders, commands and stores. The two party-add messages are shaped from the client's own descriptor tables and traced store-by-store — `0x01BF` PARTY_HENCHMAN_ADD `[u16,u16,string16(20),u8,u8]` (CORROBORATES GWCA independently) and `0x01C2` PARTY_HERO_ADD `[u16,u16,u16,u8,u8]` (**CORRECTS** OpenTyria's "a `uint8` level"); `0x0074`'s upstream `{hero_id,level,primary,secondary}` is **REFUTED** at 20 fields / 127 bytes. The catalogue is located and closed: **`s_heroClientData` = 40 rows × 24 B at `0x00A35E08`**, `HEROES`=40, `HERO_UNUSED`=0, per-player cap **7** (three independent sites) — and the rival 48×12 reading was a misattribution to the **adjacent title table**, settled by reading the client's own assert strings. Extraction is ruled **permitted** under the MEASUREMENT branch. The honest negatives: hero **skill-bar delivery is NOT FOUND** on any wire shape, and the **c2s** direction (stance, flag placement, hiring) is NOT FOUND at every point looked. **The wire cannot teach this** — 0 of 22,524 decoded live GAME_SMSG messages carry opcode 114/116/447/450, because every live session is solo; the only vault appearances are 92 `PROBE[smsgsweep]` sends. A henchman authorship route is **buildable now** (one new message on top of the existing `party_build()`), with acceptance criterion R4c-H in §8. **2026-08-16 — R4c-H IS MET, caged loopback, four arms** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §10): control **1** roster row, treatment **2**, the second reading **`Mo1 Hatcher [Collector]`** — archive-resolved name, Monk, level 1 — from one `0x01BF`. Three results beyond the criterion. **(a)** The row draws with **NO world body** (so `PtRoster:602`'s agentId lookup is not a precondition) but draws EMPTY: `Lvl 255 ...`. **(b) A discriminator arm overturns the upstream reading** — with the wire deliberately carrying a *different* name, profession 6 and level 20 while the body kept Hatcher/Monk/1, the row rendered **the BODY's values in every field**, proven from the captured plaintext. So `0x01BF`'s name string and its two trailing bytes do **not** drive the roster row: the message binds a roster SLOT to an `agent_id` and the client reads the rest from that agent. GWCA/OpenTyria's `profession`/`level` names are **not confirmed**, and the body arm alone *looked* like a confirmation because it was a confound. **(c)** Unpredicted: the **compass flag widget appears** (one group flag + three numbered + clear) from one `0x01BF` even with no body, corroborating the wiki's four-control description and §3.1's index-0 reading from the screen. Henchman authoring is done as a mechanism. **2026-08-16, same day — THE HERO ARM RAN TOO, five arms, closing two of §7.2's three blockers** (§11). **(1) `0x01C2`'s word order is settled BY CONSTRUCTION**: the body was created at agent **200**, deliberately outside the 1..39 hero-index range, so a word carrying it cannot be a legal hero index — and the row renders only in the arm where **msg+0xc (→ entry+0x0) holds the agent id and msg+8 (→ entry+0x4) the hero index**. That yields a structural fact too: **entry+0x0 is the agent id in `0x01BF` AND `0x01C2`** — same storage slot, different wire order, so §1.2's refuted "by analogy" reasoning reached the right offset for the wrong reason. **(2)** The hero row renders `Mo1 Hatcher [Collecto…]` **plus a numbered commander-slot button** the henchman row lacks (`GmHeroCommander`'s per-slot UI), and its text again comes from the AGENT — three arms, two message families, one rule. **(3) `0x0074` MERCENARY_INFO is what creates the `charHeroData` record**, by a single-variable pair: with it the trailing `0x0072` diagnostic asserts `attribState` (`ChCliAttrib.cpp:156`), without it `charHeroData` (`ChCliHero.cpp:199`). Every static route had this NOT FOUND; one arm settled it. **The gate did not vanish, it MOVED** — onto §4's sharpest negative, hero **attributes**, which the client now names itself. **(4) That shaped hypothesis — `0x0074`'s two 5-dword groups as the attribute block — was TESTED AND REFUTED the same day** (§12), with the prediction on record before the run. An arm carrying ten dwords of `12` (the rank cap), the third-copy flag set (a branch never previously exercised) and the leading bytes loaded produced a **byte-identical** `attribState` assert. Reading the assert instead of guessing gives the real shape: `attribState` is a **separate `0x43c`-stride record, binary-searched by a key at +0**, holding **`attrib[51]` of 20 bytes each** (`ChCliAttrib:177` `cmp 0x33`; index math `20*i+4`) — 1020 bytes, against a 40-byte chunk in a different structure. New measurements banked: **51 attributes**, **rank cap 12** (`AcctTemplate:441`). **The live lead is now the TEMPLATE system** — `AcctTemplate:422/423/440` and `TemplatesCode:168`/`TemplatesHelpers:368` bound a struct carrying `attribCount` + `attrib[]` + `attribValue[]`, which *is* a build, and is §4's "packed template blob" candidate with named asserts to find it by. **(5) 2026-08-16, third pass — the template lead was a RED HERRING and the real mechanism was already in our tree** (§13). `AccountTemplateDataSkill` (140 B: profPrimary, profSecondary, attribCount, attrib[12], attribValue[12], skill[8]) is **account-local** — the base64 saved-build feature — and a reachability closure from it contains **zero message handlers**. What actually creates an attribState record is **`GAME_SMSG 0x0037`** (`[agent_id,u8,u8]`, handler `0x0091d8c0` → thunk `0x0080EAA0` → creator `0x008199C0`, whose own guard is `ChCliAttrib:313` `!attribState`), and **`0x003A`** (`[agent_id, array32[48]]`) fills `attrib[]`. **Both are keyed by AGENT id, which is why a hero can have attributes at all — and both have been in `authsrv.py` since the combat arc**, sent to the player's agent every session. Two refuted hypotheses were spent hunting a message already in the tree: the §3 failure in miniature. Sending the pair for a hero **does clear the attribState gate** — but the client then dies on **`profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`, bound 11**, with or without the `0x0072` diagnostic, so it REGRESSES an otherwise-working hero and the flag ships OFF. Two more fixes tried and refuted there: `0x0074`'s `b2`/`b3` (upstream's "primary/secondary" — a second failure to confirm those names) and matching the body's profession to the attribute set. **(6) 2026-08-16, fourth pass — READING THOSE THREE CALLERS CLOSED IT. THE HERO IS AUTHORED** (§14). All three sit in one function, `0x00819EF0`, which takes the attribState record, reads **its agent id**, and looks that agent's primary/secondary up in **`ctx[0x2c]+0x6BC`** — the array `studies/profession/RUNS.md` already knew is written only by **`0x00B7`**, which we had only ever sent for the player. **There are TWO profession stores**: `0x00A6` writes the agent's own bytes (what the roster label reads — why the row already said `Mo1`), `0x00B7` writes `+0x6BC` (what the attribute code reads). Conflating them cost an afternoon. With `0x00B7` sent for the hero, gate 3 cleared and the assert moved to `attribState ChCliAttrib.cpp(435)` — whose fix `authsrv.py`'s own comment already recorded: **points first, profession second**. **Four gates, all cleared:** `charHeroData`→`0x0074`; `attribState:156`→`0x0037`; `ConstChar:1296`→`0x00B7` for the hero's agent; `attribState:435`→ordering `0x0037`→`0x00B7`→`0x003A`. The `0x0072` diagnostic that ASSERTED on 2026-08-12 now **completes silently**. **The payoff is a name**: with the record incomplete the row read `Mo1 Hatcher [Collector]` (the body's name); complete, the same row reads **`Mo1 Norgu`** — `s_heroClientData` row 1. The client SWITCHES name sources once the hero record is satisfied, which measures §0's central claim that a hero resolves its identity through the static table. Also read in passing: **`s_attrib` = 51 rows × 20 B at `0x00A35740`** (profession, self-index, two string ids, an is-primary flag set on exactly ten rows), and attributes 26-28/45-50 carry profession 11 — the PvE title tracks, out of range by design. **(7) 2026-08-16, fifth pass — THE SKILL BAR, and §4's negative was a SCOPING ERROR** (§15). `0x00DA` SKILLBAR_UPDATE is `[agent_id, array32[8], array32[8], u8]` — RECV, **agent-keyed, eight slots** — and this server has been sending it **for the player every session**. §4 searched `0x0074`/`0x01BF`/`0x01C2` and the SEND-direction shapes and concluded "no skill-bar field anywhere"; the answer was outside that space. **Fourth time this arc that the mechanism was already in the tree** (after `0x0037`, `0x003A`, `0x00B7`) — every piece of a hero turned out to be an existing agent-keyed message we only ever addressed to the player. Sent to the hero it is accepted, 75 B, no assert. **HONEST LIMIT: that is delivery, not display** — the hero panel is opened by clicking the commander-slot button and that click CRASHES, so nobody has seen eight icons. **`0x0072` is not a diagnostic, it is HeroActivate**: its four fields are the client's own format string `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, matching the descriptor exactly. Measured, two runs differing only in it — without: the row reads `Mo1 Hatcher [Collector]` (the BODY's name) and flag 1 is greyed; **with: `Mo1 Norgu` and flag 1 goes GREEN**. So `0x0072` promotes a labelled body into a hero, switching the roster label to `s_heroClientData` and binding the `GmHeroCommander` slot. **`aiMode` is field 4, so the Fight/Guard/Avoid stance IS server-settable** — a partial answer to §3.3's oldest open question. **(8) 2026-08-16, sixth pass — `inventoryId` REFUTED as that suspect, twice** (§16). Naming the assert should have come first: the click crash is **`commander` / `GmView.cpp(5890)`**, not any of the eight inventory asserts (`asserts.py` cannot read line 5890 — one of its 371 blind sites, its answers being floors). And `inventoryId = 1` changes nothing: accepted with no assert on the activation path, and the **identical** crash on the click. The field is **inert on every reachable path** and its meaning stays NOT FOUND. **The real cause is now read statically**: commander objects live in a container at `ctx+0x20`, `heroCommanderSlot[7]` at `+0x30` holds **keys into it**, `0x00524C40` is a **get-or-create**, and `0x00524DB0` — the one the click uses — **does not create**, it looks up and asserts. Our hero has no entry. The creator's other caller sits in a loop over the `activeHeroes` stack buffer built by scanning the party's agents (`GmHeroCommander:214`). **Precise next step, desk work only:** does that scan skip our hero, or register it under a key different from the one `GmView:5890` looks up? **(9) 2026-08-16, seventh pass — THE DESK WORK, and it refuted its own prediction** (§17). The whole commander path is now read out of the binary: the iterator `0x008563B0` walks `[ctx+0x4c]`→my-party→`+0x24` with **stride 0x18 — exactly `0x01C2`'s entry size**, so it walks the entries we append; the scan `0x00524E00` filters `[edi+4]` against a widely-used "my id" accessor and takes **`[edi+8]` as the commander key**, which is where `0x01C2`'s `msg+0x10` lands — and we had been sending **0** there. Prediction: put the hero id in `msg+0x10` and the panel click stops asserting. **REFUTED** — identical `commander`/`GmView(5890)`, with no regression (`Mo1 Norgu`, slot bound, flag green), so the change is kept as better-founded but is RECONSTRUCTION, not a fix. **What it eliminates is the value**: the scan has exactly ONE caller, `0x004E5D85`, inside a GmView **event** handler, so the leading explanation is no longer "wrong key" but **"the scan never runs"** — the commander container is filled by a client-side UI event, not by the wire. **Also a self-correction (§17.3): §11.1's "msg+8 is the hero index" is WITHDRAWN.** H1/H2 only showed `msg+8` accepts 1 and rejects 200, and in this rig `PLAYER_NUMBER`, `PLAYER_AGENT_ID` and the hero index are **all 1** — hero index, owner player and owner agent are indistinguishable, and the scan's filter actively suggests *owner*. `msg+0xc` = agent id still stands. **(10) 2026-08-16 — ran that rig: hero index 2, and the confound broke** (§18). With `msg+8`=1, `msg+0xc`=200, `msg+0x10`=2 all distinct, the row rendered **`Mo1 Goren`** — hero 2's own name. So **`msg+8` is definitively NOT the hero index** (it carried 1 while the hero was 2), settling by experiment what §17.3 could only doubt; what it *is* stays UNVERIFIED, narrowed to owner-player-number vs owner-agent-id, which are both 1 here. **And `s_heroClientData` row 2 = `Goren` is now confirmed FROM THE SCREEN**, independently of the recon's `textrec.py` resolution — rows 1 and 2 both verified from two unrelated directions, so the catalogue reading is solid. Remaining confound: `0x0074`, `0x01C2`'s `msg+0x10` and `0x0072` all carried 2, so which message supplies the identity is undetermined; **(11) 2026-08-16 — ran that split too, and `0x01C2` carries NO hero identity at all** (§19). Prediction on record first: row 3's name id 36274 resolves to **Tahlkora**, so Tahlkora would mean the identity rides `msg+0x10` and Goren would mean it rides `0x0074`/`0x0072`. With `0x0074`/`0x0072` on hero **2** and `msg+0x10` on **3**, the row read **`Mo1 Goren`** — the client ignored the party-add message's hero id completely, with no crash and no change. So the hero's identity arrives **entirely on the data-cache family**, and `0x01C2`'s five fields are a party id, an owner-ish word (UNVERIFIED), the agent id and two bytes. That is stronger than §0's original "a hero carries no NAME": it carries no identity. **`msg+0x10` is now inert on everything observable** — §17.1 read it as the commander key from the scan's `[edi+8]`, §17.2's hero-id value did not fix the panel click, and a deliberately WRONG value here changes nothing; consistent with §17.2's leading explanation that the scan never runs. Its role stays RECONSTRUCTION. **(12) 2026-08-16 — split those too, and the question was malformed** (§20). Three outcomes named first; the run gave the third. With `0x0074` creating a record for hero **2** and `0x0072` activating hero **3**, the client produced `charHeroData` / `ChCliHero.cpp(199)` — the **identical** assert §11.3 got by omitting `0x0074` altogether. So **`0x0074`'s field 1 is the record KEY and `0x0072`'s field 1 is a SELECTOR into the same namespace**, and a mismatched selector is indistinguishable from the record never existing. Neither message "supplies" the identity: `0x0074` creates a keyed record that carries it and `0x0072` activates that record under the same key. It also re-confirms §11.3 from a new direction — that section removed `0x0074` to prove it creates the record; this keeps it and mismatches the key, a different manipulation reaching the same gate. **The family now reads: identity is the data-cache record's; `0x01C2` only binds a roster slot to an agent id.** **(13) 2026-08-16 — `msg+8` IDENTIFIED: it is the OWNER PLAYER NUMBER** (§21). `--player-number 2` finally separates `PLAYER_NUMBER` from `PLAYER_AGENT_ID`, and two arms differing only in `msg+8` are **exact mirrors**: `msg+8`=2 (player number) renders the row but leaves the commander slot unbound; `msg+8`=1 (agent id) binds flag 1 but shows **no row**. The roster row appears exactly when `msg+8` equals the declared player number — consistent with the original rig and with H1's rejection of 200 — so the field is now positively identified, closing the thread §11.1 opened wrongly, §17.3 withdrew and §18 refuted. **The mirror is the unexpected half**: both consumers read `entry+4` yet compare it against DIFFERENT "my id" values — the roster UI against our declared player number, the `GmHeroCommander` scan against `ctx[0x44][0x2ac]`, which stayed 1. RECONSTRUCTION: `--player-number` changes only what we SEND, not what the client believes about itself, so it desynchronises the two; in the default rig both are 1 and everything agrees, which is why the hero worked. Whether `ctx[0x44][0x2ac]` is the agent id or a client-side player number is still undecidable here (both are 1) and needs the CLIENT's value moved, not ours. Practical: do not use `--player-number` outside this experiment — it makes the roster row and the commander binding mutually exclusive. **(14) 2026-08-16 — found what writes it, desk work only** (§22): `ctx[0x44]` is the MISSION subsystem (accessor `0x0084DD70` sits in **MsCliApi**), `--field 0x2AC --writes` gives eleven stores of which two in that range are real, both copy **field 1** of a message struct, and neither has a call xref — each VA sits in one aligned `.rdata` word, i.e. a dispatch entry. `msgshape --all` resolves them: **`0x0199` INSTANCE_LOAD_INFO** (handler `0x0084EF00`) and `0x01A4` (handler `0x0084F230`, never sent by us). **So `ctx[0x44][0x2ac]` is `0x0199`'s field 1 — the player's agent id, which this server has sent at every instance load since the beginning.** That explains §21's mirror exactly: the roster UI filters on the player number while the commander scan filters on `0x0199` field 1, and `--player-number 2` moved one and left the other at 1. In the default rig both are 1, both filters see 1, and the hero binds. **Trap removed:** that field was a literal `1` at the send site rather than `PLAYER_AGENT_ID` — harmless today, but it demonstrably feeds a filter three subsystems away, so it now uses the constant. The confirming arm (move both together) was NOT run and the reason is recorded: it means moving `PLAYER_AGENT_ID` itself, which touches the spawn path and deserves its own arm. **(15) 2026-08-16 — A FULL AUTHORED PARTY OF FIVE** (§23): player + heroes **Norgu, Goren, Tahlkora** in commander slots **1/2/3** + the **Hatcher** henchman, one roster, one run. `--hero` takes a list and `hero_slots()` owns the agent-id/definition arithmetic in one place. Four things measured that n=1 could not: the `heroCommanderSlot[7]` array **assigns sequentially and independently** (three separate numbered buttons); each hero **resolves its own identity** from its own `0x0074` record, so §20's keyed-record model holds past one; heroes and henchmen **coexist and the client distinguishes them visually** — the henchman row has NO numbered button, which is §3.1's reconstruction and the wiki's "three individual flags plus one all" now visible rather than inferred; and **`s_heroClientData` row 3 = `Tahlkora` confirmed from the screen**, so rows 1/2/3 are each verified from two unrelated directions (archive resolution and the client's own rendering). Guards mirror the client's bounds: >7 heroes refused (`cmp 7` at PtPlayer:332 and GmHeroCommander:214), duplicate hero ids refused (one record per key),  **(16) 2026-08-17 — THE COMMANDER QUESTION IS MEASURED, and the arc's last wall is down** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §33). §26.4/§27.2/§32 all stopped on one sentence — *does `0x008590CA` execute, and it needs a breakpoint or code cave*. Built as `toolkit/clientscan/commandertrap.py`: a debugger in pure `ctypes` setting EXECUTE breakpoints in **DR0..DR3**, which are per-thread processor state, so **nothing is written into the client** — no `int3` over an instruction, no code cave, no injection (carve-out 3 permits a compiler; this did not need one). Every site's bytes are re-verified against the RUNNING process before arming, because the pin is 38797 and these are 38833 addresses and §24 already crossed those once. **Three arms, control firing in all three.** Default rig (party-cache HIT): `worker=1 raise=0` — §26.2's gate OBSERVED doing what the disassembly said, predicted in writing beforehand. `--hero-bust-cache` (cache MISS): `worker=1 raise=1 case93=0` — **the event IS raised and its handler never runs**, and the image's own byte map + jump table make that unambiguous (`0x1000011E` → case 93 → `0x004E5DE1`, the ONLY event routing there). Bulk path: `bulkraise=1 bulk=0 create=0` — `0x00524C40` **never executes**, confirming §27's `count=0` by a code trace rather than a memory read, two unrelated instruments agreeing. **The corrected shape: the missing piece is a SUBSCRIPTION, not a trigger.** Every earlier fix (`inventoryId` §16, `msg+0x10` §19, the cache gate §26) aimed at making the client RAISE the event; §26's arm actually succeeded at that and the panel still asserts. **So `0x01C2` cannot bind a commander and no wire field will change it** — the hero as authored (row, name, level, profession, attributes, skill bar, lit flag) is complete for everything the wire governs. Also confirmed from the frozen client: §25.1's push-order decode against the live stack, and §26.1's `ecx`-holds-the-entry claim. **Four tool defects, three caught by the tool's own control before it ever read the client** (§33.8) — a 64-bit debugger receives `STATUS_WX86_SINGLE_STEP` (`0x4000001E`) not `0x80000004` from a WOW64 target, so v1 reported NO HITS and would have published the right headline from a dead instrument; `EFLAGS.RF` does not survive `ContinueDebugEvent`, so one instruction trapped 32 times in 4ms and read as "executed 32 times"; state was captured after the read handle closed, so a whole run's fields came back `None` and that run was DISCARDED rather than published; and the module list is not ready the instant a process exists. **The control had a hole too**: it stopped at the first hit, proving a breakpoint FIRES while saying nothing about whether the target RESUMES — and the untested half was the broken one. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
 | **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against the props chunk through the test's own walker — the terrain path never reads it) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). **Since 2026-08-13 the interchange carries PROPS** (format_version 2): every placement from BOTH streams cross-checked at export through `corresponds()`, model indices resolved to file ids with MFT (size, crc) identity, **the rotation composition measured** — z first, then x, then y, per-axis signs (−, +, −), 3,545/3,545 multi-axis records on a 12-map probe, closing what `props.py` had open — and Blender places every placement as a measured proxy (footprint prism or radius cylinder; placements only, NO ArenaNet model geometry, which nothing in this tree decodes). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **And since 2026-08-12 the OTHER delivery route is open: the client's own map compiler builds from a Stripped stream we supply** — §35 it compiles at all and reproduces ArenaNet's bytes, §36 it compiles the stream WE write rather than anything cached, and **§38 it floods terrain we AUTHORED**: the rebuilt navmesh stops at world x = 1152.0, the cell boundary we chose, with walkable area in the steep strip falling from a measured 37.3% to 0. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation; only the terrain of §38's map is ours (props, zones and collision are ArenaNet's); and the delivery path is still `datwrite` into a copied archive — which now bounds authoring to maps that SHRINK, since it writes uncompressed and will not relocate (§8.10 e9). |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10**, `fbedcfb` — **and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
+
+| **R-ISLE** | **The Isle of the Nameless as a calibration range** | Rungs per [studies/isle/PLAN.md](studies/isle/PLAN.md): reader, route, offline bench, loopback probes, plumbing, then the live sessions | 🔶 **rungs 1-5 DONE 2026-08-16/17**, landed `f17cd49`. The arc: [studies/isle/PLAN.md](studies/isle/PLAN.md) (the north-star doc: instruments, skeptic-attacked designs, the ladder) + [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) (rung 3's eight offline answers; rung 4's four operator-confirmed probe results). Headlines: the AoE radii are static (`s_skill +0x6C`: adjacent 156 / nearby 240 / in-the-area 312, +10-16 bounding-radius hypothesis for the Isle markers to test); the Master of Damage's chat numbers are extractable AND rendered ("is now level 17!" on our own client — 0x5D needs its 0x5E tag); the enc_name → nameplate route is PROVEN (station 1470 = the Ascalon City outfitter, operator-read); conditions map 478=Bleeding..486=Weakness (+2077) with degen server-owned; the three damage kinds separate on the client bar (16/17 debit, 18 notifies); `agentroster.py` reads any capture into cross-session-stable stations; `map.280` is in content with the 0x0195 prediction pre-registered; a PvP-only character reaches 280 (owner-confirmed, GWW-corroborated — the ONE PvE area they may enter). **Next: rung 6, LIVE #1** — the ~20-min no-combat roster walk (owner-driven, new PvP character); then rung 7's damage pass inheriting (target, cause, swing-kind). Residuals riding the next loopback pass: the varint send, the overhead channel, skill 2077's render, the energy probe. |
 
 Two structural changes, both argued below in §4.
 
@@ -1162,7 +1164,11 @@ versus code:**
   and line** — `P:\Code\Base\Rtl\Random.cpp` plus `fraction <= 1.0f` is a line of their source
   code, and a 477-opcode table of them is a source dump with extra steps. What a derived table may
   carry instead is the *constraint*: opcode, field, bound, address. That is the useful content and
-  it loses almost nothing.
+  it loses almost nothing. **(This bullet was REFINED the next day and must not be read alone —
+  see "REFINED 2026-08-12" three paragraphs down: the refusal is aimed at BULK, and a single
+  assert cited as the evidence for one claim is a measurement. Reading this bullet on its own is
+  what cost 46 hand-rewritten citations, and it had a live route back in via `toolkit/content.py`
+  until 2026-08-16.)**
 - **NAMES AND AUTHORED TEXT: commit the id, resolve at run time.** Item, skill, NPC and dialogue
   strings are individually trivial and in bulk a dump of authored work. A row carrying
   `model_id = 419, name_string_id = 2519` is fully useful to the server and carries no ArenaNet
@@ -1307,13 +1313,227 @@ what the corpus cannot (n56 fires on 0 files; block H on 0 of 20,661, now exerci
 `test_modelfile.py` together with the client's error-0x1D refusal). The full-population
 run also CORRECTED the study's sabotage table — six "clean" variants carry 1–29
 aliasing survivors at n=14,571 (FINDINGS §3.6) — and the measured ceilings are pinned.
-**Next is U2 (name the animation payloads) and U3 (companion chunks + the object
-model), which can run as parallel arcs** — `studies/unitmodels/PLAN.md` §2. Still
-undecoded, honestly: blk2C/blk48's element contents (strides exact, semantics unnamed;
-the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object identity,
-and the mid/tail chunk families. GW1 units read as rigid-segment models — zero skinning
-vocabulary in 19,758 assert sites — which, if it survives U2, makes custom-unit
-authoring markedly simpler than a skinned-mesh format would.
+
+**U2 and U3 both landed the same day, as parallel worktree arcs, each surviving an
+independent adversarial review.** U3 (`studies/mdlrefs/`, `toolkit/mapdata/mdlrefs.py`,
+30,722/30,722 reference chunks closed): the five list chunks share one client reader
+whose record rule is null-word-terminated; the m_skel/m_geom question is ANSWERED — two
+classes, 0x15C/0x11C, distinct deleting destructors; the mid/tail chunk families are
+classified (tails = runtime collision/visibility, mids = MdlDecomp's mirror). U2
+(`studies/anim/`, the typed layer in `skelfile.py`): **the animation payloads are
+NAMED** — blk2C is one record per animated node carrying translation + QUATERNION
+rotation + aux channels as times-prefix SoA, and the node-link byte is the
+rigid-segment hierarchy itself (121,532/121,532 topological) — **the recon's quaternion
+refutation is reversed**: it measured a byte-count-identical, shape-wrong overlay, and
+the review confirmed the reversal from the samplers' address arithmetic plus the
+client's own unit-gated fast-normalize. n40 is the sound-event table indexing FA6;
+MdlAnim:367 is settled; flag bits 1–2 are ORed into one runtime bit. So the
+rigid-segment reading now stands on structure, not just assert absence — custom-unit
+authoring needs no skinning path.
+
+**U4 and U5 landed the same day, the second pair of parallel review-gated arcs — the
+ladder is complete through FIVE of its seven rungs, all in one day.** U4
+(`toolkit/mapdata/unitassembly.py`, `studies/unitassembly/`): **wire → file closure,
+54/54 pooled definitions** resolving to closed sets (1,393 distinct files; hatcher
+definition 1471 = 232 files pinned id-by-id), the COMPOSITED rule derived from the
+archive bit and equal to wire 0x0057-presence 54/54, and content rows resolving to
+IDENTICAL sets — our server can dress a unit from `content/*.toml`. U5
+(`toolkit/mapdata/unitexport.py`, `tools/blender/import_gwunit.py`,
+`studies/unitexport/`): **both anchor bodies export** with the M3 re-interleave holding,
+the FA1 sidecar byte-verbatim plus a typed layer that must equal a fresh decode, and a
+Blender viewer measured headless (predicted-vs-measured silhouettes, exact-zero hidden
+controls) — the flat placement is pinned as the bind pose by a review-measured
+cloud-occupancy statistic. Honest finds recorded: the hatcher's picked diffuse is 99.9%
+transparent texels (its default render is a floating head — the diffuse-slot question
+stays open with AMAT), and the corpus FA8 graph is acyclic at depth 1, so a synthetic
+cycle fixture is what carries the recursion claim.
+
+**U6 landed 2026-08-17 — SIX of seven rungs, and everything that can be proven without
+launching the client is proven.** `toolkit/mapdata/skelwrite.py` re-emits the complete
+population byte-identically — **14,571/14,571 FA1 chunks, 21,420/21,420 whole
+containers** — and the review's mutation test (51 typed-field classes × 8 payloads,
+zero survivors) proves the identity is informative, not vacuous. Identity's own catch:
+header bytes +0x09..+0x0B are NOT padding (non-zero on 5,208 FA1s; consumer unknown).
+The rebuilt-archive round trip holds with the nextStream chain verified; the U7
+modification seam is atomic after the review's one real bug (a mid-span refusal used to
+leave a half-retimed repr); and `skelfile.sound_events()`'s majority-class crash was
+found by this rung and fixed — independently, twice, by two sessions in the same hour.
+
+### ✅ U7 IS MET — the ladder is COMPLETE, and a model we authored renders in the retail client (2026-08-17)
+
+**The summit run happened and it went green.** The hatcher's skeleton, its 85 animated
+node bases scaled ×2 through `skelwrite`, drawn visibly stretched by the pinned 38797
+client reading a `datmove`-rebuilt archive — owner-driven run, OBSERVED, screenshot with
+the record. **Our decode → our typed representation → our encode → our container →
+their renderer.** That is round-trip authorship of unit models, which is the goal this
+arc was scoped around, closed seven rungs after the recon that opened it.
+
+**It took four client runs and three of them failed on the EXPERIMENT, not the chain** —
+recorded in [studies/unitmodels/U7-RUN.md](studies/unitmodels/U7-RUN.md) because the next
+session will otherwise pay the same tolls: (1) the plan's named target was the worm, but
+the harness's `--enemy` spawns the HATCHER and U4 had already proved those file sets
+disjoint — the client never read a modified byte; (2) `Code=007` with and without the
+modification, which exonerated the archive and exposed a real server bug — the 2026-08-14
+crossbuild key fix lived inline in `handle()`'s auth branch and the game branch never got
+it, so a 38797 client got 38833's key and the ARC4 stream was noise (fixed as one shared
+`bind_key_to_build()`, with an AST regression check that both channels reach it); (3) the
+`burrow` probe re-creating a body at a fresh agent id while a combat AI drove the first,
+so three things animated the target at once.
+
+**What the run settled beyond the summit.** A **stored** flags=515 row IS acceptable to
+the client — the arc's named risk candidate, REFUTED, and retail ships that row
+compressed. A COMPOSITED shell's own FA1 poses its creature. And **pose and playback rate
+come from different places**: ×4 on the same file's key times changed nothing visible
+across two operator-reviewed clips, which is a real constraint on `studies/anim`'s timing
+reading and the sharpest open question this arc leaves.
+
+**The standing wall, named precisely**: the shell's first FA8 link (15018) carries 1.5 MB
+of FA1 — 237 sequences against the shell's sparse set — and cannot be written back.
+`datmove` refuses it in its own words ("nothing fits… the largest run datplan will hand
+over is 953,856 B") because retail ships it compressed, we write stored, and no
+compression-8 encoder exists. **Authorship that reaches the full animation set needs that
+encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
+for the owner rather than a gap in this one.
+
+### The archive write-size wall — SCOPED, and both halves of U7's closing sentence were wrong (2026-08-17)
+
+**Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
+routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A
+separate pass answered the durability question `studies/datwrite` named as decisive and left
+open for eleven days. Nothing is built — §3's ladder (A1–A8) is a **PROPOSAL until adopted**.
+
+**The wall was misframed, and correcting it shrinks the arc.** U7 recorded 15018 as "1.5 MB,
+unwritable". It never needed 1.5 MB of contiguous space: the row **already owns a 1,029,632 B
+reservation and already ships compressed at 1,029,564 B**, and the 1.5 MB is what it
+decompresses to. So the bar is not *beat ArenaNet by 7.35% to fit a 953,856 B free run* but
+*match ArenaNet within 3,732 B, in place* — and `zlib -9` already clears that. Verified
+independently (row 11196, ratio 0.679645; the shell 116228 agrees to four decimals at
+0.679015).
+
+**Two routes may skip the encoder entirely and both are free reads.** A1: is the sequence
+index space global across the FA8 link graph? If yes, adding a 16th linked file is
+transparent and nothing needs compressing. A2: does a *realistic* edit still fit the
+reservation — measured elasticity is +806 B at 0.1% of slots retimed but **+8,725 B
+(overflow) at 1.0%**, so the encoder may be unable to deliver the thing it would be built
+for. **Both were skipped by scouts who then costed multi-session builds on top of the gap.**
+
+**REFUTED: `nextStream` is not a continuation link.** 44,699 of 44,700 link targets begin
+with their own container magic. A payload cannot spill across two rows. Do not re-derive it.
+
+**Two live defects in our own tooling, both confirmed by the session lead:**
+- `datmove` flattens `compression → 0` unconditionally, so **there is no safe relocation verb
+  for a compressed row** — moving one produces a green archive holding an unreadable file
+  that passes all three checksum rules and all ten open-time rules.
+- `archive.py:322` reads the header `mftOffset` as `<I` while `datcheck.py:223` and
+  `datwrite.py:101` read `<Q`. Latent today and **it caps archive growth**: the live MFT sits
+  121,634,304 B below the u32 ceiling.
+
+**Durability is answered, and it is the reason this arc gets a safety rung before a feature
+rung.** "Repair" means **discard** — the client adopts a surviving older MFT generation and
+then deletes the entire `nextStream` chain of any row whose payload CRC mismatches,
+persisting after one launch. The genuine one-way door is quieter: a bad **12-byte header
+CRC**, or a repair that finds no valid generation, returns zero with **no log line** into
+`ArchiveCreate`, which writes a fresh empty archive over the file. Six MFT generations
+survive in the study archive (measured, counters 26,881 down to 8,735) — which is what makes
+this recoverable-in-principle rather than fatal, and why no allocator may consume the shadow
+rotation region. **Operational rule, now standing: never launch the client on a suspect
+archive; diff it first. The launch is the irreversible step, not the write.**
+
+**A1 AND A2 ARE RUN, both 2026-08-17, and between them they took the compression-8 encoder
+off the critical path.** Study §7 and §8.
+
+**A2: GREEN, and the rung as written was vacuous.** The edit it named
+(`scale_sequence_keytimes`) can only move 692 B of a 1,514,855 B payload, so retiming ALL
+237 sequences costs **+7 bytes** — a gate that cannot perturb its input. The honest version
+against the curves (86 nodes, 76,008 samples): translations ×2 costs **−21 B**;
+requantizing every float to a 1/1024 grid costs **−467,928 B, i.e. 46% smaller than retail
+ships it**. My stated prediction that requantization would be expensive was **refuted** —
+coarser grids make mantissas more repetitive, so the adversarial case is the compressible
+one. The residual risk is therefore inverted: not that an authored payload is too big, but
+that a *higher-fidelity* one could be. Nothing measured bounds that, because every edit
+preserved the sample count. Also: the best of 16 deflate configurations is **11,930 B
+smaller than ArenaNet's own output**, so the encoder's difficulty is format conformance, not
+ratio.
+
+**A1: PER-FILE, by blind replication — two researchers from opposite ends, each told to
+refute the hypothesis they were assigned, both independently returning PER-FILE.** The
+selector is **named**: the FA1 parser swaps the first two record fields, so disk `u8@+0x00`
+lands at runtime `+0x04` and is read at `MdlAnim 0x007822F0` as a **1-based** index into the
+FA8 link array (`links[sel-1]`: 31,700/0 = 100.0000%, against a 0-based rival at 0.82% and a
+random-link null at 8.06%). Indices are born bounded by one file's own count — the key
+lookup is a `lower_bound` over a single file's array with **no fall-through** — and the
+32-byte runtime record is fully enumerated, leaving **no field that could carry a global
+base**. `242 = 2 + 110 + 125 + 5`, reproduced independently from the selector histogram; the
+old `242 = 237 + 5` is dead.
+
+**WHY THAT IS THE GOOD OUTCOME, despite reading as the bad one.** A 16th FA8 record is
+necessary, safe and inert — *safe* is measured, since **retail ships 410 unselected links
+across 63 shells**. Playback needs new sequence records in the **shell's** own FA1. So the
+file to rewrite is **116228: 29,802 B decompressed, 20,236 B stored in a 20,480 B
+reservation** — the 20 KB shell U7 already rewrote successfully. **Retail's 1 MB link 15018
+is never touched, and the 1.5 MB wall does not arise on this path at all.**
+
+**A4 now has a near-ideal oracle.** `0x00804240` is a variant *picker*, and the call site
+passes a literal `push 0`, so the client chooses **uniformly at random among sequences
+sharing a key**. With 216 of the shell's 224 keys single-variant, appending one record on an
+**existing** key with selector 16 gives a **50/50 coin flip between retail's animation and
+ours on every play** — self-controlling, unmistakable, and needing no invented key. Hard
+constraint for that rung: the array is `lower_bound`-searched, so a record is **inserted in
+key order, never appended**.
+
+**Retracted in `studies/anim/FINDINGS.md`**: the reading that 592 files carry indices keyed
+by "a linked model's larger sequence space". All 149 out-of-range values sampled are exactly
+`0x10000` — a sentinel, not a cross-file index. The `0x0078007F` mechanism named alongside it
+is correct and is now corroborated.
+
+**A3 AND A4 ARE BUILT, 2026-08-17.** Study §9. Nothing has been launched.
+
+**A3, the safety fixes** — seven items, floors `test_datcheck` 84→112, `test_datwrite`
+78→87, `test_datplan` 38→44. On the real archive: **6 MFT generations** (`--generations`,
+3.4 s) and **177,327 payload CRCs recomputed, all matching** (`--crc-sweep`, 2.4 s). The
+`<I`→`<Q` fix removes a silent cap on archive growth. `datwrite` now refuses
+`[0x00,0x10)`, the one corruption with no recovery path, which until today was protected
+by *absence*. `datplan` projects a generation's declared extent across run boundaries — a
+mark is where a signature sits, not where the table it declares ends. One item was
+**removed after a single test run because the fixtures refuted it**: the generation census
+is a property of an archive's history, not its validity, and pre-flight costs 1.7 s
+precisely because it never reads a payload.
+
+**A4, the additive path** — `toolkit/mapdata/unitauthor.py`. On the real hatcher shell the
+whole edit is **+29 bytes**: 15 links → 16, 242 sequences → 243 inserted in key order, and
+key 805313525 goes from 1 variant to 2. Two of the three things it must get right cannot
+fail a checksum and cannot fail any of the ten open-time rules — the array must stay
+sorted for the client's `lower_bound`, and the FA8 list is positional so a link is
+appended rather than inserted — so the test inserts at the front, middle and end of the
+table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
+
+**THE RUN HAPPENED, 2026-08-17, and the client ACCEPTS the addition.** Study §9.3c.
+`RUN VERDICT: PASS (target: map)`, exit 0, eight of eight capture-derived checkpoints, body
+in the map at t+16.3s, **no `MdlLoad`/`MdlSeq`/`MdlAnim` assert**. The retail client loads an
+archive carrying a **16th FA8 link and a 243-record sequence table**, with the relocated
+29,831 B **stored** shell and a newly allocated row at file id 389632. Every named rejection
+risk for the additive path is REFUTED, and A4's criterion is met **at the client**.
+
+**What is NOT settled is whether our record was ever PICKED.** The owner's report —
+*"sometimes it feels altered but I'm not sure"* — is not a verdict, and that is the
+experiment's fault: the variant sat on **1 key of 224** and its content was a duplicate of a
+working file, so even when picked it looks plausible. Worse, `--shots` skipped **every**
+screenshot (`client not foreground`), so no measurable record exists. **Next run: scale the
+linked file's node bases and attach the variant to every single-variant key** — U7 proved
+that changing SHAPE is unmissable where changing timing is not. Standing instruction from the
+owner, adopted: spawn anything to be looked at **~150u to the player's left or right**, never
+in front, because the player model occludes it.
+
+**Previously recorded as the remaining risk, now closed by the run above:**
+Everything above is archive-legal and self-consistent, which is exactly the state the two
+dangerous defects would also produce. `datcheck.py` has zero references to compression
+codes and nothing we own can refute a conforming-but-wrong result. **The client is the
+only oracle.** The run is designed with its prediction stated in §9.4 and is **waiting on
+the owner's go-ahead**; the target must be a creature the harness actually spawns, which
+is the toll U7's first run paid.
+
+A1b — who fills the per-agent key array — remains downgraded from blocking to
+worth-doing.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
@@ -1343,6 +1563,52 @@ the corpus and is its own arc), quest names are ArenaNet's string ids rather tha
 (rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
 per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
 
+**RUNG Q1 LANDED 2026-08-16, and it was the arc's unbanked value.** Fifteen of the nineteen
+quest opcodes were **absent from `schema/overrides.json` entirely** — `QUEST_ADD`,
+`QUEST_DESCRIPTION` and the `0x0080`/`0x0081` dialog pair existed only in a study document,
+invisible to every tool that reads the schema. Now: **12 named, 1 renamed, 4 deliberate
+abstentions**, each with its own evidence chain and confidence.
+
+The evidence for eleven of the twelve is the **frame bus**, and it was made refutable before
+it was used. `studies/quests/FINDINGS.md` had both halves — §1.6's publisher VAs, §2.1's
+handler bodies — in two tables and never multiplied them. The pairing was **predicted**
+structurally (*the two adds share a frame id, the two text-fills share one, the three marker
+ops — one shared payload layout — do not*) and then read out of the pinned image: **11 of 11**.
+It is committed as `toolkit/clientscan/framebus.py` with `test_framebus.py` (18 checks, floor
+14, §1 runs on a bare machine) so every row's `why` is reproducible by RUNNING, not by
+rewriting a scratch script.
+
+**The result worth carrying: `0x004E` VICTORY_BANNER → `QUEST_COMPLETE_PANEL`.** Its body
+`0x0080F670` does `push 0x10000155` / `call 0x00633D70` — posting into the band
+`GmQuestComplete` subscribes to. FINDINGS §7.6 had ruled that question needed *"one narrated
+live session in which the operator completes a mission. Nothing static will substitute."*
+Half the join was in its own §1.6 table. The 2026-08-13 smsgsweep had **already** fired the
+opcode at a client and photographed a centre-screen banner, filed `medium` because a name
+from a picture is a guess about purpose — the static join supplies the purpose, and the two
+lineages share no ancestry. **The reward arc is not unblocked, but it is one loopback run
+from its first real question** (what the panel expects in its three dwords), rather than a
+live capture campaign away from it.
+
+Two process notes, both cheap and both paid for. The **call window** failed twice by
+returning a confident short list rather than an error — §1.6's own scan at 6 bytes lost two
+sites, 24 lost `0x0050`'s (its call sits at +29 behind three payload stores). And naming CMSG
+`0x0014` made `test_dispatch.py` §7 **go red before** its `DROPPED_ON_PURPOSE` row landed,
+which is the tripwire working rather than a gap.
+
+**Q1b(b) is done too:** `toolkit/content.py` no longer declares a single cited assert to be
+refused expression — the trap that would have re-run the 2026-08-12 over-refusal, and the last
+place still carrying the old wording four days after CLAUDE.md fixed it. §7 Q3's REFUSED
+bullet now forward-points to its own refinement; the dated ruling text was left alone.
+**`Q1b(a)` is still open and is a second-gate obligation**: `PLAN.md` §6.1 has no
+Fournux/Tyria-Extractor row (`:33` is the prior-art landscape table and grants nothing), open
+since 2026-08-13.
+
+**Next offline, cheapest first:** the 66/66 coded-string verification is a claim in prose and
+not a check; §6.1's Fournux row; **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
+`0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
+build 38797, none re-checked against 38833.
+
 
 ### Heroes and henchmen — R4c-H MET, hero row renders, next gate NAMED (2026-08-16)
 
@@ -1359,56 +1625,236 @@ word order (msg+0xc is the agent id), and **what creates the `charHeroData` reco
 is the headline: `ChCliAttrib.cpp:156`, hero **attribute state** — §4's negative, now named by
 the client itself.
 
-**What is left here, in order.**
-0. ~~**What writes a HERO's attribute record?**~~ **ANSWERED (§13): `0x0037` creates the
-   attribState record and `0x003A` fills it, both keyed by AGENT id — and both have been in
-   `authsrv.py` since the combat arc, sent to the player's agent every session.** The
-   TEMPLATE system was a **RED HERRING**, now confirmed: `AccountTemplateDataSkill` (140 B)
-   is account-local, the base64 saved-build feature, and its reachability closure contains
-   **zero message handlers**. Do not re-open it, and do not re-run the `0x0074`-chunk
-   hypothesis (§12, refuted).
-   **THE LIVE GATE IS NOW `profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`,
-   bound 11.** Sending the pair for a hero clears attribState and then dies here, with or
-   without the `0x0072` diagnostic — so it REGRESSES a hero that otherwise renders, and
-   `--hero-attribs` is off by default. Two fixes already tried and refuted: `0x0074`'s
-   `b2`/`b3` (upstream's "primary/secondary"), and matching the body's profession to the
-   attribute set. **Next move is STATIC, not another run**: the getter `0x005AB800` has 12
-   callers and three — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit in the attribute code
-   the pair activates. Read those three to find where the bad `profession` is loaded.
-1. **The two trailing bytes and the wire name still have no known purpose** — measured
-   negative now, not just a missing assert. The untested candidate is the **outpost hiring
-   UI**, which needs RESKIN §18.1's explorable gate solved first. That is the real next
-   experiment.
-2. **Follow AI** — unbuilt work, not an unknown; the movement messages exist.
-3. ~~**The hero route's remaining blocker**~~ **CLOSED — the hero is authored end to end**
-   (§14, §15): `0x0074` → party window with `0x01C2` → body → `0x00A6` → `0x0037`/`0x00B7`/
-   `0x003A` (that order) → `0x00DA` → `0x0072` HeroActivate. The row draws `Mo1 Norgu` and
-   the commander flag lights. **The next unknown is the commander-panel CLICK, which
-   crashes on `commander` / `GmView.cpp(5890)`.** `inventoryId` was the named suspect and is
-   **refuted** (§16) — do not re-try it. **That desk work is DONE (§17) and it refuted its own
-   fix**: the commander key is `0x01C2`'s `msg+0x10`, we were sending 0, sending the hero id
-   changed nothing. The scan has ONE caller inside a GmView event handler, so the live
-   hypothesis is that **the scan never runs** and the commander container is filled by a
-   client-side UI event rather than by the wire. Next: identify that event and whether
-   anything server-side provokes it — if not, the panel is outside what a server authors.
-   **Also open and now honestly labelled: `0x01C2`'s `msg+8` is UNVERIFIED** — this rig has
-   player number, player agent id and hero index all equal to 1, so separating them needs a
-   hero index >= 2 or a different player number. `--hero-ai-mode` is wired but **untested**.
-   `0x0074`'s other 17 fields are still unexplained.
-4. **Retry the family under `--encstring`** — still never done.
-5. `heroes_table.py` (MEASUREMENT branch) is still unbuilt and still permitted; anchor on
-   `0x005A9380` / `0x00A35E08`, **not** the adjacent title table.
+**What is left here, in order.** *(Refreshed 2026-08-16 after §18-§22; the previous list
+had gone stale on four items that were since closed, which is the drift the top of
+`CLAUDE.md` is about.)*
 
-**Two environment facts this run measured, worth not re-paying for:** the **38797 pin cannot
-currently run** (its archive has 146/148 mid-replacement; on 38833 those maps bind different
+0. ~~**What writes a HERO's attribute record?**~~ **CLOSED (§13).** `0x0037` creates the
+   attribState record, `0x003A` fills it, both AGENT-keyed and both already in `authsrv.py`
+   since the combat arc. The TEMPLATE system was a **RED HERRING** (§12.3, confirmed:
+   `AccountTemplateDataSkill` is account-local and its closure holds zero message handlers).
+   Do not re-open it and do not re-run the `0x0074`-chunk hypothesis (§12, refuted).
+   ~~The live gate is `ConstChar.cpp(1296)`~~ — **also closed (§14): there are TWO profession
+   stores.** `0x00A6` writes the agent's profession bytes (the roster label); `0x00B7` writes
+   `ctx[0x2c]+0x6BC`, which is what the ATTRIBUTE code reads. Sending `0x00B7` for the hero's
+   agent cleared it.
+1. ~~**`0x01C2`'s `msg+8`**~~ **CLOSED (§21): it is the OWNER PLAYER NUMBER.** Both rigs the
+   old list asked for were run — hero index 2 (§18) and a different player number (§21).
+   ~~`msg+0x10`~~ **also closed (§19): `0x01C2` carries NO hero identity at all**; identity
+   arrives entirely on `0x0074`/`0x0072`, and `msg+0x10` is inert on every observable.
+   ~~What writes `ctx[0x44][0x2ac]`~~ **closed (§22): `0x0199` INSTANCE_LOAD_INFO field 1.**
+
+2. **THE LIVE UNKNOWN — the commander-panel click**, `commander` / `GmView.cpp(5890)`.
+   `inventoryId` was the named suspect and is **refuted twice** (§16); do not re-try it.
+   The desk work is done as far as it goes (§17, §20): commander objects live in a container
+   at `ctx+0x20`, `heroCommanderSlot[7]` at `ctx+0x30` holds **keys** into it, `0x00524C40`
+   is a get-or-create, and `0x00524DB0` — the one the click uses — does **not** create. The
+   creator's caller is a loop over `activeHeroes` built by a party-agent scan.
+   ~~**Next, identify the event that runs that scan**~~ **DONE (§23), and the leading
+   hypothesis was WRONG.** The commander branches are cases of one GmView switch
+   (`sub eax,0x10000007; cmp eax,0x1c7; movzx [0x4E66C4]; jmp [0x4E6480]`): the scan is
+   event **`0x10000114`**, the crashing branch is **`0x100001A4`**. `0x10000114` is raised
+   **from the PARTY MANAGER** at `0x008588AD`, in the same region as `0x01BF`'s and
+   `0x01CB`'s workers — **so the trigger IS server-provokable and the panel is not outside
+   what a server authors.** `0x100001A4` has two raisers: inside the scan itself (after the
+   create loop) and in **PtHero** — the party-window button, which raises it directly and so
+   hits the non-creating resolver when the scan never ran.
+   ~~**Next, item 1 first…**~~ **BOTH DONE (§25).** (1) The iterator walks
+   `party->container[0x24]`, bound `[party+0x2c]`, **stride 24** — confirmed against
+   `0x01C2`'s writer **on the same build** (`0x00859010` on 38833, NOT the 38797 address this
+   arc had been quoting), and every §1.2 field offset reproduces. So `[edi+4]`/`[edi+8]` ARE
+   `msg+8`/`msg+0x10`; the chain is confirmed, not invalidated. (2) **`0x01C2` raises
+   `0x1000011E` (case 93), NOT `0x10000114` (case 90, the bulk scan)** — and `0x10000114`'s
+   raiser has eight callers, **all UI**, none a message worker. So the bulk scan is
+   UI-triggered and no message provokes it, while our message drives the INCREMENTAL path:
+   case 93 applies the same my-id filter and hands a key to `0x00524CC0`, which walks the same
+   iterator and derives the commander SLOT by counting my entries. **This revises "the scan
+   never runs"** — true of the bulk scan, not the whole story — and confirms §21/§22's mirror
+   from a third code path. **Loose end, flagged:** case 93's `[esi+4]`/`[esi+8]` may read past
+   the 8-byte payload `0x01C2`'s worker builds, so those exact offsets are RECONSTRUCTION;
+   the structure around them is solid. **RESOLVED (§26.1):** the payload's second dword is the
+   ENTRY POINTER (`ecx`, set at `0x00859089`, never reassigned through the six stores), so
+   case 93 dereferences it — and §21's behavioural arms corroborate the semantics without
+   needing the plumbing at all.
+   **NEW, OBSERVED (§26.2): `0x01C2` raises its commander event only on a party-cache MISS.**
+   `cmp edi,[mgr+0x4c]; je <epilogue>` at `0x008590AF` skips the raise when the party is
+   already the cached one — a real, previously unrecorded gate.
+   **It looked like the answer and is REFUTED (§26.3).** `--hero-post-commit` proves nothing
+   (post-commit the party is still 1, so the condition under test never changed — a confound
+   I nearly scored as a result); `--hero-bust-cache`, which opens a build on party **2** first
+   so the hero-add must take the slow lookup, **still asserts identically**.
+   **NEXT IS RUNTIME, NOT MORE STATIC READING.** Three static hypotheses have now been refuted
+   by experiment on this one question, and what is needed is a single measurement of whether
+   the event fires at all — a breakpoint or code-cave trace on `0x008590CA`. `CLAUDE.md`
+   carve-out 3 permits native tooling explicitly.
+   **DONE, and it needed no debugger (§27).** The commander context is a **plain static global
+   at `0x00C07850`**, so the RESULT can be read instead of the event trapped:
+   `toolkit/clientscan/commanderpeek.py` (new, pure ctypes through `keytap`'s read-only
+   reader). Live, with the hero authored and the roster row drawn:
+   **`container ctx+0x20: cap=7 count=0`, all seven `heroCommanderSlot` entries zero.**
+   **NO COMMANDER IS EVER CREATED** — so §26.4's "key mismatch" branch is REFUTED (nothing is
+   filed under any key) and "the creation path never runs" is confirmed. The party entry IS
+   present, since the roster renders its archive-resolved name from that same `party+0x24`
+   array. **Still open:** empty does not distinguish *the event never fires* from *case 93
+   runs and its my-id filter rejects*; that needs a trace on `0x008590CA`, and the case for
+   spending native tooling is now made of a measurement rather than a hypothesis. Note
+   `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
+   (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
+   **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at
+   `0xc11bc4` reported **NO SUBSCRIBER** for all three commander events — refuted on the spot
+   by evidence already in hand, since `0x100001A4` demonstrably reaches its handler (it is
+   what raises the `GmView:5890` assert). Dumping the buckets confirmed the reader was blind:
+   512/512 slots non-empty and no event-id-shaped value at any offset, because the lookup
+   hashes through `0x004920B0` and the walk never sees real keys. `commanderpeek --events`
+   now **refuses to answer** unless it finds that control first; both branches verified
+   offline. **So the subscriber question is unanswered and is NOT cheap** — it needs the hash
+   replicated (a second thing to get wrong) or the trace §26.4 already named.
+   **Loose end:** the control gate has no committed test, and a new test file needs its
+   `TESTS.md` entry in the same commit.
+   **Method note worth carrying, now cutting both ways:** three static hypotheses were killed
+   by client runs at ~7 minutes each and what moved it was four dwords of live memory — but
+   the very next live read produced a clean, memorable, completely FALSE finding, and only a
+   built-in positive control caught it. Measure the state; then check the instrument against
+   something you already know.
+3. **Desk leftovers, mostly closed.** ~~(a) the scan trigger~~ **DONE (§23, §25).**
+   ~~(c) `msg+0x14`~~ and ~~(d) aiMode~~ **DONE (§31): both inert on every observable** —
+   though the aiMode result is **UNINFORMATIVE and must not be read as "stance does nothing"**,
+   because our server has no follow AI for a stance to act on. Still open: **(b) `0x0074`'s
+   other 17 fields**, where the prior after §12 and §30.2 is that most are inert on the
+   surfaces we can see.
+4. **`0x01BF`'s two trailing bytes and its wire name** — measured negatives, not just missing
+   asserts (§10.2). The untested candidate is the **outpost hiring UI**, which needs
+   RESKIN §18.1's explorable gate solved first.
+5. ~~**Retry the family under `--encstring`**~~ **CLOSED (§30.2).** Superseded for `0x01BF`
+   from §10 onward (a real EncString is what makes the henchman row render a name), and the
+   last untested case — `0x0074`'s `string16(32)`, empty in every run until now — was sent
+   with a real one: 71 bytes, `4 name ids`, and the row still reads `Mo1 Goren`. **Neither
+   name-bearing message in this family reaches the party roster.** Also recorded (§30.1, free
+   from existing screenshots): the hero row's label MIXES sources — profession and level from
+   the AGENT, name from `s_heroClientData` via the hero id — which is why a Monk-bodied
+   "Goren" renders without complaint. The henchman row takes all three from the agent.
+6. ~~**`heroes_table.py`**~~ **BUILT (§29).** A thin emitter over `consttable`'s locator, so
+   there is one place that can be wrong about where the table is. It carries **no address**:
+   it anchors on `ConstHero.cpp` and REFUSES any geometry that is not 40 × 24, naming the
+   title-table trap in the refusal. Closure holds on the byte (`base + 40*24 == anchor_off`).
+   Ids only — `--resolve` refuses a whole column. `vault/content/heroes.toml` written; all 40
+   rows pass `content.py`'s real `_check_provenance`, and stripping `extractor` makes it
+   refuse. `test_heroes_table.py` floor 10, catalogued in the same commit.
+7. **Follow AI** — unbuilt work rather than an unknown; the movement messages exist.
+
+**A defect this arc shipped, and the guard now standing over it.** `HERO_ATTRIBS`,
+`HERO_SKILLBAR` and `HERO_BODY_NPC` landed with no module-level default while the world-load
+path read them unconditionally, so **every default launch** died with NameError inside the
+instance load and showed the client `Code=007`. Two other sessions hit it and one spent its
+first attempt on the archive, because a server-side NameError and a bad map row look
+identical from the client's side. Fixed, and `srclint.conditional_globals` +
+`test_srclint` §8 (floor 20) now fail on the shape.
+
+**Two environment facts this run measured — and the FIRST IS RETRACTED (§24).** The 38797
+pin **runs fine**: its failure was the crossbuild key bug (a 38797 client handed 38833's key
+on the game channel), fixed 2026-08-17 as `bind_key_to_build()`, and the whole hero arc
+reproduces on the PIN with the row reading `Mo1 Goren`. The archive half is real but concerns
+maps 146/148 and was wrongly carried onto a map-90 run — the evidence was in my own log
+(`starting with the newest, rurik_dh_2026-08-13…` two lines above `build=38797`). The
+retracted claim read: ~~the **38797 pin cannot
+currently run**~~ (its archive has 146/148 mid-replacement; on 38833 those maps bind different
 files than `dat_study`) — clean explorable maps on the 38833 pair are **90, 474, 558**; and a
 client `Code=007` is usually **our** crash, so read `gamesrv.log` for a traceback before
 believing the dialog.
 
-### Heroes and henchmen — scoped, and the henchman was one message away (2026-08-15)
+### Heroes and henchmen — the commander question is MEASURED and the arc is closed (2026-08-17)
 
 The arc is [studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md); R4c's row in §3
-carries the summary. **Nothing here needs a decision — it needs one caged run.**
+carries the summary. **Everything below this paragraph is history, kept because it records
+what was tried.** The arc's last wall — §26.4/§27.2/§32's *"does `0x008590CA` execute, and it
+needs a breakpoint or code cave"* — was spent on 2026-08-17 and **answered**:
+`toolkit/clientscan/commandertrap.py` (hardware breakpoints in DR0..DR3, pure `ctypes`,
+nothing written into the client) shows the raise **does** execute once the party-cache gate
+opens, and its handler **never runs**. `0x00524C40` never runs either, confirming §27's
+`count=0` from a second independent instrument. **The event is raised into nothing: what is
+missing is a SUBSCRIPTION, not a trigger** — so no wire field can bind a commander, and the
+authored hero is complete for everything the server governs. FINDINGS §33.
+
+**And the successor question is answered too — FINDINGS §34.** The subscriber question §28
+declared off the table (the map hashes through `0x004920B0`, so a bucket walk cannot read it)
+needed no hash at all: the raise is `call 0x491f20; test eax,eax; je`, so **`eax` at
+`0x0064CA47` IS the subscriber list** for the event in `[ebp+8]`. Read there,
+`0x1000011E` has **`subscribers = 0`** — raised into nothing, mechanism and all.
+Control-verified by a 4000-hit census: 54 distinct events, 23 of them subscribed, so the
+reader demonstrably says both things. *(Its FIRST control run said NO SUBSCRIBER to
+everything and would have confirmed the finding falsely — all 32 hits landed inside one 4 ms
+burst of a single event, because a hot site's default ceiling is not a sample. A control that
+samples badly does not fail loudly; it agrees with whatever you were about to conclude.)*
+
+**2026-08-17, latest: it REPRODUCES 4 OF 5 (FINDINGS §35.5).** Three more late runs with
+`worker,raise,lookup,case93` armed all ran the full chain, each with its own live subscriber
+pointer (`0x272BA958`, `0x25EE9D78`, `0x25BF7AA8` — four distinct addresses across four runs,
+so it is a per-session list rather than a static). **Sending the roster sequence after
+`INSTANCE_LOAD_FINISH` reliably finds a subscriber for `0x1000011E` where sending it inside
+the load reliably does not.** The one stall (run 10) did not arm `raise`/`lookup`, so it stays
+unattributed and is recorded as a 1-in-5 rate rather than explained away. **STILL UNEXPLAINED
+and now the whole question: case 93 runs and NO COMMANDER IS CREATED** (`count=0` across 14
+samples), so the break sits between case 93's entry and the get-or-create — the my-id filter
+or `0x00524CC0` itself.
+
+**AND THEN DOWNGRADED AGAIN, FINDINGS §35.6 — the late rig makes the client ASSERT, 4 of 4:**
+`Assertion: SkillListContext::SKILL_LIST_USERS != skillListUser`, in every late run and in no
+inline run. So every late measurement was taken from a client that asserts during the session,
+and "the subscriber appears later" cannot be separated from "the client is in a degraded
+state". §35.1/§35.5 are **CONTESTED**, not corroborated. What survives is the *contrast* —
+inline reads `subscribers = 0`, late reads non-zero, repeatedly and control-verified — not any
+claim about why. **Fix the assert before re-running: a rig that asserts is not a rig.** Since then (§35.6a/b):
+the inline half of that claim is now VERIFIED rather than assumed — **inline 0 of 3 assert,
+late 9 of 9** — and the obvious fix FAILED. Moving `0x0074` back inline (it had been deferred,
+putting `0x0072`/attributes/skill bar 20 s before the record they need) left the chain running
+and the client still asserting, 2 of 2. **What remains is the last inline/late split:** the
+hero's body, attributes, skill bar and HeroActivate are still sent inline while only the
+roster binding is late, so they are now too EARLY relative to `0x01C2` — and a
+`SkillListContext` assert naming a skill-list *user* fits a bar addressed to an agent the
+party does not yet hold. The correct rig defers the **whole hero pipeline as one unit** — **BUILT AND TRIED (§35.6c),
+and it STILL asserts.** `hsend()` now routes the entire pipeline through one deferral point,
+relative order identical to inline, only absolute time changed; the chain ran and the client
+asserted anyway. **Three orderings, three asserts — so the cause is LATENESS ITSELF, not
+ordering.** The client will not accept a party roster and hero delivered after
+`INSTANCE_LOAD_FINISH`. So **"send it later" is not a viable authoring route**, the timing
+experiment cannot be run cleanly this way, §35.1/§35.5 stay CONTESTED with no cheap way to lift
+it, and §33.5 stands better understood: the commander panel is not reachable from the server.
+Regression control held throughout — the same code inline is clean, send order unchanged.
+**The remaining route is a different instrument:** trap the map INSERT rather than the lookup,
+and find which UI construction registers `0x1000011E`. **DONE — FINDINGS §36.3, and it lifts
+the CONTESTED status.** A properly serialised census of the subscribe path (277 distinct
+(event, caller) pairs) shows **`0x1000011E` registered TWICE on the ordinary INLINE rig** — the
+one that does not assert. So the commander event does acquire a subscriber in a normal session;
+§34's `subscribers = 0` was measured only because the raise happens *during* the instance load,
+before that registration. The timing story therefore no longer depends on the asserting late
+rig at all: §35's *contrast* was right and its late-rig mechanism was never needed. **Next, and
+it is static:** the caller resolves (after un-sliding: `0x00843C07 - 0x210000 = 0x00633C07`) to
+a thin subscribe wrapper at `0x00633BF0` through which every registration funnels — so
+enumerate ITS callers and find which passes `0x1000011E`. That names the UI construction. Also
+recorded UNRESOLVED (§35.7): the two trap site-sets disagreed 4-of-4 versus 0-of-3 on the same
+rig, which could be variance, an observer effect, or the sites themselves — so §35.5's numbers
+are not safe to build on yet.
+
+**The intermediate labelling, kept because the correction is mine:** that hypothesis was first
+TESTED at n=2 as CORROBORATED but NOT REPRODUCIBLE, retracting a mid-session "CONFIRMED"
+(FINDINGS §35).** `--hero-late N` holds the whole roster
+sequence until N seconds after `INSTANCE_LOAD_FINISH`. One run showed exactly what the
+hypothesis predicted — subscriber `0x26151EA0` instead of `0`, and case 93 **running** — but a
+second run on the identical rig stopped at the worker, and a third held the container at
+`count=0` for 14 samples. **No commander is created in any run, early or late.** The confound
+is named: `--hero-late` moves *two* things, the send time **and** the party-cache state that
+gates the raise, so run 2's stall is probably `raise=0` from a re-cached party 1 — the same
+confound shape as §10.2's body arm and §26.3's arm A. Settle it by trapping
+`worker,raise,lookup,case93` on the late rig over several runs.
+
+**The original framing, kept because the hypothesis is still live:** The census shows
+**eight events whose subscriber state changes mid-session**, so the map is filled as UI
+modules come up. Hence **TIMING**: our `0x01C2` rides inside the instance load and may simply
+arrive before the commander UI subscribes — in which case the same bytes would work sent
+later. Refuted by censusing `0x1000011E` across a whole session and finding it never
+subscribed at any moment. Testing it needs the registration site trapped, or a hero-add sent
+long after `INSTANCE_LOAD_FINISH`, which no flag does today. Also unresolved and named rather
+than smoothed over: `0x10000114` HAS a live subscriber yet case 90 never executed (§34.3).
 
 **The one thing to do first, and everything hangs on it:** send a single `0x01BF`
 PARTY_HENCHMAN_ADD inside the party build window our server already opens, with `0x00B0`
@@ -1507,7 +1953,7 @@ press rather than at cast end** — magnitudes moved in step 8, timing did not.
 
 **READ THIS FIRST, because it retires the headline this section carried all day.** *It read "the compass on our server is drawing the client's FALLBACK", and every paragraph below was written under that premise.* **Rung C1 — the arc's first client run — put the compass on screen drawing a recognisable crop of Ascalon City on retail map 148**, our server, our DH, caged, loopback, synthetic credential. The metric is §6's own chromatic ratio with the control measured first: the previously-classified fallback frames re-read at **χ +1.154 … +1.160** by the same sampler, and this run's five frames at **+0.250 … +0.279** — against rung S5's *offline* prediction of **+0.286** for map 148's crop, computed before any frame existed and never fitted to one. **`studies/minimap/FINDINGS.md` §6d** carries it.
 
-**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.**
+**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.** *(Since fixed, and on 2026-08-16 the 38797 archive state itself was repaired — that §8 item has the record.)*
 
 **ATTRIBUTION IS NOW CLOSED TOO — rung S13, same day (`studies/minimap/FINDINGS.md` §6e). The cause is the ARCHIVE'S ARMED STATE, and specifically the ATLAS TILE ROWS.**
 
@@ -1515,19 +1961,23 @@ press rather than at cast end** — magnitudes moved in step 8, timing did not.
 
 The other three candidates were each tested and died: the **map file** (height field byte-identical, `MAP_PARAMS`'s rect bytes identical, differing only in a trailing v4 GUID), the **client build** (all 12 `CompassMap.cpp` asserts identical and uniformly displaced +0xA0; ctor, crop, latch and fallback tiler have identical instruction counts and **zero** mnemonic mismatches; the footprint table, `s_worldData` and the tile arrays byte-identical), and the **map-type byte** (map 148's two footprints are the same rect, and a forced `--explorable` run still drew the atlas). **S9's hypothesis 2 was right in substance and refuted for the wrong reason** — the load does fail, but upstream of the loader, in a lookup that never yields a row.
 
-**This is the same defect a third time, and that is the durable lesson.** `archive.file_id_table()` dual-registers a bit-31 id, so it answered "row 44717, present" for a tile the client cannot address. It has now hidden: the map **file** id (caught by crossbuild), the **`contentids`** pre-flight (below, UNFIXED), and rung **S9's tile-presence check** — which cost S9, S12, C1 and S13 to unwind. **One predicate fixes all three: does the id bind in the form it is sent?**
+**This is the same defect a third time, and that is the durable lesson.** `archive.file_id_table()` dual-registers a bit-31 id, so it answered "row 44717, present" for a tile the client cannot address. It has now hidden: the map **file** id (caught by crossbuild), the **`contentids`** pre-flight (below; since fixed), and rung **S9's tile-presence check** — which cost S9, S12, C1 and S13 to unwind. **One predicate fixes all three: does the id bind in the form it is sent?**
 
 **Second result, small and operational:** the ground layer **arrives late** — `final.png` at the map verdict reads χ +1.182 (fallback band) and converges to +0.250 by ~t+26 s. A single early frame is not evidence of a NULL image. **Consequences: C2 and C3 are UNGATED** (they were held behind a vacuous-arm problem that no longer exists), **risk 7 is RETIRED**, and Tier 3's premise survives. Two caveats the run carries: the server ran **without a navmesh** (`Permission denied` — the client holds its own archive open, so give the server a separate copy), and `--shots` is foreground-gated, skipping 4 of 9.
 
 **Everything below this line was written under the fallback premise. The static analysis stands; the framing does not.**
 
-### `file_id_table()`'s dual registration has now hidden three failures — `contentids.py` is the one still UNFIXED (2026-08-14)
+### `file_id_table()`'s dual registration has now hidden three failures — all three CLOSED, and the archive state behind them repaired (2026-08-14 → 2026-08-16)
 
 **Read this as one defect with three victims, not three bugs.** `archive.file_id_table()` registers a bit-31 id under **both** its raw and its masked form — correct for finding a row, and documented in that same file as **not a model of the client**, which compares 32 bits exactly at `0x0047AA20` with no retry. Every caller that asks it "does this id resolve?" gets an answer about *our reader*.
 
 1. **The map file id** — `content/maps.toml` recorded `0x8001B97D`. Caught 2026-08-14 by the crossbuild arc; the row now reads `0x1B97D`.
 2. **Rung S9's atlas-tile presence check** — concluded "all four of map 148's tiles present in the archive the client opened", and through it the minimap arc's entire leading question. **The tiles were present as rows and unaddressable by the client**: 22 of 492 armed, 18 in world 1. It cost rungs S9, S12, C1 and S13 to unwind. Closed by S13.
-3. **`toolkit/contentids.py`** — **STILL UNFIXED**, detailed below.
+3. **`toolkit/contentids.py`** — **FIXED**: `check()` resolves the client's half on the
+   RAW table and the server's half on the masked one, which is not a compromise but the
+   measured model of each side (the gamesrv really did serve a navmesh through the alias
+   on 2026-08-14). `test_contentids.py` §1b/§2 are the regression guards, red on the old
+   code. The account below is kept as the record of the defect.
 
 **The single fix:** a `binds_plainly(archive, file_id)` / `file_id_table(raw=True)` predicate, and every caller that is asking *what the client will do* uses it. Each of the three above becomes a one-line check.
 
@@ -1546,6 +1996,28 @@ The other three candidates were each tested and died: the **map file** (height f
 `contentids` reported `10 of 10 map row(s) agree` for the 38797 pair, comparing row 7982 to row 7982. The run then died at **Code=007** with the client hanging up immediately after `0x0199`. **The guard passed, the launch proceeded, and the failure was silent on our side and unexplained on the client's** — which is the precise shape the guard was written to prevent.
 
 **Fix:** do not change `file_id_table()` — its convenience is load-bearing elsewhere. Have `contentids` resolve on the **raw** table and fail when the id `content/maps.toml` will actually put on the wire is absent from the client's archive *in the form it is sent*. The refusal must name both forms and both rows. `test_contentids.py` needs an arm that goes red on today's code: a fixture pair binding only the renamed form, asked for the plain one.
+
+**RESOLVED, in two layers.** The guard fix above landed (raw table for the client's half,
+masked for the server's, regression-guarded), and **on 2026-08-16 the archive state it
+was refusing was itself repaired**: `datwrite.py --relink-plain 0x1B97D` re-bound the
+plain id to row 7982 in the canonical `vault/run/2026-07-29_221c13772c7a/Gw.dat` — the
+DnArchive re-link minus the download that was never coming, one dword of the file-id
+table plus the two checksums, journalled, with a sha-verified full backup beside the
+archive (`Gw.dat.pre-relink-20260816`) and censuses under
+`vault/research/relink-1b97d-2026-08-16/`. `contentids` preflight now reads **10 of 10
+agree, 0 FATAL** — maps 146/148 included — against the archive `select_run_exe`
+launches, and `datcheck --preflight` holds 10 of 10 open-time rules. The 38797 lane can
+serve Pre-Searing again; the `-c2`/`-probe`/`reskin-roster` copies are deliberately left
+mid-replacement (test_contentids's positive controls need one, and the verb repairs any
+of them in one command). **One premise from the 2026-08-15/16 accounts is REFUTED by
+measurement**: the 38833 copy's `0x1B97D` file is **not** a terrain-arc rewrite — row
+177262's stored bytes are sha-identical across the pristine `client/2026-08-13`
+snapshot, the 38833 run dir and the 38833 `run-live` copy, so it is ArenaNet's own
+38833-generation Pre-Searing map, which simply differs from the 38797 bytes `dat_study`
+paths against. A 38833-exe run therefore still needs `--map 449` or a same-generation
+`RURIK_DAT`. `contentids.default_client_dat()` was also re-aligned to mirror
+`select_run_exe` (pinned build, measured from the exe, canonical stamp dir) instead of
+the newest-mtime rule the harness abandoned.
 
 ### The minimap — the record under the fallback premise (superseded above)
 
