@@ -114,6 +114,17 @@ DROPPED_ON_PURPOSE = {
 # ids resolve to encrypted archive records whose key is NOT FOUND, so their
 # words were never reachable to copy. studies/quests/ is the study the reason
 # was waiting on.
+    0x0014: "QUEST_SET_ACTIVE (1 live arrival, 0 loopback) -- NAMED 2026-08-16 "
+            "by rung Q1 and dropped the same day, which is this list working "
+            "rather than a gap. This server serves ONE quest, so 'which quest "
+            "is tracked' has no second value to take and an arm would be a "
+            "no-op wearing coverage. It becomes real work the day a second "
+            "quest exists, and the arm is small: set the row's active flag and "
+            "reply 0x0053 QUEST_SET_ACTIVE_MARKER. Note the name is the "
+            "weakest in the quest family -- medium, from shape and position "
+            "with n=1 and no consequence chain -- so ARMING it should start by "
+            "settling what it is, with the labelled run overrides.json asks "
+            "for. studies/quests/FINDINGS.md 2.1.",
     0x002B: "COMPASS_DRAW (5 loopback, 1 live) -- the player drawing or "
             "pinging on their own compass: a client-allocated stroke handle "
             "plus 1-16 knots, each two signed int16 packed low-half-first in "

@@ -1715,7 +1715,10 @@ Every one of these, in the order they were written:
   ASYMMETRIC on purpose: an arm on an opcode the SCHEMA does not know is a hard
   failure, since the framer refuses the message and the arm is dead code that reads
   as coverage; while a NAMED opcode with no arm is a REPORT against
-  `DROPPED_ON_PURPOSE`, six rows each carrying its reason -- 194 layouts against
+  `DROPPED_ON_PURPOSE`, seven rows each carrying its reason (the seventh is
+  `0x0014` QUEST_SET_ACTIVE, named and dropped on the same day by rung Q1 --
+  the check went red on the naming commit before the row landed, which is the
+  tripwire working rather than a gap) -- 194 layouts against
   sixteen arms means demanding an arm per layout would be a permanently red test that
   gets deleted, but a name costs somebody a binary read or a narrated live session and
   losing one silently is the defect. The allowlist is checked in BOTH directions,
@@ -2297,6 +2300,35 @@ Every one of these, in the order they were written:
   pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
   and agreeing pairs are printed as the measurement they are.
   Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
+  `toolkit/clientscan/test_framebus.py` (the frame-bus pairing that twelve quest
+  names rest on — `studies/quests/FINDINGS.md` §9, rung Q1. The client's UI does
+  not read the wire: a handler in `ChCliApi` posts a numbered frame and UI
+  modules subscribe, so "what does opcode X do on screen" has a STATIC answer,
+  and it is the strongest evidence available for naming an opcode with no client
+  run. FINDINGS had both halves — §1.6's publisher VAs, §2.1's handler bodies —
+  in two tables and never joined them per opcode, which is how §7.6 came to say
+  "Nothing static will substitute" about a question its own document answered.
+  **The regression this file exists for is the CALL WINDOW.** The `push imm32`
+  and the `call` that consumes it are not adjacent — the body stages the frame
+  payload between them — and a window too short does not error, it returns a
+  confident short list: §1.6's own scan used 6 bytes and missed two sites, and
+  24 bytes missed `0x0050`'s, whose call sits at +29 behind three payload stores
+  (one of them `0x378` == 888, the no-marker map id). §1 plants a call at
+  exactly +29 and at BOTH edges of `CALL_WINDOW` on a synthetic PE, so shrinking
+  the constant goes red rather than quietly un-measuring an opcode — verified by
+  sabotage: reverting it to 24 fails 4 checks and turns `0x0050` into a silent
+  negative in both sections. §1 also plants a SUBSCRIBE call that must not count
+  as a post, an out-of-band id that must be invisible, and a VA in no section
+  that must raise. §2 asserts the eleven-body pairing against the pinned image
+  including the two SHARED ids — the two adds agree, the two log-text messages
+  agree, and the three marker ops, which share ONE payload layout, do not; the
+  payload cannot tell `0x004D`/`0x0051`/`0x0053` apart and the frame id can,
+  which is the entire naming argument for those three. Its last check is a
+  CONTROL on the measured negatives: `0x004A`'s empty result is scanned over the
+  same window as the positives, because a negative produced by a narrower scan
+  is an artefact rather than a finding. §1 runs on a bare machine — `framebus.py`
+  is a fixed-byte-pattern tool and takes no disassembler — and §2 declares a
+  `LEDGER.skip` without the vault, which is why the floor is 14 and not 18. ~1 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
