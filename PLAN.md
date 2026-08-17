@@ -1323,9 +1323,29 @@ the review confirmed the reversal from the samplers' address arithmetic plus the
 client's own unit-gated fast-normalize. n40 is the sound-event table indexing FA6;
 MdlAnim:367 is settled; flag bits 1–2 are ORed into one runtime bit. So the
 rigid-segment reading now stands on structure, not just assert absence — custom-unit
-authoring needs no skinning path. **Next: U4 (the wire→file assembly resolver) and U5
-(unit body export + measured viewer), both unblocked; then U6 round-trip and the U7
-summit** — `studies/unitmodels/PLAN.md` §2–3.
+authoring needs no skinning path.
+
+**U4 and U5 landed the same day, the second pair of parallel review-gated arcs — the
+ladder is complete through FIVE of its seven rungs, all in one day.** U4
+(`toolkit/mapdata/unitassembly.py`, `studies/unitassembly/`): **wire → file closure,
+54/54 pooled definitions** resolving to closed sets (1,393 distinct files; hatcher
+definition 1471 = 232 files pinned id-by-id), the COMPOSITED rule derived from the
+archive bit and equal to wire 0x0057-presence 54/54, and content rows resolving to
+IDENTICAL sets — our server can dress a unit from `content/*.toml`. U5
+(`toolkit/mapdata/unitexport.py`, `tools/blender/import_gwunit.py`,
+`studies/unitexport/`): **both anchor bodies export** with the M3 re-interleave holding,
+the FA1 sidecar byte-verbatim plus a typed layer that must equal a fresh decode, and a
+Blender viewer measured headless (predicted-vs-measured silhouettes, exact-zero hidden
+controls) — the flat placement is pinned as the bind pose by a review-measured
+cloud-occupancy statistic. Honest finds recorded: the hatcher's picked diffuse is 99.9%
+transparent texels (its default render is a floating head — the diffuse-slot question
+stays open with AMAT), and the corpus FA8 graph is acyclic at depth 1, so a synthetic
+cycle fixture is what carries the recursion claim.
+
+**Next: U6 — the FA1/container writer and the no-op byte-identical round trip** (its
+spans-tiling precondition is already a U5 check on real payloads), **then the U7
+summit**: retime a sequence, rebuild the archive via datwrite, and an owner-driven
+loopback client run renders it — `studies/unitmodels/PLAN.md` §2–3.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
