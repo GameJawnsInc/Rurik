@@ -96,6 +96,60 @@ when A3 was written.
 
 ---
 
+## Tyria-Extractor — Fournux
+
+**Used by:** `toolkit/clientscan/textrec.py` (the string-id split `file = id // 1024,
+rec = id % 1024`, taken from `doc/SKILL_EXTRACTION.md` and **not** re-derived by us) and
+`toolkit/clientscan/skilltable.py` (the 0xA4 skill record layout and its field offsets,
+read from the same document and re-derived here). Both carry rows in
+[PLAN.md](PLAN.md) §6.1.
+
+**Licence: MIT** — permissive, attribution required, which is why the notice below is
+reproduced in full rather than summarised. The mirror is at
+`vault/mirrors/Fournux__Tyria-Extractor` (gitignored; `toolkit/mirror_priorart.py`
+fetches it).
+
+**This entry is four days late and the delay is worth recording.** Tyria-Extractor is
+cited over a hundred times across sixteen study documents and in five modules;
+`studies/reconstruction/FINDINGS.md` §9.3 flagged the missing register row on
+2026-08-13 and `studies/quests/FINDINGS.md` §7.9 flagged it again on 2026-08-15. The
+obligation is small — one row and this notice — and it went unmet because nothing
+checked it. `toolkit/derivlint.py` checks it now.
+
+**It is not clean-room for client structures**, and that matters for how its agreement
+is scored: its own `README.md` credits GWToolbox++/GWCA as an input, so
+Tyria-Extractor agreeing with GWCA is one witness counted twice — the same trap
+`CLAUDE.md` names for OpenTyria and `schema/messages.json`. Where it *is* an
+independent witness (its PE measurement of 1,333 skill rows, reached by its own parse
+of a 2026-07-26 client) the agreement is real, and `test_skilltable.py` scores it
+against the wiki as well so the corroboration does not rest on one lineage.
+
+```
+MIT License
+
+Copyright (c) 2026 TyriaExtractor contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## What is deliberately NOT here
 
 **`gw-preservation/*` and `Py4GW_Reforged` carry no licence at all, which means all rights

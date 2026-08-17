@@ -3254,6 +3254,37 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
+  `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
+  after the plan forbade exactly that, and closes the paragraph "The rule was in the
+  plan; nothing was checking" — `content.py` checks the row-level half, nothing looked
+  at MODULES, and on 2026-08-17 Fournux/Tyria-Extractor turned up cited 100+ times
+  across sixteen studies and five modules, supplying a rule `textrec.py`'s own
+  docstring says was NOT re-derived, with no §6.1 row and no notice — MIT, so the
+  missing notice was an unmet obligation rather than an untidy table. **The check is
+  PER-UPSTREAM and the measurement is why**: 21 upstreams are named across `toolkit/`
+  in 223 (module, upstream) pairs, and `gw-preservation/server` alone appears in 106
+  modules precisely because it is the one we may not copy — so a per-pair rule is the
+  permanently-red test that gets deleted, which §7 of `test_dispatch.py` documents at
+  length. Fourteen upstreams, each accounted for by a §6.1 row, a notice, or a
+  `NO_DERIVATION` row naming its site; both allowlist directions checked, stale and
+  orphan. **Every sabotage runs against a SYNTHETIC repo root**, because a test that
+  only asserts "the tree is clean today" passes equally well once the scanner stops
+  finding anything — §2 plants a module, removes the row, and requires UNACCOUNTED,
+  then shows the row clearing it while MIT still separately owes a notice. **§3 is the
+  sharpest and is not hypothetical**: `PLAN.md:33` is the prior-art LANDSCAPE table,
+  granting nothing, 1,030 lines above the register, and a recon lane read a Fournux
+  mention there as a register row and recorded it as fact (`studies/quests/AUTHORING.md`
+  §7 killed it). A `"Fournux" in open("PLAN.md").read()` check repeats that mistake and
+  would have scored the tree CLEAN on the day the row was missing, so §3 builds that
+  exact file and requires UNACCOUNTED. §4 proves the skip list is load-bearing — with
+  `mirror_priorart.py` in scope the census inflates 14 → 21, since the fetch manifest
+  names every mirror by construction. `audit()` takes `no_derivation` as a PARAMETER so
+  the synthetic roots do not inherit the real allowlist; §2 pins that reading the module
+  constant instead would make all three rows orphans and the orphan check meaningless.
+  Floor 17 against a run of 20 — §5 adds one per allowlist row, and a tree where every
+  upstream had earned a real row would legitimately run 17. No vault, no socket, no
+  client),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
   which server, both directions — slow, ~1 min, it queries the Windows Firewall once
   per client),
