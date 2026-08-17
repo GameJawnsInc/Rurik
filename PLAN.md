@@ -1346,10 +1346,25 @@ transparent texels (its default render is a floating head — the diffuse-slot q
 stays open with AMAT), and the corpus FA8 graph is acyclic at depth 1, so a synthetic
 cycle fixture is what carries the recursion claim.
 
-**Next: U6 — the FA1/container writer and the no-op byte-identical round trip** (its
-spans-tiling precondition is already a U5 check on real payloads), **then the U7
-summit**: retime a sequence, rebuild the archive via datwrite, and an owner-driven
-loopback client run renders it — `studies/unitmodels/PLAN.md` §2–3.
+**U6 landed 2026-08-17 — SIX of seven rungs, and everything that can be proven without
+launching the client is proven.** `toolkit/mapdata/skelwrite.py` re-emits the complete
+population byte-identically — **14,571/14,571 FA1 chunks, 21,420/21,420 whole
+containers** — and the review's mutation test (51 typed-field classes × 8 payloads,
+zero survivors) proves the identity is informative, not vacuous. Identity's own catch:
+header bytes +0x09..+0x0B are NOT padding (non-zero on 5,208 FA1s; consumer unknown).
+The rebuilt-archive round trip holds with the nextStream chain verified; the U7
+modification seam is atomic after the review's one real bug (a mid-span refusal used to
+leave a half-retimed repr); and `skelfile.sound_events()`'s majority-class crash was
+found by this rung and fixed — independently, twice, by two sessions in the same hour.
+
+**The ladder now waits on exactly one thing: the owner. U7 is the summit run** —
+retime the worm's sequence 2 by ×2, rebuild the loopback archive, and watch it burrow
+at half speed. The procedure, the three observation gates, and the two named rejection
+risk candidates (a STORED flags=515 row, which the client has never seen; the mid/tail
+companions beside a rewritten head) are written up in
+[studies/unitmodels/U7-RUN.md](studies/unitmodels/U7-RUN.md). Preparation of the
+modified archive is a session's job on the owner's go-ahead; the run itself is
+hand-driven per the standing rules.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
