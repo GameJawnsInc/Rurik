@@ -1342,6 +1342,46 @@ the exact selector that reaches it. Three sites, each in a block with **one** se
   `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
   an `agentId`.
 
+**LANDED 2026-08-17: A COMMANDER EXISTS.** Eight loopback runs, build 38833. The cause was
+a **53 millisecond** race, not a wire field:
+
+```
+  +0.000s  worker     our 0x01C2 appends the hero row
+  +0.000s  raise114   our 0x01B2 raises 0x10000114
+  +0.053s  gmvSub114  GmView SUBSCRIBES to 0x10000114
+```
+
+`0x10000114` is the only event whose GmView case (90) calls the commander-model rebuild
+`0x00524E00`, itself the only caller of `0x00524C40` — the function heroes measured as
+never running. We raise it 53 ms before the module that listens for it exists, and nothing
+raises it again, so the model is built once over an empty container and never rebuilt.
+
+**`--party-mine-late SECONDS`** (new, opt-in, defaults off) re-sends `0x01B2` after the
+load. `0x01B2`'s handler raises `0x10000114` on both branches, so a second send is a second
+raise. With `--party-mine-late 2.0`:
+
+```
+  +2.048s  raise114   the re-send        |  before: cap=7 count=0, all slots 0x0
+  +2.048s  bulk       case 90 ENTERED    |  after:  cap=7 count=1, slot0 = 0x1
+  +2.054s  create     0x00524C40 RAN     |  => 1 commander(s) EXIST
+```
+
+**Not claimed:** the party-window hero button has not been clicked, so whether `GmView:5890`
+still fires is unmeasured — that is the next thing, and it needs a click. `n=1` on the fix;
+the control is that runs 1–6 fire `worker` and the first raise identically while `bulk` and
+`create` stay cold.
+
+**Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
+38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
+container claim (refuted by RESKIN §18, which was right); §13.3's "only `0x01D9` writes
+it" (refuted twice — `0x01D9` writes `+0x58`, a different field, because every `PyCliParty`
+worker takes `this = object + 4` and spells `+0x54` as `0x50`); and §14.3's ordering
+hypothesis (refuted — our rows land *before* the raise, which is the order the rebuild
+wants). `PyCliGetMyPartyId` is `0x00856310` on 38833, not the `0x00856250` in
+`agents.py:369`.
+
+**Superseded detail below, kept for the record.**
+
 **MEASURED ON THE HARNESS 2026-08-17 (§15-§16). Three loopback runs, build 38833, one
 hero, every site byte-verified in the running process, every run reaching its map:**
 
