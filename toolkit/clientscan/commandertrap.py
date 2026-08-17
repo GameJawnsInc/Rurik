@@ -830,6 +830,109 @@ SITES = {
         "hash -- the client does the lookup and we read its result.",
         capture=lambda ctx, rd: _cap_lookup(ctx, rd),
         arm_after="raise", oneshot=True),
+    # THE SAME QUESTION, ASKED OF THE EVENT THAT ACTUALLY DRIVES THE COMMANDER.
+    # `studies/pvpui/FINDINGS.md` §14.3: the rebuild `0x00524E00` has exactly ONE
+    # caller, inside GmView's event case 90, selected by exactly one event --
+    # `0x10000114`, NOT the `0x1000011E` the heroes arc spent itself on. Run 1
+    # (2026-08-17) measured `bulkraise` (0x00858850's entry) firing once while
+    # `bulk` (that case) never fired at all, with `worker` green as the control.
+    # BOTH branches of 0x00858850 raise 0x10000114 -- the arg1 != 0 path at
+    # 0x008588AD below, and the arg1 == 0 path via `mov eax,0x10000114` at
+    # 0x008588D1 into the shared tail -- so the entry firing means the event WAS
+    # raised. `agents.py:434` sends PARTY_SET_MINE with arg1 = 1, which is this
+    # path, so THIS is the site that fires on our wire.
+    "raise114": Site(
+        "raise114", 0x008588AD, bytes.fromhex("6814010010"),
+        "`push 0x10000114` inside 0x00858850, reached from the 0x01B2 "
+        "PARTY_SET_MINE handler. The event whose GmView case calls the "
+        "commander-model rebuild."),
+    "lookup114": Site(
+        "lookup114", 0x0064CA47, bytes.fromhex("85c0740dff75"),
+        "the same subscriber-map read as `lookup`, armed off `raise114` instead "
+        "of `raise`. EAX is the subscriber list for 0x10000114 at the moment we "
+        "raise it; zero means raised into nothing, which would explain case 90 "
+        "never running without any appeal to ordering.",
+        capture=lambda ctx, rd: _cap_lookup(ctx, rd),
+        arm_after="raise114", oneshot=True),
+    # AND IF IT IS SUBSCRIBED, WHO GOT IT. Run 2 (2026-08-17) measured
+    # `lookup114` SUBSCRIBED while `bulk` -- GmView's case for that very event --
+    # never fired. Exactly one of three things is then true: the subscriber is
+    # not GmView, GmView's dispatch routes 0x10000114 somewhere other than case
+    # 90, or `bulk`'s address is not that case body. This site separates them by
+    # reading the event id GmView's own event half is entered with.
+    #
+    # `0x004E366A` is `sub eax, 0x10000007`, the first instruction of the event
+    # half of GmView's frame handler 0x004E27D0, so EAX still holds the RAW
+    # event id when the breakpoint fires. It is hot -- every UI event GmView
+    # receives passes here -- which is why it is deferred behind `raise114` and
+    # oneshot: the raise is a synchronous call chain on one thread, so the first
+    # entry after it is ours. Same argument `lookup` rests on (§33.6).
+    "gmvEvent": Site(
+        "gmvEvent", 0x004E366A, bytes.fromhex("2d07000010"),
+        "the event half of GmView's frame handler, entered with the raw event "
+        "id in EAX. Armed off `raise114`, so it names the event GmView is "
+        "handed at the moment we raise 0x10000114.",
+        capture=lambda ctx, rd: {
+            "event id (eax)": ctx.Eax,
+            "is 0x10000114": ctx.Eax == 0x10000114,
+            "VERDICT": ("GmView WAS handed 0x10000114 -- so the break is in its "
+                        "own dispatch, not in delivery"
+                        if ctx.Eax == 0x10000114 else
+                        "GmView was handed a DIFFERENT event -- ours went to "
+                        "some other subscriber, or not to GmView at all"),
+        },
+        arm_after="raise114", oneshot=True),
+    # THE CENSUS FORM OF THE SAME SITE, and it exists because run 3's oneshot
+    # cannot carry the weight the deferred argument gives `lookup`.
+    #
+    # `lookup` is sound deferred-and-oneshot because `0x0064CA47` sits INSIDE the
+    # raise's own synchronous call chain -- the first hit after the trigger is
+    # necessarily ours. `0x004E366A` is not: it is only reached if GmView's frame
+    # handler is entered for the event at all, so "the next hit was some other
+    # event" is consistent with BOTH "GmView never got ours" and "GmView got ours
+    # by a path that does not pass here". Heroes §36.7 named GmView's SUBSCRIBER
+    # as `0x004ED055`, which is not this function -- so the subscriber callback
+    # and the frame-handler event half are two different doors, and a oneshot at
+    # one of them cannot speak for the other.
+    #
+    # Armed for the whole session with a high `--max-hits`, this answers the
+    # question the oneshot only gestured at: does 0x10000114 EVER reach GmView's
+    # frame handler? Same shape as `lookupany`, and for the same reason.
+    "gmvEventAny": Site(
+        "gmvEventAny", 0x004E366A, bytes.fromhex("2d07000010"),
+        "the event half of GmView's frame handler, armed for the whole session. "
+        "A census of every event id GmView's frame dispatch is entered with -- "
+        "0x10000114's presence or absence in it is the measurement.",
+        capture=lambda ctx, rd: {"event id (eax)": ctx.Eax}),
+    # GMVIEW'S OWN SUBSCRIBE OF 0x10000114, TIMESTAMPED AGAINST OUR RAISE.
+    #
+    # Run 5's `subscribe` census DID find GmView registering 0x10000114 (outer
+    # return address 0x004ED03F un-slid, which is this call's return), so §18.1
+    # holds: we are on the non-observer branch and GmView takes the event we
+    # raise. What the census could not say is WHEN -- it aggregates, and
+    # aggregated rows carry no timestamps, while the ordered hit list showed
+    # only `worker` and `raise114`, both at +1.710s.
+    #
+    # This site is the same subscribe, anchored on the `call` so it lands in the
+    # ORDERED list. Run it beside `raise114` and the two timestamps answer the
+    # only question left: does GmView subscribe before or after we raise.
+    #
+    # `0x004ED03A` is `call 0x00633BD0` with EAX already holding the computed
+    # event id from `add eax, 0x10000114` five instructions earlier, so the
+    # capture also re-reads which branch of §18's conditional was taken --
+    # making this its own control rather than trusting the static reading.
+    "gmvSub114": Site(
+        "gmvSub114", 0x004ED03A, bytes.fromhex("e8916b1400"),
+        "GmView's CONDITIONAL subscribe call. EAX is the event id it is "
+        "registering -- 0x10000114 on the normal branch, 0x1000012B in observer "
+        "mode. Timestamped against `raise114`.",
+        capture=lambda ctx, rd: {
+            "event being subscribed (eax)": ctx.Eax,
+            "branch": ("NORMAL -- 0x10000114, the event we raise"
+                       if ctx.Eax == 0x10000114 else
+                       "OBSERVER -- 0x1000012B, not the event we raise"
+                       if ctx.Eax == 0x1000012B else "UNEXPECTED"),
+        }),
     "posseMsg": Site(
         "posseMsg", 0x005392AC, bytes.fromhex("8b460483f856"),
         "GmPosseRoster's handler at its switch selector, esi already loaded. "
