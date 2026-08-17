@@ -214,7 +214,10 @@ def identify_build(path, build=None):
     `worldmap.image_build` is the one worth reading, because its own docstring
     says "Never a constant" and it emitted `build: 38797` beside
     `image: "pristine: build 38833"` -- the contradiction was already in the
-    row and nothing looked at it. See `studies/crossbuild/FINDINGS.md` §8.
+    row and nothing looked at it. See `studies/crossbuild/FINDINGS.md` §9,
+    whose §9.5 is the part worth reading: five test sections covered these four
+    tools and every one was green, because every check ran against the pin --
+    where the constant is correct.
     """
     if not os.path.isfile(path):
         return "unknown", None, "no such file"
