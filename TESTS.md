@@ -1840,7 +1840,12 @@ Every one of these, in the order they were written:
   through `spawn_population` with the label defaulting to the npc key, and
   every emitted message encodes through the real codec; the fixture asserts
   the row truly lacks a name so the check can tell the fix from a smuggled
-  fixture. 43 checks, ~2 s),
+  fixture. Section 5 (2026-08-17, unitsetup Q9): the PARTY co-loads with every
+  area, so its ids are reserved against area rows -- player 1, henchman
+  30/definition 9, hero bodies 200..206/definitions 10..16 -- refused at load
+  rather than at spawn, with the test enemy's ids as the deliberate
+  NON-example (an area replaces it, so reserving agent 10 would refuse a
+  collision that cannot happen). 51 checks, ~2 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is

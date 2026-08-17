@@ -47,10 +47,11 @@ import pathchunk  # noqa: E402
 from codec import Codec  # noqa: E402
 import pathmap  # noqa: E402
 
-# FLOOR: 43, MEASURED from a green run 2026-08-16 (38 + section 4's nameless
-# def_NNNN spawn, studies/isle/PLAN.md gap 2). Every section is synthetic --
-# no vault, no socket, no client -- so there is nothing here that may skip.
-LEDGER = checks.Ledger("test_population", floor=43)
+# FLOOR: 51, MEASURED from a green run 2026-08-17 (43 + section 5's
+# party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
+# synthetic -- no vault, no socket, no client -- so there is nothing here that
+# may skip.
+LEDGER = checks.Ledger("test_population", floor=51)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -449,6 +450,49 @@ def section4():
           str(bad) if bad else f"all {len(sent)}")
 
 
+def section5():
+    """The party co-loads with every area, so its ids are reserved.
+
+    studies/unitsetup/FINDINGS.md 8 Q9: the set checks of section 1 are
+    per-area, and nothing guarded an area row against the ids the PARTY brings
+    into the same instance -- player 1, henchman 30/definition 9, hero bodies
+    200..206/definitions 10..16. `--area sculpt --hero 1,2,3` is a legal
+    command line, and before this guard it was a client run wasted at best and
+    a body silently wearing a hero's model at worst. The test enemy's ids are
+    the deliberate NON-example: an area REPLACES it (section 3's AST proof),
+    so refusing agent 10 or definition 3 would invent a rule.
+    """
+    print("\n-- section 5: party-reserved ids, the cross-load collision --")
+
+    for a in sorted({r.get("area")
+                     for r in content_mod.load().rows("spawn").values()
+                     if r.get("area")}):
+        rows = authsrv.area_population(a)
+        check(rows is not None and len(rows) > 0,
+              f"the REAL store's area {a!r} clears the party-reservation "
+              f"guard, so the guard guards without refusing what exists",
+              f"{len(rows)} rows")
+
+    for kw, why in (
+            (dict(agent_id=authsrv.PLAYER_AGENT_ID), "the player's agent id"),
+            (dict(agent_id=authsrv.HENCHMAN_AGENT_ID), "the henchman's"),
+            (dict(agent_id=authsrv.HERO_AGENT_ID), "the first hero body's"),
+            (dict(agent_id=authsrv.HERO_AGENT_ID + 6), "the seventh hero's"),
+            (dict(definition=authsrv.HENCHMAN_DEFINITION),
+             "the henchman's definition"),
+            (dict(definition=authsrv.HERO_DEFINITION + 2),
+             "a mid-range hero definition"),
+    ):
+        check(refuses({"s": row(**kw)}, why),
+              f"a row claiming {why} ({kw}) is REFUSED at load, not at spawn")
+
+    got = accepts({"s": row(agent_id=10, definition=3)})
+    check(got == ["s"],
+          "and the TEST ENEMY's ids are accepted -- an area replaces it, so "
+          "reserving agent 10 / definition 3 would refuse a collision that "
+          "cannot happen", got)
+
+
 def main():
     print("=" * 70)
     print("POPULATION -- what lives in an authored area")
@@ -459,6 +503,7 @@ def main():
     section2b()
     section3()
     section4()
+    section5()
     return LEDGER.verdict()
 
 
