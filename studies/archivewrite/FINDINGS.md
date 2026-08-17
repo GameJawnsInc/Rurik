@@ -297,7 +297,7 @@ Rung shape follows [studies/unitmodels/PLAN.md](../unitmodels/PLAN.md): each run
 
 | Rung | What | Acceptance criterion (refutable) | Est. |
 |---|---|---|---|
-| **A1** | **Is the sequence index space global across the FA8 link graph, or per-file?** Read-only. Walk the hatcher's 15 link targets (§1.6) with `skelfile`, and either (a) find the client-side selector that maps a requested sequence index to a *file*, or (b) refute globality from the corpus. My own measurement is the starting evidence and the puzzle: shell **242**, 15018 **237**, the 15 links sum to **385**, grand total **627** — so 242 is neither. State the prediction first. | Either: **the index space is global** and adding a 16th linked FA1 is transparent (→ A4 becomes the route, the compressor drops to nice-to-have and this arc mostly ends); or **it is per-file** and the selector is NAMED with its VA and a corpus prediction that could have failed; or **NOT FOUND**, with the search range recorded. Widen past the hatcher before anything leans on it — the FA8 graph is acyclic with max link depth 1 corpus-wide ([studies/unitassembly](../unitassembly/FINDINGS.md)), so one creature is one witness. | 0.5 session |
+| **A1** ✅ **RUN 2026-08-17 — ANSWERED: PER-FILE, selector named, see §8. The encoder LEAVES the critical path** (the file to rewrite is the 20 KB shell, not the 1 MB link). | **Is the sequence index space global across the FA8 link graph, or per-file?** Read-only. Walk the hatcher's 15 link targets (§1.6) with `skelfile`, and either (a) find the client-side selector that maps a requested sequence index to a *file*, or (b) refute globality from the corpus. My own measurement is the starting evidence and the puzzle: shell **242**, 15018 **237**, the 15 links sum to **385**, grand total **627** — so 242 is neither. State the prediction first. | Either: **the index space is global** and adding a 16th linked FA1 is transparent (→ A4 becomes the route, the compressor drops to nice-to-have and this arc mostly ends); or **it is per-file** and the selector is NAMED with its VA and a corpus prediction that could have failed; or **NOT FOUND**, with the search range recorded. Widen past the hatcher before anything leans on it — the FA8 graph is acyclic with max link depth 1 corpus-wide ([studies/unitassembly](../unitassembly/FINDINGS.md)), so one creature is one witness. | 0.5 session |
 | **A2** ✅ **RUN 2026-08-17 — GREEN, see §7. The row below is SUPERSEDED**: its elasticity figures did not reproduce, and the edit it names can only move 692 B of a 1.5 MB payload. | **Does a REALISTIC edit still fit? The elasticity gate.** Read-only, no encoder. Take the real 1,514,855 B payload, apply the edit the next rung actually wants through `skelwrite`'s existing seam (`scale_sequence_keytimes`), re-serialize, and compress with zlib -9 raw/-15 (+4 B trailer) as the **optimistic** proxy. | **> 1,029,632 B ⇒ the in-place compressed route is DEAD for that edit, no matter how good `gwenc.py` gets, and no encoder is written.** This has a real chance of going red: the measured elasticity is **+806 B at 0.1% of slots retimed, +8,725 B (OVERFLOW) at 1.0%**. Report the fraction of slots at which it crosses, not a yes/no. | 0.5 session |
 | **A3** | **The route-independent safety fixes, and they can all go red.** (a) `container_signature` withholds by an MFT generation's **declared extent** projected across run boundaries, not by a head magic — regression fixture is `dat_study_38833` (§1.5). (b) `archive.py:322` `<I` → `<Q`, plus a synthetic archive with `mftOffset` above 2³² (**C-7**). (c) `datcheck --crc-sweep`, whole-archive, ~30 lines. (d) `datcheck --diff` compares `size_on_disk`. **(e) `datcheck --generations` (§5.4) — count surviving MFT generations and their flush counters, ~40 lines and one pass; nothing in the repo checks today whether a fallback exists before you risk needing one. (f) An explicit refusal in `datwrite.py` on header bytes `0x00..0x0C` (§5.6 rule 2) — the silent-wipe region is currently protected only by absence. (g) Mark the shadow-MFT rotation region as reserved in `datplan`/`datalloc` (§5.4) so no allocator can consume the client's own recovery material.** TESTS.md entries in the same commit — `test_srclint.py` §7 checks both directions. | `plan_move` on `dat_study_38833` for row 11196 **REFUSES** where it currently accepts `0xF5923800`; the u32 test fails before the fix and passes after; the CRC sweep reports exactly 2 structural exceptions (rows 1 and 3) in ~3.3 s and **catches a deliberately compression-flattened row** (C-6) that all ten open-time rules pass. Floors set from a real green run. | 1 session |
 | **A4** | **The additive FA8 path, on a SYNTHETIC archive only.** Build with `test_datcheck.py`'s `build_archive`; `datalloc` a new FA1-only file, append a 16th record to a copy of 116228's FA8 chunk (`mdlrefs` encodes the dependency-pair spelling), re-emit the shell with `skelwrite`. Never against a real `Gw.dat`. | Ten open-time rules clear, three CRC rules clear, `datalloc`'s MFT-slack accounting honest, the shell round-trips byte-identically apart from the intended FA8 delta, and the new row is registered **before** any bytes land in a region the client may reuse. **Kill:** if A1 said per-file-with-unknown-selector, this rung cannot state what the client will do with the 16th record and should stop at "archive-legal" rather than claim a route. | 1 session |
@@ -634,6 +634,141 @@ ladder and it should be.
 **A2 is GREEN and does not kill the arc.** The in-place compressed route survives every
 edit class tested, with 11,994 B of headroom before any edit and more after most of them.
 The encoder's difficulty is *format conformance* (A6, A7), not ratio.
+
+---
+
+## 8. A1 — RUN 2026-08-17. **PER-FILE, the selector is NAMED, and the encoder leaves the critical path**
+
+**Method: blind replication**, the owner's standing pattern for a contested reading. Two
+researchers attacked from opposite ends — one the client binary, one the archive corpus —
+each assigned ONE hypothesis and told to **refute** it, neither shown the other's
+assignment or answer. Then an adjudicator, then a skeptic. **Both blind agents independently
+returned PER-FILE**, and the one assigned "GLOBAL" refuted its own hypothesis.
+
+### 8.1 The answer
+
+**[OBSERVED] The sequence index space is PER-FILE, and the selector is a byte in the
+sequence record.** Disk record stride is 23 (`0x17`); runtime is 32. The FA1 parser
+**deliberately swaps the first two fields**: disk `u32@+0x01` (the KEY) → runtime `+0x00`,
+and disk `u8@+0x00` (the SELECTOR) → runtime `+0x04`.
+
+```
+007965A0  mov   eax, [edx-4]        ; disk +0x01  ->  runtime +0x00   (the KEY)
+007965A6  movzx eax, byte [edx-5]   ; disk +0x00  ->  runtime +0x04   (THE SELECTOR)
+```
+
+At `MdlAnim 0x007822F0` that selector is read as a **1-based** index into the model's FA8
+link array (`[edx+0x114]`); zero means "this file". The index that reaches it is bounded by
+**one file's own count** — `MdlSeq:300` `seqIndex < m_skel->m_seqCount` at `0x00792F38`,
+five more sites at `MdlSeq:430/503/582/606`.
+
+**The strong form of the refutation is at the layer where an index is BORN, not where it is
+consumed.** The key lookup `0x00792DC0` is a textbook `std::lower_bound` over exactly one
+file's array, bounded by that file's `m_seqCount`. It never touches `+0x114`, never touches
+the link array, and has **no fall-through** to linked files. Arguing PER-FILE from *not
+finding* a load-time merge was the weak form; this is the strong one.
+
+And the runtime record is now **fully enumerated** — `+0x00, 04, 08, 0C, 10, 14, 18, 1C`,
+every slot written by that one parser loop. **There is no field left that could carry a
+global base, a file id, or a cross-file offset.** That is a closure argument, not an absence.
+
+### 8.2 The evidence, with its controls
+
+| test | result | control / rival |
+|---|---|---|
+| `links[sel-1]` (1-based) vs `links[sel]`, all 252 shells, all 31,700 nonzero-selector records | **31,700 / 0 — 100.0000%** | 0-based rival **0.82%**; random-other-link null **8.06%** |
+| Every FA1's sequence array non-decreasing in `u32@+0x01` (required for `lower_bound` to be correct) | **3,000 / 3,000 files, 40,226 sequences, zero violations** | sorted by `u32@+0x0F` 91.1%; by `start` 58.9% |
+| Every linked file's sequence ids also declared by its parent shell | **2,467 / 2,467, coverage exactly 1.0** | rare-id subset 89/89 at 1.0; a random **different-skeleton** shell scores **0 of 89** (median 0.303) |
+| `max(u8@+0x00) <= that file's FA8 record count` | **0 violations / 252** | max **equals** the link count on 19 of 19 sampled — tightest margin 0 |
+| Files with no FA8 carry selector 0 everywhere | **all 35,399 sequences in 14,319 files** | closed by subtraction, not sampled — 31,700 nonzero in the 252 matches the independent full-population sweep exactly |
+
+**OBSERVED (orchestrator), reproduced from the archive directly:**
+
+| file | records | selector histogram | distinct keys | sorted by key |
+|---|---|---|---|---|
+| **116228** shell, 15 links | 242 | `0:2, 1:110, 2:3, 3:2, 4:1, 5:13, 6:7, 7:39, 8:20, 9:1, 10:6, 11:14, 12:9, 13:4, 14:6, 15:5` | 224 | ✅ |
+| **15018** link, 13 links | 237 | `0:110, 1:4, 2:2, 3:1, 4:13, 5:7, 6:39, 7:20, 8:1, 9:6, 10:15, 11:9, 12:4, 13:6` | 219 | ✅ |
+| **116366** worm, 0 links | 10 | `0:10` | 10 | ✅ |
+
+Max selector equals link count in all three. Lay the two histograms side by side with a +1
+shift and the structure is plain: **the shell's table is 15018's entire table re-based by
++1** (110↔110, 2↔2, 1↔1, 13↔13, 7↔7, 39↔39, 20↔20, 1↔1, 6↔6, 9↔9, 4↔4, 6↔6, two records
+dropped) **plus the shell's own 2 and 5 from link 169533**.
+
+### 8.3 The 242 puzzle is settled, and the old explanation is dead
+
+**242 = 2 + 110 + 125 + 5.** A curated re-index of the whole link graph, not a
+concatenation and not a subset. **This kills `242 = 237 + 5`**, which §1.6 carried as a
+RECONSTRUCTION — and no arithmetic identity exists to find in its place: sibling shells
+82929/82795/18934/82935 declare 246/243/248/246 against link sets each summing to exactly
+627.
+
+### 8.4 What it means for the arc — the encoder leaves the critical path
+
+**Adding a 16th FA8 record is NECESSARY, SAFE, and INERT.** Safe and inert is measured, not
+assumed: **retail itself ships 410 unselected links across 63 shells**, so an unreferenced
+FA8 record is attested 410 times and what the client does with it is nothing. Playback
+additionally requires **new sequence records in the shell's own FA1 carrying selector 16**.
+
+**So the file that must be rewritten is the SHELL — 116228, row 13738, 29,802 B decompressed
+/ 20,236 B stored in a 20,480 B reservation. Retail's 1,029,564 B link 15018 is never
+touched.** U7 already rewrote this exact shell successfully. **The 1.5 MB wall does not arise
+on this path at all**, and Routes A and E (the compression-8 encoder) drop off the critical
+path for this arc. They remain real and EXPENSIVE for the archive-wide reason; they are no
+longer blocking.
+
+Named cost so nobody re-derives it: the shell's FA1 runs **121.9 B per sequence** against
+**244 B of stored headroom**, so roughly 2–4 appended records fit before the row must
+relocate — and relocating a ~20 KB row is the easy case.
+
+### 8.5 The experiment this hands A4, and it is close to ideal
+
+`0x00804240` is **not a lookup — it is a variant picker**, and the `AvChar:8212` call site
+passes a literal `push 0`, so **the client picks uniformly at random among all sequences
+sharing a key**. The shell has 242 records over 224 keys, run sizes `{1:216, 2:4, 3:1, 4:1,
+5:1, 6:1}` (reproduced above).
+
+**Therefore: append a record carrying an EXISTING key and selector 16.** It joins that key's
+equal-key run, and with 216 of 224 keys currently single-variant, a new record on one of them
+gives a **50/50 coin flip between retail's animation and ours on every play** — a
+self-controlling, unmistakable client-run oracle, with no invented key, no wire question, and
+no dependence on what fills the agent's key array.
+
+**A hard authoring constraint, and it must reach the A4 rung text:** the array is
+`lower_bound`-searched, so it **must stay sorted by `u32@+0x01`**. A new record is
+**inserted in key order, never appended** — a tail append with a low key silently breaks the
+binary search for every key after it. Its `lo`/`hi` pair indexes the key-time array and must
+stay consistent.
+
+### 8.6 Corrections to standing findings
+
+- **§1.6 above: `242 = 237 + 5` is dead** (§8.3). It was labelled RECONSTRUCTION and is now
+  refuted with the exact decomposition.
+- **[CONTESTED → retract] `studies/anim/FINDINGS.md`'s "592 files carry indices ≥
+  `m_seqCount` … keyed by a linked model's larger sequence space".** In a 2,500-head sample
+  all 149 out-of-range values are exactly **65,536 = `0x10000`**, 110 of 149 terminal in the
+  sorted array — **a sentinel above any real count** (the largest union measured anywhere is
+  627), not a cross-file index. Independently supported here by 0 genuine out-of-range
+  selectors across 252/252 shells. The `0x0078007F` link-array mechanism named in that same
+  row is correct and is now corroborated; only the "larger sequence space" reading is wrong.
+- **A1b is downgraded, not cancelled.** The remaining unknown is real —
+  `schema/messages.json` contains **zero** occurrences of `anim`, `sequence`, `seq`, `emote`
+  or `gesture`, so *"the server tells the client to play sequence N"* was an assumption of
+  the A1 question rather than a measured wire fact. But §8.5's existing-key path does not
+  depend on it, so **A1b no longer blocks A4**. Its real target is who fills the per-agent
+  key array at `+0x2C`/`+0x34` (`0x007F1AD0` is `rand() % [this+0x34]`, a uniform pick — not
+  a state producer).
+
+### 8.7 What would reopen it
+
+Recorded rather than smoothed. (1) A writer of `m_skel+0x6C`/`+0x70` outside the FA1 parser
+allocating a merged array — scanned only in the `Engine\Model` band, and `codescan` cannot
+see a displacement built in two steps. (2) **Depth-2 chains: 39 FA8 targets themselves carry
+FA8**, and `studies/unitassembly`'s max-depth-1 is measured on the 54 *live* closures only,
+which is UPSTREAM to this pass. (3) A wire capture showing a raw index rather than a key.
+
+**Not tested by construction: no client was launched.** Whether retail actually plays a 16th
+authored link is untested, and **the client remains the only oracle**. That is A4's job.
 
 ---
 

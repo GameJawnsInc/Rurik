@@ -1439,7 +1439,56 @@ this recoverable-in-principle rather than fatal, and why no allocator may consum
 rotation region. **Operational rule, now standing: never launch the client on a suspect
 archive; diff it first. The launch is the irreversible step, not the write.**
 
-**Next: run A1 and A2.** Both read-only, half a session each, and either can end the arc.
+**A1 AND A2 ARE RUN, both 2026-08-17, and between them they took the compression-8 encoder
+off the critical path.** Study §7 and §8.
+
+**A2: GREEN, and the rung as written was vacuous.** The edit it named
+(`scale_sequence_keytimes`) can only move 692 B of a 1,514,855 B payload, so retiming ALL
+237 sequences costs **+7 bytes** — a gate that cannot perturb its input. The honest version
+against the curves (86 nodes, 76,008 samples): translations ×2 costs **−21 B**;
+requantizing every float to a 1/1024 grid costs **−467,928 B, i.e. 46% smaller than retail
+ships it**. My stated prediction that requantization would be expensive was **refuted** —
+coarser grids make mantissas more repetitive, so the adversarial case is the compressible
+one. The residual risk is therefore inverted: not that an authored payload is too big, but
+that a *higher-fidelity* one could be. Nothing measured bounds that, because every edit
+preserved the sample count. Also: the best of 16 deflate configurations is **11,930 B
+smaller than ArenaNet's own output**, so the encoder's difficulty is format conformance, not
+ratio.
+
+**A1: PER-FILE, by blind replication — two researchers from opposite ends, each told to
+refute the hypothesis they were assigned, both independently returning PER-FILE.** The
+selector is **named**: the FA1 parser swaps the first two record fields, so disk `u8@+0x00`
+lands at runtime `+0x04` and is read at `MdlAnim 0x007822F0` as a **1-based** index into the
+FA8 link array (`links[sel-1]`: 31,700/0 = 100.0000%, against a 0-based rival at 0.82% and a
+random-link null at 8.06%). Indices are born bounded by one file's own count — the key
+lookup is a `lower_bound` over a single file's array with **no fall-through** — and the
+32-byte runtime record is fully enumerated, leaving **no field that could carry a global
+base**. `242 = 2 + 110 + 125 + 5`, reproduced independently from the selector histogram; the
+old `242 = 237 + 5` is dead.
+
+**WHY THAT IS THE GOOD OUTCOME, despite reading as the bad one.** A 16th FA8 record is
+necessary, safe and inert — *safe* is measured, since **retail ships 410 unselected links
+across 63 shells**. Playback needs new sequence records in the **shell's** own FA1. So the
+file to rewrite is **116228: 29,802 B decompressed, 20,236 B stored in a 20,480 B
+reservation** — the 20 KB shell U7 already rewrote successfully. **Retail's 1 MB link 15018
+is never touched, and the 1.5 MB wall does not arise on this path at all.**
+
+**A4 now has a near-ideal oracle.** `0x00804240` is a variant *picker*, and the call site
+passes a literal `push 0`, so the client chooses **uniformly at random among sequences
+sharing a key**. With 216 of the shell's 224 keys single-variant, appending one record on an
+**existing** key with selector 16 gives a **50/50 coin flip between retail's animation and
+ours on every play** — self-controlling, unmistakable, and needing no invented key. Hard
+constraint for that rung: the array is `lower_bound`-searched, so a record is **inserted in
+key order, never appended**.
+
+**Retracted in `studies/anim/FINDINGS.md`**: the reading that 592 files carry indices keyed
+by "a linked model's larger sequence space". All 149 out-of-range values sampled are exactly
+`0x10000` — a sentinel, not a cross-file index. The `0x0078007F` mechanism named alongside it
+is correct and is now corroborated.
+
+**Next: A3 (the route-independent safety fixes) and A4 (the additive FA8 path, synthetic
+archive only).** A1b — who fills the per-agent key array — is downgraded from blocking to
+worth-doing.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
