@@ -1531,48 +1531,139 @@ word order (msg+0xc is the agent id), and **what creates the `charHeroData` reco
 is the headline: `ChCliAttrib.cpp:156`, hero **attribute state** — §4's negative, now named by
 the client itself.
 
-**What is left here, in order.**
-0. ~~**What writes a HERO's attribute record?**~~ **ANSWERED (§13): `0x0037` creates the
-   attribState record and `0x003A` fills it, both keyed by AGENT id — and both have been in
-   `authsrv.py` since the combat arc, sent to the player's agent every session.** The
-   TEMPLATE system was a **RED HERRING**, now confirmed: `AccountTemplateDataSkill` (140 B)
-   is account-local, the base64 saved-build feature, and its reachability closure contains
-   **zero message handlers**. Do not re-open it, and do not re-run the `0x0074`-chunk
-   hypothesis (§12, refuted).
-   **THE LIVE GATE IS NOW `profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`,
-   bound 11.** Sending the pair for a hero clears attribState and then dies here, with or
-   without the `0x0072` diagnostic — so it REGRESSES a hero that otherwise renders, and
-   `--hero-attribs` is off by default. Two fixes already tried and refuted: `0x0074`'s
-   `b2`/`b3` (upstream's "primary/secondary"), and matching the body's profession to the
-   attribute set. **Next move is STATIC, not another run**: the getter `0x005AB800` has 12
-   callers and three — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit in the attribute code
-   the pair activates. Read those three to find where the bad `profession` is loaded.
-1. **The two trailing bytes and the wire name still have no known purpose** — measured
-   negative now, not just a missing assert. The untested candidate is the **outpost hiring
-   UI**, which needs RESKIN §18.1's explorable gate solved first. That is the real next
-   experiment.
-2. **Follow AI** — unbuilt work, not an unknown; the movement messages exist.
-3. ~~**The hero route's remaining blocker**~~ **CLOSED — the hero is authored end to end**
-   (§14, §15): `0x0074` → party window with `0x01C2` → body → `0x00A6` → `0x0037`/`0x00B7`/
-   `0x003A` (that order) → `0x00DA` → `0x0072` HeroActivate. The row draws `Mo1 Norgu` and
-   the commander flag lights. **The next unknown is the commander-panel CLICK, which
-   crashes on `commander` / `GmView.cpp(5890)`.** `inventoryId` was the named suspect and is
-   **refuted** (§16) — do not re-try it. **That desk work is DONE (§17) and it refuted its own
-   fix**: the commander key is `0x01C2`'s `msg+0x10`, we were sending 0, sending the hero id
-   changed nothing. The scan has ONE caller inside a GmView event handler, so the live
-   hypothesis is that **the scan never runs** and the commander container is filled by a
-   client-side UI event rather than by the wire. Next: identify that event and whether
-   anything server-side provokes it — if not, the panel is outside what a server authors.
-   **Also open and now honestly labelled: `0x01C2`'s `msg+8` is UNVERIFIED** — this rig has
-   player number, player agent id and hero index all equal to 1, so separating them needs a
-   hero index >= 2 or a different player number. `--hero-ai-mode` is wired but **untested**.
-   `0x0074`'s other 17 fields are still unexplained.
-4. **Retry the family under `--encstring`** — still never done.
-5. `heroes_table.py` (MEASUREMENT branch) is still unbuilt and still permitted; anchor on
-   `0x005A9380` / `0x00A35E08`, **not** the adjacent title table.
+**What is left here, in order.** *(Refreshed 2026-08-16 after §18-§22; the previous list
+had gone stale on four items that were since closed, which is the drift the top of
+`CLAUDE.md` is about.)*
 
-**Two environment facts this run measured, worth not re-paying for:** the **38797 pin cannot
-currently run** (its archive has 146/148 mid-replacement; on 38833 those maps bind different
+0. ~~**What writes a HERO's attribute record?**~~ **CLOSED (§13).** `0x0037` creates the
+   attribState record, `0x003A` fills it, both AGENT-keyed and both already in `authsrv.py`
+   since the combat arc. The TEMPLATE system was a **RED HERRING** (§12.3, confirmed:
+   `AccountTemplateDataSkill` is account-local and its closure holds zero message handlers).
+   Do not re-open it and do not re-run the `0x0074`-chunk hypothesis (§12, refuted).
+   ~~The live gate is `ConstChar.cpp(1296)`~~ — **also closed (§14): there are TWO profession
+   stores.** `0x00A6` writes the agent's profession bytes (the roster label); `0x00B7` writes
+   `ctx[0x2c]+0x6BC`, which is what the ATTRIBUTE code reads. Sending `0x00B7` for the hero's
+   agent cleared it.
+1. ~~**`0x01C2`'s `msg+8`**~~ **CLOSED (§21): it is the OWNER PLAYER NUMBER.** Both rigs the
+   old list asked for were run — hero index 2 (§18) and a different player number (§21).
+   ~~`msg+0x10`~~ **also closed (§19): `0x01C2` carries NO hero identity at all**; identity
+   arrives entirely on `0x0074`/`0x0072`, and `msg+0x10` is inert on every observable.
+   ~~What writes `ctx[0x44][0x2ac]`~~ **closed (§22): `0x0199` INSTANCE_LOAD_INFO field 1.**
+
+2. **THE LIVE UNKNOWN — the commander-panel click**, `commander` / `GmView.cpp(5890)`.
+   `inventoryId` was the named suspect and is **refuted twice** (§16); do not re-try it.
+   The desk work is done as far as it goes (§17, §20): commander objects live in a container
+   at `ctx+0x20`, `heroCommanderSlot[7]` at `ctx+0x30` holds **keys** into it, `0x00524C40`
+   is a get-or-create, and `0x00524DB0` — the one the click uses — does **not** create. The
+   creator's caller is a loop over `activeHeroes` built by a party-agent scan.
+   ~~**Next, identify the event that runs that scan**~~ **DONE (§23), and the leading
+   hypothesis was WRONG.** The commander branches are cases of one GmView switch
+   (`sub eax,0x10000007; cmp eax,0x1c7; movzx [0x4E66C4]; jmp [0x4E6480]`): the scan is
+   event **`0x10000114`**, the crashing branch is **`0x100001A4`**. `0x10000114` is raised
+   **from the PARTY MANAGER** at `0x008588AD`, in the same region as `0x01BF`'s and
+   `0x01CB`'s workers — **so the trigger IS server-provokable and the panel is not outside
+   what a server authors.** `0x100001A4` has two raisers: inside the scan itself (after the
+   create loop) and in **PtHero** — the party-window button, which raises it directly and so
+   hits the non-creating resolver when the scan never ran.
+   ~~**Next, item 1 first…**~~ **BOTH DONE (§25).** (1) The iterator walks
+   `party->container[0x24]`, bound `[party+0x2c]`, **stride 24** — confirmed against
+   `0x01C2`'s writer **on the same build** (`0x00859010` on 38833, NOT the 38797 address this
+   arc had been quoting), and every §1.2 field offset reproduces. So `[edi+4]`/`[edi+8]` ARE
+   `msg+8`/`msg+0x10`; the chain is confirmed, not invalidated. (2) **`0x01C2` raises
+   `0x1000011E` (case 93), NOT `0x10000114` (case 90, the bulk scan)** — and `0x10000114`'s
+   raiser has eight callers, **all UI**, none a message worker. So the bulk scan is
+   UI-triggered and no message provokes it, while our message drives the INCREMENTAL path:
+   case 93 applies the same my-id filter and hands a key to `0x00524CC0`, which walks the same
+   iterator and derives the commander SLOT by counting my entries. **This revises "the scan
+   never runs"** — true of the bulk scan, not the whole story — and confirms §21/§22's mirror
+   from a third code path. **Loose end, flagged:** case 93's `[esi+4]`/`[esi+8]` may read past
+   the 8-byte payload `0x01C2`'s worker builds, so those exact offsets are RECONSTRUCTION;
+   the structure around them is solid. **RESOLVED (§26.1):** the payload's second dword is the
+   ENTRY POINTER (`ecx`, set at `0x00859089`, never reassigned through the six stores), so
+   case 93 dereferences it — and §21's behavioural arms corroborate the semantics without
+   needing the plumbing at all.
+   **NEW, OBSERVED (§26.2): `0x01C2` raises its commander event only on a party-cache MISS.**
+   `cmp edi,[mgr+0x4c]; je <epilogue>` at `0x008590AF` skips the raise when the party is
+   already the cached one — a real, previously unrecorded gate.
+   **It looked like the answer and is REFUTED (§26.3).** `--hero-post-commit` proves nothing
+   (post-commit the party is still 1, so the condition under test never changed — a confound
+   I nearly scored as a result); `--hero-bust-cache`, which opens a build on party **2** first
+   so the hero-add must take the slow lookup, **still asserts identically**.
+   **NEXT IS RUNTIME, NOT MORE STATIC READING.** Three static hypotheses have now been refuted
+   by experiment on this one question, and what is needed is a single measurement of whether
+   the event fires at all — a breakpoint or code-cave trace on `0x008590CA`. `CLAUDE.md`
+   carve-out 3 permits native tooling explicitly.
+   **DONE, and it needed no debugger (§27).** The commander context is a **plain static global
+   at `0x00C07850`**, so the RESULT can be read instead of the event trapped:
+   `toolkit/clientscan/commanderpeek.py` (new, pure ctypes through `keytap`'s read-only
+   reader). Live, with the hero authored and the roster row drawn:
+   **`container ctx+0x20: cap=7 count=0`, all seven `heroCommanderSlot` entries zero.**
+   **NO COMMANDER IS EVER CREATED** — so §26.4's "key mismatch" branch is REFUTED (nothing is
+   filed under any key) and "the creation path never runs" is confirmed. The party entry IS
+   present, since the roster renders its archive-resolved name from that same `party+0x24`
+   array. **Still open:** empty does not distinguish *the event never fires* from *case 93
+   runs and its my-id filter rejects*; that needs a trace on `0x008590CA`, and the case for
+   spending native tooling is now made of a measurement rather than a hypothesis. Note
+   `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
+   (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
+   **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at
+   `0xc11bc4` reported **NO SUBSCRIBER** for all three commander events — refuted on the spot
+   by evidence already in hand, since `0x100001A4` demonstrably reaches its handler (it is
+   what raises the `GmView:5890` assert). Dumping the buckets confirmed the reader was blind:
+   512/512 slots non-empty and no event-id-shaped value at any offset, because the lookup
+   hashes through `0x004920B0` and the walk never sees real keys. `commanderpeek --events`
+   now **refuses to answer** unless it finds that control first; both branches verified
+   offline. **So the subscriber question is unanswered and is NOT cheap** — it needs the hash
+   replicated (a second thing to get wrong) or the trace §26.4 already named.
+   **Loose end:** the control gate has no committed test, and a new test file needs its
+   `TESTS.md` entry in the same commit.
+   **Method note worth carrying, now cutting both ways:** three static hypotheses were killed
+   by client runs at ~7 minutes each and what moved it was four dwords of live memory — but
+   the very next live read produced a clean, memorable, completely FALSE finding, and only a
+   built-in positive control caught it. Measure the state; then check the instrument against
+   something you already know.
+3. **Desk leftovers, mostly closed.** ~~(a) the scan trigger~~ **DONE (§23, §25).**
+   ~~(c) `msg+0x14`~~ and ~~(d) aiMode~~ **DONE (§31): both inert on every observable** —
+   though the aiMode result is **UNINFORMATIVE and must not be read as "stance does nothing"**,
+   because our server has no follow AI for a stance to act on. Still open: **(b) `0x0074`'s
+   other 17 fields**, where the prior after §12 and §30.2 is that most are inert on the
+   surfaces we can see.
+4. **`0x01BF`'s two trailing bytes and its wire name** — measured negatives, not just missing
+   asserts (§10.2). The untested candidate is the **outpost hiring UI**, which needs
+   RESKIN §18.1's explorable gate solved first.
+5. ~~**Retry the family under `--encstring`**~~ **CLOSED (§30.2).** Superseded for `0x01BF`
+   from §10 onward (a real EncString is what makes the henchman row render a name), and the
+   last untested case — `0x0074`'s `string16(32)`, empty in every run until now — was sent
+   with a real one: 71 bytes, `4 name ids`, and the row still reads `Mo1 Goren`. **Neither
+   name-bearing message in this family reaches the party roster.** Also recorded (§30.1, free
+   from existing screenshots): the hero row's label MIXES sources — profession and level from
+   the AGENT, name from `s_heroClientData` via the hero id — which is why a Monk-bodied
+   "Goren" renders without complaint. The henchman row takes all three from the agent.
+6. ~~**`heroes_table.py`**~~ **BUILT (§29).** A thin emitter over `consttable`'s locator, so
+   there is one place that can be wrong about where the table is. It carries **no address**:
+   it anchors on `ConstHero.cpp` and REFUSES any geometry that is not 40 × 24, naming the
+   title-table trap in the refusal. Closure holds on the byte (`base + 40*24 == anchor_off`).
+   Ids only — `--resolve` refuses a whole column. `vault/content/heroes.toml` written; all 40
+   rows pass `content.py`'s real `_check_provenance`, and stripping `extractor` makes it
+   refuse. `test_heroes_table.py` floor 10, catalogued in the same commit.
+7. **Follow AI** — unbuilt work rather than an unknown; the movement messages exist.
+
+**A defect this arc shipped, and the guard now standing over it.** `HERO_ATTRIBS`,
+`HERO_SKILLBAR` and `HERO_BODY_NPC` landed with no module-level default while the world-load
+path read them unconditionally, so **every default launch** died with NameError inside the
+instance load and showed the client `Code=007`. Two other sessions hit it and one spent its
+first attempt on the archive, because a server-side NameError and a bad map row look
+identical from the client's side. Fixed, and `srclint.conditional_globals` +
+`test_srclint` §8 (floor 20) now fail on the shape.
+
+**Two environment facts this run measured — and the FIRST IS RETRACTED (§24).** The 38797
+pin **runs fine**: its failure was the crossbuild key bug (a 38797 client handed 38833's key
+on the game channel), fixed 2026-08-17 as `bind_key_to_build()`, and the whole hero arc
+reproduces on the PIN with the row reading `Mo1 Goren`. The archive half is real but concerns
+maps 146/148 and was wrongly carried onto a map-90 run — the evidence was in my own log
+(`starting with the newest, rurik_dh_2026-08-13…` two lines above `build=38797`). The
+retracted claim read: ~~the **38797 pin cannot
+currently run**~~ (its archive has 146/148 mid-replacement; on 38833 those maps bind different
 files than `dat_study`) — clean explorable maps on the 38833 pair are **90, 474, 558**; and a
 client `Code=007` is usually **our** crash, so read `gamesrv.log` for a traceback before
 believing the dialog.
