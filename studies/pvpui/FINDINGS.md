@@ -1298,3 +1298,53 @@ mismatch `commanderpeek`'s canned line guesses at without testing.
 > being an agent id is a RECONSTRUCTION from §10.1's disassembly, not a measurement — the
 > call has never been observed running, because it needs a click. So a matching key is
 > necessary-if-the-reconstruction-holds, and nothing more. **The click remains the owner's.**
+
+## 23. Run 10: the key is steerable, and the probe's own fix verified itself
+
+`--hero-roster-id 200 --party-mine-late 2.0`, same rig otherwise:
+
+```
+  return address (VA)    0x00524FA9      <- un-slid correctly this time
+  from the rebuild loop  True
+  key (arg0)             0x000000C8  (200)
+  TOTALS   create 1   bulk 1   raise114 2   worker 1
+```
+
+Three things at once:
+
+- **§22.2's prediction is met.** `scan_key` steers the key the commander is filed under, so
+  the container can be keyed by the hero's agent id instead of the hero id.
+- **The §22.1 probe fix verified itself.** The same site that reported
+  `from the rebuild loop: False` for a call from `0x00524FA9` now un-slides and reports
+  `True`. The bug was in the probe, not the client, and the repair is confirmed by the
+  measurement it was blocking.
+- **The chain is unchanged by the key.** `bulk`, `create` and the second `raise114` all
+  still fire, so changing `scan_key` costs nothing that §20 established.
+
+### 23.1 Retired: "scan_key is indifferent on every observable"
+
+`agents.py:510` records, from heroes §19.2, that a wrong `scan_key` "changes nothing" and a
+right one "fixed nothing" — correctly reasoned at the time, and explicitly hedged there as
+*"consistent with the scan never running in our sessions."* The scan runs now (§20), and the
+value it reads is this one. **The clause is retired, and the hedge is why it can be retired
+cleanly rather than argued about.**
+
+### 23.2 What is still NOT measured, and it is the same thing as in §22.2
+
+A commander now exists, filed under a key we control. Whether the **button** works is
+untouched:
+
+- `0x00524DB0`'s argument being an **agent id** is a RECONSTRUCTION from §10.1's
+  disassembly. That call has never been observed executing, because it runs only on a
+  party-row click.
+- So "key 200 matches what the button passes" is an inference resting on that
+  reconstruction, not a measurement. Key 1 vs key 200 might both fail, or both work, for
+  reasons the static read did not capture.
+- `commanderpeek.py`'s "it is a KEY MISMATCH" line still asserts this without testing it,
+  and still should not be quoted (§20.1).
+
+**The click is the measurement, and `session.py --walk` has no click verb by deliberate
+design** — "keyboard rather than a click on purpose", because a held key makes the server
+answer with a direction while a click would be our own clip. So this last step belongs to
+the owner, and the two arms worth running are `--hero-roster-id 200` against the default
+`--hero-roster-id 1`, both with `--party-mine-late 2.0`.

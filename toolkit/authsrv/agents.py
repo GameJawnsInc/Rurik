@@ -601,6 +601,14 @@ def party_hero_add(party_id, owner_player_number, agent_id, scan_key=0,
       the scan never running in our sessions. Callers send the hero id as
       the best guess; the name deliberately does NOT say 'hero', because
       19's headline is that this message carries no hero identity.
+      **RETIRED 2026-08-17: the scan RUNS now.** studies/pvpui/FINDINGS.md
+      19 found the rebuild being raised into a subscriber map 53 ms too
+      early; with `--party-mine-late` the raise lands late enough that
+      0x00524C40 executes, and it takes THIS field as the key the
+      commander is filed under (22.1; 23 steers it to 200 with
+      `--hero-roster-id`). The hedge in the sentence above is why this
+      retires cleanly rather than reading as a contradiction -- 19.2 was
+      right about every observable it had.
 
     No range guard on owner_player_number or scan_key beyond the wire
     widths, deliberately: the settling arms themselves had to send
