@@ -877,3 +877,91 @@ that is the way to bet" — was the right bet.
 
 `0x01D9` remains a *second* writer of the same pointer, unsent by us, and nothing here
 requires it.
+
+## 17. Run 3 and run 4 — `0x10000114` never reaches GmView's frame handler
+
+### 17.1 Run 3, and why its own result is not enough
+
+Sites `raise114, gmvEvent, bulk, worker`. `gmvEvent` is `0x004E366A`, the first instruction
+of the event half of GmView's frame handler (`sub eax, 0x10000007`), so EAX still holds the
+raw event id when it fires. Armed off `raise114`, oneshot:
+
+```
+  HIT worker
+  HIT raise114
+  HIT gmvEvent   event id (eax) 0x10000021   is 0x10000114: False
+  TOTALS  bulk 0
+```
+
+**That reading is weaker than it looks, and the reason is worth keeping.** `lookup`'s
+deferred-oneshot argument works because `0x0064CA47` sits *inside* the raise's own
+synchronous call chain — the next hit after the trigger is necessarily ours. `0x004E366A`
+is not inside that chain: it is reached only *if* GmView's frame handler is entered for the
+event. So "the next hit was a different event" is consistent with both "GmView never got
+ours" and "GmView got ours through a door that does not pass here" — and heroes §36.7
+named GmView's **subscriber** as `0x004ED055`, which is not this function. Two doors.
+
+### 17.2 Run 4 — the census, which is the measurement that counts
+
+Same site armed for the whole session instead (`gmvEventAny`, `--max-hits 3000`, so nothing
+was capped):
+
+```
+  TOTALS  gmvEventAny 12   raise114 1   bulk 0   worker 1
+  arm failures / resume failures 0 / 0
+  distinct event ids GmView's frame handler was entered with:
+      0x10000030   x10
+      0x10000022   x1
+      0x10000021   x1
+  0x10000114:  ABSENT
+```
+
+**`0x10000114` is raised once, has a subscriber, and never once enters GmView's frame
+handler.** `bulk` — the case that would run if it did — is 0 across all four runs, and
+`worker` is green in all of them, so the machinery is proven on every run that reports a
+zero.
+
+**The honest limit of this census:** twelve hits and three distinct ids is a *small* sample
+for a whole session. It is not a 4000-hit census like heroes §34.2's. What makes it usable
+anyway is that the thing being counted is not rare — `raise114` fired inside the same
+window, so the event we care about happened *while this site was armed and uncapped*. A
+site that saw 12 events including none of ours, during a window that provably contained our
+raise, is evidence about our raise specifically rather than about the population.
+
+### 17.3 Where that leaves it, stated as three live possibilities
+
+The subscriber list for `0x10000114` is non-empty (run 2) and GmView's frame handler is not
+in the delivery path (run 4). So:
+
+1. **The subscriber is some other module.** `codescan --xrefs 0x10000114` gives eleven
+   sites; the pushes that are not the raise sit at `0x004A36C4`, `0x00539374`
+   (GmPosseRoster's block, which §0 measured as never installed), `0x00562D51`,
+   `0x0056856C` and `0x00568A79`. One of those is the live subscriber.
+2. **GmView subscribes but with a callback that is not the frame forwarder.**
+   `0x004ED033` is `add eax, 0x10000114` inside GmView — the shape of a loop registering a
+   *range* of events — so GmView plausibly does subscribe to it, and the callback it
+   registers for that range is then the thing to read.
+3. **`bulk` is not case 90's body.** Least likely — the byte table at `0x004E66C4[0x10D]`
+   selects case table entry 90, which is `0x004E5D20`, and `commandertrap.py` independently
+   labelled that address "dispatch case 90" long before this arc — but it is listed because
+   two runs of a zero do not distinguish "never called" from "wrong address".
+
+**The next measurement is static and cheap: read GmView's subscribe block around
+`0x004ED000..0x004ED060` and find what callback it registers for the range containing
+`0x10000114`.** That separates (1) from (2) without another client run. If it turns out
+GmView registers a non-frame callback for that range, the whole chain is explained: the
+event is delivered to a callback that does not forward it into the frame, so the case that
+rebuilds the commander model can never run from our raise — and the fix is not a message we
+are missing but a UI module that is not up.
+
+### 17.4 What four runs have now removed from the board
+
+- Not delivery — the event has a subscriber (run 2).
+- Not ordering — the hero row lands before the raise (run 1).
+- Not the container — `0x01B2` writes it and RESKIN measured it non-null (§16).
+- Not the identity — `ctx[0x44][0x2AC]` is CORROBORATED from both directions (§13.1).
+- Not `0x1000011E` — the assert the player hits is on `0x100001A4`'s path (§10.2).
+- Not `GmPosseRoster` — that is PvP-window furniture (§6), and the commander UI is
+  `GmPetCommander` / `AgentCommander*` (§8).
+
+What is left is one link: **between a delivered `0x10000114` and GmView's case 90.**
