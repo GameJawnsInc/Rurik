@@ -2328,6 +2328,12 @@ HERO_POST_COMMIT = False
 # did NOT test this: post-commit the party is still 1, so the cache still
 # holds it and the condition never changed. studies/heroes/FINDINGS.md 26.
 HERO_BUST_CACHE = False
+# 0x0074's string16(32) name field. EVERY run so far has sent it EMPTY, so the
+# one encstring case this family never tested is the hero's own. The hero row
+# renders its name from s_heroClientData (the body is a hatcher and the row
+# says "Goren"), so this asks whether the data-cache message's own name field
+# overrides that table lookup or is ignored. studies/heroes/FINDINGS.md 30.
+HERO_INFO_NAME = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6635,11 +6641,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # have for the thing 0x0072's gate wants to exist.
                             # An ordering hypothesis, stated as one.
                             _hb = HERO_BYTES or (0, 0, 0)
+                            _iname = (agents.npc_template(HERO_INFO_NAME)
+                                      ["enc_name"] if HERO_INFO_NAME else "")
                             for _hid, _haid, _hdef in hero_slots():
                                 if HERO_INFO:
                                     send(*agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
-                                        d3=HERO_FLAG, chunk=HERO_CHUNK))
+                                        d3=HERO_FLAG, chunk=HERO_CHUNK,
+                                        enc_name=_iname))
                             # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
                             # (-> entry+0x0). Which is the agent id is exactly
                             # what this arm asks, so the two carry DIFFERENT
@@ -7714,6 +7723,11 @@ def main():
                          "also PLAYER_AGENT_ID, and that coincidence is what "
                          "makes 0x01C2's msg+8 undecidable. Set it to something "
                          "else and the two namespaces separate.")
+    ap.add_argument("--hero-info-name", default=None, metavar="NPC_KEY",
+                    help="Put a real EncString on 0x0074's name field, which "
+                         "every run so far has sent EMPTY. The hero row takes "
+                         "its name from s_heroClientData; this asks whether "
+                         "0x0074's own name overrides that.")
     ap.add_argument("--hero-bust-cache", action="store_true",
                     help="Open a second party build right before 0x01C2 so the "
                          "party-manager cache holds a DIFFERENT party and the "
@@ -8002,6 +8016,10 @@ def main():
         HERO_POST_COMMIT = a.hero_post_commit
         global HERO_BUST_CACHE
         HERO_BUST_CACHE = a.hero_bust_cache
+        global HERO_INFO_NAME
+        HERO_INFO_NAME = a.hero_info_name
+        if HERO_INFO_NAME:
+            agents.npc_template(HERO_INFO_NAME)      # fail here, not mid-load
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS

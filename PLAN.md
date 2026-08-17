@@ -1584,7 +1584,14 @@ had gone stale on four items that were since closed, which is the drift the top 
 4. **`0x01BF`'s two trailing bytes and its wire name** — measured negatives, not just missing
    asserts (§10.2). The untested candidate is the **outpost hiring UI**, which needs
    RESKIN §18.1's explorable gate solved first.
-5. **Retry the family under `--encstring`** — still never done.
+5. ~~**Retry the family under `--encstring`**~~ **CLOSED (§30.2).** Superseded for `0x01BF`
+   from §10 onward (a real EncString is what makes the henchman row render a name), and the
+   last untested case — `0x0074`'s `string16(32)`, empty in every run until now — was sent
+   with a real one: 71 bytes, `4 name ids`, and the row still reads `Mo1 Goren`. **Neither
+   name-bearing message in this family reaches the party roster.** Also recorded (§30.1, free
+   from existing screenshots): the hero row's label MIXES sources — profession and level from
+   the AGENT, name from `s_heroClientData` via the hero id — which is why a Monk-bodied
+   "Goren" renders without complaint. The henchman row takes all three from the agent.
 6. ~~**`heroes_table.py`**~~ **BUILT (§29).** A thin emitter over `consttable`'s locator, so
    there is one place that can be wrong about where the table is. It carries **no address**:
    it anchors on `ConstHero.cpp` and REFUSES any geometry that is not 40 × 24, naming the

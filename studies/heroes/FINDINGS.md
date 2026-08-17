@@ -1874,6 +1874,50 @@ extraction goes). **All 40 rows pass `content.py`'s real `_check_provenance`**, 
 `test_heroes_table.py` (floor 10) pins all of it, including the title-table sabotage with a
 positive control after it. Catalogued in `TESTS.md` in the same commit.
 
+## 30. The hero row's label MIXES sources, and `0x0074`'s name is inert
+
+Two things here, one free from data already collected and one from a run.
+
+### 30.1 The free observation, and it sharpens §19
+
+The henchman row reads `Mo1 Hatcher [Collector]`, and §10.2 proved all three parts come from
+the **agent** — the wire's own name was ignored.
+
+The hero row reads `Mo1 Goren`. But **the hero's body IS a hatcher** (`--hero-body-npc`
+defaults to it, and the `0x0056` says so). So the hero row's label is **assembled from two
+places**:
+
+| part | henchman | hero |
+|---|---|---|
+| profession (`Mo`) | agent | **agent** |
+| level (`1`) | agent | **agent** |
+| name | agent | **`s_heroClientData`, via the hero id** |
+
+That was visible in screenshots from §18 onward and went unstated. It is the concrete form of
+§19's "identity arrives on the data-cache family": a hero's *identity* is the table's, while
+its *displayed profession and level* are still the agent's — which is why a Monk-bodied
+"Goren" renders without complaint even though the real Goren is a Warrior.
+
+### 30.2 `0x0074`'s name field is inert for the roster — the last encstring case
+
+`0x0074` carries a `string16(32)`, and **every run in this arc had sent it empty** — the one
+encstring case the family never tested. (`0x01BF`'s was tested from §10 onward and is what
+made the henchman row render a real name, so the standing "retry under `--encstring`" item was
+already superseded there.)
+
+Sent with a real EncString — the worm's, deliberately different from both the body and the
+hero id — the message goes out at 71 bytes with `4 name ids`, and the row still reads
+**`Mo1 Goren`**.
+
+So `0x0074`'s name field **does not override the `s_heroClientData` lookup** for the roster
+label. Whether it feeds some other surface (the hero panel, a tooltip) is untested and now
+has a flag to test it with; for the roster it is inert.
+
+That closes the arc's "retry under `--encstring`" item: both name-bearing messages in this
+family have now carried a real one, and the outcomes are opposite — `0x01BF`'s rides to the
+agent-fed label and is ignored (§10.2), `0x0074`'s rides to a table-fed label and is ignored
+too. In neither case does a name on the wire reach the party roster.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
