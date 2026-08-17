@@ -3187,4 +3187,39 @@ Every one of these, in the order they were written:
   constant still sends the full effect burst, because a guard that refuses
   everything would pass every refusal check. Dormant while every fraction is
   a literal constant; load-bearing the day studies/combat step 8 computes
-  them from the client's skill table).
+  them from the client's skill table),
+  `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
+  geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
+  interchange (`unitexport.py`), and the Blender viewer measured headless
+  (`tools/blender/import_gwunit.py`). The anchors are the burrowing worm
+  116366 (FA0 + the 82,169-byte FA1) and the hatcher body 116703 (FA0, NO
+  skeleton -- and its export must SAY so, so "old export" can never read as
+  "no skeleton"). The models-arc RE-INTERLEAVE holds on both (7/7
+  sub-models, test_modelexport's packer imported rather than copied -- it
+  shares no code with any module under test); `unit_<id>.fa1.bin` off disk
+  IS the archive's 0xFA1 payload byte-for-byte; and every typed skeleton
+  value read back off disk -- 10 sequences' lo/hi/start/end/durations, the
+  3-entry key table, 20 node links and channel key counts, 6 sound events,
+  98 field comparisons -- must equal a FRESH `skelfile.Skeleton` decode of
+  the archive bytes, with tamper controls either side proving the
+  comparison can fail. The pose that shipped is the FLAT placement, and the
+  measurement that makes it the BIND POSE rather than a guess is pinned:
+  all 18 channel-carrying nodes' bases fall INSIDE the stored mesh's own
+  bbox (the two channel-less ones sit at the origin). No sub-model-to-node
+  binding is measured (3 sub-models, 20 nodes), so per-vertex posing would
+  be invention, and a COMPOSITED shell (116228) is REFUSED outright as rung
+  U4's to assemble. Section 3 drives Blender as a subprocess and measures
+  the SCENE, never an eyeball: counts and bbox against the position sidecar
+  (z negated, the M4 convention), all 20 node empties at their RAW bases
+  with parent = measured link, and the RENDER -- an orthographic silhouette
+  whose alpha coverage must be non-zero where the hidden-everything control
+  frame measures EXACTLY zero, and whose pixel bbox must match the extent
+  predicted from the export's own bbox through the dump's ortho scale,
+  +/-4 px (worm 38x233 vs 36.3x232.7 predicted). The first contact with
+  real data paid twice: 18/20 empties were measured OFF their bases --
+  background Blender had not evaluated the parent's matrix_world before the
+  parent-inverse was taken from it -- and the hatcher's thin silhouette
+  refuted the guessed 0.02 coverage floor at 0.0147. Floor 69 from the
+  green run; sections 0-1 (synthetics + the resolve_outdir refusal with its
+  positive controls and the mapexport delegation check) score 28 vault-less
+  and go RED; with the archive but no Blender, 52, also RED).
