@@ -1325,16 +1325,31 @@ named by the client's own assert `GmView:2073`. `GmPosseRoster` is a child of di
    `0x0050E540` → `0x0050DC50`), opened at `0x004E8990` with `dialog = 32 + heroIndex` where the
    hero index comes from `0x00524DB0(agentId)`. **Heroes was chasing the wrong subscriber.**
 
-**Next, and both are desk work:** walk up from `0x004E3D16` and the two dialog-39 toggles
-(`0x004E9450`, `0x004EAAA2`) to find whether any of `ShowFloatingDialog`'s 77 call sites is
-reached from a message handler rather than a control code — that settles reachability; and read
-`0x00524DB0` to find what it needs to return a hero record, which is the heroes arc's real
-blocker. **Still worth checking early:** whether any of this shares RESKIN §18.1's explorable
-gate — heroes §32 blocks `0x01BF`'s last question behind it, so both would unblock together.
+**Q4 is ANSWERED too (study §10), same session, still desk work.** `GmView`'s frame handler
+(`0x004E27D0`, installed by `UiGame.cpp`) dispatches small UI messages 4..0x52 and events
+`0x10000007..0x100001CE` through two MSVC switch tables, so a call site inside it maps back to
+the exact selector that reaches it. Three sites, each in a block with **one** selector:
 
-**The honest prior remains that the commander panel is NOT server-reachable**, and §6 hardened
-it: the wire cannot name a control type even in principle. What is still unmeasured is whether
-the wire can open a *window*.
+- `0x004E3D16` → the commander-window opener → event **`0x100001C2`**, whose **only raise** is
+  `0x00567069` in **`PtTeamAgent`** on UI message 1 param 8 — **a party-row click.** So the
+  commander window is **not server-openable**; the player opens it, and the server's only
+  influence is over what `0x00524DB0(agentId)` finds. That is a better position than "not
+  reachable": we do not need to open the window, we need the lookup to succeed.
+- `0x004E38F0` → **`GmView:5890 commander`, the heroes crash** → event **`0x100001A4`**, *not*
+  `0x1000011E`. Its only raise is `0x00524FD0`, which loops over 12-byte records in the same
+  region as `0x00524DB0` and `0x00524C40` and raises once per record passing `0x0049C4B0`.
+  Neighbouring asserts give the shape of what is missing: a `commander` with
+  `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
+  an `agentId`.
+
+**So the next measurement is neither on the wire nor on the event bus:** what does
+`0x0049C4B0` test, and what fills the 12-byte record table `0x00524FD0` walks. That is what
+stands between us and a bound commander. **Still worth checking early:** whether any of this
+shares RESKIN §18.1's explorable gate — heroes §32 blocks `0x01BF`'s last question behind it.
+
+**The prior is now sharper than "not server-reachable".** The wire cannot name a control type
+(§6) and cannot open the window (§10.1) — but it was never supposed to. The heroes arc spent
+itself on `0x1000011E` while the assert the player hits is on `0x100001A4`'s path.
 
 ### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
 

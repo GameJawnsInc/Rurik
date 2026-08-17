@@ -12,6 +12,11 @@ row, archive-resolved name, level, profession, attributes, skill bar, lit comman
 `GmView.cpp(5890)`. The reason is not a wire field. It is that the commander event
 `0x1000011E` is **raised into nothing**.
 
+> **§10.2 relocates that assert.** `GmView:5890` is at `0x004E38F0`, in the case for event
+> **`0x100001A4`** — not `0x1000011E`. `0x100001A4`'s only raise is `0x00524FD0`, local to
+> the commander model, not a message handler. The paragraph above is the heroes arc's
+> framing and is kept for the record; read §10 before acting on it.
+
 Inherited from heroes, all OBSERVED, and none of it needs re-deriving:
 
 - `0x01C2`'s worker raises `0x1000011E` at `0x008590CA`, gated on a party-cache miss (§26.2,
@@ -276,3 +281,126 @@ windows (`PvpItemCreate`, `DeckBuilder`), not the commander panel.
 - **The heroes question changed shape.** Before spending anything more on `0x1000011E`,
   read `0x00524DB0` and ask what it needs in order to return a record — that, not the
   event, is what stands between us and `PetCommanderHero0`.
+
+## 10. Q4 ANSWERED, and it moves the heroes arc off `0x1000011E`
+
+`GmView`'s frame handler is `0x004E27D0`, installed by **`UiGame.cpp`** at `0x004A7AD5` as
+frame id 6 under the game root. It splits its own dispatch in two:
+
+```
+0x004E284E  eax = hdr.message
+            cmp eax, 0x10000001 ; ja -> the EVENT half at 0x004E366A
+            sub eax, 4 ; cmp eax, 0x4E     small UI messages 4..0x52
+                       byte table 0x004E636C -> case table 0x004E6308   (25 cases)
+0x004E366A  sub eax, 0x10000007 ; cmp eax, 0x1C7
+                       byte table 0x004E66C4 -> case table 0x004E6480   (145 cases)
+                       events 0x10000007 .. 0x100001CE
+```
+
+Both tables are two-level MSVC switches, so a call site inside the function can be mapped
+back to the exact selector that reaches it: find the case block it falls in, then the
+selector slots whose index byte picks that case. Three sites, each landing in a block of
+0x1C–0xAC bytes with **exactly one** selector:
+
+| site | what it does | reached by |
+|---|---|---|
+| `0x004E3D16` | calls `0x004E8990`, the commander-window opener | event **`0x100001C2`** |
+| `0x004E38F0` | `assert commander` — **`GmView:5890`, the heroes crash** | event **`0x100001A4`** |
+| `0x004E387F` | `assert commander` — `GmView:5875` | event **`0x100001A3`** |
+| `0x004E2BE3` | the branch reaching both dialog-39 toggles | UI message **0x20** |
+
+### 10.1 The commander window is opened by a CLICK, not by the wire
+
+Event `0x100001C2` has exactly two sites in the whole image: a subscribe inside GmView's
+block at `0x004ED26C`, and **one raise** at `0x00567069`:
+
+```
+0x00567052   cmp [hdr+4], 1          UI message 1
+0x0056705F   cmp [hdr+8], 8          param 8
+0x00567064   push 0 ; push [eax+0x20]        the agent id
+0x00567069   push 0x100001C2 ; call 0x00633D70      RAISE
+```
+
+That function's asserts are `PtTeamAgent:237 petFrame`, `:250 petFrame`, `:273 agentId` —
+**the party window's team-agent row**. So the whole route is:
+
+```
+click a party row (UI message 1, param 8)
+  -> PtTeamAgent raises 0x100001C2 carrying the agent id
+  -> GmView case[136] -> 0x004E8990
+       dialog = 31 if the agent is the player,
+                else 32 + [0x00524DB0(agentId) + 4]
+  -> ShowFloatingDialog(dialog, show=1) -> s_floatingDialogs[31..38] -> GmPetCommander
+```
+
+**Nothing on the wire raises `0x100001C2`.** The two sites are this raise, inside a UI
+click handler, and GmView's own subscribe. **Q4: the commander window is not
+server-openable — it is opened by the player clicking, and the server's only influence is
+over what `0x00524DB0` finds.** That is a much better place to be than "not reachable":
+the server does not need to open the window, it needs the lookup to succeed.
+
+### 10.2 The heroes crash is on a different event than the arc assumed
+
+`GmView:5890 commander` sits at `0x004E38F0`, in the case for event **`0x100001A4`** — not
+`0x1000011E`. Its neighbours name the shape of what is missing:
+
+```
+0x004E387F  GmView:5875  commander
+0x004E3899  GmView:5876  commander->slotIndex < DLG_AGENT_COMMANDERS
+0x004E38F0  GmView:5890  commander                    <- the crash
+0x004E390A  GmView:5891  commander->slotIndex < DLG_AGENT_COMMANDERS
+0x004E393C  GmView:5897  heroData
+0x004E3956  GmView:5898  heroData->agentId
+```
+
+`DLG_AGENT_COMMANDERS` is the registry's **`AgentCommander0..6`** family (indices 0..6,
+handler `0x004FB490`) — a *second* commander UI, distinct from `PetCommander*`. So the
+client wants a `commander` record carrying a `slotIndex` that selects one of seven
+`AgentCommander` dialogs, plus `heroData` with an `agentId`.
+
+`0x100001A4` also has exactly three sites: GmView's subscribe (`0x004ED1E5`), a PvpItem
+subscribe (`0x00577E33`), and **one raise at `0x00524FD0`** —
+
+```
+0x00524FC1  call 0x0049C4B0 ; test eax,eax ; je skip
+0x00524FCD  push 0 ; push edi
+0x00524FD0  push 0x100001A4 ; call 0x00633D70      RAISE
+0x00524FDD  add esi, 0xc                            ... looping over 12-byte records
+```
+
+— inside the same function region as `0x00524DB0` (the hero-record lookup §8 uses) and
+`0x00524C40` (heroes §26 measured as never running). **That module is the commander
+model.** It walks a table of 12-byte records and raises `0x100001A4` per record that
+passes `0x0049C4B0`.
+
+### 10.3 What this means for the heroes arc
+
+Heroes spent the arc on `0x1000011E` because that is what `0x01C2`'s worker raises. Nothing
+measured here contradicts that raise — but the assert the player actually hits is on
+`0x100001A4`'s path, and `0x100001A4` is raised **locally**, by the commander model
+iterating its own records, not by a message handler. The chain the server needs is
+therefore:
+
+```
+our 0x01C2 (or whatever populates the model)
+   -> the 12-byte records at 0x00524xxx get filled
+   -> 0x00524FD0 raises 0x100001A4 once per record
+   -> GmView case[125] finds `commander` non-null and slotIndex < 7
+   -> AgentCommander{slotIndex} renders; the party row click then opens PetCommanderHero{n}
+```
+
+**The next measurement is not on the wire and not on the event bus.** It is: what does
+`0x0049C4B0` test, and what fills the 12-byte record table that `0x00524FD0` walks? That
+is the thing standing between us and a bound commander, and it is desk work.
+
+RECONSTRUCTION, flagged as such: the arrow from `0x01C2` to those records is inferred from
+adjacency (`0x00524C40`, `0x00524DB0`, `0x00524FD0` in one region) and is **not** measured.
+Do not carry it forward as OBSERVED.
+
+### 10.4 One coincidence, named so nobody spends a day on it
+
+Event `0x100001C2` and network opcode `0x01C2` share their low bits. The event space is
+`0x10000007..0x100001CE` and opcodes run to about `0x01FF`, so the two numbering spaces
+overlap by construction and collisions are expected. There is no measured relationship,
+and `0x100001C2`'s only raise is a UI click handler in `PtTeamAgent`. Treat it as
+coincidence unless something measures otherwise.
