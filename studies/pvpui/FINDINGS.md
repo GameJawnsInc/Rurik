@@ -560,3 +560,105 @@ notification, and it fires whether or not the item that was just appended belong
 That is why it was observable, and why it led nowhere: **it reports that the list changed,
 not that a commander exists.** The commander asserts hang off `0x100001A4` (§10.2), which is
 raised only after the ownership test has already produced a record.
+
+## 13. THE CONTAINER IS THE WRONG ONE. `0x01C2`'s first field selects it, and we send 1
+
+Everything above converges here, and it is a two-line experiment.
+
+### 13.1 What heroes already had, re-derived from the other end
+
+Working forward from the UI, this session reached `[[globals+0x44]+0x2AC]` as the identity
+the commander model tests against — and heroes §22 was already there, from the wire:
+`agents.py:5567` names handler `0x0084EF00`, the field `ctx[0x44][0x2ac]`, and the
+comparison against `0x01C2`'s `msg+8`, and sends `PLAYER_AGENT_ID` for it. **Two
+independent derivations, opposite directions, same answer** — CORROBORATED, and not news.
+The opcode is `0x0199`, `GAME_SMSG_INSTANCE_LOAD_INFO`, which we already send.
+
+So the identity is not the problem. Heroes §21 measured that with `--player-number 2` the
+roster row renders when `msg+8` equals the declared player number, while the commander
+binding vanishes, and called the two "DIFFERENT `my id` notions". With both values at 1 in
+the default rig they should agree — and the commander still does not bind. **So the
+ownership test was never the blocker.** The list is empty before the test runs.
+
+### 13.2 The branch heroes read as "silent" is the one that matters
+
+`0x01C2`'s **first field** is not a label, it is the container selector, and the worker
+branches on it:
+
+```
+0x00859010(this = [g+0x4C]+4, container, …)
+  0085902B  container != 0 -> 0x859032  bounds-check [this+0x44],
+                                        edi = [[this+0x3C] + container*4]   a NUMBERED container
+  0085902D  container == 0 -> edi = [this+0x50]                             the DEFAULT container
+```
+
+And `[this+0x50]` is `[[g+0x4C]+0x54]` — **byte for byte the container the accessor's
+`container == 0` path resolves**, and therefore **the only container the commander model
+ever reads** (§11: it calls `0x008563B0(0, n)`, arg0 literal zero).
+
+`agents.py:560` refuses `party_id = 0` with the reasoning that it hits "the same
+silent-on-zero branch as `party_henchman_add`". The branch is real; the reading of it is
+not. **Zero is not a no-op — it is the default-container branch.** We send `party_id = 1`
+(`authsrv.py:8159`), which appends to numbered container 1. The roster UI reads that one,
+which is why the row renders. The commander model reads container 0, which is why it finds
+nothing, why its loop has no iterations, and why `0x00524C40` is cold.
+
+**That single mismatch is consistent with every measurement in the heroes arc**, including
+the ones that made the five refuted hypotheses look plausible: the row rendering, the
+commander vanishing, `0x00524C40` never running, and `0x1000011E` being raised into nothing
+(it is raised on the cache-miss branch either way, §12.2).
+
+### 13.3 Who creates the default container, and whether we ever ask
+
+`[c+0x54]` has exactly two pointer stores in the image, both in `0x0085A340`, which is
+called from exactly one place — `0x00857226`, inside `0x00857200`, whose VA sits in the
+receive table at `0x00BCB964`:
+
+```
+opcode 0x01D9 -> 0x00857200(msg)
+   0x0085A340([msg+4], [msg+8], word[msg+0xC] ? &msg[0xC] : 0)
+     ... raise 0x1000012D, then [[g+0x4C]+0x54] = the new container
+```
+
+`schema/messages.json` gives `GAME_SMSG_0473` as `[byte, byte, string16(122)]`, matching
+the handler's three reads — a party id, a flag, and a name. **Nothing in `toolkit/` sends
+`0x01D9`.**
+
+### 13.4 The experiment, with its prediction stated first
+
+Per `CLAUDE.md`: the prediction goes on the record before the run, because a probe with no
+stated expectation can be rationalised into agreeing with anything.
+
+> **Send `0x01D9` to create the default party, then send `0x01C2` with `party_id = 0`
+> instead of 1.**
+>
+> **Predicted:** `0x008563B0(0, n)` starts returning items; the commander model's loop
+> gains one record per hero whose `msg+8` equals `PLAYER_AGENT_ID`; `0x00524C40` runs (it
+> has never run once in this project); `0x100001A4` is raised; and the party-row click
+> stops asserting `commander` at `GmView:5890`.
+>
+> **What would refute it:** `0x00524C40` still cold with a non-empty container — then the
+> ownership test *is* failing and §13.1's CORROBORATED identity is wrong somewhere.
+> Container still empty after `0x01D9` — then `0x01D9` is not sufficient to install it and
+> the `[c+0x54]` store is gated on something inside `0x0085A340` we have not read.
+> **Row stops rendering** — then the roster UI and the commander model genuinely do read
+> different containers, retail sends `0x01C2` twice, and heroes §21.2's tension is real
+> rather than an artifact of us picking the wrong container.
+
+The third refutation is the interesting one, and it is cheap to pre-empt: send the hero row
+**both ways**, `party_id = 0` and `party_id = 1`, and see whether row and commander can be
+lit at the same time. That costs one extra message and settles §21.2 either way.
+
+**Two guards must move to run this at all**, and both are heroes' own, both documented as
+inheriting a belief rather than a measurement: `agents.py:560`'s `1 <= party_id <= 20` and
+whatever refuses an unknown opcode on the send path. Relax the first to `0 <= party_id`,
+citing this section — do not delete it.
+
+### 13.5 Status of this section
+
+The addresses, the branch, the two stores, the table entry and the schema shapes are
+**OBSERVED** on build 38833. That `0x01D9` is *sufficient* to install the container is
+**UNVERIFIED** — `0x0085A340` has a body we did not read past the store. The prediction in
+13.4 is a **PREDICTION** and nothing more until a run either meets or refutes it. Nothing in
+this section has been near a client; it is all static reading, and the arc's history says
+that is exactly when to be most careful about calling it settled.

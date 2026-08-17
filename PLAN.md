@@ -1342,10 +1342,30 @@ the exact selector that reaches it. Three sites, each in a block with **one** se
   `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
   an `agentId`.
 
-**So the next measurement is neither on the wire nor on the event bus:** what does
-`0x0049C4B0` test, and what fills the 12-byte record table `0x00524FD0` walks. That is what
-stands between us and a bound commander. **Still worth checking early:** whether any of this
-shares RESKIN §18.1's explorable gate — heroes §32 blocks `0x01BF`'s last question behind it.
+**AND THE BLOCKER IS NAMED (study §13), still without touching a client.** `0x01C2`'s FIRST
+field is the container selector, not a label: `0` resolves to `[[globals+0x4C]+0x54]`, the
+**default** container — which is byte for byte the only container the commander model reads
+(`0x008563B0(0, n)`, arg0 a literal zero). `1..20` resolve to numbered containers. **We send
+`party_id = 1`** (`authsrv.py:8159`), so the roster UI reads our row and the commander model
+reads an empty list. `agents.py:560` refuses `0` on the belief that zero is a "silent" no-op
+branch; the branch is real, the reading is not.
+
+The default container is installed by **`0x01D9`** (handler `0x00857200` → `0x0085A340`, the
+only two pointer stores to `[c+0x54]` in the image). **Nothing in `toolkit/` sends `0x01D9`.**
+
+**The experiment, prediction first (§13.4):** send `0x01D9`, then `0x01C2` with
+`party_id = 0`. Predicted — the container fills, `0x00524C40` runs for the first time in this
+project, `0x100001A4` is raised, and the party-row click stops asserting. Refuted if the
+container fills and `0x00524C40` stays cold (the identity is wrong), if `0x01D9` does not
+install it (the store is gated on something unread), or if **the row stops rendering** (then
+retail sends `0x01C2` twice and heroes §21.2's tension is real). Pre-empt the third by sending
+the row **both ways** — one extra message settles §21.2 either way. Two of heroes' own guards
+must be relaxed to run it, both documented as inheriting a belief rather than a measurement.
+
+Separately CORROBORATED on the way: `ctx[0x44][0x2ac]` — reached from the UI side here,
+already reached from the wire side in heroes §22. Same answer, opposite directions. The
+identity was never the blocker. **Still worth checking early:** whether any of this shares
+RESKIN §18.1's explorable gate — heroes §32 blocks `0x01BF`'s last question behind it.
 
 **The prior is now sharper than "not server-reachable".** The wire cannot name a control type
 (§6) and cannot open the window (§10.1) — but it was never supposed to. The heroes arc spent
