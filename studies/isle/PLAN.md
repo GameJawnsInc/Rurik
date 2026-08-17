@@ -901,6 +901,26 @@ armor exponent NOT REACHED without the Suits. Rung 7 inherits the
 **(target, cause, swing-kind)** scoping rule.
 
 **Rung 4 — the loopback probes.** Our server, our client, no ArenaNet.
+**STATUS 2026-08-16 late: probes BUILT, VALIDATED, BLOCKED by a session-wide client
+death that is not this arc's.** The four probes exist (`ab309fa`/`021de16`,
+`check_encodable` green over all 71) and seven launch attempts produced a clean
+diagnosis instead of a render: **every loopback session on this machine since ~19:57
+tonight dies ~2 s after the spawn burst** — client-initiated (game channel `0x0008`,
+auth channel `0x0009 UPDATE_CHARACTER_SETTINGS`, status→Offline, RST both, Code=007
+on screen). Exonerated by direct test: the probes (dies with none running), the
+session flags (dies plain), the heroes NameError (`fab28bb` fixed it; still dies),
+the missing `0x0009` ack (arm added `6ce3875`; the reset precedes any possible ack
+by **194 µs** — it is a departure courtesy, not a blocked request), the webgate
+(traffic identical to surviving runs), DH/keys (c2s decodes fine), the def-1470
+payload (dies without it), and map binding (the client loads, spawns, walks, then
+leaves). **Convicted by elimination: shared vault state.** The last survivor ran
+17:53 from `main` (~100 s); `main`'s CURRENT server under the survivor's own
+configuration dies identically — code held, vault moved. The 146/148 archive
+relink (`--relink-plain`, landed 20:27–20:35, rewrote the client run-dir archives;
+their mtimes move during runs) is the prime suspect, with the character-data
+session's 19:57–20:20 experimental runs muddying the exact onset. That work is
+another session's and may be mid-debug — the probes run the moment any session
+survives past ~30 s.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
 17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
