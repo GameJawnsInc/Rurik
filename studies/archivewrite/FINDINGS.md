@@ -298,7 +298,7 @@ Rung shape follows [studies/unitmodels/PLAN.md](../unitmodels/PLAN.md): each run
 | Rung | What | Acceptance criterion (refutable) | Est. |
 |---|---|---|---|
 | **A1** | **Is the sequence index space global across the FA8 link graph, or per-file?** Read-only. Walk the hatcher's 15 link targets (§1.6) with `skelfile`, and either (a) find the client-side selector that maps a requested sequence index to a *file*, or (b) refute globality from the corpus. My own measurement is the starting evidence and the puzzle: shell **242**, 15018 **237**, the 15 links sum to **385**, grand total **627** — so 242 is neither. State the prediction first. | Either: **the index space is global** and adding a 16th linked FA1 is transparent (→ A4 becomes the route, the compressor drops to nice-to-have and this arc mostly ends); or **it is per-file** and the selector is NAMED with its VA and a corpus prediction that could have failed; or **NOT FOUND**, with the search range recorded. Widen past the hatcher before anything leans on it — the FA8 graph is acyclic with max link depth 1 corpus-wide ([studies/unitassembly](../unitassembly/FINDINGS.md)), so one creature is one witness. | 0.5 session |
-| **A2** | **Does a REALISTIC edit still fit? The elasticity gate.** Read-only, no encoder. Take the real 1,514,855 B payload, apply the edit the next rung actually wants through `skelwrite`'s existing seam (`scale_sequence_keytimes`), re-serialize, and compress with zlib -9 raw/-15 (+4 B trailer) as the **optimistic** proxy. | **> 1,029,632 B ⇒ the in-place compressed route is DEAD for that edit, no matter how good `gwenc.py` gets, and no encoder is written.** This has a real chance of going red: the measured elasticity is **+806 B at 0.1% of slots retimed, +8,725 B (OVERFLOW) at 1.0%**. Report the fraction of slots at which it crosses, not a yes/no. | 0.5 session |
+| **A2** ✅ **RUN 2026-08-17 — GREEN, see §7. The row below is SUPERSEDED**: its elasticity figures did not reproduce, and the edit it names can only move 692 B of a 1.5 MB payload. | **Does a REALISTIC edit still fit? The elasticity gate.** Read-only, no encoder. Take the real 1,514,855 B payload, apply the edit the next rung actually wants through `skelwrite`'s existing seam (`scale_sequence_keytimes`), re-serialize, and compress with zlib -9 raw/-15 (+4 B trailer) as the **optimistic** proxy. | **> 1,029,632 B ⇒ the in-place compressed route is DEAD for that edit, no matter how good `gwenc.py` gets, and no encoder is written.** This has a real chance of going red: the measured elasticity is **+806 B at 0.1% of slots retimed, +8,725 B (OVERFLOW) at 1.0%**. Report the fraction of slots at which it crosses, not a yes/no. | 0.5 session |
 | **A3** | **The route-independent safety fixes, and they can all go red.** (a) `container_signature` withholds by an MFT generation's **declared extent** projected across run boundaries, not by a head magic — regression fixture is `dat_study_38833` (§1.5). (b) `archive.py:322` `<I` → `<Q`, plus a synthetic archive with `mftOffset` above 2³² (**C-7**). (c) `datcheck --crc-sweep`, whole-archive, ~30 lines. (d) `datcheck --diff` compares `size_on_disk`. **(e) `datcheck --generations` (§5.4) — count surviving MFT generations and their flush counters, ~40 lines and one pass; nothing in the repo checks today whether a fallback exists before you risk needing one. (f) An explicit refusal in `datwrite.py` on header bytes `0x00..0x0C` (§5.6 rule 2) — the silent-wipe region is currently protected only by absence. (g) Mark the shadow-MFT rotation region as reserved in `datplan`/`datalloc` (§5.4) so no allocator can consume the client's own recovery material.** TESTS.md entries in the same commit — `test_srclint.py` §7 checks both directions. | `plan_move` on `dat_study_38833` for row 11196 **REFUSES** where it currently accepts `0xF5923800`; the u32 test fails before the fix and passes after; the CRC sweep reports exactly 2 structural exceptions (rows 1 and 3) in ~3.3 s and **catches a deliberately compression-flattened row** (C-6) that all ten open-time rules pass. Floors set from a real green run. | 1 session |
 | **A4** | **The additive FA8 path, on a SYNTHETIC archive only.** Build with `test_datcheck.py`'s `build_archive`; `datalloc` a new FA1-only file, append a 16th record to a copy of 116228's FA8 chunk (`mdlrefs` encodes the dependency-pair spelling), re-emit the shell with `skelwrite`. Never against a real `Gw.dat`. | Ten open-time rules clear, three CRC rules clear, `datalloc`'s MFT-slack accounting honest, the shell round-trips byte-identically apart from the intended FA8 delta, and the new row is registered **before** any bytes land in a region the client may reuse. **Kill:** if A1 said per-file-with-unknown-selector, this rung cannot state what the client will do with the 16th record and should stop at "archive-legal" rather than claim a route. | 1 session |
 | **A5** | **THE CONTAINER EXPERIMENT — one caged run, owner-driven.** On a **copy**: extend the file by 1,515,008 B at EOF, write row 11196's payload there **decompressed but otherwise byte-identical to what renders today**, rewrite offset/size/compression/CRC, zero the old extent, `datcheck --preflight` + `--crc-sweep` + `--check-overlaps` before and after. Write the testing instructions; **do not launch** (standing rule). | Because the payload is byte-identical content, **any visual change is unambiguous evidence about the CONTAINER**. Three answers at once: does the client read a **1,514,855 B stored** row (currently backed by an **empty** population — retail's largest ordinary stored content row is 19,292 B); does it tolerate a row past the old EOF; does file extension work. **This rung settles the Route B contest** (§2.4) — its two skeptics disagree and this is the run both proposed. Recovery is a file copy. Confirm no other session holds the archive open (a `PermissionError` was hit mid-measurement). | 1 session + 1 run |
@@ -553,6 +553,87 @@ Recorded rather than smoothed over.
 ## 6. The decision the owner actually faces
 
 **Recommendation: run A1 and A2 before anything is built, and expect them to change the arc.** Both are free, read-only, half a session each, and either can end it: A1 may show that the hatcher's animation is *already* addressable as fifteen separately-loaded files — in which case adding a sixteenth is transparent, nothing needs compressing, displacing, shrinking or repinning, and the 1.5 MB wall was never a wall but a description of one row we chose to rewrite. A2 may show that a realistic 1% retime overflows the reservation by 4,993 B — in which case the compression-8 encoder cannot deliver the thing it would be built for, whatever its quality. **The honest cost if both survive is 4–6 sessions to a working `gwenc.py`, and its payoff for file 15018 alone is between 68 and 3,732 bytes of authoring budget** — a route whose success criterion is *matching ArenaNet's own compressor on ArenaNet's own data to within 64 bytes*, with the pass/fail boundary sitting inside deflate's own tuning range and no fallback if it lands short. The encoder is still worth building eventually, but for the archive-wide reason (**121,139 rows cannot be rewritten stored in place**), not for this creature. **The one thing that would change the recommendation is A5:** if the retail client will read a 1,514,855-byte *stored* row placed past the old EOF, then the wall dissolves for every route at the cost of a permanently inflated archive, and the ladder collapses to A3 + A5 + a growth verb with a u32 guard. That population is currently **empty** — retail's largest ordinary stored content row is 19,292 B, and our one precedent is 29,802 B — which is exactly why A5 is one caged run, on a copy, with a byte-identical payload so the answer cannot be confounded by content.
+
+---
+
+## 7. A2 — RUN 2026-08-17. **GREEN**, and the rung as written tested the wrong edit
+
+**OBSERVED (orchestrator), read-only.** A2 asked whether a realistic edit still fits file
+15018's own 1,029,632 B reservation, using `zlib` raw deflate as the optimistic proxy —
+a kill gate for the in-place compressed route, needing no encoder.
+
+**It does not cross. In any direction tested.** The route is not entropy-limited.
+
+### 7.1 The baseline, and a number worth pausing on
+
+Sweeping 16 raw-deflate configurations (levels 6–9 × memLevel 8–9 × default/filtered), the
+best is **1,017,634 B** at level 8 / memLevel 8 / default — **11,994 B under the budget**
+(reservation less the 4-byte trailer).
+
+**That is 11,930 bytes SMALLER than ArenaNet's own output of 1,029,564 B.** The stdlib
+beats retail's compressor on retail's own payload by 1.2%. The §1.1 framing of the bar as
+"match ArenaNet within 3,732 B" was itself pessimistic — it came from `zlib -9`/memLevel 9,
+which is *not* the best configuration, and choosing the level by its number rather than by
+measurement cost 8,262 B of apparent headroom. **This does not make the encoder free** —
+`gwenc.py` must hit this in the *compression-8* format, not deflate, and A6 is still the
+rung that tests that. But the bar is a ratio ArenaNet themselves did not reach.
+
+### 7.2 The rung as specified tested the smallest possible edit
+
+Retiming through `skelwrite.scale_sequence_keytimes`, the seam A2 named:
+
+| sequences retimed | key slots moved | deflate | vs baseline |
+|---|---|---|---|
+| 1 of 237 | 0 | 1,017,634 | +0 |
+| 24 (10.1%) | 5 | 1,017,645 | +11 |
+| 128 (54.0%) | 72 | 1,017,651 | +17 |
+| **237 (100%)** | 167 | 1,017,641 | **+7** |
+
+**Retiming every sequence in the file costs seven bytes.** The reason is structural and it
+invalidates the rung as written: **the key table is 173 int32s — 692 bytes of a 1,514,855 B
+payload.** At most 0.05% of the input can move. A gate that cannot perturb its input is not
+a gate, and this one would have reported GREEN without testing anything.
+
+**This refutes the dossier's elasticity figures** (+806 B at 0.1% of slots, +8,725 B and
+overflowing at 1.0%). Those numbers are not reproducible here and cannot be right in the
+direction claimed: 692 bytes of moved input cannot cost 8,725 bytes of deflate output.
+Recorded as **CONTESTED → refuted**; the ladder's A2 row should be read as superseded by
+this section.
+
+### 7.3 The honest version: edits that touch the curves
+
+The mass is in the channels — 86 nodes, **76,008 curve samples** (node 1 alone carries 1,437
+rotation quaternions and 2,853 translation vec3s). An authored animation rewrites *those*.
+Two edits, applied to the first *n* nodes, FA1 length identical throughout so this is purely
+an entropy test:
+
+| edit | 5% of nodes | 25% | 50% | 100% |
+|---|---|---|---|---|
+| **SCALE** — translations ×2 (the curve-space form of what U7 shipped on node bases) | −11 | −18 | −27 | **−21** |
+| **REQUANT** — every float snapped to a 1/1024 grid (a from-scratch exporter's output) | −32,395 | −154,256 | −293,374 | **−467,928** |
+
+All FIT, with margin growing rather than shrinking.
+
+**PREDICTION STATED BEFORE THE RUN, AND REFUTED.** I predicted SCALE would be nearly free
+(correct — multiplying a smooth curve by a constant leaves it smooth) and that **REQUANT
+would be expensive and might overflow**, on the reasoning that re-rounding destroys the
+byte-level regularity deflate exploits. **That is backwards.** Coarser quantization makes
+the mantissas *more* repetitive, not less: requantizing every curve in the file compresses
+it **46% smaller than retail ships it**. I had conflated "not retail's exact bytes" with
+"less regular", and the adversarial case turns out to be the compressible one.
+
+The residual risk this leaves is the opposite of the one A2 was written to catch: not that
+an authored payload is too large, but that a *higher-fidelity* one — more samples, finer
+grids, denser keys — could be. Nothing measured here bounds that, because every edit above
+preserves the sample **count**. **A2's real successor question is whether an authoring
+pipeline may add samples, and at what rate the budget is consumed.** It is not on the
+ladder and it should be.
+
+### 7.4 Verdict
+
+**A2 is GREEN and does not kill the arc.** The in-place compressed route survives every
+edit class tested, with 11,994 B of headroom before any edit and more after most of them.
+The encoder's difficulty is *format conformance* (A6, A7), not ratio.
 
 ---
 
