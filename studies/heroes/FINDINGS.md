@@ -2435,6 +2435,45 @@ for exactly this reason and this run was launched without it. **`0x1000011E` is 
 those 3, which means nothing**: a 3-event sample taken after the UI is built cannot show a
 registration that happens during construction.
 
+### 36.3 THE CLEAN CENSUS: `0x1000011E` IS SUBSCRIBED, on the INLINE rig, twice
+
+Re-run properly serialised (wait for the field to clear, then start the client), so the
+startup burst is captured instead of a post-construction tail: **277 distinct
+(event, caller) pairs**, and among them
+
+```
+x2   event(esi)=0x1000011E   caller(retaddr)=0x00843C07
+```
+
+**On the ordinary inline rig -- the one that does NOT assert.** So the commander event does
+acquire a subscriber in a perfectly normal session; §34 measured `subscribers = 0` only
+because the raise happens *during the instance load*, before that registration.
+
+**This lifts §35's CONTESTED status without touching the broken rig.** The timing story no
+longer rests on late runs that assert -- it is now visible on the clean inline rig from a
+completely different instrument: the registration exists, and our `0x01C2` simply precedes it.
+§35.1/§35.5's *contrast* was right and its late-rig *mechanism* was never needed.
+
+**A repeat of 36.1's own lesson, one section later.** The captured `0x00843C07` is a RUNTIME
+address; resolving it against the image gave misaligned garbage until the slide came off:
+`0x00843C07 - 0x210000 = 0x00633C07`, which sits beside the raise wrapper at `0x00633D70`.
+Un-sliding a captured pointer is the mirror of not baking a relocated address into an anchor,
+and both cost a wrong reading before being noticed.
+
+The caller resolves to a thin subscribe wrapper:
+
+```
+00633BF0  push eax
+00633BF1  call 0x64ca60          ; resolve the target object
+00633BF9  lea  ecx,[eax+0xa8]    ; its own map, NOT the global 0xC11BC4
+00633BFF  push [ebp+0xc]         ; the event id, from the wrapper's arg
+00633C02  call 0x64cd60          ; subscribe
+```
+
+so every registration in the census funnels through one site and the wrapper's **callers** are
+what name the UI construction. That is the next read, and it is static: enumerate callers of
+`0x00633BF0` and find which passes `0x1000011E`.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.

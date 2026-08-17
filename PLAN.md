@@ -1804,7 +1804,16 @@ experiment cannot be run cleanly this way, §35.1/§35.5 stay CONTESTED with no 
 it, and §33.5 stands better understood: the commander panel is not reachable from the server.
 Regression control held throughout — the same code inline is clean, send order unchanged.
 **The remaining route is a different instrument:** trap the map INSERT rather than the lookup,
-and find which UI construction registers `0x1000011E`. Fresh arc. Also
+and find which UI construction registers `0x1000011E`. **DONE — FINDINGS §36.3, and it lifts
+the CONTESTED status.** A properly serialised census of the subscribe path (277 distinct
+(event, caller) pairs) shows **`0x1000011E` registered TWICE on the ordinary INLINE rig** — the
+one that does not assert. So the commander event does acquire a subscriber in a normal session;
+§34's `subscribers = 0` was measured only because the raise happens *during* the instance load,
+before that registration. The timing story therefore no longer depends on the asserting late
+rig at all: §35's *contrast* was right and its late-rig mechanism was never needed. **Next, and
+it is static:** the caller resolves (after un-sliding: `0x00843C07 - 0x210000 = 0x00633C07`) to
+a thin subscribe wrapper at `0x00633BF0` through which every registration funnels — so
+enumerate ITS callers and find which passes `0x1000011E`. That names the UI construction. Also
 recorded UNRESOLVED (§35.7): the two trap site-sets disagreed 4-of-4 versus 0-of-3 on the same
 rig, which could be variance, an observer effect, or the sites themselves — so §35.5's numbers
 are not safe to build on yet.
