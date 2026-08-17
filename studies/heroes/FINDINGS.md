@@ -1787,6 +1787,59 @@ process**. The commander context was a plain global the whole time. When a quest
 is the client's state", prefer measuring the state over predicting it — the same lesson
 `CLAUDE.md`'s "capture the client and read it" states, arrived at the expensive way.
 
+## 28. A subscriber-map reading that was WRONG, and the control that caught it
+
+Having measured the container empty (§27), the obvious next cheap read was the UI event
+**subscriber map**: `0x0064CA30` does `mov ecx, 0xc11bc4` — the address *is* the map object —
+and looks the event id up through `0x00491F20` before calling any handler. An event with no
+entry would be raised into nothing, which would explain the empty container with no debugger
+at all.
+
+The lookup's own arithmetic gives the shape: buckets at map`+0x10`, bucket count `+0x18`,
+mask `+0x1c`, **12-byte entries** (`lea ecx,[edi+edi*2]; lea edx,[eax+ecx*4]`) whose `+8` is a
+state word. Read live, the header agreed exactly: `buckets=0x1D1A6A38, n=512, mask=0x1FF`.
+
+**And the answer it produced was dramatic and false.** It reported **NO SUBSCRIBER** for
+`0x1000011E`, `0x10000114` *and* `0x100001A4`.
+
+### 28.1 Why that is refuted, from evidence already in hand
+
+`0x100001A4` is **known live**: the party-window button raises it, and the client asserts
+**inside its handler** — that is the whole `GmView.cpp(5890)` crash this arc has been chasing.
+An event whose handler demonstrably runs cannot be unsubscribed. So the reader was broken,
+not the client surprising.
+
+Dumping the bucket array settled it: **512 of 512 slots non-empty, and no event-id-shaped
+value at ANY of the three offsets.** The map does not hold raw ids in its buckets — the
+lookup hashes through `0x004920B0` first, so the keys are hashed or held indirectly and a
+plain walk cannot find them without replicating that hash.
+
+### 28.2 The control is now the tool's gate
+
+`commanderpeek.py --events` no longer answers unless it finds `0x100001A4` first. If the
+control is absent the reader declares itself broken and gives **no** subscriber verdict.
+Both branches verified offline against a synthetic map (absent → refuses; present → answers,
+`0x1000011E`=1, `0x10000114`=0).
+
+This is the house rule doing its job in the direction that matters: *"a fixture that silently
+resolves to the wrong thing turns every assertion behind it into a no-op."* Without the
+control, "the commander event has no subscriber" would have been a clean, memorable,
+completely wrong finding — and it fits the arc's story so neatly that it would probably have
+survived review.
+
+### 28.3 What still stands, and what is now off the table
+
+- **§27's container measurement stands.** It is a separate, simple header read
+  (`ctx+0x20`: `cap=7 count=0`, seven zero slots) and it is *consistent* with the assert
+  rather than in tension with it.
+- **The subscriber question is unanswered**, and cheaply answering it is off the table: it
+  needs `0x004920B0` replicated, which is a second thing to get wrong, or a trace — which is
+  where §26.4 already pointed.
+
+**Loose end, named rather than left implicit:** the control gate is verified offline but has
+no committed test, and a new test file needs its `TESTS.md` entry in the same commit
+(`test_srclint` §7 enforces both directions). That is the next small piece of work here.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

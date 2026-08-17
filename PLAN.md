@@ -1560,10 +1560,22 @@ had gone stale on four items that were since closed, which is the drift the top 
    spending native tooling is now made of a measurement rather than a hypothesis. Note
    `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
    (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
-   **Method note worth carrying:** three static hypotheses were killed by client runs at ~7
-   minutes each, and what actually moved this was reading four dwords out of the live process
-   — the global was there the whole time. When the question is "what is the client's state",
-   measure the state.
+   **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at
+   `0xc11bc4` reported **NO SUBSCRIBER** for all three commander events — refuted on the spot
+   by evidence already in hand, since `0x100001A4` demonstrably reaches its handler (it is
+   what raises the `GmView:5890` assert). Dumping the buckets confirmed the reader was blind:
+   512/512 slots non-empty and no event-id-shaped value at any offset, because the lookup
+   hashes through `0x004920B0` and the walk never sees real keys. `commanderpeek --events`
+   now **refuses to answer** unless it finds that control first; both branches verified
+   offline. **So the subscriber question is unanswered and is NOT cheap** — it needs the hash
+   replicated (a second thing to get wrong) or the trace §26.4 already named.
+   **Loose end:** the control gate has no committed test, and a new test file needs its
+   `TESTS.md` entry in the same commit.
+   **Method note worth carrying, now cutting both ways:** three static hypotheses were killed
+   by client runs at ~7 minutes each and what moved it was four dwords of live memory — but
+   the very next live read produced a clean, memorable, completely FALSE finding, and only a
+   built-in positive control caught it. Measure the state; then check the instrument against
+   something you already know.
 3. **Four desk leftovers**, scoped by a workflow that died on a session limit before
    returning anything: (a) the scan trigger above, (b) `0x0074`'s other **17 unexplained
    fields**, (c) `0x01C2`'s `msg+0x14` (the second `u8`, never varied), (d) the **aiMode
