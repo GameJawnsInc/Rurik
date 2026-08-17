@@ -3287,4 +3287,64 @@ Every one of these, in the order they were written:
   the green run (71 -> 72 with the review's real-data tiling check);
   sections 0-1 (synthetics + the resolve_outdir refusal with its positive
   controls and the mapexport delegation check) score 28 vault-less and go
-  RED; with the archive but no Blender, 53, also RED).
+  RED; with the archive but no Blender, 53, also RED),
+  `toolkit/mapdata/test_skelwrite.py` (the RE-IMPORT ROUND TRIP, rung U6:
+  the FA1/container WRITER
+  (`skelwrite.py`): decode -> extract -> encode must be BYTE-IDENTICAL, and
+  identity is the criterion precisely because re-parse equivalence cannot
+  be -- the walk pins no order between adjacent fixed-size blocks, so the
+  test's `swap_n14_n34` writer variant emits output that RE-PARSES GREEN
+  (walk closes, every gate passes) while failing identity with the diff
+  confined to the two swapped blocks, demonstrated on a synthetic with
+  planted-distinct block content (uniform fill would make the swap
+  invisible) AND on the worm, whose n14/n34 contents are measured distinct.
+  What keeps identity from being vacuous is the memcpy-loader lesson
+  (models FINDINGS 4.5) applied writer-side, pinned three ways: a typed
+  repr HAND-BUILT from the test's own literals -- never decoded from any
+  payload, so a spans-concatenating encoder cannot even run on it -- must
+  encode to `synth_anim()`'s exact bytes; the anchors' opaque-carry totals
+  are pinned at their measured values (worm 823 of 82,169 B, shell 559 of
+  29,495 -- ~1%: everything else is re-derived from typed values); and the
+  U7 seam (`scale_sequence_keytimes`, pure int32, inexactness and overflow
+  REFUSED) must land its modification at byte offsets PREDICTED before
+  serializing -- worm sequence 2 x2 flips exactly key 2's int32 slot, at
+  chunk and at container level, and re-decodes to the scaled time. U6's
+  measured finding is recorded as a pin: header bytes +0x09..+0x0B, which
+  the parser never reads, are NOT zero (shell 0x42, worm 0x07; 5,208 of
+  14,571 corpus FA1s non-zero, 39 distinct patterns), so the typed layer
+  carries them opaque rather than assuming them. Identity runs on both
+  anchors plus the container-only hatcher body, a deterministic stride-89
+  corpus pass (241/241 containers, 160/160 FA1s, 9 blk48 carriers so the
+  typed blk48 repack meets real data), and under `--all` the COMPLETE
+  population: 21,420/21,420 containers and 14,571/14,571 FA1s
+  byte-identical (MEASURED 2026-08-16, 848 s). Refusals are named `Unwritable`s beside passing
+  controls: count/list mismatch, diverged start/end aliases, truncated
+  opaque var-array (each opaque block must TILE under its own terms before
+  it is emitted), wrong-size pad09, n2C == 0 (the client's own error 12),
+  fa1= against a no-FA1 container, non-type-2 ffna -- and an
+  n56-carrying synthetic (0 corpus files can exercise that stride) must
+  round-trip, in two shapes. Section 3 is the datwrite half with its
+  identity levels STATED: serialized chunk/container bytes EXACT;
+  decompressed row payload read back out of a REBUILT archive EXACT; the
+  STORED form legitimately different (compression 8 x 90,616 B ->
+  stored x 129,368 B -- no compression-8 encoder exists, datwrite study
+  blocker 2). The rebuilt archive carries the worm's REAL rows
+  byte-verbatim in test_datmove's fixture shape at loader-legal indices
+  (>= 16): the 515 -> 1 -> 2817 `alloc.nextStream` chain, whose survival
+  is the load-bearing check because U7's kill/keep names the untouched
+  mid/tail rows as prime suspects -- after the move the chain links, the
+  flags, and both partners' bytes are unchanged (corrupted-chain control
+  beside it), the file-id table still names the same row, all three
+  checksum rules hold, and no two reservations intersect. The recorded
+  WALL is exhibited, not just cited: `datwrite.replace` refuses the
+  129,368-B payload naming the relocation, and `datmove` -- the verb built
+  for exactly that refusal -- succeeds beside it. Floor 66 MEASURED from
+  the green default run; --all runs 68, its two stride-1-only
+  population pins added; vault-less runs
+  execute the synthetic sections only, 32 checks plus a declared skip, RED
+  on the floor by design -- and the first vault-less run DIED with no
+  verdict because `require_dir` raises SystemExit past `except Exception`,
+  the exact unguarded-exception failure the models-arc review named, now
+  guarded and commented. ~40 s default; nothing outside the vault is ever
+  written -- the rebuilt archive and its journals live under
+  `vault/exports/unitwrite/`).
