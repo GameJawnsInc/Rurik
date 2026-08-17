@@ -6860,7 +6860,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_PLAYER_FLAGS,
                                  agents.player_flags(PLAYER_NUMBER, PLAYER_FLAGS),
                                  f"PLAYER_FLAGS(value {PLAYER_FLAGS}, mask 7)")
-                        # The create's preamble, retail's exceptionless idiom:
+                        # The create's preamble, retail's kind-5 idiom
+                        # (createburst census, 344/366 in the two dominant
+                        # templates): the per-AGENT level rides prop 36 before
+                        # the body exists, then 0x00F0, then the create. The
+                        # level was never sent per-agent at all until
+                        # 2026-08-17 -- the roster's W0 was its absence
+                        # rendered (RESKIN 18.4), while 0x00E9 field 9 below
+                        # only feeds the per-PLAYER top-left bar; the two
+                        # channels are confirmed distinct in the same frame.
+                        # Retail also sends 009F:30 (ApplyGuild1) here; we
+                        # have no guild id and do not invent one.
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                             [agents.PROP_LEVEL, PLAYER_AGENT_ID, START_LEVEL],
+                             f"level {START_LEVEL} on the player's AGENT")
                         # 0x00F0 immediately precedes every kind-5 create,
                         # 130/130 in the smsg corpus, and the player burst sent
                         # NOTHING here until 2026-08-17 (divergence D2's
