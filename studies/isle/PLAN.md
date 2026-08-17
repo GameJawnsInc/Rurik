@@ -944,6 +944,18 @@ survives past ~30 s.
 > flows) could kill a client's connections mid-session, though the death's tight
 > timing argues for a timer, not async interference. The next discriminating step
 > needs the owner: one run with all other sessions' harness activity paused.
+>
+> **RESOLVED 2026-08-17, and both diagnoses above were wrong in an instructive way:
+> nothing was dying.** `session.py --hold` without `--keep-open` is silently inert
+> (`session.py:1272` gates `hold_open` on `a.keep_open` alone), so every "death" was
+> the harness's own teardown at the verdict closing a healthy client — whose orderly
+> exit telemetry reads exactly like a client-side failure. The 17:53 "survivor"
+> survived because its 66-second action schedule kept the session up, and the char-data
+> arc's run sheets pass `--keep-open` as a matter of habit. The reboot at 18:34 was a
+> coincidence inside the window; the client-internal-timer inference fit fourteen runs
+> and was still an artifact of the instrument. With `--keep-open` passed, every probe
+> ran to completion — see FINDINGS "Rung 4". The 38797-defaults pre-spawn failure
+> remains real and is the archive-family issue `studies/character/RUNS.md` documents.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
 17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
@@ -954,6 +966,18 @@ precedent). Each of these
 answers a question a live session cannot.
 *Exit:* each named question resolved on our own client with an operator-confirmed render,
 per the repo's rendered-acceptance rule.
+**DONE 2026-08-17** (met for three probes, met-with-residuals for the fourth —
+`FINDINGS.md` "Rung 4"): the enc_name route PROVEN and station 1470 named ("Outfitter",
+operator-read); 478=Bleeding/480=Burning CORROBORATE the condition mapping order and
+the client does NOT self-apply degeneration; the three damage kinds separate on the
+client's own bar (16 debits, **17 debits — the probe's prediction refuted**, 18
+notifies only), settling "17 replaces 16" on both halves; and `0x5D` renders only with
+its `0x5E` channel tag, ArenaNet's numeric args displaying in the clear ("is now level
+17!"), with two hazards named — arg values colliding with control ids (7 → 0x107, the
+literal marker) and `0x5F`-with-a-bare-sid crashing the client (c0000005). Residuals
+riding the next loopback pass: the multi-word varint send, the overhead channel, the
+2077 condition render, and the energy drain-pool probe (never run — the session budget
+went to the teardown detour). None blocks rung 6 or rung 7's chat-log half.
 
 **Rung 5 — the plumbing.** Gaps 2, 4, 5, 7 of §5.
 *Exit:* a vault-emitted `def_NNNN` row spawns on loopback, and dropping a synthetic fourth

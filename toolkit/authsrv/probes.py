@@ -2192,27 +2192,40 @@ def _coded_chat_steps(agent_id):
     of Damage plan reads DPS numbers out of exactly this format, so if our
     encode does not round-trip, rung 7's analysis tooling is built on a guess.
     """
+    # RUN 2026-08-16 (twice, operator watching): all three bare 0x5D steps
+    # rendered NOTHING, with exactly ONE 'Invalid coded string' in Gw.log per
+    # run -- so two were ACCEPTED and still not displayed. Live traffic never
+    # sends 0x5D bare: every one is paired with an 0x5E channel/color tag
+    # (t=21.06 in 20260807T143055: 0x5D [sid 1796 + args] then 0x5E [51, 10]).
+    # This revision replays the pair, verbatim tag after each line.
+    TAG = [51, 10]
     return [
         Step(2.0, 0x005D, [_chat_units(CHAT_TEMPLATE_SID, CHAT_LIVE_ARGS)],
              "93: ArenaNet's own level-up line, replayed verbatim",
-             "the CHAT PANEL (and any overhead banner). The control: these are "
-             "the exact words ArenaNet sent on 2026-08-07, so SOMETHING should "
-             "render, with the numbers 13, 51, 1 and 17 somewhere in it. Note "
-             "which numbers appear and in what roles."),
+             "nothing yet -- the channel tag comes next."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: its channel tag [51, 10], the captured partner",
+             "the CHAT PANEL. The control: these are the exact words ArenaNet "
+             "sent on 2026-08-07 WITH their tag, so SOMETHING should render, "
+             "with 13, 51, 1 and 17 somewhere in it."),
         Step(10.0, 0x005D, [_chat_units(CHAT_TEMPLATE_SID, CHAT_OUR_ARGS)],
              "93: the same template, OUR numbers 42/7/3/99",
-             "THE MEASUREMENT. The same line must render with 42, 7, 3, 99 in "
-             "the same roles the control's numbers held. If the numbers on "
-             "screen are ours, the 0x100-biased value-word encode round-trips "
-             "and rung 7 can read the Master of Damage. If the client logs "
-             "'Invalid coded string received from server' (check Gw.log "
-             "after), the refusal is the finding."),
+             "nothing yet."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: the tag again",
+             "THE MEASUREMENT. The same line with 42, 7, 3, 99 in the roles "
+             "the control's numbers held. If the numbers on screen are ours, "
+             "the value-word encode round-trips and rung 7 can read the "
+             "Master of Damage."),
         Step(10.0, 0x005D, [_chat_varint_units(CHAT_TEMPLATE_SID,
                                                CHAT_BIG_VALUE)],
              "93: first arg as a MULTI-WORD varint carrying 40000",
-             "the same line with 40000 as its first number. This is the "
-             "encoding a five-digit damage total needs, and the decode rule's "
-             "send direction has never been exercised."),
+             "nothing yet."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: the tag again",
+             "the same line with 40000 as its first number -- the encoding a "
+             "five-digit damage total needs, never exercised in the send "
+             "direction."),
         Step(10.0, 0x005F, [ENEMY_AGENT_ID, 0,
                             "".join(chr(0x100 + 2972))],
              "95: NPC overhead text on the hostile -- one bare sid, 2972",
@@ -4119,7 +4132,17 @@ PROBES = {
              "own handler -- a render is also the first proof of that layout "
              "against a running client. SAY THE TOOLTIP NAMES OUT LOUD: the "
              "id -> condition mapping order is UNVERIFIED and the tooltip is "
-             "the only instrument that settles it.",
+             "the only instrument that settles it. "
+             "RUN 2026-08-16, operator watching: 478 rendered BLEEDING and "
+             "480 BURNING, both classified as CONDITIONS on the operator's "
+             "character -- two points landing exactly in s_charCondition's "
+             "order, so the mapping (478 Bleeding, 479 Blind, 480 Burning, "
+             "481 Crippled, 482 Deep Wound, 483 Disease, 484 Poison, 485 "
+             "Dazed, 486 Weakness) moves to CORROBORATED. 'They did no "
+             "damage': the client renders the condition and does NOT "
+             "self-apply degeneration -- the server must send it (the 0x00A2 "
+             "prop-44 rate, FINDINGS B4). Step 5 (2077) went unobserved; "
+             "Cracked Armor's out-of-block id is still open.",
     ),
     "lone_p17": lambda a, o: Probe(
         question="What does a LONE property 17 draw, and does the client-side "
@@ -4136,7 +4159,17 @@ PROBES = {
         note="Isle rung 4. Step 1 is the known-good p16 control at the same "
              "magnitude -- read 17 and 18 AGAINST it, not against memory of "
              "what a crit should look like. Step 4 restores the orb via the "
-             "property-34 setter.",
+             "property-34 setter. "
+             "RUN 2026-08-16, measured off the harness screenshots (bar "
+             "values legible): 100 -> 90 on the p16 control, 90 -> 80 on the "
+             "LONE p17 -- THE ORB MOVED, refuting this probe's own stated "
+             "prediction -- and 80 -> 80 on p18. So the three kinds separate "
+             "on screen: 16 debits, 17 debits, 18 notifies only. The "
+             "agentprops 'notification without a health record' reading was "
+             "right about the MECHANISM and wrong about the ID -- it belongs "
+             "to 18. Client and server agree on 17 (B6: a lone p17 kills "
+             "server-side; here it debits client-side): 17 is a full damage "
+             "kind, and '17 replaces 16' is settled on both halves.",
     ),
     "coded_chat": lambda a, o: Probe(
         question="Does OUR encode of coded-string numeric args render -- same "
@@ -4154,7 +4187,21 @@ PROBES = {
              "plan reads DPS numbers out of exactly this format "
              "(studies/isle/FINDINGS.md B8 -- decode direction measured on "
              "50 live 0x5D messages, send direction never exercised). CHECK "
-             "GW.LOG AFTERWARD either way.",
+             "GW.LOG AFTERWARD either way. "
+             "RUN 2026-08-16/17, operator watching, three sessions. Bare 0x5D "
+             "renders NOTHING and is silently held -- the 0x5E channel tag is "
+             "REQUIRED (paired verbatim, the control rendered). The control "
+             "drew the level-up line with its numeric arg IN THE CLEAR ('is "
+             "now level 17!'), so the announcement-number path rung 7 needs "
+             "is proven on a real render. BOTH our-arg variants were refused "
+             "('Invalid coded string' x2): arg value 7 encodes to 0x107, "
+             "which is the LITERAL-RUN MARKER record -- the biased-varint "
+             "range contains control ids and 7 collides. The varint rule "
+             "itself is therefore STILL UNEXERCISED. And step 7's 0x5F with "
+             "a bare non-chat sid CRASHED the client -- c0000005, null read "
+             "-- so 0x5F is never to be sent with an arbitrary record; the "
+             "overhead half of the oracle stays unproven. Next iteration: "
+             "args avoiding 0x100-0x1FF control ids, and no 0x5F.",
     ),
     "encname_render": lambda a, o: Probe(
         question="Does a CAPTURED enc_name tuple render as a readable "
@@ -4169,7 +4216,14 @@ PROBES = {
         note="Isle rung 4, the Hatcher precedent re-run on a roster row. "
              "HOLD CTRL and read the plate out loud; the string the client "
              "resolves from its own archive is the measurement, and it "
-             "never enters the repo -- the ids already have.",
+             "never enters the repo -- the ids already have. "
+             "RUN 2026-08-16, operator-confirmed: the body spawned, wore the "
+             "outfitter/merchant model (pack and all -- the operator matched "
+             "it to Gelsan the Outfitter's family on the wiki), carried a "
+             "readable red 'Outfitter' plate, and despawned clean. The "
+             "captured-tuple -> nameplate route is PROVEN, and the "
+             "agentroster station (slot 1470, model 116698, map 148, pos "
+             "8436,4819) is NAMED: the Ascalon City outfitter.",
     ),
     "buff_type_field": lambda a, o: Probe(
         question="Is opcode 66's third field Headquarter's `effect_type` or "

@@ -305,3 +305,102 @@ recorded weapon.
 - **Repo defect surfaced, not fixed here** (bench was read-only):
   `consttable.py`'s `s_effect` docstring/field naming calls +0x04 `name_id`; it is
   an archive file id (B3, 2076/2076 vs 0/2000 control). Tracked as a spawn chip.
+
+---
+
+# Rung 4 — the loopback probes: four runs, four measurements, one long detour
+
+**2026-08-16/17, operator watching throughout.** The detour first, because its lesson
+is a harness fact every future session needs: **`--hold` without `--keep-open` is
+silently inert** — `session.py:1272` runs `hold_open` only under `a.keep_open`, so a
+`--hold`-only session tears down at the verdict, ~4 s after spawn, closing a healthy
+client whose orderly exit (game `0x0008`, auth `0x0009 UPDATE_CHARACTER_SETTINGS`,
+status→Offline) reads exactly like a client-side death. Fourteen launches were
+autopsied as deaths before the missing flag was found; the elimination matrix that
+exonerated code, archives (to the point of a pristine restore), maps, flags and the
+vault is preserved in PLAN.md's rung-4 status note as a monument. The 38797-default
+config's separate pre-spawn failure is the archive-family issue
+`studies/character/RUNS.md` already documents. Two keepers came out of the detour:
+the `0x0009 UPDATE_CHARACTER_SETTINGS` ack arm (`6ce3875` — the message is departure
+courtesy, not a blocked request), and the focus-sampler pattern for separating "the
+client died" from "the harness closed it".
+
+## R4-1. `encname_render` — the naming route is PROVEN, and the station has a name
+
+OPERATOR-CONFIRMED RENDER: the body spawned 150u out wearing the outfitter/merchant
+model (matched by the operator against Gelsan the Outfitter's family on GWW), carried
+a readable red **"Outfitter"** nameplate, and despawned clean. The captured
+`enc_name` tuple `[3943, 39638, 36630, 30448]` → readable text via our server and our
+client, no RC4 key anywhere — the exact route rung 6's roster identification depends
+on. Bonus: `agentroster.py`'s cross-session station (slot 1470, model 116698,
+map 148, pos 8436,4819) is now **named**: the Ascalon City outfitter. One bound
+recorded en route: declaring at index 1470 vs index 25 made no difference to the
+detour-era teardown — the small-index note in the probe stands as caution, unproven
+either way.
+
+## R4-2. `condition_render` — 478=Bleeding, 480=Burning, and degen is the server's job
+
+OPERATOR-CONFIRMED: skill 478 rendered the **Bleeding** condition and 480
+**Burning**, classified as conditions on the operator's own character. Two points
+landing exactly in `s_charCondition`'s order move the id→condition mapping
+UNVERIFIED → **CORROBORATED**: 478 Bleeding, 479 Blind, 480 Burning, 481 Crippled,
+482 Deep Wound, 483 Disease, 484 Poison, 485 Dazed, 486 Weakness (+2077 Cracked
+Armor, step unobserved — still open). And the operator's "they did no damage" is the
+third measurement: **the client renders a condition and does not self-apply its
+degeneration** — health stays server-authoritative, so rung 8's server-side condition
+model must send the degen itself, which is precisely what B4's `0x00A2` property-44
+rate (quanta of 2/H) provides the mechanism for.
+
+## R4-3. `lone_p17` — the three damage kinds separate on screen, and the prediction lost
+
+Measured off the harness screenshots (bar values legible): **100 → 90** on the
+property-16 control, **90 → 80 on the LONE property 17** — the orb moved, refuting
+this probe's own stated prediction — and **80 → 80 on property 18**. So:
+
+| kind | client bar | server ledger (B6) |
+|---|---|---|
+| 16 | debits | debits |
+| 17 | **debits** | **debits — a lone 17 kills** |
+| 18 | does not move | (never observed live) |
+
+`studies/agentprops`' "raises the notification, skips the health record" was right
+about the mechanism and wrong about the id — it belongs to **18**. Client and server
+agree on 17: it is a full damage kind, and "17 replaces 16" is settled on both
+halves. What 17 *means* (critical is still the lean, per B6's floor(1.414·max) fits)
+remains rung 7's variance test.
+
+## R4-4. `coded_chat` — the tag is required, the numbers render, and two hazards have names
+
+Three sessions, operator watching:
+
+- **Bare `0x5D` renders NOTHING and is silently held** — no refusal, no display.
+  Live traffic never sends it bare; paired verbatim with its captured `0x5E [51, 10]`
+  channel tag, the control **rendered**: the operator read *"is now level 17!"* in
+  chat — ArenaNet's level-up template with its numeric argument displayed **in the
+  clear**. The announcement-number path rung 7's Master of Damage reading depends on
+  is now proven on a real render, not just a decode.
+- **Both our-argument variants were refused** (`Invalid coded string` ×2), and the
+  cause is sharper than the varint rule: our arg value **7** encodes to `0x107`,
+  which is the **literal-run marker record** (`questdefs.LITERAL_MARK`). The
+  0x100-biased value range **contains control ids**, and 7 collides. ArenaNet's own
+  args 13/51/1/17 (0x10D/0x133/0x101/0x111) pass, so the collision set is specific,
+  not the whole low range. The multi-word varint encode therefore remains
+  UNEXERCISED — the refused lines never got as far as judging it.
+- **`0x5F` with a bare non-chat sid CRASHED the client** — `c0000005`, memory at
+  0x00000000 could not be read, no assert text — after rendering nothing. The
+  overhead-text path dereferences something our bare-sid message does not provide.
+  **Never send `0x5F` with an arbitrary record**, and the overhead half of the
+  oracle stays unproven; the `/bow` report rides `0x5D` anyway (B8), which is the
+  half that now works.
+
+Next iteration (cheap, no session needed to design): args chosen outside the control-id
+range, no `0x5F`, and one step isolating the multi-word varint.
+
+## Rung 4 verdict
+
+Every probe produced a measurement; three of four settled their question outright and
+the fourth proved the load-bearing half of its channel while naming two real hazards.
+The rung's exit criterion — each named question resolved with an operator-confirmed
+render — is met for R4-1/2/3 and met-with-residuals for R4-4 (the varint and the
+overhead channel carry to the next loopback pass; neither blocks rung 6 or rung 7's
+chat-log half).
