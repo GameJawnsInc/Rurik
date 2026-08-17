@@ -77,3 +77,74 @@ reading; a render at half speed is the summit.
 Loopback only; the DH binding decides where a build may point
 (`assert_launch_safe`); the cage stays verified; one client, human cadence;
 nothing from this run leaves the vault.
+
+---
+
+# THE RUN — 2026-08-17. U7 IS MET.
+
+**A modification we authored renders in the retail client.** The hatcher's
+skeleton, node bases scaled ×2 through `skelwrite`, drawn grotesquely
+stretched by the pinned build-38797 client reading a `datmove`-rebuilt
+archive. OBSERVED by the owner, screenshot with the run record. Not one
+byte of that deformation is ArenaNet's: it is our decode → our typed
+representation → our encode → our container → their renderer.
+
+The chain, every link committed and review-gated: `skelfile` (U1) decoded
+FA1 → `skelwrite.extract` (U6) → node bases ×2 → `skelwrite.encode` →
+`rebuild_container` → `datmove` into a staged copy → the loopback client.
+
+## It took four runs, and three of them were the experiment fighting itself
+
+Recorded because the next session will otherwise pay the same tolls. None
+of the first three failures was in the decode/encode chain.
+
+1. **Wrong creature.** The plan's named case was the worm (116366). The
+   harness's `--enemy` spawns the **hatcher** (definition 1471 = shell
+   116228 + body 116703), and U4 had already proved those file sets are
+   disjoint — so the client never read a modified byte. The operator was
+   asked to eyeball an animation that could not have changed. *Read the
+   assembly resolver's own answer before choosing a target.*
+
+2. **A server bug that looked like ours.** Runs 1–2 died at
+   `INSTANCE_LOAD_INFO` with `Code=007`, no assert, zero c2s — with AND
+   without the modified archive, which is what exonerated it. Cause: the
+   2026-08-14 crossbuild key fix lived inline in `handle()`'s **auth**
+   branch and the **game** branch never got it, so a 38797 client was
+   handed 38833's key and the ARC4 stream was noise. Fixed as one shared
+   `bind_key_to_build()` with an AST regression check that both channels
+   reach it (`test_handshake.py` section 0).
+
+3. **Three things animating the target at once.** Run 3 used
+   `--probe burrow`, whose step 4 deliberately re-creates the body at a
+   **fresh agent id** (`probes.py:2515`) — that is the second hatcher, and
+   it is the probe doing its job in a test that had no business calling
+   it. Add the combat arc making hostiles fight, and the creature was
+   being driven by a burrow cycle, an AI and a probe while we tried to
+   measure a model's playback rate. `--game-args="--practice-target"`
+   (note the `=`: argparse only takes a `--`-leading value if it contains
+   a space, which is why `'--probe burrow'` worked and
+   `'--practice-target'` did not) gives one hostile standing still.
+
+## What the run measured, beyond the summit
+
+- **The shell's FA1 poses the creature.** The deformation lands from
+  116228's own blk2C bases, so a COMPOSITED shell's skeleton is live in
+  the renderer — not merely loaded. MEASURED.
+- **Pose and playback rate come from different places.** Key times ×4 on
+  the same file changed *nothing* visible (two clips, operator-reviewed),
+  while bases ×2 on the same file changed everything. So the FA1 key
+  table is not what sets idle playback speed — a real constraint on
+  `studies/anim`'s timing reading, and the next question this arc leaves.
+  (An earlier "superspeed" observation is NOT evidence either way: the
+  burrow cycle and attack timing are server-driven and were animating the
+  body themselves. It is recorded as uninterpretable, not as a result.)
+- **A stored `flags=515` row is acceptable to the client** — risk
+  candidate (a) above is REFUTED. The rewritten row is uncompressed where
+  retail ships it compressed, and the client loaded, posed and animated it.
+- **The animation library is currently unwritable, and that is the arc's
+  standing wall.** The shell's first FA8 link (15018) carries 1.5 MB of
+  FA1 — 237 sequences against the shell's sparse set — and `datmove`
+  refuses it by name: *"nothing fits… the largest run datplan will hand
+  over is 953,856 B"*. Retail ships it compressed; we write stored; no
+  compression-8 encoder exists. Any authorship reaching the full animation
+  set needs one, or an archive that may grow.

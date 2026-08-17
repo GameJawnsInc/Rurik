@@ -1359,14 +1359,41 @@ modification seam is atomic after the review's one real bug (a mid-span refusal 
 leave a half-retimed repr); and `skelfile.sound_events()`'s majority-class crash was
 found by this rung and fixed — independently, twice, by two sessions in the same hour.
 
-**The ladder now waits on exactly one thing: the owner. U7 is the summit run** —
-retime the worm's sequence 2 by ×2, rebuild the loopback archive, and watch it burrow
-at half speed. The procedure, the three observation gates, and the two named rejection
-risk candidates (a STORED flags=515 row, which the client has never seen; the mid/tail
-companions beside a rewritten head) are written up in
-[studies/unitmodels/U7-RUN.md](studies/unitmodels/U7-RUN.md). Preparation of the
-modified archive is a session's job on the owner's go-ahead; the run itself is
-hand-driven per the standing rules.
+### ✅ U7 IS MET — the ladder is COMPLETE, and a model we authored renders in the retail client (2026-08-17)
+
+**The summit run happened and it went green.** The hatcher's skeleton, its 85 animated
+node bases scaled ×2 through `skelwrite`, drawn visibly stretched by the pinned 38797
+client reading a `datmove`-rebuilt archive — owner-driven run, OBSERVED, screenshot with
+the record. **Our decode → our typed representation → our encode → our container →
+their renderer.** That is round-trip authorship of unit models, which is the goal this
+arc was scoped around, closed seven rungs after the recon that opened it.
+
+**It took four client runs and three of them failed on the EXPERIMENT, not the chain** —
+recorded in [studies/unitmodels/U7-RUN.md](studies/unitmodels/U7-RUN.md) because the next
+session will otherwise pay the same tolls: (1) the plan's named target was the worm, but
+the harness's `--enemy` spawns the HATCHER and U4 had already proved those file sets
+disjoint — the client never read a modified byte; (2) `Code=007` with and without the
+modification, which exonerated the archive and exposed a real server bug — the 2026-08-14
+crossbuild key fix lived inline in `handle()`'s auth branch and the game branch never got
+it, so a 38797 client got 38833's key and the ARC4 stream was noise (fixed as one shared
+`bind_key_to_build()`, with an AST regression check that both channels reach it); (3) the
+`burrow` probe re-creating a body at a fresh agent id while a combat AI drove the first,
+so three things animated the target at once.
+
+**What the run settled beyond the summit.** A **stored** flags=515 row IS acceptable to
+the client — the arc's named risk candidate, REFUTED, and retail ships that row
+compressed. A COMPOSITED shell's own FA1 poses its creature. And **pose and playback rate
+come from different places**: ×4 on the same file's key times changed nothing visible
+across two operator-reviewed clips, which is a real constraint on `studies/anim`'s timing
+reading and the sharpest open question this arc leaves.
+
+**The standing wall, named precisely**: the shell's first FA8 link (15018) carries 1.5 MB
+of FA1 — 237 sequences against the shell's sparse set — and cannot be written back.
+`datmove` refuses it in its own words ("nothing fits… the largest run datplan will hand
+over is 953,856 B") because retail ships it compressed, we write stored, and no
+compression-8 encoder exists. **Authorship that reaches the full animation set needs that
+encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
+for the owner rather than a gap in this one.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
