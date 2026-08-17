@@ -1296,24 +1296,45 @@ worktree `.claude/worktrees/pvpui-arc`.
 
 **Why it exists.** Heroes §36.10 measured that `GmPosseRoster` — one of the eight subscribers
 to the commander event `0x1000011E` — has its handler **never entered once** in a session with
-the party window open and a hero row rendering. Its gate is not the cause
-(`[ctx[0x2c]+0x67C]` reads 1), so the guarded install site `0x00578BF0` is simply never
-reached. The subscriber is not unregistered; **its whole construction path is absent**, and
-every route to it runs through UI an explorable PvE session does not build.
+the party window open and a hero row rendering, so the guarded install site `0x00578BF0` is
+never reached. (The gate reading that accompanied this is retracted — see 2 below.) The
+subscriber is not unregistered; **its whole construction path is absent**, and every route to
+it runs through UI an explorable PvE session does not build.
 
-**What is already read** (§1 of the study, all OBSERVED): the handler, its message-9 subscribe
-block registering four events at once, the three install sites (GmDeckBuilder, UiCtlInstance
-×2), the 36-entry vtable at `0x00956264` whose index `[7]` is the install site, and the two
-`mov [eax], 0x956264` constructors in **UiCtlInstance** whose `hdr.param` asserts show they are
-themselves message handlers.
+**The deciding question is ANSWERED (2026-08-17, study §6), on desk work alone.** The message
+is **9** — UI "frame created" — and **there is no type selector**. `hdr.param` is the instance
+slot `T**`, not a type code; which control gets built is fixed at compile time by which
+`UiCtlInstance<T>` was instantiated. The one runtime choice on the whole path is *which window
+index was opened*, through `GmView::ShowFloatingDialog` (`0x004E1E80`, 38833) over
+**`s_floatingDialogs`** — a 58-entry, 36-byte-stride registry of named windows at `0x0094BEE8`,
+named by the client's own assert `GmView:2073`. `GmPosseRoster` is a child of dialog **39
+`PvpItemCreate`** and of dialog 10 `DeckBuilder` — both PvP windows, now name-confirmed.
 
-**The question that decides the arc:** what message and parameter drives `UiCtlInstance` to
-construct type `[7]`, and can anything on the wire reach it. **Worth checking early:** whether
-this shares RESKIN §18.1's explorable gate — heroes §32 already blocks `0x01BF`'s last question
-behind it, so both would unblock together.
+**Three things came out of it that outlive the arc:**
 
-**The honest prior is that the commander panel is NOT server-reachable.** Five hypotheses were
-refuted on the heroes side; this arc's job is to convert that prior into a measured yes or no.
+1. **A build hazard worth a house rule** (study §4). The static tools default to the pinned
+   **38797**; the harness runs **38833**. Region drift is −0x20 to −0x160, and on 38797 the
+   install site `0x00578BF0` is not a function at all but a switch jump table — so `--xrefs`
+   answers "no callers" with total confidence. Pass `--exe` and stamp the build on every VA.
+2. **Two corrections to heroes §36.8/§36.10** (study §7). `0x00815EA0` is the gate's *early-out*,
+   not its verdict — the value returned is bit 11 of a record field nobody read — and the gate
+   has **14 callers**, so hits inside it attribute to no caller. "The gate is not the reason"
+   is retracted to UNVERIFIED. The handler-never-entered measurement itself stands.
+3. **The commander panel is `GmPetCommander`, not `GmPosseRoster`** (study §8). It is
+   `s_floatingDialogs[31..38]` (`PetCommanderPlayer`, `PetCommanderHero0..6`, handler
+   `0x0050E540` → `0x0050DC50`), opened at `0x004E8990` with `dialog = 32 + heroIndex` where the
+   hero index comes from `0x00524DB0(agentId)`. **Heroes was chasing the wrong subscriber.**
+
+**Next, and both are desk work:** walk up from `0x004E3D16` and the two dialog-39 toggles
+(`0x004E9450`, `0x004EAAA2`) to find whether any of `ShowFloatingDialog`'s 77 call sites is
+reached from a message handler rather than a control code — that settles reachability; and read
+`0x00524DB0` to find what it needs to return a hero record, which is the heroes arc's real
+blocker. **Still worth checking early:** whether any of this shares RESKIN §18.1's explorable
+gate — heroes §32 blocks `0x01BF`'s last question behind it, so both would unblock together.
+
+**The honest prior remains that the commander panel is NOT server-reachable**, and §6 hardened
+it: the wire cannot name a control type even in principle. What is still unmeasured is whether
+the wire can open a *window*.
 
 ### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
 
