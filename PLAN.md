@@ -1786,7 +1786,15 @@ inline run. So every late measurement was taken from a client that asserts durin
 and "the subscriber appears later" cannot be separated from "the client is in a degraded
 state". §35.1/§35.5 are **CONTESTED**, not corroborated. What survives is the *contrast* —
 inline reads `subscribers = 0`, late reads non-zero, repeatedly and control-verified — not any
-claim about why. **Fix the assert before re-running: a rig that asserts is not a rig.** Also
+claim about why. **Fix the assert before re-running: a rig that asserts is not a rig.** Since then (§35.6a/b):
+the inline half of that claim is now VERIFIED rather than assumed — **inline 0 of 3 assert,
+late 9 of 9** — and the obvious fix FAILED. Moving `0x0074` back inline (it had been deferred,
+putting `0x0072`/attributes/skill bar 20 s before the record they need) left the chain running
+and the client still asserting, 2 of 2. **What remains is the last inline/late split:** the
+hero's body, attributes, skill bar and HeroActivate are still sent inline while only the
+roster binding is late, so they are now too EARLY relative to `0x01C2` — and a
+`SkillListContext` assert naming a skill-list *user* fits a bar addressed to an agent the
+party does not yet hold. The correct rig defers the **whole hero pipeline as one unit**. Also
 recorded UNRESOLVED (§35.7): the two trap site-sets disagreed 4-of-4 versus 0-of-3 on the same
 rig, which could be variance, an observer effect, or the sites themselves — so §35.5's numbers
 are not safe to build on yet.

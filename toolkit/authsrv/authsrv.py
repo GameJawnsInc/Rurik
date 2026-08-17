@@ -6701,7 +6701,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       ["enc_name"] if HERO_INFO_NAME else "")
                             for _hid, _haid, _hdef in hero_slots():
                                 if HERO_INFO:
-                                    _seq.append(agents.mercenary_info(
+                                    # SENT INLINE EVEN UNDER --hero-late, and
+                                    # that is the whole ordering fix. 0x0074
+                                    # CREATES the keyed charHeroData record (20);
+                                    # 0x0072 HeroActivate, the attribute pair and
+                                    # the skill bar all run later in this handler
+                                    # and are NOT deferred. Deferring 0x0074 with
+                                    # the party build put those 20 s BEFORE the
+                                    # record they need, inverting the order 13/14
+                                    # established -- and the client asserted
+                                    # `SkillListContext::SKILL_LIST_USERS !=
+                                    # skillListUser` on 4 of 4 late runs
+                                    # (FINDINGS 35.6). --hero-late is meant to
+                                    # move ONE thing, the roster binding.
+                                    send(*agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))

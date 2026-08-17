@@ -2343,9 +2343,34 @@ is the *contrast* -- inline runs read `subscribers = 0` and late runs read non-z
 that difference is large, repeated, and control-verified (34.2). What does NOT survive is any
 claim about *why*, because the rig changed two things and then broke a third.
 
-**What it would take:** find and fix the assert first (send the skill bar on the inline
-schedule and only the party/hero messages late, or drop `0x00DA` from the late batch), then
-re-run. A rig that asserts is not a rig.
+**What it would take:** find and fix the assert first. A rig that asserts is not a rig.
+
+**35.6a -- the inline half of that claim, VERIFIED (it had not been).** 35.6 asserted the
+dialog appears "in every late run and in no inline run" while only ever having checked the
+late half. Checked properly against `vault/captures/harness/`:
+
+| rig | runs | asserted |
+|---|---|---|
+| inline (`0x01C2` inside the load) | 3 | **0** |
+| late (`--hero-late 20`) | 9 | **9** |
+
+So the claim holds, and it now rests on both halves instead of one. Writing a two-sided
+statement having tested one side is the same defect as 28's reader, in prose rather than code.
+
+**35.6b -- the obvious fix was tried and FAILED.** `0x0074` was moved back to the inline
+schedule, on the reasoning that deferring it put `0x0072` HeroActivate, the attribute pair and
+the skill bar 20 s *before* the `charHeroData` record they need -- inverting the order 13/14
+established. The chain still ran (`worker/raise/lookup/case93` all 1) and **the client still
+asserted, 2 of 2.** So that inversion was real but is not the cause.
+
+**What is left, and it is the LAST inline/late split in the rig:** the hero's **body,
+attributes (`0x0037`/`0x003A`), skill bar (`0x00DA`) and `0x0072` HeroActivate are still sent
+inline** while the roster binding arrives 20 s later, so now those are too EARLY relative to
+`0x01C2` rather than too late. `SkillListContext::SKILL_LIST_USERS != skillListUser` naming a
+skill-list *user* fits a skill bar addressed to an agent the party does not yet hold. The
+correct rig defers the **whole hero pipeline as one unit**, preserving relative order and
+moving only the absolute time -- which is what "change one thing" required from the start and
+what this flag did not do.
 
 ### 35.7 A site-set asymmetry, recorded and NOT explained
 
