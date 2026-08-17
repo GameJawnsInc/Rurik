@@ -76,7 +76,24 @@ import checks  # noqa: E402
 # `_main` that no function-level check can see, and the revert sabotage's six
 # reds did not include it until §7 ran the real CLI. Same fixture, still no
 # vault and no client. MEASURED, not counted by hand: a green run prints 84.
-LEDGER = checks.Ledger("dat pre-flight and detector", floor=84)
+#
+# RAISED 84 -> 108 on 2026-08-17 with sections 8, 9 and 10 -- the generation
+# census, the payload CRC sweep and the file-length half of `--diff`. Same
+# fixture, still no vault and no client. Two of the three carry a CONTROL that
+# is the actual point of the section: §9 asserts that a stale payload CRC
+# passes ALL TEN open-time rules (10 of 10 clear) before the sweep names it,
+# and §10 asserts that appending past every extent changes NO MFT row, so
+# nothing else in this tool could have caught it. A check whose control does
+# not first demonstrate the blind spot is not evidence that the new code sees
+# anything. MEASURED from a green run: 108.
+#
+# RAISED 108 -> 112 on 2026-08-17 with section 11, the mftOffset width (C-7).
+# Four checks, and the reason they are cheap is the point: proving a u64 read
+# does NOT need a 4 GB file, only the high dword set and a failure that names
+# the full offset. A `<I` reader truncates, finds the MFT where it always was,
+# and opens the archive reporting success -- so the check is refutable in both
+# directions on a 5.5 KB fixture. MEASURED from a green run: 112.
+LEDGER = checks.Ledger("dat pre-flight and detector", floor=112)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -232,6 +249,217 @@ def expect_only(path, label, failing):
     others = [n for n, ok in v.items() if n != failing and not ok]
     check(not others, f"{label}: nothing else goes red",
           f"also red: {others}" if others else "isolated")
+
+
+TOOL = os.path.join(HERE, "datcheck.py")
+
+
+def run_cli(*argv):
+    """The real CLI, in a real subprocess. Module level since 2026-08-17 --
+    §7 had it as a local closure and §§8-10 need the same one, and two
+    definitions of "run the tool" is how they drift apart."""
+    return subprocess.run([sys.executable, TOOL] + list(argv),
+                          capture_output=True, text=True)
+
+
+def cli(*argv):
+    return run_cli(*argv).returncode
+
+
+def plant_generation(path, at, counter, rows=ENTRY_COUNT):
+    """Write a second MFT descriptor into the fixture's slack, block-aligned.
+
+    A real archive accumulates these because the client rotates its table on
+    flush; the fixture has to be given one, and giving it one is what makes the
+    "no fallback" check able to go BOTH ways instead of only red.
+    """
+    desc = bytearray(ENTRY_SIZE)
+    desc[0:4] = MFT_MAGIC
+    struct.pack_into("<I", desc, 0x04, counter)
+    struct.pack_into("<I", desc, 0x08, 0)
+    struct.pack_into("<I", desc, 0x0C, rows)
+    poke(path, at, bytes(desc))
+
+
+def section_generations(tmp):
+    print("\n8. the MFT generation census -- what a repair would have to adopt")
+
+    one = fresh(tmp, "gen-one.dat")
+    gens = datcheck.generations(one)
+    live = [g for g in gens if g["live"]]
+    check(len(gens) == 1 and len(live) == 1,
+          "a fresh fixture has exactly one generation, and it is the live one",
+          f"{len(gens)} candidate(s), {len(live)} live")
+    check(gens[0]["offset"] == MFT_OFF and gens[0]["rows"] == ENTRY_COUNT,
+          "and the scan finds it where the header says it is",
+          f"0x{gens[0]['offset']:X}, {gens[0]['rows']} rows")
+    check(cli("--dat", one, "--generations") == 1,
+          "ONE generation REFUSES -- a repair would have nothing to adopt",
+          "exit 1")
+
+    # The control the refusal needs: plant an older generation in the slack
+    # between the payload rows and the MFT, and the same verb must go green.
+    two = fresh(tmp, "gen-two.dat")
+    plant_generation(two, 0x1000, counter=6)
+    gens2 = datcheck.generations(two)
+    ok2 = [g for g in gens2 if g["shape_ok"]]
+    check(len(gens2) == 2 and len(ok2) == 2,
+          "CONTROL: with a planted older generation the scan finds two",
+          f"{len(gens2)} candidate(s), {len(ok2)} passing the shape gate")
+    check([g["counter"] for g in gens2] == [7, 6],
+          "and they are ordered newest-first by the flush counter",
+          f"{[g['counter'] for g in gens2]}")
+    check(gens2[0]["live"] and not gens2[1]["live"],
+          "with only the header's own marked live")
+    check(cli("--dat", two, "--generations") == 0,
+          "TWO generations pass -- the refusal is not unconditional", "exit 0")
+
+    # Shape gate: a candidate with +0x08 != 0 is one ScanMft would not adopt.
+    bad = fresh(tmp, "gen-shape.dat")
+    plant_generation(bad, 0x1000, counter=6)
+    poke(bad, 0x1000 + 0x08, struct.pack("<I", 1))
+    shaped = [g for g in datcheck.generations(bad) if g["shape_ok"]]
+    check(len(shaped) == 1,
+          "a candidate with +0x08 != 0 fails the shape gate ScanMft applies",
+          f"{len(shaped)} of 2 pass")
+    check(cli("--dat", bad, "--generations") == 1,
+          "so it does not count as a fallback either", "exit 1")
+
+    # And the census must not quietly become a pre-flight item again: see
+    # datcheck.preflight's comment for why it was removed after one test run.
+    names = [c.name for c in datcheck.preflight(one)[0]]
+    check(not any("generation" in n for n in names),
+          "the census stays OUT of --preflight, which never reads a payload",
+          f"{len(names)} pre-flight items, none naming a generation")
+
+
+def section_crc_sweep(tmp):
+    print("\n9. the payload CRC sweep -- what the ten open-time rules cannot see")
+
+    clean = fresh(tmp, "crc-clean.dat")
+    sw = datcheck.crc_sweep(clean)
+    check(not sw["bad"], "a healthy fixture has no CRC finding",
+          f"{sw['checked']} payload(s) recomputed")
+    check(sw["skipped"] == list(datcheck.CRC_STRUCTURAL_ROWS),
+          "and the structural rows are skipped BY NAME, not silently",
+          f"skipped {sw['skipped']}")
+    check(sw["checked"] == len(PAYLOAD_ROWS),
+          "every payload row is actually read -- the sweep is not vacuous",
+          f"{sw['checked']} checked, {len(PAYLOAD_ROWS)} payload rows")
+
+    # A stale CRC is invisible to every rule the client applies at OPEN, and
+    # costs the whole nextStream chain the moment repair fires for any reason.
+    stale = fresh(tmp, "crc-stale.dat")
+    poke_row(stale, ROW_A, crc=0xDEADBEEF)
+    v = verdicts(stale)
+    check(all(v.values()),
+          "CONTROL: a stale payload CRC passes ALL TEN open-time rules",
+          f"{sum(v.values())} of {len(v)} clear -- which is the point")
+    bad = datcheck.crc_sweep(stale)["bad"]
+    check(len(bad) == 1 and bad[0][0] == ROW_A,
+          "but the sweep names it", f"rows {[b[0] for b in bad]}")
+    check(cli("--dat", stale, "--crc-sweep") == 1,
+          "and the CLI refuses", "exit 1")
+
+    # C-6, the live trap: datmove flattens compression to 0 while the bytes
+    # stay compressed. The CRC is over the STORED bytes and does not move, so
+    # this is the one defect the sweep cannot catch by checksum -- it is caught
+    # by reporting the row, and the test says so rather than claiming more.
+    body = fresh(tmp, "crc-flat.dat")
+    poke(body, ROWS[ROW_A][0], b"\xff" * 16)     # payload changed, CRC not
+    flat = datcheck.crc_sweep(body)["bad"]
+    check(len(flat) == 1 and flat[0][0] == ROW_A,
+          "a payload edited without its CRC is caught", f"{len(flat)} finding(s)")
+
+    past = fresh(tmp, "crc-eof.dat")
+    poke_row(past, ROW_B, offset=FILE_SIZE - 16)
+    hits = [b for b in datcheck.crc_sweep(past)["bad"] if b[0] == ROW_B]
+    check(hits and hits[0][3] == "extent past EOF",
+          "a row whose extent runs past EOF is named, not read off the end",
+          f"{hits[0][3] if hits else 'MISSED'}")
+
+
+def section_growth(tmp):
+    print("\n10. --diff sees the file's own length")
+
+    before = fresh(tmp, "grow-before.dat")
+    snap = datcheck.snapshot(before, datcheck.scan(before))
+    d = datcheck.diff(snap, path=before)
+    check(d["unchanged"] and d["growth"] is None,
+          "an untouched archive reports no growth", "unchanged")
+
+    grown = fresh(tmp, "grow-after.dat")
+    with open(grown, "ab") as fh:                # append past every extent
+        fh.write(b"\x00" * BLOCK)
+    d2 = datcheck.diff(snap, path=grown)
+    check(d2["growth"] is not None
+          and d2["growth"]["delta"] == BLOCK,
+          "appending past every extent IS detected",
+          f"{d2['growth']}" if d2["growth"] else "MISSED -- no row records it")
+    check(not d2["unchanged"],
+          "and growth alone makes the diff non-clean")
+    check(not d2["changes"] and not d2["corroboration"],
+          "CONTROL: no MFT row changed, so nothing else could have caught it",
+          f"{len(d2['changes'])} row change(s)")
+    check("LENGTH CHANGED" in datcheck.format_diff(d2),
+          "and the formatter says so out loud")
+    check(cli("--dat", grown, "--diff",
+              write_snap(tmp, before, "grow.json")) == 1,
+          "the CLI exits 1 on growth alone", "exit 1")
+
+
+def section_mft_offset_width(tmp):
+    """The header's mftOffset is a u64, and all three readers must say so.
+
+    C-7 of studies/archivewrite/FINDINGS.md: `archive.py` read this field as
+    `<I` while `datcheck.read_header` and `datwrite.mft_offset_of` both read
+    `<Q`. Two of three said u64 and the OUTLIER WAS THE ONE EVERY TOOL IMPORTS.
+
+    It never fired, because every archive on this machine keeps the high dword
+    zero -- which is exactly why it needed a test rather than a reading. And it
+    was not harmless: `dat_study`'s live MFT sits 121,634,304 B below the u32
+    ceiling, so it silently CAPPED how far the archive could grow, which is the
+    route the same study scores as contested.
+
+    The test does not need a 4 GB file. Setting the high dword and requiring the
+    failure to NAME the full 64-bit offset is refutable both ways: a `<I` reader
+    truncates to the low dword, finds the MFT exactly where it always was, and
+    opens the archive with no complaint at all.
+    """
+    print("\n11. the header's mftOffset is a u64 in every reader")
+
+    good = fresh(tmp, "u64-good.dat")
+    a_off = archive_mod.Archive(good).mft_offset
+    d_off = datcheck.read_header(good)["mft_offset"]
+    check(a_off == d_off == MFT_OFF,
+          "all readers agree on an ordinary archive",
+          f"archive={a_off:#x} datcheck={d_off:#x}")
+
+    # The high dword, set on a copy. Nothing else about the archive changes.
+    high = fresh(tmp, "u64-high.dat")
+    poke(high, 0x14, struct.pack("<I", 1))          # mftOffset += 2**32
+    want = MFT_OFF + (1 << 32)
+
+    check(datcheck.read_header(high)["mft_offset"] == want,
+          "datcheck reads the full 64 bits", f"{want:#x}")
+
+    failed = None
+    try:
+        archive_mod.Archive(high)
+    except (ValueError, OSError) as exc:
+        failed = str(exc)
+    check(failed is not None,
+          "archive.py does NOT quietly open it by truncating to the low dword",
+          "a <I reader finds the MFT at 0x1200 and reports success")
+    check(failed is not None and hex(want)[2:].upper() in failed.upper(),
+          "and the failure names the FULL offset, which is the u64 evidence",
+          failed.split(":")[0] if failed else "opened cleanly")
+
+
+def write_snap(tmp, path, name):
+    out = os.path.join(tmp, name)
+    datcheck.write_snapshot(path, out)
+    return out
 
 
 # ------------------------------------------------------------------ main --
@@ -697,17 +925,10 @@ def run(tmp):
     # archive this tool cannot read exited 1 as well, anything reading the code
     # would report a crash as that result -- so unreadable is its own code, and
     # the run sheet's "exit 1 means something changed" only holds because of it.
-    tool = os.path.join(HERE, "datcheck.py")
+
     clean = fresh(tmp, "exit-clean.dat")
     snap_path = os.path.join(tmp, "exit.json")
     datcheck.write_snapshot(clean, snap_path)
-
-    def run_cli(*argv):
-        return subprocess.run([sys.executable, tool] + list(argv),
-                              capture_output=True, text=True)
-
-    def cli(*argv):
-        return run_cli(*argv).returncode
 
     # BOTH VERBS, THROUGH THE REAL CLI. §3b checks `format_diff` as a function;
     # this is the only place the `--preflight` banner is reached at all, and it
@@ -740,6 +961,11 @@ def run(tmp):
     check(cli("--dat", broken, "--diff", snap_path) == 2,
           "and 2 from --diff too, so a crash is never read as 'it changed'",
           "--diff")
+
+    section_generations(tmp)
+    section_crc_sweep(tmp)
+    section_growth(tmp)
+    section_mft_offset_width(tmp)
 
 
 if __name__ == "__main__":

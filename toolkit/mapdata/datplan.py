@@ -48,6 +48,7 @@ on a plan.
 import argparse
 import binascii
 import os
+import re
 import struct
 import sys
 
@@ -312,14 +313,62 @@ def classify_runs(ar, runs=None):
     generations it currently holds is precisely the space the next, larger
     generation grows into, and "the container is only in the first 27,611 blocks"
     is an argument for writing exactly where the client is about to write.
+
+    A MARK IS NOT THE END OF THE GENERATION IT NAMES, and until 2026-08-17 this
+    function behaved as though it were. `scan_run` finds the block where a
+    signature SITS; an MFT generation then declares how far it REACHES, at +0x0C,
+    and that extent can run past the end of the free run it started in. The next
+    run along carries no magic at any of its own boundaries -- it is the MIDDLE
+    of a table -- so it scored usable, and `best_fit` would hand a writer the
+    inside of a generation the client is about to rotate back onto.
+
+    Not hypothetical: studies/archivewrite/FINDINGS.md 1.5 measured a
+    2,892,800-byte run on the 38833 study copy lying 100.0% inside a stale
+    generation's declared extent and accepted by `plan_move` as free space. So
+    every mark's declared extent is now projected ACROSS run boundaries and any
+    run it reaches is withheld, whether or not that run carries a mark of its
+    own. The projection is one-directional on purpose -- a generation is claimed
+    forward from its header, because forward is the only direction a
+    self-describing table reaches -- and only the MFT signature participates,
+    because the file-id-table test is a head heuristic that declares no length.
     """
     if runs is None:
         runs = free_runs(ar)
+
+    scanned = [(start, n, scan_run(ar, start, n)) for start, n in runs]
+
+    # Every declared extent, in absolute blocks, from every mark that declares
+    # one. Only the MFT signature is self-describing; the file-id-table
+    # heuristic names a head and nothing about length, so it claims its own
+    # block and no more.
+    per_block = ar.block_size
+    claimed = []
+    for start, _n, marks in scanned:
+        for at, kind, detail in marks:
+            if kind != "master file table":
+                continue
+            m = re.search(r"declares (\d+) entries", detail)
+            if not m:
+                continue
+            blocks = -(-(int(m.group(1)) * ENTRY_SIZE) // per_block)
+            claimed.append((start + at, start + at + blocks, detail))
+
     usable, excluded = [], []
-    for start, n in runs:
-        marks = scan_run(ar, start, n)
+    for start, n, marks in scanned:
+        reach = [c for c in claimed
+                 if c[0] < start + n and c[1] > start and not (c[0] >= start
+                                                               and c[0] < start + n)]
         if marks:
             excluded.append(Exclusion(start, n, marks))
+        elif reach:
+            # No signature of its own: this run is the INSIDE of a table whose
+            # header sits in an earlier run. Recorded with the same evidence
+            # shape so `why()` reads correctly, and marked at block 0 because
+            # that is where the claim enters this run.
+            excluded.append(Exclusion(start, n, [(
+                0, "master file table",
+                "no signature here -- inside the declared extent of the "
+                "generation at block 0x%X (%s)" % (reach[0][0], reach[0][2]))]))
         else:
             usable.append((start, n))
     return usable, excluded

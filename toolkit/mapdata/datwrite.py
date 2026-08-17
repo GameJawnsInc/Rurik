@@ -74,6 +74,13 @@ ENTRY_COMP_OFF = 0x0C   # u16, 0 stored / 8 huffman
 ENTRY_CRC = 0x14        # offset of the crc within a 24-byte MFT row
 HDR_CRC = 0x0C          # offset of the crc within the 32-byte file header
 HDR_MFT_OFFSET = 0x10   # u64, where the master file table lives
+
+# The refusal region: bytes 0x00..0x0D inclusive of the CRC dword, i.e. the
+# four fields the client's header gate reads before it will look at anything
+# else. A write overlapping ANY of it is refused outright by `Writer.put` --
+# see `_refuse_header` for why this one region is unlike every other bad write.
+HDR_REFUSE_START = 0x00
+HDR_REFUSE_END = HDR_CRC + 4        # 0x10, exclusive
 MFT_HDR_COUNT = 0x0C    # u32 inside the MFT's own first row: the entry count
 
 
@@ -417,8 +424,47 @@ class Writer:
         self.fh.seek(self.ar.mft_offset)
         return bytearray(self.fh.read(self.ar.mft_size))
 
+    def _refuse_header(self, offset, length, what):
+        """The 32-byte file header's first 13 bytes are the one region whose
+        corruption is UNRECOVERABLE, and this refuses to touch them.
+
+        Not a warning. A refusal, and it is deliberately not overridable.
+
+        WHY THIS IS DIFFERENT FROM EVERY OTHER BAD WRITE. Damage anywhere else
+        sends the client into its repair path, which is destructive but at
+        least announces itself (`Repairing corrupt archive`) and can adopt an
+        older MFT generation. Damage to bytes 0x00..0x0C -- the magic, the
+        header size, the block size, and the CRC at +0x0C that covers the first
+        twelve -- fails the header gate at 0x0047B6DD, returns 0 from a
+        six-instruction tail at 0x0047BE38 that contains NO LOGGING CALL AT
+        ALL, and that zero tail-jumps to ArchiveCreate (0x004797EC), which
+        writes a fresh empty 16-row archive over a 4.2 GB file. Silently. No
+        tool in this repo can recover from it and no MFT generation helps,
+        because the header is what says where the MFT is.
+
+        This module never had a reason to write here, so the region was
+        protected by absence -- which is not protection, it is luck that nobody
+        has yet added a caller. studies/archivewrite/FINDINGS.md 5.2/5.6 rule 2.
+        """
+        lo, hi = offset, offset + length
+        if lo < HDR_REFUSE_END and hi > HDR_REFUSE_START:
+            raise SystemExit(
+                f"REFUSED: {what}\n"
+                f"  the write [0x{lo:X},0x{hi:X}) overlaps the file header's "
+                f"bytes [0x{HDR_REFUSE_START:X},0x{HDR_REFUSE_END:X}) -- magic, "
+                f"headerSize, blockSize and the CRC that covers them.\n"
+                f"  Corrupting that region does not produce an error or a "
+                f"repair. The client's ArchiveOpen returns 0 with no log line "
+                f"and tail-jumps to ArchiveCreate, which OVERWRITES THE WHOLE "
+                f"ARCHIVE with a fresh empty one.\n"
+                f"  There is no recovery path for this in this repo and no MFT "
+                f"generation can help, because the header is what locates the "
+                f"MFT. If you genuinely mean to rewrite a header, do it on a "
+                f"copy with a tool that is not this one.")
+
     def put(self, offset, data, what):
         """One journalled write. Reads the old bytes first, always."""
+        self._refuse_header(offset, len(data), what)
         self.fh.seek(offset)
         before = self.fh.read(len(data))
         if len(before) != len(data):
