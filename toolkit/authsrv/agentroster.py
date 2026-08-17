@@ -267,16 +267,9 @@ def main():
                          "emitter gives them per-row provenance.")
     a = ap.parse_args()
 
-    caps = npcdefs.live_captures()
-    if a.capture:
-        want = set(a.capture)
-        caps = [c for c in caps if os.path.basename(c) in want]
-        missing = want - {os.path.basename(c) for c in caps}
-        if missing:
-            raise RosterError(
-                f"no keyed live capture named {sorted(missing)}; "
-                f"have {[os.path.basename(c) for c in npcdefs.live_captures()]}")
-
+    # npcdefs.live_captures owns the selection AND the refusal -- a name that
+    # matches nothing raises there rather than yielding an empty census here.
+    caps = npcdefs.live_captures(names=a.capture)
     rosters = read_roster(caps)
     _census(rosters)
 

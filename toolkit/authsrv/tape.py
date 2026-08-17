@@ -253,8 +253,27 @@ def load_tape(capture_dir, connection=None):
         # None when the tape has no events: there is no first segment to measure from, and
         # a 0.0 there would be a made-up origin that reads as a real one.
         "t0": t0,
+        # THE OPERATOR'S GAME-MODE DECLARATION, additive like t0 above. livesession.py
+        # writes it into manifest.json at capture time (game_mode_source records that it
+        # is a declaration, not a derivation -- Reforged leaves no wire mark). It was
+        # recorded there and UNREACHABLE from here, so every consumer re-asked the
+        # operator via its own --mode flag and got "unrecorded" for captures that had
+        # answered at capture time (studies/isle/PLAN.md gap 5). Absent manifest, null
+        # field and unknown value all read "unrecorded": content.py accepts that value
+        # and never promotes rows carrying it.
+        "game_mode": _manifest_mode(capture_dir),
     }
     return info, events
+
+
+def _manifest_mode(capture_dir):
+    """manifest.json's game_mode, or 'unrecorded' -- never a guess, never a raise."""
+    try:
+        with open(os.path.join(capture_dir, "manifest.json"), encoding="utf-8") as fh:
+            mode = json.load(fh).get("game_mode")
+    except (OSError, ValueError):
+        return "unrecorded"
+    return mode if mode in ("base", "reforged") else "unrecorded"
 
 
 # What decode_all hands back beside the messages. A plain 3-tuple by design -- it

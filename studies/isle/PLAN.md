@@ -915,6 +915,28 @@ per the repo's rendered-acceptance rule.
 **Rung 5 — the plumbing.** Gaps 2, 4, 5, 7 of §5.
 *Exit:* a vault-emitted `def_NNNN` row spawns on loopback, and dropping a synthetic fourth
 capture directory into the vault does not redden `test_npcdefs.py`.
+**DONE 2026-08-16, all four gaps:**
+- **Gap 2**: the spawn path labels a nameless row by its own npc key
+  (`authsrv.py` `spawn_population`; commit the id, resolve the string at run time).
+  `test_population` §4 spawns a `def_NNNN` fixture end to end — the fixture asserts it
+  truly lacks a name, and every emitted message encodes through the real codec, which is
+  the strongest client-free half of "spawns on loopback"; the rendered half rides
+  rung 4's session for free.
+- **Gap 4**: `npcdefs.live_captures(names=...)` — a name matching nothing is refused —
+  and `test_npcdefs`/`test_agentroster` pin BY NAME to the three measured captures.
+  The synthetic-fourth-capture proof runs inside `test_npcdefs` itself (built into the
+  vault, removed in a finally): the glob sees it, the pins do not move.
+- **Gap 5**: `tape.load_tape` surfaces `game_mode` from the capture manifest
+  (additive key, like `t0`); `npcdefs.resolve_mode` uses a recorded mode with no flag,
+  refuses base+reforged pooling, refuses a `--mode` that contradicts a manifest, and
+  keeps `--mode` only as fill-in for pre-recording captures. All three current captures
+  honestly read `unrecorded`; the first Isle capture will be the first recorded one.
+- **Gap 7**: `content/maps.toml` `[map.280]` — file id 0x287B3 = 165811 verified binding
+  MFT row 21641 in all five vault/run archive copies (flags 259, ffna, 1,516,583 B),
+  mesh parses to 2,769 trapezoids, spawn (1136, −463) scores exactly-1 on plane 0
+  against Pre-Searing's spawn at 0 (the control). The spawn is OURS and the row's own
+  note pre-registers the `0x0195` wire check with all three branches. `test_content`'s
+  census pin moved 10 → 11 and 280 joined the named-additions allowlist.
 
 **Rung 6 — LIVE #1, the roster pass.** ~20 minutes, **no combat, no deaths, no `/bow`**.
 Walk the island, target every body once in a pre-registered F9 order. It carries none of the

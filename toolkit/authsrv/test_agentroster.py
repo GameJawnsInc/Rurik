@@ -51,7 +51,10 @@ LEDGER = checks.Ledger("agentroster: creates -> stations -> cross-session identi
                        floor=27)
 
 # Measured 2026-08-16 over the three keyed live captures, and written as literals:
-# a symbol imported from the module under test is not a check.
+# a symbol imported from the module under test is not a check. NAMED selection,
+# same rule as test_npcdefs: these pins are facts about THESE captures, and the
+# Isle sessions will drop a fourth into the vault (studies/isle/PLAN.md gap 4).
+CAPTURES = ("20260807T133758", "20260807T143055", "20260810T235916")
 ROSTERS, TOTAL_CREATES = 12, 1068
 M148 = {
     # capture -> (item, npc, player) create counts on its map-148 game connection
@@ -77,8 +80,8 @@ def synthetic_create(tag, low16, pos, plane=7):
 
 def main():
     try:
-        caps = npcdefs.live_captures()
-    except SystemExit:
+        caps = npcdefs.live_captures(names=CAPTURES)
+    except (SystemExit, npcdefs.NpcDefsError):
         caps = []
 
     # ---- 4. the refusal, vault or no vault -----------------------------------

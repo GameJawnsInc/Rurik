@@ -1650,7 +1650,12 @@ Every one of these, in the order they were written:
   set wrong with all 125 checks green. Both constants are now asserted against
   LITERALS written in the test file and the probe distance is a literal too.
   No vault, no socket, no client: the mesh is `pathchunk.minimal()`, authored
-  from nothing. 33 checks, ~2 s),
+  from nothing. Section 4 (2026-08-16, Isle rung 5 gap 2): a vault-emitted
+  `def_NNNN` row — which deliberately carries NO name — spawns end to end
+  through `spawn_population` with the label defaulting to the npc key, and
+  every emitted message encodes through the real codec; the fixture asserts
+  the row truly lacks a name so the check can tell the fix from a smuggled
+  fixture. 43 checks, ~2 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
@@ -1719,7 +1724,12 @@ Every one of these, in the order they were written:
   non-hostile definition may carry a health reading. Three sabotages run, three fail —
   the third by `read()` refusing and naming both speeds rather than averaging. Also:
   six definitions carry an EncString word in the UTF-16 surrogate range and were
-  **unsendable by this server until the `string16` fix**),
+  **unsendable by this server until the `string16` fix**. Since 2026-08-16 (Isle
+  rung 5) the pins select the three captures BY NAME and the test proves a
+  synthetic fourth keyed capture cannot move them — built into the vault and
+  removed in a finally — plus the mode plumbing: base+reforged captures refuse
+  to pool, a `--mode` contradicting a manifest is refused, and a recorded mode
+  is used with no flag at all),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a

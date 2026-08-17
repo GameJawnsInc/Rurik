@@ -4318,11 +4318,19 @@ def spawn_population(send, state, origin, conn_id, area=None):
 
         allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
+        # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
+        # "a name comes from a rendered nameplate or it does not exist" -- and
+        # this used to index `npc["name"]` bare, so every such row threw inside
+        # instance bring-up, where the harness still reported PASS and the map
+        # readback stayed green (studies/isle/PLAN.md gap 2). The fallback label
+        # is OURS and is the npc row's own key: commit the id, resolve the
+        # string at run time. It reaches logs only, never the wire.
+        label = npc.get("name") or str(row["npc"])
         entry = {
             "pos": (x, y), "plane": plane,
             "health": hp, "max_health": hp,
             "dead": False,
-            "name": npc["name"],
+            "name": label,
             "npc": npc,
             "definition": int(row["definition"]),
             "allegiance": allegiance,
@@ -4337,7 +4345,7 @@ def spawn_population(send, state, origin, conn_id, area=None):
                            conn_id=conn_id)
         placed += 1
         note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
-        print(f"[c{conn_id}] {key!r}: {npc['name']} at ({x:.0f}, {y:.0f}) "
+        print(f"[c{conn_id}] {key!r}: {label} at ({x:.0f}, {y:.0f}) "
               f"{how}, {row.get('allegiance', 'hostile')}, {hp:.0f} hp{note}",
               flush=True)
     print(f"[c{conn_id}] area {area!r}: {placed} of {len(rows)} placed",
