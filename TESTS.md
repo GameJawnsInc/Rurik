@@ -3219,7 +3219,13 @@ Every one of these, in the order they were written:
   real data paid twice: 18/20 empties were measured OFF their bases --
   background Blender had not evaluated the parent's matrix_world before the
   parent-inverse was taken from it -- and the hatcher's thin silhouette
-  refuted the guessed 0.02 coverage floor at 0.0147. Floor 69 from the
-  green run; sections 0-1 (synthetics + the resolve_outdir refusal with its
-  positive controls and the mapexport delegation check) score 28 vault-less
-  and go RED; with the archive but no Blender, 52, also RED).
+  refuted the guessed 0.02 coverage floor at 0.0147 -- and that number has
+  a measured CAUSE, pinned by the --opaque control: the hatcher's bound
+  diffuse texture carries alpha ~0 on 99.9% of its texels and the inherited
+  prop convention wires texture alpha as transparency, so the default
+  render is a floating head over an invisible torso; --opaque at least
+  triples the coverage (0.0147 -> 0.1932), and what the alpha channel MEANS
+  on a unit texture stays NOT DECODED with the AMAT chain. Floor 71 from
+  the green run; sections 0-1 (synthetics + the resolve_outdir refusal with
+  its positive controls and the mapexport delegation check) score 28
+  vault-less and go RED; with the archive but no Blender, 52, also RED).

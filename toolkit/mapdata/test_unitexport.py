@@ -119,13 +119,17 @@ ALPHA_MIN = 26
 #: so a 0.02 floor was refuted by the first real run and lowered.
 COVER_MIN = 0.005
 
-# FLOOR: 69, from a real green run on `vault/dat_study/Gw.dat` with Blender
-# 5.1.1, 2026-08-16 (7.2 s; the two Blender runs are most of it). Sections
-# 0-1 alone score 28 -- MEASURED by pointing --dat at a missing file, not
-# counted by eye -- so a vault-less run lands 41 short and goes RED; a run
-# with the archive but no Blender scores 52 (MEASURED with --no-blender)
-# and lands 17 short, also RED. Both are deliberate: synthetics verify
-# plumbing, and a scene nobody measured is not a viewer.
+# FLOOR: 71, from a real green run on `vault/dat_study/Gw.dat` with Blender
+# 5.1.1, 2026-08-16 (8.3 s; the three Blender runs are most of it).
+# Sections 0-1 alone score 28 -- MEASURED by pointing --dat at a missing
+# file, not counted by eye -- so a vault-less run lands 43 short and goes
+# RED; a run with the archive but no Blender scores 52 (MEASURED with
+# --no-blender) and lands 19 short, also RED. Both are deliberate:
+# synthetics verify plumbing, and a scene nobody measured is not a viewer.
+# 69 -> 71 the same day, when the hatcher's default render measured a
+# floating head over an invisible torso and the --opaque control was added
+# to pin why (its diffuse texture's alpha, wired as transparency by the
+# inherited prop convention, is ~0 on 99.9% of texels).
 #
 # The first real run had TWO reds worth recording, both fixed the same day:
 # 18/20 node empties were measured OFF their bases (the depsgraph had not
@@ -134,7 +138,7 @@ COVER_MIN = 0.005
 # hatcher's silhouette refuted the guessed 0.02 coverage floor at 0.0147
 # (see COVER_MIN). A check that finds two defects on its first contact with
 # real data is earning its runtime.
-FLOOR = 69
+FLOOR = 71
 
 
 # ------------------------------------------------------------------ helpers
@@ -714,6 +718,25 @@ def _section3(check, led, args, paths, tmp):
           f"and its silhouette bbox matches its prediction "
           f"(+/-{SIL_TOL_PX}px)",
           f"{got_w}x{got_h} px vs {pred_w:.1f}x{pred_h:.1f}")
+
+    # THE ALPHA FINDING, measured on pixels: the hatcher's bound diffuse
+    # texture carries alpha < 26/255 on 99.9% of its texels (MEASURED on
+    # tex_1C7DB.png), and the prop-path convention wires texture alpha into
+    # the shader, so the DEFAULT render is a floating head over an
+    # invisible torso. What a unit texture's alpha means is NOT DECODED
+    # (the AMAT chain); --opaque is the display control, and the coverage
+    # gap between the two renders is the measurement that pins the finding.
+    rc, out, osumm = run_gwunit(blender, paths[HATCHER_FILE_ID], tmp,
+                                "hatcher_op", extra=("--opaque",))
+    check(rc == 0 and osumm is not None and osumm.get("opaque") is True,
+          "the hatcher imports with --opaque and the dump says so",
+          f"rc {rc}")
+    if osumm is not None:
+        ofrac, obox = coverage(osumm["render"]["body_png"])
+        check(obox is not None and ofrac > 3 * frac,
+              "--opaque at least triples the hatcher's silhouette coverage "
+              "-- the measured cost of wiring unit texture alpha as "
+              "transparency", f"{frac:.4f} -> {ofrac:.4f}")
 
 
 if __name__ == "__main__":

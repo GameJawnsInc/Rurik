@@ -77,7 +77,30 @@ def clear_scene():
         bpy.data.objects.remove(obj, do_unlink=True)
 
 
-def build_unit(json_path, no_textures=False, no_nodes=False):
+def _force_opaque(materials):
+    """Cut the texture-alpha wire and set every material's alpha to 1.
+
+    A DISPLAY CONTROL, not a correction. `gwmodel_materials` wires the
+    texture's alpha into the shader -- right for a prop's foliage and
+    fences, and MEASURED WRONG-LOOKING on a unit body: the hatcher's bound
+    diffuse carries alpha < 26/255 on 99.9% of its texels, so the default
+    render shows a floating head over an invisible torso. What that alpha
+    channel MEANS on a unit texture is NOT DECODED (the AMAT chain, 0xFAD),
+    so neither wiring is knowledge; this flag exists so both renders can be
+    measured.
+    """
+    for mat in materials.values():
+        if not mat.use_nodes:
+            continue
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        if bsdf is None or "Alpha" not in bsdf.inputs:
+            continue
+        for link in list(bsdf.inputs["Alpha"].links):
+            mat.node_tree.links.remove(link)
+        bsdf.inputs["Alpha"].default_value = 1.0
+
+
+def build_unit(json_path, no_textures=False, no_nodes=False, opaque=False):
     """The body object and the node empties. Returns `(body, empties, meta)`."""
     meta, positions, idx, uvs = load_gwmodel(json_path)
     mdir = os.path.dirname(os.path.abspath(json_path))
@@ -85,6 +108,8 @@ def build_unit(json_path, no_textures=False, no_nodes=False):
     mats, sub_images = ({}, {})
     if not no_textures:
         mats, sub_images = gwmodel_materials(meta, mdir)
+        if opaque:
+            _force_opaque(mats)
     mesh = gwmodel_mesh(meta, positions, idx, name, uvs=uvs,
                         materials=mats, sub_images=sub_images)
     body = bpy.data.objects.new(name, mesh)
@@ -287,13 +312,19 @@ def main(argv=None):
                          "control for the texture path")
     ap.add_argument("--no-nodes", action="store_true",
                     help="skip the skeleton empties")
+    ap.add_argument("--opaque", action="store_true",
+                    help="ignore texture alpha (see _force_opaque: what a "
+                         "unit texture's alpha means is NOT DECODED, and "
+                         "the default wiring renders some bodies invisible)")
     args = ap.parse_args(_script_argv(argv))
 
     if args.clear:
         clear_scene()
     body, empties, meta = build_unit(args.json, no_textures=args.no_textures,
-                                     no_nodes=args.no_nodes)
+                                     no_nodes=args.no_nodes,
+                                     opaque=args.opaque)
     summary = unit_summary(body, empties, meta, args.json)
+    summary["opaque"] = bool(args.opaque)
     if args.render:
         summary["render"] = render_silhouette(body, empties, args.render,
                                               size=args.render_size)
