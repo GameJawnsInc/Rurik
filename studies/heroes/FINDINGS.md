@@ -1456,6 +1456,74 @@ rewrite a whole roster.
 120 units apart along y, because bodies sharing a spot read as one body and "nothing
 appeared" is a failure this repo has already paid for once.
 
+## 23. The scan trigger, named — and it is a PARTY event, so the server can reach it
+
+§17.3 left the question "what event runs the `activeHeroes` scan, and can anything
+server-side provoke it". Desk work, no client.
+
+### 23.1 The GmView event dispatch
+
+The commander branches are not a function each — they are cases of one switch:
+
+```
+004E366A  sub  eax, 0x10000007          ; event id, biased
+004E366F  cmp  eax, 0x1c7               ; 456 events
+004E3674  ja   <default>
+004E367A  movzx eax, byte [eax+0x4E66C4] ; event -> case, a BYTE map
+004E3681  jmp  dword [eax*4+0x4E6480]    ; 145 case targets
+```
+
+Resolving the two indirections gives the events by name-number:
+
+| event | case | body |
+|---|---|---|
+| **`0x10000114`** | 90 | the **`activeHeroes` scan** (`0x004E5D20`), which creates the commanders |
+| `0x100001A3` | 124 | `GmView:5875` commander |
+| **`0x100001A4`** | 125 | `GmView:5890` commander — **the branch that crashes** |
+
+### 23.2 Who raises them
+
+- **`0x10000114` is raised from the PARTY MANAGER**, at `0x008588AD`:
+  `push 0x10000114; call 0x633d70`, immediately after setting a flag bit
+  (`[esi+0x10] |= 0x80`) and with `[ebp+8] = edi` as the payload. That address is in the
+  same `0x0085xxxx` region as `0x01BF`'s worker (`0x00858cb0`) and `0x01CB`'s
+  (`0x00859800`).
+  **So the answer to §17.3's question is YES — the scan's trigger is a party event, and the
+  party is exactly what our messages drive.** The panel is not obviously outside what a
+  server can author, which is the opposite of the leading hypothesis §17.3 recorded.
+- **`0x100001A4` has two raisers**, and that is the interesting part: `0x00524FD1`, **inside
+  the scan itself**, right after the get-or-create loop — and `0x00577E34`, in the **PtHero**
+  region (`PtHero:156` `commanderBtnFrame` is at `0x00578123`), i.e. the party-window hero
+  button. The same event is fired both by the code that *creates* commanders and by the
+  button that *consumes* them.
+
+### 23.3 What this makes of the crash
+
+The intended order is: party changes → `0x10000114` → the scan builds `activeHeroes` →
+get-or-create a commander per entry → `0x100001A4` per commander. The party-window button
+raises `0x100001A4` **directly**, so pressing it when the scan never created anything takes
+the non-creating resolver (`0x00524DB0`, §17.3) straight into the assert.
+
+That is consistent with everything measured, including §19's finding that `msg+0x10` is inert
+on every observable: if the scan never ran, the key it would have used cannot matter.
+
+### 23.4 The precise next step
+
+The scan's filter is `[edi+4] == ctx[0x44][0x2ac]`, which §22 identified as `0x0199`'s field
+1 = 1, and our `msg+8` is 1 by default — so the filter *should* pass. Two candidates remain
+and they are separable by reading, not running:
+
+1. **The iterator.** `0x008563B0` resolves `[ctx+0x4c]` (the party manager) and branches on
+   its argument; §17.1 read its loop shape but not what it actually enumerates. If it walks
+   party PLAYERS rather than hero entries, `[edi+4]`/`[edi+8]` are not the `0x01C2` fields
+   this arc has been assuming, and every key inference above it is unfounded.
+2. **The raiser's reachability.** `0x008588AD` sits on one path through the party code; which
+   of `0x01D2`/`0x01CB`/`0x01C2`/`0x01D3` reaches it is unread. If none does, the server can
+   build a party the client never announces, and *that* is the gap.
+
+Item 1 first: it is cheap and it can invalidate a chain of inferences, which is the better
+kind of check to run early.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
