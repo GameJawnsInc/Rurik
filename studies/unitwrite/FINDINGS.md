@@ -20,7 +20,7 @@ adversarial review's fixes -- §6.1; TESTS.md entry in the same commit). Labels 
   **14,571/14,571 FA1 chunks and 21,420/21,420 whole containers, zero
   failures** (MEASURED 2026-08-16, 775 s; `fullpop_census.json`, and the
   committed test reproduces the same numbers under `--all` — 71 checks
-  green post-review, REVIEWALLTIME — while its default stride pins
+  green post-review, corpus pass 780 s — while its default stride pins
   241/241 + 160/160). The carried-bytes truth, by the review's RECURSIVE
   LEAF WALK (§6.1 RISK-1/2): worm 883 of 82,169 (1.07%); shell 1,179 of
   29,495 (4.00% — the shell is the n40-heavy anchor, and 620 of its
