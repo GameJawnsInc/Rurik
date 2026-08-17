@@ -8046,6 +8046,16 @@ def main():
         if a.probe not in probes.names():
             raise SystemExit(f"no probe named {a.probe!r}. "
                              f"Known: {', '.join(probes.names())}")
+        if a.probe == "henchman_level" and (a.henchman is None
+                                            or not a.henchman_body):
+            # Fail HERE, not after a client run: without a body the roster row
+            # is a container reading Lvl 255 (arm one of the staged demo), so
+            # the probe would spend a session measuring a sentinel.
+            raise SystemExit(
+                "--probe henchman_level needs --henchman NPC_KEY AND "
+                "--henchman-body: the probe reads the henchman's roster row, "
+                "and without a world body at agent 30 that row is a container "
+                "showing Lvl 255 -- a session spent measuring a sentinel.")
         global PROBE_NAME
         PROBE_NAME = a.probe
         print(f"PROBE MODE: {a.probe} -- fires after the character spawns")
