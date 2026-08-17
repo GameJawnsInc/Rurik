@@ -362,6 +362,29 @@ def _level_steps(agent_id):
     ]
 
 
+# authsrv.py's HENCHMAN_AGENT_ID, mirrored the way PROBE_PLAYER_NUMBER mirrors
+# PLAYER_AGENT_ID -- probes.py is a data module with no view of the session and
+# does not import the server.
+HENCHMAN_AGENT_ID = 30
+
+
+def _henchman_level_steps():
+    return [
+        Step(2.0, 0x009F, [PROP_LEVEL, HENCHMAN_AGENT_ID, 1],
+             "henchman level -> 1",
+             "the HENCHMAN'S party-roster row, top right. Before this step it "
+             "shows the body's spawn state (the control); does it read 1 now? "
+             "The player's own row is the in-frame control and must NOT move."),
+        Step(6.0, 0x009F, [PROP_LEVEL, HENCHMAN_AGENT_ID, 15],
+             "henchman level -> 15",
+             "the same roster row. 15?"),
+        Step(6.0, 0x009F, [PROP_LEVEL, HENCHMAN_AGENT_ID, 20],
+             "henchman level -> 20",
+             "20? All three tracking settles Q3's substance: the prop-36 store "
+             "is read back for agents other than the local player."),
+    ]
+
+
 def _attribute_steps(agent_id):
     """L6's attributability check: does the PANEL show the ranks we sent?
 
@@ -4468,6 +4491,30 @@ PROBES = {
              "This is the highest-value packet in the queue: it converts the "
              "study's best-supported claim into an observation and explains why "
              "the character is level 0.",
+    ),
+    "henchman_level": lambda a, o: Probe(
+        question="Does a SECOND agent's level surface read the same per-agent "
+                 "prop-36 store the player's row does? The WRITE half is "
+                 "SOURCED -- int-main case 0x00812D6E stores the value in a "
+                 "per-agent record keyed by whatever agent id the message "
+                 "names (studies/unitsetup/FINDINGS.md 8 Q4) -- but the only "
+                 "readout ever OBSERVED is the player's own roster row "
+                 "(studies/profession/RESKIN.md 18.4, W1/W15/W20).",
+        predicts="The henchman's roster row tracks 1 -> 15 -> 20 exactly as "
+                 "the player's did, because the store is agent-keyed and the "
+                 "roster label builder reads the AGENT "
+                 "(studies/heroes/FINDINGS.md 11.2, three arms). The player's "
+                 "row, in the same frames, must not move. If the henchman's "
+                 "row never changes, the roster reads member levels through "
+                 "some other channel and unitsetup Q3 reopens wider.",
+        steps=_henchman_level_steps(),
+        note="REQUIRES --henchman hatcher --henchman-body (refused at parse "
+             "without them): with no world body the row is a container "
+             "reading Lvl 255 and the probe measures nothing. Party window "
+             "OPEN across every step -- actions '0:play 4:key:P' -- and the "
+             "roster draws at the TOP RIGHT (RESKIN 18.3's lesson: aim the "
+             "instrument at the right rectangle). The body's create carries "
+             "no prop 36, so the pre-step-1 frame is the control reading.",
     ),
     "profession_custom": lambda a, o: Probe(
         question="Does the client accept a primary profession of 12 -- an id it "
