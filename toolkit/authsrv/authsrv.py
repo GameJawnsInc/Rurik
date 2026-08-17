@@ -6701,20 +6701,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       ["enc_name"] if HERO_INFO_NAME else "")
                             for _hid, _haid, _hdef in hero_slots():
                                 if HERO_INFO:
-                                    # SENT INLINE EVEN UNDER --hero-late, and
-                                    # that is the whole ordering fix. 0x0074
-                                    # CREATES the keyed charHeroData record (20);
-                                    # 0x0072 HeroActivate, the attribute pair and
-                                    # the skill bar all run later in this handler
-                                    # and are NOT deferred. Deferring 0x0074 with
-                                    # the party build put those 20 s BEFORE the
-                                    # record they need, inverting the order 13/14
-                                    # established -- and the client asserted
-                                    # `SkillListContext::SKILL_LIST_USERS !=
-                                    # skillListUser` on 4 of 4 late runs
-                                    # (FINDINGS 35.6). --hero-late is meant to
-                                    # move ONE thing, the roster binding.
-                                    send(*agents.mercenary_info(
+                                    # BACK IN THE DEFERRED UNIT. 35.6b tried it
+                                    # inline and the assert survived, so the
+                                    # 0x0074-vs-0x0072 inversion was real and was
+                                    # not the cause. What --hero-late must move is
+                                    # the WHOLE hero pipeline as one unit --
+                                    # 0x0074, the party build, the body, the
+                                    # attribute pair, the skill bar and 0x0072 --
+                                    # preserving their relative order and changing
+                                    # only the absolute time. Splitting the
+                                    # pipeline across the load boundary is what
+                                    # kept asserting, in both directions.
+                                    _seq.append(agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))
@@ -6767,6 +6765,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         _seq.extend(agents.party_build(
                             1, PLAYER_NUMBER, inside_window=_inside))
                         _seq.extend(_after)
+                        # THE ROUTER for everything downstream. `hsend` is the
+                        # hero pipeline's `send`: inline normally, appended to the
+                        # held sequence under --hero-late. It exists so the body,
+                        # attributes, skill bar and HeroActivate below travel WITH
+                        # the roster binding instead of being split from it.
+                        def hsend(op, vals, label=None, _q=_seq):
+                            if HERO_LATE is None:
+                                send(op, vals, label)
+                            else:
+                                _q.append((op, vals, label))
                         if HERO_LATE is None:
                             for op, vals, label in _seq:
                                 send(op, vals, label)
@@ -7064,7 +7072,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # failure this repo already paid for once.
                             _rx, _ry = pos[0] - 150.0, pos[1] + 120.0 * _i
                             create_agent_world(
-                                send, state, _haid,
+                                hsend, state, _haid,
                                 {"pos": (_rx, _ry), "plane": cfg[2],
                                  "health": 100.0, "max_health": 100.0,
                                  "dead": False, "name": _hro["name"],
@@ -7118,16 +7126,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # own recorded knowledge re-earning itself.
                             _hprof = (agents.npc_template(HERO_BODY_NPC)
                                       ["profession"] if HERO_BODY else 1)
-                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
                                  [_haid, ATTRIBUTE_POINTS, ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
                                  f"{_haid})")
-                            send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                            hsend(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
                                  spawn_profession_values(_hprof, _haid),
                                  f"PLAYER_UPDATE_PROFESSION(hero agent "
                                  f"{_haid}, prof {_hprof})")
                             _hcols = attribute_columns()
-                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                                  [_haid, _hcols],
                                  f"AGENT_UPDATE_ATTRIBUTES(hero agent "
                                  f"{_haid}, {len(_hcols) // 3} attrs)")
@@ -7145,7 +7153,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                    if HERO_SKILLBAR else ()):
                             _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
                             _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
-                            send(GAME_SMSG_SKILLBAR_UPDATE,
+                            hsend(GAME_SMSG_SKILLBAR_UPDATE,
                                  [_haid, _hskills,
                                   SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                                  f"SKILLBAR_UPDATE(hero agent "
@@ -7159,7 +7167,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # name the commander-binding trigger.
                         for _hid, _haid, _hdef in (hero_slots()
                                                    if HERO_ACTIVATE else ()):
-                            send(*agents.hero_activate(
+                            hsend(*agents.hero_activate(
                                 HERO_ACTIVATE_ID
                                 if (HERO_ACTIVATE_ID is not None
                                     and _haid == HERO_AGENT_ID) else _hid,

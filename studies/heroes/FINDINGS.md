@@ -2363,7 +2363,40 @@ the skill bar 20 s *before* the `charHeroData` record they need -- inverting the
 established. The chain still ran (`worker/raise/lookup/case93` all 1) and **the client still
 asserted, 2 of 2.** So that inversion was real but is not the cause.
 
-**What is left, and it is the LAST inline/late split in the rig:** the hero's **body,
+**35.6c -- THE WHOLE PIPELINE WAS DEFERRED AS ONE UNIT, AND IT STILL ASSERTS.** The third and
+last ordering was tried: `hsend()` now routes the entire hero pipeline through a single
+deferral point -- `0x0074`, the party build with `0x01C2`, the world body, the attribute trio
+(`0x00B7`/`0x0037`/`0x003A`), the skill bar `0x00DA` and `0x0072` HeroActivate -- preserving
+their relative order exactly and changing only the absolute time. **The chain ran
+(`worker/raise/lookup/case93` all 1) and the client asserted anyway.**
+
+Three orderings, three asserts:
+
+| rig | relative order | assert |
+|---|---|---|
+| `0x0074` deferred, rest inline | inverted | yes |
+| `0x0074` inline, rest inline | partly split | yes |
+| **whole pipeline deferred** | **identical to inline** | **yes** |
+
+**So the assert is not about relative ordering at all -- it is about LATENESS ITSELF.** The
+client will not accept a party roster and hero delivered after `INSTANCE_LOAD_FINISH`,
+however internally well-ordered. The regression control holds throughout: the same code on the
+inline schedule is clean (`RUN VERDICT: PASS`, send order unchanged), so `hsend` did not break
+the default path.
+
+**What this closes.** "Send it later" is **not a viable authoring route**, and the timing
+experiment cannot be run cleanly by this method -- any late delivery asserts, so every late
+measurement is taken from a client that is failing. §35.1/§35.5 stay **CONTESTED** and there is
+now no cheap way to lift that. The subscriber genuinely is present later (measured four times,
+control-verified), but we cannot exploit it, which leaves §33.5's practical conclusion exactly
+where it was and better understood: **the commander panel is not reachable from the server.**
+
+**The remaining route, and it is not more of this:** find what the client itself does between
+the load and the subscription -- i.e. trap the map INSERT rather than the lookup, and learn
+which UI construction registers `0x1000011E`. That is a different instrument (the registration
+site) and a fresh arc's worth of work.
+
+**Superseded, kept for the record -- the reasoning that led to 35.6c:** the hero's **body,
 attributes (`0x0037`/`0x003A`), skill bar (`0x00DA`) and `0x0072` HeroActivate are still sent
 inline** while the roster binding arrives 20 s later, so now those are too EARLY relative to
 `0x01C2` rather than too late. `SkillListContext::SKILL_LIST_USERS != skillListUser` naming a

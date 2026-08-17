@@ -1794,7 +1794,17 @@ and the client still asserting, 2 of 2. **What remains is the last inline/late s
 hero's body, attributes, skill bar and HeroActivate are still sent inline while only the
 roster binding is late, so they are now too EARLY relative to `0x01C2` — and a
 `SkillListContext` assert naming a skill-list *user* fits a bar addressed to an agent the
-party does not yet hold. The correct rig defers the **whole hero pipeline as one unit**. Also
+party does not yet hold. The correct rig defers the **whole hero pipeline as one unit** — **BUILT AND TRIED (§35.6c),
+and it STILL asserts.** `hsend()` now routes the entire pipeline through one deferral point,
+relative order identical to inline, only absolute time changed; the chain ran and the client
+asserted anyway. **Three orderings, three asserts — so the cause is LATENESS ITSELF, not
+ordering.** The client will not accept a party roster and hero delivered after
+`INSTANCE_LOAD_FINISH`. So **"send it later" is not a viable authoring route**, the timing
+experiment cannot be run cleanly this way, §35.1/§35.5 stay CONTESTED with no cheap way to lift
+it, and §33.5 stands better understood: the commander panel is not reachable from the server.
+Regression control held throughout — the same code inline is clean, send order unchanged.
+**The remaining route is a different instrument:** trap the map INSERT rather than the lookup,
+and find which UI construction registers `0x1000011E`. Fresh arc. Also
 recorded UNRESOLVED (§35.7): the two trap site-sets disagreed 4-of-4 versus 0-of-3 on the same
 rig, which could be variance, an observer effect, or the sites themselves — so §35.5's numbers
 are not safe to build on yet.
