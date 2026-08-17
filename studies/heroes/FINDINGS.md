@@ -2627,6 +2627,47 @@ this question (`inventoryId`, `msg+0x10`, the party-cache gate, and this one), w
 arc's established pattern: the static reading is sound and the guess about *which* branch is
 cold has been wrong every time.
 
+### 36.10 MEASURED: the roster handler never runs at all, and the gate is not why
+
+Both sites armed together for a whole session:
+
+```
+posseMsg  0        <- GmPosseRoster's handler, NEVER ENTERED
+posseGate 5        <- field ctx[0x2c]+0x67C = 1 every time, non-zero
+```
+
+**`GmPosseRoster`'s message handler is never entered once** in 115 seconds, with the party
+window open and a hero row rendering in it. Not message 9, not any message. So §36.9's
+possibility (1) -- "installed but message 9 never delivered" -- is **REFUTED**: a component
+with an installed handler would take *some* message across a whole session, and this takes
+none.
+
+And the gate is not the reason. `[ctx[0x2c]+0x67C]` is **1**, so `0x00815E90` returns non-zero
+and its `je` is not taken. Which forces the conclusion:
+
+> **`0x00578BF0` -- the guarded install site -- never runs in our session.** Its gate would
+> have passed had it been reached. The five `posseGate` hits therefore come from the
+> function's *other* callers, exactly as §36.9 warned they might.
+
+That is §36.9's possibility (2), confirmed by elimination, and it moves the blocker **one
+level up**: not the gate, not the handler, but whatever constructs the thing at `0x00578BF0`
+in the first place. The two remaining install sites are `0x0050145C` (**GmDeckBuilder**, the
+PvP build UI) and `0x008E3264` (**UiCtlInstance**) -- neither of which an explorable PvE
+session has any reason to build either.
+
+**Which closes the shape of the answer even though it does not name the caller.** Every route
+to `GmPosseRoster` runs through UI our session does not construct -- a PvP deck builder, a
+PvP item list, a generic control instance -- and the roster window we *do* see on screen is a
+different component that draws party rows without ever registering for commander events. That
+is the concrete form of §36.7's finding, and it is why no amount of wire traffic will bind a
+commander: the subscriber is not merely unregistered, its entire construction path is absent.
+
+**Fifth refuted hypothesis on this question** (`inventoryId`, `msg+0x10`, the party-cache gate,
+the `+0x67C` gate, and now "installed but unmessaged"). The static reading has been right every
+time; the guess about which branch is cold has been wrong every time. That asymmetry is the
+arc's most reusable lesson, and it is why each of these cost one cheap measurement instead of a
+redesign.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.

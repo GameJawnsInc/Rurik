@@ -713,6 +713,22 @@ def _cap_filter(ctx, reader):
                         "REJECTS -- jne 0x4e62f4, the handler returns")}
 
 
+def _cap_posse(ctx, reader):
+    """GmPosseRoster's handler, with the message it was handed.
+
+    At `0x005392AC` esi is the message struct (loaded at `0x005392A8`) and
+    `[esi+4]` is the switch selector. 36.9 left three possibilities and this
+    separates the first two by itself: NO hits means the handler is not
+    installed; hits WITHOUT message 9 mean it is installed and never created;
+    a message 9 hit would contradict 36.7's census and put the fault elsewhere.
+    """
+    m = _dw(reader, ctx.Esi + 4, 1)
+    v = m[0] if m else None
+    return {"message([esi+4])": v,
+            "VERDICT": ("MESSAGE 9 -- instance create, the subscribe path"
+                        if v == 9 else f"message {v}, not the create path")}
+
+
 def _cap_gate(ctx, reader):
     """THE GATE on GmPosseRoster's existence. `0x00815E90` resolves the root
     context, takes `ctx[0x2c]` (the same character context 14 read `+0x6BC`
@@ -814,6 +830,12 @@ SITES = {
         "hash -- the client does the lookup and we read its result.",
         capture=lambda ctx, rd: _cap_lookup(ctx, rd),
         arm_after="raise", oneshot=True),
+    "posseMsg": Site(
+        "posseMsg", 0x005392AC, bytes.fromhex("8b460483f856"),
+        "GmPosseRoster's handler at its switch selector, esi already loaded. "
+        "Reads WHICH message the roster handler receives -- the discriminator "
+        "for 36.9's surviving possibilities.",
+        capture=lambda ctx, rd: _cap_posse(ctx, rd)),
     "posseGate": Site(
         "posseGate", 0x00815EA0, bytes.fromhex("85f67505"),
         "`test esi,esi` inside 0x00815E90, where esi IS ctx[0x2c]+0x67C. This is "
