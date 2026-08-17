@@ -3383,7 +3383,20 @@ Every one of these, in the order they were written:
   `assemble` that self-checks and stamps `origin: live`; `assemble_live` pairing a keyring
   to several connections and, the one that matters, decrypting nothing and writing no file
   when the right key is absent; and that the guards refuse the primary account, an ours-DH
-  client aimed live, and a run with no `--confirm`),
+  client aimed live, and a run with no `--confirm`. §12 (2026-08-17) is the
+  LAUNCH-BUILD guard: the exe must be the build the live service is actually
+  serving, read from the owner's own auto-updating install rather than from any
+  pin — a pin is what we last chose, the service serves what it shipped this
+  morning. It refuses a stale build BEFORE the login because the failure is
+  otherwise expensive and late: the updater is LIVE on every `run-live/` build by
+  design, so a stale exe updates ITSELF and the key-tap cave — patched at a
+  build-specific address — is gone in the copy that runs, spending the one
+  authorized session on ciphertext with no key. Five checks and every one can go
+  red: the matching build is ACCEPTED (the positive control), the stale one is
+  refused naming both numbers, the refusal NAMES the staged directory that would
+  work (and prints the rebuild command when none does), an absent owner install
+  SKIPS loudly rather than passing, and an unreadable launch binary is refused
+  outright. 112 checks),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled — **and since 2026-08-13 which BUILD, which is
   the same argument one level down**. `HANDOFF.md`:237 has required a build id in

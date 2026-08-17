@@ -977,6 +977,104 @@ def one_live_client():
         return None
 
 
+# The owner's own install, which is the ONLY thing in reach that knows what build
+# ArenaNet is serving today. Read-only, always: CLAUDE.md's rule is that this
+# directory is never patched and never launched, and reading its bytes is allowed.
+LIVE_INSTALL_EXE = r"C:\gw\Gw.exe"
+
+
+def service_build():
+    """(build, why) for the build the live service is currently serving.
+
+    Derived from the owner's auto-updating install rather than from any pin --
+    `buildid.of_image` names that install as a case it exists to handle. A pin
+    cannot answer this question by construction: the pin is what we last chose,
+    the service serves whatever it shipped this morning.
+    """
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import buildid                                   # stdlib + gwpe only
+    if not os.path.isfile(LIVE_INSTALL_EXE):
+        return None, f"no install at {LIVE_INSTALL_EXE}"
+    return buildid.of_image(LIVE_INSTALL_EXE)
+
+
+def _run_live_builds():
+    """{build number: [directory, ...]} for every staged live build. Read from bytes."""
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import buildid
+    out = {}
+    try:
+        root = vaultpath.require_dir("run-live", why="naming the build that would work")
+    except Exception:                                          # noqa: BLE001
+        return out
+    for name in sorted(os.listdir(root)):
+        exe = os.path.join(root, name, "Gw.exe")
+        if os.path.isfile(exe):
+            n, _ = buildid.of_image(exe)
+            out.setdefault(n, []).append(name)
+    return out
+
+
+def check_build_matches_service(exe):
+    """Refuse a live launch whose build is not the one the service is serving.
+
+    WHY THIS IS A REFUSAL AND NOT A WARNING. The updater is LIVE on every
+    `run-live/` build by design -- the live client must fetch content during a
+    real session -- so an exe older than the service does not fail politely: it
+    UPDATES ITSELF, and the key-tap cave is patched at a build-specific address,
+    so the tap is gone in the copy that then runs. What that costs is the one
+    thing this project rations: an authorized session against the real service,
+    spent producing ciphertext with no key. The downstream refusals catch it
+    (`slot_rva` re-reads the slot and raises), but they catch it AFTER the login.
+
+    ADDED 2026-08-17, from a question rather than a failure. Asked which build
+    to launch, a session hedged -- "whichever matches what ArenaNet serves
+    today" -- when the answer was two commands away and doubly determined: the
+    owner's install reads 38833 through its own build getter, and `run-live/`
+    names its directories `<PE date>_<source sha256[:12]>`, so the directory
+    `2026-08-13_64fae3b1369b` is literally named for the sha of the install it
+    was patched from. Both witnesses agreed. A question the tools could answer
+    and a human could not is exactly the shape that belongs in a preflight.
+
+    SKIPS, LOUDLY, when the owner's install is not on this machine -- the
+    checkable thing is absent, which is not the same as checked and fine.
+    """
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import buildid
+    want, want_why = service_build()
+    have, have_why = buildid.of_image(exe)
+    if want is None:
+        print(f"  [skip] cannot check the launch build against the service: {want_why}.\n"
+              f"         The exe reads build {have}. Nothing verified this is the build "
+              f"the service serves.", flush=True)
+        return {"checked": False, "why": want_why, "launch_build": have}
+    if have is None:
+        raise LiveError(
+            f"cannot read a build number out of the launch client ({have_why}), while the "
+            f"service is serving {want}. Refusing rather than launching an unidentified "
+            f"binary at the real service.")
+    if have != want:
+        staged = _run_live_builds()
+        fix = (f"  vault/run-live/{staged[want][0]} is build {want} -- launch that one."
+               if staged.get(want) else
+               f"  NO staged live build is {want}. Rebuild:\n"
+               f"    python toolkit/clientpatch/make_custom_client.py "
+               f"--no-dh-patch --key-tap\n"
+               f"    python toolkit/clientpatch/make_run_dir.py --live")
+        raise LiveError(
+            f"the launch client is build {have}; the live service is serving {want}.\n"
+            f"  A stale live build does not fail politely -- its updater is LIVE by design, "
+            f"so it updates ITSELF and the key-tap cave (a build-specific address) is lost "
+            f"in the copy that runs. The session would spend the authorized login producing "
+            f"ciphertext with no key.\n{fix}\n"
+            f"  service: {want_why}\n  launch:  {have_why}")
+    print(f"  [ok] launch build {have} matches the service ({want}).", flush=True)
+    return {"checked": True, "launch_build": have, "service_build": want}
+
+
 def preflight(account_label, exe, live_host, want_windivert=True):
     """Everything that must be true before a client is launched at the real service.
 
@@ -997,6 +1095,8 @@ def preflight(account_label, exe, live_host, want_windivert=True):
         raise LiveError("the live build is not key-tapped: without the cave there is no key "
                         "to read, and the ciphertext cannot be decrypted. Rebuild with "
                         "make_custom_client.py --no-dh-patch --key-tap")
+
+    check_build_matches_service(exe)
 
     running = one_live_client()
     if running is None:

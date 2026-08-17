@@ -164,7 +164,9 @@ LiveErrorType = ls.LiveError
 # and the stock gate declare skips without a vault, so a vault-less run goes red -- the
 # same choice this file has made since the floor was 42, and the reason is that its
 # headline claims are about REAL captured bytes.
-LEDGER = checks.Ledger("livesession", floor=106)
+# FLOOR: 112, MEASURED from a green run 2026-08-17 after section 12 (the
+# launch-build guard) landed -- read off the run, never computed.
+LEDGER = checks.Ledger("livesession", floor=112)
 
 
 # --------------------------------------------------- the syntax-tree readout --
@@ -1439,6 +1441,102 @@ def main():
         LEDGER.ok(relaunch and relaunch[0] == "POPEN",
                   "SABOTAGE: a spawn above the seal is the FIRST thing in the log",
                   f"{relaunch} -- the client is up before anything has been sealed")
+
+    # ---- 12. the launch build must be the build the service is serving ---------
+    print("\n12. the build guard: a stale live build is refused BEFORE the login")
+    real_service = ls.service_build
+
+    def fake_service(n, why="fixture"):
+        return lambda: (n, why)
+
+    class FakeImage:
+        """buildid.of_image for a path we never have to own on disk."""
+
+        def __init__(self, table):
+            self.table = table
+
+        def __call__(self, path):
+            for frag, n in self.table.items():
+                if frag in path.replace("\\", "/"):
+                    return n, "fixture"
+            return None, "fixture: unknown image"
+
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(ls.__file__)),
+                                     "..", "clientscan"))
+    import buildid
+    real_of_image = buildid.of_image
+    try:
+        buildid.of_image = FakeImage({"CURRENT/Gw.exe": 38833, "STALE/Gw.exe": 38797})
+
+        ls.service_build = fake_service(38833)
+        ok = ls.check_build_matches_service("C:/x/run-live/CURRENT/Gw.exe")
+        LEDGER.ok(ok["checked"] and ok["launch_build"] == 38833,
+                  "the matching build is ACCEPTED",
+                  "the positive control -- a guard that refuses everything "
+                  "protects nothing")
+
+        try:
+            ls.check_build_matches_service("C:/x/run-live/STALE/Gw.exe")
+            refused, msg = False, ""
+        except ls.LiveError as exc:
+            refused, msg = True, str(exc)
+        LEDGER.ok(refused and "38797" in msg and "38833" in msg,
+                  "a build OLDER than the service is REFUSED, naming both numbers",
+                  "the updater is LIVE on run-live builds by design, so a stale "
+                  "exe updates itself and loses the key-tap cave -- after the "
+                  "login, which is the authorized session gone")
+
+        # The refusal must NAME the build that would work. A refusal that only
+        # says no leaves the operator where the hedge did.
+        real_scan = ls._run_live_builds
+        try:
+            ls._run_live_builds = lambda: {38833: ["2026-08-13_64fae3b1369b"]}
+            try:
+                ls.check_build_matches_service("C:/x/run-live/STALE/Gw.exe")
+                named = ""
+            except ls.LiveError as exc:
+                named = str(exc)
+            LEDGER.ok("2026-08-13_64fae3b1369b" in named,
+                      "and the refusal NAMES the staged build that would work",
+                      "a refusal that only says no leaves the operator exactly "
+                      "where the unmeasured hedge did")
+            ls._run_live_builds = lambda: {}
+            try:
+                ls.check_build_matches_service("C:/x/run-live/STALE/Gw.exe")
+                nostage = ""
+            except ls.LiveError as exc:
+                nostage = str(exc)
+            LEDGER.ok("make_custom_client.py" in nostage,
+                      "and with NO staged build at that number it prints the "
+                      "rebuild command instead")
+        finally:
+            ls._run_live_builds = real_scan
+
+        # The owner's install is not on every machine. Absent must SKIP loudly,
+        # never pass quietly -- unchecked is not the same as checked and fine.
+        ls.service_build = fake_service(None, "no install at C:\\gw\\Gw.exe")
+        skipped = ls.check_build_matches_service("C:/x/run-live/CURRENT/Gw.exe")
+        LEDGER.ok(skipped["checked"] is False and skipped["launch_build"] == 38833,
+                  "with no owner install to compare against, the check SKIPS and "
+                  "says so rather than passing",
+                  "checks.py's own rule: a section that cannot run is printed, "
+                  "never silent")
+
+        # An unreadable launch binary is a refusal, not a shrug.
+        ls.service_build = fake_service(38833)
+        try:
+            ls.check_build_matches_service("C:/x/run-live/MYSTERY/Gw.exe")
+            refused_unknown = False
+        except ls.LiveError:
+            refused_unknown = True
+        LEDGER.ok(refused_unknown,
+                  "a launch binary whose build cannot be read is REFUSED",
+                  "an unidentified binary at the real service is the one thing "
+                  "worse than the wrong identified one")
+    finally:
+        buildid.of_image = real_of_image
+        ls.service_build = real_service
 
     return LEDGER.verdict()
 
