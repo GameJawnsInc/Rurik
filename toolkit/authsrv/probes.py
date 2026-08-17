@@ -2120,9 +2120,15 @@ def _encname_render_steps(origin):
     """
     ox, oy = (origin[0], origin[1]) if origin else (0.0, 0.0)
     # The def_1470 declaration, verbatim from vault/content/npcs.toml (OBSERVED
-    # on ArenaNet's wire, 8 connections, 2 captures, byte-identical). Ids and
-    # numbers only; the name stays in the owner's archive.
-    DEF, FILE_ID, MODEL = 1470, 116227, 116698
+    # on ArenaNet's wire, 8 connections, 2 captures, byte-identical) -- EXCEPT
+    # the index. OBSERVED 2026-08-16 (harness 20260816T211432): declaring INDEX
+    # 1470 into our minimal instance made the 38833 client send its goodbye
+    # family (0x0008/0x000A/0x000B/0x000D) and reset the connection -- the
+    # declare path evidently will not take an index ~1460 above anything the
+    # instance has seen, on a table retail populates densely. The index carries
+    # no naming semantics, so the probe uses a small unused one; the rejection
+    # itself is recorded as a real bound on any replay idea rung 6 might have.
+    DEF, FILE_ID, MODEL = 25, 116227, 116698
     SCALE, FLAGS, PROF, LEVEL = 1677721600, 524, 3, 2
     ENC = [3943, 39638, 36630, 30448]
     enc_str = "".join(chr(u) for u in ENC)
