@@ -2391,6 +2391,54 @@ now no cheap way to lift that. The subscriber genuinely is present later (measur
 control-verified), but we cannot exploit it, which leaves §33.5's practical conclusion exactly
 where it was and better understood: **the commander panel is not reachable from the server.**
 
+## 36. The subscribe site, built -- and a BYTE ANCHOR MUST NOT CONTAIN A RELOCATED ADDRESS
+
+35.6c's successor route is the map INSERT rather than the lookup: `0x0064CDA4` looks an event
+up and, when absent, allocates a list and stores the id (`mov [ebx],esi`). At that point `esi`
+is the event id and `[ebp+4]` is the caller's return address -- so a census names **who
+registers what**, which is what 34 and 35 could not reach by watching the raise.
+
+### 36.1 The guard refused, and it was right for the wrong reason
+
+Armed at `0x0064CDA4` the verification REFUSED:
+
+```
+expected b9c41bc100      (mov ecx, 0x00C11BC4)
+got      b9c41be200      (mov ecx, 0x00E21BC4)
+```
+
+`0xE21BC4 - 0xC11BC4 = 0x210000`, **exactly the run's ASLR slide.** That instruction embeds an
+absolute DATA address, the loader relocates it, and the bytes in memory therefore differ from
+the bytes in the file *by design*. The site was correct and the guard rejected it.
+
+**The rule, and it is general:** a byte anchor must contain no relocated absolute address.
+The four sites this arc has been using survived only by luck of encoding -- two function
+prologues, a `push imm32` whose immediate is a CONSTANT (not relocated), and a `call rel32`,
+which is PC-relative and identical in file and memory. Re-anchored five bytes on to
+`0x0064CDA9`, the `call rel32` into the lookup, where `esi` and `[ebp+4]` still hold the same
+values. It verifies and arms.
+
+*(This is the second time the byte guard has produced a REFUSAL rather than a wrong number,
+and both times the refusal was the useful output: once for a genuine cross-build hazard, once
+for this. A guard that only ever says yes is 28's reader again.)*
+
+### 36.2 The instrument works; the run that used it did not
+
+Armed, it captures exactly what was wanted -- `event(esi)` with `caller(retaddr)`, e.g.
+`0x10000013` registered from `0x00843C07`.
+
+**But the census is worthless and the reason is an orchestration error, not the tool.** The
+trap attached to pid 24896 -- the PREVIOUS run's client, still alive, already fully loaded --
+so it sampled 3 late subscriptions instead of the startup burst where the interesting
+registrations happen. The earlier series scripts serialised on `while tasklist | grep Gw.exe`
+for exactly this reason and this run was launched without it. **`0x1000011E` is absent from
+those 3, which means nothing**: a 3-event sample taken after the UI is built cannot show a
+registration that happens during construction.
+
+**Next, and it is one clean run:** the same site, on a client this run started, with the
+wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
+--xrefs` on each -- to name the UI construction that registers `0x1000011E`.
+
 **The remaining route, and it is not more of this:** find what the client itself does between
 the load and the subscription -- i.e. trap the map INSERT rather than the lookup, and learn
 which UI construction registers `0x1000011E`. That is a different instrument (the registration

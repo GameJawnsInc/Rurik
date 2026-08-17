@@ -713,6 +713,17 @@ def _cap_filter(ctx, reader):
                         "REJECTS -- jne 0x4e62f4, the handler returns")}
 
 
+def _cap_subscribe(ctx, reader):
+    """WHO registers WHAT. `esi` holds the event id (it is stored to the scratch
+    slot at `0x0064CDA0` and passed to the lookup by address), and `[ebp+4]` is
+    the caller's return address -- so a census here names both the event and the
+    code that subscribed to it. 34 could read whether a subscriber EXISTS; this
+    reads where it came from."""
+    ret = _dw(reader, ctx.Ebp + 4, 1)
+    return {"event(esi)": ctx.Esi,
+            "caller(retaddr)": ret[0] if ret else None}
+
+
 def _cap_lookup(ctx, reader):
     """THE subscriber answer, read out of the client's own lookup.
 
@@ -778,6 +789,23 @@ SITES = {
         "hash -- the client does the lookup and we read its result.",
         capture=lambda ctx, rd: _cap_lookup(ctx, rd),
         arm_after="raise", oneshot=True),
+    "subscribe": Site(
+        # ANCHORED ON THE `call`, NOT THE `mov` FIVE BYTES EARLIER, and the
+        # reason is a defect this guard caught in itself. `0x0064CDA4` is
+        # `mov ecx, 0x00C11BC4` -- an absolute DATA address, which the loader
+        # RELOCATES. Live it reads `b9c41be200` = 0x00E21BC4, and
+        # 0xE21BC4 - 0xC11BC4 = 0x210000 is exactly the ASLR slide, so the
+        # verification refused a site that was perfectly correct. A byte anchor
+        # must not contain a relocated absolute address. `call rel32` is
+        # PC-relative and therefore identical in the file and in memory, and at
+        # this instruction `esi` and `[ebp+4]` hold the same values they held
+        # five bytes earlier.
+        "subscribe", 0x0064CDA9, bytes.fromhex("e87251e4ff"),
+        "the subscriber-map INSERT path: it looks the event up and, when absent, "
+        "allocates a list and stores the id (`mov [ebx],esi`). Census it to learn "
+        "which UI construction registers 0x1000011E and when -- the question 34.4 "
+        "and 35 could not reach by watching the raise. HOT: raise --max-hits.",
+        capture=lambda ctx, rd: _cap_subscribe(ctx, rd)),
     "lookupany": Site(
         "lookupany", 0x0064CA47, bytes.fromhex("85c0740dff75"),
         "THE POSITIVE CONTROL for `lookup`, and the same address armed with no "
