@@ -677,8 +677,24 @@ def section2(check, led, ar, stride):
     span_viol = spans_seen = mono_viol = 0
     grid_ok = grid_n = 0
     presence_ok = presence_n = 0
+    quiet_n = quiet_ok = 0
+    quiet_err = None
     for row, p, _ in payloads:
         sk = Skeleton.decode(p)
+        if sk.header["n40"] == 0 and sk.header["n44"] == 0:
+            # The no-n40n44-span majority (72.5% of the corpus):
+            # sound_events() must answer [], not raise. It raised a
+            # TypeError here until 2026-08-16, found by rung U6's first
+            # strided writer run over the corpus and fixed under the U6
+            # review's scoped permission (studies/unitwrite/FINDINGS.md
+            # §2). Guarded so a regression is the named FAIL below, not
+            # a dead run with no verdict.
+            quiet_n += 1
+            try:
+                if sk.sound_events() == []:
+                    quiet_ok += 1
+            except Exception as e:                        # noqa: BLE001
+                quiet_err = quiet_err or f"row {row}: {e!r}"
         for _bit, flagged, present in sk.flags_presence():
             presence_n += 1
             if flagged == present:
@@ -707,6 +723,10 @@ def section2(check, led, ar, stride):
     check(presence_ok == presence_n,
           f"flag bits 3/5/6/7 mirror block presence via the module's own "
           f"flags_presence(), {presence_ok}/{presence_n}")
+    check(quiet_n > 0 and quiet_ok == quiet_n,
+          f"sound_events() returns [] on every sampled no-n40n44-span "
+          f"file ({quiet_ok}/{quiet_n}) -- the U6-found TypeError, "
+          "regression-pinned", quiet_err or "")
     check(span_viol == 0,
           f"span binding lo <= hi <= n3C over {spans_seen} records, "
           "0 violations -- the check the decoder cannot force")
@@ -787,15 +807,18 @@ def main():
                          "decompresses every head row, ~45 min)")
     args = ap.parse_args()
 
-    # Floor from the real green default run, 2026-08-16: 91 checks executed
+    # Floor from the real green default run, 2026-08-17: 92 checks executed
     # (stride 89, the study archive; 71 before the U2 typed-layer section
     # 0b landed, 89 before the U2 review added the two failing controls
-    # and folded one forced check, 90 before the U6 empty-span guard on
-    # sound_events()). Set below that only by the checks whose pools can
-    # legitimately empty on a different sample (the 16 corpus sabotage
-    # variants and the two order-control halves declare skips); the
-    # mandatory core is 73.
-    led = checks.Ledger("skeleton chunk (0xFA1)", floor=83)
+    # and folded one forced check, then TWO sound_events empty-span
+    # regression checks -- U6's arc pinned the corpus population and a
+    # parallel session pinned the synthetic fixture, independently within
+    # the hour; the merge keeps BOTH because they cover different ground.
+    # Set below that only by the checks whose pools can legitimately
+    # empty on a different sample (the 16 corpus sabotage variants and
+    # the two order-control halves declare skips); the mandatory core
+    # is 74.
+    led = checks.Ledger("skeleton chunk (0xFA1)", floor=84)
     check = checks.adopt(led)
 
     section0(check)

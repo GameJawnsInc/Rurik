@@ -845,15 +845,17 @@ Every one of these, in the order they were written:
   near-identity quaternions make any misaligned window score ~35% on
   this anchor), and a deterministic link rotation that must violate the
   `<= own index` half (the `< n2C` half is a multiset property a shuffle
-  cannot refute). The minimal fixture also pins `sound_events() == []`
-  where n40 == n44 == 0 -- the walker records no n40n44 span there, the
-  accessor's unguarded unpack was the TypeError that stopped U6's first
-  strided-writer run (2026-08-16, `studies/unitwrite/FINDINGS.md` §2),
-  and the majority of prop-class FA1s take this path. 91 checks against
-  a floor of 83 (the mandatory core is 73; the corpus sabotage and
-  order-control pools can legitimately empty on another sample and
-  declare skips). ~25 s; `--all` reads every head
-  row, ~25-45 min),
+  cannot refute). The sound_events() empty-span regression -- the
+  TypeError that stopped U6's first strided-writer run (2026-08-16,
+  `studies/unitwrite/FINDINGS.md` §2) -- is pinned TWICE, because two
+  arcs fixed and pinned it independently within the hour and the merge
+  kept both sides' checks on purpose: the minimal fixture pins
+  `sound_events() == []` where n40 == n44 == 0, and section 2
+  regression-pins the same answer on every sampled no-n40n44-span
+  corpus file (the 72.5% majority class). 92 checks against a floor of
+  84 (the mandatory core is 74; the corpus sabotage and order-control
+  pools can legitimately empty on another sample and declare skips).
+  ~25 s; `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
   `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
   the one generic reader all five go through (`0x00796DE0`, exactly five call
@@ -3324,4 +3326,78 @@ Every one of these, in the order they were written:
   the green run (71 -> 72 with the review's real-data tiling check);
   sections 0-1 (synthetics + the resolve_outdir refusal with its positive
   controls and the mapexport delegation check) score 28 vault-less and go
-  RED; with the archive but no Blender, 53, also RED).
+  RED; with the archive but no Blender, 53, also RED),
+  `toolkit/mapdata/test_skelwrite.py` (the RE-IMPORT ROUND TRIP, rung U6:
+  the FA1/container WRITER
+  (`skelwrite.py`): decode -> extract -> encode must be BYTE-IDENTICAL, and
+  identity is the criterion precisely because re-parse equivalence cannot
+  be -- the walk pins no order between adjacent fixed-size blocks, so the
+  test's `swap_n14_n34` writer variant emits output that RE-PARSES GREEN
+  (walk closes, every gate passes) while failing identity with the diff
+  confined to the two swapped blocks, demonstrated on a synthetic with
+  planted-distinct block content (uniform fill would make the swap
+  invisible) AND on the worm, whose n14/n34 contents are measured distinct.
+  What keeps identity from being vacuous is the memcpy-loader lesson
+  (models FINDINGS 4.5) applied writer-side, pinned three ways: a typed
+  repr HAND-BUILT from the test's own literals -- never decoded from any
+  payload, so a spans-concatenating encoder cannot even run on it -- must
+  encode to `synth_anim()`'s exact bytes; the anchors' opaque-carry totals
+  are pinned by a RECURSIVE LEAF WALK over every bytes-like leaf in the
+  repr (worm 883 of 82,169 B = 1.07%, shell 1,179 of 29,495 = 4.00% --
+  the shell is n40-heavy, 620 of its bytes the 62 sound-event raw tails;
+  the declared/undeclared split is asserted as exactly 10 x n40 beside
+  it. The U6 review struck the first version, which summed the DECLARED
+  regions only and so could not catch a writer stashing bytes under a
+  new key); and the U7 seam (`scale_sequence_keytimes`, pure int32,
+  inexactness and overflow REFUSED, and since the review ATOMIC -- the
+  whole span validates before any key commits, with the refusal-then-
+  identity check on a two-key span pinning it: the pre-fix writer left
+  the shell's seq 16 half-retimed 66666 -> 22222 and still serialized)
+  must land its modification at EXACTLY the byte set the value change
+  predicts (set equality, not subset) -- worm sequence 2 x2 flips key
+  2's int32 slot, at chunk and at container level, and re-decodes to
+  the scaled time. U6's
+  measured finding is recorded as a pin: header bytes +0x09..+0x0B, which
+  the parser never reads, are NOT zero (shell 0x42, worm 0x07; 5,208 of
+  14,571 corpus FA1s non-zero, 39 distinct patterns), so the typed layer
+  carries them opaque rather than assuming them. Identity runs on both
+  anchors plus the container-only hatcher body, a deterministic stride-89
+  corpus pass (241/241 containers, 160/160 FA1s, 9 blk48 carriers so the
+  typed blk48 repack meets real data), and under `--all` the COMPLETE
+  population: 21,420/21,420 containers and 14,571/14,571 FA1s
+  byte-identical (MEASURED 2026-08-16, 848 s). Refusals are named `Unwritable`s beside passing
+  controls: count/list mismatch, diverged start/end aliases, truncated
+  opaque var-array (each opaque block must TILE under its own terms before
+  it is emitted), wrong-size pad09, n2C == 0 (the client's own error 12),
+  fa1= against a no-FA1 container, non-type-2 ffna -- and an
+  n56-carrying synthetic (0 corpus files can exercise that stride) must
+  round-trip, in two shapes. Section 3 is the datwrite half with its
+  identity levels STATED: serialized chunk/container bytes EXACT;
+  decompressed row payload read back out of a REBUILT archive EXACT; the
+  STORED form legitimately different (compression 8 x 90,616 B ->
+  stored x 129,368 B -- no compression-8 encoder exists, datwrite study
+  blocker 2). The rebuilt archive carries the worm's REAL rows
+  byte-verbatim in test_datmove's fixture shape at loader-legal indices
+  (>= 16): the 515 -> 1 -> 2817 `alloc.nextStream` chain, whose survival
+  is the load-bearing check because U7's kill/keep names the untouched
+  mid/tail rows as prime suspects -- after the move the chain links, the
+  flags, and both partners' bytes are unchanged (the failing control
+  corrupts the rebuilt archive's OWN MFT bytes -- root nextStream and
+  mid flags -- and requires both faults reported by name through the
+  real on-disk layout, the review's upgrade over mutating a parse), the
+  file-id table still names the same row, all three checksum rules hold,
+  and no two reservations intersect. The recorded WALL is exhibited, not
+  just cited: `datwrite.replace` refuses the 129,368-B payload naming
+  the relocation, and `datmove` -- the verb built for exactly that
+  refusal -- succeeds beside it. The resolve_outdir delegation is proven
+  by monkeypatch (patching mapexport's changes skelwrite's answer),
+  refutable where the struck docstring-prose check was not. Floor 69
+  MEASURED from the green default run (66 pre-review); --all runs 71,
+  its two stride-1-only population pins added; vault-less runs execute
+  the synthetic sections only, 33 checks plus a declared skip, RED on
+  the floor by design -- and the first vault-less run DIED with no
+  verdict because `require_dir` raises SystemExit past `except Exception`,
+  the exact unguarded-exception failure the models-arc review named, now
+  guarded and commented. ~40 s default; nothing outside the vault is ever
+  written -- the rebuilt archive and its journals live under
+  `vault/exports/unitwrite/`).
