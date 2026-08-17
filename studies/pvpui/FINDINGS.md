@@ -482,3 +482,81 @@ version of it that names a specific number to go and look at.
   `GmPetCommander` / `AgentCommander*` (§8, §10.2).
 - **Not the wire opening a window.** The window is opened by a party-row click (§10.1).
 - **Not `0x00524C40` being cold.** It is cold because its loop has no iterations (§11).
+
+## 12. `0x01C2` fills that container, and here is the field that decides it
+
+**Correction to §11 first.** §11 called the container's items 12 bytes. They are **24**:
+`0x008563E3 lea ecx,[edi+edi*2]` then `0x008563E8 lea eax,[eax+ecx*8]` — index×3×8. The
+*local* array in the commander model is genuinely 12 bytes per record (`lea ecx,[ebx+ebx*2]`
+then `[ebp+ecx*4-0x58]`), and I conflated the two. Nothing downstream changes: the
+commander model still reads `[item+4]` and `[item+8]` out of the container, and still
+writes 12-byte records of its own.
+
+`msghandler.py` puts opcode `0x01C2` on handler **`0x00856C40`**, and it lands on the same
+subsystem the commander model reads:
+
+```
+0x00856C40   [RECV] 0x01C2
+  eax = globals()
+  ecx = [eax+0x4C] + 4                  <- the subsystem, +4
+  push [msg+0x14]  [0]  [0]  [msg+0x10]  [msg+0x0C]  [msg+0x08]  [msg+0x04]
+  call 0x00859010
+```
+
+```
+0x00859010(this = [g+0x4C]+4, container, a, b, c, d, e, f)
+  esi = container
+  edi = [this+0x4C]                     the one-entry cache
+  if (!edi || [edi] != esi):
+      esi == 0 ? edi = [this+0x50]      <- == [[g+0x4C]+0x54], THE DEFAULT CONTAINER,
+                                           the exact one 0x008563B0(0, n) walks
+               : bounds-check [this+0x44], edi = [[this+0x3C] + esi*4]
+  if (!edi) bail
+  [edi+0x78] = 1
+  grow [edi+0x24] if [edi+0x2C]+1 > [edi+0x28]        base / count / capacity
+  item = [edi+0x24] + ([edi+0x2C]-1)*24
+      item[+0x04] = a        (msg+0x08)
+      item[+0x00] = b        (msg+0x0C)
+      item[+0x08] = c        (msg+0x10)
+      item[+0x0C] = d        (0)
+      item[+0x10] = e        (0)
+      item[+0x14] = f        (msg+0x14)
+  if (edi != [this+0x4C]) … raise 0x1000011E at 0x008590CA
+```
+
+The container's `+0x24 / +0x28 / +0x2C` are exactly the base / capacity / count that
+`0x008563B0` reads back. **This is the same object, written by `0x01C2` and read by the
+commander model, `GmPosseRoster` and `PvpItem`** (the accessor's eight call sites are in
+those three places and nowhere else).
+
+### 12.1 The field that decides whether a commander binds
+
+Cross-referencing §11's ownership test with the mapping above:
+
+| the commander model reads | which is the container item at | which `0x01C2` fills from |
+|---|---|---|
+| `[edi+4] == 0x0084DD70()` — **the ownership test** | `item+0x04` | **`msg+0x08`** |
+| `[edi+8]` — the agent id it stores as the hero's | `item+0x08` | **`msg+0x10`** |
+
+So: **for a hero to get a commander, our `0x01C2` must carry, at `msg+0x08`, the same value
+`MsCliApi`'s `0x0084DD70()` returns for us — and the hero's agent id at `msg+0x10`.** If
+`msg+0x08` is anything else, the item is appended, the list is non-empty, and the commander
+model's loop still produces zero records, because every item fails the ownership test.
+
+That is a **field bug in a message we already send**, not a missing message — and it is the
+second of the two outcomes §11.1 predicted, reached without the harness.
+
+**RECONSTRUCTION, and the distinction matters:** the offsets are OBSERVED, the arrow from
+"our `0x01C2` payload" to "these argument slots" is not. `msg+0x04/0x08/0x0C/0x10/0x14` are
+*decoded-struct* offsets in the client's own message struct, which are not the same thing as
+byte offsets in our wire payload — `schema/messages.json` is what maps one to the other, and
+nothing here read it. **Do that mapping before changing a line of `authsrv.py`.**
+
+### 12.2 Why `0x1000011E` looked like the answer for so long
+
+The raise heroes chased is at `0x008590CA`, **inside this very function**, on the branch
+taken when the container written is *not* the cached one. It is a cache-invalidation
+notification, and it fires whether or not the item that was just appended belongs to us.
+That is why it was observable, and why it led nowhere: **it reports that the list changed,
+not that a commander exists.** The commander asserts hang off `0x100001A4` (§10.2), which is
+raised only after the ownership test has already produced a record.
