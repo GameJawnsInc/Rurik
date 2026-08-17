@@ -101,6 +101,18 @@ GRANDFATHERED = {
     # is self-serving, the check that matters is unchanged and cheap to apply -- read
     # the citations and ask whether any argues for nothing.
     os.path.join("studies", "minimap", "FINDINGS.md"): 40,    # 25: the atlas chain, the draw/ping triple, the fog partition
+    # 13 on 2026-08-17, over NEWCOMER_CEILING on the day the arc landed, and the
+    # document is a CHAIN of asserts by construction: it follows one click through
+    # GmView's case for 0x100001A4 assert by assert -- 5890 `commander`, 5891
+    # `commander->slotIndex < DLG_AGENT_COMMANDERS`, 5897 `heroData`, 5898
+    # `heroData->agentId` -- and each one is the evidence that a specific server-side
+    # change moved the failure to the next line. Take any of them out and the table in
+    # 25.1 stops being auditable. The rest are single citations pinning single facts:
+    # `GmView:2073` NAMES s_floatingDialogs, `PyCliParty:650` names m_partyClient,
+    # `ItCliApi:485/488` bound ITEM_EQUIP_SLOTS and name the new blocker. Same
+    # proportion as the entries above, and the same check applies -- read them and ask
+    # whether any argues for nothing.
+    os.path.join("studies", "pvpui", "FINDINGS.md"): 30,      # 13: the assert-by-assert walk of GmView's commander case
     # 15 on 2026-08-15, over NEWCOMER_CEILING on the arc's first commit, which is what
     # this row is for. 25 is the proportion the four 11-12 entries above already carry,
     # not a new number. The document argues from every one of them: `QuestChallenge:197`
