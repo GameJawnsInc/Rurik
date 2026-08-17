@@ -965,3 +965,88 @@ are missing but a UI module that is not up.
   `GmPetCommander` / `AgentCommander*` (§8).
 
 What is left is one link: **between a delivered `0x10000114` and GmView's case 90.**
+
+## 18. GmView's subscribe is CONDITIONAL, and `0x0199` field 5 picks the branch
+
+§17.3 named the cheap static separator. Here it is, and it is a two-way switch on an
+observer-mode bit.
+
+`0x004ED010` onward is GmView's subscribe run — a straight sequence of
+`push <event>; push esi; call 0x00633BD0`, one per event. One of them is not a literal:
+
+```
+0x004ED027   call 0x0084E020
+0x004ED02C   neg eax ; sbb eax,eax        eax = (result != 0) ? -1 : 0
+0x004ED030   and eax, 0x17               eax = (result != 0) ? 0x17 : 0
+0x004ED033   add eax, 0x10000114
+0x004ED038   push eax ; push esi
+0x004ED03A   call 0x00633BD0             SUBSCRIBE
+```
+
+**GmView subscribes to `0x10000114` OR `0x1000012B`, never both**, and the predicate
+chooses. Its neighbours in the same run are plain literals — `0x100000F1`, `0x10000118`,
+`0x10000119`, `0x1000011E` (this is `0x004ED055`, the site heroes §36.7 named), `0x1000011F`,
+`0x10000123`, `0x1000012A` — so the conditional one is deliberate, not an artifact.
+
+The predicate is four instructions:
+
+```
+0x0084E020   eax = <globals>
+             eax = [eax+0x44]            the mission-client context
+             eax = [eax+0x2A8]
+             return (eax >> 4) & 1       BIT 4
+```
+
+`MsCliApi` (its only assert is `MsCliApi:821 context->observeTable.Find(gameKey)`), and
+bit 4 of `[ctx+0x2A8]` is written in exactly one place — **`0x0199`'s handler**, which §12
+already read:
+
+```
+0x0084EF00   [RECV] 0x0199 GAME_SMSG_INSTANCE_LOAD_INFO
+             …
+             if ([msg+0x18]) [ctx+0x2A8] |= 0x10        <- BIT 4
+             else { [ctx+0x234] = [msg+0x08]; [ctx+0x23C] = [msg+0x0C]; }
+```
+
+`msg+0x18` is `0x0199`'s **sixth field**, and `authsrv.py:5566` names it in its own send:
+`[PLAYER_AGENT_ID, map_id, is_explorable, district, language, **is_observer**]`.
+
+### 18.1 We are on the right side of the switch, so this is NOT the cause
+
+We send `is_observer = 0`. Bit 4 stays clear, `0x0084E020` returns 0, `eax` stays
+`0x10000114`, and **GmView subscribes to the event we raise.** The conditional is
+eliminated as the explanation, which is worth as much as finding it would have been — it
+was the best remaining candidate and it is dead.
+
+Two things fall out anyway and both are keepers:
+
+- **`0x1000012B` is the observer-mode twin of `0x10000114`.** In an observer session GmView
+  watches a different event for the same rebuild. Nothing in this project has needed that
+  yet; it is written down so nobody re-derives it.
+- **`0x0199` field 6 is load-bearing beyond the map type.** `authsrv.py` documents field 1
+  (`PLAYER_AGENT_ID` → `ctx[0x2AC]`, heroes §22) and field 3 (the map-type byte,
+  `--explorable`/`--outpost`). Field 6 also steers which event GmView listens on. A run
+  that ever sets `is_observer = 1` should expect the commander rebuild to stop working,
+  and now knows why.
+
+### 18.2 What that leaves, and it is the one thing runs 1–4 did not time
+
+GmView subscribes to `0x10000114`. We raise `0x10000114`. `lookup114` reads the list as
+non-empty at raise time. And GmView's frame handler is never entered for it.
+
+The one arrangement consistent with all four: **the subscriber present at raise time is not
+GmView, because GmView has not subscribed yet.** Our raise fires at instance load —
+`raise114` at `+0.000s`, alongside `worker` — and GmView's subscribe run is UI construction,
+which happens when the UI comes up. Nothing re-raises `0x10000114` afterwards, so the
+commander model is built once, from an empty container, and never again.
+
+Note carefully that this is **not** §14.3's ordering hypothesis, which run 1 refuted. That
+one was about our own messages' order relative to each other, and it is still dead: `worker`
+fires before `bulkraise`. This is our raise's order relative to **the client's own UI
+construction**, which we do not control and did not measure.
+
+It is also the same shape heroes §34 measured for `0x1000011E` — raised at load into a map
+that fills later — which would make it one cause behind two arcs' worth of symptoms.
+
+**Run 5 times it directly**: the `subscribe` census armed for the whole session alongside
+`raise114`, and the timestamps say which came first.
