@@ -1486,8 +1486,36 @@ by "a linked model's larger sequence space". All 149 out-of-range values sampled
 `0x10000` — a sentinel, not a cross-file index. The `0x0078007F` mechanism named alongside it
 is correct and is now corroborated.
 
-**Next: A3 (the route-independent safety fixes) and A4 (the additive FA8 path, synthetic
-archive only).** A1b — who fills the per-agent key array — is downgraded from blocking to
+**A3 AND A4 ARE BUILT, 2026-08-17.** Study §9. Nothing has been launched.
+
+**A3, the safety fixes** — seven items, floors `test_datcheck` 84→112, `test_datwrite`
+78→87, `test_datplan` 38→44. On the real archive: **6 MFT generations** (`--generations`,
+3.4 s) and **177,327 payload CRCs recomputed, all matching** (`--crc-sweep`, 2.4 s). The
+`<I`→`<Q` fix removes a silent cap on archive growth. `datwrite` now refuses
+`[0x00,0x10)`, the one corruption with no recovery path, which until today was protected
+by *absence*. `datplan` projects a generation's declared extent across run boundaries — a
+mark is where a signature sits, not where the table it declares ends. One item was
+**removed after a single test run because the fixtures refuted it**: the generation census
+is a property of an archive's history, not its validity, and pre-flight costs 1.7 s
+precisely because it never reads a payload.
+
+**A4, the additive path** — `toolkit/mapdata/unitauthor.py`. On the real hatcher shell the
+whole edit is **+29 bytes**: 15 links → 16, 242 sequences → 243 inserted in key order, and
+key 805313525 goes from 1 variant to 2. Two of the three things it must get right cannot
+fail a checksum and cannot fail any of the ten open-time rules — the array must stay
+sorted for the client's `lower_bound`, and the FA8 list is positional so a link is
+appended rather than inserted — so the test inserts at the front, middle and end of the
+table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
+
+**NOT ESTABLISHED, and it is the whole remaining risk: no client has been launched.**
+Everything above is archive-legal and self-consistent, which is exactly the state the two
+dangerous defects would also produce. `datcheck.py` has zero references to compression
+codes and nothing we own can refute a conforming-but-wrong result. **The client is the
+only oracle.** The run is designed with its prediction stated in §9.4 and is **waiting on
+the owner's go-ahead**; the target must be a creature the harness actually spawns, which
+is the toll U7's first run paid.
+
+A1b — who fills the per-agent key array — remains downgraded from blocking to
 worth-doing.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)

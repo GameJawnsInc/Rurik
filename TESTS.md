@@ -3408,6 +3408,28 @@ Every one of these, in the order they were written:
   sections 0-1 (synthetics + the resolve_outdir refusal with its positive
   controls and the mapexport delegation check) score 28 vault-less and go
   RED; with the archive but no Blender, 53, also RED),
+  `toolkit/mapdata/test_unitauthor.py` (rung A4, the ADDITIVE path: add a 16th
+  linked file to a creature's shell and one sequence record that selects it.
+  Two of the three things it must get right cannot fail a checksum, cannot fail
+  any of `datcheck`'s ten open-time rules, and would show up in the game only as
+  "some animations stopped playing". **§2, the sequence array must stay SORTED**
+  by `u32@+0x01`, because the client searches it with `std::lower_bound`
+  (`0x00792DC0`) and a `lower_bound` on an unsorted array silently returns the
+  wrong run -- so a key is inserted at the FRONT, the MIDDLE and the END of the
+  table, since a tail-append implementation passes the last of those and one key
+  would not be a test. §2b then unsorts the table by hand and requires the
+  refusal to fire, with a control first asserting that the sabotage really does
+  unsort it. **§1, the FA8 list is POSITIONAL** -- `links[sel-1]` is how every
+  existing record resolves, so the check is that the prior list is a PREFIX of
+  the new one, which a reordering breaks and a length check would not. §3
+  re-decodes the bytes that would actually ship and asserts the modified FA1
+  re-encodes byte-identically -- the writer holding on a table it did not itself
+  produce. §4 exercises the archive operation on a synthetic fixture and
+  requires the ten rules plus the CRC sweep. Floor 30, and the number that
+  justifies the whole rung is in §3: the edit costs **+29 bytes on a 29,802 B
+  shell**, not a rewrite of the 1,514,855 B link the arc was blocked on.
+  Sections 1-3 read `vault/dat_study` READ-ONLY and declare a printed skip
+  without it; §4 builds its own archive and always runs. No client, no server),
   `toolkit/mapdata/test_skelwrite.py` (the RE-IMPORT ROUND TRIP, rung U6:
   the FA1/container WRITER
   (`skelwrite.py`): decode -> extract -> encode must be BYTE-IDENTICAL, and

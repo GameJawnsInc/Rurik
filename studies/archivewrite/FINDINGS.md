@@ -299,8 +299,8 @@ Rung shape follows [studies/unitmodels/PLAN.md](../unitmodels/PLAN.md): each run
 |---|---|---|---|
 | **A1** ✅ **RUN 2026-08-17 — ANSWERED: PER-FILE, selector named, see §8. The encoder LEAVES the critical path** (the file to rewrite is the 20 KB shell, not the 1 MB link). | **Is the sequence index space global across the FA8 link graph, or per-file?** Read-only. Walk the hatcher's 15 link targets (§1.6) with `skelfile`, and either (a) find the client-side selector that maps a requested sequence index to a *file*, or (b) refute globality from the corpus. My own measurement is the starting evidence and the puzzle: shell **242**, 15018 **237**, the 15 links sum to **385**, grand total **627** — so 242 is neither. State the prediction first. | Either: **the index space is global** and adding a 16th linked FA1 is transparent (→ A4 becomes the route, the compressor drops to nice-to-have and this arc mostly ends); or **it is per-file** and the selector is NAMED with its VA and a corpus prediction that could have failed; or **NOT FOUND**, with the search range recorded. Widen past the hatcher before anything leans on it — the FA8 graph is acyclic with max link depth 1 corpus-wide ([studies/unitassembly](../unitassembly/FINDINGS.md)), so one creature is one witness. | 0.5 session |
 | **A2** ✅ **RUN 2026-08-17 — GREEN, see §7. The row below is SUPERSEDED**: its elasticity figures did not reproduce, and the edit it names can only move 692 B of a 1.5 MB payload. | **Does a REALISTIC edit still fit? The elasticity gate.** Read-only, no encoder. Take the real 1,514,855 B payload, apply the edit the next rung actually wants through `skelwrite`'s existing seam (`scale_sequence_keytimes`), re-serialize, and compress with zlib -9 raw/-15 (+4 B trailer) as the **optimistic** proxy. | **> 1,029,632 B ⇒ the in-place compressed route is DEAD for that edit, no matter how good `gwenc.py` gets, and no encoder is written.** This has a real chance of going red: the measured elasticity is **+806 B at 0.1% of slots retimed, +8,725 B (OVERFLOW) at 1.0%**. Report the fraction of slots at which it crosses, not a yes/no. | 0.5 session |
-| **A3** | **The route-independent safety fixes, and they can all go red.** (a) `container_signature` withholds by an MFT generation's **declared extent** projected across run boundaries, not by a head magic — regression fixture is `dat_study_38833` (§1.5). (b) `archive.py:322` `<I` → `<Q`, plus a synthetic archive with `mftOffset` above 2³² (**C-7**). (c) `datcheck --crc-sweep`, whole-archive, ~30 lines. (d) `datcheck --diff` compares `size_on_disk`. **(e) `datcheck --generations` (§5.4) — count surviving MFT generations and their flush counters, ~40 lines and one pass; nothing in the repo checks today whether a fallback exists before you risk needing one. (f) An explicit refusal in `datwrite.py` on header bytes `0x00..0x0C` (§5.6 rule 2) — the silent-wipe region is currently protected only by absence. (g) Mark the shadow-MFT rotation region as reserved in `datplan`/`datalloc` (§5.4) so no allocator can consume the client's own recovery material.** TESTS.md entries in the same commit — `test_srclint.py` §7 checks both directions. | `plan_move` on `dat_study_38833` for row 11196 **REFUSES** where it currently accepts `0xF5923800`; the u32 test fails before the fix and passes after; the CRC sweep reports exactly 2 structural exceptions (rows 1 and 3) in ~3.3 s and **catches a deliberately compression-flattened row** (C-6) that all ten open-time rules pass. Floors set from a real green run. | 1 session |
-| **A4** | **The additive FA8 path, on a SYNTHETIC archive only.** Build with `test_datcheck.py`'s `build_archive`; `datalloc` a new FA1-only file, append a 16th record to a copy of 116228's FA8 chunk (`mdlrefs` encodes the dependency-pair spelling), re-emit the shell with `skelwrite`. Never against a real `Gw.dat`. | Ten open-time rules clear, three CRC rules clear, `datalloc`'s MFT-slack accounting honest, the shell round-trips byte-identically apart from the intended FA8 delta, and the new row is registered **before** any bytes land in a region the client may reuse. **Kill:** if A1 said per-file-with-unknown-selector, this rung cannot state what the client will do with the 16th record and should stop at "archive-legal" rather than claim a route. | 1 session |
+| **A3** ✅ **BUILT 2026-08-17 — see §9.1. Seven items, floors 84→112 / 78→87 / 38→44** | **The route-independent safety fixes, and they can all go red.** (a) `container_signature` withholds by an MFT generation's **declared extent** projected across run boundaries, not by a head magic — regression fixture is `dat_study_38833` (§1.5). (b) `archive.py:322` `<I` → `<Q`, plus a synthetic archive with `mftOffset` above 2³² (**C-7**). (c) `datcheck --crc-sweep`, whole-archive, ~30 lines. (d) `datcheck --diff` compares `size_on_disk`. **(e) `datcheck --generations` (§5.4) — count surviving MFT generations and their flush counters, ~40 lines and one pass; nothing in the repo checks today whether a fallback exists before you risk needing one. (f) An explicit refusal in `datwrite.py` on header bytes `0x00..0x0C` (§5.6 rule 2) — the silent-wipe region is currently protected only by absence. (g) Mark the shadow-MFT rotation region as reserved in `datplan`/`datalloc` (§5.4) so no allocator can consume the client's own recovery material.** TESTS.md entries in the same commit — `test_srclint.py` §7 checks both directions. | `plan_move` on `dat_study_38833` for row 11196 **REFUSES** where it currently accepts `0xF5923800`; the u32 test fails before the fix and passes after; the CRC sweep reports exactly 2 structural exceptions (rows 1 and 3) in ~3.3 s and **catches a deliberately compression-flattened row** (C-6) that all ten open-time rules pass. Floors set from a real green run. | 1 session |
+| **A4** ✅ **BUILT 2026-08-17 — see §9.2. `toolkit/mapdata/unitauthor.py`, the edit costs +29 B. Awaiting the client run, which is A8 and needs the owner's go-ahead** | **The additive FA8 path, on a SYNTHETIC archive only.** Build with `test_datcheck.py`'s `build_archive`; `datalloc` a new FA1-only file, append a 16th record to a copy of 116228's FA8 chunk (`mdlrefs` encodes the dependency-pair spelling), re-emit the shell with `skelwrite`. Never against a real `Gw.dat`. | Ten open-time rules clear, three CRC rules clear, `datalloc`'s MFT-slack accounting honest, the shell round-trips byte-identically apart from the intended FA8 delta, and the new row is registered **before** any bytes land in a region the client may reuse. **Kill:** if A1 said per-file-with-unknown-selector, this rung cannot state what the client will do with the 16th record and should stop at "archive-legal" rather than claim a route. | 1 session |
 | **A5** | **THE CONTAINER EXPERIMENT — one caged run, owner-driven.** On a **copy**: extend the file by 1,515,008 B at EOF, write row 11196's payload there **decompressed but otherwise byte-identical to what renders today**, rewrite offset/size/compression/CRC, zero the old extent, `datcheck --preflight` + `--crc-sweep` + `--check-overlaps` before and after. Write the testing instructions; **do not launch** (standing rule). | Because the payload is byte-identical content, **any visual change is unambiguous evidence about the CONTAINER**. Three answers at once: does the client read a **1,514,855 B stored** row (currently backed by an **empty** population — retail's largest ordinary stored content row is 19,292 B); does it tolerate a row past the old EOF; does file extension work. **This rung settles the Route B contest** (§2.4) — its two skeptics disagree and this is the run both proposed. Recovery is a file copy. Confirm no other session holds the archive open (a `PermissionError` was hit mid-measurement). | 1 session + 1 run |
 | **A6** | **The entropy accountant — kill the encoder before a matcher is written.** ~80 lines, no encoder, no bitstream. Instrument the existing decoder (`gwdat.py:349-385`) to emit **retail's own token stream** for row 11196 — per block, literal/length symbols, distance symbols, both table headers — then re-cost that same sequence under a from-scratch canonical-Huffman assignment plus the fixed meta-encoding, and compare to 1,029,564 B. | **Prediction stated first: it lands within 0.5% of 1,029,564 B.** This isolates the two risks the scouts merged: *can our Huffman + meta layer match ArenaNet's* (answered exactly, on tokens we did not have to produce) from *can our LZ77 matcher match zlib's* (not tested here). **Kill: if the accountant cannot reproduce retail's size to within a few hundred bytes on retail's own tokens, the encoder arc is dead.** | 0.5 session |
 | **A7** | **`toolkit/mapdata/gwenc.py` + `test_gwenc.py` + the `datwrite` compression-8 arm.** Build the matcher **size-only first** (hash chain, min match 3, 32 KB window, lazy matching) against A6's accountant — no bitstream writer, no round trip — then the writer. Copy the constant stream header (lead bits 0, `first_four = 2`, 4000/4000). Alphabet 0..29. **`PLAN.md` §6.1 register row BEFORE the module exists**, plus THIRD-PARTY-NOTICES. `datwrite` gains a verb that writes `len(new)`, **keeps compression 8**, and CRCs the stored bytes (`restore`/donor path proves every mechanic, `datwrite.py:610-614`). | Hard bar stated up front: **on the real payload, ≤ 1,029,628 B AND `gwdat.decompress` returns the original bytes.** The falsifiable headline in the test is *our compressed size vs ArenaNet's stored size on N real rows*, which can go red. Round-trip over a strided corpus sample. `checks.Ledger` floor from a real green run; TESTS.md in the same commit. **Note the acceptance bar is a RATIO target, not a correctness target** — the success/failure boundary is inside deflate's own tuning range (§1.2), and a level-1-quality matcher misses by 122 KB. | 2–3 sessions |
@@ -769,6 +769,100 @@ which is UPSTREAM to this pass. (3) A wire capture showing a raw index rather th
 
 **Not tested by construction: no client was launched.** Whether retail actually plays a 16th
 authored link is untested, and **the client remains the only oracle**. That is A4's job.
+
+---
+
+## 9. A3 and A4 — BUILT 2026-08-17. The edit is 29 bytes, and it is waiting on one run
+
+### 9.1 A3, the route-independent safety fixes
+
+Seven items, each with a test that can go red. Floors from real green runs:
+`test_datcheck` 84 → 112, `test_datwrite` 78 → 87, `test_datplan` 38 → 44.
+
+| item | what it was | measured after |
+|---|---|---|
+| **C-7**, `archive.py` `<I` → `<Q` | two of three readers said u64; the outlier was the one every tool imports, and it silently **capped archive growth** | proving it needs no 4 GB file — set the high dword and require the failure to name the full offset, since a `<I` reader truncates, finds the MFT where it always was, and reports success |
+| **`datcheck --generations`** | nothing in the repo could count the client's own recovery material | **6 generations on the real archive**, counters 26,881 → 8,735, in **3.4 s**. Reported as an UPPER BOUND (ScanMft's shape gate, not LoadMft's full validation) |
+| **`datcheck --crc-sweep`** | a stale payload CRC is invisible to all ten open-time rules and then costs the whole `nextStream` chain | **177,327 payload CRCs recomputed, all matching, 2 structural rows skipped by name, 2.4 s.** 177,327 chances to be wrong is also the evidence the sweep reads rows correctly |
+| **`--diff` compares `size_on_disk`** | `snapshot()` had recorded it since it was written and `diff()` never looked, so an archive that **grew** read as unchanged | the control asserts appending past every extent changes **no MFT row** — which is why nothing else could have caught it |
+| **`datwrite` refuses `[0x00,0x10)`** | protected by **absence**: no caller wrote there, so nothing checked | tested by reaching for it at every field and at **both sides** of the `0x0F`/`0x10` boundary, each attempt on its own fixture |
+| **`datplan` projects declared extents** | a mark is where a signature *sits*; the header says how far the table *reaches*, and a generation running off the end of its run left the next run scoring usable | four of six new checks are controls, because a projection that swallowed everything downstream would withhold the archive and protect nothing |
+
+**One item was removed after a single test run, and the fixtures were right.** The
+generation census was briefly a pre-flight item; `build_archive` writes one MFT and is
+perfectly healthy, so it turned every synthetic archive red and broke nine isolation
+checks. **"Has a fallback" is a property of an archive's HISTORY, not its validity** — and
+pre-flight costs 1.7 s precisely because it never reads a payload, which is worth more
+than folding one more item in. `--generations` is its own verb, run before an archive is
+*risked* rather than before it is *opened*.
+
+### 9.2 A4, the additive path — `toolkit/mapdata/unitauthor.py`
+
+**The edit costs 29 bytes.** On the real hatcher shell:
+
+```
+shell 116228 (row 13738)
+  links 15 -> 16, new file id 389632 at selector 16
+  sequences 242 -> 243, inserted at index 1
+  key 805313525: 1 variant(s) -> 2
+  container 29802 -> 29831 B (+29)
+```
+
+Two of the three things this must get right **cannot fail a checksum, cannot fail any of
+`datcheck`'s ten open-time rules, and would present in-game only as "some animations
+stopped playing"** — which is why the test is shaped the way it is:
+
+- **The sequence array must stay sorted** by `u32@+0x01`, because the client searches it
+  with `std::lower_bound` and an unsorted array silently returns the wrong run. Keys are
+  inserted at the **front, middle and end** of the table — a tail-append implementation
+  passes the last of those, so one key would not be a test — and §2b unsorts the table by
+  hand to prove the refusal fires, with a control first asserting the sabotage really does
+  unsort it.
+- **The FA8 list is positional.** `links[sel-1]` is how every existing record resolves, so
+  the check is that the prior list is a **prefix** of the new one. A reordering breaks
+  that; a length check would not notice.
+- Archive legality is the ordinary third, and §4 exercises it on a synthetic fixture.
+
+30 checks, floor 30. Sections needing the vault declare a printed skip.
+
+### 9.3 What is NOT established, and it is the whole remaining risk
+
+**No client has been launched.** Everything in §9.2 is archive-legal and self-consistent,
+and *self-consistent is exactly the state the two dangerous defects above would also
+produce*. `datcheck.py` contains zero references to compression codes and nothing we own
+can refute a conforming-but-wrong result. **The client is the only oracle**, and the run
+is A8's job, on the owner's go-ahead.
+
+Specifically untested: that the client reads a 16th FA8 record at all; that it accepts a
+243-record sequence table; that our appended record is picked as a variant; and that a
+**stored** 29,831 B shell in place of a 20,236 B compressed one is loadable — U7 proved a
+stored `flags=515` row is acceptable at 29,802 B, so this is a 29-byte extrapolation of a
+result we already have rather than a new question.
+
+### 9.4 The run, when it is authorized
+
+Written now so the design is fixed before anyone is at the keyboard, per the standing rule
+that a probe states its prediction first.
+
+**PREDICTION.** The hatcher plays its animations as it does today, except that on the one
+key carrying our variant it flips a coin: roughly half of plays show retail's animation and
+half show whatever file 389632 contains. If the new link is unreadable, the expected
+failure is an `MdlLoad`/`MdlSeq`/`MdlAnim` assert naming its own line — a crash that names
+the gate is a *result*, not a lost run.
+
+**Procedure.**
+1. `datcheck --generations` and `--crc-sweep` on the run copy **before** anything (§5.6
+   rules 1, 3, 4). Take the 3.91 GiB backup — it is the only net for a header write.
+2. Author the shell, `datalloc` the new file, place both, `datcheck --preflight` +
+   `--crc-sweep` + `--diff` against a pre-write snapshot.
+3. Owner launches the caged loopback client per `RUNBOOK.md`, with a **retail control
+   first** — U7's third false start was three things animating at once, and its second was
+   a server bug that only became visible when the retail control failed identically.
+4. `datcheck --diff` after exit. **Never launch on a suspect archive** (§5.3).
+
+**The one thing to get right that is not in the tooling:** the target must be a creature
+the harness actually spawns. U7's first run modified the worm while `--enemy` spawns the
+hatcher, and the client never read a modified byte.
 
 ---
 
