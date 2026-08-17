@@ -83,8 +83,10 @@ WHAT IS DECODED, and what stays bytes:
         w4 vec3f (same sampler, applier 0x006747A0 — semantic UNVERIFIED,
         carried as "aux"). Record flags: bits 8-12 = how many n34
         emitter-attachment records bind to this node (sum == n34 on
-        14,571/14,571), bit 26 = node carries the next block-A light
-        (sum == the FA0's light count on 13,812/13,812 measurable files),
+        14,571/14,571, informative on 34% of files), bit 26 = node
+        carries the next block-A light (sum == the FA0's light count on
+        13,812/13,812 measurable files -- but block A exists on only 26
+        files, so the informative n is 26, not 13,812; U2 review R-1),
         bit 28 = skip the node's Gr commit, bits 30/31 = mirror
         transform; bits 0-7 = the node's LINK (parent/attach reference:
         always < n2C and always <= the record's own index --
@@ -623,9 +625,13 @@ class Skeleton:
     def sound_events(self):
         """The n40 region of the n40n44 blob, in the CLIENT's framing
         (0x00780C70): n40 SORTED u32 sequence indices, then n40 18-byte
-        bodies {i32 time; u32 path_index; 10 raw bytes}. `time` is
-        SEQUENCE-RELATIVE (0 <= t <= end-start on 11,588/11,632 corpus
-        events; the absolute reading was refuted). path_index is
+        bodies {i32 time; u32 path_index; 10 raw bytes}. `time` reads as
+        sequence-relative -- PLAUSIBLE, not proven (U2 review R-3): the
+        absolute reading is refuted (25.4%), relative scores 99.6% of
+        in-range events (93.3% of all events), but a null control pairing
+        events with WRONG sequences already scores 82.8% because 44% of
+        times are 0; the decisive test is what the caller feeds
+        0x00780C70's window args, untraced. path_index is
         MdlAnim:2040's `pathIndex < m_skel->m_soundPathCount` and indexes
         the FA6 (m_soundPaths) array. Returns dicts with seq, time,
         path_index, raw_tail.

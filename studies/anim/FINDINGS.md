@@ -93,8 +93,14 @@ SOURCE-CODE.
   `0x00783D70`, which computes the 4-component dot, flips the second
   quaternion's weight when dot < 0 (constants: threshold 0.0 at
   `0x0093C1B0`, −1.0 at `0x0093CF24`), and blends — **shortest-path
-  quaternion nlerp**. Quaternion-specific math; a plain vec4 lerp has no
-  shortest-path branch. `0x00783F10` then composes quaternion + position
+  quaternion nlerp**. **And it renormalizes — found by the review, and it
+  is this section's strongest instruction-level evidence: after the blend
+  the function computes the result's squared 4-length and takes a
+  first-order fast normalization (`(3−len²)/2`, constant 3.0 at
+  `0x00948610`) gated on `len² ∈ [0.9, 1.1]` (`0x00948564`/`0x009485E8`)
+  — a fast path only correct when the INPUTS are unit, assumed by the
+  code before any corpus is consulted.** Quaternion-specific math; a
+  plain vec4 lerp has no shortest-path branch. `0x00783F10` then composes quaternion + position
   into the 3×4 transform handed to Gr (`0x00671FF0(slot, row0, row1,
   row2)`).
 
@@ -246,7 +252,7 @@ predictions, written before it ran. Population: 121,532 blk2C records
 | prediction | result |
 |---|---|
 | P4 **quaternions**: the w2 sections' float4 values (at section+4·N, per the SoA layout) are unit-norm within 1% | **16,263,916 / 16,263,916 — 100.000%** (norm histogram entirely within [0.5,1.5) about 1.0) |
-| P4 **control**: the 2026-08-16 AoS overlay re-run as recorded | 6 / 19,460 within 1e-3 — reproduces the study's 4/19,460: the refutation was true of the WRONG OVERLAY |
+| P4 **control**: the 2026-08-16 AoS overlay re-run as recorded | 6 / 19,460 within 1e-3 — reproduces the study's 4/19,460: the refutation was true of the WRONG OVERLAY. *Review correction (R-2): as first run, the control got a 10× tighter tolerance than the claim (1e-3 vs 1%) and a head-of-corpus 19,460-value cap — a control given a harder test than its hypothesis. The review re-ran BOTH overlays at the SAME 1% on its own stride-15 sample: SoA 963,066/963,066 (100.000% — and 100.000% at 0.1%, so the tolerance is not load-bearing), AoS 478/159,838 (0.30%), null control 153/119,006 (0.13%). The separation stands with the asymmetry removed* |
 | P1 **no consumed channel has exactly 1 key** (the sampler asserts `keyCount >= 2` and is called whenever a section is non-empty) | **0 violations over 102,727 sections** (21,750 w0 + 70,007 w2 + 9,176 w4 + 1,761 + 33 blk48) |
 | P5 vec3/float4 values all finite | 0 non-finite anywhere |
 | P3 times sane | 0 negative; max 29,600,003 = 296.0 s (both blk2C and blk48 share the ceiling — one global track timeline) |
@@ -268,7 +274,7 @@ U6 inherits is therefore NON-DECREASING, same as the n3C table.
 | prediction | result |
 |---|---|
 | P-N34: Σ over a file's blk2C records of `(flags>>8)&0x1F` == n34 | **14,571 / 14,571** — the emitter-attach reading, unforceable by the decoder |
-| P-LIGHT: Σ of flag bit 26 == the FA0's block-A light count (u8@0x30), 0 where block A absent | **13,812 / 13,812** measurable files, 0 violations (759 COMPOSITED shells unmeasurable — their m_geom is the wire-linked body) |
+| P-LIGHT: Σ of flag bit 26 == the FA0's block-A light count (u8@0x30), 0 where block A absent | **13,812 / 13,812** measurable files, 0 violations (759 COMPOSITED shells unmeasurable — their m_geom is the wire-linked body). *Review reweighting (R-1): block A exists on 26 files, so ~99.8% of the figure is `0 == 0` — the INFORMATIVE population is 26 files / 36 bit-26 records, and the identity's weight is what those carry. The headline number stays (it is what was measured) but its evidentiary weight is the 26* |
 | P-EMIT (exploratory): n34 == the FA0's block-J emitter count | 12,264 / 13,812 (88.8%); the 1,548 disagreements all sampled n34 > emitters — n34 also covers attachments beyond block-J emitters (the 0x783510 dispatch's other arms; recorded, not named) |
 | blk2C flag-bit census (121,532 records) | bits 0–6: 57,834/36,854/28,737/26,743/25,644/20,860/12,554 · bit 7 and 13–25: **0** · bits 8–12 (emitter counts): 11,073/2,509/717/257/58 · bit 26: **36** (block A is on 26 files) · bit 28: 69,565 (57% of nodes skip the Gr commit) · bits 30/31: 4,027/3,128 |
 | blk48 flag census (1,794 records) | **only bit 27 ever set** — 1,300/1,794 looping; `u10` values are hash-like (no small-int structure) |
@@ -284,9 +290,16 @@ order; discriminator: the (i − b) delta distribution concentrates near
 small values if it is a hierarchy, spreads if the bytes are merely
 small): **both hold at 121,532 / 121,532 — zero violations** —
 self-reference on 56,160 records (every record 0 among them: 14,571
-root_zero), and the non-self deltas concentrate low (1: 5,608 · 2: 4,339
-· 3: 3,660 · 4: 3,295 …) with a deep-ancestor 10+ tail of 23,543 — the
-hierarchy shape, not the smallness shape. **The byte is the node's LINK
+root_zero), and the non-self deltas run 1: 5,608 · 2: 4,339 · 3: 3,660 ·
+4: 3,295 … with a 10+ tail of 23,543. *Review correction (R-4): that tail
+is 47% of the non-self non-zero deltas — the histogram does NOT cleanly
+match the "concentrates low" discriminator this section stated for
+itself, and the first draft read it as passing anyway. What carries the
+LINK name is the topological bound plus the consumer: `<= own index` is
+the discriminating half (the review's shuffled-links control violates it
+on 22.6% of records, while `< n2C` survives any shuffle — a multiset
+property), and the byte feeds `0x006737C0` per node. The delta histogram
+is demoted to color.* **The byte is the node's LINK
 (parent/attach reference in topological order)**; whether self-reference
 means "root/own transform" is the remaining UNVERIFIED convention.
 Consumer side: the byte goes to
@@ -305,9 +318,13 @@ byte selects a slot within stream 2's state.
 | off-by-one rivals (`keys[lo+1]`, `keys[hi]`) | 15 and 12 of 9,321 — no off-by-one rescue; the binding idea is dead |
 
 What the refutation revealed instead (sampled, MEASURED on the failure
-records): per file the [start, end] windows are **consecutive,
-non-overlapping ranges on a global timeline** (row 291: 2.03–2.17 s,
-2.87–3.63 s, 3.67–4.43 s, 4.47–5.23 s, 5.67–6.30 s…), the same timeline
+records): per file the [start, end] windows are consecutive,
+**mostly** non-overlapping ranges on a global timeline (row 291:
+2.03–2.17 s, 2.87–3.63 s, 3.67–4.43 s, 4.47–5.23 s, 5.67–6.30 s…) — the
+review put a rate on the word this section first stated bare: **9 of 152
+multi-window files (5.9%) carry at least one overlapping pair** at its
+stride-15 sample, so "non-overlapping" is a ~94% regularity, not a law —
+the same timeline
 the channel times live on (max 296 s) — while the n3C span key times are
 small per-sequence-local values (which is exactly UM §3.7b's
 "local-vs-global" shape). So a SEQUENCE is a window of the global track
@@ -329,14 +346,18 @@ Population: 3,415 files with n40 > 0, 12,423 events.
 |---|---|
 | P-N40A: the seq-index prefix is sorted (the client binary-searches it) | **3,415 / 3,415 files** |
 | P-N40A': every index < the local n18 | 2,823 / 3,415 — **592 files carry indices ≥ m_seqCount**. Not a layout failure: the consumer resolves its current-sequence selector through the FA8 link array (`0x0078007F`), so a shell's events can be keyed by a linked model's larger sequence space. RECONSTRUCTION for the excess; the worm anchor (all in-bounds) is pinned in the test |
-| P-N40B: every `pathIndex` < the container's FA6 record count | **12,423 / 12,423**, and n40 > 0 ⇒ FA6 present on **3,415 / 3,415** — the FA6 ⟺ m_soundPaths join, corpus-proven on top of the compiled chain |
-| P-N40C: event times — absolute vs relative reading, both measured | absolute (start ≤ t ≤ end) **FAILS**: 2,879 / 11,632. **Relative wins: 11,588 / 11,632 (99.6%)** — the body's `time` is an offset WITHIN its sequence (0 ≤ t ≤ end − start); the 44 exceptions exceed their sequence's duration and are recorded, not explained |
+| P-N40B: every `pathIndex` < the container's FA6 record count | **12,423 / 12,423**, and n40 > 0 ⇒ FA6 present on **3,415 / 3,415** — the FA6 ⟺ m_soundPaths join, corpus-proven on top of the compiled chain. *Review BUG B-1, recorded: `n40corpus.py`'s `pathname_count` walked FA6/FAE as u16-terminated groups from offset 0 — but these chunks are `u32 count` + 6-byte records, so it returned count+1 everywhere and this row was checked against a bound ONE LOOSER than the client's. The review re-checked with the true count: **740/740 in bounds on its sample** — the conclusion survives and TIGHTENS* |
+| P-N40C: event times — absolute vs relative reading, both measured | absolute (start ≤ t ≤ end) **FAILS**: 2,879 / 11,632. Relative wins: 11,588 / 11,632 (99.6%) — but *review correction (R-3): the claim is DOWNGRADED to PLAUSIBLE/RECONSTRUCTION.* The review's null control — pairing each event with a random OTHER sequence in the same file — already scores **82.8%** (44% of events have `time == 0`, which any non-negative duration passes), so relative-beats-absolute is decisive (25.4% for absolute) while relative-beats-null is modest. And the 99.6% denominator excludes the 791 events (6.4%) of P-N40A′'s out-of-range files — over ALL events it is 11,588/12,423 = 93.3%. The decisive unread evidence: what the caller feeds `[ebp+8]`/`[ebp+0xC]` at `0x00780C70` — neither this study nor the review traced it |
 | body tail | `u16@+0x08` is a sparse high-bit flag word (0: 11,950 · 0x8000: 401 · 0x4000: 50 · 0xC000: 16); the last 8 bytes are non-zero on 3,379/12,423 — carried raw |
 
 **n3E / FAE** (6 firing files): every arrA sorted; every arrB record is
 **type 0**; every `param` < the container's FAE record count, FAE present
 on all 6 — P-N3E holds entirely (rows 18731, 136755, 150245, 150389,
-151054, 155178; FAE counts 7/6/2/7/4/…). Non-zero n3E types exist in the
+151054, 155178). *Review BUG B-1: this paragraph's first draft printed
+FAE counts 7/6/2/7/4/… — those were `pathname_count`'s count+1 phantoms;
+the TRUE counts are **6/5/1/6/3/1**, and with them the fit is exact:
+max `param` == count − 1 on all six files — tighter evidence than the
+loose bound gave.* Non-zero n3E types exist in the
 code path but not in this archive — a floor, not a census.
 
 ## 4. Flag bits 1 and 2: the consumer-side meaning (UM §6.2)
@@ -360,7 +381,7 @@ Consumers of `m_skeletonFlags & 1` (the bits-1|2 image), all four sites:
 | `0x007786A6` | MdlApi | animation-rate path: a rate argument of 0.0 falls back to `[B+0x100]` (header f20); result stored as `rate·abs(rate)` on the instance |
 | `0x0077973D` | MdlBuild | registration that reads sequence[0]'s in-memory +0x08 (start time) — gated `!(argflag&2) && bit0` |
 | `0x0077D384` | MdlBuild | Gr channel-2 reset committing node `[B+0x58]` and node 0 |
-| `0x007A2E7C` | decomp zone | **writer**: `if bit0: [B+0x58] = computed value` |
+| `0x007A2E7C` | MdlCombine (the review placed it via `asserts.py --at`; the first draft said "decomp zone") | **writer**: `if bit0: [B+0x58] = computed value` |
 
 `[B+0x100]`'s fallback when header f20 == 0.0 (`0x007A6D10`, called from
 the parser at `0x00796889`): `clamp(max(2·[B+0x48], [B+0x4C]) × 5.2083 /
@@ -422,6 +443,25 @@ same layout the runtime does.
   ways (`[esi+8]` tested for skeleton flags then read for geometry lights
   at `0x0077D384`; but the blend CTX carries separate +0x8/+0xC slots).
   U3's question; observations recorded, nothing claimed.
+
+> **Refutation pass (2026-08-16, adversarial, independent).** Posture was
+> REFUTE; the reversal survived harder than this document argues it. The
+> reviewer re-derived all four samplers' address arithmetic (`base +
+> 4·count + N·idx` — impossible under the AoS overlay), re-measured BOTH
+> overlays at an equalized tolerance (100.000% vs 0.30%), verified S =
+> B+0x38 from both ends (the parser's own B-relative writes land at the
+> S-relative offsets the consumers read), and found the renormalization
+> gate §2.1 had left on the floor. The hierarchy invariant, sum
+> identities, strictness resolution, flag-bits-1/2 exhaustiveness (a
+> whole-image scan for `test [reg+0x38]` sites) and all three spot-checked
+> disasm dumps reproduced byte-exact. Verdicts: §2.1/§3.1, §2.2/§3.4,
+> §3.5, §4 CONFIRMED; §2.6's layout and FA6 join CONFIRMED, its
+> sequence-relative time reading PLAUSIBLE only (see R-3 in place). One
+> BUG (B-1, the FA6/FAE count+1 — both affected rows re-checked, both
+> conclusions tightened), and the R-1/R-2/R-4 weight corrections are
+> recorded in place at the rows they amend. The two unforceable test
+> checks gained the failing controls the review measured for them
+> (AoS ~0.3% unit-norm; rotated links ~23% violations).
 
 ## 7. Provenance
 

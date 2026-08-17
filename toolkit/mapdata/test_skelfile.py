@@ -532,13 +532,17 @@ def section1(check, ar, idt):
           "same payload as the container path")
 
     # U2 typed layer against real bytes (values measured 2026-08-16; a
-    # drift here is a decoder regression, the archive is pinned).
+    # drift here is a decoder regression, the archive is pinned). The two
+    # unforceable checks each carry a FAILING CONTROL beside them -- the U2
+    # review's R-5: an assertion whose rival is never run is not a
+    # measurement, and both controls' values were measured by the review
+    # before being pinned here.
     an = sk.anims()
-    check(len(an) == 20, "worm anims(): 20 nodes (n2C)")
-    check(sum(a["emitter_count"] for a in an) == 10 == sk.header["n34"],
-          "worm: blk2C emitter-attach counts sum to n34 -- the invariant "
-          "the MdlAnim:1121 assert enforces at runtime, from file bytes "
-          "the decoder cannot force")
+    check(len(an) == 20 == sk.header["n2C"]
+          and sum(a["emitter_count"] for a in an) == 10 == sk.header["n34"],
+          "worm: 20 blk2C node records whose emitter-attach counts sum to "
+          "n34 -- the invariant the MdlAnim:1121 assert enforces at "
+          "runtime, from file bytes the decoder cannot force")
     import math as _math
     quats = [q for a in an if a["rot"] for q in a["rot"][1]]
     unit = sum(1 for q in quats
@@ -548,16 +552,47 @@ def section1(check, ar, idt):
           "within 1% -- the reading the misaligned 2026-08-16 overlay "
           "refuted at 4/19,460",
           f"{unit}/{len(quats)}")
+    # CONTROL: the same PAYLOAD BYTES under a misaligned float4 overlay
+    # (stride 20, the refuted reading's rotation-group stride). HONESTY
+    # BOUND: on THIS anchor no misaligned overlay collapses to the
+    # corpus-wide ~0.3% -- the worm's rotations are dominated by
+    # near-identity quaternions, so any 4-float window holding one +-1
+    # and three ~0s reads unit-norm and every misalignment scores ~35%
+    # here (measured: 16-byte tiling 35.0%, stride 20 34.9%). The control
+    # therefore asserts the GAP (<50% vs the true layout's 100.000%), and
+    # the 0.30%-vs-100.000% separation at equal tolerance lives in the
+    # corpus run (study P4 + review R-2), not in this anchor.
+    blk = sk.block_bytes("blk2C")
+    var = blk[16 * sk.header["n2C"]:]
+    aos_n = (len(var) - 16) // 20 + 1 if len(var) >= 16 else 0
+    aos_unit = sum(
+        1 for i in range(aos_n)
+        if abs(_math.sqrt(sum(
+            c * c for c in struct.unpack_from("<4f", var, 20 * i))) - 1)
+        < 0.01)
+    check(aos_n and aos_unit < aos_n * 0.5,
+          "CONTROL: a misaligned float4 overlay on the same bytes falls "
+          "far below the true layout's 100.000% (gap, not collapse -- "
+          "see comment)",
+          f"{aos_unit}/{aos_n}")
     ev = sk.sound_events()
     check(len(ev) == 6
           and [e["seq"] for e in ev] == sorted(e["seq"] for e in ev)
           and all(e["seq"] < sk.seq_count for e in ev),
           "worm: 6 sound events, seq-index prefix sorted (the client "
           "binary-searches it) and in range")
-    check(all(a["link"] < len(an) and a["link"] <= i
-              for i, a in enumerate(an)),
+    links = [a["link"] for a in an]
+    check(all(b < len(an) and b <= i for i, b in enumerate(links)),
           "worm: every node's link byte references an earlier-or-self "
           "node (the hierarchy invariant, 121,532/121,532 corpus-wide)")
+    # CONTROL: shuffled links must violate `link <= index` -- `< n2C`
+    # alone is a multiset property a shuffle preserves, so only this half
+    # carries the hierarchy claim (review-measured: ~23% violations under
+    # shuffle corpus-wide). Deterministic rotation, no RNG in tests.
+    shuffled = links[10:] + links[:10]
+    check(any(not (b <= i) for i, b in enumerate(shuffled)),
+          "CONTROL: rotating the worm's links violates the invariant "
+          "(the check above has power)")
 
 
 def section2(check, led, ar, stride):
@@ -748,13 +783,14 @@ def main():
                          "decompresses every head row, ~45 min)")
     args = ap.parse_args()
 
-    # Floor from the real green default run, 2026-08-16: 89 checks executed
+    # Floor from the real green default run, 2026-08-16: 90 checks executed
     # (stride 89, the study archive; 71 before the U2 typed-layer section
-    # 0b and its five anchor checks landed later the same day). Set below
-    # that only by the checks whose pools can legitimately empty on a
-    # different sample (the 16 corpus sabotage variants and the two
-    # order-control halves declare skips); the mandatory core is 71.
-    led = checks.Ledger("skeleton chunk (0xFA1)", floor=81)
+    # 0b landed, 89 before the U2 review added the two failing controls
+    # and folded one forced check). Set below that only by the checks
+    # whose pools can legitimately empty on a different sample (the 16
+    # corpus sabotage variants and the two order-control halves declare
+    # skips); the mandatory core is 72.
+    led = checks.Ledger("skeleton chunk (0xFA1)", floor=82)
     check = checks.adopt(led)
 
     section0(check)
