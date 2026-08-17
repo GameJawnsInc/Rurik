@@ -2411,6 +2411,27 @@ Every one of these, in the order they were written:
   occurs **596 times** in `.text`, so it identifies "a switch" and never "this
   switch" — which is why the dispatchers had to be anchored first, and now are.
   Needs the vault throughout. Floor 39, ~20 s),
+  `toolkit/clientscan/test_heroes_table.py` (`s_heroClientData` as content
+  rows, and the trap it exists to avoid. `s_titleClientData` sits SIX
+  INSTRUCTIONS from it -- accessor `0x005A9350` (`cmp esi,0x30`, stride 12)
+  versus `0x005A9380` (`cmp esi,0x28`, stride 24) -- and this arc lost a
+  contested reading to exactly that adjacency until the client's own assert
+  strings settled it. A structural locator that closes on the wrong anchor
+  still closes, so the failure mode is not an error but a clean, plausible,
+  WRONG table of numbers presented as heroes. §1 pins the geometry and the
+  closure the artifact can refute: the table must end on the byte where its
+  anchor string begins (`base + 40*24 == anchor_off`), which an off-by-one-row
+  base or stride does not satisfy. §2 checks the index column equals the row
+  number on all 40. §3 is the sabotage: `table_for` is monkeypatched to hand
+  back the title table's 48 x 12 geometry and the extractor must REFUSE with a
+  message naming the trap, followed by a positive control that the real table
+  still loads -- otherwise §3 would prove only that `load()` always raises.
+  §4 runs the emitted TOML through `content.py`'s REAL `_check_provenance`,
+  all 40 rows, then strips `extractor` from one and requires a refusal, so the
+  40/40 is a result rather than a tautology. §5 pins that `--resolve` with no
+  explicit rows is refused: ids ship, English does not, and a committed column
+  of resolved names is the bulk expression the provenance gate refuses. Needs
+  the vault; SKIPs with its reason. Floor 10, instant),
   `toolkit/clientscan/test_commanderpeek.py` (the live hero-commander reader's
   own instrument check. `commanderpeek.py` reads a running client, so almost
   nothing about it can be tested offline -- except the part that actually

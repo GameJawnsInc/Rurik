@@ -1840,6 +1840,40 @@ survived review.
 no committed test, and a new test file needs its `TESTS.md` entry in the same commit
 (`test_srclint` §7 enforces both directions). That is the next small piece of work here.
 
+## 29. `heroes_table.py` — the extraction §2.1 ruled permitted, built
+
+Outstanding since §2.1 ruled it inside the provenance gate's MEASUREMENT branch. Built as a
+thin emitter over `consttable`'s structural locator rather than a second copy of the location
+logic, so there is one place that can be wrong about where the table is.
+
+**It carries no address.** §2's contested reading was lost to `s_titleClientData` sitting six
+instructions from `s_heroClientData`, so the module locates by the `ConstHero.cpp` anchor and
+then **refuses** any geometry that is not 40 × 24 — naming the trap in the refusal.
+
+Run against the pin:
+
+```
+s_heroClientData: 40 x 24 B at file 0x634E08, anchor 0x6351C8 (ConstHero.cpp)
+  closure: base + 40*24 == 0x6351C8        <- ends exactly where its anchor begins
+  index column agrees with the row number on every row
+```
+
+That closure is the check the artifact could refute and did not: an off-by-one-row base or
+stride does not land on the anchor byte.
+
+**Ids only, and that is the gate rather than a style choice.** The name, epithet and biography
+ship as **string ids**; the client resolves them from the owner's own archive at render time —
+the same "commit the id, resolve at run time" pattern `mapbuild.py` proves and `0x01BF` proves
+on the wire (§10.2). `--resolve` takes explicit rows for analysis and **refuses** a whole
+column, because that is the bulk expression the gate refuses.
+
+`vault/content/heroes.toml` written (373 lines, gitignored — the vault is where bulk
+extraction goes). **All 40 rows pass `content.py`'s real `_check_provenance`**, and stripping
+`extractor` from one makes it refuse, so the 40/40 is a result rather than a tautology.
+
+`test_heroes_table.py` (floor 10) pins all of it, including the title-table sabotage with a
+positive control after it. Catalogued in `TESTS.md` in the same commit.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

@@ -1585,8 +1585,13 @@ had gone stale on four items that were since closed, which is the drift the top 
    asserts (§10.2). The untested candidate is the **outpost hiring UI**, which needs
    RESKIN §18.1's explorable gate solved first.
 5. **Retry the family under `--encstring`** — still never done.
-6. **`heroes_table.py`** (MEASUREMENT branch) — still unbuilt, still permitted; anchor on
-   `0x005A9380` / `0x00A35E08`, **not** the adjacent title table.
+6. ~~**`heroes_table.py`**~~ **BUILT (§29).** A thin emitter over `consttable`'s locator, so
+   there is one place that can be wrong about where the table is. It carries **no address**:
+   it anchors on `ConstHero.cpp` and REFUSES any geometry that is not 40 × 24, naming the
+   title-table trap in the refusal. Closure holds on the byte (`base + 40*24 == anchor_off`).
+   Ids only — `--resolve` refuses a whole column. `vault/content/heroes.toml` written; all 40
+   rows pass `content.py`'s real `_check_provenance`, and stripping `extractor` makes it
+   refuse. `test_heroes_table.py` floor 10, catalogued in the same commit.
 7. **Follow AI** — unbuilt work rather than an unknown; the movement messages exist.
 
 **A defect this arc shipped, and the guard now standing over it.** `HERO_ATTRIBS`,
