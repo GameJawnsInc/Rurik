@@ -2267,6 +2267,20 @@ def hero_slots():
             for i, h in enumerate(HERO_IDS)]
 HERO_DEFINITION = 10
 HERO_BODY = False
+# THESE THREE NEED A MODULE-LEVEL DEFAULT AND IT IS NOT DECORATION. They were
+# assigned only inside the `--hero` CLI block when the arc landed on 2026-08-16,
+# and the world-load path reads them UNCONDITIONALLY -- `hero_slots() if
+# HERO_ATTRIBS else ()` evaluates the name before anything can short-circuit on
+# HERO being None. So a DEFAULT launch, with no --hero at all, died with
+# NameError inside the instance load and the client showed Code=007. Two other
+# sessions hit it the next morning, and one of them first mis-diagnosed it as an
+# archive problem -- a server-side NameError and a bad map row present
+# identically from the client's side, which is what made it expensive.
+# `hero_slots()` returns [] when HERO_IDS is empty, so True here stays inert
+# until a hero is actually authored; the values match the argparse defaults.
+HERO_ATTRIBS = True
+HERO_SKILLBAR = True
+HERO_BODY_NPC = "hatcher"
 # Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
 # one is a hero index, and the client's own code does not say which.
 HERO_SWAP = False
