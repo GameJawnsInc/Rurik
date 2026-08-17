@@ -130,6 +130,16 @@ PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum; see below.
 # footnote: sending 42 with the value the agent ALREADY has is a NO-OP, because
 # the delta is zero. A run that tried to use it as "restore to full" measured
 # nothing and looked like a dead property (RESKIN.md 18.12).
+#
+# THE SHRINK DIRECTION, and the store is SIGNED. MEASURED (harness
+# 20260817T143333, probe health_shrink, studies/unitsetup/FINDINGS.md 8 Q5):
+# from 25/100, max -> 50 DISPLAYED 1 on the orb, and max -> 100 then read
+# exactly 25 again. Only 25 + (50-100) = -25 held in an UNCLAMPED signed store
+# explains the round trip -- a store clamped at 1 restores to 51, a refill to
+# 50. So the delta can drive current health BELOW ZERO silently, the HUD
+# floors the DISPLAY at 1, and the arithmetic survives the excursion intact.
+# The "floors at 1: cannot kill" on PROP_DAMAGE above is therefore at least
+# partly a display floor; what the STORE does under prop 16 is unmeasured.
 
 # The agent effects bitfield, carried by GAME_SMSG 0x00F1. Bit 4 is death:
 # setting it kills, clearing it revives. OBSERVED both directions.
