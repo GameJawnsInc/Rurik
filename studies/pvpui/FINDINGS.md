@@ -1348,3 +1348,76 @@ design** — "keyboard rather than a click on purpose", because a held key makes
 answer with a direction while a click would be our own clip. So this last step belongs to
 the owner, and the two arms worth running are `--hero-roster-id 200` against the default
 `--hero-roster-id 1`, both with `--party-mine-late 2.0`.
+
+## 24. THE ASSERT MOVED TWICE. The commander binds and the panel opens
+
+Two owner-driven clicks on the party window's hero button, build 38833 (the crash dialog
+states it), both with `--party-mine-late 2.0`. Quoting each crash dialog's own first two
+lines, which is text the retail client shows any player who crashes:
+
+| arm | click result |
+|---|---|
+| before this arc | `Assertion: commander` / `GmView.cpp(5890)` |
+| `--hero-roster-id 200` | `Assertion: heroData` / `GmView.cpp(5897)` |
+| default key (hero id 1) | `Assertion: heroData->agentId` / `GmView.cpp(5898)` |
+
+**The commander assert is gone.** `GmView:5890` and `:5891` (`commander`,
+`commander->slotIndex < DLG_AGENT_COMMANDERS`) both pass now. Reading the case confirms what
+that buys:
+
+```
+0x004E38DA   ebx = payload[0]
+             commander = 0x00524DB0(edi)
+             assert commander                          :5890  <- WAS the crash, now passes
+             assert commander->slotIndex < 7           :5891  <- passes
+0x004E3921   ShowFloatingDialog(ebx, commander->slotIndex, show=1, 0)
+                                                       <- THE PANEL IS OPENED
+             heroData = 0x0080E370(edi)
+             assert heroData                           :5897
+             assert heroData->agentId  ([heroData+4])  :5898
+```
+
+`ShowFloatingDialog` runs *between* the two asserts, with `commander->slotIndex` as the
+dialog index — so the `AgentCommander{n}` window is constructed before the failure. The
+click now gets further than "no commander exists" by two asserts and one window.
+
+### 24.1 The two arms are a matched pair, and they name the key rule
+
+Both lookups in that case take **the same `edi`**. `0x00524DB0` finds the commander;
+`0x0080E370` finds the hero-data record in `[globals+0x2c] + 0x584`.
+
+- With `--hero-roster-id 200` the commander is filed under 200 (§23) and heroData under the
+  hero id — so heroData misses, `:5897`.
+- With the default the commander is filed under 1 and heroData under 1 — heroData is
+  **found**, and the failure moves to its `agentId` field, `:5898`.
+
+**So the commander container and the hero-data cache must be keyed alike, and the key is the
+hero id.** §22.2's guess — that the button passes an agent id and `scan_key` should be 200 —
+is refuted by its own experiment. `--hero-roster-id` should be left at its default.
+
+### 24.2 What `heroData->agentId` is NOT
+
+`0x0074`'s worker chain is `0x0091E350` → `0x00811560` → `0x0081DB70`, and the last one
+writes the payload into the record starting at **`[rec+8]`**:
+
+```
+0x0081DBCC   [esi+0x08] = arg1 ; [esi+0x0C] = arg2 ; [esi+0x10] = arg3 ; [esi+0x14] = arg4 …
+```
+
+`+0` and `+4` are not among them — they belong to the record's creation
+(`0x0081D700`, an array grow with stride **0x9C**). **So `agentId` at `+4` is not carried by
+`0x0074`'s payload at all**, and no combination of `mercenary_info`'s arguments can set it.
+The field is written by whatever links a hero record to its spawned agent.
+
+**The lead, UNVERIFIED:** the container has 28 `+0x584` sites. One family sits at
+`0x0080E460`, which does `0x0081DE20(container, hero_id, <something>)` and guards
+`hero <= 0x28` with asserts `0x1178`/`0x1179` — the `ChCliApi` `hero < HEROES` family
+heroes §1 already met (`HEROES = 40`). `0x0081DE20` is the next thing to read, and it is
+desk work.
+
+### 24.3 One loose observation from the screenshots
+
+The party window renders the hero row as **`Lvl 255`**. Not investigated, not obviously
+related to any of the above, and recorded here only so the next reader does not think it is
+new — a level that reads 255 where 20 is the game's cap is the shape of an unset or
+sign-extended byte, and `0x0074`'s level field is one of the arguments we send as zero.
