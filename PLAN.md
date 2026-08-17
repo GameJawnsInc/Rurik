@@ -1730,10 +1730,25 @@ opens, and its handler **never runs**. `0x00524C40` never runs either, confirmin
 missing is a SUBSCRIPTION, not a trigger** — so no wire field can bind a commander, and the
 authored hero is complete for everything the server governs. FINDINGS §33.
 
-**The one open question left here** is bounded and is not more reading of the party path:
-*what registers a subscriber for `0x1000011E`/`0x10000114`, and why is it not registered in
-our session* — the commander module is demonstrably alive (§27: context non-null, container
-allocated at `cap=7`), so this is not an uninitialised UI.
+**And the successor question is answered too — FINDINGS §34.** The subscriber question §28
+declared off the table (the map hashes through `0x004920B0`, so a bucket walk cannot read it)
+needed no hash at all: the raise is `call 0x491f20; test eax,eax; je`, so **`eax` at
+`0x0064CA47` IS the subscriber list** for the event in `[ebp+8]`. Read there,
+`0x1000011E` has **`subscribers = 0`** — raised into nothing, mechanism and all.
+Control-verified by a 4000-hit census: 54 distinct events, 23 of them subscribed, so the
+reader demonstrably says both things. *(Its FIRST control run said NO SUBSCRIBER to
+everything and would have confirmed the finding falsely — all 32 hits landed inside one 4 ms
+burst of a single event, because a hot site's default ceiling is not a sample. A control that
+samples badly does not fail loudly; it agrees with whatever you were about to conclude.)*
+
+**What is left is one UNVERIFIED hypothesis, stated with its refutation.** The census shows
+**eight events whose subscriber state changes mid-session**, so the map is filled as UI
+modules come up. Hence **TIMING**: our `0x01C2` rides inside the instance load and may simply
+arrive before the commander UI subscribes — in which case the same bytes would work sent
+later. Refuted by censusing `0x1000011E` across a whole session and finding it never
+subscribed at any moment. Testing it needs the registration site trapped, or a hero-add sent
+long after `INSTANCE_LOAD_FINISH`, which no flag does today. Also unresolved and named rather
+than smoothed over: `0x10000114` HAS a live subscriber yet case 90 never executed (§34.3).
 
 **The one thing to do first, and everything hangs on it:** send a single `0x01BF`
 PARTY_HENCHMAN_ADD inside the party build window our server already opens, with `0x00B0`

@@ -2091,7 +2091,8 @@ Not "does the event fire" — that is answered. **What registers a subscriber fo
 and `0x10000114`, and why is it not registered in our session?** The commander module is
 demonstrably alive (§27: context non-null, container allocated at `cap=7`), so this is not
 an uninitialised UI. That is a real question with a real instrument now pointed at it, and it
-is the honest successor to §32's wall.
+is the honest successor to §32's wall. **§34 answers the first half and re-shapes the
+second.**
 
 ### 33.8 Four defects in the instrument, three of them caught by its own control
 
@@ -2125,6 +2126,103 @@ whether the target **resumes** — two separate claims, one of them untested, an
 one was the broken one. It now runs to process exit and requires *exactly one* hit on an entry
 point that executes once. A control that only checks the half you thought of is a control with
 a hole in it.
+
+## 34. NO SUBSCRIBER, measured — and the control nearly let a second §28 through
+
+§33 showed the commander event is raised and its handler never runs, and inferred "raised
+into nothing". §28 had said the subscriber question itself was off the table: the map's keys
+hash through `0x004920B0`, so a bucket walk cannot find them, and answering it "needs that
+replicated, which is a second thing to get wrong, or a trace."
+
+**It needed neither.** The raise is four instructions of ordinary code:
+
+```
+0064CA42  call 0x491f20      ; the map lookup
+0064CA47  test eax, eax      ; <- EAX IS THE SUBSCRIBER LIST for the event in [ebp+8]
+0064CA49  je   0x64ca58      ; NULL -> return, having called nothing
+0064CA53  call 0x64c7d0      ; else dispatch to the list
+```
+
+So let the client hash its own key and read the answer out of `eax` one instruction later.
+No replication, nothing to get wrong.
+
+### 34.1 The result
+
+```
+worker  party 1, owner 1, agent 200, hero 2
+raise   entry+0 agent 200   entry+4 owner 1   entry+8 heroId 2
+lookup  event(ebp+8)      0x1000011E
+        subscribers(eax)  0x00000000
+        NO SUBSCRIBER -- takes `je 0x64ca58`, the raise returns having called nothing
+```
+
+Three sites, one thread, in order, 3 ms apart, `arm/resume failures 0/0`. **`0x1000011E` has
+no subscriber at the moment it is raised.** The captured `event(ebp+8)` is the point of that
+capture and not decoration: it proves the hit was *ours* rather than some other event that
+interleaved.
+
+`0x0064CA47` is inside the raise **every** UI event in the client passes through, so arming
+it for a session would trap thousands of times. It is armed only when our own raise fires and
+taken down after one hit (`arm_after`/`oneshot`), so it was live for ~3 ms.
+
+### 34.2 THE CONTROL FAILED FIRST, and this is the part worth keeping
+
+A reader whose only output is NO SUBSCRIBER is §28 wearing a different hat. So: arm the same
+address with no trigger and census what the client raises on its own.
+
+**The first control run said NO SUBSCRIBER to everything** — every sampled lookup, including
+unrelated events `0x10000141` and `0x0000004B`. Had that been the last word, §34.1 was dead.
+
+It was not the reader; it was the **sample**. All 32 hits landed inside one 4 ms burst, ~30 of
+them the same event, because `max_hits` capped the slot instantly. A hot site's default
+ceiling is not a sample of anything. Re-run with the ceiling at 4000:
+
+```
+CENSUS: 54 distinct events, 4000 hits
+  23 ALWAYS subscribed        e.g. 0x00000045 -> 0x1AEFBEE8, 0x10000114 -> 0x1C4D0AA0
+  23 never subscribed
+   8 BOTH -- their subscriber state CHANGED during the session
+```
+
+**The reader is bidirectional, so §34.1 stands.** And a near-miss is recorded rather than
+quietly fixed: a control that samples badly does not fail loudly, it agrees with whatever you
+were about to conclude.
+
+### 34.3 Two things the census gives away for free
+
+**`0x10000114` IS subscribed** (`-> 0x1C4D0AA0`), so §28's reader was wrong about that one
+too — exactly as its own control implied. That leaves a real tension with §33.6, which
+measured `bulkraise=1, bulk=0`: the bulk event has a live subscriber, yet case 90
+(`0x004E5D20`) never executed. Either `0x00858850` ran without reaching its raise in that
+session, or the subscriber for `0x10000114` is **not** the switch that holds case 90. Two
+different sessions, so they are not strictly comparable. **UNRESOLVED, and named rather than
+smoothed over.**
+
+**Subscriptions change during a session.** Eight events appear with a null subscriber at one
+moment and a real one at another — `0x00000054`, `0x10000001`, `0x10000007`, `0x1000001D`,
+`0x10000030`, `0x1000005E`, `0x10000142`, `0x10000176`. The map is populated as the client's
+UI modules come up, not once at startup.
+
+### 34.4 The successor question, now sharp enough to test
+
+§33.7 asked *why* there is no subscriber and could only gesture. §34.3 turns it into a
+hypothesis with a mechanism:
+
+> **TIMING.** Our `0x01C2` rides inside the instance load. If the commander UI subscribes
+> later than that, the event is raised into an empty slot and the same wire bytes would work
+> if they arrived after the subscription.
+
+**UNVERIFIED**, and stated with what would refute it: census `0x1000011E` across a whole
+session and find it *never* subscribed at any moment — that kills timing and puts the fault
+back on the subscription itself. The current census cannot answer it, because the lookup only
+happens when the event is raised and our rig raises it exactly once. What it needs is either
+the registration site trapped, or a hero-add deliberately sent long after
+`INSTANCE_LOAD_FINISH` — and no flag sends one that late today (`--hero-bust-cache` already
+moves it after the party build, which is as late as the current rig goes).
+
+**None of this changes §33.5's practical conclusion**: at the moment our server can send it,
+`0x01C2` cannot bind a commander, and the authored hero is complete for everything the wire
+governs.
 
 ## 9. Defects and corrections this arc produced
 

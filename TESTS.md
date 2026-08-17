@@ -2486,9 +2486,20 @@ Every one of these, in the order they were written:
   already. §5 breaks the verdict's control gate both ways. §6 pins the capture
   decoders, including the filter's PASSES/REJECTS string, which is the run's
   headline, and that an unreadable entry decodes to `None` rather than to a row
-  of zeros that would read as a real measurement. §§2-4 need the vault and a
-  32-bit Windows and SKIP with their reason. Floor 14 = the mandatory core
-  (§1+§5+§6); a whole green run is 33, ~4s),
+  of zeros that would read as a real measurement. §3b covers DEFERRED arming,
+  the mechanism that makes a hot site measurable — `lookup` sits inside the
+  raise every UI event passes through, so it is armed only when its trigger
+  fires and taken down after one hit. The hazard is specific: a deferred site
+  that never arms is SILENT, and silence is exactly what its finding ("no
+  subscriber") looks like. Checked by reading the debug registers back out of
+  the live thread — the deferred address must land in `DR1` **and** its enable
+  bit must appear in `DR7`, since an address sitting in `DR1` with no `L1` is
+  silence again. The obvious behavioural version cannot work and the test says
+  why: a hardware execute breakpoint fires on an instruction's FIRST byte, so a
+  dependent at `entry+1` is mid-instruction and would be silent for reasons
+  unrelated to deferral. §§2-4 need the vault and a 32-bit Windows and SKIP with
+  their reason. Floor 14 = the mandatory core (§1+§5+§6); a whole green run is
+  39, ~6s),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

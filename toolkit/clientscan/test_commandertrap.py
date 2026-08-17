@@ -160,6 +160,60 @@ def main():
                       f"DR6 says slot {h['dr6_slot']}, EIP says {h['slot']} -- "
                       f"an independent cross-check, and it disagreed")
 
+    # ---- 3b. DEFERRED arming ----------------------------------------------
+    print("\n3b. deferred arming: a site that goes live only on a trigger")
+    if not os.path.isfile(WOW64_CMD):
+        LEDGER.skip("section 3b", "needs the 32-bit cmd.exe target")
+    else:
+        # THE HAZARD THIS COVERS: a deferred site that never arms is SILENT,
+        # and silence is exactly what a real negative looks like. `lookup` is
+        # deferred, and its whole purpose is to report "no subscriber" -- so a
+        # deferral bug would manufacture that finding out of nothing.
+        # Checked by READING THE DEBUG REGISTERS BACK out of the live thread,
+        # not by watching a second address execute. The obvious behavioural
+        # version -- trigger at the entry point, dependent at entry+1 -- cannot
+        # work and it is worth writing down why: a hardware execute breakpoint
+        # fires on an instruction's FIRST byte, and entry+1 is in the middle of
+        # one, so it would be silent for a reason that has nothing to do with
+        # deferral. `armed_now()` reads the registers the processor will
+        # actually consult, so this is target state rather than a mock.
+        st = {}
+
+        def on_create2(trap, info):
+            e = int(info.lpStartAddress)
+            st["entry"] = e
+            return [e, e + 0x20]
+
+        t2 = ct.HwTrap(on_create=on_create2)
+        t2.spawn(WOW64_CMD, "/c exit")
+        t2.deferred = {1: 0}          # slot 1 arms when slot 0 fires
+        t2.disarmed = {1}             # ...and starts down
+        after = {}
+        try:
+            t2.pump(30.0, stop_when=lambda t: bool(t.hits))
+            if t2.hits:
+                h = t2.threads.get(t2.hits[0]["tid"])
+                if h:
+                    after["dr"] = t2.armed_now(h)
+        finally:
+            t2.detach()
+        slots = [x["slot"] for x in t2.hits]
+        LEDGER.ok(slots[:1] == [0],
+                  "the deferred slot is SILENT until its trigger fires",
+                  f"slots in order: {slots} -- slot 1 firing first would mean "
+                  f"it was live all along")
+        dr = after.get("dr")
+        LEDGER.ok(dr and dr[1] == st["entry"] + 0x20,
+                  "the trigger loads the deferred address into DR1",
+                  f"DR1 = 0x{(dr[1] if dr else 0):08X}, wanted "
+                  f"0x{(st.get('entry', 0) + 0x20):08X}")
+        LEDGER.ok(dr and (dr[4] & 0b0100),
+                  "and sets its ENABLE bit in DR7 -- it is genuinely live",
+                  f"DR7 = {(dr[4] if dr else 0):#b}; without L1 the address sits "
+                  f"in DR1 doing nothing, which is silence again")
+        LEDGER.ok(1 not in t2.disarmed,
+                  "and the bookkeeping agrees it is no longer disarmed")
+
     # ---- 4. a wrong site is refused against a live process ----------------
     print("\n4. byte verification refuses a wrong site")
     if not os.path.isfile(WOW64_CMD):

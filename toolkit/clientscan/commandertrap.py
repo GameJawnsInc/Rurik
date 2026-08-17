@@ -358,6 +358,18 @@ class HwTrap:
         self.hit_counts = {}
         self.max_hits = 32
         self.disarmed = set()
+        # slot -> trigger slot. A deferred slot starts in `disarmed` and is
+        # armed the moment its trigger fires. See Site.arm_after.
+        self.deferred = {}
+        self.oneshot = set()
+        # Kept apart from `disarmed`, because a slot goes down for two very
+        # different reasons and the report must not confuse them: a CAPPED slot
+        # hit its ceiling and its count is a floor, while a ONESHOT slot took
+        # itself down on purpose and its count is exactly what was asked for.
+        # The first version reported a completed oneshot as "counts are floors,
+        # not totals", which is false and is the kind of label that gets a
+        # correct measurement re-litigated later.
+        self.capped = set()
         self._getctx = None
         self._setctx = None
 
@@ -577,12 +589,23 @@ class HwTrap:
             ctx.ContextFlags = CONTEXT_FULL_READ
             if not self._setctx(h, ctypes.byref(ctx)):
                 self.resume_failures += 1
-        if n >= self.max_hits:
+        rearm = False
+        if n >= self.max_hits and slot not in self.oneshot:
             # A runaway guard, not an optimisation: if the resume flag were
             # ever not honoured the same instruction would re-trap forever and
             # the client would hang rather than crash. Disarming the slot ends
             # that, and the report says the slot was capped.
             self.disarmed.add(slot)
+            self.capped.add(slot)
+            rearm = True
+        if slot in self.oneshot and slot not in self.disarmed:
+            self.disarmed.add(slot)
+            rearm = True
+        for dep, trigger in self.deferred.items():
+            if trigger == slot and dep in self.disarmed:
+                self.disarmed.discard(dep)
+                rearm = True
+        if rearm:
             self._arm_all()
         return DBG_CONTINUE
 
@@ -613,9 +636,21 @@ class Site:
     would not.
     """
 
-    def __init__(self, name, va, code, why, capture=None):
+    def __init__(self, name, va, code, why, capture=None,
+                 arm_after=None, oneshot=False):
         self.name, self.va, self.code, self.why = name, va, code, why
         self.capture = capture
+        # DEFERRED ARMING, and it is what makes a HOT site measurable at all.
+        # `0x0064CA47` sits inside the raise that EVERY UI event in the client
+        # passes through; arming it for a whole session would trap thousands of
+        # times and slow the client for one answer. Armed only when `arm_after`
+        # fires, it is live for the handful of instructions between our own
+        # raise and its map lookup, and `oneshot` takes it down again after.
+        # The first hit after the trigger is then unambiguously OURS -- the
+        # raise is a synchronous call on the same thread, so no other event can
+        # interleave between `0x008590CA` and `0x0064CA47`.
+        self.arm_after = arm_after
+        self.oneshot = oneshot
 
 
 def _dw(reader, addr, n=1):
@@ -678,6 +713,25 @@ def _cap_filter(ctx, reader):
                         "REJECTS -- jne 0x4e62f4, the handler returns")}
 
 
+def _cap_lookup(ctx, reader):
+    """THE subscriber answer, read out of the client's own lookup.
+
+    At `0x0064CA47`, `ebp` is set up and `[ebp+8]` still holds the event id
+    (stored back at `0x0064CA3B`), while `eax` is whatever `0x00491F20`
+    returned for it. 28 could not walk this map -- its keys hash through
+    `0x004920B0` and a plain bucket walk finds nothing -- and this sidesteps
+    the whole problem: let the client hash it, and read the answer.
+    """
+    ev = _dw(reader, ctx.Ebp + 8, 1)
+    return {"event(ebp+8)": ev[0] if ev else None,
+            "subscribers(eax)": ctx.Eax,
+            "VERDICT": ("NO SUBSCRIBER -- takes `je 0x64ca58`, the raise "
+                        "returns having called nothing"
+                        if ctx.Eax == 0 else
+                        "SUBSCRIBED -- falls through to `call 0x64c7d0` "
+                        "with the list")}
+
+
 # Build 38833. Disassembled, not copied from a study: every `code` below is the
 # instruction's own bytes as `codescan --dis` printed them.
 SITES = {
@@ -715,6 +769,23 @@ SITES = {
         "bulk", 0x004E5D20, bytes.fromhex("8b1eff37895da8"),
         "dispatch case 90, the bulk activeHeroes scan -- the path that DOES "
         "create commanders. 25.2 says all eight callers of its raiser are UI"),
+    "lookup": Site(
+        "lookup", 0x0064CA47, bytes.fromhex("85c0740dff75"),
+        "`test eax,eax` one instruction after the subscriber-map lookup in the "
+        "raise (0x0064CA30). EAX IS THE SUBSCRIBER LIST for the event in "
+        "[ebp+8]: zero takes `je 0x64ca58` and the raise returns having called "
+        "nothing. This answers 28's question WITHOUT replicating the 0x004920B0 "
+        "hash -- the client does the lookup and we read its result.",
+        capture=lambda ctx, rd: _cap_lookup(ctx, rd),
+        arm_after="raise", oneshot=True),
+    "lookupany": Site(
+        "lookupany", 0x0064CA47, bytes.fromhex("85c0740dff75"),
+        "THE POSITIVE CONTROL for `lookup`, and the same address armed with no "
+        "trigger. A reader that only ever prints NO SUBSCRIBER is 28 again, so "
+        "this censuses whatever events the client raises on its own and must "
+        "show some of them SUBSCRIBED. Hot by construction -- it is capped by "
+        "max_hits and the report says so.",
+        capture=lambda ctx, rd: _cap_lookup(ctx, rd)),
     "bulkraise": Site(
         "bulkraise", 0x00858850, bytes.fromhex("558bec568bf157"),
         "the function that raises 0x10000114, reached through 0x00856920. If "
@@ -773,11 +844,36 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
     w = out.write
     order = [s.name for s in sites]
     counts = {n: 0 for n in order}
+    # A CENSUS SITE IS SUMMARISED, NOT LISTED. A hot address can produce
+    # thousands of hits, and printing each one buries the only thing that
+    # matters -- how many DISTINCT values were seen. The first control run
+    # printed 32 near-identical lines spanning 4ms and looked like a sample of
+    # the client's events when it was one event repeated.
+    BULK = 12
+    bulky = {i for i in range(len(sites))
+             if sum(1 for h in hits if h["slot"] == i) > BULK}
+    for i in sorted(bulky):
+        rows = {}
+        for h in hits:
+            if h["slot"] != i or not h.get("cap"):
+                continue
+            key = tuple((k, v) for k, v in h["cap"].items()
+                        if not isinstance(v, str))
+            rows[key] = rows.get(key, 0) + 1
+        w("\n" + "=" * 72 + f"\nCENSUS: {order[i]} -- {len(rows)} distinct, "
+          f"{sum(rows.values())} hits\n" + "=" * 72 + "\n")
+        for key, n in sorted(rows.items(), key=lambda kv: -kv[1]):
+            w(f"  x{n:<6} " + "  ".join(
+                f"{k}=0x{v:08X}" if isinstance(v, int) else f"{k}={v}"
+                for k, v in key) + "\n")
+
     w("\n" + "=" * 72 + "\nHITS, in order\n" + "=" * 72 + "\n")
     if not hits:
         w("  none\n")
     t0 = hits[0]["t"] if hits else 0
     for h in hits:
+        if h["slot"] in bulky:
+            continue
         name = order[h["slot"]] if h["slot"] < len(order) else "?"
         counts[name] = counts.get(name, 0) + 1
         site = sites[h["slot"]]
@@ -810,9 +906,14 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         w(f"  other exceptions passed on     {trap.other_exceptions}\n")
         w(f"  arm failures / resume failures {trap.arm_failures} / "
           f"{trap.resume_failures}\n")
-        if trap.disarmed:
-            w(f"  SLOTS CAPPED AT max_hits: {sorted(trap.disarmed)} -- those "
-              f"counts are floors, not totals\n")
+        if trap.capped:
+            w(f"  SLOTS CAPPED AT max_hits: "
+              f"{sorted(order[i] for i in trap.capped)} -- those counts are "
+              f"FLOORS, not totals\n")
+        done = sorted(order[i] for i in trap.oneshot if i not in trap.capped)
+        if done:
+            w(f"  one-shot slots, taken down after their hit: {done} -- these "
+              f"counts are exactly what was asked for\n")
     return counts
 
 
@@ -862,6 +963,11 @@ def main(argv=None):
                          "before the instance load.")
     ap.add_argument("--seconds", type=float, default=180.0,
                     help="how long to hold the debug loop open")
+    ap.add_argument("--max-hits", type=int, default=32,
+                    help="per-slot ceiling before the slot is disarmed "
+                         "(default 32). RAISE IT for a census site: 32 hits of "
+                         "a hot address can all land inside one 4ms burst of a "
+                         "single event, which looks like a sample and is not.")
     ap.add_argument("--sites", default=",".join(DEFAULT_SITES),
                     help=f"up to {MAX_SLOTS} of: {', '.join(SITES)}")
     ap.add_argument("--out", default=None, help="also write the report here")
@@ -928,7 +1034,22 @@ def main(argv=None):
               flush=True)
 
     trap = HwTrap(on_hit=on_hit, verbose=True)
+    trap.max_hits = a.max_hits
     trap.addrs = [base + (s.va - IMAGE_BASE) for s in sites]
+    for i, s in enumerate(sites):
+        if s.oneshot:
+            trap.oneshot.add(i)
+        if s.arm_after:
+            if s.arm_after not in want:
+                raise SystemExit(
+                    f"site {s.name!r} arms after {s.arm_after!r}, which is not "
+                    f"in this run's site list -- it would never arm, and a site "
+                    f"that never arms reports the same silence as a real "
+                    f"negative.")
+            trap.deferred[i] = want.index(s.arm_after)
+            trap.disarmed.add(i)          # starts down; the trigger raises it
+            print(f"  {s.name} is DEFERRED: armed when {s.arm_after} fires"
+                  + (", one shot" if s.oneshot else ""))
     trap.attach(pid)
     print(f"attached; armed {len(sites)} execute breakpoints, holding "
           f"{a.seconds:.0f}s", flush=True)
