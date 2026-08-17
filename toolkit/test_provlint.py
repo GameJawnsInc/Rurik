@@ -130,7 +130,19 @@ GRANDFATHERED = {
 # was ~1.5x) rather than inventing a new one. The tree-wide number is the BACKSTOP;
 # the per-file ceilings above are the instrument that actually catches accumulation,
 # and none of them moved except the one documented at its row.
-TOTAL_CEILING = 280
+#
+# 280 on 2026-08-17 -- EXACTLY at the ceiling, which is the state this comment's own
+# 2026-08-14 note was written to avoid. The arc that landed on it (studies/archivewrite,
+# the Gw.dat write-size wall) contributes TWO citations, both single asserts anchoring
+# the client's archive-repair path -- `progressNumer < progressDenomForScanMft` names
+# the rescan and `m_writeState == STATE_READY` names the write-back, and each is the
+# evidence for a claim about whether a botched write destroys the archive. That is the
+# permitted form, not a dump. Raised to 420 on the same 1.5x rule rather than to a
+# number that buys one more arc: a tripwire re-armed three short of its limit fires on
+# the next session's ordinary work, and CLAUDE.md's recorded direction of error in this
+# repo is over-refusal, of which a nuisance tripwire is a cheap generator. The per-file
+# ceilings are still the instrument; none of them moved this pass.
+TOTAL_CEILING = 420
 
 
 def hits(text, modules=None):

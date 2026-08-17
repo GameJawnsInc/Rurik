@@ -1395,6 +1395,52 @@ compression-8 encoder exists. **Authorship that reaches the full animation set n
 encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
 for the owner rather than a gap in this one.
 
+### The archive write-size wall — SCOPED, and both halves of U7's closing sentence were wrong (2026-08-17)
+
+**Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
+routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A
+separate pass answered the durability question `studies/datwrite` named as decisive and left
+open for eleven days. Nothing is built — §3's ladder (A1–A8) is a **PROPOSAL until adopted**.
+
+**The wall was misframed, and correcting it shrinks the arc.** U7 recorded 15018 as "1.5 MB,
+unwritable". It never needed 1.5 MB of contiguous space: the row **already owns a 1,029,632 B
+reservation and already ships compressed at 1,029,564 B**, and the 1.5 MB is what it
+decompresses to. So the bar is not *beat ArenaNet by 7.35% to fit a 953,856 B free run* but
+*match ArenaNet within 3,732 B, in place* — and `zlib -9` already clears that. Verified
+independently (row 11196, ratio 0.679645; the shell 116228 agrees to four decimals at
+0.679015).
+
+**Two routes may skip the encoder entirely and both are free reads.** A1: is the sequence
+index space global across the FA8 link graph? If yes, adding a 16th linked file is
+transparent and nothing needs compressing. A2: does a *realistic* edit still fit the
+reservation — measured elasticity is +806 B at 0.1% of slots retimed but **+8,725 B
+(overflow) at 1.0%**, so the encoder may be unable to deliver the thing it would be built
+for. **Both were skipped by scouts who then costed multi-session builds on top of the gap.**
+
+**REFUTED: `nextStream` is not a continuation link.** 44,699 of 44,700 link targets begin
+with their own container magic. A payload cannot spill across two rows. Do not re-derive it.
+
+**Two live defects in our own tooling, both confirmed by the session lead:**
+- `datmove` flattens `compression → 0` unconditionally, so **there is no safe relocation verb
+  for a compressed row** — moving one produces a green archive holding an unreadable file
+  that passes all three checksum rules and all ten open-time rules.
+- `archive.py:322` reads the header `mftOffset` as `<I` while `datcheck.py:223` and
+  `datwrite.py:101` read `<Q`. Latent today and **it caps archive growth**: the live MFT sits
+  121,634,304 B below the u32 ceiling.
+
+**Durability is answered, and it is the reason this arc gets a safety rung before a feature
+rung.** "Repair" means **discard** — the client adopts a surviving older MFT generation and
+then deletes the entire `nextStream` chain of any row whose payload CRC mismatches,
+persisting after one launch. The genuine one-way door is quieter: a bad **12-byte header
+CRC**, or a repair that finds no valid generation, returns zero with **no log line** into
+`ArchiveCreate`, which writes a fresh empty archive over the file. Six MFT generations
+survive in the study archive (measured, counters 26,881 down to 8,735) — which is what makes
+this recoverable-in-principle rather than fatal, and why no allocator may consume the shadow
+rotation region. **Operational rule, now standing: never launch the client on a suspect
+archive; diff it first. The launch is the irreversible step, not the write.**
+
+**Next: run A1 and A2.** Both read-only, half a session each, and either can end the arc.
+
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
 **A quest we authored is offered, accepted, tracked, advanced and turned in at a real

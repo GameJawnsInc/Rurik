@@ -85,12 +85,16 @@ first thing to do.** Three findings reorder the problem:
 
 **What still blocks us, in one sentence each.**
 
-- **Durability is the decisive unknown and it is genuinely unanswered.** The
-  client relocates rows, its free-space list is not persisted (it is rederived
-  from the entry table at every open), and we do not know whether a botched write
-  is recoverable — the "Repairing corrupt archive" rescan was located but not
-  followed to completion, so we cannot say whether it can rebuild the
-  fileId→mftIndex map or whether it is a one-way door.
+- **Durability was the decisive unknown. ANSWERED 2026-08-17** in
+  [studies/archivewrite/FINDINGS.md §5](../archivewrite/FINDINGS.md), and the answer is
+  worse than this bullet's framing. The rescan **cannot** rebuild the fileId→mftIndex
+  map — it adopts a surviving older MFT generation (six exist in the study archive,
+  measured) and then **deletes the whole `nextStream` chain** of every row whose payload
+  CRC mismatches. Repair means discard, and it persists after one launch. Worse, the
+  one-way door is not the rescan at all: a bad **12-byte header CRC**, or a rescan that
+  finds no valid generation, returns zero with **no log line** into `ArchiveCreate`,
+  which writes a fresh empty archive over the file. The operational rule is *never
+  launch the client on a suspect archive; diff it first.*
 - **We have no compression-8 encoder.** This bullet also used to argue we did not
   understand the format, on the evidence that our decompressor failed on 12 of
   1,089 text files with a huffman table hole. **That evidence is withdrawn as of
@@ -450,7 +454,7 @@ zero-filled-entry-3 `022fbfab`, from-0x18 `e7b37cf0`.
 ### What the loader checks at open
 
 In order, all at `ArchiveOpen 0x47b650` and `LoadMft 0x47c160`: header magic,
-`headerSize >= 0x20`, `blockSize` power-of-two and `<= 0xFFFF`, the 12-byte header
+`headerSize >= 0x20`, `blockSize` power-of-two and `<= 0x10000`, the 12-byte header
 CRC, `mftSize % 24 == 0`, `count >= 16`, `mftOffset + mftSize <= file size`,
 descriptor signature `0x1A74664D`, `descriptor[+8] == 0`, `descriptor[+0xC] ==
 count`, entries 1/2/3 all USED, `entry[1].offset == 0 && entry[1].size == 0x20`,
@@ -459,10 +463,30 @@ blockSize-aligned and `offset+size` within the file, every `nextStream` link in
 `[16, count)` and acyclic (genuine Floyd tortoise/hare), then the fileId table
 (entry 2) with `extraBytes == 0`, `size % 8 == 0` and its own CRC.
 
-Any failure logs **"Repairing corrupt archive"** (VA 0x93f428) and triggers a full
-rescan of the 4 GB file in 1 MiB blocks. Whether that rescan can rebuild the
-fileId→mftIndex mapping is **NOT FOUND**, and it is the single most important
-open question in this study.
+**CORRECTED 2026-08-17 — and this correction is the dangerous kind, so it replaces
+the sentence rather than annotating it.** This paragraph used to read *"Any failure
+logs **"Repairing corrupt archive"** (VA 0x93f428) and triggers a full rescan"*, and
+then named the rebuild question as this study's most important open one. Both halves
+were wrong, and the first half was wrong in the direction that gets an archive
+destroyed: it teaches a reader that a silent open is a healthy open.
+
+**Not any failure.** The checks above split into two classes that behave completely
+differently. The **header gates** — under 32 bytes, MFT magic, `headerSize`,
+`blockSize`, and the 12-byte header CRC — return 0 from a six-instruction tail at
+`0x0047BE38` with **no logging call at all**, and that zero funnels into
+`ArchiveCreate`, which writes a fresh empty 16-row archive over the file. Only the
+**MFT-level** triggers reach the rescan and the log line. A *failed* rescan then
+returns zero through the same funnel, so there are two routes to total loss, not one.
+
+**And the rescan does not rebuild anything.** It hunts the file for a surviving older
+MFT generation and adopts the newest that validates; then it CRCs every payload and
+**deletes the entire `nextStream` chain** of any row that mismatches. Repair means
+discard. It persists after one launch, because the path calls Flush.
+
+Full trace, the six surviving MFT generations measured in the study archive, and the
+ten operating rules that follow from it: **[studies/archivewrite/FINDINGS.md §5](../archivewrite/FINDINGS.md)**.
+The one-line operational consequence is *never launch the client on a suspect archive;
+diff it first* — the launch is the irreversible step, not the write.
 
 MEASURED on the real file: all of these invariants hold, and 177,329 of 177,329
 non-empty USED entries are 512-byte aligned while only 1,082 have sizes that are
