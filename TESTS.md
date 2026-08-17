@@ -170,6 +170,17 @@ Every one of these, in the order they were written:
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
   fail a checksum -- the archive verified perfectly through all of them.
+  **The header-refusal section added 2026-08-17, floor 78 -> 87.** File offsets
+  `[0x00,0x10)` -- magic, `headerSize`, `blockSize` and the CRC covering them --
+  are the ONE corruption with no recovery path: the client's header gate returns
+  0 from a tail with no log call and tail-jumps to `ArchiveCreate`, which writes
+  a fresh empty archive over the whole file. This module had no caller that wrote
+  there, so the region was protected by ABSENCE, which is luck rather than
+  protection. `Writer.put` now refuses it outright, and the test REACHES FOR IT
+  at every field and at both sides of the `0x0F`/`0x10` boundary -- the pair that
+  catches a half-open interval written as containment -- each attempt on its own
+  fresh fixture, because the CONTROL is a permitted write and permitted writes
+  are still destructive.
   **Section 7 (2026-08-14) is `--restore`, the IN-PLACE GROW `datmove.plan_move`
   names and refuses** -- its own docstring ends *"write the in-place grow as its
   own verb with its own test"*, and this is that verb. It puts a row back from a
@@ -215,7 +226,27 @@ Every one of these, in the order they were written:
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
-  go red ALONE. **One of the ten was STRICTER THAN THE CLIENT and was corrected
+  go red ALONE.
+  **§§8-11 added 2026-08-17, floor 84 -> 112, and three of the four exist because
+  the ten rules above are BLIND to what they check.** §8, the MFT generation
+  census: the client's repair does not rebuild a table, it hunts the file for a
+  surviving older generation and adopts the highest flush counter, so "is a
+  botched write recoverable" is a countable fact -- one generation REFUSES, a
+  planted second one passes, and a candidate with `+0x08 != 0` fails the same
+  shape gate ScanMft applies. §9, the payload CRC sweep, whose CONTROL is the
+  section: a stale payload CRC passes ALL TEN open-time rules (10 of 10 clear)
+  and then costs the entire `nextStream` chain the moment repair fires for an
+  unrelated reason. §10, the file's own length: `snapshot` had recorded
+  `size_on_disk` since it was written and `diff` never compared it, so an archive
+  that GREW read as unchanged -- and the control asserts that appending past
+  every extent changes NO MFT row, so nothing else could have caught it. §11, the
+  header's `mftOffset` width: `archive.py` read `<I` while `datcheck` and
+  `datwrite` read `<Q`, and the outlier was the one every tool imports. Proving a
+  u64 read needs no 4 GB file -- set the high dword and require the failure to
+  name the full offset, since a `<I` reader truncates, finds the MFT where it
+  always was, and reports success. §8 is deliberately NOT a pre-flight item: it
+  reads the whole file, and pre-flight costs 1.7 s precisely because it never
+  reads a payload. **One of the ten was STRICTER THAN THE CLIENT and was corrected
   2026-08-13**: "no row >= 16 with USED clear" refused ArenaNet's own shipped
   archive -- the owner's `C:\gw\Gw.dat`, opened by the retail client every day,
   carries row 35301 that way and pre-flight answered REFUSE, 9 of 10, while
@@ -1000,7 +1031,18 @@ Every one of these, in the order they were written:
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live
   container generation is withheld whether the signature is at its head or 428
-  blocks in, and that the plan names what it withheld instead of dropping it. It
+  blocks in, and that the plan names what it withheld instead of dropping it.
+  **§9 added 2026-08-17, floor 38 -> 44: a mark is not the END of the generation
+  it names.** Every check before it rested on where a signature SITS; none asked
+  how far the table it declares REACHES. A generation whose extent runs off the
+  end of its own free run leaves the next run with no magic at any boundary, so
+  it scored usable and `best_fit` would place a payload inside a live table --
+  measured on the 38833 study copy as a 2,892,800 B run lying 100.0% inside a
+  stale generation's extent and accepted by `plan_move`. Four of §9's six checks
+  are CONTROLS (runs past the extent still usable, the run before it untouched
+  since a table is claimed forward only, the untouched fixture unchanged),
+  because a projection that swallowed everything downstream would withhold the
+  archive and protect nothing. It
   exists because "free" was measured as the gap between reservations, and by that
   measure 88.5% of `Gw.dat`'s free space is live container generations the client
   rotates through -- so the planner aimed every insert at a complete shadow MFT.
@@ -3455,6 +3497,28 @@ Every one of these, in the order they were written:
   sections 0-1 (synthetics + the resolve_outdir refusal with its positive
   controls and the mapexport delegation check) score 28 vault-less and go
   RED; with the archive but no Blender, 53, also RED),
+  `toolkit/mapdata/test_unitauthor.py` (rung A4, the ADDITIVE path: add a 16th
+  linked file to a creature's shell and one sequence record that selects it.
+  Two of the three things it must get right cannot fail a checksum, cannot fail
+  any of `datcheck`'s ten open-time rules, and would show up in the game only as
+  "some animations stopped playing". **§2, the sequence array must stay SORTED**
+  by `u32@+0x01`, because the client searches it with `std::lower_bound`
+  (`0x00792DC0`) and a `lower_bound` on an unsorted array silently returns the
+  wrong run -- so a key is inserted at the FRONT, the MIDDLE and the END of the
+  table, since a tail-append implementation passes the last of those and one key
+  would not be a test. §2b then unsorts the table by hand and requires the
+  refusal to fire, with a control first asserting that the sabotage really does
+  unsort it. **§1, the FA8 list is POSITIONAL** -- `links[sel-1]` is how every
+  existing record resolves, so the check is that the prior list is a PREFIX of
+  the new one, which a reordering breaks and a length check would not. §3
+  re-decodes the bytes that would actually ship and asserts the modified FA1
+  re-encodes byte-identically -- the writer holding on a table it did not itself
+  produce. §4 exercises the archive operation on a synthetic fixture and
+  requires the ten rules plus the CRC sweep. Floor 30, and the number that
+  justifies the whole rung is in §3: the edit costs **+29 bytes on a 29,802 B
+  shell**, not a rewrite of the 1,514,855 B link the arc was blocked on.
+  Sections 1-3 read `vault/dat_study` READ-ONLY and declare a printed skip
+  without it; §4 builds its own archive and always runs. No client, no server),
   `toolkit/mapdata/test_skelwrite.py` (the RE-IMPORT ROUND TRIP, rung U6:
   the FA1/container WRITER
   (`skelwrite.py`): decode -> extract -> encode must be BYTE-IDENTICAL, and

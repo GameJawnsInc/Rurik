@@ -78,7 +78,16 @@ import checks  # noqa: E402
 # restore through, and a donor whose compression is flattened to 0 leaves the row
 # at 0 while the PAYLOAD stays byte-identical -- the last one is why 7b checks the
 # compression field separately, since the stored bytes cannot tell the two apart.
-LEDGER = checks.Ledger("dat writer", floor=78)
+#
+# RAISED 78 -> 87 on 2026-08-17 with the header-refusal section. That region --
+# file offsets [0x00,0x10), the magic/headerSize/blockSize/CRC the client's
+# header gate reads -- had been protected by ABSENCE: no caller wrote there, so
+# nothing could go wrong, so nothing checked. It is the one corruption with no
+# recovery path (ArchiveOpen returns 0 with no log line and tail-jumps to
+# ArchiveCreate, which overwrites the whole file), so the refusal is tested by
+# REACHING FOR IT at every field and at both sides of the 0x0F/0x10 boundary,
+# each attempt on its own fresh fixture. MEASURED from a green run: 87.
+LEDGER = checks.Ledger("dat writer", floor=87)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -817,6 +826,81 @@ def section_relink(tmp):
           "a row failing its own crc refuses the relink, archive untouched")
 
 
+def section_header_refusal(tmp):
+    """The 32-byte header's first 16 bytes are the one unrecoverable region.
+
+    `Writer.put` refuses any write overlapping [0x00,0x10) -- magic, headerSize,
+    blockSize and the CRC that covers them. It is not a warning and there is no
+    override flag, because the failure mode has no recovery: the client's header
+    gate returns 0 from a tail with NO log call and tail-jumps to ArchiveCreate,
+    which writes a fresh empty archive over a 4.2 GB file.
+
+    This module never had a caller that wrote there, so before 2026-08-17 the
+    region was protected by ABSENCE. Absence is not protection -- it is luck
+    that nobody has added a caller yet -- and it is exactly the shape of hazard
+    this repo's own rule ("a rule nothing checks is a wish") is about. So the
+    refusal is tested by REACHING FOR IT, at every boundary.
+    """
+    print("\nheader refusal: the region whose corruption is unrecoverable")
+
+    # EVERY ATTEMPT GETS ITS OWN ARCHIVE. The first draft of this section shared
+    # one fixture, and the CONTROL below -- which is SUPPOSED to succeed --
+    # wrote eight zero bytes over mftOffset and left the archive unopenable for
+    # the next attempt. A permitted write is still a destructive one, and a
+    # section whose later checks depend on an earlier check's side effect is
+    # measuring the order it happens to run in.
+    counter = [0]
+
+    def attempt(offset, n):
+        counter[0] += 1
+        path, _ = fresh(tmp, f"refuse-{counter[0]}.dat")
+        before = blob(path)
+        w = datwrite.Writer(path, journal_path=os.path.join(tmp, "refuse.jrnl"))
+        try:
+            w.put(offset, b"\x00" * n, f"deliberate write at 0x{offset:X}")
+            return None, path, before
+        except SystemExit as exc:
+            return str(exc), path, before
+        finally:
+            w.close()
+
+    def refused(offset, n):
+        msg, path, before = attempt(offset, n)
+        # A refusal that still wrote is worse than no refusal, so both halves
+        # are asserted together and neither can pass on its own.
+        return msg, blob(path) == before
+
+    for off, n, label in ((0x00, 4, "the magic"),
+                          (0x04, 4, "headerSize"),
+                          (0x08, 4, "blockSize"),
+                          (0x0C, 4, "the header CRC itself"),
+                          (0x0F, 1, "the CRC's last byte"),
+                          (0x00, 32, "the whole header")):
+        msg, intact = refused(off, n)
+        check(msg is not None and "REFUSED" in msg and intact,
+              f"a write over {label} is REFUSED, and nothing was written",
+              f"0x{off:X}+{n}: "
+              f"{'refused' if msg else 'WENT THROUGH'}, "
+              f"archive {'intact' if intact else 'MODIFIED'}")
+
+    # THE BOUNDARY, both sides. A write starting at 0x10 does not overlap
+    # [0x00,0x10) and must go through; a write starting at 0x0E does overlap it
+    # and must not. This is the pair that catches a half-open interval written
+    # as containment -- the single most likely way to get this check wrong.
+    msg, path, before = attempt(0x10, 8)
+    check(msg is None and blob(path) != before,
+          "CONTROL: 0x10 (mftOffset) is OUTSIDE the region and IS written",
+          "the refusal is an interval, not a blanket ban on the first block")
+    msg, intact = refused(0x0E, 4)
+    check(msg is not None and intact,
+          "but a write straddling 0x0F/0x10 is refused -- overlap, not "
+          "containment")
+
+    msg, _path, _before = attempt(0x00, 4)
+    check("ArchiveCreate" in msg and "no log line" in msg,
+          "the refusal NAMES the failure mode, so nobody removes it as noise")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
@@ -824,6 +908,7 @@ def main():
         sections(tmp)
         section_restore(tmp)
         section_relink(tmp)
+        section_header_refusal(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

@@ -319,7 +319,17 @@ class Archive:
         self.header_size = struct.unpack_from("<I", head, 0x04)[0]
         self.block_size = struct.unpack_from("<I", head, 0x08)[0]
         self.unknown_0c = struct.unpack_from("<I", head, 0x0C)[0]
-        self.mft_offset = struct.unpack_from("<I", head, 0x10)[0]
+        # u64, NOT u32. This read was `<I` until 2026-08-17 while
+        # `datcheck.read_header` and `datwrite.mft_offset` both read `<Q` --
+        # two of three readers said u64 and the outlier was the one every tool
+        # imports. It never fired because every archive we have keeps the high
+        # dword zero, but `dat_study`'s live MFT sits at 0xF8BEFE00, only
+        # 121,634,304 B below the u32 ceiling. A truncated offset does not
+        # raise: it seeks somewhere plausible, fails the MFT magic check, and
+        # reports "no MFT" on an archive that is fine. It also silently CAPPED
+        # archive growth, which is the route studies/archivewrite scores as
+        # contested. See that study's C-7.
+        self.mft_offset = struct.unpack_from("<Q", head, 0x10)[0]
         self.mft_size = struct.unpack_from("<I", head, 0x18)[0]
 
         self.fh.seek(self.mft_offset)

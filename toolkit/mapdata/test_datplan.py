@@ -68,7 +68,17 @@ import checks  # noqa: E402
 # addresses -- row N-1 for "MFT row N", the file-id table for "MFT row 3", the
 # file header for "MFT row 2" -- and was green here the whole time, on a tool
 # whose output a human applies by hand. Same fixture, no vault, no client.
-LEDGER = checks.Ledger("dat planner", floor=38)
+#
+# RAISED 38 -> 44 on 2026-08-17 with section 9, the declared-extent projection.
+# The thirty-eight above all rest on a MARK -- the block a container signature
+# sits on -- and none of them asked how far the table that signature declares
+# actually REACHES. A generation whose extent runs off the end of its own free
+# run leaves the next run with no magic at any boundary, so it scored usable and
+# best_fit would place a payload inside a live table. Four of the six new checks
+# are CONTROLS (runs past the extent still usable, the run before it untouched,
+# the untouched fixture unchanged), because a projection that swallowed
+# everything downstream would withhold the archive and protect nothing.
+LEDGER = checks.Ledger("dat planner", floor=44)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -486,12 +496,85 @@ def sections(tmp):
               f"would then never run")
 
 
+def section_extent_projection(tmp):
+    """A generation's DECLARED EXTENT crosses run boundaries. The mark does not.
+
+    `scan_run` finds the block a signature SITS on. An MFT header then says how
+    far the table REACHES, at +0x0C. If it reaches past the end of the free run
+    it started in, the next run along is the MIDDLE of that table: no magic at
+    any of its own block boundaries, so a signature-only classifier scores it
+    usable and `best_fit` hands a writer the inside of a live generation.
+
+    studies/archivewrite/FINDINGS.md 1.5 measured exactly this on the 38833
+    study copy -- a 2,892,800-byte run lying 100.0% inside a stale generation's
+    declared extent, accepted by `plan_move`. That archive is a different build
+    pin and is not a fixture this suite may depend on, so the case is built
+    here instead, on the bare-machine fixture: it is a property of the
+    classifier, not of one copy of the game.
+    """
+    print("\n9. a declared extent is projected across run boundaries")
+    path = fresh(tmp, "projection.dat", COUNT_ERASED)
+
+    # RUN_8 is 8 blocks at block 6 and reads clean today. Plant an MFT header
+    # at its LAST block declaring a table far longer than the run it sits in,
+    # so the extent runs off the end of RUN_8 and over RUN_4A at block 40.
+    last = RUN_8 + 7
+    reach_blocks = (RUN_4A + 2) - last            # past RUN_4A's head
+    count = reach_blocks * BLOCK // ENTRY_SIZE
+    desc = bytearray(BLOCK)
+    desc[0:4] = datplan.MFT_MAGIC
+    struct.pack_into("<I", desc, datplan.MFT_HDR_COUNT, count)
+    with open(path, "r+b") as fh:
+        fh.seek(last * BLOCK)
+        fh.write(bytes(desc))
+
+    with Archive(path) as ar:
+        usable, excluded = datplan.classify_runs(ar)
+        starts = sorted(x.start_block for x in excluded)
+        usable_starts = [s for s, _n in usable]
+
+        check(RUN_8 in starts,
+              "the run CARRYING the header is withheld, as it always was",
+              f"withheld {starts}")
+        check(RUN_4A not in usable_starts,
+              "and the NEXT run is withheld too, though it carries no "
+              "signature of its own -- this is the whole fix",
+              f"usable {usable_starts}")
+
+        by_start = {x.start_block: x for x in excluded}
+        reached = by_start.get(RUN_4A)
+        check(reached is not None
+              and "no signature here" in reached.marks[0][2],
+              "and its exclusion SAYS it was reached rather than marked",
+              reached.marks[0][2][:60] if reached else "not withheld")
+
+        # The controls. A projection that swallowed everything downstream would
+        # protect nothing, so the runs BEYOND the extent must survive, and the
+        # run BEFORE it must too -- the claim is one-directional.
+        check(RUN_4B in usable_starts and RUN_1 in usable_starts,
+              "CONTROL: runs past the declared extent are still usable",
+              f"usable {usable_starts}")
+        check(RUN_2 in usable_starts,
+              "CONTROL: a run BEFORE the header is untouched -- a table is "
+              "claimed forward from its header, never backward")
+
+    # And the classifier must not have changed on the untouched fixture: the
+    # projection may only ever ADD exclusions that a real extent justifies.
+    clean = fresh(tmp, "projection-control.dat", COUNT_ERASED)
+    with Archive(clean) as ar:
+        usable, _exc = datplan.classify_runs(ar)
+        check(usable == USABLE_RUNS,
+              "CONTROL: with no crossing extent the classification is "
+              "unchanged", f"got {usable}")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datplan-")
     print(f"synthetic archive: {FILE_SIZE} B, {len(DESIGNED_RUNS)} free runs, "
           f"2 shadow containers, in {tmp}")
     try:
         sections(tmp)
+        section_extent_projection(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()
