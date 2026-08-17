@@ -3268,6 +3268,28 @@ Every one of these, in the order they were written:
   `C:\gw` and every checkout while PERMITTING the vault, and the guard is asserted on
   the SYNTAX TREE to be called exactly once from `main()` -- a guard that exists and is
   never called being the failure `test_atex.py` §3 names),
+  `toolkit/mapdata/test_tilerender.py` (PLAN A3's atlas-tile renderer -- the step from
+  "the client draws art we wrote" to "the compass draws OUR MAP". A picture is the
+  easiest thing here to be confidently wrong about, because it looks like terrain
+  either way, so the three decisions that fail silently each get a check that could go
+  the other way. THE SIGN FLIP is asserted in BOTH directions: archive heights are
+  NEGATED (greater stored = lower ground), and with the flip the rise side reads
+  brighter by +48.7 luma while `negated=False` INVERTS it to -51.1 -- a one-directional
+  check would pass on a renderer that ignored the flag entirely. PLACEMENT is derived,
+  not assumed: the atlas coordinate is `local + footprint_origin`, so map 143's 64x64
+  belongs at texel (448, 448) of tile (1, 0), and putting it at the tile's own corner
+  would be off by 448 and read as the shading being broken; a render that would straddle
+  two tiles is REFUSED rather than truncated. And THE GENERATOR IS THE ORACLE for whether
+  it is our terrain at all -- `deploy.gen_plaza` puts a 61-degree cliff at `gx == mid`,
+  and the heightfield's largest column step must land there, dominating the runner-up by
+  more than 3x (8,748 against 488). That bound is a WINDOW rather than an equality and
+  the reason is measured: a 3-tap central difference smears a step by one column either
+  side. An earlier draft asserted the heightfield stepped at "exactly one" column, read
+  off a top-4 printout; `gen_plaza` is a gradient on both sides of the plaza, so it is
+  simply false, and it went red on its own terrain. The paste is contained to 4,096 of
+  262,144 texels -- 1.56%, against A1 replacing the whole tile, which is what shrinks the
+  collateral onto the five other maps sharing it -- and the built container round-trips
+  through the ATEX reader at 10 levels with a worst channel delta of 1),
   `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
   profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
   twelfth id because `.rdata` has zero slack and seven of the profession tables are
