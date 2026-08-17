@@ -2541,6 +2541,43 @@ Third address-arithmetic slip in this arc, all the same shape: 24 read a 38797 a
 wrong one. The lesson is narrower than "be careful with addresses" -- it is that a captured
 pointer needs its FRAME justified, not just its base.
 
+### 36.7 MEASURED: the two are GmView and Compass -- and 36.5's guess was HALF WRONG
+
+The frame walk fixed (`[[ebp]+4]`), one clean census, 399 distinct registrations. Exactly two
+carry `0x1000011E`, and un-sliding by this run's `0x9A0000`:
+
+```
+SUBSCRIBER 0x0125B6BD -> 0x008BB6BD    Compass
+SUBSCRIBER 0x00E8D060 -> 0x004ED060    GmView
+inner      0x00FD3C07 -> 0x00633C07    constant, as 36.6 predicted
+```
+
+**The cross-check is exact in both directions.** The static scan found `push 0x1000011E` at
+`0x008BB6B0` with its `call` 8 bytes later, so the return address must be `0x008BB6BD` -- and
+that is what the live capture holds. Same for `0x004ED055` +6 -> `0x004ED060`. A static
+enumeration and a live frame walk, agreeing to the byte, neither derived from the other.
+`inner` stayed constant across all 399, which is the control 36.6 built in: had it varied, the
+frame reasoning was wrong and `outer` would have been worthless.
+
+**And it REFUTES 36.5.** That section reconstructed the two live subscribers as
+**GmPosseRoster + Compass**, reasoning from which UI our session visibly builds -- the roster
+renders the hero row, so surely the roster subscribes. Measured, they are **GmView + Compass**:
+the Compass half was right and **the roster half is wrong**. `GmPosseRoster` subscribes at
+`0x00539380` and that site does NOT run in our session, even though the roster window is on
+screen with a hero row in it.
+
+That is worth more than the correction. The roster **drawing** a hero and the roster
+**registering for commander events** are separate things, and only the second is what a
+commander binding needs. It also sharpens 33.5: the missing subscription is not "some UI we do
+not build" in the abstract -- it is specifically `GmPosseRoster`'s, from a window that is
+demonstrably present. Why that window's registration does not run is the next question, and it
+is a fresh one.
+
+**Method note, because this is the third time it has paid.** 36.5 was labelled RECONSTRUCTION
+rather than measured, and the label is the only reason the refutation is a correction to a
+guess instead of a retraction of a finding. The same discipline caught 28's subscriber map and
+35's premature CONFIRMED.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.

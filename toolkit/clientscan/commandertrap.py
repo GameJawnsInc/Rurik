@@ -719,9 +719,20 @@ def _cap_subscribe(ctx, reader):
     the caller's return address -- so a census here names both the event and the
     code that subscribed to it. 34 could read whether a subscriber EXISTS; this
     reads where it came from."""
-    ret = _dw(reader, ctx.Ebp + 4, 1)
+    # TWO FRAMES, and the second is the one that answers the question. 36.6:
+    # capturing only `[ebp+4]` returned the SAME value for every event --
+    # 0x00633C07, inside the subscribe WRAPPER 0x00633BD0 -- because the
+    # trapped function is the wrapper's callee, so its return address is the
+    # wrapper by construction and identifies nothing. The subscriber is one
+    # frame further up: `[[ebp]+4]`. Both are reported so the inner value stays
+    # visible as its own control: if `inner` ever varies, this reasoning about
+    # the frame layout is wrong and `outer` cannot be trusted either.
+    inner = _dw(reader, ctx.Ebp + 4, 1)
+    saved = _dw(reader, ctx.Ebp, 1)
+    outer = _dw(reader, saved[0] + 4, 1) if saved and saved[0] else None
     return {"event(esi)": ctx.Esi,
-            "caller(retaddr)": ret[0] if ret else None}
+            "inner(wrapper)": inner[0] if inner else None,
+            "SUBSCRIBER(outer)": outer[0] if outer else None}
 
 
 def _cap_lookup(ctx, reader):
