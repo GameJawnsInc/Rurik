@@ -152,6 +152,26 @@ def prompts_operator(a):
     return is_labelling(a) or is_probing(a)
 
 
+def hold_implies_keep_open(a):
+    """--hold N means hold for N seconds, with or without --keep-open.
+
+    run_client() gates the hold on a.keep_open ALONE, so `--hold 60` on its
+    own used to be silently inert: the session tore down at the verdict, and
+    the healthy client's orderly exit -- game 0x0008, auth 0x0009, status
+    Offline, then the RST -- reads exactly like a client-side death.
+    OBSERVED 2026-08-16: fourteen launches misdiagnosed that way before the
+    missing flag was noticed (studies/isle/FINDINGS.md "Rung 4").
+
+    --hold has no meaning other than bounding the hold, so it implies the
+    hold rather than being refused -- the same resolution the tape chain
+    made, which sets a.keep_open itself for the same reason. Mutates and
+    returns the namespace, like that path does.
+    """
+    if a.hold and not a.keep_open:
+        a.keep_open = True
+    return a
+
+
 def resolve_enemy(game_args, enemy=False):
     """Decide whether the gamesrv spawns the standing hostile. Default: NO.
 
@@ -1397,10 +1417,11 @@ def main():
                          "reaching for a screenshot key means letting go of the "
                          "input that produces them.")
     ap.add_argument("--hold", type=float, default=0.0, metavar="SECONDS",
-                    help="With --keep-open, stop holding after SECONDS instead "
-                         "of waiting for the client to exit. What a probe needs "
-                         "is its own step delays plus slack; --list-probes "
-                         "prints them.")
+                    help="Hold the session up for SECONDS after the verdict, "
+                         "then tear down. Implies --keep-open, whose hold this "
+                         "bounds -- alone, --keep-open holds until the client "
+                         "exits. What a probe needs is its own step delays "
+                         "plus slack; --list-probes prints them.")
     ap.add_argument("--tape-chain", metavar="CAPTURE_DIR", default=None,
                     help="R1.5 chaining (PLAN §8.0 item 0b): play a whole recorded "
                          "session, hop by hop. Discovers the chain from the capture "
@@ -1441,6 +1462,7 @@ def main():
                          "the top-right corner. Flags that decide where the "
                          "client points are REFUSED.")
     a = ap.parse_args()
+    hold_implies_keep_open(a)
 
     if not dc.is_loopback(a.auth_host):
         raise SystemExit(f"--auth-host {a.auth_host!r} is not a 127/8 loopback "

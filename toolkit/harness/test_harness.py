@@ -56,7 +56,13 @@ import checks  # noqa: E402
 # floor above what a healthy run produces reddens the run and says nothing.
 # Note this test cannot run vault-LESS at all -- pinned.find() refuses first --
 # so unlike test_origin.py there is no empty-vault figure to measure against.
-LEDGER = checks.Ledger("harness", floor=108)
+# 2026-08-17: 108 -> 136, MEASURED 138 from a green run. The floor had sat at
+# 108 through five commits that added checks (--probe echo, the roster, the
+# skills-panel burst, client pre-flight scoping, interact:) plus this one's
+# --hold section (+4): 26 checks could have vanished behind a passing floor,
+# which is exactly the drift this ledger exists to catch. Still two below the
+# measure, for the same two vault-dependent skips as before.
+LEDGER = checks.Ledger("harness", floor=136)
 check = checks.adopt_named(LEDGER)
 
 
@@ -730,6 +736,31 @@ if __name__ == "__main__":
               "main() routes the echo and run_client() silences the hold's "
               "progress line; a revert to is_labelling in either restores the "
               "silent terminal for --probe runs")
+
+    # ---- --hold N without --keep-open must hold, never silently skip ------------
+    # run_client() gates the hold on a.keep_open alone, so `--hold 60` on its
+    # own used to be inert: teardown at the verdict, and the healthy client's
+    # orderly exit (game 0x0008, auth 0x0009, Offline, RST) reads exactly like
+    # a client-side death. OBSERVED 2026-08-16: fourteen launches misdiagnosed
+    # before the missing flag was noticed (studies/isle/FINDINGS.md "Rung 4").
+    print("\n- --hold implies --keep-open (2026-08-16)")
+    LEDGER.ok(_sess.hold_implies_keep_open(
+                  _argparse.Namespace(hold=60.0, keep_open=False)).keep_open,
+              "--hold 60 without --keep-open holds anyway",
+              "an inert --hold closes a healthy client at the verdict, and its "
+              "orderly exit telemetry is indistinguishable from a crash")
+    LEDGER.ok(not _sess.hold_implies_keep_open(
+                  _argparse.Namespace(hold=0.0, keep_open=False)).keep_open,
+              "no --hold, no --keep-open: the ordinary run still tears down "
+              "at the verdict")
+    LEDGER.ok(_sess.hold_implies_keep_open(
+                  _argparse.Namespace(hold=0.0, keep_open=True)).keep_open,
+              "--keep-open alone is untouched -- it holds until the client "
+              "exits")
+    LEDGER.ok("hold_implies_keep_open" in _names(_fns["main"]),
+              "and main() actually calls it (syntax tree)",
+              "the 2026-08-12 crash-dialog gap was a correct function with a "
+              "call site missing; this is the same trap")
 
     # ---- a chained tape run must outlive its own verdict ------------------------
     print("\n- the tape chain (R1.5 0b)")

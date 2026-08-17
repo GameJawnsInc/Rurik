@@ -956,6 +956,8 @@ survives past ~30 s.
 > and was still an artifact of the instrument. With `--keep-open` passed, every probe
 > ran to completion — see FINDINGS "Rung 4". The 38797-defaults pre-spawn failure
 > remains real and is the archive-family issue `studies/character/RUNS.md` documents.
+> The harness defect itself is FIXED on main as of 2026-08-17 (`34091f5`): `--hold`
+> implies `--keep-open`, and `test_harness.py` pins the interaction.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
 17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
