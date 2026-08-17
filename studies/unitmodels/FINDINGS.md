@@ -53,7 +53,11 @@ no FA0 chunk — 14,571/14,571, two independent places in the archive**
 (MEASURED). And that same bit is what the wire shows: every 0x0056-only
 definition's file has its own FA0 (**8/8**), every definition that also got a
 0x0057 has a file lacking FA0 (**36/36**), and every 0x0057 model id resolves
-to a file carrying FA0 (**43/43**) — measured on live capture 20260807T143055
+to a file carrying FA0 (**43/43** — *population corrected by U4, 2026-08-16:
+the noun here was wrong; 43 is the PER-DEFINITION pooled count over all
+three captures, not distinct model ids, of which 143055 has 33 (33/33) and
+the pool 40 (40/40) — [../unitassembly/FINDINGS.md](../unitassembly/FINDINGS.md)
+§4 pins every granularity*) — measured on live capture 20260807T143055
 (OBSERVED + MEASURED, two agents, neither knowing the other's result).
 COMPOSITED means "my geometry comes from elsewhere", and 0x0057 is where.
 
@@ -736,7 +740,9 @@ connections, via `tape.decode_all` + the schema codec — the same pipeline
 - **The archive rule** (MEASURED, 56/56 ids resolving via
   `file_id_table(raw=True)`, all ffna type-2): every 0x0056-only definition's
   file **has** FA0 (8/8); every definition with a 0x0057 has a file **lacking**
-  FA0 (36/36); every 0x0057 model id **has** FA0 (43/43). No exceptions. This
+  FA0 (36/36); every 0x0057 body **has** FA0 (43/43 — the per-definition
+  pooled count; U4 corrected this row's noun and pinned the distinct-id
+  populations, 33/33 and 40/40). No exceptions. This
   refines `studies/smsg`'s open "what do the composite dwords encode" —
   MEASURED here: they are archive file ids of geometry-bearing files, not
   abstract piece selectors.
