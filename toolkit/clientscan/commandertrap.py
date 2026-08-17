@@ -713,6 +713,20 @@ def _cap_filter(ctx, reader):
                         "REJECTS -- jne 0x4e62f4, the handler returns")}
 
 
+def _cap_gate(ctx, reader):
+    """THE GATE on GmPosseRoster's existence. `0x00815E90` resolves the root
+    context, takes `ctx[0x2c]` (the same character context 14 read `+0x6BC`
+    from) and loads `[+0x67C]` into esi; zero returns 0 and the caller at
+    `0x00578BFE` skips installing the posse-roster handler entirely. No handler
+    means no `message 9`, no subscribe block, and therefore no roster
+    subscriber for 0x1000011E -- which is exactly what 36.7 measured."""
+    return {"field ctx[0x2c]+0x67C (esi)": ctx.Esi,
+            "bound-holder (edi)": ctx.Edi,
+            "VERDICT": ("ZERO -- gate FAILS, GmPosseRoster is never installed"
+                        if ctx.Esi == 0 else
+                        "non-zero -- gate passes, the roster handler installs")}
+
+
 def _cap_subscribe(ctx, reader):
     """WHO registers WHAT. `esi` holds the event id (it is stored to the scratch
     slot at `0x0064CDA0` and passed to the lookup by address), and `[ebp+4]` is
@@ -800,6 +814,13 @@ SITES = {
         "hash -- the client does the lookup and we read its result.",
         capture=lambda ctx, rd: _cap_lookup(ctx, rd),
         arm_after="raise", oneshot=True),
+    "posseGate": Site(
+        "posseGate", 0x00815EA0, bytes.fromhex("85f67505"),
+        "`test esi,esi` inside 0x00815E90, where esi IS ctx[0x2c]+0x67C. This is "
+        "the guard at 0x00578BFE that decides whether GmPosseRoster's message "
+        "handler is installed at all -- and 36.7 measured that the roster never "
+        "subscribes to the commander event despite its window being on screen.",
+        capture=lambda ctx, rd: _cap_gate(ctx, rd)),
     "subscribe": Site(
         # ANCHORED ON THE `call`, NOT THE `mov` FIVE BYTES EARLIER, and the
         # reason is a defect this guard caught in itself. `0x0064CDA4` is

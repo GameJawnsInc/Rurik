@@ -2578,6 +2578,55 @@ rather than measured, and the label is the only reason the refutation is a corre
 guess instead of a retraction of a finding. The same discipline caught 28's subscriber map and
 35's premature CONFIRMED.
 
+### 36.8 Chasing GmPosseRoster's absence: the chain read, the gate REFUTED
+
+36.7 left one question: why does `GmPosseRoster` not subscribe when its window is on screen?
+Read statically, the chain is:
+
+- `0x005392A0` is GmPosseRoster's message handler -- a switch on `[esi+4]`, confirmed by its
+  own asserts (`sm_instanceCount`, `sm_staticSelectedAgentId`, `GmPosseRoster:115/124/137`).
+- Its jump table (base 9, `0x00539794`/`0x0053977C`) routes **message `0x09`** to `0x005392D8`,
+  which falls through to the subscribe block -- and that block registers **four** events
+  together: `0x10000114` (the bulk scan), **`0x1000011E`**, `0x1000011F`, `0x100001C5`.
+  So message 9 is instance-create, and it is the only path to the roster's subscription.
+- The handler is installed from exactly three sites (`push 0x539980`): `0x0050145C`
+  (**GmDeckBuilder**), `0x00578C0C` (**UiCtlInstance/PvpItemList**, next door to §11's
+  `PtHero:156`), and `0x008E3264` (**UiCtlInstance**).
+- `0x00578C0C` sits behind a guard: `call 0x00815E90; test eax,eax; je <skip>`. That function
+  resolves the root context, takes `ctx[0x2c]` -- the same character context §14 read `+0x6BC`
+  from -- and returns 0 when **`[ctx[0x2c]+0x67C]` is zero**. Its only two real writers are at
+  `0x005E42CF` and `0x0081B8FC`, the latter in **ChCliBase** (asserts 480-515,
+  `playerTeamToken` / `AgentGetTeamToken`).
+
+**Hypothesis: the field is zero on our synthetic character, so the install is skipped.**
+Prediction stated before the run: `posseGate` fires with `esi == 0`.
+
+**REFUTED.** Trapped at `0x00815EA0`, where `esi` IS that field: four hits, **non-zero every
+time** -- `gate passes, the roster handler installs`. The field is populated on our character.
+
+### 36.9 What that leaves, stated precisely
+
+The measurement kills the hypothesis and does **not** answer the question, and the difference
+matters. What it establishes is only that `[ctx[0x2c]+0x67C]` is non-zero. It does **not**
+establish that `0x00578BF0` (the guarded install site) ever ran -- `0x00815E90` has other
+callers and the trap cannot tell which one produced a given hit without a frame walk, the same
+distinction §36.6 already paid for once.
+
+So three possibilities survive, and separating them is the next arc's work, not a quick run:
+
+1. the install site runs, the handler is installed, and **message 9 is never delivered** to it;
+2. a **different** one of the three install sites is the roster's real path, and it is gated
+   elsewhere;
+3. the handler is installed and message 9 delivered, but the subscribe block is reached by a
+   route the census would have seen -- which §36.7 rules out, so this is the weakest.
+
+**Standing regardless:** `GmPosseRoster` does not subscribe to `0x1000011E` in our session
+(§36.7, measured), the commander event's only live subscribers are GmView and Compass, and
+`0x01C2` cannot bind a commander from the server. Four hypotheses have now been refuted on
+this question (`inventoryId`, `msg+0x10`, the party-cache gate, and this one), which is the
+arc's established pattern: the static reading is sound and the guess about *which* branch is
+cold has been wrong every time.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.
