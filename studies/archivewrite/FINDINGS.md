@@ -839,6 +839,52 @@ Specifically untested: that the client reads a 16th FA8 record at all; that it a
 stored `flags=515` row is acceptable at 29,802 B, so this is a 29-byte extrapolation of a
 result we already have rather than a new question.
 
+### 9.3b STAGED AND DEPLOYED 2026-08-17 — every machine-readable gate is green
+
+The edit is in the pinned 38797 run archive
+(`vault/run/2026-07-29_221c13772c7a/Gw.dat`), built by
+`vault/research/archivewrite/a4stage.py` from `Gw.dat.retail`, which is preserved.
+**Nothing was launched.**
+
+```
+shell 116228 row 13738: 29,802 -> 29,831 B (+29)
+donor 222949 (11,878 B) duplicated as new file id 389632, registered
+links 15 -> 16, sequences 242 -> 243 at index 1
+key 805313525: 1 variant -> 2   (a 1-in-2 pick per play)
+
+preflight   10 of 10 clear
+generations 6 of 6 pass the shape gate
+crc sweep   177,320 payload CRCs, 0 bad, 2 structural skipped by name
+size        4,198,489,600 B (unchanged), 177,335 rows
+```
+
+**The diff is exactly two rows out of 177,335** — row 13738 relocated
+`0x1A40CA00 → 0xA314A00` with compression 8 → 0, and row 35301 recycled from a
+zero-size spare to the new file. Read back from the archive through the decoders:
+16 links, 243 sequences, one record at selector 16, the array still **sorted**,
+and the 1 MB link 15018 **byte-identical to retail**.
+
+Two choices worth recording because they are not obvious:
+
+- **The new file is a DUPLICATE of the shell's smallest existing link, not
+  authored motion.** This rung asks whether the client accepts a 16th link and a
+  243-record table; authored curves would confound it, because "nothing moved"
+  could then mean *the client ignored our link* or *our curves were wrong*. Every
+  byte in the new row is something the client already reads today, so a failure
+  is unambiguously about the **addition**.
+- **Flags are copied verbatim (`0x0203`), never synthesised**, per
+  `studies/datwrite`'s measured conclusion that the high byte is unexplained by
+  ArenaNet's own asserts and read differently by two upstreams. `extra_bytes` is
+  0 because that field *is* the compression code under another name, and we write
+  the donor's decompressed bytes — the same stored `flags=515` shape U7 already
+  put on screen.
+
+One coincidence flagged rather than left to surprise someone: **row 35301 is the
+same row `studies/datwrite` observed the CLIENT filling** during a caged session.
+It is no longer a spare — it is USED and named in the file-id table — so the
+allocator's LIFO spare stack cannot hand it out again. Not a conflict, but the
+next diff of that archive will show a row that document already discusses.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
