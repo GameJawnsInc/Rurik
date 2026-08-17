@@ -42,6 +42,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
+import buildid               # noqa: E402
 import consttable            # noqa: E402
 import pinned                # noqa: E402
 
@@ -108,12 +109,26 @@ def check(rows_):
 
 
 def toml(pe, table, rows_, exe_path):
-    """`vault/content/heroes.toml`, provenance per row, ids only."""
+    """`vault/content/heroes.toml`, provenance per row, ids only.
+
+    The build is MEASURED from `exe_path` and an image that will not name its
+    build is REFUSED. It was `pinned.BUILD` until 2026-08-17 -- see
+    `consttable.effect_toml`, which had the identical defect for the identical
+    reason, and `pinned.identify_build` for the other two.
+    """
+    build, how = buildid.of_image(exe_path)
+    if build is None:
+        raise pinned.WrongBuild(
+            f"REFUSING to emit hero rows read from {exe_path}\n"
+            f"  {how}\n"
+            f"  The row must record the build it was derived on (condition 2);\n"
+            f"  writing {pinned.BUILD} on an unidentified image is the misreport\n"
+            f"  that condition exists to prevent.")
     head = [
-        "# s_heroClientData, read out of the pinned client's own static table.",
+        "# s_heroClientData, read out of the client's own static table.",
         "#",
         f"#   client   {exe_path}",
-        f"#   build    {pinned.BUILD}",
+        f"#   build    {build}  ({how})",
         f"#   table    file 0x{table.base:06X} .. 0x{table.end:06X}, "
         f"{table.count} x {table.stride} B",
         f"#   anchor   file 0x{table.anchor_off:06X}, ConstHero.cpp",
@@ -129,7 +144,7 @@ def toml(pe, table, rows_, exe_path):
     ]
     prov = ('{ source = "client-table", '
             'extractor = "toolkit/clientscan/heroes_table.py", '
-            f'build = {pinned.BUILD}, '
+            f'build = {build}, '
             f'note = "%s[%d]; table at file 0x{table.base:06X}, stride '
             f'{table.stride}, {table.count} records, located by the anchor '
             f'\\"ConstHero.cpp\\" at file 0x{table.anchor_off:06X}" }}')
@@ -177,7 +192,10 @@ def main(argv=None):
     print()
     print(f"{SYMBOL}: {table.count} x {table.stride} B at file "
           f"0x{table.base:06X}, anchor 0x{table.anchor_off:06X} (ConstHero.cpp)")
-    print(f"  build {pinned.BUILD}   {table.refs} reference(s) to the base")
+    _b, _how = buildid.of_image(exe)
+    print(f"  build {_b if _b is not None else 'UNKNOWN'}   {table.refs} "
+          f"reference(s) to the base")
+    print(f"        ({_how})")
     print(f"  closure: base + {table.count}*{table.stride} == "
           f"0x{table.base + table.count * table.stride:06X}")
     for c in complaints:

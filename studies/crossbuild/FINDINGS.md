@@ -1229,6 +1229,110 @@ reverts, and it caught me inside an hour.
 
 ---
 
+## 9. Four tools reported the PIN for whatever image they were handed — OBSERVED 2026-08-17
+
+§7 is about tools that **refused** the new build. This is the other failure mode,
+and it is the quieter one: four tools that read build 38833 without complaint and
+then **labelled the result 38797**.
+
+### 9.1 The observation
+
+`framebus.py --exe vault/client/2026-08-13_64fae3b1369b/Gw.exe` printed:
+
+```
+     10483904 bytes, the pinned build 38797
+```
+
+The label came from `len(blob) == pinned.SIZE`. **38833 ships at exactly 38797's
+length — 10,483,904 bytes — so a size check cannot separate them.** `pinned.py`'s
+own `BUILDS` comment had recorded that consequence two days earlier, in the commit
+that registered 38833:
+
+> *"38833 is the FIRST build where size is not a discriminator … a size check
+> written anywhere else is now a bug."*
+
+It was written as a caution and never turned into anything that could go red, which
+is `CLAUDE.md`'s "a rule nothing checks is a wish" from the other direction: the
+rule was checked *at the place that wrote it down* and nowhere else.
+
+### 9.2 It was not cosmetic
+
+Addresses drift between these two builds by **0x20..0x160 per region** (§7.2). So
+that header sat above a table of 38797's offsets applied to another build's bytes —
+the output was not a reading of the client named in the header. `studies/pvpui/FINDINGS.md`
+§4/§15.0 records two wrong-build readings in a single session that each produced a
+confident wrong answer, one nearly published as a correction. **A tool that
+misreports which image it read is that same failure with a friendlier face**, and it
+is worse in one respect: the wrong-build readings in pvpui were caught by a human
+noticing, and there is nothing to notice here.
+
+### 9.3 Three more, and all three land in COMMITTED rows
+
+The console label was copied, so the defect was:
+
+| tool | what it emitted |
+|---|---|
+| `worldmap.image_build` | `build: 38797` beside `image: "pristine: build 38833, as ArenaNet shipped it"` — contradicting itself inside one row, on every row |
+| `consttable.effect_toml` | `build = 38797` on all 2,077 `s_effect` rows |
+| `heroes_table.toml` | the same, on all 40 hero rows |
+
+These are worse than the console case. Condition 2 of the owner's 2026-08-11 ruling
+requires the row to record the build **so the row can be re-derived or refuted** —
+and re-deriving one of these against the build it named would have read a
+*different table*. `worldmap.image_build` is the one to read, because its docstring
+says in full sentences exactly what it was doing wrong:
+
+> *"(build, image) for the binary actually read. Never a constant. … Stamping 38797
+> on rows read out of an unidentified image is a provenance MISREPORT."*
+
+…above `build = pinned.BUILD if kind in ("pristine", "patched") else None`.
+
+### 9.4 One root cause, and it is a return type
+
+All four reached for `pinned.BUILD` for the same reason: **`pinned.identify()`
+returned the CATEGORY and threw away the row it had matched.** A caller got back
+the string `"pristine"` — which names a *kind of file*, not a build — so a tool that
+had just identified an image correctly still had nowhere to obtain its number, and
+the constant was the only thing to hand. The defect was in the shape of the answer,
+not in four independent lapses of care.
+
+Fixed at that level: `pinned.identify_build()` returns the matched `Build`, and
+`buildid.of_image()` is now the single call for a build a tool prints or emits —
+registry sha256 first, the client's **own build getter** (§7-era `buildid.read`) as
+the fallback. That fallback is load-bearing rather than decorative: our patched
+38833 copy is a real client with `patched=None` in the registry, so `identify()`
+calls it `unknown` and only reading the binary answers at all. It was previously
+stamped 38797 out of nothing.
+
+### 9.5 Why every existing guard was green
+
+This is the part worth carrying. Four tools were wrong and five test sections
+covered them, all passing — each for a reason unrelated to correctness:
+
+| guard | why it passed |
+|---|---|
+| `test_worldmap.py` §7 control | it emitted from a path naming **no file**. A control for "unidentifiable" is not a control for "identified, and not the one you assumed" |
+| `test_consttable.py` §8 | the fixture passed the literal string `"TEST"` as the path it had read — and the constant did not care what it was handed |
+| `test_heroes_table.py` §4 | it ran all 40 rows through `content.py`'s **real** gate, which asks that a build be PRESENT, not that it be TRUE |
+| `test_framebus.py` §2 | it gated on `img.pinned`, the same size check, so it could not distinguish "not the pinned build" from "the pinned build" either |
+| the whole directory | every check ran against the pin, **where the constant is correct** |
+
+That last row is the general lesson and it is not specific to builds: **a constant
+that happens to equal the value under test cannot be caught by a test that only ever
+uses that value.** Every new check added here emits or reads from a SECOND real
+client and requires the answer to move; `test_framebus.py` §3 additionally carries a
+negative control, because a label reading `38833 (the pinned build 38797)` satisfies
+a check for "38833" and is still the bug.
+
+### 9.6 Verified refutable
+
+The framebus guard was run against the restored original line: **2 FAILs**, with the
+positive control on the default run still green. Per `CLAUDE.md`'s "a check that
+cannot fail is not a check", and because three of the five guards above were written
+in good faith and could not.
+
+---
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.
@@ -1279,6 +1383,12 @@ reverts, and it caught me inside an hour.
 | `test_handshake.py` drove a 38833 client while announcing build 38797 | **OBSERVED**, §7.7 — latent from the moment the second build was patched, surfaced by the new guard |
 | ~296 files counted as research corpus were self-test artifacts | **MEASURED** — §7.4d, census 1,828 → 1,532 once `selftest/` is excluded. Deliverable 7's "1,122 files" figure was over a tree that included them |
 | The research corpus is now genuinely two-build, and the pooling refusal alone could not resolve it | **OBSERVED** — §7.8, 1,534 at 38797 against 18 at 38833 plus 953 unstamped. The refusal was correct and unactionable; the figures now FOLLOW THE PIN via `origin.select_build`, unstamped files kept, exclusions printed |
+| `framebus.py` reported "the pinned build 38797" while reading the 38833 client | **OBSERVED** 2026-08-17, §9.1 — reproduced from the command line; the label was `len(blob) == pinned.SIZE` and the two builds are the same length |
+| Three more tools stamped 38797 onto rows extracted from other builds | **OBSERVED**, §9.3 — `worldmap.py`, `consttable.py`, `heroes_table.py`, verified by emitting from the 38833 client before the fix |
+| The cause was `pinned.identify()` returning the CATEGORY and discarding the matched row | **OBSERVED**, §9.4 — one return type, four call sites; `identify_build()` and `buildid.of_image()` replace it |
+| Five existing test sections covered these four tools and all were green | **OBSERVED**, §9.5 — each passing for a reason unrelated to correctness, the shared one being that every check ran against the pin, where the constant is right |
+| A constant equal to the value under test is invisible to a test that only uses that value | **RECONSTRUCTION** — §9.5's generalisation from n=5 guards in one directory. Stated as the lesson, not measured as a law |
+| The new guards can go red | **MEASURED**, §9.6 — the original framebus line restored, 2 FAILs, positive control still green |
 | A pin the corpus does not hold passes the one-build census vacuously | **MEASURED** — §7.8, control at 99999: 0 files, first predicate green, second red. Why the census needs both halves |
 | `test_atexlevel.py` §7 silently switched to validating 38833 when the vault gained a third build | **OBSERVED** — §7.9, a fourth `sorted()[-1]` written as a break-less loop. Stayed green because 38833 did not move those tables; 38519 does, so they ARE build-coupled |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |

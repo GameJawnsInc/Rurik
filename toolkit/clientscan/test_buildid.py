@@ -28,12 +28,22 @@ WHAT THIS PINS, and §3 is the one that makes the rest worth trusting.
   * §4: `pinned.BUILDS` must MATCH a fresh read. The registry's numbers are
     supposed to be derived, and a hand-edit that drifts from the binary is
     exactly what this arc is about.
+  * §5: `of_image` -- the shared answer to "which build is THIS file" -- must
+    never be able to reply with a constant. Added 2026-08-17 for a defect with
+    four instances and one shape: a tool identified a file correctly and then
+    labelled it 38797 anyway, because `identify()` returned the category
+    ("pristine") and not the row, so the number had to come from somewhere and
+    `pinned.BUILD` was the only thing to hand. `framebus.py` printed it over
+    the 38833 client; `worldmap.py`, `consttable.py` and `heroes_table.py`
+    stamped it onto extracted content rows, where condition 2 of the owner's
+    ruling says the build is what makes a row re-derivable. The checks are
+    written to fail against that code, not merely to pass against this one.
 
 WHAT IT DOES NOT ESTABLISH. That the range 30000..99999 is right in general --
 it is an assumption, stated in `buildid.py`'s docstring as its weakest link, and
-§3 is the only thing testing it from outside. n=2 builds.
+§3 is the only thing testing it from outside. n=3 builds.
 
-Needs the vault. Floor 23, ~6 s.
+Needs the vault. Floor 39, ~8 s.
 """
 import json
 import os
@@ -51,7 +61,12 @@ from gwpe import PE                                          # noqa: E402
 
 # floor re-measured 2026-08-14 from a real green run: 23 -> 29, the third
 # vaulted build (38833) adding 6.
-LEDGER = checks.Ledger("client build id", floor=29)
+# re-measured 2026-08-17 from a real green run: 29 -> 39. §5 adds 12 with the
+# whole vault present, and the floor is 39 rather than 41 because TWO of them
+# need `vault/run/2026-08-13_64fae3b1369b/Gw.exe` -- our patched 38833 copy,
+# which is optional in a way the pristine snapshots are not. That pair declares
+# a skip; the floor stays at the mandatory core, per checks.py's own advice.
+LEDGER = checks.Ledger("client build id", floor=39)
 check = checks.adopt(LEDGER)
 
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -199,5 +214,65 @@ for b in pinned.BUILDS:
 
 check(all(b.number for b in pinned.BUILDS) or not EXES,
       "and no registered build is left without one")
+
+
+print("\n5. of_image answers about the FILE, and cannot answer with a constant")
+
+# THE REGRESSION THIS SECTION EXISTS FOR, found 2026-08-17. Four tools took a
+# build number from `pinned.BUILD` after merely CHECKING that the file was some
+# recorded build: `framebus.py` printed "the pinned build 38797" over the 38833
+# client, and `worldmap.py`, `consttable.py` and `heroes_table.py` stamped 38797
+# onto rows extracted from it. Every check below is written to go red against
+# that code -- an implementation that returns the pin fails the `!= pinned.BUILD`
+# checks, and one that returns None for anything unrecognised fails the getter
+# fallback. `pinned.identify_build`'s docstring has the whole history.
+
+for b in pinned.BUILDS:
+    if b.stamp not in EXES:
+        continue
+    kind, row, _detail = pinned.identify_build(EXES[b.stamp])
+    check(kind == "pristine" and row is b,
+          f"{b.stamp}: identify_build hands back the ROW it matched",
+          f"{kind}, {row} -- returning only the string 'pristine' is what left "
+          f"four callers with no way to name the build they had just identified")
+
+    number, why = BI.of_image(EXES[b.stamp])
+    check(number == b.number,
+          f"{b.stamp}: of_image reads {b.number} from the file itself",
+          f"{number} -- {why}")
+    if b.number != pinned.BUILD:
+        check(number != pinned.BUILD,
+              f"{b.stamp}: and does NOT answer {pinned.BUILD} for it",
+              f"{number} -- this is the check the old code fails: it identified "
+              f"this file correctly and then reported the constant")
+
+# THE FALLBACK, and it is the case the registry cannot serve: our PATCHED 38833
+# copy is a real client that `BUILDS` has no hash for (`patched=None`), so
+# `identify()` says "unknown" and only reading the client's own getter answers
+# at all. A tool stamping the pin here is the worst version of the defect --
+# the file is neither the pin nor recorded, and 38797 is pure invention.
+_patched_38833 = os.path.join(vaultpath.vault_root(), "run",
+                              "2026-08-13_64fae3b1369b", "Gw.exe")
+if os.path.isfile(_patched_38833):
+    kind, row, _d = pinned.identify_build(_patched_38833)
+    number, why = BI.of_image(_patched_38833)
+    check(kind == "unknown" and row is None,
+          "our patched 38833 copy is in no registry row",
+          f"{kind}/{row} -- `patched` is None for that build")
+    check(number == 38833,
+          "and of_image still reads 38833, from the image's own build getter",
+          f"{number} -- {why}")
+else:
+    LEDGER.skip("the unregistered-image fallback",
+                f"{_patched_38833} is not here")
+
+# Two ways to have no answer. Both must be None rather than the pin: `worldmap`
+# emits `build: None` on such a row on purpose, so a reader can act on it.
+check(BI.of_image(os.path.join(HERE, "no_such_client.exe")) == (None,
+      f"no such file: {os.path.join(HERE, 'no_such_client.exe')}"),
+      "a missing file is (None, why), not the pin")
+check(BI.of_image(os.path.join(HERE, "buildid.py"))[0] is None,
+      "and so is a file that is not a PE at all",
+      "None is a usable answer; 38797 is not")
 
 sys.exit(LEDGER.verdict())

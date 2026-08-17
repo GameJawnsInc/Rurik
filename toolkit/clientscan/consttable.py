@@ -135,6 +135,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gwpe import PE                                              # noqa: E402
+import buildid                                                   # noqa: E402
 import pinned                                                    # noqa: E402
 
 find_exe = pinned.find
@@ -718,18 +719,36 @@ def effect_toml(pe: PE, table: Table, exe_path: str) -> str:
     "commit the id, resolve at run time" pattern `mapbuild.py` uses for name
     strings, and it is what keeps ArenaNet's model data out of a file that
     will be merged into a running server.
+
+    THE BUILD IS MEASURED FROM `exe_path`, never `pinned.BUILD`. It was the
+    constant until 2026-08-17: `--exe` takes any file, so every row emitted
+    from any other client claimed 38797 -- and a build stamped wrong on an
+    extracted row is worse than a wrong label on a console, because the row is
+    what gets committed and condition 2 of the owner's 2026-08-11 ruling exists
+    so the row can be RE-DERIVED. Re-deriving it against the build it names
+    would have found a different table. `WrongBuild` on an unidentifiable image
+    rather than a row that says 38797 and cannot be checked.
     """
+    build, how = buildid.of_image(exe_path)
+    if build is None:
+        raise pinned.WrongBuild(
+            f"REFUSING to emit s_effect rows read from {exe_path}\n"
+            f"  {how}\n"
+            f"  Condition 2 of the provenance ruling is that the row records the\n"
+            f"  BUILD, so that it can be re-derived or refuted. This image will\n"
+            f"  not say which build it is, and the one thing this must not do is\n"
+            f"  write {pinned.BUILD} because that is the usual answer.")
     prov = ('{ source = "client-table", '
             'extractor = "toolkit/clientscan/consttable.py", '
-            f'build = {pinned.BUILD}, '
+            f'build = {build}, '
             f'note = "s_effect[%d]; table at file 0x{table.base:06X}, stride '
             f'{table.stride}, {table.count} records, located by the anchor '
             f'\\"ConstEffect.cpp\\" at file 0x{table.anchor_off:06X}" }}')
     lines = [
-        "# s_effect, read out of the pinned client's own static table.",
+        "# s_effect, read out of the client's own static table.",
         "#",
         f"#   client   {exe_path}",
-        f"#   build    {pinned.BUILD}",
+        f"#   build    {build}  ({how})",
         f"#   table    file 0x{table.base:06X} .. 0x{table.end:06X}, "
         f"{table.count} x {table.stride} B",
         f"#   anchor   file 0x{table.anchor_off:06X}, "
@@ -877,7 +896,12 @@ def main(argv=None) -> int:
           f"{sum(t.refs for t in tables)} reference(s) over {len(tables)} tables, "
           f"minimum {min((t.refs for t in tables), default=0)}")
     if a.out:
-        payload = {"exe": exe, "build": pinned.BUILD,
+        # MEASURED from `exe`, not `pinned.BUILD` -- same defect as the TOML
+        # emitter above, same fix. This payload is a corpus of table bases and
+        # strides, and which build they were read on is the whole of what makes
+        # them checkable.
+        _build, _how = buildid.of_image(exe)
+        payload = {"exe": exe, "build": _build, "build_from": _how,
                    "tables": [t.as_dict() for t in tables],
                    "refused": {s: str(e) for s, e in refusals}}
         Path(a.out).write_text(json.dumps(payload, indent=1), encoding="utf-8")

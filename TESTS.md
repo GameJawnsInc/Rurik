@@ -2295,13 +2295,28 @@ Every one of these, in the order they were written:
   `pinned.BUILD` on every row: `--exe` takes any file and `pinned.find()` falls
   back to the auto-updating install at `C:\gw`, so condition 2 was recording a
   CONSTANT rather than the build of the image read. The build is measured from
-  `pinned.identify()` now, the row names WHICH image, and the control is a
-  payload built from an unidentified path that must record `None`. One check was
+  `buildid.of_image()` now, the row names WHICH image, and the control is a
+  payload built from an unidentified path that must record `None`. **That
+  control was one case short until 2026-08-17, and the bug it missed was live
+  the whole time.** The fix had read `build = pinned.BUILD if kind in
+  ("pristine", "patched") else None` — the constant, guarded by a check that the
+  file is SOME recorded build rather than THE build — so pointed at the vaulted
+  38833 client it scored `pristine` and stamped 38797 on every row, beside an
+  `image` string reading "build 38833, as ArenaNet shipped it". The row
+  contradicted itself and the test stayed green, because the only negative it
+  had was a path naming no file at all: a control for "unidentifiable" is not a
+  control for "identified, and not the one you assumed". §7 now emits from every
+  other build the vault holds and requires the row's `build` and `image` to name
+  the SAME one. Three sibling tools had the identical defect that day
+  (`framebus.py`, `consttable.py`, `heroes_table.py`); the shared helper is
+  guarded by `test_buildid.py` §5. One check was
   also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
   `archive.py:367` asserts internally and would have raised first -- and
   replaced by two the archive can refute. THREE scores, each measured and none
   subtracted: **77 with client and archive, 64 with the client alone, 39 with
-  neither** -- floor 77, so a vault-less run goes red. The archive section
+  neither** -- floor 77, so a vault-less run goes red. (79 since 2026-08-17
+  where the vault also holds a build that is not the pin; the floor stays 77
+  because those two declare a skip without one.) The archive section
   scores a fixed count however many archives a vault holds, and **as of
   2026-08-14 so does section 6's checkout refusal**. It was one check PER working
   tree, and `working_tree_roots()` answers 2 inside a git worktree against 1 in
@@ -2369,7 +2384,33 @@ Every one of these, in the order they were written:
   two images and the read still lands on exactly one in-range candidate. The
   ascending-numbers check was also respelled as a sort, because the two-build
   spelling had to be edited the moment a third arrived.
-  Needs the vault. Floor 29 (was 23; 38833 adds 6), ~6 s),
+  **§5 guards `of_image`, added 2026-08-17, and it exists because "which build
+  is this file" had no single answer and four tools invented one.**
+  `pinned.identify()` returned the CATEGORY — `"pristine"` — and threw away the
+  row it matched, so a caller that had just identified a file correctly still
+  had nowhere to get its number and reached for `pinned.BUILD`. All four did:
+  `framebus.py` printed "the pinned build 38797" over the vaulted 38833 client
+  (its label was `len(blob) == pinned.SIZE`, and 38833 ships at *exactly*
+  38797's 10,483,904 bytes, so the size check could not tell them apart), while
+  `worldmap.py`, `consttable.py` and `heroes_table.py` stamped 38797 onto
+  extracted content rows — where condition 2 of the owner's ruling says the
+  build is the thing that makes a row re-derivable, so re-deriving one against
+  the build it named would have read a different table. `worldmap.image_build`
+  is the one to read: its docstring says "Never a constant" and it emitted
+  `build: 38797` beside `image: "pristine: build 38833"`, contradicting itself
+  inside every row for three days with a green test over it — its control
+  covered an image that could not be identified AT ALL and never one that was
+  identified as a build that is not the pin. `pinned.identify_build()` now hands
+  back the matched row, and `buildid.of_image()` is the one call for a build a
+  tool prints or emits: registry sha256 first, the client's own build getter as
+  the fallback that answers for an image `BUILDS` has never seen — our patched
+  38833 copy is exactly that, real and unrecorded, where stamping the pin is
+  pure invention. The checks are written to fail against the old code rather
+  than merely to pass against the new: each non-pinned build must read as
+  ITSELF *and* must not read as 38797, because a label printing both is still
+  the misreport.
+  Needs the vault. Floor 39 (was 29; §5 adds 12, of which 2 need our patched
+  38833 copy and declare a skip), ~8 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
@@ -2425,9 +2466,32 @@ Every one of these, in the order they were written:
   which is the entire naming argument for those three. Its last check is a
   CONTROL on the measured negatives: `0x004A`'s empty result is scanned over the
   same window as the positives, because a negative produced by a narrower scan
-  is an artefact rather than a finding. §1 runs on a bare machine — `framebus.py`
-  is a fixed-byte-pattern tool and takes no disassembler — and §2 declares a
-  `LEDGER.skip` without the vault, which is why the floor is 14 and not 18. ~1 s),
+  is an artefact rather than a finding. **§3 reads the tool's own header, added
+  2026-08-17, because the label lied.** `--exe`'d at the vaulted 38833 client
+  this tool printed "the pinned build 38797": the label was
+  `len(blob) == pinned.SIZE`, and 38833 ships at *exactly* 38797's 10,483,904
+  bytes, so a size check cannot separate them — `pinned.py`'s own `BUILDS`
+  comment had written down two days earlier that "a size check written anywhere
+  else is now a bug". This is not cosmetic. Addresses drift between the two
+  builds by 0x20..0x160 per region, so every VA below that header is 38797's
+  offsets applied to another build's bytes, and `studies/pvpui/FINDINGS.md`
+  §4/§15.0 records two wrong-build readings from this session that each produced
+  a confident wrong answer, one nearly published as a correction. §3 runs the
+  CLI as a SUBPROCESS — the defect lived in `main`'s print statement, so
+  anything importing the module and asking it directly would have stayed green
+  while the command line kept saying 38797 — and asserts the header names the
+  file, reports THAT file's build, does NOT claim the pin (the negative control:
+  a label reading "38833 (the pinned build 38797)" passes a check for "38833"
+  and is still the bug), and warns that the VAs were not measured on it. A
+  positive control on the default run stops a fix that calls everything
+  not-the-pin. It needs a SECOND real client and skips without one, which is why
+  the defect survived: against the pin the constant is correct. Same shape in
+  three other tools that day — `worldmap.py`, `consttable.py`, `heroes_table.py`
+  — all routed through `buildid.of_image`, with the shared helper guarded by
+  `test_buildid.py` §5. §1 runs on a bare machine — `framebus.py`
+  is a fixed-byte-pattern tool and takes no disassembler — and §2 and §3 each
+  declare a `LEDGER.skip` without the vault, which is why the floor is 14 and
+  not 23. ~4 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -2481,10 +2545,20 @@ Every one of these, in the order they were written:
   still loads -- otherwise §3 would prove only that `load()` always raises.
   §4 runs the emitted TOML through `content.py`'s REAL `_check_provenance`,
   all 40 rows, then strips `extractor` from one and requires a refusal, so the
-  40/40 is a result rather than a tautology. §5 pins that `--resolve` with no
+  40/40 is a result rather than a tautology. **§4 also pins that the row's
+  `build` is the build it was READ ON, added 2026-08-17**, because it was
+  `pinned.BUILD` and every row from every client claimed 38797 — and the gate
+  above passed all of them, since `_check_provenance` asks that a build be
+  PRESENT, not that it be true. Only `--exe` at a second real client separates
+  the two, so that is what it does: rows emitted from the 38833 client must be
+  stamped 38833. `consttable.effect_toml` had the identical defect and
+  `test_consttable.py` §8 now checks it the same way; both refuse to emit at
+  all when `buildid.of_image` cannot name the build, rather than writing the
+  usual answer. §5 pins that `--resolve` with no
   explicit rows is refused: ids ship, English does not, and a committed column
   of resolved names is the bulk expression the provenance gate refuses. Needs
-  the vault; SKIPs with its reason. Floor 10, instant),
+  the vault; SKIPs with its reason. Floor 10 (12 checks with a second vaulted
+  build), instant),
   `toolkit/clientscan/test_commanderpeek.py` (the live hero-commander reader's
   own instrument check. `commanderpeek.py` reads a running client, so almost
   nothing about it can be tested offline -- except the part that actually
@@ -2783,7 +2857,17 @@ Every one of these, in the order they were written:
   INDEX rather than the id column (one record's id is not its index, and keying by id
   would drop row 2036 and mint a 2077), and the test loads them through `content.py`
   and then REMOVES the build from one row and requires the load to FAIL, so the 2,077
-  are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
+  are proved to have passed condition 2 rather than skipped it. **What that did NOT
+  prove until 2026-08-17 is that the build is TRUE**: it was `pinned.BUILD`, so rows
+  read out of any client claimed 38797 and every check above passed, `content.py`
+  included — the gate asks that a build be present, not that it be right. The
+  fixture made it invisible by handing the emitter the literal string `"TEST"` as
+  the path it had read, which the constant did not care about; it passes `pe.path`
+  now, and §8 emits a second time from the 38833 client and requires the stamp to
+  MOVE. The emitter refuses outright when `buildid.of_image` cannot name the build,
+  rather than writing the usual answer onto a row whose whole purpose is being
+  re-derivable. `heroes_table.py` had the same defect and `test_heroes_table.py` §4
+  checks it the same way. Sections 0-4 build a
   small PE32 image byte by byte and need no vault, scoring 28 against a floor of 69,
   so a vault-less run goes red. ~15 s),
   noise. **§10, added 2026-08-12, is the both-build run** —

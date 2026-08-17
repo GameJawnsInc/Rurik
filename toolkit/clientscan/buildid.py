@@ -158,6 +158,55 @@ def read(path):
     return number, va, callers
 
 
+def of_image(path):
+    """(build number or None, how we know) for the image ACTUALLY at `path`.
+
+    THE call for any tool that prints or emits a build number. It cannot return
+    a constant: every answer is derived from the bytes of that file, by one of
+    two instruments, and "I do not know" is a real answer rather than a
+    fallback to the pin.
+
+      1. `pinned.identify_build` -- sha256 against the registry. Preferred when
+         it hits, because it also says PRISTINE vs OUR PATCHED COPY, which
+         reading the getter cannot: our patch does not touch the build number.
+      2. this module's `read()` -- the client's own build getter. This is what
+         makes the answer work for a build that is not in `BUILDS` at all: a
+         fresh download, the auto-updating install at `C:\\gw`, a copy somebody
+         put in the wrong directory.
+
+    WHY IT IS HERE AND NOT IN `pinned.py`: `pinned` is imported by everything
+    and must stay a size/hash registry with no PE parser behind it; this module
+    already imports both. The dependency runs one way.
+
+    ADDED 2026-08-17 for a defect that had four instances and one shape -- a
+    tool identifying a file correctly and then labelling it 38797 anyway. See
+    `pinned.identify_build`'s docstring for the four and what each one printed.
+    """
+    kind, b, detail = pinned.identify_build(path)
+    if b is not None and b.number is not None:
+        return b.number, f"{kind}; sha256 matches the registry -- {detail}"
+    if not os.path.isfile(path):
+        return None, f"no such file: {path}"
+    # Not a copy we recorded. That is NOT a refusal: it is the ordinary case
+    # for any client this repo has not snapshotted, and the binary still
+    # carries its own number. `read()` refuses on none and on several rather
+    # than choosing, so a None here means the image genuinely would not say.
+    try:
+        n, va, callers = read(path)
+    except NoBuildId as exc:
+        return None, (f"no copy of this file in pinned.BUILDS ({detail}), and "
+                      f"its own build getter could not be read: {exc}")
+    return n, (f"no copy of this file in pinned.BUILDS ({detail}); {n} read "
+               f"from the image's own build getter at 0x{va:08X} "
+               f"({callers} callers)")
+
+
+def label(path):
+    """`of_image` as one line for a provenance header. Never silently a guess."""
+    n, why = of_image(path)
+    return f"{n if n is not None else 'UNKNOWN'}  ({why})"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", help="client to read; defaults to the pinned one")

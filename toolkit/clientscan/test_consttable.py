@@ -62,6 +62,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 
+import buildid                                                  # noqa: E402
 import checks                                                   # noqa: E402
 import consttable                                               # noqa: E402
 import pinned                                                   # noqa: E402
@@ -754,7 +755,14 @@ def section_effect_toml(pe, by):
     print("\n8. s_effect as a content overlay")
     import tomllib
     t = by["s_effect"]
-    text = consttable.effect_toml(pe, t, "TEST")
+    # THE REAL PATH, not the string "TEST", and the change is the point. The
+    # build on every emitted row used to be `pinned.BUILD` regardless of what
+    # was read, so this fixture could hand the emitter a path that names no
+    # file at all and still get well-formed rows stamped 38797. The emitter now
+    # MEASURES the build from the image, which means a fixture that lies about
+    # which image it read can no longer be told apart from one that does not --
+    # so it stops lying. See `pinned.identify_build` for the four tools.
+    text = consttable.effect_toml(pe, t, pe.path)
     doc = tomllib.loads(text)
     rows = doc.get("effect", {})
     LEDGER.ok(len(rows) == 2077, "2,077 rows, one per record",
@@ -777,6 +785,42 @@ def section_effect_toml(pe, by):
               "and the extractor it names exists in this checkout",
               f"{extractor} -- content.py resolves and requires this path, so a "
               f"renamed tool fails the load rather than the review")
+
+    # Condition 2 is that the row records THE BUILD -- the one it was derived
+    # on, so the row can be re-derived or refuted. Added 2026-08-17: this was
+    # `pinned.BUILD` on every row, so rows extracted from ANY client claimed
+    # 38797, and re-deriving one against the build it named would have read a
+    # different table. Checked against a fresh read of the same image rather
+    # than against the constant, because comparing the emitter's constant to
+    # the test's constant is a check that cannot fail.
+    want, how = buildid.of_image(pe.path)
+    stamped = {r["provenance"]["build"] for r in rows.values()}
+    LEDGER.ok(stamped == {want} and want is not None,
+              f"and every row's build is {want}, MEASURED from the image the "
+              f"rows were read out of",
+              f"stamped {stamped}, image says {want} -- {how}")
+
+    # THE WRONG-BUILD CASE, which is the one the constant passes. Emitting from
+    # a second real client must move the stamp; if it does not, the field is
+    # decoration.
+    others = [b for b in pinned.BUILDS if b.number != pinned.BUILD]
+    have = [(b, p) for b, p in ((b, os.path.join(vaultpath.vault_root(), "client",
+                                                 b.stamp, "Gw.exe")) for b in others)
+            if os.path.isfile(p)]
+    if not have:
+        LEDGER.skip("the wrong-build stamp", "only the pinned client is vaulted")
+    else:
+        other, other_path = have[-1]
+        other_pe = PE(other_path)
+        other_t = consttable.table_for(other_pe, "s_effect")
+        other_rows = tomllib.loads(
+            consttable.effect_toml(other_pe, other_t, other_path))["effect"]
+        got = {r["provenance"]["build"] for r in other_rows.values()}
+        LEDGER.ok(got == {other.number} and other.number != pinned.BUILD,
+                  f"rows emitted from the build-{other.number} client are "
+                  f"stamped {other.number}, not {pinned.BUILD}",
+                  f"{got} -- the constant passes every check above and fails "
+                  f"this one, which is why it survived three days")
 
     # The load itself, through the real store, with the overlay pointed at a
     # temp directory. NEVER vault/content/: that is merged into every server
