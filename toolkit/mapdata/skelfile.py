@@ -634,9 +634,16 @@ class Skeleton:
         0x00780C70's window args, untraced. path_index is
         MdlAnim:2040's `pathIndex < m_skel->m_soundPathCount` and indexes
         the FA6 (m_soundPaths) array. Returns dicts with seq, time,
-        path_index, raw_tail.
+        path_index, raw_tail (always `bytes`, whatever the payload's own
+        type). On the n40 == n44 == 0 majority (no n40n44 span exists)
+        returns [] -- until 2026-08-16 it unpacked the missing span and
+        died with a TypeError, found by rung U6's first strided writer
+        run over the corpus (studies/unitwrite/FINDINGS.md §2).
         """
-        off, _ = self._span("n40n44")
+        s = self._span("n40n44")
+        if s is None:
+            return []
+        off = s[0]
         p, n40, out = self.payload, self.header["n40"], []
         body0 = off + 4 * n40
         for k in range(n40):
@@ -645,7 +652,7 @@ class Skeleton:
                 "seq": struct.unpack_from("<I", p, off + 4 * k)[0],
                 "time": struct.unpack_from("<i", p, b)[0],
                 "path_index": struct.unpack_from("<I", p, b + 4)[0],
-                "raw_tail": p[b + 8:b + 18]})
+                "raw_tail": bytes(p[b + 8:b + 18])})
         return out
 
     def event_track(self):

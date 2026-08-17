@@ -845,10 +845,17 @@ Every one of these, in the order they were written:
   near-identity quaternions make any misaligned window score ~35% on
   this anchor), and a deterministic link rotation that must violate the
   `<= own index` half (the `< n2C` half is a multiset property a shuffle
-  cannot refute). 90 checks against a floor of 82 (the mandatory core is
-  72; the corpus sabotage and order-control pools can legitimately empty
-  on another sample and declare skips). ~25 s; `--all` reads every head
-  row, ~25-45 min),
+  cannot refute). The sound_events() empty-span regression -- the
+  TypeError that stopped U6's first strided-writer run (2026-08-16,
+  `studies/unitwrite/FINDINGS.md` §2) -- is pinned TWICE, because two
+  arcs fixed and pinned it independently within the hour and the merge
+  kept both sides' checks on purpose: the minimal fixture pins
+  `sound_events() == []` where n40 == n44 == 0, and section 2
+  regression-pins the same answer on every sampled no-n40n44-span
+  corpus file (the 72.5% majority class). 92 checks against a floor of
+  84 (the mandatory core is 74; the corpus sabotage and order-control
+  pools can legitimately empty on another sample and declare skips).
+  ~25 s; `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
   `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
   the one generic reader all five go through (`0x00796DE0`, exactly five call
@@ -884,6 +891,54 @@ Every one of these, in the order they were written:
   body's FA6-lessness is the composite split's other half. 52 checks
   against a floor of 45 (the FA8/FAE-dependent sections declare skips on a
   sample that misses them). ~25 s; `--all` ~15-20 min),
+  `toolkit/mapdata/test_unitassembly.py` (the ASSEMBLY RESOLVER -- rung U4 of
+  `studies/unitmodels/PLAN.md`: a unit definition (0x0056 shell + 0x0057
+  bodies, from a capture via `npcdefs.py` or a `content/*.toml` row) resolved
+  to the CLOSED archive file set the client's loaders would reach -- shell ->
+  FA8 links recursive with a visited set (the cached by-id loader
+  `0x00794260`'s closure) -> bodies -> FA5 textures -> FA6 sound descriptors
+  -> their type-8 chunk-0x1 audio -> FAD/FAE, every id checked against
+  `file_id_table(raw=True)` and every walked container decoded, or the
+  resolution records a NAMED problem. **The headline is the acceptance
+  number**: the three keyed live captures' 54 pooled definitions resolve
+  54/54 closed and 54/54 geometry-complete -- 1,393 distinct files, role
+  histogram pinned (shell 32, body 40, link 134, texture 113, sound 241,
+  audio 830, fad 8, fae_model 0), set sizes 3/158/233 with the carrying
+  definitions named. **The COMPOSITED rule is DERIVED, not assumed**
+  (`needs_body` reads FA0-absence; the FA1 bit is the independent second
+  witness, 161/161 carriers agreeing) and cross-checked against wire
+  presence of 0x0057 with every count TRI-VALUED and MEASURED -- with FA0 /
+  without / unreadable, one tuple check per population, after the U4
+  review caught the first version printing its "reversed rule" as f-string
+  arithmetic that was 0 by construction: capture 20260807T143055 alone 8/8
+  0x0056-only shells CARRY FA0 (measured reverse 0, unreadable 0), 36/36
+  with-0x0057 shells LACK it, 33/33 distinct model ids carry it; pooled
+  11/11, 43/43 per-definition (the unitmodels SS5.4 "43/43", whose NOUN
+  was wrong -- it counted definitions pooled, not model ids), 40/40
+  distinct -- plus `needs_body` == wire-0x0057-presence on all 54, the
+  only check covering the seven with-0x0057 definitions outside 143055.
+  **The visited set has its own synthetic cycle fixture** (A<->B links plus
+  a self-loop through a pre-filled facts cache, under a call budget that
+  turns a hang into a red check), because the corpus cannot exercise it:
+  the live FA8 graph is acyclic and terminates at depth 1, so the review's
+  remove-the-visited-set mutation stayed green on real data and is killed
+  by this fixture (re-verified against the mutant). The hatcher pair
+  (1471: 116228+116703) is pinned as the full
+  232-id set and the worm (1442: 116366) as 75 ids, and the content-row
+  entries (`npc.hatcher`/`npc.lakeside_worm`) must resolve to the IDENTICAL
+  sets -- one resolution path, two id sources. The origin gate is proved in
+  both directions on synthetic capture dirs: live+live pools, live+ours
+  REFUSES naming both, UNKNOWN never pools. Controls that fail: an id
+  outside the raw table leaves the set OPEN, a map file (ffna type 3) as
+  shell is refused not walked, and npcdefs' 0x0057-disagreement refusal is
+  FIRED through the decode seam -- an injected conflicting repeat must make
+  read() refuse naming the definition and both lists. Two review-flagged
+  entailed checks were removed (hatcher!=worm needs_body; a separate
+  FAE==0 beside the pinned role dict -- a check that cannot fail
+  independently is the recorded defect class). 57 checks, floor 57 --
+  nothing legitimately varies; vault-less runs skip sections 2-4 and go
+  red on the floor. ~90 s: needs `vault/dat_study` and the three keyed
+  live captures),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
@@ -1667,7 +1722,10 @@ Every one of these, in the order they were written:
   ASYMMETRIC on purpose: an arm on an opcode the SCHEMA does not know is a hard
   failure, since the framer refuses the message and the arm is dead code that reads
   as coverage; while a NAMED opcode with no arm is a REPORT against
-  `DROPPED_ON_PURPOSE`, six rows each carrying its reason -- 194 layouts against
+  `DROPPED_ON_PURPOSE`, seven rows each carrying its reason (the seventh is
+  `0x0014` QUEST_SET_ACTIVE, named and dropped on the same day by rung Q1 --
+  the check went red on the naming commit before the row landed, which is the
+  tripwire working rather than a gap) -- 194 layouts against
   sixteen arms means demanding an arm per layout would be a permanently red test that
   gets deleted, but a name costs somebody a binary read or a narrated live session and
   losing one silently is the defect. The allowlist is checked in BOTH directions,
@@ -2273,6 +2331,35 @@ Every one of these, in the order they were written:
   pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
   and agreeing pairs are printed as the measurement they are.
   Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
+  `toolkit/clientscan/test_framebus.py` (the frame-bus pairing that twelve quest
+  names rest on — `studies/quests/FINDINGS.md` §9, rung Q1. The client's UI does
+  not read the wire: a handler in `ChCliApi` posts a numbered frame and UI
+  modules subscribe, so "what does opcode X do on screen" has a STATIC answer,
+  and it is the strongest evidence available for naming an opcode with no client
+  run. FINDINGS had both halves — §1.6's publisher VAs, §2.1's handler bodies —
+  in two tables and never joined them per opcode, which is how §7.6 came to say
+  "Nothing static will substitute" about a question its own document answered.
+  **The regression this file exists for is the CALL WINDOW.** The `push imm32`
+  and the `call` that consumes it are not adjacent — the body stages the frame
+  payload between them — and a window too short does not error, it returns a
+  confident short list: §1.6's own scan used 6 bytes and missed two sites, and
+  24 bytes missed `0x0050`'s, whose call sits at +29 behind three payload stores
+  (one of them `0x378` == 888, the no-marker map id). §1 plants a call at
+  exactly +29 and at BOTH edges of `CALL_WINDOW` on a synthetic PE, so shrinking
+  the constant goes red rather than quietly un-measuring an opcode — verified by
+  sabotage: reverting it to 24 fails 4 checks and turns `0x0050` into a silent
+  negative in both sections. §1 also plants a SUBSCRIBE call that must not count
+  as a post, an out-of-band id that must be invisible, and a VA in no section
+  that must raise. §2 asserts the eleven-body pairing against the pinned image
+  including the two SHARED ids — the two adds agree, the two log-text messages
+  agree, and the three marker ops, which share ONE payload layout, do not; the
+  payload cannot tell `0x004D`/`0x0051`/`0x0053` apart and the frame id can,
+  which is the entire naming argument for those three. Its last check is a
+  CONTROL on the measured negatives: `0x004A`'s empty result is scanned over the
+  same window as the positives, because a negative produced by a narrower scan
+  is an artefact rather than a finding. §1 runs on a bare machine — `framebus.py`
+  is a fixed-byte-pattern tool and takes no disassembler — and §2 declares a
+  `LEDGER.skip` without the vault, which is why the floor is 14 and not 18. ~1 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -3211,4 +3298,130 @@ Every one of these, in the order they were written:
   constant still sends the full effect burst, because a guard that refuses
   everything would pass every refusal check. Dormant while every fraction is
   a literal constant; load-bearing the day studies/combat step 8 computes
-  them from the client's skill table).
+  them from the client's skill table),
+  `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
+  geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
+  interchange (`unitexport.py`), and the Blender viewer measured headless
+  (`tools/blender/import_gwunit.py`). The anchors are the burrowing worm
+  116366 (FA0 + the 82,169-byte FA1) and the hatcher body 116703 (FA0, NO
+  skeleton -- and its export must SAY so, so "old export" can never read as
+  "no skeleton"). The models-arc RE-INTERLEAVE holds on both (7/7
+  sub-models, test_modelexport's packer imported rather than copied -- it
+  shares no code with any module under test); `unit_<id>.fa1.bin` off disk
+  IS the archive's 0xFA1 payload byte-for-byte; and every typed skeleton
+  value read back off disk -- 10 sequences' lo/hi/start/end/durations, the
+  3-entry key table, 20 node links and channel key counts, 6 sound events,
+  98 field comparisons -- must equal a FRESH `skelfile.Skeleton` decode of
+  the archive bytes, with tamper controls either side proving the
+  comparison can fail. The pose that shipped is the FLAT placement, and the
+  measurement that makes it the BIND POSE rather than a guess is pinned:
+  all 18 channel-carrying nodes' bases fall INSIDE the stored mesh's own
+  bbox -- 18 of 20 total; the two channel-less ones sit at the origin,
+  outside the mesh's y-range, carrying no positional claim. The U5 review
+  measured the statistic's power (rotated bases 1/18, scaled 0/18, the
+  hatcher's 1,463 vertices vs this bbox 0/1463) and its limit (a
+  component-shuffle passes: cloud occupancy, not per-node correspondence
+  -- exactly what is claimed). The spans-tiling check runs on the worm's
+  REAL payload too (review RISK-1: five span kinds the synthetic never
+  builds; it is rung U6's precondition). No sub-model-to-node binding is
+  measured (3 sub-models, 20 nodes), so per-vertex posing would be
+  invention, and a COMPOSITED shell (116228) is REFUSED with its MESSAGE
+  asserted -- naming the mechanism and rung U4, not a bare raises() that
+  cannot tell composited from absent. Section 3 drives Blender as a subprocess and measures
+  the SCENE, never an eyeball: counts and bbox against the position sidecar
+  (z negated, the M4 convention), all 20 node empties at their RAW bases
+  with parent = measured link, and the RENDER -- an orthographic silhouette
+  whose alpha coverage must be non-zero where the hidden-everything control
+  frame measures EXACTLY zero, and whose pixel WIDTH must match the extent
+  predicted from the export's own bbox through the dump's ortho scale,
+  +/-4 px (worm 38 vs 36.3, hatcher 120 vs 121.6 -- a 3.35x spread; the
+  HEIGHT half is res/1.1 identically whenever the model is taller than
+  wide, a framing constant, and is labeled so). The first contact with
+  real data paid twice: 18/20 empties were measured OFF their bases --
+  background Blender had not evaluated the parent's matrix_world before the
+  parent-inverse was taken from it -- and the hatcher's thin silhouette
+  refuted the guessed 0.02 coverage floor at 0.0147 -- and that number has
+  a measured CAUSE, pinned by the --opaque control: the hatcher's bound
+  diffuse texture carries alpha ~0 on 99.9% of its texels and the inherited
+  prop convention wires texture alpha as transparency, so the default
+  render is a floating head over an invisible torso; --opaque at least
+  triples the coverage (0.0147 -> 0.1932), and what the alpha channel MEANS
+  on a unit texture stays NOT DECODED with the AMAT chain. Floor 72 from
+  the green run (71 -> 72 with the review's real-data tiling check);
+  sections 0-1 (synthetics + the resolve_outdir refusal with its positive
+  controls and the mapexport delegation check) score 28 vault-less and go
+  RED; with the archive but no Blender, 53, also RED),
+  `toolkit/mapdata/test_skelwrite.py` (the RE-IMPORT ROUND TRIP, rung U6:
+  the FA1/container WRITER
+  (`skelwrite.py`): decode -> extract -> encode must be BYTE-IDENTICAL, and
+  identity is the criterion precisely because re-parse equivalence cannot
+  be -- the walk pins no order between adjacent fixed-size blocks, so the
+  test's `swap_n14_n34` writer variant emits output that RE-PARSES GREEN
+  (walk closes, every gate passes) while failing identity with the diff
+  confined to the two swapped blocks, demonstrated on a synthetic with
+  planted-distinct block content (uniform fill would make the swap
+  invisible) AND on the worm, whose n14/n34 contents are measured distinct.
+  What keeps identity from being vacuous is the memcpy-loader lesson
+  (models FINDINGS 4.5) applied writer-side, pinned three ways: a typed
+  repr HAND-BUILT from the test's own literals -- never decoded from any
+  payload, so a spans-concatenating encoder cannot even run on it -- must
+  encode to `synth_anim()`'s exact bytes; the anchors' opaque-carry totals
+  are pinned by a RECURSIVE LEAF WALK over every bytes-like leaf in the
+  repr (worm 883 of 82,169 B = 1.07%, shell 1,179 of 29,495 = 4.00% --
+  the shell is n40-heavy, 620 of its bytes the 62 sound-event raw tails;
+  the declared/undeclared split is asserted as exactly 10 x n40 beside
+  it. The U6 review struck the first version, which summed the DECLARED
+  regions only and so could not catch a writer stashing bytes under a
+  new key); and the U7 seam (`scale_sequence_keytimes`, pure int32,
+  inexactness and overflow REFUSED, and since the review ATOMIC -- the
+  whole span validates before any key commits, with the refusal-then-
+  identity check on a two-key span pinning it: the pre-fix writer left
+  the shell's seq 16 half-retimed 66666 -> 22222 and still serialized)
+  must land its modification at EXACTLY the byte set the value change
+  predicts (set equality, not subset) -- worm sequence 2 x2 flips key
+  2's int32 slot, at chunk and at container level, and re-decodes to
+  the scaled time. U6's
+  measured finding is recorded as a pin: header bytes +0x09..+0x0B, which
+  the parser never reads, are NOT zero (shell 0x42, worm 0x07; 5,208 of
+  14,571 corpus FA1s non-zero, 39 distinct patterns), so the typed layer
+  carries them opaque rather than assuming them. Identity runs on both
+  anchors plus the container-only hatcher body, a deterministic stride-89
+  corpus pass (241/241 containers, 160/160 FA1s, 9 blk48 carriers so the
+  typed blk48 repack meets real data), and under `--all` the COMPLETE
+  population: 21,420/21,420 containers and 14,571/14,571 FA1s
+  byte-identical (MEASURED 2026-08-16, 848 s). Refusals are named `Unwritable`s beside passing
+  controls: count/list mismatch, diverged start/end aliases, truncated
+  opaque var-array (each opaque block must TILE under its own terms before
+  it is emitted), wrong-size pad09, n2C == 0 (the client's own error 12),
+  fa1= against a no-FA1 container, non-type-2 ffna -- and an
+  n56-carrying synthetic (0 corpus files can exercise that stride) must
+  round-trip, in two shapes. Section 3 is the datwrite half with its
+  identity levels STATED: serialized chunk/container bytes EXACT;
+  decompressed row payload read back out of a REBUILT archive EXACT; the
+  STORED form legitimately different (compression 8 x 90,616 B ->
+  stored x 129,368 B -- no compression-8 encoder exists, datwrite study
+  blocker 2). The rebuilt archive carries the worm's REAL rows
+  byte-verbatim in test_datmove's fixture shape at loader-legal indices
+  (>= 16): the 515 -> 1 -> 2817 `alloc.nextStream` chain, whose survival
+  is the load-bearing check because U7's kill/keep names the untouched
+  mid/tail rows as prime suspects -- after the move the chain links, the
+  flags, and both partners' bytes are unchanged (the failing control
+  corrupts the rebuilt archive's OWN MFT bytes -- root nextStream and
+  mid flags -- and requires both faults reported by name through the
+  real on-disk layout, the review's upgrade over mutating a parse), the
+  file-id table still names the same row, all three checksum rules hold,
+  and no two reservations intersect. The recorded WALL is exhibited, not
+  just cited: `datwrite.replace` refuses the 129,368-B payload naming
+  the relocation, and `datmove` -- the verb built for exactly that
+  refusal -- succeeds beside it. The resolve_outdir delegation is proven
+  by monkeypatch (patching mapexport's changes skelwrite's answer),
+  refutable where the struck docstring-prose check was not. Floor 69
+  MEASURED from the green default run (66 pre-review); --all runs 71,
+  its two stride-1-only population pins added; vault-less runs execute
+  the synthetic sections only, 33 checks plus a declared skip, RED on
+  the floor by design -- and the first vault-less run DIED with no
+  verdict because `require_dir` raises SystemExit past `except Exception`,
+  the exact unguarded-exception failure the models-arc review named, now
+  guarded and commented. ~40 s default; nothing outside the vault is ever
+  written -- the rebuilt archive and its journals live under
+  `vault/exports/unitwrite/`).

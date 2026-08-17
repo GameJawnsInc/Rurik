@@ -600,6 +600,19 @@ name taken from a picture of an effect is a guess about PURPOSE:
 `HARD_MODE_SUCCESS_BANNER`, `0x01AA` `AMBIENT_LIGHT_SET` (which repaints 88% of the
 window by changing the light colour and intensity — not a map change).
 
+> **`0x004E` was RENAMED `QUEST_COMPLETE_PANEL` on 2026-08-16, and the hedge above is
+> why it could be.** The quest arc measured what this row could not see: the handler
+> body `0x0080F670` does `push 0x10000155` / `call 0x00633D70`, posting into the frame
+> band `GmQuestComplete` subscribes to. That supplies the **purpose** the picture could
+> only guess at, and `GmQuestComplete` is a 3D scene with a model and a light — which is
+> what a centre-screen banner animation looks like from the outside. **The observation
+> here was right and is kept verbatim in the row; only the name moved**, `medium` →
+> `high`, on two lineages that share no ancestry. Worth noting for the other three: this
+> is the shape of evidence that upgrades an animation name, and `0x006C`
+> `CHEST_REWARD_EFFECT` is the next candidate — the quest arc calls it `0x004E`'s
+> "instruction-identical twin posting the adjacent frame id", so the same scan should
+> settle it. `studies/quests/FINDINGS.md` §9.3, `toolkit/clientscan/framebus.py`.
+
 **Five are NOT named, on purpose.** `0x00C3` `0x00C7` `0x00C8` `0x00C9` `0x00CA` all
 draw the same account-name selector and are indistinguishable on screen. Giving them one
 name each invents a distinction; giving them the same name asserts they are

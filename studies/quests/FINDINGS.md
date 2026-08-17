@@ -547,7 +547,9 @@ and the description slot of `s2c 0x004C [80, …]` at `t=28.241` — 0.5 s later
 
 **Shapes, from `schema/messages.json`:** `GAME_SMSG 128 = [msg_header, string16(122)]`, `GAME_SMSG 129 = [msg_header, agent_id]`. Both carry `name: null`. Neither has an override entry.
 
-**Label: OBSERVED for the association and the byte-identical string; RECONSTRUCTION for the names.** No assert has been traced to either handler and neither has been fired at a client. But *"dialogue is blocked because nobody knows the reply"* is dead, and the two opcodes to confirm are named, shaped, and already decodable by our codec.
+**Label: OBSERVED for the association and the byte-identical string; RECONSTRUCTION for the names.** No assert has been traced to either handler and neither has been fired at a client.
+
+> **SUPERSEDED 2026-08-15 on the last clause, and it was true when written.** Both have now been fired at a retail client by this server: `0x0080` then `0x0081` opens the NPC dialog window (rung Q4), and `0x0081` with no preceding `0x0080` **closes** it — so `0x0081` is the flush/show and not a second text message. `schema/overrides.json` names them `NPC_DIALOG_TEXT` and `NPC_DIALOG_SHOW`, `high`, on those two lineages (rung Q1, §9). What is *still* unsettled is the six extra `0x0081` firings at quest-accept instants, which a labelled single-action run would separate. But *"dialogue is blocked because nobody knows the reply"* is dead, and the two opcodes to confirm are named, shaped, and already decodable by our codec.
 
 **One thing the association does not settle.** At `t=26.816` a `0x0080`/`0x0081` pair fires *before* any `0x003B`; at `t=27.719` one fires just *after* a `0x003B` code 3. So `0x0080` plausibly serves both "open the dialog" and "answer a dialog branch". The `0x0081` also fires alone at every quest-accept instant (`28.179`, `29.197`, `47.655`, `73.431`, `92.792`, `173.560`) — six extra firings beyond the 15 paired ones. A labelled single-action run settles it.
 
@@ -834,6 +836,10 @@ The UI addresses a quest by `{questType, id}`; the wire carries a bare `u32`; th
 
 **Cheapest decisive test:** the capture in §4.3 item 1 — one narrated live session in which the operator completes a mission. Nothing static will substitute; the panel is a 3D scene fed by five frame messages from five opcodes.
 
+> **HALF-ANSWERED 2026-08-16, and the wrong half of that paragraph was the confident one.** *"Nothing static will substitute"* was written while **half the join sat in this document's own §1.6 table**: `0x004E`'s handler body is `0x0080F670` (§2.1) and `0x0080F6C7` publishes `0x10000155` (§1.6), 0x57 bytes inside it. Read from the bytes rather than from the arithmetic, `0x0080F670` does `push 0x10000155` / `call 0x00633D70` — the **post** helper, not the `0x00633BD0` subscribe helper — with no `int3` padding in between, so the publish site is inside this handler and not a wedged-in helper. **`0x004E` feeds `GmQuestComplete`, statically, and the opcode is renamed `QUEST_COMPLETE_PANEL`** (§9). The 2026-08-13 sweep had already fired it at a client and photographed a centre-screen banner animation, which is what §1.5's model-and-light scene looks like from outside — two lineages sharing no ancestry.
+>
+> **What the live capture is still needed for is the OTHER half, and it is the half that matters for authoring:** what the panel expects *in* those three dwords. Firing the opcode is now cheap; knowing what to put in it is not. Do not read this as the reward arc being unblocked — read it as the reward arc being one loopback run away from its first real question.
+
 ### 7.7 Is `0x0011` abandon?
 
 **Cheapest decisive test:** §4.3 item 4 — one abandon from the log context menu, in an outpost, on a live capture. It settles `0x0011` *and* joins `QuestLog:261` to GWW's town-only statement, converting an UNVERIFIED reading into a two-lineage CORROBORATED one for the price of one action.
@@ -849,7 +855,7 @@ The UI addresses a quest by `{questType, id}`; the wire carries a bare `u32`; th
 - **A `test_quests.py` with refutable assertions**, which no lane proposed. `run_suite.py` discovers from disk; `test_srclint.py` §7 enforces `TESTS.md` bidirectionally; `checks.py` requires a declared `floor`. The obvious checks exist and are cheap: every quest row's `enc_*` words re-encode to the varint form; every marker map id is a real `areatable` row or exactly 888; every authored quest id sits outside the observed 41–1462 band. **Without them a quests table is precisely the "rule nothing checks is a wish" CLAUDE.md opens with.**
 - **`PLAN.md` §6.1 needs a Fournux/Tyria-Extractor row (MIT, mirrored) before any of its naming is used.** Flagged by `studies/reconstruction/FINDINGS.md` §9.3 on 2026-08-13 and still open; lane D adopted the naming in the meantime.
 - **`PLAN.md` §1.7's "four genuinely server-only things" is unamended** since `studies/review/FINDINGS.md:344-350` recommended six or seven on 2026-08-06, and `PLAN.md:277-278` and `studies/srvtree/FINDINGS.md` §6 still cite the four. Quest and dialog state machines belong on that list, and `studies/reconstruction/FINDINGS.md` row 16 already superseded it for quests specifically. **Owner-facing documentation debt, not a code blocker** — but do not cite "§1.7's four" in a quest plan without saying so.
-- **`toolkit/content.py:95-96` still declares "verbatim assert expressions with their source path and line" to be ArenaNet's expression and refused.** CLAUDE.md's REFINED 2026-08-12 clause reverses exactly that, and **this entire study is built on single cited asserts.** No lane noticed. A cold session reading `content.py` first would re-run the 2026-08-12 over-refusal that cost 46 hand-rewritten citations.
+- ~~**`toolkit/content.py:95-96` still declares "verbatim assert expressions with their source path and line" to be ArenaNet's expression and refused.**~~ **FIXED 2026-08-16.** CLAUDE.md's REFINED 2026-08-12 clause reverses exactly that, and **this entire study is built on single cited asserts.** No lane noticed. A cold session reading `content.py` first would re-run the 2026-08-12 over-refusal that cost 46 hand-rewritten citations. The comment now says BULK DUMPS and carries the correction with its cost; `PLAN.md` §7 Q3's own REFUSED bullet gained a forward-pointer to the refinement three paragraphs below it, because that bullet is the other place a reader can stop early. The dated 2026-08-11 ruling text was **not** rewritten — it is a decision record and is supposed to say what was decided that day.
 - **Every binary claim here is build 38797** and none has been re-checked against 38833, which is what the owner's live install now runs. Frame ids and struct offsets probably did not move; "probably" is what the VA-drift rule exists to refuse.
 
 ---
@@ -1162,3 +1168,147 @@ cd <tree> && python toolkit/clientscan/textrec.py --dat <vault>/dat_study/Gw.dat
 ```
 
 **Every wire measurement in §8 came from scratch scripts over `cmsgstream.timed`, not from a committed tool**, and that is debt in the same shape §7.9 already names: the `0x007E` option/click ledger, the screen builder that groups `0x0080*` → `0x0081` → `0x007E*`, and the `0x009F` property census. Set `PYTHONIOENCODING=utf-8:replace` or printing coded strings fails on cp1252. **Sort merged c2s/s2c rows by TIMESTAMP ONLY** — sorting the whole tuple reorders same-timestamp frames by opcode, puts `0x007E` (126) ahead of `0x0080` (128), and manufactures a refutation of the ordering rule the server depends on. Until these land as a `test_quests.py`, treat their numbers as reproducible-by-rewriting rather than reproducible-by-running.
+
+---
+
+### 9. Rung Q1 — the names land in the schema, and the frame bus is what carries them
+
+**2026-08-16.** Twelve quest opcodes were named in `schema/overrides.json`, one was
+renamed, and four rows record a deliberate abstention. Before this the arc's naming
+existed **only in this document**: fifteen of the nineteen quest opcodes were absent
+from the overrides file entirely, so `QUEST_ADD`, `QUEST_DESCRIPTION` and the dialog
+pair — the arc's biggest single result — were invisible to every tool in the tree that
+reads the schema rather than the study.
+
+#### 9.1 The evidence that carries eleven of the twelve, and how it was made refutable
+
+The strongest argument available without a client run is the **frame bus**: a handler in
+`ChCliApi` writes the store and posts a numbered frame; UI modules subscribe to ids and
+repaint. §1.6 tabulated publisher VAs. §2.1 tabulated handler-body VAs. **Nobody joined
+them per opcode**, which is how §7.6 came to say "nothing static will substitute" about
+a question those two tables answer between them.
+
+The join was **predicted before it was measured** (`probes.py`'s rule), and the
+prediction was structural rather than a list of ten values: *the two adds share an id,
+the two text-fills share an id, and the three marker ops — which share one payload
+layout — do not.* That is the part a coincidence does not produce. Then the bytes:
+
+| opcode | body | posts | who subscribes |
+|---|---|---|---|
+| `0x0049` QUEST_ADD | `0x0080F0A0` | `0x1000014E` | QuestLog, QuestTaskTracker, GmView, GmHelpGuide, **Compass**, UiCtlInstance |
+| `0x0050` QUEST_ADD_NO_MARKER | `0x0080F470` | **`0x1000014E`** | *(the same — both are adds)* |
+| `0x004C` QUEST_DESCRIPTION | `0x0080F290` | `0x1000014F` | QuestChallenge, QuestTaskTracker |
+| `0x0054` QUEST_OBJECTIVES_UPDATE | `0x0080F990` | **`0x1000014F`** | *(the same — both fill log text)* |
+| `0x004D` QUEST_SET_MARKER | `0x0080F3C0` | `0x10000154` | QuestChallenge, QuestTaskTracker, **Compass** |
+| `0x0051` QUEST_MOVE_MARKER | `0x0080F6F0` | `0x10000151` | QuestTaskTracker, **Compass** |
+| `0x0053` QUEST_SET_ACTIVE_MARKER | `0x0080F8E0` | `0x10000153` | QuestLog, QuestTaskTracker, GmMapCtlLocationTag, **Compass** |
+| `0x0052` QUEST_REMOVE | `0x0080F7A0` | `0x10000152` | QuestLog, QuestTaskTracker, GmHelpGuide, GmMapCtlLocationTag, **Compass** |
+| `0x004E` QUEST_COMPLETE_PANEL | `0x0080F670` | `0x10000155` | **GmQuestComplete**, GmView, QuestTaskTracker |
+| `0x004A`, `0x004B` | `0x0080F250`, `0x0080F270` | *(nothing)* | — measured negatives |
+
+**11 of 11 bodies agreed, shared ids and all.** The three marker ops carry one identical
+5-field layout `[u32 id, vec2, u16, u16]`, so **the payload cannot tell them apart and
+the frame id can** — that is the whole naming argument for `0x004D`, `0x0051` and
+`0x0053`, and it is why two of them are filed `medium`: the English on top of a measured
+distinction is still RECONSTRUCTION.
+
+#### 9.2 The scan window, twice — and both times it failed by returning a short list
+
+The `push imm32` and the `call` that consumes it are **not adjacent**; the body stages
+the frame payload in between. §1.6's own scan used a 6-byte window and lost two sites
+(it says so, and lane B recovered them by hand). This pass used 24 and lost `0x0050`'s,
+whose call sits at **+29** behind three `mov [ebp-x], imm32` — one of them `0x378` ==
+**888**, the no-marker map id, which is §2.3's constant turning up as a payload store.
+
+That first read as a **refuted prediction**. It was a refuted *instrument*. Worth
+separating, because the two look identical from inside a run: **a window too small does
+not error — it returns a confident short list**, the same failure shape as a stale
+worktree returning a confident number from an old scanner. `CALL_WINDOW = 48` now, and
+`test_framebus.py` §1 plants a call at exactly +29 and at **both edges** of the window,
+so shrinking it goes red instead of quietly un-measuring an opcode. Verified by
+sabotage: reverting to 24 fails four checks.
+
+#### 9.3 `0x004E` — the rename, and §7.6's premise expiring
+
+`schema/overrides.json` already named `0x004E` **`VICTORY_BANNER`**, `medium`, from the
+2026-08-13 sweep: one opcode fired at a fresh client and an operator writing down a
+centre-screen victory-flag animation. That arc filed it `medium` for exactly the right
+reason — *a name taken from a picture of an effect is a guess about purpose.*
+
+The static join supplies the purpose. `0x0080F670` does `push 0x10000155` /
+`call 0x00633D70` (post, **not** the `0x00633BD0` subscribe helper) with no `int3`
+padding between body start and push site, so the site is inside this handler rather than
+a helper wedged between two bodies — the containment was worth checking, because
+everything else here was arithmetic across two tables. `GmQuestComplete` is a 3D scene
+with a model and a light (§1.5), which is what a centre-screen banner animation looks
+like from the outside. **Renamed `QUEST_COMPLETE_PANEL`, `high`, CORROBORATED** — two
+lineages sharing no ancestry, one static and one on-screen. The prior name is kept in
+the row, because it is an observation and not a mistake.
+
+**This is the arc's real result, and it is a negative about our process rather than about
+the client:** seven recon lanes and this document's own author held both halves and did
+not multiply them. The claim that turned out to be wrong — *"Nothing static will
+substitute"* — was the confidently stated one.
+
+**MEASURED while checking that, and it is the map the reward arc needs.** All five ids
+`GmQuestComplete` subscribes to have a distinct publisher and **every one is a real
+`call 0x00633D70` post**, not a subscribe:
+
+| frame id | published at | inside |
+|---|---|---|
+| `0x10000155` | `0x0080F6C7` | **`0x004E`'s handler body** |
+| `0x10000156` | `0x00810B47` | *not a quest-family handler* |
+| `0x10000157` | `0x008124C8` | *not a quest-family handler* |
+| `0x10000158` | `0x00812473` | *not a quest-family handler* |
+| `0x10000159` | `0x0081529E` | *not a quest-family handler* |
+
+So the completion panel is fed by five frames and **only one of them comes from the quest
+opcode block** (`0x0080F0A0`–`0x0080FA12`); the other four are published from elsewhere in
+`ChCliApi`. That is worth knowing before anyone tries to open the panel from the server:
+sending `0x004E` supplies one fifth of what the scene subscribes to. **Which opcodes drive
+the other four is the next static question**, and `framebus.py --at` answers it one body at
+a time — `0x006C`, this arc's named "instruction-identical twin", is the first candidate to
+place. Lane B's by-hand recovery of `0x10000159`'s site at `0x0081529E` is confirmed here.
+
+#### 9.4 What was NOT named, on purpose
+
+Four rows carry a `why` and **no** `name`, on `studies/smsgsweep/FINDINGS.md` §7.6's
+precedent that a withheld name belongs in the artifact rather than only in a study:
+
+- **`0x004B`** — 32-byte body, `[array32[64]]`, bulk-assigns the `+0x518` list, **posts
+  no frame id**, 2 arrivals, no observed consequence. A name would describe the argument
+  rather than the effect.
+- **CMSG `0x0011`** — `[u32 id]`, **0 of 971**. §7.7's "abandon?" stays open; one abandon
+  on a live capture settles it and a shape does not.
+- **CMSG `0x0013`** — `[msg_header]` alone, no payload, **0 of 971**. "QUEST_CLEAR_ACTIVE"
+  is a plausible reading of a blank message and nothing more.
+
+**CMSG `0x0014` `QUEST_SET_ACTIVE` was named `medium` and is the weakest row in the
+family** — shape and position, n=1, no consequence chain. Naming it made
+`test_dispatch.py` §7 go red on the same commit, which **is the rung working**: a name
+costs somebody a binary read, so named implies handled *or* listed. It is now listed,
+with the reason that this server serves one quest and has no second value for "which
+quest is tracked".
+
+#### 9.5 The debt this closes, and the debt it does not
+
+§7.9 asked for the coded-string codec to stop living in a scratch file. The same
+complaint applies to a *measurement*: the join above was a scratch script for about an
+hour. It is now `toolkit/clientscan/framebus.py` with `test_framebus.py` behind it (18
+checks, floor 14 — §1 runs on a bare machine against a synthetic PE, §2 declares a
+`LEDGER.skip` without the vault). So the `why` text in every one of those overrides rows
+is reproducible **by running** rather than by rewriting.
+
+**Still open from §7.9:** the coded-string codec itself, the 66/66 byte-identical
+verification that is a claim in prose and not a check, and the fact that **every binary
+claim in this document is build 38797** and none has been re-checked against 38833.
+
+#### Reproducing §9
+
+```bash
+cd <tree> && git rev-parse --show-toplevel
+cd <tree> && python toolkit/clientscan/framebus.py
+cd <tree> && python toolkit/clientscan/framebus.py --at 0x0080F670 --end 0x0080F6F0
+cd <tree> && python toolkit/clientscan/test_framebus.py
+cd <tree> && python toolkit/authsrv/test_dispatch.py
+```

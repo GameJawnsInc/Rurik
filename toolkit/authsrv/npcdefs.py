@@ -158,7 +158,11 @@ class Definition:
     def __init__(self, index):
         self.index = index
         self.payload = None          # the 0x0056 body, minus the definition index
-        self.model_id = None
+        self.model_id = None         # first 0x0057 body -- what row() emits
+        self.model_ids = None        # the FULL 0x0057 list, wire order. Two pooled
+                                     # definitions (1496/1497) carry TWO bodies each,
+                                     # so `model_id` alone under-describes them;
+                                     # unitassembly.py (U4) resolves the whole list.
         self.move_speed = None
         self.attack = None           # (interval, modifier)
         self.health = []             # [(capture, value)]
@@ -260,8 +264,20 @@ def read(capture_dirs, codec=None):
                     d.declare(values, capture, connection)
                 elif opcode == MONSTER_COMPOSITE:
                     d = defs.setdefault(values[1], Definition(values[1]))
-                    models = values[2] if isinstance(values[2], list) else [values[2]]
+                    models = tuple(values[2] if isinstance(values[2], list)
+                                   else [values[2]])
                     if models:
+                        # Same posture as declare(): a repeat must agree. MEASURED:
+                        # 101 composite messages over 43 definitions across three
+                        # captures, ZERO list-level disagreements -- so one is a
+                        # finding, not a merge conflict.
+                        if d.model_ids is not None and d.model_ids != models:
+                            raise NpcDefsError(
+                                f"definition {values[1]} is given two different "
+                                f"0x0057 model lists ({d.model_ids}, {models}). "
+                                f"Every repeat in the vault agrees, so this is "
+                                f"new -- do not pick one.")
+                        d.model_ids = models
                         d.model_id = models[0]
                 elif opcode == CREATE_AGENT:
                     tagged = values[2]
