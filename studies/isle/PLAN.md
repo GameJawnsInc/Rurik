@@ -846,6 +846,32 @@ another character; what confirms it is one login and a look at the character-sel
 Three of the four skeptics found this independently and none of the four designs asked it.
 *Exit:* the character that will play is named in the plan file with its level, profession
 and route to 280 — or the first deliverable of this arc is a character, not a capture.
+**DONE 2026-08-16 — owner's answer: a new PvP-only character.** UPSTREAM corroboration
+(GWW "PvP-only character", edited 2026-06-28): PvP-only characters "can only enter PvP
+outposts **(with the exception of Isle of the Nameless)**" — 280 is the one non-PvP area
+open to them — and they start "in the Great Temple of Balthazar at **level 20**", which
+is one of the Isle's three exits. Route: create → GTB → walk in. This also corroborates
+§2's bit-22 arrival-area RECONSTRUCTION from the game side. Profession: owner's choice at
+creation (an Elementalist/caster suits §3.1 — a wand isolates the armor term from
+weapon-mastery rank).
+**What the character type changes, and it is mostly good** (UPSTREAM, GWW "PvP
+Equipment" edited 2025-12-28; full notes `gww-facts.md` §10):
+- PvP Equipment creates **known-maximum-stat weapons with requirement 9** — the
+  base-damage range becomes a published constant, and rank 8 vs 9 straddles the
+  unmet-requirement ×⅓ rule: the sharpest single falsifiable step on the island, for
+  the cost of one attribute refund.
+- **PvP equipment is auto-customized (+20%), unavoidably.** The §3.1 ratio test is
+  unaffected (scales all Suits identically); every absolute prediction carries ×1.20.
+- Level 20 with freely assignable ranks: **B9's two STRUCTURALLY-UNREACHABLE rows —
+  the L20/rank-12/AR-60 identity point and the 11/12/13 threshold kink — become live
+  session work**, and gate 1's rank-instrument session (`0x003A`/`0x0037` under real
+  rank changes) rides the same trip.
+- **Rung 10 (Churrhir Fields) is NOT reachable by this character** — Factions PvE; the
+  exception clause names only the Isle. The out-of-sample ladder needs a roleplaying
+  character or stays open.
+- UNVERIFIED small print: which skill versions a PvP-only character gets on 280 (the
+  Master-of-the-Isle note implies PvE versions on that map but was written for
+  roleplaying characters) — the capture itself settles it.
 
 **Rung 3 — the offline bench.** No client. Runs in parallel with everything above.
 Contents, each already named and none of them run: the gwinch float32 scan and a
@@ -902,10 +928,16 @@ against the pre-registered prediction 165811 with the third branch (113021 / a s
 pre-registered too.
 
 **Rung 7 — LIVE #2, the damage pass.** Only after rung 6 names the bodies and rung 1 proves
-the reader. One uncustomised weapon, auto-attack only, `--minutes 45`, budgeted in **swings**.
+the reader. One PvP-created weapon (auto-customized +20% — unavoidable on this character,
+rung 2; known max stats, requirement 9, rank held ≥ 9), auto-attack only, `--minutes 45`,
+budgeted in **swings**, aggregated on **(target, cause, swing-kind)** per rung 3's B6.
 *Exit:* D recovered jointly from `r80` and `r100` with the consistency of the two estimates
-reported, aggregated on (definition slot, spawn coordinate), and the property-17 population's
-variance reported against the crit prediction.
+reported, and the property-17 population's variance reported against the crit prediction —
+now at n ≥ 2 per scoped group, which the corpus never afforded. Session extensions the
+PvP character makes possible (each a pre-registered prediction before the run): the rank
+sweep 11/12/13 against the wiki's +24.0/+10.0-point kink; the rank 8↔9 requirement
+straddle (×⅓ predicted); and the `0x003A`/`0x0037` traffic from real rank reassignment —
+gate 1's live instrument, free on the same trip.
 
 **Rung 8 — LIVE #3, the effects pass**, ordered by how little AI is in the way: **Torches
 first** (a gadget applies one effect on click, with no bar, no aftercast, no allegiance),
@@ -924,7 +956,9 @@ bit required; an interrupt window diffed against a completed-cast control window
 **all** opcodes.
 
 **Rung 10 — Churrhir Fields.** The 15/35/55 ladder as an out-of-sample prediction from rung
-7's fitted curve.
+7's fitted curve. **NOT reachable by rung 2's PvP-only character** (Factions PvE; the
+exception clause names only the Isle) — needs a roleplaying character with Cantha access,
+or stays open as a recorded limit.
 *Exit:* the curve predicts 15/35/55, or it does not — either is a result.
 
 **Rung 11 — land it.** Merge at the tested milestone; `PLAN.md` §3 and §8 updated, dated,
