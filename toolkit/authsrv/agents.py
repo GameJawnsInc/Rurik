@@ -814,6 +814,17 @@ ITEM_TYPE_HAMMER = 15
 STARTER_HAMMER = _row("item", "starter_hammer")
 
 
+def item_template(key):
+    """A usable ITEM template by name -- npc_template's sibling, same reason.
+
+    `enc_name` arrives as a list of GW string ids and must be ENCODED before
+    named_item() can put it on the wire; a caller reaching for the raw row
+    builds a message the codec refuses. See npc_template's docstring for the
+    day that cost a silent empty population.
+    """
+    return _row("item", key)
+
+
 def named_item(item_id, item):
     """GAME_SMSG 0x0161 CREATE_NAMED_ITEM -- declares an item's bytes.
 

@@ -35,7 +35,8 @@ from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
     ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
-    agent_set_profession, agent_set_secondary_bits, create_agent, npc_model,
+    agent_set_profession, agent_set_secondary_bits, agent_set_tabard_visible,
+    create_agent, item_template, named_item, npc_model,
     npc_properties, npc_template)
 
 # The hostile the normal map load spawns. Read from content, the same row
@@ -409,6 +410,76 @@ def _health_shrink_steps(agent_id):
              "(1 + 50) -- the shrink LOST the 24 health the clamp ate, and a "
              "restore does not give it back. 25 here means the pool remembers "
              "through the clamp; 100 means refill was hiding all along."),
+    ]
+
+
+# Item ids for the armor-slot arm. The weapon is item 1 (authsrv
+# WEAPON_ITEM_ID); these two are declared by the probe itself via 0x0161.
+_ARMOR_LEGS_ITEM = 2
+_ARMOR_BOOTS_ITEM = 3
+
+
+def _armor_slots_steps(agent_id):
+    """Which of 0x006E's nine positions is which body slot -- unitsetup Q6.
+
+    CONTESTED at studies/character/FINDINGS.md "Where every source is silent":
+    positions 3-6 are Legs/Head/Boots/Gloves in bag order (2 lineages) or
+    Boots/Legs/Gloves/Head permuted (1 lineage), NOT FOUND for build 38797
+    after fifteen mirrors. A sibling track also doubted the 0x006F mapping
+    itself ("if 111 does nothing, the mapping is wrong"). The probe crosses
+    two visually loud pieces -- leggings and boots, gray on a bare-legged
+    body -- through the one position (3) where the readings disagree
+    hardest, with 0x006E-array and 0x006F-per-slot arms both represented.
+    The character is otherwise naked from the waist down but for shorts:
+    gray leggings versus bare calves versus booted feet are all readable
+    from the default camera with no aiming.
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x0161, named_item(_ARMOR_LEGS_ITEM,
+                                     item_template("warrior_legs")),
+             "0x0161: declare the LEGGINGS (item 2)",
+             "nothing -- a declaration renders nothing, measured 621/621."),
+        Step(1.0, 0x0161, named_item(_ARMOR_BOOTS_ITEM,
+                                     item_template("warrior_boots")),
+             "0x0161: declare the BOOTS (item 3)",
+             "nothing yet either."),
+        Step(3.0, 0x006F, [a, 3, _ARMOR_LEGS_ITEM],
+             "0x006F: LEGGINGS into position 3 -- the contested cell",
+             "the body. Gray LEGGINGS appearing = position 3 wears what bag "
+             "order says (Legs@3) or the render is item-driven; something on "
+             "the FEET = the permuted reading (Boots@3) with slot-driven "
+             "render; NOTHING = 0x006F is not per-slot wear and the sibling "
+             "track's doubt about the 109/110/111 mapping wins."),
+        Step(6.0, 0x006E, [a, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+             "0x006E: nine zeros -- the reset (gw-preservation's own idiom)",
+             "everything visual vanishes, hammer included. A clean slate "
+             "so the next arm cannot inherit this one's pixels."),
+        Step(1.0, 0x0048, agent_set_tabard_visible(a, 0),
+             "0x0048 after 0x006E, retail's own 366/366 pairing",
+             "nothing."),
+        Step(4.0, 0x006F, [a, 5, _ARMOR_LEGS_ITEM],
+             "0x006F: the SAME leggings into position 5",
+             "if the leggings LAND SOMEWHERE ELSE (feet under bag order's "
+             "Boots@5, hands under permuted Gloves@5), the slot drives the "
+             "render and position semantics are directly readable. If they "
+             "draw as leggings again, the ITEM drives its own placement and "
+             "the slot-order contest is invisible to pixels."),
+        Step(6.0, 0x006E, [a, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+             "0x006E: reset again", "clean slate again."),
+        Step(1.0, 0x0048, agent_set_tabard_visible(a, 0),
+             "0x0048, the pairing", "nothing."),
+        Step(4.0, 0x006E, [a, 0, 0, 0, _ARMOR_LEGS_ITEM, 0,
+                           _ARMOR_BOOTS_ITEM, 0, 0, 0],
+             "0x006E array arm: leggings at position 3, boots at position 5 "
+             "-- BAG ORDER's own claim, through the nine-dword message",
+             "BOTH pieces correctly placed (gray legs AND booted feet) = bag "
+             "order confirmed for 0x006E on 38797, the 2-lineage reading. "
+             "Pieces on wrong body parts = the permuted reading. One piece "
+             "missing = that position is neither."),
+        Step(1.0, 0x0048, agent_set_tabard_visible(a, 0),
+             "0x0048, the pairing", "nothing -- and the run is done; the "
+             "frames from here back are the verdict."),
     ]
 
 
@@ -4624,6 +4695,38 @@ PROBES = {
              "ANSWERED 2026-08-17 (harness 20260817T142147): Mo1 -> Mo15 -> "
              "Mo20, player row frozen at W0. The store is per-agent both "
              "ways. studies/unitsetup/FINDINGS.md 8 Q3.",
+    ),
+    "armor_slots": lambda a, o: Probe(
+        question="Which of 0x006E's nine positions is which body slot on "
+                 "build 38797 -- bag order (2 lineages) or GWLP-R's "
+                 "permutation -- and is 0x006F really per-slot wear?",
+        predicts="0x006F wears (the mapping stands, 3 lineages on shape), "
+                 "and the ITEM drives its own placement: leggings render on "
+                 "the legs from position 3 AND from position 5, making the "
+                 "slot-order contest invisible to pixels -- in which case "
+                 "the array arm (leggings@3 + boots@5, bag order's claim) "
+                 "still renders both correctly and 0x006E order stays a "
+                 "protocol-bookkeeping question, not a visual one. If "
+                 "instead the SLOT drives the render, the leggings visibly "
+                 "move between arms and the order is read straight off the "
+                 "screen. If position-3 wear never draws at all, the "
+                 "permuted reading or the sibling's mapping doubt takes it.",
+        steps=_armor_slots_steps(a),
+        note="The two pieces are the Prophecies warrior starters "
+             "(content/items.toml, UPSTREAM from OpenTyria's own table, gray "
+             "dye) -- visually loud on a body that spawns in shorts with "
+             "bare calves, feet and hands. Every 0x006E is followed by "
+             "0x0048, retail's 366/366 pairing. Weapon item id is 1; the "
+             "probe declares its pieces as items 2 and 3. Verdict frames: "
+             "after steps 3, 6 and 9. Model-appearance verdicts are the "
+             "fuzzy kind -- ship the frames to the owner rather than "
+             "over-reading a compressed screenshot. "
+             "ANSWERED 2026-08-17 (harness 20260817T150232): 0x006F WEARS "
+             "(the mapping stands), the ITEM drives its own placement "
+             "(leggings on legs from position 3 AND 5, reset proven clean "
+             "between), and the array arm dressed both pieces -- so the "
+             "slot-order contest is invisible to pixels and survives only "
+             "as bookkeeping. studies/unitsetup/FINDINGS.md 8 Q6.",
     ),
     "health_shrink": lambda a, o: Probe(
         question="What does int property 42 do to CURRENT health when the "
