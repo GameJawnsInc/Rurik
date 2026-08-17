@@ -679,18 +679,30 @@ def effect_rows(pe: PE, table: Table):
 
     MEASURED over all 2,077 records on build 38797:
       +0x00 u32  the effect id, equal to the row index on 2,076 of 2,077
-      +0x04 u32  a string id -- 1,996 distinct, one zero (row 2036's hole)
-      +0x08 u32  zero on 2,071 rows, a second string id on 6
+      +0x04 u32  a Gw.dat archive FILE id -- 1,996 distinct, one zero (row
+                 2036's hole)
+      +0x08 u32  zero on 2,071 rows, an alternate file id on 6
       +0x0C u32  0x64000000 on every row without exception
-    The last one is reported as `tag` rather than named: a constant column tells
-    you it is constant and nothing else, and inferring a name from a value is
-    the mistake `test_envchunk.py` records for tag6.
+    CORRECTED 2026-08-16 (studies/isle/FINDINGS.md B3; scripts in
+    vault/research/isle-nameless-2026-08-16/bench/b3-effect/): +0x04 shipped
+    here as `name_id`, "a string id", and it is not one. All 2,076 nonzero
+    values bind in the archive's file-id table against 0 of 2,000 for a
+    uniform-random control, the column's max of 369,351 exceeds the string-id
+    space's own ceiling of 101,375 (99 files x 1024, textrec's space), a
+    spread sample of 20 resolves 0 through TextIndex.get, and all 68 probed
+    files decompress to ffna type 2 -- model data. The name is `file_id`
+    rather than `model_file_id` because the binding was measured over the
+    whole column and the ffna magic over a sample of 68; naming the column
+    for the sample would repeat tag6's mistake.
+    The last column is reported as `tag` rather than named: a constant column
+    tells you it is constant and nothing else, and inferring a name from a
+    value is the mistake `test_envchunk.py` records for tag6.
     """
     out = []
     for i in range(table.count):
         rec = table.record(pe, i)
-        eid, name_id, alt_id, tag = struct.unpack("<4I", rec)
-        out.append({"row": i, "id": eid, "name_id": name_id,
+        eid, file_id, alt_id, tag = struct.unpack("<4I", rec)
+        out.append({"row": i, "id": eid, "file_id": file_id,
                     "alt_id": alt_id, "tag": tag})
     return out
 
@@ -702,10 +714,10 @@ def effect_toml(pe: PE, table: Table, exe_path: str) -> str:
     is the one `content.py` cannot enforce -- so it is spelled out on every row
     rather than hoisted to a header comment that a merge could drop.
 
-    The row commits the STRING ID and not the string. That is the same
-    "commit the id, resolve the string at run time" pattern `mapbuild.py` uses,
-    and it is what keeps ArenaNet's authored text out of a file that will be
-    merged into a running server.
+    The row commits the FILE ID and not the file. That is the same
+    "commit the id, resolve at run time" pattern `mapbuild.py` uses for name
+    strings, and it is what keeps ArenaNet's model data out of a file that
+    will be merged into a running server.
     """
     prov = ('{ source = "client-table", '
             'extractor = "toolkit/clientscan/consttable.py", '
@@ -726,8 +738,9 @@ def effect_toml(pe: PE, table: Table, exe_path: str) -> str:
         f"{table.refs} code reference(s) to the base",
         "#",
         "# Every value here is a MEASUREMENT -- ids and offsets. No ArenaNet",
-        "# text: `name_id` is a string id the client resolves from the owner's",
-        "# own archive at run time.",
+        "# bytes: `file_id` is a Gw.dat archive file id the client resolves",
+        "# from the owner's own archive at run time (ffna type 2, model data,",
+        "# on every probed file -- studies/isle/FINDINGS.md B3).",
         "",
     ]
     # Keyed by the ARRAY INDEX, not by the id column. The client's own assert is
@@ -737,7 +750,7 @@ def effect_toml(pe: PE, table: Table, exe_path: str) -> str:
     for row in effect_rows(pe, table):
         lines.append(f"[effect.{row['row']}]")
         lines.append(f"id = {row['id']}")
-        lines.append(f"name_id = {row['name_id']}")
+        lines.append(f"file_id = {row['file_id']}")
         if row["alt_id"]:
             lines.append(f"alt_id = {row['alt_id']}")
         lines.append(f"tag = {row['tag']}")

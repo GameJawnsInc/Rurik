@@ -854,8 +854,13 @@ about this. If definitions do *not* survive, dropping the resend crashes the cli
 `index < m_count`. So the server resends, and this probe is what would let it stop:
 
 ```bash
-python toolkit/harness/session.py --probe burrow
+python toolkit/harness/session.py --enemy --keep-open --game-args '--probe burrow'
 ```
+
+(`--probe` is a GAMESRV flag and only reaches it through `--game-args` —
+`session.py --probe burrow` bare is an argparse error. This line said exactly
+that until 2026-08-16. `--enemy` because this probe needs the hostile;
+`--keep-open` because a probe's steps land after the spawn verdict.)
 
 **Target the hostile before it starts, and keep watching the target frame.** Steps 3 and
 4 are the experiment — the same id and then a fresh id, both with no definition resent.

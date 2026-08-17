@@ -62,14 +62,15 @@ from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: the sixty-six checks below, every one of which runs unconditionally --
-# the fixture is built by this file, so there is no corpus to be missing and no
-# section that can legitimately not run. Measured from a green run on
-# 2026-08-10, again on 2026-08-12 when section 0b took it from 31 to 34, and
-# again on 2026-08-14 when section 7 (--restore) took it from 34 to 66.
-# Anything under this means a section stopped executing, and on a file whose
-# defects all present as silent success that is exactly the report we must not
-# accept.
+# FLOOR: the seventy-eight checks below, every one of which runs
+# unconditionally -- the fixture is built by this file, so there is no corpus
+# to be missing and no section that can legitimately not run. Measured from a
+# green run on 2026-08-10, again on 2026-08-12 when section 0b took it from 31
+# to 34, again on 2026-08-14 when section 7 (--restore) took it from 34 to 66,
+# and again on 2026-08-16 when section 8 (--relink-plain) took it from 66 to
+# 78. Anything under this means a section stopped executing, and on a file
+# whose defects all present as silent success that is exactly the report we
+# must not accept.
 #
 # Section 7's three sabotages are the measurement of which of ITS checks matter,
 # and they are run rather than argued: stubbing `claimants()` to [] lets the
@@ -77,7 +78,7 @@ import checks  # noqa: E402
 # restore through, and a donor whose compression is flattened to 0 leaves the row
 # at 0 while the PAYLOAD stays byte-identical -- the last one is why 7b checks the
 # compression field separately, since the stored bytes cannot tell the two apart.
-LEDGER = checks.Ledger("dat writer", floor=66)
+LEDGER = checks.Ledger("dat writer", floor=78)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -712,12 +713,117 @@ def section_restore(tmp):
           "of the payload does NOT, because the stored bytes are the same")
 
 
+def install_rename(path, plain, renamed):
+    """Turn the fixture into a mid-replacement archive: rename PLAIN's pair.
+
+    This is the state `FcArchive` leaves behind when it has requested a
+    replacement (studies/maprows/FINDINGS.md section 8): the file-id table
+    carries `id | 0x80000000` and the plain id stops resolving. Longhand and
+    not through datwrite, because the state under test must not be built by
+    the code under test.
+    """
+    off, size, _comp, _flags = ROWS[ROW_IDTABLE]
+    with open(path, "r+b") as fh:
+        fh.seek(off)
+        table = bytearray(fh.read(size))
+        hits = [i for i in range(size // 8)
+                if struct.unpack_from("<II", table, i * 8)[0] == plain]
+        assert len(hits) == 1, hits
+        struct.pack_into("<I", table, hits[0] * 8, renamed)
+        fh.seek(off)
+        fh.write(bytes(table))
+        fh.seek(MFT_OFF)
+        mft = bytearray(fh.read(MFT_SIZE))
+        struct.pack_into("<I", mft, ROW_IDTABLE * ENTRY_SIZE + ENTRY_CRC,
+                         binascii.crc32(bytes(table)))
+        struct.pack_into("<I", mft, ROW_SELF * ENTRY_SIZE + ENTRY_CRC,
+                         self_crc(mft))
+        fh.seek(MFT_OFF)
+        fh.write(bytes(mft))
+
+
+def section_relink(tmp):
+    """--relink-plain: the DnArchive re-link, minus the download.
+
+    The fixture's pair (0x1000 -> ROW_SHRINK) is renamed to 0x80001000 by
+    install_rename, so the pristine fixture IS the correct post-relink state --
+    which turns the strongest available assertion into one line: after the
+    relink the whole archive must be byte-identical to the file build_archive
+    wrote, table dword, entry-2 crc and MFT self-crc all at once.
+    """
+    plain, renamed = 0x1000, 0x80001000
+
+    print("\n8. --relink-plain undoes the rename exactly")
+    t, _ = fresh(tmp, "relink.dat")
+    pristine = blob(t)
+    install_rename(t, plain, renamed)
+    suspended = blob(t)
+    check(suspended != pristine, "fixture is in the renamed state")
+    code, _ = run_cli("--dat", t, "--verify")
+    check(code == 0, "CONTROL: mid-replacement is itself a valid archive -- "
+                     "the state is real, not a sabotage")
+
+    j = os.path.join(tmp, "j8.json")
+    code, out = run_cli("--dat", t, "--journal", j,
+                        "--relink-plain", hex(plain))
+    check(code != 0 and blob(t) == suspended,
+          "without --confirm the plan is printed and nothing is written")
+    with quiet():
+        code, _ = run_cli("--dat", t, "--journal", j,
+                          "--relink-plain", hex(plain), "--confirm")
+    check(code == 0, f"the relink runs (exit {code})")
+    check(blob(t) == pristine,
+          "the archive is byte-identical to its pre-rename self -- table "
+          "dword, entry-2 crc and MFT self-crc, in one comparison")
+    code, _ = run_cli("--dat", t, "--verify")
+    check(code == 0, "and all three checksum rules hold")
+
+    print("\n8b. the refusals")
+    code, out = run_cli("--dat", t, "--journal",
+                        os.path.join(tmp, "j8b1.json"),
+                        "--relink-plain", hex(plain), "--confirm")
+    check(code != 0 and "already binds" in out and blob(t) == pristine,
+          "a plain id that already binds is refused, archive untouched")
+    code, out = run_cli("--dat", t, "--journal",
+                        os.path.join(tmp, "j8b2.json"),
+                        "--relink-plain", "0x2000", "--confirm")
+    check(code != 0 and blob(t) == pristine,
+          "an id present under neither spelling is refused")
+    code, out = run_cli("--dat", t, "--journal",
+                        os.path.join(tmp, "j8b3.json"),
+                        "--relink-plain", hex(renamed), "--confirm")
+    check(code != 0 and "PLAIN" in out and blob(t) == pristine,
+          "the bit-31 spelling as the ARGUMENT is refused, naming the plain "
+          "form")
+
+    print("\n8c. the journal is the way back")
+    code, _ = run_cli("--revert", j)
+    check(code == 0 and blob(t) == suspended,
+          "revert restores the renamed state exactly")
+    code, _ = run_cli("--dat", t, "--verify")
+    check(code == 0, "and the reverted archive still verifies")
+
+    print("\n8d. a corrupt target row is not made addressable")
+    t2, _ = fresh(tmp, "relink-badrow.dat")
+    install_rename(t2, plain, renamed)
+    with quiet():
+        run_cli("--dat", t2, "--journal", os.path.join(tmp, "j8d.json"),
+                "--corrupt-crc", str(ROW_SHRINK))
+    before = blob(t2)
+    code, out = run_cli("--dat", t2, "--journal",
+                        os.path.join(tmp, "j8d2.json"),
+                        "--relink-plain", hex(plain), "--confirm")
+    check(code != 0 and "CRC" in out and blob(t2) == before,
+          "a row failing its own crc refuses the relink, archive untouched")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
     try:
         sections(tmp)
         section_restore(tmp)
+        section_relink(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

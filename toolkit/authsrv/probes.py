@@ -899,6 +899,124 @@ def _attr_legend_steps(agent_id):
     ]
 
 
+def _faction_max_steps(agent_id):
+    """The four one-dword faction-maxima messages, 0x00EA-0x00ED.
+
+    studies/character/STORAGE.md §2: the attr_legend run proved the client
+    ignores fields 2/4/6/12 of 0x00E9 for the bar denominators (four bars,
+    identical behaviour -- a rule, not a glitch), and every lineage names those
+    fields total_earned_*, a different stat. The caps have messages of their
+    own: CHARACTER_FACTION_MAX_KURZICK/LUXON/BALTHAZAR/IMPERIAL, header + one
+    dword, shapes confirmed by the client's own 38797 tables. Headquarter's
+    handlers store the dword straight into player_hero.{faction}.max. None of
+    the four has ever been observed on any wire we hold, so this is the
+    cheapest OBSERVED conversion in the study.
+
+    Step 1 re-sends the attr_legend vector so every numerator is a number that
+    names its own field; the maxima then get four DISTINCT values so a swapped
+    opcode->faction mapping names itself too (the EC/ED order -- Balthazar
+    before Imperial -- is ldufr's naming, not a measurement). The last step
+    moves one cap after the fact: "set once at load" and "updatable any time"
+    are different servers to build.
+    """
+    v = [1000 + i for i in range(15)]
+    v[0] = 424242     # xp -- known, kept distinctive
+    v[9] = 17         # level must stay legal (the char-select blob caps at 31)
+    return [
+        Step(3.0, 0x00E9, v,
+             "numerators: the attr_legend vector (field i = 1000+i)",
+             "nothing new yet -- this paints the numerators the maxima need: "
+             "Kurzick 1001, Luxon 1003, Imperial 1005, Balthazar 1011."),
+        Step(6.0, 0x00EA, [21000], "0x00EA = 21000 (named MAX_KURZICK)",
+             "nothing yet; the panel does not live-refresh."),
+        Step(1.0, 0x00EB, [22000], "0x00EB = 22000 (named MAX_LUXON)",
+             "nothing yet."),
+        Step(1.0, 0x00EC, [23000], "0x00EC = 23000 (named MAX_BALTHAZAR)",
+             "nothing yet."),
+        Step(1.0, 0x00ED, [24000], "0x00ED = 24000 (named MAX_IMPERIAL)",
+             "NOW close and reopen the Hero window and read the Faction tab. "
+             "PREDICTION: the denominators that have always read '/ 0' are "
+             "filled -- Kurzick 1001/21000, Luxon 1003/22000, Balthazar "
+             "1011/23000, Imperial 1005/24000. Each cap value names its own "
+             "opcode, so if Imperial reads 23000 the EC/ED naming is swapped "
+             "and we have measured that too. All four still '/ 0' refutes the "
+             "whole cluster reading."),
+        Step(12.0, 0x00EA, [31000], "0x00EA again = 31000",
+             "reopen the panel once more. Kurzick 1001/31000 means a cap can "
+             "move mid-session; still 21000 means the client latched the "
+             "first value and a server must send caps before the panel is "
+             "first opened."),
+    ]
+
+
+def _title_track_steps(agent_id):
+    """The title cluster 0x00F3-0x00F6, which no capture has ever contained.
+
+    studies/character/STORAGE.md §3. Shapes are client-validated at 38797 via
+    schema/messages.json; the field NAMES past field 0 are where ldufr and
+    GWCA disagree (GWLP-R's track_id/current_points/... vs GWCA's
+    title_id/value/...), with one agreement worth leaning on: field 0 is the
+    title id and field 2 is the current points under BOTH readings. So the
+    coherent step keeps rank-shaped fields small and legal and makes every
+    points-shaped field distinct, and whatever renders names its own field.
+
+    The two trailing string16(8) fields are enc-strings ("Pts" label and
+    mouseover per GWCA's names). Template framing spends 3 of the 8 units, so
+    the literals here are <= 5 characters -- enough to prove whose text is on
+    screen. If the row's NAME is a real title's (Drunkard, Survivor...)
+    resolved by the client rather than our literal, that alone is a finding:
+    field 0 indexes the compiled 48-row s_titleClientData catalog.
+
+    The deliberately out-of-range legend title comes LAST: if a rank-id field
+    is an unchecked index into the tier array, that step may assert -- and a
+    crash there names the consumer while costing nothing, because every
+    earlier reading is already on screen (the attr_legend rule: leave the
+    client in the state being measured).
+    """
+    label = questdefs.coded_literal("Pts", limit=8)
+    name = questdefs.coded_literal("Rurik", limit=8)
+    return [
+        Step(3.0, 0x00F3, [1, 0, 1, name],
+             "0x00F3 TITLE_RANK_DATA: rank_id 1, rank 1, name 'Rurik'",
+             "nothing visible, predicted -- this should seed a tier record "
+             "the track below can reference. A crash HERE is its own result: "
+             "it names 0x00F3's consumer before anything referenced it."),
+        Step(8.0, 0x00F6, [7, 0, 4200, 1, 1000, 0, 1, 8400, 12, 1,
+                           label, name],
+             "0x00F6 TITLE_TRACK_INFO: title 7, points 4200, denominators "
+             "1000/8400 distinct",
+             "open the Hero window's TITLES tab (close it first if it was "
+             "open). PREDICTION: a track row exists at rank 1 carrying 4200 "
+             "progress. Whichever of 1000 or 8400 shows as the target names "
+             "its field -- ldufr and GWCA disagree here. Note the row's NAME: "
+             "our 'Rurik', or a real title resolved from the client's own "
+             "48-row table?"),
+        Step(10.0, 0x00F5, [7, 6000],
+             "0x00F5 TITLE_UPDATE: title 7 -> 6000",
+             "reopen the tab. PREDICTION: the same row now reads 6000 -- an "
+             "update can move a track without a fresh TRACK_INFO. If a rank "
+             "boundary was crossed (6000 > 4200), does the rank change too?"),
+        Step(10.0, 0x00F4, [agent_id, 1],
+             "0x00F4 TITLE_RANK_DISPLAY: player 1, rank 1",
+             "under YOUR OWN nameplate (target yourself). PREDICTION, weak: "
+             "the rank-1 name from step 1 appears there. The wiki says titles "
+             "display in STAGING areas, so nothing appearing in an explorable "
+             "is the staging-area rule, not a refutation -- but a crash or a "
+             "changed nameplate is real signal either way. The word field is "
+             "player NUMBER under GWLP-R's naming and could be agent id; ours "
+             "are both 1, so this step cannot tell them apart."),
+        Step(10.0, 0x00F6, [8, 0, 9002, 9003, 9004, 0, 9006, 9007, 9008, 9009,
+                            label, name],
+             "0x00F6 legend, title 8: every numeric field 9000+index, "
+             "rank ids deliberately out of range",
+             "LAST ON PURPOSE. Reopen the tab. A second row whose numbers "
+             "name their own fields settles the ldufr/GWCA naming dispute "
+             "outright; an assert instead names which field is an unchecked "
+             "index into the tier table -- either outcome is worth having, "
+             "and everything before this is already measured."),
+    ]
+
+
 def _f32(x):
     """A float, as the dword our schema says this field is.
 
@@ -4565,6 +4683,45 @@ PROBES = {
              "later steps rebuilt the array from zeros and wiped the legend "
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
+    ),
+    "faction_max": lambda a, o: Probe(
+        question="Do the four one-dword messages 0x00EA-0x00ED set the "
+                 "faction bar denominators that 0x00E9 provably does not?",
+        predicts="After the burst and a Hero-window reopen, the Faction tab's "
+                 "denominators -- '/ 0' on every run so far -- read 21000 "
+                 "Kurzick, 22000 Luxon, 23000 Balthazar, 24000 Imperial "
+                 "against the legend numerators 1001/1003/1011/1005. Distinct "
+                 "caps mean a swapped opcode->faction mapping names itself. "
+                 "The final step predicts Kurzick moving to 31000, settling "
+                 "whether a cap can change mid-session. All four bars still "
+                 "'/ 0' refutes the cluster reading outright.",
+        steps=_faction_max_steps(a),
+        note="studies/character/STORAGE.md §2. Shapes are the client's own "
+             "38797 tables; the semantics are three lineages deep (Headquarter "
+             "stores the dword into player_hero.*.max) and observed nowhere. "
+             "The Hero window does not live-refresh -- close and reopen it "
+             "after each read point, or the run will look self-contradictory.",
+    ),
+    "title_track": lambda a, o: Probe(
+        question="Does the title cluster 0x00F3-0x00F6 drive the Hero "
+                 "window's Titles tab, and whose field naming is right?",
+        predicts="A track row appears for title 7 at rank 1 with 4200 points "
+                 "(field 2 is current points under BOTH rival namings), and "
+                 "0x00F5 moves it to 6000. Whichever of 1000/8400 renders as "
+                 "the target names its field and its lineage. The row's name "
+                 "is the sharper question: our literal 'Rurik' means the "
+                 "strings are display text; a real title name means field 0 "
+                 "indexes the compiled 48-row catalog. The out-of-range "
+                 "legend title is LAST because it may assert, and an assert "
+                 "there names an unchecked tier index without costing the "
+                 "earlier readings.",
+        steps=_title_track_steps(a),
+        note="studies/character/STORAGE.md §3. Zero title messages exist in "
+             "all 22,524 captured -- this cluster has never been seen used, "
+             "only declared. Titles DISPLAY only in staging areas per GWW, so "
+             "step 4 failing silently in an explorable is expected; the tab "
+             "itself should work anywhere. Reopen the Hero window at every "
+             "read point.",
     ),
     "damage": lambda a, o: Probe(
         question="Does damage arrive as agent property 16 on 0x00A3, and is the "

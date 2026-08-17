@@ -136,6 +136,62 @@ def check_source(src, filename="<src>"):
     return sorted(set(bad))
 
 
+def conditional_globals(src, filename="<src>"):
+    """[(lineno, name)] -- `global X` names with NO module-level assignment.
+
+    A DIFFERENT DEFECT FROM `check_source`, and the reason this exists is that
+    `check_source` is deliberately blind to it. `_bound_at_module` counts
+    `global X` as a module binding because for NAME RESOLUTION it is one --
+    Python resolves the read fine. What it cannot see is RUNTIME ORDERING: a
+    `global X; X = ...` inside a CLI block binds X only if that block runs. If
+    nothing else ever assigns X at module level, every other path reads a name
+    that does not exist yet.
+
+    MEASURED, 2026-08-16. Three names landed exactly this way -- HERO_ATTRIBS,
+    HERO_SKILLBAR and HERO_BODY_NPC, assigned only inside authsrv.py's `--hero`
+    block while the world-load path read them unconditionally. A DEFAULT launch,
+    with no --hero at all, raised NameError inside the instance load; the client
+    showed Code=007, which is indistinguishable from a bad map row, and one of
+    the two sessions that hit it spent its first attempt on the archive.
+    `check_source` reported zero on that file, correctly by its own rule.
+
+    The check is deliberately crude: a module-level `NAME = ...` anywhere
+    clears it. That admits a name assigned at module scope only inside an `if`,
+    which is the same defect one level down -- but it is refutable, cheap, and
+    catches the shape that actually shipped.
+    """
+    tree = ast.parse(src, filename)
+    declared = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Global):
+            for name in n.names:
+                declared.setdefault(name, n.lineno)
+    if not declared:
+        return []
+    assigned = set()
+    for stmt in tree.body:
+        targets = []
+        if isinstance(stmt, ast.Assign):
+            targets = stmt.targets
+        elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign)):
+            targets = [stmt.target]
+        for t in targets:
+            for sub in ast.walk(t):
+                if isinstance(sub, ast.Name):
+                    assigned.add(sub.id)
+        if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+            for a in stmt.names:
+                if a.name != "*":
+                    assigned.add((a.asname or a.name).split(".")[0])
+    return sorted((line, name) for name, line in declared.items()
+                  if name not in assigned)
+
+
+def conditional_globals_file(path):
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        return conditional_globals(fh.read(), path)
+
+
 def check_file(path):
     with open(path, encoding="utf-8", errors="replace") as fh:
         return check_source(fh.read(), path)

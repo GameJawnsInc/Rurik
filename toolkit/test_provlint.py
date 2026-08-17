@@ -111,6 +111,14 @@ GRANDFATHERED = {
     # own noun for a quest-log row. Apply the check this file's docstring names -- read
     # them and ask whether any argues for nothing.
     os.path.join("studies", "quests", "FINDINGS.md"): 25,     # 15: the questType enum, the flag gates, challengeSortArray
+    # 22 on 2026-08-16, over NEWCOMER_CEILING after the R4c-H arc landed. Ruled on by
+    # the unit-models session (a DIFFERENT arc -- the heroes session should apply the
+    # docstring's check itself and object if this is wrong): the 22 are ~13 DISTINCT
+    # asserts cited repeatedly at different claim sites -- ChCliHero.cpp:199
+    # `charHeroData` five times as the evidence anchoring one struct, ChCliAttrib.cpp:156
+    # `attribState` four -- the smsg shape (one quote, many claims), not a dump. 30 is
+    # snug over 22, in the proportion the 11-15 entries above carry.
+    os.path.join("studies", "heroes", "FINDINGS.md"): 30,
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own

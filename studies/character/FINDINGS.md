@@ -1189,6 +1189,20 @@ set the denominators will ship faction bars that render as empty, and the study'
 from is **NOT FOUND** — plausibly a title-track or account-state message we have
 never sent.
 
+> **UPDATE 2026-08-16 — answered at the reading level.** The denominators have
+> four dedicated one-dword messages of their own: `0x00EA`–`0x00ED`
+> (`CHARACTER_FACTION_MAX_KURZICK/LUXON/BALTHAZAR/IMPERIAL`). Shapes are
+> confirmed by the client's own 38797 tables (via `schema/messages.json`, no
+> override in range); semantics are CORROBORATED across ldufr (Headquarter's
+> handler stores the dword into `player_hero.*.max`), GWLP-R (`P222`–`P225`)
+> and the GWCA/Py4GW client-memory sink (`WorldContext` `max_*` fields,
+> outside the dupe-paired block this message's fields fill). Fields 2/4/6/12
+> are `total_earned_*` — *lifetime* faction, a different stat — which is why
+> the bars ignore them. Not yet OBSERVED against our client; the one-packet
+> probe and the full record are in [STORAGE.md](STORAGE.md) §2, along with
+> the title cluster `0x00F3`–`0x00F6` this note's old "plausibly a
+> title-track message" guess was half-pointing at.
+
 **Practical note for anyone probing this panel:** the Hero window does not
 live-refresh. It has to be closed and reopened after a packet lands, which made
 an earlier run read as self-contradictory until the owner noticed.

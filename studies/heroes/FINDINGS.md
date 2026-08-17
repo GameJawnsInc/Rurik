@@ -580,7 +580,8 @@ confound the henchman arm nearly shipped with.
 > index from owner player number from owner agent id, because all three are 1 in this rig.
 > `msg+8` is UNVERIFIED; the agent-id half stands. **§18 then settled the negative by
 > experiment: `msg+8` carried 1 while the hero was 2 and the row still rendered as hero 2,
-> so it is definitively NOT the hero index.**)*
+> so it is definitively NOT the hero index. **§21 then identified it positively: it is the
+> OWNER PLAYER NUMBER.**)*
 
 And that yields a tidy structural fact across both messages: **entry+0x0 holds the agent id
 in `0x01BF` *and* `0x01C2`** — consistent storage, different wire order. The refuted
@@ -1242,6 +1243,218 @@ One confound survives: `0x0074` and `0x0072` both carried hero 2, so which of th
 supplies the identity is undetermined. The same trick splits them — give `0x0072` a different
 hero id from `0x0074`'s — with the caveat that `0x0072` is the activation and may simply
 assert rather than render, which would itself be an answer.
+
+## 20. Splitting `0x0074` and `0x0072` — they are two halves of one keyed record
+
+The last confound. Three outcomes were named before the run: the name follows `0x0074`
+(Goren), the name follows `0x0072` (Tahlkora), or `0x0072` asserts `charHeroData` because its
+field 1 *selects* the record `0x0074` made.
+
+```
+0x0074  MERCENARY_INFO (hero 2)      <- creates a record for 2
+0x01C2  PARTY_HERO_ADD (..., 2, 0)
+0x0072  HERO_ACTIVATE  (hero 3, ...) <- activates 3, for which no record exists
+```
+
+**Outcome C.** `Assertion: charHeroData  P:\Code\Gw\Char\Cli\ChCliHero.cpp(199)` — the
+**identical** assert §11.3 got by omitting `0x0074` entirely.
+
+### 20.1 The result, and why it is better than an A/B answer
+
+**`0x0074`'s field 1 is the record KEY; `0x0072`'s field 1 is a SELECTOR into the same
+namespace, and the two must agree.** A mismatched selector is indistinguishable — same
+assert, same line — from the record never having been created at all.
+
+So the question "which message supplies the hero's identity" was subtly malformed, and the
+run says so rather than picking a side. Neither supplies it independently: **`0x0074` creates
+a keyed record that carries the identity, and `0x0072` activates the record under that key.**
+The name the roster renders is the *record's*, reached through a key both messages must name
+identically. That is a cleaner mechanism than either branch of the A/B would have described.
+
+It also **re-confirms §11.3 from a new direction**: that section established `0x0074` creates
+the `charHeroData` record by removing it. This reproduces the same assert by *keeping* the
+message and mismatching its key — a different manipulation reaching the same gate, which is
+the kind of agreement worth more than a repeat of the same arm.
+
+### 20.2 The hero family, as a whole, now reads
+
+| message | field 1 | role |
+|---|---|---|
+| `0x0074` MERCENARY_INFO | hero id | **creates** the `charHeroData` record (the identity lives here) |
+| `0x01C2` PARTY_HERO_ADD | owner-ish word (UNVERIFIED) | roster slot → agent id at `msg+0xc`; **carries no identity** (§19) |
+| `0x0072` HERO_ACTIVATE | hero id | **selects** that record and activates it; also `agentId`, `inventoryId`, `aiMode` |
+
+Three arcs of confound-splitting, each one field at a time, and the shape that emerges is:
+**identity is the data-cache record's, the party message only binds a slot to an agent.**
+
+### 20.3 Still open
+
+`0x01C2`'s `msg+8` (owner-player vs owner-agent — both 1 in this rig), its `msg+0x14`,
+`0x0074`'s other 17 fields, `msg+0x10`'s real role (§19.2 — inert on everything observable),
+the commander-panel click (§17.4 — probably a client-side UI event, not a message), the
+untested `aiMode`, and follow AI.
+
+## 21. `msg+8` is the OWNER PLAYER NUMBER — and the arm exposed two "my id" notions
+
+The rig §18 asked for: `--player-number 2` makes `PLAYER_NUMBER` (2) differ from
+`PLAYER_AGENT_ID` (1), so the two candidate readings of `0x01C2`'s `msg+8` finally separate.
+`--hero-owner` overrides `msg+8` alone. Two arms differing in nothing else:
+
+| arm | `msg+8` | roster row | commander slot / flag 1 |
+|---|---|---|---|
+| **A** | **2** (the player number) | **`Mo1 Goren` renders** | **absent / greyed** |
+| **B** | **1** (the agent id) | **no hero row** | **bound / green** |
+
+### 21.1 The answer
+
+**`msg+8` is the owner PLAYER NUMBER — OBSERVED.** The roster row renders exactly when
+`msg+8` equals the player number this server declared, and not when it equals the agent id.
+That is consistent across all three rigs now: the original (`PLAYER_NUMBER` 1, `msg+8` 1 →
+renders), H1 (`msg+8` 200 → no row), and arms A/B here. §11.1's "hero index" reading was
+withdrawn in §17.3, refuted in §18, and the field is now positively identified rather than
+merely narrowed.
+
+### 21.2 The unexpected half: the two filters disagree
+
+Arms A and B are **exact mirrors** — whichever value makes the roster row appear makes the
+commander binding vanish, and vice versa. Both consumers read the same `entry+4`, so they
+must be comparing it against **different** "my id" values:
+
+- the **roster UI** compares against the player number we declared (2),
+- the **`GmHeroCommander` scan** (§17.1) compares `entry+4` against `ctx[0x44][0x2ac]`, which
+  evidently stayed **1**.
+
+**RECONSTRUCTION, and the honest reading:** `--player-number` changes only what *we send*, not
+what the client believes about itself. `ctx[0x44][0x2ac]` is computed from something our
+override never touched, so forcing `PLAYER_NUMBER` to 2 **desynchronised** the client's own
+notion of "me" from ours. In the default rig both are 1 and everything agrees, which is why
+the hero worked all along.
+
+**What is still not settled:** whether `ctx[0x44][0x2ac]` is the player's *agent id* or a
+client-side *player number* derived elsewhere — because in this rig it is 1, and so is
+`PLAYER_AGENT_ID`. Breaking that needs the client's own value moved, not ours, which means
+finding what writes it rather than another flag on our side.
+
+### 21.3 The practical consequence
+
+Do not use `--player-number` for anything but this experiment. It puts the server's claimed
+player number out of step with the client's internal one, and the visible symptom is
+narrow and misleading: the roster row and the commander binding become mutually exclusive.
+The default (1) is the value that satisfies both, and it is the default for that reason.
+
+## 22. What writes `ctx[0x44][0x2ac]`: `0x0199` INSTANCE_LOAD_INFO, field 1
+
+§21.2 left the client's own "my id" unnamed. Desk work, no client:
+
+- **`ctx[0x44]` is the MISSION subsystem.** The accessor `0x0084DD70` sits in **MsCliApi**
+  (its neighbours assert `MsCliApi:387/396/406/821`).
+- **`codescan.py --field 0x2AC --writes`** finds eleven stores image-wide; three are in the
+  MsCliApi range, and two of those are real writes rather than an init-zero:
+  `0x0084EF13` and `0x0084F24F`. Both take a message struct as `[ebp+8]` and copy **`[msg+4]`
+  — field 1** — into `mission_ctx[0x2ac]`; the second bulk-copies a dozen more fields
+  alongside it, which is what a message handler looks like.
+- Neither has a `call` xref: each VA sits in **one aligned `.rdata` word** (`0x00BCB2B4`,
+  `0x00BCB368`) — dispatch-table entries. `msgshape.py --all` matches them to opcodes:
+
+| opcode | handler | shape |
+|---|---|---|
+| **`0x0199` INSTANCE_LOAD_INFO** | `0x0084EF00` | `[agent_id, u16, u8, u32, u8, u8]`, 15 B |
+| `0x01A4` | `0x0084F230` | `[agent_id, u16, u8, u32, u8, u8, u32, vec2, u16, u8, u8, string16(20), blob(8)]`, 81 B |
+
+**`ctx[0x44][0x2ac]` is `0x0199`'s field 1** — the message this server has sent at every
+instance load since the beginning, whose field 1 the client's own descriptor types
+`agent_id` and which we fill with the player's agent id. `0x01A4` writes the same slot from
+its own field 1 and we never send it.
+
+### 22.1 This explains §21's mirror exactly
+
+The two filters read the same `entry+4` and compare it against different things:
+
+- the **roster UI** against the value we used as `PLAYER_NUMBER` (which also feeds `0x0059`,
+  `0x00B0`/`0x00B1`, `0x01CB`'s party member and the player's `model_id`, so "player number"
+  is the coherent label but not fully isolated),
+- the **`GmHeroCommander` scan** against `ctx[0x44][0x2ac]` = **`0x0199` field 1** = the
+  player's **agent id**.
+
+`--player-number 2` moved the first and left the second at 1, so exactly one of the two could
+match at a time. In the default rig `PLAYER_NUMBER` and `PLAYER_AGENT_ID` are both 1, both
+filters see 1, and the hero binds — which is why every earlier run worked and why the
+mirror only appeared once the two were forced apart.
+
+### 22.2 A trap removed
+
+`0x0199`'s field 1 was a **literal `1`** at the send site, not `PLAYER_AGENT_ID`. Harmless
+today because the constant is also 1 — and exactly the kind of thing this repo keeps
+recording after it bites: the value now demonstrably feeds a filter three subsystems away,
+so a literal that silently stops tracking the constant is worth closing before it matters.
+Now `PLAYER_AGENT_ID`, with the reason attached.
+
+### 22.3 The confirming experiment, and why it was not run
+
+The prediction is clean: set `0x0199` field 1 **and** `msg+8` to the same value and both
+consumers agree again. It was not run because that field is the player's own agent id — the
+body is created at `PLAYER_AGENT_ID`, so moving one without the other desynchronises the
+player rather than the hero, and the run would measure our own inconsistency. The honest
+version of the test is to move `PLAYER_AGENT_ID` itself, which touches the spawn path and
+deserves its own arm rather than a footnote to this one.
+
+## 23. A FULL AUTHORED PARTY — three heroes and a henchman, in one roster
+
+The capability step. `--hero` now takes a list, and every hero gets its own agent id and
+definition from one place (`hero_slots()`), because an agent id reused for a second body
+leaves the client holding one agent's state under another's name.
+
+```
+0x01BF PARTY_HENCHMAN_ADD (party 1, agent 30,  ...)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 200, hero 1)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 201, hero 2)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 202, hero 3)
+... bodies, attribute trios, skill bars, then one HERO_ACTIVATE each
+```
+
+**The Party Members window:**
+
+```
+    W0 Test Warrior
+[1] Mo1 Norgu
+[2] Mo1 Goren
+[3] Mo1 Tahlkora
+    Mo1 Hatcher [Collector]
+```
+
+### 23.1 What this measures that a single hero could not
+
+- **The commander slot array assigns sequentially and independently.** Slots 1, 2, 3 appear
+  as separate numbered buttons, one per hero — the `heroCommanderSlot[7]` array of §3.1
+  filling up, not a single slot being reused.
+- **Each hero resolves its OWN identity.** Three different `s_heroClientData` rows render
+  three different names from three `0x0074` records keyed by three hero ids. The keyed-record
+  model of §20 holds at n=3, which is the first time it has been tested past one.
+- **Heroes and henchmen coexist in one roster, and the client distinguishes them visually.**
+  The henchman row has **no numbered button**; the heroes do. That is §3.1's reconstruction
+  (individually-flaggable hero slots vs henchmen-as-a-group) and the wiki's "three individual
+  flags plus one all-heroes-and-henchmen" (§6), both now visible on screen rather than
+  inferred from an 8-way dispatch.
+- **`s_heroClientData` row 3 = `Tahlkora`, confirmed from the screen.** Predicted in §19 from
+  `textrec.py` before the run that would show it; the row never rendered in that arm because
+  the client ignored `msg+0x10`. It renders here. Rows **1, 2 and 3** are now each confirmed
+  from two unrelated directions — archive resolution and the client's own rendering.
+
+### 23.2 Guards, mirroring the client's own bounds
+
+`--hero` refuses more than **7** (`PtPlayer:332` and `GmHeroCommander:214` both `cmp 7`,
+`GmView:4330` names exactly HERO1..HERO7), refuses a **duplicate** hero id (each `0x0074`
+record is keyed by that id, so two agents would select one record), and each id still
+traverses the 1..39 bound. All four refusals verified.
+
+The single-hero experiment flags (`--hero-owner`, `--hero-swap`, `--hero-roster-id`,
+`--hero-activate-id`) apply to the **first** hero only, so a probe arm can never silently
+rewrite a whole roster.
+
+### 23.3 Bodies are fanned out
+
+120 units apart along y, because bodies sharing a spot read as one body and "nothing
+appeared" is a failure this repo has already paid for once.
 
 ## 9. Defects and corrections this arc produced
 
