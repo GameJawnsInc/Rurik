@@ -1421,3 +1421,23 @@ The party window renders the hero row as **`Lvl 255`**. Not investigated, not ob
 related to any of the above, and recorded here only so the next reader does not think it is
 new — a level that reads 255 where 20 is the game's cap is the shape of an unset or
 sign-extended byte, and `0x0074`'s level field is one of the arguments we send as zero.
+
+### 24.4 Method correction: the harness reads the assert itself
+
+§23.2 said "the click is the measurement" and left the whole readout with the owner. Half of
+that is wrong, and it matters for how the remaining arms get run.
+
+`session.py` **captures the crash dialog on its own** — the Arm B run wrote
+`vault/captures/harness/20260817T170749/crash-dialog.txt` and printed
+`>>> Assertion: heroData->agentId` into its own verdict, alongside `report.json` and
+screenshots, and still finished `RUN VERDICT: PASS (target: map)` because the map rung was
+reached before the crash.
+
+So the owner-dependent part is **only the click**. The assert text, the dialog, the logs and
+the screenshots all come back without anyone reading a screen — which means an arm costs one
+click and nothing else, and the result is a file rather than a transcription. Future arms
+should quote `crash-dialog.txt` rather than a screenshot, and can be diffed against each
+other directly.
+
+(The two arms of §24 are `20260817T170549` — `heroData` — and `20260817T170749` —
+`heroData->agentId`.)
