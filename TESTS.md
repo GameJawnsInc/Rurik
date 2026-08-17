@@ -2606,8 +2606,12 @@ Every one of these, in the order they were written:
   claims and only the first was being made. §1 pins the DR7
   encoding, including that bits 16+ are ZERO: a nonzero R/W field is a *data*
   breakpoint wearing the same address, which does not error and never fires on
-  execution. §2 checks all seven site addresses against the 38833 image ON
-  DISK, so a typo'd address is caught with no client at all. §4 proves
+  execution. §2 checks EVERY site's bytes against the 38833 image ON DISK — 19
+  of them as of 2026-08-17 — so a typo'd address is caught with no client at
+  all. That count grows with the arc (`raise114`, `lookup114`, `gmvEvent`,
+  `gmvEventAny`, `gmvSub114` came from the PvP-UI arc), and §2 iterates `SITES`
+  rather than a hand-kept list precisely so a new site cannot be added without
+  being checked. §4 proves
   `verify_sites` accepts bytes that match and REFUSES bytes that do not — the
   cross-build guard, and this arc read a 38797 address in a 38833 binary once
   already. §5 breaks the verdict's control gate both ways. §6 pins the capture

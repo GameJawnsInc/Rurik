@@ -1317,6 +1317,183 @@ kind 9's `0x1000` ambient flag — a model, not a default); `0x006D` NPC weapons
 (needs item authoring the content store cannot do yet); and two residues filed with their
 own arcs — the heroes split-filter (§21.2) and whether `0x006E` position semantics matter
 for the HANDS.
+### The PvP-UI arc — OPENED and LANDED 2026-08-17, out of the heroes arc's measured wall
+
+> **Cross-reference for the unit-setup arc's open residue above.** That entry lists "the
+> heroes split-filter (§21.2)" as a leftover — the roster UI and the commander scan
+> comparing `entry+0x4` against different notions of "my id". This arc bears on it: §13.1
+> corroborates the commander's notion as `ctx[0x44][0x2AC]` from the UI side (heroes §22
+> had it from the wire side), and §20 shows a commander binding **without** touching that
+> field — the identity was never the blocker, the timing was. Anyone picking up §21.2
+> should read §19 first.
+
+Study: [studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md). Branch `claude/pvpui-arc`,
+worktree `.claude/worktrees/pvpui-arc`.
+
+**Why it exists.** Heroes §36.10 measured that `GmPosseRoster` — one of the eight subscribers
+to the commander event `0x1000011E` — has its handler **never entered once** in a session with
+the party window open and a hero row rendering, so the guarded install site `0x00578BF0` is
+never reached. (The gate reading that accompanied this is retracted — see 2 below.) The
+subscriber is not unregistered; **its whole construction path is absent**, and every route to
+it runs through UI an explorable PvE session does not build.
+
+**The deciding question is ANSWERED (2026-08-17, study §6), on desk work alone.** The message
+is **9** — UI "frame created" — and **there is no type selector**. `hdr.param` is the instance
+slot `T**`, not a type code; which control gets built is fixed at compile time by which
+`UiCtlInstance<T>` was instantiated. The one runtime choice on the whole path is *which window
+index was opened*, through `GmView::ShowFloatingDialog` (`0x004E1E80`, 38833) over
+**`s_floatingDialogs`** — a 58-entry, 36-byte-stride registry of named windows at `0x0094BEE8`,
+named by the client's own assert `GmView:2073`. `GmPosseRoster` is a child of dialog **39
+`PvpItemCreate`** and of dialog 10 `DeckBuilder` — both PvP windows, now name-confirmed.
+
+**Three things came out of it that outlive the arc:**
+
+1. **A build hazard worth a house rule** (study §4). The static tools default to the pinned
+   **38797**; the harness runs **38833**. Region drift is −0x20 to −0x160, and on 38797 the
+   install site `0x00578BF0` is not a function at all but a switch jump table — so `--xrefs`
+   answers "no callers" with total confidence. Pass `--exe` and stamp the build on every VA.
+2. **Two corrections to heroes §36.8/§36.10** (study §7). `0x00815EA0` is the gate's *early-out*,
+   not its verdict — the value returned is bit 11 of a record field nobody read — and the gate
+   has **14 callers**, so hits inside it attribute to no caller. "The gate is not the reason"
+   is retracted to UNVERIFIED. The handler-never-entered measurement itself stands.
+3. **The commander panel is `GmPetCommander`, not `GmPosseRoster`** (study §8). It is
+   `s_floatingDialogs[31..38]` (`PetCommanderPlayer`, `PetCommanderHero0..6`, handler
+   `0x0050E540` → `0x0050DC50`), opened at `0x004E8990` with `dialog = 32 + heroIndex` where the
+   hero index comes from `0x00524DB0(agentId)`. **Heroes was chasing the wrong subscriber.**
+
+**Q4 is ANSWERED too (study §10), same session, still desk work.** `GmView`'s frame handler
+(`0x004E27D0`, installed by `UiGame.cpp`) dispatches small UI messages 4..0x52 and events
+`0x10000007..0x100001CE` through two MSVC switch tables, so a call site inside it maps back to
+the exact selector that reaches it. Three sites, each in a block with **one** selector:
+
+- `0x004E3D16` → the commander-window opener → event **`0x100001C2`**, whose **only raise** is
+  `0x00567069` in **`PtTeamAgent`** on UI message 1 param 8 — **a party-row click.** So the
+  commander window is **not server-openable**; the player opens it, and the server's only
+  influence is over what `0x00524DB0(agentId)` finds. That is a better position than "not
+  reachable": we do not need to open the window, we need the lookup to succeed.
+- `0x004E38F0` → **`GmView:5890 commander`, the heroes crash** → event **`0x100001A4`**, *not*
+  `0x1000011E`. Its only raise is `0x00524FD0`, which loops over 12-byte records in the same
+  region as `0x00524DB0` and `0x00524C40` and raises once per record passing `0x0049C4B0`.
+  Neighbouring asserts give the shape of what is missing: a `commander` with
+  `slotIndex < DLG_AGENT_COMMANDERS` (the registry's `AgentCommander0..6`) and `heroData` with
+  an `agentId`.
+
+**LANDED 2026-08-17: A COMMANDER EXISTS.** Eight loopback runs, build 38833. The cause was
+a **53 millisecond** race, not a wire field:
+
+```
+  +0.000s  worker     our 0x01C2 appends the hero row
+  +0.000s  raise114   our 0x01B2 raises 0x10000114
+  +0.053s  gmvSub114  GmView SUBSCRIBES to 0x10000114
+```
+
+`0x10000114` is the only event whose GmView case (90) calls the commander-model rebuild
+`0x00524E00`, itself the only caller of `0x00524C40` — the function heroes measured as
+never running. We raise it 53 ms before the module that listens for it exists, and nothing
+raises it again, so the model is built once over an empty container and never rebuilt.
+
+**`--party-mine-late SECONDS`** (new, opt-in, defaults off) re-sends `0x01B2` after the
+load. `0x01B2`'s handler raises `0x10000114` on both branches, so a second send is a second
+raise. With `--party-mine-late 2.0`:
+
+```
+  +2.048s  raise114   the re-send        |  before: cap=7 count=0, all slots 0x0
+  +2.048s  bulk       case 90 ENTERED    |  after:  cap=7 count=1, slot0 = 0x1
+  +2.054s  create     0x00524C40 RAN     |  => 1 commander(s) EXIST
+```
+
+**Not claimed:** the party-window hero button has not been clicked, so whether `GmView:5890`
+still fires is unmeasured — that is the next thing, and it needs a click. `n=1` on the fix;
+the control is that runs 1–6 fire `worker` and the first raise identically while `bulk` and
+`create` stay cold.
+
+**Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
+38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
+container claim (refuted by RESKIN §18, which was right); §13.3's "only `0x01D9` writes
+it" (refuted twice — `0x01D9` writes `+0x58`, a different field, because every `PyCliParty`
+worker takes `this = object + 4` and spells `+0x54` as `0x50`); and §14.3's ordering
+hypothesis (refuted — our rows land *before* the raise, which is the order the rebuild
+wants). `PyCliGetMyPartyId` is `0x00856310` on 38833, not the `0x00856250` in
+`agents.py:369`.
+
+**Superseded detail below, kept for the record.**
+
+**MEASURED ON THE HARNESS 2026-08-17 (§15-§16). Three loopback runs, build 38833, one
+hero, every site byte-verified in the running process, every run reaching its map:**
+
+- **The ordering hypothesis is REFUTED.** `worker` (our `0x01C2`) fires BEFORE `bulkraise`,
+  so the hero row is already in the container when `0x10000114` is raised.
+- **"Raised into nothing" is REFUTED for this event.** `lookup114`, the client's own
+  subscriber-map read armed off the raise, reports **SUBSCRIBED**. The event is raised and
+  delivered, and GmView's case 90 — the only caller of the commander rebuild — still never
+  runs. `bulk` 0 hits, `create` 0 hits, across every run.
+- `commanderpeek` with the client in the map: commander container **cap=7, count=0**.
+- **§14.2's CONTESTED point is SETTLED in RESKIN's favour (§16).** `0x00858850` is a
+  thiscall whose caller (`0x01B2`'s handler) passes `ecx = [globals+0x4C]+4`, so its
+  `mov [esi+0x50], eax` **is** the `[[globals+0x4C]+0x54]` store. `0x01B2 PARTY_SET_MINE`
+  writes it and `agents.py:434` already sends it. `codescan --field 0x54` missed it because
+  the displacement is `0x50` — the base is pre-biased by four — exactly the blind spot the
+  tool documents. §13.3 is refuted.
+- **§4 is corrected (§15.0):** the harness does NOT default to 38833. `drive_client.py:87`
+  selects by build and :167 excludes it. Running 38833 needs `--exe` **and** `RURIK_DAT`
+  pointed at that run dir's own `Gw.dat`, or `contentids` refuses on maps 146/148.
+
+**So the break is neither delivery nor ordering.** GmView's *subscriber* is `0x004ED055`
+(heroes §36.7), which is not its frame handler `0x004E27D0` — two different doors, and
+case 90 sits behind the second. The open question is now narrow and mechanical: **does
+`0x10000114` ever reach GmView's frame-handler event half at all**, and if not, what
+decides which events its subscriber forwards into the frame.
+
+**Earlier, superseded framing, kept for the record:** The
+retraction matters more than the claim: `[[ctx+0x4C]+0x54]` was already named by
+`agents.py:369` and RESKIN §17.1, and RESKIN §18 **measured** it non-null and equal to 1
+after the party build. So the commander model is reading our rows, not an empty list,
+and §13.4's experiment is withdrawn. What survives:
+
+- **CORROBORATED**: `ctx[0x44][0x2ac]` — reached from the UI side in this arc, from the
+  wire side in heroes §22. Same answer, opposite directions. The identity is not the blocker.
+- **CONTESTED**, and worth settling: `[c+0x54]` has exactly two pointer stores in the image,
+  both reachable only from opcode `0x01D9`, which we never send — yet RESKIN measured the
+  pointer written. Either `codescan.py` missed a store (its own footer says how that
+  happens, and that is the way to bet) or §17.1 misreads `PyCliGetMyPartyId`. Neither
+  side may be quoted as fact until one is checked.
+- **The corrected chain** (§14.3): `0x00524C40` ← the rebuild `0x00524E00` ← its ONE caller
+  in GmView's event dispatcher ← event `0x10000114` ← `0x00858850` ← the handler for
+  **`0x01B2` PARTY_SET_MINE, which `agents.py:434` already sends**. So the trigger is not
+  missing; the live question is **ordering** — our `0x01C2` rows go out inside the
+  `0x01D2..0x01D3` window, and if the rebuild has already run over an empty container
+  nothing re-raises `0x10000114`. `authsrv.py:2322`/:7896 already carry a flag for exactly
+  that ordering. **Whether it has ever been run together with a commander check is not
+  recorded anywhere — establish that before forming a new hypothesis.**
+
+**Original §13 claim, kept for the record:** `0x01C2`'s FIRST
+field is the container selector, not a label: `0` resolves to `[[globals+0x4C]+0x54]`, the
+**default** container — which is byte for byte the only container the commander model reads
+(`0x008563B0(0, n)`, arg0 a literal zero). `1..20` resolve to numbered containers. **We send
+`party_id = 1`** (`authsrv.py:8159`), so the roster UI reads our row and the commander model
+reads an empty list. `agents.py:560` refuses `0` on the belief that zero is a "silent" no-op
+branch; the branch is real, the reading is not.
+
+The default container is installed by **`0x01D9`** (handler `0x00857200` → `0x0085A340`, the
+only two pointer stores to `[c+0x54]` in the image). **Nothing in `toolkit/` sends `0x01D9`.**
+
+**The experiment, prediction first (§13.4):** send `0x01D9`, then `0x01C2` with
+`party_id = 0`. Predicted — the container fills, `0x00524C40` runs for the first time in this
+project, `0x100001A4` is raised, and the party-row click stops asserting. Refuted if the
+container fills and `0x00524C40` stays cold (the identity is wrong), if `0x01D9` does not
+install it (the store is gated on something unread), or if **the row stops rendering** (then
+retail sends `0x01C2` twice and heroes §21.2's tension is real). Pre-empt the third by sending
+the row **both ways** — one extra message settles §21.2 either way. Two of heroes' own guards
+must be relaxed to run it, both documented as inheriting a belief rather than a measurement.
+
+Separately CORROBORATED on the way: `ctx[0x44][0x2ac]` — reached from the UI side here,
+already reached from the wire side in heroes §22. Same answer, opposite directions. The
+identity was never the blocker. **Still worth checking early:** whether any of this shares
+RESKIN §18.1's explorable gate — heroes §32 blocks `0x01BF`'s last question behind it.
+
+**The prior is now sharper than "not server-reachable".** The wire cannot name a control type
+(§6) and cannot open the window (§10.1) — but it was never supposed to. The heroes arc spent
+itself on `0x1000011E` while the assert the player hits is on `0x100001A4`'s path.
 
 ### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
 

@@ -2340,6 +2340,32 @@ HERO_BUST_CACHE = False
 # None = send it inline, which is every run before 2026-08-17. See
 # hero_late_tick() for the hypothesis under test.
 HERO_LATE = None
+# Seconds after INSTANCE_LOAD_FINISH to RE-SEND 0x01B2 PARTY_SET_MINE.
+# None = do not, which is every run before 2026-08-17.
+#
+# THE MEASUREMENT THIS EXISTS FOR is one line of a trap report.
+# studies/pvpui/FINDINGS.md 19 timestamped GmView's own subscribe call against
+# our raise, both sites in the same ordered list:
+#
+#   +0.000s  worker     our 0x01C2 appends the hero row
+#   +0.000s  raise114   our 0x01B2 raises 0x10000114
+#   +0.053s  gmvSub114  GmView SUBSCRIBES to 0x10000114
+#
+# 0x10000114 is the only event whose GmView case (90, at 0x004E5D20) calls the
+# commander-model rebuild 0x00524E00 -- itself the only caller of 0x00524C40,
+# the function heroes measured as never running. We raise it 53 ms before the
+# module that listens for it exists, and nothing raises it again, so the model
+# is built once over an empty container and never rebuilt.
+#
+# 0x01B2's handler (0x008569E0 -> 0x00858850) raises 0x10000114 on BOTH of its
+# branches, so a second send is a second raise -- this time into a subscriber
+# map that contains GmView. 19.2 states the three refutations before the run.
+#
+# DELIBERATELY NOT --hero-late. Heroes already deferred the hero PIPELINE and
+# measured that it still asserted; what has never been deferred is the RAISE.
+# The rows stay where they are -- 15.1 measured them landing BEFORE the raise,
+# which is the order the rebuild needs.
+PARTY_MINE_LATE = None
 # 0x0074's string16(32) name field. EVERY run so far has sent it EMPTY, so the
 # one encstring case this family never tested is the hero's own. The hero row
 # renders its name from s_heroClientData (the body is a hatcher and the row
@@ -2875,6 +2901,36 @@ def hero_late_tick(send, state, conn_id):
           f"finished", flush=True)
     for op, vals, label in seq:
         send(op, vals, label)
+
+
+def party_mine_late_tick(send, state, conn_id):
+    """Re-send `0x01B2 PARTY_SET_MINE` once, `PARTY_MINE_LATE` s after the load.
+
+    See `PARTY_MINE_LATE` for the measurement. In one sentence: the raise that
+    drives the commander-model rebuild happens 53 ms before GmView subscribes to
+    it, so the rebuild runs over an empty container and never runs again. This
+    raises it a second time, late enough that GmView is listening.
+
+    ONE SHOT, and `0x01D2`'s precedent is why it is worth saying. `party_build`'s
+    docstring records that a second `0x01D2` with a build already open fires
+    `PyCliParty.cpp:1228`. `0x01B2` is a different message and its handler has no
+    such assert on the path read (`0x008569E0` -> `0x00858850` re-resolves the
+    container and raises), but "no assert on the path we read" is not "safe to
+    spam", so this fires exactly once and the flag takes seconds rather than a
+    period.
+
+    Polled from the world tick for the same reason `hero_late_tick` is: a second
+    thread calling `send` would interleave with a simulation tick for no gain.
+    """
+    due = state.get("party_mine_late_due")
+    if due is None or time.perf_counter() < due:
+        return
+    state["party_mine_late_due"] = None
+    print(f"[c{conn_id}] PARTY-MINE-LATE: re-sending PARTY_SET_MINE now, "
+          f"{PARTY_MINE_LATE:.1f}s after the load finished -- re-raising "
+          f"0x10000114 into a subscriber map that should now hold GmView "
+          f"(studies/pvpui/FINDINGS.md 19)", flush=True)
+    send(*agents.party_set_mine(1))
 
 
 def ping_tick(send, state, conn_id):
@@ -5671,6 +5727,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # First, and once: it is a one-shot that must not be
                         # skipped by anything below it returning early.
                         hero_late_tick(send, state, conn_id)
+                        # Same shape and the same reason: one shot, polled here
+                        # rather than on a timer thread. It re-raises
+                        # 0x10000114 once GmView is subscribed to it
+                        # (studies/pvpui/FINDINGS.md 19).
+                        party_mine_late_tick(send, state, conn_id)
                         ping_tick(send, state, conn_id)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
@@ -7086,6 +7147,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         if state.get("hero_late_seq"):
                             state["hero_late_due"] = (time.perf_counter()
                                                       + HERO_LATE)
+                        if PARTY_MINE_LATE is not None:
+                            state["party_mine_late_due"] = (time.perf_counter()
+                                                            + PARTY_MINE_LATE)
                         if NETGRAPH_FLAGS is not None:
                             # AFTER the load, not before: the widget this
                             # unlocks is built by a routine that reads the flag
@@ -7910,6 +7974,24 @@ def main():
                          "every run so far has sent EMPTY. The hero row takes "
                          "its name from s_heroClientData; this asks whether "
                          "0x0074's own name overrides that.")
+    ap.add_argument("--party-mine-late", type=float, default=None,
+                    metavar="SECONDS",
+                    help="Re-send 0x01B2 PARTY_SET_MINE once, SECONDS after "
+                         "INSTANCE_LOAD_FINISH, leaving everything else where "
+                         "it is. THE TIMING EXPERIMENT of "
+                         "studies/pvpui/FINDINGS.md 19, and it is a different "
+                         "one from --hero-late: that defers the hero PIPELINE, "
+                         "this re-fires the RAISE. Run 6 timestamped our raise "
+                         "of 0x10000114 at +0.000s and GmView's subscribe to "
+                         "that same event at +0.053s -- 0x10000114 is the only "
+                         "event whose GmView case calls the commander-model "
+                         "rebuild, so it is raised into a map that does not yet "
+                         "hold GmView and is never raised again. 0x01B2's "
+                         "handler raises it on both branches, so a second send "
+                         "is a second raise. Try 2.0. Predicted: the rebuild "
+                         "runs, 0x00524C40 runs for the first time in this "
+                         "project, and commanderpeek reports a non-zero "
+                         "commander count. 19.2 names the three refutations.")
     ap.add_argument("--hero-late", type=float, default=None, metavar="SECONDS",
                     help="Hold the ENTIRE party/roster sequence (build window, "
                          "henchman and hero rows, 0x0074s) until SECONDS after "
@@ -8319,6 +8401,19 @@ def main():
         PLAYER_FLAGS = a.player_flags
         print(f"PLAYER_FLAGS: sending 0x003C (player {PLAYER_NUMBER}, value "
               f"{a.player_flags}, mask 7) before WORLD_CREATE_AGENT")
+    if a.party_mine_late is not None:
+        if a.party_mine_late < 0:
+            raise SystemExit("--party-mine-late cannot be negative")
+        global PARTY_MINE_LATE
+        PARTY_MINE_LATE = a.party_mine_late
+        # Bound OUTSIDE the `--hero` block on purpose: this is about the party
+        # and its raise, not about heroes. It is only INTERESTING with a hero in
+        # the party, but a run that wants to watch the re-raise without one
+        # should not be refused.
+        print(f"PARTY-MINE-LATE: re-sending PARTY_SET_MINE "
+              f"{PARTY_MINE_LATE:.1f}s after the load, to raise 0x10000114 a "
+              f"second time once GmView has subscribed to it "
+              f"(studies/pvpui/FINDINGS.md 19).")
     if a.explorable and a.outpost:
         raise SystemExit("--explorable and --outpost contradict each other: one "
                          "forces the 0x0199 map-type byte to 1, the other to 0. "
