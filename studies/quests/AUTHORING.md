@@ -47,6 +47,18 @@ So the brief's literal question is settled OBSERVED. The question that decides w
 >
 > **Three things Q0 did NOT settle, stated so the green does not spread further than it earned:**
 > 1. **The compass free rider went unclaimed.** The run was on map 449, so the marker fields were 449's and §7.3 is untouched. Map **148 cannot load at all**: no client archive in the vault binds `0x1B97D` as the server's does — four run dirs hold only the bit-31 mid-replacement spelling and the 38833 copy binds a rewritten file. That is archive state from the terrain arc, not a quest problem, and it is the first thing to fix before the compass question can be asked.
+>    **FIXED 2026-08-16, with one premise refuted.** `datwrite.py --relink-plain 0x1B97D`
+>    re-bound the plain id to row 7982 in the canonical
+>    `vault/run/2026-07-29_221c13772c7a/Gw.dat` — the DnArchive re-link minus the
+>    download; sha-verified backup beside the archive, journal and censuses under
+>    `vault/research/relink-1b97d-2026-08-16/`. `contentids` preflight is green
+>    **10 of 10, maps 146/148 included**, against the archive `select_run_exe`
+>    launches, so the compass question can now be asked on 146/148 with the pinned
+>    38797 client. The refuted premise: the 38833 copy's file is **not** a terrain-arc
+>    rewrite — row 177262's bytes are sha-identical across the pristine 2026-08-13
+>    snapshot, the 38833 run dir and the 38833 run-live copy, so it is ArenaNet's own
+>    38833-generation map, merely a different generation than `dat_study` serves. A
+>    38833-exe run still needs `--map 449` or a same-generation `RURIK_DAT`.
 > 2. **`0x004C` was never sent**, so no authored *prose* has reached a client — only an 8-unit name slot. Route B's claim that description and objectives hold ~125 characters is still RECONSTRUCTION, and rung Q3 is still its test.
 > 3. **The `?` icon is not the name.** `studies/minimap/FINDINGS.md:721` read it as "the empty name string we deliberately sent"; the icon is still present here *beside* `Ascalon`. Empty strings produced **no text**, not a `?`.
 
