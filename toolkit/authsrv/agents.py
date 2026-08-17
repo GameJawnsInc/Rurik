@@ -507,7 +507,8 @@ HEROES = 40          # ChCliApi:4446 `hero < HEROES`, `cmp esi,0x28`. OBSERVED.
 HERO_UNUSED = 0      # ChCliApi:4447, fires only on `test esi,esi`. OBSERVED.
 
 
-def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
+def party_hero_add(party_id, owner_player_number, agent_id, scan_key=0,
+                   unk_b=0):
     """GAME_SMSG 0x01C2 / 450 -- one hero row in the party roster.
 
     THE SHAPE CORRECTS THE UPSTREAM. OpenTyria's GameMsg.h:466-473 gives
@@ -516,20 +517,39 @@ def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
     u8, u8]`, 10 bytes. Three words and two bytes.
     studies/heroes/FINDINGS.md 1.2.
 
-    WHY THE TWO WORDS ARE CALLED word_a AND word_b. One of them is an agent
-    id and the other a hero index, and WE DO NOT KNOW WHICH -- the natural
-    tie-break failed twice over. (1) The storage-order analogy with 0x01BF
-    ("the dedupe key is stored first, so entry+0 is the key") was REFUTED:
-    0x01C2's worker has NO dedupe scan at all, it appends unconditionally.
-    (2) GmHeroCommander's `heroData->agentId` looked like the anchor and is
-    not -- it resolves through ctx+0x2c+0x584, which is the 0x0074 DATA
-    CACHE record, not this party-roster entry.
+    WHAT EACH IDENTITY FIELD IS, and how sure. This signature was renamed
+    FOUR times across 2026-08-16 as the arms ran, and the history is the
+    warning: `word_a` -> `hero_index` (11.1, WRONG) -> `word_a` again (17.3
+    doubted it) -> `owner_player_number` (21 measured it). Each name change
+    tracked a measurement; the one that didn't (hero_index) lasted six
+    hours. 0x01C2 itself carries NO hero identity at all (19) -- identity
+    lives in 0x0074's data-cache record; this message only binds a party
+    slot to an agent.
 
-    So the names are positional on purpose: word_a is msg+8 (stored to
-    entry+0x4), word_b is msg+0xc (stored to entry+0x0). Naming either one
-    `agent_id` here would bake a guess into the call site, which is exactly
-    how UPSTREAM becomes fact. The caged arm settles it by making the two
-    disagree and seeing which one a live body must match.
+    * `owner_player_number` is msg+8 (stored to entry+0x4). OBSERVED (21):
+      with --player-number 2 splitting player number from agent id, the
+      roster row renders exactly when this word equals the declared player
+      number, across three rigs. One nuance worth carrying (21.2): the
+      roster UI and GmHeroCommander's scan compare entry+0x4 against
+      DIFFERENT "my id" notions -- the arm that renders the row is the arm
+      whose commander binding vanishes -- so this name is the roster's
+      reading, and the commander's is ctx[0x44][0x2ac], which did not
+      track the declared number.
+    * `agent_id` is msg+0xc (stored to entry+0x0). MEASURED, the one thing
+      H1/H2 truly settled: the body lived at agent 200, outside every other
+      candidate range, and the row rendered only with 200 here (11.1).
+    * `scan_key` is msg+0x10 (stored to entry+0x8). That the commander
+      scan reads entry+0x8 as its container key is SOURCED (17.1); every
+      OBSERVABLE consequence is indifferent to the value (19.2: a wrong
+      value changes nothing, the right one fixed nothing), consistent with
+      the scan never running in our sessions. Callers send the hero id as
+      the best guess; the name deliberately does NOT say 'hero', because
+      19's headline is that this message carries no hero identity.
+
+    No range guard on owner_player_number or scan_key beyond the wire
+    widths, deliberately: the settling arms themselves had to send
+    out-of-range values (H1 put 200 at msg+8), and a guard here would have
+    refused the experiments that earned these notes.
 
     The client also pushes TWO HARDCODED ZERO DWORDS into entry+0xc and
     +0x10 that never touch the wire -- worth knowing before anyone reads the
@@ -543,15 +563,17 @@ def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
             f"silent-on-zero branch as party_henchman_add, and 0x01C2 uses "
             f"the IDENTICAL [this+0x3c]/[this+0x44] party lookup (OBSERVED), "
             f"so it inherits the same 'party must be built first' gate")
-    for nm, v in (("word_a", word_a), ("word_b", word_b)):
+    for nm, v in (("owner_player_number", owner_player_number),
+                  ("agent_id", agent_id)):
         if not 0 <= v <= 0xFFFF:
             raise ValueError(f"{nm}={v} does not fit the u16 the client reads")
-    for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
+    for nm, v in (("scan_key", scan_key), ("unk_b", unk_b)):
         if not 0 <= v <= 255:
             raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
-    return (0x01C2, [party_id, word_a, word_b, unk_a, unk_b],
-            f"PARTY_HERO_ADD(party {party_id}, wordA {word_a}, wordB "
-            f"{word_b}, {unk_a}, {unk_b})")
+    return (0x01C2, [party_id, owner_player_number, agent_id, scan_key,
+                     unk_b],
+            f"PARTY_HERO_ADD(party {party_id}, owner {owner_player_number}, "
+            f"agent {agent_id}, key {scan_key}, {unk_b})")
 
 
 def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,

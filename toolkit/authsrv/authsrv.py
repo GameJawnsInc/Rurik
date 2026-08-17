@@ -2281,8 +2281,14 @@ HERO_BODY = False
 HERO_ATTRIBS = True
 HERO_SKILLBAR = True
 HERO_BODY_NPC = "hatcher"
-# Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
-# one is a hero index, and the client's own code does not say which.
+# Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
+# an agent id and one is something else, and the client's own code does not
+# say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
+# is the AGENT ID (11.1, the H1/H2 settlement) and msg+8 is the OWNER PLAYER
+# NUMBER -- OBSERVED via --player-number 2 (studies/heroes/FINDINGS.md 21),
+# after 'hero index' (11.1) was refuted by the Goren rig (18). The default
+# sends PLAYER_NUMBER there; this flag exchanges the words, i.e. re-sends
+# H1, the order that rendered nothing, as the control arm.
 HERO_SWAP = False
 # 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
 # one day. Its four fields are exactly the client's own format string,
@@ -2306,10 +2312,12 @@ HERO_ROSTER_ID = None
 # follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
 # its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
 HERO_ACTIVATE_ID = None
-# 0x01C2's msg+8, overridable. The field accepts 1 and rejects 200 (H1/H2) and
-# is NOT the hero index (18), but PLAYER_NUMBER and PLAYER_AGENT_ID are both 1
-# in the default rig so owner-player and owner-agent cannot be told apart.
-# Pair with --player-number to break that. studies/heroes/FINDINGS.md 21.
+# 0x01C2's msg+8, overridable. The tie this knob existed to break is broken:
+# paired with --player-number 2 it proved msg+8 is the OWNER PLAYER NUMBER --
+# the roster row renders exactly when the field equals the declared number,
+# OBSERVED across three rigs (studies/heroes/FINDINGS.md 21). Kept as the
+# control arm, and because 21.2's split (the commander scan reads the same
+# field against a DIFFERENT "my id") is not finished asking questions.
 HERO_OWNER = None
 # Send 0x01C2 AFTER 0x01B2 instead of inside the 0x01D2..0x01D3 window.
 # THE REASON IS A MEASURED BRANCH, not tidiness. 0x01C2's worker raises its
@@ -6716,21 +6724,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))
-                            # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
-                            # (-> entry+0x0). Which is the agent id is exactly
-                            # what this arm asks, so the two carry DIFFERENT
-                            # values and --hero-swap exchanges them.
-                            # CORRECTED 2026-08-16 from GmHeroCommander's own
-                            # party scan (studies/heroes/FINDINGS.md 17):
-                            #   msg+8    -> entry+0x4 : the OWNER player id,
-                            #               filtered against ctx[0x44][0x2ac]
-                            #   msg+0xc  -> entry+0x0 : the agent id
-                            #   msg+0x10 -> entry+0x8 : the HERO ID, and it is
-                            #               the key the commander container is
-                            #               built under.
-                            # We had been leaving msg+0x10 at 0, so our hero's
-                            # commander was registered under 0 and the panel
-                            # click looked up a real hero id and missed.
+                            # What 0x01C2's identity words mean, four rounds
+                            # of arms later (studies/heroes/FINDINGS.md 11.1
+                            # -> 17.3 -> 18 -> 21; 19 for msg+0x10):
+                            #   msg+8    -> entry+0x4 : the OWNER PLAYER
+                            #               NUMBER -- OBSERVED (21): with
+                            #               --player-number 2 splitting the
+                            #               candidates, the roster row renders
+                            #               exactly when this equals the
+                            #               declared player number. Nuance
+                            #               (21.2): the commander scan compares
+                            #               the same field against a DIFFERENT
+                            #               "my id" (ctx[0x44][0x2ac]) -- the
+                            #               arm that renders the row loses the
+                            #               commander binding.
+                            #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
+                            #               the one word H1/H2 actually settled
+                            #               (200 rendered only here).
+                            #   msg+0x10 -> entry+0x8 : read by the commander
+                            #               scan as its key (SOURCED) but inert
+                            #               on everything observable (19.2);
+                            #               0x01C2 carries NO hero identity
+                            #               (19) -- we send the hero id as the
+                            #               best guess.
                             # --hero-swap still exchanges the two words; it was
                             # the arm that (with player number == hero id == 1)
                             # could not tell owner from hero index apart.
@@ -7780,10 +7796,11 @@ def main():
                          "carries NO model_id, so a hero's model cannot come "
                          "from the hero table and must be a placeholder.")
     ap.add_argument("--hero-swap", action="store_true",
-                    help="Exchange 0x01C2's two u16s. One is an agent id and "
-                         "one a hero index and the client does not say which; "
-                         "the two arms differ ONLY in this, so whichever "
-                         "renders names the field.")
+                    help="Exchange 0x01C2's two identity words, i.e. send "
+                         "the H1 order (agent id at msg+8), which rendered "
+                         "nothing. Both words are settled: msg+8 owner "
+                         "player number (heroes FINDINGS 21), msg+0xc agent "
+                         "id (11.1). This flag is the control arm.")
     ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
                     dest="hero_activate",
                     help="Send 0x0072 HeroActivate last. Its four fields are "
@@ -8165,8 +8182,10 @@ def main():
               f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
-              f"200 is outside 1..39 ON PURPOSE — whichever word must hold it "
-              f"for the row to render is the agent id.")
+              f"msg+8 = owner player number (OBSERVED, 21) and msg+0xc = "
+              f"agent id (11.1); msg+0x10 is read by the commander scan but "
+              f"inert on everything observable, hero id there is a best "
+              f"guess (heroes FINDINGS 19, 21).")
 
     if a.henchman is not None:
         global HENCHMAN
