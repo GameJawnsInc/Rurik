@@ -821,15 +821,39 @@ Every one of these, in the order they were written:
   hatcher's COMPOSITED shell (29,495 B, no geometry), 116366 the
   self-contained worm (82,169 B, also reached via `Skeleton.load`), and
   116703 the 0x0057 body pinned to carry NO FA1 at all -- the absence is
-  the composite mechanism's other half. 71 checks against a floor of 63
-  (the mandatory core is 53; the corpus sabotage and order-control pools
-  can legitimately empty on another sample and declare skips). ~25 s;
-  `--all` reads every head row, ~25-45 min),
+  the composite mechanism's other half. **Section 0b is rung U2's typed
+  animation layer** (`studies/anim/FINDINGS.md`): a second builder with
+  its own literals packs REAL channel content -- blk2C's times-prefix SoA
+  sections (N int32 times then N vec3f / N float4 quaternions; the AoS
+  "16-byte group" framing was the wrong overlay and its quaternion
+  refutation an artifact of it, re-measured 16,263,916/16,263,916
+  unit-norm at full population), blk48's 4-byte sub-header and two vec3
+  sections with the bit-27 loop flag, n40's sorted-seq-index-then-18-byte-
+  bodies sound events, n3E's {type, param} event track, and the sequence
+  record's start/end clamp window (MdlSeq 0x00792F56) -- and `anims()`/
+  `tracks()`/`sound_events()`/`event_track()`/`sequences()` must read it
+  all back, plus the worm-anchor checks of the invariants the decoder
+  cannot force (emitter-attach bits summing to n34, the invariant
+  MdlAnim:1121 enforces at runtime, measured 14,571/14,571; 3,919/3,919
+  unit quaternions; the sorted sound-event index prefix; every node's
+  link byte referencing an earlier-or-self node -- the hierarchy
+  invariant, 121,532/121,532 corpus-wide with zero violations). **The
+  U2 review added the failing controls those two unforceable checks
+  lacked**: a misaligned stride-20 float4 overlay on the same bytes
+  (~35% vs the true layout's 100% -- a gap control; the 0.30%-vs-100.000%
+  collapse at equal tolerance lives in the corpus run, since the worm's
+  near-identity quaternions make any misaligned window score ~35% on
+  this anchor), and a deterministic link rotation that must violate the
+  `<= own index` half (the `< n2C` half is a multiset property a shuffle
+  cannot refute). 90 checks against a floor of 82 (the mandatory core is
+  72; the corpus sabotage and order-control pools can legitimately empty
+  on another sample and declare skips). ~25 s; `--all` reads every head
+  row, ~25-45 min),
   `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
   `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
   the one generic reader all five go through (`0x00796DE0`, exactly five call
-  sites) decoded under the client's own record rule, read from the nine
-  instructions of the scanner at `0x00908260`: a record is u16 words ended by
+  sites) decoded under the client's own record rule, read from the scanner
+  at `0x00908260` (an 11-instruction scan body): a record is u16 words ended by
   the FIRST ZERO WORD, variable length, NOT fixed 6 bytes. **The headline
   control is a rival that must fail**: the fixed-6 reading closes on every
   FA6/FA8/FAD chunk in the archive (every record there happens to be 2
