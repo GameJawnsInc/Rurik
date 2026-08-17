@@ -1583,6 +1583,83 @@ directly to this arc:
   the reason: argparse only accepts a `--`-leading value if it contains a space, which is why
   `'--probe burrow'` works and `'--practice-target'` does not.
 
+## 25. The iterator confirmed, and `0x01C2` drives a DIFFERENT path than the scan
+
+§23.4 named two candidates and said to take the first because it could invalidate a chain of
+inferences rather than add to one. It did not invalidate it — it confirmed it, and then the
+second candidate turned up the real asymmetry.
+
+### 25.1 The iterator walks the hero array — confirmed against the writer, same build
+
+`0x008563B0` resolves to `party->container[0x24][index]`, bound `[party+0x2c]`, **stride 24**.
+Read `0x01C2`'s worker on the SAME build to check that against the writer rather than accept
+a size coincidence — and note the worker is **`0x00859010` on 38833**, not the 38797 address
+this arc had been quoting; reading a pinned-build address in the other binary is exactly the
+cross-build error the verifiers warned about, and I nearly made it here.
+
+Decoding the handler's push order (`push [eax+4]` last = first arg), every §1.2 offset
+reproduces:
+
+| stack | wire | store |
+|---|---|---|
+| `[ebp+0xc]` | `msg+8` | **entry+4** |
+| `[ebp+0x10]` | `msg+0xc` | **entry+0** |
+| `[ebp+0x14]` | `msg+0x10` | **entry+8** |
+| `[ebp+0x18]`, `[ebp+0x1c]` | *client-hardcoded 0* | entry+0xc, +0x10 |
+| `[ebp+0x20]` | `msg+0x14` | entry+0x14 |
+
+and the append is `lea ecx,[edi+0x24]` … `base + (count-1)*24`. **Same base, same bound, same
+stride as the iterator.** So `[edi+4]`/`[edi+8]` in the scan really are `msg+8` and
+`msg+0x10`, and §1.2's layout — read on 38797 — holds on 38833 too.
+
+### 25.2 But `0x01C2` raises a DIFFERENT event than the scan
+
+The worker's tail raises **`0x1000011E`**, not `0x10000114`:
+
+```
+008590CA  push 0x1000011e ; call 0x633d70
+```
+
+Resolving both through §23.1's dispatch: `0x1000011E` → **case 93** (`0x004E5DE1`),
+`0x10000114` → **case 90** (`0x004E5D20`, the bulk `activeHeroes` scan). They are different
+handlers.
+
+And `0x10000114`'s raiser — function `0x00858850`, reached through `0x00856920` — has **eight
+callers and all of them are UI** (GmView, `Pt*`), none a message worker. **So the bulk scan is
+UI-triggered and no message we send provokes it.**
+
+### 25.3 What our message DOES drive
+
+Case 93 is the incremental counterpart, and it uses the same machinery:
+
+```
+004E5DED  call 0x84dd70      ; ctx[0x44][0x2ac] -- 0x0199 field 1 (22)
+004E5DF2  cmp  [esi+4], eax  ; the SAME my-id filter
+004E5DFB  push [esi+8]       ; the key
+004E5DFE  call 0x524cc0
+```
+
+and `0x00524CC0` walks the party hero array **through the same iterator**, comparing
+`entry+4` against the my-id and `entry+8` against the key, incrementing a counter only for
+entries that pass the my-id test — i.e. deriving the **slot index** as the position among
+*my* heroes.
+
+**This revises §17.2 and §23.3.** "The scan never runs" is right about the BULK scan and
+wrong as a whole story: there are two paths, and `0x01C2` drives the incremental one. It also
+confirms §21/§22's mirror from a third code path — the commander side compares `msg+8`
+against `ctx[0x44][0x2ac]` (= `0x0199` field 1, the player's **agent id**) while the roster
+row wants the **player number**, and the default rig satisfies both only because both are 1.
+
+### 25.4 One loose end, flagged rather than papered over
+
+Case 93 reads `[esi+4]` and `[esi+8]` where `esi` is the dispatcher's first argument (the
+event payload pointer, `0x004E27E5`). The payload `0x01C2`'s worker builds looks like an
+8-byte buffer (`[ebp-8]` and `[ebp-4]`), so `payload+8` would read past it. Either the
+payload is larger than it appears, or `esi` in case 93 is not the payload. **I have not
+resolved which**, and the field semantics of case 93 above are therefore RECONSTRUCTION, not
+OBSERVED — the surrounding structure (same filter, same iterator, slot-index-by-counting) is
+solid, the exact payload offsets are not.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

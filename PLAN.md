@@ -1519,10 +1519,21 @@ had gone stale on four items that were since closed, which is the drift the top 
    what a server authors.** `0x100001A4` has two raisers: inside the scan itself (after the
    create loop) and in **PtHero** — the party-window button, which raises it directly and so
    hits the non-creating resolver when the scan never ran.
-   **Next, still static, item 1 first because it can invalidate a chain of inferences:**
-   (1) read what iterator `0x008563B0` actually enumerates — if it walks party PLAYERS rather
-   than hero entries, then `[edi+4]`/`[edi+8]` are not the `0x01C2` fields this arc assumed;
-   (2) find which of `0x01D2`/`0x01CB`/`0x01C2`/`0x01D3` reaches `0x008588AD`.
+   ~~**Next, item 1 first…**~~ **BOTH DONE (§25).** (1) The iterator walks
+   `party->container[0x24]`, bound `[party+0x2c]`, **stride 24** — confirmed against
+   `0x01C2`'s writer **on the same build** (`0x00859010` on 38833, NOT the 38797 address this
+   arc had been quoting), and every §1.2 field offset reproduces. So `[edi+4]`/`[edi+8]` ARE
+   `msg+8`/`msg+0x10`; the chain is confirmed, not invalidated. (2) **`0x01C2` raises
+   `0x1000011E` (case 93), NOT `0x10000114` (case 90, the bulk scan)** — and `0x10000114`'s
+   raiser has eight callers, **all UI**, none a message worker. So the bulk scan is
+   UI-triggered and no message provokes it, while our message drives the INCREMENTAL path:
+   case 93 applies the same my-id filter and hands a key to `0x00524CC0`, which walks the same
+   iterator and derives the commander SLOT by counting my entries. **This revises "the scan
+   never runs"** — true of the bulk scan, not the whole story — and confirms §21/§22's mirror
+   from a third code path. **Loose end, flagged:** case 93's `[esi+4]`/`[esi+8]` may read past
+   the 8-byte payload `0x01C2`'s worker builds, so those exact offsets are RECONSTRUCTION;
+   the structure around them is solid. Resolve that before building on case 93's field
+   semantics.
 3. **Four desk leftovers**, scoped by a workflow that died on a session limit before
    returning anything: (a) the scan trigger above, (b) `0x0074`'s other **17 unexplained
    fields**, (c) `0x01C2`'s `msg+0x14` (the second `u8`, never varied), (d) the **aiMode
