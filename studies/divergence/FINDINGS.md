@@ -185,6 +185,20 @@ come from a create before the window or from a fourth create path.
 **Impact.** Every agent ArenaNet spawns is given a starting effect state; every agent we
 spawn is left undefined.
 
+> **CLOSED (the v1 half) 2026-08-17.** Two corrections and a fix. The ≈0.93 ratio above
+> is superseded — the smsg refutation pass measured the rule EXCEPTIONLESS per kind
+> (`0x00F0` immediately precedes its agent's `0x0020` 472/472, gated on kind ∈ {5, 9}),
+> and `toolkit/authsrv/createburst.py` (unitsetup Q2, 951 pairs over all three keyed
+> captures) put the payload split on record: kind 5 `0x0000`×342 of 366, kind 9
+> `0x0000`×357 / `0x1000`×202 — plus kind 8 exists and one arrived already DEAD
+> (`0x0010`), so the family is bigger than {5, 9} on the newer corpus. The fix item 6
+> below asked for landed exactly as it guessed: **v1 always sends 0** — the gamesrv now
+> sends `0x00F0` unconditionally before every NPC create (`create_agent_world`, payload
+> from the row's `effects` else 0) and before the player's own create (payload 0), the
+> exact idiom validated in a caged run (harness `20260817T152952`). What stays open is
+> the payload MODEL for the non-zero tail: kind 5's `0x2000`/high-word combat values
+> (24/366) and kind 9's `0x1000` ambient flag are still sent as 0/row-effects only.
+
 ---
 
 ### D3 — Two streams where we send the brackets and never the body

@@ -135,12 +135,16 @@ def section_guard():
               "assignment while remove_agent guarded its side")
 
     ops = send.opcodes()
-    LEDGER.ok(ops[:3] == [authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES,
+    LEDGER.ok(ops[:4] == [authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES,
                           authsrv.GAME_SMSG_MONSTER_COMPOSITE,
+                          authsrv.GAME_SMSG_AGENT_INITIAL_STATUS,
                           authsrv.GAME_SMSG_WORLD_CREATE_AGENT],
-              "the definition still precedes the agent that uses it",
+              "the definition still precedes the agent, and 0x00F0 is the "
+              "create's immediate preamble -- retail's 472/472 idiom",
               f"{[hex(o) for o in ops]} -- the definition index is a raw array index "
-              "on the client and an undefined one crashes it outright")
+              "on the client and an undefined one crashes it outright; the "
+              "0x00F0 became unconditional 2026-08-17 (divergence D2, "
+              "createburst census)")
 
     try:
         authsrv.create_agent_world(send, state, 10, make_entry(burrow=False), "again")
