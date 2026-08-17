@@ -1942,12 +1942,17 @@ Wire: `PARTY_HERO_ADD(party 1, wordA 1, wordB 200, 2, 200)` and
 The research is at its wall, and the remaining work is of three kinds — none of it more
 reading.
 
-**Needs native tooling.** The commander-panel click. Everything up to it is measured: no
-commander is ever created (§27, live memory), the creation path exists and is reachable from
-`0x01C2` (§25.3), and three static hypotheses plus one live one are refuted (§16, §19, §26,
-§28). What is left is a single question — does `0x008590CA` execute — and it needs a
-breakpoint or code cave. `CLAUDE.md` carve-out 3 permits it; the case for spending it is now
-made of measurements.
+**~~Needs native tooling.~~ SPENT, and it answered — see §33.** This section read: *"What is
+left is a single question — does `0x008590CA` execute — and it needs a breakpoint or code
+cave."* It was built (`commandertrap.py`, hardware breakpoints, nothing written into the
+client) and the question is answered: **the raise executes once the party-cache gate opens,
+and the handler never runs.** The event is raised into nothing. `0x00524C40` never executes
+either, which confirms §27's `count=0` from a second, independent instrument.
+
+The wall has therefore **moved rather than fallen flat**: it is no longer "does the event
+fire" but **"what registers a subscriber for `0x1000011E`, and why is it not registered
+here"**. And the practical answer this arc needed is settled — no wire field binds a
+commander, so the hero is complete for everything the server governs.
 
 **Needs another arc first.** `0x01BF`'s trailing bytes and its wire name (§10.2's measured
 negatives) have one untested candidate left, the **outpost hiring UI** — and the party window
@@ -1963,6 +1968,163 @@ from the client's own tables, three of which correct or refute their published u
 descriptions; `s_heroClientData` located, closed and extracted under the provenance gate; and
 the attribute pair (`0x0037`/`0x003A`) plus `0x00B7` identified as what a hero needs — all of
 which were already in the tree, addressed to the wrong agent.
+
+## 33. THE WALL COMES DOWN: the commander event is raised into nothing
+
+§26.4, §27.2 and §32 all stop at the same sentence — *what would separate the remaining
+possibilities is runtime observation, and that is a native-tooling job.* Built it. The answer
+is **not** the one the arc had been circling, and it moves the question rather than closing it
+where everyone expected.
+
+### 33.1 The instrument, and what it deliberately is not
+
+`toolkit/clientscan/commandertrap.py`: a debugger in pure `ctypes`. Execute breakpoints live
+in **DR0..DR3**, which are per-thread processor state, so **nothing is written into the
+client** — no `int3` patched over an instruction, no code cave, no injected DLL, no thread
+created in the target. `CLAUDE.md` carve-out 3 permits a compiler and this did not need one,
+which is the cheap end of that permission. It matters beyond tidiness: an `int3` patch mutates
+the very bytes every address in this file was measured against.
+
+Each site's **instruction bytes are re-verified against the RUNNING process** before anything
+arms. The pin is 38797, these addresses are 38833, and §24 already read one build's address in
+the other's binary once in this arc. A hardware breakpoint on the wrong build does not error —
+it arms on whatever is mapped there and reports it as the chain. Live, the client came up at
+base `0x00610000`, slide `0x210000`, and all sites matched.
+
+### 33.2 Three arms
+
+| arm | `worker` | `raise` | `case93` | `filter` | | `bulkraise` | `bulk` | `create` |
+|---|---|---|---|---|---|---|---|---|
+| default (party cache **hit**) | 1 | **0** | 0 | 0 | | — | — | — |
+| `--hero-bust-cache` (cache **miss**) | 1 | **1** | **0** | 0 | | — | — | — |
+| bulk path | 1 | — | — | — | | **1** | **0** | **0** |
+
+Every arm: `arm failures / resume failures 0 / 0`, one swallowed `int3` (the attach break-in,
+none of the client's), zero foreign single-steps.
+
+`worker` is the **control** and it fired in all three, so `0x01C2` demonstrably reached
+`0x00859010` and a silent trap cannot be confused with a real negative — which is the whole
+shape of §28's failure. All four slots are written in one `SetThreadContext` per thread, so
+the silent sites were armed **on the very thread the control fired on**; "armed but blind" is
+not available as an explanation.
+
+### 33.3 The stack and the entry, from the frozen client
+
+At `worker` (`push ebp`, args still at `[esp+4..]`):
+
+```
+party_id 1   msg+8 owner 1   msg+0xc agent 200   msg+0x10 heroId 2   msg+0x14 0
+```
+
+and at `raise`, dereferencing `ecx`:
+
+```
+entry+0 agent 200   entry+4 owner 1   entry+8 heroId 2   entry+0xc/0x10/0x14 0
+```
+
+**§25.1's decode of the push order is confirmed against the live stack**, and §26.1's claim
+that `ecx` still holds the entry pointer at `0x008590CA` is confirmed by that row decoding
+sensibly at all. `esi = 0` there, so the event payload is `{0, entryPtr}`.
+
+### 33.4 What it settles, and it is three separate things
+
+**1. §26.2's cache gate is real, and now OBSERVED rather than read.** The default rig takes
+the fast path at `0x00859027`, so `edi == [ebx+0x4c]` at `0x008590AF` and `je 0x8590e2` skips
+the raise: `raise = 0`. Bust the cache and the same site fires: `raise = 1`. The gate does
+exactly what the disassembly said. This was **predicted in writing before the runs**.
+
+**2. The event is raised INTO NOTHING.** In the bust-cache arm `0x008590CA` executes,
+`0x00633D70` is called with `0x1000011E`, and `0x004E5DE1` **never runs**. The static routing
+makes that mean what it looks like — resolved out of the image's own byte map and jump table:
+
+```
+0x1000011E  case  93 -> 0x004E5DE1      and it is the ONLY event routing to case 93
+0x10000114  case  90 -> 0x004E5D20      the bulk activeHeroes scan
+0x100001A4  case 125 -> 0x004E38DA      GmView:5890 -- the click that crashes
+```
+
+One event, one case, one target. So there is no "it dispatched to a different case" escape:
+the switch was simply never entered with `0x1000011E`.
+
+**3. Nothing ever creates a commander, confirmed by a second, independent instrument.**
+`0x00524C40` (get-or-create, `GmHeroCommander:81`) **never executes**. §27 reached the same
+conclusion by reading the container header out of live memory (`cap=7 count=0`); this reaches
+it by tracing the code that would have filled it. Two unrelated methods, same answer — which
+is worth more than either alone, because §27's reading depended on the container offset being
+right and this one does not.
+
+### 33.5 The corrected shape of the problem
+
+§17.4 guessed the commander container is "populated by a client-side UI event we do not
+trigger". The measured version is **different and stronger**:
+
+> The event **is** raised. Nothing consumes it. What is missing is a **SUBSCRIPTION**, not a
+> trigger.
+
+That distinction is the whole result. Every fix this arc attempted — `inventoryId` (§16),
+`msg+0x10` (§19), the cache gate (§26) — was aimed at *getting the client to raise the event*.
+Three of them were refuted by experiment and the fourth (§26) turns out to have succeeded at
+its stated goal: the bust-cache arm **does** make the raise fire, and the panel still asserts.
+§26.3 scored that arm "the cache-hit gate is real but is NOT why the commander fails to bind",
+and that verdict was exactly right — this names the mechanism behind it.
+
+**So `0x01C2` cannot bind a commander, and no wire field will change that.** The hero as
+authored — roster row, name, level, profession, attributes, skill bar, lit commander flag — is
+complete for everything the wire governs, which is §17.4's conclusion arrived at by
+measurement instead of by exhaustion.
+
+### 33.6 The bulk path is dead the same way
+
+`0x00858850`, the function §25.2 identified as raising `0x10000114`, **does run** in our
+session — and case 90 (`0x004E5D20`) never does. So both commander events fail in the same
+place: raised, unconsumed.
+
+**Stated carefully, because it is easy to overclaim here:** the trap measured that
+`0x00858850` *executes*. It did not measure its caller, and it did not measure whether that
+particular execution reached its raise. §25.2's "all eight callers are UI" is neither
+confirmed nor refuted by this — the client runs UI and message handling on one thread
+(everything above fired on the same tid), so the thread identity says nothing either way.
+
+### 33.7 What is left, and it is one bounded question
+
+Not "does the event fire" — that is answered. **What registers a subscriber for `0x1000011E`
+and `0x10000114`, and why is it not registered in our session?** The commander module is
+demonstrably alive (§27: context non-null, container allocated at `cap=7`), so this is not
+an uninitialised UI. That is a real question with a real instrument now pointed at it, and it
+is the honest successor to §32's wall.
+
+### 33.8 Four defects in the instrument, three of them caught by its own control
+
+The reusable part, and it is not about heroes.
+
+- **A 64-bit debugger does not receive `0x80000004` from a 32-bit target.** It receives
+  `STATUS_WX86_SINGLE_STEP` (`0x4000001E`) and `STATUS_WX86_BREAKPOINT` (`0x4000001F`). The
+  first version passed every hit back to the client as somebody else's exception and reported
+  **no hits**. Against the client that would have published "the commander event is never
+  raised" as a measurement — the right headline, reached by a broken instrument, which is
+  §28's failure exactly.
+- **`EFLAGS.RF` does not survive `ContinueDebugEvent`.** A hardware execute breakpoint is a
+  *fault*, delivered before the instruction runs; the processor sets RF in the saved flags so
+  the resume does not re-trap, and that does not make it back through the debug loop. The
+  first live run trapped one instruction **32 times in 4ms**, identical `ESP` each time, until
+  the runaway guard disarmed the slot — and reported it as "this site executed 32 times". The
+  debugger has to set RF itself.
+- **State captured after the read handle closed.** Decoding happened at report time, by which
+  point `main`'s `finally` had closed the handle and the client had exited, so every captured
+  field read `None`. State belongs to the instant the thread is frozen; anything later is
+  reading a different process. This is why run 2 was discarded rather than published — its
+  `raise=0` was probably right, and a run whose capture returned nothing has no business
+  supplying a headline.
+- **The module list is not ready the instant a process exists.** `--wait` grabs the pid
+  microseconds after `CreateProcess` on purpose, and the toolhelp snapshot fails with
+  `ERROR_PARTIAL_COPY`. Retried, with a timeout so it cannot become a silent hang.
+
+**And the control had its own blind spot, which is the lesson worth keeping.** §3 of the test
+originally stopped at the first hit. That proves a breakpoint **fires** and says nothing about
+whether the target **resumes** — two separate claims, one of them untested, and the untested
+one was the broken one. It now runs to process exit and requires *exactly one* hit on an entry
+point that executes once. A control that only checks the half you thought of is a control with
+a hole in it.
 
 ## 9. Defects and corrections this arc produced
 

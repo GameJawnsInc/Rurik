@@ -2466,7 +2466,17 @@ Every one of these, in the order they were written:
   (`0x4000001F`), not `0x80000004`/`0x80000003`, so every hit was being handed
   back to the target as somebody else's exception. Without this section that
   would have run against the client and reported the arc's headline — "the
-  commander event is never raised" — as a measurement. §1 pins the DR7
+  commander event is never raised" — as a measurement. **And it caught a SECOND
+  break, from its own first version's blind spot.** §3 originally stopped at the
+  first hit, which proves a breakpoint FIRES and says nothing about whether the
+  target RESUMES past it — so the live run trapped one instruction 32 times in
+  4ms, identical `ESP` each time, until the runaway guard disarmed the slot, and
+  reported it as "that site executed 32 times". A hardware execute breakpoint is
+  a *fault*: `EFLAGS.RF` does not survive the trip out through
+  `ContinueDebugEvent`, so the debugger must set it explicitly on the way back
+  in. §3 now runs to process exit and requires **exactly one** hit on an entry
+  point that runs once, plus a clean exit — firing and resuming are separate
+  claims and only the first was being made. §1 pins the DR7
   encoding, including that bits 16+ are ZERO: a nonzero R/W field is a *data*
   breakpoint wearing the same address, which does not error and never fires on
   execution. §2 checks all seven site addresses against the 38833 image ON
@@ -2478,7 +2488,7 @@ Every one of these, in the order they were written:
   headline, and that an unreadable entry decodes to `None` rather than to a row
   of zeros that would read as a real measurement. §§2-4 need the vault and a
   32-bit Windows and SKIP with their reason. Floor 14 = the mandatory core
-  (§1+§5+§6); a whole green run is 29, instant),
+  (§1+§5+§6); a whole green run is 33, ~4s),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

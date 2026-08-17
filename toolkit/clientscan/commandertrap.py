@@ -126,6 +126,17 @@ CONTEXT_INTEGER = CONTEXT_i386 | 0x0002
 CONTEXT_DEBUG_REGISTERS = CONTEXT_i386 | 0x0010
 CONTEXT_FULL_READ = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_DEBUG_REGISTERS
 
+# EFLAGS.RF, the RESUME flag, and it is load-bearing. A hardware EXECUTE
+# breakpoint is a FAULT: the #DB is delivered BEFORE the instruction runs, with
+# EIP still pointing at it. Intel sets RF in the saved EFLAGS so that the
+# resume executes the instruction once without re-trapping -- and MEASURED on
+# this path, that does NOT survive the trip out through ContinueDebugEvent.
+# The first live run trapped the SAME instruction 32 times in 4 milliseconds,
+# identical ESP every time, until the runaway guard disarmed the slot. So the
+# debugger has to set RF itself on the way out. Missing this does not look like
+# a hang -- the guard caps it -- it looks like "that site executed 32 times".
+EFLAGS_RF = 1 << 16
+
 MAX_SLOTS = 4                      # DR0..DR3, and the processor has no more
 
 
@@ -343,6 +354,7 @@ class HwTrap:
         self.foreign_steps = 0       # single-steps that were not ours
         self.other_exceptions = 0
         self.arm_failures = 0
+        self.resume_failures = 0
         self.hit_counts = {}
         self.max_hits = 32
         self.disarmed = set()
@@ -555,6 +567,16 @@ class HwTrap:
         n = self.hit_counts[addr] = self.hit_counts.get(addr, 0) + 1
         if self.on_hit:
             self.on_hit(self, hit)
+        # RESUME PAST IT. See EFLAGS_RF: without this the same instruction
+        # re-traps on every continue and the site's hit count becomes a count of
+        # our own re-entries. DR6 is cleared in the same write, so the sticky
+        # bits stay a usable cross-check rather than accumulating.
+        if ctx is not None and h:
+            ctx.EFlags |= EFLAGS_RF
+            ctx.Dr6 = 0
+            ctx.ContextFlags = CONTEXT_FULL_READ
+            if not self._setctx(h, ctypes.byref(ctx)):
+                self.resume_failures += 1
         if n >= self.max_hits:
             # A runaway guard, not an optimisation: if the resume flag were
             # ever not honoured the same instruction would re-trap forever and
@@ -690,18 +712,44 @@ SITES = {
         "get-or-create. If this fires, a commander object exists and 27's "
         "count=0 is about a later teardown, not a create that never ran"),
     "bulk": Site(
-        "bulk", 0x004E5D20, None,
-        "dispatch case 90, the bulk activeHeroes scan -- 25.2 says every "
-        "caller of its raiser is UI, so this firing would refute that"),
+        "bulk", 0x004E5D20, bytes.fromhex("8b1eff37895da8"),
+        "dispatch case 90, the bulk activeHeroes scan -- the path that DOES "
+        "create commanders. 25.2 says all eight callers of its raiser are UI"),
+    "bulkraise": Site(
+        "bulkraise", 0x00858850, bytes.fromhex("558bec568bf157"),
+        "the function that raises 0x10000114, reached through 0x00856920. If "
+        "this never runs, no UI action in our session asks for the scan"),
 }
 
 DEFAULT_SITES = ("worker", "raise", "case93", "filter")
 CONTROL = "worker"
 
 
+def wait_for_module(pid, module="Gw.exe", timeout=30.0):
+    """The module's runtime base, retried while the process is still mapping.
+
+    `--wait` deliberately grabs the pid the INSTANT the process exists, because
+    the whole point is to be armed long before the instance load. A process that
+    new has no module list yet, and the toolhelp snapshot fails with
+    ERROR_PARTIAL_COPY (299) rather than returning an empty list. MEASURED: the
+    first live run died here, having found pid 4220 microseconds after CreateProcess.
+    Retrying is the fix; refusing after a timeout keeps it from becoming a
+    silent wait.
+    """
+    last, deadline = None, time.time() + timeout
+    while time.time() < deadline:
+        try:
+            return keytap.module_base(pid, module)
+        except keytap.TapError as ex:
+            last = ex
+            time.sleep(0.2)
+    raise TrapError(f"{module} never appeared in pid {pid} within "
+                    f"{timeout:.0f}s: {last}")
+
+
 def verify_sites(pid, sites, module="Gw.exe"):
     """(base, [(site, ok, detail)]). Reads the RUNNING process, not the file."""
-    base = keytap.module_base(pid, module)
+    base = wait_for_module(pid, module)
     out = []
     for s in sites:
         if s.code is None:
@@ -738,14 +786,16 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         if not h["dr6_agrees"]:
             w(f"      NOTE: DR6 says slot {h['dr6_slot']}, EIP says "
               f"{h['slot']} -- the cross-check disagrees\n")
-        if site.capture and h["ctx"] is not None:
-            reader = h.get("reader")
-            if reader:
-                for k, v in site.capture(h["ctx"], reader).items():
-                    if isinstance(v, int):
-                        w(f"      {k:18} 0x{v:08X}  ({v})\n")
-                    else:
-                        w(f"      {k:18} {v}\n")
+        # Decoded AT THE HIT, not here. The first live run decoded at report
+        # time, by which point `main`'s finally-block had closed the read handle
+        # and the client had exited -- so every captured field came back None
+        # and the run recorded no state at all. State belongs to the moment the
+        # thread was frozen; anything later is reading a different process.
+        for k, v in (h.get("cap") or {}).items():
+            if isinstance(v, int):
+                w(f"      {k:18} 0x{v:08X}  ({v})\n")
+            else:
+                w(f"      {k:18} {v}\n")
     w("\n" + "=" * 72 + "\nTOTALS\n" + "=" * 72 + "\n")
     for n in order:
         w(f"  {n:9} {counts.get(n, 0)}\n")
@@ -758,6 +808,8 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         w(f"  int3 passed on (second-chance) {trap.bp_second}\n")
         w(f"  single-steps not ours          {trap.foreign_steps}\n")
         w(f"  other exceptions passed on     {trap.other_exceptions}\n")
+        w(f"  arm failures / resume failures {trap.arm_failures} / "
+          f"{trap.resume_failures}\n")
         if trap.disarmed:
             w(f"  SLOTS CAPPED AT max_hits: {sorted(trap.disarmed)} -- those "
               f"counts are floors, not totals\n")
@@ -865,15 +917,21 @@ def main(argv=None):
         return keytap.read_handle(reader_h, addr, size)
 
     def on_hit(trap, hit):
-        hit["reader"] = reader
-        name = want[hit["slot"]]
-        print(f"  HIT {name} (0x{sites[hit['slot']].va:08X}) tid {hit['tid']}")
+        site = sites[hit["slot"]]
+        if site.capture and hit["ctx"] is not None:
+            hit["cap"] = site.capture(hit["ctx"], reader)
+        # flush: a run of this thing is minutes long and its output is normally
+        # redirected, where Python block-buffers and the live progress a watcher
+        # wants arrives only at exit.
+        print(f"  HIT {site.name} (0x{site.va:08X}) tid {hit['tid']}"
+              + (f"  {hit['cap'].get('VERDICT', '')}" if hit.get("cap") else ""),
+              flush=True)
 
     trap = HwTrap(on_hit=on_hit, verbose=True)
     trap.addrs = [base + (s.va - IMAGE_BASE) for s in sites]
     trap.attach(pid)
     print(f"attached; armed {len(sites)} execute breakpoints, holding "
-          f"{a.seconds:.0f}s")
+          f"{a.seconds:.0f}s", flush=True)
     try:
         trap.pump(a.seconds)
     except KeyboardInterrupt:

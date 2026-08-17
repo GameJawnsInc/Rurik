@@ -118,7 +118,13 @@ def main():
         trap = ct.HwTrap(on_create=on_create)
         trap.spawn(WOW64_CMD, "/c exit")
         try:
-            trap.pump(20.0, stop_when=lambda t: bool(t.hits))
+            # NO stop_when. The first version of this section stopped at the
+            # first hit, which proved the breakpoint FIRES and said nothing
+            # about whether the target RESUMES past it -- and that was the half
+            # that was broken. Run to process exit instead: the entry point
+            # executes exactly once, so anything above one hit is us re-trapping
+            # an instruction that never retired.
+            trap.pump(30.0)
         finally:
             trap.detach()
         LEDGER.ok(state["entry"], "the OS gave us an entry point",
@@ -128,6 +134,18 @@ def main():
                   "NO HIT. Every 'the instruction never executed' answer this "
                   "tool can give is now worthless -- that is this section's "
                   "entire job")
+        # THE RESUME. An entry point runs once, so more than one hit means the
+        # instruction never retired and we re-trapped it -- which is exactly
+        # what the first live run did, 32 times in 4ms, and it read as "this
+        # site executed 32 times" rather than as a broken resume.
+        LEDGER.ok(len(trap.hits) == 1,
+                  "EXACTLY ONCE -- the target resumed past the breakpoint",
+                  f"{len(trap.hits)} hits on an entry point that runs once: "
+                  f"EFLAGS.RF is not being honoured and every hit COUNT this "
+                  f"tool reports is a count of our own re-entries")
+        LEDGER.ok(trap.exited and not trap.resume_failures,
+                  "and the process ran on to a normal exit",
+                  f"exited={trap.exited} resume_failures={trap.resume_failures}")
         if trap.hits:
             h = trap.hits[0]
             LEDGER.ok(h["addr"] == state["entry"],
