@@ -368,6 +368,112 @@ def _level_steps(agent_id):
 HENCHMAN_AGENT_ID = 30
 
 
+def _health_shrink_steps(agent_id):
+    """The delta model under a DECREASING maximum -- unitsetup Q5.
+
+    `health += (new_max - old_max)` is MEASURED for an increase (health_max,
+    2026-08-13: 25/100 -> max 200 read 125). Nobody has measured a DECREASE
+    except studies/enemy/PLAN.md 6g's max -> 0, which rendered a FULL bar and
+    then asserted `range > 0` -- recorded as a mystery under the old refill
+    reading and still flagged UNVERIFIED-in-mechanism under the delta. It is
+    only a mystery if the pool was damaged: a shrink onto a FULL pool lands
+    exactly at the new maximum under the delta model (100 + (50-100) = 50 of
+    50), so 6g's full bar is the delta model's own prediction. Step 1 shows
+    that legally (50 asserts nothing). The discriminator is step 4, a shrink
+    onto a DAMAGED pool, where the three readings finally part company.
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x009F, [42, a, 50],
+             "int property 42 = 50 at FULL health -- 6g's shape, legal value",
+             "HUD number. Delta predicts 50 with the bar FULL (100-50 = -50 "
+             "grant lands exactly on the new max) -- 6g's 'refilled to full' "
+             "reproduced with nothing mysterious about it. Refill predicts "
+             "the same 50/50 here, which is why this step alone settles "
+             "nothing and step 4 exists."),
+        Step(5.0, 0x009F, [42, a, 100],
+             "int property 42 = 100 -- restore",
+             "HUD 100, bar full. Reversibility before the discriminator."),
+        Step(5.0, 0x00A3, [16, a, a, _f32(-0.75)],
+             "damage -0.75 -- the bar to a quarter",
+             "HUD 25. The step measured twice before; the run's own control."),
+        Step(5.0, 0x009F, [42, a, 50],
+             "int property 42 = 50 onto the DAMAGED pool -- the discriminator",
+             "THE HUD NUMBER. Delta: 25 + (50-100) = -25, which cannot stand; "
+             "the damage path floors at 1, and if the grant shares that clamp "
+             "the orb reads 1 on a bar of 50. Refill: 50. Fraction-survives: "
+             "12 or 13. Three mechanisms, three different numbers."),
+        Step(5.0, 0x009F, [42, a, 100],
+             "int property 42 = 100 -- what did the clamp destroy?",
+             "HUD number again. If step 4 clamped to 1, delta predicts 51 "
+             "(1 + 50) -- the shrink LOST the 24 health the clamp ate, and a "
+             "restore does not give it back. 25 here means the pool remembers "
+             "through the clamp; 100 means refill was hiding all along."),
+    ]
+
+
+# Fresh definition slots and agent ids for the composite arm. Chosen clear of
+# everything any co-loading path uses: definitions 3 (test enemy), 5 (sculpt),
+# 9 (henchman), 10..16 (heroes), 1480 (quest giver); agents 1, 10, 20..22, 30,
+# 99, 200..206.
+_COMPOSITE_PROBE_DEF = 76       # 0x0056 sent, 0x0057 WITHHELD
+_COMPOSITE_CONTROL_DEF = 77     # identical, plus its 0x0057
+_COMPOSITE_PROBE_AGENT = 60
+_COMPOSITE_CONTROL_AGENT = 61
+
+
+def _composite_withheld_steps(origin):
+    """A declared definition whose file NEEDS a composite, with 0x0057 withheld.
+
+    unitsetup Q10. The unitmodels study measured the law both directions --
+    0x0057 is sent exactly when the 0x0056 file's own skeleton carries the
+    COMPOSITED flag ('no own geometry'), wire 43/43 and archive 14,571/14,571
+    -- but nobody has ever watched the client RENDER the withheld case. Only
+    the undeclared-slot case is measured, and that one is a crash (Array.h
+    587), which says nothing about this one: here the definition IS declared,
+    so the create indexes cleanly and whatever fails, fails later and softer.
+    The hatcher's file is on the COMPOSITED side of the law (its template
+    carries model_id, and every retail declaration of a composited file came
+    with its 0x0057).
+    """
+    ox, oy, plane = origin
+    h = npc_template("hatcher")
+    return [
+        Step(2.0, 0x0056, npc_properties(_COMPOSITE_PROBE_DEF, h),
+             f"0x0056 def {_COMPOSITE_PROBE_DEF}: the hatcher's COMPOSITED "
+             f"file id, and NO 0x0057 will follow",
+             "nothing yet -- a type, not a body."),
+        Step(1.0, 0x0056, npc_properties(_COMPOSITE_CONTROL_DEF, h),
+             f"0x0056 def {_COMPOSITE_CONTROL_DEF}: the control's identical "
+             f"declaration",
+             "nothing yet."),
+        Step(1.0, 0x0057, npc_model(_COMPOSITE_CONTROL_DEF, h),
+             f"0x0057 def {_COMPOSITE_CONTROL_DEF} -- the composite, CONTROL "
+             f"ONLY. The two definitions now differ in exactly one message",
+             "nothing yet."),
+        Step(4.0, 0x0020,
+             create_agent(_COMPOSITE_CONTROL_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | _COMPOSITE_CONTROL_DEF,
+                          AGENT_KIND_NPC, ox - 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_COMPOSITE_CONTROL_AGENT}) -- the control "
+             f"body, 150u WEST",
+             "a hatcher renders 150u WEST (the quest arc's proven frame "
+             "geometry). If THIS one does not draw, the run is void -- fix "
+             "the control before reading anything off the probe arm."),
+        Step(4.0, 0x0020,
+             create_agent(_COMPOSITE_PROBE_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | _COMPOSITE_PROBE_DEF,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_COMPOSITE_PROBE_AGENT}) -- the probe "
+             f"body, 150u EAST, composite withheld",
+             "THE QUESTION, 150u EAST: a body (the COMPOSITED flag does not "
+             "gate rendering and unitmodels needs a second look), NOTHING or "
+             "a floating name over empty ground (the flag means what the "
+             "study says), or a crash (the missing 0x0057 is load-bearing at "
+             "create time and every no-model row is living dangerously)."),
+    ]
+
+
 def _henchman_level_steps():
     return [
         Step(2.0, 0x009F, [PROP_LEVEL, HENCHMAN_AGENT_ID, 1],
@@ -4514,7 +4620,55 @@ PROBES = {
              "OPEN across every step -- actions '0:play 4:key:P' -- and the "
              "roster draws at the TOP RIGHT (RESKIN 18.3's lesson: aim the "
              "instrument at the right rectangle). The body's create carries "
-             "no prop 36, so the pre-step-1 frame is the control reading.",
+             "no prop 36, so the pre-step-1 frame is the control reading. "
+             "ANSWERED 2026-08-17 (harness 20260817T142147): Mo1 -> Mo15 -> "
+             "Mo20, player row frozen at W0. The store is per-agent both "
+             "ways. studies/unitsetup/FINDINGS.md 8 Q3.",
+    ),
+    "health_shrink": lambda a, o: Probe(
+        question="What does int property 42 do to CURRENT health when the "
+                 "maximum DECREASES -- and what really happened in "
+                 "studies/enemy/PLAN.md 6g's max->0 full-bar frame?",
+        predicts="Pure delta, both directions. Step 1 (shrink at full): 50, "
+                 "bar full -- 6g's shape, no mystery. Step 4 (shrink onto a "
+                 "quarter pool): the grant is 25 + (50-100) = -25, the pool "
+                 "clamps at its floor of 1, orb reads 1. Step 5 (restore): "
+                 "51, because the clamp DESTROYED 24 health and += cannot "
+                 "know that. A 50 at step 4 resurrects the refill reading "
+                 "for the shrink direction only; 12-13 means the fraction "
+                 "survives shrink and the mechanism is direction-split.",
+        steps=_health_shrink_steps(a),
+        note="Run --explorable like the health_max run it extends (damage on "
+             "an outpost map is swallowed). The readout is the HUD orb's "
+             "printed NUMBER, bottom centre -- RESKIN 18.13's method note: "
+             "bar fills are only good to a few points, the number is exact. "
+             "ANSWERED 2026-08-17 (harness 20260817T143333): 50/100/25/1/25. "
+             "The 25-out kills all three candidates -- the store is SIGNED "
+             "and unclamped (-25 survived the excursion), the HUD floors the "
+             "DISPLAY at 1. studies/unitsetup/FINDINGS.md 8 Q5.",
+    ),
+    "composite_withheld": lambda a, o: Probe(
+        question="What does the client RENDER for a declared definition whose "
+                 "COMPOSITED file gets no 0x0057 -- the one cell of the "
+                 "composite law no study has watched?",
+        predicts="The control hatcher renders 150u WEST; the probe arm 150u "
+                 "EAST draws NO geometry and does NOT crash -- the definition "
+                 "is declared so the create indexes cleanly, and COMPOSITED "
+                 "means the skeleton has no geometry of its own to fall back "
+                 "on. A rendered body EAST refutes unitmodels' reading of the "
+                 "flag; a crash promotes the missing 0x0057 from cosmetic to "
+                 "load-bearing.",
+        steps=_composite_withheld_steps(o),
+        note="RUN ON --map 449 (the quest arc's proven +/-150u frame "
+             "geometry -- both spots visible without touching the camera). "
+             "Definitions 76/77 and agents 60/61 are chosen clear of every "
+             "co-loading id. Verdict frames: after step 4 (control WEST must "
+             "draw) and after step 5 (the question, EAST). "
+             "ANSWERED 2026-08-17 (harness 20260817T143717): a solid WHITE "
+             "BOX, body-sized, at the probe body's spot -- no crash, no "
+             "invisibility, a positive placeholder. The white box is now a "
+             "known on-screen signature for 'composite needed, none sent'. "
+             "studies/unitsetup/FINDINGS.md 8 Q10.",
     ),
     "profession_custom": lambda a, o: Probe(
         question="Does the client accept a primary profession of 12 -- an id it "

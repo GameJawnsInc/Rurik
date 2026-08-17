@@ -61,6 +61,16 @@ the pool 40 (40/40) — [../unitassembly/FINDINGS.md](../unitassembly/FINDINGS.m
 (OBSERVED + MEASURED, two agents, neither knowing the other's result).
 COMPOSITED means "my geometry comes from elsewhere", and 0x0057 is where.
 
+> **The withheld cell of this law is now WATCHED, 2026-08-17.** Every row above
+> is correspondence — nobody had ever made the client RENDER a declared
+> COMPOSITED definition with its 0x0057 withheld. The `composite_withheld`
+> probe did (harness `20260817T143717`, control arm differing in exactly the
+> one message): **a solid white untextured box, body-sized, at the create's
+> position** — no crash, no invisible agent. The client draws a positive
+> placeholder where the composite should have hung its geometry, OBSERVED.
+> A white box on any spawn is now a diagnosable signature rather than a
+> texture mystery. `studies/unitsetup/FINDINGS.md` §8 Q10.
+
 The other headline answers:
 
 - **The flags-2817 stream (M6b's open question) is solved**: it is the tail of
