@@ -526,11 +526,15 @@ flags are greyed because there are no heroes.
   the client showing "connection lost"; the cause was `KeyError: 'attack_speed'` in
   `create_agent_world`, which killed the world-tick thread. Read `gamesrv.log` for a
   traceback before believing the dialog.
-- **The 38797 pin cannot currently run.** Its run-dir archive has map 146/148 mid-replacement
+- ~~**The 38797 pin cannot currently run.**~~ **RETRACTED — see §24.** The pin runs; the
+  cause was the crossbuild key bug, not the archive. The map-row half below is real and
+  unchanged, but it is about maps 146/148 and was wrongly carried onto a map-90 run.
+  ~~ Its run-dir archive has map 146/148 mid-replacement
   (row 7982 renamed `0x8001B97D`); on 38833 those maps bind to *different files* than
   `dat_study`. Clean explorable maps on the 38833 pair are **90, 474, 558** — Lakeside County
   is not one. `contentids.py` refuses correctly; this is archive state, not a bug, and it was
   not repaired here.
+~~
 - **`0x01BF` holds its shape on 38833**: same table `0x00bcb788`, same
   `[u16,u16,string16(20),u8,u8]`, same 50 bytes; only the handler moves
   (`0x00856b00` → `0x00856bc0`). A two-build corroboration of §1.1.
@@ -1523,6 +1527,61 @@ and they are separable by reading, not running:
 
 Item 1 first: it is cheap and it can invalidate a chain of inferences, which is the better
 kind of check to run early.
+
+## 24. CORRECTION — the 38797 pin runs, and my archive diagnosis was wrong
+
+§10.4 recorded, as an environment fact worth not re-paying for, that **"the 38797 pin cannot
+currently run"**, blaming its archive. **That is wrong and is retracted.**
+
+The real cause was a server bug that another arc found and fixed the next day: the
+2026-08-14 crossbuild key fix lived **inline in the auth branch** and the game branch never
+got it, so a 38797 client authenticated fine and was then handed **38833's key** on the game
+channel. The handshake "completed", the ARC4 stream was noise, and the client died right
+after `INSTANCE_LOAD_INFO` with `Code=007` and zero c2s. Fixed as one shared
+`bind_key_to_build()` with an AST regression check that both channels reach it
+(`test_handshake.py` §0). Full record: `studies/unitmodels/U7-RUN.md`.
+
+**The evidence was in my own log the whole time.** That first run printed
+`keys: 2 key files present; starting with the newest, rurik_dh_2026-08-13…` and, two lines
+later, `GAME version: build=38797`. I read the map-row preflight refusal — which was real,
+and about maps 146/148 — and carried it over onto a **map 90** run that failed for an
+entirely different reason.
+
+**Re-tested 2026-08-17 with the fix in:** the 38797 pin reaches `body is in the map`, the log
+now reads `keys: re-selected 2026-07-29_221c13772c7a to match the client's build 38797 (had
+2026-08-13_64fae3b1369b)`, and the hero renders **identically** — `Mo1 Goren`, commander slot
+1 bound, flag green.
+
+**So the whole hero arc reproduces on the PIN**, not only on 38833. That is worth more than
+the retraction: every §10–§23 result was measured on 38833, and the repo's canonical build
+now shows the same behaviour.
+
+### 24.1 The same mistake, twice in two days, in both directions
+
+Worth stating plainly because it is a pattern and not bad luck. Yesterday I recorded that a
+server-side `NameError` and a bad map row **present identically from the client's side**, and
+that another session had spent its first attempt on the archive because of it. I had already
+made that exact error myself, one day earlier, and written it into a findings doc as a
+measured environment fact.
+
+The correct instinct is in `RUNBOOK.md`'s own advice and worth repeating here: **`Code=007`
+means read `gamesrv.log` first.** A preflight refusal about map A is not evidence about a run
+that serves map B, and a diagnosis that survives only because nobody re-tested it is not a
+measurement.
+
+### 24.2 Collision hazards carried over from U7-RUN.md
+
+That record's other three failures are about experiments fighting themselves, and two apply
+directly to this arc:
+
+- **Do not combine a measurement arm with `--probe` or the standing enemy.** U7's run 3 had a
+  burrow cycle, combat AI and a probe all driving one creature while it tried to measure an
+  animation rate; `probes.py`'s burrow step deliberately re-creates the body at a **fresh
+  agent id**, which is a second body. Every hero arm here ran without probes, which was luck
+  as much as design — say it out loud in the next one.
+- **`--game-args` needs the `=` form.** Independently hit here (§10.4) and recorded there with
+  the reason: argparse only accepts a `--`-leading value if it contains a space, which is why
+  `'--probe burrow'` works and `'--practice-target'` does not.
 
 ## 9. Defects and corrections this arc produced
 

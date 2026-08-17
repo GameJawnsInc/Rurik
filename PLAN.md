@@ -1544,8 +1544,14 @@ first attempt on the archive, because a server-side NameError and a bad map row 
 identical from the client's side. Fixed, and `srclint.conditional_globals` +
 `test_srclint` §8 (floor 20) now fail on the shape.
 
-**Two environment facts this run measured, worth not re-paying for:** the **38797 pin cannot
-currently run** (its archive has 146/148 mid-replacement; on 38833 those maps bind different
+**Two environment facts this run measured — and the FIRST IS RETRACTED (§24).** The 38797
+pin **runs fine**: its failure was the crossbuild key bug (a 38797 client handed 38833's key
+on the game channel), fixed 2026-08-17 as `bind_key_to_build()`, and the whole hero arc
+reproduces on the PIN with the row reading `Mo1 Goren`. The archive half is real but concerns
+maps 146/148 and was wrongly carried onto a map-90 run — the evidence was in my own log
+(`starting with the newest, rurik_dh_2026-08-13…` two lines above `build=38797`). The
+retracted claim read: ~~the **38797 pin cannot
+currently run**~~ (its archive has 146/148 mid-replacement; on 38833 those maps bind different
 files than `dat_study`) — clean explorable maps on the 38833 pair are **90, 474, 558**; and a
 client `Code=007` is usually **our** crash, so read `gamesrv.log` for a traceback before
 believing the dialog.
