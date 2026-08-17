@@ -1289,6 +1289,35 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### Unit setup — the pipeline is one document, 10 of 11 questions ran, and the fixes landed (2026-08-17)
+
+The arc is [studies/unitsetup/FINDINGS.md](studies/unitsetup/FINDINGS.md): how a unit comes
+to exist, server → wire → client, synthesized 2026-08-16 and then mostly EXECUTED the next
+day — its §8 ladder priced every open question by cheapest experiment, and ten of eleven
+are now ANSWERED in place, seven of them by **agent-piloted caged runs** (the harness
+launches, keys, screenshots, and the frames are read without an operator; the first was
+`20260817T142147`). The measured headlines: property 36 is a per-agent level store written
+at `entry+0x2C` and read back for any agent's roster row; the health pool is a SIGNED,
+unclamped store under a display floor of 1; a declared-but-composite-less definition
+renders as a white placeholder box (the new diagnosable signature); armor items place
+THEMSELVES, so `0x006E`'s slot-order contest is invisible to pixels; and the create-burst
+census (`toolkit/authsrv/createburst.py`, 951 paired `0x00F0`s) split the initial-status
+payload by kind — which armed two server fixes that landed the same day: **`0x00F0` is now
+the unconditional create preamble on every path** (divergence D2's v1, closure notes at
+both docs) and **the player's agent gets prop 36 pre-create** (the roster's `W0` was the
+absence rendered; it reads `W1` now, harness `20260817T153701`). The harness also learned
+to aim: `--walk` gained `yaw`, named-key holds (`alt:` is nameplates) and `shot:` on the
+plan's clock, validated live (`20260817T151242`) — "the harness cannot aim" survives only
+for world-anchored clicks and model-appearance judgment.
+
+**What is left, in cost order:** Q11 (every "4/4 tapes agree" figure is one character
+sampled four times — one live capture on a different character, human-driven by design,
+`RUNBOOK.md` procedure); the `0x00F0` non-zero payload tail (kind 5's combat values,
+kind 9's `0x1000` ambient flag — a model, not a default); `0x006D` NPC weapons at create
+(needs item authoring the content store cannot do yet); and two residues filed with their
+own arcs — the heroes split-filter (§21.2) and whether `0x006E` position semantics matter
+for the HANDS.
+
 ### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
 
 **`0x00000FA1` is the skeleton/animation chunk, and it is structurally decoded** —
