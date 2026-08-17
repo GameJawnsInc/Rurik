@@ -359,7 +359,7 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 
 **The compass picture is OURS.** A 512×512 DXT1 ATEX we authored (10 levels, "closes exactly", round-tripped at 0 of 5,476 sampled pixels off by >60) was installed with `datmove` into a throwaway archive — 174,868 B against ArenaNet's 54,192 stored, exactly the misfit this rung predicted, so `--replace` was never an option. It reads back byte-identical, the archive still passes all three checksum rules, and on screen it is **38.0 % of the disc** (9,246 of 24,313 px in colours no Pre-Searing art carries).
 
-**Not established:** the tile is a PATTERN, not our terrain — generating it from the authored heightfield is a further step. And the collateral this rung warned about is unmeasured: tile (1,0) is shared, so every other Pre-Searing map in that copy now carries it and no run has looked.
+**Not established:** the tile is a PATTERN, not our terrain — generating it from the authored heightfield is a further step, and as of 2026-08-17 it is **the only open item left in Tier 3** (see A3 below). **The collateral this rung warned about is CLOSED and needed no run**: sweeping all 888 rows for world-1 footprints overlapping tile (1,0) returns exactly **6** — maps 143, 147, 149, 150, 151, 779 — with 149/150/151 carrying byte-identical rects to 143's, so the blast radius was five extra maps in one throwaway archive. FINDINGS §6g.4.
 
 ---
 
@@ -367,6 +367,7 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 **Prediction:** replacing the 512×512 ATEX at the tile covering map 143's footprint changes the compass, mission map **and** world map together (all read the same table, FINDINGS §3.2). If only one changes, §3.2 is wrong.
 **Procedure:** `png.py` → `dxt1.encode` → `atex` container → `datwrite --replace` if it fits (it will not — ours writes uncompressed, median tile is 110,608 B stored), else `datmove`, into a **throwaway run-directory archive only**. Follow `iconset.py`'s scars: `file_id_table` returns one-based row numbers while `Archive.entries` is positional, so `entries[row]` reads the row before the one named; check the whole plan before the Writer opens. Prefer `datwrite --restore` from a donor over `--revert` (a journal expires the moment a client runs, `studies/crossbuild/FINDINGS.md` §4c; no journal exists for the icon rows left armed in `vault/run/reskin-roster/`).
 **Cost:** 1-2 days + runs. **Collateral to state up front:** a tile spans up to four of map 143's footprint chunks, all shared with other Pre-Searing maps — arming them changes every neighbour's compass in that archive copy.
+
 
 ### A2. Repoint the area row's footprint — **DONE 2026-08-15, and its own prediction is half REFUTED. FINDINGS §6g.**
 
@@ -382,6 +383,14 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 **Prediction:** editing `s_missionClientData[143]`'s `+0x48..+0x54` (and `+0x58..+0x64`) to a rect whose size equals our authored dims makes the compass crop that size (32/64/96 cells instead of 320×544), and the player marker projection becomes self-consistent for the first time.
 **Procedure:** extend `toolkit/clientpatch/reskin.py`. The table is `.rdata`; the same three constraints as its four existing tables apply — locate structurally (never by address), require anchor AND shape to agree, write out of place, assert containment (every changed byte inside the intended dword) plus a read-back (`test_reskin.py`'s first version wrongly assumed "4 bytes changed" when only two moved).
 **Cost:** 1-2 days + runs. **A1 makes the compass the right *picture*; A2 makes it the right *shape*. Neither alone is enough** — which is the cost the owner should see before Tier 3 starts: making an authored map's compass right means both an archive write and a client patch.
+
+---
+
+### A3. Generate the atlas tile FROM our terrain — **NEW 2026-08-17, the last open item in Tier 3**
+**Prediction:** a 512×512 tile whose 64×64 sub-rectangle at map 143's footprint origin is a shaded render of the authored heightfield makes the compass show a recognisable picture OF OUR MAP — ridges and valleys matching the terrain the player walks — rather than art we merely chose. **Refutation:** if the compass shows the render but it does not correspond to the ground (features in the wrong place, or mirrored), the projection between heightfield cells and atlas texels is wrong, and §6b.2's "one texel per terrain cell" is the first thing to re-check.
+**Why it is cheap now, and what is missing:** `mapexport.py` already emits `heights.f32` at exactly one sample per cell — the compass's own scale — and `atex.build_image` + `datmove` are proven end to end by A1. **What does not exist anywhere in `toolkit/` is a renderer**: no hillshade, no top-down. That is the whole of the new code, and it is pure-stdlib arithmetic over a float32 grid (a slope/aspect shade is a few lines), not a Blender dependency.
+**Procedure:** render → `atex.build_image` → `datmove` into a throwaway copy of a **38833** archive (the 38797 generation cannot address world 1's tiles at all, §6g), then one short run at map 143. Place the render at the footprint origin's offset WITHIN the tile, not at the tile's corner — A2 established the origin is the lever and the size is not.
+**Cost:** ~2 h for the renderer offline, then a 4 GB copy, one elevated cage step and one short run.
 
 ---
 
