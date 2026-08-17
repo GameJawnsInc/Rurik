@@ -315,7 +315,11 @@ is a harness fact every future session needs: **`--hold` without `--keep-open` i
 silently inert** — `session.py:1272` runs `hold_open` only under `a.keep_open`, so a
 `--hold`-only session tears down at the verdict, ~4 s after spawn, closing a healthy
 client whose orderly exit (game `0x0008`, auth `0x0009 UPDATE_CHARACTER_SETTINGS`,
-status→Offline) reads exactly like a client-side death. Fourteen launches were
+status→Offline) reads exactly like a client-side death. (**FIXED on main
+2026-08-17, `34091f5`**: `--hold` now implies `--keep-open` —
+`hold_implies_keep_open()` in `session.py`, with the flag interaction and its
+call site pinned in `test_harness.py`. The present tense above describes the
+harness as it was during this rung.) Fourteen launches were
 autopsied as deaths before the missing flag was found; the elimination matrix that
 exonerated code, archives (to the point of a pristine restore), maps, flags and the
 vault is preserved in PLAN.md's rung-4 status note as a monument. The 38797-default
