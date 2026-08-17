@@ -1536,6 +1536,18 @@ So: **1 lineage permuted, 2 bag order**, and the two permuted-adjacent readings 
 agree with each other on the hands (GWLP-R has leadhand at 0; gw-preservation has
 RightHand 1 / LeftHand 0). NOT FOUND for 38797 specifically, after sweeping fifteen mirrors.
 
+> **RUN 2026-08-17, and the question DISSOLVES for pixels** (harness `20260817T150232`,
+> probe `armor_slots`; full record `studies/unitsetup/FINDINGS.md` §8 Q6). The per-slot
+> probe this section asked for happened: `0x006F` **wears** — the mapping above is
+> vindicated against the sibling track's doubt — but the same LEGS piece rendered on the
+> legs from position 3 and from position 5, with a nine-zero `0x006E` reset proven clean
+> in between. **The item drives its own placement; the position does not choose the body
+> part**, so bag order vs permutation cannot be told apart by looking, and the array arm
+> (legs@3 + boots@5) drawing both correctly confirms only that bag order WORKS, not that
+> it is what 38797 believes. The contest stands, demoted to protocol bookkeeping that no
+> screenshot will ever settle; the routes that could are a memory read of the equipped
+> bag or a behavior keyed to position (costume slots 7/8 are the candidates).
+
 ### How the client knows what an item looks like
 
 **Appearance comes from `file_id`, which the client calls `model_file_id` — never from

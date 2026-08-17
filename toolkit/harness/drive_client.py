@@ -642,6 +642,18 @@ def orbit(hwnd, pid, dx, dy, steps=12):
 VK_SHIFT, VK_CONTROL, VK_MENU = 0x10, 0x11, 0x12
 MOD_KEYS = {"shift": VK_SHIFT, "ctrl": VK_CONTROL, "alt": VK_MENU}
 
+# Keys a walk plan can HOLD by name -- the ones a single character cannot
+# spell. ALT is the load-bearing entry: Guild Wars shows every ally/item
+# nameplate while it is down, so "alt:4" with a shot cadence running is how a
+# script reads names off the world without aiming at anything. LEFT/RIGHT are
+# the keyboard turn, which rotates the character (and the chase camera with
+# it) at the client's own fixed rate -- a timed hold is a yaw the server can
+# neither see nor spoil, since turning in place sends nothing.
+NAMED_KEYS = {
+    "alt": VK_MENU, "ctrl": VK_CONTROL, "shift": VK_SHIFT,
+    "space": 0x20, "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28,
+}
+
 
 def press_vk(hwnd, pid, vk, mods=(), allow_no_scan=False):
     """Press a RAW virtual key, optionally under modifier keys held down.
