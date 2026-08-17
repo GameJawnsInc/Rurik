@@ -404,3 +404,81 @@ Event `0x100001C2` and network opcode `0x01C2` share their low bits. The event s
 overlap by construction and collisions are expected. There is no measured relationship,
 and `0x100001C2`'s only raise is a UI click handler in `PtTeamAgent`. Treat it as
 coincidence unless something measures otherwise.
+
+## 11. `0x00524C40` does not "never run" — it runs once per record, and the list is empty
+
+Heroes §26 measured `0x00524C40` as never entered and read that as the commander never being
+created. The call site says something more useful: it is **inside a loop**, once per element
+of a **local** array the same function built moments earlier.
+
+```
+0x00524E00  the commander model's rebuild
+  esi  = 0x004E0B90()                      the view
+  eax  = 0x0084DD70()   -> [ebp-0x5c]      MsCliApi: our own identity
+  edi  = 0x008563B0(0, 0)                  first item of the default container
+  ebx  = 0                                 slot counter
+  while (edi):
+      if ([edi+4] == [ebp-0x5c]):          the item is OURS
+          assert ebx != 7                  (:214) -- at most SEVEN slots
+          rec = &[ebp-0x58] + ebx*12
+          rec[0] = ebx                     slotIndex
+          rec[1] = -1
+          rec[2] = [edi+8]                 the agent id
+          ebx++
+      edi = 0x008563B0(0, ++esi)
+  [ebp-0x64] = ebx                         the count
+
+  … then, for each of those `ebx` records:
+0x00524FA4  eax = 0x00524C40(rec.agentId)          <- HEROES' "never runs"
+0x00524FAE  eax[0] = rec.slotIndex
+0x00524FB0  eax = eax[4]
+0x00524FB3  eax = (eax >= 3) ? eax+0x5F : eax+0x37    the 3-then-4 split again
+0x00524FC1  if (0x0049C4B0(eax)):
+0x00524FD0      raise 0x100001A4 with the agent id
+```
+
+**So "the commander is never created" and "the loop body never ran" are the same
+observation, and the cause is upstream of both: `ebx == 0`.** Either `0x008563B0(0, n)`
+returns nothing, or nothing it returns has `[+4]` equal to our identity.
+
+`0x008563B0(container, index)` is a plain two-level accessor, no asserts:
+
+```
+g = globals(); c = [g+0x4C]
+container == 0 ?  c = [c+0x54]                      the default container
+               :  bounds-check against [c+0x48], c = [[c+0x40] + container*4]
+index >= [c+0x2C] ? return 0                        the count
+return [c+0x24] + index*12                          12-byte records
+```
+
+**RECONSTRUCTION** (well-supported, not measured): this is the hero-owner list. The cap of
+seven, the `slotIndex` it produces, and the 3-vs-4 split downstream all match the hero
+slots exactly, and `[+4] == our identity` is the ownership test. What is OBSERVED is the
+structure walk and the loop; the name is inference.
+
+### 11.1 The one thing to measure next
+
+The whole heroes question now reduces to a single, cheap, *local* reading:
+
+> **After our server sends the hero pipeline, is `[[globals+0x4C]+0x54]`'s count
+> (`+0x2C`) non-zero, and do any of its 12-byte records carry `[+4] == 0x0084DD70()`?**
+
+That is one `commandertrap.py` capture at `0x00524E40` (the compare) with the two values
+read out — or, cheaper still, a `commanderpeek.py`-style read of the two structure fields
+with no breakpoint at all. Both are far cheaper than another wire hypothesis, and either
+outcome is decisive:
+
+- **count == 0** → nothing populates the container; find its writer and the message behind it.
+- **count > 0 but no `[+4]` match** → we populate it with the wrong owner id, which is a
+  field bug in a message we already send.
+
+Five hypotheses were refuted on this question by guessing at the wire. This is the first
+version of it that names a specific number to go and look at.
+
+### 11.2 What is now known NOT to be the blocker
+
+- **Not `0x1000011E`.** The assert the player hits is on `0x100001A4`'s path (§10.2).
+- **Not `GmPosseRoster`.** That is a child of the PvP windows (§6), and the commander UI is
+  `GmPetCommander` / `AgentCommander*` (§8, §10.2).
+- **Not the wire opening a window.** The window is opened by a party-row click (§10.1).
+- **Not `0x00524C40` being cold.** It is cold because its loop has no iterations (§11).
