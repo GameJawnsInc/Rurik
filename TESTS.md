@@ -845,9 +845,14 @@ Every one of these, in the order they were written:
   near-identity quaternions make any misaligned window score ~35% on
   this anchor), and a deterministic link rotation that must violate the
   `<= own index` half (the `< n2C` half is a multiset property a shuffle
-  cannot refute). 90 checks against a floor of 82 (the mandatory core is
-  72; the corpus sabotage and order-control pools can legitimately empty
-  on another sample and declare skips). ~25 s; `--all` reads every head
+  cannot refute). The minimal fixture also pins `sound_events() == []`
+  where n40 == n44 == 0 -- the walker records no n40n44 span there, the
+  accessor's unguarded unpack was the TypeError that stopped U6's first
+  strided-writer run (2026-08-16, `studies/unitwrite/FINDINGS.md` §2),
+  and the majority of prop-class FA1s take this path. 91 checks against
+  a floor of 83 (the mandatory core is 73; the corpus sabotage and
+  order-control pools can legitimately empty on another sample and
+  declare skips). ~25 s; `--all` reads every head
   row, ~25-45 min),
   `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
   `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
