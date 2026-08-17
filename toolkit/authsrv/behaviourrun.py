@@ -249,10 +249,14 @@ def encounters(smsg, player_agent=None):
     born = {}
     order = []
     for t, op, v in smsg:
-        if op == CREATE and len(v) > 3:
+        if op == CREATE and len(v) > 5:
             agent = v[1]
+            # v[0] is the opcode, so agents.create_agent's 23 payload fields sit at
+            # v[1:] and the position TUPLE at v[5]. v[3:5] is (type, kind) = (1, 9)
+            # on a real create, and this line read exactly that as a coordinate
+            # until the Isle study caught it (studies/isle/PLAN.md 3.2).
             born[agent] = {"model": v[2], "agent": agent, "created_t": t,
-                           "pos": tuple(v[3:5]), "moved": 0, "reaction": None,
+                           "pos": tuple(v[5]), "moved": 0, "reaction": None,
                            "resolved": True}
             order.append(agent)
         elif op in MOVEMENT_OPS and len(v) > 1:

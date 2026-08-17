@@ -184,8 +184,19 @@ Every one of these, in the order they were written:
   blocks through, `check_identity()` stubbed lets the wrong file through, and a
   donor whose compression is flattened leaves the row at 0 **while the payload
   stays byte-identical** -- which is why the compression field is checked
-  separately, since the stored bytes cannot tell those two apart. No vault, no
-  client. 66 checks against a floor of 66, was 34),
+  separately, since the stored bytes cannot tell those two apart. **Section 8
+  (2026-08-16) is `--relink-plain`, the DnArchive re-link minus the download** --
+  a copy caught mid-replacement (file-id table holding `id | 0x80000000`,
+  studies/maprows/FINDINGS.md §8) has its plain id re-bound to the row the
+  rename names, in place, one dword. The fixture's rename is installed longhand
+  so the pristine fixture IS the correct post-relink state, which makes the
+  strongest check one line: the relinked archive must be BYTE-IDENTICAL to the
+  pre-rename file -- table dword, entry-2 crc and MFT self-crc in a single
+  comparison. Refusals each get a check: plain already binds, neither spelling
+  present, the bit-31 spelling as the argument, and a target row failing its
+  own crc (a relink must not make a corrupt row addressable); plan-only without
+  `--confirm` writes nothing, and `--revert` restores the renamed state
+  exactly. No vault, no client. 78 checks against a floor of 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -838,6 +849,41 @@ Every one of these, in the order they were written:
   72; the corpus sabotage and order-control pools can legitimately empty
   on another sample and declare skips). ~25 s; `--all` reads every head
   row, ~25-45 min),
+  `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
+  `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
+  the one generic reader all five go through (`0x00796DE0`, exactly five call
+  sites) decoded under the client's own record rule, read from the scanner
+  at `0x00908260` (an 11-instruction scan body): a record is u16 words ended by
+  the FIRST ZERO WORD, variable length, NOT fixed 6 bytes. **The headline
+  control is a rival that must fail**: the fixed-6 reading closes on every
+  FA6/FA8/FAD chunk in the archive (every record there happens to be 2
+  wchars), so the test builds the discriminating shape -- FA5's null slots --
+  from its own byte literals AND requires the rival to fail on the corpus
+  null-slot population in BOTH directions (fails exactly where a null slot
+  exists, 104 chunks at the default stride 53; full population 5,393 of
+  20,661 FA5 chunks / 11,894 slots). Closure is OUR assertion: the client
+  copies exactly the consumed bytes with no cursor-vs-end compare
+  (`0x00794B70`) and silently loads an EMPTY list on a malformed record
+  (error path `0x00794C27`), where the module raises at a named gate --
+  refusals for the no-terminator record, the count overrun, the odd trailing
+  byte, and the scanner's end-1 edge (a zero BYTE on the last byte is not a
+  zero WORD, `0x0090826B`) are each pinned beside a passing control.
+  `--all` decodes every reference chunk on every flags=515 head -- 30,722
+  chunks, zero failures -- and pins the population literals: FA6-first
+  exactly 388 (reproducing the recon's independent prefix sweep), FA8 252
+  chunks / 2,467 records / 394 distinct targets all ffna type-2 with FA1 and
+  without FA0 (the §5.3 claims widened 10x past the 25-chunk caveat), FAE
+  exactly 6, and every 2-wchar record resolving in `file_id_table(raw=True)`
+  via the dependency-pair formula. **The sound-chain oracle** re-runs the
+  study's FA6 -> ffna type-8 -> MPEG identification through the committed
+  module: the three anchors' 60 distinct type-8 descriptors' own chunk-0x1
+  entries, 231/231 valid MPEG-1 Layer III frame headers by field values
+  only (nothing copied), with the header oracle itself refused in seven
+  synthetic directions first. Anchors: 116228 FA6=30/FA8=15 with first link
+  15018, 116366 FA5=5/FA6=16, 116703 FA5=3 and NOTHING else -- the hatcher
+  body's FA6-lessness is the composite split's other half. 52 checks
+  against a floor of 45 (the FA8/FAE-dependent sections declare skips on a
+  sample that misses them). ~25 s; `--all` ~15-20 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

@@ -2247,8 +2247,40 @@ HERO = None
 # An id inside 1..39 would have let both readings fit, which is the confound
 # the henchman arm nearly shipped with.
 HERO_AGENT_ID = 200
+# Up to seven, because that is the client's own cap: PtPlayer:332
+# `heroIndex < arrsize(m_heroAgentId)` and GmHeroCommander:214
+# `heroIndexPlayer != arrsize(activeHeroes)` both read 7, and GmView:4330 names
+# exactly CONST_KEY_COMMAND_HERO1..HERO7. Agent ids and definitions run
+# consecutively from the bases below so no two heroes collide.
+HERO_IDS = []
+
+
+def hero_slots():
+    """[(hero_id, agent_id, definition)] for every hero this run authors.
+
+    One place decides the id arithmetic, because an agent id reused for a second
+    body leaves the client holding one agent's state under another's name -- the
+    same collision ENEMY_AGENT_ID's comment is about, and the reason the henchman
+    got its own id rather than sharing.
+    """
+    return [(h, HERO_AGENT_ID + i, HERO_DEFINITION + i)
+            for i, h in enumerate(HERO_IDS)]
 HERO_DEFINITION = 10
 HERO_BODY = False
+# THESE THREE NEED A MODULE-LEVEL DEFAULT AND IT IS NOT DECORATION. They were
+# assigned only inside the `--hero` CLI block when the arc landed on 2026-08-16,
+# and the world-load path reads them UNCONDITIONALLY -- `hero_slots() if
+# HERO_ATTRIBS else ()` evaluates the name before anything can short-circuit on
+# HERO being None. So a DEFAULT launch, with no --hero at all, died with
+# NameError inside the instance load and the client showed Code=007. Two other
+# sessions hit it the next morning, and one of them first mis-diagnosed it as an
+# archive problem -- a server-side NameError and a bad map row present
+# identically from the client's side, which is what made it expensive.
+# `hero_slots()` returns [] when HERO_IDS is empty, so True here stays inert
+# until a hero is actually authored; the values match the argparse defaults.
+HERO_ATTRIBS = True
+HERO_SKILLBAR = True
+HERO_BODY_NPC = "hatcher"
 # Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
 # one is a hero index, and the client's own code does not say which.
 HERO_SWAP = False
@@ -2264,6 +2296,21 @@ HERO_ACTIVATE = False
 # inventory-table key, an id naming no inventory should trip THAT assert and
 # name the field by experiment. Silence means it is inert on this path.
 HERO_INVENTORY = 0
+# 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
+# key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
+# 0x0072's hero id, which is the only way to tell which message supplies the
+# hero's identity. studies/heroes/FINDINGS.md 19.
+HERO_ROSTER_ID = None
+# 0x0072's hero id, overridable so ACTIVATE can name a different hero from the
+# one 0x0074 created a record for. Three outcomes, all informative: the name
+# follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
+# its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
+HERO_ACTIVATE_ID = None
+# 0x01C2's msg+8, overridable. The field accepts 1 and rejects 200 (H1/H2) and
+# is NOT the hero index (18), but PLAYER_NUMBER and PLAYER_AGENT_ID are both 1
+# in the default rig so owner-player and owner-agent cannot be told apart.
+# Pair with --player-number to break that. studies/heroes/FINDINGS.md 21.
+HERO_OWNER = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -5340,7 +5387,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [1,          # agent_id -- the player's own agent, 1 for the first
+                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
+                              # here until 2026-08-16, which is a trap rather
+                              # than a bug while the constant is also 1: this
+                              # field is what the client stores at
+                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
+                              # GmHeroCommander's scan filters hero entries by
+                              # comparing that value against 0x01C2's msg+8.
+                              # A literal here silently stops tracking the
+                              # constant. studies/heroes/FINDINGS.md 22.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -6491,20 +6546,46 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # context (+0x584), so it is the only candidate we
                             # have for the thing 0x0072's gate wants to exist.
                             # An ordering hypothesis, stated as one.
-                            if HERO_INFO:
-                                _hb = HERO_BYTES or (0, 0, 0)
-                                send(*agents.mercenary_info(
-                                    HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
-                                    d3=HERO_FLAG, chunk=HERO_CHUNK))
+                            _hb = HERO_BYTES or (0, 0, 0)
+                            for _hid, _haid, _hdef in hero_slots():
+                                if HERO_INFO:
+                                    send(*agents.mercenary_info(
+                                        _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                        d3=HERO_FLAG, chunk=HERO_CHUNK))
                             # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
                             # (-> entry+0x0). Which is the agent id is exactly
                             # what this arm asks, so the two carry DIFFERENT
                             # values and --hero-swap exchanges them.
-                            _wa, _wb = HERO_AGENT_ID, HERO
-                            if HERO_SWAP:
-                                _wa, _wb = _wb, _wa
-                            _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _wb),)
+                            # CORRECTED 2026-08-16 from GmHeroCommander's own
+                            # party scan (studies/heroes/FINDINGS.md 17):
+                            #   msg+8    -> entry+0x4 : the OWNER player id,
+                            #               filtered against ctx[0x44][0x2ac]
+                            #   msg+0xc  -> entry+0x0 : the agent id
+                            #   msg+0x10 -> entry+0x8 : the HERO ID, and it is
+                            #               the key the commander container is
+                            #               built under.
+                            # We had been leaving msg+0x10 at 0, so our hero's
+                            # commander was registered under 0 and the panel
+                            # click looked up a real hero id and missed.
+                            # --hero-swap still exchanges the two words; it was
+                            # the arm that (with player number == hero id == 1)
+                            # could not tell owner from hero index apart.
+                                # The experiment flags below apply to the
+                                # FIRST hero only; with several in the party the
+                                # rest carry the corrected values, so a probe arm
+                                # never silently rewrites the whole roster.
+                                _first = _haid == HERO_AGENT_ID
+                                _wa = (PLAYER_NUMBER
+                                       if HERO_OWNER is None or not _first
+                                       else HERO_OWNER)
+                                _wb = _haid
+                                if HERO_SWAP and _first:
+                                    _wa, _wb = _wb, _wa
+                                _inside = _inside + (agents.party_hero_add(
+                                    1, _wa, _wb,
+                                    HERO_ROSTER_ID if (HERO_ROSTER_ID
+                                                       is not None and _first)
+                                    else _hid),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -6781,23 +6862,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that the roster row reads the AGENT for its name,
                         # profession and level, so a bodiless hero row would be
                         # expected to render as empty as the henchman's did.
-                        if HERO is not None and HERO_BODY:
+                        for _i, (_hid, _haid, _hdef) in (
+                                enumerate(hero_slots()) if HERO_BODY else ()):
                             _hro = agents.npc_template(HERO_BODY_NPC)
-                            _rx, _ry = pos[0] - 150.0, pos[1]
+                            # Fan them out rather than stacking: bodies sharing a
+                            # spot read as one body, and "nothing appeared" is the
+                            # failure this repo already paid for once.
+                            _rx, _ry = pos[0] - 150.0, pos[1] + 120.0 * _i
                             create_agent_world(
-                                send, state, HERO_AGENT_ID,
+                                send, state, _haid,
                                 {"pos": (_rx, _ry), "plane": cfg[2],
                                  "health": 100.0, "max_health": 100.0,
                                  "dead": False, "name": _hro["name"],
                                  "npc": _hro,
-                                 "definition": HERO_DEFINITION,
+                                 "definition": _hdef,
                                  "allegiance": agents.ALLEGIANCE_PLAYER,
                                  "effects": 0,
                                  "attack_speed": ENEMY_ATTACK_SPEED,
                                  "resend_definition": True,
                                  "attacks_back": False,
                                  "skills": [], "skill_ready": []},
-                                "hero body", conn_id=conn_id)
+                                f"hero body (hero {_hid})", conn_id=conn_id)
                         # THE HERO'S ATTRIBUTE STATE, and it is not a new
                         # mechanism -- it is the pair the PLAYER's own agent
                         # already gets, addressed to the hero's agent instead.
@@ -6809,7 +6894,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # which is why a hero can have one at all.
                         # This is the message the arc spent two refuted
                         # hypotheses looking for, and we already had it.
-                        if HERO is not None and HERO_ATTRIBS:
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_ATTRIBS else ()):
                             # 0x00B7 FIRST, and read the reason before moving
                             # it. THERE ARE TWO PROFESSION STORES and this arc
                             # conflated them for a day:
@@ -6839,20 +6925,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             _hprof = (agents.npc_template(HERO_BODY_NPC)
                                       ["profession"] if HERO_BODY else 1)
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                                 [HERO_AGENT_ID, ATTRIBUTE_POINTS,
-                                  ATTRIBUTE_POINTS],
+                                 [_haid, ATTRIBUTE_POINTS, ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
-                                 f"{HERO_AGENT_ID})")
+                                 f"{_haid})")
                             send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
-                                 spawn_profession_values(_hprof,
-                                                         HERO_AGENT_ID),
+                                 spawn_profession_values(_hprof, _haid),
                                  f"PLAYER_UPDATE_PROFESSION(hero agent "
-                                 f"{HERO_AGENT_ID}, prof {_hprof})")
+                                 f"{_haid}, prof {_hprof})")
                             _hcols = attribute_columns()
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                                 [HERO_AGENT_ID, _hcols],
+                                 [_haid, _hcols],
                                  f"AGENT_UPDATE_ATTRIBUTES(hero agent "
-                                 f"{HERO_AGENT_ID}, {len(_hcols) // 3} attrs)")
+                                 f"{_haid}, {len(_hcols) // 3} attrs)")
                         # THE HERO'S SKILL BAR, and it is the same message the
                         # player's bar rides -- 0x00DA is
                         # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
@@ -6863,14 +6947,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # shapes, and this is a RECV message this server has
                         # been sending for the player all along. Fourth time
                         # this arc that the mechanism was already in the tree.
-                        if HERO is not None and HERO_SKILLBAR:
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_SKILLBAR else ()):
                             _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
                             _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
                             send(GAME_SMSG_SKILLBAR_UPDATE,
-                                 [HERO_AGENT_ID, _hskills,
+                                 [_haid, _hskills,
                                   SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                                  f"SKILLBAR_UPDATE(hero agent "
-                                 f"{HERO_AGENT_ID}){_hskills}")
+                                 f"{_haid}){_hskills}")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -6878,9 +6963,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # charHeroData gate wants. Both outcomes are readouts,
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
-                        if HERO is not None and HERO_ACTIVATE:
-                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
-                                                 HERO_INVENTORY, HERO_AI_MODE))
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_ACTIVATE else ()):
+                            send(*agents.hero_activate(
+                                HERO_ACTIVATE_ID
+                                if (HERO_ACTIVATE_ID is not None
+                                    and _haid == HERO_AGENT_ID) else _hid,
+                                _haid, HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7444,7 +7533,7 @@ def main():
                          "arm one measured that the row draws with no body at "
                          "all, but with no name and 'Lvl 255'. This asks "
                          "whether the row's CONTENT is what needs the agent.")
-    ap.add_argument("--hero", type=int, default=None, metavar="INDEX",
+    ap.add_argument("--hero", default=None, metavar="INDEX[,INDEX...]",
                     help="Add a HERO row to the party roster: send 0x01C2 "
                          "inside the party build window for s_heroClientData "
                          "index INDEX (1..39; 0 is HERO_UNUSED and 40 is the "
@@ -7492,6 +7581,25 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--player-number", type=int, default=None, metavar="N",
+                    help="The in-instance player number, normally 1 -- which is "
+                         "also PLAYER_AGENT_ID, and that coincidence is what "
+                         "makes 0x01C2's msg+8 undecidable. Set it to something "
+                         "else and the two namespaces separate.")
+    ap.add_argument("--hero-owner", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+8 only (normally the player "
+                         "number). With --player-number, this is the arm that "
+                         "says whether the field is the owner's PLAYER NUMBER "
+                         "or the owner's AGENT ID.")
+    ap.add_argument("--hero-activate-id", type=int, default=None, metavar="N",
+                    help="Override 0x0072's hero id only, leaving 0x0074 on "
+                         "--hero's value. Splits the last confound: which of "
+                         "the two data-cache messages supplies the identity.")
+    ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
+                         "0x0072 on --hero's value. Three fields normally "
+                         "carry the same hero id, so nothing can say which one "
+                         "the client reads the identity from; this splits them.")
     ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
                     metavar="N",
                     help="HeroActivate's inventoryId (field 3), 0 so far. "
@@ -7713,20 +7821,46 @@ def main():
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
 
+    if a.player_number is not None:
+        global PLAYER_NUMBER
+        if not 1 <= a.player_number <= 255:
+            raise SystemExit("--player-number outside 1..255")
+        PLAYER_NUMBER = a.player_number
+        print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
+              f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
+              f"which is the whole point of the arm.")
+
     if a.hero is not None:
-        global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
+        global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC
+        HERO_IDS = [int(x, 0) for x in str(a.hero).split(",")]
+        if len(HERO_IDS) > 7:
+            raise SystemExit(
+                f"--hero got {len(HERO_IDS)} heroes; the client's own cap is 7 "
+                f"(PtPlayer:332 and GmHeroCommander:214 both `cmp 7`, and "
+                f"GmView:4330 names exactly HERO1..HERO7)")
+        if len(set(HERO_IDS)) != len(HERO_IDS):
+            raise SystemExit(
+                "--hero repeats a hero id: each 0x0074 record is keyed by that "
+                "id, so a duplicate would have two agents selecting one record")
         # Fail HERE, not inside instance bring-up, and mirror the client's own
-        # two asserts rather than inventing a range.
-        agents.party_hero_add(1, HERO_AGENT_ID, a.hero)
-        agents.mercenary_info(a.hero)
-        HERO = a.hero
+        # asserts rather than inventing a range.
+        for _i, _h in enumerate(HERO_IDS):
+            agents.party_hero_add(1, PLAYER_NUMBER, HERO_AGENT_ID + _i, _h)
+            agents.mercenary_info(_h)
+        HERO = HERO_IDS[0]
         HERO_BODY = a.hero_body
         HERO_BODY_NPC = a.hero_body_npc
         HERO_SWAP = a.hero_swap
         HERO_ACTIVATE = a.hero_activate
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
+        global HERO_ROSTER_ID
+        HERO_ROSTER_ID = a.hero_roster_id
+        global HERO_ACTIVATE_ID
+        HERO_ACTIVATE_ID = a.hero_activate_id
+        global HERO_OWNER
+        HERO_OWNER = a.hero_owner
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
@@ -7755,8 +7889,8 @@ def main():
                   f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
-        _wa, _wb = (HERO, HERO_AGENT_ID) if HERO_SWAP else (HERO_AGENT_ID, HERO)
-        print(f"HERO: 0x01C2 wordA={_wa} wordB={_wb} (swap={HERO_SWAP}) "
+        print(f"HERO: {len(HERO_IDS)} hero(es) {HERO_IDS} at agents "
+              f"{[HERO_AGENT_ID + i for i in range(len(HERO_IDS))]}; "
               f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "

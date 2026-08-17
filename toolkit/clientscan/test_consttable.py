@@ -792,10 +792,10 @@ def section_effect_toml(pe, by):
                   "`client-table` rows this store has ever loaded",
                   f"census {world.census()}")
         row0 = world.get("effect", "0")
-        LEDGER.ok(row0["name_id"] == 78727 and row0["id"] == 0,
+        LEDGER.ok(row0["file_id"] == 78727 and row0["id"] == 0,
                   "row 0 reads back as the client has it",
-                  f"name_id {row0['name_id']} -- a string ID, not a string: "
-                  f"ArenaNet's text stays in the owner's archive")
+                  f"file_id {row0['file_id']} -- a file ID, not the file: "
+                  f"ArenaNet's model data stays in the owner's archive")
         LEDGER.ok(world.get("effect", "2036")["id"] == 2077,
                   "and the one hole survives the round trip intact",
                   "recorded as measured rather than repaired")
