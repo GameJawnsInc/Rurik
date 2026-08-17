@@ -314,6 +314,10 @@ def section0(check):
           "minimal fixture is 110 bytes by the builder's own arithmetic",
           f"got {len(minimal)}")
     check(walk(minimal)["ok"], "minimal fixture closes")
+    check(Skeleton.decode(minimal).sound_events() == [],
+          "sound_events() is [] when n40 == n44 == 0 -- the walker records "
+          "no n40n44 span there, and the unguarded unpack was the U6 "
+          "strided writer's first crash (2026-08-16)")
 
     full = synth(**FULL_KW)
     check(len(full) == FULL_LEN,
@@ -803,15 +807,18 @@ def main():
                          "decompresses every head row, ~45 min)")
     args = ap.parse_args()
 
-    # Floor from the real green default run, 2026-08-16: 91 checks executed
+    # Floor from the real green default run, 2026-08-17: 92 checks executed
     # (stride 89, the study archive; 71 before the U2 typed-layer section
     # 0b landed, 89 before the U2 review added the two failing controls
-    # and folded one forced check, 90 before the U6 review's sound_events
-    # regression check). Set below that only by the checks whose pools can
-    # legitimately empty on a different sample (the 16 corpus sabotage
-    # variants and the two order-control halves declare skips); the
-    # mandatory core is 73.
-    led = checks.Ledger("skeleton chunk (0xFA1)", floor=83)
+    # and folded one forced check, then TWO sound_events empty-span
+    # regression checks -- U6's arc pinned the corpus population and a
+    # parallel session pinned the synthetic fixture, independently within
+    # the hour; the merge keeps BOTH because they cover different ground.
+    # Set below that only by the checks whose pools can legitimately
+    # empty on a different sample (the 16 corpus sabotage variants and
+    # the two order-control halves declare skips); the mandatory core
+    # is 74.
+    led = checks.Ledger("skeleton chunk (0xFA1)", floor=84)
     check = checks.adopt(led)
 
     section0(check)
