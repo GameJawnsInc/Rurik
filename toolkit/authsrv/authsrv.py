@@ -7139,6 +7139,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       state["settings_buf"]).decode())
                         send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
                              f"REQUEST_RESPONSE(settings {req_id})")
+                elif opcode == 0x0009:  # UPDATE_CHARACTER_SETTINGS
+                    # [req_id, character name, settings blob]. OBSERVED
+                    # 2026-08-16: a client whose account has a STORED character
+                    # sends this ~2 s after entering a map -- persisting its
+                    # char-select settings word ("currently in", appearance) --
+                    # and an unanswered one is FATAL: the client waits, sets
+                    # itself Offline and drops BOTH channels with Code=007.
+                    # Every harness session on every tree died of this the day
+                    # the character store landed (captures 20260816T19*-21*);
+                    # the synthetic-character flow never sent it, which is why
+                    # no arm existed. Ack like the settings upload above; the
+                    # blob is recorded for the character-data arc, not parsed
+                    # here -- persistence design is that arc's, not this arm's.
+                    req_id, char_name, blob = values[1], values[2], values[3]
+                    # array8 decodes to a str of code points here (MEASURED on
+                    # tonight's capture: types [int, int, str, str]); bytes()
+                    # on that str raised, killed this thread, and turned the
+                    # missing-ack death into an instant-reset death.
+                    raw = (bytes(blob) if isinstance(blob, (bytes, bytearray))
+                           else bytes(ord(ch) & 0xFF for ch in blob))
+                    rec.event("character_settings", req_id=req_id,
+                              name_units=[ord(ch) for ch in char_name],
+                              blob=binascii.hexlify(raw).decode())
+                    send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
+                         f"REQUEST_RESPONSE(char settings {req_id})")
+                    print(f"[c{conn_id}] character settings: req {req_id}, "
+                          f"{len(raw)}B recorded and ACKED", flush=True)
                 elif opcode == AUTH_CMSG_SET_PLAYER_STATUS:
                     # Deliberately no reply: the reference server records the
                     # status and returns. Sent on pressing Play, status 1.
