@@ -884,6 +884,54 @@ Every one of these, in the order they were written:
   body's FA6-lessness is the composite split's other half. 52 checks
   against a floor of 45 (the FA8/FAE-dependent sections declare skips on a
   sample that misses them). ~25 s; `--all` ~15-20 min),
+  `toolkit/mapdata/test_unitassembly.py` (the ASSEMBLY RESOLVER -- rung U4 of
+  `studies/unitmodels/PLAN.md`: a unit definition (0x0056 shell + 0x0057
+  bodies, from a capture via `npcdefs.py` or a `content/*.toml` row) resolved
+  to the CLOSED archive file set the client's loaders would reach -- shell ->
+  FA8 links recursive with a visited set (the cached by-id loader
+  `0x00794260`'s closure) -> bodies -> FA5 textures -> FA6 sound descriptors
+  -> their type-8 chunk-0x1 audio -> FAD/FAE, every id checked against
+  `file_id_table(raw=True)` and every walked container decoded, or the
+  resolution records a NAMED problem. **The headline is the acceptance
+  number**: the three keyed live captures' 54 pooled definitions resolve
+  54/54 closed and 54/54 geometry-complete -- 1,393 distinct files, role
+  histogram pinned (shell 32, body 40, link 134, texture 113, sound 241,
+  audio 830, fad 8, fae_model 0), set sizes 3/158/233 with the carrying
+  definitions named. **The COMPOSITED rule is DERIVED, not assumed**
+  (`needs_body` reads FA0-absence; the FA1 bit is the independent second
+  witness, 161/161 carriers agreeing) and cross-checked against wire
+  presence of 0x0057 with every count TRI-VALUED and MEASURED -- with FA0 /
+  without / unreadable, one tuple check per population, after the U4
+  review caught the first version printing its "reversed rule" as f-string
+  arithmetic that was 0 by construction: capture 20260807T143055 alone 8/8
+  0x0056-only shells CARRY FA0 (measured reverse 0, unreadable 0), 36/36
+  with-0x0057 shells LACK it, 33/33 distinct model ids carry it; pooled
+  11/11, 43/43 per-definition (the unitmodels SS5.4 "43/43", whose NOUN
+  was wrong -- it counted definitions pooled, not model ids), 40/40
+  distinct -- plus `needs_body` == wire-0x0057-presence on all 54, the
+  only check covering the seven with-0x0057 definitions outside 143055.
+  **The visited set has its own synthetic cycle fixture** (A<->B links plus
+  a self-loop through a pre-filled facts cache, under a call budget that
+  turns a hang into a red check), because the corpus cannot exercise it:
+  the live FA8 graph is acyclic and terminates at depth 1, so the review's
+  remove-the-visited-set mutation stayed green on real data and is killed
+  by this fixture (re-verified against the mutant). The hatcher pair
+  (1471: 116228+116703) is pinned as the full
+  232-id set and the worm (1442: 116366) as 75 ids, and the content-row
+  entries (`npc.hatcher`/`npc.lakeside_worm`) must resolve to the IDENTICAL
+  sets -- one resolution path, two id sources. The origin gate is proved in
+  both directions on synthetic capture dirs: live+live pools, live+ours
+  REFUSES naming both, UNKNOWN never pools. Controls that fail: an id
+  outside the raw table leaves the set OPEN, a map file (ffna type 3) as
+  shell is refused not walked, and npcdefs' 0x0057-disagreement refusal is
+  FIRED through the decode seam -- an injected conflicting repeat must make
+  read() refuse naming the definition and both lists. Two review-flagged
+  entailed checks were removed (hatcher!=worm needs_body; a separate
+  FAE==0 beside the pinned role dict -- a check that cannot fail
+  independently is the recorded defect class). 57 checks, floor 57 --
+  nothing legitimately varies; vault-less runs skip sections 2-4 and go
+  red on the floor. ~90 s: needs `vault/dat_study` and the three keyed
+  live captures),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
