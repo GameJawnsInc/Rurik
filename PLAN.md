@@ -1327,6 +1327,34 @@ container, and our `0x013F`/`0x013E` bag family only ever goes to the local play
 subsystem, different missing piece: floor two is the heroes arc's to price as its own
 work, not a duplicate of this line. And two residues filed with their own arcs — the
 heroes split-filter (§21.2) and whether `0x006E` position semantics matter for the HANDS.
+
+**A NAMED FUTURE CAPTURE: the Factions tutorial, start to Shing Jea Monastery.** Owner's
+call 2026-08-17, made while walking a new character through it: *"there are definitely
+some good packets in this tutorial."* Too long to bolt onto a Q11 run, so it is its own
+session — and it is aimed, not speculative. What it would be the FIRST capture of, each
+checked against the corpus before this was written:
+
+- **A level CHANGING.** Property 36 has 513 sightings across four captures at values 1–20,
+  and every one is a different body seen once at its create. A tutorial takes one agent
+  1→8, so the same agent id receives successive values — and whatever ELSE rides a
+  level-up (max health on 42? attribute points on `0x0037`? a skill point?) is a burst
+  nobody has seen. A server that wants levelling has to guess it today.
+- **Quest state with real quests.** The whole corpus holds 40 `0x0054` and 6 `0x0053`; a
+  tutorial is dense with accept → objective → complete, which is exactly the kind-18 /
+  kind-22 / kind-23 progression `studies/quests/FINDINGS.md` §9.3 reasons about from the
+  client side.
+- **Secondary profession selection**, which the Factions tutorial ends with — an open
+  question in `studies/profession/`, and a transition no capture carries.
+- **Skill acquisition and the first equipment grants**, i.e. `0x0161` item records
+  arriving as rewards rather than at login.
+- **Cinematics.** The tutorial has cutscenes; whatever drives them is unread.
+
+Two properties worth naming while a tutorial capture is being planned, because both are
+frequent and neither is understood: **property 66** (202 sightings, the second most common
+int property, sent pre-create to NPCs) is past OpenTyria's enum and unnamed in every
+lineage — see the unit-setup arc's Q7 answer — and **property 30** (`ApplyGuild1`, 223
+sightings) rides the player create burst on retail and is deliberately unsent by us.
+
 ### The PvP-UI arc — OPENED and LANDED 2026-08-17, out of the heroes arc's measured wall
 
 > **Cross-reference for the unit-setup arc's open residue above.** That entry lists "the
