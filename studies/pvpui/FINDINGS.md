@@ -1240,3 +1240,61 @@ was an artifact of the C++ subobject convention sitting between them.
 `+0x54`, `[ebx+0x3c]` is `+0x40`, `[edi+0x44]` is `+0x48`. A displacement-anchored search
 over this subsystem must be run at **both** offsets, or it will produce a confident zero.
 That belongs in `codescan.py`'s footer next to the other blind spots it already names.
+
+## 22. WHOSE commander, and a defect in the probe that asked
+
+Run 9 armed a capture on `create` (`0x00524C40`) reading its argument, because §20 could
+show a commander existing but not whose — `heroCommanderSlot` holds container KEYS, not
+agent ids.
+
+```
+  return address        0x00EC4FA9   ->  VA 0x00524FA9
+  agent id (arg0)       0x00000001
+  VERDICT               agent 1 gets the commander -- the PLAYER, not the hero
+  TOTALS   create 1   bulk 1   worker 1
+```
+
+**Two things there are wrong, and both are mine.**
+
+1. **`from the rebuild loop: False` was a bug in the probe.** It compared the *slid* runtime
+   return address against the *static* `0x00524FA9`. Un-slid, `0x00EC4FA9` **is**
+   `0x00524FA9` — the call came from exactly the rebuild loop the check was written to
+   confirm. Fixed: `commandertrap.py` now carries the target's `SLIDE`, set once in `main`,
+   and `unslide()` turns a runtime pointer back into a VA. A capture that silently answers
+   the wrong question is the failure this module exists to prevent, and it had one.
+2. **"the PLAYER, not the hero" was a misreading of what `arg0` is.** The rebuild passes
+   `[item+8]`, and `agents.py:510` names `item+8` as `0x01C2`'s **`scan_key`** (msg+0x10) —
+   which callers fill with the **hero id**, not an agent id. A `1` here is *hero 1*, not the
+   player's agent 1. The two collide on the default rig, which is precisely the confusion
+   `--player-number` was added to break.
+
+### 22.1 What run 9 actually measured, and why it matters
+
+**The commander is filed under `scan_key`.** We send `scan_key = hero_id = 1`, and that is
+the key `0x00524C40` receives and the container is keyed by.
+
+`agents.py:510`'s docstring says of that field: *"That the commander scan reads entry+0x8 as
+its container key is SOURCED (17.1); every OBSERVABLE consequence is indifferent to the
+value (19.2: a wrong value changes nothing, the right one fixed nothing), consistent with
+the scan never running in our sessions."*
+
+**That last clause is now obsolete.** The scan runs (§20). `scan_key` has become observable
+for the first time in this project, and it is the key the commander is filed under. Heroes
+§19.2's "a wrong value changes nothing" was true only while nothing read it.
+
+### 22.2 The next experiment, prediction first
+
+§10.1 measured the button's path: a party-row click raises `0x100001C2` carrying the agent
+id, and GmView's case calls `0x00524DB0(<that>)` to find the record. If the lookup key is an
+**agent id** and the container is filed under **hero id**, they cannot match — which is the
+mismatch `commanderpeek`'s canned line guesses at without testing.
+
+> **Send `scan_key = 200` (the hero's agent id) instead of the hero id**, via the existing
+> `--hero-roster-id 200`, together with `--party-mine-late 2.0`.
+>
+> **Predicted:** `create` fires with `key (arg0) = 200`.
+>
+> **What that does NOT settle:** whether the button then works. `0x00524DB0`'s argument
+> being an agent id is a RECONSTRUCTION from §10.1's disassembly, not a measurement — the
+> call has never been observed running, because it needs a click. So a matching key is
+> necessary-if-the-reconstruction-holds, and nothing more. **The click remains the owner's.**

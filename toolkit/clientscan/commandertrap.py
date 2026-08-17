@@ -75,6 +75,22 @@ sys.path.insert(0, HERE)
 import keytap                                                   # noqa: E402
 
 IMAGE_BASE = 0x00400000
+# The ASLR slide of the CURRENT target, filled in by main() once the base is
+# known. Captures need it to turn a runtime pointer back into a VA they can
+# compare against the addresses in this file -- and the need is not
+# hypothetical: `create`'s first version compared a SLID return address
+# against the static 0x00524FA9 and reported `from the rebuild loop: False`
+# for a call that came from exactly there. A capture that silently answers
+# the wrong question is the failure this whole module is built against.
+SLIDE = 0
+
+
+def unslide(p):
+    """Runtime pointer -> image VA, or None if it is not in the image."""
+    if p is None:
+        return None
+    va = p - SLIDE
+    return va if IMAGE_BASE <= va < IMAGE_BASE + 0x01000000 else None
 
 # ---------------------------------------------------------------------------
 # Win32
@@ -829,14 +845,21 @@ SITES = {
         # not 0x00524FA9 means the call came from somewhere other than the
         # rebuild loop, and then the id is about something else.
         capture=lambda ctx, rd: (lambda w: {
-            "return address": None if not w else w[0],
-            "from the rebuild loop": None if not w else w[0] == 0x00524FA9,
-            "agent id (arg0)": None if not w else w[1],
+            "return address (VA)": None if not w else unslide(w[0]),
+            "from the rebuild loop": None if not w else
+                unslide(w[0]) == 0x00524FA9,
+            "key (arg0)": None if not w else w[1],
+            # NOT an agent id, and the first version of this string said
+            # it was. The rebuild passes `[item+8]`, and `agents.py`
+            # names item+8 as 0x01C2's `scan_key` (msg+0x10) -- which
+            # callers fill with the HERO ID, not an agent id. So a 1 here
+            # is hero 1, not the player's agent 1; the two collide on the
+            # default rig, which is exactly the trap `--player-number`
+            # exists to break.
             "VERDICT": "unreadable stack" if not w else (
-                f"agent {w[1]} gets the commander"
-                + (" -- the HERO" if w[1] == 200 else
-                   " -- the PLAYER, not the hero" if w[1] == 1 else
-                   " -- neither the hero agent (200) nor the player (1)")),
+                f"the commander is filed under key {w[1]} -- this is "
+                f"0x01C2's scan_key (msg+0x10), the value --hero-roster-id "
+                f"overrides, NOT an agent id"),
         })(_dw(rd, ctx.Esp, 2))),
     "bulk": Site(
         "bulk", 0x004E5D20, bytes.fromhex("8b1eff37895da8"),
@@ -1208,6 +1231,8 @@ def main(argv=None):
 
     print(f"pid {pid}")
     base, checks = verify_sites(pid, sites)
+    global SLIDE
+    SLIDE = base - IMAGE_BASE
     print(f"Gw.exe base 0x{base:08X}  (image base 0x{IMAGE_BASE:08X}, "
           f"slide 0x{base - IMAGE_BASE:X})")
     bad = []
