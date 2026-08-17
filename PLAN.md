@@ -1313,10 +1313,20 @@ for world-anchored clicks and model-appearance judgment.
 **What is left, in cost order:** Q11 (every "4/4 tapes agree" figure is one character
 sampled four times — one live capture on a different character, human-driven by design,
 `RUNBOOK.md` procedure); the `0x00F0` non-zero payload tail (kind 5's combat values,
-kind 9's `0x1000` ambient flag — a model, not a default); `0x006D` NPC weapons at create
-(needs item authoring the content store cannot do yet); and two residues filed with their
-own arcs — the heroes split-filter (§21.2) and whether `0x006E` position semantics matter
-for the HANDS.
+kind 9's `0x1000` ambient flag — a model, not a default); `0x006D` NPC weapons at create —
+**refined 2026-08-17 after the heroes arc hit ItCliApi:488 and asked whether its blocker
+was this line**: it half is. The item-authoring gap has TWO floors. Floor one, item
+RECORDS, already exists — the armor probe declares content-row items via `0x0161`, and a
+census over all three keyed captures proved retail's `0x006D` ids are exactly such records
+(**375/375** non-zero ids declared earlier in the same stream by the `0x015E`-family, zero
+exceptions — so what `0x006D` still lacks is per-NPC-type weapon ROWS, not machinery; and
+**210/585** retail `0x006D`s carry item **0**, a legal no-weapon value needing no authoring
+at all). Floor two, per-OWNER inventory containers in the item client's table
+(`[globals+0x40]+0xD4`), is what ItCliApi:488 actually wants — the hero's owner has no
+container, and our `0x013F`/`0x013E` bag family only ever goes to the local player. Same
+subsystem, different missing piece: floor two is the heroes arc's to price as its own
+work, not a duplicate of this line. And two residues filed with their own arcs — the
+heroes split-filter (§21.2) and whether `0x006E` position semantics matter for the HANDS.
 ### The PvP-UI arc — OPENED and LANDED 2026-08-17, out of the heroes arc's measured wall
 
 > **Cross-reference for the unit-setup arc's open residue above.** That entry lists "the
