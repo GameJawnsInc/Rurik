@@ -1769,8 +1769,31 @@ everything and would have confirmed the finding falsely — all 32 hits landed i
 burst of a single event, because a hot site's default ceiling is not a sample. A control that
 samples badly does not fail loudly; it agrees with whatever you were about to conclude.)*
 
-**2026-08-17, later: that hypothesis was TESTED — CORROBORATED but NOT REPRODUCIBLE, and a
-mid-session "CONFIRMED" is retracted (FINDINGS §35).** `--hero-late N` holds the whole roster
+**2026-08-17, latest: it REPRODUCES 4 OF 5 (FINDINGS §35.5).** Three more late runs with
+`worker,raise,lookup,case93` armed all ran the full chain, each with its own live subscriber
+pointer (`0x272BA958`, `0x25EE9D78`, `0x25BF7AA8` — four distinct addresses across four runs,
+so it is a per-session list rather than a static). **Sending the roster sequence after
+`INSTANCE_LOAD_FINISH` reliably finds a subscriber for `0x1000011E` where sending it inside
+the load reliably does not.** The one stall (run 10) did not arm `raise`/`lookup`, so it stays
+unattributed and is recorded as a 1-in-5 rate rather than explained away. **STILL UNEXPLAINED
+and now the whole question: case 93 runs and NO COMMANDER IS CREATED** (`count=0` across 14
+samples), so the break sits between case 93's entry and the get-or-create — the my-id filter
+or `0x00524CC0` itself.
+
+**AND THEN DOWNGRADED AGAIN, FINDINGS §35.6 — the late rig makes the client ASSERT, 4 of 4:**
+`Assertion: SkillListContext::SKILL_LIST_USERS != skillListUser`, in every late run and in no
+inline run. So every late measurement was taken from a client that asserts during the session,
+and "the subscriber appears later" cannot be separated from "the client is in a degraded
+state". §35.1/§35.5 are **CONTESTED**, not corroborated. What survives is the *contrast* —
+inline reads `subscribers = 0`, late reads non-zero, repeatedly and control-verified — not any
+claim about why. **Fix the assert before re-running: a rig that asserts is not a rig.** Also
+recorded UNRESOLVED (§35.7): the two trap site-sets disagreed 4-of-4 versus 0-of-3 on the same
+rig, which could be variance, an observer effect, or the sites themselves — so §35.5's numbers
+are not safe to build on yet.
+
+**The intermediate labelling, kept because the correction is mine:** that hypothesis was first
+TESTED at n=2 as CORROBORATED but NOT REPRODUCIBLE, retracting a mid-session "CONFIRMED"
+(FINDINGS §35).** `--hero-late N` holds the whole roster
 sequence until N seconds after `INSTANCE_LOAD_FINISH`. One run showed exactly what the
 hypothesis predicted — subscriber `0x26151EA0` instead of `0`, and case 93 **running** — but a
 second run on the identical rig stopped at the worker, and a third held the container at

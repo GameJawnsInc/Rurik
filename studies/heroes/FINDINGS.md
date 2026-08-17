@@ -2247,7 +2247,13 @@ Same rig otherwise, and the late run's `case93` capture cross-checks itself: `pa
 **So the commander UI does subscribe, and later than our hero-add had been arriving.** That
 is a genuine measurement and the subscriber reading behind it is control-verified (34.2).
 
-### 35.2 IT DOES NOT REPRODUCE, and that governs
+### 35.2 SUPERSEDED BY 35.5 -- it reproduces 4 of 5. Read on before using this section.
+
+*The three subsections below are kept exactly as written at n=2, because the correction they
+carry is about my own labelling and deleting it would hide it. The measurement they report is
+real: one late run did stall. What changed is the DENOMINATOR.*
+
+### 35.2 IT DOES NOT REPRODUCE, and that governs (at n=2)
 
 A second run on the **identical** rig -- `--hero-late 20 --hero-bust-cache`, same map, same
 hero -- reached the worker and stopped:
@@ -2285,6 +2291,87 @@ which `--hero-bust-cache` does not guarantee once the instance is live.
 **Unchanged either way:** no commander is created in any run measured, so 33.5's practical
 conclusion holds -- at the moment our server can reliably send it, `0x01C2` does not bind a
 commander, and the authored hero is complete for everything the wire governs.
+
+## 35.5 The series 35.4 asked for: it reproduces 4 of 5
+
+Three more late runs with `worker,raise,lookup,case93` armed, exactly the shape 35.4
+specified. **All three ran the full chain**, each with its own live subscriber pointer:
+
+| run | worker | raise | lookup | case93 | `subscribers(eax)` |
+|---|---|---|---|---|---|
+| 9 | 1 | 1 | 1 | 1 | `0x26151EA0` |
+| series 1 | 1 | 1 | 1 | 1 | `0x272BA958` |
+| series 2 | 1 | 1 | 1 | 1 | `0x25EE9D78` |
+| series 3 | 1 | 1 | 1 | 1 | `0x25BF7AA8` |
+| 10 | 1 | -- | -- | **0** | *(not armed)* |
+
+**So the late rig reaches case 93 in 4 of 5 runs**, and 35.2's "NOT REPRODUCIBLE" was drawn
+from a single stall. The honest label is now **REPRODUCIBLE WITH ONE OUTLIER**: sending the
+roster sequence after `INSTANCE_LOAD_FINISH` reliably finds a subscriber for `0x1000011E`
+where sending it inside the load reliably does not.
+
+**Run 10 stays unattributed and is not swept up.** It did not arm `raise` or `lookup`, so
+whether it stalled at the cache gate (35.3's confound) or at an absent subscriber cannot be
+recovered from it. One in five is a real rate and it is recorded as one.
+
+**The distinct subscriber pointer in every run is worth noting**: four different addresses, so
+this is a list allocated per session rather than a static that might have been misread.
+
+### 35.6 THE LATE RIG MAKES THE CLIENT ASSERT -- 4 of 4, and it confounds everything above
+
+Reading the session logs rather than only the trap reports:
+
+```
+ERROR DIALOG captured
+>>> Assertion: SkillListContext::SKILL_LIST_USERS != skillListUser
+```
+
+**Every late run produced it -- 4 of 4, identical string.** `--hero-late` does not merely move
+the roster sequence, it puts the client into an assert it never hits on the inline rig. The
+likely cause is the hero's skill bar (`0x00DA`) arriving 20 s after the load, but that is not
+measured and is a guess.
+
+**This is a confound over 35.1 and 35.5, and it is mine.** Every late measurement in this
+section was taken from a client that asserts during the run. "The subscriber appears later"
+may be a fact about normal UI initialisation, or it may be a fact about a client in a degraded
+state -- these runs cannot tell those apart. The subscriber pointer being **different in every
+run** (four distinct addresses) is mild evidence for a genuine per-session list rather than an
+artifact, but it is not decisive.
+
+**Downgraded:** 35.1 and 35.5 are **CONTESTED**, not CORROBORATED. What survives unconditionally
+is the *contrast* -- inline runs read `subscribers = 0` and late runs read non-zero -- because
+that difference is large, repeated, and control-verified (34.2). What does NOT survive is any
+claim about *why*, because the rig changed two things and then broke a third.
+
+**What it would take:** find and fix the assert first (send the skill bar on the inline
+schedule and only the party/hero messages late, or drop `0x00DA` from the late batch), then
+re-run. A rig that asserts is not a rig.
+
+### 35.7 A site-set asymmetry, recorded and NOT explained
+
+The two trap configurations disagreed systematically:
+
+| sites armed | runs | reached case 93 |
+|---|---|---|
+| `worker,raise,lookup,case93` | 4 | **4** |
+| `worker,filter,create,notfound` | 3 | **0** |
+
+Same rig, same session arguments, same map, same hero -- only the armed addresses differ. The
+assert above is constant across BOTH sets, so it is not the discriminator. Three readings fit
+and this arc has no evidence to choose between them: run-to-run variance that happened to
+land 4-0 then 0-3; an observer effect where trapping `0x008590CA` delays the raise into a
+window that works; or something about the later sites being armed. **UNRESOLVED, and it is
+recorded because it means the numbers in 35.5 are not yet safe to build on.**
+
+### 35.8 What is STILL not explained, and it is the whole remaining question
+
+Case 93 runs. And **no commander is created** -- the container held `cap=7 count=0` across all
+14 samples of a late session. Since `0x00524CC0` reaches the get-or-create on BOTH of its
+exits (33's reading, unchanged), the break must sit between case 93's entry and that call:
+either the my-id filter at `0x004E5DF2` rejects, or `0x00524CC0` behaves differently from the
+static read. That is one run shape -- `worker, filter, create, notfound` on the late rig,
+repeated to beat the 1-in-5 stall -- and the filter site captures both operands, so it answers
+itself.
 
 ## 9. Defects and corrections this arc produced
 
