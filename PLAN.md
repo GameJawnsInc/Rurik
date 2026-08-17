@@ -1162,7 +1162,11 @@ versus code:**
   and line** — `P:\Code\Base\Rtl\Random.cpp` plus `fraction <= 1.0f` is a line of their source
   code, and a 477-opcode table of them is a source dump with extra steps. What a derived table may
   carry instead is the *constraint*: opcode, field, bound, address. That is the useful content and
-  it loses almost nothing.
+  it loses almost nothing. **(This bullet was REFINED the next day and must not be read alone —
+  see "REFINED 2026-08-12" three paragraphs down: the refusal is aimed at BULK, and a single
+  assert cited as the evidence for one claim is a measurement. Reading this bullet on its own is
+  what cost 46 hand-rewritten citations, and it had a live route back in via `toolkit/content.py`
+  until 2026-08-16.)**
 - **NAMES AND AUTHORED TEXT: commit the id, resolve at run time.** Item, skill, NPC and dialogue
   strings are individually trivial and in bulk a dump of authored work. A row carrying
   `model_id = 419, name_string_id = 2519` is fully useful to the server and carries no ArenaNet
@@ -1374,6 +1378,52 @@ is called done.
 the corpus and is its own arc), quest names are ArenaNet's string ids rather than ours
 (rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
 per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
+
+**RUNG Q1 LANDED 2026-08-16, and it was the arc's unbanked value.** Fifteen of the nineteen
+quest opcodes were **absent from `schema/overrides.json` entirely** — `QUEST_ADD`,
+`QUEST_DESCRIPTION` and the `0x0080`/`0x0081` dialog pair existed only in a study document,
+invisible to every tool that reads the schema. Now: **12 named, 1 renamed, 4 deliberate
+abstentions**, each with its own evidence chain and confidence.
+
+The evidence for eleven of the twelve is the **frame bus**, and it was made refutable before
+it was used. `studies/quests/FINDINGS.md` had both halves — §1.6's publisher VAs, §2.1's
+handler bodies — in two tables and never multiplied them. The pairing was **predicted**
+structurally (*the two adds share a frame id, the two text-fills share one, the three marker
+ops — one shared payload layout — do not*) and then read out of the pinned image: **11 of 11**.
+It is committed as `toolkit/clientscan/framebus.py` with `test_framebus.py` (18 checks, floor
+14, §1 runs on a bare machine) so every row's `why` is reproducible by RUNNING, not by
+rewriting a scratch script.
+
+**The result worth carrying: `0x004E` VICTORY_BANNER → `QUEST_COMPLETE_PANEL`.** Its body
+`0x0080F670` does `push 0x10000155` / `call 0x00633D70` — posting into the band
+`GmQuestComplete` subscribes to. FINDINGS §7.6 had ruled that question needed *"one narrated
+live session in which the operator completes a mission. Nothing static will substitute."*
+Half the join was in its own §1.6 table. The 2026-08-13 smsgsweep had **already** fired the
+opcode at a client and photographed a centre-screen banner, filed `medium` because a name
+from a picture is a guess about purpose — the static join supplies the purpose, and the two
+lineages share no ancestry. **The reward arc is not unblocked, but it is one loopback run
+from its first real question** (what the panel expects in its three dwords), rather than a
+live capture campaign away from it.
+
+Two process notes, both cheap and both paid for. The **call window** failed twice by
+returning a confident short list rather than an error — §1.6's own scan at 6 bytes lost two
+sites, 24 lost `0x0050`'s (its call sits at +29 behind three payload stores). And naming CMSG
+`0x0014` made `test_dispatch.py` §7 **go red before** its `DROPPED_ON_PURPOSE` row landed,
+which is the tripwire working rather than a gap.
+
+**Q1b(b) is done too:** `toolkit/content.py` no longer declares a single cited assert to be
+refused expression — the trap that would have re-run the 2026-08-12 over-refusal, and the last
+place still carrying the old wording four days after CLAUDE.md fixed it. §7 Q3's REFUSED
+bullet now forward-points to its own refinement; the dated ruling text was left alone.
+**`Q1b(a)` is still open and is a second-gate obligation**: `PLAN.md` §6.1 has no
+Fournux/Tyria-Extractor row (`:33` is the prior-art landscape table and grants nothing), open
+since 2026-08-13.
+
+**Next offline, cheapest first:** the 66/66 coded-string verification is a claim in prose and
+not a check; §6.1's Fournux row; **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
+`0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
+build 38797, none re-checked against 38833.
 
 
 ### Heroes and henchmen — R4c-H MET, hero row renders, next gate NAMED (2026-08-16)
