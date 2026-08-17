@@ -1793,7 +1793,12 @@ Every one of these, in the order they were written:
   set wrong with all 125 checks green. Both constants are now asserted against
   LITERALS written in the test file and the probe distance is a literal too.
   No vault, no socket, no client: the mesh is `pathchunk.minimal()`, authored
-  from nothing. 33 checks, ~2 s),
+  from nothing. Section 4 (2026-08-16, Isle rung 5 gap 2): a vault-emitted
+  `def_NNNN` row — which deliberately carries NO name — spawns end to end
+  through `spawn_population` with the label defaulting to the npc key, and
+  every emitted message encodes through the real codec; the fixture asserts
+  the row truly lacks a name so the check can tell the fix from a smuggled
+  fixture. 43 checks, ~2 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
@@ -1862,7 +1867,26 @@ Every one of these, in the order they were written:
   non-hostile definition may carry a health reading. Three sabotages run, three fail —
   the third by `read()` refusing and naming both speeds rather than averaging. Also:
   six definitions carry an EncString word in the UTF-16 surrogate range and were
-  **unsendable by this server until the `string16` fix**),
+  **unsendable by this server until the `string16` fix**. Since 2026-08-16 (Isle
+  rung 5) the pins select the three captures BY NAME and the test proves a
+  synthetic fourth keyed capture cannot move them — built into the vault and
+  removed in a finally — plus the mode plumbing: base+reforged captures refuse
+  to pool, a `--mode` contradicting a manifest is refused, and a recorded mode
+  is used with no flag at all),
+  `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
+  `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
+  partitioned by class tag before any masking, because field 2's low 16 bits are a
+  definition index ONLY for the NPC class. The sabotage is measured both ways: 331
+  player creates masked anyway produce **0 collisions** with declared definitions and
+  **72 phantom slots** no 0x0056 ever declared — so an unconditional mask INVENTS
+  types rather than corrupting real ones, which is worse because nothing downstream
+  can notice. Pins the cross-session station that makes an Isle roster a table rather
+  than a session log: slot 1470 / model 116698 / pos (8436, 4819) byte-identical in
+  two live sessions THREE DAYS APART, and map 164's whole outpost joining 6/0/0. Also
+  the `tuple(v[3:5])` regression: a synthetic create carries decoy values at fields
+  3/4 that would read as a plausible position, so decoding the wrong slots cannot
+  come back green. Needs `vault/captures/live/`; without it, 2 of a floor of 27 run
+  and the floor takes it red),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly

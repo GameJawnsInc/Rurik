@@ -1972,6 +1972,84 @@ def _cast_anim_steps(agent_id):
     ]
 
 
+def _cast_one_steps(agent_id, which):
+    """`cast_anim` with ONE variable, because timing discrimination failed.
+
+    The combined probe fires 228 and property 60 in the same run, eight
+    seconds apart, and asks the operator which one animated. On 2026-08-15
+    that failed for a plain reason: the operator saw a sparkle, lost count
+    of the gaps, and could not attribute it -- and an observation that
+    cannot be attributed is not evidence about either message. (The agent
+    running it had also quoted the gaps wrong, as ~3 s, because `Step`'s
+    first field is a DELAY from the previous step rather than an absolute
+    time. Both halves of that failure are worth recording.)
+
+    So: same bar, same map, same everything, and exactly ONE message under
+    test per run. The operator answers "did anything visible happen after
+    the bar settled" -- yes or no, no counting. Run both and the pair is a
+    control for each other.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    steps = [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready. THE SHARED CONTROL: this message is "
+             "in both runs, so anything it causes is not the variable."),
+    ]
+    if which == "228":
+        steps.append(
+            Step(8.0, 0x00E4, [agent_id, bar[4], 0], "228, and NOTHING else",
+                 "the CHARACTER's body and the bar, for the whole rest of "
+                 "the run. PREDICTION: nothing, ever. Its handler compares "
+                 "the named agent against the local player and returns."))
+    else:
+        steps.append(
+            Step(8.0, 0x009F, [PROP_CAST_SKILL, agent_id, bar[4]],
+                 "property 60, and NOTHING else",
+                 "the CHARACTER's body. PREDICTION: the cast animation "
+                 "plays. This is the run that should show the sparkle."))
+    return steps
+
+
+def _cast_spell_steps(agent_id):
+    """Property 60 with a REAL SPELL, because the pair above used an attack.
+
+    `cast_prop60_only` sent property 60 with `PROBE_BAR_SKILL + 4` = 320,
+    Hamstring -- `type_code` 14, an attack skill, `activation = 0.0 s`. It
+    does not cast, and the client's own table gives it ONE animation id
+    (566) with the other five slots null. So a weapon sparkle is the whole
+    of what that skill has, and calling the result "the cast animation" was
+    an overclaim the owner caught.
+
+    105 Deathly Swarm is the opposite end: a 2.0 s Necromancer spell whose
+    six animation ids are [204, -, 201, -, -, 199] -- THREE components in
+    three different slots. If one property-60 send reproduces a full cast,
+    this is where a body animation shows; if it still renders only an
+    effect, then property 60 drives the EFFECT and the body animation comes
+    from somewhere else, which is a different and more useful answer than
+    the one we nearly wrote down.
+
+    The bar is sent first with 105 in slot 5 so the client has the skill in
+    hand -- the pair above showed the client will render for a skill it has
+    on the bar, and changing that variable too would spoil the comparison.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    bar[4] = 105
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1],
+             "bar with 105 Deathly Swarm in slot 5",
+             "the bar. Slot 5 should now be a Necromancer spell, not "
+             "Hamstring."),
+        Step(8.0, 0x009F, [PROP_CAST_SKILL, agent_id, 105],
+             "property 60 = 105 Deathly Swarm (2.0 s spell)",
+             "THE CHARACTER'S BODY, not the weapon. PREDICTION: a casting "
+             "stance -- arms, posture, something the model does -- because "
+             "this skill carries three animation components where Hamstring "
+             "carried one. If all that appears is another weapon effect, "
+             "property 60 drives EFFECTS and the body animation has another "
+             "source."),
+    ]
+
+
 def _unlock_211_steps(agent_id):
     """Opcode 211 is unnamed everywhere and shaped like both unlock messages.
 
@@ -1997,6 +2075,215 @@ def _unlock_211_steps(agent_id):
              "the same panel. PREDICTION: this one does change it -- 219 is "
              "the bitmap the client bit-tests before answering 'how many "
              "copies of this skill do you own'."),
+    ]
+
+
+def _condition_render_steps(agent_id):
+    """Isle rung 4: does 0x0042 carrying a CONDITION skill id render a condition?
+
+    studies/isle/FINDINGS.md B3/B6 background: the client's skill table marks ids
+    478-486 + 2077 as type_code 8 (the ten conditions), s_charCondition names the
+    nine condition strings, and the buff opcode family has ZERO ArenaNet witnesses
+    for 0x0042 -- so whether a condition arrives as a buff-add with the condition
+    skill's id is exactly the channel assumption rung 8's live session would
+    otherwise spend its first two minutes on. The tooltip is the measurement:
+    the client resolves the skill name from its own table, so whatever name the
+    operator reads settles the id -> condition mapping for that id, which no
+    offline pass could (the mapping order is UNVERIFIED).
+    """
+    return [
+        Step(2.0, 0x0042, [agent_id, 478, 0, 1, _f32(15.0)],
+             "66: skill 478 (type_code 8), 15 s",
+             "TWO places at once: the effects area above the skill bar, and "
+             "the health bar. A CONDITION shows a small brown DOWN arrow on "
+             "the bar and a gold-bordered icon; a plain buff icon with no "
+             "arrow means 0x0042 carries the skill but the client does not "
+             "classify it as a condition from the id alone. READ THE TOOLTIP "
+             "and say the name out loud -- that name is the measurement."),
+        Step(9.0, 0x0044, [agent_id, 1], "68: remove it", "the icon goes."),
+        Step(4.0, 0x0042, [agent_id, 480, 0, 2, _f32(15.0)],
+             "66: skill 480, 15 s",
+             "same two places, same tooltip read. A DIFFERENT condition name "
+             "than step 1 means the ids are per-condition, not a family id."),
+        Step(9.0, 0x0044, [agent_id, 2], "68: remove it", "the icon goes."),
+        Step(4.0, 0x0042, [agent_id, 2077, 0, 3, _f32(15.0)],
+             "66: skill 2077 (Cracked Armor's id, the out-of-block member)",
+             "if this renders a condition too, the type-8 set travels as a "
+             "set; if it renders nothing or a bare buff, 2077 is special."),
+        Step(9.0, 0x0044, [agent_id, 3], "68: remove it", "clean up."),
+    ]
+
+
+def _lone_p17_steps(agent_id, origin):
+    """Isle rung 4: what does a LONE property 17 draw, and does the orb move?
+
+    studies/isle/FINDINGS.md B6 settled the ledger half on ArenaNet's wire: a
+    lone p17 debits the server's health ledger and can kill (agent 38, 9 damage
+    on a 3/8 body, death 244 ms later). What the corpus cannot show is the
+    CLIENT's presentation -- studies/agentprops/FINDINGS.md 1 reads the handler
+    as raising a damage notification WITHOUT modifying the client-side health
+    record, which predicts a number that draws while the orb stays put.
+    """
+    return [
+        Step(2.0, 0x00A3, [16, agent_id, ENEMY_AGENT_ID, _f32(-0.10)],
+             "163: property 16, -0.10 of max, the control",
+             "the player orb and the space over the character. Expect the orb "
+             "to drop ~10 points and a damage number to draw. This is the "
+             "known-good kind; read the next two against it."),
+        Step(8.0, 0x00A3, [17, agent_id, ENEMY_AGENT_ID, _f32(-0.10)],
+             "163: property 17 ALONE, same magnitude",
+             "BOTH questions at once. (1) Does a number draw, and does it look "
+             "DIFFERENT from step 1 -- size, colour, anything? Say what you "
+             "see, not what a crit 'should' look like. (2) Does the ORB move? "
+             "PREDICTION from the client read: the number draws, the orb does "
+             "NOT move -- 17's handler raises the notification and skips the "
+             "health record. If the orb moves too, 17 is a full damage kind "
+             "client-side and the agentprops reading is wrong."),
+        Step(8.0, 0x00A3, [18, agent_id, ENEMY_AGENT_ID, _f32(-0.10)],
+             "163: property 18, the third kind in the dispatch",
+             "same two questions. 18 shares 17's notification path in the "
+             "dispatch read; no live capture has ever carried one."),
+        Step(6.0, 0x00A2, [34, agent_id, _f32(1.0)],
+             "162: property 34 = 1.0, the pool setter, restore",
+             "the orb refills to full (pool_fraction measured 34 as a SETTER: "
+             "fraction x maximum). If it was already full, nothing changes "
+             "-- which is itself the answer to step 2's orb question."),
+    ]
+
+
+# The live 0x5D chat line this probe replays and then rewrites. MEASURED off
+# ArenaNet's own wire (capture 20260807T143055 :60935 t=21.1, byte-identical
+# again in 20260810T235916 :61193): template sid 1796 -- a PLAIN archive record,
+# no key needed -- followed by four single-word numeric args, no terminator.
+# Words are ids and numbers, not text; the prose lives in the owner's archive
+# and is resolved by the client at render time.
+CHAT_TEMPLATE_SID = 1796
+CHAT_LIVE_ARGS = [13, 51, 1, 17]         # what ArenaNet sent, verbatim
+CHAT_OUR_ARGS = [42, 7, 3, 99]           # ours -- distinct from every live value
+CHAT_BIG_VALUE = 40000                   # forces the multi-word varint path
+
+
+def _chat_units(sid, args):
+    """[sid+0x100] + one 0x100-biased word per small arg."""
+    return "".join(chr(0x100 + v) for v in [sid] + list(args))
+
+
+def _chat_varint_units(sid, big):
+    """The multi-word encoding for a value >= 0x7F00.
+
+    studies/textrec (TextParser.cpp 0x7ccd2a): acc = acc*0x7F00 + (word-0x100),
+    continuation = 0x8000. UNVERIFIED in the send direction until this probe --
+    the decode rule is measured, our encode of it has never been through a
+    client.
+    """
+    hi, lo = divmod(big, 0x7F00)
+    words = [0x8000 | (0x100 + hi), 0x100 + lo]
+    return "".join(chr(0x100 + sid)) + "".join(chr(w) for w in words) + \
+        "".join(chr(0x100 + v) for v in CHAT_OUR_ARGS[1:])
+
+
+def _coded_chat_steps(agent_id):
+    """Isle rung 4, the probe rung 7 waits on: our coded-string ENCODE, rendered.
+
+    studies/isle/FINDINGS.md B8: numeric arguments in coded strings are cleartext
+    varints on a code path with no RC4 -- measured in the DECODE direction on 50
+    live 0x5D messages. What has never happened is the SEND direction: no coded
+    string with numeric args built by us has been through a client. The Master
+    of Damage plan reads DPS numbers out of exactly this format, so if our
+    encode does not round-trip, rung 7's analysis tooling is built on a guess.
+    """
+    # RUN 2026-08-16 (twice, operator watching): all three bare 0x5D steps
+    # rendered NOTHING, with exactly ONE 'Invalid coded string' in Gw.log per
+    # run -- so two were ACCEPTED and still not displayed. Live traffic never
+    # sends 0x5D bare: every one is paired with an 0x5E channel/color tag
+    # (t=21.06 in 20260807T143055: 0x5D [sid 1796 + args] then 0x5E [51, 10]).
+    # This revision replays the pair, verbatim tag after each line.
+    TAG = [51, 10]
+    return [
+        Step(2.0, 0x005D, [_chat_units(CHAT_TEMPLATE_SID, CHAT_LIVE_ARGS)],
+             "93: ArenaNet's own level-up line, replayed verbatim",
+             "nothing yet -- the channel tag comes next."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: its channel tag [51, 10], the captured partner",
+             "the CHAT PANEL. The control: these are the exact words ArenaNet "
+             "sent on 2026-08-07 WITH their tag, so SOMETHING should render, "
+             "with 13, 51, 1 and 17 somewhere in it."),
+        Step(10.0, 0x005D, [_chat_units(CHAT_TEMPLATE_SID, CHAT_OUR_ARGS)],
+             "93: the same template, OUR numbers 42/7/3/99",
+             "nothing yet."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: the tag again",
+             "THE MEASUREMENT. The same line with 42, 7, 3, 99 in the roles "
+             "the control's numbers held. If the numbers on screen are ours, "
+             "the value-word encode round-trips and rung 7 can read the "
+             "Master of Damage."),
+        Step(10.0, 0x005D, [_chat_varint_units(CHAT_TEMPLATE_SID,
+                                               CHAT_BIG_VALUE)],
+             "93: first arg as a MULTI-WORD varint carrying 40000",
+             "nothing yet."),
+        Step(0.5, 0x005E, list(TAG),
+             "94: the tag again",
+             "the same line with 40000 as its first number -- the encoding a "
+             "five-digit damage total needs, never exercised in the send "
+             "direction."),
+        Step(10.0, 0x005F, [ENEMY_AGENT_ID, 0,
+                            "".join(chr(0x100 + 2972))],
+             "95: NPC overhead text on the hostile -- one bare sid, 2972",
+             "text ABOVE THE HOSTILE's head. Sid 2972 is the Isle of the "
+             "Nameless map name, a PLAIN record the archive resolves without "
+             "a key -- if the words appear over the body, 0x5F works end to "
+             "end and the overhead half of the Master of Damage's announce "
+             "channel is proven too. The u8 field is 0 on a guess; if "
+             "nothing draws, that byte is the first suspect."),
+    ]
+
+
+def _encname_render_steps(origin):
+    """Isle rung 4: a CAPTURED enc_name, rendered by our own client.
+
+    The Hatcher precedent, pointed at the Isle's naming problem: rung 6's roster
+    will identify NPCs by their 0x0056 enc_name tuples, which no tool can decode
+    (the RC4 key pair's location is NOT FOUND -- studies/textrec). The one
+    working route is this: send the captured tuple to our own client and read
+    the nameplate. def_1470 is the cross-session station agentroster.py pins
+    (slot 1470, model 116698, byte-identical three days apart on map 148), so
+    its name is also a check against the operator's own memory of Ascalon City.
+    """
+    ox, oy = (origin[0], origin[1]) if origin else (0.0, 0.0)
+    # The def_1470 declaration, verbatim from vault/content/npcs.toml (OBSERVED
+    # on ArenaNet's wire, 8 connections, 2 captures, byte-identical) -- EXCEPT
+    # the index. OBSERVED 2026-08-16 (harness 20260816T211432): declaring INDEX
+    # 1470 into our minimal instance made the 38833 client send its goodbye
+    # family (0x0008/0x000A/0x000B/0x000D) and reset the connection -- the
+    # declare path evidently will not take an index ~1460 above anything the
+    # instance has seen, on a table retail populates densely. The index carries
+    # no naming semantics, so the probe uses a small unused one; the rejection
+    # itself is recorded as a real bound on any replay idea rung 6 might have.
+    DEF, FILE_ID, MODEL = 25, 116227, 116698
+    SCALE, FLAGS, PROF, LEVEL = 1677721600, 524, 3, 2
+    ENC = [3943, 39638, 36630, 30448]
+    enc_str = "".join(chr(u) for u in ENC)
+    return [
+        Step(2.0, 0x0056, [DEF, FILE_ID, 0, SCALE, 0, FLAGS, PROF, LEVEL,
+                           enc_str],
+             "86: declare definition 1470, the captured payload verbatim",
+             "nothing yet -- a declaration draws nothing on its own."),
+        Step(1.0, 0x0057, [DEF, [MODEL]],
+             "87: its model, 116698", "still nothing."),
+        Step(1.0, 0x0020,
+             create_agent(FRESH_AGENT_ID,
+                          CHAR_CLASS_MONSTER_BASE | DEF, AGENT_KIND_NPC,
+                          ox + PROBE_SPAWN_NEAR, oy, 0,
+                          allegiance=ALLEGIANCE_HOSTILE),
+             "32: a body wearing it, 150u out",
+             "THE NAMEPLATE. Hold Ctrl and read the name over the body out "
+             "loud -- that string is the measurement, and it is the exact "
+             "route rung 6 uses to identify all ~50 Isle bodies. If the "
+             "plate is blank or garbage, the enc_name path our roster plan "
+             "depends on does not work and rung 6 needs the marks ordinals "
+             "instead. Bonus check: the model should be an Ascalon City "
+             "guard-ish human, the station agentroster pins on map 148."),
+        Step(12.0, 0x0021, [FRESH_AGENT_ID], "33: remove it", "clean up."),
     ]
 
 
@@ -3827,6 +4114,117 @@ PROBES = {
              "because 66's setter calls no refresh and 65's does; step 1 "
              "establishes what a bare toggle does so it can be discounted.",
     ),
+    "condition_render": lambda a, o: Probe(
+        question="Does 0x0042 carrying a CONDITION skill id (type_code 8) "
+                 "render as a condition -- brown down-arrow, gold-bordered "
+                 "icon -- and which condition does each id name?",
+        predicts="Renders as a condition, named by its tooltip. The rival "
+                 "outcome is a plain buff icon with no arrow, which would "
+                 "mean the client does not classify conditions from the "
+                 "skill id and the Students' applications ride something "
+                 "else -- the refutation branch rung 8's live session would "
+                 "otherwise spend its first two minutes on. Either answer "
+                 "changes rung 8; only silence changes nothing, and a bare "
+                 "icon is not silence.",
+        steps=_condition_render_steps(a),
+        note="Isle rung 4 (studies/isle/PLAN.md). 0x0042 has ZERO ArenaNet "
+             "witnesses, so everything here is our layout from the client's "
+             "own handler -- a render is also the first proof of that layout "
+             "against a running client. SAY THE TOOLTIP NAMES OUT LOUD: the "
+             "id -> condition mapping order is UNVERIFIED and the tooltip is "
+             "the only instrument that settles it. "
+             "RUN 2026-08-16, operator watching: 478 rendered BLEEDING and "
+             "480 BURNING, both classified as CONDITIONS on the operator's "
+             "character -- two points landing exactly in s_charCondition's "
+             "order, so the mapping (478 Bleeding, 479 Blind, 480 Burning, "
+             "481 Crippled, 482 Deep Wound, 483 Disease, 484 Poison, 485 "
+             "Dazed, 486 Weakness) moves to CORROBORATED. 'They did no "
+             "damage': the client renders the condition and does NOT "
+             "self-apply degeneration -- the server must send it (the 0x00A2 "
+             "prop-44 rate, FINDINGS B4). Step 5 (2077) went unobserved; "
+             "Cracked Armor's out-of-block id is still open.",
+    ),
+    "lone_p17": lambda a, o: Probe(
+        question="What does a LONE property 17 draw, and does the client-side "
+                 "orb move?",
+        predicts="A damage number draws and the orb does NOT move -- the "
+                 "handler read (studies/agentprops 1) raises the notification "
+                 "and skips the health record. ArenaNet's ledger half is "
+                 "already settled the other way (a lone p17 kills -- "
+                 "studies/isle/FINDINGS.md B6), so if the orb DOES move, "
+                 "client and server agree and the agentprops reading is "
+                 "wrong; if it does not, our server must debit health "
+                 "server-side when it ever sends 17, or the two drift.",
+        steps=_lone_p17_steps(a, o),
+        note="Isle rung 4. Step 1 is the known-good p16 control at the same "
+             "magnitude -- read 17 and 18 AGAINST it, not against memory of "
+             "what a crit should look like. Step 4 restores the orb via the "
+             "property-34 setter. "
+             "RUN 2026-08-16, measured off the harness screenshots (bar "
+             "values legible): 100 -> 90 on the p16 control, 90 -> 80 on the "
+             "LONE p17 -- THE ORB MOVED, refuting this probe's own stated "
+             "prediction -- and 80 -> 80 on p18. So the three kinds separate "
+             "on screen: 16 debits, 17 debits, 18 notifies only. The "
+             "agentprops 'notification without a health record' reading was "
+             "right about the MECHANISM and wrong about the ID -- it belongs "
+             "to 18. Client and server agree on 17 (B6: a lone p17 kills "
+             "server-side; here it debits client-side): 17 is a full damage "
+             "kind, and '17 replaces 16' is settled on both halves.",
+    ),
+    "coded_chat": lambda a, o: Probe(
+        question="Does OUR encode of coded-string numeric args render -- same "
+                 "template, our numbers -- and does the multi-word varint "
+                 "path work in the send direction?",
+        predicts="Step 1 renders ArenaNet's level-up line with 13/51/1/17; "
+                 "step 2 renders the SAME line with 42/7/3/99 in the same "
+                 "roles; step 3 renders 40000 via the two-word varint; step "
+                 "4 draws the Isle's own map name over the hostile's head. "
+                 "Any step that instead logs 'Invalid coded string received "
+                 "from server' in Gw.log names exactly which encoding rule "
+                 "we hold wrong -- which is worth more than a render.",
+        steps=_coded_chat_steps(a),
+        note="Isle rung 4, and rung 7 waits on step 2: the Master of Damage "
+             "plan reads DPS numbers out of exactly this format "
+             "(studies/isle/FINDINGS.md B8 -- decode direction measured on "
+             "50 live 0x5D messages, send direction never exercised). CHECK "
+             "GW.LOG AFTERWARD either way. "
+             "RUN 2026-08-16/17, operator watching, three sessions. Bare 0x5D "
+             "renders NOTHING and is silently held -- the 0x5E channel tag is "
+             "REQUIRED (paired verbatim, the control rendered). The control "
+             "drew the level-up line with its numeric arg IN THE CLEAR ('is "
+             "now level 17!'), so the announcement-number path rung 7 needs "
+             "is proven on a real render. BOTH our-arg variants were refused "
+             "('Invalid coded string' x2): arg value 7 encodes to 0x107, "
+             "which is the LITERAL-RUN MARKER record -- the biased-varint "
+             "range contains control ids and 7 collides. The varint rule "
+             "itself is therefore STILL UNEXERCISED. And step 7's 0x5F with "
+             "a bare non-chat sid CRASHED the client -- c0000005, null read "
+             "-- so 0x5F is never to be sent with an arbitrary record; the "
+             "overhead half of the oracle stays unproven. Next iteration: "
+             "args avoiding 0x100-0x1FF control ids, and no 0x5F.",
+    ),
+    "encname_render": lambda a, o: Probe(
+        question="Does a CAPTURED enc_name tuple render as a readable "
+                 "nameplate on our client -- the route rung 6's roster "
+                 "naming depends on?",
+        predicts="The body 150u out wears a readable name (and an Ascalon "
+                 "City-ish human model) -- def_1470 is the byte-identical "
+                 "cross-session station agentroster.py pins. A blank or "
+                 "garbled plate refutes the naming route and rung 6 falls "
+                 "back to marks ordinals.",
+        steps=_encname_render_steps(o),
+        note="Isle rung 4, the Hatcher precedent re-run on a roster row. "
+             "HOLD CTRL and read the plate out loud; the string the client "
+             "resolves from its own archive is the measurement, and it "
+             "never enters the repo -- the ids already have. "
+             "RUN 2026-08-16, operator-confirmed: the body spawned, wore the "
+             "outfitter/merchant model (pack and all -- the operator matched "
+             "it to Gelsan the Outfitter's family on the wiki), carried a "
+             "readable red 'Outfitter' plate, and despawned clean. The "
+             "captured-tuple -> nameplate route is PROVEN, and the "
+             "agentroster station (slot 1470, model 116698, map 148, pos "
+             "8436,4819) is NAMED: the Ascalon City outfitter.",
+    ),
     "buff_type_field": lambda a, o: Probe(
         question="Is opcode 66's third field Headquarter's `effect_type` or "
                  "GWCA's `attribute_level`?",
@@ -3923,6 +4321,68 @@ PROBES = {
              "is strong enough to be worth trying to break. Watch Gw.log as "
              "well as the screen: step 4 should produce the client's own "
              "'Pending skill %u copy %d not found'.",
+    ),
+    "cast_228_only": lambda a, o: Probe(
+        question="Does opcode 228 addressed to the LOCAL player animate "
+                 "anything -- on its own, with nothing else sent?",
+        predicts="Nothing, for the whole run. 228's handler compares the "
+                 "named agent against the local player and returns before "
+                 "it reaches AgentView. Corroborated from the wire: all 7 "
+                 "0x00E4 in the live corpus name the receiving connection's "
+                 "OWN player (studies/combat 6, step 0a), so the real "
+                 "service broadcasts it uniformly and relies on this "
+                 "discard. A sparkle here REFUTES that reading.",
+        steps=_cast_one_steps(a, "228"),
+        note="ANSWERED 2026-08-15 and the prediction HELD: nothing, for the "
+             "whole run. Capture authsrv-20260815T184213-c1.jsonl -- bar at "
+             "t=2.87, 0x00E4 at t=10.88, nothing else sent, operator saw no "
+             "change. Its pair cast_prop60_only, identical but for the one "
+             "message, DID render the cast. So 228 is bookkeeping, and the "
+             "handler read, the live wire (7 of 7 name the receiving "
+             "player) and the screen all agree. Keep the probe: it is the "
+             "control half, and re-running it is how a future change to "
+             "0x00E4's handling gets caught.",
+    ),
+    "cast_prop60_only": lambda a, o: Probe(
+        question="Does agent property 60 alone play the cast animation?",
+        predicts="THIS is the one that animates -- property 60 reaches "
+                 "AvApi and queues the animation event, where 228 never "
+                 "leaves its bookkeeping array. If this run shows nothing "
+                 "and the 228 run does, the two are swapped and "
+                 "studies/skills section 8 is wrong.",
+        steps=_cast_one_steps(a, "prop60"),
+        note="ANSWERED 2026-08-15 and the prediction HELD: the operator saw "
+             "the cast sparkle on the weapon. Capture "
+             "authsrv-20260815T184317-c1.jsonl -- bar at t=2.85, property "
+             "60 at t=10.85, nothing else sent. Its pair cast_228_only, "
+             "identical but for the one message and firing at the same "
+             "t=10.88, rendered NOTHING. Same bar, same map, same hold: the "
+             "animation follows property 60. This closes studies/skills "
+             "section 8's headline question and refutes its own guess that "
+             "the client predicts the animation itself.",
+    ),
+    "cast_spell_only": lambda a, o: Probe(
+        question="Does one property-60 send reproduce a FULL cast -- the "
+                 "body animation -- or only the skill's visible effect?",
+        predicts="A casting stance on the model. 105 Deathly Swarm is a "
+                 "2.0 s spell carrying THREE animation components "
+                 "([204, -, 201, -, -, 199] at +0x74..+0x88) where "
+                 "Hamstring, the skill the earlier pair used, carries one. "
+                 "If only an effect appears, property 60 drives EFFECTS and "
+                 "the body animation has another source -- which is the "
+                 "more useful answer of the two.",
+        steps=_cast_spell_steps(a),
+        note="ANSWERED 2026-08-15 and the prediction HELD: the operator "
+             "reports the MODEL animated, not just a weapon effect. "
+             "Capture authsrv-20260815T190337-c1.jsonl. So property 60 "
+             "drives the cast including the body, and what renders is "
+             "PER-SKILL -- one component for an attack skill, a full "
+             "casting animation for a 2 s spell carrying three. "
+             "Follow-up to cast_prop60_only, which the owner correctly "
+             "objected was tested with an ATTACK skill (320 Hamstring, "
+             "activation 0.0 s, one animation id) and so could never have "
+             "shown a body animation. That probe settled the DRIVER; this "
+             "one asks about the CONTENT. Watch the model, not the weapon.",
     ),
     "unlock_211": lambda a, o: Probe(
         question="What is opcode 211, the third unlock-list-shaped message?",

@@ -47,9 +47,10 @@ import pathchunk  # noqa: E402
 from codec import Codec  # noqa: E402
 import pathmap  # noqa: E402
 
-# FLOOR: 38, MEASURED from a green run 2026-08-13. Every section is synthetic --
+# FLOOR: 43, MEASURED from a green run 2026-08-16 (38 + section 4's nameless
+# def_NNNN spawn, studies/isle/PLAN.md gap 2). Every section is synthetic --
 # no vault, no socket, no client -- so there is nothing here that may skip.
-LEDGER = checks.Ledger("test_population", floor=38)
+LEDGER = checks.Ledger("test_population", floor=43)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -376,6 +377,78 @@ def section3():
           "refusal rather than a client run")
 
 
+def section4():
+    """A vault-emitted def_NNNN row -- no name, by design -- SPAWNS.
+
+    npcdefs.py deliberately never emits a name ("a name comes from a rendered
+    nameplate or it does not exist"), and until 2026-08-16 the spawn path
+    indexed `npc["name"]` bare, so every vault row threw inside instance
+    bring-up -- where the harness still reported PASS and the map readback
+    stayed green, the exact silent shape section 2b documents
+    (studies/isle/PLAN.md gap 2). The fallback label is the npc row's own key:
+    commit the id, resolve the string at run time.
+    """
+    print("\n4. a nameless def_NNNN row spawns, labelled by its own key")
+    # Shaped exactly like npcdefs.to_toml's output: ids and numbers, no name.
+    NPC_KEY = "def_1470"
+    npc_row = {"definition": 1470, "file_id": 116698, "model_id": 116698,
+               "scale": 0x3F800000, "flags": 0, "profession": 5, "level": 20,
+               "move_speed": 1.0, "enc_name": [0x0101, 0x0102, 0x0103]}
+    spawn_row = {"area": AREA, "npc": NPC_KEY, "agent_id": 21, "definition": 1470,
+                 "x": 7.0, "y": 9.0, "enabled": True, "max_health": 96}
+    check("name" not in npc_row,
+          "the row truly has no name -- so this section can tell the fix "
+          "from a fixture that smuggled one in")
+
+    class TwoTables:
+        def rows(self, kind):
+            return {"s": dict(spawn_row)} if kind == "spawn" else {}
+
+        def get(self, kind, key):
+            if kind == "npc" and key == NPC_KEY:
+                return dict(npc_row)
+            if kind == "spawn":
+                return dict(spawn_row)
+            raise KeyError((kind, key))
+
+    sent = []
+
+    def send(op, values, why=""):
+        sent.append((op, values))
+
+    state = {}
+    saved = authsrv.agents.WORLD
+    try:
+        authsrv.agents.WORLD = TwoTables()
+        placed = authsrv.spawn_population(send, state, (0.0, 0.0, 0), conn_id=0,
+                                          area=AREA)
+    finally:
+        authsrv.agents.WORLD = saved
+
+    check(placed == 1, "the body is placed", f"{placed}")
+    entry = state.get("agents", {}).get(21)
+    check(entry is not None and entry["name"] == NPC_KEY,
+          "and its label is the npc key, never a KeyError",
+          f"name={entry and entry['name']!r}")
+    ops = [op for op, _v in sent]
+    check(authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES in ops
+          and authsrv.GAME_SMSG_WORLD_CREATE_AGENT in ops,
+          "definition and create both went out",
+          f"{len(sent)} messages")
+    # Section 2b's rule, applied here: encoding through the real codec is the
+    # strongest thing checkable without a client, because it is the same codec
+    # the server sends through. Every message the spawn emitted must encode.
+    codec = Codec()
+    bad = []
+    for op, values in sent:
+        try:
+            codec.encode("GAME_SMSG", op, values)
+        except Exception as exc:                              # noqa: BLE001
+            bad.append((hex(op), str(exc)[:50]))
+    check(not bad, "and every emitted message ENCODES through the real codec",
+          str(bad) if bad else f"all {len(sent)}")
+
+
 def main():
     print("=" * 70)
     print("POPULATION -- what lives in an authored area")
@@ -385,6 +458,7 @@ def main():
     section2()
     section2b()
     section3()
+    section4()
     return LEDGER.verdict()
 
 
