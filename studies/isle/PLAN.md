@@ -1018,6 +1018,27 @@ the roster and the gadgets; every range marker's coordinate; and `0x0195` field 
 against the pre-registered prediction 165811 with the third branch (113021 / a shared id)
 pre-registered too.
 
+**The rung-6 marks plan is written and parses: `vault/plans/isle_rung6_roster.txt`**, 69
+steps (arrival → the range star → the armor bench → the AoE circles → allies → torches →
+Students → Zaishen masters → foes → gadgets → sweep → depart), each step's prediction stated
+in its own text. It lives in the vault, not in git, on the same reasoning that put
+`gww-facts.md` there: the step text names ArenaNet's NPCs. `livesession.py --plan` hashes it
+**before** the client launches and the marks are ordinals into it, so it must not be edited
+once the run starts — if a body is missing, press F9 anyway and annotate by ordinal in a
+separate notes file.
+
+**Use the 38833 live build, and this is a real trap.** All six live captures in the vault
+used `run-live/2026-07-29_221c13772c7a` = build **38797**, but retail moved on: the
+2026-08-14 baseline records `live_install` at build **38833, pristine**, and
+`run-live/2026-08-13_64fae3b1369b` is the 38833 stock-DH build. `run-live/` carries
+`updater=LIVE` by design, so launching the *older* build points the pre-login patcher at a
+binary it wants to replace — and a rewritten `Gw.exe` takes the key-tap cave with it, which
+is the one failure that produces a full session of ciphertext with no key. Both live builds
+read `key_tapped: true` and `slot_rva` resolves to `0x7F17A0` on both (the slot is located by
+scanning the binary, `keytap_patch.locate_slot`, not by a build-pinned constant), so the
+tap itself is not what picks the build — currency against retail is. The driver hashes the
+exe before and after the run and says so if it moved. Never select by filename.
+
 **Rung 7 — LIVE #2, the damage pass.** Only after rung 6 names the bodies and rung 1 proves
 the reader. One PvP-created weapon (auto-customized +20% — unavoidable on this character,
 rung 2; known max stats, requirement 9, rank held ≥ 9), auto-attack only, `--minutes 45`,

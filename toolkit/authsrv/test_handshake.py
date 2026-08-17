@@ -52,6 +52,7 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -127,6 +128,66 @@ def _build_of_keyfile(keys):
     return None
 
 
+def drain_server(srv, timeout=20):
+    """The server's log as a string, plus a reason it is short. Never None.
+
+    WHY THIS IS A FUNCTION and not the `srv.communicate(timeout=20)[0]` it was
+    until 2026-08-17, when it crashed the run with
+
+        AttributeError: 'NoneType' object has no attribute 'splitlines'
+
+    after a green handshake -- every check through CHARACTER_INFO had passed, and
+    the traceback landed before `LEDGER.verdict()`, so the suite's most important
+    test reported NOTHING. Not a FAIL: nothing. No banner, no count, no name.
+
+    `communicate()` on a `stdout=PIPE` child is assumed by every reader to hand
+    back the stream, and it can instead hand back **None, silently, with
+    returncode 0**. CPython's Windows implementation reads the pipe on a helper
+    thread -- `Lib/subprocess.py:_readerthread`, `buffer.append(fh.read())` -- and
+    if that read raises, the thread dies, the buffer stays empty, and the
+    collector's last line is `stdout = stdout[0] if stdout else None`. An empty
+    list is falsy, so the failure is laundered into None instead of propagating.
+    The thread's own traceback goes to stderr ahead of ours, where it reads as
+    noise out of the server rather than as the parent having lost the log.
+
+    The read that raises is a DECODE. `text=True` decodes with the PARENT's locale
+    codec (cp1252 on this machine) and errors='strict', while the child encodes
+    with whatever its own stdout is set to -- so an environment carrying
+    PYTHONIOENCODING=utf-8 has authsrv writing UTF-8 into a cp1252 decoder. Most
+    of what it prints survives that as mojibake, which is what the ARC4-key regex
+    below has always been working around; but cp1252 leaves five bytes UNDEFINED
+    -- 0x81 0x8D 0x8F 0x90 0x9D -- and any one of them raises instead. A single
+    such byte anywhere in the log loses the whole log.
+
+    That is now fixed at the source: the Popen pins the codec at BOTH ends, so the
+    decode cannot raise. This function is the belt to that braces, and it earns
+    its keep on the one failure the pinning does not cover -- a `--once` server
+    that never exits. Either way the caller gets a string and a reason, so a
+    teardown problem is a named FAIL under the banner rather than a traceback
+    thrown before the banner exists.
+
+    `checks.py`'s own docstring closes on the mirror image of this bug: a test
+    killed by printing the bytes it read. This one was killed READING them.
+    """
+    try:
+        out, _ = srv.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # The `--once` server should exit after one connection. If it has not,
+        # the log so far is still worth having -- kill it and take what it wrote.
+        srv.kill()
+        try:
+            out, _ = srv.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out = ""
+        return out or "", (f"the --once server had not exited {timeout}s after the "
+                           f"session ended; killed it and read what it had written")
+    if out is None:
+        return "", ("the server's stdout pipe decoded to None -- subprocess's "
+                    "reader thread raised while reading it (its traceback is "
+                    "above, ahead of this line) and the log is unrecoverable")
+    return out, ""
+
+
 # The floor is what a completed handshake session executes. MEASURED 2026-08-06:
 # a green run spawns its authsrv on 6112, completes the lifecycle and prints 17,
 # which is every check() site in the file. 16 of those are mandatory; the 17th is
@@ -147,7 +208,19 @@ def _build_of_keyfile(keys):
 # 17 -> 21 on 2026-08-17: section 0's four vault-free checks, the regression
 # guard for the game channel's missing key binding. They need no server and no
 # vault, so they are mandatory on any machine -- see section_key_binding().
-LEDGER = checks.Ledger("handshake", floor=21)
+# 21 -> 22 on 2026-08-17, MEASURED against a green run that printed 23 (22
+# mandatory + the negative control): teardown now asserts that the server's log
+# was actually captured. That is a real check and not a formality -- the run it
+# was written for reached this point with every earlier check green and then
+# died, and the three checks after it read `out`, so before it existed a lost
+# log could only surface as a traceback or as three FAILs blaming the server.
+#
+# Note what the count did NOT do here. The swapped-argument check below (the
+# exe/key-file build match) was counted in the 21 while asserting nothing, so
+# 21 was never 21 real checks; fixing it changed the count by zero and the floor
+# by zero, which is exactly why a floor cannot be the only guard. It counts
+# checks, and it cannot tell a check from a check-shaped no-op.
+LEDGER = checks.Ledger("handshake", floor=22)
 check = checks.adopt_named(LEDGER)
 
 
@@ -232,6 +305,26 @@ def section_key_binding(check):
 
 
 def main():
+    """Run the session, and make sure the ledger gets to rule on it either way.
+
+    An exception escaping `_run` used to end the process with a traceback and no
+    banner -- exit 1, but exit 1 with no count, no failure name and no record of
+    the twenty checks that HAD passed. That is the failure `checks.py` was written
+    to refuse, arriving by the one route a ledger cannot see: not a check quietly
+    not running, but the run dying before the verdict. So the traceback is still
+    printed (it is the diagnosis), and then it is also recorded as a named FAIL so
+    the banner prints and the exit code comes from the ledger like every other run.
+    """
+    try:
+        return _run()
+    except Exception:                                        # noqa: BLE001
+        traceback.print_exc()
+        LEDGER.ok(False, "the run finished without an unhandled exception",
+                  "traceback above")
+        return LEDGER.verdict() or 1
+
+
+def _run():
     section_key_binding(check)
 
     # By parameters, never by name -- and by the parameters the SERVER will load rather
@@ -257,8 +350,14 @@ def main():
     global BUILD                                             # noqa: PLW0603
     BUILD = buildid.read(exe)[0]
     print(f"announcing     : build {BUILD}, read out of that same exe")
-    check(BUILD == _build_of_keyfile(srv),
-          "the exe's build matches the key file the server will load",
+    # `check` is adopt_named: (name, cond, detail). These two were swapped from
+    # the day the check was added (2026-08-14) until 2026-08-17, which made the
+    # condition the message string -- always truthy -- and the label the boolean.
+    # It printed `[PASS] True` on every run, including runs where the builds did
+    # NOT agree, and it counted toward the floor while asserting nothing: a check
+    # that cannot fail, holding a place in the count that says one did.
+    check("the exe's build matches the key file the server will load",
+          BUILD == _build_of_keyfile(srv),
           f"exe says {BUILD}, key file is {srv.get('build_tag')} -- these must "
           f"agree or the handshake is testing two different builds against "
           f"each other")
@@ -294,10 +393,19 @@ def main():
         return 2
     probe.close()
 
+    # BOTH ends of this pipe are pinned to one codec, and that is not tidiness.
+    # `text=True` alone decodes with the PARENT's locale codec while the child
+    # encodes with whatever ITS stdout is set to; where those differ the parent's
+    # decode can raise, and subprocess turns that into a silent None rather than
+    # an error -- see drain_server() for the crash that cost this file its banner.
+    # PYTHONIOENCODING fixes what authsrv writes, encoding=/errors= fixes what we
+    # read, and "replace" means a surprising byte costs one glyph, never the run.
     srv = subprocess.Popen([sys.executable, "toolkit/authsrv/authsrv.py", "--once",
                             "--vault", SELFTEST_VAULT,
                             "--sessions", SELFTEST_SESSIONS],
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           text=True, encoding="utf-8", errors="replace",
+                           env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     ok = True
     try:
         for _ in range(60):
@@ -307,8 +415,14 @@ def main():
             except OSError:
                 time.sleep(0.1)
         else:
-            print("authsrv never came up")
-            return 1
+            # Through the ledger, not `print` + `return 1`. Section 0 has already
+            # recorded four checks by this point, and a bare return threw them
+            # away along with the banner -- exit 1 with nothing named, which is
+            # indistinguishable from the crash this file was fixed for.
+            check("authsrv came up on 6112 within 6s", False,
+                  "the subprocess never accepted a connection; its log is the "
+                  "next thing to read")
+            return LEDGER.verdict()
 
         # ---- client side of the handshake -------------------------------
         print("\n1. version")
@@ -330,7 +444,9 @@ def main():
             resp += chunk
         ok &= check("server replied 22 bytes", len(resp) == 22, f"{len(resp)}")
         if len(resp) < 22:
-            return 1
+            # The FAIL above is already recorded; let the ledger print it and own
+            # the exit code, rather than returning a bare 1 over its head.
+            return LEDGER.verdict()
         hdr = struct.unpack("<H", resp[:2])[0]
         ok &= check("header is 0x1601", hdr == 0x1601, hex(hdr))
 
@@ -437,16 +553,18 @@ def main():
                             repr(ch[0][1][4]))
         s.close()
 
-        out, _ = srv.communicate(timeout=20)
+        out, short = drain_server(srv)
+        ok &= check("captured the server's log, which the next three checks read",
+                    not short, short)
         srv_key = ""
         for line in out.splitlines():
             if "ARC4 key" in line:
-                # The server ends this line with a Unicode ellipsis, and what
-                # that glyph arrives as depends on the codepage the pipe was
-                # decoded with -- under cp1252 it is three mojibake characters
-                # that rstrip("…") cannot see, and the comparison below then
-                # fails on display garbage rather than on the key. Keep the
-                # leading hex run and nothing else.
+                # The server ends this line with a Unicode ellipsis. Pinning the
+                # pipe's codec means that now arrives as the ellipsis rather than
+                # as the three mojibake characters `rstrip("…")` could not see --
+                # but keep parsing forward rather than trimming from the end,
+                # because errors="replace" can still put a U+FFFD in a line and
+                # the comparison below should fail on the KEY, never on a glyph.
                 m = re.match(r"[0-9a-f]+", line.split("ARC4 key")[1].strip())
                 srv_key = m.group(0) if m else ""
         ok &= check("server completed key exchange", "key exchange OK" in out)
