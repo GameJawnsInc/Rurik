@@ -5092,6 +5092,55 @@ def recv_exact(sock, n, rec=None):
     return buf
 
 
+def bind_key_to_build(keys, build, conn_id, rec):
+    """Re-select the DH key for the build the client just announced.
+
+    Returns `(keys, ok)`; `ok` False means REFUSE this connection.
+
+    WHY THIS IS ONE FUNCTION CALLED BY BOTH CHANNELS, which is the whole
+    point of it existing. The 2026-08-14 crossbuild fix wrote this logic
+    INLINE in the auth branch, and the game branch -- forty lines below,
+    in the same function -- never got it. On 2026-08-17 that shipped its
+    consequence: a 38797 client authenticated fine (auth re-selected its
+    key) and was then handed 38833's key on the GAME channel, because
+    newest-by-filename is the starting default. The handshake "completed",
+    the ARC4 stream was noise, the client parsed nothing it was sent, and
+    it dropped the connection -- Code=007, no assert, zero c2s. Two runs,
+    with and without a modified archive, failed identically; the archive
+    was innocent.
+
+    That is `sorted()[-1]` picking the wrong build for the FOURTH time in
+    this repo, and the second time the identical fix was written for one
+    path while its twin sat feet away. `studies/crossbuild/FINDINGS.md`
+    says it in the voice of the session that paid for it: "A rule written
+    in one file does not protect the identical line in another." So this
+    is a function, not a paragraph copied twice.
+    """
+    want = KEYS_BY_BUILD.get(build)
+    have_tag = keys.get("build_tag")
+    # Compared by build_tag, not by object identity: the registry loads its
+    # own copy of every file, so `is not` is true even when both are the
+    # same key and the log would claim a swap that did not happen.
+    if want is not None and want.get("build_tag") != have_tag:
+        print(f"[c{conn_id}] keys: re-selected {want.get('build_tag')} to "
+              f"match the client's build {build} (had {have_tag})", flush=True)
+        rec.event("keys_reselected", build=build,
+                  build_tag=want.get("build_tag"), was=have_tag)
+        return want, True
+    if want is None and _build_of_tag(have_tag) not in (None, build):
+        # No key for this build AND the loaded one is for a different, known
+        # build. Refusing beats a wrong key: the client cannot be decrypted
+        # either way, and only one of those says why.
+        msg = (f"no DH key for client build {build}; the loaded key is "
+               f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
+               f"build with make_custom_client.py, or point the client at "
+               f"the run directory matching the key.")
+        print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
+        rec.event("key_build_mismatch", build=build, key_tag=have_tag)
+        return keys, False
+    return keys, True
+
+
 def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
@@ -5121,35 +5170,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                   flush=True)
             rec.event("version", channel="auth", build=build, h0008=h8, h000C=hC)
 
-            # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED. The DH triple is
-            # patched per build, so a key from another build derives a shared
-            # secret the client does not share: the handshake completes, the
-            # ARC4 stream is noise, and the first symptom is `Code=058` on the
-            # client half a minute later -- which names nothing. This costs one
-            # dict lookup and turns that into a line naming both builds.
-            want = KEYS_BY_BUILD.get(build)
-            have_tag = keys.get("build_tag")
-            # Compared by build_tag, not by object identity: the registry loads
-            # its own copy of every file, so `is not` is true even when both are
-            # the same key and the log would claim a swap that did not happen.
-            if want is not None and want.get("build_tag") != have_tag:
-                keys = want
-                print(f"[c{conn_id}] keys: re-selected {keys.get('build_tag')} to "
-                      f"match the client's build {build} (had {have_tag})",
-                      flush=True)
-                rec.event("keys_reselected", build=build,
-                          build_tag=keys.get("build_tag"), was=have_tag)
-            elif want is None and _build_of_tag(have_tag) not in (None, build):
-                # No key for this build AND the loaded one is for a different,
-                # known build. Refusing beats a wrong key: the client cannot be
-                # decrypted either way, and only one of those says why.
-                msg = (f"no DH key for client build {build}; the loaded key is "
-                       f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
-                       f"build with make_custom_client.py, or point the client at "
-                       f"the run directory matching the key.")
-                print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
-                rec.event("key_build_mismatch", build=build, key_tag=have_tag)
-                return
+            # The key is bound to the announced build below, for BOTH
+            # channels -- see bind_key_to_build() for why that is not
+            # written here any more.
         else:
             # 60 more bytes, measured: build, unk1, world_id, map_id, player_id,
             # then the account uuid and the character uuid we handed this client in
@@ -5160,7 +5183,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             account_uuid = body[20:36]
             char_uuid = body[36:52]
             tail = body[52:60]
-            hC = keys["generator"]      # not carried on this channel; keep the check quiet
+            hC = None                   # not carried on this channel; the check below skips
             print(f"[c{conn_id}] GAME version: build={build} world_id={world_id} "
                   f"map_id={map_id} player_id={player_id}", flush=True)
             print(f"[c{conn_id}]   account {wire_to_uuid(account_uuid)}", flush=True)
@@ -5171,7 +5194,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                       char_uuid=wire_to_uuid(char_uuid),
                       tail=binascii.hexlify(tail).decode(),
                       header=hex(header))
-        if hC != keys["generator"]:
+        # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED -- both channels,
+        # one implementation. The DH triple is patched per build, so a key
+        # from another build derives a shared secret the client does not
+        # share: the handshake completes, the ARC4 stream is noise, and the
+        # client drops with no assert and nothing to name the cause.
+        keys, ok = bind_key_to_build(keys, build, conn_id, rec)
+        if not ok:
+            return
+
+        if hC is not None and hC != keys["generator"]:
             print(f"[c{conn_id}] NOTE client generator {hC} != our {keys['generator']}",
                   flush=True)
 

@@ -144,11 +144,96 @@ def _build_of_keyfile(keys):
 # 16 -> 17 on 2026-08-14: the mandatory core gained the check that the exe's
 # build matches the key file the server will load. A green run now prints 18
 # (17 mandatory + the negative control).
-LEDGER = checks.Ledger("handshake", floor=17)
+# 17 -> 21 on 2026-08-17: section 0's four vault-free checks, the regression
+# guard for the game channel's missing key binding. They need no server and no
+# vault, so they are mandatory on any machine -- see section_key_binding().
+LEDGER = checks.Ledger("handshake", floor=21)
 check = checks.adopt_named(LEDGER)
 
 
+def section_key_binding(check):
+    """The key must bind to the ANNOUNCED build on BOTH channels.
+
+    This section is vault-free on purpose: it is the regression guard for
+    2026-08-17, when a 38797 client was handed 38833's key on the GAME
+    channel because the 2026-08-14 fix lived inline in the AUTH branch and
+    the game branch never got it. The handshake completed, the ARC4 stream
+    was noise, and the client dropped with Code=007 and no assert -- a
+    symptom that named nothing and cost two client runs to attribute.
+
+    The last check is the one that matters: it asserts the STRUCTURE that
+    was wrong, not just the behaviour of the helper. A future edit that
+    tucks the call back inside one channel's branch turns it red.
+    """
+    print("\n== 0. the DH key binds to the announced build (no vault) ==")
+    import ast
+    import authsrv
+
+    class _Rec:
+        def __init__(self):
+            self.events = []
+
+        def event(self, name, **kw):
+            self.events.append((name, kw))
+
+    # REAL stamps from pinned.BUILDS, not invented ones: the refusal arm
+    # only fires when the loaded key belongs to a KNOWN different build, so
+    # a fixture with made-up tags cannot reach it. The first version of this
+    # section used fake tags, and the refusal check failed for that reason
+    # -- the check catching its own fixture, which is what a check that can
+    # fail is for.
+    A = {"build_tag": pinned.BUILDS[1].stamp, "generator": 4}   # 38797
+    B = {"build_tag": pinned.BUILDS[2].stamp, "generator": 4}   # 38833
+    saved = authsrv.KEYS_BY_BUILD
+    try:
+        authsrv.KEYS_BY_BUILD = {38797: A, 38833: B}
+        # loaded the newest (B) and a 38797 client speaks: must swap to A.
+        rec = _Rec()
+        got, ok = authsrv.bind_key_to_build(B, 38797, 1, rec)
+        check("a 38797 client on a server holding 38833's key RE-SELECTS "
+              "-- the exact case that produced Code=007 on the game channel",
+              ok and got is A and rec.events
+              and rec.events[0][0] == "keys_reselected",
+              f"got {got.get('build_tag')}")
+        # already correct: no swap, and no log line claiming one.
+        rec = _Rec()
+        got, ok = authsrv.bind_key_to_build(A, 38797, 1, rec)
+        check("a matching key is left alone and reports no swap",
+              ok and got is A and not rec.events)
+        # unknown build, loaded key belongs to a different known build: refuse.
+        rec = _Rec()
+        got, ok = authsrv.bind_key_to_build(A, 99999, 1, rec)
+        check("an unknown build is REFUSED by name rather than handed a "
+              "key that cannot decrypt it",
+              not ok and rec.events
+              and rec.events[0][0] == "key_build_mismatch")
+    finally:
+        authsrv.KEYS_BY_BUILD = saved
+
+    # STRUCTURAL: both channels must reach the binding. The bug was not that
+    # the logic was wrong -- it was correct, and unreachable from `game`.
+    src = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    fn = next(n for n in ast.walk(src)
+              if isinstance(n, ast.FunctionDef) and n.name == "handle")
+    calls_in = []                       # (call node, inside the kind=='auth' If?)
+    kind_ifs = [n for n in ast.walk(fn) if isinstance(n, ast.If)
+                and any(isinstance(c, ast.Constant) and c.value == "auth"
+                        for c in ast.walk(n.test))]
+    inside = {id(c) for k in kind_ifs for c in ast.walk(k)}
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "bind_key_to_build"):
+            calls_in.append(id(n) in inside)
+    check("handle() binds the key at ONE site OUTSIDE the kind=='auth' "
+          "branch, so the game channel cannot miss it -- the structural "
+          "fact whose absence was the 2026-08-17 bug",
+          len(calls_in) == 1 and not calls_in[0],
+          f"{len(calls_in)} call site(s), inside-auth-branch={calls_in}")
+
+
 def main():
+    section_key_binding(check)
+
     # By parameters, never by name -- and by the parameters the SERVER will load rather
     # than merely "some key file of ours". `classify` alone answers `ours` for a build
     # matching ANY rurik_dh_*.json, and with two in the vault the wrong one still derives
