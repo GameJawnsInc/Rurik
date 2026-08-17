@@ -33,13 +33,16 @@ import origin  # noqa: E402
 import tape  # noqa: E402
 import vaultpath  # noqa: E402
 
+# 30 from the green run of 2026-08-17: 28 as below, plus section 9's repacketized
+# retransmit and its sabotage -- which, like section 6, builds its own capture and so
+# stays refutable on a bare machine.
 # 28 from the green run of 2026-08-11: 22 as before, plus 6 for section 6's straddle.
 # Sections 3-5 all skip together on a machine with no vault, and the floor takes them
 # with it -- a run that never read the capture has not checked the chain, whatever it
 # printed. Sections 1, 2 and 6 build their own captures and need no vault; 6 is
 # deliberately on that side, because a segmentation defect is not a property of any
 # particular capture and should be refutable on a bare machine.
-LEDGER = checks.Ledger("tape", floor=28)
+LEDGER = checks.Ledger("tape", floor=30)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -303,6 +306,7 @@ def main():
                   "a handoff", whyl)
 
     section_decode_all()
+    section_repacketized_retransmit()
     return LEDGER.verdict()
 
 
@@ -393,6 +397,57 @@ def section_decode_all():
                   f"err={rec.err!r} -- this is what a caller asserts on when it wants "
                   f"the shortfall to be a red check instead of an exception, which is "
                   f"what test_burrow.py's section 2 now does")
+
+
+def section_repacketized_retransmit():
+    """A retransmit SPLIT into smaller segments must not double-count.
+
+    The defect this pins is real and dated: live capture 20260817T183756
+    connection 10.0.0.210:58389 had 216 bytes of overlap in two clusters, its
+    seq span was exactly contiguous, `livesession`'s own reassembly agreed
+    with the span, and `load_tape` refused the channel anyway because its own
+    byte sum was 216 too high. Exact-seq dedupe cannot see a repacketized
+    retransmit: every re-sent fragment carries a NEW starting seq.
+    """
+    print("\n9. a repacketized retransmit is trimmed, not counted twice")
+    pieces = [b"AAAA", b"BBBBBB", b"CCCCCCCC"]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "cap")
+        write_capture(root, s2c_pieces=pieces)
+        # The handshake is 22B at seq 1000, so payload starts at 1022. Re-send
+        # the middle piece (seq 1026, 6B) as three 2-byte segments with their
+        # own seqs -- none of which equals 1026, so `seen` never fires.
+        wire = os.path.join(root, "wire.jsonl")
+        with open(wire, "a", encoding="utf-8") as fh:
+            for off in (0, 2, 4):
+                fh.write(json.dumps({
+                    "kind": "wire", "dir": "s2c", "seq": 1026 + off,
+                    "t": 99.0 + off, "payload": b"BB"[:2].hex(),
+                    "src": "3.65.1.1", "sport": 80,
+                    "dst": "10.0.0.9", "dport": 5000}) + "\n")
+        info, events = tape.load_tape(root)
+        got = b"".join(b for _t, b in events)
+        LEDGER.ok(got == b"".join(pieces),
+                  "the tape is the true stream, with the re-sent fragments dropped",
+                  f"{len(got)}B, expected {len(b''.join(pieces))}B -- a repacketized "
+                  f"retransmit carries new seqs, so exact-seq dedupe misses it")
+
+        # SABOTAGE: without the range trim, load_tape must REFUSE. This is what
+        # makes the check above a check rather than a description.
+        real = tape._drop_covered
+        try:
+            tape._drop_covered = lambda segs: segs
+            try:
+                tape.load_tape(root)
+                refused = False
+            except tape.TapeError:
+                refused = True
+        finally:
+            tape._drop_covered = real
+        LEDGER.ok(refused,
+                  "SABOTAGE: with the range trim removed, the channel is REFUSED",
+                  "so the green above is the trim working, not the fixture being "
+                  "too easy -- this is exactly what happened to a real channel")
 
 
 if __name__ == "__main__":

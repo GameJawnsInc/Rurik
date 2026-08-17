@@ -123,6 +123,14 @@ from codec import Codec  # noqa: E402
 # confirmed is exactly the wish this repo keeps refusing.
 LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=118)
 
+# The three captures the canon-12 denominator was measured on. Named because a pin is
+# a fact about ITS corpus: the vault now also holds two live Factions captures
+# (2026-08-17), which take the unfiltered pool to 177 opcodes over 20 connections --
+# 22 opcodes ArenaNet had never sent us before. That is new evidence for a new check,
+# not a reason for this one to move; the same rule test_npcdefs, test_agentroster and
+# test_unitassembly already follow.
+CANON_CAPTURES = ("20260807T133758", "20260807T143055", "20260810T235916")
+
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
 OVERRIDDEN = {140, 146, 421}
@@ -806,7 +814,13 @@ def main():
     # ---- 8. the denominator, rebuilt from the tapes -------------------------
     print("\n8. the observed set is recomputed, not remembered")
     try:
-        seen, conns = sw.observed_from_live()
+        # NAMED, not the whole vault. The pin below is a fact about THESE THREE
+        # captures; the sweep itself still uses every capture there is, because a
+        # bigger denominator is a better answer to "what has ArenaNet never sent".
+        # Unnamed, this reddened on 2026-08-17 when two live Factions captures took
+        # the pool to 177 opcodes over 20 connections -- new evidence arriving as a
+        # failure, which is the shape npcdefs.live_captures warned about.
+        seen, conns = sw.observed_from_live(names=CANON_CAPTURES)
     except Exception as exc:
         LEDGER.skip("the observed set from the live tapes",
                     f"{type(exc).__name__}: {str(exc).splitlines()[0][:90]}")
