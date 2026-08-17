@@ -340,7 +340,20 @@ class Image:
                   "an 8- or 16-bit destination cannot hold an address in "
                   "32-bit code, so those rows are dropped rather than "
                   "reported. MEASURED: `add al, 0xe` at 0x00479BC8 is the one "
-                  "`--field 0xE --in ExeArchive` would otherwise carry")]
+                  "`--field 0xE --in ExeArchive` would otherwise carry"),
+                 ("a field reached through a BIASED `this`",
+                  f"where the code holds a pointer to a SUBOBJECT, the same "
+                  f"field is spelled with a smaller displacement and "
+                  f"0x{disp:X} never appears at all. MEASURED, and it cost a "
+                  f"published claim: every message worker in `PyCliParty` "
+                  f"takes `this = party_object + 4`, so `m_partyClient` at "
+                  f"+0x54 is written as `mov [esi+0x50], eax` (0x00858872). "
+                  f"`--field 0x54 --writes` found the two +0x54 stores that "
+                  f"DO exist off the object base and reported them correctly "
+                  f"-- and the answer still read as 'only 0x01D9 writes it', "
+                  f"which was wrong. When a subsystem's answer looks too "
+                  f"small, re-run at disp-4 and disp+4 before believing it "
+                  f"(studies/pvpui/FINDINGS.md 21.2)")]
         return searched, blind
 
     def _mem_row(self, ins, disp):
