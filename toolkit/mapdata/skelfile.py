@@ -634,9 +634,13 @@ class Skeleton:
         0x00780C70's window args, untraced. path_index is
         MdlAnim:2040's `pathIndex < m_skel->m_soundPathCount` and indexes
         the FA6 (m_soundPaths) array. Returns dicts with seq, time,
-        path_index, raw_tail.
+        path_index, raw_tail; [] when n40 == n44 == 0, where the walker
+        records no n40n44 span at all (most prop-class FA1s).
         """
-        off, _ = self._span("n40n44")
+        span = self._span("n40n44")
+        if span is None:
+            return []
+        off, _ = span
         p, n40, out = self.payload, self.header["n40"], []
         body0 = off + 4 * n40
         for k in range(n40):
