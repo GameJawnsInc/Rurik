@@ -1289,6 +1289,32 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### The PvP-UI arc — OPENED 2026-08-17, out of the heroes arc's measured wall
+
+Study: [studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md). Branch `claude/pvpui-arc`,
+worktree `.claude/worktrees/pvpui-arc`.
+
+**Why it exists.** Heroes §36.10 measured that `GmPosseRoster` — one of the eight subscribers
+to the commander event `0x1000011E` — has its handler **never entered once** in a session with
+the party window open and a hero row rendering. Its gate is not the cause
+(`[ctx[0x2c]+0x67C]` reads 1), so the guarded install site `0x00578BF0` is simply never
+reached. The subscriber is not unregistered; **its whole construction path is absent**, and
+every route to it runs through UI an explorable PvE session does not build.
+
+**What is already read** (§1 of the study, all OBSERVED): the handler, its message-9 subscribe
+block registering four events at once, the three install sites (GmDeckBuilder, UiCtlInstance
+×2), the 36-entry vtable at `0x00956264` whose index `[7]` is the install site, and the two
+`mov [eax], 0x956264` constructors in **UiCtlInstance** whose `hdr.param` asserts show they are
+themselves message handlers.
+
+**The question that decides the arc:** what message and parameter drives `UiCtlInstance` to
+construct type `[7]`, and can anything on the wire reach it. **Worth checking early:** whether
+this shares RESKIN §18.1's explorable gate — heroes §32 already blocks `0x01BF`'s last question
+behind it, so both would unblock together.
+
+**The honest prior is that the commander panel is NOT server-reachable.** Five hypotheses were
+refuted on the heroes side; this arc's job is to convert that prior into a measured yes or no.
+
 ### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
 
 **`0x00000FA1` is the skeleton/animation chunk, and it is structurally decoded** —
