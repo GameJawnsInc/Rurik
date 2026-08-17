@@ -647,18 +647,39 @@ def main():
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "authsrv"))
     import npcdefs
+    # SELECTED BY NAME, not pooled -- and this file already had the constant to
+    # do it with (it reaches for CAPTURES[1] in two places). Until 2026-08-17
+    # this was the unfiltered glob gated on `len(caps) != 3`, which is the time
+    # bomb `npcdefs.live_captures` documents in its own docstring: "the day a
+    # FOURTH keyed capture lands, every unfiltered pin goes red at once". It
+    # landed that day -- a live Factions capture, the first new keyed capture
+    # in a week -- and the prediction was exactly right, in the good way:
+    # MEASURED before this fix was kept, by running the old form against the
+    # four-capture vault, the file goes RED and names the shortfall --
+    #
+    #   ONLY 32 OF A DECLARED FLOOR OF 57 CHECKS RAN -- 25 did not execute,
+    #   so this run is incomplete rather than passing
+    #
+    # -- because a declared skip does NOT exempt the floor (checks.py's
+    # `ran < floor`). So the guard worked; what was wrong was this call site
+    # asking a question whose answer changes when the vault grows. Every number
+    # section3 and section4 pin is a fact about THESE THREE captures, so name
+    # them: a fourth capture is new evidence for a new check, never a reason
+    # for an old one to stop running -- nor to redden a file it says nothing
+    # about.
     try:
-        caps = npcdefs.live_captures()
+        caps = npcdefs.live_captures(names=CAPTURES)
     except SystemExit:
         caps = []
 
     with Archive(dat) as ar:
         r = Resolver(ar)
         section2(check, r, world)
-        if len(caps) != 3:
+        if len(caps) != len(CAPTURES):
             for why in ("the 54-definition corpus",
                         "the COMPOSITED cross-check"):
-                led.skip(why, f"{len(caps)} keyed live capture(s), need 3")
+                led.skip(why, f"{len(caps)} of {len(CAPTURES)} named "
+                              f"capture(s) present")
         else:
             defs = section3(check, r, caps)
             section4(check, r, caps, defs)
