@@ -5,8 +5,11 @@ live captures (`20260807T133758`, `20260807T143055`, `20260810T235916` —
 the owner's own sessions against the live service; origin `live`, checked
 per directory, never assumed). This is rung U4 of
 [../unitmodels/PLAN.md](../unitmodels/PLAN.md); the committed deliverable is
-`toolkit/mapdata/unitassembly.py` + `test_unitassembly.py` (55 checks,
-floor 55). Labels are the project vocabulary
+`toolkit/mapdata/unitassembly.py` + `test_unitassembly.py` (57 checks,
+floor 57 after the adversarial review's four RISK fixes — the review
+CONFIRMED the module and every numeric claim, and its corrections are
+recorded in place below, each marked "review"). Labels are the project
+vocabulary
 ([../character/FINDINGS.md](../character/FINDINGS.md)).
 
 **How this document was produced.** One session. Six predictions were
@@ -43,10 +46,12 @@ posture as U1/U3.
   with the archive on every definition: `needs_body` (= the shell carries
   no FA0) equals wire presence of 0x0057 **54/54 pooled**. The §5.4
   triple, populations now NAMED (§4): capture 20260807T143055 alone —
-  **8/8** 0x0056-only shells carry FA0 (reversed rule 0/8, the failing
-  control), **36/36** with-0x0057 shells lack it, 33/33 distinct model
-  ids carry it; pooled — 11/11, **43/43 per-definition** (this is the
-  population unitmodels §5.4's "43/43" was counting), 40/40 distinct.
+  **8/8** 0x0056-only shells carry FA0 (the reverse — shells lacking it —
+  and the unreadable count both MEASURED at 0, never derived; a review
+  correction, §3), **36/36** with-0x0057 shells lack it, 33/33 distinct
+  model ids carry it; pooled — 11/11, **43/43 per-definition** (the
+  population unitmodels §5.4's "43/43" was actually counting — its noun
+  said "model id" and was wrong, §4), 40/40 distinct.
   Independently, the FA1 flag bit agrees with FA0-absence on **161/161**
   carriers the closures touch (U1 measured the same equivalence at
   14,571/14,571 archive-wide).
@@ -99,10 +104,26 @@ committed module (the numbers here are the committed run's).
 | P5 | every FA8 link target: type-2, FA1 with seq_count ≠ 0, no FA0 | **HELD** — 134/134 distinct link targets |
 | P6 | repeated 0x0057 lists never disagree, pooled | **HELD** — 0 disagreements over 101 messages |
 
-Controls that fail, alongside: the reversed COMPOSITED rule scores 0/8
-and 0/36; an id outside the raw table leaves a set OPEN with the problem
-named; a map file (ffna type 3) as shell is refused, not walked; a
-live+ours capture mix refuses with both origins named.
+Controls that fail, alongside — the review rebuilt two of these and added
+two more: every COMPOSITED count is tri-valued and **measured** (with
+FA0 / without / unreadable, one tuple check per population), so the
+reverse rule's 0/8 and 0/36 are counts, not arithmetic — the first
+version derived them in an f-string, which is 0 by construction whenever
+the forward check passes and wrong exactly when `has_geometry` is None
+(review RISK, fixed); an id outside the raw table leaves a set OPEN with
+the problem named; a map file (ffna type 3) as shell is refused, not
+walked; a live+ours capture mix refuses with both origins named; a
+synthetic FA8 **cycle** (A↔B plus a self-loop) terminates and closes
+under a call budget — the review's mutation test showed the corpus alone
+cannot exercise the visited set (§6), and the mutant that removes it is
+killed by this fixture; and npcdefs' new 0x0057-disagreement refusal is
+**fired** through the decode seam (an injected conflicting repeat) and
+must name the definition and both lists. The pooled
+`needs_body == wire-0x0057-presence` 54/54, previously asserted only in
+this document and `summary.json`, is now a check — it is the only one
+covering the seven with-0x0057 definitions outside capture 143055 (272,
+326, 378, 391, 398, 1484, 1498), whose `needs_body=True` no other check
+reaches (review RISK, fixed).
 
 ## 4. The "43/43" reconciliation — a population, not a discrepancy
 
@@ -111,8 +132,11 @@ attributes all three to capture 20260807T143055. MEASURED here: that
 capture has **33** distinct 0x0057 model ids (33/33 carry FA0), and no
 population inside it counts 43. What DOES count 43 is the **pooled
 number of definitions carrying a 0x0057** (41 one-body + 2 two-body),
-and all 43 have every body carrying FA0 — so the study's figure was the
-pooled per-definition count, its caption just did not say so. The fact
+and all 43 have every body carrying FA0 — so the study line was wrong in
+its NOUN, not merely under-captioned: "every 0x0057 model id" counted
+DEFINITIONS, pooled across the three captures, and attributed the count
+to a single capture it does not fit. (The §5.4 text itself is corrected
+at merge time, per the review.) The fact
 it was standing in for is true in every granularity measured: per
 definition 43/43 pooled, per distinct model 33/33 (143055) and 40/40
 (pooled), per shell 8/8 + 36/36 (143055) and 11/11 + 43/43 (pooled).
@@ -131,9 +155,14 @@ per definition with every file's roles and facts).
   the 1,393 distinct files (60%); sounds + audio together 77%. By bytes
   the ordering inverts: the 113 textures total ~12.8 MB against the 830
   audio files' ~6.5 MB. Model-role files: 201 distinct ffna type-2;
-  sound descriptors: 241 type-8; textures/audio are non-ffna containers
-  (951 files) — ATEX and MPEG payloads respectively, recorded by magic,
-  not walked.
+  sound descriptors: 241 type-8; textures and audio are non-ffna
+  containers (951 files), and the census is NOT uniform (review
+  measurement, reproduced independently here): audio is **827
+  MPEG-frame-headed + 2 ID3v2-tagged + 1 `AMPT`**; textures are **112
+  ATEX + 1 `DDS `**. The blanket "ATEX and MPEG respectively" this
+  bullet first claimed was three files too generous, and the closure
+  artifact carries no magic field — these counts come from re-reading
+  the files.
 - **Shells are heavily shared.** 54 definitions use only 32 distinct
   shells: 116228 serves EIGHT definitions (1458–1508 — the hatcher's
   shell is Ascalon's generic collector-body shell), 116227 seven,
@@ -152,10 +181,13 @@ per definition with every file's roles and facts).
   none intersects any live-capture unit. The `fae_model` role is
   fixture-covered only; nothing in this corpus exercises it.
 - **FAD is rare on units**: 8 distinct targets across 5 definitions
-  (301, 391, 397, 1480, 7809). Included under their own role because the
-  list is parsed into the geometry object (A+0xFC), with the honest
-  caveat that its consumer is unread (U3 §8.1) — whether the client ever
-  FETCHES an FAD target is UNVERIFIED, and a caller can filter the role.
+  (301, 391, 397, 1480, 7809) — and **every one is an `AMAT` material
+  file, 376–1055 bytes** (the review's unclaimed finding, reproduced
+  here: real signal for what the FAD list references). Included under
+  their own role because the list is parsed into the geometry object
+  (A+0xFC), with the honest caveat that its consumer is unread (U3
+  §8.1) — whether the client ever FETCHES an FAD target is UNVERIFIED,
+  and a caller can filter the role.
 - **FA5 null slots exist even here**: exactly 2 across the 54 walks.
   The terminator rule (U3) is load-bearing on real units, not only in
   the archive-wide census.
@@ -174,6 +206,17 @@ per definition with every file's roles and facts).
   the client reaches them through the archive's stream linkage, a hop
   U3 left OPEN (§6.1/§8.4). The closure is the complete *file-id*
   reference set; U6's archive writer inherits the streams with the rows.
+- **The recursive FA8 walk mirrors the client's loop (`0x00794850`),
+  but THIS CORPUS cannot discriminate it from a flat one-hop walk**
+  (review mutation finding, quantified here): the 54 closures' link
+  graph is acyclic and every chain terminates at depth 1 — a depth-1
+  cap changes **0/54** closures, while not walking links at all loses
+  **3,111 file-slots** (3,651 if the 540 link memberships themselves
+  are dropped too). MEASURED. So the visited set's termination role is
+  exercised only by the synthetic cycle fixture in
+  `test_unitassembly.py` §0b, where the remove-the-visited-set mutant
+  is killed by the call budget; depth ≥ 2 contributes nothing on live
+  units until a deeper chain enters a capture.
 - `fae_model` recursion is RECONSTRUCTION: FAE is the n3E timed
   model-load event table (U2), a *runtime* load handed to the same
   loader — untestable on this corpus (zero occurrences).

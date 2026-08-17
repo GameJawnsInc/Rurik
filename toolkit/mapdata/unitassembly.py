@@ -401,6 +401,12 @@ class Resolver:
             f = touch(fid, role, read=True)
             if f is None:
                 continue
+            if fid in walked:
+                continue          # the cache hit: roles recorded, walk once
+            # Judged once too: a bad file queued under two roles must not
+            # name its problem twice (the U4 review's dead-code sweep
+            # caught the duplicate append the old ordering allowed).
+            walked.add(fid)
             if f.ffna != MODEL_FFNA_TYPE:
                 res.problems.append(
                     (fid, role, f"ffna type {f.ffna}, not the model type "
@@ -409,9 +415,6 @@ class Resolver:
             if f.err is not None:
                 res.problems.append((fid, role, f.err))
                 continue
-            if fid in walked:
-                continue          # the cache hit: roles recorded, walk once
-            walked.add(fid)
             refs = f.refs
             for cid, trole in ((mdlrefs.TEXTURE_CHUNK, ROLE_TEXTURE),
                                (mdlrefs.FAD_CHUNK, ROLE_FAD)):
@@ -427,7 +430,7 @@ class Resolver:
                         res.null_slots += 1
                         continue
                     sf = touch(s, ROLE_SOUND, read=True)
-                    if sf is None or sf is True:
+                    if sf is None:
                         continue
                     if sf.ffna != SOUND_FFNA_TYPE:
                         res.problems.append(

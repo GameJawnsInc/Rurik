@@ -900,21 +900,38 @@ Every one of these, in the order they were written:
   definitions named. **The COMPOSITED rule is DERIVED, not assumed**
   (`needs_body` reads FA0-absence; the FA1 bit is the independent second
   witness, 161/161 carriers agreeing) and cross-checked against wire
-  presence of 0x0057 with the reversed rule as the failing control: capture
-  20260807T143055 alone 8/8 0x0056-only shells CARRY FA0 (reversed 0/8),
-  36/36 with-0x0057 shells LACK it, 33/33 distinct model ids carry it;
-  pooled 11/11, 43/43 per-definition (the unitmodels SS5.4 "43/43", whose
-  population this file names as the pooled per-definition count), 40/40
-  distinct. The hatcher pair (1471: 116228+116703) is pinned as the full
+  presence of 0x0057 with every count TRI-VALUED and MEASURED -- with FA0 /
+  without / unreadable, one tuple check per population, after the U4
+  review caught the first version printing its "reversed rule" as f-string
+  arithmetic that was 0 by construction: capture 20260807T143055 alone 8/8
+  0x0056-only shells CARRY FA0 (measured reverse 0, unreadable 0), 36/36
+  with-0x0057 shells LACK it, 33/33 distinct model ids carry it; pooled
+  11/11, 43/43 per-definition (the unitmodels SS5.4 "43/43", whose NOUN
+  was wrong -- it counted definitions pooled, not model ids), 40/40
+  distinct -- plus `needs_body` == wire-0x0057-presence on all 54, the
+  only check covering the seven with-0x0057 definitions outside 143055.
+  **The visited set has its own synthetic cycle fixture** (A<->B links plus
+  a self-loop through a pre-filled facts cache, under a call budget that
+  turns a hang into a red check), because the corpus cannot exercise it:
+  the live FA8 graph is acyclic and terminates at depth 1, so the review's
+  remove-the-visited-set mutation stayed green on real data and is killed
+  by this fixture (re-verified against the mutant). The hatcher pair
+  (1471: 116228+116703) is pinned as the full
   232-id set and the worm (1442: 116366) as 75 ids, and the content-row
   entries (`npc.hatcher`/`npc.lakeside_worm`) must resolve to the IDENTICAL
   sets -- one resolution path, two id sources. The origin gate is proved in
   both directions on synthetic capture dirs: live+live pools, live+ours
   REFUSES naming both, UNKNOWN never pools. Controls that fail: an id
   outside the raw table leaves the set OPEN, a map file (ffna type 3) as
-  shell is refused not walked. 55 checks, floor 55 -- nothing legitimately
-  varies; vault-less runs skip sections 2-4 and go red on the floor.
-  ~75 s: needs `vault/dat_study` and the three keyed live captures),
+  shell is refused not walked, and npcdefs' 0x0057-disagreement refusal is
+  FIRED through the decode seam -- an injected conflicting repeat must make
+  read() refuse naming the definition and both lists. Two review-flagged
+  entailed checks were removed (hatcher!=worm needs_body; a separate
+  FAE==0 beside the pinned role dict -- a check that cannot fail
+  independently is the recorded defect class). 57 checks, floor 57 --
+  nothing legitimately varies; vault-less runs skip sections 2-4 and go
+  red on the floor. ~90 s: needs `vault/dat_study` and the three keyed
+  live captures),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

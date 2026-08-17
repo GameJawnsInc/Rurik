@@ -11,24 +11,40 @@ files. Closure is OUR assertion (the client tolerates what the resolver
 refuses to pass over), so 54 green resolutions are 54 real checks.
 
 THE CHECK THAT EARNED THE RUNG is the COMPOSITED cross-check, measured from
-the archive bit against wire presence of 0x0057 with the reversed rule as a
-failing control. Capture 20260807T143055 alone: 8/8 0x0056-only shells
-CARRY geometry (and 0/8 lack it), 36/36 with-0x0057 shells LACK it (0/36
-carry it), 33/33 distinct model ids carry it. Pooled over three captures:
-11/11 0x0056-only shells carry FA0, 43/43 definitions with a 0x0057 have
-every body carrying FA0, 40/40 distinct models. The unitmodels SS5.4 triple
-8/8-36/36-43/43 is reproduced with its populations NAMED: the first two are
-capture 143055, the third is the pooled per-definition count -- the study
-line did not say so, and this file is where the reconciliation is pinned.
-Independently, the FA1 flag bit agrees with FA0-absence on all 161 FA1
-carriers the closures touch (`composited_violations()` empty; U1 measured
-the same equivalence at 14,571/14,571 archive-wide).
+the archive bit against wire presence of 0x0057 -- every count TRI-VALUED
+(with FA0 / without / unreadable), all three measured in one tuple check
+per population, because the first version printed its "reversed rule" as
+f-string arithmetic that was 0 by construction and wrong exactly when
+has_geometry is None; the U4 review caught it. Capture 20260807T143055
+alone: 8/8 0x0056-only shells CARRY geometry (measured reverse 0,
+unreadable 0), 36/36 with-0x0057 shells LACK it (reverse 0), 33/33
+distinct model ids carry it. Pooled over three captures: 11/11, 43/43
+per-definition, 40/40 distinct -- and `needs_body` equals wire 0x0057
+presence on all 54, which is the only check covering the seven
+needs_body definitions outside 143055. The unitmodels SS5.4 triple
+8/8-36/36-43/43 is reproduced with its populations NAMED: the first two
+are capture 143055; the third counted DEFINITIONS pooled, not model ids
+-- its noun was wrong, and this file is where the reconciliation is
+pinned. Independently, the FA1 flag bit agrees with FA0-absence on all
+161 FA1 carriers the closures touch (`composited_violations()` empty; U1
+measured the same equivalence at 14,571/14,571 archive-wide).
+
+THE VISITED SET has its own fixture, because the corpus cannot exercise
+it: the live units' FA8 graph is acyclic and every chain terminates at
+depth 1, so recursion-with-visited and an unguarded walk are green-
+indistinguishable on real data (the review mutation-tested it). Section
+0b feeds the resolver a synthetic A<->B link cycle with a self-loop
+through a pre-filled facts cache under a call budget: remove the visited
+set and the budget turns the hang into a red check.
 
 THE ORIGIN GATE is proved in both directions on synthetic capture
 directories: two live-stamped-and-corroborated captures pool (positive
 control), a live+ours mix REFUSES naming both origins, ours-only against a
 live expectation refuses, and UNKNOWN refuses (it is not a synonym for
-either -- `origin.py`'s whole point).
+either -- `origin.py`'s whole point). And npcdefs' 0x0057-disagreement
+refusal is FIRED on purpose through the decode seam: an injected
+conflicting repeat must make `read()` refuse naming the definition and
+both lists.
 
 THE NAMED FIRST CASE: the hatcher pair (definition 1471 = shell 116228 +
 body 116703) with its full 232-file resolved set pinned id-by-id, the worm
@@ -53,10 +69,13 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive  # noqa: E402
 import checks  # noqa: E402
+from mapchunks import dependency_pair  # noqa: E402
+import mdlrefs  # noqa: E402
 import origin  # noqa: E402
+import unitassembly  # noqa: E402  (for the _Facts fixture in section 0b)
 from unitassembly import (AssemblyError, Resolver, UnitDef,  # noqa: E402
                           definitions_from_captures, require_one_origin,
-                          ROLE_LINK, ROLE_FAE, MODEL_ROLES, ALL_ROLES)
+                          ROLE_LINK, MODEL_ROLES, ALL_ROLES)
 
 # ---------------------------------------------------------------------------
 # Pinned literals. MEASURED 2026-08-16 through the committed module against
@@ -181,6 +200,64 @@ def section0(check):
         check(True, "refusal: an undeclared definition has no file id")
 
 
+def _model_facts(links, has_geometry):
+    """A synthetic model-file _Facts: type-2, one sequence, FA8 links only."""
+    f = unitassembly._Facts()
+    f.size, f.ffna = 64, 2
+    f.has_geometry = has_geometry
+    f.composited = not has_geometry
+    f.seq_count = 1
+    f.refs = ({mdlrefs.LINK_CHUNK:
+               mdlrefs.RefList([dependency_pair(l) for l in links])}
+              if links else {})
+    return f
+
+
+class _BoundedResolver(Resolver):
+    """No archive underneath: the table and the facts cache ARE the
+    fixture. The call budget is what turns 'the visited set is gone' into
+    a red check instead of a hung suite."""
+
+    def __init__(self, facts_map, budget=50):
+        self.ar = None
+        self.table = {fid: fid for fid in facts_map}
+        self._facts = dict(facts_map)
+        self._budget = budget
+
+    def facts(self, fid):
+        self._budget -= 1
+        if self._budget < 0:
+            raise AssemblyError(
+                "the walk exceeded its call budget -- unguarded recursion")
+        return super().facts(fid)
+
+
+def section0b(check):
+    print("\n== section 0b: the visited set, on a synthetic FA8 cycle ==")
+    # The corpus CANNOT exercise this: the 54 live closures' FA8 graph is
+    # acyclic and every chain terminates at depth 1 (FINDINGS SS6), so the
+    # review's mutation test removed the visited set and the suite stayed
+    # green. This fixture is the discriminator: A links B and ITSELF, B
+    # links back to A.
+    A, B = 900001, 900002
+    r = _BoundedResolver({A: _model_facts((B, A), True),
+                          B: _model_facts((A,), False)})
+    try:
+        res = r.resolve(UnitDef(A))
+        check(res.closed and set(res.files) == {A, B},
+              "an A<->B link cycle with a self-loop terminates and closes "
+              "on exactly {A, B} -- remove the visited set and the budget "
+              "reddens this instead of hanging the suite")
+        check(res.files[A].roles == {"shell", "link"}
+              and res.files[B].roles == {"link"},
+              "roles accumulate across the cycle: A is shell AND its own "
+              "link target")
+    except AssemblyError as e:
+        check(False, "the cycle walk terminates", str(e))
+        check(False, "roles accumulate across the cycle", "walk never "
+              "finished")
+
+
 def _capture_fixture(root, name, lines):
     d = os.path.join(root, name)
     os.makedirs(d)
@@ -281,16 +358,16 @@ def section2(check, r, world):
           "its own FA0, and the content row's missing model_id needs no "
           "invention")
     check(worm.shell.composited is False,
-          "worm shell FA1 flag bit 0 is CLEAR -- the discriminating anchor "
-          "against the hatcher's set bit")
+          "worm shell FA1 flag bit 0 is CLEAR -- with the hatcher's set "
+          "bit pinned above, the anchors sit on opposite sides of the "
+          "rule and the derivation discriminates on this pair. (A "
+          "separate hat != worm check was removed by the U4 review: "
+          "entailed by these two, it could never fail independently)")
     check(tuple(worm.file_ids()) == WORM_IDS,
           f"the worm's full set is the pinned {len(WORM_IDS)} ids",
           f"got {len(worm.files)} files")
     check(worm.role_counts() == WORM_ROLES,
           f"worm roles: {WORM_ROLES}", f"got {worm.role_counts()}")
-    check(hat.needs_body != worm.needs_body,
-          "CONTROL: the two anchors sit on opposite sides of the rule -- "
-          "a needs_body that answered both the same would derive nothing")
 
     shallow = Resolver(r.ar, table=r.table).resolve(
         UnitDef(HATCHER_SHELL, (HATCHER_BODY,)), deep=False)
@@ -316,7 +393,7 @@ def section2(check, r, world):
     print(f"  ({time.time() - t0:.0f}s)")
 
 
-def section3(check, led, r, caps):
+def section3(check, r, caps):
     print("\n== section 3: the 54-definition corpus ==")
     t0 = time.time()
     defs = definitions_from_captures(caps)
@@ -349,11 +426,11 @@ def section3(check, led, r, caps):
     per_role = {role: sum(1 for ro in pooled.values() if role in ro)
                 for role in ALL_ROLES}
     check({k: v for k, v in per_role.items() if v} == POOLED_ROLES,
-          f"per-role distinct files: {POOLED_ROLES}",
+          f"per-role distinct files: {POOLED_ROLES} -- fae_model absent "
+          f"from the pinned dict IS the zero-FAE fact (the archive-wide "
+          f"population of 6 never intersects these units; a separate "
+          f"FAE==0 check was removed by the U4 review as entailed)",
           f"got {per_role}")
-    check(per_role[ROLE_FAE] == 0,
-          "ZERO FAE targets in any closure -- the archive-wide population "
-          "of 6 never intersects these units")
     multi = tuple(sorted(f for f, ro in pooled.items() if len(ro) > 1))
     check(multi == MULTI_ROLE,
           "five files carry two roles: shells that are other definitions' "
@@ -401,8 +478,62 @@ def section3(check, led, r, caps):
           and tuple(results[WORM_DEF].file_ids()) == WORM_IDS,
           f"wire definition {WORM_DEF} is the 0x0056-only worm, closure "
           f"equal to the content-row set")
+
+    # The pooled needs_body <-> wire equivalence, as a CHECK rather than a
+    # study-doc assertion (the U4 review found it stated in FINDINGS and
+    # summary.json but verified for only 47 of 54: the seven with-0x0057
+    # definitions outside capture 143055 -- 272, 326, 378, 391, 398, 1484,
+    # 1498 -- had needs_body=True asserted nowhere, geometry_complete
+    # being satisfiable either way).
+    agree = sum(res.needs_body == bool(defs[i].model_ids)
+                for i, res in results.items())
+    check(agree == POOLED_DEFS,
+          f"needs_body (derived from the shell's FA0 alone) equals wire "
+          f"0x0057 presence on {POOLED_DEFS}/{POOLED_DEFS} definitions -- "
+          f"both directions, including the seven outside capture 143055",
+          f"{agree} agree")
+
+    # npcdefs' 0x0057-disagreement refusal, FIRED on purpose (the review
+    # found the new guard untested): append a conflicting repeat through
+    # the decode seam; read() must refuse naming the definition and BOTH
+    # lists, and the seam is restored whatever happens.
+    import npcdefs
+    import tape
+    one = [d for d in caps if d.endswith(CAPTURES[1])]
+    real = tape.decode_all
+
+    def sabotaged(events, codec_obj, channel="GAME_SMSG", mask=0,
+                  strict=True):
+        msgs, receipt = real(events, codec_obj, channel, mask, strict)
+        return (msgs + [(0.0, npcdefs.MONSTER_COMPOSITE,
+                         [0x57, HATCHER_DEF, [999999]])], receipt)
+
+    refused = None
+    tape.decode_all = sabotaged
+    try:
+        try:
+            npcdefs.read(one)
+        except npcdefs.NpcDefsError as e:
+            refused = str(e)
+    finally:
+        tape.decode_all = real
+    check(refused is not None and str(HATCHER_DEF) in refused
+          and "999999" in refused and str(HATCHER_BODY) in refused,
+          "CONTROL: an injected disagreeing 0x0057 repeat makes "
+          "npcdefs.read REFUSE, naming the definition and both lists",
+          f"{(refused or 'NO REFUSAL')[:120]}")
+
     print(f"  ({time.time() - t0:.0f}s)")
-    return defs, results
+    return defs
+
+
+def _geo(r, fid):
+    """has_geometry, tri-valued and guarded: True/False for a readable
+    model container, None when the id does not resolve or the file is no
+    model. Counted explicitly in section 4 so a regression FAILS by name
+    instead of raising AttributeError off a None facts()."""
+    f = r.facts(fid)
+    return None if f is None else f.has_geometry
 
 
 def section4(check, r, caps, defs):
@@ -418,19 +549,35 @@ def section4(check, r, caps, defs):
           f"split {C55_ONLY56} 0x0056-only / {C55_WITH57} with-0x0057",
           f"got {len(only56)}/{len(with57)}")
 
-    a = sum(1 for i in only56 if r.facts(d55[i].file_id).has_geometry)
-    check(a == C55_ONLY56,
-          f"{C55_ONLY56}/{C55_ONLY56} 0x0056-only shells CARRY FA0 -- and "
-          f"the reversed rule scores {C55_ONLY56 - a}/{C55_ONLY56}, the "
-          f"control that fails")
-    b = sum(1 for i in with57 if not r.facts(d55[i].file_id).has_geometry)
-    check(b == C55_WITH57,
-          f"{C55_WITH57}/{C55_WITH57} with-0x0057 shells LACK FA0 "
-          f"(reversed: {C55_WITH57 - b}/{C55_WITH57})")
+    # Every count below is tri-valued and MEASURED -- with FA0 / without /
+    # unreadable -- in ONE tuple check per population. The first version
+    # printed its "reversed rule" as f-string arithmetic (C55_ONLY56 - a),
+    # which is 0 by construction whenever the forward check passes and
+    # wrong exactly when has_geometry is None; the U4 review caught it.
+    # The complements are not split into second checks the first would
+    # entail -- that is the recorded defect class from the other side.
+    g = [_geo(r, d55[i].file_id) for i in only56]
+    got = (sum(x is True for x in g), sum(x is False for x in g),
+           sum(x is None for x in g))
+    check(got == (C55_ONLY56, 0, 0),
+          f"0x0056-only shells: {C55_ONLY56}/{C55_ONLY56} CARRY FA0; the "
+          f"measured reverse (lacking FA0) is 0; unreadable 0",
+          f"(with, without, unreadable) = {got}")
+    g = [_geo(r, d55[i].file_id) for i in with57]
+    got = (sum(x is False for x in g), sum(x is True for x in g),
+           sum(x is None for x in g))
+    check(got == (C55_WITH57, 0, 0),
+          f"with-0x0057 shells: {C55_WITH57}/{C55_WITH57} LACK FA0; the "
+          f"measured reverse (carrying FA0) is 0; unreadable 0",
+          f"(without, with, unreadable) = {got}")
     models = sorted({m for u in d55.values() for m in u.model_ids})
-    c = sum(1 for m in models if r.facts(m).has_geometry)
-    check((len(models), c) == (C55_MODELS, C55_MODELS),
-          f"{C55_MODELS}/{C55_MODELS} distinct 0x0057 model ids carry FA0")
+    g = [_geo(r, m) for m in models]
+    got = (len(models), sum(x is True for x in g),
+           sum(x is False for x in g), sum(x is None for x in g))
+    check(got == (C55_MODELS, C55_MODELS, 0, 0),
+          f"{C55_MODELS}/{C55_MODELS} distinct 0x0057 model ids carry FA0 "
+          f"(measured reverse 0; unreadable 0)",
+          f"(distinct, with, without, unreadable) = {got}")
 
     # pooled: the SS5.4 triple's third figure, population named
     onlyp = sorted(i for i, u in defs.items() if not u.model_ids)
@@ -438,33 +585,47 @@ def section4(check, r, caps, defs):
     check((len(onlyp), len(withp)) == (POOLED_ONLY56, POOLED_WITH57),
           f"pooled split {POOLED_ONLY56} 0x0056-only / {POOLED_WITH57} "
           f"with-0x0057")
-    ap = sum(1 for i in onlyp if r.facts(defs[i].file_id).has_geometry)
-    check(ap == POOLED_ONLY56,
-          f"{POOLED_ONLY56}/{POOLED_ONLY56} pooled 0x0056-only shells "
-          f"carry FA0")
-    perdef = sum(1 for i in withp
-                 if all(r.facts(m).has_geometry for m in defs[i].model_ids))
-    check(perdef == POOLED_WITH57,
+    g = [_geo(r, defs[i].file_id) for i in onlyp]
+    got = (sum(x is True for x in g), sum(x is False for x in g),
+           sum(x is None for x in g))
+    check(got == (POOLED_ONLY56, 0, 0),
+          f"pooled 0x0056-only shells: {POOLED_ONLY56}/{POOLED_ONLY56} "
+          f"carry FA0 (measured reverse 0; unreadable 0)",
+          f"(with, without, unreadable) = {got}")
+    per = [[_geo(r, m) for m in defs[i].model_ids] for i in withp]
+    got = (sum(all(x is True for x in gs) for gs in per),
+           sum(any(x is False for x in gs) for gs in per),
+           sum(any(x is None for x in gs) for gs in per))
+    check(got == (POOLED_WITH57, 0, 0),
           f"{POOLED_WITH57}/{POOLED_WITH57} pooled definitions with a "
-          f"0x0057 have EVERY body carrying FA0 -- unitmodels SS5.4's "
-          f"'43/43', whose population is this pooled per-definition count")
+          f"0x0057 have EVERY body carrying FA0 (bodies lacking it 0; "
+          f"unreadable 0) -- unitmodels SS5.4's '43/43', whose noun was "
+          f"wrong: it counted these DEFINITIONS pooled, not model ids",
+          f"(all-with, any-without, any-unreadable) = {got}")
     modelsp = sorted({m for u in defs.values() for m in u.model_ids})
-    cp = sum(1 for m in modelsp if r.facts(m).has_geometry)
-    check((len(modelsp), cp) == (POOLED_MODELS, POOLED_MODELS),
+    g = [_geo(r, m) for m in modelsp]
+    got = (len(modelsp), sum(x is True for x in g),
+           sum(x is False for x in g), sum(x is None for x in g))
+    check(got == (POOLED_MODELS, POOLED_MODELS, 0, 0),
           f"{POOLED_MODELS}/{POOLED_MODELS} pooled distinct model ids "
-          f"carry FA0 -- the same rule at distinct-model granularity")
+          f"carry FA0 -- the same rule at distinct-model granularity",
+          f"(distinct, with, without, unreadable) = {got}")
 
 
 def main():
-    # Floor 55 = the real green run of 2026-08-16 exactly (8 construction +
-    # 6 origin-gate + 18 anchors + 14 corpus + 9 cross-check). Nothing here
-    # legitimately varies with the sample -- every section either runs whole
-    # or declares its vault skip -- so the floor IS the count, and a run
-    # that loses even one check is incomplete, not passing.
-    led = checks.Ledger("unit assembly: wire -> file closure", floor=55)
+    # Floor 57 = the real green run of the review-fixes commit exactly
+    # (8 construction + 2 cycle + 6 origin-gate + 16 anchors + 16 corpus +
+    # 9 cross-check; the first run's comment mis-stated its own breakdown
+    # as 18+14 -- the review counted 17+15, and two entailed checks have
+    # since been removed and four added). Nothing here legitimately varies
+    # with the sample -- every section either runs whole or declares its
+    # vault skip -- so the floor IS the count, and a run that loses even
+    # one check is incomplete, not passing.
+    led = checks.Ledger("unit assembly: wire -> file closure", floor=57)
     check = checks.adopt(led)
 
     section0(check)
+    section0b(check)
     section1(check)
 
     import vaultpath
@@ -499,7 +660,7 @@ def main():
                         "the COMPOSITED cross-check"):
                 led.skip(why, f"{len(caps)} keyed live capture(s), need 3")
         else:
-            defs, _results = section3(check, led, r, caps)
+            defs = section3(check, r, caps)
             section4(check, r, caps, defs)
 
     return led.verdict()
