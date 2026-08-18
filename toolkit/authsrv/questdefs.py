@@ -46,12 +46,25 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import content                                              # noqa: E402
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientscan"))
+import codedstr                                             # noqa: E402
 
 # MEASURED, from the live corpus (studies/quests/FINDINGS.md 3.3): the framing
 # ArenaNet puts around every literal it substitutes into a coded string.
-TEMPLATE_STR1 = 0x0BA9      # archive id 2729, `%str1%`, a plain record
-LITERAL_MARK = 0x0107       # archive id 263, precedes the literal run
-LITERAL_END = 0x0001        # terminator
+# The three framing words, with their DECODED archive ids beside them. A word
+# and the id it denotes are different numbers -- id = word - 0x100 -- and
+# `LITERAL_MARK`'s comment used to read "archive id 263", which is the raw
+# word and not the id. That is the rival reading `studies/quests/FINDINGS.md`
+# 3.2 spends a section refuting, sitting in a live comment two lines under a
+# neighbour that had it right. Both are checked below rather than asserted.
+TEMPLATE_STR1 = 0x0BA9      # id 2729, `%str1%`, a plain record
+LITERAL_MARK = 0x0107       # id 7, precedes the literal run
+LITERAL_END = 0x0001        # terminator (a marker, below WORD_VALUE_BASE)
+
+assert codedstr.decode_id([TEMPLATE_STR1]) == (2729, 1)
+assert codedstr.decode_id([LITERAL_MARK]) == (7, 1)
+assert LITERAL_END < codedstr.BIAS
 
 # The client's own field width for both 0x004C slots, from its RECV descriptor
 # (msgshape.py 0x004C -> string16(128)) and from schema/messages.json, which
@@ -88,7 +101,7 @@ def coded_literal(text, framing="template", limit=FIELD_UNITS):
                          "the wire field is a u16 array")
     if framing == "template":
         units = [TEMPLATE_STR1, LITERAL_MARK] + units + [LITERAL_END]
-    elif units and (units[0] & ~0x8000) < 0x100:
+    elif units and (units[0] & ~codedstr.CONT) < codedstr.BIAS:
         # MEASURED 2026-08-15, by doing it: a 0x004C whose description began
         # `0x53` ('S') killed a real client on its own bound check --
         #     Assertion: (codedString[0] & ~WORD_BIT_MORE) >= WORD_VALUE_BASE

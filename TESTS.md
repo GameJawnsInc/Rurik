@@ -2450,6 +2450,37 @@ Every one of these, in the order they were written:
   pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
   and agreeing pairs are printed as the measurement they are.
   Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
+  `toolkit/clientscan/test_codedstr.py` (the coded string — markers, and
+  `0x100`-biased base-`0x7F00` varints — and `studies/quests/FINDINGS.md` §3.2's **66 of
+  66** turned from a paragraph into a check, which §7.9 asked for by name. The rule was
+  derived in `studies/textrec/FINDINGS.md` §4 from `TextParser.cpp` and then tested in
+  quests §3.2 against 66 EncString slots on ArenaNet's own wire — a source the textrec arc
+  never had. Every authored quest string this repo sends is built on it and every string
+  id it reads out of a capture is decoded with it, so it is load-bearing both ways and
+  nothing could turn it red; the ENCODE half lived nowhere at all, so the 66/66 was only
+  reproducible by rewriting the script that made it. **§1 runs on a bare machine** and its
+  two headline fixtures — `80660 -> 8102 3E14`, `0x3D64 -> 15460` — were written into a
+  document BEFORE this module existed, so they cannot have been back-fitted. It also pins
+  the digit boundaries (`BASE-1`/`BASE`/`BASE+1`, where a carry misusing `0x8000` or
+  `0x100` shows up), that a sub-`BASE` id is ONE word (an always-two encoder round-trips
+  fine and does not match ArenaNet's bytes), and four refusals — including a MARKER word,
+  which is the client's own distinction: a `0x004C` description beginning `'S'` (`0x53`)
+  killed a real client on `TextApi.cpp:585` asserting that bound. **§3 is the one worth
+  reading.** All 66 slots resolving is weak — a wrong rule also produces numbers. What is
+  strong is that they PARTITION: slot 0 plain 22/22, slots 1 and 2 encrypted 22/22, which
+  is textrec §4's own prediction confirmed on a source it never had; under a wrong reading
+  the plain share would sit near the archive-wide ~28%. Its CONTROL is the rival raw-word
+  reading, which could have won and did not — `0x3D64` is 15460 our way and 15716 the
+  rival's, one plain and one encrypted with a key this repo has not recovered. **A first
+  draft asserted the rival record was ABSENT and went red**: §3.2 says "an encrypted
+  record returning nothing" and the nothing is the decoded TEXT — the assertion was
+  stronger than the evidence, not the document wrong. **No ArenaNet text is asserted
+  anywhere**, deliberately: the structure discriminates and the word is their expression.
+  Verified by sabotage — `BIAS=0` fails 8 checks, `BASE` and `CONT` changes raise. The two
+  captures are NAMED, not globbed, because the vault's capture tree is append-only and a
+  glob would silently move the denominator, which is what put `test_smsgsweep` red at 177
+  opcodes the same week. Floor 12 against a run of 18 — §2 and §3 need the corpus and the
+  owner's archive and declare skips. ~10 s),
   `toolkit/clientscan/test_framebus.py` (the frame-bus pairing that twelve quest
   names rest on — `studies/quests/FINDINGS.md` §9, rung Q1. The client's UI does
   not read the wire: a handler in `ChCliApi` posts a numbered frame and UI
