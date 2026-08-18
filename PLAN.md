@@ -1527,12 +1527,21 @@ activation exists to imitate). The hero hop: `0x0072`'s worker stores field 3 �
 sent as 0 so far — at activation-record +8, and the party window's gear draw (`PtHero.cpp`
 via `0x5265B0`) reads it back as the equip-walk key, so key 0 finds nothing and
 `ItCliApi:488` is exactly the crash measured 2026-08-17. `--hero-bags` (new, opt-in)
-declares the key: `0x0144 [HERO_INVENTORY, 0]` + the equipped bag. Staged arms on §25's
-rig, predictions on record in §26.3: `--hero-inventory 2` alone still asserts `:488`;
-`--hero-inventory 2 --hero-bags` clears it. The click is the same party-window hero button
-as §25. (The old text here said "per-owner container" and pointed at the bag family —
-both corrected: the key is an inventory id, and `0x013F` *requires* the container
-(`ItCliApi:1942`) rather than creating it.)
+declares the key: `0x0144 [HERO_INVENTORY, 0]` + the equipped bag. (The old text here said
+"per-owner container" and pointed at the bag family — both corrected: the key is an
+inventory id, and `0x013F` *requires* the container (`ItCliApi:1942`) rather than creating
+it.) **THE CLICK RAN, same day: `ItCliApi:488` CLEARED — §26.3's predictions held** — and
+died one floor deeper, `Array:587` in the char client (build 38833, full 40-frame stack in
+`vault/captures/harness/20260818T121224/`). That floor is diagnosed and its arm staged the
+same day, study **§27**: the commander panel's paperdoll indexes the char-by-id table at
+`[charctx+0x7CC]` with the hero's agent id, nothing we send grows that table, and — the
+correction that matters — **`0x0020` create doesn't either** (it builds a char object,
+never the by-id entry, so `--hero-body` is NOT this fix). The registrar is opcode
+**`0x009A`** `[agent_id, dword]`, whose handler grows the table *before* its bounds check
+(hand-verified on the run's exe). `--hero-char` (new, opt-in) sends it per hero slot. Next
+click: §26.3's command + `--hero-char`, prediction **the panel opens and stays** — the
+doll NULL-falls-back to the hero record and its slot loop lands on inventory 2, which §26
+already registered.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

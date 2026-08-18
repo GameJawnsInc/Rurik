@@ -754,6 +754,17 @@ GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
+# [agent_id, dword]. Grows the char client's char-by-id table ([charctx+0x7CC],
+# stride 0x38, count +0x7D4) to COVER the agent id, then stores the dword at
+# record+0x30 -- and the grow runs BEFORE the bounds check (recv 0x0091ECA0 ->
+# 0x008124E0 -> ensure 0x00817A80, read on 38833), so one send REGISTERS an id.
+# That table is what GmAgentDoll's CharBy(agentId) indexes when the commander
+# panel draws a hero, and agent 200 past its count was the 2026-08-18 click
+# crash (Array:587). 0x0020 does NOT grow it -- the create path builds a char
+# OBJECT but never the by-id entry. Retail sends value = percent<<24 (100<<24
+# the mode, 38-connection census); the NAME IS OURS, from the mechanism -- no
+# ArenaNet string names this opcode. studies/pvpui/FINDINGS.md 27.
+GAME_SMSG_CHAR_TABLE_VALUE = 0x009A
 # The equipped-items bag: type 2, model 21, nine slots, weapon in slot 0.
 # CORROBORATED across ldufr (GmInventory.c:21-27, GmInventory.h:6-10) and
 # gw-preservation (item/item.go:139-152).
@@ -2503,8 +2514,8 @@ HERO_SWAP = False
 # matter what any other message carries. OFF is the arm that crashes EARLIER,
 # not the safe one; ON, the same click gets past GmView entirely and stops at
 # ItCliApi.cpp(488). It stays off only because no full session has been measured
-# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25 -- and 26 for
-# what clears ItCliApi:488 (pair with --hero-inventory 2 --hero-bags).
+# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25 -- and 26/27
+# for the floors past it (pair with --hero-inventory 2 --hero-bags --hero-char).
 HERO_ACTIVATE = False
 # HeroActivate's field 3, and the question the old comment posed ("if field 3
 # really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
@@ -2532,6 +2543,16 @@ HERO_INVENTORY = 0
 # which is enough for a one-hero rig and wrong past that -- a per-hero key
 # wants plumbing only after the single-hero click survives.
 HERO_BAGS = False
+# Register each hero's agent id in the char client's char-by-id table (one
+# 0x009A per hero slot, value 100<<24 as retail sends it). This is the floor
+# AFTER ItCliApi:488: the cleared click reached GmAgentDoll::CharBy(agentId),
+# which died on Array:587 because nothing had ever grown that table past 200
+# (measured 2026-08-18, full stack in the harness capture). CharBy tolerates a
+# REGISTERED id whose slot holds no char object -- it returns NULL and the
+# doll falls back to the hero record -- so registration alone is the minimal
+# arm. --hero-body is NOT this fix: 0x0020 builds a char object but never the
+# by-id entry (read end to end on 38833). studies/pvpui/FINDINGS.md 27.
+HERO_CHAR = False
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -7713,6 +7734,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                                  f"SKILLBAR_UPDATE(hero agent "
                                  f"{_haid}){_hskills}")
+                        # The char-by-id registration, BEFORE activate so the
+                        # table covers the id by the time any click can open
+                        # the commander panel. One message per hero slot; the
+                        # value is retail's modal 100<<24 and lands at
+                        # record+0x30, whatever that field turns out to mean.
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_CHAR else ()):
+                            hsend(GAME_SMSG_CHAR_TABLE_VALUE,
+                                  [_haid, 100 << 24],
+                                  f"CHAR_TABLE_VALUE(hero agent {_haid})")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -8484,6 +8515,13 @@ def main():
                          "own. Refused for keys 0 and 1 -- 0 declares nothing "
                          "and 1 is the player's key, which 0x0144's handler "
                          "asserts against re-declaring (ItCliApi:2010).")
+    ap.add_argument("--hero-char", action="store_true",
+                    help="Register each hero agent id in the char client's "
+                         "char-by-id table (0x009A, one per hero slot). The "
+                         "floor after ItCliApi:488: the commander panel's "
+                         "paperdoll indexes that table by agent id and "
+                         "Array:587s on an unregistered one. Registration "
+                         "alone suffices -- a NULL slot falls back cleanly.")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8745,6 +8783,8 @@ def main():
         HERO_INVENTORY = a.hero_inventory
         global HERO_BAGS
         HERO_BAGS = a.hero_bags
+        global HERO_CHAR
+        HERO_CHAR = a.hero_char
         if HERO_BAGS and HERO_INVENTORY in (0, 1):
             raise SystemExit(
                 f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "
