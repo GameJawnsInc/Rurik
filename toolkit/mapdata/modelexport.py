@@ -389,10 +389,15 @@ def build_manifest(geo, name, source, mtable=None):
             # on most building surfaces -- black with soft highlights --
             # while awnings and foliage come out right. So FA5 is a mixed
             # list of map kinds and this index does not name the colour one.
-            # The likely chain is sub-model -> an AMAT material (chunk
-            # 0xFAD, 457/457 resolving to files with that magic) -> the FA5
-            # slot, and AMAT is NOT DECODED. Nothing here should be read as
-            # "the diffuse texture is slot `material_index`".
+            # The chain guessed here was sub-model -> an AMAT material (chunk
+            # 0xFAD) -> the FA5 slot. **That is WRONG IN KIND, and the
+            # correction is worth more than the guess** (FINDINGS §9,
+            # 2026-08-18, read out of the pinned client): the LAYERED branch
+            # never touches AMAT at all, and AMAT itself is a compiled SHADER
+            # binary whose parser keys on ASCII `TECH`/`PASS` chunk tags
+            # (`Dx9ShaderBinary.cpp:482`), not a texture-index table -- so
+            # "-> the FA5 slot" has the wrong destination. Nothing here should
+            # still be read as "the diffuse texture is slot `material_index`".
             "material_index": sm.unk,
             # THE MATERIAL'S LAYERS, which is what actually binds a surface
             # to its textures (`modelfile.MaterialTable`). Each layer names

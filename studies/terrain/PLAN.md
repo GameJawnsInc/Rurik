@@ -268,6 +268,20 @@ the visible result.
 
 ## 4. Fold in while here: the prop fall-through
 
+> **DONE 2026-08-18, and every number below is STALE -- see
+> [FINDINGS.md](FINDINGS.md) §9.** Decoding the material table collapsed this
+> defect from the 31.6% recorded here to **0.11% of Kamadan's prop area** (one
+> sub-model, the AMAT `binary` path) and to **zero** on Lornar's Pass, measured
+> twice independently. The cheap half landed: an unbindable sub-model now draws
+> `gw_unbound_material` instead of slot 0, with `test_blenderimport` §5b
+> checking it against the manifests and §5c breaking one on purpose.
+> **Two claims below are REFUTED.** The rocks are not this defect -- all 12
+> fall-back sub-models draw the only colour map their model owns, and
+> `tex_3C172.png` is simply a dark rock albedo. And "decoding AMAT is the real
+> fix" is wrong in kind: AMAT is a compiled SHADER binary (`TECH`/`PASS`
+> chunks), not a texture-index table, so it is a shader arc that would buy
+> 0.11% of one map.
+
 Not part of this arc, but adjacent and cheap, and it is a live defect.
 
 `gwmodel_mesh` appends every image a model owns to `mesh.materials` and only

@@ -246,7 +246,11 @@ PYTHON_EXIT_CODE = 66
 # flat-shaded where the client's vertex layouts carry normals. One check
 # per section pins CHANNEL_PACKED and all-faces-smooth, read back off the
 # scene. Sections 0-2b score 54, so a vault-less run lands 56 short.
-FLOOR = 118
+#
+# 118 -> 122 on 2026-08-18: section 5b checks the PROP fall-through against the
+# model manifests, and 5c BREAKS one on purpose so the guard is seen to go red
+# (`studies/terrain/FINDINGS.md` §9). Set from a real green run, never a guess.
+FLOOR = 122
 
 
 # ------------------------------------------------------------------ helpers
@@ -1188,6 +1192,9 @@ def _section4(check, led, blender, tmp, exp, zmap, src):
     check(all(o["verts"] > 0 for o in ps["objects"]),
           "every object -- real or proxy -- carries geometry")
 
+    _section5b(check, led, exp, models, summary)
+    _section5c(check, led, blender, tmp, exp, src, models)
+
 
 # --- 5. rung T5 on the real map ---------------------------------------------
 
@@ -1336,6 +1343,139 @@ def _section5(check, led, blender, tmp, exp, src, summary):
           and s2.get("terrain_textures", {}).get("state") == "skipped",
           "--no-terrain-textures leaves the real ground unmaterialed",
           "rc=%d, state %r" % (rc, s2 and s2.get("terrain_textures")))
+
+def _section5b(check, led, exp, models_dir, summary):
+    """The PROP fall-through, against the model manifests.
+
+    A sub-model whose material cannot be resolved must draw its own marker
+    material, never slot 0. The expectation is recomputed HERE from the
+    `.gwmodel.json` manifests rather than taken from the importer's own
+    bookkeeping, so an importer that went back to defaulting -- which is what
+    the defect was -- fails this even though its dump would still be
+    self-consistent. That is the §7.15 lesson: diff the artifact, not the unit.
+    """
+    print("\n== 5b. the prop fall-through, against the manifests ==")
+    ps = (summary or {}).get("props")
+    if not ps or not ps.get("real"):
+        led.skip("5b. the prop fall-through", "no real-mesh props in the dump")
+        return
+    if "unbound_faces" not in ps:
+        check(False, "the dump reports unbound prop faces at all -- without "
+                     "it nothing outside Blender can see the fall-through")
+        return
+
+    props = exp.props or {}
+    want_faces = 0
+    seen = 0
+    for m in props.get("models", ()):
+        mp = os.path.join(models_dir, "model_%X.gwmodel.json" % m["file_id"])
+        if not os.path.exists(mp):
+            continue
+        with open(mp, encoding="utf-8") as fh:
+            md = json.load(fh)
+        seen += 1
+        slots = md.get("textures") or []
+        have = {s.get("image") for s in slots if s.get("image")}
+        for sm in md.get("submodels", ()):
+            mat = sm.get("material") or {}
+            layers = mat.get("layers") or []
+            slot = None
+            if layers:
+                stored = [l for l in layers if (l.get("uv") or 0) >= 0]
+                slot = (stored or layers)[0].get("texpath")
+            elif mat.get("kind") in (None, "none"):
+                slot = sm.get("material_index", sm.get("texture"))
+            bound = (slot is not None and slot < len(slots)
+                     and slots[slot].get("image") in have)
+            if not bound:
+                want_faces += sm.get("ti", 0) // 3
+
+    if not seen:
+        led.skip("5b. the prop fall-through", "no model manifests beside the "
+                 "export")
+        return
+    check(ps["unbound_faces"] == want_faces,
+          "every prop face whose material the manifests cannot resolve draws "
+          "the marker, and no other face does -- %d face(s) over %d model(s)"
+          % (want_faces, seen),
+          "dump says %r, manifests say %d"
+          % (ps.get("unbound_faces"), want_faces))
+    # The marker must not be quietly standing in for everything: if the corpus
+    # has no unbindable sub-model, a dump claiming unbound faces is as wrong as
+    # one hiding them.
+    check(bool(ps.get("unbound_meshes")) == bool(want_faces),
+          "the marker appears on exactly the meshes that need it",
+          "%r" % (ps.get("unbound_meshes"),))
+
+
+def _section5c(check, led, blender, tmp, exp, src, models_dir):
+    """THE MUTATION CONTROL, because 5b on this corpus compares 0 against 0.
+
+    Pre-Searing has no unbindable sub-model, so 5b would pass unchanged if the
+    importer went straight back to defaulting to slot 0 -- the defect itself.
+    So BREAK one on purpose: copy a single model's family to a scratch dir,
+    point its first sub-model at a material that cannot resolve, and require
+    the marker to appear on exactly that sub-model's faces. A guard that has
+    never been seen to go red is a wish.
+    """
+    print("\n== 5c. the fall-through control: an unbindable sub-model ==")
+    if not os.path.isdir(models_dir):
+        led.skip("5c. the fall-through control", "no model family")
+        return
+    # The model must be one THIS map actually places, or the mutated import
+    # has no real mesh to put the marker on and the control never runs.
+    placed = {}
+    for rec in (exp.props or {}).get("props", ()):
+        placed[rec["model"]] = placed.get(rec["model"], 0) + 1
+    pick = None
+    for m in (exp.props or {}).get("models", ()):
+        if not placed.get(m["index"]):
+            continue
+        name = "model_%X.gwmodel.json" % m["file_id"]
+        path = os.path.join(models_dir, name)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            md = json.load(fh)
+        subs = md.get("submodels") or []
+        if len(subs) >= 1 and subs[0].get("ti", 0) >= 3 and md.get("textures"):
+            pick = (name, md)
+            break
+    if pick is None:
+        led.skip("5c. the fall-through control", "no usable model to mutate")
+        return
+
+    name, md = pick
+    mut = os.path.join(tmp, "models_mutated")
+    os.makedirs(mut, exist_ok=True)
+    for side in md.get("sidecars", ()):
+        srcf = os.path.join(models_dir, side["name"])
+        if os.path.exists(srcf):
+            shutil.copy2(srcf, os.path.join(mut, side["name"]))
+    # The break: no layers and a kind the fallback does not rescue, which is
+    # exactly the shape of the one real case in the corpus (the AMAT `binary`
+    # path on Kamadan's model 0x3C5AC).
+    md["submodels"][0]["material"] = {"kind": "binary", "index": 0xFFFF}
+    want = md["submodels"][0]["ti"] // 3
+    with open(os.path.join(mut, name), "w", encoding="utf-8") as fh:
+        json.dump(md, fh)
+
+    work = os.path.join(tmp, "run_mutated")
+    os.makedirs(work, exist_ok=True)
+    rc, _out, summary, _v = run_blender(blender, src, work,
+                                        extra=["--models", mut])
+    ps = (summary or {}).get("props") or {}
+    if rc != 0 or not ps.get("real"):
+        led.skip("5c. the fall-through control",
+                 "mutated import produced no real mesh (rc=%d)" % rc)
+        return
+    check(ps.get("unbound_faces") == want,
+          "the broken sub-model's %d faces draw the MARKER, not slot 0 -- "
+          "the defect would fail here" % want,
+          "dump says %r" % (ps.get("unbound_faces"),))
+    check(any(m["faces"] == want for m in ps.get("unbound_meshes", ())),
+          "and the dump names the mesh carrying them",
+          "%r" % (ps.get("unbound_meshes"),))
 
 
 def _ground_of(o, exp, zmap):
