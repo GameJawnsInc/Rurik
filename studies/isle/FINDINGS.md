@@ -605,3 +605,80 @@ exactly 5 allegiance-`play` / 5 `mon1`**, against a pre-registered wiki claim of
 Students of whom five are allies. It could have come out 6/4, or n ≠ 10, and did not.
 (By contrast the Suits' 2/1/1 arrangement was reported as tight confirmation and is not —
 four bodies over three slots can only land 2/1/1, 2/2, 3/1 or 4, so it carries about one bit.)
+
+## Rung 6b — the east line (capture `20260818T094648`, 5/5 decrypted, seals AGREE)
+
+The east leg was taken 2026-08-18 on the same 38833 build, `game_mode base`,
+`exe_unchanged: true`. Every prediction the sealed plan made resolved, and the east turned
+out to hold the half of the island that matters most for the rungs after this one.
+
+**The four pre-registered predictions. All OBSERVED, none fudged.**
+
+| prediction | result |
+|---|---|
+| `0x0195` field 1 == 165811 again | **confirmed**, both map-280 loads — now 6 for 6 |
+| field 2 == `(-6036.0, -2519.0)`, byte-identical | **confirmed**, both loads, fifth and sixth time |
+| slot 129: same coordinate ⇒ fixed station; different ⇒ spawn | **fixed station** — one create per run, `(6521, 1628)` in both, two independent sessions |
+| an item-tagged body near the far east edge | **confirmed** — `(9298, -39)` in both runs, same coordinate |
+
+**Seven of the ten pre-registered missing definition indices were exactly where the gap
+argument said they would be.** 131, 132, 133, 136, 137, 138 and 140 all appeared, all in
+the east, all level 20, all foe-allegiance. **130, 139 and 146 remain unseen anywhere.**
+That is the strongest coverage result the arc has: the ten indices were named *before* the
+run as the concrete candidates for bodies the first pass never reached, and seven of them
+turned up in the region the first pass never walked.
+
+**The east is now bounded, which is a stronger claim than "walked".** The track ran to
+x = 13,325 and spanned y −7,010 … 10,920, while the easternmost station sits at x = 9,937
+and the station envelope is y −7,008 … 9,687. **The walk encloses every body we found on
+every side.** Coverage inside the line is deliberately looser than the first pass (median
+station→track distance 2,928 u against the west's 255 u, and 60 of 94 stations were never
+within 2,000 u) because this leg was bought for REACH, not proximity — and reach is what
+the missing indices needed.
+
+### What the east actually holds: the skill-bar foes, with their summons
+
+Three positions carry more than one body, and the co-location is the finding.
+
+| position | body | level | profession | allegiance | reading |
+|---|---|---|---|---|---|
+| (3363, −7008) | slot 136 | 20 | **2 Ranger** | `mon1` | owner |
+| | slot 1387 | **15** | 2 | **`anim`** | its pet |
+| (7856, −1950) | slot 132 | 20 | **5 Mesmer** | `mon1` | owner |
+| | slot 2937 | **0** | 2 | `mon1` | a spirit — no model, and it is re-created under **agent ids 118, 123 and 158** at the one position |
+| (3049, −2902) | slot 138 | 20 | **8 Ritualist** | `mon1` | owner |
+| | slots 4274, 4264 | **0** | 2 | `mon1` | two spirits |
+
+**These match three separate wiki claims that were written down before the run, on axes
+that could each have come out wrong.** `gww-facts.md` records a Master of Interrupts who is
+**R**/Me and carries a **level 15** Elder Wolf — we measured a level-20 **Ranger** with a
+**level-15 `anim`-allegiance** body at its feet, three independent agreements. It records a
+Master of Energy Denial who is **Me**/R and casts **Quickening Zephyr**, a nature ritual —
+we measured a level-20 **Mesmer** with a level-0, model-less body respawning under fresh
+agent ids beside it, which is what a spirit looks like on the wire. And it records a Master
+of Spirits who is **Rt** — we measured a level-20 **Ritualist** with **two** such bodies.
+
+**Label these RECONSTRUCTION, not identification.** No name was read off the wire, and the
+`enc_name` route (`studies/isle/PLAN.md`'s ruling) is still the only thing that can name a
+body. The reason to trust this more than the withdrawn "agent 28 = Master of Combat" claim
+is that it is not a lone coincidence: profession, level, allegiance class and summon
+structure agree simultaneously, per body, across three bodies.
+
+**Level 0 + no model + churning agent ids + co-located with an owner is a SUMMON**, and it
+is a shape the roster reader should learn: `stations()` keys on position, so a spirit
+re-created three times at one spot inflates the station count and looks like three bodies.
+
+### Two corrections to how these plans get written
+
+**The island's axes are not the plan's compass directions.** Walking "east" from the spawn
+lands at the **north-east corner** — world +x and +y are both involved, so a plan that says
+"east" and then "along the eastern edge, north then south" describes a rectangle the island
+does not have. In practice steps 5 and 6 sent the operator **back and forth along one line**.
+Write the next plan in terms of *landmarks and screen-relative headings from a named start*,
+or in terms of "until X sits at the compass edge" — never in world-axis compass words, which
+only the capture can see.
+
+**"Walk one compass length" understated it badly.** The operator reports the real east leg
+took "a very far duration" of running, and the track bears that out: 13,325 u of x against a
+plan that budgeted ~2 compass radii (10,000 u) for the whole line. The Isle is much larger
+than the first pass's west-and-centre extent suggested.
