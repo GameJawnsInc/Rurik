@@ -247,7 +247,78 @@ Every one of these, in the order they were written:
   present, the bit-31 spelling as the argument, and a target row failing its
   own crc (a relink must not make a corrupt row addressable); plan-only without
   `--confirm` writes nothing, and `--revert` restores the renamed state
-  exactly. No vault, no client. 78 checks against a floor of 78, was 66),
+  exactly. No vault, no client.
+  **Sections 9 and 10 (2026-08-18) are the COMPRESSION-8 WRITE VERB and the C-6
+  guard, floor 87 -> 136.** Until `gwenc.py` existed nothing in this project
+  could produce compression-8 bytes, so `replace()` hardcoded the field to 0;
+  it is now a keyword argument whose default reproduces the old behaviour byte
+  for byte, because `iconset`, `rebloat`, `textwrite`, `deploy.py`'s subprocess
+  and the six `a4stage*.py` staging scripts under `vault/research/archivewrite/`
+  all depend on "it marks the row stored" and none of them is edited. Section 9
+  is the whole pipeline of studies/archivewrite FINDINGS **A8 minus the client**:
+  payload -> `gwenc.encode` -> the verb -> a FRESH `Archive.read()` ->
+  unmodified `gwdat.decompress` -> the same payload, with the row afterwards
+  saying compression 8, the STORED length, and a crc over the stored bytes (the
+  domain FINDINGS 1.1 measured on retail's own comp-8 rows). It runs on
+  **`test_datcheck`'s fixture, not this file's** -- this file's payload rows sit
+  below `INDEX_FIRST_FILE = 16`, so `datcheck.preflight` is permanently 9/10 on
+  it and a "ten open-time rules pass" claim could not be made honestly
+  (measured both ways: 9/10 here, 10/10 there). **Section 9d is the
+  load-bearing one and it asserts a DEFECT**: it stages FINDINGS C-6 on purpose
+  -- correct compressed bytes with the code poked back to 0, self-crc repaired
+  -- and measures that all ten open-time rules, the crc sweep and all three
+  checksum rules stay GREEN over a file that no longer reads. That is why the
+  verb decompresses and compares against a MANDATORY declared payload *before*
+  the first byte is written: nothing this project owns can refute a
+  conforming-but-wrong compressed row afterwards, and `datcheck.py` has no
+  notion of a compression code at all. The corruptions that test the arm are
+  **earned, not staged** -- one flipped bit inside a real compressed payload
+  (which decodes to the right LENGTH without raising, so only a byte comparison
+  sees it) and a real payload with its mandatory tail word removed (FINDINGS
+  13.3's measured silent short decode). Section 10 closes C-6 in `datmove`,
+  whose defect was correctly stated as *"no safe relocation verb exists for
+  compressed rows"* rather than *"datmove corrupts archives today"*: the silent
+  case is now a refusal naming the fix, `--compression 8 --expect` is the safe
+  relocation verb, and a plaintext move with no keyword still succeeds as the
+  control. The C-6 test itself is a measurement rather than a marker: retail's
+  `0x01 0x02` at offset 2 MISSES six of eighteen `gwenc` outputs, every one a
+  payload under 256 bytes, so `looks_compressed()` uses the byte as a prefilter
+  and DECODES to decide -- measured 20 of 20 gwenc streams and 10 of 10 retail
+  rows caught, 0 false positives in 6,005 synthetic plaintext samples, and both
+  rates are re-measured by checks in the run rather than quoted from a
+  docstring. **The false-refusal rate is NOT zero and the docstring names the
+  rows**: 4 of 38,621 real stored rows in `dat_study` decode under our decoder
+  (177242, 177264, 177332, 177333) although they do not re-emit like genuine
+  comp-8 rows. Kept deliberately -- a false refusal is loud, writes nothing and
+  costs one re-run with `expect=data`, while a miss is silent and costs the
+  whole file and its nextStream chain permanently at the next repair (FINDINGS
+  5.1). The trailer-agreement half of the test is honestly labelled as weak,
+  because `gwdat` takes the declared size FROM the trailer and uses it as the
+  decode loop's bound, so it can only refute a stream that runs out of input --
+  and there is a check isolating exactly that, rather than a docstring claiming
+  more. Re-emission was tried as a stronger confirmation and REJECTED on
+  measurement: it reproduces retail's streams but 0 of 15 of our own. What
+  none of it establishes: the round trip is through `gwdat`, which is OUR
+  decoder, so it proves agreement and not correctness -- **A8, a caged client
+  reading the row, is still the only oracle.**
+  **Three defects found by the skeptic pass and fixed the same day, all one class
+  — a guard that looked closed and was not.** (1) The C-6 arm was gated on
+  `expect is None`, and `expect == data` is trivially true for ANY bytes, so
+  `--data s.bin --compression 0 --expect s.bin` with genuine `gwenc` output wrote
+  compressed bytes under a stored code through the documented CLI — exit 0,
+  preflight 10 of 10, log line indistinguishable from an ordinary replace. The arm
+  now consults the decode regardless of `expect`; the override is
+  `--stored-lookalike-ok`, which announces itself. The old "hatch" control used
+  bytes that do NOT decode, i.e. only the harmless half; `hatch_real` now covers
+  the dangerous one. (2) `--overwrite` never reached `declaration_fault` and never
+  touches the compression field, so overwriting a comp-8 row with same-length
+  plaintext left a green archive whose `Archive.read()` returns **zero bytes**;
+  it is guarded now. (3) The `toobig` case claimed to test the relocation refusal
+  but `pattern()` compresses ~12x, so it fitted the reservation and was a second
+  copy of the C-6 check wearing a false label — **the fourth recurrence in this
+  arc of a check claiming more than the artifact does** (§10.6, §12.7, §13.6). It
+  uses incompressible bytes now. 138 checks against a floor of
+  138, was 136, was 87, was 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
