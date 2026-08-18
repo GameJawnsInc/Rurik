@@ -1078,6 +1078,45 @@ again from the other side.
 **Prediction:** ~26 of 242 animations change deterministically — 20 play a ~3× exploded
 skeleton, 6 a shrunken one, the rest untouched. No crash, no assert, no `Model:` line.
 
+### 9.3i RUN 4 WAS UNINFORMATIVE, AND THE VIDEO SAYS WHY — run 5 stops authoring
+
+**The owner recorded the run** (`2026-08-18 10-29-49.mkv`, 13 s). Frames read directly
+rather than inferred: the hatcher cycles **one** animation, the raised-arm cast, and both
+models are normally proportioned — no x3 explosion, no x0.25 shrink. The owner's own read
+("more to do with cast backswing/cast time than animation deforming") is correct.
+
+**That makes run 4 UNINFORMATIVE, not negative, and the distinction is the finding.** Its
+instruments covered 26 of 242 records; the cast is not among them. **Nothing in runs 1-4
+has yet tested whether a linked file's node bases are used at all** — every run so far
+either broke a rule or aimed at an animation the creature never performs.
+
+**Run 5 therefore stops authoring entirely.** No new link, no sequence-record edit, no key
+table, no shell change — the shell is verified **byte-identical to retail**. It rewrites
+the hatcher's linked files **in place** with scaled bases and asks one question: does any
+animation this creature plays change shape?
+
+```
+12 of 13 writable links rewritten (1 refused: 73940 needed 189,952 B, no run fit)
+78 of 242 animation records (32%) now play a scaled skeleton
+bases alternate x3 / x0.25 by link, so a fired instrument NAMES its file
+shell byte-identical to retail; 15018 and 87333 untouched
+preflight 10/10 | generations 6/6 | crc 177,319 payloads, 0 bad | size unchanged
+```
+
+**The two files we cannot write hold 149 of 242 records — 62% of this creature's animation
+set.** A stored rewrite of 15018 needs 1,514,855 B and of 87333 needs 1,354,523 B against a
+largest usable run of 953,856 B. **The arc's original wall, met for the third time and now
+from the direction that matters**: it is no longer about one animation library we wanted to
+edit, it is about most of the creature's animations being unreachable.
+
+**This run is a clean either/or, which is what the last four were not.**
+
+- **Something deforms** → linked-file bases ARE used, the oracle is alive, run 4's
+  authoring path is sound, and the remaining problem is only reaching the right file.
+- **Nothing deforms** → every animation the hatcher performs comes from 15018 or 87333, and
+  the compression-8 wall is *provably* what blocks the arc. That converts a vague failure
+  into a costed next step, and it is the single most useful thing this run can return.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
