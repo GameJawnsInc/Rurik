@@ -214,9 +214,9 @@ for every agent cannot misbehave at create time: the only bit the create path br
 is death, and `0` clears it. The non-zero payloads are a fidelity gap, not a correctness
 one — we are not failing to trigger anything the client does when the body appears.
 
-**The reader, found — and it is another hop rather than an answer.** `codescan --field
-0x30` returns a single row, the "answer looks too small" case that module's own docstring
-warns about. The fix here was not the prescribed disp±4 sweep but a better anchor: every
+**The reader, found — and it is another hop rather than an answer.** Offset 0x30 is a
+tiny, ubiquitous displacement: `codescan --field 0x30` returns **3,992 rows** across the
+image, which is a haystack rather than an answer. The narrowing that worked: every
 function touching this table must multiply by the record stride, so scanning `.text` for
 `imul r32, r32, 0x34` (`6B /r ib`, register form) finds all 151 sites, of which sixteen
 sit in the agent-record neighbourhood. Exactly one of those reads offset 0x30:
@@ -226,9 +226,16 @@ sit in the agent-record neighbourhood. Exactly one of those reads offset 0x30:
     0081A605  mov eax, [ecx+eax+0x30]        ; <-- the stored status word
     0081A609  mov [edi+0x10c], eax           ; copied WHOLESALE into another object
 
-`--field 0x30` could never have seen it: the access is the base+index+displacement form,
-which that scanner does not search (its docstring lists the encodings it covers, and this
-is not among them — worth knowing for any future field hunt).
+**A correction to this document's own first draft, kept because the mistake is
+instructive.** That draft said `--field 0x30` "returns a single row" and could never have
+found this access, the base+index+displacement form, because its docstring does not list
+that encoding. **Both halves were wrong, and the fault was mine.** The scanner returns
+3,992 rows and `0x0081A605` is among them, correctly classified `base=ecx index=eax` — it
+anchors on the displacement BYTE and verifies against capstone's own encoding record, so
+the addressing form never mattered. What produced the false claim was reading the output
+through `tail`, which shows the last rows plus the trailing caveat block and hides the
+3,991 above. **The instrument was right and the operator truncated it** — the same shape
+as this repo's own "a partial run reported as a full one" defect, one level down.
 
 So the word **propagates rather than being decided on**: create path stores it, this
 function copies all 32 bits into an object at `+0x10C`, and no bit above 4 has been
