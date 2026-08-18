@@ -1108,14 +1108,31 @@ sweep 11/12/13 against the wiki's +24.0/+10.0-point kink; the rank 8↔9 require
 straddle (×⅓ predicted); and the `0x003A`/`0x0037` traffic from real rank reassignment —
 gate 1's live instrument, free on the same trip.
 
-**Rung 8 — LIVE #3, the effects pass**, ordered by how little AI is in the way: **Torches
-first** (a gadget applies one effect on click, with no bar, no aftercast, no allegiance),
-then the five **foe** Students, then Master of Energy Denial, then Master of Blocking. Order
-matters: if the Torch's application does not arrive on `0x0042`, the channel assumption is
-refuted in the first two minutes and the rest of the session can be redirected instead of
-wasted.
-*Exit:* the channel question answered — either the episodes carry 478–486/2077 on `0x0042`,
-or the refutation branch names what channel they do ride.
+**Rung 8 — LIVE #3, the effects pass. PREP DONE 2026-08-18, and the exit criterion was
+MET OFFLINE — see FINDINGS "Rung 8 prep".** The design's expectation was that this rung's
+likely outcome was a refutation, because `0x0042` had zero ArenaNet witnesses. The corpus
+holds **97 applies and 88 removals**; `0x0044` closes `0x0042` at apply + duration to the
+millisecond; **field 3 is the applier's ATTRIBUTE RANK** (confirmed on four skills against
+GWW progressions, not a duration field as the corpus's two conditions made it look); and
+the "largest single miss across all four families" — hexes and enchantments with *"no
+instrument at all"* — turns out to be **already captured and merely unidentified**:
+`0x0042` skill **984 = Torch Enchantment** and **998 = Torch Hex**, both 30 s, both on the
+Isle, both matching GWW's effect ids exactly. A **cure** is on record too, the first here:
+`"Charge!"` stripping Crippled in the same millisecond, with its own 33% speed boost
+visible on `0x0027`.
+*What the live session is now for*, none of it available offline: **skill 999**, the Torch
+DEGENERATION hex (the one torch effect never captured, and the only route to degeneration
+on retail traffic); which condition id each of the **five foe Students** applies (measured
+constraint: five of the ten are allies and cannot attack, so a ten-condition map from
+combat alone was never available); degeneration in **pips** against GWW's published 3/4/4/7;
+and the **rank ladder** that closes rung 7's one open defect. The torches are **not
+clicked** — GWW says each re-applies every ~2 s to anyone standing adjacent, which is a
+procedural correction the draft plan had wrong. Sealed plan: `vault/plans/isle_rung8_effects.txt`,
+27 steps. Consumer: `toolkit/authsrv/bufflog.py`, 36 checks, proven on the 97 witnesses
+before the plan was written.
+*Exit:* ~~the channel question answered~~ **MET 2026-08-18, offline.** The live exit is now
+skill 999 observed with its property-44 degeneration, and the five foe Students' condition
+ids recorded.
 
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because
