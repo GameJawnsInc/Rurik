@@ -1527,3 +1527,90 @@ pattern — this is the **fifth** time in the heroes lineage that the missing me
 out to be an existing agent-keyed message we only ever addressed to the player (after
 `0x0037`, `0x003A`, `0x00B7`, `0x00DA`). Look for the bag family's owner argument before
 concluding anything is absent.
+
+(§26 priced it the next day, and one word above needs correcting on the way in: the table
+is keyed by **inventory id**, not by owner — the owner indirection lives one hop earlier,
+in the hero activation record. The registrar turned out not to be the bag family but their
+prerequisite, `0x0144` — the sixth instance of the pattern, and this time the message was
+not merely in the tree but already being sent, one line above the bags.)
+
+## 26. `ItCliApi:488` priced: the chain is `0x0144` → activation record +8 → equip walk (2026-08-18)
+
+Desk work and corpus only — no client launched. Every VA below is **build 38797** (the
+pinned pristine build; §4's hazard, stamped as it demands). Tools: `codescan.py`,
+`msghandler.py`, `asserts.py`, and a scratch census over the live captures via `tape.py`.
+
+### 26.1 The table, and its one wire-side registrar — OBSERVED (static)
+
+The `+0xD4` table §25.2 called "per-owner" is ArenaNet's **`inventoryTable`**, and their
+own assert names it: `ItCliApi:1194 context->inventoryTable.Get(inventoryId)` sits in a
+function (`0x00847E70`) doing the identical lookup — `0x8445A0` on `[globals+0x40]+0xD4` —
+that the equip helper does. The key namespace is **inventory ids**.
+
+The insert into that table is `0x84A060`, and it has **exactly one direct caller in the
+image**: the `0x0144 ITEM_STREAM_CREATE` receive handler (`0x00846260`), which looks the
+key up first and asserts `!inventory` (`ItCliApi:2010`) — a key may be declared once. So
+the one message that can make the equip walk find anything is the one the server already
+sends for the player, `authsrv.py`'s `ITEM_STREAM_CREATE [1, 0]`.
+
+**The corpus agrees, 38/38 — OBSERVED** (`toolkit/authsrv/invcensus.py`, rerunnable; the
+count was 20 when first measured and 38 by the time the tool landed the same day, because
+the vault grew under the session — rerun it rather than quoting either number). Every
+decodable live connection carries exactly
+one `0x0144 [key, 0]`: field 2 is always 0, and all nine `0x013F` bags on that connection
+cite the connection's key as their field 1. And the key is an **arbitrary per-connection
+handle**, not a character id — the same character drew 1, 23, 184, 188, and 4 on different
+connections, including three distinct keys inside one capture (`20260817T183756`). That
+refutes `studies/smsg/FINDINGS.md`'s INFERRED reading of `0x013F` field 1 ("consistent
+with the local character's id"), corrected there with a pointer here.
+
+**Zero `0x0072` in the whole corpus (38 connections).** No retail tape ever activated a
+hero, so the hero
+half below is static tracing with a loopback experiment staged, not an observed wire
+sequence — there is nothing in the vault to imitate.
+
+### 26.2 The hero half: `0x0072` field 3 is stored, then read back by the party window — OBSERVED (static)
+
+`0x0072`'s worker (`0x81DA40`, the function §25 traced for `agentId`) does three things
+behind its `:199` record assert: writes `[record+4] = agentId` (§25), writes
+**`[record+8] = inventoryId`** — field 3, the one `HERO_INVENTORY` sends as 0 — and raises
+event `0x10000038` with that record as payload. Three modules subscribe: `GmView`
+(`0x004ECD2A`), the search-party dispatcher (`PtSearchHeroList`/`PtSearchPartyList`,
+whose case just relays UI message `0x59`), and **`PtHero.cpp`** (`0x005779BE`) — the
+party-window hero row, the very UI the §25 click drives.
+
+When PtHero draws a row's gear it resolves the equip-walk key through **`0x5265B0(agentId)`**:
+
+```
+assert agentId != 0
+if agentId == localPlayerAgent():          0x80D3E0
+    return *[itemctx+0xF8]                 0x845890, the local inventory (asserts :687)
+rec = heroActivationRecord(agentId)        0x80E390
+return rec ? [rec+8] : 0                   <- 0x0072 field 3, read back
+```
+
+and hands the result to the equip helper (`0x845470`: `:485 slot < ITEM_EQUIP_SLOTS`,
+`:488 inventory`). With `HERO_INVENTORY = 0` the key is 0, the table holds no key 0, and
+the lookup fails — **the model retrodicts §25.1's measured crash exactly, argument by
+argument.**
+
+Two neighbouring non-findings worth keeping: the hero-module equip callers
+(`0x81DE86`/`0x81DEEB`/`0x81DFAD`) and `GmPartyContext`'s (`0x0050CE2C`) all key by the
+**local** inventory via `0x845890` — mercenary-snapshot and context-menu paths drawing
+*your* gear, not the hero's. And the slot walker `0x84AA50` returns empty **cleanly** when
+`[inventory+0x58]` (the equip bag) is null, so the container alone is what `:488` needs —
+bags matter only once there is gear to draw.
+
+### 26.3 The staged experiment, predictions first — RECONSTRUCTION until clicked
+
+`--hero-bags` (new, opt-in, refuses keys 0 and 1) sends `0x0144 [HERO_INVENTORY, 0]` plus
+the equipped-items bag `0x013F`, in the REQUEST_ITEMS burst beside the player's own. The
+rig is §25's — `--party-mine-late 2.0 --hero-activate` — plus the new arms, and the click
+is the same party-window hero button the owner drove in §25:
+
+| arm | prediction |
+|---|---|
+| `--hero-inventory 2` alone | still `ItCliApi:488` — the key flows but names nothing |
+| `--hero-inventory 2 --hero-bags` | `:488` clears; the panel proceeds, empty gear being legal per `0x84AA50` |
+
+Anything else the cleared click hits next is a new floor and belongs here when it lands.

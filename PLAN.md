@@ -1380,7 +1380,9 @@ at all). Floor two, per-OWNER inventory containers in the item client's table
 (`[globals+0x40]+0xD4`), is what ItCliApi:488 actually wants — the hero's owner has no
 container, and our `0x013F`/`0x013E` bag family only ever goes to the local player. Same
 subsystem, different missing piece: floor two is the heroes arc's to price as its own
-work, not a duplicate of this line. And two residues filed with their own arcs — the
+work, not a duplicate of this line. (Priced 2026-08-18, `studies/pvpui` §26, with one
+correction: the table is keyed by inventory id, not owner, and its registrar is `0x0144`
+— see the PvP-UI entry below.) And two residues filed with their own arcs — the
 heroes split-filter (§21.2) and whether `0x006E` position semantics matter for the HANDS.
 
 **A NAMED FUTURE CAPTURE: the Factions tutorial, start to Shing Jea Monastery.** Owner's
@@ -1515,15 +1517,22 @@ its `agentId` is set. **The last hop was an opt-in flag, not a bug** — `heroDa
 has exactly one writer, opcode `0x0072` HeroActivate, and `HERO_ACTIVATE = False`. Fifth
 time in this lineage that the missing mechanism was a message already in the tree.
 
-**NEXT, and it is this arc's to price, not the `0x006D` line's above.** `ItCliApi:488` is a
-general 22-caller equip-slot helper asserting `inventory = get([globals+0x40]+0xD4, owner)`
-— the hero has no per-owner container in the item client's table. Cross-checked against the
-unit-setup entry the same day: item RECORDS already exist, so this is floor TWO and it is
-not blocked behind floor one. The shape of the work: find what registers an owner in that
-table and send it for the hero, and **look for an existing agent-keyed message before
-concluding anything is absent** — `0x013F`/`0x013E` are the bag family and we have only ever
-addressed them to the local player. `--hero-inventory` is NOT it (its help names
-`ItCliApi:1194`, a different site).
+**PRICED AND STAGED 2026-08-18 (study §26) — the run is one click.** The `+0xD4` table is
+ArenaNet's own **`inventoryTable`**, keyed by inventory id (their assert `ItCliApi:1194`
+names it), and its insert has **one** wire-side caller in the image: the **`0x0144
+ITEM_STREAM_CREATE`** handler — the message we already send for the player, one line above
+the bags. Retail agrees 38/38 connections (`invcensus.py`; exactly one `[key, 0]` each, key an
+arbitrary per-connection handle; zero `0x0072` anywhere in the corpus, so no retail hero
+activation exists to imitate). The hero hop: `0x0072`'s worker stores field 3 — `HERO_INVENTORY`,
+sent as 0 so far — at activation-record +8, and the party window's gear draw (`PtHero.cpp`
+via `0x5265B0`) reads it back as the equip-walk key, so key 0 finds nothing and
+`ItCliApi:488` is exactly the crash measured 2026-08-17. `--hero-bags` (new, opt-in)
+declares the key: `0x0144 [HERO_INVENTORY, 0]` + the equipped bag. Staged arms on §25's
+rig, predictions on record in §26.3: `--hero-inventory 2` alone still asserts `:488`;
+`--hero-inventory 2 --hero-bags` clears it. The click is the same party-window hero button
+as §25. (The old text here said "per-owner container" and pointed at the bag family —
+both corrected: the key is an inventory id, and `0x013F` *requires* the container
+(`ItCliApi:1942`) rather than creating it.)
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

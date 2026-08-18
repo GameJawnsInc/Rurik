@@ -2425,14 +2425,35 @@ HERO_SWAP = False
 # matter what any other message carries. OFF is the arm that crashes EARLIER,
 # not the safe one; ON, the same click gets past GmView entirely and stops at
 # ItCliApi.cpp(488). It stays off only because no full session has been measured
-# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25.
+# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25 -- and 26 for
+# what clears ItCliApi:488 (pair with --hero-inventory 2 --hero-bags).
 HERO_ACTIVATE = False
-# HeroActivate's field 3. Zero is what every run so far has sent. A NON-zero id
-# is a refutable question rather than a fix: ItCliApi:1194 asserts
-# `context->inventoryTable.Get(inventoryId)`, so if field 3 really is an
-# inventory-table key, an id naming no inventory should trip THAT assert and
-# name the field by experiment. Silence means it is inert on this path.
+# HeroActivate's field 3, and the question the old comment posed ("if field 3
+# really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
+# on 38797: the 0x0072 worker (0x81DA40) stores field 3 at activation-record +8;
+# the party window's hero row (PtHero.cpp) reads it back through 0x5265B0 --
+# local player -> the local inventory key, any other agent -> [record+8] -- and
+# hands it to the equip-slot helper (ItCliApi:485), which looks it up in
+# `inventoryTable` at [globals+0x40]+0xD4 and asserts `inventory` at
+# ItCliApi:488 when the key names nothing. Zero names nothing, which is the
+# measured crash. The ONLY wire writer of that table is 0x0144's handler
+# (sole caller of the insert), so a non-zero value here needs --hero-bags to
+# have declared the same key first. ItCliApi:1194 (the assert the old comment
+# cited) is a DIFFERENT reader of the SAME table, so that prediction stands
+# too, it just is not the equip path. studies/pvpui/FINDINGS.md 26.
 HERO_INVENTORY = 0
+# Declare HERO_INVENTORY's key to the item client: 0x0144 [key, 0] (the
+# container 0x0144's handler inserts into inventoryTable; retail sends exactly
+# one per connection, field 2 always 0, n=20/20) plus the equipped-items bag
+# 0x013F for the same key. The bag is NOT what clears ItCliApi:488 -- the
+# slot walker 0x84AA50 returns empty cleanly when [inventory+0x58] is null --
+# it is there so a cleared panel has somewhere to draw gear from later. Off by
+# default: with it off and --hero-inventory 0, the click stops at ItCliApi:488
+# (the control arm, measured 2026-08-17); with both on, the RECONSTRUCTION is
+# that the click clears the item gate. One inventory serves all --hero slots,
+# which is enough for a one-hero rig and wrong past that -- a per-hero key
+# wants plumbing only after the single-hero click survives.
+HERO_BAGS = False
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -6031,6 +6052,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stalls again they are the next candidates.
                         send(GAME_SMSG_ITEM_STREAM_CREATE, [1, 0],
                              "ITEM_STREAM_CREATE")
+                        if HERO_BAGS and HERO_INVENTORY:
+                            # The hero's container, keyed to what 0x0072 will
+                            # carry in field 3. 0x0144's handler is the ONLY
+                            # caller of the inventoryTable insert, so this is
+                            # the one message that can make the party window's
+                            # equip walk find the hero (ItCliApi:488). The bag
+                            # id reuses EQUIPPED_BAG_ID legally: ItCliBag:167's
+                            # collision search walks the OWNING inventory's
+                            # m_bagArray, so ids are per-inventory.
+                            # studies/pvpui/FINDINGS.md 26.
+                            send(GAME_SMSG_ITEM_STREAM_CREATE,
+                                 [HERO_INVENTORY, 0],
+                                 f"ITEM_STREAM_CREATE(hero inv "
+                                 f"{HERO_INVENTORY})")
+                            send(GAME_SMSG_INVENTORY_CREATE_BAG,
+                                 [HERO_INVENTORY, BAG_TYPE_EQUIPPED,
+                                  BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
+                                  EQUIPPED_SLOT_COUNT, 0],
+                                 "INVENTORY_CREATE_BAG(hero equipped)")
                         # The item has to exist before a weapon set can name it,
                         # and upstream sends inventory before the slots for that
                         # reason. CREATE_NAMED_ITEM only DECLARES the bytes --
@@ -8193,10 +8233,19 @@ def main():
                          "the client reads the identity from; this splits them.")
     ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
                     metavar="N",
-                    help="HeroActivate's inventoryId (field 3), 0 so far. "
-                         "ItCliApi:1194 asserts inventoryTable.Get(inventoryId), "
-                         "so a non-zero id naming no inventory should trip that "
-                         "assert and NAME the field by experiment.")
+                    help="HeroActivate's inventoryId (field 3). Statically "
+                         "traced 2026-08-18: stored at activation-record +8, "
+                         "read back by the party window's equip walk, looked "
+                         "up in inventoryTable -- ItCliApi:488 asserts when "
+                         "it names no inventory, and 0 names none. Pair a "
+                         "non-zero key with --hero-bags, which declares it.")
+    ap.add_argument("--hero-bags", action="store_true",
+                    help="Declare --hero-inventory's key to the item client: "
+                         "0x0144 [key, 0] plus the equipped-items bag 0x013F, "
+                         "sent in the REQUEST_ITEMS burst beside the player's "
+                         "own. Refused for keys 0 and 1 -- 0 declares nothing "
+                         "and 1 is the player's key, which 0x0144's handler "
+                         "asserts against re-declaring (ItCliApi:2010).")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8456,6 +8505,14 @@ def main():
         HERO_ACTIVATE = a.hero_activate
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
+        global HERO_BAGS
+        HERO_BAGS = a.hero_bags
+        if HERO_BAGS and HERO_INVENTORY in (0, 1):
+            raise SystemExit(
+                f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "
+                f"declares nothing and 1 is the player's key -- 0x0144's "
+                f"handler asserts !inventory (ItCliApi:2010) on a key already "
+                f"in the table. Pick a fresh key, e.g. --hero-inventory 2.")
         global HERO_ROSTER_ID
         HERO_ROSTER_ID = a.hero_roster_id
         global HERO_ACTIVATE_ID
