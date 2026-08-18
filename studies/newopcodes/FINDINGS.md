@@ -653,6 +653,31 @@ NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEN
 
 ## `0x003A` — `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES` — semantics **CORROBORATED**, name **UPSTREAM single-lineage**
 
+> **REFINED 2026-08-17, after the refused channel was recovered.** The pass ran with one
+> game channel excluded — `58389`, 3,173 messages — because `tape.py` refused its
+> timestamp mapping over a 216-byte discrepancy. That was diagnosed and fixed in parallel
+> (`5efeab0`: repacketized retransmit, the channel was fine), so the corpus is now
+> complete. Re-counted over all three captures: **5 sightings, not 4**.
+>
+> The extra sighting does not add payload variance, and understanding WHY upgrades the
+> finding. Every `0x003A` in the corpus carries the identical array `[29, 30, 2, 1, 2, 1]`,
+> at agents **27, 311, 332, 395** — and those are not four characters. They are the SAME
+> character in four instances: each is that connection's `0x0022`
+> `WORLD_UPDATE_CONTROLLED_AGENT` subject. **`0x003A` names the controlled agent 5/5 and
+> never another player** (OBSERVED), even in a town where thirty other players are fully
+> equipped and rostered.
+>
+> So the "zero variance" this section recorded is **not evidence that the array is
+> constant** — it is one character measured five times, which is the same
+> counted-twice defect the corpus-breadth caveat warns about. Two consequences: the
+> attribute layout stays UNVERIFIED for want of a second character rather than for want
+> of sightings, and **attributes are private** — retail tells you your own and nobody
+> else's, which is a fact about the message's audience that four sightings of one body
+> could not show. Under the column-major triple layout
+> (`studies/profession/ATTRIBUTES.md`; the handler divides the wire count by three), six
+> elements are two triples: ids `29, 30` with ranks `2, 1`. That reading is
+> RECONSTRUCTION and one different character settles it.
+
 **5 sightings** (4 in the two named captures, +1 in `183323`), every one carrying the
 byte-identical array `[29, 30, 2, 1, 2, 1]`. Proposed CORROBORATED across the board; **the
 skeptic split the label and struck one behavioural claim, and both changes stand.**
@@ -1072,6 +1097,43 @@ also NOT FOUND; its shape equals the first nine fields of `0x015F CREATE_UNNAMED
 ---
 
 ## `0x0071` — NOT FOUND, and one field reading is refuted by the third capture
+
+> **RESOLVED 2026-08-17, after the refused channel was recovered — mechanism OBSERVED,
+> name RECONSTRUCTION.** With all channels loading, `0x0071` has 24 sightings and its
+> arguments are **1, 2, 3, 4, 5, 6** — sequential and small, never the sparse ids real
+> agents carry (27, 356, 395). It is a SLOT INDEX, not an agent id, whatever the
+> descriptor types it (the same trap `0x0199` field 1 set: see
+> [../heroes/FINDINGS.md](../heroes/FINDINGS.md) §22's correction).
+>
+> **It terminates a repeating declaration block**, preceded 24/24 by the identical
+> triple. Six consecutive blocks from `20260817T183323`:
+>
+> | `0x009B` | `0x009F` prop 36 | `0x00A6` | `0x0071` |
+> |---|---|---|---|
+> | name, 4-word EncString | level **3** | profession **3**, sec 0 | COMMIT slot **1** |
+> | name, 4 words | level 3 | profession **1** | COMMIT slot **2** |
+> | name, 4 words | level 3 | profession **6** | COMMIT slot **3** |
+> | name, 4 words | level 3 | profession **2** | COMMIT slot **4** |
+> | name, 4 words | level 3 | profession **8** | COMMIT slot **5** |
+> | name, 4 words | level 3 | profession **7** | COMMIT slot **6** |
+>
+> Six slots, six DISTINCT professions, one uniform level, each named — and professions 7
+> and 8 are the two Factions professions. That is the **hireable-henchman roster of a
+> starter outpost**, declared entity by entity, with `0x0071` committing each slot. The
+> reading is structural rather than a guess about content: nothing else in an outpost
+> comes in six professionally-distinct level-matched named entries.
+>
+> **Why this matters beyond a name.** `0x009B [agent_id, string16]` is NOT one of these
+> 22 — it was in the canonical corpus the whole time, and its role in this block had
+> simply never been read. And this is a DIFFERENT mechanism from the one
+> `studies/heroes/FINDINGS.md` reconstructs: that arc implements henchmen with `0x01BF`,
+> which adds a row to YOUR party. This block declares the list you can hire FROM, before
+> anything is hired. The heroes arc mentions neither `0x009B` nor `0x0071` anywhere.
+>
+> Proposed `HENCHMAN_SLOT_COMMIT` — **RECONSTRUCTION**, since neither lineage names
+> `0x0071` at all and no capture shows the block's effect on screen. What is OBSERVED is
+> the block, its ordering, and that the argument is a slot index. One outpost with a
+> different henchman count tests it: the block should repeat that many times.
 
 **24 sightings across 3 channels** (18 in the two named captures, 6 more in `183323`).
 No refutation pass; the correction below is this pass's own.

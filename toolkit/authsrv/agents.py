@@ -89,9 +89,37 @@ APPEARANCE_WARRIOR = 1 << 20
 ALLEGIANCE_PLAYER = 0x706C6179        # 'play'  -- same team as the player
 ALLEGIANCE_NONCOMBATANT = 0x6E6F6E63  # 'nonc'  -- the client's own constant
 ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
-                                      # enemy; these particular bytes are not
-                                      # special and nothing in the client knows
-                                      # them.
+                                      # enemy. See the correction below: these
+                                      # bytes turned out NOT to be arbitrary.
+
+# THE TOKEN VOCABULARY, MEASURED 2026-08-17 over the whole live corpus (1,207
+# creates, 6 captures). The comment above used to end "these particular bytes
+# are not special and nothing in the client knows them", and half of that is
+# now refuted by ArenaNet's own wire:
+#
+#   play 470   every kind-5 player, and 51 allied kind-9 NPCs
+#   nonc 401   noncombatants
+#   mon1 233   the hostile token retail actually uses in these areas
+#   0000 216   every kind-0 item and kind-1 gadget, exceptionless
+#   anim  41   animals
+#   band  37   bandits
+#   mons  19   REAL, and ours by luck: retail sends exactly these bytes for the
+#              Shing Jea training monsters (definitions 3965/3975)
+#   0x616E698F 6   'ani' + 0x8F -- consistent across 6 creates of definition
+#              3973, so a real value rather than corruption
+#
+# WHAT SURVIVES of the old claim: the BINARY scan. 'mons' is still not a dword
+# constant in Gw.exe, and the client still renders any unrecognised token
+# hostile -- that was measured and stands. WHAT IS REFUTED is the implication
+# that we invented an arbitrary value: it is retail's own token for a real
+# family of monsters. The choice was lucky, not informed, and the corpus is
+# what turned one into the other.
+#
+# NOT EXPLAINED, and worth a look before anyone leans on the set: 'mon1'/'mons'
+# and 'anim'/0x616E698F each differ ONLY in the last byte, which hints at a
+# 3-character class plus a team/variant byte. 'play', 'nonc' and 'band' are
+# ordinary four-letter words, so that reading is RECONSTRUCTION and one more
+# area would test it.
 
 # Agent property ids (float channel, GAME_SMSG 0x00A3 -- prop_id, target, cause,
 # value). Which ones the client acts on is SOURCED from its own jump tables;
