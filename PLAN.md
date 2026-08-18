@@ -1416,7 +1416,15 @@ renders**, verified by pixel count, by direct visual inspection, and by connecte
 structure inside the masked region — with the scope stated in the study, namely that a bare
 drain with **no UI window open** bounds the *subscriber*, not the opcode. The wire side was
 re-decoded independently with our own codec (`0x0084 = [[40,41,42]]`,
-`0x00D8 = [[1,1,1]]`, exact-byte consumption). **A defect in the screenshot scorer came out
+`0x00D8 = [[1,1,1]]`, exact-byte consumption). **The window arm then ran too** (`20260818T184210`, same probe, byte-identical
+sends, only `--actions` differing — a single-variable comparison): with **Inventory and
+Skills both open and verified from the frames**, three drains changed the skill list by
+**0 px**, its category headers by **0 px**, and the bag row by **0 px** — the list is
+pixel-identical, `(30 Skills)`/`(19 Skills)` included. **The window-gated hypothesis, which
+was the leading explanation, is refuted for both panels a player can open with a keypress**,
+and upstream's `SKILL_ADD_TO_WINDOWS_END` does not mean the skills panel. What survives is
+the `0x00C5` flow's own merchant/collector context, which needs an NPC and is a different
+experiment. **A defect in the screenshot scorer came out
 of that audit and outlives it:** the player-body mask used to suppress idle animation sits
 exactly where GW draws centred banners and toasts — it swallows **53%** of the `0x00B9`
 callout's changed pixels — and its `delta > 28` rule is a step function (a 28-shift scores

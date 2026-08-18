@@ -723,6 +723,37 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > in the probe before the run, and unchanged by it. The next experiment opens a window
 > first; it is not another bare drain.
 >
+> ### THE WINDOW ARM RAN — 2026-08-18, and the window-gated hypothesis FAILS for both panels. OBSERVED
+>
+> Run **`20260818T184210`**: the **same probe**, byte-identical sends, with **only the
+> window state changed** (`--actions "0:play 7:key:I 2:key:K"`). A single-variable
+> comparison against the no-window run above, which is what makes it worth a launch.
+>
+> **Precondition verified from the frames before anything was scored** — a null from a
+> window that never opened would repeat the exact mistake this arm exists to fix. Both
+> panels are open and legible in every drain frame: **`Inventory (Test Warrior) [I]`**
+> (equipment slots, bag row, Weapon Sets, 0 gold) and **`Skills and Attributes (Test
+> Warrior) [K]`** (Profession: Warrior; Strength 12 / Axe Mastery 9 / Hammer Mastery 6 /
+> Swordsmanship 3 / Tactics 1; and the scrolling skill list showing `Air Magic (30 Skills)`
+> and `Axe Mastery (19 Skills)`).
+>
+> **Result: nothing lands in either panel.** Measured on sub-regions chosen to exclude the
+> inventory's animated paper doll, across all three drains (pre-drain-1 → post-drain-3):
+> **skill list 0 changed pixels, skill category headers 0, inventory bag row 0.** The skill
+> list is *pixel-identical* — the `(30 Skills)` / `(19 Skills)` counts included, so not one
+> row was appended. The only churn is the inventory's left slot column (1,103 px across the
+> drains against **904 px in a no-drain control pair**), which is the doll's animated weapon
+> overlapping that column, not a signal.
+>
+> **So the subscriber is neither the Inventory nor the Skills panel**, and upstream's
+> `SKILL_ADD_TO_WINDOWS_END` does not mean "appends to the skills panel a player can open".
+> That is a real narrowing rather than another empty result: the window-gated explanation
+> was the leading one and it is now refuted for the two panels a player can raise with a
+> keypress. **What survives:** the `0x00C5` flow's own context — a merchant/collector/trade
+> window, which needs an NPC to open and is therefore a different experiment, not another
+> keypress. Also still unobserved by any of these runs: sounds, cursor changes, and any
+> panel that requires an NPC or a map transition.
+>
 > **The wire side was independently verified** rather than assumed: decoding the captured
 > plaintext with this repo's own `toolkit/schema/codec.py` gives `0x0084 = [[40, 41, 42]]`
 > and `0x00D8 = [[1, 1, 1]]`, each consuming its buffer to the exact byte with a correct
