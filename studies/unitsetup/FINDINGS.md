@@ -188,6 +188,39 @@ Retail: `0x00F0` before **every** kind-5 and kind-9 create, exceptionless, major
 > tail (kind 5's combat values, kind 9's `0x1000` ambient flag) remains future work,
 > recorded at D2's closure note. The table row in §2a describes the pre-fix server.
 
+
+### 6e. What the client DOES with the initial-status word — SOURCED, 2026-08-17
+
+Added after the unconditional send landed, because "what payload should we send" deserved
+an answer from the binary rather than only from the corpus. The chain, read on the pinned
+build 38797:
+
+| step | address | what it does |
+|---|---|---|
+| handler | `0x0091F810` | a thin trampoline: pushes `msg+8` (the status dword) and `msg+4` (the agent), calls the worker. `0x00F1`'s stub sits directly below it at `0x0091F830` → `0x00814CC0`, which is the two forms sharing one shape. |
+| worker | `0x00814C30` | bounds-asserts the agent against the record count (the familiar `Array.h(587)` primitive, pushed as `0x24B`), computes the per-agent record at `[ctx+0x7C] + agent*0x34`, then calls the consumer with the word |
+| consumer | `0x008183F0` | **`mov [record+0x30], eax`** — stores the ENTIRE word verbatim — then **`test al, 0x10`**, and that is the only bit it branches on |
+
+**`test al` reads the LOW BYTE ONLY.** Bits 8–31 are stored and never examined on this
+path — so `0x1000` (the hostile-NPC bit, 198/202) and the kind-5 high-word values
+(6, 7, 8, 12 in bits 16–19) are **retained per agent and consumed lazily by some later
+reader**, not acted on at create time. That is exactly what the wire showed from the other
+side: the payload is per-agent and identical across every re-create of a visibility churn,
+and no other message in the stream distinguishes a non-zero agent from a zero one
+(§8 Q2's follow-up).
+
+**The practical consequence, and it retires the risk in the D2 fix.** Sending payload `0`
+for every agent cannot misbehave at create time: the only bit the create path branches on
+is death, and `0` clears it. The non-zero payloads are a fidelity gap, not a correctness
+one — we are not failing to trigger anything the client does when the body appears.
+
+**What would finish it:** find the reader of `record+0x30`. `codescan --field 0x30`
+returns a single row, which is the "answer looks too small" case that module's own
+docstring warns about — a subsystem holding a biased `this` spells the same field with a
+different displacement, and the fix it prescribes is to re-run at disp−4 and disp+4 and to
+scope by module. Until that read is done, every bit above 4 is **UNVERIFIED in meaning**,
+and this document says so rather than naming them from their correlations.
+
 ---
 
 ## 7. Contested readings, resolved
