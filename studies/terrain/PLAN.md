@@ -1,5 +1,13 @@
 # The terrain texturing arc — scope
 
+> **THE ARC CLOSED 2026-08-18. This file is the ORIGINAL SCOPE and is kept for
+> the reasoning, not the status.** A cold session should read
+> [HANDOFF.md](HANDOFF.md) first (the traps), then [FINDINGS.md](FINDINGS.md)
+> §7.6–§12. All six rungs landed, the mechanism is locked to client captures,
+> the ground does not repeat beyond the art's own floor, the prop fall-through
+> is closed, and the field of view is measured at 75.000° horizontal. §4's
+> "fold in while here" note below is superseded — see FINDINGS §9.
+
 **PROPOSAL, 2026-08-14.** A proposal until the owner adopts it, like every scope
 in this repo. Written the day the props round trip landed, because that arc ends
 with a fully textured prop layer standing on **bare grey ground**.
