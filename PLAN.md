@@ -1543,11 +1543,16 @@ CLEARED — and named floor three** (study §28): the doll's fallback feeds
 `0x0074`'s two u32s at `+0x14`/`+0x18` (sent as zeros since the message existed) to the
 **CpsMonster composite factory** as (model file id, optional skeleton file id), and the
 File.cpp codec asserts `fileId` on the zero — `File.cpp(367)`, capture `20260818T142252`.
-`--hero-appearance D1[,D2]` (new) fills the pair; the staged first click sends the
-burrower's self-contained unit file `116366` (measured content row). Prediction: the
-commander panel opens with a worm in the paperdoll — or the next assert names the FFNA
-gate. Three clicks, three floors, one afternoon; every fix so far was a message already
-in the tree carrying a field we sent as zero.
+`--hero-appearance D1[,D2]` (new) fills the pair, and **the fourth click OPENED THE
+PANEL** (study §28.3): title, health bar, AI-mode buttons, the hero's skill bar, and the
+burrower drawn in the paperdoll — janky, no assert. **The commander panel is
+wire-authorable end to end**: four floors in one day (`0x0072` → inventory key → char
+table `0x009A` → appearance pair), every fix a message already in the tree carrying a
+field we sent as zero or never sent. The full rig:
+`--hero 1 --party-mine-late 2.0 --hero-activate --hero-inventory 2 --hero-bags
+--hero-char --hero-appearance 116366`. Cosmetic residue filed in §28.3, not floors: the
+Lvl 255 sentinel (prop 36 for agent 200, or a body) and the humanoid-doll arm
+(`--hero-appearance 116703,116228`).
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

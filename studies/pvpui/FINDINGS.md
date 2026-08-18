@@ -1775,3 +1775,30 @@ mercenary from a saved appearance snapshot rather than live composite state.
 Prediction for the first click: `File.cpp:367` clears; the panel opens with a worm in the
 paperdoll, or the next assert names the FFNA gate. Either way the field is named by
 experiment: **`0x0074 +0x14` is the hero's appearance model file id.**
+
+### 28.3 IT OPENED. Owner's click, 2026-08-18 — the commander panel is wire-authorable end to end
+
+`--hero-appearance 116366` and the panel **opened and stayed**: title "Hero 1: Lvl 255
+Norgu", health bar, the AI-mode buttons, the hero's eight-skill bar (the `0x00DA` ids,
+rendered), and the paperdoll drawing the burrower — janky, but drawn, which is what the
+arm predicted a worm in a humanoid pane would be. No assert. Owner's screenshot is the
+verdict; the appearance-quality judgment stays with the owner per the standing rule.
+
+**That closes the whole ladder this study opened in §24** — four floors, each a field or
+message already in the tree that had only ever been sent as zero or never sent at all:
+
+| floor | assert | fix |
+|---|---|---|
+| `GmView:5898` heroData->agentId | `0x0072` was never sent | `--hero-activate` (§25) |
+| `ItCliApi:488` inventory | inventoryTable had no hero key | `--hero-inventory 2 --hero-bags` (§26) |
+| `Array:587` char table | nothing grew `+0x7CC` past 200 | `--hero-char`, opcode `0x009A` (§27) |
+| `File.cpp:367` fileId | `0x0074 +0x14/+0x18` sent as zeros | `--hero-appearance 116366` (§28) |
+
+Cosmetic residue, deliberately not floors: the **Lvl 255** in the title is the known
+no-agent sentinel (heroes §10.1 — the label reads the AGENT's level and agent 200 has no
+body and no property-36 entry; unit-setup measured prop 36 as a per-agent store readable
+without a create, so `0x009F [36, 200, N]` is the cheap arm, `--hero-body` the heavier
+one). The **janky doll** is a burrower posed in a humanoid paperdoll; §28.2's follow-up
+pair `116703,116228` (hatcher body + skeleton shell) is the staged humanoid arm, and a
+real answer to "what file does retail bake for a mercenary" would need a live capture of
+an account that owns one — no tape in the vault carries a single `0x0074`.
