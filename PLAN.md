@@ -1090,7 +1090,14 @@ keep honest.
 | `toolkit/mapdata/terrain.py` — the **terrain chunk** layout | GuildWarsMapBrowser: `FFNA_ImHexPatterns`, `FFNA_MapFile.h`, and `SourceFiles/Terrain.cpp` | same custom licence as the two rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-10, *before* the module exists. The `pathmap.py` row covers the **pathing** pattern only and does not reach terrain. **What we take is the hypothesis, not the layout**: every load-bearing field is re-derived from the client's own 11-entry step table at `0xA74F28` and confirmed corpus-wide — see [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §4 and §17.4. Recorded because upstream is a **witness we had to correct**, which is the strongest argument for keeping the row honest rather than dropping it: its pattern reads the tags positionally so its "tag5"/"tag6 Shadow Map" are the file's tags 3 and 9 and **tag 6 exists in none of the 349 maps**; its `cellSize` is not a cell size but `max(3, v/3072.0)`, a distance in whole terrain chunks; and its pattern and its own renderer **disagree with each other** on storage order — the renderer is right and only the pattern had been read. |
 | `toolkit/mapdata/mapchunks.py` — the **Dependencies record** `{u16 id0, u16 id1, u16 pad}` and the pair→file-id formula | GuildWarsMapBrowser: `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat` (`MapFileRef` / `MapFileRefPadded`, and the comment `decode: (id0 - 0xff00ff) + (id1 * 0xff00)`), the same expression in `SourceFiles/animation_state.cpp` | same custom licence as the three rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-11 by the verifier, *after* the module landed without one — the `gwdat.py` shape again, and the reason this table exists. The `pathmap.py` row covers the **pathing** chunk of that pattern and does not reach the dependency lists, exactly as the `terrain.py` row argues for terrain. **Everything else in the module is not upstream's**: the id decomposition, the 23-slot `s_chunkInfo` name table and the `alloc` byte split are read from the client's own strings and asserts (SOURCE-CODE, [FINDINGS](studies/customarea/FINDINGS.md) §3/§17.4), and the signature `0x29939830` and the `(size − 5) % 6` law are measured from the archive — GWMB has neither. **And upstream is a witness we corrected**: nobody upstream wrote the inverse, so nobody found that the pair encoding *aliases* (`id0 ≥ 0xFF00` names the same file as `(id0 − 0xFF00, id1 + 1)`), which retail's own writer uses in 85 records of 134,290. `THIRD-PARTY-NOTICES.md` names the module. |
 | `toolkit/mapdata/modelfile.py` — the **prop model geometry** layout and the FVF stride tables | GuildWarsMapBrowser (its FVF tables and model reader) — **not taken**; recorded because the arc ran alongside it | same custom licence as the rows above | ✅ row added 2026-08-13 with rung M2, and it is the row where **upstream turned out to be RIGHT and we were wrong**. Nothing is taken: the three stride tables are read out of the client's own `.data` (VA `0x00BF5B80`/`BC0`/`BE0`, accessor `0x00688010`) by this repo's own PE walk, and `test_modelfile.py` §5 re-reads them from the vaulted image so the module's literals are pinned to ArenaNet's bytes. GWMB's tables **are** those client tables. The point worth recording: [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §B6 logged our corpus-fitted byte-cost rule "disagreeing with GWMB's table once (`dat_fvf 0x2C`)" as an open question and every prior row in this register describes upstream as a witness *we* corrected — here the client corrected **us**, `0x2C` never existed, and the cross-file oracle went 0/16 → 16/16 on the affected model. See [studies/models/FINDINGS.md](studies/models/FINDINGS.md) §2. |
+| `toolkit/clientscan/textrec.py` — the **string-id split** `file = id // 1024, rec = id % 1024` | Fournux/Tyria-Extractor (`doc/SKILL_EXTRACTION.md`, mirrored at `vault/mirrors/Fournux__Tyria-Extractor`) | **MIT** — permissive, attribution required | ✅ row added 2026-08-17, credited in `THIRD-PARTY-NOTICES.md`. **This is the one rule in the repo taken from an upstream and NOT re-derived** — the module's own docstring says so in those words. What makes it defensible is not a second reading but an ORACLE: `textrec.py --dat … 1 2 7 …` resolves ids to words, and the words are right. That is a check the artifact can refute, and it is stronger than agreement with the source it came from. Re-deriving the split from the client's own indexing code would retire the dependency; nobody has. |
+| `toolkit/clientscan/skilltable.py` — the **skill record layout** (0xA4 stride and its field offsets) | Fournux/Tyria-Extractor `doc/SKILL_EXTRACTION.md` | same | ✅ row added 2026-08-17, same notice. **Read and re-derived, not copied** — the module locates the table by a four-way conjunction (stride, count, id monotonicity, profession/equip ranges) that a false positive would have to satisfy all of, and `test_skilltable.py` scores 1,333 base rows against Tyria-Extractor's independent count *and* against the wiki's 1,329 player skills. Two unrelated methods, so the agreement is corroboration rather than one witness twice. |
 | **monster AI: aggro radius, leash, scatter, targeting, formation, patrol** — *no module takes these yet* | GWW (`wiki.guildwars.com`), the pages named in [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §4 with revision ids | GFDL 1.2 / CC BY-NC-SA 2.5 (dual) — **attribution required**, and the NC arm is satisfied by this project being local and personal (`CLAUDE.md`) | ✅ row added 2026-08-11 **before any module takes any of it**, which is the first time this table has been used the way it was designed rather than retrofitted. **The split that matters is values vs. algorithms.** The gwinch table (aggro bubble/earshot 1012, touch 144, casting 1248, longbow 1498, compass 5020 …) is a set of *values* and reaches the repo as `content/*.toml` rows carrying `source = "wiki"`, which `toolkit/content.py` already gates. **Scatter, leash, target priority and the melee-surround formation are *algorithms*** and are what this row exists for — none has landed, and none may land without citing it here. **Currency is the failure mode, not licence**: three of the four core pages carry `Category:Unofficial terms`, *Foe* has not been revised since 2021 and *Patrol* since 2017, the wiki **contradicts itself** on target priority (§4.3), and where a stale page and a fresh one disagree the stale one was wrong both times. So every borrowed row records its revision id, and a value our own artifacts can check is checked rather than adopted. |
+
+**Three further Fournux citations owe NO row, and they are recorded here because an audit that finds 100+ mentions of one upstream should not have to re-decide each.** `toolkit/mapdata/gwdat.py` cites `DECOMPRESSION.md:26` as a SECOND WITNESS for the truncation-length reading we measured ourselves (its own row is GWMB's, and stands). `toolkit/clientpatch/repoint_skill.py` cites Tyria-Extractor as one *side* of a three-way CONTESTED icon-slot reading that we then settled by repointing one field and looking at the bar. `toolkit/mapdata/test_datwrite.py` read its fixture generator and took nothing — its docstring says so and says why ("it reads the entry fields differently than we do"), which is the discipline working rather than an omission. **Citing, verifying against, and disagreeing with an upstream are not derivation.**
+
+**Why this row was four days late, and it is the register's own failure mode.** `studies/reconstruction/FINDINGS.md` §9.3 flagged the missing Fournux row on 2026-08-13; `studies/quests/FINDINGS.md` §7.9 flagged it again on 2026-08-15 and `AUTHORING.md`'s rung Q1b made it a precondition. It still took until 2026-08-17, because **the flag lived in study documents and the obligation lives here** — and `PLAN.md:33`'s prior-art landscape table, which grants nothing and is not this register, reads enough like a row to have been mistaken for one at least once (`studies/quests/AUTHORING.md` §7 records that killed answer). The general lesson is the one §6.1 opens with: the rule was in the plan and nothing was checking. That is now `toolkit/derivlint.py`.
+
 
 **The rule this table encodes:** before a module takes a layout, an algorithm or a table
 from any upstream, add its row *first*. If the upstream grants nothing, the only
@@ -1839,16 +1846,41 @@ sites, 24 lost `0x0050`'s (its call sits at +29 behind three payload stores). An
 `0x0014` made `test_dispatch.py` §7 **go red before** its `DROPPED_ON_PURPOSE` row landed,
 which is the tripwire working rather than a gap.
 
-**Q1b(b) is done too:** `toolkit/content.py` no longer declares a single cited assert to be
+**Q1b is done, both halves:** `toolkit/content.py` no longer declares a single cited assert to be
 refused expression — the trap that would have re-run the 2026-08-12 over-refusal, and the last
 place still carrying the old wording four days after CLAUDE.md fixed it. §7 Q3's REFUSED
 bullet now forward-points to its own refinement; the dated ruling text was left alone.
-**`Q1b(a)` is still open and is a second-gate obligation**: `PLAN.md` §6.1 has no
-Fournux/Tyria-Extractor row (`:33` is the prior-art landscape table and grants nothing), open
-since 2026-08-13.
+**(a) landed 2026-08-17 and was bigger than one row.** §6.1 gained TWO Fournux rows --
+`textrec.py`'s `id // 1024` string-id split, which that module's own docstring says was
+**not** re-derived by us and which is held up by an oracle rather than a second reading,
+and `skilltable.py`'s 0xA4 record layout, which was. Fournux is MIT, so the missing
+`THIRD-PARTY-NOTICES.md` entry was an unmet **licence obligation** rather than an untidy
+table, and it is there now. Three further Fournux citations owe nothing and §6.1 says so,
+so the next audit does not re-decide them.
 
-**Next offline, cheapest first:** the 66/66 coded-string verification is a claim in prose and
-not a check; §6.1's Fournux row; **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+**AND THE CLASS IS CLOSED, NOT JUST THE INSTANCE.** §6.1 opens with `gwdat.py` landing as
+a port of an unlicensed repo the day after the plan forbade it, and ends that paragraph
+*"The rule was in the plan; nothing was checking."* It still wasn't. `content.py` guards
+the row-level half; nothing looked at MODULES, which is how Fournux went 100+ citations
+and two real derivations without a row for four days after two studies flagged it.
+`toolkit/derivlint.py` + `test_derivlint.py` (20 checks, floor 17) check it now. **The
+design decision is measured rather than assumed:** 21 upstreams appear in 223 (module,
+upstream) pairs and `gw-preservation/server` alone is in 106 modules -- *because* it is
+the one we may not copy -- so a per-pair rule is the permanently-red test that gets
+deleted. The check is per-upstream: fourteen, each accounted for by a row, a notice, or a
+`NO_DERIVATION` entry naming its site. Its sharpest check reproduces a real error --
+`PLAN.md:33`'s prior-art LANDSCAPE table was once read as a register row and recorded as
+fact, and a whole-file substring search repeats that and scores the tree clean.
+
+**The 66/66 is now a check** (2026-08-17). `toolkit/clientscan/codedstr.py` +
+`test_codedstr.py`, 18 checks, floor 12: §3.2's re-encode 66 of 66, its per-slot shape
+partition, and the plain-22/encrypted-44 split, plus the rival raw-word reading as a
+CONTROL that could have won. The ENCODE half had never existed anywhere, so that
+headline number was reproducible only by rewriting the script behind it. It also caught
+a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment said
+"archive id 263", the raw word, where the id is 7.
+
+**Next offline, cheapest first:** **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
 senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
 `0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
 build 38797, none re-checked against 38833.
@@ -2556,7 +2588,7 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
-### The terrain texturing arc — T1, T3, T4 and T5 landed; T6 (blending) deferred (2026-08-14)
+### The terrain texturing arc — ALL SIX RUNGS LANDED; the ground still does not match retail (2026-08-15)
 
 **Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
 [`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
@@ -2565,9 +2597,41 @@ object in the scene with no material slot — **186,368 of 326,708 faces (57%)**
 nearly all of the visible area. Every one of the 516 props is textured; the map surface
 is not, because nothing mapped a tile byte to a texture.
 
-Six rungs, T1–T6. **T1 done** (`5bf5a20`), **T3 done** (`44e0f78`), **T4 and T5 done
-2026-08-14** (`a337c5c`); T2 was answered early out of the client rather than run as
-a rung. T6 (blending) is deferred with its reason in the study PLAN §3.
+Six rungs, T1–T6, **all landed**. T1 `5bf5a20`, T3 `44e0f78`, T4+T5 `a337c5c`,
+**T6 `bee684d`+`83fb4cf`+`6608c18` (2026-08-14)**; T2 was answered early out of the
+client rather than run as a rung.
+
+**AND THE ARC IS NOT DONE, because the criterion was never "the rungs land" — it
+was that the ground looks like Guild Wars.** It does not. The owner went to Kamadan
+in the retail client and photographed the same spot: organic grass/dirt boundaries,
+no 96-unit grid. Two of this arc's own claims were STRUCK on that evidence —
+"per-cell variation removes the repetition" (`5c92603`) and "the visible tiling is
+inherent and the client draws exactly that" — both produced by reasoning from our own
+render instead of comparing against the client, which is the failure mode
+`CLAUDE.md` opens with.
+
+**What landed since, and it is real progress on the mechanism.** The per-cell corner
+SELECTOR at `chunk+0x2B4` went NOT FOUND → read → **CLOSED** (`139acc3`): it is a
+corner permutation generated by a **selection-sort comparator network** over the four
+corner types, reproduced **2048 of 2048 cells** against memory dumped from a running
+client. `trnblend.SELECTION` is no longer the `"identity"` pin. Getting there needed a
+32-bit `int3` hook DLL (`toolkit/clientscan/trnhook/`, carve-out 3), and the route to
+it is instructive: hardware breakpoints are DEAD in this client — proven by a control
+that armed an address the process was provably executing and saw nothing — and five
+earlier "the terrain functions are never called" readings were all measuring our own
+broken instrument. Two commits of conclusions were retracted (`931397d`).
+
+**The blocking item is now a format bug of our own making** —
+`studies/terrain/FINDINGS.md` §7.10. `layers.u16` carries no permutation, so the
+exporter picks a coverage quadrant in permuted space and the Blender importer places
+its alpha in physical space; harmless while the selector was pinned to the identity,
+wrong for ~1 cell in 7 now that it is not. The layer MODEL is verified sound
+(7,156 mixed cells, 0 coverage failures); the interchange is what drops the
+information. Two candidate fixes are written up and neither is chosen: an `int3` at
+`0x00761A25` dumps the client's own per-cell layer descriptors and decides it, and
+that instrument works. **Also still open and still unimplemented: the base layer's
+OWN UV rectangle** (`obj+0x68/0x6C` span, `obj+0x70/0x74` origin, §7.2) — the
+mechanism most likely to govern large-scale repetition.
 
 - **T1.** `atex.split_trailer` splits an ATTX row and `decode_rgba` reads one end to
   end. `parse` still REFUSES ATTX and that is the design. Criterion met on the whole
@@ -2611,19 +2675,25 @@ exactly the client's convention.
   binding never indexes, meaning UNVERIFIED. `studies/terrain/FINDINGS.md` §4.
 - **T5** (2026-08-14). The ground has a material: one per distinct texture,
   `material_index` per face from `gw_tile` through the manifest table, T3's UV window
-  (inner 111×111 texels, quadrant 0 pinned — tag 3 is not exported and the PRNG not
-  reproduced). Criterion met at full coverage against the SIDECAR: all 212,992
+  (inner 111×111 texels). ~~quadrant 0 pinned — tag 3 is not exported and the
+  PRNG not reproduced~~ — **all three superseded by T6**: tag 3 IS exported, the
+  PRNG is reproduced bit-exactly (including its magic-number division quirk), and
+  the quadrant is per-cell. Criterion met at full coverage against the SIDECAR: all 212,992
   Pre-Searing face indices sha256-match a recomputation from `tiles.u8` outside
   Blender; `--no-terrain-textures` is the control. A tile with no decodable texture
   gets its OWN magenta slot, never slot 0. Kamadan renders as a place: base tiles read
   as ground; **alpha-overlay tiles draw their unwritten regions opaque and stripe**,
-  which is §3.5's three-layer blend not being reproduced — T6's problem, visible on
-  the scene rather than hidden. FINDINGS §5.
+  which is §3.5's three-layer blend not being reproduced — **T6 fixed this**, and
+  the scene now blends. What it did NOT fix is the match to retail; see the head of
+  this block. FINDINGS §5.
 
-**What a T6 session must not rediscover**: terrain is genuinely **three blended layers
-per cell** with alpha as a mask (only 7 of 192 tiles fully opaque), and the layer
-count is decided by COMPARING `tileTypes` between a cell's four corners (T2) — the
-blending question starts there. **The prop fall-through is still open** — unbound
+**What a follow-on session must not rediscover** (T6 has landed; this stands as the
+model, not as work to do): terrain is genuinely **three blended layers per cell** with
+alpha as a mask (only 7 of 192 tiles fully opaque); the layer count is decided by
+COMPARING `tileTypes` between a cell's four corners (T2); each 128×128 quadrant is an
+AUTHORED coverage shape, confirmed from the art itself on **97 of 101** Kamadan
+textures independently of the client tables; and the corner permutation is a
+selection-sort network, closed at 2048/2048. None of that is open. **The prop fall-through is still open** — unbound
 faces keep `material_index = 0` and silently draw whichever image landed first, 31.6%
 of prop screen area on Kamadan, which is why its rocks render near-black
 (`studies/terrain/PLAN.md` §4); the GROUND now refuses that pattern, the props still

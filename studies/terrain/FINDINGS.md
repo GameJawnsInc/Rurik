@@ -1081,6 +1081,206 @@ them, so every cell was drawn mirrored and each blend ran backwards. Recorded
 because it is the same failure mode as the render this arc has been trusting —
 a picture that looks plausible and is measuring its own bug.
 
+### 7.10 The permutation is LOST AT THE FORMAT BOUNDARY (2026-08-15)
+
+Closing the selector (§7.9) did not make the ground look right, and the owner
+named the symptom precisely from a Blender screenshot: *"tile selection still
+looks random. corners where there should be half-and-half. just mismatched."*
+
+**The layer model is NOT the fault, and that was measured before blaming it.**
+Over 7,156 mixed cells of Kamadan, the UNION of each material group's overlay
+coverage maps to exactly the right PHYSICAL corners -- **0 failures**. (The
+first version of that check compared each overlay against the whole group and
+reported 552 "wrong"; it was the check that was wrong, because `_emit`'s
+two-layer path deliberately splits a group across two quadrants whose union is
+the group. `(25,3,25,25)` emits `{2,3}` and `{0}`, and `{0,2,3}` is right.)
+
+**The defect is in the interchange.** `layers.u16` carries
+
+    bits 0..7 tile   bits 8..9 quadrant   bit 15 rotated
+
+and **no permutation**. Since §7.9 the exporter picks a quadrant whose authored
+alpha covers corners in PERMUTED index space, then hands the consumer only
+`(tile, quadrant, rotated)`; `tools/blender/import_gwmap.py` places that alpha
+by a fixed `LOOP_CORNER` in PHYSICAL space. While `SELECTION` was `"identity"`
+the two spaces coincided and nothing showed. They no longer coincide for
+**about one cell in seven**, and exactly those cells draw their coverage shape
+in the wrong orientation -- a half-edge landing as a corner wedge, which is the
+symptom reported.
+
+**AND THE TEST CANNOT SEE IT.** `test_trnblend`'s "no overlay covers a corner
+that belongs to the base" computes both sides in the same permuted space, so it
+agrees with itself by construction. A check that cannot fail is not a check --
+this file has said so about other people's code twice, and here it is ours.
+
+Two candidate fixes, NEITHER chosen, because choosing by reasoning is what
+produced the last three wrong turns in this arc:
+
+1. **Resolve it in the exporter** -- map the permuted group mask back to a
+   PHYSICAL mask before the `COVER_PRIMARY` lookup, so `(quadrant, rotated)`
+   already lives in the consumer's space. Format and importer unchanged.
+2. **Widen the format** to carry the selector byte and teach the importer to
+   apply it. More invasive, and it pushes client semantics into a consumer
+   deliberately kept dumb.
+
+**What decides between them is a measurement that is already built.** The
+client assembles the packed `(coverage << 16) | tex` array at `[ebp-0x10]`
+immediately before `call 0x757a80` at `0x00761A25`. An `int3` there dumps the
+client's OWN per-cell layer descriptors; diffing those against our `layers.u16`
+for the same tile block settles whether the client's coverage is expressed in
+permuted or physical space, which is precisely what option 1 assumes and has
+not verified. The instrument works (§7.6), and the injection window is the
+first ~6 seconds of the map load.
+
+### 7.11 THE COVERAGE QUADRANT IS NOT A FUNCTION OF THE CORNERS (2026-08-17)
+
+§7.10 named two candidate fixes and said an `int3` at `0x00761A25` would
+decide between them. It ran, and it **refutes the premise both fixes rested
+on**. Neither would have worked.
+
+**THE CAPTURE.** `trnhook/trnlayers.c` patches the `call 0x757a80` at the end
+of `TrnTexBlendHi` and, instead of restoring on the first hit, **emulates the
+5-byte `call rel32`** — push `site+5`, set `Eip` to the callee — so the
+breakpoint stays armed and every cell is captured. 2,716 cells hit, 512 stored,
+injected at t+1.4s, dump at t+6.7s, **client alive afterwards**. Each entry is
+a window of the live frame, which carries the whole answer in one place:
+
+    [ebp-0x10] [ebp-0x0C] [ebp-0x08]   the packed (coverage<<16)|tex descriptors
+    [ebp-0x34] [ebp-0x30] [ebp-0x2C] [ebp-0x28]   the four corner TYPES
+
+Slot 0 is the base and its cover word is the VARIATION quadrant, not a mask —
+confirmed on `(2,4,4,4)`, where slots 1-2 are `q0`+`q1` for the second
+material, exactly what `COVER_PRIMARY[14]`/`COVER_SECOND[14]` predict.
+
+**THE RESULT, and it is a comparison of the client against ITSELF, so it does
+not depend on how we read the bits:** of the 26 corner-type tuples seen more
+than once, **24 produce more than one overlay result.**
+
+    (2,2,2,4) -> 0x8003 x12 | 0x0001 x6 | 0x0003 x4 | 0x8001 x4
+    (2,2,2,3) -> 0x0003 x10 | 0x0001 x4 | 0x8001 x3 | 0x8003 x2
+    (2,2,4,4) -> 0x8000 x5  | 0x0000 x5 | 0x0002 x4
+
+Identical corner configurations, up to four different cover words. **The corner
+types explain at most 50.8% of cells.** And the alternatives are STRUCTURED,
+not noise: `(2,2,2,4)` draws from exactly `{q3, q1, q3R, q1R}`, the four
+single-corner shapes. That is a CANDIDATE SET with a per-cell pick — the same
+shape as §7.7's finding about the selector.
+
+**So `trnblend` cannot reproduce this, structurally.** It is deterministic in
+the corner types and always emits `COVER_PRIMARY[mask]`, one fixed member of
+the candidate set. Measured head-to-head on identical inputs: **65 of 212
+cells, 30.7%.**
+
+**This is what the owner is looking at.** "Tile selection still looks random" —
+part of it *is* random, and we draw one fixed representative everywhere retail
+varies. §7.10's permuted-vs-physical question is not the bug, or not the main
+one.
+
+**WHAT IS NOT ESTABLISHED, and must not be assumed.** What drives the pick. The
+obvious candidate is the PRNG at `chunk+0x2A4` — same generator as the
+variation, same answer-shape as §7.7 — but it is NOT measured, and this arc has
+three retractions from reasoning past the evidence. The next capture should
+record the PRNG state beside each cell and test whether the draw predicts the
+choice; the instrument now captures thousands of cells per run and the client
+survives it, so this is cheap.
+
+**A CAVEAT ON THIS CAPTURE.** 512 cells from one tile block of Lornar's Pass.
+Reconstructing the observed sets through `QUADRANT_COVERS` did NOT line up
+cleanly — single-layer groups accompany physical sets dominated by `{2,3}` and
+`{3}` across every cover word — which suggests the corner indexing in that
+frame may not align with the coverage bit order the way this section assumes.
+**The variability result is independent of that** (client against itself, same
+inputs); the specific candidate-set memberships are softer and should be
+re-derived once the frame's index convention is pinned.
+
+### 7.12 The PRNG is EXONERATED, and the variation rule is confirmed live (2026-08-17)
+
+§7.11 named the PRNG at `chunk+0x2A4` as the obvious suspect for the coverage
+pick and refused to assume it. A second capture (`trnlayers2`, window widened
+to `ebp+0x20`, PRNG chased through `[ebp-0x18]+0xD4`) settles it, and the
+suspect is innocent.
+
+**THE STREAM IS OURS, PROVEN ON LIVE DRAWS.** The pair at `chunk+0x2A4` is not
+two RNG states: the first dword is constant `0x00000002` across all 512 cells
+and is a field; the SECOND is the live stream, distinct on every cell.
+Stepping it with `trnvariation.rng_next` — magic-number division quirk
+included — lands on the next cell's value **511 times out of 511**. So the
+generator advances **exactly once per cell, unconditionally, with no gaps**,
+and our port reproduces the client bit-for-bit over 512 consecutive draws. That
+is the strongest confirmation `trnvariation` has: previously it was checked
+against its own arithmetic and two static constants, never against the client's
+running stream.
+
+**THE DRAW IS SPENT ON THE VARIATION, AND ONLY THAT.**
+
+| hypothesis | result |
+|---|---|
+| `draw & 3` == BASE quadrant | **512 / 512 = 100.0%** |
+| `draw & 3` == overlay quadrant | 75 / 303 = **24.8%** (chance = 25%) |
+
+The first is exact. The second is chance to one decimal place. **One draw per
+cell also makes the coverage hypothesis impossible on its face** — the single
+draw is already consumed by the variation, so there is nothing left for a
+second per-cell choice to consume.
+
+So §7.11's variability is real and its cause is NOT the PRNG. Two corroborating
+details from the same capture: `arg4` (tag 3) is 0 on every cell, i.e. "defer
+to the PRNG", which is exactly the branch `trnvariation` models; and `arg3`,
+the selector, is `0xE4` on the majority with 15 distinct values overall,
+consistent with §7.6's identity share and confirming this frame carries the
+same selector §7.9 closed.
+
+**What is left for §7.11's cause**, now that the cheap answer is gone: the
+overlay quadrant comes from `COVER_PRIMARY`/`COVER_SECOND` indexed by a corner
+MASK, so if identical corner TYPES give different cover words, the mask being
+indexed is not derived from the types alone. The selector permutes which corner
+feeds which position — so the mask is built in permuted space, and cells with
+equal types but different selector bytes would index different rows. **That is
+now testable offline against this capture** (`arg3` and the types are both in
+the frame) and needs no client. It also folds §7.10 back in: if the mask is
+permuted, the consumer needs the permutation, which is exactly what
+`layers.u16` drops.
+
+### 7.13 CLOSED: the cover word is a function of (types, SELECTOR) (2026-08-17)
+
+Run offline against §7.12's capture, no client needed, because `arg3` and the
+corner types sit in the same frame:
+
+| hypothesis | groups | ambiguous | cells explained |
+|---|---|---|---|
+| corner types alone | 43 | 24 | 21/212 = **9.9%** |
+| **types + selector byte** | 87 | **0** | **212/212 = 100.0%** |
+
+**Zero ambiguous groups.** The client's overlay cover words are fully
+determined by the corner types together with the per-cell selector permutation.
+
+**So §7.10, §7.11 and §7.12 are ONE finding, not three.** The mask fed to
+`COVER_PRIMARY`/`COVER_SECOND` is built in PERMUTED space (§7.9's selector
+decides which corner feeds which position), so two cells with identical corner
+TYPES but different selector bytes index different table rows and legitimately
+draw different quadrants. That is exactly §7.11's "not a function of the
+corners" — the missing variable was never randomness, and §7.12 ruled the PRNG
+out at 24.8% against a 25% baseline. `trnblend` matches on 30.7% because it
+emits one fixed representative of a set the client varies.
+
+**And this is why the ground looks wrong.** `layers.u16` carries
+`(tile, quadrant, rotated)` and drops the permutation (§7.10), so a consumer
+cannot reconstruct which row was indexed. While `SELECTION` was pinned to the
+identity the two spaces coincided and nothing showed; since §7.9 they do not.
+
+**What this makes actionable.** The fix is no longer a guess between two
+options: the exporter must emit the cover word for the mask it ACTUALLY built
+in permuted space — which it can, because `corner_selector` is exact
+(2048/2048, §7.9) and the table lookup is already ours. The consumer stays
+dumb and the format stays as it is. **The check that must accompany it** is the
+one this arc kept failing to write: compare our emitted cover words against
+this capture's, per cell, keyed on (types, selector) — 212 mixed cells of
+ground truth that no amount of internal agreement can fake.
+
+**Scope**: 512 cells, one Lornar's Pass tile block, all with `arg4 = 0`
+(tag 3 deferring to the PRNG). A block with authored tag-3 values is not
+covered and should be captured before the rule is called general.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
@@ -1088,14 +1288,24 @@ a picture that looks plausible and is measuring its own bug.
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
   at 255, so a gamma or a scale-and-bias would fit the corpus equally well
   and none is measured. `--no-lightmap` is the control.
-- ~~The SOURCE of the per-cell corner selector.~~ **READ 2026-08-15, §7.6.**
-  `chunk+0x2B4` holds a per-cell **corner permutation**: 16 distinct bytes, all
-  16 permutations of (0,1,2,3), 85.6% identity. `trnblend.SELECTION =
-  "identity"` is right for six cells in seven and wrong for the seventh.
-  **What replaces it as the open item: what GENERATES the permutation.** The
-  array is regenerated per tile block (two reads seconds apart disagree), and
-  the PRNG pair sits 16 bytes before it at `chunk+0x2A4` — observed live as
-  `reseed(8, 18)`. A consumer must derive the permutation, not capture it.
+- ~~The SOURCE of the per-cell corner selector.~~ ~~What GENERATES it.~~
+  **BOTH CLOSED 2026-08-15, §7.6 and §7.9.** `chunk+0x2B4` is a per-cell corner
+  PERMUTATION, and it is a **selection-sort comparator network** over the four
+  corner types — `[01][02][03][12][13][23]`, swap on strict `>` — reproduced
+  **2048 of 2048 cells** over two captures. Landed as
+  `trnblend.corner_selector`; `SELECTION` is no longer `"identity"`.
+- ~~What picks the coverage quadrant.~~ **CLOSED 2026-08-17, §7.13**: it is a
+  function of (corner types, SELECTOR byte) — 212/212 mixed cells, 0 ambiguous
+  groups. The PRNG is exonerated (§7.12, 24.8% vs a 25% baseline) and is spent
+  entirely on the base variation (512/512).
+- **THE TOP ITEM NOW: emit the cover word for the PERMUTED mask (§7.13).** Our
+  exporter builds the mask in permuted space but ships `(tile, quadrant,
+  rotated)` without the permutation, so the consumer cannot reconstruct the row
+  that was indexed. `corner_selector` is exact, so this is implementable now —
+  and it MUST land with a check against the 212 captured cells, which is the
+  ground truth this arc kept substituting internal agreement for.
+- ~~The permutation is lost at the format boundary (§7.10).~~ **Subsumed by
+  §7.13** — same defect, now with the mechanism and a test set.
 - **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
   `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
   the base tiles continuously and there is no 96-unit repeat; if it does not,

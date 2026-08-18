@@ -2450,6 +2450,37 @@ Every one of these, in the order they were written:
   pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
   and agreeing pairs are printed as the measurement they are.
   Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
+  `toolkit/clientscan/test_codedstr.py` (the coded string — markers, and
+  `0x100`-biased base-`0x7F00` varints — and `studies/quests/FINDINGS.md` §3.2's **66 of
+  66** turned from a paragraph into a check, which §7.9 asked for by name. The rule was
+  derived in `studies/textrec/FINDINGS.md` §4 from `TextParser.cpp` and then tested in
+  quests §3.2 against 66 EncString slots on ArenaNet's own wire — a source the textrec arc
+  never had. Every authored quest string this repo sends is built on it and every string
+  id it reads out of a capture is decoded with it, so it is load-bearing both ways and
+  nothing could turn it red; the ENCODE half lived nowhere at all, so the 66/66 was only
+  reproducible by rewriting the script that made it. **§1 runs on a bare machine** and its
+  two headline fixtures — `80660 -> 8102 3E14`, `0x3D64 -> 15460` — were written into a
+  document BEFORE this module existed, so they cannot have been back-fitted. It also pins
+  the digit boundaries (`BASE-1`/`BASE`/`BASE+1`, where a carry misusing `0x8000` or
+  `0x100` shows up), that a sub-`BASE` id is ONE word (an always-two encoder round-trips
+  fine and does not match ArenaNet's bytes), and four refusals — including a MARKER word,
+  which is the client's own distinction: a `0x004C` description beginning `'S'` (`0x53`)
+  killed a real client on `TextApi.cpp:585` asserting that bound. **§3 is the one worth
+  reading.** All 66 slots resolving is weak — a wrong rule also produces numbers. What is
+  strong is that they PARTITION: slot 0 plain 22/22, slots 1 and 2 encrypted 22/22, which
+  is textrec §4's own prediction confirmed on a source it never had; under a wrong reading
+  the plain share would sit near the archive-wide ~28%. Its CONTROL is the rival raw-word
+  reading, which could have won and did not — `0x3D64` is 15460 our way and 15716 the
+  rival's, one plain and one encrypted with a key this repo has not recovered. **A first
+  draft asserted the rival record was ABSENT and went red**: §3.2 says "an encrypted
+  record returning nothing" and the nothing is the decoded TEXT — the assertion was
+  stronger than the evidence, not the document wrong. **No ArenaNet text is asserted
+  anywhere**, deliberately: the structure discriminates and the word is their expression.
+  Verified by sabotage — `BIAS=0` fails 8 checks, `BASE` and `CONT` changes raise. The two
+  captures are NAMED, not globbed, because the vault's capture tree is append-only and a
+  glob would silently move the denominator, which is what put `test_smsgsweep` red at 177
+  opcodes the same week. Floor 12 against a run of 18 — §2 and §3 need the corpus and the
+  owner's archive and declare skips. ~10 s),
   `toolkit/clientscan/test_framebus.py` (the frame-bus pairing that twelve quest
   names rest on — `studies/quests/FINDINGS.md` §9, rung Q1. The client's UI does
   not read the wire: a handler in `ChCliApi` posts a numbered frame and UI
@@ -3254,6 +3285,37 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
+  `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
+  after the plan forbade exactly that, and closes the paragraph "The rule was in the
+  plan; nothing was checking" — `content.py` checks the row-level half, nothing looked
+  at MODULES, and on 2026-08-17 Fournux/Tyria-Extractor turned up cited 100+ times
+  across sixteen studies and five modules, supplying a rule `textrec.py`'s own
+  docstring says was NOT re-derived, with no §6.1 row and no notice — MIT, so the
+  missing notice was an unmet obligation rather than an untidy table. **The check is
+  PER-UPSTREAM and the measurement is why**: 21 upstreams are named across `toolkit/`
+  in 223 (module, upstream) pairs, and `gw-preservation/server` alone appears in 106
+  modules precisely because it is the one we may not copy — so a per-pair rule is the
+  permanently-red test that gets deleted, which §7 of `test_dispatch.py` documents at
+  length. Fourteen upstreams, each accounted for by a §6.1 row, a notice, or a
+  `NO_DERIVATION` row naming its site; both allowlist directions checked, stale and
+  orphan. **Every sabotage runs against a SYNTHETIC repo root**, because a test that
+  only asserts "the tree is clean today" passes equally well once the scanner stops
+  finding anything — §2 plants a module, removes the row, and requires UNACCOUNTED,
+  then shows the row clearing it while MIT still separately owes a notice. **§3 is the
+  sharpest and is not hypothetical**: `PLAN.md:33` is the prior-art LANDSCAPE table,
+  granting nothing, 1,030 lines above the register, and a recon lane read a Fournux
+  mention there as a register row and recorded it as fact (`studies/quests/AUTHORING.md`
+  §7 killed it). A `"Fournux" in open("PLAN.md").read()` check repeats that mistake and
+  would have scored the tree CLEAN on the day the row was missing, so §3 builds that
+  exact file and requires UNACCOUNTED. §4 proves the skip list is load-bearing — with
+  `mirror_priorart.py` in scope the census inflates 14 → 21, since the fetch manifest
+  names every mirror by construction. `audit()` takes `no_derivation` as a PARAMETER so
+  the synthetic roots do not inherit the real allowlist; §2 pins that reading the module
+  constant instead would make all three rows orphans and the orphan check meaningless.
+  Floor 17 against a run of 20 — §5 adds one per allowlist row, and a tree where every
+  upstream had earned a real row would legitimately run 17. No vault, no socket, no
+  client),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
   which server, both directions — slow, ~1 min, it queries the Windows Firewall once
   per client),
