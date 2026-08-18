@@ -1623,6 +1623,81 @@ lightmap's transfer curve — not by a different layout. The "no hypothesis
 left" branch did NOT fire. Scope: the client-truth side still rests on one
 `arg4 = 0` Lornar's block (§7.13's caveat), unchanged by this section.
 
+### 7.21 CLOSED: the arg4 = 0 caveat, and claim 1 confirmed against the client (2026-08-18)
+
+**Every prediction §8 recorded before this run came back exact.** Row 34429,
+tile block (4,3), 1024 of 1024 cells, client alive afterwards with no assert
+dialog.
+
+| | predicted, before the run | measured |
+|---|---|---|
+| authored / deferred cells | 590 / 434 | **590 / 434** |
+| `arg4` histogram | — | `{0:434, 1:189, 2:198, 3:203}` |
+| cells where H1's two readings differ | **331** | **331** |
+
+    H1  base quadrant == draw-CONSUMED model : 1024/1024 = 100.0%
+    H1  base quadrant == draw-SKIPPED  model :  693/1024 =  67.7%
+    H2  an authored cell draws its authored value : 590/590
+    H3  our cover words == the client's           : 735/735
+
+**H1 — `trnvariation` CLAIM 1 IS CONFIRMED, and this is its first test.** The
+claim is that an authored cell *still consumes its place in the PRNG stream*
+and then ignores what it drew; the rival skips the draw and shifts every later
+cell in the tile. Both readings are identical on a block where tag 3 is zero,
+which is every block ever captured before this one — so a claim carried since
+2026-08-14 had never been exposed to a case that could refute it. It survives
+at 1024/1024, and the 331 cells where the two disagree are **exactly** the 331
+predicted: on every one of them the consume model is right and the skip model
+is wrong. 67.7% is what the wrong model scores, which is the useful number —
+it is high enough to look like agreement to anyone not differencing the two.
+
+**H2** settles the other half: an authored cell's base quadrant IS the authored
+value, 590 of 590, and quadrant 0 appears only among the 434 deferred cells,
+which is §3.2's "tag 3 can only pin 1–3" seen from the client side.
+
+**H3 — §7.14 GENERALISES.** The physical-mask cover-word rule reproduces the
+client on **735 of 735** mixed cells of a block where 58% of cells carry
+authored tag 3. The 212/212 was not one block's accident, and tag 3 does not
+interact with the mask at all.
+
+**SO §7.13's SCOPE CAVEAT IS DISCHARGED.** Every client-truth number in
+§7.11–§7.14 rested on one Lornar's block with `arg4 = 0`; the rules now hold on
+a second map, a second block, and the authored branch that block could not
+reach.
+
+**THE INSTRUMENT HAD TO BE AIMED FIRST, and that is the reusable part.**
+`trnlayers.c` stores the first 512 cells that hit the breakpoint, so the block
+it captures is whichever the client builds first — four runs, four different
+un-requested blocks. Standing in the right place cannot aim it either: ranked
+by authored density the top four blocks in the archive have **zero** walkable
+probes, decorative terrain no player reaches. `trnblock.c` filters on
+`chunk+0x2A4`'s first dword, the block's unstepped reseed `(tx << 16) ^ ty`,
+and keeps the patch armed until that block completes. This run saw **33,639
+hits across 32 distinct blocks** — the client builds the whole map at load —
+and kept the 1024 that matched. `layers_row34429_t4_3_tag3.bin`.
+
+**AND IT TOOK TWO RUNS, for a reason worth carrying.** The first came back
+`hits 0`, with a perfectly correct ASLR-resolved breakpoint at `0x00DB1A25`
+(the client relocated to `0x00A50000`). The client started at 16:30:45, the
+map loaded at 16:30:52, and the injection landed at ~16:31:15. **Terrain
+builds ONCE, at map load** — arming the hook after that point sees nothing at
+all, and a human-paced "poll for the pid, then inject" round trip does not fit
+in seven seconds. `autoinject.py` waits at 25 ms and injects in the same
+breath: 1.5 s after the process appeared, on a run started *before* the client
+was launched. A zero-hit capture is also now diagnosable rather than
+ambiguous, because the sidecar records hits, matches and every block id seen —
+"the target never built" and "the hook never fired" are different failures and
+used to look identical.
+
+**Two run-side notes.** The map is reached with a borrowed map-id slot
+(`content/maps.toml [map.27]`, file id `0xB5FF`), and the client draws the
+SLOT's name and world map over our terrain — the owner reported the minimap
+"didn't really fit the map", which is that split showing, not a fault. Opening
+the world map (M) crashed the client on the first run; `Gw.log` stops mid-auth
+chatter with no error line, the same signature as §7.6's first crash. Not
+diagnosed, plausibly the same label/content mismatch, and avoidable: the
+capture needs no input at all.
+
 ## 8. What is still open
 
 - ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
@@ -1632,8 +1707,16 @@ left" branch did NOT fire. Scope: the client-truth side still rests on one
   side-by-side against retail still shows a difference, look at RENDERING —
   fog, mips, the lo path, t3's lerp, the lightmap curve — not at layout.
   Instrument: `studies/terrain/repeatprobe.py`, artifact-gated, reruns offline.
-- **The `arg4 = 0` scope caveat (§7.13/§7.14) has a named capture target, and
-  it is NOT the densest block.** Corpus scanned 2026-08-18: 181 of 349 maps
+- ~~The `arg4 = 0` scope caveat (§7.13/§7.14).~~ **DISCHARGED 2026-08-18,
+  §7.21.** Row 34429 tile (4,3) captured whole: 1024/1024, 590 cells with
+  authored tag 3. `trnvariation` claim 1 confirmed against the client for the
+  first time (1024/1024 consume vs 693/1024 skip, the 331 differing cells
+  exactly as predicted); an authored cell's base quadrant is its authored
+  value 590/590; §7.14's cover-word rule holds 735/735 on the authored block.
+  The target-selection record below is kept because the reasoning is the
+  reusable part.
+- **How that target was chosen, and the error worth not repeating.** Corpus
+  scanned 2026-08-18: 181 of 349 maps
   author tag 3 somewhere. Ranked by authored count alone the winner is row
   46101 tile (1,1), 767/1024 — **and it is unreachable: 0 of 64 walkable
   probes.** So are the next three (132053 t(2,7), 132040 t(2,4), 59717
@@ -1650,8 +1733,9 @@ left" branch did NOT fire. Scope: the client-truth side still rests on one
   550. The map is 256×256 and the client's own table cannot name it (35 rival
   rows); it loads by file id through a test slot, the pattern `[map.143]` and
   `[map.144]` already establish.
-- **THE PREDICTION, stated before the run** (house rule: a probe with no
-  stated expectation can be rationalised into agreeing with anything). Block
+- **THE PREDICTION, stated before the run and CONFIRMED EXACTLY by §7.21**
+  (house rule: a probe with no stated expectation can be rationalised into
+  agreeing with anything — this one could not have been, and was not). Block
   (4,3) holds 590 authored cells AND 434 deferred ones, which makes it the
   first block in the arc that can test **`trnvariation` claim 1 — "the draw
   happens either way"** at all. Every prior capture had `arg4 = 0` on every

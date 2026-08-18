@@ -152,7 +152,13 @@ static DWORD WINAPI worker(LPVOID unused)
     veh = AddVectoredExceptionHandler(1, on_bp);
     poke(g_site, 0xCC, &g_orig);
 
-    while (!g_done && waited < 900000) { Sleep(50); waited += 50; }
+    /* 4 minutes, not the 15 `trnlayers.c` used. That one filled its ring
+     * inside a single chunk and stopped; this one stays armed until the
+     * TARGET block completes, so a target that never builds keeps every
+     * terrain cell in the process running through a vectored handler for the
+     * whole timeout. Bounding it bounds that exposure, and the run is decided
+     * at map load either way -- terrain builds once, when the map arrives. */
+    while (!g_done && waited < 240000) { Sleep(50); waited += 50; }
     poke(g_site, g_orig, NULL);
     Sleep(120);                        /* let in-flight handlers finish */
 
