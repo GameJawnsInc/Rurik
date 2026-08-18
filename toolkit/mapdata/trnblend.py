@@ -61,26 +61,37 @@ So a consumer does NOT need to author blend weights: bind the layer's own
 texture at the named quadrant, let its alpha do the masking, and the seam is
 ArenaNet's.
 
-**THE SELECTOR IS KNOWN WRONG HERE, NOT MERELY UNVERIFIED. READ THIS BEFORE
-TRUSTING A BOUNDARY.** Each corner is fetched as `arr[(sel >> 2k) & 3]` --
-that FORM is measured, `0x0076181B`..`0x0076185E` -- where `sel` is a per-cell
-byte. This module pins `sel` to the identity (`0xE4`), and on 2026-08-14 the
-call site settled that it is not: arg3 is read through a pointer the caller
-INCREMENTS once per cell (`inc dword ptr [ebp-0x38]`, `0x0075E10A`), so `sel`
-walks a per-cell array and varies. Where that array is filled is still NOT
-FOUND.
+**THE SELECTOR, AND THE TWO SPACES IT LIVES IN.** Each corner is fetched as
+`arr[(sel >> 2k) & 3]` (`0x0076181B`..`0x0076185E`), where `sel` is a per-cell
+byte from `chunk+0x2B4`. It is DERIVED, not pinned: `corner_selector` is a
+selection-sort comparator network over the four corner TYPES, reproducing the
+client's own array on **2048 of 2048 cells** across two memory captures.
 
-The cost of the pin is not a subtlety, and it is the defect the owner spotted
-by isolating the overlay object: four cursors with a 2-bit pick per corner is
-an ORIENTATION mechanism -- the same authored coverage shapes reused
-permuted -- so pinning it makes every cell along a straight material boundary
-choose the same quadrant, and the boundary undulates with a period of exactly
-one cell. Retail does not. Correcting the SET of layers (which is right) does
-not correct their orientation.
+What the selector does is SORT the types so equal ones sit adjacent, which
+makes the grouping loop below a single pass. **It does NOT move the mask.**
+The mask handed to `COVER_PRIMARY`/`COVER_SECOND` names PHYSICAL corners, so a
+group occupying sorted positions k..j contributes `1 << perm[k]`, not
+`1 << k`. Measured against the client's own descriptors: physical **212/212**,
+sorted-position 66/212. That is why `cell_layers` takes `perm`, and why
+passing permuted corners without it is silently wrong rather than loudly so.
 
-`SELECTION` is the switch, `studies/terrain/FINDINGS.md` §7.3 is the evidence,
-and `test_trnblend.py` keeps the consequence visible rather than hiding it in
-prose.
+**THE BASE IS THE CORNER THAT SORTS FIRST**, not the cell's own tile --
+measured 102/102 on the cells where those two disagree. The overlays mask the
+COMPLEMENT of that base, so a consumer binding a different base underneath
+shows every mixed cell a material its overlays were never computed against.
+`import_gwmap.py` did exactly that and it read as randomly scattered tiles.
+
+**THIS RULE LIVES IN THREE PLACES AND HAS DRIFTED IN ALL OF THEM.**
+`map_layers` here, `mapexport.build_blend_layers`, and the Blender importer's
+base binding each carried their own copy; the physical-mask fix landed in the
+first and changed nothing downstream until the other two were corrected
+separately. `test_mapexport` now asserts the first two agree cell for cell.
+If you add a fourth, wire it to that check.
+
+`studies/terrain/FINDINGS.md` §7.6-§7.18 is the evidence, and
+`test_trnblend.py` §5 holds the whole thing against 212 captured cells of the
+client's own output -- an exact match is required, because the wrong model
+scored 31.1% and three rounds of internal agreement never told them apart.
 """
 
 import sys

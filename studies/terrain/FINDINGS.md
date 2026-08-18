@@ -1482,6 +1482,38 @@ running client. The test was one added field in an instrument that already
 existed and one run. Three days of "likeliest cause" against ten minutes of
 measurement.
 
+### 7.19 The whole corpus, offline: 361 maps, and only the 8 shapes exist (2026-08-17)
+
+Everything in §7.6-§7.18 rests on **two tile blocks of one map**. The
+derivation itself needs no client, so it can be run over the archive's entire
+map population, and was:
+
+| | |
+|---|---|
+| maps processed | **361 of 361** (`flags == 259`, build 38833) |
+| cells sampled | **108,807** |
+| layer counts | 64,070 single / 22,941 two / 21,796 three |
+| distinct coverage masks emitted | **8** |
+| refusals, exceptions, out-of-range quadrants | **NONE** |
+
+**The 8 masks are the interesting number.** They are
+`{1, 2, 3, 4, 5, 8, 10, 12}` — exactly `QUADRANT_COVERS` and its rotations:
+`q0=12, q1=2, q2=5, q3=8`, rotated `3, 4, 10, 1`. Over 108,807 cells of every
+map in the archive the grouping **never once asks for a coverage shape the
+authored quadrant set cannot draw**, and never emits a ninth. A wrong mask
+rule would have to land outside that closed set eventually; across the corpus
+it does not.
+
+This does NOT extend §7.14's 212/212 client agreement beyond its one block —
+nothing here is compared against the client, and a rule can be internally
+closed and still wrong, which is the trap this arc fell into three times. What
+it does rule out is the cheaper failure: a grouping that produces impossible
+masks, overflows three layers, or throws on some map nobody exported. It does
+none of those anywhere.
+
+**Cost: one command, no client, no vault captures.** Worth re-running after any
+edit to `cell_layers` or `corner_selector`.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
