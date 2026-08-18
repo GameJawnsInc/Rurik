@@ -123,9 +123,10 @@ Three deliberate limits, stated so a render is read for what it is:
     (`gw_untextured_<fid>`), never slot 0 -- the prop fall-through defect
     is exactly what this refuses to repeat. Props now do the same
     (`gw_unbound_material`). That defect was recorded at 31.6% of Kamadan's
-    prop area; decoding the material table cut it to **0.11%** (one sub-model,
-    the AMAT `binary` path) and to zero on Lornar's Pass --
-    `studies/terrain/FINDINGS.md` §9.
+    prop area; measured, **one** sub-model is genuinely left at the default
+    (0.11%, the AMAT `binary` path) and none at all on Lornar's Pass -- the
+    rest of that 31.6% binds to slot 0 explicitly, which is the slot the
+    default gives anyway. `studies/terrain/FINDINGS.md` §9.
 
 PROPS (format_version 2, 2026-08-13). When the export carries a props sidecar,
 every placement becomes a PROXY object in a `<name>.props` collection --
@@ -1349,6 +1350,9 @@ def gwmodel_mesh(meta, positions, idx, mesh_name, uvs=(),
     # incident, and the defect the terrain path above already refuses to repeat.
     # MEASURED 2026-08-18: one sub-model of Kamadan (model 0x3C5AC, the AMAT
     # `binary` path), 0.11% of prop area, and none at all on Lornar's Pass.
+    # The 12 `none`-kind sub-models are NOT here -- they resolve a slot above
+    # and merely happen to resolve slot 0, which is why this fix moves so few
+    # pixels and why the recorded 31.6% overstated it (FINDINGS §9).
     if materials:
         slot_of = {}
         for image_name, mat in materials.items():

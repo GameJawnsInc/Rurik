@@ -1698,32 +1698,50 @@ chatter with no error line, the same signature as §7.6's first crash. Not
 diagnosed, plausibly the same label/content mismatch, and avoidable: the
 capture needs no input at all.
 
-## 9. The prop fall-through: 31.6% was stale by 287x, and the fix is in (2026-08-18)
+## 9. The prop fall-through: overstated, not stale, and the fix is in (2026-08-18)
 
 `PLAN.md` §4 and the importer's own docstring recorded this defect as **31.6%
 of Kamadan's prop area**, 13 of 207 sub-models, "and for the five rock models
 slot 0 is a near-black texture -- which is why they render dark rather than
-untextured." Measured today against the current exports, **every number in that
-sentence is wrong**, and two of them are wrong in the direction that matters.
+untextured."
 
-| | recorded 2026-08-14 | MEASURED 2026-08-18 |
+> **THIS SECTION'S FIRST VERSION SAID "31.6% -> 0.11%, stale by 287x", AND
+> THAT WAS WRONG** -- caught the same day by dating the code rather than
+> trusting the improvement. Both the layered chain and the `none` fallback
+> landed in `da35145` at **10:51 on 2026-08-14**, and the 31.6% claim landed in
+> `39db117` at **13:01 the same day**. The binding code has not changed since.
+> Nothing collapsed, and comparing the two numbers compares two different
+> metrics. The corrected account is below. It is a smaller claim and it is the
+> true one.
+
+**THE POPULATION NEVER MOVED: 13 sub-models then, 13 now.** Measured on today's
+Kamadan export, sub-models with no layered material number **exactly 13** --
+the 08-14 count, unchanged. What differs is which of them a reader calls
+"falling through":
+
+| metric, same data | sub-models | prop AREA |
 |---|---|---|
-| Kamadan sub-models falling through | 13 of 207 | **1 of 207** |
-| Kamadan prop AREA | **31.6%** | **0.11%** |
-| Lornar's Pass | — | **0.00%**, 0 of 391 |
+| A: no layered material (**the 08-14 population**) | **13** | 55.61% |
+| B: left at Blender's DEFAULT, no explicit choice | **1** | **0.11%** |
 
-Measured twice, independently: once by me and once by an agent that wrote its
-own scripts and never saw mine. Both land on the same single sub-model
-(**model `0x3C5AC`**, the AMAT `binary` path, 7 instances) and the same
-0.11% / 2,665,424 of 2,342,145,300 area-units. **What closed it was decoding
-the material table** -- the layered chain, sub-model -> material -> layers ->
-`texPathIndex` -> FA5 slot, with §7's "first layer sampling a STORED UV set"
-rule. Nothing in the fall-through code path changed; the population it applies
-to collapsed. **A defect recorded once and never re-measured drifted by 287x**,
-and it was cited in three places as a live 31.6%.
+The gap between A and B is the **12 `none`-kind sub-models**, and the reason
+they are not a rendering defect is exact rather than approximate: the importer
+binds them to `slots[material_index]`, `material_index` is **0 on all 12**, and
+`by_image` is built in slot order -- so they land on material slot 0, **the
+same slot Blender's default would have given.** Explicit or defaulted, the
+pixels are identical. The 31.6% was therefore never 31.6% of *wrongly drawn*
+surface; it was the area of sub-models reached by a path nobody trusted.
 
-**AND THE ROCKS ARE NOT THIS DEFECT.** The claim was that dark rocks are the
-symptom. They are not, and the correction has a measurement behind it:
+**Only ONE sub-model is genuinely unbound** -- model `0x3C5AC`, the AMAT
+`binary` path, 7 instances, 0.11% of prop area (2,665,424 of 2,342,145,300
+area-units) -- and Lornar's Pass has **none at all**, 0 of 391. Measured twice
+independently, by me and by an agent that wrote its own scripts and never saw
+mine, landing on the same sub-model and the same figures. **The fix below
+changes what is drawn on that one sub-model and nowhere else.**
+
+**AND THE ROCKS ARE NOT THIS DEFECT** -- this is the part of the original claim
+that is genuinely refuted rather than re-framed, and it is why the 12 above are
+not a defect at all. The correction has a measurement behind it:
 `tex_3C172.png` really is that texture and really is dark (mean rgba
 **[42, 40, 32]**, fully opaque, max channel 107) -- but the 10 models that draw
 it (not five; **156 instances**, not 123) are **single-sub-model models whose

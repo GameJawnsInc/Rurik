@@ -268,11 +268,13 @@ the visible result.
 
 ## 4. Fold in while here: the prop fall-through
 
-> **DONE 2026-08-18, and every number below is STALE -- see
-> [FINDINGS.md](FINDINGS.md) §9.** Decoding the material table collapsed this
-> defect from the 31.6% recorded here to **0.11% of Kamadan's prop area** (one
-> sub-model, the AMAT `binary` path) and to **zero** on Lornar's Pass, measured
-> twice independently. The cheap half landed: an unbindable sub-model now draws
+> **DONE 2026-08-18 -- and the number below is OVERSTATED rather than stale;
+> see [FINDINGS.md](FINDINGS.md) §9.** The population is unchanged (13
+> sub-models with no layered material, then and now), but **12 of the 13 bind
+> to material slot 0 explicitly, which is the same slot the default gives** --
+> so they were never drawn wrongly. Only **one** sub-model is genuinely left at
+> Blender's default: **0.11% of Kamadan's prop area**, and **zero** on
+> Lornar's Pass. The cheap half landed: that sub-model now draws
 > `gw_unbound_material` instead of slot 0, with `test_blenderimport` §5b
 > checking it against the manifests and §5c breaking one on purpose.
 > **Two claims below are REFUTED.** The rocks are not this defect -- all 12
