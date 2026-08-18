@@ -458,3 +458,92 @@ what the screen displays and the `enc_name` id we recorded, which is a check tha
 reading the distances support, but scripted spawns and respawns produce late creates too,
 and map 242 is not the Isle. The plan does not depend on the distinction — walking is the
 cheap insurance under every reading.
+
+## Rung 6, LIVE #1: the run happened, and the capture nearly lost its best connection
+
+The run went off-plan in four ways the operator reported honestly (a quest detour into four
+PvP arenas mid-step-2, a mixed-up leg, four spot checks whose targets went unrecorded, and a
+substituted position on the docks leg). None of them is what nearly cost the session.
+
+**What nearly cost it: two connections did not decrypt, and the bigger one was the whole
+walk.** `livesession` pairs tapped keys to connections with `key_fits`, a TWO-BYTE test —
+direction bit set, opcode within the catalog. Capture `20260817T231139` had fifteen
+connections and fifteen keys; thirteen paired cleanly and the last two formed a perfect 2×2,
+each remaining key passing the two-byte test on each remaining connection. The driver
+refused, correctly — writing under a wrong key produces noise that reads like a capture —
+and the refusal was recorded as `"2 different keys all fit; refusing to choose"` in a
+manifest field nothing was looking at. The lost connection was **port 63805, 122,432 bytes,
+map 280, wire time 882→1484 s — every walking leg and all four spot checks.** Steps 0–2 were
+in earlier connections, so the capture looked plausible: three Isle visits, a roster, no
+error anywhere on screen.
+
+**The fix is a second question, asked only when the first fails to separate:** does the whole
+s2c stream frame to its FINAL byte under this key? ARC4 is wrong for every byte after the
+first message and the framer walks off lengths it reads from the plaintext, so noise cannot
+walk 122 KB and land exactly on the end. **OBSERVED: 100.0% against 0.01%, and 100.0%
+against 0.11%** — not a close call. Re-assembly now reports **15/15 connections decrypted**,
+plan seal AGREE. `livesession._frames_completely` + `test_livesession` §13, commit `46a7ea6`.
+An independent witness agrees and was not used to decide: every connection's key is tapped
+**~8.7 s before** it opens, and the two leftovers pair that way too.
+
+**A caution for anyone reading a capture by hand.** Reassembling a connection by
+concatenating `wire.jsonl` payloads *in file order* rather than TCP **sequence** order
+produces a stream that decrypts, frames 108 messages, and then dissolves into garbage — a
+convincing impersonation of a wrong key or a mid-stream re-key. It cost an hour here. Use
+`wirecapture.load_connections`, which orders by sequence; there were **no TCP holes and no
+retransmits** in this capture.
+
+### What the recovered connection holds
+
+| | creates | NPC creates | definitions | stations |
+|---|---|---|---|---|
+| **63805 (recovered)** | **426** | **332** | **32** | **109** |
+| 52318 | 182 | 135 | 28 | 94 |
+| 62134 | 79 | 59 | 15 | 66 |
+| 52099 | 47 | 36 | 11 | 47 |
+
+Across the four Isle visits: **110 distinct stations, 32 definition slots, and 32 of 32
+carrying `enc_name`** — the 246/246 result above extends to 278/278 with no exception.
+Note creates ≫ stations (426 → 109): a body is **re-created when the player re-enters its
+streaming radius**, so creates count arrivals, not bodies. Station is the unit; any count of
+"how many X are on the Isle" taken from create counts is wrong by a factor of four here.
+
+Also recovered: port 52447, **map 281** — a map id that appears in no other capture we hold.
+
+### The forgotten spot-check targets are recoverable, and were recovered
+
+The operator noted only that the Suit was "Suit of 60 Armor" and the Master was "Master of
+Combat". The wire holds the rest. The client stream frames 100% (17,180 bytes, 898 messages,
+mask `0x8000`), and two independent opcodes name the same agent at the same instant:
+`0x00C1`, a continuous stream that tracks what the cursor is over, and a discrete commit
+(`0x0026` or `0x0039`). Both carry `agent_id` as their first field **per the catalog's own
+field types**, not per our reading of the bytes.
+
+| plan step | t (wire) | commit | agent | definition slot | model | level | prof |
+|---|---|---|---|---|---|---|---|
+| 13 — a range marker | 1418.3 | `0x0026` | 36 | 155 | 170342 | 20 | 4 |
+| 14 — a Suit of Armor | 1430.3 | `0x0026` | 29 | 152 | 170342 | 20 | 4 |
+| 15 — a named Master | 1441.2 | `0x0039` | 28 | 142 | 155687 | 20 | 1 |
+| 16 — a Student | 1459.0 | `0x0039` | 93 | 162 | 158806 | 20 | 4 |
+
+Each falls inside its own step's mark window, and `0x00C1` corroborates each at the same
+timestamp. **CORROBORATED against what the operator remembered**, on the one axis memory can
+check: steps 13 and 14 share model 170342 and differ only in definition slot, which is what
+"the dummies look alike but are different bodies" predicts; step 15 is a different model and
+a different profession, which is what a humanoid Master predicts. **The spot checks do not
+need repeating.** What is still open is only the last mile — resolving each `enc_name` id to
+its string from the owner's archive and comparing it to what the screen showed.
+
+The opcode *meanings* stay **UNVERIFIED**: `schema/messages.json` carries no name for
+`0x0026`, `0x0039` or `0x00C1`. What is OBSERVED is the field type, the timing, and the
+agreement of two opcodes; naming them is a separate job.
+
+### What the detour cost, and what it bought
+
+It cost the plan's cadence and it is why step 2 carries a 612-second gap (wire t 230→842)
+and two F10 repeats. It cost nothing in the Isle data, because the arenas are different map
+ids on different connections and separate cleanly. What it bought is in the same capture:
+**maps 309, 310, 311, 312** — four PvP arenas with bot opponents — and five visits to map
+248 carrying 28–31 *players* each, which is the largest population of real player agents in
+the corpus. Whether that is a usable damage or roster corpus is being assessed separately;
+what is certain is that it is not contamination.
