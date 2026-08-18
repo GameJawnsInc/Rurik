@@ -1073,7 +1073,15 @@ A mis-declared mode would not corrupt a number here — it would corrupt the ros
 silently, in the artifact every later rung indexes into. If the character can be checked
 cheaply before the run, check it.
 
-**Rung 7 — LIVE #2, the damage pass.** Only after rung 6 names the bodies and rung 1 proves
+**Rung 7 — LIVE #2, the damage pass.** **PREP DONE 2026-08-18, RUN BLOCKED on the
+behavioural-cap ruling below** (see FINDINGS "Rung 7 prep"): the consumer exists and is
+proven (`toolkit/authsrv/damagepass.py`, 44 checks — scoping key, H recovery, the D
+fit, the p17 law, `0x5D` extraction, AR/RANK labels from the sealed plan's own marks),
+the bench geometry is recovered from the rung-6 captures, the plan draft with every
+prediction pre-registered sits at `vault/plans/isle_rung7_damage.txt`, and the arena
+detour's 641 p16 + 119 p17 events proved the machinery on retail bytes — including the
+attack-skill confound, measured at 10 of 11 arena p17 groups nonzero-variance. Only
+after rung 6 names the bodies and rung 1 proves
 the reader. One PvP-created weapon (auto-customized +20% — unavoidable on this character,
 rung 2; known max stats, requirement 9, rank held ≥ 9), auto-attack only, `--minutes 45`,
 budgeted in **swings**, aggregated on **(target, cause, swing-kind)** per rung 3's B6.
@@ -1116,7 +1124,9 @@ approaches on the same creature type per session, no repeated visits to one spaw
 The conditions protocol alone is five approaches to one Student at one fixed spawn point,
 and the Blind fix pushes it further. The Isle is a training area and the rule may reasonably
 be scoped narrower there — but that is an owner ruling, and none of the four designs raised
-it.
+it. **2026-08-18: the question is now IN FRONT of the owner** — the rung-7 draft at
+`vault/plans/isle_rung7_damage.txt` is header-blocked on it and states the case for the
+narrower scope; record the ruling here and in `PLAN.md` §7 when it lands, then reseal.
 
 ---
 

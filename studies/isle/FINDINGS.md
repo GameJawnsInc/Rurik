@@ -682,3 +682,79 @@ only the capture can see.
 took "a very far duration" of running, and the track bears that out: 13,325 u of x against a
 plan that budgeted ~2 compass radii (10,000 u) for the whole line. The Isle is much larger
 than the first pass's west-and-centre extent suggested.
+
+# Rung 7 prep — the consumer built first, and the corpus paid twice (2026-08-18)
+
+§7's named risk for this arc is a campaign whose numbers no line ever reads, so the
+damage pass's consumer was built and proven BEFORE its live session:
+`toolkit/authsrv/damagepass.py` + `test_damagepass.py` (44 checks, floor 44, entry in
+`TESTS.md` same commit). It reads a capture's `0x00A3` p16/17/18 events, joins each to
+the create in effect at its timestamp, scopes on **(target-station, cause, swing-kind,
+plan-step)** — B6's rule plus the block dimension, because the rank sweep re-engages ONE
+Suit at five ranks and without the step those blocks pool into a mean about nothing —
+recovers H from the fraction grid (bitwise f32, family semantics: every multiple of a
+fitting H also fits), fits the armour divisor D from r80/r100 separately and jointly per
+§3.1's one-parameter correction, runs the p17 variance law per block, extracts `0x5D`
+cleartext varint candidates (B8's path), and binds AR/RANK labels ONLY from the sealed
+plan's own step text read out of `plan_marks.jsonl` windows. Conflicting labels refuse.
+
+**The rung-6 detour's PvP arenas turn out to hold the largest damage corpus in the
+vault, and it proved the analyzer the useful way — by showing the confounds are real.**
+Maps 310/311/312 carry 641 p16 + 119 p17 events (553 on map 310 alone, zero unjoined).
+Run over them, OBSERVED: **10 of 11 arena p17 groups at n≥2 have nonzero variance** —
+the attack-skill packet (§3.1's confound: armour-ignoring bonus riding the same
+message) measured in bulk, and the reason rung 7 is auto-attack only. A player-class
+target's fraction grid recovers the **480 family — level-20 base health** — out of raw
+bytes; several bot groups come back "H unfit", consistent with death penalty moving max
+health mid-session (RECONSTRUCTION; DP is §3.1's own confound and the arenas were full
+of deaths). The level-up `0x5D`'s cleartext args [13, 51, 1, 17] are pinned as the test
+of the announcement path.
+
+**The armor bench geometry, recovered from both rung-6 captures** (merged definitions,
+`agentroster`): the four Suits are a row — slots **152 at (-5915, 2079)**, **153 at
+(-5768, 1978)**, **154 at (-5618, 1864)**, **152 again at (-5483, 1751)** — all model
+170342, level 20, `mon1`, with the slot-142 Master (**Warrior**, model 155687, `nonc`)
+at (-5832, 1761). The two slot-152 bodies are the row's ENDS, so if GWW's 2/1/1 holds,
+the 60-Armor pair is the ends — a pre-registered nameplate prediction in the plan, not
+an assignment. The island's profession-6 (Elementalist — GWW's Master of Damage)
+candidates are **slot 145 at (-5033, 2970)** (`nonc`, near the bench) and **slot 144 at
+(-2000, 3233)** (`mon1`); slot 142 at the bench middle is predicted NOT to be the MoD.
+Which body carries which name stays for the nameplate, per the standing ruling.
+
+**The no-combat east run carried one combat episode, and it answered rung 8's channel
+question early.** OBSERVED in `20260818T094648` (the operator reported it live —
+"got hit with Pin Down by I believe the Master of Survival", OPERATOR-RECALLED names):
+agent 103 = **slot 137** (east foe, level 20, profession 2 **Ranger** — corroborating
+the recollection on the axis the wire can see) shot the passing player once. The tick
+at t=183.755 holds, together: `0x00A3 [16, 25, 103, -0.0270833]` (13 points on the
+**480** grid — the PvP character's level-20 base health, measured in passing),
+**`0x0042 [25, 481, 13, 95, 13.0f]`** — **481 = Crippled in B4's condition mapping,
+arriving on `0x0042` from ArenaNet's own server**, with a trailing float that reads as
+a duration (Pin Down cripples up to ~13 s, UPSTREAM) — and `0x0027 [25, 144.0]`: the
+player's move speed **halved from 288, server-side** (the same server-owns-the-effect
+shape as R4-2's degen result). The attacker's wind-up named **skill 392** twice
+independently (`0x00A0 [50, 103, 25, 392]` at draw, `0x009F [10, 25, 392]` at impact
+— the Pin Down id candidate), the arrow flew as `0x00A4` (shooter 103, ~1.0 s flight),
+and the operator's answer — skill **364**, cast five times — rides the same channel as
+a self-effect: `0x0042 [25, 364, 10, 96, 10.0f]` with `0x0027` speeds 383.04 = 288 ×
+1.33 (and 191.52 = its crippled half): a +33% speed stance. **Consequence for rung 8:
+the channel assumption is no longer only an assumption — condition application has now
+been OBSERVED on `0x0042` on retail traffic, once.** Torches-first stays (a gadget's
+application may differ from an attack's, and n=1), but the two-minute refutation branch
+is now unlikely. Honest note for rung 6b's record: the east run's "no skills" rule was
+broken under fire, five casts, all after the hit; nothing in the roster data is touched
+by it.
+
+**The plan draft is staged at `vault/plans/isle_rung7_damage.txt` and is BLOCKED on the
+one ruling §6 requires before any plan is sealed**: `studies/monsterai/FINDINGS.md:1121`
+caps behaviour probing at 3 approaches per creature type per session with no repeated
+spawn-point visits, and the damage pass is ~9 blocks against 5 practice bodies. The
+draft carries the case for scoping the cap narrower on the Isle (a training range with
+no AI to probe, where standing at a dummy auto-attacking is the most human-shaped
+traffic the map ever sees) in its header, and is not to be run until the owner rules.
+Two design notes folded in from the owner mid-prep: weapons have damage RANGES — p16
+spreads over the rolled range while a crit pins to its maximum, which is stated in the
+plan's predictions and printed as a per-block integer band by the analyzer — and the
+rank-sweep prediction BRANCHES on the recorded weapon type (wand/staff: flat, caster
+weapons scale with character level only; martial: the 283%/293% kink), pre-registered
+both ways in the `weapon` step.
