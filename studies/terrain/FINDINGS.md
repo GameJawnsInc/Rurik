@@ -1698,6 +1698,100 @@ chatter with no error line, the same signature as §7.6's first crash. Not
 diagnosed, plausibly the same label/content mismatch, and avoidable: the
 capture needs no input at all.
 
+## 9. The prop fall-through: 31.6% was stale by 287x, and the fix is in (2026-08-18)
+
+`PLAN.md` §4 and the importer's own docstring recorded this defect as **31.6%
+of Kamadan's prop area**, 13 of 207 sub-models, "and for the five rock models
+slot 0 is a near-black texture -- which is why they render dark rather than
+untextured." Measured today against the current exports, **every number in that
+sentence is wrong**, and two of them are wrong in the direction that matters.
+
+| | recorded 2026-08-14 | MEASURED 2026-08-18 |
+|---|---|---|
+| Kamadan sub-models falling through | 13 of 207 | **1 of 207** |
+| Kamadan prop AREA | **31.6%** | **0.11%** |
+| Lornar's Pass | — | **0.00%**, 0 of 391 |
+
+Measured twice, independently: once by me and once by an agent that wrote its
+own scripts and never saw mine. Both land on the same single sub-model
+(**model `0x3C5AC`**, the AMAT `binary` path, 7 instances) and the same
+0.11% / 2,665,424 of 2,342,145,300 area-units. **What closed it was decoding
+the material table** -- the layered chain, sub-model -> material -> layers ->
+`texPathIndex` -> FA5 slot, with §7's "first layer sampling a STORED UV set"
+rule. Nothing in the fall-through code path changed; the population it applies
+to collapsed. **A defect recorded once and never re-measured drifted by 287x**,
+and it was cited in three places as a live 31.6%.
+
+**AND THE ROCKS ARE NOT THIS DEFECT.** The claim was that dark rocks are the
+symptom. They are not, and the correction has a measurement behind it:
+`tex_3C172.png` really is that texture and really is dark (mean rgba
+**[42, 40, 32]**, fully opaque, max channel 107) -- but the 10 models that draw
+it (not five; **156 instances**, not 123) are **single-sub-model models whose
+material kind is `none`, and it is the ONLY colour map any of them owns.**
+Classifying all four slots of the worst offender by pixel statistics:
+
+    slot 0  tex_3C172.png  512x256  mean [42,39,31]   <- the only COLOUR map
+    slot 1  tex_3C174.png  512x256  mean [127,127,253]   flat blue: a NORMAL map
+    slot 2  tex_32F2E.png  128x128  mean [128,127,127]   grayscale, r constant
+    slot 3  tex_2D885.png    64x64  mean [255,255,255]   flat white
+
+**12 of 12** fall-back sub-models draw the only colour map their model owns.
+So the binding is right, and the darkness is **the art**, not our bug. That
+matters because it was the stated motivation for decoding AMAT.
+
+**THE FIX, and it is the cheap half deliberately.** A sub-model whose material
+cannot be resolved now gets its own `gw_unbound_material` -- magenta, no image
+-- instead of keeping Blender's default index 0 and drawing whichever image
+landed first. This is the prop half of a convention the terrain path already
+had (`gw_untextured_<fid>`), whose docstring names this very defect as what it
+refuses to repeat. The render gets worse on 0.11% of one map and stops lying.
+
+**AND A CHECK THAT CAN ACTUALLY FAIL**, because the first version could not.
+`props_summary` now reports `unbound_faces` and `unbound_meshes` off the BUILT
+polygons -- without that the dump cannot express the defect at all, so nothing
+outside Blender could see it return. `test_blenderimport` §5b recomputes the
+expectation from the **model manifests** rather than the importer's own
+bookkeeping, so an importer that went back to defaulting fails even though its
+dump stays self-consistent (§7.15's lesson). On Pre-Searing that comparison is
+0 against 0 and would pass over the defect, so **§5c BREAKS one on purpose**:
+it copies a placed model's family to a scratch dir, points its first sub-model
+at an unresolvable material, and requires the marker on exactly those 578
+faces. The suite is 122 green, floor 122.
+
+**WHAT IS NOT DONE, and why the plan for it has changed.** `PLAN.md` §4 called
+decoding AMAT (`0xFAD`) "the real fix". **It is not the fix for this**, and the
+recorded chain is wrong in kind. Read out of the pinned client (build 38797,
+`asserts.py` + `codescan.py`, capstone under carve-out 1):
+
+- The layered branch **never touches AMAT at all**. `mtlIndex` selects a
+  material with `pixelShaderId != 8`, whose layers carry `texPathIndex`
+  resolved through `baseTexs[texPathIndex]` -- bounds- and null-checked exactly
+  where `modelfile.py`'s format-derived chain says (`MdlCombine.cpp:568`,
+  `MdlTex.cpp:673`). That is independent corroboration of the structural
+  reading, from different evidence.
+- The `binary` branch is the minority, taken when `pixelShaderId == 8`
+  (`MdlLoad.cpp:1150`), and its `amatIndex` is bounds-checked against a
+  **separate** `amatPathCount` (`MdlCombine.cpp:632`) that loads an
+  out-of-model resource.
+- **AMAT is a compiled SHADER binary, not a texture-index table.** Its parser
+  keys on 4-byte ASCII chunk tags `TECH` and `PASS`
+  (`Dx9ShaderBinary.cpp:482` and `:489`, the literals `0x48434554` and
+  `0x53534150` compared in code). So "-> the FA5 slot" is the wrong
+  destination: an AMAT file declares its own texture roles internally.
+
+So decoding AMAT is a **shader-decoding arc**, it would buy 0.11% of one map,
+and `modelexport.py`'s hypothesis should be corrected rather than pursued.
+**LABEL: this last block is DISASSEMBLY, not tested against a running client** —
+the exact failure mode that cost this arc four retracted claims (§7.18). The
+`TECH`/`PASS` tags and the bounds checks are solid because they are literal
+byte comparisons beside their own asserts; **which slot the client calls
+"diffuse" is NOT established** and the agent that found this flagged it.
+
+**One non-defect, recorded so it is not chased.** 59 of Kamadan's 145
+referenced models have no `.gwmodel.json` at all (40.7%), which looks alarming
+and is not: **all 59 have ZERO placements.** The list is the map's model
+dependency list, not its placement list. Lornar's is 135 of 135.
+
 ## 8. What is still open
 
 - ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
