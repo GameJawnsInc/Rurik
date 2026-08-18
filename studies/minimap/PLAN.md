@@ -386,7 +386,21 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 
 ---
 
-### A3. Generate the atlas tile FROM our terrain — **NEW 2026-08-17, the last open item in Tier 3**
+### A3. Generate the atlas tile FROM our terrain — **OFFLINE HALF DONE 2026-08-17; the run is all that is left**
+
+**`toolkit/mapdata/tilerender.py` renders the authored heightfield into the tile, and the generator is the oracle.** The sculpt area's 64×64 plaza shades to a dip on −x, a rise on +x and a hard seam at `gx == mid` — which is exactly where `deploy.gen_plaza`'s own comment puts its 61° cliff. Measured rather than eyeballed: the heightfield's largest column step is at gx=33, **8,748 against the runner-up's 488**, and the shaded seam peaks within one column of it (a 3-tap central difference smears a step by one either side). The **sign flip is checked in both directions** — flipped, the rise reads +48.7 luma brighter; unflipped it inverts to −51.1 — so a renderer ignoring the archive's negated heights cannot pass.
+
+**Placement is derived, and it is the half most likely to be silently wrong.** The atlas coordinate is `local + footprint_origin`, so map 143's render belongs at texel **(448, 448) of tile (1, 0)** — the corner, fitting 64×64 exactly. Putting it at the tile's own corner would be off by 448 and would read as the shading being broken. A render that would straddle two tiles is refused rather than truncated.
+
+**It also shrinks A1's collateral by construction.** A1 replaced the whole 512×512, which is why five other maps got our checkerboard. This decodes ArenaNet's own tile and paints only the authored map's cells: **4,096 of 262,144 texels, 1.56%**. Verified against the real 38833 archive (tile 116842, row 177375) and round-tripped through the ATEX reader at 10 levels, worst channel delta 1. `test_tilerender.py`, 17 checks.
+
+**A real bug the test caught, worth recording because it fails only when it matters:** `atex.decode_rgba` returns `(rgba, w, h)`, and the first `decode_tile` indexed that tuple as if it were the pixel buffer — inert until a real `--dat` is supplied, i.e. exactly when the tool is doing its job.
+
+**WHAT IS LEFT: the run.** `datmove` the blob into a throwaway copy of a **38833** archive, cage it, and look at map 143's compass — the prediction below is unchanged and unverified. Everything up to the archive write is done and green.
+
+---
+
+### A3-old. The rung as written
 **Prediction:** a 512×512 tile whose 64×64 sub-rectangle at map 143's footprint origin is a shaded render of the authored heightfield makes the compass show a recognisable picture OF OUR MAP — ridges and valleys matching the terrain the player walks — rather than art we merely chose. **Refutation:** if the compass shows the render but it does not correspond to the ground (features in the wrong place, or mirrored), the projection between heightfield cells and atlas texels is wrong, and §6b.2's "one texel per terrain cell" is the first thing to re-check.
 **Why it is cheap now, and what is missing:** `mapexport.py` already emits `heights.f32` at exactly one sample per cell — the compass's own scale — and `atex.build_image` + `datmove` are proven end to end by A1. **What does not exist anywhere in `toolkit/` is a renderer**: no hillshade, no top-down. That is the whole of the new code, and it is pure-stdlib arithmetic over a float32 grid (a slope/aspect shade is a few lines), not a Blender dependency.
 **Procedure:** render → `atex.build_image` → `datmove` into a throwaway copy of a **38833** archive (the 38797 generation cannot address world 1's tiles at all, §6g), then one short run at map 143. Place the render at the footprint origin's offset WITHIN the tile, not at the tile's corner — A2 established the origin is the lever and the size is not.

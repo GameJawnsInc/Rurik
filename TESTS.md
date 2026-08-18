@@ -1875,7 +1875,17 @@ Every one of these, in the order they were written:
   message across two of them and requires `decode_all` to recover all three while the
   per-EVENT idiom it replaced loses two and INVENTS two more. That idiom cost the
   corpus 4,251 of 22,137 messages and invented 117 (studies/tape T18). It needs no
-  vault -- a segmentation defect is not a property of any one capture),
+  vault -- a segmentation defect is not a property of any one capture. §9
+  (2026-08-17) pins the REPACKETIZED RETRANSMIT: exact-seq dedupe catches only an
+  identical resend, and TCP may retransmit the same stream bytes split into
+  smaller segments each carrying its own new seq, so every fragment survives
+  `seen` and its bytes are counted twice. Found on live capture 20260817T183756
+  connection …58389, which `load_tape` REFUSED with a 216-byte discrepancy while
+  the seq span was exactly contiguous and `livesession`'s own reassembly agreed --
+  a good channel rejected by a bad sum. `_drop_covered` now trims by covered byte
+  RANGE; the section builds the defect synthetically and its SABOTAGE removes the
+  trim to prove the refusal returns. Wraparound of the 32-bit seq is named as NOT
+  handled rather than assumed away. 30 checks),
   `toolkit/authsrv/test_behaviourrun.py` (the LIVE behaviour run's analyser and its
   operator script, against a session the test builds out of tuples -- no vault, no
   socket, no client. It labels the MONSTER's behaviour where `labelrun` labels the
@@ -3244,6 +3254,37 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
+  `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
+  after the plan forbade exactly that, and closes the paragraph "The rule was in the
+  plan; nothing was checking" — `content.py` checks the row-level half, nothing looked
+  at MODULES, and on 2026-08-17 Fournux/Tyria-Extractor turned up cited 100+ times
+  across sixteen studies and five modules, supplying a rule `textrec.py`'s own
+  docstring says was NOT re-derived, with no §6.1 row and no notice — MIT, so the
+  missing notice was an unmet obligation rather than an untidy table. **The check is
+  PER-UPSTREAM and the measurement is why**: 21 upstreams are named across `toolkit/`
+  in 223 (module, upstream) pairs, and `gw-preservation/server` alone appears in 106
+  modules precisely because it is the one we may not copy — so a per-pair rule is the
+  permanently-red test that gets deleted, which §7 of `test_dispatch.py` documents at
+  length. Fourteen upstreams, each accounted for by a §6.1 row, a notice, or a
+  `NO_DERIVATION` row naming its site; both allowlist directions checked, stale and
+  orphan. **Every sabotage runs against a SYNTHETIC repo root**, because a test that
+  only asserts "the tree is clean today" passes equally well once the scanner stops
+  finding anything — §2 plants a module, removes the row, and requires UNACCOUNTED,
+  then shows the row clearing it while MIT still separately owes a notice. **§3 is the
+  sharpest and is not hypothetical**: `PLAN.md:33` is the prior-art LANDSCAPE table,
+  granting nothing, 1,030 lines above the register, and a recon lane read a Fournux
+  mention there as a register row and recorded it as fact (`studies/quests/AUTHORING.md`
+  §7 killed it). A `"Fournux" in open("PLAN.md").read()` check repeats that mistake and
+  would have scored the tree CLEAN on the day the row was missing, so §3 builds that
+  exact file and requires UNACCOUNTED. §4 proves the skip list is load-bearing — with
+  `mirror_priorart.py` in scope the census inflates 14 → 21, since the fetch manifest
+  names every mirror by construction. `audit()` takes `no_derivation` as a PARAMETER so
+  the synthetic roots do not inherit the real allowlist; §2 pins that reading the module
+  constant instead would make all three rows orphans and the orphan check meaningless.
+  Floor 17 against a run of 20 — §5 adds one per allowlist row, and a tree where every
+  upstream had earned a real row would legitimately run 17. No vault, no socket, no
+  client),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
   which server, both directions — slow, ~1 min, it queries the Windows Firewall once
   per client),
@@ -3268,6 +3309,28 @@ Every one of these, in the order they were written:
   `C:\gw` and every checkout while PERMITTING the vault, and the guard is asserted on
   the SYNTAX TREE to be called exactly once from `main()` -- a guard that exists and is
   never called being the failure `test_atex.py` §3 names),
+  `toolkit/mapdata/test_tilerender.py` (PLAN A3's atlas-tile renderer -- the step from
+  "the client draws art we wrote" to "the compass draws OUR MAP". A picture is the
+  easiest thing here to be confidently wrong about, because it looks like terrain
+  either way, so the three decisions that fail silently each get a check that could go
+  the other way. THE SIGN FLIP is asserted in BOTH directions: archive heights are
+  NEGATED (greater stored = lower ground), and with the flip the rise side reads
+  brighter by +48.7 luma while `negated=False` INVERTS it to -51.1 -- a one-directional
+  check would pass on a renderer that ignored the flag entirely. PLACEMENT is derived,
+  not assumed: the atlas coordinate is `local + footprint_origin`, so map 143's 64x64
+  belongs at texel (448, 448) of tile (1, 0), and putting it at the tile's own corner
+  would be off by 448 and read as the shading being broken; a render that would straddle
+  two tiles is REFUSED rather than truncated. And THE GENERATOR IS THE ORACLE for whether
+  it is our terrain at all -- `deploy.gen_plaza` puts a 61-degree cliff at `gx == mid`,
+  and the heightfield's largest column step must land there, dominating the runner-up by
+  more than 3x (8,748 against 488). That bound is a WINDOW rather than an equality and
+  the reason is measured: a 3-tap central difference smears a step by one column either
+  side. An earlier draft asserted the heightfield stepped at "exactly one" column, read
+  off a top-4 printout; `gen_plaza` is a gradient on both sides of the plaza, so it is
+  simply false, and it went red on its own terrain. The paste is contained to 4,096 of
+  262,144 texels -- 1.56%, against A1 replacing the whole tile, which is what shrinks the
+  collateral onto the five other maps sharing it -- and the built container round-trips
+  through the ATEX reader at 10 levels with a worst channel delta of 1),
   `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
   profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
   twelfth id because `.rdata` has zero slack and seven of the profession tables are

@@ -1197,7 +1197,7 @@ def capture_resolver(codec, capture_dir=None):
     return resolve
 
 
-def observed_from_live():
+def observed_from_live(names=None):
     """The GAME_SMSG opcodes ArenaNet has actually sent us, rebuilt from the tapes.
 
     THE DENOMINATOR HAS TO BE REPRODUCIBLE. The pilot's `seen` list was a text file
@@ -1210,15 +1210,34 @@ def observed_from_live():
     Live captures only. Pooling ours with ArenaNet's is the one thing `toolkit/origin.py`
     exists to refuse, and a sweep whose denominator counted our own server's sends would
     exclude exactly the opcodes it is meant to try.
+
+    `names` NARROWS to specific capture stamps, and the split matters. The SWEEP wants
+    every capture there is -- a bigger denominator is a better answer to "what has
+    ArenaNet never sent us", and a new capture legitimately shrinks the never-seen plan.
+    A TEST wants a fixed corpus, because a pin is a fact about the captures it was
+    measured on. Added 2026-08-17, when two new live captures took the pool from 12
+    connections to 20 and reddened the canon-12 pin -- the same time bomb
+    `npcdefs.live_captures` documents, arriving in its third file. A stamp that matches
+    nothing is REFUSED rather than silently contributing an empty corpus.
     """
     import tape
     root = vaultpath.require_dir("captures", "live",
                                  why="the sweep's denominator is what ArenaNet has sent")
     codec = Codec()
     seen, dirs = set(), []
+    if names is not None:
+        have = {n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n))}
+        missing = set(names) - have
+        if missing:
+            raise ValueError(
+                f"no live capture named {sorted(missing)}; the vault holds "
+                f"{sorted(have)}. A selector that matches nothing turns every count "
+                f"behind it into a count of an empty corpus.")
     for name in sorted(os.listdir(root)):
         path = os.path.join(root, name)
         if not os.path.isdir(path):
+            continue
+        if names is not None and name not in names:
             continue
         if not any(f.startswith("game-") and f.endswith(".jsonl")
                    for f in os.listdir(path)):
