@@ -1969,6 +1969,35 @@ Every one of these, in the order they were written:
   3/4 that would read as a plausible position, so decoding the wrong slots cannot
   come back green. Needs `vault/captures/live/`; without it, 2 of a floor of 27 run
   and the floor takes it red),
+  `toolkit/authsrv/test_damagepass.py` (the rung-7 damage-pass consumer —
+  `studies/isle/PLAN.md` §6's exit criterion made runnable BEFORE the live session,
+  because §7's named risk is measurements no line ever consumes. Three layers: exact
+  math (H recovery must return the H the fractions were CONSTRUCTED from, with the
+  MoD's predicted 590 in the family, and a three-value mixed-grid control proving the
+  fit cannot be forced; the divisor fit recovers D=40 through all three estimators
+  from ratios manufactured at D=40, reports spread 6.4 on a planted 10% distortion,
+  reports None — not a complex number — when attenuation is absent, and REFUSES a
+  missing AR=60 base rather than inventing §3.1's circularity); the B6 scoping rule
+  (kind is part of the key; an NPC target keys on its STATION because the Suits die
+  and respawn under fresh agent ids, a player keys per body-instance because a moving
+  body at station granularity is many one-event groups); and retail pins BY NAME —
+  map 146's fight (37 p16 + 3 p17), the rung-6 detour's map-310 arena (470 p16 +
+  83 p17, ZERO unjoined, 105 projectiles — the largest damage corpus in the vault,
+  recorded before this module existed), a player-class target's fraction grid
+  recovering the 480 family (level-20 base health, a game-shaped number out of raw
+  bytes), and the level-up `0x5D`'s cleartext args [13, 51, 1, 17] (B8's pin — the
+  MoD announcement path). The p17 variance law is deliberately NOT asserted on arena
+  data: bots cast skills, and the test instead PINS the confound — 10 of 11 arena
+  p17 groups at n≥2 show nonzero variance, which is §3.1's attack-skill packet
+  measured, and the reason rung 7 is auto-attack only. AR labels bind exclusively
+  from the sealed plan's own step text (`AR=NN` / `RANK=NN` inside a mark window);
+  one group under two labels refuses, events under no window carry None rather than
+  a guess. The plan STEP joins the scoping key whenever mark windows exist — the
+  rank-sweep extension re-engages ONE Suit at five ranks, and without the block
+  dimension those blocks pool into a mean about nothing; `RANK=`-tagged blocks feed
+  the rank curve and are excluded from the divisor fit by construction. Needs
+  `vault/captures/live/`; without it the corpus sections cannot run and the floor
+  of 44 takes it red),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
