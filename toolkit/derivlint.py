@@ -91,12 +91,6 @@ NO_DERIVATION = {
         "header credits `entice/gw-interface`, so they are one lineage rather than "
         "four. Citing a repo to DISCOUNT its agreement is the opposite of deriving "
         "from it.",
-    "gwdevhub/GWToolboxpp":
-        "Named ONCE, at areatable.py:34, in the same one-lineage argument -- and it "
-        "is there as the project that VENDORS the closed-source gwca.dll, i.e. as a "
-        "reason its agreement is not separate evidence. Nothing taken. "
-        "(studies/skills/FINDINGS.md separately records it as not self-consistent "
-        "across its own three call sites, which is a further reason not to.)",
 }
 
 # Upstreams whose licence obliges us to reproduce a notice. If one of these has
