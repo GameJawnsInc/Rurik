@@ -1500,3 +1500,30 @@ like the item-authoring gap the unit-setup arc already listed as open — "`0x00
 at create (needs item authoring the content store cannot do yet)". If so, the commander is
 no longer the blocker and hero equipment is, which is a different arc with a known
 prerequisite. Confirm that before treating it as new work.
+
+### 25.3 ANSWERED the same day, by the arc that owns the other half
+
+§25.2 asked for that check before anyone spent a day on it. The unit-setup arc ran it and
+wrote the answer into `PLAN.md` §8's own entry (*"refined 2026-08-17 after the heroes arc
+hit ItCliApi:488 and asked whether its blocker was this line"*). The verdict is **half**,
+and the half matters:
+
+- **Floor one — item RECORDS — already exists**, and my reconstruction was wrong to treat
+  it as missing. The armor probe declares content-row items via `0x0161`, and a census over
+  all three keyed captures found retail's `0x006D` ids are exactly such records: **375/375**
+  non-zero ids declared earlier in the same stream by the `0x015E` family, zero exceptions.
+  What `0x006D` still lacks is per-NPC-type weapon ROWS — content, not machinery. (And
+  **210/585** retail `0x006D`s carry item **0**, a legal no-weapon value needing no
+  authoring at all.)
+- **Floor two — a per-OWNER inventory container in the item client's table at
+  `[globals+0x40]+0xD4` — is what `ItCliApi:488` actually wants**, and it does not exist for
+  the hero. Our `0x013F`/`0x013E` bag family has only ever been addressed to the local
+  player. Same subsystem as the `0x006D` line, different missing piece.
+
+So `ItCliApi:488` is **not** a duplicate of the unit-setup arc's open item line, and it is
+not blocked behind it either. It is this arc's to price, and the shape of the work is now
+named: find what registers an owner in that table and send it for the hero. Note the
+pattern — this is the **fifth** time in the heroes lineage that the missing mechanism turned
+out to be an existing agent-keyed message we only ever addressed to the player (after
+`0x0037`, `0x003A`, `0x00B7`, `0x00DA`). Look for the bag family's owner argument before
+concluding anything is absent.

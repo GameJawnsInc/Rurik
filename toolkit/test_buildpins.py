@@ -193,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 47,
-      "47 class-(a) occurrences -- the census",
+check(len(live) == 82,
+      "82 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -225,8 +225,24 @@ check(len(live) == 47,
       f"client sorted last and did (38833, silently, once the vault gained a "
       f"third build). atex.TABLES_BUILD fixes that and costs one census row. The "
       f"trade is the right way round: a counted pin that a test resolves through "
-      f"pinned.find() beats an uncounted address nobody can tell is stale")
-check(len(files) == 8, "across 8 files", f"{len(files)}: {sorted(files)}")
+      f"pinned.find() beats an uncounted address nobody can tell is stale. "
+      f"**82 on 2026-08-17, and this is the largest jump the census has ever "
+      f"recorded: +35 in ONE DAY, from three files that did not exist the day "
+      f"before** -- clientscan/commandertrap.py (20), clientscan/framebus.py "
+      f"(13), clientscan/commanderpeek.py (2). That is the hardware-breakpoint "
+      f"generation of tooling (the heroes/PvP-UI commander arc and the frame-bus "
+      f"reader), and it is a DIFFERENT KIND of pin from everything above it: "
+      f"these are execution sites armed in a RUNNING process, so they are not "
+      f"merely build-coupled, they are the addresses a debugger writes into "
+      f"DR0..DR3 and a wrong one arms a breakpoint on the wrong instruction. "
+      f"They are also the cheapest class to re-derive, because every one of them "
+      f"is byte-verified against the live process before it is armed and the "
+      f"tools refuse to run when the bytes disagree -- which is the mitigation "
+      f"this check should be read against: the liability is real and it is "
+      f"guarded at the point of use. Do not scrub them. If this number should "
+      f"come DOWN, the way is genericvalue.py's -- derive the sites from a table "
+      f"the client itself carries instead of naming them")
+check(len(files) == 11, "across 11 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed
 # the two live-memory readers would be reassuring and wrong.

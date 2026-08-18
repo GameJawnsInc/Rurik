@@ -2417,6 +2417,15 @@ HERO_SWAP = False
 # `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, and sending it
 # is what makes the client resolve the hero's NAME from s_heroClientData and
 # enable its commander-slot flag. studies/heroes/FINDINGS.md 15.
+# 2026-08-17, and this is why the default deserves a decision rather than an
+# inheritance: 0x0072 is the ONLY writer of heroData->agentId (0x0081DA90,
+# reached from its RECV handler 0x0091E2A0 by a single caller chain), and 0x0074
+# ZEROES that field itself in its create path -- so with this flag off, clicking
+# the party-window hero button asserts `heroData->agentId` / GmView.cpp(5898) no
+# matter what any other message carries. OFF is the arm that crashes EARLIER,
+# not the safe one; ON, the same click gets past GmView entirely and stops at
+# ItCliApi.cpp(488). It stays off only because no full session has been measured
+# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25.
 HERO_ACTIVATE = False
 # HeroActivate's field 3. Zero is what every run so far has sent. A NON-zero id
 # is a refutable question rather than a fix: ItCliApi:1194 asserts
