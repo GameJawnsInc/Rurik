@@ -1954,20 +1954,67 @@ the vertical moves with the render aspect while the horizontal does not.
 `gwcam.py` sets `sensor_fit = HORIZONTAL` and `angle_x = 75 deg` (lens 23.46 mm
 on a 36 mm sensor).
 
-**A CONFLICT LEFT STANDING RATHER THAN EXPLAINED AWAY.** ArenaNet's own patch
-note (2018-06-06) says the client moved to a *vertical* calculation, with
-`-oldfov` restoring a diagonal one — and a horizontal-fixed projection is
-neither. The measurement is what it is: on build 38797, with no `-oldfov`,
-the value at `0x00C078C4` is the horizontal field. Possible readings — the
-slider value is expressed horizontally while the *derivation* is vertical, or
-the behaviour changed again after 2018 — are UNTESTED, and naming one here
-would be exactly the kind of guess this arc has retracted four times. What
-would settle it is a second run at a DIFFERENT window aspect: a
-horizontal-fixed projection keeps `m00` and moves `m11`, a vertical-fixed one
-does the reverse, and `fovaxis.py` already prints both.
+**A CONFLICT WITH ARENANET'S OWN PATCH NOTE — now tested, §12.** The
+2018-06-06 note says the client moved to a *vertical* calculation with
+`-oldfov` restoring a diagonal one, and a horizontal-fixed projection is
+neither. §11's first version left that standing; §12 ran the aspect test and
+the client held HORIZONTAL fixed.
 
 **Instruments:** `toolkit/clientscan/fovaxis.py` (the adjacency test, read-only)
 and `fovread.py`. Both rerun in a minute against any running client.
+
+## 12. THE ASPECT TEST: the client holds HORIZONTAL fixed (2026-08-18)
+
+§11 named the test that would settle §11's own conflict with ArenaNet's patch
+note: **run it again at a different window aspect.** A horizontal-fixed
+projection keeps `m00` and moves `m11`; a vertical-fixed one does the reverse.
+It ran, on one client, resized mid-session from wide to portrait.
+
+| render area | aspect | m00 | m11 | horizontal | vertical |
+|---|---|---|---|---|---|
+| 1920 x 1001 | 1.918 | **1.303225** | 2.499693 | 75.000 | 43.608 |
+| 700 x 1001 | 0.699 | **1.303225** | 0.911346 | **75.000** | 95.311 |
+
+**`m00` does not move. `m11` tracks the aspect exactly.** At the portrait
+aspect the vertical reading requires the pair `(1.863612, 1.303225)` and it
+appears at **ZERO** sites, against 10 confirmed sites for the horizontal pair;
+the diagonal is zero as well. So the field of view the client holds constant is
+the HORIZONTAL one, and the vertical is whatever the window makes it — 43.6
+degrees on a wide window, 95.3 on a tall one.
+
+**Choosing the aspect was the part that needed care.** At aspect **1.0 the two
+hypotheses predict the SAME pair** — `cot(75/2)` twice — so a square window is
+the one shape that could not have settled anything. Portrait was chosen for the
+opposite reason: below 1.0 the two readings do not merely differ, they **swap
+which cotangent is larger**, so the answer is a qualitative flip rather than a
+fitted number.
+
+**THREE INDEPENDENT CHECKS THAT THE RESIZE WAS REAL**, because an OS window
+resize is not the same thing as a D3D9 swap-chain rebuild and a skeptic rated
+that LOW confidence before the run:
+
+1. The client's own record of its render size moved to `(700.0, 1001.0)` at
+   **175 sites**; the stale `(1920.0, 1001.0)` survives at 27.
+2. **`m11` moved at all.** Had the client ignored the resize, the projection
+   would still read 2.499693 — the measurement itself refutes the confound.
+3. The portrait screenshot (`fov_client_portrait.png`) shows **no letterbox**:
+   the world fills the window, the HUD re-laid itself out, the horizontal
+   extent is preserved and the vertical extent grows hugely. That is the same
+   verdict from pixels, with no arithmetic at all.
+
+**SO THE PATCH NOTE AND THIS CLIENT DISAGREE, and the disagreement is now a
+measurement rather than a loose end.** On build 38797, launched without
+`-oldfov`, the projection is horizontal-fixed. What that means for ArenaNet's
+"vertical calculation" wording is still NOT established — the honest options
+are that the slider is expressed horizontally while something else is derived
+vertically, that the behaviour changed again after 2018, or that the note
+describes the *option's* framing rather than the matrix. **Naming one would be
+a guess**, and this arc has retracted four of those. What is measured is the
+table above.
+
+**Cost: one client run, two scans, one screenshot.** `fovaxis.py` needs no
+argument — it reads the fov and the window itself and recomputes the
+predictions, so re-running it after any resize is the whole procedure.
 
 ## 8. What is still open
 
@@ -2062,10 +2109,12 @@ and `fovread.py`. Both rerun in a minute against any running client.
   cot(75/2) as the x scale (2 sites; the vertical and diagonal pairs appear
   nowhere), and the vertical reading is refuted geometrically because it would
   put the character 55 units under the terrain. Vertical is 43.608 deg at
-  1920x1001 and moves with the aspect. **Left open**: this contradicts
-  ArenaNet's own 2018 patch note describing a *vertical* calculation; a second
-  run at a DIFFERENT window aspect settles which axis the client holds fixed,
-  and `fovaxis.py` already prints both.
+  1920x1001 and moves with the aspect. ~~Left open: the conflict with
+  ArenaNet's 2018 patch note.~~ **TESTED 2026-08-18, §12**: resized to a
+  portrait window mid-session, `m00` stayed pinned at cot(75/2) while `m11`
+  tracked the aspect, and the vertical pair scored ZERO sites. The client
+  holds HORIZONTAL fixed. Why the patch note says *vertical* remains
+  unexplained, and is left that way rather than guessed.
 - The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
   measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
   is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and
