@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=24)
+led = checks.Ledger("charstore", floor=25)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -145,11 +145,30 @@ try:
     led.ok(st3.character_by_uuid(UUID)["xp"] == xp0 and not sent,
            "accrual is a strict no-op with persistence off")
 
+    # The DEFAULT world awards no faction anywhere: no shipped map row
+    # carries balthazar_per_kill, so even with a balthazar account row the
+    # kill yields xp only. This is the check the first version failed --
+    # it put faction gains on everything (owner's catch, 2026-08-18).
     authsrv.PERSIST = True
     try:
         authsrv.accrue_kill_rewards(fake_send, game_state, 0)
     finally:
         authsrv.PERSIST = False
+    led.ok(not sent
+           and st3.character_by_uuid(UUID)["xp"]
+           == xp0 + authsrv.KILL_REWARD_VALUE,
+           "on an unflagged map a kill yields xp and NO faction",
+           "retail awards Balthazar in arena/PvP contexts only")
+    xp0 = st3.character_by_uuid(UUID)["xp"]
+
+    _real_rate = authsrv.balthazar_rate
+    authsrv.balthazar_rate = lambda m: 40   # a map row that awards, faked
+    authsrv.PERSIST = True
+    try:
+        authsrv.accrue_kill_rewards(fake_send, game_state, 0)
+    finally:
+        authsrv.PERSIST = False
+        authsrv.balthazar_rate = _real_rate
     led.ok(st3.character_by_uuid(UUID)["xp"]
            == xp0 + authsrv.KILL_REWARD_VALUE,
            "a kill accrues KILL_REWARD_VALUE xp in the store")

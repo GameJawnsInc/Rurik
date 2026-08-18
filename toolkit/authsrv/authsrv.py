@@ -1368,13 +1368,23 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
-# The Balthazar gain that rides a kill when the store is armed. 40 is the
-# delta magnitude retail itself sent -- 17 of the 22 paired [11,d]+[12,d]
-# sightings in the 08-17 live captures are +40 (STORAGE.md §2) -- but the
-# TRIGGER context there was the new-character tutorial, not ordinary kills,
-# so the magnitude is borrowed and the schedule is ours. Labelled here so
-# nobody reads it back as a measured per-kill rule.
-BALTH_PER_KILL = 40
+def balthazar_rate(map_id):
+    """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
+
+    Retail awards Balthazar faction in specific contexts -- the training
+    arena's NPC fights (the owner's identification of where the captures'
+    paired +40s actually came from) and PvP -- and NOWHERE else. The first
+    version of the accrual awarded it on every kill everywhere: it borrowed
+    the +40 magnitude from the captures while ignoring that their context
+    was exactly such an arena, a labelled invention but an invention all the
+    same, and the owner caught it within the day (2026-08-18). The gate is
+    now the map's own content row: no `balthazar_per_kill` field on the
+    served map, no gain -- and NO shipped row carries one today, so the
+    default world awards none, like the game. Authoring one is a deliberate
+    content act that carries its own provenance, same as every other row.
+    """
+    row = agents.WORLD.rows("map").get(str(map_id), {})
+    return int(row.get("balthazar_per_kill", 0))
 
 
 def accrue_kill_rewards(send, state, conn_id):
@@ -1384,9 +1394,11 @@ def accrue_kill_rewards(send, state, conn_id):
     client applies it += to the sheet -- but nothing on our side remembered
     it, so the next 0x00E9 (or the next session) snapped the sheet back to
     the store's old numbers. With --persist armed and the burst having found
-    a store row, the same delta now lands in the store, and Balthazar
-    faction rides the same tick as the paired [11, d] + [12, d] deltas
-    retail sends: CURRENT capped at the stored max (the cap is exactly what
+    a store row, the same delta now lands in the store; and ON A MAP WHOSE
+    CONTENT ROW AWARDS IT (balthazar_rate above -- zero everywhere by
+    default, like the game), Balthazar faction rides the same tick as the
+    paired [11, d] + [12, d] deltas retail sends: CURRENT capped at the
+    stored max (the cap is exactly what
     0x00EA-0x00ED declare, and a current past its denominator is a bar the
     client has never been shown), TOTAL uncapped -- fields 11/12 move
     together in every retail sighting. Without --persist this returns
@@ -1401,16 +1413,16 @@ def accrue_kill_rewards(send, state, conn_id):
         return
     row["xp"] += KILL_REWARD_VALUE
     balth = store.account()["factions"].get("balthazar")
-    if balth is not None:
-        current_gain = min(BALTH_PER_KILL,
-                           max(0, balth["max"] - balth["current"]))
+    rate = balthazar_rate(state.get("map_id", -1))
+    if balth is not None and rate > 0:
+        current_gain = min(rate, max(0, balth["max"] - balth["current"]))
         balth["current"] += current_gain
-        balth["total"] = balth.get("total", 0) + BALTH_PER_KILL
+        balth["total"] = balth.get("total", 0) + rate
         send(GAME_SMSG_AGENT_KILL_REWARD, [11, current_gain],
              f"balthazar current +{current_gain}"
-             + (" (capped)" if current_gain < BALTH_PER_KILL else ""))
-        send(GAME_SMSG_AGENT_KILL_REWARD, [12, BALTH_PER_KILL],
-             f"balthazar total +{BALTH_PER_KILL}")
+             + (" (capped)" if current_gain < rate else ""))
+        send(GAME_SMSG_AGENT_KILL_REWARD, [12, rate],
+             f"balthazar total +{rate}")
     store.save()
     print(f"[c{conn_id}] PERSIST: kill accrued -- xp {row['xp']}"
           + (f", balthazar {balth['current']}/{balth['max']}"

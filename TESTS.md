@@ -1942,7 +1942,7 @@ Every one of these, in the order they were written:
   crash cited — an at-cap display string (string16(8) admits 7 units; at-cap is an
   instant Code=007) and a title referencing an unseeded rank (silent on receive,
   `Array.h(587)` at render) — and a corrupt or wrong-version store raises instead of
-  silently becoming the default character. Its accrual half drives authsrv.accrue_kill_rewards with a fake send: xp lands on disk, the Balthazar current is CAPPED at the stored max while total is not, and with persistence off the kill template is a strict no-op. Floor 24, set from the green run),
+  silently becoming the default character. Its accrual half drives authsrv.accrue_kill_rewards with a fake send: xp lands on disk, the Balthazar current is CAPPED at the stored max while total is not, and with persistence off the kill template is a strict no-op. Floor 25, set from the green run; its faction half proves the DEFAULT world awards none -- the gate is the served map's content row),
   `toolkit/authsrv/test_npcdefs.py` (the capture→content compiler: **126 of 126**
   NPC definitions rebuild BYTE-IDENTICALLY from the extractor's own typed rows —
   rebuilt field by field, never replayed, so a compiler that stored the blob prints
