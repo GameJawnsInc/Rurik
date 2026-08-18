@@ -1018,10 +1018,17 @@ the roster and the gadgets; every range marker's coordinate; and `0x0195` field 
 against the pre-registered prediction 165811 with the third branch (113021 / a shared id)
 pre-registered too.
 
-**The rung-6 marks plan is written and parses: `vault/plans/isle_rung6_roster.txt`**, 70
-steps (arrival → the range star → the armor bench → the AoE circles → allies → torches →
-Students → Zaishen masters → foes → gadgets → sweep → depart), each step's prediction stated
-in its own text. It lives in the vault, not in git, on the same reasoning that put
+**The rung-6 marks plan is written and parses: `vault/plans/isle_rung6_roster.txt`**, **18
+steps** — arrive, settle, eleven walking legs, four spot checks, depart — each carrying its
+own prediction. **It was 70 steps until it was measured.** The first draft targeted every
+body on the island once; the owner said 70 was a lot, and the corpus agreed with the owner:
+every NPC definition that appears in a create also carries its `enc_name`, **246 of 246
+across 8 maps**, so the whole agent-id ↔ slot ↔ model ↔ name ↔ coordinate table arrives
+without a single click. What delivery *is* gated on is **distance** — map 242's late creates
+sat 3117+ from the player and trickled to 108 s — so coverage, not enumeration, is the thing
+the operator has to supply, and the four surviving `check` steps exist only to witness that
+the on-screen string matches the `enc_name` id we recorded. Full measurement and its limits:
+`studies/isle/FINDINGS.md` §"Rung 6 prep". It lives in the vault, not in git, on the same reasoning that put
 `gww-facts.md` there: the step text names ArenaNet's NPCs. `livesession.py --plan` hashes it
 **before** the client launches and the marks are ordinals into it, so it must not be edited
 once the run starts — if a body is missing, press F9 anyway and annotate by ordinal in a

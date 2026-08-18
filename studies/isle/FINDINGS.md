@@ -408,3 +408,53 @@ The rung's exit criterion — each named question resolved with an operator-conf
 render — is met for R4-1/2/3 and met-with-residuals for R4-4 (the varint and the
 overhead channel carry to the next loopback pass; neither blocks rung 6 or rung 7's
 chat-log half).
+
+## Rung 6 prep: what a live pass actually has to DO (measured, not assumed)
+
+The first draft of the rung-6 plan was 70 steps — target every body on the island once,
+in a pre-registered order. The owner's reaction ("70 steps is a lot") was correct, and
+checking it against the corpus rather than defending it showed the targeting buys **none**
+of rung 6's stated exit criteria. Three measurements, all from captures already in the
+vault, `toolkit/authsrv/agentroster.py` doing the reading.
+
+**1. Names arrive unprompted, without exception. OBSERVED.** Every NPC definition slot
+referenced by a `0x0020` create also arrived carrying its `enc_name` on `0x0056` —
+**246 of 246**, across 8 distinct maps (146, 148, 164, 212, 238, 242, 416) and three
+sessions (`20260807T143055`, `20260810T235916`, and today's four). Not one miss. The
+run that produced today's captures carried a 13-step plan with no systematic targeting,
+so this is not an artifact of the operator having clicked things: the server volunteers
+the definition, and the definition carries the name.
+
+**2. Position, slot, model and allegiance also arrive unprompted.** They are fields of the
+create itself (`v[2]` tagged ref, `v[5]` pos, `v[6]` plane, `v[12]` allegiance), so the
+agent-id ↔ definition-slot ↔ model-id ↔ `enc_name` ↔ coordinate table — rung 6's entire
+exit — is a *consequence of being in the instance*, not of interacting with anything.
+`20260817T183756` alone yields 97 creates (53 NPC, 29 item, 15 player) and 42 named
+definitions from a session that never set out to census anything.
+
+**3. What delivery IS gated on is DISTANCE, not attention. OBSERVED.** Splitting map 242's
+NPC creates at 5 s after the first:
+
+| connection | early n | early mean d | early max d | late n | late mean d | **late min d** |
+|---|---|---|---|---|---|---|
+| `:60966` | 32 | 2590 | 4463 | 21 | 4786 | **3117** |
+| `:58389` | 21 | 3243 | 5418 | 24 | 7553 | **5136** |
+
+The two populations are nearly disjoint in distance from the player's own create, and the
+late arrivals run out to 108 s. That is a proximity-streaming signature: the instance sends
+what is near you at load and the rest as you approach. **So the roster is completed by
+WALKING, and a body never approached is a body never sent** — which is the real failure
+mode a rung-6 plan has to defend against, and it is not the one the 70-step draft was
+defending against.
+
+**Consequence for the plan.** Coverage replaces enumeration: stand still through the load
+burst, then walk the island so that every region comes within streaming distance, and
+spend a handful of steps on spot checks rather than sixty on a census the wire performs by
+itself. The trimmed plan is `vault/plans/isle_rung6_roster.txt`. The spot checks are kept
+deliberately — they are the one thing targeting still buys, a human-witnessed link between
+what the screen displays and the `enc_name` id we recorded, which is a check that can fail.
+
+**Not established, and left alone:** *why* the late creates are late. Proximity is the
+reading the distances support, but scripted spawns and respawns produce late creates too,
+and map 242 is not the Isle. The plan does not depend on the distinction — walking is the
+cheap insurance under every reading.
