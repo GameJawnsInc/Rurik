@@ -350,6 +350,20 @@ The original sketch, kept for the record:
   carry `title_id`/`track_id` with no scope marker) — answerable only with
   real title traffic, i.e. a live capture outside Pre-Searing, or a probe.
 - `is_pvp`'s two open probes from FINDINGS.md §b stand unchanged.
+- **The quest log does not survive a restart.** It survives map transitions
+  in-session (Q6 bound it to the character rather than the connection), but
+  it lives in the connection state dict, not the store — a server restart
+  forgets every held quest and objective. This is the next natural
+  `charstore` tenant: unlike the PvP items below it is a system we have
+  already measured end to end (`studies/quests`), and the write-back moment
+  (accept/complete/objective) is already a handled server event.
+- **The store's title scoping is knowingly coarser than retail.** All title
+  state lives on the ACCOUNT object; the game splits per-track (Drunkard,
+  Survivor, LDoA character-scoped; Gladiator, Zaishen, allegiance
+  account-wide — §"The answer in one page"). Harmless with one character on
+  the roster, wrong the day there are two: character A's Survivor progress
+  would render on character B. The fix is a per-track scope field, riding
+  whatever future arc gives titles real semantics.
 - **Balthazar award semantics are DEFERRED to a PvP arc — owner's call,
   2026-08-18.** The kill-accrual gate (`balthazar_rate`) exists and defaults
   to zero everywhere; do NOT author a `balthazar_per_kill` map row yet. The
