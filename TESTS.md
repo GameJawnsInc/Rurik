@@ -3288,7 +3288,19 @@ Every one of these, in the order they were written:
   marker clears to `(+inf, +inf)`/888 and never `(0,0)`, and that the progress
   carrier shares `quests` across connections while deliberately NOT carrying
   `desc_sent`, whose survival would make every objectives line after the first
-  map a silent no-op. ~2 s),
+  map a silent no-op. **§20 is the 38797→38833 re-check**, and it is the section
+  that turned FINDINGS §7.9's *"probably did not move; 'probably' is what the
+  VA-drift rule exists to refuse"* into a measurement: twelve cited sites read
+  byte-identically on the pin and on the build the owner runs, and the frame-bus
+  pairing holds 11 of 11 on both. **Its CONTROL is a whole build.** A first draft
+  asserted identity across ALL vaulted images and went red — correctly — because
+  **38519 is ~90 days older and 0 of 12 sites match there, with the frame-bus scan
+  finding nothing in any quest body at all.** So the claim was rescoped to what was
+  actually measured (nothing moved across the 15-day 38797→38833 patch, which is
+  much smaller than "stable"), and 38519 became the control proving the equality is
+  a measurement rather than a reader that never opened a file. A fourth vaulted
+  build is covered with no edit. Needs the vault and two builds at or after the pin;
+  skips loudly otherwise. ~2 s, ~40 s with §20),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
