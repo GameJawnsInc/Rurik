@@ -42,9 +42,9 @@ import checks  # noqa: E402
 import damagepass  # noqa: E402
 import vaultpath  # noqa: E402
 
-# Floor set from the first real green run (41 checks, 2026-08-18); every
-# section runs unconditionally, so the mandatory core is the whole file.
-LEDGER = checks.Ledger("damagepass", floor=41)
+# Floor set from a real green run (44 checks, 2026-08-18); every section
+# runs unconditionally, so the mandatory core is the whole file.
+LEDGER = checks.Ledger("damagepass", floor=44)
 check = checks.adopt(LEDGER)
 
 f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
@@ -137,13 +137,31 @@ pkey = damagepass.target_key(player_row)
 check(pkey[0] == "agent" and pkey[1] == 31,
       "a player target keys per body-instance, not station")
 
+# The block dimension: one Suit engaged in two plan steps must split, because
+# the rank sweep re-engages one station at different ranks (rung 7's design).
+two_step_ev = {"damage": [
+    {"t": 250.0, "kind": 16, "target": 29, "cause": 5, "frac": -0.05,
+     "target_row": target_row},
+    {"t": 350.0, "kind": 16, "target": 29, "cause": 5, "frac": -0.03,
+     "target_row": target_row},
+]}
+win2 = [(1, "block one [AR=60]", 200.0, 300.0),
+        (2, "block two [AR=60 RANK=11]", 300.0, math.inf)]
+split = damagepass.scoped_groups(two_step_ev, win2)
+check(len(split) == 2,
+      "one station across two plan steps -> two groups (the rank-sweep "
+      "pooling trap)", f"got {len(split)}")
+merged = damagepass.scoped_groups(two_step_ev)
+check(len(merged) == 1, "without windows the same rows are one group "
+      "(census mode keeps B6's key)")
+
 # ---------------------------------------------------------------------------
 print("== 4. p17 report: both verdicts detectable ==")
 
 g17 = {
-    (tkey, 5, 16): [{"frac": -0.05}, {"frac": -0.06}],
-    (tkey, 5, 17): [{"frac": -0.0846}, {"frac": -0.0846}],
-    (("x",), 9, 17): [{"frac": -0.08}, {"frac": -0.12}],
+    (tkey, 5, 16, None): [{"frac": -0.05}, {"frac": -0.06}],
+    (tkey, 5, 17, None): [{"frac": -0.0846}, {"frac": -0.0846}],
+    (("x",), 9, 17, None): [{"frac": -0.08}, {"frac": -0.12}],
 }
 rep17 = damagepass.p17_report(g17)
 by_cause = {r["cause"]: r for r in rep17}
@@ -181,17 +199,25 @@ with tempfile.TemporaryDirectory() as td:
 
     rows_60 = [{"t": 250.0, "frac": -0.05}]
     rows_span = [{"t": 250.0, "frac": -0.05}, {"t": 350.0, "frac": -0.04}]
-    labels = damagepass.label_groups({("k1", 5, 16): rows_60}, windows)
-    check(labels[("k1", 5, 16)] == 60, "events in the AR=60 window label 60")
+    labels = damagepass.label_groups({("k1", 5, 16, 1): rows_60}, windows)
+    check(labels[("k1", 5, 16, 1)]["ar"] == 60,
+          "events in the AR=60 window label 60")
     try:
-        damagepass.label_groups({("k2", 5, 16): rows_span}, windows)
+        damagepass.label_groups({("k2", 5, 16, None): rows_span}, windows)
         check(False, "one group under two AR labels must refuse")
     except damagepass.DamagePassError:
         check(True, "one group under two AR labels refuses loudly")
     labels_none = damagepass.label_groups(
-        {("k3", 5, 16): [{"t": 50.0, "frac": -0.1}]}, windows)
-    check(labels_none[("k3", 5, 16)] is None,
+        {("k3", 5, 16, None): [{"t": 50.0, "frac": -0.1}]}, windows)
+    check(labels_none[("k3", 5, 16, None)]["ar"] is None,
           "events before any window carry no label rather than a guess")
+
+    # RANK=NN labels: read back, and distinct from AR.
+    rwin = [(4, "sweep block [AR=60 RANK=11]", 400.0, 500.0)]
+    rlab = damagepass.label_groups(
+        {("k4", 5, 16, 4): [{"t": 450.0, "frac": -0.05}]}, rwin)
+    check(rlab[("k4", 5, 16, 4)] == {"ar": 60, "rank": 11},
+          "a rank-extension block carries both AR and RANK labels")
 
 # ---------------------------------------------------------------------------
 print("== 6. retail corpus, pinned by name ==")
@@ -221,7 +247,7 @@ check(arena["unjoined"] == 0,
 check(len(arena["projectiles"]) == 105, "arena: 105 projectile launches")
 
 agroups = damagepass.scoped_groups(arena)
-p480 = [g for (tk, cause, kind), rows in agroups.items()
+p480 = [g for (tk, cause, kind, step), rows in agroups.items()
         for g in [damagepass.h_fit([r["frac"] for r in rows])]
         if tk and tk[0] == "agent" and kind == 16 and len(rows) >= 4 and g]
 check(any(damagepass.h_family_contains(h0, 480) for h0, _ in p480),

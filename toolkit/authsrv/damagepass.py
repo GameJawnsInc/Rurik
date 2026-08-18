@@ -30,6 +30,10 @@ plane) when the create in effect is an NPC -- §3.1's own confound table says
 "aggregate on (definition slot, spawn coordinate), not agent id", because the
 Suits DIE and respawn under fresh agent ids -- and a per-body key otherwise (a
 moving player is many stations, which is the other half of the same trap).
+When a sealed plan's mark windows exist the plan STEP joins the key too: the
+rank-sweep extension re-engages one Suit at five different attribute ranks,
+and without the block dimension those blocks pool into one group whose mean
+is a number about nothing.
 
 JOINING TARGETS: the create IN EFFECT AT THE EVENT'S TIMESTAMP, never the
 agent's last create -- agent ids are recycled (`npcdefs.py`'s interval rule; 19
@@ -215,11 +219,24 @@ def target_key(row):
     return ("agent", row["agent"], row["t"])
 
 
-def scoped_groups(ev):
-    """{(target_key, cause, kind): [damage rows]} -- B6's rule, kind in the key."""
+def scoped_groups(ev, windows=None):
+    """{(target_key, cause, kind, step): [damage rows]} -- B6's rule plus the
+    plan's own block structure.
+
+    Kind is in the key (B6, not optional). STEP is in the key whenever a
+    sealed plan's mark windows exist, because the rung-7 design re-engages the
+    SAME Suit at different attribute ranks in different steps -- without the
+    step, a rank-11 block and a rank-13 block against one station pool into a
+    single group and the pooled mean is a number about nothing. With no
+    windows (census mode, foreign captures) step is None and the key is B6's.
+    """
     groups = {}
     for d in ev["damage"]:
-        key = (target_key(d.get("target_row")), d["cause"], d["kind"])
+        step = None
+        if windows:
+            w = window_at(windows, d["t"])
+            step = w[0] if w else None
+        key = (target_key(d.get("target_row")), d["cause"], d["kind"], step)
         groups.setdefault(key, []).append(d)
     return groups
 
@@ -320,18 +337,20 @@ def p17_report(groups):
     """
     out = []
     p16max = {}
-    for (tkey, cause, kind), rows in groups.items():
+    for (tkey, cause, kind, step), rows in groups.items():
         if kind == 16 and rows:
-            p16max[(tkey, cause)] = max(abs(r["frac"]) for r in rows)
-    for (tkey, cause, kind), rows in sorted(
+            p16max[(tkey, cause, step)] = max(abs(r["frac"]) for r in rows)
+    for (tkey, cause, kind, step), rows in sorted(
             groups.items(), key=lambda kv: str(kv[0])):
         if kind != 17:
             continue
         vals = [abs(r["frac"]) for r in rows]
         distinct = sorted(set(vals))
-        mx = p16max.get((tkey, cause))
+        # The cross-fit compares within the SAME block: a rank-13 crit against
+        # a rank-11 p16 max would test nothing but the pooling mistake.
+        mx = p16max.get((tkey, cause, step))
         out.append({
-            "target": tkey, "cause": cause, "n": len(vals),
+            "target": tkey, "cause": cause, "step": step, "n": len(vals),
             "values": vals, "variance_zero": len(distinct) == 1,
             "p16_max": mx,
             "ratio_to_p16max": (distinct[-1] / mx) if mx else None,
@@ -343,6 +362,7 @@ def p17_report(groups):
 # mark windows: the sealed plan labels the blocks, nothing else does
 
 AR_RE = re.compile(r"\bAR=(\d+)\b")
+RANK_RE = re.compile(r"\bRANK=(\d+)\b")
 H_RE = re.compile(r"\bH=(\d+)\b")
 
 
@@ -380,28 +400,37 @@ def window_at(windows, t):
 
 
 def label_groups(groups, windows):
-    """AR labels per scoped group, from the plan's own step text -- and a
-    REFUSAL when one group spans steps labelled with different ARs, because
-    that means the operator engaged one body under two labels and averaging
-    across the contradiction would manufacture a ratio.
+    """{group_key: {"ar": int|None, "rank": int|None}} from the plan's own
+    step text -- the ONLY place a label may come from (pre-registered, sealed).
 
-    Returns {group_key: ar or None}.
+    `AR=NN` names the target's armour rating as the operator's nameplate
+    witnesses it; `RANK=NN` declares a rank-extension block, which the divisor
+    fit must EXCLUDE (a rank change moves the numerator for reasons that are
+    not armour). With step in the group key a group sits inside one window by
+    construction; the multi-AR refusal is kept as a guard for step-less
+    groups and repeat anomalies -- one body engaged under two labels is a run
+    error to investigate, not a number to average.
     """
     labels = {}
     for key, rows in groups.items():
-        ars = set()
+        ars, ranks = set(), set()
         for r in rows:
             w = window_at(windows, r["t"])
             if w:
                 m = AR_RE.search(w[1])
                 if m:
                     ars.add(int(m.group(1)))
-        if len(ars) > 1:
+                m = RANK_RE.search(w[1])
+                if m:
+                    ranks.add(int(m.group(1)))
+        if len(ars) > 1 or len(ranks) > 1:
             raise DamagePassError(
-                f"group {key} has events under {len(ars)} different AR labels "
-                f"{sorted(ars)}: one body engaged under two labels is a run "
-                f"error to investigate, not a number to average")
-        labels[key] = ars.pop() if ars else None
+                f"group {key} has events under {len(ars)} AR / {len(ranks)} "
+                f"RANK labels ({sorted(ars)}, {sorted(ranks)}): one body "
+                f"engaged under two labels is a run error to investigate, "
+                f"not a number to average")
+        labels[key] = {"ar": ars.pop() if ars else None,
+                       "rank": ranks.pop() if ranks else None}
     return labels
 
 
@@ -411,8 +440,8 @@ def label_groups(groups, windows):
 def report(capture_dir, connection, codec=None):
     """The full rung-7 readout for one connection: census + fits where possible."""
     ev = join_targets(read_events(capture_dir, connection, codec))
-    groups = scoped_groups(ev)
     windows = mark_windows(capture_dir)
+    groups = scoped_groups(ev, windows)
 
     rep = {
         "capture": ev["capture"], "connection": connection,
@@ -428,19 +457,26 @@ def report(capture_dir, connection, codec=None):
             "projectiles": len(ev["projectiles"]),
         },
         "groups": [], "p17": p17_report(groups), "divisor": None,
+        "rank_curve": [],
     }
 
     labels = label_groups(groups, windows) if windows else {}
     means_by_ar, ar_basis = {}, {}
     for key, rows in sorted(groups.items(), key=lambda kv: str(kv[0])):
-        tkey, cause, kind = key
+        tkey, cause, kind, step = key
         fracs = [r["frac"] for r in rows]
         fit = h_fit(fracs) if kind in (16, 17) else None
-        g = {"target": tkey, "cause": cause, "kind": kind, "n": len(rows),
+        lab = labels.get(key, {"ar": None, "rank": None})
+        g = {"target": tkey, "cause": cause, "kind": kind, "step": step,
+             "n": len(rows),
              "mean_frac": sum(abs(f) for f in fracs) / len(fracs),
-             "h_fit": fit, "ar": labels.get(key)}
+             "h_fit": fit, "ar": lab["ar"], "rank": lab["rank"]}
         rep["groups"].append(g)
-        if kind == 16 and g["ar"] is not None:
+        if kind == 16 and g["ar"] is not None and g["rank"] is not None:
+            # A rank-extension block: feeds the rank curve, NEVER the divisor
+            # fit -- a rank change moves damage for non-armour reasons.
+            rep["rank_curve"].append(g)
+        elif kind == 16 and g["ar"] is not None:
             # Points when the grid gave H back, fractions otherwise; a mixed
             # basis across AR groups is refused at the fit below.
             if fit:
@@ -509,9 +545,11 @@ def main():
                 continue
             h = (f"H0={g['h_fit'][0]}" if g["h_fit"] else "H unfit")
             ar = f" AR={g['ar']}" if g["ar"] is not None else ""
+            rk = f" RANK={g['rank']}" if g["rank"] is not None else ""
+            st = f" step={g['step']}" if g["step"] is not None else ""
             print(f"    kind {g['kind']} n={g['n']} mean|f|="
-                  f"{g['mean_frac']:.5f} {h}{ar} <- cause {g['cause']} vs "
-                  f"{_fmt_target(g['target'])}")
+                  f"{g['mean_frac']:.5f} {h}{ar}{rk}{st} <- cause "
+                  f"{g['cause']} vs {_fmt_target(g['target'])}")
         for p in rep["p17"]:
             if p["n"] >= 2:
                 print(f"    p17 LAW n={p['n']} variance_zero="

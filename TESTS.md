@@ -1990,10 +1990,14 @@ Every one of these, in the order they were written:
   data: bots cast skills, and the test instead PINS the confound — 10 of 11 arena
   p17 groups at n≥2 show nonzero variance, which is §3.1's attack-skill packet
   measured, and the reason rung 7 is auto-attack only. AR labels bind exclusively
-  from the sealed plan's own step text (`AR=NN` inside a mark window); one group
-  under two labels refuses, events under no window carry None rather than a guess.
-  Needs `vault/captures/live/`; without it the corpus sections cannot run and the
-  floor of 41 takes it red),
+  from the sealed plan's own step text (`AR=NN` / `RANK=NN` inside a mark window);
+  one group under two labels refuses, events under no window carry None rather than
+  a guess. The plan STEP joins the scoping key whenever mark windows exist — the
+  rank-sweep extension re-engages ONE Suit at five ranks, and without the block
+  dimension those blocks pool into a mean about nothing; `RANK=`-tagged blocks feed
+  the rank curve and are excluded from the divisor fit by construction. Needs
+  `vault/captures/live/`; without it the corpus sections cannot run and the floor
+  of 44 takes it red),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
