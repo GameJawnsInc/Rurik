@@ -1108,9 +1108,12 @@ def _faction_max_steps(agent_id):
     fields total_earned_*, a different stat. The caps have messages of their
     own: CHARACTER_FACTION_MAX_KURZICK/LUXON/BALTHAZAR/IMPERIAL, header + one
     dword, shapes confirmed by the client's own 38797 tables. Headquarter's
-    handlers store the dword straight into player_hero.{faction}.max. None of
-    the four has ever been observed on any wire we hold, so this is the
-    cheapest OBSERVED conversion in the study.
+    handlers store the dword straight into player_hero.{faction}.max.
+    UPDATE 2026-08-18: retail sends all four -- 132 sightings across six live
+    captures, values 10000/10000/10000/20000 (STORAGE.md §2) -- so what is
+    left for this probe is the per-opcode->bar mapping (three identical
+    10000s discriminate nothing; our distinct values do) and whether a cap
+    moves mid-session.
 
     Step 1 re-sends the attr_legend vector so every numerator is a number that
     names its own field; the maxima then get four DISTINCT values so a swapped
@@ -1150,70 +1153,80 @@ def _faction_max_steps(agent_id):
 
 
 def _title_track_steps(agent_id):
-    """The title cluster 0x00F3-0x00F6, which no capture has ever contained.
+    """The title cluster 0x00F3-0x00F6, on our client for the first time.
 
-    studies/character/STORAGE.md §3. Shapes are client-validated at 38797 via
-    schema/messages.json; the field NAMES past field 0 are where ldufr and
-    GWCA disagree (GWLP-R's track_id/current_points/... vs GWCA's
-    title_id/value/...), with one agreement worth leaning on: field 0 is the
-    title id and field 2 is the current points under BOTH readings. So the
-    coherent step keeps rank-shaped fields small and legal and makes every
-    points-shaped field distinct, and whatever renders names its own field.
+    REVISED 2026-08-18. The first version aimed to settle a field-naming
+    dispute between mirror lineages; retail settled it first. The 08-17
+    Factions captures carry the whole cluster (0x00F3 x170, 0x00F4 x215,
+    0x00F5 x5, 0x00F6 x7 -- studies/character/STORAGE.md §3), and
+    studies/newopcodes/FINDINGS.md measured 0x00F6's handler byte-by-byte:
+    field 2 is FLAGS (bit 0 = display value / 10), fields 4/7 are RANK IDS
+    into the 0x00F3 table at ctx+0x82C, fields 5/8 duplicate those ranks'
+    values on the wire (retail invariant, checked in every sighted channel),
+    the strings are printf-style TEMPLATES, and 0x00F5 patches only
+    current-points -- and is inert unless a prior 0x00F6 set the description
+    pointer (entry+0x28), which is why 0x00F6 must precede it.
 
-    The two trailing string16(8) fields are enc-strings ("Pts" label and
-    mouseover per GWCA's names). Template framing spends 3 of the 8 units, so
-    the literals here are <= 5 characters -- enough to prove whose text is on
-    screen. If the row's NAME is a real title's (Drunkard, Survivor...)
-    resolved by the client rather than our literal, that alone is a finding:
-    field 0 indexes the compiled 48-row s_titleClientData catalog.
+    So this probe no longer asks what the fields mean. It asks the loopback
+    question retail cannot: does OUR server driving this cluster render in
+    OUR client's Titles tab -- the replicate-one-piece step -- plus the two
+    things retail traffic left open: whose text reaches the screen (the row
+    NAME should resolve from the compiled 48-row s_titleClientData; our
+    5-char literals ride the template strings), and what an UNSEEDED rank id
+    does (retail always ships 0x00F3 first; AttribTitles:114
+    codedNextTierName is the named assert candidate).
 
-    The deliberately out-of-range legend title comes LAST: if a rank-id field
-    is an unchecked index into the tier array, that step may assert -- and a
-    crash there names the consumer while costing nothing, because every
-    earlier reading is already on screen (the attr_legend rule: leave the
-    client in the state being measured).
+    Steps mirror retail's own shape: two 0x00F3 rank records, then a 0x00F6
+    whose fields 4/5 and 7/8 reference them value-for-value, then the 0x00F5
+    patch, then 0x00F4 (retail usage measured: binds a PLAYER NUMBER to a
+    rank id, 215 sightings in towns -- ours is 1 either way). The unseeded-
+    rank stress step stays LAST so a crash costs no earlier reading.
     """
     label = questdefs.coded_literal("Pts", limit=8)
-    name = questdefs.coded_literal("Rurik", limit=8)
+    rank1 = questdefs.coded_literal("Rurik", limit=8)
+    rank2 = questdefs.coded_literal("Elder", limit=8)
     return [
-        Step(3.0, 0x00F3, [1, 0, 1, name],
-             "0x00F3 TITLE_RANK_DATA: rank_id 1, rank 1, name 'Rurik'",
-             "nothing visible, predicted -- this should seed a tier record "
-             "the track below can reference. A crash HERE is its own result: "
-             "it names 0x00F3's consumer before anything referenced it."),
-        Step(8.0, 0x00F6, [7, 0, 4200, 1, 1000, 0, 1, 8400, 12, 1,
-                           label, name],
-             "0x00F6 TITLE_TRACK_INFO: title 7, points 4200, denominators "
-             "1000/8400 distinct",
+        Step(3.0, 0x00F3, [1, 1, 1000, rank1],
+             "0x00F3 rank record 1: value 1000, name 'Rurik'",
+             "nothing visible, predicted -- retail streams these in bulk "
+             "(170 sightings) before any track references them."),
+        Step(1.0, 0x00F3, [2, 1, 8400, rank2],
+             "0x00F3 rank record 2: value 8400, name 'Elder'",
+             "nothing yet either."),
+        Step(6.0, 0x00F6, [7, 0, 4200, 1, 1000, 0, 2, 8400, 2, 2,
+                           label, rank1],
+             "0x00F6 track: title 7, points 4200, current rank 1 (min 1000), "
+             "next rank 2 (min 8400)",
              "open the Hero window's TITLES tab (close it first if it was "
-             "open). PREDICTION: a track row exists at rank 1 carrying 4200 "
-             "progress. Whichever of 1000 or 8400 shows as the target names "
-             "its field -- ldufr and GWCA disagree here. Note the row's NAME: "
-             "our 'Rurik', or a real title resolved from the client's own "
-             "48-row table?"),
+             "open). PREDICTION: a track row at 4200 progressing toward 8400, "
+             "next tier named 'Elder'. Note the row's NAME: a real title "
+             "resolved from the client's own 48-row table (title id 7), or "
+             "our text? Retail's field map says the id wins and our strings "
+             "are the points/mouseover templates."),
         Step(10.0, 0x00F5, [7, 6000],
-             "0x00F5 TITLE_UPDATE: title 7 -> 6000",
-             "reopen the tab. PREDICTION: the same row now reads 6000 -- an "
-             "update can move a track without a fresh TRACK_INFO. If a rank "
-             "boundary was crossed (6000 > 4200), does the rank change too?"),
+             "0x00F5 update: title 7 -> 6000 points",
+             "reopen the tab. PREDICTION: the same row reads 6000 -- retail "
+             "moves title 2 this way five times (1->8->9->10->12->13), and "
+             "the handler posts UI message 0x10000065 on receipt. This works "
+             "only because step 3 set the description pointer -- the guard "
+             "newopcodes measured at entry+0x28."),
         Step(10.0, 0x00F4, [agent_id, 1],
-             "0x00F4 TITLE_RANK_DISPLAY: player 1, rank 1",
-             "under YOUR OWN nameplate (target yourself). PREDICTION, weak: "
-             "the rank-1 name from step 1 appears there. The wiki says titles "
-             "display in STAGING areas, so nothing appearing in an explorable "
-             "is the staging-area rule, not a refutation -- but a crash or a "
-             "changed nameplate is real signal either way. The word field is "
-             "player NUMBER under GWLP-R's naming and could be agent id; ours "
-             "are both 1, so this step cannot tell them apart."),
+             "0x00F4 display: player 1 wears rank 1",
+             "under YOUR OWN nameplate (target yourself). Retail sends this "
+             "215 times in towns binding OTHER players (word field = player "
+             "number, values <= ~90) to rank records. PREDICTION: 'Rurik' "
+             "under the name in this outpost. Our player number and agent id "
+             "are both 1, so this step cannot tell those apart."),
         Step(10.0, 0x00F6, [8, 0, 9002, 9003, 9004, 0, 9006, 9007, 9008, 9009,
-                            label, name],
-             "0x00F6 legend, title 8: every numeric field 9000+index, "
-             "rank ids deliberately out of range",
-             "LAST ON PURPOSE. Reopen the tab. A second row whose numbers "
-             "name their own fields settles the ldufr/GWCA naming dispute "
-             "outright; an assert instead names which field is an unchecked "
-             "index into the tier table -- either outcome is worth having, "
-             "and everything before this is already measured."),
+                            label, rank1],
+             "0x00F6 stress, title 8: rank ids 9006/9009 deliberately "
+             "UNSEEDED",
+             "LAST ON PURPOSE. Reopen the tab. Retail always seeds 0x00F3 "
+             "first, so this is the one input real traffic never shows the "
+             "client. A rendered-garbage row means the UI tolerates a missing "
+             "rank record; an assert names the consumer -- AttribTitles:114 "
+             "codedNextTierName is the candidate. Either is worth having, and "
+             "everything before this is already measured."),
     ]
 
 
@@ -5055,31 +5068,41 @@ PROBES = {
                  "'/ 0' refutes the cluster reading outright.",
         steps=_faction_max_steps(a),
         note="studies/character/STORAGE.md §2. Shapes are the client's own "
-             "38797 tables; the semantics are three lineages deep (Headquarter "
-             "stores the dword into player_hero.*.max) and observed nowhere. "
-             "The Hero window does not live-refresh -- close and reopen it "
-             "after each read point, or the run will look self-contradictory.",
+             "38797 tables. UPGRADED 2026-08-18: retail SENDS these -- 132 "
+             "sightings over six live captures, EA/EB/EC = 10000 and "
+             "ED = 20000, constant -- so the cluster reading is no longer in "
+             "doubt. What this probe still buys: the per-opcode->bar mapping "
+             "(retail's three identical 10000s cannot tell EA/EB/EC apart; "
+             "our four distinct values can) and the mid-session-change "
+             "question. The Hero window does not live-refresh -- close and "
+             "reopen it after each read point, or the run will look "
+             "self-contradictory.",
     ),
     "title_track": lambda a, o: Probe(
-        question="Does the title cluster 0x00F3-0x00F6 drive the Hero "
-                 "window's Titles tab, and whose field naming is right?",
-        predicts="A track row appears for title 7 at rank 1 with 4200 points "
-                 "(field 2 is current points under BOTH rival namings), and "
-                 "0x00F5 moves it to 6000. Whichever of 1000/8400 renders as "
-                 "the target names its field and its lineage. The row's name "
-                 "is the sharper question: our literal 'Rurik' means the "
-                 "strings are display text; a real title name means field 0 "
-                 "indexes the compiled 48-row catalog. The out-of-range "
-                 "legend title is LAST because it may assert, and an assert "
-                 "there names an unchecked tier index without costing the "
+        question="Does OUR server driving 0x00F3-0x00F6 render in OUR "
+                 "client's Titles tab -- and what does an unseeded rank id "
+                 "do, the one input retail never sends?",
+        predicts="A track row for title 7 at 4200 points progressing toward "
+                 "8400, next tier 'Elder'; 0x00F5 moves it to 6000; 0x00F4 "
+                 "puts 'Rurik' under our own nameplate in the outpost. The "
+                 "row's NAME should be the real title id 7's, resolved from "
+                 "the compiled 48-row table -- our strings are the "
+                 "points/mouseover templates, per the measured field map. The "
+                 "unseeded-rank stress step is LAST because it may assert "
+                 "(AttribTitles:114 codedNextTierName is the candidate), and "
+                 "an assert there names the consumer without costing the "
                  "earlier readings.",
         steps=_title_track_steps(a),
-        note="studies/character/STORAGE.md §3. Zero title messages exist in "
-             "all 22,524 captured -- this cluster has never been seen used, "
-             "only declared. Titles DISPLAY only in staging areas per GWW, so "
-             "step 4 failing silently in an explorable is expected; the tab "
-             "itself should work anywhere. Reopen the Hero window at every "
-             "read point.",
+        note="REVISED 2026-08-18 to the measured field map: retail sightings "
+             "(0x00F3 x170, 0x00F4 x215, 0x00F5 x5, 0x00F6 x7 -- "
+             "studies/character/STORAGE.md §3) and the byte-level handler "
+             "walk (studies/newopcodes/FINDINGS.md) settled the naming "
+             "dispute the first version was built around. Field 2 = flags, "
+             "fields 4/7 = rank ids into the 0x00F3 table, fields 5/8 = "
+             "those ranks' values restated, strings = printf templates, and "
+             "0x00F5 is inert without a prior 0x00F6 (entry+0x28 guard). "
+             "Titles DISPLAY in staging areas per GWW -- run this in an "
+             "outpost. Reopen the Hero window at every read point.",
     ),
     "damage": lambda a, o: Probe(
         question="Does damage arrive as agent property 16 on 0x00A3, and is the "

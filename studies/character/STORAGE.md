@@ -117,10 +117,33 @@ Answered at the reading level:
 - **Not observed anywhere:** no capture in the vault contains 234–237 (the
   live sessions are Pre-Searing; faction UI is Factions/Nightfall content).
 
+> **UPDATE 2026-08-18 — OBSERVED, on retail's own wire.** The bullet above
+> described only the Pre-Searing corpus; the 2026-08-10/17/18 live captures
+> (six of them — the Factions-character campaign plus 20260810T235916) were
+> scanned this pass with `tape.load_tape`/`decode_all` over all 31 game
+> connections, every receipt 100% consumed, 71,424 messages, zero decode
+> errors. The four maxima appear **132 times**: `0x00EA = 10000`,
+> `0x00EB = 10000`, `0x00EC = 10000`, `0x00ED = 20000` — each constant
+> across every sighting and every capture. `0x00ED`'s odd 20,000 tags one
+> opcode↔bar pairing from retail data alone; the three identical 10,000s
+> still need the probe's distinct-value trick to tell apart. The same scan
+> settled two neighbours for free:
+> - **`0x00E9` field 10 is 100 in all 31 sightings** — fresh level-1 and
+>   level-20 characters alike — and `0x00EE` carries one
+>   `attr 10, delta 0xFFFFFFF1` = **−15**: the morale = value − 100 encoding,
+>   from retail (a −15% death penalty in the flesh). Our display probe's
+>   refutation stands for the *top-left indicator*, not for the encoding.
+> - **Fields 11/12 move together**: `0x00EE` sends paired `attr 11, +40` /
+>   `attr 12, +40` (×17) and `+50/+50` (×5), and a level-20's `0x00E9` shows
+>   930/930 — the current/total-earned pairing watched happening rather than
+>   read out of a struct name.
+
 **Probe — built 2026-08-16: `--probe faction_max`.** The attr_legend vector
 paints the numerators, then the four maxima land with distinct values (so a
 swapped opcode→faction mapping names itself), and a final `0x00EA` re-send
 asks whether a cap can move mid-session. Four filled denominators = OBSERVED.
+*(Still worth running after the 08-18 upgrade above — retail's values cannot
+discriminate `0x00EA/EB/EC` from each other; four distinct values can.)*
 
 ## 3. Titles: the `0x00F3`–`0x00F6` cluster (new)
 
@@ -165,13 +188,36 @@ The mirrors know a four-message SMSG cluster and two CMSGs:
   send site (`GameSrv.c:1472` `// GameSrv_SendPlayerTitles`). GWLP-R has the
   three protocol shells and no table. Nobody persists a title anywhere.
 
-**Probe — built 2026-08-16: `--probe title_track`.** Five steps: a `0x00F3`
-tier seed, a coherent `0x00F6` track (field 2 = current points under both
-rival namings; the two possible denominators distinct so whichever renders
-names its lineage), a `0x00F5` update, a `0x00F4` display attempt against our
-own nameplate (staging-area caveat noted in the probe), and LAST a
-deliberately out-of-range legend track — the client's title UI bound-checks
-its 48-row table (`GmCtlSkList:3294 title < TITLES`), so an assert there
+> **UPDATE 2026-08-18 — the whole cluster is OBSERVED in retail traffic, and
+> the field names are measured, not argued.** Two developments since this
+> section was written. **(1) Retail sends all four.** The same six-capture
+> scan as §2's: `0x00F3` ×170 — the rank *vocabulary*, streamed in bulk
+> (`[rank_id, flags, value, template-string]`, e.g. records 133/177/364/365);
+> `0x00F4` ×215 — **in towns, binding OTHER players to rank records**
+> (`[60, 364]`, `[1, 133]`, `[52, 177]`… — the word field is a player
+> number, values ≤ ~90, and the rank ids are `0x00F3` records), which is
+> what TITLE_RANK_DISPLAY is *for*: the under-nameplate title of everyone in
+> the district; `0x00F5` ×5 / `0x00F6` ×7 — title id **2** on the new
+> Factions character, points moving 1→8→9→10→12→13. **(2) The field map is
+> measured** ([../newopcodes/FINDINGS.md](../newopcodes/FINDINGS.md)
+> `0x00F5`/`0x00F6`): the table above's GWLP-R naming is superseded — field
+> 2 is **flags** (bit 0 = display value ÷ 10), fields 4/7 are **rank ids
+> into the `0x00F3` table** at `ctx+0x82C` (fields 5/8 restate those ranks'
+> values on the wire — checked in every sighted channel), the two strings
+> are **printf-style templates**, not captions, and `0x00F5` patches only
+> current-points and is inert unless a prior `0x00F6` set the description
+> pointer (`entry+0x28`). The title id space is the client's own 48-row
+> `s_titleClientData`, named by its own assert (`AttribTitles:114`). The
+> probe below was revised the same day to this map.
+
+**Probe — built 2026-08-16, revised 2026-08-18: `--probe title_track`.** Six
+steps mirroring retail's own shape: two `0x00F3` rank records, a `0x00F6`
+referencing them value-for-value, the `0x00F5` patch (valid only because the
+`0x00F6` set the description pointer — the measured guard), a `0x00F4`
+display attempt against our own nameplate, and LAST a `0x00F6` whose rank
+ids are deliberately **unseeded** — the one input retail traffic never shows
+the client — where the client's title UI bound-checks are the named assert
+candidates (`GmCtlSkList:3294 title < TITLES`), so an assert there
 names an unchecked tier index without costing the earlier readings. The
 sharpest cheap question: whether the track row's *name* is our literal string
 or a real title resolved from the compiled catalog.
