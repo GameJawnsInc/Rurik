@@ -32,6 +32,20 @@ coincidence: a bare float can occur anywhere, so a hit only counts when its
 PARTNER is present nearby at the ratio the render aspect demands. A lone
 1.30323 with no partner is reported as exactly that and settles nothing.
 
+**DO NOT RUN THIS AT A SQUARE WINDOW.** At aspect 1.0 the horizontal and
+vertical readings predict the IDENTICAL pair -- cot(fov/2) twice -- so the test
+cannot discriminate at all; and because the partner search below looks in a
+window that always contains the found float itself, each reading would
+self-confirm off one stored value. The verdict then prints UNSETTLED, which is
+honest but wastes the run. Near-square is WORSE than exactly square: at aspect
+0.9999 the two predictions are ~2.6e-4 apart, at this file's own tolerance,
+where a floating-point difference could tip a false winner instead of failing
+loudly. Pick an aspect far from 1.0 -- portrait is ideal, because below 1.0 the
+two readings SWAP which cotangent is larger, making the answer a qualitative
+flip rather than a fitted number. (Both hazards are measured, not theorised:
+FINDINGS section 12, where the run used 0.699 and the predictions sat 0.39
+apart.)
+
 Read-only: `ReadProcessMemory` and nothing else. The client must be IN A MAP.
 """
 
