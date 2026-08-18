@@ -2002,6 +2002,26 @@ that LOW confidence before the run:
    extent is preserved and the vertical extent grows hugely. That is the same
    verdict from pixels, with no arithmetic at all.
 
+**THE DESIGN WAS REVIEWED ADVERSARIALLY BEFORE IT RAN, and the reviewer
+returned FLAWED.** Its primary attack was exactly the aspect-1.0 collision —
+and worse than uninformative there, because `fovaxis.py`'s partner check
+searches a window that always contains the found float itself, so at aspect 1.0
+each hypothesis would *self*-confirm off one stored value. That is a real
+defect in the tool at that one aspect. It did not bite because the aspect was
+pinned to 0.699 first, where the predictions sit 0.39 apart — roughly 2,000×
+the tolerance. **A near-square window is worse than an exact one**: at 0.9999
+the two predictions are ~2.6e-4 apart, at the tool's own noise floor, where
+exact 1.0 at least fails loudly as UNSETTLED.
+
+**The reviewer's other live confound — a second in-engine camera (minimap,
+shadow, cutscene) contributing a matching pair by coincidence — is answered by
+the two runs together.** `fovaxis.py` confirms on numeric adjacency alone and
+does not tie a hit back to the camera chain, so a decoy is possible in
+principle. But a decoy would have to produce the horizontal pair at BOTH
+aspects, never produce the vertical pair at either, and have its second value
+land on `cot(75/2) × aspect` for two different windows — 2.499693 and then
+0.911346. A camera with its own field of view does not track OUR window twice.
+
 **SO THE PATCH NOTE AND THIS CLIENT DISAGREE, and the disagreement is now a
 measurement rather than a loose end.** On build 38797, launched without
 `-oldfov`, the projection is horizontal-fixed. What that means for ArenaNet's
