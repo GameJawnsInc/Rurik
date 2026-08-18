@@ -1182,17 +1182,40 @@ def _title_track_steps(agent_id):
     rank id, 215 sightings in towns -- ours is 1 either way). The unseeded-
     rank stress step stays LAST so a crash costs no earlier reading.
     """
-    label = questdefs.coded_literal("Pts", limit=8)
-    rank1 = questdefs.coded_literal("Rurik", limit=8)
-    rank2 = questdefs.coded_literal("Elder", limit=8)
+    # RUN 2026-08-18 (harness 20260818T...) -- the client HUNG UP, Code=007,
+    # the instant the original step 1 landed: 0x00F3 [1, 1, 1000, <8-unit
+    # template literal>]. No assert, no crash dialog -- the clean-refusal
+    # shape. So the opening is now a one-variable-per-step ladder, verbatim
+    # first: retail's own bytes, then our ids with retail's string, then our
+    # string SHORTENED -- because the original literal sat exactly at the
+    # string16(8) cap, and an off-by-one bound check (`<` where `<=` fits)
+    # rejects exactly-at-cap while retail's longest observed is 5 units.
+    # Whichever rung hangs up names its variable.
+    retail_str = questdefs.coded_literal("ā", framing="bare", limit=8)
+    label = questdefs.coded_literal("Pts", limit=7)
+    rank1 = questdefs.coded_literal("Ruri", limit=7)
+    rank2 = questdefs.coded_literal("Eld", limit=7)
     return [
-        Step(3.0, 0x00F3, [1, 1, 1000, rank1],
-             "0x00F3 rank record 1: value 1000, name 'Rurik'",
-             "nothing visible, predicted -- retail streams these in bulk "
-             "(170 sightings) before any track references them."),
-        Step(1.0, 0x00F3, [2, 1, 8400, rank2],
-             "0x00F3 rank record 2: value 8400, name 'Elder'",
-             "nothing yet either."),
+        Step(3.0, 0x00F3, [0, 0, 0, retail_str],
+             "0x00F3 VERBATIM RETAIL: [0, 0, 0, string-id 0x0101] "
+             "(capture 20260810T235916, record 0)",
+             "nothing visible, predicted -- and no hangup: these are "
+             "ArenaNet's own bytes. A Code=007 HERE means the problem is not "
+             "our values at all (build drift 38833-capture vs 38797-client "
+             "becomes the suspect)."),
+        Step(2.0, 0x00F3, [1, 0, 1000, retail_str],
+             "0x00F3 our ids, retail's string: [1, 0, 1000, 0x0101]",
+             "changes ONE thing from step 1: rank_id/value. A hangup here "
+             "names the numbers, not the string."),
+        Step(2.0, 0x00F3, [1, 0, 1000, rank1],
+             "0x00F3 our 7-UNIT literal: [1, 0, 1000, 'Ruri']",
+             "changes ONE thing from step 2: the string, now UNDER the "
+             "8-unit cap the first run sat exactly on. A hangup here, after "
+             "steps 1-2 passed, points at the template literal itself; "
+             "acceptance convicts the at-cap length."),
+        Step(2.0, 0x00F3, [2, 0, 8400, rank2],
+             "0x00F3 rank record 2: value 8400, name 'Eld'",
+             "the second rank the track needs."),
         Step(6.0, 0x00F6, [7, 0, 4200, 1, 1000, 0, 2, 8400, 2, 2,
                            label, rank1],
              "0x00F6 track: title 7, points 4200, current rank 1 (min 1000), "
@@ -1208,25 +1231,27 @@ def _title_track_steps(agent_id):
              "reopen the tab. PREDICTION: the same row reads 6000 -- retail "
              "moves title 2 this way five times (1->8->9->10->12->13), and "
              "the handler posts UI message 0x10000065 on receipt. This works "
-             "only because step 3 set the description pointer -- the guard "
-             "newopcodes measured at entry+0x28."),
+             "only because the 0x00F6 step set the description pointer -- "
+             "the guard newopcodes measured at entry+0x28."),
         Step(10.0, 0x00F4, [agent_id, 1],
              "0x00F4 display: player 1 wears rank 1",
              "under YOUR OWN nameplate (target yourself). Retail sends this "
              "215 times in towns binding OTHER players (word field = player "
-             "number, values <= ~90) to rank records. PREDICTION: 'Rurik' "
+             "number, values <= ~90) to rank records. PREDICTION: 'Ruri' "
              "under the name in this outpost. Our player number and agent id "
              "are both 1, so this step cannot tell those apart."),
-        Step(10.0, 0x00F6, [8, 0, 9002, 9003, 9004, 0, 9006, 9007, 9008, 9009,
-                            label, rank1],
-             "0x00F6 stress, title 8: rank ids 9006/9009 deliberately "
-             "UNSEEDED",
-             "LAST ON PURPOSE. Reopen the tab. Retail always seeds 0x00F3 "
-             "first, so this is the one input real traffic never shows the "
-             "client. A rendered-garbage row means the UI tolerates a missing "
-             "rank record; an assert names the consumer -- AttribTitles:114 "
-             "codedNextTierName is the candidate. Either is worth having, and "
-             "everything before this is already measured."),
+        # THE STRESS STEP IS RETIRED -- ANSWERED 2026-08-18, run 2 (harness
+        # 20260818T113658). A 0x00F6 whose rank ids reference no 0x00F3
+        # record is accepted SILENTLY on receive and kills the client at
+        # RENDER time: the first Hero-window open after it landed died on
+        #     Assertion: index < m_count   Array.h(587)   build 38797
+        # with the dump stack rebasing into the AttribTitles render path and
+        # the ctx+0x81C accessor neighborhood newopcodes measured. So the
+        # rank-id fields are unchecked until drawn, and a server must never
+        # ship a track referencing ranks it has not sent -- same class as
+        # the buffId constraint (reconstruction 2.9.5). The step is gone
+        # because a registered probe with a guaranteed crash at its tail is
+        # a hazard, not an experiment: the question has no remainder.
     ]
 
 
@@ -5079,29 +5104,28 @@ PROBES = {
     ),
     "title_track": lambda a, o: Probe(
         question="Does OUR server driving 0x00F3-0x00F6 render in OUR "
-                 "client's Titles tab -- and what does an unseeded rank id "
-                 "do, the one input retail never sends?",
-        predicts="A track row for title 7 at 4200 points progressing toward "
-                 "8400, next tier 'Elder'; 0x00F5 moves it to 6000; 0x00F4 "
-                 "puts 'Rurik' under our own nameplate in the outpost. The "
-                 "row's NAME should be the real title id 7's, resolved from "
-                 "the compiled 48-row table -- our strings are the "
-                 "points/mouseover templates, per the measured field map. The "
-                 "unseeded-rank stress step is LAST because it may assert "
-                 "(AttribTitles:114 codedNextTierName is the candidate), and "
-                 "an assert there names the consumer without costing the "
-                 "earlier readings.",
+                 "client's Titles tab?",
+        predicts="A track row at 6000 of 8400. The row's name: the ANSWERED "
+                 "surprise is that it is the current rank's 0x00F3 string -- "
+                 "ours -- not a compiled-table entry, so titles are fully "
+                 "wire-authorable, display text included. 0x00F4's "
+                 "under-nameplate render is the one prediction still "
+                 "unverified: it needs a real self-target, which a scripted "
+                 "center-click does not produce (it becomes a move order).",
         steps=_title_track_steps(a),
-        note="REVISED 2026-08-18 to the measured field map: retail sightings "
-             "(0x00F3 x170, 0x00F4 x215, 0x00F5 x5, 0x00F6 x7 -- "
-             "studies/character/STORAGE.md §3) and the byte-level handler "
-             "walk (studies/newopcodes/FINDINGS.md) settled the naming "
-             "dispute the first version was built around. Field 2 = flags, "
-             "fields 4/7 = rank ids into the 0x00F3 table, fields 5/8 = "
-             "those ranks' values restated, strings = printf templates, and "
-             "0x00F5 is inert without a prior 0x00F6 (entry+0x28 guard). "
-             "Titles DISPLAY in staging areas per GWW -- run this in an "
-             "outpost. Reopen the Hero window at every read point.",
+        note="ANSWERED 2026-08-18 over three runs (RUNS.md §Run 2; captures "
+             "20260818T113252/113658/114312) except 0x00F4's nameplate "
+             "half. Two constraints found on the way, both load-bearing for "
+             "any server: string16(8) admits AT MOST 7 units on receive -- "
+             "an at-cap literal is an instant Code=007 hangup, convicted by "
+             "a one-variable ladder against verbatim-accepted retail bytes "
+             "-- and a 0x00F6 referencing unseeded rank ids is silent on "
+             "receive and FATAL on first render (Array.h(587), dump in the "
+             "capture). The stress step that found the second is retired; "
+             "its record is in _title_track_steps' tail comment. Field map "
+             "per studies/newopcodes; retail sightings per STORAGE.md §3. "
+             "Run in an outpost; reopen the Hero window at every read "
+             "point.",
     ),
     "damage": lambda a, o: Probe(
         question="Does damage arrive as agent property 16 on 0x00A3, and is the "

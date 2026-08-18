@@ -215,14 +215,31 @@ The mirrors know a four-message SMSG cluster and two CMSGs:
 > `s_titleClientData`, named by its own assert (`AttribTitles:114`). The
 > probe below was revised the same day to this map.
 
-**Probe — built 2026-08-16, revised 2026-08-18: `--probe title_track`.** Six
-steps mirroring retail's own shape: two `0x00F3` rank records, a `0x00F6`
-referencing them value-for-value, the `0x00F5` patch (valid only because the
-`0x00F6` set the description pointer — the measured guard), a `0x00F4`
-display attempt against our own nameplate, and LAST a `0x00F6` whose rank
-ids are deliberately **unseeded** — the one input retail traffic never shows
-the client — where the client's title UI bound-checks are the named assert
-candidates (`GmCtlSkList:3294 title < TITLES`), so an assert there
+> **RUN 2026-08-18, three runs, agent-piloted — OBSERVED except one loose
+> end** (full record [RUNS.md](RUNS.md) §Run 2). The cluster drives our
+> client's Titles tab end to end: our authored track renders as
+> **"Ruri (1,000)" at 6,000 of 8,400** — the row's *name* is the current
+> rank's `0x00F3` string, not a compiled-table entry, so **titles are fully
+> wire-authorable, display text included**; the bar's denominator is the
+> next-rank minimum; `0x00F5`'s patch is what renders. Two hard constraints
+> fell out: **`string16(8)` admits at most 7 units on receive** (an at-cap
+> literal is an instant `Code=007` hangup — the ladder convicted it against
+> verbatim-accepted retail bytes), and **unseeded rank ids in `0x00F6` are
+> silent on receive and fatal on render** (`Array.h(587) index < m_count`,
+> dump captured, stack in the AttribTitles path) — a server must never
+> reference ranks it has not sent. Open: `0x00F4`'s under-nameplate render
+> (the scripted self-click became a move order), and whether retail draws
+> the rank record's field 3 as threshold or rank number in the parens.
+
+**Probe — built 2026-08-16, revised twice 2026-08-18: `--probe
+title_track`.** Now seven steps: the verbatim-retail-first `0x00F3` ladder,
+a `0x00F6` referencing the seeded ranks value-for-value, the `0x00F5` patch
+(gated on the `0x00F6`-set description pointer — the measured guard), and a
+`0x00F4` display attempt. The unseeded-rank stress step is **retired,
+answered** — its finding is the render-time crash above, and a registered
+probe with a guaranteed crash at its tail is a hazard, not an experiment.
+The original design note stands for the record: the client's title UI
+bound-checks its 48-row table (`GmCtlSkList:3294 title < TITLES`), so an assert there
 names an unchecked tier index without costing the earlier readings. The
 sharpest cheap question: whether the track row's *name* is our literal string
 or a real title resolved from the compiled catalog.
