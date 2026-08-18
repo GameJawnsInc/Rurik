@@ -92,12 +92,32 @@ directory the harness prints, then close the client.
   38833 `--exe` line above. PLAN.md's rule held: the client was innocent
   both times until the gamesrv log said otherwise.
 
-### Result (fill in)
+### Result — RUN 2026-08-18, agent-piloted, ALL FOUR QUESTIONS ANSWERED
 
-- Date/build:
-- Terminal showed 6/6 steps:
-- Kurzick / Luxon / Balthazar / Imperial rows read:
-- Verdict:
+- **Date/build:** 2026-08-18, build 38797 (default client selection, default
+  map — Ascalon City post-relink), harness `20260818T112259`, agent-piloted
+  end to end: `--actions '0:play 45:key:h'`, no operator, no clicks. The
+  Hero window opened already on the Faction tab, so the planned phase-B tab
+  click was never needed.
+- **Terminal showed 6/6 steps** — each verified in the gamesrv log before
+  reading a pixel. RUN VERDICT: PASS; teardown clean.
+- **Rows read (frames hold003 and hold022, identical 76 s apart):**
+  Kurzick **1,001 / 31,000** · Luxon **1,003 / 22,000** · Balthazar
+  **1,011 / 23,000** · Imperial **1,005 / 24,000**.
+- **Verdict — OBSERVED, all predictions hit:**
+  1. `0x00EA`–`0x00ED` fill the four denominators that read `/ 0` on every
+     prior run.
+  2. The opcode→bar mapping is ldufr's naming exactly: EA=Kurzick,
+     EB=Luxon, EC=Balthazar, ED=Imperial — no swap.
+  3. Kurzick shows **31,000**, the step-6 re-send: a cap moves mid-session;
+     the client does not latch the first value.
+  4. In-frame controls all held: numerators are legend fields 1/3/5/11,
+     level 17, 424,242 xp, skill points 1,013 — the known `0x00E9` field map
+     re-confirmed in the same frame.
+- **Free rider for Run 2:** the Hero panel's tab bar reads
+  `Faction | Titles | Account`; the **Titles** tab center measures
+  ≈ `(0.816, 0.263)` in window fractions (1936×1048 frame) — the click
+  target an agent-piloted `title_track` run needs.
 
 ---
 

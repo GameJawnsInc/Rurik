@@ -1202,6 +1202,14 @@ never sent.
 > probe and the full record are in [STORAGE.md](STORAGE.md) §2, along with
 > the title cluster `0x00F3`–`0x00F6` this note's old "plausibly a
 > title-track message" guess was half-pointing at.
+>
+> **OBSERVED 2026-08-18, both directions.** Retail sends all four (132
+> sightings over six live captures, 10000/10000/10000/20000 — STORAGE.md
+> §2), and the probe ran agent-piloted against our own client (harness
+> `20260818T112259`, [RUNS.md](RUNS.md) §Run 1): all four bars filled with
+> our distinct values, mapping EA=Kurzick / EB=Luxon / EC=Balthazar /
+> ED=Imperial exactly as named, and a re-sent cap took effect mid-session.
+> This section's NOT FOUND is closed end to end.
 
 **Practical note for anyone probing this panel:** the Hero window does not
 live-refresh. It has to be closed and reopened after a packet lands, which made

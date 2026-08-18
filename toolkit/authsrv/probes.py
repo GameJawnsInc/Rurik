@@ -5067,16 +5067,15 @@ PROBES = {
                  "whether a cap can change mid-session. All four bars still "
                  "'/ 0' refutes the cluster reading outright.",
         steps=_faction_max_steps(a),
-        note="studies/character/STORAGE.md §2. Shapes are the client's own "
-             "38797 tables. UPGRADED 2026-08-18: retail SENDS these -- 132 "
-             "sightings over six live captures, EA/EB/EC = 10000 and "
-             "ED = 20000, constant -- so the cluster reading is no longer in "
-             "doubt. What this probe still buys: the per-opcode->bar mapping "
-             "(retail's three identical 10000s cannot tell EA/EB/EC apart; "
-             "our four distinct values can) and the mid-session-change "
-             "question. The Hero window does not live-refresh -- close and "
-             "reopen it after each read point, or the run will look "
-             "self-contradictory.",
+        note="ANSWERED 2026-08-18, agent-piloted (harness 20260818T112259, "
+             "studies/character/RUNS.md §Run 1): all four bars filled, "
+             "mapping = ldufr's naming exactly (EA Kurzick, EB Luxon, EC "
+             "Balthazar, ED Imperial), and the step-6 re-send moved Kurzick "
+             "to 31000 -- caps update mid-session. Retail corroborates from "
+             "the other side: 132 sightings over six live captures at "
+             "10000/10000/10000/20000 (STORAGE.md §2). Kept runnable as the "
+             "faction-panel calibration. The Hero window does not "
+             "live-refresh -- close and reopen it after each read point.",
     ),
     "title_track": lambda a, o: Probe(
         question="Does OUR server driving 0x00F3-0x00F6 render in OUR "
