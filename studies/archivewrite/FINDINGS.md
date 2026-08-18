@@ -1219,6 +1219,168 @@ hatcher, and the client never read a modified byte.
 
 ---
 
+## 10. A6 — RUN 2026-08-18. The entropy layer costs **+8 bytes**, and that is a smaller result than it sounds
+
+`toolkit/mapdata/gwentropy.py` + `test_gwentropy.py`, 91 checks, floor 91, ~43 s. Read-only
+against `vault/dat_study/Gw.dat`; no client, no server, nothing under `vault/` written.
+`git diff -- toolkit/mapdata/gwdat.py` is **empty**, which is what makes the byte-for-byte
+comparisons below evidence rather than a decoder agreeing with itself.
+
+### 10.1 The number, and the prediction it was measured against
+
+**PRE-REGISTERED 2026-08-17** in §3's A6 row, before any of this existed: *"it lands within
+0.5% of 1,029,564 B"*, with the kill rule *"if the accountant cannot reproduce retail's size
+to within a few hundred bytes on retail's own tokens, the encoder arc is dead."*
+
+**OBSERVED.** Re-costing retail's own token stream for row 11196 under a from-scratch
+canonical Huffman plus this format's meta-coder, keeping retail's block partition:
+
+| | retail | ours | delta |
+|---|---|---|---|
+| stream header | 8 bits | 8 | 0 — 4 discarded lead bits (measured 0) + `first_four` (measured 2) |
+| literal/length tables | 11,284 bits | 11,345 | **+61** |
+| distance tables | 2,202 bits | 2,200 | **−2** |
+| `block_size` fields | 64 bits | 64 | 0 — 16 blocks × 4 bits |
+| tokens | 7,877,902 bits | 7,877,902 | **0** |
+| extra bits | 344,974 bits | 344,974 | 0 |
+| **total** | **8,236,434 bits** | **8,236,493** | **+59 bits** |
+| **stored bytes** | **1,029,564** | **1,029,572** | **+8 B, +0.00078%** |
+
+The prediction is met by roughly 640×. **A6 does not kill the encoder arc.**
+
+### 10.2 Why that is weaker evidence than the headline implies — and this is the finding
+
+The skeptic pass makes an argument that must travel with the number: **A6's headline was
+close to unfalsifiable.** Huffman optimality is a theorem, so the token term — **7,877,902
+of 8,236,434 bits, 95.6% of the stream** — *had* to tie. The extra bits, the `block_size`
+fields and the header are retail's by construction. **The only genuinely free term was
+13,486 bits of table transmission, against a pre-registered tolerance of 41,184 bits.**
+
+So what A6 actually excluded is a defect in **our own cost model or reconstruction**. That
+was worth excluding and the controls below are real. But a green A6 carries much less weight
+for the A7 go/no-go than a verdict of "the encoder survives" suggests, because **the
+decision-relevant risk was always the LZ77 matcher and A6 does not touch it.** §1.2 stands
+unchanged: the success/failure boundary sits inside deflate's own tuning range.
+
+**The number that should be quoted next to +8 B, because it is the one that decides A7.**
+Row 11196's table transmission totals 13,486 bits = **1,686 B, which is 25× the row's entire
+68 B of reservation slack**. One extra block costs ~843 bits ≈ **105 B — one and a half times
+the whole authoring budget**. The row holds 1,021,421 tokens = **15.58 blocks**, so a matcher
+that produces merely **+2.7% more tokens buys a 17th block and overflows the reservation on
+table overhead alone, before a single token bit is counted.** Retail's block partition was
+handed to A6 for free, and it is not a neutral input: across a 16-row sample retail's
+non-final blocks use size codes 1, 2, 4, 5, 7, 8 and 13, so partitioning is adaptive in
+general even though row 11196's is trivial (`[15 ×15, 9]`).
+
+### 10.3 Two skeptic results that are larger than A6's own
+
+Both were produced while trying to refute the headline, and both are capability rather than
+commentary.
+
+- **[OBSERVED] Retail's stored row was RE-EMITTED BYTE-IDENTICALLY.** A skeptic wrote a
+  bitstream emitter — table descriptions copied verbatim as raw bit ranges, then every
+  recorded token re-encoded through code words derived from the reconstructed lengths via
+  `build_table`'s own `next_bits` walk, then the extra bits, padding, terminator word and
+  u32 trailer. Row 11196 came back **1,029,564 B, byte-identical to disk, with
+  `crc32 == 0xF862D5C4 == the MFT's own recorded CRC`**. Generality: **428 rows re-emitted
+  byte-identically, zero failures** — 3 anchors plus 400 random comp-8 rows in 16 B..20 KB
+  plus 25 in 100 KB..7 MB, all drawn from **outside** the module's own anchor and witness
+  lists. A valid-but-different parse could not reproduce their bytes.
+- **[OBSERVED] ArenaNet's table encoder is IDENTIFIED: it is longest-run greedy.** A
+  separately written greedy meta-planner reproduces retail's measured table bits
+  **bit-exactly on 2,194 of 2,194 tables (100.00%)**. That is why the C5 control comes back
+  so clean — not our decoder forcing anything, but us holding their algorithm. The
+  optimal DP beats greedy on 26 of 2,194 tables (1.2%), rising with row size, and the
+  magnitude is trivial: **152 bits = 19 B across a whole 26-row witness set.**
+
+**Taken together, every piece of a compression-8 encoder now exists except the LZ77
+matcher**: the meta-coder cost model is validated, the table encoder's algorithm is named,
+the canonical code assignment is proven by byte-identical re-emission, and a bit packer has
+been fed to `build_table` on 2,194 tables with **zero refusals** — no `next_bits` overflow,
+no `currentSymbol >= symbolCount`, and decoded lengths matching intended lengths every time.
+That materially re-prices A7 downward, and it is the strongest reason to keep it on the board.
+
+### 10.4 The literal-only number §4.5 asked for — and it is DEAD
+
+§4.5 recorded that *"a literal-only Huffman encoder (no LZ77 matcher) was never costed for
+ratio … nobody has a number for it on this payload."* **OBSERVED:** row 11196 as Huffman
+literals with no LZ77 at all is **1,421,280 B — ×1.3805 of retail's output and 391,648 B OVER
+the 1,029,632 B reservation.** Ratio 0.9382 of the payload. The token census says why: of
+1,021,421 tokens, **988,469 are literals and only 32,952 are matches** — 3.2% of tokens,
+carrying the other 32% of the compression. **A literal-only encoder is not a cheap fallback
+and should not be costed again.**
+
+### 10.5 Controls, including the ones deliberately broken
+
+C1 (segment accounting closes to zero bits, with the token term **modelled** from
+reconstructed length × count rather than read off bit positions, which is the version that
+could not fail) closes to **0 bits on 11/11 test rows and 26/26 witness rows**. C2 reproduces
+the payload byte-for-byte twice — tracer vs `gwdat.decompress`, and `replay()` from the
+recorded token arrays alone with no Huffman table and no bit reader. C3 Kraft equality in
+exact `Fraction` arithmetic on 4,450 retail tables. C4 rebuilds the reconstruction into a
+full table and diffs all 256 nodes, 24 `trans` rows and every `vals` entry against what
+`build_table` produced. **C5, the meta-cost control:** retail's own decoded lengths back
+through our DP versus the table bits measured off the reader — the `above` arm (DP costing
+MORE than retail, impossible unless our cost model is wrong) fired **zero times in 6,286
+opportunities**, and an independent skeptic re-ran it with a separately derived cost table
+and real emitted bits for **0 in 2,194 more**.
+
+Each was **broken on purpose** and watched go red: shave one bit off one of the 256 meta
+tokens and C5's `below` arm fires; add one and the refuting `above` arm fires; swap two
+symbols' code lengths and Kraft stays blind at exactly 0 while C4 names the node
+(`node 240: build_table [5, 190], rebuild [5, 277]`). A check nobody has seen fail is what
+`checks.py` exists to complain about.
+
+### 10.6 Corrections to this run's own first draft
+
+Recorded here rather than smoothed, because three of the four were over-claims in **our**
+favour and one is a rule violation.
+
+- **The framing model is an IDENTITY, not a prediction, and calling it refutable was the
+  defect.** `gwentropy.py`'s docstring, its `framing_bytes()` docstring and the TESTS.md
+  entry all claimed it *predicts* the MFT's own `size` field, "a field that is not an input
+  to the calculation". `ar.raw(e)` slices the payload to `e.size`, so `len(data) == e.size`
+  by construction; C1b pins `final_idx == len(data) − 4` and `avail ∈ 0..31`; agreement is
+  then forced for every stored size divisible by 4, and **138,708 of 138,708 comp-8 rows
+  satisfy that**. It could not fail anywhere in its population — **exactly the "check that
+  cannot fail" CLAUDE.md forbids.** All three sites are corrected; it is kept as bookkeeping.
+- **"The scout prototype's 972 B miss was essentially all matcher" is a non-sequitur.** That
+  prototype's 1,030,604 B used *its* entropy layer on *its* tokens; A6 measured *ours* on
+  *retail's*. The +8 B does not transfer across token streams — table cost scales with block
+  count and per-block symbol distributions, both of which move when the matcher changes. The
+  defensible claim is the weaker one: **our entropy layer is within a few bytes of optimal
+  for whatever token stream it is handed.**
+- **"Inside the in-place bar of 1,029,628 B by 56 B" is near-vacuous and mis-denominated.**
+  Vacuous because re-costing retail's own tokens and finding they fit retail's own
+  reservation is not a milestone. Mis-denominated because §1.1 defines 1,029,628 as the
+  reservation *less* the 4-byte trailer while `gwentropy`'s `stored` is trailer-*inclusive*;
+  the right bar for a trailer-inclusive figure is **1,029,632**. This is correction **C-3**'s
+  trailer double-count, live in a second place, and the direction is conservative by 4 B.
+- **C5's independence is narrower than "the one check nothing of ours forces."** It is
+  genuinely independent of `table_lengths` and of the DP's run logic, but the DP and
+  `build_table`'s measured consumption are both driven by the same borrowed
+  `CODE_LENGTH_THRESHOLDS` / `CODE_LENGTH_SYMBOLS`. A shared error in *those* is invisible to
+  it — the standing §2.2 risk that `gwdat.py`'s diff against `xentax.cpp` has never been run.
+- Minor: "four rows come out smaller than retail" is **two** in bytes (−4 and −8); the other
+  two are 0 B. And the stated cause (tie-break luck) is incomplete — the DP genuinely beats
+  retail's greedy meta-plan on 1.2% of tables, which is a small systematic edge.
+
+### 10.7 What A6 does and does not say
+
+**Does:** our Huffman + meta layer is within +8 B of ArenaNet's on their own tokens for row
+11196, and within {−8 … +28} B across a 26-row witness set spanning 88 B to 6,247,580 B and
+five content kinds (ATEX, ffna, MPEG, DDS, MZ). Format conformance is not the encoder's
+problem. Rung **A7 is not killed and is now cheaper than costed**, because the table encoder
+is identified and the code assignment is proven.
+
+**Does not:** say the encoder works. The LZ77 matcher is **completely untested**, it is where
+§1.2 puts the whole risk, and §10.2's block-overhead arithmetic says a matcher only 2.7%
+worse in token count overflows the reservation on table cost alone. **Nor does A6 restore the
+encoder to the critical path for shape authoring** — §9.3k settled that separately, and the
+lever there is still the 29,802 B shell.
+
+---
+
 ## Appendix — what I verified myself
 
 **OBSERVED (mine), run read-only in `C:/gd/Rurik/.claude/worktrees/great-heyrovsky-7fe716`, vault located via `toolkit/vaultpath.py` → `C:\gd\Rurik\vault`:**

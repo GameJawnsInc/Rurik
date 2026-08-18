@@ -30,6 +30,13 @@ are the arc's main output so far.
 **What is NOT shown:** a linked file's *content* changing what appears on screen. The only
 property we tested in a linked file is the one linked files do not own.
 
+**What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
+retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted
+byte-identically** (428 rows, CRC-matched); **ArenaNet's table encoder is longest-run
+greedy**, bit-exact on 2,194/2,194 tables; and a literal-only encoder is **dead** by
+391,648 B. **Not shown:** anything about the LZ77 matcher, which is where the whole
+remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7.
+
 ---
 
 ## 2. State of the machine
@@ -60,6 +67,7 @@ Nothing is running: no client, no server, no background task.
 | `archive.py` `mftOffset` u64 | was `<I`; silently **capped archive growth** | §11 |
 | `datwrite` header refusal | `[0x00,0x10)` — the one corruption with no recovery | `test_datwrite.py` |
 | `datplan` extent projection | a generation's declared extent crosses run boundaries | `test_datplan.py` §9 |
+| `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
@@ -94,11 +102,23 @@ casting animation** in the harness's `--enemy` setup, so pick a link that serves
 provoke other animations. 13 of 15 links are writable; the two that are not (15018, 87333)
 hold 149 of 242 records.
 
-**B. Decide the encoder on its real merits.** It is off the critical path for shape, but it
-is what reaches *motion* in the 62% of records held by unwritable files. A2 measured the
-stdlib beating ArenaNet's own ratio on that payload by **11,930 B**, so the difficulty is
-format conformance, not compression. Rung **A6** — the entropy accountant, ~80 lines, no
-bitstream — is the cheapest thing that can kill it.
+**B. ~~Decide the encoder on its real merits.~~ A6 RAN, 2026-08-18 — see §10. It did NOT
+kill the encoder, and the risk is now entirely the LZ77 matcher.** Re-costing retail's own
+token stream for row 11196 gives **+8 B on 1,029,564**. But read §10.2 before quoting that:
+the token term is 95.6% of the stream and Huffman optimality is a theorem, so it *had* to
+tie — A6 excluded a defect in our own cost model, not a risk in the encoder. **The figure
+that decides A7 is the block overhead:** table transmission is 1,686 B = **25× the row's
+68 B of slack**, one extra block ≈ **1.5× the whole authoring budget**, and a matcher only
+**+2.7%** worse in token count overflows the reservation on table cost alone.
+**What the skeptics left behind is worth more than the verdict:** retail's stored row was
+**re-emitted byte-identically** (428 rows, zero failures, CRC matching the MFT), and
+**ArenaNet's table encoder is identified as longest-run greedy** (bit-exact on 2,194/2,194
+tables). Every piece of a compression-8 encoder now exists **except the matcher**. Also
+settled: a literal-only encoder is **DEAD** — 1,421,280 B, 391,648 B over the reservation.
+**A7's remaining question is a size-only matcher experiment**, and it needs no bitstream:
+build a hash-chain/lazy-matching LZ77, feed its token stream to `gwentropy`'s existing
+cost model, and see whether it lands under 1,029,632 B *including* whatever block count it
+implies. That is the cheapest thing that can still kill A7.
 
 **C. A1b, downgraded but real.** `schema/messages.json` has **zero** occurrences of `anim`,
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*

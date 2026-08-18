@@ -1095,6 +1095,7 @@ keep honest.
 | `toolkit/mapdata/modelfile.py` — the **prop model geometry** layout and the FVF stride tables | GuildWarsMapBrowser (its FVF tables and model reader) — **not taken**; recorded because the arc ran alongside it | same custom licence as the rows above | ✅ row added 2026-08-13 with rung M2, and it is the row where **upstream turned out to be RIGHT and we were wrong**. Nothing is taken: the three stride tables are read out of the client's own `.data` (VA `0x00BF5B80`/`BC0`/`BE0`, accessor `0x00688010`) by this repo's own PE walk, and `test_modelfile.py` §5 re-reads them from the vaulted image so the module's literals are pinned to ArenaNet's bytes. GWMB's tables **are** those client tables. The point worth recording: [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §B6 logged our corpus-fitted byte-cost rule "disagreeing with GWMB's table once (`dat_fvf 0x2C`)" as an open question and every prior row in this register describes upstream as a witness *we* corrected — here the client corrected **us**, `0x2C` never existed, and the cross-file oracle went 0/16 → 16/16 on the affected model. See [studies/models/FINDINGS.md](studies/models/FINDINGS.md) §2. |
 | `toolkit/clientscan/textrec.py` — the **string-id split** `file = id // 1024, rec = id % 1024` | Fournux/Tyria-Extractor (`doc/SKILL_EXTRACTION.md`, mirrored at `vault/mirrors/Fournux__Tyria-Extractor`) | **MIT** — permissive, attribution required | ✅ row added 2026-08-17, credited in `THIRD-PARTY-NOTICES.md`. **This is the one rule in the repo taken from an upstream and NOT re-derived** — the module's own docstring says so in those words. What makes it defensible is not a second reading but an ORACLE: `textrec.py --dat … 1 2 7 …` resolves ids to words, and the words are right. That is a check the artifact can refute, and it is stronger than agreement with the source it came from. Re-deriving the split from the client's own indexing code would retire the dependency; nobody has. |
 | `toolkit/clientscan/skilltable.py` — the **skill record layout** (0xA4 stride and its field offsets) | Fournux/Tyria-Extractor `doc/SKILL_EXTRACTION.md` | same | ✅ row added 2026-08-17, same notice. **Read and re-derived, not copied** — the module locates the table by a four-way conjunction (stride, count, id monotonicity, profession/equip ranges) that a false positive would have to satisfy all of, and `test_skilltable.py` scores 1,333 base rows against Tyria-Extractor's independent count *and* against the wiki's 1,329 player skills. Two unrelated methods, so the agreement is corroboration rather than one witness twice. |
+| `toolkit/mapdata/gwentropy.py` — the **meta-coder tables** (`CODE_LENGTH_THRESHOLDS`, `CODE_LENGTH_SYMBOLS`) read in the ENCODE direction | GuildWarsMapBrowser `SourceFiles/xentax.cpp`, reached through this repo's own re-derivation in `toolkit/mapdata/gwdat.py` | same custom licence as the `gwdat.py` row above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-18 **before the module existed**, which is what [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md) §2.2 asked for and what the `gwdat.py` row itself never got. The module **imports** those constants rather than re-transcribing them and takes **nothing new** from upstream — but it reads them in the direction upstream never wrote. That direction is the point: the archivewrite scouts checked all five mirrored lineages (GWMB `xentax.cpp`, gw-preservation `binutil/huffman.go`, Fournux `gw_dat_decompress.rs`, OpenTyria `FaCompress.c`, Headquarter `docs/compress.c`) and **every one declares decode only — NOT FOUND, nobody upstream wrote the inverse**. So the cost model is ours and the tables are theirs, which is exactly the split this register exists to record. `THIRD-PARTY-NOTICES.md`'s GWMB entry names the modules; extend its "Used by" list in the same commit as the module. |
 | **monster AI: aggro radius, leash, scatter, targeting, formation, patrol** — *no module takes these yet* | GWW (`wiki.guildwars.com`), the pages named in [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §4 with revision ids | GFDL 1.2 / CC BY-NC-SA 2.5 (dual) — **attribution required**, and the NC arm is satisfied by this project being local and personal (`CLAUDE.md`) | ✅ row added 2026-08-11 **before any module takes any of it**, which is the first time this table has been used the way it was designed rather than retrofitted. **The split that matters is values vs. algorithms.** The gwinch table (aggro bubble/earshot 1012, touch 144, casting 1248, longbow 1498, compass 5020 …) is a set of *values* and reaches the repo as `content/*.toml` rows carrying `source = "wiki"`, which `toolkit/content.py` already gates. **Scatter, leash, target priority and the melee-surround formation are *algorithms*** and are what this row exists for — none has landed, and none may land without citing it here. **Currency is the failure mode, not licence**: three of the four core pages carry `Category:Unofficial terms`, *Foe* has not been revised since 2021 and *Patrol* since 2017, the wiki **contradicts itself** on target priority (§4.3), and where a stale page and a fresh one disagree the stale one was wrong both times. So every borrowed row records its revision id, and a value our own artifacts can check is checked rather than adopted. |
 
 **A MIRROR TRAP THAT COST FIVE AGENTS AN ARGUMENT EACH, 2026-08-17.** The vault holds
@@ -1728,12 +1729,52 @@ compression-8 encoder exists. **Authorship that reaches the full animation set n
 encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
 for the owner rather than a gap in this one.
 
-### The archive write-size wall — SCOPED, and both halves of U7's closing sentence were wrong (2026-08-17)
+### The archive write-size wall — A1–A4 and A6 are RUN; the encoder's risk is now entirely its matcher (2026-08-18)
 
 **Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
 routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A
 separate pass answered the durability question `studies/datwrite` named as decisive and left
-open for eleven days. Nothing is built — §3's ladder (A1–A8) is a **PROPOSAL until adopted**.
+open for eleven days. §3's ladder is A1–A8; **A1, A2, A3, A4 and A6 have run**, A5, A7 and
+A8 have not. (This paragraph read "Nothing is built" for a day after A3 and A4 landed.)
+
+**A6 IS RUN, 2026-08-18 — the entropy layer costs +8 bytes, and that is a SMALLER result
+than it sounds.** Study §10. `toolkit/mapdata/gwentropy.py` + `test_gwentropy.py`, 91 checks,
+floor 91. Re-costing retail's own token stream for row 11196 under a from-scratch canonical
+Huffman plus this format's meta-coder gives **1,029,572 B against retail's 1,029,564 B —
++8 B, +0.00078%**, meeting the prediction pre-registered on 2026-08-17 ("within 0.5%") by
+roughly 640×. **A6 does not kill the encoder arc.**
+
+**But the honest reading is the skeptics', and it must travel with the number: A6's headline
+was close to unfalsifiable.** Huffman optimality is a theorem, so the token term — 95.6% of
+the stream — *had* to tie, and the extra bits, `block_size` fields and header are retail's by
+construction. Only 13,486 bits of table transmission were genuinely free, against a tolerance
+of 41,184. What A6 excluded is a defect in **our own cost model**, which was worth excluding;
+the decision-relevant risk was always the **LZ77 matcher and A6 does not touch it**. §1.2
+stands: the pass/fail boundary sits inside deflate's own tuning range. **The number that
+should be quoted instead of +8 B:** row 11196's table transmission is 1,686 B = **25× the
+row's entire 68 B of reservation slack**, one extra block costs ≈105 B = **1.5× the whole
+authoring budget**, and the row is 15.58 blocks — so a matcher producing merely **+2.7% more
+tokens buys a 17th block and overflows the reservation on table overhead alone.**
+
+**Two skeptic results are larger than A6's own, and both are capability.** Retail's stored row
+was **re-emitted BYTE-IDENTICALLY** (row 11196 at 1,029,564 B with `crc32` matching the MFT's
+own recorded value; **428 rows total, zero failures**, drawn from outside the module's witness
+list). And **ArenaNet's table encoder is identified: it is longest-run greedy**, reproduced
+bit-exactly on **2,194 of 2,194 tables**. So every piece of a compression-8 encoder now exists
+**except the LZ77 matcher** — a bit packer was fed to `build_table` on those 2,194 tables with
+**zero refusals**. That re-prices A7 downward.
+
+**§4.5's literal-only question is answered and the answer is DEAD:** row 11196 as Huffman
+literals with no LZ77 is **1,421,280 B, ×1.3805 of retail and 391,648 B OVER the reservation**.
+Only 32,952 of 1,021,421 tokens are matches — 3.2% of tokens carrying 32% of the compression.
+
+**One rule violation caught by the skeptic pass and corrected in the same commit.** The
+module, its `framing_bytes()` docstring and its TESTS.md entry all claimed the framing model
+*predicts* the MFT's own `size` field, "a field that is not an input to the calculation". It
+does not: `ar.raw(e)` slices the payload to `e.size`, so agreement is forced for every stored
+size divisible by 4 — **138,708 of 138,708 comp-8 rows**. It is **a check that cannot fail**,
+which CLAUDE.md forbids by name, and it is now demoted to bookkeeping at all three sites.
+Three other over-claims, all in our favour, are corrected in §10.6.
 
 **The wall was misframed, and correcting it shrinks the arc.** U7 recorded 15018 as "1.5 MB,
 unwritable". It never needed 1.5 MB of contiguous space: the row **already owns a 1,029,632 B

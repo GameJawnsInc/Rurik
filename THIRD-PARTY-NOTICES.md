@@ -16,6 +16,12 @@ nothing if we are casual about the ones that do grant a licence.
 
 **Used by:** `toolkit/mapdata/gwdat.py` (the `Gw.dat` huffman/LZ77 decompressor and its
 six constant tables, derived from `SourceFiles/xentax.cpp`) and
+`toolkit/mapdata/gwentropy.py` (the A6 entropy accountant — it re-uses two of those same
+tables, `CODE_LENGTH_THRESHOLDS` and `CODE_LENGTH_SYMBOLS`, in the ENCODE direction, and
+re-runs `gwdat.decompress`'s block loop with counters attached. It **imports** both
+tables from `gwdat.py` and re-transcribes neither, so nothing new is taken from upstream
+— but the direction is new, and it is new because upstream never wrote it: all five
+mirrored lineages of this format declare decode only. `PLAN.md` §6.1) and
 `toolkit/mapdata/pathmap.py` (the FFNA pathing-chunk struct layout and field names,
 derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
 `toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`
