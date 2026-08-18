@@ -5934,15 +5934,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
-                              # here until 2026-08-16, which is a trap rather
-                              # than a bug while the constant is also 1: this
-                              # field is what the client stores at
-                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
-                              # GmHeroCommander's scan filters hero entries by
-                              # comparing that value against 0x01C2's msg+8.
-                              # A literal here silently stops tracking the
-                              # constant. studies/heroes/FINDINGS.md 22.
+                 [PLAYER_NUMBER,  # the player NUMBER -- despite the client's
+                              # own descriptor typing this field agent_id.
+                              # Retail separates the two id spaces (player 1,
+                              # agents 27/395/311 across 20260817T183756's four
+                              # channels) and field 1 tracks the NUMBER every
+                              # time. The client stores it at ctx[0x44][0x2ac]
+                              # (handler 0x0084EF00), which GmHeroCommander's
+                              # scan compares against 0x01C2's msg+8 -- so the
+                              # PLAYER_AGENT_ID sent here 2026-08-16..18 was
+                              # one half of heroes 21.2's split-filter mirror.
+                              # A solo instance hides the difference (both 1).
+                              # studies/heroes/FINDINGS.md 22, the CORRECTED
+                              # block.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -8777,7 +8781,12 @@ def main():
         PLAYER_NUMBER = a.player_number
         print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
               f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
-              f"which is the whole point of the arm.")
+              f"which is the whole point of the arm. NOTE: since 2026-08-18 "
+              f"the 0x0199 send tracks PLAYER_NUMBER (heroes 22's correction), "
+              f"so the roster filter and the commander scan move TOGETHER "
+              f"under this flag; heroes 21's mirror rig -- roster row and "
+              f"commander binding mutually exclusive -- is no longer "
+              f"reproducible from this flag alone.")
 
     if a.hero is not None:
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
