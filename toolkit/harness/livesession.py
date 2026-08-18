@@ -1968,6 +1968,18 @@ def reassemble(outdir):
     print(f"  plan seal: {verdict.upper()} -- {why}")
     update_manifest(outdir, {"plan_seals": verdict, "plan_seals_why": why})
     report = assemble_live(wire, keys, outdir)
+    # AND WRITE THE REPORT BACK, for exactly the reason the seal comment above gives.
+    # Until 2026-08-18 this function recomputed the whole per-connection report, PRINTED
+    # it, and dropped it on the floor -- so `manifest.json` kept whatever `run()` wrote
+    # during the live session, forever. That is not cosmetic. Capture 20260817T231139 was
+    # re-assembled after the key tie-break landed and went from 13/15 to 15/15 connections
+    # on disk, while its manifest went on saying `decrypted: false`, `key_from: null` and
+    # `"2 different keys all fit; refusing to choose"` for the two recovered ones -- one of
+    # them the largest connection in the corpus. Any consumer trusting the manifest over
+    # the directory would skip a file that is sitting right there and frames cleanly.
+    # `report_from` distinguishes the two writers; a manifest without it was written by
+    # `run()` and never re-assembled.
+    update_manifest(outdir, {"report": report, "report_from": "reassemble"})
     for row in report["connections"]:
         if row.get("decrypted"):
             print(f"  [ok] {row['connection']}  {row['channel']}  "

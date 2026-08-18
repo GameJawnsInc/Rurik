@@ -513,11 +513,19 @@ Also recovered: port 52447, **map 281** — a map id that appears in no other ca
 ### The forgotten spot-check targets are recoverable, and were recovered
 
 The operator noted only that the Suit was "Suit of 60 Armor" and the Master was "Master of
-Combat". The wire holds the rest. The client stream frames 100% (17,180 bytes, 898 messages,
-mask `0x8000`), and two independent opcodes name the same agent at the same instant:
-`0x00C1`, a continuous stream that tracks what the cursor is over, and a discrete commit
-(`0x0026` or `0x0039`). Both carry `agent_id` as their first field **per the catalog's own
-field types**, not per our reading of the bytes.
+Combat". The wire holds which BODY was clicked. The client stream frames 100% (17,180 bytes,
+898 messages, mask `0x8000` — `cmsgstream.py`'s `CMSG_MASK`, not the `1` a first pass used),
+and each click appears as a continuous cursor-tracking stream (`0x00C1`) plus a discrete
+commit (`0x0026` or `0x0039`). Both carry `agent_id` as their first field **per the
+catalog's own field types**, not per our reading of the bytes.
+
+**CORRECTION, from adversarial review — these are NOT two independent witnesses.** This
+section first called them "two independent opcodes naming the same agent at the same
+instant". They are one UI event emitting two adjacent messages: for steps 14, 15 and 16 the
+pair sits **in a single TCP segment, ten bytes apart**, and `tape.py` timestamps per
+segment by construction, so "the same instant" is arithmetic rather than agreement. Only
+step 13's pair straddles segments. The recovery is unaffected — every number below
+reproduced independently, 21 of 21 — but it rests on one witness, not two.
 
 | plan step | t (wire) | commit | agent | definition slot | model | level | prof |
 |---|---|---|---|---|---|---|---|
@@ -526,13 +534,21 @@ field types**, not per our reading of the bytes.
 | 15 — a named Master | 1441.2 | `0x0039` | 28 | 142 | 155687 | 20 | 1 |
 | 16 — a Student | 1459.0 | `0x0039` | 93 | 162 | 158806 | 20 | 4 |
 
-Each falls inside its own step's mark window, and `0x00C1` corroborates each at the same
-timestamp. **CORROBORATED against what the operator remembered**, on the one axis memory can
-check: steps 13 and 14 share model 170342 and differ only in definition slot, which is what
-"the dummies look alike but are different bodies" predicts; step 15 is a different model and
-a different profession, which is what a humanoid Master predicts. **The spot checks do not
-need repeating.** What is still open is only the last mile — resolving each `enc_name` id to
-its string from the owner's archive and comparing it to what the screen showed.
+Each falls inside its own step's mark window. **The spot checks do not need repeating** —
+which body was clicked is settled for all four.
+
+**Which body it WAS is not settled, and the operator's recollection is in tension with the
+geometry rather than confirming it.** Agent 28 (step 15, the "named Master") stands at the
+centre of the four Suits; agent **27** — clicked three times during step 2 — stands at the
+centre of the eleven slot-155 range markers. By the sealed plan's own labels ("the
+practice-target star (Master of Combat / Practice Target)", "the armor bench (the Suits,
+Master of Damage)") that reading makes **27** the Master of Combat and 28 the Master of
+Damage, contradicting the recollection. But 28 cannot simply be relabelled either: slot 142
+is profession **1 = Warrior**, and GWW makes the Master of Damage an Elementalist. No
+`PROP_HEALTH_MAX` was observed for agent 28 in the whole connection, so there is no third
+datum. **The name is NOT RECOVERABLE from this capture** — it needs the `enc_name`
+(slot 142 → `[3046, 51807, 63827, 4654]`) rendered on a client we control, which is the
+method `studies/isle/PLAN.md` already ruled on.
 
 The opcode *meanings* stay **UNVERIFIED**: `schema/messages.json` carries no name for
 `0x0026`, `0x0039` or `0x00C1`. What is OBSERVED is the field type, the timing, and the
@@ -547,3 +563,45 @@ ids on different connections and separate cleanly. What it bought is in the same
 248 carrying 28–31 *players* each, which is the largest population of real player agents in
 the corpus. Whether that is a usable damage or roster corpus is being assessed separately;
 what is certain is that it is not contamination.
+
+### Coverage: the west is closed, the east was never walked
+
+Six agents (four analysts, two skeptics, ~1.2M tokens) went over the recovered capture.
+What survived attack:
+
+**The two deviations the operator worried about cost essentially nothing, and that is
+measured rather than reassuring.** The mixed-up leg (step 3, the range line) produced
+**zero creates** — the entire range ladder had already been delivered during step 2, in
+both the second and fourth visits, at byte-identical positions fitting to ±12.4 u. Ten
+rungs. **Closed; do not re-walk it.** The substituted docks position likewise: steps 5, 7,
+8, 9, 10 and 11 each yielded **zero new stations**, because those bodies were already in
+the roster from earlier legs. And the four spot checks yielded **0 new stations out of 95
+creates**, which is the trimmed plan's own premise confirmed from the other side —
+targeting buys a name link, not a roster.
+
+**The real gap is spatial and it is the east.** The last productive leg was step 12 ("walk
+the remaining perimeter"): six new bodies streamed in between wire t 1333.8 and 1358.9, and
+the operator turned around 13 seconds later, **while bodies were still arriving**. Only 7
+of 108 bodies were ever delivered from ≥5,000 u, and the far-east group sits at 2,852–7,581 u
+— at the edge of the streaming envelope, so what lies beyond is simply unmeasured.
+Everything east of x ≈ 2100 is unwalked, plus the NE corner around x[1000,3000] y[6000,8000],
+skirted at 3,494 u. West and centre (x −11314…+2100) were walked at a median 255 u from
+every body in them: empty cells there are **evidence of absence**.
+
+**A second visit is therefore worth taking, and it is short.** Walk east past x = 2076 to
+the map edge along two y-lines, pausing 20 s every ~2,000 u, to reach the six bodies already
+glimpsed out there and whatever sits between them; get slots **129** and **135** above n = 1
+create (one create cannot distinguish a fixed station from a spawn); and reach the far NE
+corner and the lone NW station at (−10951, 7649). It settles a stated question: definition
+indices are a **global** space (slot 111 is byte-identical across maps 248/280/309–312), and
+of the Isle block 129–165, **ten indices — 130, 131, 132, 133, 136, 137, 138, 139, 140,
+146 — have never appeared in any capture we hold.** If the east leg produces them the roster
+is closed; if a full east walk does not, they belong to another map and the Isle roster is
+27 types, which is itself a result.
+
+**The strongest positive result of the run is the Students**, and it is strong because it
+could have failed: **ten bodies over ten consecutive definition slots (156–165), split
+exactly 5 allegiance-`play` / 5 `mon1`**, against a pre-registered wiki claim of ten
+Students of whom five are allies. It could have come out 6/4, or n ≠ 10, and did not.
+(By contrast the Suits' 2/1/1 arrangement was reported as tight confirmation and is not —
+four bodies over three slots can only land 2/1/1, 2/2, 3/1 or 4, so it carries about one bit.)

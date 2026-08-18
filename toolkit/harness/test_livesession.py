@@ -166,7 +166,7 @@ LiveErrorType = ls.LiveError
 # headline claims are about REAL captured bytes.
 # FLOOR: 112, MEASURED from a green run 2026-08-17 after section 12 (the
 # launch-build guard) landed -- read off the run, never computed.
-LEDGER = checks.Ledger("livesession", floor=117)
+LEDGER = checks.Ledger("livesession", floor=120)
 
 
 # --------------------------------------------------- the syntax-tree readout --
@@ -796,6 +796,31 @@ def main():
         LEDGER.ok(len(outs) == 2,
                   "both an auth-shaped and a GAME-shaped connection come back",
                   ", ".join(outs))
+
+        # AND THE MANIFEST HAS TO AGREE WITH THE DIRECTORY. reassemble() recomputed the
+        # whole report, printed it and dropped it until 2026-08-18, so a capture that
+        # gained connections on a re-run went on advertising the old refusal forever --
+        # observed on 20260817T231139, which reached 15/15 on disk while its manifest
+        # still said `decrypted: false` for the largest connection in the corpus.
+        import json as _json
+        man = os.path.join(rd, "manifest.json")
+        with open(man, "w", encoding="utf-8") as fh:
+            _json.dump({"stamp": "fixture", "keep_me": 7,
+                        "report": {"decrypted": 0, "total": 0, "connections": []},
+                        "report_from": None}, fh)
+        rc2 = ls.reassemble(rd)
+        with open(man, encoding="utf-8") as fh:
+            after = _json.load(fh)
+        LEDGER.ok(rc2 == 0 and after["report"]["decrypted"] == 2,
+                  "reassemble() WRITES the recomputed report back into manifest.json",
+                  "a stale report is a consumer skipping a file that is sitting right "
+                  "there and frames cleanly")
+        LEDGER.ok(after.get("report_from") == "reassemble",
+                  "and stamps WHICH writer produced it",
+                  "absent means run() wrote it and it was never re-assembled")
+        LEDGER.ok(after.get("keep_me") == 7 and after.get("stamp") == "fixture",
+                  "every other manifest field survives the rewrite untouched",
+                  "update_manifest is the only code that edits a run's primary artifact")
 
     # ---- 4. the guards refuse --------------------------------------------------
     print("\n4. the guards refuse the primary, a non-stock client, and no --confirm")

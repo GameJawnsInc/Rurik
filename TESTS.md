@@ -3552,7 +3552,15 @@ Every one of these, in the order they were written:
   test could be vacuously false and still look like it works), a wrong key does not,
   the RIGHT key still fails on a stream truncated off a message boundary (that is the
   `consumed == len` half, which catches a gap-holed capture rather than a wrong key),
-  and an empty stream is not "complete". 117 checks),
+  and an empty stream is not "complete". §3 also now pins that `reassemble()` WRITES
+  the recomputed report back into `manifest.json` (2026-08-18): it used to recompute the
+  whole per-connection report, print it, and drop it, so a capture that gained connections
+  on a re-run advertised the old refusal forever — `20260817T231139` reached 15/15 on disk
+  while its manifest still read `decrypted: false` for the largest connection in the
+  corpus, and a consumer trusting the manifest over the directory would skip a file that
+  frames cleanly. Three checks: the report is rewritten, `report_from` records which
+  writer produced it (absent = `run()`, never re-assembled), and every other manifest
+  field survives untouched. 120 checks),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled — **and since 2026-08-13 which BUILD, which is
   the same argument one level down**. `HANDOFF.md`:237 has required a build id in
