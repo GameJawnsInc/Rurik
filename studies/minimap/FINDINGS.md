@@ -756,6 +756,25 @@ A 512×512 DXT1 ATEX authored from a pattern in colours no Pre-Searing art carri
 
 Both discs show the authored region as a **bounded square with the fallback tiled around it** — which is exactly H3b's prediction for an authored map whose file dims are smaller than its borrowed footprint, and which nothing in this arc had ever seen. It survived this long unobserved for a reason worth recording: **in the 38797 archive all four of map 143's footprint tiles are UNADDRESSABLE, and in 38833 all four resolve.** So the customarea arc's "featureless brown disc" on an authored map (§6, §23) was never about the authored map at all — it was the same archive-generation fault §6d found, and H3b could not have been seen before the generation moved.
 
+### 6g.5 A3 — THE COMPASS DRAWS OUR TERRAIN (2026-08-17)
+
+**The picture on the compass is now the ground the player is standing on.** `tilerender.py` shaded the sculpt area's own 64x64 heightfield, `datmove` put it into a throwaway 38833 archive at tile 116842 (row 177375, 54,192 -> 174,868 B, MFT self-crc updated, 0 overlapping pairs), and map 143's compass shows it.
+
+**Measured against a pristine-archive control on the same map** (`20260815T003056`, the C3 run: same map id, same client generation, same server, no authored tile):
+
+| | our green | brown fallback |
+|---|---|---|
+| **A3, tile installed** | **50.7 %** (12,330 of 24,313) | 48.0 % |
+| control, pristine archive | **0.1 %** (32 px) | 94.3 % |
+
+0.1 % to 50.7 % is the whole result. And the authored region is not a flat wash: within it the disc carries **two distinct luminance levels, 111 and 145, separated by 34 luma** — the dip and the rise `deploy.gen_plaza` generated, with the cliff between them, inside a **bounded rectangle** (x -36..88, y -25..88 of a 176 px disc) with fallback tiled around it. That bounded-patch-plus-fallback shape is **H3b, seen directly**.
+
+**One reading correction, stated because the frame invites the wrong one.** Offline the render's seam is VERTICAL (dip on -x, rise on +x); on screen it is HORIZONTAL. That is the compass rotating with the camera -- the bezel in the same frame reads E at top and N at left -- not a transposed render. The luma separation is the axis-independent half and it survives: +48.7 offline, 34 through the compass's `out = a*src + (1-a)*neutral` composite.
+
+**What this does NOT show.** The run used map 143's EXISTING footprint origin, so no `footprint.py` patch was involved -- A2's lever was not exercised here and the two rungs remain independently demonstrated rather than jointly. The collateral is unchanged in kind but far smaller in degree: 4,096 of 262,144 texels (1.56 %) rather than A1's whole tile, and the five other world-1 rows sharing tile (1,0) (maps 147, 149, 150, 151, 779) were again not looked at.
+
+---
+
 ### 6g.4 What Tier 3 does NOT establish — TWO OF THE THREE CLOSED 2026-08-17, both without a client
 
 - **The authored tile is a PATTERN, not our terrain. STILL OPEN, and it is now the only open item in Tier 3.** A1 proves the client renders art we wrote at a slot we chose; it does not render the authored map's own heightfield. Generating the tile *from* our terrain is a further step nothing here attempts, and nothing in `main` as of 2026-08-17 supersedes it — the 311 commits since Tier 3 landed went to models, skeletons and units, and **no top-down/hillshade renderer exists anywhere in `toolkit/`**. The pieces that would feed one do: `mapexport.py` already emits `heights.f32` at one sample per cell, which is the compass's own scale (§6b.2).

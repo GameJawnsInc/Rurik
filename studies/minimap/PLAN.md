@@ -386,7 +386,7 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 
 ---
 
-### A3. Generate the atlas tile FROM our terrain — **OFFLINE HALF DONE 2026-08-17; the run is all that is left**
+### A3. Generate the atlas tile FROM our terrain — **DONE 2026-08-17. THE COMPASS DRAWS OUR TERRAIN. FINDINGS §6g.5.**
 
 **`toolkit/mapdata/tilerender.py` renders the authored heightfield into the tile, and the generator is the oracle.** The sculpt area's 64×64 plaza shades to a dip on −x, a rise on +x and a hard seam at `gx == mid` — which is exactly where `deploy.gen_plaza`'s own comment puts its 61° cliff. Measured rather than eyeballed: the heightfield's largest column step is at gx=33, **8,748 against the runner-up's 488**, and the shaded seam peaks within one column of it (a 3-tap central difference smears a step by one either side). The **sign flip is checked in both directions** — flipped, the rise reads +48.7 luma brighter; unflipped it inverts to −51.1 — so a renderer ignoring the archive's negated heights cannot pass.
 
@@ -396,7 +396,7 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 
 **A real bug the test caught, worth recording because it fails only when it matters:** `atex.decode_rgba` returns `(rgba, w, h)`, and the first `decode_tile` indexed that tuple as if it were the pixel buffer — inert until a real `--dat` is supplied, i.e. exactly when the tool is doing its job.
 
-**WHAT IS LEFT: the run.** `datmove` the blob into a throwaway copy of a **38833** archive, cage it, and look at map 143's compass — the prediction below is unchanged and unverified. Everything up to the archive write is done and green.
+**THE RUN LANDED.** `datmove` into a throwaway 38833 copy (tile 116842, row 177375), map 143, ~12 s hold. Against the pristine-archive control on the same map, our green goes from **0.1 % to 50.7 %** of the disc, carrying **two luminance levels 34 apart** — the dip and the rise, with the cliff between — inside a bounded rectangle with fallback around it, which is **H3b seen directly**. The on-screen seam is horizontal rather than vertical because the compass rotates with the camera; the luma separation is the axis-independent half and survives the composite (+48.7 offline, 34 on screen).
 
 ---
 
