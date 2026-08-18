@@ -1014,6 +1014,70 @@ Its own file id (389634), built from retail, so runs 1-3 cannot contaminate each
 still stands still, the window reading is wrong in some further way and the next move is to
 narrow to the donor's own seven windows — correct by construction, at 2.7% coverage.
 
+### 9.3g WHY RUNS 2 AND 3 FROZE — adjudicated, and my design was wrong at the root
+
+Three independent lines (link-load, play-path, corpus), then an adjudicator that had to
+explain **both** observations. Every figure below was re-measured read-only against
+`vault/dat_study/Gw.dat` and the deployed run-3 archive, plus an independent 6,000-id
+random sample (seed 1138) that reproduces the corpus rules at 100.0000%.
+
+**H1 (the link never loaded) is REFUTED, and the refutation is clean.** `MdlAnim`
+dereferences `links[sel-1]` with **no null check** (`mov edx,[eax+ecx*4-4]` then
+`cmp dword [edx+0xB8],edi` seventeen bytes later), so a nulled slot would have been an
+access violation on the first pick. Three multi-minute sessions, no crash. The file loads.
+Compression is irrelevant on this path — `MdlLoad` never sees the field — and a link needs
+no geometry, because the FA8 loop passes NULL for the mesh out-param.
+
+**The failure happens BEFORE the selected file is ever sampled**, and retail's own
+invariants say why. The ones I broke:
+
+| rule | retail | run 3 |
+|---|---|---|
+| **(1)** key K must exist in link *k*'s **own** table | 31,700 / 31,700 | **209 of our 216 records violate it** |
+| **(3)** equal-key runs are homogeneous — one key, one file | 0 mixed of 33,077 | **216 of 224 keys mixed** |
+| **(4)** start/end/u32_0F/f32_13 copied verbatim from the link's same-key record | 31,700 / 31,700 | only 6 satisfy it |
+| **(7)** the key table is a cursor tiled by records in array order | 252 / 252 shells | **92 cursor breaks** |
+
+**Rule 3 kills the whole coin-flip design.** A key is served by exactly one file; variants
+live *inside* that file. The A/B flicker I built three runs around is **unattested in
+retail**, and no amount of tuning would have made it work.
+
+**The decider, and it is why "no deformation" was the load-bearing half of the report:**
+the node bases are **bone lengths** — per-node `|base|` spread 0.0003 across all sixteen
+files, `sum|base|` = 3,928.2 in thirteen of them. Had the link's `blk2C` been read at all,
+the hatcher would have been a 3× exploded skeleton on half of every animation. Not subtle.
+It did not happen.
+
+**Run 3 was strictly WORSE than run 2**, which I did not anticipate: scaling the new file's
+channel times ×5 left its own seven records pointing at their original windows, so the file
+became internally inconsistent and broke the six records that had been *accidentally*
+rule-compliant in run 2.
+
+### 9.3h RUN 4 STAGED — correct by construction, deterministic, two instruments
+
+`vault/research/archivewrite/a4stage4.py` → `vault/exports/archivewrite/a4run4/`.
+**Not deployed, not launched.** No inserts, no key-table edits, no coin flips.
+
+- **A. GIANT.** Duplicate link 8 (file 96978, 214,868 B, same 86-node skeleton) with 85
+  bases ×3, registered as FA8 record 16; then **flip one byte** on each of the shell's 20
+  selector-8 records, 8 → 16. Because the duplicate's records are byte-identical to
+  96978's, rules 1/4/5/6 hold **for free** and no run becomes mixed. Verified from the
+  result: **rule 1 20/20, rule 3 0 mixed of 224 keys, record count unchanged, shell +6 B.**
+- **B. TINY, and it is insurance.** Retail's link 14 (222949) rewritten **in place** with
+  85 bases ×0.25. No shell edit — retail's own six selector-14 records already point there.
+
+**Why two.** The base-scaling oracle has never itself been validated: U7 scaled a *shell's*
+bases, and no run has proved that scaling a *linked* file's bases is visible. "No
+deformation" is now carrying a lot of weight. Two instruments, opposite directions, both
+deterministic. **If neither fires, the oracle is dead — and that is the finding.**
+
+**Link 1 (15018, 110 keys, 45% coverage) is the better instrument and does not fit:** a
+stored 1,514,855 B duplicate fits **0 of 212** free runs. The arc's original wall, met
+again from the other side.
+
+**Prediction:** ~26 of 242 animations change deterministically — 20 play a ~3× exploded
+skeleton, 6 a shrunken one, the rest untouched. No crash, no assert, no `Model:` line.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
