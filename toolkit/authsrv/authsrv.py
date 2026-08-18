@@ -482,6 +482,97 @@ def _quest_markers(state):
     return marks
 
 
+# WHAT THE CHARACTER HAS DONE, surviving the connection. Rung Q6.
+#
+# `state` is created fresh per connection (`state = {}` in the handshake), so
+# before this the held-quest set died at every map transition -- which is
+# precisely the red the rung names: walk through a portal and the log empties.
+#
+# THE SPLIT IS THE DESIGN, and it is not arbitrary. `quests` and
+# `objectives_done` are facts about the CHARACTER and belong here. `desc_sent`
+# is bookkeeping about what THIS CONNECTION has been told, and must NOT survive
+# -- a fresh client has been told nothing, and a carried-over `desc_sent` would
+# make `_replay_quests` skip the 0x004C that sets the description-filled flag,
+# turning every objectives line after it into a silent no-op. The bug would
+# appear only on the SECOND map, which is the worst place to look for it.
+#
+# WHAT THIS IS NOT: persistence. One character, one process; a restart forgets.
+# The character store is its own arc and authsrv.py already defers to it (see
+# the UPDATE_CHARACTER_SETTINGS arm). Keying this by character is that arc's
+# job, and doing it here would invent a key nothing reads.
+QUEST_PROGRESS = {"quests": set(), "objectives_done": set()}
+
+
+def bind_progress(state):
+    """Point this connection's quest keys at the process-wide progress.
+
+    The SAME set objects, not copies: every existing `state.setdefault(...)`
+    call site then mutates the carrier without knowing it exists. Copying in
+    and out would work until somebody added a fourth call site and forgot the
+    copy-back, and it would fail silently.
+    """
+    for key, carrier in QUEST_PROGRESS.items():
+        state[key] = carrier
+    return state
+
+
+def _replay_quests(send, state):
+    """Rung Q6: put every held quest back in the log on instance load.
+
+    ArenaNet's own order, OBSERVED at 20260807T143055 t=66.159 --
+        0x0050[218] 0x0050[1462] 0x0054[1462] 0x004C[1462] 0x0051[1462, ...]
+    -- with ONE DELIBERATE DIFFERENCE: we send 0x004C BEFORE 0x0054.
+
+    0x0054 is a silent no-op until the description-filled flag is set, which
+    0x004C sets (the body tests it at 0x0080F9CD). ArenaNet sends them the
+    other way round and TRIPS ITS OWN GATE -- twice in the corpus -- so the
+    objectives line it sent went nowhere. Copying the order verbatim would
+    reproduce a bug we can see, and the failure is invisible: the client shows
+    an empty objective and looks like it ignored us.
+    """
+    held = sorted(state.setdefault("quests", set()))
+    if not held:
+        return
+    mid = state["map_id"]
+    for qid in held:
+        row = quest_rows()[qid]
+        nm = questdefs.enc_string(row.get("enc_name") or [])
+        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, 32, nm, nm, nm, mid],
+             f"QUEST_ADD_NO_MARKER[{qid}] (instance load)")
+    for qid in held:
+        row = quest_rows()[qid]
+        _send_description(send, state, qid, row)
+        done = qid in state.setdefault("objectives_done", set())
+        text = row.get("objectives_done") if done else row.get("objectives")
+        if text:
+            send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+                 [qid, questdefs.coded_literal(text, row.get("wire_framing",
+                                                             "template"))],
+                 f"QUEST_OBJECTIVES_UPDATE[{qid}] (instance load)")
+    for qid in held:
+        send(GAME_SMSG_QUEST_MOVE_MARKER,
+             [qid, NO_MARKER_POS, 0, NO_MARKER_MAP],
+             f"QUEST_MOVE_MARKER[{qid}] (clear stale marker)")
+
+
+def _restore_active_marker(send, state):
+    """One 0x0053 for the active quest, after the players block.
+
+    ArenaNet sends this LATE -- t=66.737, after c2s 0x0090, half a second after
+    the adds -- and for exactly one quest. RECONSTRUCTION: we have no measured
+    rule for WHICH quest is active on a fresh load, so this takes the lowest
+    held id and says so rather than inventing a priority. With one row in the
+    table the choice is not yet observable.
+    """
+    held = sorted(state.setdefault("quests", set()))
+    if not held:
+        return
+    qid = held[0]
+    send(GAME_SMSG_QUEST_SET_ACTIVE_MARKER,
+         [qid, NO_MARKER_POS, 0, NO_MARKER_MAP],
+         f"QUEST_SET_ACTIVE_MARKER[{qid}] (instance load)")
+
+
 def _send_markers(send, state, why=""):
     """Push every agent's mark, set or cleared, in one batch.
 
@@ -1896,6 +1987,37 @@ QUEST_MARKER_OFFER = 5       # at least one quest to offer. Green '!'.
 # The two halves of a turn-in. 0x0052's body at 0x0080F7A0 is the real deleter
 # -- it memmoves the tail of charContext+0x52C down, decrements the count at
 # +0x534 and frees the five pointer slots -- and 0x004A unlists.
+# The instance-load family (rung Q6). All three are NAMED in overrides.json
+# with their frame-bus evidence; studies/quests/FINDINGS.md 9.1 has the table.
+#
+# 0x0050 rather than 0x0049 IS THE WHOLE POINT and it is not a style choice:
+# 0x0049's body writes charContext+0x528 (mov [ebx+0x528], ebx at 0x0080F20B),
+# so restoring several held quests with it silently makes the LAST one pushed
+# the active quest. 0x0050 does not touch that field. Measured, and it is the
+# red the ladder named for this rung.
+GAME_SMSG_QUEST_ADD_NO_MARKER = 0x0050
+GAME_SMSG_QUEST_MOVE_MARKER = 0x0051
+GAME_SMSG_QUEST_SET_ACTIVE_MARKER = 0x0053
+
+# "No marker" has an exact spelling and it is not zero: marker x = marker y =
+# +inf (0x7F800000, which 0x0050's body reads from [0x00948654]) and map id
+# 888. NEVER (0, 0) -- that drops a marker at the map origin.
+#
+# 888 is one past the last valid map: areatable.py on the pinned exe prints
+# "888 consecutive valid records / 888 non-empty / 888 with a name id", reached
+# independently by two lanes. FINDINGS 2.3 says derive it rather than pin it,
+# and the server path may not import a vault reader at startup -- so it is
+# pinned HERE and RE-DERIVED in test_quests.py against areatable when the vault
+# is present, which is the same shape framebus.QUEST_EXPECTED uses.
+#
+# OPEN, and flagged rather than reconciled: MAP_ID_COUNT above is 877, and it
+# is also used as a "no map" sentinel (the manifest's first round). Two
+# different numbers for "one past the last map" in one file is either two
+# different quantities or a bug, and nothing here has measured which. Do not
+# quietly make them equal.
+NO_MARKER_MAP = 888
+NO_MARKER_POS = (float("inf"), float("inf"))
+
 GAME_SMSG_QUEST_REMOVE = 0x0052
 GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
 
@@ -5399,6 +5521,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c = ARC4(derived)
         state = {}
         if kind == "game":
+            # Rung Q6: held quests are the CHARACTER's, not the connection's.
+            bind_progress(state)
             if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
                 if TAPE_EVENTS is not None:
                     # --map writes state["map_id"], and under a tape NOTHING reads
@@ -5960,6 +6084,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              ["", 0, 0, 1000, 0, 0, 0], "CHARACTER_UPDATE_INFO")
                         send(GAME_SMSG_MAP_UPDATE_CURRENT, [state["map_id"], 0],
                              "MAP_UPDATE_CURRENT")
+                        # Rung Q6, and it goes BEFORE READY_FOR_MAP_SPAWN
+                        # because that message is the LAST of this burst rather
+                        # than a shortcut to the end -- the comment at the top
+                        # of this arm is there because sending only the tail
+                        # made the client accept everything and then reset.
+                        _replay_quests(send, state)
                         send(GAME_SMSG_READY_FOR_MAP_SPAWN, [0],
                              "READY_FOR_MAP_SPAWN")
                         # GameSrv_SendDownloadManifest: two PHASE messages then a
@@ -7353,6 +7483,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 args=(rec, conn_id, stop),
                                 kwargs={"steps": LABEL_RUN},
                                 daemon=True).start()
+                        # Rung Q6's tail, and it is placed here rather than in
+                        # the REQUEST_ITEMS burst for a reason: property-11 head
+                        # glyphs are PER AGENT, and the agents do not exist until
+                        # this arm has created them. Sent earlier they would name
+                        # agents the client has never heard of.
+                        _restore_active_marker(send, state)
+                        _send_markers(send, state, " (instance load)")
+
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the

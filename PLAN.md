@@ -1897,7 +1897,13 @@ headline number was reproducible only by rewriting the script behind it. It also
 a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment said
 "archive id 263", the raw word, where the id is 7.
 
-**Next offline, cheapest first:** **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+**Q6 IS BUILT, TESTED OFFLINE, AND NEEDS ONE RUN TO GET ITS VERDICT (2026-08-17).** The rung turned out to be a LIFETIME question rather than a message one: `state = {}` is per connection, so held quests died at every map transition before any replay could matter. `QUEST_PROGRESS` carries `quests`/`objectives_done` across connections and deliberately does NOT carry `desc_sent` — carrying that would make the replay skip the `0x004C` that arms the description-filled flag, and every objectives line after it would be a silent no-op appearing only on the SECOND map. We send `0x004C` before `0x0054`, which is NOT ArenaNet's order: they trip their own gate twice in the corpus, and copying it would reproduce a visible bug that fails invisibly. `test_quests.py` §§17-19, 74 checks. **The acceptance criterion — walk a portal, the log survives — needs a client and is the owner's.**
+
+**Floor 73, recomputed.** `test_quests.py` carried a DERIVED floor of 17 ("13 row-independent checks plus 4 per row") that was right when written; the file grew to 74 against the same one-row table and the floor never moved, so a healthy run did four times its own minimum and three sections could have vanished unnoticed. A derived floor goes stale silently where a measured one goes stale loudly.
+
+**FLAGGED, NOT FIXED:** `authsrv.py` holds `MAP_ID_COUNT = 877` and now `NO_MARKER_MAP = 888`, both meaning "one past the last map" in different places. Either they are two different quantities or one is wrong, and nothing here has measured which — 888 is re-derived from `areatable.py` by `test_quests.py` §19, 877 is not. Do not quietly make them equal.
+
+**Next offline, cheapest first:** (no `0x0050`/`0x0051`/`0x0053`
 senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
 `0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
 build 38797, none re-checked against 38833.
