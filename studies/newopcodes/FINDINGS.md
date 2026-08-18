@@ -1098,6 +1098,43 @@ also NOT FOUND; its shape equals the first nine fields of `0x015F CREATE_UNNAMED
 
 ## `0x0071` — NOT FOUND, and one field reading is refuted by the third capture
 
+> **RESOLVED 2026-08-17, after the refused channel was recovered — mechanism OBSERVED,
+> name RECONSTRUCTION.** With all channels loading, `0x0071` has 24 sightings and its
+> arguments are **1, 2, 3, 4, 5, 6** — sequential and small, never the sparse ids real
+> agents carry (27, 356, 395). It is a SLOT INDEX, not an agent id, whatever the
+> descriptor types it (the same trap `0x0199` field 1 set: see
+> [../heroes/FINDINGS.md](../heroes/FINDINGS.md) §22's correction).
+>
+> **It terminates a repeating declaration block**, preceded 24/24 by the identical
+> triple. Six consecutive blocks from `20260817T183323`:
+>
+> | `0x009B` | `0x009F` prop 36 | `0x00A6` | `0x0071` |
+> |---|---|---|---|
+> | name, 4-word EncString | level **3** | profession **3**, sec 0 | COMMIT slot **1** |
+> | name, 4 words | level 3 | profession **1** | COMMIT slot **2** |
+> | name, 4 words | level 3 | profession **6** | COMMIT slot **3** |
+> | name, 4 words | level 3 | profession **2** | COMMIT slot **4** |
+> | name, 4 words | level 3 | profession **8** | COMMIT slot **5** |
+> | name, 4 words | level 3 | profession **7** | COMMIT slot **6** |
+>
+> Six slots, six DISTINCT professions, one uniform level, each named — and professions 7
+> and 8 are the two Factions professions. That is the **hireable-henchman roster of a
+> starter outpost**, declared entity by entity, with `0x0071` committing each slot. The
+> reading is structural rather than a guess about content: nothing else in an outpost
+> comes in six professionally-distinct level-matched named entries.
+>
+> **Why this matters beyond a name.** `0x009B [agent_id, string16]` is NOT one of these
+> 22 — it was in the canonical corpus the whole time, and its role in this block had
+> simply never been read. And this is a DIFFERENT mechanism from the one
+> `studies/heroes/FINDINGS.md` reconstructs: that arc implements henchmen with `0x01BF`,
+> which adds a row to YOUR party. This block declares the list you can hire FROM, before
+> anything is hired. The heroes arc mentions neither `0x009B` nor `0x0071` anywhere.
+>
+> Proposed `HENCHMAN_SLOT_COMMIT` — **RECONSTRUCTION**, since neither lineage names
+> `0x0071` at all and no capture shows the block's effect on screen. What is OBSERVED is
+> the block, its ordering, and that the argument is a slot index. One outpost with a
+> different henchman count tests it: the block should repeat that many times.
+
 **24 sightings across 3 channels** (18 in the two named captures, 6 more in `183323`).
 No refutation pass; the correction below is this pass's own.
 
