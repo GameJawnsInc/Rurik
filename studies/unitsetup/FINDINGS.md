@@ -188,6 +188,66 @@ Retail: `0x00F0` before **every** kind-5 and kind-9 create, exceptionless, major
 > tail (kind 5's combat values, kind 9's `0x1000` ambient flag) remains future work,
 > recorded at D2's closure note. The table row in §2a describes the pre-fix server.
 
+
+### 6e. What the client DOES with the initial-status word — SOURCED, 2026-08-17
+
+Added after the unconditional send landed, because "what payload should we send" deserved
+an answer from the binary rather than only from the corpus. The chain, read on the pinned
+build 38797:
+
+| step | address | what it does |
+|---|---|---|
+| handler | `0x0091F810` | a thin trampoline: pushes `msg+8` (the status dword) and `msg+4` (the agent), calls the worker. `0x00F1`'s stub sits directly below it at `0x0091F830` → `0x00814CC0`, which is the two forms sharing one shape. |
+| worker | `0x00814C30` | bounds-asserts the agent against the record count (the familiar `Array.h(587)` primitive, pushed as `0x24B`), computes the per-agent record at `[ctx+0x7C] + agent*0x34`, then calls the consumer with the word |
+| consumer | `0x008183F0` | **`mov [record+0x30], eax`** — stores the ENTIRE word verbatim — then **`test al, 0x10`**, and that is the only bit it branches on |
+
+**`test al` reads the LOW BYTE ONLY.** Bits 8–31 are stored and never examined on this
+path — so `0x1000` (the hostile-NPC bit, 198/202) and the kind-5 high-word values
+(6, 7, 8, 12 in bits 16–19) are **retained per agent and consumed lazily by some later
+reader**, not acted on at create time. That is exactly what the wire showed from the other
+side: the payload is per-agent and identical across every re-create of a visibility churn,
+and no other message in the stream distinguishes a non-zero agent from a zero one
+(§8 Q2's follow-up).
+
+**The practical consequence, and it retires the risk in the D2 fix.** Sending payload `0`
+for every agent cannot misbehave at create time: the only bit the create path branches on
+is death, and `0` clears it. The non-zero payloads are a fidelity gap, not a correctness
+one — we are not failing to trigger anything the client does when the body appears.
+
+**The reader, found — and it is another hop rather than an answer.** Offset 0x30 is a
+tiny, ubiquitous displacement: `codescan --field 0x30` returns **3,992 rows** across the
+image, which is a haystack rather than an answer. The narrowing that worked: every
+function touching this table must multiply by the record stride, so scanning `.text` for
+`imul r32, r32, 0x34` (`6B /r ib`, register form) finds all 151 sites, of which sixteen
+sit in the agent-record neighbourhood. Exactly one of those reads offset 0x30:
+
+    0081A5FF  mov eax, [ebx+0x7c]            ; the record table
+    0081A602  imul ecx, esi, 0x34            ; agent * stride
+    0081A605  mov eax, [ecx+eax+0x30]        ; <-- the stored status word
+    0081A609  mov [edi+0x10c], eax           ; copied WHOLESALE into another object
+
+**A correction to this document's own first draft, kept because the mistake is
+instructive.** That draft said `--field 0x30` "returns a single row" and could never have
+found this access, the base+index+displacement form, because its docstring does not list
+that encoding. **Both halves were wrong, and the fault was mine.** The scanner returns
+3,992 rows and `0x0081A605` is among them, correctly classified `base=ecx index=eax` — it
+anchors on the displacement BYTE and verifies against capstone's own encoding record, so
+the addressing form never mattered. What produced the false claim was reading the output
+through `tail`, which shows the last rows plus the trailing caveat block and hides the
+3,991 above. **The instrument was right and the operator truncated it** — the same shape
+as this repo's own "a partial run reported as a full one" defect, one level down.
+
+So the word **propagates rather than being decided on**: create path stores it, this
+function copies all 32 bits into an object at `+0x10C`, and no bit above 4 has been
+branched on anywhere yet. The enclosing routine looks like a constructor — two
+`memset`-shaped calls (sizes 0x24 and 8) and a `cmp dword [ebx+0x4ec], 0xDDDDDDDD` debug
+sentinel above the copy.
+
+**What would finish it** is now one well-defined step rather than a search: find what
+reads `+0x10C` of the object that constructor builds. Until then every bit above 4 is
+**UNVERIFIED in meaning**, and this document says so rather than naming them from their
+correlations — three hops of propagation is not a semantics.
+
 ---
 
 ## 7. Contested readings, resolved
