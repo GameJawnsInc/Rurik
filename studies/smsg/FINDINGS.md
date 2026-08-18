@@ -913,7 +913,7 @@ Reached: `ItCliApi.cpp`, `ItCliBag.cpp`, `ItCliInv.cpp`
 | field | meaning | label |
 |---|---|---|
 | 0 | msg_header, opcode 319 | OBSERVED |
-| 1 | key of the owning inventory; hashed into the item client's inventory table (ItCliApi:1942 asserts the result). Constant within a session, consistent with the local character's id. | INFERRED |
+| 1 | key of the owning inventory; hashed into the item client's inventory table (ItCliApi:1942 asserts the result). Constant within a session. The "consistent with the local character's id" reading that used to end this cell is REFUTED — a 38-connection census (`toolkit/authsrv/invcensus.py`) found it is an arbitrary per-connection handle (the same character drew 1, 23, 184, 188 and 4 on different connections), always equal to that connection's `0x0144` field 1, which is the message that registers the key (studies/pvpui/FINDINGS.md §26.1). | OBSERVED |
 | 2 | bagType | SOURCED |
 | 3 | bagSlot -- used verbatim for types 1 and 4, ignored for 2, 3 and 5 where the client derives 21, 6 and 5 | SOURCED |
 | 4 | bag id; any existing bag carrying it is destroyed first, so it is unique within the inventory | OBSERVED |
