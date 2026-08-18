@@ -1872,8 +1872,15 @@ deleted. The check is per-upstream: fourteen, each accounted for by a row, a not
 `PLAN.md:33`'s prior-art LANDSCAPE table was once read as a register row and recorded as
 fact, and a whole-file substring search repeats that and scores the tree clean.
 
-**Next offline, cheapest first:** the 66/66 coded-string verification is a claim in prose and
-not a check; **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
+**The 66/66 is now a check** (2026-08-17). `toolkit/clientscan/codedstr.py` +
+`test_codedstr.py`, 18 checks, floor 12: §3.2's re-encode 66 of 66, its per-slot shape
+partition, and the plain-22/encrypted-44 split, plus the rival raw-word reading as a
+CONTROL that could have won. The ENCODE half had never existed anywhere, so that
+headline number was reproducible only by rewriting the script behind it. It also caught
+a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment said
+"archive id 263", the raw word, where the id is 7.
+
+**Next offline, cheapest first:** **Q6 instance-load replay** (no `0x0050`/`0x0051`/`0x0053`
 senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
 `0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
 build 38797, none re-checked against 38833.
