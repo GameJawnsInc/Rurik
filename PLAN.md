@@ -1386,6 +1386,23 @@ correction: the table is keyed by inventory id, not owner, and its registrar is 
 — see the PvP-UI entry below.) And two residues filed with their own arcs — the
 heroes split-filter (§21.2) and whether `0x006E` position semantics matter for the HANDS.
 
+**2026-08-18, the follow-up ladder is STAGED and one fix landed.** The `0x0199` field-1
+correction reached the code: the send site now fills it with `PLAYER_NUMBER` (heroes §22's
+CORRECTED block; it sent `PLAYER_AGENT_ID` for two days, indistinguishable in a solo
+instance), and the stale "agent id" sentences in heroes §22.1/§25.3 and pvpui §13.1 are
+corrected in place. The `newopcodes` §4 ladder's three loopback probes are instrumented
+and waiting on a harness slot: **`allegiance_pair`** (new probe, encodes clean, prediction
+on record — settles the one CONTESTED row `0x002F`; run `--explorable`, and note the
+design correction: retail's nonc→play is invisible since both draw green, so the
+discriminating arm flips a `mons`-red body with the same `'play'` pair against an
+untouched red control); **`0x00B9` field2=1** needs zero new code
+(`smsgsweep.py --plan --only 0x00B9 --encstring --set 0x00B9:2=1`, verified in-process:
+the composed payload keeps the real string and files under its own ledger regime);
+**`0x0084` vs `0x00D7`** is BLOCKED on desk work first — upstream's own
+`SKILL_ADD_TO_WINDOWS_END` name for `0x00E1` contradicts the ladder's assumed
+`0x00D7`→`0x00E1` pairing, so the four drain handlers are being disassembled for which
+accum list each zeroes before any run is designed.
+
 **A NAMED FUTURE CAPTURE: the Factions tutorial, start to Shing Jea Monastery.** Owner's
 call 2026-08-17, made while walking a new character through it: *"there are definitely
 some good packets in this tutorial."* Too long to bolt onto a Q11 run, so it is its own

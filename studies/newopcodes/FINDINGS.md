@@ -1355,6 +1355,17 @@ by ArenaNet's own server — **and our probe tested only half of the mechanism.*
 **That is the experiment that would resolve this, and it is cheap.** Nothing in either side
 is refuted yet, so the label stays CONTESTED and the name does not ship.
 
+**Probe staged 2026-08-18: `allegiance_pair`** (`toolkit/authsrv/probes.py`, encodes clean,
+prediction on record). One design correction to the ladder's item 5: replaying retail's
+nonc→play *exactly* cannot render a verdict, because `'nonc'` and `'play'` both draw
+GREEN (`npc_allegiance`, 2026-08-06) — the faithful arm is kept for non-colour artifacts,
+and the discriminating arm sends the same pair, still carrying `'play'` in field 2, at a
+body created `'mons'` (red): the readout is a red→green flip against an untouched `'mons'`
+control. Run `--explorable`, because `0x00AA`'s roster-key step is gated on
+`MISSION_MAP_GAME` and has never fired anywhere — both retail sightings are outpost
+captures. The static reading predicts nothing moves; upstream predicts the flip; an
+`AgMsg.cpp(655/660)` assert is the third recordable outcome.
+
 **Open:** what `+0xE8` on the AgMsg sync/async record is read for (no consumer traced);
 whether `0x002F` ever fires with a non-`'play'` value — no enemy-side token has ever been
 seen in this field.

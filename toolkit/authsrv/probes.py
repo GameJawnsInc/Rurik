@@ -1628,6 +1628,113 @@ def _npc_allegiance_steps(agent_id, origin):
     return steps
 
 
+def _allegiance_pair_steps(agent_id, origin):
+    """Does retail's 0x00AA-then-0x002F pair CHANGE an existing agent's
+    allegiance? The one CONTESTED row in studies/newopcodes/FINDINGS.md.
+
+    THE CONTEST. Two upstream lineages at delta 0 (ldufr, maintained GWCA) call
+    0x002F AGENT_UPDATE_ALLEGIANCE. Our own client says: its handler
+    (0x005FDD70) stamps field 2 into +0xE8 of the per-agent AgMsg sync/async
+    message-channel records -- plumbing, not the rendered allegiance (the
+    agent's displayed teamToken also sits at +0xE8, of a DIFFERENT struct; the
+    equal offset is a coincidence that has already misled once) -- and the
+    attackability byte (+0x1B5) is write-once at construction, two writers in
+    the whole image, both constructors (studies/enemy/PLAN.md 6p). "Sending it
+    changed nothing" (enemy PLAN 6o) was measured on 0x002F ALONE. Retail NEVER
+    sends it alone: both corpus sightings follow an 0x00AA for the same agent
+    within the same burst, the pair carrying 'play' at agents created 'nonc'
+    (newopcodes, capture 20260817T180610, agents 0x0F/0x11). This probe sends
+    the PAIR -- the half of the mechanism no test has exercised.
+
+    WHY RETAIL'S OWN TRANSITION IS INVISIBLE, AND THE DESIGN AROUND IT: 'nonc'
+    and 'play' both render GREEN (npc_allegiance, 2026-08-06), so replaying
+    nonc->play faithfully cannot show a verdict on any colour surface. The
+    discriminating arm runs the SAME pair at a body created 'mons' (red).
+    Field 2 still carries 'play' -- the only value ever seen in either message
+    on retail -- so the invention is the body's starting colour, not the
+    token, and the readout becomes a red->green FLIP: a shape change, per the
+    make-the-signal-unmistakable rule, not a hue judgment. Three bodies, one
+    definition, POSITION is the label:
+
+        LEFT  (agent 4, 'nonc') -- retail-faithful arm
+        RIGHT (agent 5, 'mons') -- the discriminator
+        BACK  (agent 6, 'mons') -- control, never messaged after create
+
+    RUN IT EXPLORABLE. 0x00AA's handler has a second step gated on
+    MissionCliGetMap() == MISSION_MAP_GAME: field 2 becomes a roster KEY and
+    every agent registered under the same token is enumerated and linked
+    (newopcodes: 0x0091EF10 -> 0x00813560 -> 0x0084DD20). Every retail
+    sighting is an outpost capture, so that enumeration has never fired
+    anywhere, retail included. Pass --explorable or the run tests less than
+    it could.
+
+    CRASH NOTES, so a death is a diagnosis and not a mystery: 0x002F field 1
+    is a bounds-checked index into the AgMsg sync/async arrays; a missing
+    entry asserts syncPtr AgMsg.cpp(655) / asyncPtr AgMsg.cpp(660). That
+    would itself be a finding -- our created agents lack a record retail's
+    have -- and enemy PLAN 6o's 0x002F-alone send NOT crashing says the
+    record does exist for bodies like these.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    model = CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION
+    play, nonc, mons = 0x706C6179, 0x6E6F6E63, 0x6D6F6E73
+    return [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION} (Hatcher, known good)",
+             "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}",
+             "nothing yet. All three bodies share this definition -- position, "
+             "not name, is the label."),
+        Step(2.0, 0x0020,
+             create_agent(4, model, AGENT_KIND_NPC, ox - 300, oy, plane,
+                          allegiance=nonc),
+             "agent 4 LEFT, created 'nonc' -- retail's precondition",
+             "a Hatcher on the LEFT with a GREEN nameplate and dot (nonc is "
+             "one of the client's two literal non-combatant values)."),
+        Step(2.0, 0x0020,
+             create_agent(5, model, AGENT_KIND_NPC, ox + 300, oy, plane,
+                          allegiance=mons),
+             "agent 5 RIGHT, created 'mons' -- the discriminator's start state",
+             "a Hatcher on the RIGHT reading RED (unrecognised token falls "
+             "through to hostile). If it is not red the discriminator is dead "
+             "on arrival -- say so and read no further arm as a verdict."),
+        Step(2.0, 0x0020,
+             create_agent(6, model, AGENT_KIND_NPC, ox, oy - 300, plane,
+                          allegiance=mons),
+             "agent 6 BACK, created 'mons' -- the control, never messaged again",
+             "a RED Hatcher behind the player. It must still be red in the "
+             "final frame, or the whole run measured something else."),
+        Step(12.0, 0x00AA, [4, play, model],
+             "0x00AA agent 4: 'play' + its own model -- retail's preamble, "
+             "faithful arm",
+             "nothing predicted by either side at this instant; the pair is "
+             "judged after 0x002F lands."),
+        Step(1.0, 0x002F, [4, play],
+             "0x002F agent 4: 'play' -- retail's nonc->play pair, complete",
+             "the LEFT Hatcher: both readings predict green stays green here "
+             "(saturation), so colour is NOT the signal in this arm -- watch "
+             "instead for ANY new artifact: party/roster rows, compass "
+             "changes, chat, a nameplate rewrite."),
+        Step(12.0, 0x00AA, [5, play, model],
+             "0x00AA agent 5: 'play' + its own model -- the discriminator's "
+             "preamble",
+             "nothing yet; the flip, if it comes, is allowed to come here or "
+             "at the next step -- note WHICH."),
+        Step(1.0, 0x002F, [5, play],
+             "0x002F agent 5: 'play' at a RED body -- THE TEST",
+             "if the pair updates displayed allegiance, the RIGHT Hatcher "
+             "flips red->green -- nameplate AND compass dot -- while the "
+             "control behind stays red. If nothing moves in 20 seconds, the "
+             "static reading holds and upstream's name fails on every "
+             "rendered surface. A crash naming AgMsg.cpp(655/660) is the "
+             "third outcome and is a finding, not a failure."),
+    ]
+
+
 def _enemy_damage_steps(agent_id, origin):
     """Can the client show an ENEMY taking damage? And which slot is the target?
 
@@ -5266,6 +5373,34 @@ PROBES = {
              "field cannot be a word the client looks up -- it is an identity, "
              "with two special cases. Monster-class bodies this time, so the "
              "player-class confound that ruined the first attempt is gone.",
+    ),
+    "allegiance_pair": lambda a, o: Probe(
+        question="Does retail's 0x00AA-then-0x002F pair change an EXISTING "
+                 "agent's allegiance -- the one CONTESTED row left in "
+                 "studies/newopcodes/FINDINGS.md?",
+        predicts="The static reading says NO VISIBLE CHANGE in either arm: "
+                 "0x002F writes AgMsg message plumbing, the attackability "
+                 "byte is write-once at construction, and no post-construction "
+                 "writer of the displayed teamToken is known -- so the RIGHT "
+                 "Hatcher stays red and upstream's AGENT_UPDATE_ALLEGIANCE "
+                 "name fails for every rendered surface. Upstream predicts "
+                 "the opposite shape: RIGHT flips red->green on nameplate and "
+                 "compass dot while the BACK control stays red. Either "
+                 "outcome settles the contest for pixels; a crash naming "
+                 "AgMsg.cpp(655/660) is the third outcome and localises the "
+                 "sync/async record instead.",
+        steps=_allegiance_pair_steps(a, o),
+        note="Run with --explorable: 0x00AA's second step -- field 2 as a "
+             "roster KEY, enumerating same-token agents -- is gated on "
+             "MISSION_MAP_GAME and has never fired ANYWHERE, retail included "
+             "(both corpus sightings are outpost captures). Field 2 carries "
+             "'play' in every send because it is the only value either "
+             "message has ever been seen to carry; the discriminator is the "
+             "BODY's starting colour, not an invented token. Position is the "
+             "label: LEFT nonc (faithful), RIGHT mons (discriminator), BACK "
+             "mons (control). Frames bracket each send via the gamesrv log's "
+             "timestamps; compass dots are the fixed-position readout, "
+             "nameplates the confirming one (hold ALT via --walk 'alt:').",
     ),
     "npc_agent": lambda a, o: Probe(
         question="Does a monster-class agent render, and does it need an NPC "
