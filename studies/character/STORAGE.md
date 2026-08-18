@@ -138,12 +138,17 @@ Answered at the reading level:
 >   930/930 — the current/total-earned pairing watched happening rather than
 >   read out of a struct name.
 
-**Probe — built 2026-08-16: `--probe faction_max`.** The attr_legend vector
-paints the numerators, then the four maxima land with distinct values (so a
-swapped opcode→faction mapping names itself), and a final `0x00EA` re-send
-asks whether a cap can move mid-session. Four filled denominators = OBSERVED.
-*(Still worth running after the 08-18 upgrade above — retail's values cannot
-discriminate `0x00EA/EB/EC` from each other; four distinct values can.)*
+**Probe — built 2026-08-16, RUN 2026-08-18: `--probe faction_max` —
+OBSERVED, everything.** Agent-piloted (harness `20260818T112259`, no
+operator; 6/6 steps verified in the gamesrv log before reading a pixel;
+frames stable 76 s apart). The four denominators that read `/ 0` on every
+prior run filled with our distinct values, and the mapping is ldufr's naming
+exactly — **EA=Kurzick 1,001/31,000, EB=Luxon 1,003/22,000, EC=Balthazar
+1,011/23,000, ED=Imperial 1,005/24,000** — with Kurzick showing the step-6
+re-send, so **a cap moves mid-session**. §2's question set is closed: the
+messages, the per-opcode mapping, and the update semantics are all OBSERVED
+against our own client, on top of retail's own 132 sightings. Record:
+[RUNS.md](RUNS.md) §Run 1.
 
 ## 3. Titles: the `0x00F3`–`0x00F6` cluster (new)
 
