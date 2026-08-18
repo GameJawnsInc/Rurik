@@ -51,9 +51,11 @@ GW_FOV_DEG = 75.0
 #: client's projection holds cot(75/2) as the SMALLER of an adjacent pair whose
 #: ratio is the render aspect -- i.e. the x scale -- and the vertical reading is
 #: refuted geometrically (it would bury the character 55 units under the
-#: ground). NOTE this disagrees with ArenaNet's own 2018 patch note, which
-#: describes a "vertical calculation"; the disagreement is recorded, not
-#: resolved. Override with --fov-axis.
+#: ground). CONFIRMED AGAIN by the aspect test (FINDINGS section 12): resized
+#: to a portrait window, the horizontal scale did not move and the vertical
+#: one tracked the aspect. NOTE this disagrees with ArenaNet's own 2018 patch
+#: note, which describes a "vertical calculation"; the disagreement is
+#: measured and recorded, not resolved. Override with --fov-axis.
 GW_FOV_AXIS = "horizontal"
 #: MEASURED: the literal the client's own frustum builder loads (0x00946EBC).
 GW_FAR_PLANE = 48000.0
