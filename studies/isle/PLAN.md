@@ -1018,7 +1018,7 @@ the roster and the gadgets; every range marker's coordinate; and `0x0195` field 
 against the pre-registered prediction 165811 with the third branch (113021 / a shared id)
 pre-registered too.
 
-**The rung-6 marks plan is written and parses: `vault/plans/isle_rung6_roster.txt`**, 69
+**The rung-6 marks plan is written and parses: `vault/plans/isle_rung6_roster.txt`**, 70
 steps (arrival → the range star → the armor bench → the AoE circles → allies → torches →
 Students → Zaishen masters → foes → gadgets → sweep → depart), each step's prediction stated
 in its own text. It lives in the vault, not in git, on the same reasoning that put
@@ -1027,17 +1027,44 @@ in its own text. It lives in the vault, not in git, on the same reasoning that p
 once the run starts — if a body is missing, press F9 anyway and annotate by ordinal in a
 separate notes file.
 
-**Use the 38833 live build, and this is a real trap.** All six live captures in the vault
-used `run-live/2026-07-29_221c13772c7a` = build **38797**, but retail moved on: the
-2026-08-14 baseline records `live_install` at build **38833, pristine**, and
-`run-live/2026-08-13_64fae3b1369b` is the 38833 stock-DH build. `run-live/` carries
-`updater=LIVE` by design, so launching the *older* build points the pre-login patcher at a
-binary it wants to replace — and a rewritten `Gw.exe` takes the key-tap cave with it, which
-is the one failure that produces a full session of ciphertext with no key. Both live builds
-read `key_tapped: true` and `slot_rva` resolves to `0x7F17A0` on both (the slot is located by
-scanning the binary, `keytap_patch.locate_slot`, not by a build-pinned constant), so the
-tap itself is not what picks the build — currency against retail is. The driver hashes the
-exe before and after the run and says so if it moved. Never select by filename.
+**Use the 38833 live build — and as of 2026-08-17 the tool enforces it, so this is no
+longer a judgement the operator has to get right.** All six live captures before that day
+used `run-live/2026-07-29_221c13772c7a` = build **38797**, but retail moved on:
+`run-live/2026-08-13_64fae3b1369b` is the 38833 stock-DH build and `C:\gw\Gw.exe` reads
+38833, pristine. `run-live/` carries `updater=LIVE` by design, so launching the *older*
+build points the pre-login patcher at a binary it wants to replace — and a rewritten
+`Gw.exe` takes the key-tap cave with it, which is the one failure that produces a full
+session of ciphertext with no key. `livesession.preflight()` now calls
+`check_build_matches_service()` (commit `5b7189b`), which reads the launch exe's build from
+its own getter and refuses **before the login** naming the staged directory that would
+work; ask the same question directly with `buildid.py --exe <path>`. Confirmed on both:
+38833 passes, 38797 is refused by name. The tap is not what picks the build — both live
+builds are key-tapped and `slot_rva` resolves to `0x7F17A0` on each, because the slot is
+found by scanning the binary rather than from a build-pinned constant. Currency is what
+picks it. Never select by filename.
+
+**Confirmed in production the same day.** The two Q11 live captures
+(`vault/captures/live/20260817T183323`, `...T183756`) ran on that 38833 exe with
+`game_mode: base` and recorded `exe_unchanged: true` — the updater did not touch it,
+which is the observation the whole argument above predicts. They also demonstrate the
+seal working end to end: `plan_seals: "agree"`, two independent hashes of a 13-step plan
+taken in different processes. Rung 6 is the same procedure with a 70-step plan.
+
+**`--mode base` for rung 6, and the reasoning is worth writing down because it is NOT
+"stats we are not reading".** The operator's judgement (2026-08-17) is that base is the only
+option a PvP-only character has, and it is well founded: GWW has Reforged Mode opted into
+**at character creation** and toggled afterwards at a Shrine to Godly Accoutrements
+(`studies/presearing/MANIFEST.md:54`), and the PvP creation flow offers neither. Both Q11
+captures declared base. Label this **UNVERIFIED** rather than settled: nothing in this repo
+has measured a PvP character's mode, `game_mode_source` stays `operator-declared`, and
+`origin.py` cannot disambiguate it — Reforged leaves no mark on the wire.
+The exposure here is smaller than rung 7's but it is not zero, and the earlier framing in
+this section ("no Reforged question on stats we are not reading") understates it: Reforged
+also **adds creatures and changes hostility** (faction-conditional, `studies/monsterai/FINDINGS.md:1013`),
+and a roster pass is precisely a census of which bodies exist and which side they are on.
+A mis-declared mode would not corrupt a number here — it would corrupt the roster itself,
+silently, in the artifact every later rung indexes into. If the character can be checked
+cheaply before the run, check it.
 
 **Rung 7 — LIVE #2, the damage pass.** Only after rung 6 names the bodies and rung 1 proves
 the reader. One PvP-created weapon (auto-customized +20% — unavoidable on this character,
