@@ -304,7 +304,7 @@ Rung shape follows [studies/unitmodels/PLAN.md](../unitmodels/PLAN.md): each run
 | **A4** ✅ **BUILT 2026-08-17 — see §9.2. `toolkit/mapdata/unitauthor.py`, the edit costs +29 B. Awaiting the client run, which is A8 and needs the owner's go-ahead** | **The additive FA8 path, on a SYNTHETIC archive only.** Build with `test_datcheck.py`'s `build_archive`; `datalloc` a new FA1-only file, append a 16th record to a copy of 116228's FA8 chunk (`mdlrefs` encodes the dependency-pair spelling), re-emit the shell with `skelwrite`. Never against a real `Gw.dat`. | Ten open-time rules clear, three CRC rules clear, `datalloc`'s MFT-slack accounting honest, the shell round-trips byte-identically apart from the intended FA8 delta, and the new row is registered **before** any bytes land in a region the client may reuse. **Kill:** if A1 said per-file-with-unknown-selector, this rung cannot state what the client will do with the 16th record and should stop at "archive-legal" rather than claim a route. | 1 session |
 | **A5** | **THE CONTAINER EXPERIMENT — one caged run, owner-driven.** On a **copy**: extend the file by 1,515,008 B at EOF, write row 11196's payload there **decompressed but otherwise byte-identical to what renders today**, rewrite offset/size/compression/CRC, zero the old extent, `datcheck --preflight` + `--crc-sweep` + `--check-overlaps` before and after. Write the testing instructions; **do not launch** (standing rule). | Because the payload is byte-identical content, **any visual change is unambiguous evidence about the CONTAINER**. Three answers at once: does the client read a **1,514,855 B stored** row (currently backed by an **empty** population — retail's largest ordinary stored content row is 19,292 B); does it tolerate a row past the old EOF; does file extension work. **This rung settles the Route B contest** (§2.4) — its two skeptics disagree and this is the run both proposed. Recovery is a file copy. Confirm no other session holds the archive open (a `PermissionError` was hit mid-measurement). | 1 session + 1 run |
 | **A6** | **The entropy accountant — kill the encoder before a matcher is written.** ~80 lines, no encoder, no bitstream. Instrument the existing decoder (`gwdat.py:349-385`) to emit **retail's own token stream** for row 11196 — per block, literal/length symbols, distance symbols, both table headers — then re-cost that same sequence under a from-scratch canonical-Huffman assignment plus the fixed meta-encoding, and compare to 1,029,564 B. | **Prediction stated first: it lands within 0.5% of 1,029,564 B.** This isolates the two risks the scouts merged: *can our Huffman + meta layer match ArenaNet's* (answered exactly, on tokens we did not have to produce) from *can our LZ77 matcher match zlib's* (not tested here). **Kill: if the accountant cannot reproduce retail's size to within a few hundred bytes on retail's own tokens, the encoder arc is dead.** | 0.5 session |
-| **A7** | **`toolkit/mapdata/gwenc.py` + `test_gwenc.py` + the `datwrite` compression-8 arm.** Build the matcher **size-only first** (hash chain, min match 3, 32 KB window, lazy matching) against A6's accountant — no bitstream writer, no round trip — then the writer. Copy the constant stream header (lead bits 0, `first_four = 2`, 4000/4000). Alphabet 0..29. **`PLAN.md` §6.1 register row BEFORE the module exists**, plus THIRD-PARTY-NOTICES. `datwrite` gains a verb that writes `len(new)`, **keeps compression 8**, and CRCs the stored bytes (`restore`/donor path proves every mechanic, `datwrite.py:610-614`). | Hard bar stated up front: **on the real payload, ≤ 1,029,628 B AND `gwdat.decompress` returns the original bytes.** The falsifiable headline in the test is *our compressed size vs ArenaNet's stored size on N real rows*, which can go red. Round-trip over a strided corpus sample. `checks.Ledger` floor from a real green run; TESTS.md in the same commit. **Note the acceptance bar is a RATIO target, not a correctness target** — the success/failure boundary is inside deflate's own tuning range (§1.2), and a level-1-quality matcher misses by 122 KB. | 2–3 sessions |
+| **A7** | **`toolkit/mapdata/gwenc.py` + `test_gwenc.py` + the `datwrite` compression-8 arm.** Build the matcher **size-only first** (hash chain, min match 3, 32 KB window, lazy matching) against A6's accountant — no bitstream writer, no round trip — then the writer. Copy the constant stream header (lead bits 0, `first_four = 2`, 4000/4000). Alphabet 0..29. **`PLAN.md` §6.1 register row BEFORE the module exists**, plus THIRD-PARTY-NOTICES. `datwrite` gains a verb that writes `len(new)`, **keeps compression 8**, and CRCs the stored bytes (`restore`/donor path proves every mechanic, `datwrite.py:610-614`). | Hard bar, **CORRECTED 2026-08-18 — this row said `≤ 1,029,628 B` and that is the trailer-EXCLUSIVE figure from §1.1, while every A7a/A7b number is trailer-inclusive. The third recurrence of correction C-3's double-count, and this is the row a cold session reads AS the criterion.** The bar is **≤ 1,029,632 B trailer-inclusive** AND `gwdat.decompress` returns the original bytes. Met: 1,011,244 B, §12–§13. The falsifiable headline in the test is *our compressed size vs ArenaNet's stored size on N real rows*, which can go red. Round-trip over a strided corpus sample. `checks.Ledger` floor from a real green run; TESTS.md in the same commit. **Note the acceptance bar is a RATIO target, not a correctness target** — the success/failure boundary is inside deflate's own tuning range (§1.2), and a level-1-quality matcher misses by 122 KB. | 2–3 sessions |
 | **A8** | **SUMMIT: a row THIS PROJECT COMPRESSED, read by the retail client.** Deploy the compression-8 in-place write of 15018 into the loopback build's archive; owner-driven caged run against our server per RUNBOOK. | The client loads the map with the modified archive, does not trip a `MdlLoad`/`MdlSeq`/`MdlAnim` assert (the assert vocabulary is the failure oracle — a crash names its line), and the authored animation is **measured**, not eyeballed. **Kill/keep:** if it fails, the run records **which gate fired** — that failure is itself the result. | 1 run |
 
 **Summit: A8.** What it would prove is the thing nothing else in this stack can: **that our encoder's output is a stream ArenaNet's decompressor accepts, not merely one ours does.** Every route above stops at the same sentence — `datmove.py:62-68`, `datalloc.py:79-86` and `gwdat.py:81-84` each carry a version of it. `datcheck.py` contains **zero** references to compression codes, so no invariant we own can refute a conforming-but-wrong bitstream. **The client is the only oracle, and A8 is the only rung that consults it.**
@@ -1657,6 +1657,157 @@ Note that a skeptic already emitted real bits during A6 and had `build_table` ac
   A7" — is what produced the wrong steer, and it is still correct *as arithmetic about
   retail's partition*; it just is not the constraint it looked like once the partition
   becomes a free variable.
+
+---
+
+## 13. A7b — RUN 2026-08-18. **The writer exists, and it reproduces ArenaNet's own bytes**
+
+`toolkit/mapdata/gwenc.py` + `test_gwenc.py`, 55 checks, floor 55, ~150 s. Three skeptics,
+**none refuting**, each reproducing the headline independently. All figures
+trailer-inclusive.
+
+### 13.1 The two results
+
+**[OBSERVED] Retail's own stored rows are re-emitted BYTE-IDENTICALLY.** Row 11196 comes
+back at 1,029,564 B with `crc32 == 0xF862D5C4 ==` the MFT's own recorded CRC. At scale:
+**3,051 distinct rows across five archive files, 197 MB, zero failures**, plus a skeptic's
+independent draw of **~5,990 more re-emissions across seven archives by their own seeds,
+also zero failures. No failure class, in any archive, any size band, any client build.**
+
+This is the check that does not depend on `gwdat` being a correct decoder, and a skeptic
+confirmed it is not smuggling: the writer never touches the trace's recorded bit positions,
+and re-emission still succeeds when the trace is round-tripped through a plain dict carrying
+**only semantic fields**. Tables are re-planned from code lengths through
+`meta_plan(optimal=False)`; code words are re-derived from lengths. The table encoder and the
+canonical assignment are genuinely on trial, and perturbing any of bit order, code
+assignment, `symbol_count`, meta-tokens, size codes, `first_four`, extra-bit widths or
+framing changes the bytes.
+
+**[OBSERVED] Our own encoder emits real bits.** `gwmatch` → `gwenc` → **unmodified
+`gwdat.decompress`** returns the exact payload, and row 11196 emits **1,011,244 B — equal to
+A7a's modelled figure TO THE BYTE**, 109 blocks, **18,388 B under the 1,029,632 B
+reservation.** The A7a number is now an artifact rather than a model.
+
+**§12.6's stated remaining risk is retired.** 328 encoder-implied tables were serialized and
+rebuilt by `gwdat.build_table` itself with decoded lengths diffed against intended: **0
+refusals, 0 mismatches.** Across a dial × partition stress the build agent ran 1,204 more
+tables through it, also zero.
+
+### 13.2 The bit order is corroborated from ArenaNet's own source, not just from our decoder
+
+**[OBSERVED, and this is the strongest independent evidence in the rung]** The client's bit
+layer is `P:\Code\Base\Compress\CmpIo.h`, named by its own assert lines. `gwdat`'s
+`buf1`/`buf2` are their `m_rackData0`/`m_rackData1` (`CmpIo:60`). **The client has a bit
+WRITER, and its preconditions are exactly this writer's** — `CmpIo:138 bitCount < 8 *
+sizeof(value)` and `CmpIo:139 !(value & ~((1 << bitCount) - 1))`.
+
+The rule: **bits are MSB-first inside each 32-bit word; words are in file order; each word
+is little-endian.** Validated by 7,688,160 bits round-tripped against disk across 48 rows
+with zero mismatches, and by three negative controls — big-endian words, LSB-first-in-word
+(zlib's order), and MSB-first bytewise — **all three of which differ from disk**, so the
+passing arm selects one of four rather than confirming itself.
+
+### 13.3 The framing, measured rather than assumed
+
+- **Prologue:** `data[3] == 0x02` — four zero lead bits then `first_four = 2` — on **138,708
+  of 138,708** comp-8 rows in `dat_study`, widened to **258,708 rows across four archives and
+  three client builds. One value.**
+- **Pad:** `pad = (−consumed_bits) mod 32`, and **every pad bit is zero** — 1,109 stratified
+  rows, all 32 pad widths occurring, not one non-zero bit. A control writing them as ones
+  gives different bytes that still decode, so they are genuinely free and retail chose zero.
+- **The tail word 0x80010008 is the reader's mandatory look-ahead**, constant on **258,708 of
+  258,708** rows. Two controls: replacing it with `0xDEADBEEF` or omitting it entirely both
+  still decode, so `gwdat` does not need it — **but every retail row has it and the client is
+  the only oracle, so it is emitted.** What the value *means* is **NOT FOUND**. It does tell
+  us the shape of retail's writer: invariant across all 32 pad widths means they flush the
+  partial word with zeros and then write a literal sentinel, rather than shifting out a
+  pre-loaded register.
+- **A real defect in our own decoder, found by a refutable control.** Hand `gwdat` a stream
+  one word shorter than the rule requires and it **silently truncates the payload** rather
+  than raising — row 11196 returns 1,514,850 of 1,514,855 B. `Eof` fires inside `next_code`
+  *after* the symbol is found, and `decompress` swallows it. Worth knowing before anyone
+  trusts a short read.
+
+### 13.4 The zero-length code — and my own brief's premise was wrong
+
+I told the agents *"A6 measured retail never enters it."* **That is false and a skeptic
+refuted it.** A6's measurement was about the *scout's prototype encoder*, not about retail,
+and I mis-carried it.
+
+**[OBSERVED] Retail enters the zero-length branch: 12 of 138,708 first blocks** carry a
+zero-length distance table — rows 8295/8300/8302/8305 each declare n=5, all-skip, with the
+zero-bit code consulted 24 times per block.
+
+**And the decisive measurement, which retires half of §2.2's standing risk.** Decoding
+ArenaNet's **own** row 8295 with an *upstream-faithful* `build_table` — the length-0 symbol
+parked and never read back, exactly as `xentax.cpp` and `binutil/huffman.go` do — **FAILS**
+with `zero-length code (table hole)`. So `gwdat`'s repair, which its docstring has always
+labelled a divergence from both upstream lineages, **is REQUIRED by ArenaNet's own archive.
+The shipping client must implement something equivalent, and using the branch is not a step
+outside what the client demonstrably does.** That is a much better position than §2.2's
+*"a bit-exact round trip through a wrong decoder proves agreement, not correctness."*
+
+### 13.5 Where our encoder leaves retail's envelope — the real A8 risk
+
+A skeptic asked which paths **B1 structurally cannot cover**, because retail never took them.
+Three feared gaps turned out not to exist: **ours is a strict subset of retail** on block
+count (retail rows carry 1..37 blocks and use *every* size code 0..15 including as non-final,
+so our 109 blocks is more iterations of a covered path, not a new one), on code lengths
+(ours lit 0..15 / dist 0..11 against retail's lit 1..16 / dist 0..13), and essentially on the
+meta alphabet. In the other direction **B1 is broader than B2 in the bit layer**, exercising
+the writer on inputs our encoder never generates.
+
+**What is genuinely uncovered, and it is one thing that matters:**
+
+| gap | retail | ours |
+|---|---|---|
+| **A. declared `symbol_count == 1`** | **0 of 138,708 first blocks** (min lit 258, min dist 5) | **7 of 208 tables (3.4%)** |
+| B. zero-length **literal** table | 0 of 138,708 | 2 of 208 |
+| C. declared counts outside retail's envelope | lit ≥ 258, dist ≥ 5 | lit 66/67/98/256/257/258 — 257 alone is 19 of 102 lit tables; dist 1/2/6 |
+| D. a zero-block stream | none — smallest row is 56 B and holds a block | `encode(b"")` → 12 B |
+| E. three meta indices in the 16-bit catch-all band | absent from a 709-row sample | emitted |
+
+**Gap A is the one to watch.** Retail reaches the zero-length code only through the
+`total == 0` fallback with declared ≥ 2; ours reaches it through the `symbol_count < 2` arm
+with declared == 1, a branch ArenaNet's own compressor appears never to trigger. Its
+correctness rests on `gwdat`'s repair **plus** `gwentropy`'s model of that repair — both
+ours, **no external witness anywhere in the rung**. `test_gwenc` §2 exercises it, but its
+referee is `build_table`, so it is B2-strength, not B1-strength.
+
+**The mitigation is named and cheap, so this is not a blocker:** the declared-1 empty
+distance table costs 20 bits; a two-symbol distance table inside retail's attested envelope
+costs a few bits more and sits on a path 138,708 rows witness. **If A8 finds the client
+refuses declared == 1, that is the fix — a size question, not a design one.**
+
+### 13.6 Corrections
+
+- **The trailer double-count, for the THIRD time.** §3's A7 ladder row still stated the
+  acceptance criterion as `≤ 1,029,628 B` — §1.1's trailer-*exclusive* figure — while every
+  A7a/A7b number is trailer-inclusive. Nothing turned on it (1,011,244 clears both), but that
+  is the row a cold session reads *as* the criterion. Corrected. See **C-3** and §10.6.
+- **Two fixture annotations claimed coverage they did not provide**, in `test_gwenc.py` and
+  repeated in TESTS.md: `all 0xFF` was said to make the *literal* table take the all-skip
+  zero-length shape (measured: an ordinary 3-symbol table declared 285; the zero-length one
+  is the *distance* table), and `incompressible` was said to leave the distance table empty
+  (measured: 101 matches and a full 30-symbol table). Both shapes are covered by other
+  fixtures — but **nothing asserted the mapping, so the comments drifted from the artifact.**
+  That is the same defect §3's window-edge "genuinely REACHED" assertion exists to prevent,
+  applied to only one of the fixtures that needed it. Corrected in both files.
+- **My brief's zero-length premise was wrong** (§13.4), and the skeptic's refutation of it
+  produced the rung's best result. Recorded because the error was mine and it was confident.
+
+### 13.7 What stands between here and A8
+
+**A8 is "a row THIS PROJECT COMPRESSED, read by the retail client."** Still missing:
+
+1. **The `datwrite` compression-8 arm** — a verb that writes `len(new)` as the size, **keeps
+   compression 8**, and CRCs the *stored* bytes. Every mechanic is proven by the
+   `restore`/donor path (`datwrite.py:610-614`); it was deliberately excluded from A7b so
+   that building the writer and wiring it into a 4.2 GB file were not the same change.
+2. **The safety gates** of §5.6 — `--preflight`, `--generations`, `--crc-sweep`, `--diff`
+   against a pre-write snapshot, and the backup. **Never launch on a suspect archive.**
+3. **The owner at the keyboard.** `gwdat` is still ours; §13.2 and §13.4 make it much more
+   likely to be right than it was, but only the client can settle it.
 
 ---
 

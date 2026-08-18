@@ -28,6 +28,18 @@ same six tables, `LENGTH_BASE`, `LENGTH_EXTRA_BITS`, `DISTANCE_BASE` and
 window, and re-transcribes none of them. The *search* is not upstream's at all — a hash
 chain with lazy matching, following deflate's published design — and nobody upstream has
 a matcher for this format to take. `PLAN.md` §6.1) and
+`toolkit/mapdata/gwenc.py` (the A7b **bitstream writer** — the inverse of `gwdat.py`'s
+`BitReader`, of `build_table`'s meta-token walk over `CODE_LENGTH_THRESHOLDS` /
+`CODE_LENGTH_SYMBOLS`, and of its canonical code assignment. It **imports** every
+constant from `gwdat.py` and `gwentropy.py` and re-transcribes none. What is upstream's
+is the format — the meta alphabet, the assignment rule, and the 32-bit little-endian
+word order with MSB-first bits inside each word, all recovered by GWMB from ArenaNet's
+compressed archive. What is ours is only the direction: all five mirrored lineages
+declare decode only, so there is no writer, no table serializer and no compressor
+anywhere upstream to copy. Worth saying plainly, because this module's headline result
+is *byte-identical re-emission of ArenaNet's own stored rows* — that result is evidence
+we hold **GWMB's recovery of the format** correctly, and it would not have been reachable
+without it. `PLAN.md` §6.1) and
 `toolkit/mapdata/pathmap.py` (the FFNA pathing-chunk struct layout and field names,
 derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
 `toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`
