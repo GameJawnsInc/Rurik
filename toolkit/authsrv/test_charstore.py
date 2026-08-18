@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=18)
+led = checks.Ledger("charstore", floor=24)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -125,6 +125,59 @@ try:
         led.ok(False, "an empty email cannot name a store")
     except ValueError:
         led.ok(True, "an empty email cannot name a store")
+
+    # -- kill accrual: the reward lands in the store, capped where retail
+    # -- caps it, and is a strict no-op when persistence is off -------------
+    import authsrv  # noqa: E402  (heavy, but the accrual lives there)
+    sent = []
+
+    def fake_send(op, values, label=""):
+        sent.append((op, list(values) if isinstance(values, list) else values))
+
+    st3 = charstore.Store.open("loopback@rurik.invalid", base=base)
+    st3.account()["factions"]["balthazar"] = {"current": 9990, "max": 10000}
+    st3.save()
+    xp0 = st3.character_by_uuid(UUID)["xp"]
+    game_state = {"charstore_game": st3, "char_uuid": UUID}
+
+    authsrv.PERSIST = False
+    authsrv.accrue_kill_rewards(fake_send, game_state, 0)
+    led.ok(st3.character_by_uuid(UUID)["xp"] == xp0 and not sent,
+           "accrual is a strict no-op with persistence off")
+
+    authsrv.PERSIST = True
+    try:
+        authsrv.accrue_kill_rewards(fake_send, game_state, 0)
+    finally:
+        authsrv.PERSIST = False
+    led.ok(st3.character_by_uuid(UUID)["xp"]
+           == xp0 + authsrv.KILL_REWARD_VALUE,
+           "a kill accrues KILL_REWARD_VALUE xp in the store")
+    led.ok(sent == [(authsrv.GAME_SMSG_AGENT_KILL_REWARD, [11, 10]),
+                    (authsrv.GAME_SMSG_AGENT_KILL_REWARD, [12, 40])],
+           "current is CAPPED at the stored max, total is not",
+           f"sent {sent} -- 10 of room, full 40 to total; the cap is what "
+           f"0x00EA-0x00ED declare and a current past its denominator is a "
+           f"bar the client has never been shown")
+    back = charstore.Store.open("loopback@rurik.invalid", base=base)
+    led.ok(back.account()["factions"]["balthazar"]
+           == {"current": 10000, "max": 10000, "total": 40},
+           "the accrued faction state is on DISK, not just in memory")
+    led.ok(back.character_by_uuid(UUID)["xp"]
+           == xp0 + authsrv.KILL_REWARD_VALUE,
+           "the accrued xp is on disk too")
+
+    del st3.account()["factions"]["balthazar"]
+    st3.save()
+    sent.clear()
+    authsrv.PERSIST = True
+    try:
+        authsrv.accrue_kill_rewards(fake_send, game_state, 0)
+    finally:
+        authsrv.PERSIST = False
+    led.ok(not sent and st3.character_by_uuid(UUID)["xp"]
+           == xp0 + 2 * authsrv.KILL_REWARD_VALUE,
+           "no balthazar row: xp still accrues, no faction delta is invented")
 finally:
     shutil.rmtree(base, ignore_errors=True)
 

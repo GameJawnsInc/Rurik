@@ -1368,6 +1368,53 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+# The Balthazar gain that rides a kill when the store is armed. 40 is the
+# delta magnitude retail itself sent -- 17 of the 22 paired [11,d]+[12,d]
+# sightings in the 08-17 live captures are +40 (STORAGE.md §2) -- but the
+# TRIGGER context there was the new-character tutorial, not ordinary kills,
+# so the magnitude is borrowed and the schedule is ours. Labelled here so
+# nobody reads it back as a measured per-kill rule.
+BALTH_PER_KILL = 40
+
+
+def accrue_kill_rewards(send, state, conn_id):
+    """Make the kill reward ACCRUE instead of evaporating.
+
+    The [0, 26] xp delta hit_enemy sends is ArenaNet's own kill shape and the
+    client applies it += to the sheet -- but nothing on our side remembered
+    it, so the next 0x00E9 (or the next session) snapped the sheet back to
+    the store's old numbers. With --persist armed and the burst having found
+    a store row, the same delta now lands in the store, and Balthazar
+    faction rides the same tick as the paired [11, d] + [12, d] deltas
+    retail sends: CURRENT capped at the stored max (the cap is exactly what
+    0x00EA-0x00ED declare, and a current past its denominator is a bar the
+    client has never been shown), TOTAL uncapped -- fields 11/12 move
+    together in every retail sighting. Without --persist this returns
+    immediately and the kill template stays byte-identical to what the
+    combat arc measured.
+    """
+    store = state.get("charstore_game")
+    if not PERSIST or store is None:
+        return
+    row = store.character_by_uuid(state.get("char_uuid", ""))
+    if row is None:
+        return
+    row["xp"] += KILL_REWARD_VALUE
+    balth = store.account()["factions"].get("balthazar")
+    if balth is not None:
+        current_gain = min(BALTH_PER_KILL,
+                           max(0, balth["max"] - balth["current"]))
+        balth["current"] += current_gain
+        balth["total"] = balth.get("total", 0) + BALTH_PER_KILL
+        send(GAME_SMSG_AGENT_KILL_REWARD, [11, current_gain],
+             f"balthazar current +{current_gain}"
+             + (" (capped)" if current_gain < BALTH_PER_KILL else ""))
+        send(GAME_SMSG_AGENT_KILL_REWARD, [12, BALTH_PER_KILL],
+             f"balthazar total +{BALTH_PER_KILL}")
+    store.save()
+    print(f"[c{conn_id}] PERSIST: kill accrued -- xp {row['xp']}"
+          + (f", balthazar {balth['current']}/{balth['max']}"
+             if balth is not None else ""), flush=True)
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
@@ -3302,6 +3349,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
              f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
+        # AFTER the measured three-message template, never inside it: the
+        # status/reward/flags order is ArenaNet's own tick shape, and the
+        # accrual only appends to it (and only under --persist).
+        accrue_kill_rewards(send, state, conn_id)
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -7180,6 +7231,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       f"sheet stays default", flush=True)
                             else:
                                 _ps_acct = _ps_store.account()
+                                # Cached for the kill path: accrual must not
+                                # re-scan the store directory every swing.
+                                state["charstore_game"] = _ps_store
                                 print(f"[c{conn_id}] PERSIST: sheet from "
                                       f"{_ps_store.path}", flush=True)
                         _ps_level = (_ps_row or {}).get("level", START_LEVEL)
@@ -7304,12 +7358,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         if _ps_acct is not None:
                             # Field indices measured by attr_legend and the
                             # faction_max run: 1/3/5/11 are the four currents.
-                            _cur = {f: r["current"] for f, r
-                                    in _ps_acct["factions"].items()}
-                            player_attrs[1] = _cur.get("kurzick", 0)
-                            player_attrs[3] = _cur.get("luxon", 0)
-                            player_attrs[5] = _cur.get("imperial", 0)
-                            player_attrs[11] = _cur.get("balthazar", 0)
+                            _fxr = _ps_acct["factions"]
+                            for _fac, _cur_f, _tot_f in (
+                                    ("kurzick", 1, 2), ("luxon", 3, 4),
+                                    ("imperial", 5, 6), ("balthazar", 11, 12)):
+                                if _fac in _fxr:
+                                    player_attrs[_cur_f] = \
+                                        _fxr[_fac]["current"]
+                                    # Fields 2/4/6/12 are total-earned --
+                                    # the pair that moves with current in
+                                    # every retail sighting (STORAGE.md §2).
+                                    player_attrs[_tot_f] = \
+                                        _fxr[_fac].get("total", 0)
                         send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
                              f"CHARACTER_UPDATE_FACTIONS(level {_ps_level})")
                         if _ps_acct is not None and _ps_acct["factions"]:
