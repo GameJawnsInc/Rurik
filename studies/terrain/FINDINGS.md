@@ -1444,6 +1444,44 @@ nothing about this prop is special. The outline being visible while the mesh
 was not is what distinguishes "absent" from "invisible", and it is worth
 keeping as a diagnostic.
 
+### 7.18 §7.2 REFUTED: there is no second rectangle (2026-08-17)
+
+§7.2 read two UV rectangles in `0x00757A80` — a masked path using the quadrant
+table, and an "unmasked" path with its own span (`obj+0x68/0x6C`) and origin
+(`obj+0x70/0x74`) — and concluded the BASE layer used the second one. That
+conclusion stood for three days as the likeliest cause of large-scale
+repetition. **It is wrong.**
+
+**The base never takes that path. 0 of 512 cells.** `0xFFFF` — the value that
+selects the unmasked branch — appears only in slots 1 and 2, where it marks an
+UNUSED slot (300 and 421 occurrences). Every base descriptor carries a real
+cover word, and those are the four variation quadrants in near-equal
+proportion: `0x0` 123, `0x1` 125, `0x2` 125, `0x3` 139.
+
+**And the rectangle itself says so.** Captured per cell and constant across all
+512: **span = 0.000488 = 1/2048, origin = 0.0625 = 1/16.** A span of 1/2048 is
+SUB-TEXEL on a 256-pixel texture — it samples essentially one point. That is
+not a terrain rectangle; it is what you write to make an unused slot draw
+nothing.
+
+So the `0xFFFF` branch is the no-op path for empty slots, the base goes through
+the same quadrant machinery as everything else (which §7.12 already showed from
+the other side: `draw & 3` == base quadrant, 512/512), and **there is no second
+rectangle to implement.**
+
+**What this costs, honestly.** §7.2 was the last open item that could have
+explained a 96-unit repeat, and it has evaporated. If the ground still repeats
+visibly at distance, the cause is NOT a missing UV rectangle and the next
+suspect is unknown — the candidates left are the lightmap transfer curve
+(§8, weak) or something nobody has looked at. If it does not repeat visibly,
+there was never anything here to fix.
+
+**A note on how this was found**, because it is the same shape as §7.14's
+correction: §7.2 was read out of the disassembly and never tested against a
+running client. The test was one added field in an instrument that already
+existed and one run. Three days of "likeliest cause" against ten minutes of
+measurement.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
@@ -1467,11 +1505,11 @@ keeping as a diagnostic.
   format and importer unchanged. `test_trnblend` §5 locks it to the capture.
 - ~~The permutation is lost at the format boundary (§7.10).~~ **Subsumed by
   §7.13** — same defect, now with the mechanism and a test set.
-- **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
-  `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
-  the base tiles continuously and there is no 96-unit repeat; if it does not,
-  there is. NOT FOUND, and it decides the thing the owner's screenshot is
-  about. The per-texture atlas origin `[tex+0x10]/[tex+0x14]` is unread too.
+- ~~The base layer's own UV rectangle.~~ **REFUTED 2026-08-17, §7.18**: there
+  is no second rectangle. The base never takes the unmasked path (0 of 512
+  cells); `0xFFFF` marks an UNUSED slot, and its span of 1/2048 is sub-texel —
+  a placeholder that samples nothing. The last item that could have explained
+  large-scale repetition is gone, and no replacement suspect is named.
 - The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
   factory's argument that lands at stage record +0x10. Named, not
   understood, and asserted nowhere.

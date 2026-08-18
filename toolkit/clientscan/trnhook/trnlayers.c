@@ -44,6 +44,7 @@ static volatile LONG  g_n = 0;
 static volatile LONG  g_done = 0;
 static DWORD g_ebp[NCAP];
 static DWORD g_rng[NCAP][2];
+static DWORD g_uv[NCAP][4];   /* base rect: span u,v then origin u,v (7.2) */
 static BYTE  g_win[NCAP][WIN_LEN];
 
 static int poke(DWORD addr, BYTE val, BYTE *saved)
@@ -73,6 +74,14 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
             DWORD sub = *(DWORD *)(c->Ebp - 0x18);
             g_rng[slot][0] = *(DWORD *)(sub + PRNG_OFF);
             g_rng[slot][1] = *(DWORD *)(sub + PRNG_OFF + 4);
+            /* FINDINGS 7.2: the UNMASKED (base) path reads its own
+             * rectangle -- span at obj+0x68/0x6C, origin at obj+0x70/0x74 --
+             * which we have never implemented. Captured as raw dwords; they
+             * are floats. */
+            g_uv[slot][0] = *(DWORD *)(sub + 0x68);
+            g_uv[slot][1] = *(DWORD *)(sub + 0x6C);
+            g_uv[slot][2] = *(DWORD *)(sub + 0x70);
+            g_uv[slot][3] = *(DWORD *)(sub + 0x74);
         }
         memcpy(g_win[slot], (const void *)(c->Ebp - WIN_LO), WIN_LEN);
         if (slot == NCAP - 1) InterlockedExchange(&g_done, 1);
@@ -112,6 +121,7 @@ static DWORD WINAPI worker(LPVOID unused)
         fwrite(&base, 4, 1, f);
         fwrite(g_ebp, 4, n, f);
         fwrite(g_rng, 8, n, f);
+        fwrite(g_uv, 16, n, f);
         fwrite(g_win, WIN_LEN, n, f);
         fclose(f);
     }
