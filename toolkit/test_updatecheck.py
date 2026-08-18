@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 82,
-          "and the class-(a) census rides along, at 82",
+    check(len(state["pins"]) == 86,
+          "and the class-(a) census rides along, at 86",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -232,7 +232,12 @@ if exe:
           f"byte-verified against the running process before they are armed. The "
           f"reasoning is on test_buildpins.py's copy of this literal and is not "
           f"repeated here; what matters at THIS site is only that the two agree. "
-          f"Both literals "
+          f"86 on 2026-08-18: clientscan/fovread.py and clientscan/fovaxis.py "
+          f"added four between them -- the field-of-view global and the camera "
+          f"position and target beside it -- every one resolved as an RVA off a "
+          f"module base read at RUN TIME rather than as a fixed address, and both "
+          f"tools refuse loudly when the fov reads 0.0, which is what a wrong "
+          f"address looks like. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")
