@@ -1398,10 +1398,12 @@ discriminating arm flips a `mons`-red body with the same `'play'` pair against a
 untouched red control); **`0x00B9` field2=1** needs zero new code
 (`smsgsweep.py --plan --only 0x00B9 --encstring --set 0x00B9:2=1`, verified in-process:
 the composed payload keeps the real string and files under its own ledger regime);
-**`0x0084` vs `0x00D7`** is BLOCKED on desk work first — upstream's own
-`SKILL_ADD_TO_WINDOWS_END` name for `0x00E1` contradicts the ladder's assumed
-`0x00D7`→`0x00E1` pairing, so the four drain handlers are being disassembled for which
-accum list each zeroes before any run is designed.
+**`0x0084` vs `0x00D7`** — the desk work RAN and killed the ladder's design before it
+could crash a session: `0x0086` asserts the two accum counts equal (`ChCliApi.cpp(1587)`,
+verified by hand), only `0x0085` drains a single list, and the appenders share one handler
+so nothing can separate them. Replaced by the **`accum_drains`** probe (one appender, all
+four drain events, real named ids, equal columns, assert-carrying drain last) — newopcodes
+`0x0084` section's ADDENDUM has the drain table.
 
 **A NAMED FUTURE CAPTURE: the Factions tutorial, start to Shing Jea Monastery.** Owner's
 call 2026-08-17, made while walking a new character through it: *"there are definitely

@@ -649,6 +649,35 @@ the ids of the immediately preceding `0x0161` batch = **OBSERVED**, n = 2; mecha
 appends each dword to `ChCliApi accumIntList[0]` = **SOURCED**; **"items" specifically =
 NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEND`.
 
+**ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
+have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
+disassembled, the assert-carrying one re-verified by a second reader):
+
+| drain | worker | event | lists touched | zeroes |
+|---|---|---|---|---|
+| `0x0085` | `0x008119C0` | `0x100000B8` | list 0 only | count 0 only |
+| `0x0086` | `0x00811A00` | `0x100000B9` | **both, as parallel columns** | both |
+| `0x00D4` | `0x008145C0` | `0x10000052` | both | both |
+| `0x00E1` | `0x00814860` | `0x100000BA` | both | both |
+
+Three consequences. **(1)** `0x0086`'s worker opens with
+`Assertion: context->accumIntList[0].Count() == context->accumIntList[1].Count()`,
+`ChCliApi.cpp(1587)` — and then posts ONE count with BOTH base pointers, so its consumer
+reads the two lists as columns of one table. Item 7's "send `0x0084` with N ids then
+`0x0086`" is therefore a guaranteed assert (N ≠ 0); the 2026-08-13 screen pass survived
+`0x0086` only because empty == empty passes. **(2)** The drains cannot separate the
+appenders — `0x0085` is the only single-list drain, and the naive `0x00D7`→`0x00E1`
+pairing does not exist: `0x00E1` drains both lists, which makes upstream's
+`SKILL_ADD_TO_WINDOWS_END` incomplete rather than wrong. **(3)** Nothing separates the
+appenders at all — `0x0084` and `0x00D7` share handler `0x0091E820` (§ above), so the
+client cannot see which opcode staged the row and no experiment can either; only the
+declared wire lengths differ (array32(16) vs array32(8)). Item 7 is REPLACED by the
+`accum_drains` probe (`toolkit/authsrv/probes.py`): one appender, all four drain events
+with three declared, distinctly named item ids staged, column 1 fed `[1,1,1]` on every
+multi-list arm, the assert-carrying drain last. Prediction on record there; a null result
+refutes nothing (subscribers may need an open window — the `0x00C5` flow is the only
+observed reader and it rides a window context).
+
 ---
 
 ## `0x003A` — `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES` — semantics **CORROBORATED**, name **UPSTREAM single-lineage**
@@ -1439,6 +1468,13 @@ repeated:
 7. **One loopback run separates `0x0084` from `0x00D7`.** Send `0x0084` with N ids then
    `0x0086`; separately `0x00D7` then `0x00E1`; see which UI surface receives each. That
    separates the two appenders the binary cannot.
+   **SUPERSEDED 2026-08-18 — this design would have crashed, and its premise is refuted.**
+   The desk read it needed (the `0x0084` section's ADDENDUM): `0x0086` asserts the two
+   accum counts EQUAL (`ChCliApi.cpp(1587)`), so "`0x0084` with N ids then `0x0086`" is a
+   guaranteed assert; and nothing separates the appenders — they share one handler, so the
+   client never sees which opcode staged a row. The runnable replacement is the
+   `accum_drains` probe: one appender, all four drain events, real named ids, column 1 fed
+   equal-length, the assert-carrying drain last.
 8. **One capture more than three hours after `20260817T183756` confirms `0x011A`.** GWW's
    border recomputes on a three-hour cadence, so a later capture is the only thing that can
    watch fields 3 and 4 move and turn two RECONSTRUCTIONs into OBSERVED. It costs a login,

@@ -483,6 +483,108 @@ def _armor_slots_steps(agent_id):
     ]
 
 
+# Item ids for the accum-drain probe, clear of the armor probe's 2/3 and the
+# hammer. The declarations create them; the ids only need to be unclaimed.
+_DRAIN_ITEM_A = 40
+_DRAIN_ITEM_B = 41
+_DRAIN_ITEM_C = 42
+
+
+def _accum_drains_steps(agent_id):
+    """Which UI surface does each accum-table DRAIN event drive, with real ids
+    staged? The redesign of studies/newopcodes/FINDINGS.md section-4 item 7,
+    after the desk read that item asked for came back and changed it.
+
+    WHAT THE DESK READ SETTLED FIRST (2026-08-18, all four drain workers
+    disassembled, the load-bearing one re-verified by hand): the ladder's
+    proposed experiment -- '0x0084 then 0x0086; separately 0x00D7 then 0x00E1;
+    see which surface receives each' -- had two false premises. (1) The
+    appenders CANNOT be separated by any experiment: 0x0084 and 0x00D7 share
+    one handler VA (0x0091E820) and one worker appending into the same list;
+    the client never sees which opcode it was. This probe deliberately uses
+    only 0x0084. (2) The drains do not pair off one-per-list: 0x0085 (worker
+    0x008119C0, event 0x100000B8) drains list 0 ONLY and zeroes only count 0;
+    0x00D4 (0x008145C0, event 0x10000052) and 0x00E1 (0x00814860, event
+    0x100000BA) read both lists and zero both counts; and 0x0086 (0x00811A00,
+    event 0x100000B9) ASSERTS the two counts EQUAL --
+    `context->accumIntList[0].Count() == context->accumIntList[1].Count()`,
+    ChCliApi.cpp(1587) -- then posts ONE count with BOTH base pointers: its
+    consumer reads the two lists as parallel COLUMNS of one table. So the
+    ladder's 0x0086 arm as written would have crashed (3 != 0), and the only
+    reason the 2026-08-13 screen pass survived 0x0086 is that empty == empty
+    passes the assert.
+
+    WHAT IS LEFT TO MEASURE is which surface each drain EVENT drives when the
+    buffer holds real, declared, distinctly-named item ids -- the screen pass
+    proved every drain QUIET on an EMPTY buffer, which measured the events
+    subscriber-side only at zero rows. Three items with three different names
+    (legs/boots/gloves) so whichever surface renders says WHICH rows reached
+    it. Every multi-list arm stages column 1 with [1, 1, 1] -- equal length by
+    construction, value 1 because the column's meaning (quantity? id?) is
+    exactly what the render would reveal. The 0x0086 arm runs LAST: it is the
+    only assert-carrying drain, so if the run dies there the frames from the
+    first three arms are already banked.
+
+    KNOWN CONFOUND, stated up front: a null result refutes nothing. The
+    subscribers may exist only while some window is open (retail's only
+    staged-buffer use observed, the 0x00C5 flow, rides a window context), and
+    this run opens none. Nothing-lights is 'no subscriber in this state', not
+    'the events are dead'.
+    """
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    return [
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
+                                     item_template("warrior_legs")),
+             "0x0161: declare item 40 (leggings name)",
+             "nothing -- a declaration renders nothing, measured 621/621."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
+                                     item_template("warrior_boots")),
+             "0x0161: declare item 41 (boots name)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
+                                     item_template("warrior_gloves")),
+             "0x0161: declare item 42 (gloves name)", "nothing."),
+        Step(8.0, 0x0084, [ids],
+             "0x0084: stage column 0 with the three item ids",
+             "nothing -- the appender is QUIET, measured; the drain is the "
+             "experiment."),
+        Step(2.0, 0x0085, [0],
+             "0x0085: DRAIN, event 0x100000B8 -- the only single-list drain",
+             "ARM 1's verdict frame. Any window, toast, chat line or list "
+             "gaining three rows named like armor pieces. Nothing is also an "
+             "answer (no subscriber in this state)."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: stage column 1 = [1,1,1], equal length",
+             "nothing -- list 1's appender was QUIET too."),
+        Step(2.0, 0x00D4, [],
+             "0x00D4: DRAIN, event 0x10000052 (bare trigger, no payload field)",
+             "ARM 2's verdict frame, same watch as arm 1."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: restage column 1", "nothing."),
+        Step(2.0, 0x00E1, [0],
+             "0x00E1: DRAIN, event 0x100000BA -- upstream calls this "
+             "SKILL_ADD_TO_WINDOWS_END",
+             "ARM 3's verdict frame. If upstream's name is honest, a SKILL "
+             "surface moves here -- and column 1 is all 1s, so 'skill id 1' "
+             "appearing would also name which column that surface reads."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: restage column 1 -- 3 == 3, the assert passes by "
+             "construction", "nothing."),
+        Step(2.0, 0x0086, [0],
+             "0x0086: DRAIN, event 0x100000B9 -- the assert-carrying, "
+             "paired-columns drain, deliberately LAST",
+             "ARM 4's verdict frame. A crash naming ChCliApi.cpp(1587) here "
+             "means the count bookkeeping differs from the disassembly's "
+             "reading and is itself a finding; the first three arms are "
+             "already on disk either way."),
+    ]
+
+
 # Fresh definition slots and agent ids for the composite arm. Chosen clear of
 # everything any co-loading path uses: definitions 3 (test enemy), 5 (sculpt),
 # 9 (henchman), 10..16 (heroes), 1480 (quest giver); agents 1, 10, 20..22, 30,
@@ -5401,6 +5503,33 @@ PROBES = {
              "mons (control). Frames bracket each send via the gamesrv log's "
              "timestamps; compass dots are the fixed-position readout, "
              "nameplates the confirming one (hold ALT via --walk 'alt:').",
+    ),
+    "accum_drains": lambda a, o: Probe(
+        question="Which UI surface does each accum-table drain event drive "
+                 "(0x100000B8/52/BA/B9), with three declared, distinctly "
+                 "named item ids actually staged?",
+        predicts="If upstream's WINDOW_ADD_ITEMS / SKILL_ADD_TO_WINDOWS_END "
+                 "family names are honest, at least one drain renders the "
+                 "three item names on some window surface and 0x00E1's "
+                 "surface is skill-flavoured. The stated null -- nothing "
+                 "lights on any arm -- refutes NOTHING (the 2026-08-13 "
+                 "screen pass already proved all four QUIET on an empty "
+                 "buffer; subscribers may need an open window), and says the "
+                 "follow-up needs a window context, not that the events are "
+                 "dead. A ChCliApi.cpp(1587) assert on the LAST arm would "
+                 "contradict the verified count bookkeeping and reopen the "
+                 "disassembly.",
+        steps=_accum_drains_steps(a),
+        note="Replaces newopcodes section-4 item 7 as written: the desk read "
+             "it asked for showed the appenders share one handler "
+             "(0x0084 == 0x00D7 to the client, so only 0x0084 is used), "
+             "0x0085 is the only single-list drain, 0x00D4/0x00E1 drain "
+             "both lists, and 0x0086 ASSERTS equal counts then posts the "
+             "lists as parallel columns -- the ladder's arm would have "
+             "crashed on 3 != 0. Every multi-list arm here stages column 1 "
+             "as [1,1,1]; the assert-carrying drain runs last so three arms "
+             "bank frames before the risky one. No aiming: the readout is "
+             "whatever fixed UI moves, bracketed by the gamesrv log.",
     ),
     "npc_agent": lambda a, o: Probe(
         question="Does a monster-class agent render, and does it need an NPC "
