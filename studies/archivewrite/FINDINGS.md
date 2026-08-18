@@ -1117,6 +1117,42 @@ edit, it is about most of the creature's animations being unreachable.
   the compression-8 wall is *provably* what blocks the arc. That converts a vague failure
   into a costed next step, and it is the single most useful thing this run can return.
 
+### 9.3j RUN 5 CAME BACK NULL — and run 6 is the positive control I owed since run 1
+
+**Owner: "deployed and ran it, still no deformation."** 32% of the creature's animation
+records were playing from files whose bone lengths we had scaled x3 or x0.25, and nothing
+changed shape.
+
+**TWO READINGS SURVIVE, and only one of them is about the wall.**
+
+- **(a) The cast comes from 15018 or 87333** — the two files we cannot write, holding 149
+  of 242 records between them. This is the reading I had been favouring, and it makes the
+  compression-8 wall the blocker.
+- **(b) LINKED-FILE BASES ARE NEVER USED.** The rest skeleton is *replicated* into every
+  animation file — `sum|base|` = 3,928.2 in thirteen of sixteen, measured — but replication
+  is not use. If only the SHELL's copy poses the creature, then U7 (shell bases →
+  "deformed") and runs 4–5 (link bases → nothing) are both exactly as predicted, and where
+  the cast animation lives is irrelevant.
+
+**I had been under-weighting (b), and it is the cheaper explanation.**
+
+**Neither can be believed until the measurement chain is validated, and it never has
+been.** Five runs have reported "no deformation" while resting on the assumption that U7's
+oracle still works — a different archive, session and camera. **An assumption carrying five
+negative results is exactly the thing to test**, and running a positive control first is
+ordinary discipline that I skipped.
+
+**Run 6 changes exactly one file: the shell, every node base x3.** No link, no record, no
+new file — verified: all 15 links byte-identical to retail, 1 row changed, size unchanged,
+preflight 10/10, crc 177,319 payloads 0 bad. It is U7's own edit, larger.
+
+- **It deforms** → the oracle is alive, and with run 5's null result **(b) is CONFIRMED**:
+  bone lengths come from the shell, links supply motion channels only. That is good news —
+  the shell is 29,802 B and we can already write it, so the arc's authoring lever for shape
+  exists and is reachable.
+- **It does not deform** → the chain between our writer and the screen is broken, **runs
+  1–5 are void**, and that is what to debug. Nothing else should be believed first.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
