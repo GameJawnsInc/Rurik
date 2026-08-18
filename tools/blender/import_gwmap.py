@@ -834,9 +834,23 @@ def apply_terrain_textures(obj, gwmap, lightmap=True):
     for mat in materials:
         mesh.materials.append(mat)
 
-    # material_index per face from the tiles array -- the SAME world
-    # row-major order as the faces, so the mapping is the identity.
-    indices = [tile_slot[t] for t in gwmap.tiles]
+    # material_index per face from the BASE LAYER, not from `tiles`.
+    #
+    # These are not the same tile, and treating them as one is what made the
+    # rebuilt ground read as randomly chosen tiles. The client's base is the
+    # corner that SORTS FIRST -- measured, 102 of 102 cells where the two
+    # hypotheses disagree (FINDINGS 7.16) -- while `tiles` is the cell's own
+    # byte. The overlays mask the complement of the BASE, so binding a
+    # different base underneath leaves each cell showing a material its
+    # overlays were never computed against.
+    #
+    # Fall back to `tiles` only when the export predates the layers sidecar,
+    # where base == own tile by construction.
+    if gwmap.layers is not None:
+        indices = [tile_slot[gwmap.layers[3 * c] & 0xFF]
+                   for c in range(len(gwmap.tiles))]
+    else:
+        indices = [tile_slot[t] for t in gwmap.tiles]
     mesh.polygons.foreach_set("material_index", indices)
 
     # SMOOTH-SHADED, because the client's terrain is: both vertex layouts

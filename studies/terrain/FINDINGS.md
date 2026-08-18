@@ -1353,6 +1353,47 @@ check is vacuous. The general lesson is the repo's own: **a rule implemented
 twice will drift, and a suite that tests each copy against itself cannot see
 it.** Diff the artifact, not just the unit.
 
+### 7.16 The base material was bound from the WRONG TILE (2026-08-17)
+
+The owner rebuilt Kamadan after §7.15 and reported it unchanged: *"still just
+looks like randomly chosen tiles."* That is not a blending symptom — coherent
+regions had become a scatter, which means cells were drawing a texture that was
+not theirs.
+
+**The layer data was innocent, and the compositor proved it.** The same
+`layers.u16`, composited in TEXTURE space with no Blender involved, gives grass
+above and dirt below with an organic scalloped boundary, seam ratio **0.79**.
+So the fault had to be downstream of the data.
+
+**THE CLIENT'S BASE IS THE CORNER THAT SORTS FIRST, NOT THE CELL'S OWN TILE.**
+Tested against the capture on the cells where the two hypotheses disagree:
+
+| base texture equals | cells |
+|---|---|
+| **the SORTED-FIRST corner's type** | **102** |
+| the PHYSICAL corner 0's type | 0 |
+| neither | 0 |
+
+**And `import_gwmap.py` was binding `material_index` from `gwmap.tiles`** —
+the cell's own byte — while the overlays mask the COMPLEMENT of the base. Bind
+a different base underneath and every mixed cell shows a material its overlays
+were never computed against. Affected **9.5% of Kamadan's faces and 29.0% of
+Lornar's**.
+
+Fixed: the base binds from `layers[3*c] & 0xFF`, falling back to `tiles` only
+for exports predating the sidecar, where the two are equal by construction.
+
+**THIS IS THE THIRD PLACE THE SAME RULE LIVED.** `trnblend.map_layers`,
+`mapexport.build_blend_layers` (§7.15) and now the importer each carried their
+own idea of what the base is, and each had to be corrected separately. §7.15's
+lesson generalises: a rule implemented three times will drift three ways.
+
+**T5's checks encoded the superseded rule and had to be updated, not
+weakened.** Three checks asserted "faces bind by their tile byte" at full
+coverage — true while the selector was the identity, false since §7.14. They
+now assert the BASE LAYER's tile, still at full sha256 coverage over all
+212,992 faces. `test_blenderimport` is 118 green.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14

@@ -576,6 +576,22 @@ def main(argv=None):
 
 # --- 0. the install selector -----------------------------------------------
 
+def _base_tiles(exp):
+    """The tile each face's BASE layer names -- not the cell's own byte.
+
+    Superseded T5's `exp.tiles` on 2026-08-17. The client's base is the corner
+    that SORTS FIRST (measured 102/102 where the hypotheses disagree,
+    FINDINGS 7.16), and the overlays mask the COMPLEMENT of that base, so a
+    face bound to its own tile shows a material its overlays were never
+    computed against -- which is what made the rebuilt ground read as random.
+    Exports predating the layers sidecar keep the old rule, where the two are
+    equal by construction.
+    """
+    if getattr(exp, "layers", None) is None:
+        return list(exp.tiles)
+    return [exp.layers[3 * c] & 0xFF for c in range(exp.cells)]
+
+
 def _section0(check, blender):
     """The `--blender` / `RURIK_BLENDER` override must actually override.
 
@@ -874,13 +890,15 @@ def _section2b(check, led, blender, tmp):
     # THE BINDING, at full coverage: recompute the per-face material index
     # from the SIDECAR's tile bytes and the dump's slot table, and it must
     # equal the digest Blender took off its own built polygons.
-    idx = [tt["tile_slot"][t] for t in exp.tiles]
+    base_tiles = _base_tiles(exp)
+    idx = [tt["tile_slot"][t] for t in base_tiles]
     want = hashlib.sha256(struct.pack("<%dH" % len(idx), *idx)).hexdigest()
     check(want == tt["material_index_digest"],
-          "all %d faces bind by their tile byte, including the untextured "
-          "slot -- reached explicitly, never by fall-through" % len(idx))
+          "all %d faces bind by their BASE LAYER's tile, including the "
+          "untextured slot -- reached explicitly, never by fall-through"
+          % len(idx))
     census = {}
-    for t in exp.tiles:
+    for t in base_tiles:
         s = str(tt["tile_slot"][t])
         census[s] = census.get(s, 0) + 1
     check(tt["faces_per_slot"] == census and
@@ -1199,10 +1217,10 @@ def _section5(check, led, blender, tmp, exp, src, summary):
     check(not bad,
           "every one of the %d tiles binds the texture the manifest names "
           "for it" % len(block["tiles"]), "wrong: %r" % (bad,))
-    idx = [tile_slot[t] for t in exp.tiles]
+    idx = [tile_slot[t] for t in _base_tiles(exp)]
     want = hashlib.sha256(struct.pack("<%dH" % len(idx), *idx)).hexdigest()
     check(want == tt["material_index_digest"],
-          "all %d faces carry the material their tile byte names"
+          "all %d faces carry the material their BASE LAYER names"
           % len(idx))
     check(sum(tt["faces_per_slot"].values()) == exp.cells,
           "every face is bound -- none fell through unassigned")
