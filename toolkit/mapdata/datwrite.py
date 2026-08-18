@@ -42,6 +42,8 @@ THE THREE CHECKSUM RULES, all MEASURED (see test_datcrc.py):
     python toolkit/mapdata/datwrite.py --dat DAT --corrupt-crc 12345
     python toolkit/mapdata/datwrite.py --dat DAT --overwrite 12345 --data new.bin
     python toolkit/mapdata/datwrite.py --dat DAT --verify --replace 12345 --data new.bin
+    python toolkit/mapdata/datwrite.py --dat DAT --replace 12345 --data gwenc.bin \
+        --compression 8 --expect payload.bin
     python toolkit/mapdata/datwrite.py --dat DAT --revert journal.json
 
 test_datwrite.py exercises all of the above against a small archive it builds
@@ -61,7 +63,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
                      mft_row_offset, MFT_SELF_ROW, FILE_MAGIC,
-                     FILE_ID_HIGH_BIT, FILE_ID_TABLE_ROW)
+                     FILE_ID_HIGH_BIT, FILE_ID_TABLE_ROW,
+                     COMPRESSION_STORED, COMPRESSION_HUFFMAN)
+# `archive.py` already imports `gwdat` at module level and `Archive.read()`
+# dispatches compression 8 through it, so this is not a new dependency in this
+# module's chain -- it is the same decoder, named directly because
+# `declaration_fault` needs it BEFORE an Archive would ever see the bytes.
+# `gwdat` is pure stdlib (`import struct`); the bare-machine rule holds.
+import gwdat  # noqa: E402
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
 
@@ -188,6 +197,250 @@ def claimants(ar, lo, hi, exclude):
             out.append((o, h, e.index))
     out.sort()
     return out
+
+
+COMPRESSION_CODES = (COMPRESSION_STORED, COMPRESSION_HUFFMAN)
+
+# The compression-8 prologue, MEASURED. `data[3] == 0x02` -- four zero lead bits
+# then `first_four = 2` -- holds on 138,708 of 138,708 comp-8 rows in dat_study,
+# widened to 258,708 rows across four archives and three client builds
+# (studies/archivewrite/FINDINGS.md 13.3). ONE value, no exceptions.
+#
+# `data[2]` is the top of the declared literal count and is 0x01 on every RETAIL
+# row, but NOT on every stream `gwenc` produces: measured 2026-08-18, five of
+# nineteen gwenc outputs (all the incompressible ones, where the literal count is
+# small) carry `data[2] == 0x00`. So the two-byte marker is the right test for
+# "are these bytes RETAIL-SHAPED compressed data" and the WRONG test for "did our
+# own encoder make this". The two directions below use different tests for that
+# reason, and each uses the tightest one that does not fire on its own legitimate
+# population. `datalloc.py:432` still uses the two-byte form as a comp-8 GATE and
+# will refuse legitimate gwenc output; that is recorded, not fixed here.
+HUFFMAN_PROLOGUE_BYTE = 0x02
+HUFFMAN_RETAIL_MARKER = b"\x01\x02"
+
+
+def looks_compressed(data):
+    """Are these bytes a compression-8 stream? -> bool. Decides by DECODING.
+
+    Used in exactly one direction -- to refuse a STORED write of bytes that are
+    actually compressed, FINDINGS C-6 -- and never to infer a code. A caller
+    always declares; this only ever contradicts a declaration.
+
+    THE BYTE MARKER ALONE IS NOT ENOUGH, and the measurement is why. `data[2:4]
+    == 0x01 0x02` holds on every retail row, and the obvious cheap test is to
+    compare those two bytes. Measured against `gwenc` output 2026-08-18 it MISSES
+    six of eighteen cases -- `random 0/1/4/16/64` and `pattern 100`, every one of
+    them a payload under ~256 bytes, where the declared literal count is small
+    enough that `data[2]` falls to 0x00. Twelve of eighteen hit, and the twelve
+    are every payload of 256 B or more. A guard against a silent, permanent,
+    whole-file corruption with a measured one-in-three miss rate on small
+    payloads is not a guard, so the marker is demoted to a PREFILTER and the
+    decoder makes the decision.
+
+    `data[3] == 0x02` is the prefilter: 258,708 of 258,708 comp-8 rows carry it
+    (FINDINGS 13.3) and it is 18 of 18 on our own encoder, so nothing compressed
+    gets past it, while it keeps the decode attempt off 255 of every 256 stored
+    writes. `textwrite`, `iconset`, `rebloat` and the six `a4stage*.py` scripts
+    pay nothing.
+
+    The decision is then: it decompresses without raising, AND the trailer's
+    declared size equals the number of bytes that came out.
+
+    BE HONEST ABOUT HOW STRONG THAT SECOND HALF IS, because it is weaker than it
+    reads and this file has a rule about checks that cannot fail.
+    `gwdat.decompress` takes the declared size FROM the trailer and uses it as
+    the decode loop's own termination bound (`gwdat.py:349-350`, `:356`), so
+    `declared == len(back)` is TRUE by construction whenever the loop terminates
+    normally. It refutes exactly one thing: a stream that runs OUT of input
+    first, which is the failure FINDINGS 13.3 measured -- one word short decodes
+    silently and lands with a nonsense declared size (2,147,549,192 against 2,722
+    bytes out). That is worth having and it is not a general validity check.
+
+    SO THE MEASURED RATES, both taken 2026-08-18 rather than argued:
+
+      * RECALL, on what a caller would actually mis-declare: **20 of 20** `gwenc`
+        streams across payloads from 0 to 9,000 B, and **10 of 10** real
+        compression-8 rows sampled from `vault/dat_study/Gw.dat`. Nothing that is
+        genuinely compressed got past it.
+      * FALSE REFUSALS: **4 of 38,621** real STORED rows in the same archive --
+        177242, 177264, 177332, 177333 (all flags 0xFF03, at the very end of the
+        table; 177334 clears the prefilter and is correctly not flagged). Their
+        bytes decode to exactly `size - 12` under our decoder, but they do NOT
+        re-emit byte-identically through `gwenc.reemit` the way 3,051 genuine
+        comp-8 rows do (FINDINGS 13.1), so the reading is that these are genuine
+        false positives rather than retail's own C-6 -- CONTESTED, and not
+        settled from here. Also 0 of 6,005 synthetic plaintext payloads.
+
+    Re-emission was tried as a confirming test and REJECTED on measurement: it
+    reproduces retail's streams but **0 of 15** of our own encoder's, so it would
+    have thrown away the entire population this guard exists for. It would also
+    have put `gwenc`/`gwmatch`/`gwentropy` in this module's import chain, which
+    `reservation_for`'s docstring exists to keep out.
+
+    KEEPING IT AT 4 IN 38,621 IS THE DELIBERATE CALL, and the asymmetry is why. A
+    false refusal is LOUD, changes nothing on disk, and costs one re-run with
+    `expect=data` -- a caller stating that the stored bytes are the payload,
+    which is what a stored row IS, so it is a statement rather than a switch. A
+    MISS is silent, passes every rule this project owns, and costs the whole file
+    plus its entire nextStream chain, permanently, the first time the client
+    repairs for any unrelated reason (FINDINGS 5.1). That is not the direction to
+    economise in.
+    """
+    data = bytes(data)
+    if len(data) < 4 or data[3] != HUFFMAN_PROLOGUE_BYTE:
+        return False
+    try:
+        back, declared = gwdat.decompress(data)
+    except Exception:                                        # noqa: BLE001
+        return False
+    return declared == len(back)
+
+
+def declaration_fault(data, compression, expect, stored_lookalike_ok=False):
+    """Is it safe to mark `data` with this compression code? -> None, or the reason.
+
+    Never writes, never raises, never opens anything. Returns a string a caller
+    can put in its own exception type, which is why `datwrite` (SystemExit) and
+    `datmove` (Refused) can share one implementation of the rule.
+
+    THE FAILURE CLASS THIS EXISTS FOR is studies/archivewrite/FINDINGS.md C-6,
+    and it is the sharpest trap in that dossier: **a green archive holding an
+    unreadable file.** The entry CRC is over the STORED bytes, so a row whose
+    compression code disagrees with its bytes passes all three checksum rules and
+    all ten of `datcheck --preflight`'s open-time rules. `datcheck.py` contains
+    ZERO references to compression codes, so NOTHING WE OWN can refute a
+    conforming-but-wrong compressed payload by inspection. The only way to know a
+    compression-8 row is readable is to DECOMPRESS IT, and the only moment that
+    is cheap is before the write.
+
+    So the contract is: the caller declares BOTH the code and the payload a
+    reader must get back, and this checks the declaration against the bytes
+    before any of them reach the archive. For compression 8 the expected payload
+    is MANDATORY, not optional -- an unverifiable compressed write is exactly the
+    thing this rung exists to make impossible.
+
+    WHAT IT CANNOT CATCH, and this belongs in the open where a caller sees it:
+
+      * The round trip is through `gwdat.decompress`, which is OUR decoder. It
+        proves agreement with our reader, NOT correctness against the client's.
+        FINDINGS 13.5 gap A -- a declared `symbol_count == 1`, which our encoder
+        emits and retail never does -- is precisely the shape that would pass
+        here and could still be refused by the client. **A8 is the only oracle.**
+      * A caller that hands plaintext with `compression=0` and gets the shape
+        check's silence has proved nothing; only the explicit code is doing work
+        there. The shape tests below are a CROSS-CHECK on the declaration, not a
+        classifier, and they are deliberately never used to INFER a code.
+
+    The two shape rules, both refutable and each measured against the population
+    it has to survive:
+
+      * `compression=8` with `data[3] != 0x02` is refused. 258,708-row witness,
+        and it does not fire on any of nineteen measured `gwenc` outputs.
+      * `compression=0` with bytes that DECODE as a compression-8 stream is
+        refused, naming compression 8. This is the arm that catches C-6. It
+        decides by decoding rather than by a byte marker, because the marker
+        measurably misses small payloads -- see `looks_compressed`. Overriding
+        it takes `stored_lookalike_ok=True`, which is deliberately awkward and
+        prints a line naming C-6 when taken; `expect=data` used to waive it and
+        that was a hole, not a hatch -- see the comment on the arm itself.
+    """
+    data = bytes(data)
+    if compression not in COMPRESSION_CODES:
+        return (f"compression {compression} is not a code this archive uses. "
+                f"Measured across every live row of every vault archive the "
+                f"field takes only {{0, 8}}; refusing to invent a third.")
+
+    if compression == COMPRESSION_HUFFMAN:
+        if not data:
+            return ("a zero-length compression-8 row is a shape nothing in the "
+                    "corpus witnesses -- retail's smallest comp-8 row is 56 B "
+                    "and holds a block. `replace(row, b\"\")` is the documented "
+                    "re-bloat trigger and means STORED; refusing to overload it.")
+        if expect is None:
+            return ("a compression-8 write must declare the payload a reader "
+                    "must get back, and none was given.\n"
+                    "  Nothing else can check it afterwards: the entry CRC is "
+                    "over the STORED bytes, so a wrong payload passes every "
+                    "checksum rule and all ten open-time rules, and datcheck "
+                    "has no notion of a compression code at all. The "
+                    "decompress-and-compare below is the ONLY refutation "
+                    "available, and it is only available before the write.")
+        if len(data) < 4 or data[3] != HUFFMAN_PROLOGUE_BYTE:
+            got = data[3] if len(data) > 3 else None
+            return (f"these bytes are not shaped like a compression-8 stream: "
+                    f"byte 3 is "
+                    + ("absent" if got is None else f"0x{got:02X}")
+                    + f", and every one of 258,708 comp-8 rows measured across "
+                      f"four archives and three client builds has 0x"
+                      f"{HUFFMAN_PROLOGUE_BYTE:02X} there (four zero lead bits "
+                      f"then first_four = 2). FINDINGS 13.3.")
+        try:
+            back, declared = gwdat.decompress(data)
+        except Exception as exc:                              # noqa: BLE001
+            return (f"the bytes do not decompress at all "
+                    f"({type(exc).__name__}: {exc}). A row marked compression 8 "
+                    f"whose payload the decoder rejects is a file the client "
+                    f"deletes -- with its whole nextStream chain -- the next "
+                    f"time repair fires for any reason (FINDINGS 5.1).")
+        expect = bytes(expect)
+        if declared != len(expect):
+            return (f"the stream's trailer declares {declared} B and the "
+                    f"expected payload is {len(expect)} B. A stream one word "
+                    f"short does NOT raise -- it decodes silently short "
+                    f"(FINDINGS 13.3, measured on our own decoder), which is "
+                    f"exactly the corruption no checksum can see.")
+        if back != expect:
+            where = next((i for i, (a, b) in enumerate(zip(back, expect))
+                          if a != b), min(len(back), len(expect)))
+            return (f"the bytes decompress to {len(back)} B that are NOT the "
+                    f"expected payload ({len(expect)} B); first difference at "
+                    f"offset {where}. The archive would be green and the file "
+                    f"unreadable.")
+        return None
+
+    # compression == 0. The stored bytes ARE the payload, by definition.
+    if expect is not None and bytes(expect) != data:
+        return (f"a stored row's bytes ARE its payload, and the {len(data)} B "
+                f"being written differ from the {len(bytes(expect))} B declared "
+                f"as expected. One of the two is wrong.")
+    if looks_compressed(data) and not stored_lookalike_ok:
+        # CORRECTED 2026-08-18, and this arm used to read `if expect is None and
+        # looks_compressed(data)`. A skeptic drove C-6 straight through the gap:
+        #
+        #     datwrite.py --dat X --replace N --data s.bin --compression 0 --expect s.bin
+        #
+        # with `s.bin` genuine `gwenc` output. `expect == data` is trivially true for
+        # ANY bytes, so pointing --expect at the same file waived the only check that
+        # could see the problem. Exit 0, preflight 10 of 10, crc sweep 0 bad, and the
+        # log line INDISTINGUISHABLE from an ordinary stored replace -- the exact
+        # green-archive-holding-an-unreadable-file state this function exists to
+        # prevent, reached through the documented CLI with no warning to find later.
+        #
+        # `expect=data` was described here as "a statement rather than an override".
+        # It is not: it is an override that costs nothing to type by accident. The
+        # real statement is now a separate, deliberately awkward argument, and the
+        # decode is consulted whether or not `expect` was given.
+        #
+        # Refusing outright is nearly free, and both halves are measured: of 38,621
+        # real stored rows only 4 look compressed (177242/177264/177332/177333, all
+        # flags 0xFF03), and of 1,500 DECOMPRESSED retail payloads -- the population
+        # every authoring caller actually hands us -- exactly 0 do.
+        return ("these bytes are a decodable compression-8 stream and the "
+                "write declares compression 0.\n"
+                "  That is studies/archivewrite/FINDINGS.md C-6: the row would "
+                "be marked STORED while its bytes are still compressed, the CRC "
+                "is over the stored bytes and does not move, so all three "
+                "checksum rules and all ten open-time rules would still pass "
+                "and the file would simply be unreadable. Nothing we own can "
+                "detect it afterwards.\n"
+                "  If these really are compressed bytes, pass compression=8 "
+                "with the payload they decompress to. If they really are "
+                "plaintext that merely decodes -- 4 of 38,621 real stored rows "
+                "do, and 0 of 1,500 decompressed retail payloads -- pass "
+                "stored_lookalike_ok=True (`--stored-lookalike-ok`), which is "
+                "deliberately awkward because it is an override rather than a "
+                "statement, and it prints a line naming C-6 when taken.")
+    return None
 
 
 class DonorRow:
@@ -484,8 +737,37 @@ class Writer:
         self.put(row_offset(self.ar, row) + ENTRY_CRC,
                  struct.pack("<I", value), f"MFT row {row} crc")
 
-    def replace(self, row, new):
+    def replace(self, row, new, *, compression=COMPRESSION_STORED, expect=None,
+                stored_lookalike_ok=False):
         """Put different bytes, of a different length, in an existing row.
+
+        THE COMPRESSION CODE IS AN ARGUMENT, and its default reproduces this
+        verb's behaviour byte for byte from the day it was written. Every caller
+        in the tree -- `iconset`, `rebloat`, `textwrite`, the `--replace` CLI --
+        hands plaintext and relies on "it marks the row stored", and so do the
+        six staging scripts under `vault/research/archivewrite/` that nothing in
+        this tree can re-derive. None of them is edited and none of them changes
+        behaviour.
+
+        WHAT compression=8 ADDS, and why it needed a rung of its own. Until
+        2026-08-18 nothing in this project could produce compression-8 bytes, so
+        the field was hardcoded to 0 (its own docstring said so, and `restore`'s
+        first bullet still explains why that made a donor archive the only way to
+        put a compressed row back). `gwenc.py` produces them now. Marking a row
+        compression 8 is four writes and three of them are the same three this
+        verb already did -- the difference is entirely in what can go wrong.
+
+        THE VERIFY-BEFORE-COMMIT ARM. `expect` is the payload a reader must get
+        back, and for a compressed write it is MANDATORY. The bytes are
+        decompressed and compared against it before the first byte reaches the
+        archive; a mismatch is a loud refusal at the call site and nothing is
+        written. That is not belt-and-braces, it is the only refutation that
+        exists: the entry CRC is over the STORED bytes, so a compression-8 row
+        holding a wrong payload passes all three checksum rules and all ten of
+        `datcheck --preflight`'s open-time rules, and `datcheck.py` has no notion
+        of a compression code at all. See `declaration_fault`, which also states
+        plainly what this CANNOT catch -- the round trip is through our own
+        decoder, and only the client can settle that.
 
         The one thing this will not do is relocate. Space is reserved in whole
         512-byte blocks, so a row owns ceil(size/512)*512 bytes whatever its
@@ -533,6 +815,7 @@ class Writer:
         row cannot begin before offset + reservation. Past the end of the file it
         is put()'s short-read guard that refuses, not this.
         """
+        new = bytes(new)
         e = self.ar.row(row)
         block = self.ar.block_size
         reserved = -(-e.size // block) * block
@@ -542,18 +825,39 @@ class Writer:
                 f"{block}-byte blocks) and the new payload is {len(new)}. "
                 f"That is a relocation, not a replacement. Pick a row with a "
                 f"bigger reservation -- datplan.py --free lists them.")
-        image = bytes(new) + b"\x00" * (reserved - len(new))
+        # BEFORE THE FIRST put(). Every refusal in here has to land while the
+        # archive is still untouched and no journal exists, because after the
+        # write there is nothing left that can tell the difference -- see
+        # `declaration_fault`.
+        fault = declaration_fault(new, compression, expect, stored_lookalike_ok)
+        if stored_lookalike_ok and looks_compressed(new):
+            # An override that leaves no trace is the same defect as no override.
+            print(f"  !! C-6 OVERRIDE TAKEN on row {row}: these bytes DECODE as a "
+                  f"compression-8 stream and are being written as compression "
+                  f"{compression} anyway. If that is wrong, the archive will be "
+                  f"green and the file unreadable, and nothing we own can detect "
+                  f"it afterwards. FINDINGS C-6.")
+        if fault:
+            raise SystemExit(
+                f"REFUSED: will not write row {row} as compression "
+                f"{compression}.\n  {fault}")
+        image = new + b"\x00" * (reserved - len(new))
         print(f"replacing row {row}: {e.size} -> {len(new)} bytes, "
-              f"compression {e.compression} -> 0, at 0x{e.offset:X} "
+              f"compression {e.compression} -> {compression}, at 0x{e.offset:X} "
               f"(reservation {reserved}, {reserved - len(new)} B of tail zeroed)")
+        if compression == COMPRESSION_HUFFMAN:
+            print(f"  verified before writing: {len(new)} B decompress to the "
+                  f"{len(bytes(expect))} B declared (our decoder; only the "
+                  f"client can settle the rest)")
         self.put(e.offset, image, f"row {row} reservation ({reserved} B)")
         self.put(row_offset(self.ar, row) + ENTRY_SIZE_OFF,
                  struct.pack("<I", len(new)),
                  f"MFT row {row} size {e.size} -> {len(new)}")
-        if e.compression != 0:
+        if e.compression != compression:
             self.put(row_offset(self.ar, row) + ENTRY_COMP_OFF,
-                     struct.pack("<H", 0),
-                     f"MFT row {row} compression {e.compression} -> 0 (stored)")
+                     struct.pack("<H", compression),
+                     f"MFT row {row} compression {e.compression} -> "
+                     f"{compression}")
         self.set_entry_crc(row, binascii.crc32(new))
         self.fix_mft_self_crc()
 
@@ -966,7 +1270,8 @@ MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc",
 # The rest: reads, or arguments to something else. Listed only so the drift check
 # can tell "deliberately read-only" from "somebody forgot".
 READONLY_DESTS = ("help", "dat", "journal", "verify", "check_rows", "data",
-                  "revert", "force", "from_dat", "confirm")
+                  "revert", "force", "from_dat", "confirm", "compression",
+                  "expect", "stored_lookalike_ok")
 
 
 def is_mutating(args):
@@ -994,14 +1299,33 @@ def build_parser():
                     help="check specific entry crcs over their stored bytes")
     ap.add_argument("--corrupt-crc", type=int, metavar="ROW",
                     help="flip a row's stored crc, leaving its CONTENT untouched")
+    ap.add_argument("--stored-lookalike-ok", action="store_true",
+                    help="override the C-6 refusal when plaintext happens to "
+                         "decode as a compression-8 stream. Deliberately "
+                         "awkward: 4 of 38,621 real stored rows need it and 0 "
+                         "of 1,500 decompressed retail payloads do, so if you "
+                         "are reaching for it on authored content, the bytes "
+                         "are probably genuinely compressed")
     ap.add_argument("--overwrite", type=int, metavar="ROW",
                     help="replace a row's stored bytes, same length, in place")
     ap.add_argument("--data", metavar="FILE",
                     help="with --overwrite, the replacement bytes")
     ap.add_argument("--replace", type=int, metavar="ROW",
                     help="replace a row's contents with a DIFFERENT-length "
-                         "payload, writing it stored: payload, size field, "
-                         "compression field and crc. Refuses to relocate.")
+                         "payload: payload, size field, compression field and "
+                         "crc. Stored by default. Refuses to relocate.")
+    ap.add_argument("--compression", type=int, choices=(COMPRESSION_STORED,
+                                                        COMPRESSION_HUFFMAN),
+                    default=COMPRESSION_STORED,
+                    help="with --replace, the compression code to MARK the row "
+                         "with (default 0, stored). 8 requires --expect and the "
+                         "bytes are decompressed and compared against it before "
+                         "anything is written.")
+    ap.add_argument("--expect", metavar="FILE",
+                    help="with --replace, the payload a reader must get back. "
+                         "MANDATORY for --compression 8; for a stored write it "
+                         "must equal --data, which is what makes it a statement "
+                         "rather than an override.")
     ap.add_argument("--corrupt-mft-crc", action="store_true",
                     help="flip the MFT self-crc (Arm C -- expect a full rescan)")
     ap.add_argument("--restore", type=int, metavar="ROW",
@@ -1049,6 +1373,14 @@ def main():
                  "original out of)")
     if args.from_dat is not None and args.restore is None:
         ap.error("--from is only meaningful with --restore")
+    if args.replace is None and (args.expect
+                                 or args.compression != COMPRESSION_STORED):
+        ap.error("--compression and --expect are only meaningful with --replace")
+    if args.compression == COMPRESSION_HUFFMAN and not args.expect:
+        ap.error("--compression 8 needs --expect FILE: the payload a reader "
+                 "must get back. Nothing can check a compressed row after the "
+                 "write -- the entry crc is over the STORED bytes and datcheck "
+                 "has no notion of a compression code.")
 
     if args.verify or args.check_rows:
         print(f"{args.dat}")
@@ -1085,13 +1417,36 @@ def main():
             row = args.overwrite
             e = w.ar.row(row)
             new = open(args.data, "rb").read()
+            want_overwrite = None
+            if args.expect:
+                with open(args.expect, "rb") as fh:
+                    want_overwrite = fh.read()
             if len(new) != e.size:
                 raise SystemExit(
                     f"--overwrite is same-length only: row {row} stores "
                     f"{e.size} bytes, {args.data} has {len(new)}. Changing the "
                     f"size means a size field, possibly a relocation, and a "
                     f"different experiment.")
-            print(f"overwriting row {row}: {e.size} bytes at 0x{e.offset:X}")
+            # `--overwrite` NEVER touches ENTRY_COMP_OFF -- the row keeps whatever
+            # code it had -- so it is the one mutating verb in this file that can put
+            # bytes under a compression code without ever stating one. A skeptic drove
+            # C-6's MIRROR through it end to end: make a row legitimately compression 8,
+            # then overwrite its stored bytes with same-length PLAINTEXT. Accepted, CRC
+            # recomputed, `verify` 0 failures, preflight 10 of 10, crc sweep 0 bad --
+            # and `Archive.read()` returns ZERO BYTES with no exception. Green archive,
+            # unreadable file, and our own reader gives no refutation at all.
+            #
+            # Pre-existing rather than introduced here, but this rung's whole purpose is
+            # closing that class in this module, and the sibling verb was left open
+            # while it became reachable for the first time.
+            fault = declaration_fault(new, e.compression, want_overwrite,
+                                      args.stored_lookalike_ok)
+            if fault:
+                raise SystemExit(
+                    f"refusing to overwrite row {row} under its existing "
+                    f"compression {e.compression}: {fault}")
+            print(f"overwriting row {row}: {e.size} bytes at 0x{e.offset:X} "
+                  f"(compression {e.compression}, unchanged)")
             w.put(e.offset, new, f"row {row} stored bytes")
             w.set_entry_crc(row, binascii.crc32(new))
             w.fix_mft_self_crc()
@@ -1099,7 +1454,14 @@ def main():
         if args.replace is not None:
             if not args.data:
                 raise SystemExit("--replace needs --data")
-            w.replace(args.replace, open(args.data, "rb").read())
+            payload = open(args.data, "rb").read()
+            want = None
+            if args.expect:
+                with open(args.expect, "rb") as fh:
+                    want = fh.read()
+            w.replace(args.replace, payload,
+                      compression=args.compression, expect=want,
+                      stored_lookalike_ok=args.stored_lookalike_ok)
 
         if args.restore is not None:
             row = args.restore

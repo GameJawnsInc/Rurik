@@ -1811,6 +1811,109 @@ refuses declared == 1, that is the fix — a size question, not a design one.**
 
 ---
 
+## 14. The `datwrite` compression-8 arm — and four holes the skeptics drove through it
+
+The verb exists and works. **The more useful output of this rung is that a hostile read found
+FOUR ways to reach C-6's failure class through code that had just been written to prevent
+it**, and all four are the same shape: a guard whose label claims more than the artifact does.
+
+### 14.1 What was built
+
+**The write verb.** `Writer.replace(row, data, *, compression=..., expect=...)` — the
+compression code is now an explicit argument rather than a hardcoded 0, defaulting to
+`COMPRESSION_STORED` so every existing caller is untouched. Verified end to end on a
+**synthetic** archive: payload → `gwenc.encode` → the verb → a fresh `Archive` handle →
+`gwdat.decompress` returns the identical payload; the row afterwards says compression 8, the
+right size, and `crc32(stored bytes) == e.crc`.
+
+**`declaration_fault(data, compression, expect, stored_lookalike_ok)`**, shared by `datwrite`
+(SystemExit) and `datmove` (Refused). For a compressed write the expected payload is
+**mandatory**: the function decompresses what is about to be written and compares, refusing
+before any byte reaches the archive. That is the only refutation available, because
+**`datcheck.py` has zero references to compression codes** and the entry CRC is over the
+*stored* bytes, so a wrong payload passes every checksum rule and all ten open-time rules.
+
+**A safe relocation verb for compressed rows finally exists** — `datmove.move(...,
+compression=8, expect=payload)` — which is what correction **C-6** said the toolkit lacked.
+C-6 was reproduced live first, on a synthetic archive: `gwenc` bytes relocated with the old
+`move()` gave a row marked stored, CRC matching, preflight 10 of 10, sweep 0 bad, and
+`Archive.read()` returning compressed garbage. **The guard now refuses that exact call, and a
+plaintext move — what all six `a4stage*.py` scripts and `deploy.py`'s subprocess do — still
+succeeds unchanged.**
+
+**The recon's proposed guard was measurably wrong and was replaced.** It suggested the
+two-byte marker `data[2:4] == b"\x01\x02"` that `datalloc.py:432` already used, on a
+6,000/6,000-vs-0/6,000 split. Measured against real `gwenc` output the marker **misses 41 of
+92 streams** — every payload under ~200 B. `looks_compressed()` decides by **decoding**:
+recall **600/600** on real comp-8 rows and **92/92** on `gwenc` streams, with **4 false
+positives in all 38,621 real stored rows** (rows 177242/177264/177332/177333, flags 0xFF03)
+and, in the population that actually matters, **0 of 1,500 decompressed retail payloads** —
+so it is not a practical tax on any authoring caller.
+
+### 14.2 The four holes, all found by skeptics, all fixed
+
+| # | the hole | how it was reached |
+|---|---|---|
+| **1** | The C-6 arm was gated on **`expect is None`**, and `expect == data` is trivially true for *any* bytes | `datwrite.py --replace N --data s.bin --compression 0 --expect s.bin` with genuine `gwenc` output. **Exit 0, preflight 10 of 10, sweep 0 bad, and a log line indistinguishable from an ordinary stored replace.** |
+| **2** | **`--overwrite` never reached `declaration_fault`** and never touches the compression field | Make a row legitimately compression 8, then overwrite its stored bytes with same-length plaintext. Accepted; `verify` 0 failures; **`Archive.read()` returns ZERO BYTES with no exception.** C-6's mirror. |
+| **3** | **`datalloc.py:432`** gated compression 8 on the marker alone, never decoding — and this is the row **CREATION** path, the one A8 will use | `b"ab\x01\x02efgh"` passes. Worse, `test_datalloc.py` **asserted that acceptance as correct**, pinning the defect. And in the other direction it *refused* real `gwenc` output from small payloads. |
+| **4** | The `toobig` check was **labelled** "a compressed payload past the reservation (still a relocation)" and was not testing that | `pattern(3, 40000)` compresses ~12× to 484 B against a 512 B reservation, so it never reached the relocation guard — it was a second copy of the C-6 check wearing a false label, proven by disabling *only* the C-6 arm and watching this line go red. **"A compressed payload too big for its reservation is refused" was UNTESTED.** |
+
+**Fixes.** (1) The arm now consults the decode whether or not `expect` was given; the override
+is a separate, deliberately awkward `stored_lookalike_ok` / `--stored-lookalike-ok` which
+**prints a line naming C-6 when taken**, because an override that leaves no trace is the same
+defect as no override. The old "hatch" control used bytes that do *not* decode — the harmless
+half — so a `hatch_real` check now covers the dangerous one, with a control proving the
+override still works. (2) `--overwrite` routes through `declaration_fault` against the row's
+*existing* code. (3) `datalloc`'s gate is now `looks_compressed`, and the test assertion that
+pinned the defect is inverted, with a two-way control: the marker-carrying fake is refused and
+a real sub-200-byte `gwenc` stream is accepted. (4) The fixture is incompressible bytes, so it
+genuinely exceeds its reservation and genuinely reaches the relocation refusal.
+
+**Floors: `test_datwrite` 87 → 138, `test_datalloc` 98 → 100**, both from real green runs.
+
+### 14.3 The pattern, stated because it is now the arc's most reliable finding
+
+**This is the FOURTH consecutive rung in which a check claimed more than the artifact
+delivered** — §10.6's framing model, §12.7's C1 closure, §13.6's two fixture annotations, and
+now four at once. Three of those four shipped *after* the previous one was corrected, in files
+whose authors had just read the correction.
+
+The instances differ; the shape does not. **A guard is written, a label is attached
+describing what it is *for*, and nothing checks that the artifact reaches the state the label
+names.** The `toobig` case is the purest example: the same session caught the identical trap
+forty lines below and switched to a PRNG payload for exactly this reason, then missed it here.
+
+What has actually worked, every time, is **sabotage**: disable one arm and count which checks
+go red. That is how hole 4 was found, and it is the only technique in this arc that has
+reliably distinguished a check from a comment. The lesson for the next rung is not "be more
+careful with labels" — it is **break each arm on purpose and require a named check to fail.**
+
+### 14.4 What is still open
+
+- **`gwdat` is still our decoder.** `declaration_fault`'s round trip proves agreement, not
+  correctness. §13.5's gap A — a declared `symbol_count == 1`, which our encoder emits and
+  retail never does — is exactly the shape that passes here and could still be refused by the
+  client. **A8 is the only oracle**, and the fix if it fires is already named.
+- **`replace()` computes the reservation from the row's CURRENT size**, so a row already
+  shrunk cannot be grown back by this path. Irrelevant for a pristine row, fatal for a second
+  write onto a row the first one shrank.
+- **The journal cost is real**: writing 15018's whole 1,029,632 B reservation produces ~4.1 MB
+  of JSON per record, and `Journal.flush` truncates and rewrites the whole file every time
+  with no fsync.
+- **A third naming disagreement inside one module set:** `archive.py:287-297` calls the
+  `nextStream` field `counter` while `datcheck` and `datalloc` call it `next_stream`. Harmless
+  today — an in-place rewrite cannot break the chain, which is by row index — but a reader of
+  `archive.py` could think there is a counter to bump.
+- **CONTESTED and unresolved:** one skeptic reported `vault/exports/unitwrite/rebuilt_worm.dat`
+  rewritten during the run, by `test_skelwrite.py` §3, which calls `datmove.move` against a
+  `vault/exports` path by design. No real archive was at risk — it is a small archive the test
+  builds itself — but the build agent's "vault files written: 0" and its claim to have run
+  `test_skelwrite` cannot both be true. Parallel sessions were active (a client launched at
+  19:14), so the mtime is not attributable and no process was touched.
+
+---
+
 ## Appendix — what I verified myself
 
 **OBSERVED (mine), run read-only in `C:/gd/Rurik/.claude/worktrees/great-heyrovsky-7fe716`, vault located via `toolkit/vaultpath.py` → `C:\gd\Rurik\vault`:**

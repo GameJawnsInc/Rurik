@@ -70,6 +70,9 @@ Nothing is running: no client, no server, no background task.
 | `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
 | `toolkit/mapdata/gwmatch.py` | **A7a** — size-only LZ77 + an exact block-partition DP, costed through `gwentropy`; still no bitstream | `test_gwmatch.py`, 62 |
 | `toolkit/mapdata/gwenc.py` | **A7b** — the bitstream writer. Re-emits retail byte-identically; encodes our own | `test_gwenc.py`, 55 |
+| `datwrite.replace(..., compression=, expect=)` | writes compression 8 **and decompresses to verify before committing**; `declaration_fault` is shared with `datmove` | `test_datwrite.py`, 87→138 |
+| `datmove.move(..., compression=, expect=)` | the safe relocation verb for compressed rows that **C-6 said did not exist** | `test_datmove.py`, 46 |
+| `datalloc` comp-8 gate | decodes instead of matching a two-byte marker — the row **creation** path | `test_datalloc.py`, 98→100 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
@@ -168,6 +171,26 @@ by ArenaNet's own archive**, so the shipping client must implement something equ
 byte-identical re-emission structurally cannot cover it and its correctness rests only on our
 own decoder. **If the client refuses it, the fix is a two-symbol distance table inside
 retail's attested envelope, costing a few bits — a size question, not a design one.**
+
+**THE WRITE PATH IS BUILT TOO — 2026-08-18, §14.** `datwrite.replace(..., compression=8,
+expect=payload)` writes a compressed row and **decompresses to verify before committing**,
+which is the only refutation available because `datcheck` has no notion of a compression code
+and the entry CRC is over the *stored* bytes. `datmove` gained the safe relocation verb for
+compressed rows that **C-6 said did not exist**, and C-6 was reproduced live on a synthetic
+archive first. Every existing caller — all six `a4stage*.py`, `deploy.py`'s subprocess,
+`iconset`, `rebloat`, `textwrite` — is untouched by default.
+
+**Read §14.2 before trusting any of it.** Skeptics found **four** ways to reach C-6's failure
+class through code written to prevent it, including one reachable from the documented CLI in a
+single command and one that made `Archive.read()` return **zero bytes** on a green archive.
+All four are fixed. §14.3 is the pattern worth carrying forward: **this is the fourth
+consecutive rung where a check claimed more than the artifact delivered, and sabotage — break
+one arm, count which checks go red — is the only technique that has reliably caught it.**
+
+**So the summit is now one rung away.** A8 needs: a staging script (`a4stage7.py`-shaped) that
+`gwenc`-compresses an authored payload into row 11196 on a **copy**, the §5.6 gates
+(`--preflight`, `--generations`, `--crc-sweep`, `--diff` against a pre-write snapshot, and the
+3.91 GiB backup), and the owner at the keyboard. **Never launch on a suspect archive.**
 
 **C. A1b, downgraded but real.** `schema/messages.json` has **zero** occurrences of `anim`,
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*

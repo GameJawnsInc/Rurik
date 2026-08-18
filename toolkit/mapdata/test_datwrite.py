@@ -50,6 +50,7 @@ import contextlib
 import io
 import json
 import os
+import random
 import shutil
 import struct
 import sys
@@ -60,7 +61,20 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
+import datcheck  # noqa: E402
+import datmove  # noqa: E402
+import gwenc  # noqa: E402
 import checks  # noqa: E402
+# Fixture builders borrowed across the module boundary, and each for a stated
+# reason rather than for convenience. `test_datcheck`'s archive is the one whose
+# payload rows sit at index >= 16, so all TEN of datcheck's open-time rules can
+# pass on it -- this file's own fixture is permanently 9/10 because its rows are
+# at 4..7 (measured both ways 2026-08-18). `test_datmove`'s archive is the one
+# with measured free runs and a planted container generation, which is what a
+# relocation needs. `test_unitauthor.py` already does the same thing with the
+# first of them.
+import test_datcheck as tdc  # noqa: E402
+import test_datmove as tdm  # noqa: E402
 
 # FLOOR: the seventy-eight checks below, every one of which runs
 # unconditionally -- the fixture is built by this file, so there is no corpus
@@ -87,7 +101,16 @@ import checks  # noqa: E402
 # ArchiveCreate, which overwrites the whole file), so the refusal is tested by
 # REACHING FOR IT at every field and at both sides of the 0x0F/0x10 boundary,
 # each attempt on its own fresh fixture. MEASURED from a green run: 87.
-LEDGER = checks.Ledger("dat writer", floor=87)
+#
+# RAISED 87 -> 136 on 2026-08-18 with sections 9 and 10, the compression-8 write
+# verb and the C-6 guard. MEASURED from a green run, not projected: 136. These
+# sections cost ~10 s, all of it `gwenc.encode`, and need no vault -- a 2,720 B
+# payload compresses in about twenty milliseconds, so the whole pipeline of
+# FINDINGS A8 minus the client runs on a bare machine. The load-bearing part of
+# the raise is section 9d: it stages FINDINGS C-6 deliberately and MEASURES that
+# every rule this project owns stays green over an unreadable file, which is
+# what makes every refusal after it worth having rather than decorative.
+LEDGER = checks.Ledger("dat writer", floor=138)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -136,6 +159,17 @@ def reservation(size):
 def pattern(seed, n):
     """Deterministic bytes, none of them 0x00, so a zeroed tail is unambiguous."""
     return bytes(1 + ((i * 37 + seed * 101) % 255) for i in range(n))
+
+
+def _incompressible(n, seed=20260818):
+    """Deterministic PRNG bytes, so `gwenc` output is LARGER than the payload.
+
+    `pattern()` compresses about 12x, which is why a "too big for its reservation"
+    fixture built from it silently stopped testing the relocation guard and became a
+    duplicate of the C-6 check -- see the comment at the `toobig` case. Anything that
+    must exceed a reservation after compression has to be incompressible.
+    """
+    return random.Random(seed).randbytes(n)
 
 
 def self_crc(mft):
@@ -901,6 +935,466 @@ def section_header_refusal(tmp):
           "the refusal NAMES the failure mode, so nobody removes it as noise")
 
 
+def section_compressed(tmp):
+    """A row THIS PROJECT COMPRESSED, written into an archive and read back.
+
+    This is the pipeline of studies/archivewrite/FINDINGS.md A8 minus the client:
+    payload -> `gwenc.encode` -> `Writer.replace(compression=8)` -> the archive ->
+    `Archive.read()` -> `gwdat.decompress` -> the payload again. Everything in it
+    is synthetic; `gwenc` turns a 2,720-byte payload into 120 stored bytes in
+    about twenty milliseconds, so no vault archive is needed and the floor stays
+    a real floor on a bare machine.
+
+    WHY THE FIXTURE COMES FROM `test_datcheck`. This file's own archive puts its
+    payload rows at indices 4..7, below `INDEX_FIRST_FILE = 16`, so
+    `datcheck.preflight`'s "no row below index 16 touched" rule is PERMANENTLY
+    red on it -- 9 of 10, before anything is written. A section claiming ten
+    open-time rules pass has to run on an archive where ten can. Measured both
+    ways 2026-08-18: this file's fixture 9/10, `test_datcheck`'s 10/10.
+    `test_unitauthor.py` already imports that builder across the module boundary
+    for the same reason.
+
+    THE HARD PART IS NOT THE WRITE, IT IS KNOWING THE WRITE WAS RIGHT. The entry
+    CRC is over the STORED bytes, so a compression-8 row holding a wrong payload
+    satisfies all three checksum rules; `datcheck.py` contains zero references to
+    compression codes, so none of its ten open-time rules can see it either.
+    Part E below MEASURES that blind spot rather than asserting it -- it stages
+    FINDINGS C-6 on purpose and shows the resulting archive is fully green while
+    the file is unreadable. Every refusal check after it is calibrated against
+    that: a guard whose failure mode is invisible has to be tested by reaching
+    for it, and the corruptions in part F are EARNED -- a real compressed payload
+    with one bit flipped, and a real one with its mandatory tail word removed
+    (FINDINGS 13.3's measured silent-short-decode), not a staged blob of noise.
+    """
+    print("\n9. a row THIS PROJECT COMPRESSED, written and read back")
+
+    def fresh10(name):
+        """A fixture on which all TEN open-time rules can pass. See above."""
+        path = os.path.join(tmp, name)
+        tdc.build_archive(path)
+        return path
+
+    def clear(path):
+        items, _info = datcheck.preflight(path)
+        return sum(1 for c in items if c.ok), [c.name for c in items if not c.ok]
+
+    payload = (b"ffna" + bytes(range(64))) * 40           # 2,720 B, structured
+    stored = gwenc.encode(payload)                        # verify=True by default
+
+    base = fresh10("comp-baseline.dat")
+    ok, red = clear(base)
+    check(ok == 10 and not red,
+          "the fixture starts 10 of 10 clear on datcheck's open-time rules",
+          f"{ok}/10, red: {red}")
+    resv = reservation(tdc.ROWS[tdc.ROW_B][1])
+    check(len(stored) < resv,
+          f"gwenc turns the {len(payload)} B payload into {len(stored)} stored "
+          f"bytes, inside row {tdc.ROW_B}'s {resv}-byte reservation -- so this "
+          f"section tests an IN-PLACE compressed write, not a relocation")
+    check(len(stored) > 3 and stored[3] == datwrite.HUFFMAN_PROLOGUE_BYTE,
+          f"and they carry the measured compression-8 prologue "
+          f"(byte 3 == 0x{datwrite.HUFFMAN_PROLOGUE_BYTE:02X}, 258,708 rows, "
+          f"FINDINGS 13.3)",
+          f"byte 3 is 0x{stored[3]:02X}")
+
+    print("\n9a. END TO END -- the headline, through the real command line")
+    dat = fresh10("comp-e2e.dat")
+    journal = dat + ".journal.json"
+    code, out = run_cli("--dat", dat, "--journal", journal,
+                        "--verify", "--replace", str(tdc.ROW_B),
+                        "--data", spill(tmp, "c8.bin", stored),
+                        "--compression", "8",
+                        "--expect", spill(tmp, "c8.payload", payload))
+    check(code == 0, f"--verify --replace --compression 8 exits 0 (got {code})")
+
+    # A FRESH Archive, never the Writer's -- read_mft()'s documented trap. A
+    # handle opened before the write can answer a seek from a pre-write buffer
+    # window, and on an archive this small the window covers the whole file.
+    with Archive(dat) as ar:
+        e = ar.row(tdc.ROW_B)
+        size_now, comp_now, crc_now = e.size, e.compression, e.crc
+        raw_now = ar.raw(e)
+        read_back = ar.read(e)
+    check(read_back == payload,
+          f"THE ROW READS BACK AS THE ORIGINAL {len(payload)} B PAYLOAD -- "
+          f"gwenc -> the archive -> unmodified gwdat.decompress",
+          f"got {len(read_back)} B, "
+          f"{'identical' if read_back == payload else 'DIFFERENT'}")
+    check(comp_now == 8,
+          f"the compression field says 8 and was NOT flattened to 0 "
+          f"(got {comp_now})")
+    check(size_now == len(stored),
+          f"the size field is the STORED length {len(stored)}, not the "
+          f"{len(payload)}-byte payload length (got {size_now})")
+    check(raw_now == stored,
+          "the bytes on disk are exactly the bytes gwenc emitted")
+    check(binascii.crc32(raw_now) == crc_now,
+          f"the entry crc covers the STORED bytes "
+          f"(0x{crc_now:08X}) -- the domain FINDINGS 1.1 measured on retail's "
+          f"own compression-8 rows, confirmed again here read-only")
+    off = tdc.ROWS[tdc.ROW_B][0]
+    tail = blob(dat)[off + len(stored):off + resv]
+    check(tail == b"\x00" * (resv - len(stored)),
+          f"the {resv - len(stored)}-byte tail of the reservation is zeroed -- "
+          f"replace()'s whole-reservation write survives the compressed path")
+
+    print("\n9b. and the archive's own rules all still hold")
+    ok, red = clear(dat)
+    check(ok == 10 and not red,
+          "all TEN of datcheck's open-time rules pass afterwards",
+          f"{ok}/10, red: {red}")
+    sweep = datcheck.crc_sweep(dat)
+    check(not sweep["bad"],
+          f"datcheck --crc-sweep finds 0 bad payload crcs across "
+          f"{sweep['checked']} rows",
+          f"bad: {sweep['bad']}")
+    with quiet():
+        bad = datwrite.verify(dat)
+    check(bad == 0, "the file header crc and the MFT self-crc still hold")
+    with quiet():
+        bad = datwrite.check_rows(dat, [tdc.ROW_B])
+    check(bad == 0, f"and row {tdc.ROW_B}'s own entry crc rule holds")
+
+    print("\n9c. the compression field MOVES 0 -> 8, and --revert moves it back")
+    # Row B was already compression 8, so its field never had to change there.
+    # Row A is compression 0, which is the case that exercises the field write
+    # AND the revert of it -- and the case a donor restore could never reach.
+    dat = fresh10("comp-field.dat")
+    original = blob(dat)
+    journal = dat + ".journal.json"
+    code, out = run_cli("--dat", dat, "--journal", journal,
+                        "--replace", str(tdc.ROW_A),
+                        "--data", spill(tmp, "c8a.bin", stored),
+                        "--compression", "8",
+                        "--expect", spill(tmp, "c8a.payload", payload))
+    with Archive(dat) as ar:
+        e = ar.row(tdc.ROW_A)
+        check(code == 0 and e.compression == 8 and ar.read(e) == payload,
+              f"row {tdc.ROW_A} goes compression 0 -> 8 and reads back as the "
+              f"payload",
+              f"exit {code}, compression {e.compression}")
+    edits = json.load(open(journal))["edits"]
+    comp_off = datwrite.row_offset(Archive(dat), tdc.ROW_A) \
+        + datwrite.ENTRY_COMP_OFF
+    check(any(ed["offset"] == comp_off for ed in edits),
+          "the journal records the compression field's own two bytes, so the "
+          "one field no checksum can see is revertible")
+    code, out = run_cli("--revert", journal)
+    check(code == 0 and blob(dat) == original,
+          "--revert puts the archive back BYTE FOR BYTE, compression field "
+          "included",
+          f"exit {code}, "
+          f"{'identical' if blob(dat) == original else 'DIFFERS'}")
+
+    print("\n9d. THE BLIND SPOT, measured rather than asserted (FINDINGS C-6)")
+    # Stage the exact state `datmove` used to produce: correct compressed bytes,
+    # correct crc, correct size -- and the compression code saying 0. It has to
+    # be poked in, because the verb now refuses to create it, which is the whole
+    # point of the rung. The self-crc is fixed afterwards so the archive is as
+    # green as C-6 leaves it, not merely as green as a sloppy sabotage leaves it.
+    dat = fresh10("comp-c6.dat")
+    w = datwrite.Writer(dat, dat + ".journal.json")
+    try:
+        with quiet():
+            w.replace(tdc.ROW_B, stored, compression=8, expect=payload)
+    finally:
+        w.close()
+    tdc.poke_row(dat, tdc.ROW_B, extra=0)
+    w = datwrite.Writer(dat, dat + ".journal2.json")
+    try:
+        with quiet():
+            w.fix_mft_self_crc()
+    finally:
+        w.close()
+    ok, red = clear(dat)
+    sweep = datcheck.crc_sweep(dat)
+    with quiet():
+        bad = datwrite.verify(dat)
+    with Archive(dat) as ar:
+        e = ar.row(tdc.ROW_B)
+        wrong = ar.read(e)
+    check(ok == 10 and not sweep["bad"] and bad == 0,
+          "a row marked STORED whose bytes are still compressed passes ALL TEN "
+          "open-time rules, the crc sweep and all three checksum rules",
+          f"{ok}/10, {len(sweep['bad'])} bad crcs, {bad} checksum failures")
+    check(wrong != payload,
+          "...while the file is UNREADABLE -- a green archive holding a broken "
+          "file, and nothing we own can refute it by inspection",
+          f"read() returned {len(wrong)} B, payload is {len(payload)} B")
+    check(binascii.crc32(wrong) == e.crc,
+          "the crc still matches, because it was always over the STORED bytes "
+          "and those did not change -- which is exactly why the check has to "
+          "happen BEFORE the write")
+
+    print("\n9e. the verify arm fires, on EARNED corruption")
+
+    def refuse_replace(name, row, data, **kw):
+        """Try a replace on a fresh fixture. -> (message or None, intact, journal)."""
+        path = os.path.join(tmp, f"refuse-c8-{name}.dat")
+        tdc.build_archive(path)
+        before = blob(path)
+        jrnl = path + ".journal.json"
+        w = datwrite.Writer(path, jrnl)
+        msg = None
+        try:
+            with quiet():
+                w.replace(row, data, **kw)
+        except SystemExit as exc:
+            msg = str(exc)
+        finally:
+            w.close()
+        return msg, blob(path) == before, os.path.exists(jrnl)
+
+    flipped = bytearray(stored)
+    flipped[len(flipped) // 2] ^= 0x01
+    msg, intact, jrnl = refuse_replace("flip", tdc.ROW_B, bytes(flipped),
+                                       compression=8, expect=payload)
+    check(msg is not None and intact and not jrnl,
+          "ONE FLIPPED BIT inside a real compressed payload is REFUSED, nothing "
+          "is written and no journal is left -- and note the corrupt stream "
+          "decodes to the right LENGTH without raising, so only the byte "
+          "comparison can see it",
+          f"{'refused' if msg else 'WENT THROUGH'}, "
+          f"archive {'intact' if intact else 'MODIFIED'}")
+    check(msg is not None and "NOT the expected payload" in msg,
+          "and the refusal says what is wrong, not merely that something is")
+
+    msg, intact, jrnl = refuse_replace("short", tdc.ROW_B, stored[:-4],
+                                       compression=8, expect=payload)
+    check(msg is not None and intact and not jrnl,
+          "a real payload with its mandatory tail word REMOVED is refused -- "
+          "FINDINGS 13.3's measured silent short decode, the corruption that "
+          "raises nothing and passes every checksum",
+          f"{'refused' if msg else 'WENT THROUGH'}")
+
+    for name, why, row, data, kw in (
+            ("noexpect", "compression 8 with no declared payload",
+             tdc.ROW_B, stored, dict(compression=8)),
+            ("empty", "a zero-length compression-8 row",
+             tdc.ROW_B, b"", dict(compression=8, expect=b"")),
+            ("plain8", "plaintext declared as compression 8 (the shape "
+                       "cross-check, byte 3)",
+             tdc.ROW_B, b"ffna" * 20, dict(compression=8, expect=b"ffna" * 20)),
+            ("code3", "a compression code that is neither 0 nor 8",
+             tdc.ROW_B, stored, dict(compression=3, expect=payload)),
+            ("c6", "compressed bytes declared as compression 0 -- C-6 itself",
+             tdc.ROW_B, stored, {}),
+            ("c6small", "compressed bytes from a payload too SMALL to carry "
+                        "retail's 0x01 0x02 marker -- the case a byte-marker "
+                        "guard misses and a decoding one does not",
+             tdc.ROW_B, gwenc.encode(b"tiny"), {}),
+            ("mismatch", "a stored write whose declared payload is not its bytes",
+             tdc.ROW_B, b"aaaa", dict(expect=b"bbbb")),
+            # CORRECTED 2026-08-18. This case was labelled "a compressed payload past
+            # the reservation (still a relocation, and still refused)" and it was NOT
+            # testing that: `pattern(3, 40000)` compresses ~12x, to 484 stored bytes
+            # against ROW_A's 512-byte reservation, so it never reached the relocation
+            # guard at all -- it was a second copy of the C-6 check wearing a false
+            # label, and a skeptic proved it by disabling ONLY the C-6 arm and watching
+            # this line go red. "A compressed payload too big for its reservation is
+            # refused" was therefore UNTESTED.
+            #
+            # The trap was caught 40 lines below (`section_c6_guard` switched to a PRNG
+            # payload for exactly this reason) and missed here. Fourth recurrence of
+            # the FINDINGS 10.6 / 12.7 / 13.6 pattern in this arc: a check whose label
+            # claims more than the artifact does.
+            #
+            # Incompressible bytes make the stored form BIGGER than the payload, so
+            # this now genuinely exceeds the reservation and genuinely reaches the
+            # relocation refusal, with `expect` supplied so the C-6 arm cannot be what
+            # fires.
+            ("toobig", "a compressed payload past the reservation -- a "
+                       "relocation, refused BEFORE the declaration is consulted",
+             tdc.ROW_A, gwenc.encode(_incompressible(4000)),
+             dict(compression=8, expect=_incompressible(4000))),
+    ):
+        msg, intact, jrnl = refuse_replace(name, row, data, **kw)
+        check(msg is not None and intact and not jrnl,
+              f"REFUSED: {why}",
+              f"{'refused' if msg else 'WENT THROUGH'}, "
+              f"archive {'intact' if intact else 'MODIFIED'}, "
+              f"journal {'left' if jrnl else 'absent'}")
+
+    msg, intact, _j = refuse_replace("hdr", tdc.ROW_HEADER, stored,
+                                     compression=8, expect=payload)
+    check(msg is not None and "ArchiveCreate" in msg and intact,
+          "and the compressed path INHERITS the header refusal: a row at offset "
+          "0 is refused by _refuse_header, naming the silent wipe")
+
+    print("\n9f. and the controls, so none of that is a blanket ban")
+    msg, intact, _j = refuse_replace("ctl8", tdc.ROW_B, stored,
+                                     compression=8, expect=payload)
+    check(msg is None and not intact,
+          "CONTROL: the same fixture, the same bytes, a correct declaration -- "
+          "the write GOES THROUGH")
+    msg, intact, _j = refuse_replace("ctl0", tdc.ROW_B, b"plain payload bytes")
+    check(msg is None and not intact,
+          "CONTROL: the plain path with no keyword at all is untouched -- "
+          "exactly what every existing caller passes")
+    with Archive(os.path.join(tmp, "refuse-c8-ctl0.dat")) as ar:
+        e = ar.row(tdc.ROW_B)
+        check(e.compression == 0 and ar.raw(e) == b"plain payload bytes",
+              "...and it still marks the row STORED, which is what iconset, "
+              "rebloat, textwrite and the six a4stage scripts depend on")
+    marked = b"\xAA\xBB\x01\x02" + b"not actually compressed"
+    check(not datwrite.looks_compressed(marked),
+          "CONTROL: bytes that merely CARRY the 0x01 0x02 marker but do not "
+          "decode are not treated as compressed -- the guard decides by "
+          "decoding, so it does not refuse plaintext for a two-byte coincidence")
+    msg, intact, _j = refuse_replace("hatch", tdc.ROW_B, marked)
+    check(msg is None and not intact,
+          "...and such a payload writes stored with no keyword at all")
+
+    # THE DANGEROUS HALF OF THE HATCH, added 2026-08-18 after a skeptic drove C-6
+    # straight through it. The control above uses bytes that do NOT decode, so it
+    # only ever exercised the harmless half. `expect == data` is trivially true for
+    # ANY bytes, so when the C-6 arm was gated on `expect is None`, pointing
+    # --expect at the same file as --data waived it:
+    #
+    #     datwrite.py --dat X --replace N --data s.bin --compression 0 --expect s.bin
+    #
+    # Exit 0, preflight 10 of 10, sweep 0 bad, log line indistinguishable from an
+    # ordinary stored replace, and the file unreadable. The arm now consults the
+    # decode whether or not `expect` was given, and the override is a separate
+    # awkward argument that announces itself.
+    msg, intact, _j = refuse_replace("hatch_real", tdc.ROW_B, stored,
+                                     expect=stored)
+    check(msg is not None and "C-6" in msg and intact,
+          "THE HATCH IS CLOSED: genuine compressed bytes declared compression 0 "
+          "with expect=data -- the shape that reached the archive through the "
+          "documented CLI -- are REFUSED, naming C-6, with nothing written")
+    msg, intact, _j = refuse_replace("hatch_override", tdc.ROW_B, stored,
+                                     expect=stored, stored_lookalike_ok=True)
+    check(msg is None and not intact,
+          "...and the deliberate override still lets a caller through, so this "
+          "is a gate rather than a ban -- the 4 of 38,621 real stored rows that "
+          "genuinely decode still have a route")
+
+    # THE RECALL AND THE FALSE-POSITIVE RATE, both measured here rather than
+    # taken from the docstring. A guard against a silent whole-file corruption
+    # is only worth what its miss rate is, and the byte-marker version of this
+    # missed six of eighteen gwenc outputs -- every one of them a small payload.
+    sizes = (0, 1, 4, 64, 100, 256, 1000, 4000)
+    fails = [n for n in sizes
+             if not datwrite.looks_compressed(
+                 gwenc.encode(random.Random(n).randbytes(n)))]
+    check(not fails,
+          f"every one of {len(sizes)} gwenc streams across the whole size range "
+          f"is recognised as compressed, INCLUDING the sub-256-byte payloads a "
+          f"byte marker misses",
+          f"missed: {fails}")
+    plains = [pattern(s, 300) for s in range(200)] \
+        + [random.Random(s).randbytes(64) for s in range(200)] \
+        + [b"ffna" + bytes(range(200)), b"\x00" * 1000, bytes(range(256)) * 4]
+    fp = sum(1 for p in plains if datwrite.looks_compressed(p))
+    check(fp == 0,
+          f"and 0 of {len(plains)} plaintext payloads are mistaken for "
+          f"compressed ones, so the guard is not a tax on the stored path",
+          f"{fp} false positive(s)")
+    # WHAT THE TRAILER HALF OF THE TEST ACTUALLY BUYS, isolated. `declared ==
+    # len(back)` is true by construction whenever the decode loop terminates
+    # normally -- the declared size IS the loop's bound -- so it refutes exactly
+    # one thing: a stream that runs out of input first. That is FINDINGS 13.3's
+    # measured silent short decode, and this is the check that shows the clause
+    # is not decoration. It is a small claim, made small on purpose.
+    check(not datwrite.looks_compressed(stored[:-4]),
+          "a compressed stream missing its mandatory tail word is NOT accepted "
+          "as compressed -- the one thing the trailer-agreement clause can "
+          "refute, since the declared size is otherwise the decoder's own "
+          "termination bound")
+
+
+def section_c6_guard(tmp):
+    """`datmove` relocating compressed bytes: the trap, now a refusal.
+
+    Separate section and a separate fixture because a MOVE needs free space to
+    move into, and `test_datmove`'s archive is the one built with measured free
+    runs and a planted container generation. The guard itself is shared code
+    (`datwrite.declaration_fault`), so what is tested here is the wiring and the
+    fact that the module's default path did not change -- `textwrite.py`,
+    `deploy.py`'s subprocess and the six `a4stage*.py` scripts under
+    `vault/research/archivewrite/` all call `move()` for its unconditional
+    compression 0 and none of them was edited.
+    """
+    print("\n10. datmove: no more silent relocation of compressed rows")
+
+    # DELIBERATELY INCOMPRESSIBLE, and it has to be. `pattern()` compresses ~12x,
+    # which puts the stored form back inside the row's own reservation and
+    # `plan_move` correctly refuses it as "it fits where it is" -- a move that
+    # never happens tests nothing. A deterministic PRNG payload encodes to
+    # slightly MORE than it started as (2,000 -> 2,080 B here; gwenc's framing
+    # costs 80 B it cannot win back), which is the only way to get a compressed
+    # payload that genuinely needs to relocate on a fixture this size.
+    payload = random.Random(20260818).randbytes(2000)
+    stored = gwenc.encode(payload)
+
+    def attempt(name, data, **kw):
+        path = os.path.join(tmp, f"move-{name}.dat")
+        tdm.build_archive(path)
+        before = blob(path)
+        jrnl = path + ".journal.json"
+        msg = None
+        try:
+            with quiet():
+                datmove.move(path, tdm.ROW_BIG, data, jrnl, confirm=True, **kw)
+        except datmove.Refused as exc:
+            msg = str(exc)
+        return msg, path, blob(path) == before
+
+    old_res = tdm.reservation(tdm.ROWS[tdm.ROW_BIG][1])
+    check(len(stored) > old_res,
+          f"the compressed payload is {len(stored)} B against row "
+          f"{tdm.ROW_BIG}'s {old_res}-byte reservation, so this really is a "
+          f"MOVE and not a replace in disguise")
+
+    msg, _path, intact = attempt("c6", stored)
+    check(msg is not None and intact,
+          "C-6 FIRES: handing move() a compression-8 payload while leaving the "
+          "code at its default 0 is REFUSED, and nothing is written",
+          f"{'refused' if msg else 'WENT THROUGH'}, "
+          f"archive {'intact' if intact else 'MODIFIED'}")
+    check(msg is not None and "compression=8" in msg and "C-6" in msg,
+          "and the refusal names the fix and the finding, so it is actionable "
+          "rather than merely obstructive")
+
+    msg, _path, intact = attempt("noexpect", stored, compression=8)
+    check(msg is not None and intact,
+          "declaring compression 8 without the payload a reader must get back "
+          "is refused too -- the declaration is not a way to switch the check "
+          "off")
+
+    msg, path, intact = attempt("ok8", stored, compression=8, expect=payload)
+    check(msg is None and not intact,
+          "THE SAFE RELOCATION VERB EXISTS: compression 8 with a verified "
+          "payload moves the row",
+          f"{msg or 'moved'}")
+    with Archive(path) as ar:
+        e = ar.row(tdm.ROW_BIG)
+        moved_ok = (e.compression == 8 and e.size == len(stored)
+                    and binascii.crc32(ar.raw(e)) == e.crc
+                    and ar.read(e) == payload)
+        new_off = e.offset
+    check(moved_ok,
+          f"...at its new address 0x{new_off:X}, still marked compression 8, "
+          f"crc over the stored bytes, and reading back as the original "
+          f"{len(payload)} B payload")
+    with Archive(path) as ar:
+        bad = datmove.overlaps(ar)
+    check(not bad, f"and no two rows share a block afterwards ({len(bad)} pairs)")
+
+    plain = pattern(29, 2000)
+    msg, path, intact = attempt("plain", plain)
+    check(msg is None and not intact,
+          "CONTROL: a plaintext move with no keyword at all still succeeds -- "
+          "the six a4stage scripts and deploy.py's subprocess are unaffected")
+    with Archive(path) as ar:
+        e = ar.row(tdm.ROW_BIG)
+        check(e.compression == 0 and ar.raw(e) == plain
+              and binascii.crc32(ar.raw(e)) == e.crc,
+              "...and it still marks the moved row STORED, byte for byte, with "
+              "its crc over what was written")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
@@ -909,6 +1403,8 @@ def main():
         section_restore(tmp)
         section_relink(tmp)
         section_header_refusal(tmp)
+        section_compressed(tmp)
+        section_c6_guard(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

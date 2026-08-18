@@ -1966,6 +1966,32 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
+**THE WRITE PATH IS BUILT, 2026-08-18 — and the skeptics found FOUR holes in it.** Study
+§14. `datwrite.replace(..., compression=8, expect=payload)` writes a compressed row and
+**decompresses to verify before committing** — the only refutation available, since
+`datcheck.py` has zero references to compression codes and the entry CRC is over the *stored*
+bytes, so a wrong payload passes every checksum rule and all ten open-time rules. `datmove`
+gained the **safe relocation verb for compressed rows that C-6 said did not exist**, and C-6
+was reproduced live on a synthetic archive before being closed. Every existing caller is
+untouched by default: all six `a4stage*.py`, `deploy.py`'s subprocess, `iconset`, `rebloat`,
+`textwrite`. Floors `test_datwrite` 87→138, `test_datalloc` 98→100.
+
+**The four holes matter more than the verb.** All were found by hostile reads of code written
+to prevent exactly them: (1) the C-6 arm was gated on `expect is None`, and since
+`expect == data` is trivially true for any bytes, one documented CLI command wrote compressed
+bytes under a stored code with **exit 0 and a log line indistinguishable from an ordinary
+replace**; (2) `--overwrite` never reached the guard, so overwriting a comp-8 row with
+plaintext left a green archive whose `Archive.read()` returns **zero bytes**; (3)
+`datalloc`'s gate matched a two-byte marker without decoding — **the row CREATION path, the
+one A8 will use** — and its own test asserted that defect as correct; (4) a check labelled
+"a compressed payload past the reservation" was a duplicate of the C-6 check, because the
+fixture compressed 12× and fitted. All four fixed.
+
+**§14.3 is the finding to carry forward: this is the FOURTH consecutive rung in which a check
+claimed more than the artifact delivered** (§10.6, §12.7, §13.6, §14.2), three of them
+shipping after the previous correction was written. The technique that has caught it every
+time is **sabotage — disable one arm and require a named check to go red.**
+
 **A7b IS RUN, 2026-08-18 — GREEN. THE COMPRESSION-8 ENCODER EXISTS.** Study §13.
 `toolkit/mapdata/gwenc.py` + `test_gwenc.py`, 55 checks; three skeptics, none refuting.
 **Retail's own stored rows re-emit BYTE-IDENTICALLY** — row 11196 at 1,029,564 B with

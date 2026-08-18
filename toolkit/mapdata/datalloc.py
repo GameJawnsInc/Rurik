@@ -429,12 +429,24 @@ def plan_alloc(ar, streams, file_id, classified=None):
                 f"stream {i} declares extraBytes {s.extra_bytes}. The corpus "
                 f"holds only 0 and 8; anything else is a value we have never "
                 f"seen the client produce or read.")
-        if s.extra_bytes == 8 and s.data[2:4] != b"\x01\x02":
+        # CHANGED 2026-08-18: this gate was `s.data[2:4] != b"\x01\x02"`, a two-byte
+        # MARKER with no decode, and it is wrong in BOTH directions -- measured.
+        #   * It ACCEPTS bytes nothing can read. `b"ab\x01\x02efgh"` carries the
+        #     marker and is obviously not a stream, and `test_datalloc.py` asserted
+        #     that acceptance as CORRECT, pinning the defect. This is the row
+        #     CREATION path, i.e. the one rung A8 will most plausibly use, so it
+        #     could mint a brand-new compression-8 row that is green everywhere and
+        #     unreadable -- FINDINGS C-6, reached from the other end.
+        #   * It REFUSES bytes that are genuinely compressed. `gwenc.encode()` output
+        #     from a small payload has `data[2] == 0x00`, so the marker is absent and
+        #     real streams were turned away.
+        # `looks_compressed` decides by DECODING, which fixes both. Its recall is
+        # 600/600 on real comp-8 rows and 92/92 on gwenc streams across 23 sizes,
+        # against a marker that misses 41 of those 92 (FINDINGS 14).
+        if s.extra_bytes == 8 and not datwrite.looks_compressed(s.data):
             raise Refused(
                 f"stream {i} declares extraBytes 8, the compressed framing, but "
-                f"its payload does not carry 0x0102 at bytes 2..4 -- the marker "
-                f"every one of 6,000 sampled extraBytes==8 rows has and no "
-                f"stored row does.\n"
+                f"its payload does not DECODE as a compression-8 stream.\n"
                 f"  This module writes payloads verbatim and compresses nothing, "
                 f"so 0 is almost certainly what is meant. Declaring 8 over a "
                 f"stored payload produces an archive that is wrong only in the "
