@@ -124,12 +124,14 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientpatch"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import accounts  # noqa: E402
 import marks  # noqa: E402
 import origin  # noqa: E402
 import vaultpath  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4  # noqa: E402
+from codec import Codec  # noqa: E402  -- the full-stream key tie-break, _frames_completely
 
 # Handshake framing, plaintext on the wire, from authsrv.py's own reader:
 #   c2s: VERSION (u32 header + body) then CLIENT_SEED (u16 0x4200 + 64B A)
@@ -342,6 +344,29 @@ def key_fits(plain):
     return bool(op & CMSG_DIRECTION_BIT) and (op & ~CMSG_DIRECTION_BIT) <= MAX_CATALOG_OPCODE
 
 
+def _frames_completely(s2c_cipher, key):
+    """Does this key decrypt the WHOLE server stream into messages, to the last byte?
+
+    The tie-break `key_fits` cannot be: it reads two bytes, and two bytes are cheap to
+    spell by accident. This walks the entire decrypted stream through the real catalog and
+    demands `consumed == len(plain)` with no error -- the same standard `tape.decode_all`
+    holds every tape in the vault to. A wrong ARC4 key produces noise from the first
+    message onward, and noise does not frame to an exact landing.
+
+    Deliberately answers only True/False and swallows nothing else: any decode failure IS
+    the answer this returns, so a catalog gap and a wrong key look the same here. That is
+    acceptable ONLY because the caller uses this to NARROW a set it already has, never to
+    accept a key on its own -- a genuinely unknown opcode mid-stream would make every
+    candidate fail and the caller refuses, which is the safe direction.
+    """
+    try:
+        plain = decrypt_stream(s2c_cipher, key)
+        _msgs, consumed, err = Codec().decode_stream_at("GAME_SMSG", plain, 0)
+    except Exception:                                    # noqa: BLE001 -- see docstring
+        return False
+    return err is None and consumed == len(plain) and consumed > 0
+
+
 def channel_of_stream(c2s_stream):
     """'auth' / 'game' from a c2s stream's VERSION header, or None if it has none."""
     if len(c2s_stream) < 4:
@@ -425,13 +450,34 @@ def assemble_live(wire_path, keyring, out_dir):
         # any real capture yet, and it is the one guard this module advertises as a check
         # that can fail.
         if len({f[1] for f in fits}) > 1:
-            # More than one key passing means the criterion is not discriminating here, not
-            # that either is right. Refuse rather than pick -- a wrong key writes a file
-            # full of noise that reads like a capture.
-            row.update({"decrypted": False,
-                        "why": f"{len(fits)} different keys all fit; refusing to choose"})
-            results.append(row)
-            continue
+            # More than one key passing means `key_fits` is not discriminating here -- it
+            # reads TWO BYTES, and with a dozen keys and a dozen connections a wrong key
+            # spelling a plausible opcode is ordinary luck rather than a surprise. So ask a
+            # question two bytes cannot fake: DOES THE WHOLE STREAM FRAME TO ITS FINAL BYTE
+            # under this key? ARC4 is a stream cipher, so a wrong key is wrong for every
+            # byte after the first message, and the framer walks message-by-message off a
+            # length it read from the plaintext. It cannot walk 122,432 bytes of noise and
+            # land exactly on the end.
+            #
+            # OBSERVED 2026-08-17 on capture 20260817T231139, which is the reason this
+            # exists: two connections, two leftover keys, and each key passed `key_fits` on
+            # BOTH connections -- a clean 2x2 ambiguity that refused the largest connection
+            # in the corpus (122 KB, the whole of an Isle of the Nameless walk). Under this
+            # test the pairing is not close: 100.0% vs 0.01% and 100.0% vs 0.11%.
+            #
+            # This is still a check that can fail. If the full-stream test leaves more than
+            # one key -- or none -- we refuse exactly as before, and the `why` says which
+            # of the two questions did not separate them. Never pick; only ever narrow.
+            framed = [(label, key) for label, key in fits
+                      if _frames_completely(s2c_cipher, key)]
+            if len({f[1] for f in framed}) != 1:
+                row.update({"decrypted": False,
+                            "why": f"{len(fits)} different keys all fit the opcode test and "
+                                   f"{len(framed)} frame the whole s2c stream; refusing to "
+                                   f"choose"})
+                results.append(row)
+                continue
+            fits = framed
         label, key = fits[0]
         safe = str(key_name).replace(":", "_").replace("->", "-to-")
         out_path = os.path.join(out_dir, f"{channel}-{safe}.jsonl")

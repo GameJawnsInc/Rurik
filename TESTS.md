@@ -3535,7 +3535,24 @@ Every one of these, in the order they were written:
   refused naming both numbers, the refusal NAMES the staged directory that would
   work (and prints the rebuild command when none does), an absent owner install
   SKIPS loudly rather than passing, and an unreadable launch binary is refused
-  outright. 112 checks),
+  outright. §13 (2026-08-17) is the KEY TIE-BREAK. Pairing a tapped keyring to a
+  capture's connections is a search, and its criterion was `key_fits` — which reads
+  TWO BYTES, the direction bit and a catalog-sized opcode. That is cheap to spell by
+  accident: on capture `20260817T231139` two leftover keys each passed it on each of
+  two leftover connections, a clean 2×2 ambiguity, and the driver refused — correctly,
+  because picking would have written noise that reads like a capture. But the refusal
+  cost the largest connection in the corpus (122 KB, an entire Isle of the Nameless
+  walk, 426 creates). So a second question is asked when and only when the first does
+  not separate: does the WHOLE s2c stream frame to its FINAL byte under this key? A
+  wrong ARC4 key is wrong for every byte after the first message, and noise does not
+  walk message-by-message onto an exact landing — measured on that capture, 100.0%
+  against 0.01%. It only ever NARROWS: if the full-stream test leaves none or more
+  than one, the refusal stands and says which question failed. Four checks, each able
+  to redden: the right key frames completely (the positive control, without which the
+  test could be vacuously false and still look like it works), a wrong key does not,
+  the RIGHT key still fails on a stream truncated off a message boundary (that is the
+  `consumed == len` half, which catches a gap-holed capture rather than a wrong key),
+  and an empty stream is not "complete". 117 checks),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled — **and since 2026-08-13 which BUILD, which is
   the same argument one level down**. `HANDOFF.md`:237 has required a build id in

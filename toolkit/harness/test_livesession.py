@@ -166,7 +166,7 @@ LiveErrorType = ls.LiveError
 # headline claims are about REAL captured bytes.
 # FLOOR: 112, MEASURED from a green run 2026-08-17 after section 12 (the
 # launch-build guard) landed -- read off the run, never computed.
-LEDGER = checks.Ledger("livesession", floor=112)
+LEDGER = checks.Ledger("livesession", floor=117)
 
 
 # --------------------------------------------------- the syntax-tree readout --
@@ -1537,6 +1537,47 @@ def main():
     finally:
         buildid.of_image = real_of_image
         ls.service_build = real_service
+
+    # ---------------------------------------------------------------- 13. the
+    # full-stream tie-break. `key_fits` reads TWO BYTES, and on capture
+    # 20260817T231139 two leftover keys each spelled a plausible opcode on each of
+    # two leftover connections -- a clean 2x2 ambiguity that refused the largest
+    # connection in the corpus (122 KB, an entire Isle of the Nameless walk). The
+    # tie-break asks whether the WHOLE stream frames to its final byte, which a
+    # wrong ARC4 key cannot fake. These checks drive the real helper.
+    from codec import Codec as _Codec
+    codec = _Codec()
+
+    def stream_for(msgs):
+        """A GAME_SMSG byte stream built by the REAL encoder, so it frames exactly."""
+        return b"".join(codec.encode("GAME_SMSG", op, vals) for op, vals in msgs)
+
+    good_key = bytes([0x11]) * 20
+    other_key = bytes([0x22]) * 20
+    plain = stream_for([(0x0115, [277, 7]),
+                        (0x0115, [277, 8]),
+                        (0x0115, [277, 9])])
+    LEDGER.ok(len(plain) > 0,
+              "the tie-break fixture encodes through the real codec",
+              str(len(plain)) + " bytes")
+
+    cipher = ls.ARC4(good_key).crypt(plain)      # what the wire would carry
+
+    LEDGER.ok(ls._frames_completely(cipher, good_key),
+              "the RIGHT key frames the whole stream to its final byte",
+              "the positive control: without it the tie-break could be vacuously "
+              "false and still look like it works, by refusing everything")
+    LEDGER.ok(not ls._frames_completely(cipher, other_key),
+              "a WRONG key does not frame the whole stream",
+              "ARC4 is wrong for every byte after the first, and noise does not "
+              "walk message-by-message onto an exact landing")
+    LEDGER.ok(not ls._frames_completely(cipher[:len(cipher) - 3], good_key),
+              "even the RIGHT key fails when the stream does not END on a boundary",
+              "consumed == len(plain) is the half that catches a truncated or "
+              "gap-holed capture rather than a wrong key")
+    LEDGER.ok(not ls._frames_completely(b"", good_key),
+              "an empty stream is not complete",
+              "consumed > 0, or a zero-byte connection would look decidable")
 
     return LEDGER.verdict()
 
