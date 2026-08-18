@@ -28,15 +28,24 @@ sys.path.insert(0, os.path.join(HERE, "authsrv"))
 import checks                                                # noqa: E402
 import content                                               # noqa: E402
 import questdefs                                             # noqa: E402
+import authsrv                                              # noqa: E402
 
-# MEASURED: 21 against today's two-row table. The floor is 17, not 21, and the
-# derivation matters -- per checks.py's own rule, pin it to the mandatory core.
-# Sections 0 (2), 2 (2), 4 (4), 5 (2) and 6 (3) are row-count INDEPENDENT = 13.
-# Sections 1, 3 and 7 add 4 per quest row. So one row is the smallest table that
-# can exist at all, and 13 + 4 = 17 is what it executes. Pinning 21 would turn
-# "somebody retired a quest row" into a red suite, which is the failure mode
-# checks.py names; section 0's first check already catches an EMPTY table.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=17)
+# MEASURED 2026-08-17: 74 with the vault present, 73 without (section 19
+# re-derives 888 from the client image and declares a skip if it is not
+# there). The floor is 73 -- what ONE quest row runs on a bare machine.
+#
+# THE PREVIOUS DERIVATION WAS STALE AND SAID SO CONFIDENTLY: "13 checks are
+# row-count independent and each quest row adds 4, so 17 is what the
+# smallest table that can exist executes." That was true when written and
+# the file has since grown to 74 against the same one-row table, so the
+# floor sat at 17 while a healthy run did four times that -- a floor that
+# far below its run would not notice three whole sections going missing,
+# which is the exact failure checks.py exists to refuse. Recomputed from a
+# real green run rather than re-derived on paper.
+#
+# Adding quest rows only raises the count, so the floor stays valid; an
+# EMPTY table is caught by section 0 before the count matters.
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=73)
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -440,6 +449,135 @@ def main():
         check(all(int(u) >= 0x100 for u in enc),
               f"quest {qid}'s enc_name words are all >= 0x100",
               "a sub-0x100 word in an id slot is a marker, not a string id")
+
+    print("\n17. rung Q6: the instance-load replay")
+    # A recording `send`, so the ORDER is assertable and not just the contents.
+    # Order is the whole rung: 0x0054 before 0x004C is a silent no-op, and
+    # 0x0049 in place of 0x0050 changes which quest is active without any
+    # visible sign.
+    def replay(held, done=()):
+        sent = []
+        st = {"map_id": 148, "quests": set(held), "objectives_done": set(done)}
+        authsrv._replay_quests(lambda op, vals, label="": sent.append((op, vals)), st)
+        return sent, st
+
+    sent, _st = replay([])
+    check(sent == [], "no held quests sends NOTHING at all",
+          f"{sent} -- a fresh character must not get an empty quest burst; an "
+          f"0x0050 for a quest nobody holds would put a blank row in the log")
+
+    sent, _st = replay([1463])
+    ops = [op for op, _v in sent]
+    check(authsrv.GAME_SMSG_QUEST_ADD not in ops,
+          "the replay uses 0x0050, NEVER 0x0049",
+          f"{[hex(o) for o in ops]} -- 0x0049's body writes charContext+0x528 "
+          f"(0x0080F20B), so a bulk restore with it silently makes the LAST "
+          f"quest pushed the active one. This is the red the ladder named for "
+          f"this rung, and it is invisible on a one-row table -- which is "
+          f"exactly why it is asserted rather than eyeballed")
+    check(authsrv.GAME_SMSG_QUEST_ADD_NO_MARKER in ops,
+          "and does send the add", f"{[hex(o) for o in ops]}")
+
+    desc_at = ops.index(authsrv.GAME_SMSG_QUEST_DESCRIPTION)
+    obj_at = ops.index(authsrv.GAME_SMSG_QUEST_OBJECTIVES_UPDATE)
+    check(desc_at < obj_at,
+          "0x004C precedes 0x0054, which is NOT ArenaNet's order",
+          f"description at {desc_at}, objectives at {obj_at}. The client gates "
+          f"0x0054 on the description-filled flag (body tests it at "
+          f"0x0080F9CD) and ArenaNet trips its own gate twice in the corpus. "
+          f"Copying the observed order verbatim would reproduce a bug we can "
+          f"see, and it fails INVISIBLY -- an empty objective reads as the "
+          f"client ignoring us")
+    check(ops.index(authsrv.GAME_SMSG_QUEST_ADD_NO_MARKER) < desc_at,
+          "and the add precedes both",
+          "a description for a quest the client has not been given has nothing "
+          "to attach to")
+
+    clears = [v for op, v in sent if op == authsrv.GAME_SMSG_QUEST_MOVE_MARKER]
+    check(len(clears) == 1 and clears[0][1] == authsrv.NO_MARKER_POS
+          and clears[0][3] == authsrv.NO_MARKER_MAP,
+          "the stale-marker clear is (+inf, +inf) / 888, never (0, 0)",
+          f"{clears} -- (0,0) is a real coordinate and drops a marker at the "
+          f"map origin, which looks like a bug in the marker code rather than "
+          f"in the clear")
+
+    sent2, _ = replay([1463], done=[1463])
+    objs = [v for op, v in sent2 if op == authsrv.GAME_SMSG_QUEST_OBJECTIVES_UPDATE]
+    objs_undone = [v for op, v in sent if op == authsrv.GAME_SMSG_QUEST_OBJECTIVES_UPDATE]
+    check(objs and objs_undone and objs[0][1] != objs_undone[0][1],
+          "a completed objective replays its DONE text, not the original",
+          "restoring the pre-objective line would silently roll the player's "
+          "progress back on every map transition")
+
+    act = []
+    st = {"map_id": 148, "quests": {1463}, "objectives_done": set()}
+    authsrv._restore_active_marker(
+        lambda op, vals, label="": act.append((op, vals)), st)
+    check(len(act) == 1 and act[0][0] == authsrv.GAME_SMSG_QUEST_SET_ACTIVE_MARKER,
+          "exactly one 0x0053 re-arms the active quest",
+          f"{act} -- ArenaNet sends one, late (t=66.737, after c2s 0x0090). "
+          f"WHICH quest is active on a fresh load is RECONSTRUCTION: we take "
+          f"the lowest held id and the code says so")
+
+    print("\n18. the progress carrier, and what it deliberately does not carry")
+    saved = (set(authsrv.QUEST_PROGRESS["quests"]),
+             set(authsrv.QUEST_PROGRESS["objectives_done"]))
+    try:
+        authsrv.QUEST_PROGRESS["quests"].clear()
+        authsrv.QUEST_PROGRESS["objectives_done"].clear()
+        one = authsrv.bind_progress({})
+        one["quests"].add(1463)
+        one["desc_sent"] = {1463}
+        two = authsrv.bind_progress({})
+        check(1463 in two["quests"],
+              "a held quest survives into the next connection",
+              "this is the rung: state is created fresh per connection, so "
+              "before the carrier the log emptied at every map transition")
+        check("desc_sent" not in two,
+              "but `desc_sent` does NOT survive, and that is the load-bearing half",
+              "a carried-over desc_sent makes _replay_quests skip the 0x004C "
+              "that sets the description-filled flag, so every objectives line "
+              "after it is a silent no-op -- appearing only on the SECOND map")
+        check(one["quests"] is two["quests"],
+              "and both connections share the SAME set object",
+              "copies would work until a fourth call site forgot the copy-back")
+    finally:
+        authsrv.QUEST_PROGRESS["quests"].clear()
+        authsrv.QUEST_PROGRESS["quests"].update(saved[0])
+        authsrv.QUEST_PROGRESS["objectives_done"].clear()
+        authsrv.QUEST_PROGRESS["objectives_done"].update(saved[1])
+
+    print("\n19. 888 is re-derived, not trusted")
+    try:
+        sys.path.insert(0, os.path.join(HERE, "clientscan"))
+        import areatable, srctree
+        from gwpe import PE
+        pe = PE(srctree.default_exe())
+        # areatable's OWN selection rule, not a re-invention of it: the base is
+        # the VA both locators agree on, and only the structural one's first hit
+        # if they do not. Two methods disagreeing is the finding there, so the
+        # agreement is required here rather than worked around.
+        hits = areatable.locate_structural(pe)
+        code = areatable.locate_from_code(pe)
+        agreed = sorted({h["va"] for h in hits} & set(code))
+        assert agreed, ("areatable's two locators disagree on this image -- "
+                        "that is areatable's finding to report, not a number "
+                        "to pick a winner from here")
+        base_off = pe.rva_to_off(agreed[0] - pe.image_base)
+        # `extent` walks records until the pattern breaks: the same "888
+        # consecutive valid records" the CLI prints, reached by calling the
+        # module rather than by parsing its output.
+        n = areatable.extent(pe.data, base_off)
+    except Exception as exc:                                    # noqa: BLE001
+        LEDGER.skip("the no-marker sentinel against areatable",
+                    f"{type(exc).__name__}: {exc}")
+    else:
+        check(n == authsrv.NO_MARKER_MAP,
+              "areatable's map count IS the no-marker sentinel",
+              f"areatable says {n}, authsrv pins {authsrv.NO_MARKER_MAP}. "
+              f"FINDINGS 2.3 says derive it rather than pin it; the server path "
+              f"may not import a vault reader at startup, so it is pinned there "
+              f"and re-derived here")
 
     return LEDGER.verdict()
 

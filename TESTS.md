@@ -3271,10 +3271,24 @@ Every one of these, in the order they were written:
   distant, and the check that earns its place is the one asserting a line which
   FITS the description field is REFUSED for the dialog one; a single shared
   constant would pass everything else and put that error where only a screen
-  could find it. Floor 17 against a healthy 22, and the derivation is in the
-  file: 13 checks are row-count independent and each quest row adds 4 (5 with a
-  `giver_dialogue`), so 17 is what the smallest table that can exist executes;
-  §0 already catches an empty one. ~2 s),
+  could find it. **Floor 73 against a healthy 74** (§19 re-derives 888 from the
+  client image and skips without the vault). It was **17 against a run of 22**
+  when written, with a careful on-paper derivation — 13 row-independent checks
+  plus 4 per row — and the file then grew to 74 against the same one-row table
+  while the floor stayed at 17, so a healthy run did four times its own
+  minimum and three whole sections could have vanished unnoticed. That is the
+  failure `checks.py` exists to refuse, arriving by growth rather than by a bad
+  guess, and the lesson is that a DERIVED floor goes stale silently where a
+  measured one goes stale loudly. Recomputed 2026-08-17 from a real green run.
+  §§17-19 are rung Q6: that the replay uses `0x0050` and never `0x0049` (whose
+  body writes `charContext+0x528`, silently making the last quest pushed the
+  active one), that `0x004C` precedes `0x0054` — **deliberately NOT ArenaNet's
+  order**, since the client gates the objectives line on the description-filled
+  flag and ArenaNet trips its own gate twice in the corpus — that the stale
+  marker clears to `(+inf, +inf)`/888 and never `(0,0)`, and that the progress
+  carrier shares `quests` across connections while deliberately NOT carrying
+  `desc_sent`, whose survival would make every objectives line after the first
+  map a silent no-op. ~2 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
