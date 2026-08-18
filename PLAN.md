@@ -1881,6 +1881,36 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
+**RUN 7 IS DESIGNED AND DE-RISKED, 2026-08-18 — not staged, not launched.** Study §11. A
+design pass proposed it; three skeptics on distinct lenses **all refuted it**, and the
+salvage is worth more than the design. **The trap that blocked this rung is solved without
+finding the cast file:** the hatcher's most universal animation is base key 3,259,067,510
+(1.067 s), present in **26–32 of 32 corpus shells**, and all six of its weapon-class variants
+are served by **selector 10 = file 109464 — 27,948 B stored, WRITABLE, already relocated in
+run 5**. That is locomotion, and the harness re-triggers it whenever the player walks >120 u.
+**Provoke the walk, not the cast.** Ship a 180° rotation flip on the writable links
+(length-preserving, so no record, key table or window changes) plus the head-cluster ×3
+positive control — nodes 51–64, audited as genuinely the head by rebuilding the hierarchy
+from `blk2C` parent links. **Do not decimate**, even though it works: its rotation error is
+p99 46.6° / max 169.3°, the same order as the flip that is supposed to be the readout.
+
+**A real mechanism was found and its strong form refuted.** The client's animation key is
+arithmetic: `key = 0xE0000000 + (23·G) + C(letter)` at `0x007F1DD0` — the `imul …,0x17` was
+hand-disassembled from the pinned image and the calibration family recovered *blind* from the
+archive at 90–100%, against five control lattices scoring 0. **But "key mod 23 names the
+weapon class of every record, absolutely" is false**: the client's table has **12 letters**,
+26–37% of records are off-lattice, the largest single class (61 records, 25%) is emote-shaped
+and off-lattice, and `SEQ_FALLBACKS` (`AvSeq.cpp:253`) means the client sweeps *every* letter
+rather than committing to one. The lattice is a good instrument; it says nothing about which
+file serves the cast, because the selector byte already does, 242/242.
+
+**Correction C-9, and it makes A5 cheaper.** §2.5's *"the population supporting 'the client
+reads a large stored row' is EMPTY"* is **stale by our own hand**. Retail's 19,292 B ceiling
+still reproduces exactly, but `datmove` writes compression 0 unconditionally, so **run 5
+shipped eleven stored rows above it — largest 765,378 B — deployed and launched with no
+assert**. The honest bar is 11× the largest proven-read stored row and **0.5× the largest
+already deployed without a crash**.
+
 **SEVEN CLIENT RUNS, 2026-08-17/18. Handoff:
 [studies/archivewrite/HANDOFF.md](studies/archivewrite/HANDOFF.md).**
 

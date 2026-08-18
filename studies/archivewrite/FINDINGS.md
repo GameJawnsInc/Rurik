@@ -51,6 +51,7 @@ The house rule is that corrections go where they cannot be missed.
 | **C-5** | `datalloc.py:53-56`: growth past EOF is "unrevertible in principle" | **Wrong as stated.** Record the pre-growth size in the journal and `os.truncate` on revert; a scout ran it on a synthetic fixture and it restored to 10-of-10 clear. The docstring describes the current JSON schema, not a property of archives. It should be amended to say *why we still refuse* (concurrency and the u32 ceiling, §4.4), not that we cannot. **OBSERVED** (Route B scout) |
 | **C-6** | `datmove` is the relocation verb | `datmove.move()` writes **compression → 0 unconditionally** (`toolkit/mapdata/datmove.py:222-224`) and re-CRCs over the bytes it was handed. Relocating any compression-8 row with it produces a **green archive holding an unreadable file** — the entry CRC is over stored bytes, which are unchanged, so all three checksum rules and all ten open-time rules still pass. **OBSERVED (mine, source read; confirmed by two skeptics independently).** This is the single sharpest trap in the stack and it is live today. |
 | **C-7** | — | `archive.py:322` reads the header `mftOffset` as **`<I`**; `datcheck.py:223` and `datwrite.py:101` read it as **`<Q`**. Two of three readers say u64 and the outlier is the one every tool imports. Latent (all 14 vault archives have the high dword zero) and ~93 MB of file growth away from firing silently on the 38833 line. **OBSERVED (mine, all three lines read).** |
+| **C-9** | §2.5: *"the population supporting 'the client reads a large stored row' is EMPTY, not thin"* — retail's largest ordinary stored content row is 19,292 B and our one precedent is U7's 29,802 B | **STALE, and by our own hand.** The retail census still reproduces exactly (0 of 38,621 stored rows above 19,292 B, excluding the structural rows). But `datmove` writes compression 0 unconditionally, so **run 5 shipped ELEVEN stored rows above 19,292 B — the largest 765,378 B (file 117797) — and it was deployed and launched by the owner with no assert** (§9.3i/j). The honest framing is now **11× beyond the largest PROVEN-READ stored row and 0.5× the largest DEPLOYED-WITHOUT-CRASH one**, not "the population is empty". This materially de-risks **A5**, whose whole premise was that empty population. **OBSERVED** (run-7 skeptics, two independently, 2026-08-18) |
 | **C-8** | — | Two row censuses disagree by 16: 138,708 comp-8 rows (Route E) vs 138,692 (Route C skeptic), against 38,621+12 vs 38,629 comp-0. The sums are 177,341 and 177,321 — `len(entries)` versus live rows. `archive.py:413-431` warns about exactly this and names the study it already corrupted. **Unresolved bookkeeping**, and it is load-bearing for the "661 rows" headline. |
 
 ---
@@ -1378,6 +1379,146 @@ is identified and the code assignment is proven.
 worse in token count overflows the reservation on table cost alone. **Nor does A6 restore the
 encoder to the critical path for shape authoring** — §9.3k settled that separately, and the
 lever there is still the 29,802 B shell.
+
+---
+
+## 11. Run 7 — designed, then taken apart. The walk is the readout, and it is WRITABLE
+
+A design pass proposed run 7; three skeptics on distinct lenses attacked it and **all three
+refuted it**. Nothing here has been staged or launched. The design's two headline claims are
+recorded with what survived, because both are real mechanisms wrapped in over-claims.
+
+### 11.1 The finding that decides the run, and nobody had it before today
+
+**[OBSERVED] The hatcher's most universal animation is served by a WRITABLE file.** Scanning
+MFT rows 10,800–14,200 for shells carrying both FA8 and FA1 gives 32 shells; ranking keys by
+how many shells carry them puts **base key 3,259,067,510 (1.067 s) in 26–32 of the 32**. It
+appears in the hatcher's shell in **all six calibrated weapon-class variants**
+(…510/16/23/26/28/29), and **all six are served by selector 10 = file 109464 — 27,948 B
+stored, 79,194 B decompressed, comfortably writable, and already relocated successfully in
+run 5.** A 1.067 s whole-body cycle present in every creature in the sample is locomotion.
+
+**So the readout does not depend on the weapon byte, the letter table, or the key lattice at
+all**, and §5's worry that the animation we can provoke might live behind the compression
+wall does not survive. The walk is provokable on demand — the enemy closes from 300 u and
+**re-triggers whenever the player moves >120 u** (`ENEMY_DEST_RESEND`) — long, whole-body,
+and repeatable within one session.
+
+**Second new fact, and it inverts the design's own conclusion.** File **169533** (row 13737,
+immediately beside the shell) holds 5 records, all residue 4 (letter `u`), all exactly
+3.000 s, with keys in only **7–8 of 32 shells** — the hatcher family's own animations rather
+than generic ones. It is **writable** (186,268 B stored). A 3-second, family-specific,
+class-`u` animation is a better cast candidate than anything in 15018, whose class-`u`
+records are the universal 0.03–1.17 s ones every creature has. The design put ~82% on the
+opposite.
+
+### 11.2 The key lattice — the mechanism is REAL, the strong claim is refuted
+
+**[OBSERVED, two agents independently] The arithmetic exists.** `0x007F1DD0` computes
+`key = 0xE0000000 + (23·G mod 2³²) + C(letter)`, hand-disassembled out of the pinned 38797
+image: `lea eax,[eax+eax*8]`, `mov bl,[eax*4+0x00A936B0]`, **`imul edx,[ebp+0x10],0x17`** —
+the multiplier really is 23 and the table bytes really are letters. From the archive side a
+blind pairwise-shift test recovers the design's exact calibration family
+`{0,+6,+13,+16,+18,+19}` at 90–100%, and `mod 23` occupies 15 of 23 residues with a max
+bucket of 60 while **every other modulus 2..64 except 46 is uniform** with max bucket ≤ 25.
+Generating all 756 keys from the client's own tables with zero fitting hits **135 of the
+hatcher's 224 distinct keys**, against a random expectation of 4 × 10⁻⁵ and **five control
+lattices scoring 0**. Out-of-sample on other shells: 86.9% and 90%. **The circularity charge
+does not stick** — the lattice is generated from the binary, so every archive record is
+out-of-sample by construction.
+
+**What is refuted, and the design's "absolutely" is the word that fails:**
+
+- **Twelve letters cannot name fifteen occupied residues.** The table the function indexes
+  (`0x00A936B0`, stride 36) has **12 rows** — `u s w h b t p r c d y a`. Four observed
+  residues (6, 12, 14, 16) map to letters not in it and hold **64 of 242 records (26%)**;
+  the other lens puts **90 of 242 (37%)** off-lattice entirely. **Residue 12 alone is 61
+  records — 25% of the creature and the largest single class** — is independently off-lattice
+  (best delta to every other class scores **zero**), and is emote-shaped: 2.0–17.7 s.
+- **The client does not commit to one letter.** Each row carries 8 fallback indices and
+  `0x007F1B10` tries 2 action ids × 3 attempts × 8 preferred letters, then sweeps **every
+  remaining** letter — ArenaNet's own name is `attempt <= SEQ_FALLBACKS`
+  (`AvSeq.cpp:253`). Simulating the real order for row 0: of 64 action ids 39 resolve, only
+  20 on `u`. **The correct unwritable share is 85% (33/39), not the design's 72%.**
+- **The downstream inference does no work anyway.** The selector byte is *in* each record and
+  names the serving file exactly, **242/242**. The lattice moves an unconditional 62%
+  unwritable to a class-conditional 72–82% and **measures nothing about the cast**: neither
+  the "cast is ~82% 15018" figure (reproduced as 56%) nor "melee and locomotion are 86–92%
+  writable" (no large class lands in that band) reproduces.
+- **CONTESTED and unresolved:** the weapon byte's offset. One lens reads `[AvChar+0x1BA]`;
+  this repo's own `toolkit/authsrv/agents.py:1001` cites GWCA's `AgentLiving::weapon_type` at
+  **`+0x1B2`**. And **our server never sets it** — `GAME_SMSG_NPC_UPDATE_WEAPONS` (`0x006D`)
+  is sent only in the hero/henchman block (`authsrv.py:7532`), never for the hatcher. The
+  design's central probability rests on a runtime value nothing in our stack writes.
+- Also CONTESTED between the two readings: whether `G` comes from the 63-row table at
+  `0x00A92EC0`. One lens confirms that table (63 × 32 B, `G` at `+0x10`/`+0x14`); the other
+  counts **147 distinct `key//23` values on the hatcher's shell alone**, which 63 rows × 2
+  slots cannot supply. Both can hold if the table is *one* source of `G`, not the only one.
+
+**Keep the lattice. It is the arc's best new instrument and it is cheap to re-derive. Do not
+let it carry a claim about which file serves the cast.**
+
+### 11.3 Decimation — the numbers are right, the edit is not, and it dodges a wall it need not
+
+**[OBSERVED, reproduced by two agents within 0.5%]** Keeping 1 key in 4 takes 15018 from
+1,514,855 B to ~388 KB and 87333 from 1,354,523 B to ~342 KB. `blk2C` is 99.49% / 99.91% of
+each file, so a quarter of the keys really is a quarter of the file; both FA1s round-trip
+through `skelwrite` **byte-identically unmodified**, and `skelwrite.encode` derives its
+header words from channel length with no `blk2C` size field, so **a shorter FA1 is
+mechanically supported today.**
+
+- **It dodges harder than the design claimed, and therefore differently.** Both decimated
+  payloads fit **inside their own existing reservations** (1,029,632 B and 1,161,728 B), so
+  no free run and no relocation is needed. **`datmove.plan_move` REFUSES the move the design
+  describes** — *"already reserves 1029632 B and the payload is 388215 B, so it fits where it
+  is"* — and the executable path is `datwrite.Writer.replace`.
+- **And that is worth something concrete:** doing the two shrinks in place first frees
+  **1,459,712 B**, which unblocks **73940** — the one link run 5 could not place — taking
+  link coverage from 12 of 15 to **15 of 15**. The simulation is validated by reproducing
+  run 5's recorded single refusal exactly.
+- **1-in-4 is far more aggressive than required.** To fit stored in its own reservation
+  15018 needs only keep-2-in-3 and 87333 keep-3-in-4; keep-1-in-2 is comfortable on both.
+- **But as an EDIT it is ruinous for this experiment.** Rotation reconstruction error at
+  1-in-4 is **p99 46.6°, max 169.3°** on 15018 — the same order as the 180° flip that is
+  supposed to *be* the readout. **Decimation would change the picture by itself**, in an
+  experiment whose entire question is "did the picture change".
+- **The design's safety check is aimed at the wrong thing.** `MdlAnim:367` indexes the key-
+  *time* table through the record's `lo`, which decimating `blk2C` channel keys never
+  touches — under this edit it is **a check that cannot fail**. `keyCount >= 2` is
+  crash-avoidance, not correctness, and a naive `times[::4]` does leave <2 keys on 6 of
+  15018's 106 channels.
+- **CONTESTED between the lenses, and left open:** per-sequence-window key survival. One
+  measures 200 of 237 records in 15018 (84%) losing a channel entirely out of its window and
+  calls it the class that froze runs 2 and 3; the other measures that **retail already ships
+  42.3% of (rotation channel × window) pairs with <2 keys and 31% with zero**, so a sparse
+  window is normal, and scores decimation as content loss (zero-key pairs 4,830 → 7,079)
+  rather than a crash. Not resolved here.
+
+### 11.4 The positive control survives, and it was audited rather than taken on trust
+
+Nodes 51–64 **are** the head cluster. The hierarchy was rebuilt from `blk2C`'s parent field
+(reading the self-link as "continue from the previous node", the only interpretation yielding
+a connected tree): spine 0→25, two symmetric limb clusters each with five 3-bone digits at
+x = ∓108, and a terminal chain 48→49→50 whose subtree is **exactly {50, 51..64}** — two
+mirrored 3-bone horns, a 4-bone jaw chain descending in −y, and four stubs. Bases ×3 takes
+node 62 from z −805 to z −1343 against a whole-creature extent of 805. **Unmissable in a
+first still, orthogonal to a limb-flip readout, and independent of the picker, the key law
+and the file selection.**
+
+### 11.5 What to ship
+
+**The stripped run, plus the two things the skeptics added.** Flip every rotation key by 180°
+in the writable links — **including 109464, which serves the universal walk in all six weapon
+classes** — keep the head-cluster ×3 positive control in the same archive, and **provoke the
+walk rather than the cast**. No decimation, no large stored rows, no sequence-record edits,
+no key-table edits: rules 1, 3, 4 and 7 of §9.3g are untouched rather than merely satisfied,
+and the flip is length-preserving so nothing relocates.
+
+**One honest cost of stripping, measured:** without the two in-place shrinks, 73940 has no
+run to land in and coverage is **12 of 15 links**, exactly as run 5 recorded. That does not
+matter for this readout, because the walk is served by 109464. **Decimation stays on the
+shelf as a proven capability for the day something needs 15 of 15** — §11.3's numbers are
+sound and its in-place form is safer than the relocation the design proposed.
 
 ---
 

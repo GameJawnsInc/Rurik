@@ -94,13 +94,29 @@ Full detail in §5. The short form:
 
 ## 5. What to do next, cheapest first
 
-**A. Show a linked file's CONTENT changing the screen.** The one thing five client runs
-never demonstrated. Bases are the wrong lever — scale the **channel values** (rotations,
-translations) of a writable link instead, or zero them, and watch an animation that link
-actually serves. Note the trap that cost this session: **the hatcher only ever plays its
-casting animation** in the harness's `--enemy` setup, so pick a link that serves *that*, or
-provoke other animations. 13 of 15 links are writable; the two that are not (15018, 87333)
-hold 149 of 242 records.
+**A. Show a linked file's CONTENT changing the screen — DESIGNED AND DE-RISKED 2026-08-18,
+§11. It is ready to stage; it has not been staged or launched.** The trap named here (the
+hatcher only plays its cast in the `--enemy` setup) is **solved, and not by finding the cast
+file**: the creature's most universal animation is **base key 3,259,067,510, 1.067 s, present
+in 26–32 of 32 corpus shells, and all six of its weapon-class variants are served by
+selector 10 = file 109464 — 27,948 B stored, WRITABLE, already relocated in run 5.** That is
+locomotion, and the harness re-triggers it on demand: the enemy re-chases whenever the player
+moves >120 u (`ENEMY_DEST_RESEND`). **Provoke the WALK, not the cast.**
+
+Ship the stripped version: compose a **180° quaternion flip onto every rotation key** of the
+writable links (length-preserving, so nothing relocates and no record, key table or window
+changes — §9.3g's rules 1/3/4/7 are untouched rather than satisfied), plus the **positive
+control in the same archive** — the shell's head cluster, **nodes 51–64, bases ×3**, audited
+as genuinely the head (subtree of node 50: mirrored horns, a jaw chain) and visible in the
+first still before anything animates. Decision table: giant head + mangled limbs = answered;
+giant head + normal limbs = the first real negative; **normal head = pipeline broken, abort,
+and nothing else in the run means anything.**
+
+**Do NOT decimate keyframes for this run** even though it works — §11.3. It fits in place,
+it needs no free run, and it would unblock 73940 to reach 15-of-15 links; but its rotation
+error is **p99 46.6°, max 169.3°**, the same order as the flip that is supposed to *be* the
+readout. Stripping costs coverage of 73940 only (12 of 15 links), which does not matter
+because the walk is 109464.
 
 **B. ~~Decide the encoder on its real merits.~~ A6 RAN, 2026-08-18 — see §10. It did NOT
 kill the encoder, and the risk is now entirely the LZ77 matcher.** Re-costing retail's own
@@ -124,10 +140,15 @@ implies. That is the cheapest thing that can still kill A7.
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*
 was never a measured wire fact. Find who fills the per-agent key array at `+0x2C`/`+0x34`.
 
-**D. A5, still unrun and still the biggest lever on the wall.** Does the client read a
-1,514,855 B **stored** row placed past the old EOF? That population is currently empty —
-retail's largest ordinary stored content row is 19,292 B. One caged run on a copy, with a
-byte-identical payload so the answer cannot be confounded.
+**D. A5 — still unrun, and CHEAPER than this file said. Its premise expired (correction
+C-9).** "That population is currently empty" was true of *retail* and is no longer true of
+*us*: `datmove` writes compression 0 unconditionally, so **run 5 shipped eleven stored rows
+above 19,292 B — the largest 765,378 B — and the owner deployed and launched it with no
+assert.** So the honest bar is 11× the largest **proven-read** stored row and **0.5× the
+largest already deployed without a crash**, not "unprecedented". Retail's own 19,292 B
+ceiling still reproduces (0 of 38,621 rows above it), so the question is real — it is just
+much better supported than the ladder priced it. One caged run on a copy, byte-identical
+payload so the answer cannot be confounded.
 
 ---
 
