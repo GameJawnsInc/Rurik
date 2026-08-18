@@ -1395,6 +1395,47 @@ control. Run `--explorable`, because `0x00AA`'s roster-key step is gated on
 captures. The static reading predicts nothing moves; upstream predicts the flip; an
 `AgMsg.cpp(655/660)` assert is the third recordable outcome.
 
+> ### RUN 2026-08-18 — **THE PAIR FLIPS IT. The probe's own prediction is REFUTED, and so is this repo's static reading.** OBSERVED, harness `20260818T165525`, n=1
+>
+> A body created `'mons'` rendered a **RED** compass dot; ~1.5 s after receiving
+> `0x00AA` + `0x002F` (both carrying `'play'`) it rendered **GREEN at the same compass
+> position**, while a second `'mons'` body that was never messaged kept a
+> **pixel-identical** red dot (15 px, same centre, same frame). Measured by connected
+> components, not by eye: before, the mark is a 78 px blob mixing the yellow target ring,
+> red, and a touching neighbour; after, it resolves to a clean 14 px green mark at the
+> same centre (65,92), and the control's red at (71,97) is unchanged in both.
+>
+> **The instrument's own control is what makes this readable.** Across all 37 walk frames
+> the compass changed at exactly **two** frame pairs: when the `'mons'` body was created
+> (red appears, matching the create timestamp `t=10.43`) and immediately after its pair
+> (`t=37.46`/`38.46`). Every other pair, including three ALT-key holds and the entire
+> 60 s hold, changed **zero** compass pixels. The bodies' own regions change constantly
+> (idle animation, 18–8089 px per pair), which is why the body surface is not the readout.
+>
+> So **`+0x1B5` being write-once at construction does not mean displayed allegiance is
+> fixed** — `authsrv.py:2818-2823`'s "no post-construction setter to reach, so allegiance
+> is decided when the agent is CREATED and no later message can correct it" is refuted as
+> a statement about what the player SEES. The rendered path reads the teamToken
+> (`ChCliBase.cpp:326`), and something in this pair updates it. `studies/enemy/PLAN.md`'s
+> "sending it changed nothing" stands as written — it watched **attack initiation**, not
+> the compass, which is a different surface from the one that moved here.
+>
+> **What this run CANNOT say, stated before anyone quotes it:** the two messages went out
+> 1.0 s apart against a 2 s frame cadence, so **no frame separates them** and the flip is
+> attributable to the pair, not to either message. That attribution *is* the CONTESTED
+> question, so the row does **not** close here. `allegiance_split` runs the four cells
+> (`0x00AA` alone / `0x002F` alone / both / neither) 10 s apart. Also honest: **nameplates
+> were never captured** — the `--walk` plan put `shot:` after `alt:`, so ALT is released
+> before the shutter and no frame in the run shows a nameplate; that surface is untested,
+> and the plan ordering is a harness trap worth fixing. And the target-ring vanished in
+> the same frame as the flip, consistent with the client dropping a target that stopped
+> being hostile, but the two were not independent in this rig.
+>
+> Banked in passing, and it closes an UNVERIFIED note: the wire bytes are
+> `aa00 05000000 79616c70 02000020` — the allegiance dword **is** transmitted
+> byte-reversed relative to its ASCII spelling (`'play'` → `79 61 6c 70`), which a recon
+> pass had derived arithmetically and flagged as needing a capture to confirm. **OBSERVED.**
+
 **Open:** what `+0xE8` on the AgMsg sync/async record is read for (no consumer traced);
 whether `0x002F` ever fires with a non-`'play'` value — no enemy-side token has ever been
 seen in this field.

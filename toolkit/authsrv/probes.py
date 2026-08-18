@@ -483,6 +483,111 @@ def _armor_slots_steps(agent_id):
     ]
 
 
+def _allegiance_split_steps(agent_id, origin):
+    """WHICH message flips allegiance -- 0x00AA, 0x002F, or only the pair?
+
+    THE PRIOR RUN (harness 20260818T165525, `allegiance_pair`) MEASURED A FLIP
+    and refuted its own stated prediction: a body created 'mons' rendered a RED
+    compass dot, and ~1.5 s after receiving 0x00AA + 0x002F it rendered GREEN at
+    the same compass position, while an untouched 'mons' control kept a
+    pixel-identical red dot 6 px away. The compass changed at exactly two
+    moments in that whole run -- the create, and the pair -- and at no other
+    frame pair in 37. So SOMETHING in that pair updates displayed allegiance
+    post-construction, which the static reading (+0x1B5 write-once, two
+    constructor writers) says is impossible for the RENDERED surface.
+
+    WHAT THAT RUN COULD NOT SAY, and it is exactly the CONTESTED question:
+    the two messages went out 1.0 s apart against a 2 s frame cadence, so no
+    frame separates them. `studies/enemy/PLAN.md` tested 0x002F ALONE and saw
+    nothing; `studies/newopcodes` argues the pass therefore tested half a
+    mechanism. This probe tests all four cells at once, one body each:
+
+        agent 10  EAST   0x00AA alone
+        agent 11  WEST   0x002F alone      <- the old experiment, re-run clean
+        agent 12  NORTH  both, in retail's order   <- positive control
+        agent 13  SOUTH  nothing at all             <- negative control
+
+    Every body is created 'mons' (renders red), so every arm has the same
+    starting state and the readout is one bit per body: did its dot go green.
+    Arms are 10 s apart -- five frames at the 2 s cadence -- so attribution is
+    never a straddled frame again, which is the one defect of the prior run.
+    Bodies sit at +/-400 rather than +/-300 to spread the compass marks: the
+    prior run's marks touched and merged into one blob, and only connected
+    components pulled them apart.
+
+    CONFOUND THE PRIOR RUN HIT, named so this one is read correctly: the client
+    auto-targeted the first hostile it saw and drew a yellow ring around that
+    dot, which merged with a neighbour. The ring vanished when the flip
+    happened -- consistent with dropping a target that stopped being hostile,
+    but it means "ring gone" and "dot turned green" were not independent there.
+    Here the four bodies are far apart, so a ring can be attributed to one.
+
+    PREDICTIONS, one per outcome, all four distinguishable:
+      - only 12 flips  -> the PAIR is required; 0x00AA's record must exist
+        before 0x002F's write means anything. Retail's order is the mechanism.
+      - 11 flips       -> 0x002F alone suffices, and enemy/PLAN.md's null was
+        an artifact of what it watched (it watched attack initiation, not the
+        compass) rather than of sending half a mechanism.
+      - 10 flips       -> 0x00AA carries it and 0x002F is bookkeeping, which
+        would make upstream's AGENT_UPDATE_ALLEGIANCE name land on the wrong
+        opcode of the two.
+      - 13 flips       -> the readout is not measuring what we think; discard
+        the run and the prior one with it.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    model = CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION
+    play, mons = 0x706C6179, 0x6D6F6E73
+    spots = {10: (ox + 400, oy), 11: (ox - 400, oy),
+             12: (ox, oy + 400), 13: (ox, oy - 400)}
+    labels = {10: "EAST  -- 0x00AA ALONE", 11: "WEST  -- 0x002F ALONE",
+              12: "NORTH -- BOTH (positive control)",
+              13: "SOUTH -- NOTHING (negative control)"}
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+    ]
+    for aid in (10, 11, 12, 13):
+        x, y = spots[aid]
+        steps.append(Step(
+            2.0, 0x0020,
+            create_agent(aid, model, AGENT_KIND_NPC, x, y, plane,
+                         allegiance=mons),
+            f"agent {aid} {labels[aid]}, created 'mons'",
+            "a RED dot on the compass at this bearing. All four must be red "
+            "before any arm runs -- that is this run's baseline, and an arm "
+            "whose body is not red first measures nothing."))
+    steps += [
+        Step(10.0, 0x00AA, [10, play, model],
+             "ARM A: 0x00AA ALONE at agent 10 (EAST)",
+             "does EAST go green with no 0x002F ever sent? Five frames follow "
+             "before anything else moves."),
+        Step(10.0, 0x002F, [11, play],
+             "ARM B: 0x002F ALONE at agent 11 (WEST) -- enemy/PLAN.md's "
+             "experiment, re-run against the compass",
+             "does WEST go green with no 0x00AA ever sent? This is the cell "
+             "the old null result actually tested."),
+        Step(10.0, 0x00AA, [12, play, model],
+             "ARM C part 1: 0x00AA at agent 12 (NORTH)",
+             "nothing predicted yet -- ARM A's frames already say what 0x00AA "
+             "alone does."),
+        Step(1.0, 0x002F, [12, play],
+             "ARM C part 2: 0x002F at agent 12 -- the pair, retail's order",
+             "the prior run's flip should reproduce HERE. If NORTH goes green "
+             "and neither EAST nor WEST did, the pair is the mechanism and "
+             "each message alone is insufficient."),
+        Step(10.0, 0x0000, [],
+             "END: 10 s of quiet frames -- SOUTH (agent 13) must still be red",
+             "the negative control's last word. A green SOUTH invalidates the "
+             "whole run.", sends=False),
+    ]
+    return steps
+
+
 # Item ids for the accum-drain probe, clear of the armor probe's 2/3 and the
 # hammer. The declarations create them; the ids only need to be unclaimed.
 _DRAIN_ITEM_A = 40
@@ -5503,6 +5608,34 @@ PROBES = {
              "mons (control). Frames bracket each send via the gamesrv log's "
              "timestamps; compass dots are the fixed-position readout, "
              "nameplates the confirming one (hold ALT via --walk 'alt:').",
+    ),
+    "allegiance_split": lambda a, o: Probe(
+        question="WHICH message flips a body's displayed allegiance -- "
+                 "0x00AA alone, 0x002F alone, or only the pair? The prior "
+                 "run measured the flip but sent both 1 s apart against a "
+                 "2 s frame cadence, so no frame separates them.",
+        predicts="Leading expectation: only agent 12 (BOTH) flips, because "
+                 "0x00AA creates the per-agent record 0x002F then writes "
+                 "into, and a write with no record is the no-op "
+                 "studies/enemy/PLAN.md measured. If agent 11 (0x002F "
+                 "ALONE) flips, that null was about what it WATCHED -- "
+                 "attack initiation, not the compass -- rather than about a "
+                 "half-sent mechanism. If agent 10 (0x00AA ALONE) flips, "
+                 "upstream's AGENT_UPDATE_ALLEGIANCE names the wrong opcode "
+                 "of the two. Agent 13 must stay red in every frame; a green "
+                 "13 discards this run AND the prior one.",
+        steps=_allegiance_split_steps(a, o),
+        note="The attribution half of allegiance_pair (harness "
+             "20260818T165525), which measured a red->green flip on a 'mons' "
+             "body given the pair while an untouched 'mons' control stayed "
+             "pixel-identically red -- refuting this repo's static reading "
+             "(+0x1B5 write-once) for the RENDERED surface. Run "
+             "--explorable: 0x00AA's roster-key step is MISSION_MAP_GAME-"
+             "gated, it was live in the run that flipped, and it has never "
+             "fired in any retail capture (both sightings are outposts), so "
+             "an outpost re-run is a different experiment. Arms are 10 s "
+             "apart and bodies are +/-400 so marks neither straddle a frame "
+             "nor merge into one blob -- both defects of the prior run.",
     ),
     "accum_drains": lambda a, o: Probe(
         question="Which UI surface does each accum-table drain event drive "
