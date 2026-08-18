@@ -691,11 +691,61 @@ predicted to be.
 **Two honest gaps, neither papered over.** (1) **`0x00E1` was never observed**: the client
 left the OS foreground for ~23 s and `shot_if_foreground` correctly declined to photograph
 another window, so ten frames spanning that drain do not exist. The one drain carrying an
-upstream name worth testing is the one with no coverage. (2) The single non-zero frame in
-the run — 7,172 changed pixels at the `0x00D4` drain — is a **skill tooltip** ("Battle
-Rage…") raised by the mouse resting over the skill bar, plus the chat input taking focus.
-It looked like a hit at the aggregate level and is an artifact; recorded because the
-next reader will otherwise re-derive it from the same numbers.
+upstream name worth testing is the one with no coverage. **CLOSED below.** (2) The single
+non-zero frame in the run — 7,172 changed pixels at the `0x00D4` drain — is a **skill
+tooltip** ("Battle Rage…") raised by the mouse resting over the skill bar, plus the chat
+input taking focus. It looked like a hit at the aggregate level and is an artifact;
+recorded because the next reader will otherwise re-derive it from the same numbers.
+
+> ### `0x00E1`'s gap is CLOSED, 2026-08-18 — three drains, full coverage, nothing renders. OBSERVED, and read the scope line.
+>
+> Probe `accum_drain_e1` (three drains ~11 s apart, both columns restaged before each,
+> independent because every drain zeroes both counts). Run **`20260818T180039`** is the
+> record: **29 frames, max inter-frame gap 2.3 s, every drain bracketed within 3 s on both
+> sides.** An earlier identical run (`20260818T175506`) agrees exactly but is **kept only
+> as corroboration — the operator clicked in the client during it**, and a session with
+> unlogged human input is not the one to hang a null on.
+>
+> **Result: no observable change on any photographed surface, at any of the three drains.**
+> Verified three independent ways, because the first way had a hole (below): the masked
+> scorer reads **exactly 0** changed pixels outside the player's body from settling to end
+> of run; **direct visual inspection** of pre-drain vs drain+4 s frames shows identical
+> screens but for the player's arm; and inside the region the scorer masks, the largest
+> connected changed-blobs at drains (929 / 517 / 918 px, all ~40×40, limb-shaped) are
+> **indistinguishable from no-drain control pairs** (871 / 511 px) and nothing like the wide
+> coherent rectangle a banner or panel would draw.
+>
+> **THE SCOPE, and it is the whole finding.** This says *a bare drain renders nothing with
+> no UI window open*. It does **not** say `0x00E1` does nothing: the worker posts frame-bus
+> event `0x100000BA`, and if nothing subscribes in this client state then zero pixels is a
+> statement about the **subscriber**, not the opcode. The only observed reader of this
+> buffer, the `0x00C5` flow, rides a window context this run never opened — pre-registered
+> in the probe before the run, and unchanged by it. The next experiment opens a window
+> first; it is not another bare drain.
+>
+> **The wire side was independently verified** rather than assumed: decoding the captured
+> plaintext with this repo's own `toolkit/schema/codec.py` gives `0x0084 = [[40, 41, 42]]`
+> and `0x00D8 = [[1, 1, 1]]`, each consuming its buffer to the exact byte with a correct
+> `array32` count prefix, the three `0x0161` declarations preceding all three reps, ticks
+> continuous at ~50 ms across every drain, zero `Undecodable`, and the eventual
+> `ConnectionResetError` at t=73.0 s — thirty seconds after the last drain. So the client
+> really did hold three real item ids in list 0 and three in list 1 at each drain.
+>
+> **AND A DEFECT IN THE INSTRUMENT, which outlives this result.** The masked scorer used
+> here and above excludes the player's body rect `(850,300)-(1120,760)` to suppress idle
+> animation — and that rect is **where Guild Wars draws its centred area banners and
+> toasts.** Re-scoring the `0x00B9` positive control proves the cost: of 2,079 changed
+> pixels when that callout arrived, **1,104 (53%) fall inside the excluded rect**, and of
+> the 975 that survive, 880 come from a separate small box that merely happened to render
+> above it — had the banner been alone, the countable signal would have been **95 scattered
+> anti-aliased pixels**. A player-centred toast is exactly what an upstream name like
+> `SKILL_ADD_TO_WINDOWS_END` might produce, so this mask could have hidden the very thing
+> the run was looking for. Also measured: the `delta > 28` rule is a **hard step function**
+> — a synthetic uniform patch shifted by 28 scores **0** and by 29 scores **512** — so any
+> change subtler than that, such as the text-colour shift `0x00B9`'s field 2 produces, is
+> invisible to it. **Never publish a null from this scorer without also looking at the
+> masked region.** That is why this result carries a visual and a structural check on top
+> of the pixel count.
 
 **ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
 have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
