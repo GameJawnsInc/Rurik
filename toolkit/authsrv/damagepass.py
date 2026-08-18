@@ -543,7 +543,13 @@ def main():
         for g in rep["groups"]:
             if g["n"] < 2:
                 continue
-            h = (f"H0={g['h_fit'][0]}" if g["h_fit"] else "H unfit")
+            if g["h_fit"]:
+                h0, pts = g["h_fit"]
+                # The band is the readable form of the weapon's damage range:
+                # p16 spreads over the rolled range, a crit pins to its top.
+                h = f"H0={h0} points {min(pts)}..{max(pts)}"
+            else:
+                h = "H unfit"
             ar = f" AR={g['ar']}" if g["ar"] is not None else ""
             rk = f" RANK={g['rank']}" if g["rank"] is not None else ""
             st = f" step={g['step']}" if g["step"] is not None else ""
