@@ -42,9 +42,9 @@ import checks  # noqa: E402
 import damagepass  # noqa: E402
 import vaultpath  # noqa: E402
 
-# Floor set from a real green run (44 checks, 2026-08-18); every section
+# Floor set from a real green run (50 checks, 2026-08-18); every section
 # runs unconditionally, so the mandatory core is the whole file.
-LEDGER = checks.Ledger("damagepass", floor=44)
+LEDGER = checks.Ledger("damagepass", floor=50)
 check = checks.adopt(LEDGER)
 
 f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
@@ -263,6 +263,59 @@ check(len(nonzero) >= 1,
       "skill-polluted arena p17 groups show nonzero variance -- §3.1's "
       "attack-skill confound, measured; the Isle removes it by design",
       f"{len(nonzero)}/{len(big)} groups nonzero")
+
+# ---------------------------------------------------------------------------
+print("== 7. the timebase join: tape-local vs capture-global ==")
+
+# THE BUG THIS PINS, found on the rung-7 capture: tape.load_tape returns times
+# measured from the connection's OWN first s2c segment, while plan marks are on
+# the capture's global wire clock. Reading events without adding info["t0"]
+# shifts every label by the connection's opening offset -- silently, into a
+# NEIGHBOURING step, so blocks come back mislabelled rather than unlabelled.
+# On this capture the Master of Damage's 42-swing engage block landed under the
+# WALK step (which should hold zero swings), and the AR=100 block split across
+# two labels. Nothing errored; the numbers were simply wrong.
+rung7 = vaultpath.require_dir(
+    "captures", "live", "20260818T132739",
+    why="the timebase pin needs the rung-7 capture")
+CONN7 = "10.0.0.210:53202->44.217.41.117:80"
+info7, _ = damagepass.tape.load_tape(rung7, CONN7)
+t0_7 = info7.get("t0")
+check(t0_7 is not None and t0_7 > 1.0,
+      "the rung-7 bench connection opens well after the capture's t=0",
+      f"t0={t0_7}")
+
+ev7 = damagepass.join_targets(damagepass.read_events(rung7, CONN7))
+w7 = damagepass.mark_windows(rung7)
+check(len(w7) == 22, f"the sealed 22-step plan yields 22 mark windows "
+                     f"(got {len(w7)})")
+first_dmg = min(d["t"] for d in ev7["damage"])
+check(first_dmg > t0_7,
+      "damage times are on the capture clock, not the connection clock",
+      f"first damage t={first_dmg:.1f} vs connection t0={t0_7:.1f}")
+
+g7 = damagepass.scoped_groups(ev7, w7)
+lab7 = damagepass.label_groups(g7, w7)
+# The walk-to-the-bench step (3) and the walk-to-the-MoD step (8) are pure
+# travel: a correct join puts NO engagement block in either.
+walk_steps = {3, 8}
+walk_hits = sum(len(rows) for key, rows in g7.items() if key[3] in walk_steps)
+check(walk_hits == 0,
+      "no damage lands in the two pure-walking steps (the shifted join put "
+      "42 swings there)", f"{walk_hits} events")
+# And the MoD block (step 9) must hold the Master of Damage's own body.
+mod = [key for key in g7
+       if key[3] == 9 and key[0] and key[0][1] == 144 and key[2] == 16]
+check(len(mod) == 1 and len(g7[mod[0]]) == 42,
+      "step 9 holds exactly the 42-swing Master of Damage block",
+      f"{[len(g7[k]) for k in mod]}")
+ar_labels = {lab["ar"] for key, lab in lab7.items() if lab["ar"] is not None}
+check(ar_labels == {60, 80, 100},
+      "the bench blocks carry exactly the three pre-registered armour labels",
+      f"{sorted(ar_labels)}")
+
+# ---------------------------------------------------------------------------
+print("== 8. corpus, continued ==")
 
 # The chat channel: the level-up template's cleartext args (B8's pin).
 lvl = damagepass.read_events(

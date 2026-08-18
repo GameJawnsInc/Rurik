@@ -122,6 +122,14 @@ def read_events(capture_dir, connection, codec=None):
     """
     codec = codec or Codec()
     info, events = tape.load_tape(capture_dir, connection)
+    # Tape timestamps are CONNECTION-LOCAL (t=0 at the first s2c segment);
+    # plan marks are on the CAPTURE's wire clock. info["t0"] is the bridge,
+    # and skipping it shifts every mark-window label by the connection's
+    # opening offset -- measured on the rung-7 capture as the Master of
+    # Damage's engage-block swings labelling to the WALK step, one ~60 s
+    # offset. Everything this module stores is capture-global time.
+    t_base = info.get("t0") or 0.0
+    events = [(round(t + t_base, 6), payload) for t, payload in events]
     msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
     consumed, total, err = receipt
     if err is not None or consumed != total:

@@ -1995,9 +1995,17 @@ Every one of these, in the order they were written:
   a guess. The plan STEP joins the scoping key whenever mark windows exist — the
   rank-sweep extension re-engages ONE Suit at five ranks, and without the block
   dimension those blocks pool into a mean about nothing; `RANK=`-tagged blocks feed
-  the rank curve and are excluded from the divisor fit by construction. Needs
-  `vault/captures/live/`; without it the corpus sections cannot run and the floor
-  of 44 takes it red),
+  the rank curve and are excluded from the divisor fit by construction. **§7 pins the
+  timebase join, and it pins a real silent bug**: `tape.load_tape` returns
+  CONNECTION-LOCAL times (t=0 at that connection's first s2c segment) while plan marks
+  are on the capture's GLOBAL wire clock, so reading events without adding `info["t0"]`
+  shifts every label into a NEIGHBOURING step — mislabelled, not unlabelled, and nothing
+  errors. On the rung-7 capture the 67.9 s offset put the Master of Damage's 42-swing
+  block under the *walk* step and split the AR=100 block across two labels. The pins are
+  refutable by construction: the two pure-walking steps must hold ZERO damage events,
+  step 9 must hold exactly the 42-swing slot-144 block, and the bench must carry exactly
+  the three pre-registered armour labels. Needs `vault/captures/live/`; without it the
+  corpus sections cannot run and the floor of 50 takes it red),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
