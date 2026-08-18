@@ -34,7 +34,8 @@
 #define RET_LEN   5u                   /* the call instruction it replaced */
 #define NCAP      512u                 /* cells to capture */
 #define WIN_LO    0x40u                /* bytes below ebp */
-#define WIN_LEN   0x50u                /* total window */
+#define PRNG_OFF  0xD4u                /* [ebp-0x18] is chunk+0x1d0; +0xD4 = chunk+0x2A4 */
+#define WIN_LEN   0x60u   /* ebp-0x40 .. ebp+0x20: adds arg3 sel, arg4 var */
 #define OUTDIR    "C:\\gd\\Rurik\\vault\\research\\terrain"
 
 static DWORD g_site, g_callee;
@@ -42,6 +43,7 @@ static BYTE  g_orig;
 static volatile LONG  g_n = 0;
 static volatile LONG  g_done = 0;
 static DWORD g_ebp[NCAP];
+static DWORD g_rng[NCAP][2];
 static BYTE  g_win[NCAP][WIN_LEN];
 
 static int poke(DWORD addr, BYTE val, BYTE *saved)
@@ -67,6 +69,11 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
     slot = InterlockedIncrement(&g_n) - 1;
     if (slot < (LONG)NCAP) {
         g_ebp[slot] = c->Ebp;
+        {   /* the PRNG pair for THIS cell, chased from the frame */
+            DWORD sub = *(DWORD *)(c->Ebp - 0x18);
+            g_rng[slot][0] = *(DWORD *)(sub + PRNG_OFF);
+            g_rng[slot][1] = *(DWORD *)(sub + PRNG_OFF + 4);
+        }
         memcpy(g_win[slot], (const void *)(c->Ebp - WIN_LO), WIN_LEN);
         if (slot == NCAP - 1) InterlockedExchange(&g_done, 1);
     }
@@ -104,6 +111,7 @@ static DWORD WINAPI worker(LPVOID unused)
         fwrite(&n, 4, 1, f); fwrite(&lo, 4, 1, f); fwrite(&len, 4, 1, f);
         fwrite(&base, 4, 1, f);
         fwrite(g_ebp, 4, n, f);
+        fwrite(g_rng, 8, n, f);
         fwrite(g_win, WIN_LEN, n, f);
         fclose(f);
     }
