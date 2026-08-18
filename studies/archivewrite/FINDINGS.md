@@ -964,6 +964,56 @@ plays. **If it looks entirely normal, our records are never being selected**, an
 per-file reading of the selector needs re-examining. That is a real result, and it is
 the one thing run 1 could not deliver.
 
+### 9.3e RUN 2 RAN — and it is a SUCCESS that reads like a failure
+
+**Owner's report: "no deformation. half the animations are just him standing still."**
+
+**HALF IS THE COIN FLIP.** Our record was selected roughly 50% of the time, exactly as
+designed. **The additive authoring path reaches the client's animation picker**: the client
+chose a sequence record we wrote, resolved its selector to a file we created, and played
+from it. That is the thing runs 1 and 2 existed to establish, and it is established.
+
+What was wrong is the playback WINDOW, and the cause is MEASURED rather than guessed:
+
+- A record's `start`/`end` is a window on the timeline of **the file its selector names**.
+  Run 2 copied the **shell's** windows (0 .. 22,883,332) onto records pointing at the
+  donor, whose own motion lives in **0 .. 5,600,000**.
+- **188 of the 216 windows we wrote sample a region where the donor has no keyframes.**
+  The client samples empty space, so nothing moves.
+- And the x3 bases never appeared because **a base is ADDED to a SAMPLED translation**
+  (`studies/anim` 2.2). No sample, nothing to add it to — the creature stands in its rest
+  pose, which is precisely what was reported. The two halves of the report are one cause.
+
+**Retail's own rule, measured and unambiguous:** the shell's six selector-14 records carry
+the donor's own windows, **6 of 6 exact**. A record pointing at link *k* must carry a window
+valid on link *k*'s timeline. A1 saw this ("the shell's selector-k group is the same
+(key,start,end) records as link k's own selector-0 group") and the run-2 design ignored it.
+That is the error, and it is mine.
+
+### 9.3f RUN 3 IS STAGED — real keyframes under every window
+
+`vault/research/archivewrite/a4stage3.py` →
+`vault/exports/archivewrite/a4run3/Gw.a4run3.dat`. **Not deployed, not launched.**
+
+The fix keeps run 2's 96% coverage instead of narrowing to the donor's seven windows
+(2.7%): **spread the donor's keyframes across the shell's whole window range.** Its 485
+channel samples spanned 0 .. 5,600,000; scaled x5 they reach **28,000,000**, past the
+shell's 22,883,332. Now every one of the 216 records samples something, and a sample is
+all the scaled base needs in order to show.
+
+```
+channel times x5: 485 samples respread; 85 of 86 node bases scaled x3
+links 16 (16th = 389634), sequences 458, 216 at selector 16, sorted
+preflight 10 of 10 | generations 6 of 6 | crc sweep 177,320 payloads, 0 bad
+size 4,198,489,600 B unchanged; 15018 and 222949 byte-identical to retail
+```
+
+Its own file id (389634), built from retail, so runs 1-3 cannot contaminate each other.
+
+**Prediction:** the hatcher is visibly deformed on roughly half its animation plays. If it
+still stands still, the window reading is wrong in some further way and the next move is to
+narrow to the donor's own seven windows — correct by construction, at 2.7% coverage.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
