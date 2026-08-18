@@ -850,6 +850,8 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | Two years with nothing playable | A2 and R1.5 both target a visible result inside 90 days | — |
 
 
+
+
 ### 6.2 Live capture, and the two client configurations
 
 §7 Q4 authorizes automation against the live service. That breaks an assumption every
@@ -1078,6 +1080,7 @@ keep honest.
 | `toolkit/mapdata/gwdat.py` | GuildWarsMapBrowser `SourceFiles/xentax.cpp` | custom licence — permissive, but **requires a repo link and visible credit**; it is *not* MIT | ✅ re-derived 2026-08-06, attributed in `THIRD-PARTY-NOTICES.md`, and the six-table correspondence is **checked** by `test_gwdat.py` against the vaulted mirror |
 | `toolkit/mapdata/pathmap.py` | GuildWarsMapBrowser ImHex FFNA pattern | same | ✅ attributed 2026-08-06, same notice |
 | `schema/messages.json` | OpenTyria `code/msgdefs.c` | Unlicense — public domain, no obligation | ✅ credited anyway; `overrides.json` keeps our corrections separable |
+| **opcode NAMES in `studies/newopcodes/`** | `gwdevhub/GWToolboxpp` → `Dependencies/GWCA` — its `GAME_SMSG` name table, read as one of two witnesses beside OpenTyria | MIT — attribution required if we ship any of it | ⚠️ **promoted out of `NO_DERIVATION` 2026-08-17.** That row said "nothing taken", and on 2026-08-17 the decode pass took something: 14 of 22 opcode NAMES rest partly on this table. Nothing in `toolkit/` uses it yet — it is cited in a study, always labelled UPSTREAM and always beside ldufr. **The moment a name lands in `schema/overrides.json`, this needs a `THIRD-PARTY-NOTICES.md` entry**; MIT asks for that and the register is where we notice. See the mirror-trap note below: cite the MAINTAINED path, never the two archived copies. |
 | `content/items.toml` `starter_hammer` | OpenTyria `GmDefaultArmors.c` | Unlicense | ✅ row records source `opentyria`, and records that no capture corroborates it |
 | `toolkit/mapdata/archive.py` | OpenTyria — the archive magic's byte order | Unlicense | ✅ cited in the module |
 | `content/npcs.toml` `hatcher`, `content/maps.toml` ids | gw-preservation — **all rights reserved** | nothing | ✅ verified-only: each row records what it was checked against in our own artifacts, and `toolkit/content.py` **refuses to load** one that does not |
@@ -1093,6 +1096,20 @@ keep honest.
 | `toolkit/clientscan/textrec.py` — the **string-id split** `file = id // 1024, rec = id % 1024` | Fournux/Tyria-Extractor (`doc/SKILL_EXTRACTION.md`, mirrored at `vault/mirrors/Fournux__Tyria-Extractor`) | **MIT** — permissive, attribution required | ✅ row added 2026-08-17, credited in `THIRD-PARTY-NOTICES.md`. **This is the one rule in the repo taken from an upstream and NOT re-derived** — the module's own docstring says so in those words. What makes it defensible is not a second reading but an ORACLE: `textrec.py --dat … 1 2 7 …` resolves ids to words, and the words are right. That is a check the artifact can refute, and it is stronger than agreement with the source it came from. Re-deriving the split from the client's own indexing code would retire the dependency; nobody has. |
 | `toolkit/clientscan/skilltable.py` — the **skill record layout** (0xA4 stride and its field offsets) | Fournux/Tyria-Extractor `doc/SKILL_EXTRACTION.md` | same | ✅ row added 2026-08-17, same notice. **Read and re-derived, not copied** — the module locates the table by a four-way conjunction (stride, count, id monotonicity, profession/equip ranges) that a false positive would have to satisfy all of, and `test_skilltable.py` scores 1,333 base rows against Tyria-Extractor's independent count *and* against the wiki's 1,329 player skills. Two unrelated methods, so the agreement is corroboration rather than one witness twice. |
 | **monster AI: aggro radius, leash, scatter, targeting, formation, patrol** — *no module takes these yet* | GWW (`wiki.guildwars.com`), the pages named in [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §4 with revision ids | GFDL 1.2 / CC BY-NC-SA 2.5 (dual) — **attribution required**, and the NC arm is satisfied by this project being local and personal (`CLAUDE.md`) | ✅ row added 2026-08-11 **before any module takes any of it**, which is the first time this table has been used the way it was designed rather than retrofitted. **The split that matters is values vs. algorithms.** The gwinch table (aggro bubble/earshot 1012, touch 144, casting 1248, longbow 1498, compass 5020 …) is a set of *values* and reaches the repo as `content/*.toml` rows carrying `source = "wiki"`, which `toolkit/content.py` already gates. **Scatter, leash, target priority and the melee-surround formation are *algorithms*** and are what this row exists for — none has landed, and none may land without citing it here. **Currency is the failure mode, not licence**: three of the four core pages carry `Category:Unofficial terms`, *Foe* has not been revised since 2021 and *Patrol* since 2017, the wiki **contradicts itself** on target priority (§4.3), and where a stale page and a fresh one disagree the stale one was wrong both times. So every borrowed row records its revision id, and a value our own artifacts can check is checked rather than adopted. |
+
+**A MIRROR TRAP THAT COST FIVE AGENTS AN ARGUMENT EACH, 2026-08-17.** The vault holds
+**three** GWCA copies and they do not agree. `GregLando113__GWCA` and `JaborGW__GWCA` are
+**archived**; `gwdevhub__GWToolboxpp/Dependencies/GWCA` is the **maintained** fork.
+Measured first-party over both full `GAME_SMSG` tables (217 names each): **31 names
+identical up to `0x003B`, 186 at maintained = archived + 1 from `0x003E` up, zero other
+deltas** — the maintainers inserted one opcode and everything above it moved. During the
+`studies/newopcodes` pass five agents independently "derived" a +1 shift for OUR numbers,
+each building a case for it, one across three anchor pairs. **There is no shift.** Read
+against the maintained fork or against OpenTyria, our opcodes sit at **delta 0**, which is
+exactly what `studies/msgtable/FINDINGS.md` measured on all four channels and said in
+terms. Cite the maintained path; if you cite an archived one above `0x003B`, say which and
+expect to be one out. The three mirrors are all still worth keeping — an archived copy is
+the only record of what the field believed at that time — but they are not interchangeable.
 
 **Three further Fournux citations owe NO row, and they are recorded here because an audit that finds 100+ mentions of one upstream should not have to re-decide each.** `toolkit/mapdata/gwdat.py` cites `DECOMPRESSION.md:26` as a SECOND WITNESS for the truncation-length reading we measured ourselves (its own row is GWMB's, and stands). `toolkit/clientpatch/repoint_skill.py` cites Tyria-Extractor as one *side* of a three-way CONTESTED icon-slot reading that we then settled by repointing one field and looking at the bar. `toolkit/mapdata/test_datwrite.py` read its fixture generator and took nothing — its docstring says so and says why ("it reads the entry fields differently than we do"), which is the discipline working rather than an omission. **Citing, verifying against, and disagreeing with an upstream are not derivation.**
 

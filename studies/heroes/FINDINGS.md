@@ -1370,6 +1370,39 @@ instance load since the beginning, whose field 1 the client's own descriptor typ
 `agent_id` and which we fill with the player's agent id. `0x01A4` writes the same slot from
 its own field 1 and we never send it.
 
+> **CORRECTED 2026-08-17 BY RETAIL'S OWN WIRE: field 1 is the PLAYER NUMBER, not the
+> agent id.** The paragraph above reads the client's descriptor — which types field 1
+> `agent_id` — and concludes we are right to fill it with the player's agent id. The
+> Factions captures separate the two for the first time, and they disagree with the type
+> name. Measured across all four game channels of
+> `vault/captures/live/20260817T183756` (OBSERVED):
+>
+> | channel | `0x0199` field 1 | local player's `0x0059` | `0x0022` controlled agent |
+> |---|---|---|---|
+> | 52294 | **1** | player_number 1, agent **27** | 27 |
+> | 58378 | **1** | player_number 1, agent **27** | 27 |
+> | 58389 | **1** | player_number 1, agent **395** | 395 |
+> | 60966 | **1** | player_number 1, agent **311** | 311 |
+>
+> Field 1 tracks the player NUMBER (constant 1) and never the agent id (27, 395, 311).
+> **A descriptor's field TYPE is what the client parses it as, not what the server puts
+> in it** — the same distinction §1.2 already drew when OpenTyria's field names turned out
+> to be decoration over a positional layout.
+>
+> Two consequences. **§21.2's split filter is explained**: the roster UI and the
+> `GmHeroCommander` scan compare `entry+0x4` against different "my id" values because
+> `ctx[0x44][0x2ac]` holds the player NUMBER, so a `0x01C2` carrying the player number
+> renders the row while one carrying the agent id satisfies neither. That is exactly the
+> mirror-image result §21.2 measured and could not explain. **And our server has never
+> been bitten**: we fill field 1 with `PLAYER_AGENT_ID`, which is 1, and our
+> `PLAYER_NUMBER` is also 1 — divergence D7's confound again, the two id spaces collapsed
+> by a solo instance. A multi-player instance would separate them and we would be wrong.
+>
+> Also OBSERVED here and worth its own line: **player_number is not a stable identity**.
+> The local player is player 1 from their own client's view, while agents 91 and 337 both
+> carry number 4, and 379/309/349 all carry 18 — the numbers are recycled slots, not
+> identities. Anything keyed on player_number across time needs to know that.
+
 ### 22.1 This explains §21's mirror exactly
 
 The two filters read the same `entry+4` and compare it against different things:
