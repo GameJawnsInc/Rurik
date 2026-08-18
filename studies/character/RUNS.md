@@ -71,6 +71,13 @@ directory the harness prints, then close the client.
   Attempt 1 (38797 client, map 449): client hung up right after `0x0199` —
   the 38797 run archive cannot satisfy a 449 load (the load burst never got
   past the map id; same family as the 146/148 condition, different row).
+  **← CORRECTED by `fab28bb` (recorded here 2026-08-18): the archive reading
+  was WRONG.** That commit measured the 38797 archive binding `0x345CC`
+  byte-identical to `dat_study`, so the NameError below explains attempt 1
+  too — "a server-side NameError and a bad map row present IDENTICALLY from
+  the client's side" is that commit's own sentence, earned at this session's
+  expense. One diagnosis, two attempts, and the archive was innocent
+  throughout.
   Attempt 2 (38833 client via `--exe
   vault/run/2026-08-13_64fae3b1369b/Gw.exe`, map 449): **the client loaded
   the map and took the entire burst through `INSTANCE_LOAD_FINISH`** — then
