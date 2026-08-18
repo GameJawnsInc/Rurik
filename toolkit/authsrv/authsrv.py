@@ -7098,10 +7098,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # 318, and see which is the minimum that draws"), and it
                         # is the smallest change that can answer it.
                         #
-                        # Position order is bag order, which is 2 lineages
-                        # against 1 -- and positions 3-6 are CONTESTED. They are
-                        # all zero here, so this send does not depend on that
-                        # dispute; the moment armour goes in it will.
+                        # Position order is MEASURED as of 2026-08-17, and the
+                        # "2 lineages against 1" this comment used to cite was
+                        # backing the WRONG one. Retail's own wire settles it:
+                        # seven 0x006F per-slot writes in the Shing Jea capture,
+                        # each preceded by the 0x015E declaring its item, give
+                        #   2 Body, 3 BOOTS, 4 LEGS, 5 GLOVES, 6 HEAD
+                        # -- GWLP-R's permuted reading, refuting the bag order
+                        # ldufr and GWCA share (they agree because they make the
+                        # same assumption: one witness counted twice).
+                        # studies/newopcodes/FINDINGS.md 0x006F.
+                        # Positions 1..8 are all zero here, so this send never
+                        # depended on the dispute; anything that DRESSES a body
+                        # must use the measured order above.
                         if EQUIP_WEAPON:
                             send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
                                  [PLAYER_AGENT_ID, WEAPON_ITEM_ID,
