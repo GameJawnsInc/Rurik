@@ -1394,6 +1394,56 @@ coverage — true while the selector was the identity, false since §7.14. They
 now assert the BASE LAYER's tile, still at full sha256 coverage over all
 212,992 faces. `test_blenderimport` is 118 green.
 
+### 7.17 Kamadan's stairs: present, correct, and ERASED by their own alpha (2026-08-17)
+
+Reported by the owner against the rebuilt scene: the stairs are missing, but
+Blender draws a selection outline where they should be. The outline was the
+clue — an outline means the OBJECT is there.
+
+**It was, entirely.** `prop_0005_m4`: 204 vertices, 112 polygons, five
+materials, dimensions 775 x 988 x 276 (stair-sized), not hidden in viewport or
+render. Across the scene, 516 props have geometry, none empty, none degenerate.
+Nothing was missing.
+
+**ALPHA IN THIS CORPUS IS NOT ALWAYS TRANSPARENCY**, which this arc already
+knew for terrain (§6.2, where it is a coverage mask) and had not carried over
+to props. Two of the five materials draw textures whose alpha is **below 16 on
+96–98% of pixels**:
+
+| texture | mean alpha | fraction < 16 |
+|---|---|---|
+| `tex_32EED.png` | 7.9 | **98.2%** |
+| `tex_32EF5.png` | 8.9 | **96.5%** |
+
+The importer wired every texture's alpha into the BSDF unconditionally, and
+Blender's default `HASHED` blend then erased those faces. The stairs were
+rendered *exactly as instructed*, into nothing.
+
+**The class is small and the corpus says so.** Over Kamadan's 598 prop
+textures: **350 fully opaque, 241 genuine cutouts or blends, 7 erasers (1.2%)**.
+So a blanket "ignore alpha" is wrong — it would flatten the 241, and the palm
+trees beside these stairs are cutouts that render correctly today.
+
+**Why not the material table's `blend` flag**, which is already decoded and
+would seem the principled answer: it separates *blended* from the rest, and
+foliage is alpha-**tested**, not blended. Using it would have made the palms
+opaque rectangles. It solves a different problem.
+
+**The rule, and it is a floor rather than a guess:** alpha that would erase
+substantially the whole surface cannot be the artist's transparency, and the
+client plainly draws these surfaces — the stairs are walkable in game.
+`modelexport._alpha_class` records `opaque`/`cutout`/`erases` per texture at
+export, where the pixels are already in hand; the importer skips the alpha
+wiring for `erases` only. Measured on Kamadan: 428 texture entries classified,
+38 slots across **2 distinct images**, and 54 of 272 scene materials now
+correctly opaque.
+
+**The owner's read was that stairs might be "a special type of prop since
+they're walkable".** They are not — walkability lives in the pathing chunk and
+nothing about this prop is special. The outline being visible while the mesh
+was not is what distinguishes "absent" from "invisible", and it is worth
+keeping as a diagnostic.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14

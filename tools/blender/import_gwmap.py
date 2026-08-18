@@ -1207,7 +1207,17 @@ def gwmodel_materials(meta, models_dir):
             tex.extension = "REPEAT"          # texcoords are not normalised
             if bsdf is not None:
                 links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-                if "Alpha" in bsdf.inputs:
+                # ALPHA IS NOT ALWAYS TRANSPARENCY HERE. Seven of Kamadan's
+                # 598 prop textures carry alpha below 16 on >90% of pixels;
+                # wired as transparency they ERASE the surface, which is what
+                # made the stairs invisible while their mesh, 204 vertices and
+                # five materials sat correctly in the scene. The exporter
+                # classifies this (`alpha`: opaque/cutout/erases) and we skip
+                # the wiring for the degenerate class only -- foliage cutouts
+                # still need it, so a blanket opaque would cost the palms.
+                # FINDINGS 7.17.
+                if ("Alpha" in bsdf.inputs
+                        and entry.get("alpha") != "erases"):
                     links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
         if image_name in blended:
             # Blender 4.2+ renamed these; older builds want 'BLEND'. Try in

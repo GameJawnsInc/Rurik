@@ -219,6 +219,34 @@ def resolve_outdir(outdir=None):
 
 # ------------------------------------------------------------- the manifest
 
+def _alpha_class(rgba):
+    """"opaque", "cutout" or "erases" -- what this texture's ALPHA is FOR.
+
+    A consumer that wires alpha into transparency needs this, because in this
+    corpus alpha is not always transparency. MEASURED over Kamadan's 598 prop
+    textures: 350 are fully opaque, 241 are genuine cutouts or blends, and
+    **7 are "erasers"** whose alpha is below 16 on more than 90% of pixels.
+    Rendered as transparency those seven ERASE the surfaces they clothe --
+    which is what made Kamadan's stairs invisible while the mesh, its 204
+    vertices and its five materials all sat correctly in the scene
+    (`studies/terrain/FINDINGS.md` §7.17).
+
+    The rule is a floor, not a guess: alpha that would erase substantially the
+    whole surface cannot be the artist's transparency, and the client plainly
+    draws those surfaces -- the stairs are walkable in game. It deliberately
+    does NOT try to separate cutout from blend; the material table's own
+    `blend` field does that, and this only rules out the degenerate case.
+    """
+    a = rgba[3::4]
+    if not a:
+        return "opaque"
+    n = len(a)
+    lo = sum(1 for v in a if v < 16)
+    if lo > 0.90 * n:
+        return "erases"
+    return "opaque" if sum(1 for v in a if v > 239) > 0.99 * n else "cutout"
+
+
 def texture_payloads(model, name, archive, table=None):
     """Decode a model file's textures to PNG. `(entries, payloads, census)`.
 
@@ -287,7 +315,8 @@ def texture_payloads(model, name, archive, table=None):
         fname = f"tex_{file_id:X}.png"
         payloads.append((fname, png.encode(rgba, width, height)))
         written[file_id] = fname
-        entry.update(image=fname, width=width, height=height)
+        entry.update(image=fname, width=width, height=height,
+                     alpha=_alpha_class(rgba))
         entries.append(entry)
     return entries, payloads, census
 
