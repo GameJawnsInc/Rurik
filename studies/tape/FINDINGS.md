@@ -59,6 +59,16 @@ That three different pre-Searing maps share one `map_file_id` is OBSERVED and
 **UNVERIFIED as to why**. Do not build on it; it may mean the field is a region rather
 than a map, or that pre-Searing Ascalon is one terrain file. It has not been checked.
 
+**SETTLED 2026-08-18 — it is one terrain file, and "region" is the wrong frame.**
+`0x0195` field 1 is the **archive file id**, one-to-many over maps: across 30 loads in the
+live corpus, 14 map ids resolve onto 7 files, and map -> file is single-valued in 14 of 14
+while file -> map is one-to-many for 3 of 7. 113021 carries maps 146/148/164, exactly as
+this section observed. The clincher came from a different pair: 165811 carries **both** the
+Great Temple of Balthazar (248) and the Isle of the Nameless (280), and inside that file
+their arrival points sit 2,205-2,734 units apart **on the same connected walkable mesh**
+(`pm.route` returns a path). Full field-by-field decode, with what is still not established:
+[studies/mapload/FINDINGS.md](../mapload/FINDINGS.md).
+
 ---
 
 ## 2. What run 2 establishes

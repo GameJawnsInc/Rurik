@@ -297,8 +297,8 @@ the content, and the area table names no map file.
 [map.280]
 name = "Isle of the Nameless"
 file_id = 0x287B3
-spawn_x = 1136.0
-spawn_y = -463.0
+spawn_x = -6036.0
+spawn_y = -2519.0
 plane = 0
 explorable = true
 
@@ -318,16 +318,27 @@ footprint rect and 352x320 is unique in the archive (vault/areatable/maprows.jso
 row 21641, exact=true) -- necessary, not sufficient, so the wire check below is \
 still owed."""
 note = """
-THE SPAWN IS OURS AND THE MAP-ID BINDING IS A RECONSTRUCTION UNTIL RUNG 6.
+RUNG 6 ANSWERED BOTH QUESTIONS, 2026-08-17/18. Both are now retail's, not ours.
 
-The spawn point is a mesh-centre probe -- where OUR server chooses to put a body,
-verified walkable, not where retail puts an arriving player. Rung 6's Isle capture
-supplies both missing facts at once: the retail arrival position (replace spawn_x/y
-if fidelity to retail matters), and GAME_SMSG 0x0195 field 1 on the instance load,
-whose pre-registered prediction is 165811 -- with the third branch (a shared id like
-the corpus's 8-of-8 113021) pre-registered too, per studies/isle/PLAN.md section 2.
-The size-join cannot separate 248 (Great Temple of Balthazar) from 280 from 784; if
-the wire refutes 165811, this row's file_id is the finding, not the fixture.
+file_id 165811 is CONFIRMED on the wire -- GAME_SMSG 0x0195 field 1, six loads of
+map 280 across two live captures (20260817T231139, 20260818T094648), every one
+165811. The pre-registered THIRD BRANCH also fired: the id is SHARED, exactly as
+the size-join warned it might be. 165811 carries map 248 (Great Temple of
+Balthazar) as well, and inside that one file the two arrival points sit 2,205-2,734
+units apart on the same connected walkable mesh. So the id is a TERRAIN FILE id and
+map -> file is many-to-one; it is single-valued in the direction this row needs
+(14 of 14 map ids in the corpus resolve to exactly one file) which is why this row
+is still well-formed. studies/mapload/FINDINGS.md is the field-by-field decode.
+
+spawn_x/y are RETAIL'S ARRIVAL POSITION as of 2026-08-18, replacing the mesh-centre
+probe (1136, -463) this row used to carry. 0x0195 field 2 read (-6036.0, -2519.0),
+BYTE-IDENTICAL on all four map-280 loads in 20260817T231139 and both in
+20260818T094648, and the client's own first position report agrees with field 2
+bit-for-bit in 23 of 27 loads corpus-wide. The replacement is what this note asked
+for in its previous form ("replace spawn_x/y if fidelity to retail matters"), and it
+passes the same walkability check the old value did: (-6036, -2519) lands in exactly
+1 trapezoid on plane 0 of file 165811, against 0 for the Pre-Searing control. The
+old value was verified walkable too -- it was never wrong, it was just OURS.
 
 Row 280 is the client's own area-table entry: name_id 2972 resolves to the map's
 name at run time (commit the id, resolve the string). type=2, the co-operative

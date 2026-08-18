@@ -85,12 +85,13 @@ its directory disagree, believe the directory and re-run `--assemble`.
    hold.** Seven of their ten siblings turned up in the east exactly as predicted. If a
    future pass does not produce these three, they belong to another map and the Isle roster
    is closed at 27 types, which is a result worth stating rather than a gap.
-4. **`0x0195` deserves its own write-up.** The measurement is done and sitting in the
-   workflow output, not in a study doc: field 1 is a **terrain-file id shared between maps**
-   (165811 covers both the Isle and Great Temple of Balthazar — this settles the open
-   question at `studies/tape/FINDINGS.md:53-58`), field 2 is the arrival position, field 3 a
-   plane, field 4 a **heading** (`v · 2π/255`, not a district), field 6 a server clock
-   offset. Six of seven fields, with a 22/22 falsifiable check against the pathing mesh.
+4. **`0x0195` is written up — [studies/mapload/FINDINGS.md](../mapload/FINDINGS.md)**, all
+   seven fields, and it took two fixtures with it: `studies/tape` §1.2's open question is
+   settled (field 1 is a **terrain-file id**, and 165811 carries both the Isle and the Great
+   Temple of Balthazar) and `content/maps.toml [map.280]` now carries **retail's arrival
+   position** instead of our mesh-centre probe. What is left open there is field 5's meaning
+   and a live conflict about whether `0x0020` field 7 is a unit vector or a world position —
+   the repo currently holds both readings.
 5. **Loopback residuals**, cheap, any harness window: the multi-word varint send, the `0x5F`
    overhead channel (never bare-sid — it crashes the client), skill 2077's render, and the
    energy drain-pool probe, which has never been run.

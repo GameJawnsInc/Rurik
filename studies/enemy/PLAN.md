@@ -1943,6 +1943,17 @@ this was a live candidate for shooting ourselves in the foot. **It is not:** our
 is zero, so the `je` is taken and the bit stays clear. Set-once-never-cleared is
 worth keeping in view for the day we do put something there.
 
+**CORRECTED 2026-08-18 — right conclusion, wrong opcode.** `0x0084EE83` is in
+**`0x0199`**'s handler, not `0x0195`'s. In 38797 `0x0195`'s handler runs
+`0x0084ED00..0x0084EDA2` and `0x0199`'s begins at `0x0084EE40`, and the descriptor
+table is unambiguous: VA `0x00BCB27C` idx 39 dispatches `0x0084ED00` for `0x0195`,
+VA `0x00BCB2AC` idx 43 dispatches `0x0084EE40` for `0x0199`. The `cmp` at
+`0x0084EE7D` reads `0x0199` field 6 at `msg+0x18`, not anything in `0x0195`. The
+safety verdict survives — that field is **0 in 30 of 30** live loads — but the
+paragraph above reasons about the wrong message, so the "day we do put something
+there" applies to `0x0199`. Evidence and both builds disassembled:
+[studies/mapload/FINDINGS.md](../mapload/FINDINGS.md) §7.
+
 **`0x007E1460`** is a three-line wrapper: look the agent up in the plain
 `0x00802140` array, return 0 if absent, else tail-jump to `0x005FCAE0`. Our agent
 IS in that array — §10.1 read its object through it — so this gate is passed.

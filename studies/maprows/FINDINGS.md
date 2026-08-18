@@ -113,9 +113,18 @@ and both are the network:
 
 | source | where the id sits |
 |---|---|
-| GAME_SMSG **`0x0195`**, handler `0x0084ED00` | `msg+0x04` — schema field 1, `dword` |
+| GAME_SMSG **`0x0195`**, handler `0x0084ED00` (38797; `0x0084EDC0` in 38833) | `msg+0x04` — schema field 1, `dword` |
 | GAME_SMSG **`0x01A4`**, handler `0x0084F170` | `msg+0x1C` — schema field 7 |
 | the download/bloat pipeline | `DnBloat.cpp` ← `FcArchive.cpp`, id arrives with the download request |
+
+**The whole of `0x0195` is now decoded** — all seven fields, 30 loads, both builds:
+[studies/mapload/FINDINGS.md](../mapload/FINDINGS.md). Two results bear directly on this
+document. Field 1 is **one-to-many over maps** (14 map ids resolve onto 7 files; 165811
+carries both the Great Temple of Balthazar and the Isle of the Nameless, 2,205–2,734 units
+apart on one connected mesh), so it names a **terrain file**, not a map — which is the
+missing half of §6's mapping. And in 38833 the handler sits at `0x0084EDC0` calling
+`0x853C60`, a clean **+0xC0 shift** from the addresses below, so those are build-38797
+addresses rather than wrong ones.
 
 The chain is `0x0084ED00` → `0x00853BA0` → UI message `0x10000098` →
 `0x00707BB0` → `0x00707650` → `0x00707330` → `0x00713630`, and it was walked in
