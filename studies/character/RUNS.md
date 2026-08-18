@@ -160,13 +160,49 @@ it** — module, line, expression. That names the unchecked tier-index
 consumer, which is the best possible output of step 5. The run directory's
 `crash-dialog.txt` captures it too; note which step was the last one printed.
 
-### Result (fill in)
+### Result — THREE RUNS 2026-08-18, agent-piloted; answered except one loose end
 
-- Date/build:
-- Terminal showed 5/5 steps (or last step printed before a crash):
-- Row present after step 2? Name shown (Rurik vs real title):
-- Progress target shown (1000 / 8400 / other):
-- At-rest points (6000 / 4200 / no row):
-- Nameplate after step 4:
-- Step 5: second row's visible numbers, or assert text verbatim:
-- Verdict:
+**Run 1 (harness `20260818T113252`): instant `Code=007` on the original
+step 1** — a clean client hangup the moment `0x00F3` landed, no assert. The
+step's own watch text had named this outcome as its own result.
+
+**Run 2 (harness `20260818T113658`): the one-variable ladder convicts the
+string, and the stress step names its consumer.** Verbatim retail bytes
+(`[0,0,0,0x0101]`) ACCEPTED; our ids/values with retail's string ACCEPTED;
+our 7-unit template literal ACCEPTED — so run 1's killer was the 8-unit
+literal sitting exactly at the `string16(8)` cap: **the field admits at most
+7 units on receive; at-cap is an instant hangup** (off-by-one / terminator
+semantics — measured for `0x00F3`; other string16 fields untested at cap,
+and every prior literal in this repo rode far below its cap). All later
+steps accepted too. Then the stress record — rank ids 9006/9009 referencing
+no `0x00F3` record — was **silent on receive and fatal on first render**:
+the Hero window's first open died on `Assertion: index < m_count`
+`Array.h(587)`, build 38797, full dump captured (`crash-dialog.txt` in the
+capture), stack rebasing into the AttribTitles render path and the
+`ctx+0x81C` accessor neighborhood `studies/newopcodes` measured. **Server
+rule: never ship a `0x00F6` referencing ranks you have not sent** — same
+class as the buffId constraint (`studies/reconstruction` §2.9.5). The
+stress step is retired from the probe (question closed; a guaranteed crash
+in a registered probe is a hazard).
+
+**Run 3 (harness `20260818T114312`): the render, OBSERVED.** Stress step
+removed, 7/7 steps sent and verified, client alive throughout. Frame
+`3-click.png`: the Titles tab shows our track — row label **"Ruri (1,000)"**,
+bar reading **6,000**, filled ≈ 6000/8400.
+- The row's NAME is the **current rank's `0x00F3` string** — ours, not a
+  `s_titleClientData` entry. Prediction refuted, and the better outcome:
+  **title rows are fully wire-authorable, name included**; the compiled
+  48-row table constrains the title *id space*, not the display text.
+- The parenthesized **1,000** is rank 1's field-3 value as we sent it;
+  whether retail renders that field as a threshold or a rank number there
+  is OPEN (retail's `[364, 0, 4]` reads either way).
+- The bar's denominator is the **next-rank minimum** (field 8) — 6000/8400
+  visibly, confirming the field map's reading.
+- `0x00F5`'s update is what the bar shows (4,200 was never rendered; 6,000
+  was) — the patch works, gated on the prior `0x00F6` as measured.
+- **Loose end:** `0x00F4`'s under-nameplate display is still unread — the
+  scripted self-click at `(0.50, 0.62)` became a ground move-order (green
+  marker, no target frame). Needs a real self-target (owner click, or a
+  future click calibrated on the model's pixel), in a staging area, with a
+  rank record bound. Weak-evidence question anyway: our player number and
+  agent id are both 1.

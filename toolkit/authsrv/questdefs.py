@@ -91,6 +91,16 @@ def coded_literal(text, framing="template", limit=FIELD_UNITS):
     field. A silently clipped description would render as a half sentence and
     read as a client-side failure, which is the shape of bug this project keeps
     paying for -- the server would look correct and the screen would not.
+
+    MEASURED 2026-08-18 (title_track runs 1-2, studies/character/RUNS.md):
+    a literal filling a string16 field EXACTLY to its declared cap was an
+    instant client hangup (Code=007, no assert) on 0x00F3's string16(8),
+    while 7 of 8 units passed -- the receive check treats the declared
+    length as exclusive, or reserves a terminator slot. Callers should pass
+    `limit = declared - 1` for any small field; the one field this is
+    measured on is 8 units wide, and every previously-working literal in
+    this repo sat far below its field's cap, so the general rule is
+    plausible and unproven.
     """
     if framing not in FRAMINGS:
         raise ValueError(f"unknown wire_framing {framing!r}; "
