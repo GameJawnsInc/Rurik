@@ -2434,10 +2434,14 @@ HERO_SWAP = False
 # ZEROES that field itself in its create path -- so with this flag off, clicking
 # the party-window hero button asserts `heroData->agentId` / GmView.cpp(5898) no
 # matter what any other message carries. OFF is the arm that crashes EARLIER,
-# not the safe one; ON, the same click gets past GmView entirely and stops at
-# ItCliApi.cpp(488). It stays off only because no full session has been measured
-# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25 -- and 26/27
-# for the floors past it (pair with --hero-inventory 2 --hero-bags --hero-char).
+# not the safe one; ON, the same click gets past GmView entirely. The "no full
+# session measured with it on" reason for staying off is GONE as of 2026-08-18:
+# the whole cluster ran to a stable, open commander panel (pair with
+# --hero-inventory 2 --hero-bags --hero-char --hero-appearance 116366;
+# studies/pvpui/FINDINGS.md 25 through 28.3). It stays off now only as flag
+# hygiene -- every knob in this block is opt-in so old arms stay reproducible
+# -- and flipping the cluster's defaults together is a decision worth making
+# deliberately once the hero rig stops being an experiment.
 HERO_ACTIVATE = False
 # HeroActivate's field 3, and the question the old comment posed ("if field 3
 # really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
@@ -2481,8 +2485,9 @@ HERO_CHAR = False
 # hands the pair to 0x0082DB40 -> CpsPlayer/CpsMonster (Gw/Composite/), which
 # opens a FILE by it -- zeros assert `fileId` File.cpp:367, which is exactly
 # the 2026-08-18 14:23 click. So this pair is the hero's APPEARANCE COMPOSITE
-# file reference; what value renders is the open experiment.
-# studies/pvpui/FINDINGS.md 28.
+# file reference. ANSWERED by the owner's click, 2026-08-18: 116366 (the
+# burrower's self-contained unit file) RENDERED and the commander panel
+# opened and stayed -- the full ladder is studies/pvpui/FINDINGS.md 28.3.
 HERO_APPEARANCE = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
