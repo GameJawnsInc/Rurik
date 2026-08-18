@@ -483,6 +483,213 @@ def _armor_slots_steps(agent_id):
     ]
 
 
+def _allegiance_split_steps(agent_id, origin):
+    """WHICH message flips allegiance -- 0x00AA, 0x002F, or only the pair?
+
+    THE PRIOR RUN (harness 20260818T165525, `allegiance_pair`) MEASURED A FLIP
+    and refuted its own stated prediction: a body created 'mons' rendered a RED
+    compass dot, and ~1.5 s after receiving 0x00AA + 0x002F it rendered GREEN at
+    the same compass position, while an untouched 'mons' control kept a
+    pixel-identical red dot 6 px away. The compass changed at exactly two
+    moments in that whole run -- the create, and the pair -- and at no other
+    frame pair in 37. So SOMETHING in that pair updates displayed allegiance
+    post-construction, which the static reading (+0x1B5 write-once, two
+    constructor writers) says is impossible for the RENDERED surface.
+
+    WHAT THAT RUN COULD NOT SAY, and it is exactly the CONTESTED question:
+    the two messages went out 1.0 s apart against a 2 s frame cadence, so no
+    frame separates them. `studies/enemy/PLAN.md` tested 0x002F ALONE and saw
+    nothing; `studies/newopcodes` argues the pass therefore tested half a
+    mechanism. This probe tests all four cells at once, one body each:
+
+        agent 10  EAST   0x00AA alone
+        agent 11  WEST   0x002F alone      <- the old experiment, re-run clean
+        agent 12  NORTH  both, in retail's order   <- positive control
+        agent 13  SOUTH  nothing at all             <- negative control
+
+    Every body is created 'mons' (renders red), so every arm has the same
+    starting state and the readout is one bit per body: did its dot go green.
+    Arms are 10 s apart -- five frames at the 2 s cadence -- so attribution is
+    never a straddled frame again, which is the one defect of the prior run.
+    Bodies sit at +/-400 rather than +/-300 to spread the compass marks: the
+    prior run's marks touched and merged into one blob, and only connected
+    components pulled them apart.
+
+    CONFOUND THE PRIOR RUN HIT, named so this one is read correctly: the client
+    auto-targeted the first hostile it saw and drew a yellow ring around that
+    dot, which merged with a neighbour. The ring vanished when the flip
+    happened -- consistent with dropping a target that stopped being hostile,
+    but it means "ring gone" and "dot turned green" were not independent there.
+    Here the four bodies are far apart, so a ring can be attributed to one.
+
+    PREDICTIONS, one per outcome, all four distinguishable:
+      - only 12 flips  -> the PAIR is required; 0x00AA's record must exist
+        before 0x002F's write means anything. Retail's order is the mechanism.
+      - 11 flips       -> 0x002F alone suffices, and enemy/PLAN.md's null was
+        an artifact of what it watched (it watched attack initiation, not the
+        compass) rather than of sending half a mechanism.
+      - 10 flips       -> 0x00AA carries it and 0x002F is bookkeeping, which
+        would make upstream's AGENT_UPDATE_ALLEGIANCE name land on the wrong
+        opcode of the two.
+      - 13 flips       -> the readout is not measuring what we think; discard
+        the run and the prior one with it.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    model = CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION
+    play, mons = 0x706C6179, 0x6D6F6E73
+    spots = {10: (ox + 400, oy), 11: (ox - 400, oy),
+             12: (ox, oy + 400), 13: (ox, oy - 400)}
+    labels = {10: "EAST  -- 0x00AA ALONE", 11: "WEST  -- 0x002F ALONE",
+              12: "NORTH -- BOTH (positive control)",
+              13: "SOUTH -- NOTHING (negative control)"}
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+    ]
+    for aid in (10, 11, 12, 13):
+        x, y = spots[aid]
+        steps.append(Step(
+            2.0, 0x0020,
+            create_agent(aid, model, AGENT_KIND_NPC, x, y, plane,
+                         allegiance=mons),
+            f"agent {aid} {labels[aid]}, created 'mons'",
+            "a RED dot on the compass at this bearing. All four must be red "
+            "before any arm runs -- that is this run's baseline, and an arm "
+            "whose body is not red first measures nothing."))
+    steps += [
+        Step(10.0, 0x00AA, [10, play, model],
+             "ARM A: 0x00AA ALONE at agent 10 (EAST)",
+             "does EAST go green with no 0x002F ever sent? Five frames follow "
+             "before anything else moves."),
+        Step(10.0, 0x002F, [11, play],
+             "ARM B: 0x002F ALONE at agent 11 (WEST) -- enemy/PLAN.md's "
+             "experiment, re-run against the compass",
+             "does WEST go green with no 0x00AA ever sent? This is the cell "
+             "the old null result actually tested."),
+        Step(10.0, 0x00AA, [12, play, model],
+             "ARM C part 1: 0x00AA at agent 12 (NORTH)",
+             "nothing predicted yet -- ARM A's frames already say what 0x00AA "
+             "alone does."),
+        Step(1.0, 0x002F, [12, play],
+             "ARM C part 2: 0x002F at agent 12 -- the pair, retail's order",
+             "the prior run's flip should reproduce HERE. If NORTH goes green "
+             "and neither EAST nor WEST did, the pair is the mechanism and "
+             "each message alone is insufficient."),
+        Step(10.0, 0x0000, [],
+             "END: 10 s of quiet frames -- SOUTH (agent 13) must still be red",
+             "the negative control's last word. A green SOUTH invalidates the "
+             "whole run.", sends=False),
+    ]
+    return steps
+
+
+# Item ids for the accum-drain probe, clear of the armor probe's 2/3 and the
+# hammer. The declarations create them; the ids only need to be unclaimed.
+_DRAIN_ITEM_A = 40
+_DRAIN_ITEM_B = 41
+_DRAIN_ITEM_C = 42
+
+
+def _accum_drains_steps(agent_id):
+    """Which UI surface does each accum-table DRAIN event drive, with real ids
+    staged? The redesign of studies/newopcodes/FINDINGS.md section-4 item 7,
+    after the desk read that item asked for came back and changed it.
+
+    WHAT THE DESK READ SETTLED FIRST (2026-08-18, all four drain workers
+    disassembled, the load-bearing one re-verified by hand): the ladder's
+    proposed experiment -- '0x0084 then 0x0086; separately 0x00D7 then 0x00E1;
+    see which surface receives each' -- had two false premises. (1) The
+    appenders CANNOT be separated by any experiment: 0x0084 and 0x00D7 share
+    one handler VA (0x0091E820) and one worker appending into the same list;
+    the client never sees which opcode it was. This probe deliberately uses
+    only 0x0084. (2) The drains do not pair off one-per-list: 0x0085 (worker
+    0x008119C0, event 0x100000B8) drains list 0 ONLY and zeroes only count 0;
+    0x00D4 (0x008145C0, event 0x10000052) and 0x00E1 (0x00814860, event
+    0x100000BA) read both lists and zero both counts; and 0x0086 (0x00811A00,
+    event 0x100000B9) ASSERTS the two counts EQUAL --
+    `context->accumIntList[0].Count() == context->accumIntList[1].Count()`,
+    ChCliApi.cpp(1587) -- then posts ONE count with BOTH base pointers: its
+    consumer reads the two lists as parallel COLUMNS of one table. So the
+    ladder's 0x0086 arm as written would have crashed (3 != 0), and the only
+    reason the 2026-08-13 screen pass survived 0x0086 is that empty == empty
+    passes the assert.
+
+    WHAT IS LEFT TO MEASURE is which surface each drain EVENT drives when the
+    buffer holds real, declared, distinctly-named item ids -- the screen pass
+    proved every drain QUIET on an EMPTY buffer, which measured the events
+    subscriber-side only at zero rows. Three items with three different names
+    (legs/boots/gloves) so whichever surface renders says WHICH rows reached
+    it. Every multi-list arm stages column 1 with [1, 1, 1] -- equal length by
+    construction, value 1 because the column's meaning (quantity? id?) is
+    exactly what the render would reveal. The 0x0086 arm runs LAST: it is the
+    only assert-carrying drain, so if the run dies there the frames from the
+    first three arms are already banked.
+
+    KNOWN CONFOUND, stated up front: a null result refutes nothing. The
+    subscribers may exist only while some window is open (retail's only
+    staged-buffer use observed, the 0x00C5 flow, rides a window context), and
+    this run opens none. Nothing-lights is 'no subscriber in this state', not
+    'the events are dead'.
+    """
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    return [
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
+                                     item_template("warrior_legs")),
+             "0x0161: declare item 40 (leggings name)",
+             "nothing -- a declaration renders nothing, measured 621/621."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
+                                     item_template("warrior_boots")),
+             "0x0161: declare item 41 (boots name)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
+                                     item_template("warrior_gloves")),
+             "0x0161: declare item 42 (gloves name)", "nothing."),
+        Step(8.0, 0x0084, [ids],
+             "0x0084: stage column 0 with the three item ids",
+             "nothing -- the appender is QUIET, measured; the drain is the "
+             "experiment."),
+        Step(2.0, 0x0085, [0],
+             "0x0085: DRAIN, event 0x100000B8 -- the only single-list drain",
+             "ARM 1's verdict frame. Any window, toast, chat line or list "
+             "gaining three rows named like armor pieces. Nothing is also an "
+             "answer (no subscriber in this state)."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: stage column 1 = [1,1,1], equal length",
+             "nothing -- list 1's appender was QUIET too."),
+        Step(2.0, 0x00D4, [],
+             "0x00D4: DRAIN, event 0x10000052 (bare trigger, no payload field)",
+             "ARM 2's verdict frame, same watch as arm 1."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: restage column 1", "nothing."),
+        Step(2.0, 0x00E1, [0],
+             "0x00E1: DRAIN, event 0x100000BA -- upstream calls this "
+             "SKILL_ADD_TO_WINDOWS_END",
+             "ARM 3's verdict frame. If upstream's name is honest, a SKILL "
+             "surface moves here -- and column 1 is all 1s, so 'skill id 1' "
+             "appearing would also name which column that surface reads."),
+        Step(10.0, 0x0084, [ids],
+             "0x0084: restage column 0", "nothing."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "0x00D8: restage column 1 -- 3 == 3, the assert passes by "
+             "construction", "nothing."),
+        Step(2.0, 0x0086, [0],
+             "0x0086: DRAIN, event 0x100000B9 -- the assert-carrying, "
+             "paired-columns drain, deliberately LAST",
+             "ARM 4's verdict frame. A crash naming ChCliApi.cpp(1587) here "
+             "means the count bookkeeping differs from the disassembly's "
+             "reading and is itself a finding; the first three arms are "
+             "already on disk either way."),
+    ]
+
+
 # Fresh definition slots and agent ids for the composite arm. Chosen clear of
 # everything any co-loading path uses: definitions 3 (test enemy), 5 (sculpt),
 # 9 (henchman), 10..16 (heroes), 1480 (quest giver); agents 1, 10, 20..22, 30,
@@ -1626,6 +1833,113 @@ def _npc_allegiance_steps(agent_id, origin):
             f"outpost so attacking may be refused whatever the answer -- colour "
             f"is the signal that still works here."))
     return steps
+
+
+def _allegiance_pair_steps(agent_id, origin):
+    """Does retail's 0x00AA-then-0x002F pair CHANGE an existing agent's
+    allegiance? The one CONTESTED row in studies/newopcodes/FINDINGS.md.
+
+    THE CONTEST. Two upstream lineages at delta 0 (ldufr, maintained GWCA) call
+    0x002F AGENT_UPDATE_ALLEGIANCE. Our own client says: its handler
+    (0x005FDD70) stamps field 2 into +0xE8 of the per-agent AgMsg sync/async
+    message-channel records -- plumbing, not the rendered allegiance (the
+    agent's displayed teamToken also sits at +0xE8, of a DIFFERENT struct; the
+    equal offset is a coincidence that has already misled once) -- and the
+    attackability byte (+0x1B5) is write-once at construction, two writers in
+    the whole image, both constructors (studies/enemy/PLAN.md 6p). "Sending it
+    changed nothing" (enemy PLAN 6o) was measured on 0x002F ALONE. Retail NEVER
+    sends it alone: both corpus sightings follow an 0x00AA for the same agent
+    within the same burst, the pair carrying 'play' at agents created 'nonc'
+    (newopcodes, capture 20260817T180610, agents 0x0F/0x11). This probe sends
+    the PAIR -- the half of the mechanism no test has exercised.
+
+    WHY RETAIL'S OWN TRANSITION IS INVISIBLE, AND THE DESIGN AROUND IT: 'nonc'
+    and 'play' both render GREEN (npc_allegiance, 2026-08-06), so replaying
+    nonc->play faithfully cannot show a verdict on any colour surface. The
+    discriminating arm runs the SAME pair at a body created 'mons' (red).
+    Field 2 still carries 'play' -- the only value ever seen in either message
+    on retail -- so the invention is the body's starting colour, not the
+    token, and the readout becomes a red->green FLIP: a shape change, per the
+    make-the-signal-unmistakable rule, not a hue judgment. Three bodies, one
+    definition, POSITION is the label:
+
+        LEFT  (agent 4, 'nonc') -- retail-faithful arm
+        RIGHT (agent 5, 'mons') -- the discriminator
+        BACK  (agent 6, 'mons') -- control, never messaged after create
+
+    RUN IT EXPLORABLE. 0x00AA's handler has a second step gated on
+    MissionCliGetMap() == MISSION_MAP_GAME: field 2 becomes a roster KEY and
+    every agent registered under the same token is enumerated and linked
+    (newopcodes: 0x0091EF10 -> 0x00813560 -> 0x0084DD20). Every retail
+    sighting is an outpost capture, so that enumeration has never fired
+    anywhere, retail included. Pass --explorable or the run tests less than
+    it could.
+
+    CRASH NOTES, so a death is a diagnosis and not a mystery: 0x002F field 1
+    is a bounds-checked index into the AgMsg sync/async arrays; a missing
+    entry asserts syncPtr AgMsg.cpp(655) / asyncPtr AgMsg.cpp(660). That
+    would itself be a finding -- our created agents lack a record retail's
+    have -- and enemy PLAN 6o's 0x002F-alone send NOT crashing says the
+    record does exist for bodies like these.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    model = CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION
+    play, nonc, mons = 0x706C6179, 0x6E6F6E63, 0x6D6F6E73
+    return [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION} (Hatcher, known good)",
+             "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}",
+             "nothing yet. All three bodies share this definition -- position, "
+             "not name, is the label."),
+        Step(2.0, 0x0020,
+             create_agent(4, model, AGENT_KIND_NPC, ox - 300, oy, plane,
+                          allegiance=nonc),
+             "agent 4 LEFT, created 'nonc' -- retail's precondition",
+             "a Hatcher on the LEFT with a GREEN nameplate and dot (nonc is "
+             "one of the client's two literal non-combatant values)."),
+        Step(2.0, 0x0020,
+             create_agent(5, model, AGENT_KIND_NPC, ox + 300, oy, plane,
+                          allegiance=mons),
+             "agent 5 RIGHT, created 'mons' -- the discriminator's start state",
+             "a Hatcher on the RIGHT reading RED (unrecognised token falls "
+             "through to hostile). If it is not red the discriminator is dead "
+             "on arrival -- say so and read no further arm as a verdict."),
+        Step(2.0, 0x0020,
+             create_agent(6, model, AGENT_KIND_NPC, ox, oy - 300, plane,
+                          allegiance=mons),
+             "agent 6 BACK, created 'mons' -- the control, never messaged again",
+             "a RED Hatcher behind the player. It must still be red in the "
+             "final frame, or the whole run measured something else."),
+        Step(12.0, 0x00AA, [4, play, model],
+             "0x00AA agent 4: 'play' + its own model -- retail's preamble, "
+             "faithful arm",
+             "nothing predicted by either side at this instant; the pair is "
+             "judged after 0x002F lands."),
+        Step(1.0, 0x002F, [4, play],
+             "0x002F agent 4: 'play' -- retail's nonc->play pair, complete",
+             "the LEFT Hatcher: both readings predict green stays green here "
+             "(saturation), so colour is NOT the signal in this arm -- watch "
+             "instead for ANY new artifact: party/roster rows, compass "
+             "changes, chat, a nameplate rewrite."),
+        Step(12.0, 0x00AA, [5, play, model],
+             "0x00AA agent 5: 'play' + its own model -- the discriminator's "
+             "preamble",
+             "nothing yet; the flip, if it comes, is allowed to come here or "
+             "at the next step -- note WHICH."),
+        Step(1.0, 0x002F, [5, play],
+             "0x002F agent 5: 'play' at a RED body -- THE TEST",
+             "if the pair updates displayed allegiance, the RIGHT Hatcher "
+             "flips red->green -- nameplate AND compass dot -- while the "
+             "control behind stays red. If nothing moves in 20 seconds, the "
+             "static reading holds and upstream's name fails on every "
+             "rendered surface. A crash naming AgMsg.cpp(655/660) is the "
+             "third outcome and is a finding, not a failure."),
+    ]
 
 
 def _enemy_damage_steps(agent_id, origin):
@@ -5266,6 +5580,89 @@ PROBES = {
              "field cannot be a word the client looks up -- it is an identity, "
              "with two special cases. Monster-class bodies this time, so the "
              "player-class confound that ruined the first attempt is gone.",
+    ),
+    "allegiance_pair": lambda a, o: Probe(
+        question="Does retail's 0x00AA-then-0x002F pair change an EXISTING "
+                 "agent's allegiance -- the one CONTESTED row left in "
+                 "studies/newopcodes/FINDINGS.md?",
+        predicts="The static reading says NO VISIBLE CHANGE in either arm: "
+                 "0x002F writes AgMsg message plumbing, the attackability "
+                 "byte is write-once at construction, and no post-construction "
+                 "writer of the displayed teamToken is known -- so the RIGHT "
+                 "Hatcher stays red and upstream's AGENT_UPDATE_ALLEGIANCE "
+                 "name fails for every rendered surface. Upstream predicts "
+                 "the opposite shape: RIGHT flips red->green on nameplate and "
+                 "compass dot while the BACK control stays red. Either "
+                 "outcome settles the contest for pixels; a crash naming "
+                 "AgMsg.cpp(655/660) is the third outcome and localises the "
+                 "sync/async record instead.",
+        steps=_allegiance_pair_steps(a, o),
+        note="Run with --explorable: 0x00AA's second step -- field 2 as a "
+             "roster KEY, enumerating same-token agents -- is gated on "
+             "MISSION_MAP_GAME and has never fired ANYWHERE, retail included "
+             "(both corpus sightings are outpost captures). Field 2 carries "
+             "'play' in every send because it is the only value either "
+             "message has ever been seen to carry; the discriminator is the "
+             "BODY's starting colour, not an invented token. Position is the "
+             "label: LEFT nonc (faithful), RIGHT mons (discriminator), BACK "
+             "mons (control). Frames bracket each send via the gamesrv log's "
+             "timestamps; compass dots are the fixed-position readout, "
+             "nameplates the confirming one (hold ALT via --walk 'alt:').",
+    ),
+    "allegiance_split": lambda a, o: Probe(
+        question="WHICH message flips a body's displayed allegiance -- "
+                 "0x00AA alone, 0x002F alone, or only the pair? The prior "
+                 "run measured the flip but sent both 1 s apart against a "
+                 "2 s frame cadence, so no frame separates them.",
+        predicts="Leading expectation: only agent 12 (BOTH) flips, because "
+                 "0x00AA creates the per-agent record 0x002F then writes "
+                 "into, and a write with no record is the no-op "
+                 "studies/enemy/PLAN.md measured. If agent 11 (0x002F "
+                 "ALONE) flips, that null was about what it WATCHED -- "
+                 "attack initiation, not the compass -- rather than about a "
+                 "half-sent mechanism. If agent 10 (0x00AA ALONE) flips, "
+                 "upstream's AGENT_UPDATE_ALLEGIANCE names the wrong opcode "
+                 "of the two. Agent 13 must stay red in every frame; a green "
+                 "13 discards this run AND the prior one.",
+        steps=_allegiance_split_steps(a, o),
+        note="The attribution half of allegiance_pair (harness "
+             "20260818T165525), which measured a red->green flip on a 'mons' "
+             "body given the pair while an untouched 'mons' control stayed "
+             "pixel-identically red -- refuting this repo's static reading "
+             "(+0x1B5 write-once) for the RENDERED surface. Run "
+             "--explorable: 0x00AA's roster-key step is MISSION_MAP_GAME-"
+             "gated, it was live in the run that flipped, and it has never "
+             "fired in any retail capture (both sightings are outposts), so "
+             "an outpost re-run is a different experiment. Arms are 10 s "
+             "apart and bodies are +/-400 so marks neither straddle a frame "
+             "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "accum_drains": lambda a, o: Probe(
+        question="Which UI surface does each accum-table drain event drive "
+                 "(0x100000B8/52/BA/B9), with three declared, distinctly "
+                 "named item ids actually staged?",
+        predicts="If upstream's WINDOW_ADD_ITEMS / SKILL_ADD_TO_WINDOWS_END "
+                 "family names are honest, at least one drain renders the "
+                 "three item names on some window surface and 0x00E1's "
+                 "surface is skill-flavoured. The stated null -- nothing "
+                 "lights on any arm -- refutes NOTHING (the 2026-08-13 "
+                 "screen pass already proved all four QUIET on an empty "
+                 "buffer; subscribers may need an open window), and says the "
+                 "follow-up needs a window context, not that the events are "
+                 "dead. A ChCliApi.cpp(1587) assert on the LAST arm would "
+                 "contradict the verified count bookkeeping and reopen the "
+                 "disassembly.",
+        steps=_accum_drains_steps(a),
+        note="Replaces newopcodes section-4 item 7 as written: the desk read "
+             "it asked for showed the appenders share one handler "
+             "(0x0084 == 0x00D7 to the client, so only 0x0084 is used), "
+             "0x0085 is the only single-list drain, 0x00D4/0x00E1 drain "
+             "both lists, and 0x0086 ASSERTS equal counts then posts the "
+             "lists as parallel columns -- the ladder's arm would have "
+             "crashed on 3 != 0. Every multi-list arm here stages column 1 "
+             "as [1,1,1]; the assert-carrying drain runs last so three arms "
+             "bank frames before the risky one. No aiming: the readout is "
+             "whatever fixed UI moves, bracketed by the gamesrv log.",
     ),
     "npc_agent": lambda a, o: Probe(
         question="Does a monster-class agent render, and does it need an NPC "

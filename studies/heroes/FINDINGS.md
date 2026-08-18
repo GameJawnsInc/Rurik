@@ -1402,6 +1402,14 @@ its own field 1 and we never send it.
 > The local player is player 1 from their own client's view, while agents 91 and 337 both
 > carry number 4, and 379/309/349 all carry 18 — the numbers are recycled slots, not
 > identities. Anything keyed on player_number across time needs to know that.
+>
+> **Send site fixed 2026-08-18**: `authsrv.py`'s `0x0199` now fills field 1 with
+> `PLAYER_NUMBER`, retiring the "we would be wrong" sentence above. Consequence for the
+> experimental flag: `--player-number` now moves the roster filter and the commander
+> scan's `ctx[0x44][0x2ac]` together, so §21's mirror (row and binding mutually
+> exclusive) is a historical rig, not a reproducible one. §22.1 and §25.3 below carried
+> the pre-correction "agent id" reading for a day after this block landed; both are
+> corrected in place.
 
 ### 22.1 This explains §21's mirror exactly
 
@@ -1410,8 +1418,11 @@ The two filters read the same `entry+4` and compare it against different things:
 - the **roster UI** against the value we used as `PLAYER_NUMBER` (which also feeds `0x0059`,
   `0x00B0`/`0x00B1`, `0x01CB`'s party member and the player's `model_id`, so "player number"
   is the coherent label but not fully isolated),
-- the **`GmHeroCommander` scan** against `ctx[0x44][0x2ac]` = **`0x0199` field 1** = the
-  player's **agent id**.
+- the **`GmHeroCommander` scan** against `ctx[0x44][0x2ac]` = **`0x0199` field 1** — which
+  in that rig held **1** because our server filled it with `PLAYER_AGENT_ID`. (This line
+  originally read "= the player's agent id", written from what we SENT; retail fills the
+  field with the player **number** — §22's CORRECTED block — and the send site now does
+  too, 2026-08-18.)
 
 `--player-number 2` moved the first and left the second at 1, so exactly one of the two could
 match at a time. In the default rig `PLAYER_NUMBER` and `PLAYER_AGENT_ID` are both 1, both
@@ -1680,8 +1691,10 @@ entries that pass the my-id test — i.e. deriving the **slot index** as the pos
 **This revises §17.2 and §23.3.** "The scan never runs" is right about the BULK scan and
 wrong as a whole story: there are two paths, and `0x01C2` drives the incremental one. It also
 confirms §21/§22's mirror from a third code path — the commander side compares `msg+8`
-against `ctx[0x44][0x2ac]` (= `0x0199` field 1, the player's **agent id**) while the roster
-row wants the **player number**, and the default rig satisfies both only because both are 1.
+against `ctx[0x44][0x2ac]` (= `0x0199` field 1 — `PLAYER_AGENT_ID` as our server filled it
+then; retail puts the player **number** there, §22's CORRECTED block, and our send site
+follows since 2026-08-18) while the roster row wants the **player number**, and the default
+rig satisfies both only because both are 1.
 
 ### 25.4 One loose end, flagged rather than papered over
 

@@ -352,7 +352,32 @@ per-map-load reset on characters that are not new Factions characters.
 | field | reading | label |
 |---|---|---|
 | 1 `string16(128)` | the callout text, as a **server-allocated dynamic string handle** | **OBSERVED** — four code units, and the first unit **increments by one** between the two sightings (`0x4A9E` → `0x4A9F`). That is a handle, not text. Contrast the same stream at idx 335 (`0x005D`), whose 4-unit prefix is followed by `0x0107` and literal UTF-16 `character B` |
-| 2 `u32` | 1, then 0 | **UNVERIFIED**. Worth recording: the smsgsweep run that produced the observed on-screen callout used the all-other-fields-zero regime, so **field2 = 0 is the value proven to render a framed closable callout**, and one of our two live sightings is exactly field2 = 0. field2 = 1 is untested |
+| 2 `u32` | 1, then 0 | **OBSERVED 2026-08-18 — it is a TEXT-STYLE flag: 0 renders the string cream/white, 1 renders it GOLD.** Two runs differing in this field alone (below) |
+
+> ### RUN 2026-08-18 — field 2 is a TEXT-STYLE flag, and both arms are on disk. OBSERVED
+>
+> Two loopback runs identical but for this field, the same one-unit EncString (`0x3D64`,
+> which the client resolves to **"Ascalon"**) in both, scored by the same instrument:
+> `20260818T172323` (field2 = 0, plain `b900 0100 643d 0000 0000`) and `20260818T172508`
+> (field2 = 1, plain `b900 0100 643d 0100 0000`).
+>
+> **Both render the framed closable callout**, at the same screen position, with the same
+> box and the same X button, ~3 s after the send, and it persists (the run's per-frame
+> changed-pixel baseline is otherwise exactly 0, so the appearance is unmissable: 975 px
+> at field2 = 0, 1,015 px at field2 = 1). The callouts' outer bounding boxes are
+> **identical**. What differs is **884 px inside the box**: the glyph colour, measured over
+> the bright text pixels — **(211,199,182) at field2 = 0** versus **(210,193,151) at
+> field2 = 1**. Red holds while blue falls 31, i.e. the warm bias roughly doubles
+> (R−B +29 → +59). Cream/white versus gold.
+>
+> So the 2026-08-12 operator reading is now reproducible from a recorded command line
+> rather than a remembered screenshot, and the flag that was UNVERIFIED has an effect.
+> **The MEANING stays UNVERIFIED** — gold could be completed, bonus, primary, or merely
+> new, and colour alone cannot say which. What makes that worth chasing rather than
+> guessing: **retail exercises both values**, in adjacent messages, in the same stream
+> (idx 329 field2 = 1, idx 331 field2 = 0, each behind a `0x00BB` carrying a byte-identical
+> string), so the discriminator is a capture in which the two objectives' states are known
+> on screen, not another loopback arm.
 
 **The proposal's whole coherence story does not survive the wire.** It framed
 {`0x00B8` canned toast, `0x00B9` append, `0x00BA` clear} as a triplet. Census over all live
@@ -648,6 +673,58 @@ observed reader of `accumIntList[0]` in the corpus, and no agent found it.
 the ids of the immediately preceding `0x0161` batch = **OBSERVED**, n = 2; mechanism =
 appends each dword to `ChCliApi accumIntList[0]` = **SOURCED**; **"items" specifically =
 NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEND`.
+
+**RUN 2026-08-18 — `accum_drains`, harness `20260818T171920`. Three drains QUIET with real
+ids staged; one arm UNMEASURED; the assert reading is confirmed positively.** OBSERVED.
+With items 40/41/42 declared by `0x0161` and staged through `0x0084` (and column 1 fed
+`[1,1,1]` where both lists are read), the drains produced **no UI change whatsoever**:
+`0x0085`, `0x00D4` and `0x0086` each sat in a run whose per-frame changed-pixel baseline
+was **exactly 0** outside the player's own idle animation. That is the pre-registered null,
+and per this probe's own note it **refutes nothing** — the only observed reader of the
+staged buffer (the `0x00C5` flow) rides a window context, and this run opened no window.
+**The positive result is the assert:** `0x0086` with counts deliberately equal (3 == 3) was
+accepted with **no `ChCliApi.cpp(1587)`**, so the disassembly's equal-counts guard is
+confirmed from the running client rather than only from the listing — and the ladder's
+original design, which would have sent 3 against 0, is confirmed as the crash it was
+predicted to be.
+
+**Two honest gaps, neither papered over.** (1) **`0x00E1` was never observed**: the client
+left the OS foreground for ~23 s and `shot_if_foreground` correctly declined to photograph
+another window, so ten frames spanning that drain do not exist. The one drain carrying an
+upstream name worth testing is the one with no coverage. (2) The single non-zero frame in
+the run — 7,172 changed pixels at the `0x00D4` drain — is a **skill tooltip** ("Battle
+Rage…") raised by the mouse resting over the skill bar, plus the chat input taking focus.
+It looked like a hit at the aggregate level and is an artifact; recorded because the
+next reader will otherwise re-derive it from the same numbers.
+
+**ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
+have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
+disassembled, the assert-carrying one re-verified by a second reader):
+
+| drain | worker | event | lists touched | zeroes |
+|---|---|---|---|---|
+| `0x0085` | `0x008119C0` | `0x100000B8` | list 0 only | count 0 only |
+| `0x0086` | `0x00811A00` | `0x100000B9` | **both, as parallel columns** | both |
+| `0x00D4` | `0x008145C0` | `0x10000052` | both | both |
+| `0x00E1` | `0x00814860` | `0x100000BA` | both | both |
+
+Three consequences. **(1)** `0x0086`'s worker opens with
+`Assertion: context->accumIntList[0].Count() == context->accumIntList[1].Count()`,
+`ChCliApi.cpp(1587)` — and then posts ONE count with BOTH base pointers, so its consumer
+reads the two lists as columns of one table. Item 7's "send `0x0084` with N ids then
+`0x0086`" is therefore a guaranteed assert (N ≠ 0); the 2026-08-13 screen pass survived
+`0x0086` only because empty == empty passes. **(2)** The drains cannot separate the
+appenders — `0x0085` is the only single-list drain, and the naive `0x00D7`→`0x00E1`
+pairing does not exist: `0x00E1` drains both lists, which makes upstream's
+`SKILL_ADD_TO_WINDOWS_END` incomplete rather than wrong. **(3)** Nothing separates the
+appenders at all — `0x0084` and `0x00D7` share handler `0x0091E820` (§ above), so the
+client cannot see which opcode staged the row and no experiment can either; only the
+declared wire lengths differ (array32(16) vs array32(8)). Item 7 is REPLACED by the
+`accum_drains` probe (`toolkit/authsrv/probes.py`): one appender, all four drain events
+with three declared, distinctly named item ids staged, column 1 fed `[1,1,1]` on every
+multi-list arm, the assert-carrying drain last. Prediction on record there; a null result
+refutes nothing (subscribers may need an open window — the `0x00C5` flow is the only
+observed reader and it rides a window context).
 
 ---
 
@@ -1324,7 +1401,48 @@ was written. That is one of the three unknowns in that section's payload closed.
 
 ---
 
-## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — **CONTESTED**
+## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — ~~CONTESTED~~ **RESOLVED 2026-08-18: the name is right, and it is now OBSERVED on our own client**
+
+> **THE CONTEST IS OVER, AND UPSTREAM WINS — `0x002F` ALONE updates displayed allegiance.**
+> Harness `20260818T171349`, probe `allegiance_split`, four cells, arms 10 s apart,
+> predictions on record before the run. Four bodies all created `'mons'` (all red):
+>
+> | body | received | compass result |
+> |---|---|---|
+> | agent 10 EAST | **`0x00AA` alone** | **no change** — still red **53 s** later |
+> | agent 11 WEST | **`0x002F` alone** | **RED → GREEN, in the very next frame** |
+> | agent 12 NORTH | both, retail's order | **RED → GREEN** |
+> | agent 13 SOUTH | nothing | **red throughout** (negative control holds) |
+>
+> Red pixels stepped 55 → 42 → 29 — exactly one dot per flip — and the two survivors are
+> the `0x00AA`-only body and the untouched control. Per-mark connected components confirm
+> the specific dots: `(65,106)` flipped at ARM B, `(56,97)` at ARM C, `(74,97)` never.
+> Agent 10 carried the client's target ring, so its core was decomposed separately to rule
+> out a flip hiding under the ring: **RED 18 → 17 px** across the whole run, i.e. intact.
+>
+> **`0x00AA` is neither necessary nor sufficient**, which refutes the leading hypothesis
+> this probe was built on (that `0x00AA` creates the record `0x002F` writes into, so the
+> pair is required). Written down before the run and wrong.
+>
+> **And `studies/enemy/PLAN.md`'s null result STANDS — the two findings do not collide.**
+> That pass sent `0x002F` and reported "no change"; it was watching **attack initiation**,
+> which is gated by the `+0x1B5` enum, and `+0x1B5` really is write-once at construction
+> (two writers, both constructors). So allegiance lives in **at least two stores**: the
+> **displayed** team token, which `0x002F` writes at any time, and the **attackability**
+> byte, which nothing after construction has ever been shown to move. Both prior claims
+> were true about different surfaces, and the word "allegiance" was doing the equivocating.
+> `authsrv.py:2818-2823`'s "no later message can correct it" is now **wrong as written**
+> and is corrected at the site.
+>
+> **Open, and sharpened rather than closed:** the SOURCED reading below says the handler
+> stamps field 2 into `+0xE8` of the AgMsg sync/async records, "nowhere near" the rendered
+> allegiance — yet the rendered surface demonstrably moved. Since `studies/smsg` puts the
+> **team token at agent `+0xE8`**, read by `AgentGetTeamToken` (`ChCliBase.cpp:326`), the
+> "identical offset in a different structure" reading is the thing to re-derive first.
+> **Not yet measured:** the nameplate surface (uncaptured in both runs — the `--walk` plan
+> released ALT before the shutter), whether an outpost behaves the same (both runs were
+> `--explorable`, and `0x00AA`'s roster step is `MISSION_MAP_GAME`-gated), whether the flip
+> also restores attackability, and the reverse direction (`'play'` → a hostile token).
 
 **2 sightings**, `(15, 'play')` and `(17, 'play')`, immediately after the two `0x00AA`
 sightings for the same agents in the same order. No refutation pass; treat accordingly.
@@ -1354,6 +1472,58 @@ by ArenaNet's own server — **and our probe tested only half of the mechanism.*
 
 **That is the experiment that would resolve this, and it is cheap.** Nothing in either side
 is refuted yet, so the label stays CONTESTED and the name does not ship.
+
+**Probe staged 2026-08-18: `allegiance_pair`** (`toolkit/authsrv/probes.py`, encodes clean,
+prediction on record). One design correction to the ladder's item 5: replaying retail's
+nonc→play *exactly* cannot render a verdict, because `'nonc'` and `'play'` both draw
+GREEN (`npc_allegiance`, 2026-08-06) — the faithful arm is kept for non-colour artifacts,
+and the discriminating arm sends the same pair, still carrying `'play'` in field 2, at a
+body created `'mons'` (red): the readout is a red→green flip against an untouched `'mons'`
+control. Run `--explorable`, because `0x00AA`'s roster-key step is gated on
+`MISSION_MAP_GAME` and has never fired anywhere — both retail sightings are outpost
+captures. The static reading predicts nothing moves; upstream predicts the flip; an
+`AgMsg.cpp(655/660)` assert is the third recordable outcome.
+
+> ### RUN 2026-08-18 — **THE PAIR FLIPS IT. The probe's own prediction is REFUTED, and so is this repo's static reading.** OBSERVED, harness `20260818T165525`, n=1
+>
+> A body created `'mons'` rendered a **RED** compass dot; ~1.5 s after receiving
+> `0x00AA` + `0x002F` (both carrying `'play'`) it rendered **GREEN at the same compass
+> position**, while a second `'mons'` body that was never messaged kept a
+> **pixel-identical** red dot (15 px, same centre, same frame). Measured by connected
+> components, not by eye: before, the mark is a 78 px blob mixing the yellow target ring,
+> red, and a touching neighbour; after, it resolves to a clean 14 px green mark at the
+> same centre (65,92), and the control's red at (71,97) is unchanged in both.
+>
+> **The instrument's own control is what makes this readable.** Across all 37 walk frames
+> the compass changed at exactly **two** frame pairs: when the `'mons'` body was created
+> (red appears, matching the create timestamp `t=10.43`) and immediately after its pair
+> (`t=37.46`/`38.46`). Every other pair, including three ALT-key holds and the entire
+> 60 s hold, changed **zero** compass pixels. The bodies' own regions change constantly
+> (idle animation, 18–8089 px per pair), which is why the body surface is not the readout.
+>
+> So **`+0x1B5` being write-once at construction does not mean displayed allegiance is
+> fixed** — `authsrv.py:2818-2823`'s "no post-construction setter to reach, so allegiance
+> is decided when the agent is CREATED and no later message can correct it" is refuted as
+> a statement about what the player SEES. The rendered path reads the teamToken
+> (`ChCliBase.cpp:326`), and something in this pair updates it. `studies/enemy/PLAN.md`'s
+> "sending it changed nothing" stands as written — it watched **attack initiation**, not
+> the compass, which is a different surface from the one that moved here.
+>
+> **What this run CANNOT say, stated before anyone quotes it:** the two messages went out
+> 1.0 s apart against a 2 s frame cadence, so **no frame separates them** and the flip is
+> attributable to the pair, not to either message. That attribution *is* the CONTESTED
+> question, so the row does **not** close here. `allegiance_split` runs the four cells
+> (`0x00AA` alone / `0x002F` alone / both / neither) 10 s apart. Also honest: **nameplates
+> were never captured** — the `--walk` plan put `shot:` after `alt:`, so ALT is released
+> before the shutter and no frame in the run shows a nameplate; that surface is untested,
+> and the plan ordering is a harness trap worth fixing. And the target-ring vanished in
+> the same frame as the flip, consistent with the client dropping a target that stopped
+> being hostile, but the two were not independent in this rig.
+>
+> Banked in passing, and it closes an UNVERIFIED note: the wire bytes are
+> `aa00 05000000 79616c70 02000020` — the allegiance dword **is** transmitted
+> byte-reversed relative to its ASCII spelling (`'play'` → `79 61 6c 70`), which a recon
+> pass had derived arithmetically and flagged as needing a capture to confirm. **OBSERVED.**
 
 **Open:** what `+0xE8` on the AgMsg sync/async record is read for (no consumer traced);
 whether `0x002F` ever fires with a non-`'play'` value — no enemy-side token has ever been
@@ -1417,17 +1587,28 @@ repeated:
    `0x0084`, `0x005F`, `0x009E`, `0x003A` at medium with the label splits above, and put
    **nothing** in for the eight NOT FOUND. Each entry needs a `test_smsgnames.py`-style wire
    invariant that could go red.
-5. **One loopback run settles `0x002F`, and it is the only CONTESTED row.**
-   Send `0x00AA(agent, 'play', model)` **then** `0x002F(agent, 'play')` against our own
-   server, on an agent created with `'nonc'`. `studies/enemy/PLAN.md` tested `0x002F` alone,
-   and retail never sends it alone. Hand-driven, no aiming, fixed-position readout.
-6. **One loopback run resolves `0x00B9`'s flag.** Re-run the existing smsgsweep
-   `--encstring --only 0x00B9` apparatus with field2 = 1 against the already-proven
-   field2 = 0, `--shots 2`. Same instrument that named three of the four in that table; it
-   is already built.
+5. ~~**One loopback run settles `0x002F`, and it is the only CONTESTED row.**~~
+   **DONE 2026-08-18, and it took two runs rather than one.** The first sent the pair and
+   measured a red→green flip it could not attribute; the second (`allegiance_split`, four
+   cells 10 s apart) attributed it: **`0x002F` ALONE does it, `0x00AA` is neither necessary
+   nor sufficient.** The row is resolved in upstream's favour and the name is OBSERVED on
+   our own client. The design note this item carried — "retail never sends it alone" — was
+   sound reasoning that turned out not to matter. See the `0x002F` row.
+6. ~~**One loopback run resolves `0x00B9`'s flag.**~~ **DONE 2026-08-18**, exactly as
+   specified and with the instrument that already existed (`--set 0x00B9:2=1` needed no new
+   code). **field 2 is a text-style flag: 0 renders the callout string cream, 1 renders it
+   gold**; box, position and close button identical. Meaning still UNVERIFIED and the
+   discriminator is a retail capture, not another arm — see the `0x00B9` row.
 7. **One loopback run separates `0x0084` from `0x00D7`.** Send `0x0084` with N ids then
    `0x0086`; separately `0x00D7` then `0x00E1`; see which UI surface receives each. That
    separates the two appenders the binary cannot.
+   **SUPERSEDED 2026-08-18 — this design would have crashed, and its premise is refuted.**
+   The desk read it needed (the `0x0084` section's ADDENDUM): `0x0086` asserts the two
+   accum counts EQUAL (`ChCliApi.cpp(1587)`), so "`0x0084` with N ids then `0x0086`" is a
+   guaranteed assert; and nothing separates the appenders — they share one handler, so the
+   client never sees which opcode staged a row. The runnable replacement is the
+   `accum_drains` probe: one appender, all four drain events, real named ids, column 1 fed
+   equal-length, the assert-carrying drain last.
 8. **One capture more than three hours after `20260817T183756` confirms `0x011A`.** GWW's
    border recomputes on a three-hour cadence, so a later capture is the only thing that can
    watch fields 3 and 4 move and turn two RECONSTRUCTIONs into OBSERVED. It costs a login,
