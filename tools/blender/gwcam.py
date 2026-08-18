@@ -21,15 +21,15 @@ WHAT IS MEASURED HERE AND WHAT IS NOT, because the difference matters:
     builder uses is **48000** units. `studies/terrain/FINDINGS.md` section 10.
     The read self-validates -- the camera `target` beside it equalled the
     map's known spawn point, a number the reader was never given.
-  * STILL NOT MEASURED -- WHICH AXIS that 75 degrees spans. Vertical,
-    horizontal and diagonal readings are all arithmetically possible and they
-    are not close: at a 1.92 aspect they give a horizontal field of 111.6,
-    75.0 and 68.5 degrees respectively. This script takes the VERTICAL
-    reading because ArenaNet's own patch notes (2018-06-06) say the client
-    switched to a vertical calculation and `-oldfov` restores the older
-    diagonal one -- but one upstream reverse-engineering effort states 50
-    degrees vertical instead, which contradicts it, so `--fov-axis` exists
-    and the assumption is printed on every run.
+  * MEASURED TOO -- the AXIS. The 75 degrees is the HORIZONTAL field of
+    view, settled two independent ways (FINDINGS section 11): the client's
+    own projection scales sit as ADJACENT floats with cot(75/2) as the
+    SMALLER of the pair, which is the x scale; and a geometric check against
+    a screenshot refutes the vertical reading outright, because it would put
+    the character's feet 55 units BELOW the terrain they stand on. The
+    VERTICAL field therefore depends on the render aspect and is 43.6 degrees
+    at 16:9-ish. `--fov-axis` remains, now as an override rather than a
+    guess.
 
 The pitch and distance defaults come from matching screenshots by eye and are
 in the same category: adjustable, not authoritative.
@@ -47,11 +47,14 @@ CELL_PITCH = 96.0          # MEASURED, T3
 #: Exactly 75 degrees -- 1.3089969158172607 rad, which is 75 * pi/180 to the
 #: last bit, so it is an authored round number and not an artefact.
 GW_FOV_DEG = 75.0
-#: WHICH AXIS it spans is NOT measured. ArenaNet's 2018-06-06 patch notes say
-#: the client moved to a VERTICAL calculation (`-oldfov` restores the diagonal
-#: one), which is the best evidence there is; it is still an assumption and one
-#: upstream disagrees outright. Change it here or with --fov-axis.
-GW_FOV_AXIS = "vertical"
+#: MEASURED 2026-08-18 (FINDINGS section 11): the axis is HORIZONTAL. The
+#: client's projection holds cot(75/2) as the SMALLER of an adjacent pair whose
+#: ratio is the render aspect -- i.e. the x scale -- and the vertical reading is
+#: refuted geometrically (it would bury the character 55 units under the
+#: ground). NOTE this disagrees with ArenaNet's own 2018 patch note, which
+#: describes a "vertical calculation"; the disagreement is recorded, not
+#: resolved. Override with --fov-axis.
+GW_FOV_AXIS = "horizontal"
 #: MEASURED: the literal the client's own frustum builder loads (0x00946EBC).
 GW_FAR_PLANE = 48000.0
 
@@ -152,8 +155,8 @@ def main():
 
     print("gw_cam at (%.0f, %.0f, %.0f) looking at (%.0f, %.0f, %.0f)"
           % (ob.location[0], ob.location[1], ob.location[2], x, y, z0))
-    print("  fov %.3f deg on the %s axis (MEASURED 2026-08-18; the AXIS is "
-          "assumed)" % (opt["fov"], opt["axis"]))
+    print("  fov %.3f deg on the %s axis (both MEASURED 2026-08-18)"
+          % (opt["fov"], opt["axis"]))
     print("  -> lens %.2f mm at sensor %.1f mm, pitch %.0f deg, dist %.0f units"
           % (cam.lens, cam.sensor_height if cam.sensor_fit == "VERTICAL"
              else cam.sensor_width, opt["pitch"], d))
