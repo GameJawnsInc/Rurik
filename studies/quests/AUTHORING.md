@@ -7,6 +7,9 @@ This is a decision document, not a study. It answers one question — *is a sess
 
 ---
 
+> **New here? Read [HANDOFF.md](HANDOFF.md) first.** `PLAN.md` §8's *Quests* block
+> is the live next-actions list; this document is the ladder and its per-rung status.
+
 ## 1. The verdict
 
 **YES, and it has already happened.** On 2026-08-15 a probe sent one hand-built `GAME_SMSG 0x0049` QUEST_ADD at a real, unmodified retail client on our own server and a quest-log entry appeared — a `?` icon under the level bar, 23.8% of that icon slot differing from a run without the message (`studies/minimap/FINDINGS.md:721`, `toolkit/authsrv/probes.py:2467`). It rendered `?` rather than a name for exactly one reason: **the probe deliberately sent three empty strings**, because the marker was what was under test and "an authored string is a separate question" (probes.py's own comment).
