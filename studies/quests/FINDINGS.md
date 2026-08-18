@@ -8,6 +8,10 @@
 
 ---
 
+> **New here? Read [HANDOFF.md](HANDOFF.md) first** — the traps, in the order they
+> bite, and what to read next. This file is ~1,200 lines and is not meant to be read
+> front to back to start work.
+
 ## 0. What this arc settled, and what it did not
 
 **Settled: the quest subsystem is a bounded, fully-readable protocol, and we now have all of it.** Eleven `GAME_SMSG` opcodes (`0x0049`, `0x004A`, `0x004B`, `0x004C`, `0x004D`, `0x004E`, `0x0050`–`0x0054`) and four `GAME_CMSG` opcodes (`0x0011`, `0x0012`, `0x0013`, `0x0014`) form one family whose bodies all live in `ChCliApi.cpp` and all operate on one 52-byte array the client itself names `challengeSortArray`. The struct closes to the byte. The quest lifecycle — offer, accept, describe, mark, advance, turn in, replay on map change — is on the wire in order, twice, and is a directly copyable script. Fifteen opcodes carry `name: null` in `schema/messages.json` today and every one of them can be named off this pass.
