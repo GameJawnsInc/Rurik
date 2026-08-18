@@ -1309,6 +1309,21 @@ being left standing until the owner says otherwise:
 If the intended scope was wider than this — native code on the server path, or dropping the
 bare-machine requirement — say so and this entry gets corrected rather than reinterpreted.
 
+**Q7. Does the monsterai behavioural cap (3 approaches per creature type per session, no
+repeated spawn visits) bind the Isle's damage pass?** ✅ **CLOSED 2026-08-18, by the owner:
+STRUCK ENTIRELY.** *"As long as the runs are human-driven it's not suspicious at all to kill
+the same enemies over and over."* The cap was `studies/monsterai/FINDINGS.md` §7.6's own
+operationalization of the traffic-pattern rule for AI-probing campaigns — its number never
+measured, never the owner's rule — and its sibling ("at most one session per day") had
+already been struck on exactly those grounds in §7.7.2, where the cap itself survived
+unchallenged. It is now struck the same way, everywhere, not merely scoped off the Isle.
+**What governs instead is the general behavioural rule, unchanged and sufficient**: human
+cadence, human hours, one client, hand-driven, never in a competitive context. §7.6's
+per-question STOPPING rules (fixed in advance so nothing is rationalised into agreeing
+afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 plan
+(`vault/plans/isle_rung7_damage.txt`), which was header-blocked on this ruling per
+`studies/isle/PLAN.md` §6's cross-cutting question.
+
 ---
 
 ## 8. Immediate next actions

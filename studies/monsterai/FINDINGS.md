@@ -1104,11 +1104,18 @@ loop — run, analyse, fix, run — and there is no reason the live half should 
 place it is replaced by a fortnight of plan.
 
 **What survives from the original section**: the per-question stopping rules in §7.6 (fixed
-in advance so nothing is rationalised into agreeing afterwards), the behavioural cap of no
+in advance so nothing is rationalised into agreeing afterwards), ~~the behavioural cap of no
 more than three approaches on one creature type per session and no repeated visits to a
-spawn point, the secondary account, one client, human hours, and `--minutes` as a ceiling.
+spawn point,~~ the secondary account, one client, human hours, and `--minutes` as a ceiling.
 **What is dropped**: "at most one per day, over two to three weeks", as an invention that
 was never measured and never the owner's rule.
+**2026-08-18: the behavioural cap is STRUCK too, by the owner, on the identical grounds**
+(`PLAN.md` §7 Q7, raised when it collided with the Isle rung-7 plan): *"as long as the runs
+are human-driven it's not suspicious at all to kill the same enemies over and over."* This
+section's own revision had already found the day-spacing rule was this study's invention;
+the 3-approaches cap had the same provenance and merely survived that pass unchallenged.
+The general behavioural rule (human cadence, human hours, one client, hand-driven) is the
+control, and the §7.6 stopping rules stand as statistics, not behaviour.
 
 
 *(Superseded by §7.7.1–§7.7.2 above; kept because the per-question stopping rules below still stand.)* Six to ten sessions of 25–40 minutes, secondary account, one client, human hours. `livesession.py` already enforces the cheap structural half (one live client, a `--minutes` ceiling, `--confirm`). Per-question stopping rules, fixed in advance so nothing is rationalised into agreeing afterwards:
@@ -1118,7 +1125,7 @@ was never measured and never the owner's rule.
 - **Windup** — as soon as a third declared attack speed is sampled with n≥8.
 - **Health** — two life-stealing skills agreeing on 3 creature types GWW publishes.
 - **Skill policy** — 30 casts on one creature type, or 8 sessions; then **report the shortfall rather than a histogram over n=6**.
-- **Hard behavioural cap, overriding all of the above:** no more than 3 approaches on the same creature type per session, no repeated visits to one spawn point.
+- ~~**Hard behavioural cap, overriding all of the above:** no more than 3 approaches on the same creature type per session, no repeated visits to one spawn point.~~ **STRUCK by the owner 2026-08-18** (`PLAN.md` §7 Q7) — see §7.7.2's amendment above.
 
 ### 7.8 Refused outright
 

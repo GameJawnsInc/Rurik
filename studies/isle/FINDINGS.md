@@ -745,13 +745,13 @@ is now unlikely. Honest note for rung 6b's record: the east run's "no skills" ru
 broken under fire, five casts, all after the hit; nothing in the roster data is touched
 by it.
 
-**The plan draft is staged at `vault/plans/isle_rung7_damage.txt` and is BLOCKED on the
-one ruling §6 requires before any plan is sealed**: `studies/monsterai/FINDINGS.md:1121`
-caps behaviour probing at 3 approaches per creature type per session with no repeated
-spawn-point visits, and the damage pass is ~9 blocks against 5 practice bodies. The
-draft carries the case for scoping the cap narrower on the Isle (a training range with
-no AI to probe, where standing at a dummy auto-attacking is the most human-shaped
-traffic the map ever sees) in its header, and is not to be run until the owner rules.
+**The plan is staged at `vault/plans/isle_rung7_damage.txt`, and the ruling §6 required
+before sealing landed the same day it was raised.** The behavioural cap
+(`studies/monsterai/FINDINGS.md:1121`, 3 approaches per creature type per session) was
+**STRUCK ENTIRELY by the owner 2026-08-18** — `PLAN.md` §7 Q7: *"as long as the runs are
+human-driven it's not suspicious at all to kill the same enemies over and over"* — the
+same treatment its unmeasured day-spacing sibling received in monsterai §7.7.2. The
+plan is unblocked; livesession seals it at launch.
 Two design notes folded in from the owner mid-prep: weapons have damage RANGES — p16
 spreads over the rolled range while a crit pins to its maximum, which is stated in the
 plan's predictions and printed as a per-block integer band by the analyzer — and the

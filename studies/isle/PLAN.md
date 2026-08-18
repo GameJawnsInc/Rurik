@@ -1073,8 +1073,9 @@ A mis-declared mode would not corrupt a number here — it would corrupt the ros
 silently, in the artifact every later rung indexes into. If the character can be checked
 cheaply before the run, check it.
 
-**Rung 7 — LIVE #2, the damage pass.** **PREP DONE 2026-08-18, RUN BLOCKED on the
-behavioural-cap ruling below** (see FINDINGS "Rung 7 prep"): the consumer exists and is
+**Rung 7 — LIVE #2, the damage pass.** **PREP DONE 2026-08-18 and the run is UNBLOCKED —
+the behavioural-cap question below was ruled the same day (struck, §7 Q7)** (see FINDINGS
+"Rung 7 prep"): the consumer exists and is
 proven (`toolkit/authsrv/damagepass.py`, 44 checks — scoping key, H recovery, the D
 fit, the p17 law, `0x5D` extraction, AR/RANK labels from the sealed plan's own marks),
 the bench geometry is recovered from the rung-6 captures, the plan draft with every
@@ -1124,9 +1125,12 @@ approaches on the same creature type per session, no repeated visits to one spaw
 The conditions protocol alone is five approaches to one Student at one fixed spawn point,
 and the Blind fix pushes it further. The Isle is a training area and the rule may reasonably
 be scoped narrower there — but that is an owner ruling, and none of the four designs raised
-it. **2026-08-18: the question is now IN FRONT of the owner** — the rung-7 draft at
-`vault/plans/isle_rung7_damage.txt` is header-blocked on it and states the case for the
-narrower scope; record the ruling here and in `PLAN.md` §7 when it lands, then reseal.
+it. **RULED 2026-08-18, same day it was raised: the cap is STRUCK ENTIRELY** (`PLAN.md` §7
+Q7, owner's words: *"as long as the runs are human-driven it's not suspicious at all to
+kill the same enemies over and over"*) — not scoped off the Isle, struck everywhere, the
+same treatment its day-spacing sibling got in `studies/monsterai/FINDINGS.md` §7.7.2. The
+general behavioural rule governs; §7.6's stopping rules stand as statistics. The rung-7
+plan at `vault/plans/isle_rung7_damage.txt` is unblocked and ready to seal at launch.
 
 ---
 
