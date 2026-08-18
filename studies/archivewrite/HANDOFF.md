@@ -69,6 +69,7 @@ Nothing is running: no client, no server, no background task.
 | `datplan` extent projection | a generation's declared extent crosses run boundaries | `test_datplan.py` §9 |
 | `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
 | `toolkit/mapdata/gwmatch.py` | **A7a** — size-only LZ77 + an exact block-partition DP, costed through `gwentropy`; still no bitstream | `test_gwmatch.py`, 62 |
+| `toolkit/mapdata/gwenc.py` | **A7b** — the bitstream writer. Re-emits retail byte-identically; encodes our own | `test_gwenc.py`, 55 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
@@ -146,12 +147,27 @@ zlib's worst overflows all fit. Honest counterweight: on hard rows the margin is
 0.003–0.01%, so 11196's 1.8% is a favourable draw. **The budget in payload terms: 18,388 B
 of slack ≈ 34,273 B of extra payload — 2.26% growth, against retail's own 127 B.**
 
-**NEXT IS A7b, the bitstream writer, and it is now the only unbuilt piece.** No table this
-encoder implies has ever been serialized and rebuilt by `gwdat.build_table` — every legality
-check in A7a is a *model* of it. Build the writer, round-trip through `gwdat.decompress`,
-and add the explicit `build_table`-accepts-our-tables arm A7a leaves implicit. A skeptic
-already emitted real bits during A6 and had `build_table` accept them on 2,194 tables with
-zero refusals (§10.3), so the mechanics are proven — on *retail's* tables, not ours.
+**A7b RAN — 2026-08-18, §13. GREEN. THE ENCODER EXISTS.** `toolkit/mapdata/gwenc.py`,
+55 checks. Two results: **retail's own stored rows re-emit BYTE-IDENTICALLY** (row 11196 at
+1,029,564 B with `crc32` matching the MFT's own 0xF862D5C4; **3,051 distinct rows across five
+archives plus a skeptic's independent ~5,990 more across seven, zero failures, no failure
+class**), and **our own encoder emits real bits that unmodified `gwdat.decompress` turns back
+into the payload** — row 11196 at **1,011,244 B, equal to A7a's model to the byte, 18,388 B
+under the reservation.** §12.6's remaining risk is retired: 328 encoder-implied tables were
+serialized and rebuilt by `build_table` with 0 refusals and 0 mismatches.
+
+**Two things that make `gwdat` much more trustworthy than §2.2 recorded.** The bit order is
+corroborated from **ArenaNet's own source lines** — `P:\Code\Base\Compress\CmpIo.h`, and the
+client has a bit *writer* whose preconditions are exactly ours (`CmpIo:138`, `CmpIo:139`).
+And decoding ArenaNet's **own** row 8295 with an *upstream-faithful* `build_table` **FAILS**:
+`gwdat`'s zero-length repair, long labelled a divergence from both upstreams, is **required
+by ArenaNet's own archive**, so the shipping client must implement something equivalent.
+
+**The one gap to carry into A8, with its fix already named.** Our encoder emits declared
+`symbol_count == 1` on 3.4% of tables; retail does so **0 times in 138,708 first blocks**, so
+byte-identical re-emission structurally cannot cover it and its correctness rests only on our
+own decoder. **If the client refuses it, the fix is a two-symbol distance table inside
+retail's attested envelope, costing a few bits — a size question, not a design one.**
 
 **C. A1b, downgraded but real.** `schema/messages.json` has **zero** occurrences of `anim`,
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*

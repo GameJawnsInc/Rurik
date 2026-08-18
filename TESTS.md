@@ -1296,6 +1296,67 @@ Every one of these, in the order they were written:
   Floor 62 with ZERO headroom, measured green; `--rows` moves section 4's check count,
   so shortening it reddens the run on purpose, and without the archive it drops to 34
   and goes RED. ~28 s),
+  `toolkit/mapdata/test_gwenc.py` (rung **A7b**, the bitstream writer — `gwenc.py` is
+  the first thing in this arc that emits bits, and the whole point of the file is that
+  its three checks are **not equally strong**, because `gwdat.py` is OUR decoder and its
+  own docstring (`gwdat.py:81-84`) says the diff against `xentax.cpp` has never been run.
+  **B1, byte-identical re-emission of retail's own rows** (§5, §7) is the only check in
+  the rung that does not assume `gwdat` is correct: trace a stored row, re-emit from what
+  the trace recorded, require the bytes to equal the row on disk **and `crc32` to equal
+  the MFT's own recorded value**. A wrong bit order, a wrong canonical assignment, wrong
+  extra-bit widths or a wrong meta-token encoding cannot accidentally reproduce
+  ArenaNet's bytes. Its population is drawn by a **stated reproducible rule** — every
+  comp-8 row of the archive bucketed into five stored-size bands, sampled with
+  `random.Random(20260818)`, plus the anchors, `gwentropy.WITNESS`, and the four rows
+  carrying the divergent zero-length distance table — and failures are reported **by
+  class**, because a systematic class is a finding about the format while a scatter is a
+  bug in the writer. **The scope limit travels with it**: B1 validates the BIT layer and
+  not the SEMANTIC tables, since `LENGTH_BASE` / `DISTANCE_BASE` / the
+  `first_four + base + 1` arithmetic are replayed verbatim from the trace — a wrong one
+  of those gives a wrong payload and a *bit-identical* stream. **B2, the round trip**
+  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fifteen adversarial
+  synthetics (empty, one byte, all-zeros, a single symbol at index 255, incompressible
+  noise, run-length and short cycles, a match at **exactly** the 32,768 window edge
+  with a check that the edge is genuinely REACHED rather than merely survived, and two
+  `uniform=1`/`uniform=2` partitions so the "a non-final block holds exactly its declared
+  token count" rule is exercised a dozen times) — and it proves **agreement with our own
+  decoder, not correctness**. *(Two of those annotations used to claim which table SHAPE
+  each fixture reached — "a single symbol at index 255 so the literal table takes the
+  all-skip zero-length shape" and "incompressible noise so the distance table is empty".
+  A skeptic measured both FALSE: `all 0xFF` yields an ordinary 3-symbol literal table and
+  its zero-length table is the DISTANCE one, and `incompressible` has 101 matches and no
+  zero-length table at all. The shapes are covered by other fixtures; nothing ASSERTED
+  the mapping, so the comments drifted — the same defect §3's window-edge "genuinely
+  REACHED" assertion exists to prevent, applied to only one of the fixtures that needed
+  it. Corrected in the file.)* **B3, the size closure** (§4) compares the writer's ACTUAL
+  emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in **bits**, because
+  the byte figure is a 32-bit-quantised view and a writer 31 bits off the model still
+  lands on the same stored size. **And B3 has been WATCHED FIRE**, which took finding the
+  right row: `gwmatch` plans its tables with the meta DP and a writer hardcoding retail's
+  greedy emits more bits than the planner charged, but on *most* streams the two agree
+  exactly — 0 bits apart across row 11196's own 218 tables — so a randomly chosen row
+  demonstrates nothing. Row **73015** is pinned because there the wrong flag costs **+9
+  bits**, and the resulting stream **still decodes perfectly**, so B3's comparison is the
+  only thing in the file that sees it. §2 is the arm FINDINGS §12.6 says A7a never had: 328
+  tables our encoder implies, serialized and rebuilt by **`gwdat.build_table` itself**
+  rather than by a model of it, with the decoded lengths diffed against the intended
+  ones. §6 is the breakage set, and **(c) is the one that matters** — flipping the meta
+  plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
+  **valid, smaller, DIFFERENT** stream, which is what makes A6's "retail's table encoder
+  is greedy" load-bearing here rather than decorative. §6(d) records the format's most
+  dangerous property for a writer, in two halves: dropping the `0x80010008` look-ahead
+  word **entirely** still decodes (the u32 trailer slides into the slot, so `gwdat` does
+  not need the sentinel at all), and one word shorter again **truncates SILENTLY** — no
+  raise, no short-read signal, and the row still passes every checksum rule because the
+  MFT crc is over the stored bytes. **Deliberately NOT listed as evidence:**
+  `len(out) == framing_bytes(consumed)` is asserted inside `gwenc.finish`, which computes
+  the length from that very formula — it cannot fail, and the refutable form is §4's.
+  There is deliberately **no `datwrite` verb and no archive is opened for writing**; A7b
+  produces bytes in memory. Floor **55** with ZERO headroom, measured green;
+  `--per-band` / `--quick` move how many ROWS §5 re-emits and not how many checks run, so
+  the row count is itself the last check of §5 and `--quick` reddens it on purpose.
+  Without the archive it drops to 28 and goes **RED** — the same verdict its two siblings
+  give, and for the same reason: B1 never ran. ~150 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
