@@ -1810,6 +1810,94 @@ referenced models have no `.gwmodel.json` at all (40.7%), which looks alarming
 and is not: **all 59 have ZERO placements.** The list is the map's model
 dependency list, not its placement list. Lornar's is 135 of 135.
 
+## 10. The field of view is 75.000 degrees, and the axis is not (2026-08-18)
+
+`gwcam.py` has carried `--lens 28` marked NOT MEASURED since it was written.
+It is measured now, off a running client, and the number is exact.
+
+    fov = 1.3089969158172607 rad = 75.000 degrees, to the last bit
+    far plane = 48000.0 units
+
+**HOW, and why it is a read rather than a disassembly claim.** Chasing it
+statically ends at a VARIABLE, not a literal, so a static answer would have
+been a guess about which constant the camera lands on -- the shape of claim
+this arc has retracted four times (§7.18). The trace (build 38797):
+
+- `GmView.cpp`'s frustum builder at **`0x004ED3C0`** takes `fov` as its fourth
+  argument and asserts `fov != 0.0f` (**GmView.cpp:3737**). Its failure path
+  prints `Invalid frustum:` / `Fov = %f` / `Position = %f, %f, %f`.
+- Both callers (`0x004E2866`, `0x004E29F8`) push the float at
+  **`0x00C078C4`**, alongside `0x00C07860` and `0x00C0786C` -- the position
+  and target that same dump prints.
+- That global is FILLED by the camera update `0x004F6360` -> `0x004F3420`
+  (`this` = `0x00C079A8`), which asserts it again at **GmCam.cpp:1728**.
+- The far plane is the literal at `0x00946EBC` = **48000.0**.
+
+So `toolkit/clientscan/fovread.py` reads the global out of a live client with
+`ReadProcessMemory` -- no injection, no breakpoint, nothing written, and no
+6-second window to miss.
+
+**THE READ SELF-VALIDATES, which is what makes it a measurement and not a
+plausible number.** Beside the fov the same globals gave
+
+    position = (9435.99, 8077.0, -805.42)
+    target   = (9826.0,  8077.0, -716.57)
+
+and `content/maps.toml [map.148]` records Pre-Searing's spawn as
+**(9826.0, 8077.0)** -- the target equals the map's known spawn point, a
+number `fovread.py` was never given. The camera-to-target distance is
+**400.0 units**, inside the 25..750 zoom range the wiki documents. An address
+read from the wrong place does not land on a coordinate we already knew.
+
+**Conditions**: default settings. `HKCU\\Software\\ArenaNet` does not exist on
+this machine, so the client had no saved preferences and started on its own
+defaults -- which matters, because the 2018-06-06 patch added an in-game
+**Field of View slider**, so this is *a* default and not a universal constant.
+
+**WHAT IS NOT ESTABLISHED, and it is the half that decides framing: WHICH AXIS
+the 75 degrees spans.** The three readings are far apart -- at the 1.918
+aspect measured on the render area (1920x1001):
+
+| if 75 deg is | vertical | horizontal | diagonal |
+|---|---|---|---|
+| VERTICAL | 75.000 | 111.612 | 117.864 |
+| HORIZONTAL | 43.608 | 75.000 | 81.743 |
+| DIAGONAL | 39.063 | 68.463 | 75.000 |
+
+`gwcam.py` takes the **vertical** reading, because ArenaNet's own patch notes
+(2018-06-06, GWW) say the client moved to a vertical calculation and
+`-oldfov` restores the older **diagonal** one. That is documentation from the
+publisher about this exact mechanism, and it is still an assumption.
+**One upstream contradicts it**: GuildWarsMapBrowser states 50 degrees
+vertical (single witness, UPSTREAM, unverified). Nothing here reproduces 50 on
+any reading, so one of the two is wrong and it is not settled by argument.
+
+**Two routes tried that did NOT settle it**, recorded so they are not retried
+blind: a memory scan for the projection matrix over **399 MB** of the live
+client's committed pages found **zero** true perspective matrices (filtering on
+`m23 == 1`, `m33 == 0`, `1 < m22 < 1.5`, `m32 < 0`) -- it is not lying around
+in that form. And the `oldfov` flag itself does not carry a second FOV: the
+wide string sits at `0x00943254` in a 41-entry `{name, id, flags}` switch
+table as **id 25**, whose only reader is the bounds-checked getter
+`0x004997A0`, and of its 50 callers exactly **4** push id 25 -- all four
+converting the boolean to a MODE (0 or 2) fed to a shared text helper, none
+loading a second FOV-shaped constant. So on this build the flag does not
+select between two values the way its name suggests. *(Static, untested
+against a running client -- and what MODE 0 vs 2 does was not decoded.)*
+
+**THE TEST THAT WOULD CLOSE IT** is geometric and needs one client run: stand
+at a known point, screenshot, and locate a world feature whose position we
+already know exactly (we ship the terrain heights, so any ridge line will do).
+The pixel position of a known world point against a known camera pose gives
+the horizontal and vertical fields directly, with no free parameter.
+
+**One correction to a tool while here.** `toolkit/clientscan/asserts.py`'s
+census does not contain **GmCam.cpp:1728**, and an agent reasonably challenged
+that citation on those grounds. Re-read from the raw bytes at `0x004F38D9`:
+`push 0x6C0` (1728), `mov edx, 0x0094E064` -> `P:\\Code\\Gw\\Ui\\Game\\GmCam.cpp`,
+`mov ecx, 0x0094D2A4` -> `fov != 0.0f`. The citation stands and the census is
+incomplete -- worth knowing before trusting it as exhaustive.
+
 ## 8. What is still open
 
 - ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
@@ -1895,6 +1983,14 @@ dependency list, not its placement list. Lornar's is 135 of 135.
   factory's argument that lands at stage record +0x10. Named, not
   understood, and asserted nowhere.
 
+- ~~GW's FOV is unmeasured.~~ **MEASURED 2026-08-18, §10: exactly 75.000
+  degrees** at default settings, with a far plane of 48000, read live from
+  `0x00C078C4` by `toolkit/clientscan/fovread.py` and self-validated against a
+  known spawn point. **Still open: WHICH AXIS it spans** — vertical (what
+  ArenaNet's own 2018 patch notes imply, and what `gwcam.py` assumes),
+  horizontal, or diagonal, which differ by 40+ degrees of horizontal field.
+  One upstream says 50 vertical and nothing here reproduces that. The closing
+  test is geometric and needs one client run; §10 states it.
 - The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
   measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
   is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and
