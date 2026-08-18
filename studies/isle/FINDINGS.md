@@ -745,8 +745,9 @@ is now unlikely. Honest note for rung 6b's record: the east run's "no skills" ru
 broken under fire, five casts, all after the hit; nothing in the roster data is touched
 by it.
 
-**The plan is staged at `vault/plans/isle_rung7_damage.txt`, and the ruling §6 required
-before sealing landed the same day it was raised.** The behavioural cap
+**The plan ran the same day — see "Rung 7, LIVE #2" below.** It is staged at
+`vault/plans/isle_rung7_damage.txt`, and the ruling §6 required before sealing landed
+the same day it was raised. The behavioural cap
 (`studies/monsterai/FINDINGS.md:1121`, 3 approaches per creature type per session) was
 **STRUCK ENTIRELY by the owner 2026-08-18** — `PLAN.md` §7 Q7: *"as long as the runs are
 human-driven it's not suspicious at all to kill the same enemies over and over"* — the
@@ -758,3 +759,318 @@ plan's predictions and printed as a per-block integer band by the analyzer — a
 rank-sweep prediction BRANCHES on the recorded weapon type (wand/staff: flat, caster
 weapons scale with character level only; martial: the 283%/293% kink), pre-registered
 both ways in the `weapon` step.
+
+---
+
+# Rung 7, LIVE #2 — the damage pass: the formula came out whole, and one term of it is wrong
+
+**Capture `20260818T132739`, 2026-08-18.** 38833 build, `game_mode base`,
+`exe_unchanged: true`, **9/9 connections decrypted**, plan seals AGREE on a 22-step
+sealed plan. Operator: a PvP-only **Warrior**, level 20, 480 health, PvP Sword
+(`Slashing Dmg: 15-22`, `Requires 9 Swordsmanship`, `Damage +20%`, no inscription,
+customized) and a PvP Tactics Shield. Auto-attack only; every prediction below was
+sealed before the client launched.
+
+Everything here was re-derived by five independent agents — one blind, one sourcing
+GWW, two adversarial, one on the chat oracle — and then adjudicated. **Three of the
+seven claims the first pass wrote down came back corrected, one came back refuted as
+an inference, and one sub-claim came back plainly wrong.** All of that is recorded
+rather than smoothed over, because the corrections are the more useful half.
+
+## The measurement chain, before any claim rests on it
+
+| | |
+|---|---|
+| damage events | **495** — p16 **395**, p17 **100**, **p18 zero** |
+| distinct `cause` | **{25}**, all 495 — one attacker, nothing hits back |
+| unjoined to a create | **0 / 495** |
+| outside a mark window | **0 / 495**; non-engagement steps carry **0** |
+| `points/H` bitwise-exact as f32 | **495 / 495** |
+| median inter-hit gap | **1.330 s in all ten blocks** |
+| casts / projectiles inside an engagement block | **0 / 0** |
+
+**H is measured twice by unrelated routes and they agree.** An exhaustive bitwise scan
+of the fraction grid gives family `{480k}` for all four Suits and `{590k}` for the
+Master of Damage; the wire's own `PROP_HEALTH_MAX` (`0x009F` prop 42) independently
+names **480** and **590**. CORROBORATED, not assumed.
+
+**The rank labels are OBSERVED, not operator-declared** — see §8. `0x003B` fires in
+every "set the panel" step and in **no** engagement step.
+
+| step | label | slot | H | n16 | band | mean16 | n17 | crit |
+|---|---|---|---|---|---|---|---|---|
+| 4 | AR=60 | 152 (−5915, 2079) | 480 | 23 | 19..27 | 23.435 | 12 | 39 |
+| 5 | AR=80 | 153 | 480 | 50 | 13..19 | 15.880 | 7 | 27 |
+| 6 | AR=100 | 154 | 480 | 61 | 9..14 | 11.393 | 15 | 19 |
+| 7 | AR=60 | 152 (−5483, 1751) | 480 | 44 | 19..27 | 22.523 | 13 | 39 |
+| 9 | **H=590 only** | 144 | 590 | 42 | 19..27 | 23.548 | 13 | 39 |
+| 12 | AR=60 RANK=11 | 152 | 480 | 35 | 17..24 | 19.800 | 8 | 34 |
+| 14 | AR=60 RANK=12 | 152 | 480 | 29 | 18..26 | 22.069 | 9 | 37 |
+| 16 | AR=60 RANK=13 | 152 | 480 | 23 | 19..27 | 23.087 | 12 | 39 |
+| 18 | AR=60 RANK=9 | 152 | 480 | 43 | 14..20 | 17.442 | 8 | 29 |
+| 20 | AR=60 RANK=8 | 152 | 480 | 45 | 4..6 | 5.067 | 3 | **8** |
+
+Step 9's plan text is `[H=590]` and carries **no `AR=` tag** — it is correctly outside
+the armour pool, and putting it back on the strength of GWW's "60 armor rating" would
+be RECONSTRUCTION, not measurement.
+
+## 1. The armour term: the exponential form CONFIRMED, and the divisor is 40
+
+**The bench came out in the operator's own reading order — 60 / 80 / 100 / 60** — so the
+pre-registered slot-152 prediction (the two same-slot bodies are the row's ENDS) held,
+and slots 153 and 154 are the 80 and the 100.
+
+OBSERVED, H=480 points: AR60 **22.836** (n=67), AR80 **15.880** (n=50), AR100 **11.393**
+(n=61). Ratios **r80 = 0.6954** and **r100 = 0.4989** against GWW's 0.7071 / 0.5000.
+
+**CORRECTION, and it is the most important one in this document. Do not quote
+D = 38.16 / 39.88 / 39.52 bare.** Those read as "D is not 40" and the opposite is true:
+bootstrap 95% intervals are r80 **[0.6666, 0.7254]** and r100 **[0.4799, 0.5187]**, both
+containing the wiki value, at **−0.79σ** and **−0.11σ**; D_joint's interval is
+**[37.30, 42.00]**, containing 40. `divisor_fit` now returns n, sem, a per-AR interval
+and the σ-distance of 40, and its printout says outright that the mean-ratio fit is the
+weaker witness.
+
+**What actually pins D = 40 is the BAND test, which the first pass never made and which
+has NO free parameter.** With D = 40 and round-to-nearest, AR60's support {19..27} fixes
+the scale and the other two follow with nothing left to tune: AR80 → {13..19} ✔,
+AR100 → {9..14} ✔. `floor` is refuted outright by the two 14s at AR100.
+
+**Label-swap control passes decisively:** as labelled, D = 38.16 / 39.88 (spread 1.72);
+with the 80/100 nameplates swapped, D = 19.93 / 76.33 (spread 56.4).
+
+**Error budget the first pass omitted.** The two 60-Suits differ by **+0.912 ± 0.708
+(1.29σ)** — not significant, identical bands, identical crit — but the 95% bound on
+body-to-body variance is ≈ ±6% of the AR60 mean, while the r80 deficit under discussion
+is 1.7%. **AR80 and AR100 rest on one body each.** A replication with ≥2 bodies per AR
+is what would separate body variance from the ratio.
+
+## 2. The whole damage formula, and the one term that is REFUTED
+
+The model that reproduces every band endpoint, with zero free parameters:
+
+```
+points = round( roll × 1.20 × 2^((SL − AR)/40) )
+SL     = 5 × rank            for rank ≤ 12
+       = 60 + 2 × (rank−12)  above 12
+roll   drawn from the weapon's stated 15..22
+```
+
+**WIKI** (GWW "Damage calculation", rev. 2025-08-01, carrying its own `{{unofficial}}`
+banner — player reverse-engineering, so agreement is corroboration between two
+independent observers rather than confirmation against a primary source) states each
+term separately: the `2^((SL−AR)/40)` form, `5×rank`, the threshold at `(level+4)/2` = 12
+at level 20, and `+2` per rank above it. Wire and wiki agree from opposite directions.
+
+**Corrections.** The "10 of 10 blocks" is **7 distinct (AR, rank) conditions** — steps
+4, 7, 9 and 16 all predict and observe 19..27. And one of the seven passed on luck: at
+rank 11, `15 × 1.10040 = 16.5061` against a rounding threshold of 16.5, a margin of
+**0.037%**, which discriminates nothing.
+
+**The `/3` for an unmet weapon requirement is REFUTED at 3.5%.** The rank-8 band alone
+is fine (4..6 admits scale ∈ [0.25000, 0.29545), and the model's 0.28284 is inside). It
+dies when the crit is added: crit = 8 requires scale ∈ [0.24106, 0.27320), so jointly
+**[0.25000, 0.27320)** and 0.28284 is past the ceiling. **The data cannot say which term
+is wrong and no replacement may be published**: holding SL=40, the divisor lies in
+**(3.106, 3.394]** — 3 is excluded, 10/3 is not; holding ÷3, SL₈ lies in **[32.9, 38.0)**
+— 40 is excluded, 35 is not. GWW itself says "**approximately** two-thirds"; the exact
+1/3 was our hardening of a hedged source. **Do not cite GWW's worked example as support**
+— "a sword that deals 11-22 will do 5-8 (11 on critical)" is internally inconsistent.
+
+## 3. The roll is finer-grained than the stated integer range
+
+**The model-free argument, which is the decisive one:** AR60/rank13 pooled (n=132) shows
+**9 distinct point values, 19..27.** An integer roll over 15..22 is 8 values, and any
+deterministic map of 8 values yields at most 8 outputs. That kills the entire
+rounding-rule family at once, without fitting anything.
+
+**CORRECTION — "continuous" over-claims.** Against uniform K-step grids, K=8 is
+impossible, K=9..30 disfavoured, and **K ≥ 40 is indistinguishable from continuous**.
+The defensible claim is **"finer-grained than the stated integer range, at least ~40
+steps"**.
+
+**CORRECTION — the strongest rival is refuted by exactly two events, and this belongs in
+these words.** An integer roll over the *customized* range 18..26 reproduces
+AR60/rank13's support exactly and fits its **shape slightly better** than continuous
+(χ² 5.18 vs 6.13, 8 df). It dies on one thing only: at AR100 it caps at 13, and **14 was
+observed twice** — t=750.678 and t=765.382, both p16, both slot 154, both bitwise-exact
+on `14/480`. Two events carry the whole refutation. A replication should pick an AR where
+the two candidate supports differ by more than one bin, so the discrimination does not
+rest on the tail.
+
+**WIKI: NOT FOUND** on both halves — GWW says only "a random value in the weapon's
+range", never uniform, never integer-vs-continuous. **The measurement stands alone.**
+
+## 4. Property 17 IS the critical hit — the strongest result of the run
+
+Pre-registered and met: **10/10 blocks single-valued, 100/100 events, variance zero.**
+
+**One parameter fits nine numbers.** The nine requirement-met blocks pin the crit
+multiplier to **c ∈ [1.40866, 1.42045)** — a 0.83% window — and **√2 = 1.41421 is
+inside**. (Correction: "at AR−20" and "×1.414" are *the same statement*, since
+2^(20/40) = √2; the first pass presented one rule as two agreeing facts. And the data
+pins √2 only to ±0.8% — 1.41 and 1.42 also fit.)
+
+**Two witnesses the first pass did not have:**
+- **p16 + p17 = 495 = one event per swing**, at a 1.330 s median gap in every block. So
+  p17 **replaces** p16 — what a critical does and what a bonus would not.
+- **Crit rate rises monotonically with effective rank on one body at one AR**: 6.25%
+  (r8), 15.69% (r9), 18.60% (r11), 23.68% (r12), 34.29% (r13). GWW says crit chance
+  depends on attribute rank; a damage cap or a fixed bonus has no reason to do this.
+
+**THE RANK-8 CRITICAL IS A DISJOINTNESS, NOT A ROUNDING NEAR-MISS**, and the first pass's
+"observed 8 against a predicted 8.8 → 9" understated it badly. The rank-8 block admits
+**c ∈ [1.20530, 1.36600)** while the met blocks require **c ≥ 1.40866**. The intervals do
+not touch. No single crit multiplier fits all ten blocks and no rounding rule rescues it
+— `floor` fixes rank 8 and breaks AR60/r13 (38 vs 39) and rank 9 (28 vs 29). **The defect
+is not in the crit rule; it is the same unmet-requirement term §2 gets wrong, and this is
+its sharpest expression.** It stays unexplained and it stays visible.
+
+## 5. The Master of Damage oracle — and the check that could have failed
+
+**Slot 144 at (−2000, 3233), profession 6 Elementalist, level 20, health 590.** GWW's
+Master of Damage is a level-20 Elementalist with 590 health. The operator's independent
+report — "far away next to two targets of their own" — matches its position between two
+slot-155 target stations. The pre-registered prediction that the bench-middle body (slot
+142, a **Warrior**) is NOT the Master of Damage held. Still RECONSTRUCTION under the
+standing ruling: no name was rendered.
+
+**The oracle breaks the H family, which is the point.** The fraction grid alone gives a
+family `{590k}` and cannot choose within it. The announced total is **1496**; H=1180
+would make it 2992 and H=1770 would make it 4488. **Only 590 gives 1496**, and 1496 is
+exactly our independently summed integer points (989 from p16 + 507 from p17). A check
+that could have failed and did not.
+
+**REFUTED — "the `/bow` report at t=1117.57".** Verified from both directions: the line
+carrying 1496 is at **t=1117.574**, and the c2s command `0x0064 [.., '/bow']` is at
+**t=1122.037**, **4.46 s later**. The 1496 line is an **end-of-combat auto-report** ~5.8 s
+after the last hit. Its three arguments read as **(1496 total damage, 73 seconds,
+20 average DPS)** — and 1496/73 = 20.5 → 20, which closes internally. The genuine `/bow`
+responses are the two later lines at t=1123.572 (39, 9) and t=1126.572 (31).
+
+**REFUTED — the periodic tick as a running average.** N steps **20 → 26 → 21** across
+consecutive 5.00 s ticks while the cumulative total only rises; a running average over
+65 s of accumulated data cannot do that. The *direction* (a rate, not a total) is
+CONFIRMED — N stays in [17, 26] while the sum runs 92 → 1496.
+
+**The residual is OPEN and was sharpened rather than closed.** `floor(D₅/5)` scores
+11/15; a sweep over window width ∈ [3,12] s × offset ∈ [−3,+3] s × {floor, round} ×
+divisor {5, W} tops out at **12/15**. **New structure: every miss is a window holding
+fewer than 4 swings, and the deficit is exactly +4 per missing swing.** That is why
+"sum of the last 4 swings ÷ 5" also scores 12/15 — the server may be averaging over a
+fixed *number of attacks* rather than a fixed wall clock. Three ticks stay unexplained
+and the 12/15 fit is **not adopted**.
+
+**Argument encoding, OBSERVED and simpler than the varint story suggested:** every
+argument word is literally `0x100 + n`, alternating slot index and value. The
+end-of-combat line is `0x101 0x6d8 │ 0x102 0x149 │ 0x103 0x114` = slots (1,2,3) carrying
+(1496, 73, 20). This reproduces all 18 lines. The absolute template-id framing stays
+UNVERIFIED.
+
+**`damagepass`'s "0x5D renders only with its 0x5E tag" was over-read and is corrected.**
+This capture holds 21 chat lines: **3 with `0x5E`** and **18 with `0x5F`**, the latter
+naming agent 100 — the Master of Damage itself. So `0x5E` tags a channel-addressed line
+and `0x5F` an agent-addressed one; what rung 4 actually established is that a bare `0x5D`
+with **neither** renders nothing.
+
+## 6. The rank kink: the inference is REFUTED, and what replaces it is better
+
+Means confirmed exactly: **19.800** (r11, n=35), **22.069** (r12, n=29), **23.087**
+(r13, n=23); steps **+2.269** and **+1.018**, ratio **2.229** against GWW's 2.4.
+
+**That ratio is worthless and must be dropped.** Bootstrap over 200k resamples: 68% CI
+**[0.91, 4.89]**, 95% CI **[−17.29, 23.53]**, **P(ratio < 0) = 6.9%**, and **9.4% of
+resamples land within 10% of 2.4 by chance.** The denominator is 1.44σ from zero, so the
+statistic is Cauchy-tailed and cannot distinguish 2.4 from 1.0 or from 5.0. The kink
+itself is only **1.15σ** from absent. The plan's pre-registered MARTIAL branch is
+**consistent with** the data, **not confirmed by** it.
+
+**Use ratios of means instead, which are sound:** r11/r12 = **0.8972 ± 0.0243** vs the
+mechanism's 0.9170 (**−0.81σ**); r13/r12 = **1.0461 ± 0.0325** vs 1.0353 (**+0.33σ**).
+The monotone rise r11 → r13 is **+3.287 ± 0.682 = 4.82σ**. And the **bands** are
+integer-exact where the threshold rule actually shows: **17..24 / 18..26 / 19..27**. The
+crit-rate ladder in §4 is a second independent witness.
+
+**Open residual, no mechanism.** The rank-12 block: value **24 never observed** (3.45
+expected) while **23 appears 9 times**, χ² = 15.74 on 8 df, p ≈ 0.046, n=29.
+Time-ordered halves show no drift, and an integer roll would forbid the four observed
+21s, so that escape is closed too. Unexplained.
+
+## 7. The unmet-requirement step: the naive 1/3 is excluded, and so is our fix
+
+r8 = **5.067** (n=45), r9 = **17.442** (n=43), ratio **0.29049**, bootstrap 95% CI
+**[0.2769, 0.3048]**. **The naive 1/3 sits at −6.05σ and is excluded** — that is this
+step's real contribution and it holds.
+
+**But our own corrected prediction is excluded too.** With the strike-level drop 45→40
+the model predicts **0.3057**, and the observed value is **−2.18σ** below it, with the
+95% CI not containing it. Both blocks push the same way. **This is an unexplained ~5%
+residual and is recorded as one**, not as a resolution. It is the same defect as §2's and
+§4's.
+
+**Block cleanliness verified**: the two blocks are on different connections, bands are
+disjoint (14..20 vs 4..6), and the wire's attribute ledger sets effective rank 8 at
+t=1650.409 — 10.6 s after the last rank-9 hit and 19.1 s before the first rank-8 hit.
+No leakage either way.
+
+## 8. The attribute channel — gate 1's ask, and no capture had ever carried it
+
+The operator had to zone to the Great Temple of Balthazar to *lower* attributes (the game
+refuses to lower them in an explorable area), and that detour produced the traffic
+`PLAN.md` §7's gate 1 has wanted for months. **Four SMSG identifications, all OBSERVED,
+none previously named in this repo:**
+
+| opcode | shape | when |
+|---|---|---|
+| `0x0037` | `[agent, unspent, 200]` | instance load |
+| `0x003A` | `[agent, ids │ base ranks │ effective ranks]` | instance load, **column-major** |
+| `0x003B` | `[agent, attribute, base, effective]` | one per change, mid-instance |
+| `0x0038` | `[agent, unspent]` | the change's cost, debited |
+
+**The +1 bonus is visible on the wire.** `0x003A`'s two rank columns differ on
+Swordsmanship alone — base 12, effective 13 — and all 14 changes carry effective =
+base + 1. **Damage uses the EFFECTIVE rank**: the bands fit it at all five ranks, and
+base is refuted because adjacent blocks have distinct bands that do not swap. Effective
+14 is refuted too — SL(14) = 64 predicts a band reaching 28, and 28 never appears in 132
+events.
+
+**The point budget closes two unrelated ways.** The first `0x0037` reads **5 unspent
+against a budget of 200**, matching the operator's own screenshot before any arithmetic.
+Three equations over four instance loads then give **cum(8) = 37, cum(10) = 61,
+cum(12) = 97 attribute points** with no cost table assumed — and **97 is the number GWW
+publishes for rank 12**. Independently, the sweep connection's own debits (41 → 25 → 5)
+reproduce the same 36 while *splitting* it into **rank 11 = 16 points, rank 12 = 20**,
+which the load readings alone cannot separate.
+
+## 9. What this run leaves open
+
+1. **Which term of the unmet-requirement rule is wrong?** A rank-7 or rank-6 block, or a
+   second weapon with a different requirement, separates {divisor, strike-level drop,
+   crit rule}. **The highest-value next measurement** — it closes the one defect shared
+   by §2, §4 and §7.
+2. **Is the Master of Damage's tick a fixed-attack-count average rather than a fixed
+   window?** Every miss is a sub-4-swing window with a +4-per-missing-swing deficit. A
+   deliberately slower weapon separates the two readings.
+3. **What is the true grain of the roll?** K ≥ 40 is indistinguishable from continuous
+   here; a block at high AR and low rank magnifies quantization.
+4. **Why is 24 absent from the rank-12 block** while 23 appears 9 times (p ≈ 0.046)?
+5. **What closes the 11-point gap** in the Master of Damage's closing health
+   (`prop 55 = 300/590` against our ledger's 289)?
+6. **What is skill 364**, cast once by the player at t=1008.125 in a *walking* step? No
+   measurable effect on the block that follows, but it is an uncontrolled input.
+7. **`parse_coded` returned a 13.8-trillion "string id"** for a `0x5F` blob without
+   complaint. That deserves a guard.
+
+## 10. Scope, and one methodological note
+
+The armour ratio is measured against **one body per AR** at 80 and 100. The whole run is
+n=1 session, one character, one weapon, one level, one mode — §7's pessimistic case still
+applies, and the honest scope of "the damage formula is confirmed" is *for a customized
+martial weapon, at level 20, against stationary level-20 targets, on one character*.
+
+**Methodological note worth keeping.** Two of this run's three biggest corrections came
+from statistics the first pass simply did not compute (an interval on D; a bootstrap on
+the kink ratio), and the third from a timestamp it did not check (`/bow` at t=1122
+against the report at t=1117). None of the three needed new data. The band test — which
+turned out to be the strongest evidence in the whole run — was available from the first
+minute and was not made until an adversary asked what pinned D.

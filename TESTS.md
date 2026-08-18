@@ -2004,9 +2004,28 @@ Every one of these, in the order they were written:
   a guess. The plan STEP joins the scoping key whenever mark windows exist — the
   rank-sweep extension re-engages ONE Suit at five ranks, and without the block
   dimension those blocks pool into a mean about nothing; `RANK=`-tagged blocks feed
-  the rank curve and are excluded from the divisor fit by construction. Needs
-  `vault/captures/live/`; without it the corpus sections cannot run and the floor
-  of 44 takes it red),
+  the rank curve and are excluded from the divisor fit by construction. **§7 pins the
+  timebase join, and it pins a real silent bug**: `tape.load_tape` returns
+  CONNECTION-LOCAL times (t=0 at that connection's first s2c segment) while plan marks
+  are on the capture's GLOBAL wire clock, so reading events without adding `info["t0"]`
+  shifts every label into a NEIGHBOURING step — mislabelled, not unlabelled, and nothing
+  errors. On the rung-7 capture the 67.9 s offset put the Master of Damage's 42-swing
+  block under the *walk* step and split the AR=100 block across two labels. The pins are
+  refutable by construction: the two pure-walking steps must hold ZERO damage events,
+  step 9 must hold exactly the 42-swing slot-144 block, and the bench must carry exactly
+  the three pre-registered armour labels. **§7b is the attribute channel gate 1 asked
+  for and no capture had ever carried** — a REAL rank reassignment: `0x0037
+  [agent, unspent, 200]` and `0x003A [agent, ids | base | effective]` at instance load,
+  `0x003B [agent, attr, base, effective]` per change and `0x0038 [agent, unspent]`
+  mid-instance. It pins that the budget is 200, that the session's first unspent
+  reading is 5 (matching the operator's own screenshot before any arithmetic), that
+  `0x003A`'s two rank columns differ on Swordsmanship alone — the **+1 bonus visible on
+  the wire** — and that all 14 changes name attribute 20 with effective = base + 1. The
+  point costs then close two independent ways: three equations over four instance-load
+  readings give cum(8) = 37, cum(10) = 61, **cum(12) = 97** with no cost table assumed,
+  and the sweep connection's own debits (41→25→5) reproduce the same 36 while splitting
+  it into rank 11 = 16 points and rank 12 = 20. Needs `vault/captures/live/`; without it
+  the corpus sections cannot run and the floor of 64 takes it red),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly

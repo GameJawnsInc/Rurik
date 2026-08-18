@@ -1073,9 +1073,23 @@ A mis-declared mode would not corrupt a number here — it would corrupt the ros
 silently, in the artifact every later rung indexes into. If the character can be checked
 cheaply before the run, check it.
 
-**Rung 7 — LIVE #2, the damage pass.** **PREP DONE 2026-08-18 and the run is UNBLOCKED —
-the behavioural-cap question below was ruled the same day (struck, §7 Q7)** (see FINDINGS
-"Rung 7 prep"): the consumer exists and is
+**Rung 7 — LIVE #2, the damage pass. ✅ DONE 2026-08-18** — capture `20260818T132739`,
+9/9 decrypted, seals agree, 495 damage events, every pre-registered prediction resolved
+and five independent agents sent at the results afterwards. **The exit criterion is met
+and then some**: D recovered jointly (39.5, 95% CI [37.30, 42.00], containing 40 at
+−0.8σ/−0.1σ) *and* the whole damage formula pinned by a band test with no free parameter
+— `round(roll × 1.20 × 2^((SL−AR)/40))`, SL = 5·rank to 12 then +2 — with **property 17
+confirmed as the critical hit** (10/10 blocks zero-variance, one multiplier fitting nine
+blocks in a 0.83% window containing √2, crit rate rising monotonically with rank). Also
+banked: the roll is **finer-grained than the stated integer range**, the Master of
+Damage's announced total **1496 = our summed points exactly** (a check that could have
+failed), and gate 1's attribute channel (`0x0037`/`0x003A`/`0x003B`/`0x0038`, budget 200,
+cum(12) = 97). **Three claims came back corrected and one refuted** — the unmet-
+requirement `/3` is REFUTED at 3.5% and no replacement may be published; the rank-kink
+ratio is statistically worthless (95% CI [−17, 24]) and is replaced by ratios of means;
+the 1496 line is an end-of-combat auto-report, not the `/bow` response. Full record:
+`FINDINGS.md` "Rung 7, LIVE #2". Prep detail below (see FINDINGS "Rung 7 prep"): the
+consumer exists and is
 proven (`toolkit/authsrv/damagepass.py`, 44 checks — scoping key, H recovery, the D
 fit, the p17 law, `0x5D` extraction, AR/RANK labels from the sealed plan's own marks),
 the bench geometry is recovered from the rung-6 captures, the plan draft with every
