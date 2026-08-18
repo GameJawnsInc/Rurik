@@ -2821,6 +2821,17 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 #      0x002F was tested and did nothing, and it retires that whole line: there
 #      is no post-construction setter to reach, so allegiance is decided when the
 #      agent is CREATED and no later message can correct it.
+#      **CORRECTED 2026-08-18 -- the last clause is FALSE, and the word
+#      "allegiance" was equivocating.** Probe `allegiance_split` (harness
+#      20260818T171349) sent 0x002F ALONE to a body created 'mons' and its
+#      compass dot went RED -> GREEN in the next frame, while a body given only
+#      0x00AA stayed red 53 s and an untouched control stayed red all run. So a
+#      later message DOES correct displayed allegiance. What survives is this
+#      paragraph's actual subject: +0x1B5, the ATTACKABILITY enum, still has no
+#      post-construction writer, and the 0x002F test that "did nothing" was
+#      watching attack initiation -- a different store from the team token the
+#      compass and nameplate read (agent +0xE8, ChCliBase.cpp:326). Two stores,
+#      two answers, both true. studies/newopcodes/FINDINGS.md, the 0x002F row.
 #
 # AND THE READ SAYS BOTH GATES PASS (agentprobe.py, 2026-08-11): our Hatcher
 # carries +0x9C == 0xDB (a CHARACTER) and +0x1B5 == 3 (ALLEGIANCE_ENEMY), with

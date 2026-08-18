@@ -1353,7 +1353,48 @@ was written. That is one of the three unknowns in that section's payload closed.
 
 ---
 
-## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — **CONTESTED**
+## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — ~~CONTESTED~~ **RESOLVED 2026-08-18: the name is right, and it is now OBSERVED on our own client**
+
+> **THE CONTEST IS OVER, AND UPSTREAM WINS — `0x002F` ALONE updates displayed allegiance.**
+> Harness `20260818T171349`, probe `allegiance_split`, four cells, arms 10 s apart,
+> predictions on record before the run. Four bodies all created `'mons'` (all red):
+>
+> | body | received | compass result |
+> |---|---|---|
+> | agent 10 EAST | **`0x00AA` alone** | **no change** — still red **53 s** later |
+> | agent 11 WEST | **`0x002F` alone** | **RED → GREEN, in the very next frame** |
+> | agent 12 NORTH | both, retail's order | **RED → GREEN** |
+> | agent 13 SOUTH | nothing | **red throughout** (negative control holds) |
+>
+> Red pixels stepped 55 → 42 → 29 — exactly one dot per flip — and the two survivors are
+> the `0x00AA`-only body and the untouched control. Per-mark connected components confirm
+> the specific dots: `(65,106)` flipped at ARM B, `(56,97)` at ARM C, `(74,97)` never.
+> Agent 10 carried the client's target ring, so its core was decomposed separately to rule
+> out a flip hiding under the ring: **RED 18 → 17 px** across the whole run, i.e. intact.
+>
+> **`0x00AA` is neither necessary nor sufficient**, which refutes the leading hypothesis
+> this probe was built on (that `0x00AA` creates the record `0x002F` writes into, so the
+> pair is required). Written down before the run and wrong.
+>
+> **And `studies/enemy/PLAN.md`'s null result STANDS — the two findings do not collide.**
+> That pass sent `0x002F` and reported "no change"; it was watching **attack initiation**,
+> which is gated by the `+0x1B5` enum, and `+0x1B5` really is write-once at construction
+> (two writers, both constructors). So allegiance lives in **at least two stores**: the
+> **displayed** team token, which `0x002F` writes at any time, and the **attackability**
+> byte, which nothing after construction has ever been shown to move. Both prior claims
+> were true about different surfaces, and the word "allegiance" was doing the equivocating.
+> `authsrv.py:2818-2823`'s "no later message can correct it" is now **wrong as written**
+> and is corrected at the site.
+>
+> **Open, and sharpened rather than closed:** the SOURCED reading below says the handler
+> stamps field 2 into `+0xE8` of the AgMsg sync/async records, "nowhere near" the rendered
+> allegiance — yet the rendered surface demonstrably moved. Since `studies/smsg` puts the
+> **team token at agent `+0xE8`**, read by `AgentGetTeamToken` (`ChCliBase.cpp:326`), the
+> "identical offset in a different structure" reading is the thing to re-derive first.
+> **Not yet measured:** the nameplate surface (uncaptured in both runs — the `--walk` plan
+> released ALT before the shutter), whether an outpost behaves the same (both runs were
+> `--explorable`, and `0x00AA`'s roster step is `MISSION_MAP_GAME`-gated), whether the flip
+> also restores attackability, and the reverse direction (`'play'` → a hostile token).
 
 **2 sightings**, `(15, 'play')` and `(17, 'play')`, immediately after the two `0x00AA`
 sightings for the same agents in the same order. No refutation pass; treat accordingly.
