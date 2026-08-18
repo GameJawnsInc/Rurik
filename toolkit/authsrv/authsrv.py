@@ -2553,6 +2553,15 @@ HERO_BAGS = False
 # arm. --hero-body is NOT this fix: 0x0020 builds a char object but never the
 # by-id entry (read end to end on 38833). studies/pvpui/FINDINGS.md 27.
 HERO_CHAR = False
+# 0x0074's two u32s at msg +0x14/+0x18 (builder d1/d2), stored verbatim at
+# hero-record +0x14/+0x18 (worker 0x81DB70, stores at 0x0081DBE1/0x0081DBE7,
+# 38833) and read back by the commander paperdoll's fallback: PushAppearance
+# hands the pair to 0x0082DB40 -> CpsPlayer/CpsMonster (Gw/Composite/), which
+# opens a FILE by it -- zeros assert `fileId` File.cpp:367, which is exactly
+# the 2026-08-18 14:23 click. So this pair is the hero's APPEARANCE COMPOSITE
+# file reference; what value renders is the open experiment.
+# studies/pvpui/FINDINGS.md 28.
+HERO_APPEARANCE = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -7140,8 +7149,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # only the absolute time. Splitting the
                                     # pipeline across the load boundary is what
                                     # kept asserting, in both directions.
+                                    _hap = HERO_APPEARANCE or (0, 0)
                                     _seq.append(agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                        d1=_hap[0], d2=_hap[1],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))
                             # What 0x01C2's identity words mean, four rounds
@@ -8522,6 +8533,13 @@ def main():
                          "paperdoll indexes that table by agent id and "
                          "Array:587s on an unregistered one. Registration "
                          "alone suffices -- a NULL slot falls back cleanly.")
+    ap.add_argument("--hero-appearance", default=None, metavar="D1[,D2]",
+                    help="0x0074's two u32s at msg +0x14/+0x18 -- the hero's "
+                         "appearance composite file reference, fed by the "
+                         "commander paperdoll to CpsPlayer/CpsMonster. Zeros "
+                         "(the default) assert `fileId` File.cpp:367 on the "
+                         "hero-button click once --hero-char clears the char "
+                         "table. The floor after Array:587.")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8785,6 +8803,15 @@ def main():
         HERO_BAGS = a.hero_bags
         global HERO_CHAR
         HERO_CHAR = a.hero_char
+        global HERO_APPEARANCE
+        if a.hero_appearance is not None:
+            _hap = [int(x, 0) for x in str(a.hero_appearance).split(",")]
+            if len(_hap) > 2:
+                raise SystemExit(
+                    f"--hero-appearance got {len(_hap)} values; the pair is "
+                    f"two u32s (msg +0x14/+0x18), a third would silently "
+                    f"be dropped")
+            HERO_APPEARANCE = (_hap[0], _hap[1] if len(_hap) > 1 else 0)
         if HERO_BAGS and HERO_INVENTORY in (0, 1):
             raise SystemExit(
                 f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "
