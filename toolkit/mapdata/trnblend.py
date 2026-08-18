@@ -212,7 +212,8 @@ def _emit(out, mask, tile):
                          quadrant_coverage(second)))
 
 
-def cell_layers(corners, tile_types, variation, max_layers=MAX_LAYERS):
+def cell_layers(corners, tile_types, variation, max_layers=MAX_LAYERS,
+                perm=None):
     """The ordered layers for one cell. `layers[0]` is the opaque base.
 
     `corners` is the four corner tile bytes in the order (this, +x, +y, +xy);
@@ -246,15 +247,27 @@ def cell_layers(corners, tile_types, variation, max_layers=MAX_LAYERS):
     if k > 3:
         return out                       # one material: no seam, no overlay
 
-    mask = 1 << k
+    # THE MASK IS PHYSICAL, THE GROUPING IS PERMUTED, and conflating the two
+    # cost this arc a wrong model. `perm[k]` is the PHYSICAL corner sitting at
+    # sorted position k; without it we fall back to the identity, which is what
+    # the caller wants when `corners` was never permuted.
+    #
+    # MEASURED against the client's own descriptors: building the mask from
+    # PHYSICAL positions reproduces its cover words on **212 of 212** mixed
+    # cells. Building it from sorted positions -- which this function did until
+    # 2026-08-17 -- scores 31.1%, because the sorted layout says only THAT a
+    # group is a run, never WHICH corners the run occupies.
+    at = perm if perm is not None else (0, 1, 2, 3)
+
+    mask = 1 << at[k]
     group_type = types[k]
     repr_tile = corners[k]
     for j in range(k + 1, 4):
         if types[j] == group_type:
-            mask |= 1 << j
+            mask |= 1 << at[j]
         else:
             _emit(out, mask, repr_tile)
-            mask = 1 << j
+            mask = 1 << at[j]
             group_type = types[j]
             repr_tile = corners[j]
     _emit(out, mask, repr_tile)
@@ -284,9 +297,11 @@ def map_layers(dim_x, dim_y, tiles, tile_types, variation):
             # permutation is the selector byte at `chunk+0x2B4`. Deriving it
             # here is what makes a mixed cell pick the orientation retail
             # picks; pinning it to the identity was wrong for 1 cell in 7.
-            corners = select_corners(corners, tile_types)
+            sel = corner_selector(tuple(tile_types[c] for c in corners))
+            perm = tuple((sel >> (2 * k)) & 3 for k in range(4))
+            corners = tuple(corners[p] for p in perm)
             out.append(cell_layers(corners, tile_types,
-                                   variation[gy * dim_x + gx]))
+                                   variation[gy * dim_x + gx], perm=perm))
     return out
 
 

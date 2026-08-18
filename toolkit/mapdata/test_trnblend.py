@@ -44,7 +44,7 @@ import checks  # noqa: E402
 # FLOOR: 26, from a real green run 2026-08-15 -- the vault-less count.
 # Sections 1-3 are arithmetic and cannot skip; section 4 needs the vault and
 # the client captures, so it declares a skip rather than inflating the floor.
-# A full run with the vault scores 29.
+# A full run with the vault scores 32.
 FLOOR = 26
 
 
@@ -56,6 +56,7 @@ def main(argv=None):
     _section2(check)
     _section3(check)
     _section4(check, led)
+    _section5(check, led)
     print(f"\n({time.perf_counter() - t0:.1f}s)")
     return led.verdict()
 
@@ -319,6 +320,66 @@ def _section4(check, led):
     # result and a near-match is a FAILURE, not a rounding difference.
     check(hit == total, "the client's own selector bytes, exactly",
           f"{hit}/{total}")
+
+
+def _section5(check, led):
+    """`cell_layers` against the CLIENT'S OWN cover words, per cell.
+
+    Sections 1-3 check our model against our model. This one checks it against
+    212 mixed cells of descriptors captured out of the running client at
+    `0x00761A25` -- the array it is about to hand to the UV writer. It is the
+    only check here that could have caught the physical-vs-permuted mask bug,
+    and it is why the capture is kept.
+
+    The frame holds the corners ALREADY PERMUTED (sorted ascending, verified
+    512/512), the selector as arg3 and the variation as arg4, so a cell is
+    self-contained: no map data and no client are needed to re-run it.
+    """
+    import struct
+    import vaultpath
+    try:
+        vault = vaultpath.require_dir()
+    except Exception as exc:
+        led.skip(f"cover-vs-client: no vault ({exc})")
+        return
+    f = os.path.join(str(vault), "research", "terrain",
+                     "layers_lornars_prng.bin")
+    if not os.path.exists(f):
+        led.skip("cover-vs-client: no layers_lornars_prng.bin capture")
+        return
+    d = open(f, "rb").read()
+    n, lo, ln, _base = struct.unpack_from("<IIII", d, 0)
+    o = 16 + 4 * n + 8 * n
+
+    def dw(i, x):
+        return struct.unpack_from("<I", d[o + i * ln:o + (i + 1) * ln], x + lo)[0]
+
+    ok = tot = sortok = 0
+    for i in range(n):
+        t = tuple(dw(i, x) for x in (-0x34, -0x30, -0x2c, -0x28))
+        sortok += (list(t) == sorted(t))
+        if len(set(t)) == 1:
+            continue
+        sel = dw(i, 0x10) & 0xFF
+        perm = tuple((sel >> (2 * k)) & 3 for k in range(4))
+        ds = [dw(i, x) for x in (-0x10, -0x0c, -0x08)]
+        client = [v >> 16 for v in ds[1:] if (v >> 16) != 0xFFFF and v != 0]
+        lays = tb.cell_layers(list(t), list(range(max(t) + 1)),
+                              dw(i, 0x14) & 3, perm=perm)
+        ours = [(0x8000 if l.rotated else 0) | l.quadrant for l in lays[1:]]
+        tot += 1
+        ok += (ours == client)
+
+    check(sortok == n,
+          "the captured corners are ALREADY sorted -- the frame is post-selector",
+          f"{sortok}/{n}")
+    # A PHYSICAL mask scores 212/212; the permuted mask this module used until
+    # 2026-08-17 scores 31.1%. So a near-miss here is a FAIL, not drift.
+    check(ok == tot,
+          "our cover words match the CLIENT'S, cell for cell",
+          f"{ok}/{tot}")
+    check(tot >= 200, "and the capture still carries its mixed cells",
+          f"{tot} mixed")
 
 
 if __name__ == "__main__":

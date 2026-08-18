@@ -1281,6 +1281,47 @@ ground truth that no amount of internal agreement can fake.
 (tag 3 deferring to the PRNG). A block with authored tag-3 values is not
 covered and should be captured before the rule is called general.
 
+### 7.14 CORRECTED and IMPLEMENTED: the mask is PHYSICAL (2026-08-17)
+
+§7.13 concluded "the mask is built in PERMUTED space". **That was wrong, and
+the offline work that was supposed to implement it refuted it instead.**
+
+**FIRST, A FALSE ALARM WORTH RECORDING.** `corner_selector` scored only 71.5%
+against the captured `arg3`, which looked like §7.9 collapsing. It was not: the
+prologue stores each corner AFTER fetching it through `arr[(sel>>2k)&3]`, so
+`[ebp-0x34..-0x28]` holds the corners **already permuted**. Measured:
+**512 of 512 are non-decreasing.** Comparing a sort against its own output is
+meaningless, and every "mismatch" was a cell whose types were already
+ascending, where our sort correctly returns the identity. §7.9 stands
+untouched.
+
+**THEN THE REAL MECHANISM.** With identical SORTED types the client still
+varied — `(2,2,2,4)` giving `0x1` in one cell and `0x8003` in another. Decoding
+those through `QUADRANT_COVERS`: `q1` covers `{1}`, `q3` rotated covers `{0}`,
+`q3` covers `{3}`. Three different PHYSICAL corners. So the table is indexed by
+the physical mask, and the selector's job is only to **sort the types so equal
+ones sit adjacent**, making the grouping loop a single pass.
+
+| mask built from | vs the client |
+|---|---|
+| sorted positions (what this module did) | 66/212 = **31.1%** |
+| **PHYSICAL positions, via `perm[k]`** | **212/212 = 100.0%** |
+
+**LANDED.** `cell_layers` takes `perm` and ORs `1 << perm[k]` instead of
+`1 << k`; `map_layers` computes it from `corner_selector`. The interchange is
+unchanged and the importer is unchanged — §7.10's "widen the format" option is
+moot, because a physical mask is already in the consumer's space. That is the
+fix §7.13 argued for, arrived at by the opposite reasoning.
+
+**AND THE CHECK THAT WOULD HAVE CAUGHT ALL OF THIS** is now
+`test_trnblend.py` §5: our cover words against the client's own descriptors,
+cell for cell, **212/212 required exactly** — a near-miss is a FAIL, because
+the wrong model scored 31.1% and no amount of internal agreement distinguished
+it. Sections 1-3 check our model against our model; §4 and §5 check it against
+the client. The suite scores 32 with the vault, floor 26 without.
+
+**Scope unchanged from §7.13**: 512 cells, one Lornar's block, all `arg4 = 0`.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
@@ -1298,12 +1339,10 @@ covered and should be captured before the rule is called general.
   function of (corner types, SELECTOR byte) — 212/212 mixed cells, 0 ambiguous
   groups. The PRNG is exonerated (§7.12, 24.8% vs a 25% baseline) and is spent
   entirely on the base variation (512/512).
-- **THE TOP ITEM NOW: emit the cover word for the PERMUTED mask (§7.13).** Our
-  exporter builds the mask in permuted space but ships `(tile, quadrant,
-  rotated)` without the permutation, so the consumer cannot reconstruct the row
-  that was indexed. `corner_selector` is exact, so this is implementable now —
-  and it MUST land with a check against the 212 captured cells, which is the
-  ground truth this arc kept substituting internal agreement for.
+- ~~Emit the cover word for the permuted mask.~~ **DONE and CORRECTED
+  2026-08-17, §7.14**: the mask is PHYSICAL, not permuted — 212/212 against the
+  client, where the permuted reading scored 31.1%. Landed in `cell_layers`;
+  format and importer unchanged. `test_trnblend` §5 locks it to the capture.
 - ~~The permutation is lost at the format boundary (§7.10).~~ **Subsumed by
   §7.13** — same defect, now with the mechanism and a test set.
 - **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
