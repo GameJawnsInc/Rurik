@@ -1313,7 +1313,7 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### Unit setup — the pipeline is one document, 10 of 11 questions ran, and the fixes landed (2026-08-17)
+### Unit setup — the pipeline is one document, ALL 11 questions ran, and the fixes landed (2026-08-17)
 
 The arc is [studies/unitsetup/FINDINGS.md](studies/unitsetup/FINDINGS.md): how a unit comes
 to exist, server → wire → client, synthesized 2026-08-16 and then mostly EXECUTED the next
@@ -1334,10 +1334,26 @@ to aim: `--walk` gained `yaw`, named-key holds (`alt:` is nameplates) and `shot:
 plan's clock, validated live (`20260817T151242`) — "the harness cannot aim" survives only
 for world-anchored clicks and model-appearance judgment.
 
-**What is left, in cost order:** Q11 (every "4/4 tapes agree" figure is one character
-sampled four times — one live capture on a different character, human-driven by design,
-`RUNBOOK.md` procedure); the `0x00F0` non-zero payload tail (kind 5's combat values,
-kind 9's `0x1000` ambient flag — a model, not a default); `0x006D` NPC weapons at create —
+**Q11 RAN, 2026-08-17 — the arc is 11 of 11.** Three owner-driven live captures of a new
+Factions character (`20260817T180610` starter zone, `183323`, `183756` Shing Jea
+Monastery), all assembled, sealed and plan-marked. They took the observed `GAME_SMSG` set
+from **155 opcodes over 12 connections to 177 over 20**, and that 22-opcode difference is
+its own study, [studies/newopcodes/FINDINGS.md](studies/newopcodes/FINDINGS.md): 9 names
+earned, 4 upstream-only, **8 NOT FOUND**, 1 CONTESTED, eight landed in
+`schema/overrides.json` behind `toolkit/schema/test_smsgnames.py`. The headline is not a
+name — `0x006F` has none in any lineage and **settled the nine-slot equipment order**
+against the two-lineage majority (§6 Q6 below). Three same-day corrections came out of
+the same corpus: `0x0199` field 1 is the player NUMBER not the agent id
+(`studies/heroes` §22), the allegiance vocabulary is **eight** tokens not three with
+`mons` turning out to be retail's own, and `0x0071` is a henchman-slot commit whose
+declaration block (`0x009B` + prop 36 + `0x00A6`) nobody had read.
+
+**What is left, in cost order:** the `0x00F0` non-zero payload tail — **now shaped rather
+than open**: the client stores all 32 bits at `record+0x30` and branches on **bit 4
+alone** (`test al, 0x10`, so bits 8–31 are never examined on the create path), then a
+constructor copies the word wholesale to `+0x10C`. So payload 0 is *safe* and the tail is
+fidelity, not correctness; finishing it is one defined step, find what reads `+0x10C`.
+`0x006D` NPC weapons at create —
 **refined 2026-08-17 after the heroes arc hit ItCliApi:488 and asked whether its blocker
 was this line**: it half is. The item-authoring gap has TWO floors. Floor one, item
 RECORDS, already exists — the armor probe declares content-row items via `0x0161`, and a
