@@ -295,8 +295,32 @@ Verified this session over the whole toolkit:
 
 ## 6. If/when Rurik grows a character store
 
-Not scheduled anywhere; recorded so the shape is not re-derived. The minimum
-honest design, given everything above:
+> **BUILT 2026-08-18 — `toolkit/authsrv/charstore.py`, behind `authsrv.py
+> --persist` (OFF by default; every default run stays byte-identical).** One
+> JSON per account under `vault/state/characters/`, atomic writes, and the
+> two crash rules this arc measured are refused at LOAD (at-cap strings;
+> titles referencing unseeded ranks — `test_charstore.py`, floor 18).
+> Items 1–4 below are implemented as sketched: store-driven roster with the
+> client's settings blob served back verbatim, the settings write-back
+> consumed instead of dropped, and the sheet — level, xp, skill points,
+> attributes, faction currents *with their caps* (`0x00EA`–`0x00ED`), title
+> ranks and tracks (`0x00F3`/`0x00F6`) — loaded by the game channel from the
+> uuid in the client's own version frame. `session.py` forwards `--persist`
+> to BOTH server instances (the roster saves on auth; the sheet loads on
+> game). Professions, skillbar and unlocks stay flag-driven — the boundary
+> and its reason are in `charstore.py`'s docstring. **Proven end to end
+> 2026-08-18**: seed run → hand-edit the store (level 7, xp 2625, kurzick
+> 4444/44000, title 5 "Saly" at 7,777) → full server restart → the client
+> renders every stored value (harness `20260818T120713`, frame
+> `3-click.png`). One free observation from that frame: title id 5 renders
+> its points as a *percentage* where id 7 rendered a plain number — the
+> display FORMAT is per-title compiled metadata (`s_titleClientData`), while
+> the name and values stay wire-authored. One defect found and fixed on the
+> way: the first `char_uuid` stash was silently erased by the ARC4
+> handoff's `state = {}` re-bind — the "no store row for character ?"
+> diagnostic is what caught it, one run after it was written.
+
+The original sketch, kept for the record:
 
 1. **Two records, keyed the way retail scopes them**: an account record
    (unlocks, faction currents *and maxima*, account titles) and a character

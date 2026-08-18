@@ -52,6 +52,7 @@ import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
 import questdefs  # noqa: E402
+import charstore  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -902,6 +903,24 @@ SECONDARY_BITS = 0
 # confirmed by us; the rest are corroborated-but-unobserved, so they go out as
 # zeros rather than as invented values.
 GAME_SMSG_CHARACTER_UPDATE_FACTIONS = 0x00E9
+# The four one-dword faction caps and the title pair, OBSERVED both ways on
+# 2026-08-18: retail sends them (132 and 5/7 sightings over six live
+# captures) and our client renders them (faction_max and title_track runs,
+# studies/character/RUNS.md). Sent only on the --persist path below; the
+# default burst is unchanged.
+GAME_SMSG_CHARACTER_FACTION_MAX_KURZICK = 0x00EA
+GAME_SMSG_CHARACTER_FACTION_MAX_LUXON = 0x00EB
+GAME_SMSG_CHARACTER_FACTION_MAX_BALTHAZAR = 0x00EC
+GAME_SMSG_CHARACTER_FACTION_MAX_IMPERIAL = 0x00ED
+GAME_SMSG_TITLE_RANK_DATA = 0x00F3
+GAME_SMSG_TITLE_TRACK_INFO = 0x00F6
+# studies/character/STORAGE.md §6: character persistence, opt-in. False keeps
+# every default run byte-identical -- the suite, the probes and the selftest
+# captures all rely on a deterministic Test Warrior, so a store that armed
+# itself would make every run order-dependent. Module-level default on
+# purpose: a global assigned only inside main()'s flag block is the exact
+# NameError shape that broke every instance load on 2026-08-16.
+PERSIST = False
 PLAYER_ATTR_COUNT = 15
 PLAYER_ATTR_XP = 0
 PLAYER_ATTR_LEVEL = 9
@@ -5248,7 +5267,12 @@ def handle_request_game_instance(values, send, conn_id, state, rec):
     send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0], "REQUEST_RESPONSE(OK)")
 
 
-def handle_portal_login(values, send, store, conn_id, allow_any, rec):
+def handle_portal_login(values, send, store, conn_id, allow_any, rec,
+                        state=None):
+    # `state` arrived with the --persist path: the opened charstore has to
+    # live where the settings arm and CHANGE_PLAY_CHARACTER can reach it,
+    # and that place is the connection's state dict. Optional so the two
+    # tests that drive this function directly keep their call shape.
     """Answer PORTAL_ACCOUNT_LOGIN with the burst that produces character select.
 
     Order is load-bearing at both ends: every CHARACTER_INFO must precede
@@ -5278,10 +5302,31 @@ def handle_portal_login(values, send, store, conn_id, allow_any, rec):
         print(f"[c{conn_id}] login OK — {session['email']}", flush=True)
     rec.event("login_ok", who=who, email=(session or {}).get("email"))
 
-    send(AUTH_SMSG_CHARACTER_INFO,
-         [req_id, TEST_CHAR_UUID, 0, TEST_CHAR_NAME,
-          char_settings_for(SPAWN_PROFESSION)],
-         "CHARACTER_INFO")
+    if PERSIST:
+        # §6 item 2: the roster comes from the store. A refused store raises
+        # rather than degrading to the literal character -- a corrupt file
+        # silently becoming "Test Warrior, level 1" is the store lying about
+        # every character it holds. The default character is seeded on first
+        # run so the flow is visible without hand-authoring a file.
+        roster = charstore.Store.open(
+            (session or {}).get("email") or "loopback@rurik.invalid")
+        roster.ensure_character(TEST_CHAR_UUID.hex(), TEST_CHAR_NAME,
+                                TEST_CHAR_SETTINGS.hex())
+        roster.save()
+        if state is not None:
+            state["charstore"] = roster
+        for uuid_hex, row in roster.characters():
+            blob = (bytes.fromhex(row["settings_blob"])
+                    if row.get("settings_blob")
+                    else char_settings_for(SPAWN_PROFESSION))
+            send(AUTH_SMSG_CHARACTER_INFO,
+                 [req_id, bytes.fromhex(uuid_hex), 0, row["name"], blob],
+                 f"CHARACTER_INFO({row['name']!r}, stored)")
+    else:
+        send(AUTH_SMSG_CHARACTER_INFO,
+             [req_id, TEST_CHAR_UUID, 0, TEST_CHAR_NAME,
+              char_settings_for(SPAWN_PROFESSION)],
+             "CHARACTER_INFO")
     send(AUTH_SMSG_ACCOUNT_SETTINGS, [req_id, b""], "ACCOUNT_SETTINGS")
     send(AUTH_SMSG_FRIEND_STREAM_END, [req_id, req_id], "FRIEND_STREAM_END")
     send(AUTH_SMSG_ACCOUNT_INFO, [
@@ -5530,6 +5575,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c = ARC4(derived)
         state = {}
         if kind == "game":
+            # The game channel's only identity: no session, no email, just
+            # the uuid the client's version frame named. Stashed HERE, after
+            # the re-bind above -- the first version of this line sat at the
+            # parse site and was silently erased by `state = {}`, and the
+            # --persist burst printed "no store row for character ?" for a
+            # character whose uuid the same log had announced 40 lines up.
+            state["char_uuid"] = char_uuid.hex()
             # Rung Q6: held quests are the CHARACTER's, not the connection's.
             bind_progress(state)
             if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
@@ -7071,9 +7123,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # channels are confirmed distinct in the same frame.
                         # Retail also sends 009F:30 (ApplyGuild1) here; we
                         # have no guild id and do not invent one.
+                        # --persist: the character sheet comes from the store,
+                        # found by the uuid the client's version frame named
+                        # (§6 item 3). Row absent is loud-but-not-fatal: this
+                        # burst then serves the defaults it always served. A
+                        # store that fails VALIDATION propagates instead --
+                        # a broken file must not quietly cost its characters.
+                        _ps_row, _ps_acct = None, None
+                        if PERSIST:
+                            _ps_store, _ps_row = charstore.find_character(
+                                state.get("char_uuid", ""))
+                            if _ps_row is None:
+                                print(f"[c{conn_id}] PERSIST: no store row "
+                                      f"for character "
+                                      f"{state.get('char_uuid', '?')}; "
+                                      f"sheet stays default", flush=True)
+                            else:
+                                _ps_acct = _ps_store.account()
+                                print(f"[c{conn_id}] PERSIST: sheet from "
+                                      f"{_ps_store.path}", flush=True)
+                        _ps_level = (_ps_row or {}).get("level", START_LEVEL)
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                             [agents.PROP_LEVEL, PLAYER_AGENT_ID, START_LEVEL],
-                             f"level {START_LEVEL} on the player's AGENT")
+                             [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
+                             f"level {_ps_level} on the player's AGENT")
                         # 0x00F0 precedes every kind-5 create, 130/130 in the
                         # smsg corpus -- "immediately" ONLY once the clock
                         # stamp is removed, and that qualifier is load-bearing:
@@ -7185,9 +7257,72 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # exactly the invention this project keeps having to
                         # walk back.
                         player_attrs = [0] * PLAYER_ATTR_COUNT
-                        player_attrs[PLAYER_ATTR_LEVEL] = START_LEVEL
+                        player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
+                        if _ps_row is not None:
+                            player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
+                            player_attrs[13] = _ps_row["skill_points"]
+                        if _ps_acct is not None:
+                            # Field indices measured by attr_legend and the
+                            # faction_max run: 1/3/5/11 are the four currents.
+                            _cur = {f: r["current"] for f, r
+                                    in _ps_acct["factions"].items()}
+                            player_attrs[1] = _cur.get("kurzick", 0)
+                            player_attrs[3] = _cur.get("luxon", 0)
+                            player_attrs[5] = _cur.get("imperial", 0)
+                            player_attrs[11] = _cur.get("balthazar", 0)
                         send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
-                             f"CHARACTER_UPDATE_FACTIONS(level {START_LEVEL})")
+                             f"CHARACTER_UPDATE_FACTIONS(level {_ps_level})")
+                        if _ps_acct is not None and _ps_acct["factions"]:
+                            # The caps have their own messages -- OBSERVED
+                            # end to end 2026-08-18 (RUNS.md §Run 1): filled
+                            # denominators, mapping as named, updatable
+                            # mid-session.
+                            _fx = _ps_acct["factions"]
+                            for _op, _fac in (
+                                (GAME_SMSG_CHARACTER_FACTION_MAX_KURZICK,
+                                 "kurzick"),
+                                (GAME_SMSG_CHARACTER_FACTION_MAX_LUXON,
+                                 "luxon"),
+                                (GAME_SMSG_CHARACTER_FACTION_MAX_BALTHAZAR,
+                                 "balthazar"),
+                                (GAME_SMSG_CHARACTER_FACTION_MAX_IMPERIAL,
+                                 "imperial"),
+                            ):
+                                if _fac in _fx:
+                                    send(_op, [_fx[_fac]["max"]],
+                                         f"FACTION_MAX({_fac} "
+                                         f"{_fx[_fac]['max']})")
+                        if _ps_acct is not None and _ps_acct["titles"]:
+                            # Ranks strictly before the tracks that reference
+                            # them -- the render-time Array.h(587) rule the
+                            # store also enforces at load. Strings ride
+                            # template framing within the field's admissible
+                            # 7 units (charstore.MAX_NAME_CHARS).
+                            _rk = _ps_acct["title_ranks"]
+                            for _rid in sorted(_rk, key=int):
+                                send(GAME_SMSG_TITLE_RANK_DATA,
+                                     [int(_rid), _rk[_rid].get("flags", 1),
+                                      _rk[_rid]["value"],
+                                      questdefs.coded_literal(
+                                          _rk[_rid]["name"], limit=7)],
+                                     f"TITLE_RANK_DATA({_rid} "
+                                     f"{_rk[_rid]['name']!r})")
+                            for _tid in sorted(_ps_acct["titles"], key=int):
+                                _t = _ps_acct["titles"][_tid]
+                                _cr = _rk[str(_t["current_rank"])]
+                                _nr = _rk[str(_t["next_rank"])]
+                                send(GAME_SMSG_TITLE_TRACK_INFO,
+                                     [int(_tid), _t.get("flags", 0),
+                                      _t["points"],
+                                      _t["current_rank"], _cr["value"], 0,
+                                      _t["next_rank"], _nr["value"],
+                                      _t.get("rank_count", len(_rk)),
+                                      _t["max_rank"],
+                                      questdefs.coded_literal("Pts", limit=7),
+                                      questdefs.coded_literal(_cr["name"],
+                                                              limit=7)],
+                                     f"TITLE_TRACK_INFO(title {_tid}, "
+                                     f"{_t['points']} pts)")
                         # REAL RANKS since 2026-08-15. This was
                         # `[0] * ATTRIBUTE_COUNT` -- fourteen writes of rank 0
                         # to attribute 0, which the client accepted in silence
@@ -7195,13 +7330,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # show. COLUMN-MAJOR since 2026-08-15 as well, and the
                         # day between the two cost every session a modal
                         # assert box: see attribute_columns.
-                        columns = attribute_columns()
+                        _ranks = (
+                            [tuple(p) for p in _ps_row["attributes"]]
+                            if _ps_row is not None and _ps_row["attributes"]
+                            else list(agents.PLAYER_ATTRIBUTE_RANKS))
+                        columns = attribute_columns(_ranks)
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, columns],
                              f"AGENT_UPDATE_ATTRIBUTES"
                              f"({len(columns) // 3} attributes: "
-                             + ", ".join(f"{a}={r}" for a, r
-                                         in agents.PLAYER_ATTRIBUTE_RANKS)
+                             + ", ".join(f"{a}={r}" for a, r in _ranks)
                              + ")")
                         # The player's own pools, which we had never sent. See
                         # agents.py: the enemy got a health pool the day it was
@@ -7578,7 +7716,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     pass
                 elif opcode == AUTH_CMSG_PORTAL_ACCOUNT_LOGIN:
                     handle_portal_login(values, send, store, conn_id,
-                                        allow_any, rec)
+                                        allow_any, rec, state=state)
                 elif opcode == AUTH_CMSG_ASK_SERVER_RESPONSE:
                     # A bare request/response ping. We ignored this through all
                     # of R1 and the client still reached character select, which
@@ -7640,8 +7778,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                               blob=binascii.hexlify(raw).decode())
                     send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
                          f"REQUEST_RESPONSE(char settings {req_id})")
+                    persisted = ""
+                    if PERSIST and state.get("charstore") is not None:
+                        # §6 item 4: the write path this arm was holding open.
+                        # The blob is the client's own; it round-trips to the
+                        # next roster verbatim, unparsed.
+                        hit = state["charstore"].update_settings(char_name,
+                                                                 raw)
+                        persisted = (", PERSISTED" if hit
+                                     else ", no store row matched that name")
                     print(f"[c{conn_id}] character settings: req {req_id}, "
-                          f"{len(raw)}B recorded and ACKED", flush=True)
+                          f"{len(raw)}B recorded and ACKED{persisted}",
+                          flush=True)
                 elif opcode == AUTH_CMSG_SET_PLAYER_STATUS:
                     # Deliberately no reply: the reference server records the
                     # status and returns. Sent on pressing Play, status 1.
@@ -7650,7 +7798,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           f"({PLAYER_STATUS.get(values[1], '?')})", flush=True)
                 elif opcode == AUTH_CMSG_CHANGE_PLAY_CHARACTER:
                     req_id, name = values[1], values[2]
-                    known = (name == TEST_CHAR_NAME)
+                    known = (name == TEST_CHAR_NAME
+                             or (PERSIST
+                                 and state.get("charstore") is not None
+                                 and state["charstore"].character_by_name(
+                                     name) is not None))
                     state["selected_character"] = name
                     print(f"[c{conn_id}] play character: {name!r}"
                           f"{'' if known else ' — NOT on our roster'}", flush=True)
@@ -7837,7 +7989,7 @@ def main():
     # so rebinding the module constants is enough and keeps
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
-    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS
+    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -7950,6 +8102,20 @@ def main():
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
                          "ask for it in; the default path is untouched.")
+    ap.add_argument("--persist", action="store_true",
+                    help="Arm the character store (studies/character/"
+                         "STORAGE.md §6): the roster, the char-select "
+                         "settings write-back and the character sheet "
+                         "(level, xp, skill points, attributes, factions "
+                         "with their caps, titles) come from one JSON per "
+                         "account under vault/state/characters/, seeded "
+                         "with the default character on first login. OFF by "
+                         "default and deliberately so: the suite, probes "
+                         "and selftest captures rely on a deterministic "
+                         "Test Warrior, and a store that armed itself would "
+                         "make every run depend on the runs before it. "
+                         "Professions, skillbar and unlocks stay flag-"
+                         "driven (charstore.py says why).")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="Send GAME_SMSG 0x00B6 in the spawn burst: which "
                          "professions the character may take as a SECONDARY. "
@@ -8622,6 +8788,9 @@ def main():
                 if SPAWN_PROFESSION > agents.CHAR_PROFESSIONS - 1
                 else "in band, non-default")
         print(f"SPAWN PROFESSION: {SPAWN_PROFESSION} ({band})")
+    PERSIST = a.persist
+    if PERSIST:
+        print(f"PERSIST: character store armed -- {charstore.store_dir()}")
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

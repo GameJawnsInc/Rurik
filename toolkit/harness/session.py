@@ -246,6 +246,20 @@ def spawn_profession_args(game_args):
     return []
 
 
+def persist_args(game_args):
+    """['--persist'] if game_args carries it, else [].
+
+    The SECOND game flag the authsrv also needs, same reasoning as
+    --spawn-profession above: the character store's roster and settings
+    write-back live on the AUTH channel while the sheet loads on the GAME
+    channel, so one instance armed without the other is a character that
+    saves but never loads back (or loads but never saves). Unlike a --probe,
+    arming both copies is the point, not a hazard -- they share one store
+    directory and the auth side is the only writer.
+    """
+    return ["--persist"] if "--persist" in list(game_args) else []
+
+
 # A run that cannot be pinned to one map must not narrow the pre-flight. Tape
 # playback picks its own map from the recording's 0x0195, and a tape CHAIN hops
 # between maps by design -- so for these, which map loads is not ours to say.
@@ -350,7 +364,8 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
          # that was profession 8 everywhere else (OBSERVED 2026-08-13, harness
          # 20260813T111856). Two answers to one question, which is exactly the
          # split `appearance_for` exists to prevent one level down.
-         + spawn_profession_args(game_args)),
+         + spawn_profession_args(game_args)
+         + persist_args(game_args)),
         ("gamesrv", game_host, game_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--bind", game_host,
