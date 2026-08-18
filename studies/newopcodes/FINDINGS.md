@@ -653,6 +653,31 @@ NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEN
 
 ## `0x003A` — `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES` — semantics **CORROBORATED**, name **UPSTREAM single-lineage**
 
+> **REFINED 2026-08-17, after the refused channel was recovered.** The pass ran with one
+> game channel excluded — `58389`, 3,173 messages — because `tape.py` refused its
+> timestamp mapping over a 216-byte discrepancy. That was diagnosed and fixed in parallel
+> (`5efeab0`: repacketized retransmit, the channel was fine), so the corpus is now
+> complete. Re-counted over all three captures: **5 sightings, not 4**.
+>
+> The extra sighting does not add payload variance, and understanding WHY upgrades the
+> finding. Every `0x003A` in the corpus carries the identical array `[29, 30, 2, 1, 2, 1]`,
+> at agents **27, 311, 332, 395** — and those are not four characters. They are the SAME
+> character in four instances: each is that connection's `0x0022`
+> `WORLD_UPDATE_CONTROLLED_AGENT` subject. **`0x003A` names the controlled agent 5/5 and
+> never another player** (OBSERVED), even in a town where thirty other players are fully
+> equipped and rostered.
+>
+> So the "zero variance" this section recorded is **not evidence that the array is
+> constant** — it is one character measured five times, which is the same
+> counted-twice defect the corpus-breadth caveat warns about. Two consequences: the
+> attribute layout stays UNVERIFIED for want of a second character rather than for want
+> of sightings, and **attributes are private** — retail tells you your own and nobody
+> else's, which is a fact about the message's audience that four sightings of one body
+> could not show. Under the column-major triple layout
+> (`studies/profession/ATTRIBUTES.md`; the handler divides the wire count by three), six
+> elements are two triples: ids `29, 30` with ranks `2, 1`. That reading is
+> RECONSTRUCTION and one different character settles it.
+
 **5 sightings** (4 in the two named captures, +1 in `183323`), every one carrying the
 byte-identical array `[29, 30, 2, 1, 2, 1]`. Proposed CORROBORATED across the board; **the
 skeptic split the label and struck one behavioural claim, and both changes stand.**
