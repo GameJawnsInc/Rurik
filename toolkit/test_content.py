@@ -127,8 +127,9 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 11,
-              "eleven maps load (map.280, the Isle, landed 2026-08-16)",
+    LEDGER.ok(world.census().get("map", 0) == 12,
+              "twelve maps load (map.27, the terrain tag-3 capture target, "
+              "landed 2026-08-18)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -187,7 +188,14 @@ def main():
     # file id 0x287B3 = 165811 binds MFT row 21641 in all five vault/run copies;
     # its spawn is OURS (mesh-centre probe, exactly-1 trapezoid on plane 0) and
     # the retail arrival point replaces it after rung 6's capture.
-    ADDED = {143, 144, 280}
+    # 27 is the terrain arc's tag-3 capture target (studies/terrain/FINDINGS.md
+    # 7.20's open list, 2026-08-18). Unlike 143 and 144 it writes NOTHING into
+    # any archive: file id 0xB5FF is MFT row 34429 in the pristine archive, and
+    # the row exists only to make tile block (4,3) -- 590 of 1,024 cells with
+    # authored terrain tag 3 -- reachable, every prior capture having landed on
+    # a block where tag 3 is zero throughout. The spawn is the block's centre
+    # and lands in exactly 1 trapezoid against 0 in both controls.
+    ADDED = {143, 144, 280, 27}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")

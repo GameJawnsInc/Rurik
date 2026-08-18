@@ -345,3 +345,57 @@ name at run time (commit the id, resolve the string). type=2, the co-operative
 instance family (flag bit 17); the PvP twin 784 shares the footprint and is NOT
 this row on purpose -- skills convert and the Flux applies there.
 """
+
+[map.27]
+name = "Terrain tag-3 capture target (map 27 slot)"
+file_id = 0xB5FF
+spawn_x = 1584.0
+spawn_y = 1488.0
+plane = 0
+explorable = true
+
+[map.27.provenance]
+source = "measured"
+extractor = "toolkit/mapdata/archive.py"
+verified = """MEASURED in our own archive copy, and this row exists to make ONE tile \
+block reachable. 0xB5FF is one of the two file ids the archive's own id table stores \
+for MFT row 34429 (the other is 0x5D054; both resolve to the same row), a 256x256-cell \
+map with rect -12288..12288 on both axes. Its terrain tag 3 is authored on 3,139 of \
+65,536 cells (4.79%), and tile block (4,3) carries 590 of its 1,024 cells authored \
+with all three pinnable values present -- which is what studies/terrain/FINDINGS.md \
+7.13's scope caveat has been waiting for, every prior capture having been a block \
+where tag 3 is zero everywhere.
+
+The spawn is the block's centre cell (144,112) and was chosen by the same test every \
+non-placeholder row in this file carries: (1584, 1488) lands in EXACTLY 1 trapezoid \
+of this map's own mesh, against 0 for Kamadan's and 0 for Pre-Searing's, the two \
+controls. That test discriminates here rather than accepting anything -- only 14.5% \
+of 3,000 random points in this map's rect are walkable at all, and 757 of block \
+(4,3)'s 1,024 cells score exactly 1. Block (4,3) was picked over four DENSER authored \
+blocks (row 46101 t(1,1) at 767, 132053 t(2,7) and 132040 t(2,4) at 688, 59717 t(7,2) \
+at 464) because all four score ZERO of 64 walkable probes: dense authored tag 3 sits \
+mostly on decorative terrain no player can stand on, which a density ranking cannot \
+see."""
+note = """
+NOTHING IS WRITTEN INTO THE ARCHIVE BY THIS ROW, which is what makes it much smaller
+than the map.143 and map.144 experiment rows above. Those two overwrite a live retail
+row and carry a recovery mechanism; this one opens an EXISTING retail map that the
+pristine archive has always held, and the only thing borrowed is the map id.
+
+THE MAP ID IS A LABEL. Row 34429's own name is not recoverable: its 256x256 footprint
+has 35 rival rows, so `toolkit/clientscan/maprows.py` returns 22 candidate map ids and
+cannot choose between them, and the client's area table names no map file. 27 is one
+of those 22 -- so it is at least size-compatible with this row rather than arbitrary --
+it is type 2 (explorable), campaign 1, continent 0, the same family as map.90, and no
+other row here claims it. The client will print the name that name_id 10557 resolves
+to over this terrain (commit the id, resolve the string). That is not a claim about
+the content.
+
+WHAT THIS ROW IS FOR, so it can be retired. FINDINGS 7.20's open list names the
+capture: `trnblock.dll` with target_block.txt = 00040003 (the block's unstepped
+reseed, `(4 << 16) ^ 3`), which tests whether trnvariation claim 1 -- "the draw
+happens either way" -- holds on a block that can discriminate it. Block (4,3) carries
+590 authored AND 434 deferred cells, and the two readings of claim 1 predict different
+base quadrants on 331 of its 1,024 cells. Every earlier capture was arg4 = 0
+throughout, where the two readings are identical by construction.
+"""
