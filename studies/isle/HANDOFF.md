@@ -41,6 +41,16 @@ even though it now agrees on **five** axes — profession 6, level 20, health 59
 between two target stations, and its own announced damage total matching our summed
 points. Five agreeing axes is still not a rendered name.
 
+**CHECK THE VAULT BEFORE YOU DESIGN THE SESSION. It has happened three times now.**
+Rung 6's 70-step targeting plan became 18 steps of walking once someone measured that
+names arrive unprompted. Rung 7's analyzer found its whole proving corpus in a *detour*
+nobody planned. Rung 8's central question — does effect application ride `0x0042`, with
+the design expecting a refutation — was answered by **97 applies already sitting in
+`vault/captures/live/`**, along with the hex and enchantment the same document called
+"the largest single miss across all four families". In all three cases the incidental
+traffic outvalued the deliberate traffic, and in all three the cost of checking first
+was under an hour. **Point the reader at the corpus before the client.**
+
 **And a number is not a result until you have asked what its error bar is.** The rung-7
 first pass reported `D = 38.16 and 39.88` against a predicted 40 and read it as a near
 miss; the interval is [37.30, 42.00] and contains 40 at −0.8σ. It also reported a rank
@@ -90,12 +100,16 @@ its directory disagree, believe the directory and re-run `--assemble`.
 
 ## 4. Open, and worth taking in this order
 
-1. **Rung 8 — the effects pass.** Its material was found a rung early: the east's foe
-   Masters, with pets and spirits, at known coordinates. Order still stands — Torches
-   first — but the stakes have dropped: the rung-6b capture already shows **condition
-   application arriving on `0x0042`** from ArenaNet (481 Crippled with a duration-like
-   float, move speed halved server-side), so the refutation branch is now unlikely rather
-   than a coin flip. n=1, and a gadget's application may still differ from an attack's.
+1. **Rung 8 — the effects pass. PREPPED, and its exit criterion was met OFFLINE** (see
+   FINDINGS "Rung 8 prep"). The corpus already held **97 `0x0042` applies**, the
+   apply/remove lifecycle is exact to the millisecond, **field 3 is the applier's
+   attribute rank**, and hexes and enchantments — the design's "largest single miss …
+   no instrument at all" — were **already captured and merely unidentified** (skill 984
+   = Torch Enchantment, 998 = Torch Hex). The session is staged at
+   `vault/plans/isle_rung8_effects.txt` for the four things the vault cannot give:
+   skill **999** (the degeneration torch), the five foe Students' condition ids,
+   degeneration in pips, and rung 7's rank ladder. **The torches are not clicked** —
+   they re-apply every ~2 s to anyone adjacent.
 2. **The rung-7 residual is the highest-value single measurement left on the island**, and
    it is small: **one block at rank 7 or 6, or one weapon with a different requirement.**
    Three separate rung-7 results (the formula's unmet-requirement term, the rank-8

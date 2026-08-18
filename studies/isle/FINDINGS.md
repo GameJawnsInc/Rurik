@@ -1074,3 +1074,133 @@ the kink ratio), and the third from a timestamp it did not check (`/bow` at t=11
 against the report at t=1117). None of the three needed new data. The band test — which
 turned out to be the strongest evidence in the whole run — was available from the first
 minute and was not made until an adversary asked what pinned D.
+
+---
+
+# Rung 8 prep — the effects pass mostly answered itself from the vault (2026-08-18)
+
+**Rung 8's stated exit criterion was met before the session was designed**, and
+the three biggest questions in §3.3 went with it. This is the rung-6-prep pattern
+for the second time: check the corpus before writing the plan, and the plan gets
+much shorter and much better aimed.
+
+## 1. `0x0042` is NOT witness-free, and the effect lifecycle is exact
+
+§3.3's central worry: *"The instrument's opcode has ZERO ArenaNet witnesses …
+that makes the **refutation branch** — that conditions ride some other channel —
+the likely outcome."* **OBSERVED, and it is wrong**: the live corpus holds **97
+`0x0042` applies and 88 `0x0044` removals**. They arrived in the rung-6 capture's
+PvP arena detour and in the east run's Pin Down episode — neither of which set out
+to measure an effect, which is the third time this arc's incidental traffic has
+outvalued its deliberate traffic.
+
+**The lifecycle closes to the millisecond.** `0x0044 [target, buff_id]` closes
+`0x0042 [target, skill, field3, buff_id, f32 duration]` at **apply + duration**:
+57 of 88 within 5 ms, 83 of 88 within 50 ms. So an episode ends one of three ways
+and `bufflog.py` never conflates them — **EXPIRED** (residual ≈ 0), **STRIPPED**
+(early), **OPEN** (still live at the last byte, and never scored as expired).
+
+**A CURE is on record, the first in this repo, and it is fully explained.** The
+Isle's Crippled episode does not expire: it is removed **11.2 s early**, and
+another skill's apply carries the **identical timestamp** as that removal. That
+skill is **364 = `"Charge!"`**, whose WIKI text (GWW, rev. as fetched 2026-08-18)
+reads *"Allies in earshot lose the Crippled condition"*. The whole episode closes
+from four directions at once: Pin Down applies Crippled; `0x0027` halves the
+player's move speed 288 → 144; `"Charge!"` fires and the `0x0044` lands in the
+same millisecond; and the `0x0027` speeds that follow read **383.04 = 288 × 1.33**,
+which is `"Charge!"`'s own *"move 33% faster"*. **A cure closes a condition
+through the same `0x0044` an expiry uses, and only the residual separates them.**
+
+## 2. FIELD 3 IS THE APPLIER'S ATTRIBUTE RANK — settled offline, four ways
+
+The catalog calls field 3 `u32 unnamed`. The corpus's two conditions (480 Burning,
+481 Crippled) have `field3 == duration`, which made "field 3 is duration-shaped"
+tempting. **It is arithmetic accident.** Field 3 is the rank at which the skill's
+progression was evaluated, and the float duration is the *result*:
+
+| skill | wire | identified as (WIKI) | progression | at that rank |
+|---|---|---|---|---|
+| 160 | `f3=15, dur=13.0` | **Windborne Speed**, E/Air Magic | 5 s at 0 → 13 s at 15 | 15 → **13** ✔ |
+| 364 | `f3=10, dur=10.0` | **`"Charge!"`**, W/Tactics (elite shout) | 5 → 13 | 10 → 10.33 → **10** ✔ |
+| 364 | `f3=13, dur=12.0` | same | 5 → 13 | 13 → 11.93 → **12** ✔ |
+| 481 | `f3=13, dur=13.0` | **Crippled**, applied by **Pin Down** | 3 → 15 | 13 → 13.4 → **13** ✔ |
+| 984 / 998 | `f3=0, dur=30.0` | **Torch Enchantment / Torch Hex** | none (environment) | 0 → fixed **30** ✔ |
+
+The Windborne Speed row is the cleanest: GWW's **Master of Winds** page states
+*"15 Air Magic"* and the skill lasts 13 s at rank 15 — an independent source
+supplying both the rank and the duration, and the wire carrying exactly those two
+numbers. That the operator's own **Tactics 10** (visible in their attribute
+screenshot) reproduces `"Charge!"`'s 10 s is a second, self-owned confirmation.
+
+**This is CORROBORATION in the strong sense**: the wiki and the wire share no
+author, code or ancestry, and they agree on five values across four skills.
+
+## 3. Hexes and enchantments were never missing — they were unidentified
+
+§3.3 calls hexes and enchantments *"the largest single miss across all four
+families"*, with *"no instrument at all"*. **Both are already in the vault**, on
+the Isle, from the rung-6 roster run:
+
+- **`0x0042` skill 984, duration 30.0** = **Torch Enchantment** (WIKI: effect id
+  **984**, Core, *"For 30 seconds, you are under the effect of an enchantment
+  spell"*, *"only used by the Torch of Enchanting … on the Isle of the Nameless"*).
+- **`0x0042` skill 998, duration 30.0** = **Torch Hex** (WIKI: effect id **998**,
+  *"For 30 seconds, you suffer from the effects of a hex spell"*, *"only used by
+  the Torch of Hexes"*).
+
+Id and duration match on the nose, from two independent directions. **The third
+torch is the one gap**: **Torch Degeneration Hex, effect id 999**, *"For 10
+seconds, you suffer -1 Health degeneration"* — never captured, and the only route
+in this corpus to seeing degeneration applied on retail traffic. That is what
+rung 8's leg A is now for.
+
+**A procedural correction the wiki supplied and the draft plan had wrong:** the
+torches are **not clicked**. All three pages carry *"reapplied approximately every
+2 seconds if still standing adjacent to the torch"*. The measurement is where the
+operator stands and for how long, not an interaction.
+
+## 4. The material is located, and one constraint is measured rather than assumed
+
+From the three Isle captures, merged:
+
+- **The Master of Magic's circle**: an Elementalist (**slot 145**, level 20,
+  `nonc`) at **(−5033, 2970)**, ringed by **three gadget-class (tag-0) bodies** at
+  198.7 / 202.9 / 376.9 units — plus one at his exact position. GWW says three
+  Torches surround him; the geometry agrees.
+- **The ten Students are a straight north-south line** along the far west edge,
+  x ≈ −10,850, y from **1173 to 3422**, spaced ~250 u — slots 156-165.
+- **The ally/foe split is 5/5 and is now per-body**: foes (`mon1`) are slots
+  **157, 160, 161, 163, 165**; allies (`play`) are **156, 158, 159, 162, 164**.
+  §3.3 flagged the ally/foe split as *"the family's largest risk"* and it is now
+  concrete: **only five Students can attack, so at most five conditions arrive by
+  being hit**, and any plan promising a ten-condition map from combat alone is
+  over-promising by half.
+
+## 5. Degeneration, with the numbers sourced rather than recalled
+
+**WIKI** (GWW, "Health degeneration", fetched 2026-08-18): *"each pip represents a
+loss of two health per second"*, capped at 10 pips; **Bleeding 3, Burning 7,
+Disease 4, Poison 4**. An earlier draft of the rung-8 plan asserted "Bleeding −1
+and Poison −1" from memory and was wrong on both — caught only because the
+pre-registration was checked against the source before sealing. On the operator's
+480-health pool the property-44 rate should move by `pips × 2 / 480`: −0.0125
+(bleeding), −0.0167 (poison/disease), −0.0292 (burning), −0.0042 (torch degen hex).
+
+## 6. What rung 8's session is now for
+
+Four things, none of which the corpus can supply:
+
+1. **Skill 999**, the degeneration torch — the only unseen torch effect, and the
+   only route to degeneration on retail traffic.
+2. **Which condition skill id each of the five foe Students applies.**
+3. **Degeneration in pips**, against the published numbers above.
+4. **The rank ladder** (effective 5/6/7/8 at the armour bench), which closes
+   rung 7's one open defect — three separate rung-7 results fail at the
+   unmet-requirement term and this ladder separates its candidate causes. Bands
+   discriminate at ranks 5 and 6 with no free parameter; rank 7 cannot
+   discriminate on the band and is carried for its mean, which the plan says
+   outright so nobody later reads its agreement as evidence it cannot be.
+
+The plan is sealed at `vault/plans/isle_rung8_effects.txt`, 27 steps, and the
+consumer (`toolkit/authsrv/bufflog.py`, 36 checks) was built and proven on the
+97 existing witnesses before the plan was written — rung 7's discipline, kept.
