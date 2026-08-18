@@ -22,6 +22,12 @@ re-runs `gwdat.decompress`'s block loop with counters attached. It **imports** b
 tables from `gwdat.py` and re-transcribes neither, so nothing new is taken from upstream
 — but the direction is new, and it is new because upstream never wrote it: all five
 mirrored lineages of this format declare decode only. `PLAN.md` §6.1) and
+`toolkit/mapdata/gwmatch.py` (the A7a LZ77 matcher — it **imports** four more of those
+same six tables, `LENGTH_BASE`, `LENGTH_EXTRA_BITS`, `DISTANCE_BASE` and
+`DISTANCE_EXTRA_BITS`, to read off the format's min match, max match, alphabets and
+window, and re-transcribes none of them. The *search* is not upstream's at all — a hash
+chain with lazy matching, following deflate's published design — and nobody upstream has
+a matcher for this format to take. `PLAN.md` §6.1) and
 `toolkit/mapdata/pathmap.py` (the FFNA pathing-chunk struct layout and field names,
 derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
 `toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`

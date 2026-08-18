@@ -1522,6 +1522,144 @@ sound and its in-place form is safer than the relocation the design proposed.
 
 ---
 
+## 12. A7a — RUN 2026-08-18. The matcher ties retail, and the **block partition** is worth 18 KB
+
+`toolkit/mapdata/gwmatch.py` + `test_gwmatch.py`, 62 checks, floor 62, ~28 s. Size-only: a
+hash-chain lazy LZ77 emitting tokens in this format's alphabet, costed through `gwentropy`'s
+validated model. **No bitstream writer, no round trip.** Two skeptics attacked it on distinct
+lenses and **neither refuted it**, both reproducing every headline figure independently.
+
+**Every byte below is TRAILER-INCLUSIVE**, so the bar is **1,029,632 B** — not §1.1's
+trailer-exclusive 1,029,628. The §10.6 double-count did not recur; a skeptic checked for it
+specifically and found no mixed-denomination number anywhere.
+
+### 12.1 The number
+
+| | bytes |
+|---|---|
+| retail | 1,029,564 |
+| its reservation (the bar) | 1,029,632 — **68 B of slack** |
+| best of 18 raw-deflate configurations (level 8 / memLevel 8), re-measured | 1,017,638 |
+| **ours, q8, DP partition** | **1,011,244 — 18,388 B of slack, 6,394 B better than zlib** |
+
+**A7 IS NOT KILLED.**
+
+### 12.2 The matcher is a dead heat with ArenaNet's; the partition is what pays
+
+| | ours | retail |
+|---|---|---|
+| tokens | 1,021,409 | 1,021,421 |
+| matches | 32,950 | 32,952 |
+| blocks | **109** | **16** |
+| table bits | 88,263 | 13,486 |
+| token bits | 7,656,124 | 7,877,902 |
+
+**Twelve tokens apart in a million.** The entire 18,320 B win is bought by spending **74,777
+more table bits to save 221,778 token bits** — many small blocks, each with tables fitted to
+its own local symbol distribution.
+
+**Cross-validation, exact to the byte:** our tokens costed on retail's own `[15×15, 9]`
+partition give **1,029,572 B — identical to §10.1's re-cost of retail's OWN tokens.** Two
+different token streams, same entropy layer, same partition, same figure. That is strong
+independent evidence that the matcher has converged on retail's matcher's quality and that
+the win comes from somewhere else.
+
+**A correction to this run's own framing, from the skeptic, and it matters.** The report said
+*"the reason is not the matcher but the block partition."* That is framing, not fact: at the
+best dial setting, **under retail's own uniform-16 partition we already fit** (1,029,572 ≤
+1,029,632, 60 B of slack). The partition buys the **size** of the win and robustness **across
+the whole dial** — it is not what turns fail into pass.
+
+**And §1.2's predicted curve is real, on retail's partition.** Forced onto uniform-16, **six
+of ten dial settings OVERFLOW**, crossing over at q6: 1,036,724 → 1,029,572. With the
+partition searched, **every** dial setting fits — even q0, a chain-depth-1 greedy matcher
+strictly worse than deflate level 1. So matcher quality genuinely does sit inside the tuning
+range, exactly as §1.2 said; a searched partition is what removes the cliff.
+
+### 12.3 The population, and it reverses §1.2's risk
+
+§1.2's case against the encoder was population-level: zlib and ArenaNet are a statistical
+tie, 23.8% of stuck rows miss their own reservation under zlib -9, and three named rows are
+real overflows. **[OBSERVED, skeptic, correct one-based row indexing]:**
+
+- **25 random compression-8 rows, 200 KB–1.5 MB: ours beats retail 25 of 25 and fits the
+  reservation 25 of 25. Raw deflate level 8 / memLevel 8 fits only 14 of 25.**
+- **The three rows §1.2 named as zlib's worst overflows, ours fits all three:** 77197 −108,
+  95089 −124, 89174 −316, where zlib overflows by +7,142, +5,800 and +5,259.
+- Witness set of 16 rows spanning 88 B to 2,444,804 B and seven content kinds: **11 beat
+  retail, 4 tie exactly, 1 loses by 4 B** (row 69251). Largest win row 15850, −46,448 B.
+
+**The honest counterweight, and it is the skeptic's:** on those hard rows the margin is
+**0.003–0.01%**. Row 11196's 1.8% is a favourable draw, exactly as §1.2 warned about this
+row. The 18,388 B of slack is a property of *this row*, not of the encoder.
+
+**And "the win is the partition" is a row-11196 statement, not a general one.** On row 35300,
+where retail **already** partitions finely, we still beat it by **33,156 B** — so across the
+population there is a matcher and entropy component too.
+
+### 12.4 The authoring budget, finally denominated in payload bytes
+
+Slack means nothing until it converts into headroom. Measured marginal rate by compressing
+prefixes over the last 100 KB: **0.5365 stored bytes per payload byte**. So **18,388 B of
+slack ≈ 34,273 B of extra payload — 2.26% payload growth** before overflow, against retail's
+own 68 B ≈ **127 payload bytes**. **A ~270× larger authoring budget.** [RECONSTRUCTION]
+
+**This is the number §7.3's unanswered successor question must be answered against.** §7.3
+established that authored edits mostly make this payload *smaller* (requantization by 46%)
+and that the residual risk is a *higher-fidelity* payload with more samples, which nothing
+bounded. **2.26% is now that bound.**
+
+### 12.5 The 109-block shape is attested in retail's own content
+
+The run's one live caveat was that a 109-block stream has never been through a real decoder.
+**[OBSERVED, census of 400 random comp-8 rows]** retail's non-final block size codes span
+**0 through 15, all occurring**; the smallest (4,096 tokens) appears **69 times**; 44 of 400
+rows use a non-final code other than 15; and **row 35300 ships 249 blocks**. Every structural
+shape our DP emits — small non-final blocks, mixed codes, >100 blocks — is one ArenaNet's own
+encoder ships. *(One lens sampling only rows ≤400 KB found a maximum of 33 blocks and read
+the caveat as understated; the other found 249 on a large row. The disagreement is a sampling
+artifact and the larger figure is the relevant one.)*
+
+A second consequence: **"retail takes the maximum block size" is true of row 11196 and false
+of retail's encoder.** Whatever rule it follows, it is not "always 15" — so "ArenaNet left
+12,520 B on the table" is a statement about this row, not about their compressor.
+
+### 12.6 What is still unbuilt, and it is the whole remaining risk
+
+**No bitstream exists.** No table this encoder implies has ever been serialized and rebuilt by
+`gwdat.build_table`; every legality check here is a *model* of `build_table`, not
+`build_table`. All 218 tables of row 11196 do check out — Kraft defect exactly 0 in exact
+`Fraction` arithmetic, canonical assignment never exhausts the code space, deepest code
+length **15** against the format's 31 ceiling — **but they hold by luck of the cost path
+raising, not by an explicit arm.** That arm belongs in **A7b**, along with the writer itself.
+Note that a skeptic already emitted real bits during A6 and had `build_table` accept them on
+2,194 tables with zero refusals (§10.3) — but those were *retail's* tables, not ours.
+
+### 12.7 Corrections to this run's own first draft
+
+- **A check that cannot fail, for the second time in two rungs.** The report listed **C1**
+  (segment accounting closes to zero bits) among its checks. On *retail's* stream that is a
+  genuine measured-versus-modelled closure. **On OUR stream both sides derive from the same
+  `token_bits` formula, so it cannot fail** — the identical defect §10.6 corrected for
+  `framing_bytes`. Corrected in the test and in TESTS.md. Recording the recurrence rather
+  than just the instance: **this defect class survived a rung that had just been corrected
+  for it**, which is an argument for checking the "what would a red mean here" question
+  against every verdict line rather than once per arc.
+- Witness tally was "12 beat, 3 tie, 1 loses" in prose against a numbers table saying
+  **11 / 4 / 1**. The table was right.
+- `extra_bits` reported 345,045, measured **345,029** — 16 bits, partition-invariant.
+- **The orchestrator's brief was wrong and the experiment corrected it.** It said "token
+  count matters twice — directly and through the block count it implies" and "minimising
+  block count is not a trick retail declined", both implying **fewer blocks is better.** The
+  opposite is true: more, smaller blocks win here by 18 KB. The build agent flagged the
+  inversion and found the right answer anyway. Recorded because §10.2's block-overhead
+  arithmetic — which came from A6's skeptic and which I promoted to "the number that decides
+  A7" — is what produced the wrong steer, and it is still correct *as arithmetic about
+  retail's partition*; it just is not the constraint it looked like once the partition
+  becomes a free variable.
+
+---
+
 ## Appendix — what I verified myself
 
 **OBSERVED (mine), run read-only in `C:/gd/Rurik/.claude/worktrees/great-heyrovsky-7fe716`, vault located via `toolkit/vaultpath.py` → `C:\gd\Rurik\vault`:**

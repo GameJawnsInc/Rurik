@@ -68,6 +68,7 @@ Nothing is running: no client, no server, no background task.
 | `datwrite` header refusal | `[0x00,0x10)` — the one corruption with no recovery | `test_datwrite.py` |
 | `datplan` extent projection | a generation's declared extent crosses run boundaries | `test_datplan.py` §9 |
 | `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
+| `toolkit/mapdata/gwmatch.py` | **A7a** — size-only LZ77 + an exact block-partition DP, costed through `gwentropy`; still no bitstream | `test_gwmatch.py`, 62 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
@@ -131,10 +132,26 @@ that decides A7 is the block overhead:** table transmission is 1,686 B = **25× 
 **ArenaNet's table encoder is identified as longest-run greedy** (bit-exact on 2,194/2,194
 tables). Every piece of a compression-8 encoder now exists **except the matcher**. Also
 settled: a literal-only encoder is **DEAD** — 1,421,280 B, 391,648 B over the reservation.
-**A7's remaining question is a size-only matcher experiment**, and it needs no bitstream:
-build a hash-chain/lazy-matching LZ77, feed its token stream to `gwentropy`'s existing
-cost model, and see whether it lands under 1,029,632 B *including* whatever block count it
-implies. That is the cheapest thing that can still kill A7.
+**A7a RAN — 2026-08-18, §12. A7_VIABLE, and the surprise is where the win comes from.**
+`toolkit/mapdata/gwmatch.py`, size-only, 62 checks. Row 11196 comes out at **1,011,244 B
+against a 1,029,632 B bar — 18,388 B of slack, and 6,394 B better than the best of 18
+raw-deflate configurations.** Our token stream is **12 tokens** from retail's in a million:
+the matcher is a dead heat. The win is bought by the **block partition** — 109 blocks
+against retail's 16, spending 74,777 more table bits to save 221,778 token bits. **Note the
+skeptic's correction:** at the best dial setting we fit even on retail's own partition
+(60 B), so the partition buys the *size* of the win and robustness across the dial, not
+fail→pass. Population evidence reverses §1.2's risk: **25 of 25 random 200 KB–1.5 MB rows
+beat retail and fit, where deflate fits only 14 of 25**, and the three rows §1.2 named as
+zlib's worst overflows all fit. Honest counterweight: on hard rows the margin is
+0.003–0.01%, so 11196's 1.8% is a favourable draw. **The budget in payload terms: 18,388 B
+of slack ≈ 34,273 B of extra payload — 2.26% growth, against retail's own 127 B.**
+
+**NEXT IS A7b, the bitstream writer, and it is now the only unbuilt piece.** No table this
+encoder implies has ever been serialized and rebuilt by `gwdat.build_table` — every legality
+check in A7a is a *model* of it. Build the writer, round-trip through `gwdat.decompress`,
+and add the explicit `build_table`-accepts-our-tables arm A7a leaves implicit. A skeptic
+already emitted real bits during A6 and had `build_table` accept them on 2,194 tables with
+zero refusals (§10.3), so the mechanics are proven — on *retail's* tables, not ours.
 
 **C. A1b, downgraded but real.** `schema/messages.json` has **zero** occurrences of `anim`,
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*
