@@ -1934,6 +1934,15 @@ Every one of these, in the order they were written:
   doc would have locked the error in. Its capture half decodes the tape WHOLE via
   `tape.decode_all` and asserts the byte accounting first, so every count beneath it is
   of all 3,604 messages rather than the 3,500 the per-event idiom read),
+  `toolkit/authsrv/test_charstore.py` (the §6 persistence layer against a scratch
+  vault, no server started: round-trips, the client's settings blob served back
+  verbatim, and ensure-never-overwrites — the disease persistence exists to cure is
+  a restart quietly resetting a character. Its real checks are the REFUSALS: the two
+  inputs measured to kill a real client on 2026-08-18 are refused at LOAD with the
+  crash cited — an at-cap display string (string16(8) admits 7 units; at-cap is an
+  instant Code=007) and a title referencing an unseeded rank (silent on receive,
+  `Array.h(587)` at render) — and a corrupt or wrong-version store raises instead of
+  silently becoming the default character. Floor 18, set from the green run),
   `toolkit/authsrv/test_npcdefs.py` (the capture→content compiler: **126 of 126**
   NPC definitions rebuild BYTE-IDENTICALLY from the extractor's own typed rows —
   rebuilt field by field, never replayed, so a compiler that stored the blob prints

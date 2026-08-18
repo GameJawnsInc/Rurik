@@ -1,0 +1,131 @@
+"""charstore: the §6 persistence layer, exercised against a scratch vault.
+
+What this is really checking, beyond round-trips: that the store REFUSES the
+two inputs measured to kill a real client (an at-cap display string, a title
+referencing an unseeded rank -- studies/character/RUNS.md §Run 2), that a
+corrupt or wrong-version file raises instead of silently becoming defaults,
+and that ensure_character never clobbers a row that already exists -- the
+failure where every restart quietly resets a character is the exact disease
+persistence exists to cure.
+
+Everything runs against a temp directory passed as `base=`; the real vault is
+never touched, and no server is started.
+"""
+
+import os
+import shutil
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import checks  # noqa: E402
+import charstore  # noqa: E402
+
+led = checks.Ledger("charstore", floor=18)
+base = tempfile.mkdtemp(prefix="charstore-test-")
+UUID = "11111111111111111111111111111111"
+
+try:
+    # -- fresh open, seed, save, reopen ------------------------------------
+    st = charstore.Store.open("loopback@rurik.invalid", base=base)
+    led.ok(not os.path.exists(st.path), "open() alone writes nothing")
+    row = st.ensure_character(UUID, "Test Warrior", "aa" * 37)
+    led.ok(row["level"] == 1 and row["xp"] == 0,
+           "ensure_character seeds a level-1 zero-xp row")
+    st.save()
+    led.ok(os.path.exists(st.path), "save() creates the account file")
+
+    st2 = charstore.Store.open("loopback@rurik.invalid", base=base)
+    led.ok(st2.character_by_uuid(UUID)["name"] == "Test Warrior",
+           "a second open() sees the saved character")
+
+    # -- ensure never overwrites; the settings write-back round-trips ------
+    st2.character_by_uuid(UUID)["level"] = 7
+    st2.ensure_character(UUID, "Test Warrior")
+    led.ok(st2.character_by_uuid(UUID)["level"] == 7,
+           "ensure_character never resets an existing row")
+    blob = bytes(range(37))
+    led.ok(st2.update_settings("Test Warrior", blob) is True,
+           "update_settings matches by name")
+    led.ok(charstore.Store.open("loopback@rurik.invalid", base=base)
+           .character_by_uuid(UUID)["settings_blob"] == blob.hex(),
+           "the client's settings blob round-trips through disk verbatim")
+    led.ok(st2.update_settings("Nobody", b"\x00") is False,
+           "update_settings on an unknown name says so instead of inventing")
+
+    # -- the two measured crash rules are refused at load ------------------
+    acct = st2.account()
+    acct["title_ranks"]["1"] = {"value": 1000, "name": "Ruri"}
+    acct["titles"]["7"] = {"points": 6000, "current_rank": 1,
+                           "next_rank": 2, "max_rank": 2}
+    try:
+        st2.save()
+        led.ok(False, "a title referencing an unseeded rank is refused")
+    except ValueError as exc:
+        led.ok("Array.h(587)" in str(exc),
+               "a title referencing an unseeded rank is refused",
+               "and the refusal cites the measured crash")
+    acct["title_ranks"]["2"] = {"value": 8400, "name": "Eldr"}
+    st2.save()
+    led.ok(True, "the same title saves once every rank it references exists")
+
+    acct["title_ranks"]["3"] = {"value": 1, "name": "Elder"}
+    try:
+        st2.save()
+        led.ok(False, "a 5-char rank name is refused")
+    except ValueError as exc:
+        led.ok("at-cap" in str(exc) or "units" in str(exc),
+               "a 5-char rank name is refused",
+               "4 chars + 3 framing units = the field's admissible 7")
+    del acct["title_ranks"]["3"]
+
+    acct["factions"]["kurzick"] = {"current": 1001, "max": 31000}
+    st2.save()
+    led.ok(True, "faction rows save")
+    try:
+        acct["factions"]["zaishen"] = {"current": 0, "max": 0}
+        st2.save()
+        led.ok(False, "an unknown faction is refused")
+    except ValueError:
+        led.ok(True, "an unknown faction is refused")
+    del acct["factions"]["zaishen"]
+
+    # -- corrupt and wrong-version files raise; no silent defaults --------
+    with open(st2.path, "w", encoding="utf-8") as f:
+        f.write("{ not json")
+    try:
+        charstore.Store.open("loopback@rurik.invalid", base=base)
+        led.ok(False, "corrupt JSON is refused")
+    except ValueError as exc:
+        led.ok("corrupt" in str(exc), "corrupt JSON is refused loudly")
+    st2.save()  # restore a good file
+    good = charstore.Store.open("loopback@rurik.invalid", base=base)
+    good.data["version"] = 2
+    try:
+        charstore.validate(good.data, good.path)
+        led.ok(False, "a wrong store version is refused")
+    except ValueError:
+        led.ok(True, "a wrong store version is refused")
+
+    # -- the game channel's uuid lookup ------------------------------------
+    other = charstore.Store.open("second@rurik.invalid", base=base)
+    other.ensure_character("22" * 16, "Second")
+    other.save()
+    found_store, found_row = charstore.find_character(UUID, base=base)
+    led.ok(found_row is not None and found_row["name"] == "Test Warrior",
+           "find_character resolves a uuid across account files")
+    led.ok(charstore.find_character("33" * 16, base=base) == (None, None),
+           "an unknown uuid finds nothing rather than something")
+
+    try:
+        charstore.path_for("   ")
+        led.ok(False, "an empty email cannot name a store")
+    except ValueError:
+        led.ok(True, "an empty email cannot name a store")
+finally:
+    shutil.rmtree(base, ignore_errors=True)
+
+sys.exit(led.verdict())
