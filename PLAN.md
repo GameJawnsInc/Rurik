@@ -1409,7 +1409,18 @@ counts deliberately equal drew **no `ChCliApi.cpp(1587)`**, confirming the asser
 the running client. Two honest gaps recorded rather than smoothed: **`0x00E1` was never
 observed** (the client left the OS foreground and ten frames do not exist), and a 7,172-px
 "hit" at the `0x00D4` drain was a **skill tooltip** raised by the resting mouse, caught only
-by cropping. Harness trap for the next probe: **a `--walk` plan's `shot:` fires after
+by cropping. **`0x00E1`'s gap CLOSED the same day** (`accum_drain_e1`, run
+`20260818T180039`, three drains ~11 s apart, full coverage, max frame gap 2.3 s): **nothing
+renders**, verified by pixel count, by direct visual inspection, and by connected-blob
+structure inside the masked region — with the scope stated in the study, namely that a bare
+drain with **no UI window open** bounds the *subscriber*, not the opcode. The wire side was
+re-decoded independently with our own codec (`0x0084 = [[40,41,42]]`,
+`0x00D8 = [[1,1,1]]`, exact-byte consumption). **A defect in the screenshot scorer came out
+of that audit and outlives it:** the player-body mask used to suppress idle animation sits
+exactly where GW draws centred banners and toasts — it swallows **53%** of the `0x00B9`
+callout's changed pixels — and its `delta > 28` rule is a step function (a 28-shift scores
+0, a 29-shift scores 512). Never publish a null from that scorer without also looking at
+the masked region. Harness trap for the next probe: **a `--walk` plan's `shot:` fires after
 `alt:` releases**, so neither allegiance run captured a nameplate.
 
 **2026-08-18, the follow-up ladder is STAGED and one fix landed.** The `0x0199` field-1

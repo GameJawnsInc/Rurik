@@ -595,6 +595,85 @@ _DRAIN_ITEM_B = 41
 _DRAIN_ITEM_C = 42
 
 
+def _accum_drain_e1_steps(agent_id):
+    """`0x00E1` with real ids staged, THREE times -- the arm nobody photographed.
+
+    WHY THIS EXISTS. `accum_drains` (harness 20260818T171920) measured three of
+    its four drains QUIET and never observed the fourth: the client left the OS
+    foreground for ~23 s and `shot_if_foreground` correctly declined to
+    photograph whatever was in front, so the ten frames spanning `0x00E1` do
+    not exist. An unmeasured arm and a quiet arm look identical in a summary,
+    which is the whole reason this is a separate run rather than a footnote.
+    `0x00E1` is also the one worth the launch: upstream calls it
+    `SKILL_ADD_TO_WINDOWS_END`, and its worker (`0x00814860`) reads BOTH accum
+    lists and zeroes both counts, so an upstream name pointing at the skill
+    list is testable against a buffer we filled with ITEM ids.
+
+    THE FIX IS REPETITION, NOT A HARNESS CHANGE. Three identical arms, ~11 s
+    apart, each restaging both columns before draining. Frame coverage is the
+    failure mode, so three widely-spaced chances beat one; and since each drain
+    zeroes both counts, the arms are independent by construction rather than by
+    assumption. It also buys a reproducibility check the single-shot design
+    could not give: three sends, three verdicts, and a disagreement among them
+    would be worth more than any of them.
+
+    Deliberately NOT done: forcing the client to the foreground before each
+    shot. That guard exists because a run once photographed an unrelated
+    window, and weakening a safety check to make an experiment convenient is
+    the wrong trade -- especially in shared harness code other sessions run.
+
+    READING THE RESULT. The stated null stands from the prior run: the only
+    observed reader of this buffer (the `0x00C5` flow) rides a window context
+    and this run opens none, so QUIET refutes nothing about the opcode -- it
+    bounds what a bare drain does with no window open. What WOULD be new: any
+    surface gaining three rows, or anything skill-flavoured, which is the half
+    of upstream's name this run can actually address.
+
+    ARTIFACT WARNING, earned the hard way. The prior run's one non-zero frame
+    was a **skill tooltip** raised by the mouse resting over the skill bar, not
+    a drain effect -- 7,172 changed pixels landing exactly on a send. Score the
+    bottom HUD strip separately and crop before believing any spike.
+    """
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
+                                     item_template("warrior_legs")),
+             "0x0161: declare item 40 (leggings name)",
+             "nothing -- declarations render nothing, 621/621."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
+                                     item_template("warrior_boots")),
+             "0x0161: declare item 41 (boots name)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
+                                     item_template("warrior_gloves")),
+             "0x0161: declare item 42 (gloves name)", "nothing."),
+    ]
+    for rep in (1, 2, 3):
+        steps += [
+            Step(8.0, 0x0084, [ids],
+                 f"rep {rep}/3: 0x0084 stages column 0 with the three item ids",
+                 "nothing -- the appender is QUIET, measured."),
+            Step(1.0, 0x00D8, [[1, 1, 1]],
+                 f"rep {rep}/3: 0x00D8 stages column 1 = [1,1,1], equal length",
+                 "nothing -- list 1's appender was QUIET too."),
+            Step(2.0, 0x00E1,  [0],
+                 f"rep {rep}/3: 0x00E1 DRAIN, event 0x100000BA "
+                 f"(upstream: SKILL_ADD_TO_WINDOWS_END)",
+                 "THE VERDICT FRAME for this rep. Any window, list, toast or "
+                 "chat line gaining three rows named like armor pieces -- or "
+                 "anything on a SKILL surface, which is what upstream's name "
+                 "predicts. Ignore the bottom HUD strip unless the change "
+                 "survives cropping: a resting mouse raises a skill tooltip "
+                 "there and it already faked one hit."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames, so the last drain has coverage after it too",
+             "nothing new. If all three reps agree, that is the answer; if "
+             "they disagree, THAT is the finding and this run is n=3.",
+             sends=False))
+    return steps
+
+
 def _accum_drains_steps(agent_id):
     """Which UI surface does each accum-table DRAIN event drive, with real ids
     staged? The redesign of studies/newopcodes/FINDINGS.md section-4 item 7,
@@ -5636,6 +5715,30 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "accum_drain_e1": lambda a, o: Probe(
+        question="What does the 0x00E1 drain (event 0x100000BA, upstream "
+                 "SKILL_ADD_TO_WINDOWS_END) do with three real declared item "
+                 "ids staged in BOTH accum columns? The 2026-08-18 run never "
+                 "photographed this arm.",
+        predicts="Most likely QUIET, like its three siblings -- and QUIET "
+                 "refutes nothing, because the one observed reader of this "
+                 "buffer rides a window context and this run opens none. What "
+                 "would be new is any surface gaining three rows, or anything "
+                 "SKILL-flavoured, since the buffer is full of ITEM ids and "
+                 "upstream's name points at skills. Three reps must agree; a "
+                 "disagreement among them outranks any single verdict.",
+        steps=_accum_drain_e1_steps(a),
+        note="Re-run for coverage, not for a new idea: accum_drains measured "
+             "0x0085/0x00D4/0x0086 quiet and lost 0x00E1 when the client left "
+             "the OS foreground and shot_if_foreground rightly declined to "
+             "photograph another window -- an unmeasured arm and a quiet arm "
+             "read identically in a summary. Fixed by repetition (three arms "
+             "~11 s apart, each restaging both columns, independent because "
+             "every drain zeroes both counts) rather than by weakening the "
+             "foreground guard, which exists because a run once photographed "
+             "an unrelated window. Score the bottom HUD strip separately: the "
+             "prior run's only spike was a skill tooltip from a resting mouse.",
     ),
     "accum_drains": lambda a, o: Probe(
         question="Which UI surface does each accum-table drain event drive "
