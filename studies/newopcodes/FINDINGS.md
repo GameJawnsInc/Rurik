@@ -352,7 +352,32 @@ per-map-load reset on characters that are not new Factions characters.
 | field | reading | label |
 |---|---|---|
 | 1 `string16(128)` | the callout text, as a **server-allocated dynamic string handle** | **OBSERVED** — four code units, and the first unit **increments by one** between the two sightings (`0x4A9E` → `0x4A9F`). That is a handle, not text. Contrast the same stream at idx 335 (`0x005D`), whose 4-unit prefix is followed by `0x0107` and literal UTF-16 `character B` |
-| 2 `u32` | 1, then 0 | **UNVERIFIED**. Worth recording: the smsgsweep run that produced the observed on-screen callout used the all-other-fields-zero regime, so **field2 = 0 is the value proven to render a framed closable callout**, and one of our two live sightings is exactly field2 = 0. field2 = 1 is untested |
+| 2 `u32` | 1, then 0 | **OBSERVED 2026-08-18 — it is a TEXT-STYLE flag: 0 renders the string cream/white, 1 renders it GOLD.** Two runs differing in this field alone (below) |
+
+> ### RUN 2026-08-18 — field 2 is a TEXT-STYLE flag, and both arms are on disk. OBSERVED
+>
+> Two loopback runs identical but for this field, the same one-unit EncString (`0x3D64`,
+> which the client resolves to **"Ascalon"**) in both, scored by the same instrument:
+> `20260818T172323` (field2 = 0, plain `b900 0100 643d 0000 0000`) and `20260818T172508`
+> (field2 = 1, plain `b900 0100 643d 0100 0000`).
+>
+> **Both render the framed closable callout**, at the same screen position, with the same
+> box and the same X button, ~3 s after the send, and it persists (the run's per-frame
+> changed-pixel baseline is otherwise exactly 0, so the appearance is unmissable: 975 px
+> at field2 = 0, 1,015 px at field2 = 1). The callouts' outer bounding boxes are
+> **identical**. What differs is **884 px inside the box**: the glyph colour, measured over
+> the bright text pixels — **(211,199,182) at field2 = 0** versus **(210,193,151) at
+> field2 = 1**. Red holds while blue falls 31, i.e. the warm bias roughly doubles
+> (R−B +29 → +59). Cream/white versus gold.
+>
+> So the 2026-08-12 operator reading is now reproducible from a recorded command line
+> rather than a remembered screenshot, and the flag that was UNVERIFIED has an effect.
+> **The MEANING stays UNVERIFIED** — gold could be completed, bonus, primary, or merely
+> new, and colour alone cannot say which. What makes that worth chasing rather than
+> guessing: **retail exercises both values**, in adjacent messages, in the same stream
+> (idx 329 field2 = 1, idx 331 field2 = 0, each behind a `0x00BB` carrying a byte-identical
+> string), so the discriminator is a capture in which the two objectives' states are known
+> on screen, not another loopback arm.
 
 **The proposal's whole coherence story does not survive the wire.** It framed
 {`0x00B8` canned toast, `0x00B9` append, `0x00BA` clear} as a triplet. Census over all live
@@ -648,6 +673,29 @@ observed reader of `accumIntList[0]` in the corpus, and no agent found it.
 the ids of the immediately preceding `0x0161` batch = **OBSERVED**, n = 2; mechanism =
 appends each dword to `ChCliApi accumIntList[0]` = **SOURCED**; **"items" specifically =
 NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEND`.
+
+**RUN 2026-08-18 — `accum_drains`, harness `20260818T171920`. Three drains QUIET with real
+ids staged; one arm UNMEASURED; the assert reading is confirmed positively.** OBSERVED.
+With items 40/41/42 declared by `0x0161` and staged through `0x0084` (and column 1 fed
+`[1,1,1]` where both lists are read), the drains produced **no UI change whatsoever**:
+`0x0085`, `0x00D4` and `0x0086` each sat in a run whose per-frame changed-pixel baseline
+was **exactly 0** outside the player's own idle animation. That is the pre-registered null,
+and per this probe's own note it **refutes nothing** — the only observed reader of the
+staged buffer (the `0x00C5` flow) rides a window context, and this run opened no window.
+**The positive result is the assert:** `0x0086` with counts deliberately equal (3 == 3) was
+accepted with **no `ChCliApi.cpp(1587)`**, so the disassembly's equal-counts guard is
+confirmed from the running client rather than only from the listing — and the ladder's
+original design, which would have sent 3 against 0, is confirmed as the crash it was
+predicted to be.
+
+**Two honest gaps, neither papered over.** (1) **`0x00E1` was never observed**: the client
+left the OS foreground for ~23 s and `shot_if_foreground` correctly declined to photograph
+another window, so ten frames spanning that drain do not exist. The one drain carrying an
+upstream name worth testing is the one with no coverage. (2) The single non-zero frame in
+the run — 7,172 changed pixels at the `0x00D4` drain — is a **skill tooltip** ("Battle
+Rage…") raised by the mouse resting over the skill bar, plus the chat input taking focus.
+It looked like a hit at the aggregate level and is an artifact; recorded because the
+next reader will otherwise re-derive it from the same numbers.
 
 **ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
 have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
@@ -1539,14 +1587,18 @@ repeated:
    `0x0084`, `0x005F`, `0x009E`, `0x003A` at medium with the label splits above, and put
    **nothing** in for the eight NOT FOUND. Each entry needs a `test_smsgnames.py`-style wire
    invariant that could go red.
-5. **One loopback run settles `0x002F`, and it is the only CONTESTED row.**
-   Send `0x00AA(agent, 'play', model)` **then** `0x002F(agent, 'play')` against our own
-   server, on an agent created with `'nonc'`. `studies/enemy/PLAN.md` tested `0x002F` alone,
-   and retail never sends it alone. Hand-driven, no aiming, fixed-position readout.
-6. **One loopback run resolves `0x00B9`'s flag.** Re-run the existing smsgsweep
-   `--encstring --only 0x00B9` apparatus with field2 = 1 against the already-proven
-   field2 = 0, `--shots 2`. Same instrument that named three of the four in that table; it
-   is already built.
+5. ~~**One loopback run settles `0x002F`, and it is the only CONTESTED row.**~~
+   **DONE 2026-08-18, and it took two runs rather than one.** The first sent the pair and
+   measured a red→green flip it could not attribute; the second (`allegiance_split`, four
+   cells 10 s apart) attributed it: **`0x002F` ALONE does it, `0x00AA` is neither necessary
+   nor sufficient.** The row is resolved in upstream's favour and the name is OBSERVED on
+   our own client. The design note this item carried — "retail never sends it alone" — was
+   sound reasoning that turned out not to matter. See the `0x002F` row.
+6. ~~**One loopback run resolves `0x00B9`'s flag.**~~ **DONE 2026-08-18**, exactly as
+   specified and with the instrument that already existed (`--set 0x00B9:2=1` needed no new
+   code). **field 2 is a text-style flag: 0 renders the callout string cream, 1 renders it
+   gold**; box, position and close button identical. Meaning still UNVERIFIED and the
+   discriminator is a retail capture, not another arm — see the `0x00B9` row.
 7. **One loopback run separates `0x0084` from `0x00D7`.** Send `0x0084` with N ids then
    `0x0086`; separately `0x00D7` then `0x00E1`; see which UI surface receives each. That
    separates the two appenders the binary cannot.

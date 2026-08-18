@@ -1386,6 +1386,31 @@ correction: the table is keyed by inventory id, not owner, and its registrar is 
 — see the PvP-UI entry below.) And two residues filed with their own arcs — the
 heroes split-filter (§21.2) and whether `0x006E` position semantics matter for the HANDS.
 
+**2026-08-18, THE LADDER RAN: five caged runs, and the CONTESTED row is CLOSED.**
+[studies/newopcodes/FINDINGS.md](studies/newopcodes/FINDINGS.md) has each result in place.
+**`0x002F` IS `AGENT_UPDATE_ALLEGIANCE`, OBSERVED on our own client** — and it acts
+**alone**: four bodies created `'mons'` (all red), arms 10 s apart, `0x002F` alone flipped
+its body's compass dot red→**green** in the next frame, `0x00AA` alone left its body red
+for 53 s, the pair flipped, and the untouched control never moved. So `0x00AA` is neither
+necessary nor sufficient, refuting the hypothesis the probe was built on. **The
+reconciliation is the finding worth carrying:** `studies/enemy/PLAN.md`'s "sending it
+changed nothing" **stands** — it watched *attack initiation*, gated by `+0x1B5`, which
+really is write-once at construction. Allegiance is **at least two stores**: the displayed
+team token `0x002F` writes at any time, and the attackability byte nothing post-construction
+moves. Both old claims were true about different surfaces; the word "allegiance"
+equivocated. `authsrv.py`'s "no later message can correct it" is corrected at the site.
+**`0x00B9` field 2 is a TEXT-STYLE flag** — 0 cream, 1 gold, same box and close button,
+measured over two runs differing in that field alone (meaning still UNVERIFIED; retail
+exercises both values in adjacent messages, so the discriminator is a capture, not an arm).
+**`accum_drains` came back QUIET** on `0x0085`/`0x00D4`/`0x0086` with real declared ids
+staged — the pre-registered null, which refutes nothing — plus one positive: `0x0086` with
+counts deliberately equal drew **no `ChCliApi.cpp(1587)`**, confirming the assert guard from
+the running client. Two honest gaps recorded rather than smoothed: **`0x00E1` was never
+observed** (the client left the OS foreground and ten frames do not exist), and a 7,172-px
+"hit" at the `0x00D4` drain was a **skill tooltip** raised by the resting mouse, caught only
+by cropping. Harness trap for the next probe: **a `--walk` plan's `shot:` fires after
+`alt:` releases**, so neither allegiance run captured a nameplate.
+
 **2026-08-18, the follow-up ladder is STAGED and one fix landed.** The `0x0199` field-1
 correction reached the code: the send site now fills it with `PLAYER_NUMBER` (heroes §22's
 CORRECTED block; it sent `PLAYER_AGENT_ID` for two days, indistinguishable in a solo
