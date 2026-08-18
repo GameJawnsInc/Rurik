@@ -119,6 +119,8 @@ def validate(data, path):
         if not isinstance(row.get("current"), int) \
                 or not isinstance(row.get("max"), int):
             _refuse(path, f"faction {fac}: current/max must be ints")
+        if "total" in row and not isinstance(row["total"], int):
+            _refuse(path, f"faction {fac}: total must be an int when present")
     for uuid_hex, row in chars.items():
         if len(uuid_hex) != 32 or any(c not in "0123456789abcdef"
                                       for c in uuid_hex.lower()):
