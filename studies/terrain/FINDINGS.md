@@ -1898,6 +1898,77 @@ that citation on those grounds. Re-read from the raw bytes at `0x004F38D9`:
 `mov ecx, 0x0094D2A4` -> `fov != 0.0f`. The citation stands and the census is
 incomplete -- worth knowing before trusting it as exhaustive.
 
+## 11. CLOSED: the 75 degrees is the HORIZONTAL field of view (2026-08-18)
+
+§10 measured the angle and could not name its axis. Two independent tests
+settle it, and they agree.
+
+**TEST 1 — the client's own projection scales, from memory.** A perspective
+projection holds `m00 = cot(h/2)` and `m11 = cot(v/2)`, and `m11/m00` is the
+render aspect. So each reading of "75 degrees" predicts a DIFFERENT pair, and
+the pairs are computable exactly. Requiring the two to be **adjacent floats**
+(gap ≤ 3 slots, so a coincidence has to be a coincidence of ORDER as well as
+of value) over 505 MB of the live client:
+
+| the pair a reading demands | sites found |
+|---|---|
+| **HORIZONTAL** — `cot(75/2)=1.303225` then `1.303225 × aspect = 2.499693` | **2** |
+| VERTICAL — `1.303225 / aspect = 0.679442` then `1.303225` | **0** |
+| DIAGONAL — `1.469707` then `2.819018` | **0** |
+
+`0x25D3A6E8` and `0x25DEA770`, gap 1 in both. Standard D3D builds
+`xScale = yScale / aspect`, so the SMALLER of the pair is the x scale — and
+`cot(75/2)` is the smaller. **The 75 degrees is the horizontal field.** The
+looser test in §10's first pass "confirmed" both readings because the two
+predicted pairs SHARE the value 1.303225 and differ only by a factor of the
+aspect; requiring adjacency is what separates them, and a bare-value search
+never could.
+
+**TEST 2 — geometry against a screenshot, which refutes the vertical reading
+outright.** Camera pose read live, terrain height read from our own export,
+one screenshot (`vault/research/terrain/fov_client.png`, 1920×1001, Ascalon
+City):
+
+    camera  (9435.993, 8077.0, -805.418)      target (9826.0, 8077.0, -716.565)
+    camera -> target = 400.000 units exactly
+
+All three points share y = 8077, so the whole problem lies in the vertical
+plane and the target projects to the exact centre row. The character stands at
+the spawn — **(9826, 8077), which is `content/maps.toml [map.148]`'s own
+spawn** — and its feet are at row **693** in the image. Inverting each reading
+to the ground height it would require:
+
+| reading | vertical fov | required feet Z | vs the terrain (642.02) |
+|---|---|---|---|
+| 75 is VERTICAL | 75.000 | 586.40 | **−55.62 — BELOW the ground** |
+| 75 is HORIZONTAL | 43.608 | 650.97 | +8.95 |
+| 75 is DIAGONAL | 39.063 | 658.64 | +16.62 |
+
+**A character cannot stand 55 units under the terrain**, so the vertical
+reading is refuted by the picture itself. The horizontal reading needs the
+smallest correction — 9 units, which a paved plaza sitting just above the
+height lattice supplies — and it is the one test 1 names independently.
+
+**So: horizontal 75.000 degrees, vertical 43.608 degrees at 1920×1001**, and
+the vertical moves with the render aspect while the horizontal does not.
+`gwcam.py` sets `sensor_fit = HORIZONTAL` and `angle_x = 75 deg` (lens 23.46 mm
+on a 36 mm sensor).
+
+**A CONFLICT LEFT STANDING RATHER THAN EXPLAINED AWAY.** ArenaNet's own patch
+note (2018-06-06) says the client moved to a *vertical* calculation, with
+`-oldfov` restoring a diagonal one — and a horizontal-fixed projection is
+neither. The measurement is what it is: on build 38797, with no `-oldfov`,
+the value at `0x00C078C4` is the horizontal field. Possible readings — the
+slider value is expressed horizontally while the *derivation* is vertical, or
+the behaviour changed again after 2018 — are UNTESTED, and naming one here
+would be exactly the kind of guess this arc has retracted four times. What
+would settle it is a second run at a DIFFERENT window aspect: a
+horizontal-fixed projection keeps `m00` and moves `m11`, a vertical-fixed one
+does the reverse, and `fovaxis.py` already prints both.
+
+**Instruments:** `toolkit/clientscan/fovaxis.py` (the adjacency test, read-only)
+and `fovread.py`. Both rerun in a minute against any running client.
+
 ## 8. What is still open
 
 - ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
@@ -1986,11 +2057,15 @@ incomplete -- worth knowing before trusting it as exhaustive.
 - ~~GW's FOV is unmeasured.~~ **MEASURED 2026-08-18, §10: exactly 75.000
   degrees** at default settings, with a far plane of 48000, read live from
   `0x00C078C4` by `toolkit/clientscan/fovread.py` and self-validated against a
-  known spawn point. **Still open: WHICH AXIS it spans** — vertical (what
-  ArenaNet's own 2018 patch notes imply, and what `gwcam.py` assumes),
-  horizontal, or diagonal, which differ by 40+ degrees of horizontal field.
-  One upstream says 50 vertical and nothing here reproduces that. The closing
-  test is geometric and needs one client run; §10 states it.
+  known spawn point. ~~Still open: which axis.~~ **ALSO CLOSED, §11: it is
+  the HORIZONTAL field** — the projection's adjacent scale pair puts
+  cot(75/2) as the x scale (2 sites; the vertical and diagonal pairs appear
+  nowhere), and the vertical reading is refuted geometrically because it would
+  put the character 55 units under the terrain. Vertical is 43.608 deg at
+  1920x1001 and moves with the aspect. **Left open**: this contradicts
+  ArenaNet's own 2018 patch note describing a *vertical* calculation; a second
+  run at a DIFFERENT window aspect settles which axis the client holds fixed,
+  and `fovaxis.py` already prints both.
 - The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
   measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
   is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and
