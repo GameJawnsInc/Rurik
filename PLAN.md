@@ -2726,31 +2726,76 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
-### The terrain texturing arc — ALL SIX RUNGS LANDED; the ground still does not match retail (2026-08-15)
+### The terrain texturing arc — CLOSED 2026-08-18; the ground matches the mechanism, and every open item is answered
 
-> **UPDATE 2026-08-18 — the mechanism is now CLOSED against the client and the
-> repeat question is ANSWERED; two claims below are superseded.** The 08-15
-> text under this heading stood while a later session closed the whole chain
-> (`studies/terrain/FINDINGS.md` §7.11–§7.19, all locked to client captures):
-> the coverage pick is a function of (types, selector) — 212/212 — the mask is
-> PHYSICAL (the permuted reading scored 31.1%), the base layer is the corner
-> that SORTS FIRST (102/102), `trnvariation` reproduces the client's stream on
-> 511/511 consecutive live draws, and **§7.2's second UV rectangle is REFUTED**
-> (0 of 512 cells; the `0xFFFF` path is an unused-slot no-op). So the
-> "blocking format bug" paragraph below (§7.10) was subsumed — the fix landed
-> in `cell_layers`, the exporter and the importer, each of which carried its
-> own drifted copy of the rule — and the "base layer's OWN UV rectangle" it
-> calls the likeliest repetition mechanism DOES NOT EXIST. **2026-08-18,
-> §7.20: the exported ground does NOT repeat beyond the art's own floor** —
-> measured with a prediction-first, artifact-gated compositor
-> (`studies/terrain/repeatprobe.py`): the export sits ON the ideal-random
-> floor on every window of Kamadan and Lornar's while the pre-arc pinned
-> control separates 3–9×. What remains open is in FINDINGS §8: the lightmap
-> transfer curve, the one-block `arg4 = 0` scope caveat, prop fall-through,
-> and the unmeasured FOV.
+> **THE ARC IS CLOSED, 2026-08-18. Everything under this heading from 2026-08-15
+> is HISTORY — read it for the reasoning, never for the status.** Five things
+> below are superseded and two are outright refuted. Full record:
+> [`studies/terrain/FINDINGS.md`](studies/terrain/FINDINGS.md) §7.11–§12.
+>
+> **The mechanism, all locked to client captures.** The coverage pick is a
+> function of (corner types, SELECTOR) — 212/212; the mask is PHYSICAL, not
+> permuted (the permuted reading scored 31.1%); the base layer is the corner
+> that SORTS FIRST (102/102); `trnvariation` reproduces the client's stream on
+> 511/511 consecutive live draws; and **§7.2's second UV rectangle is REFUTED**
+> (0 of 512 cells — the `0xFFFF` path is an unused-slot no-op). So the
+> "blocking format bug" below was subsumed, and the "base layer's OWN UV
+> rectangle" it calls the likeliest cause of repetition DOES NOT EXIST.
+>
+> **§7.20 — the ground does NOT repeat** beyond a floor the ART sets. Measured
+> prediction-first with an artifact-gated compositor
+> (`studies/terrain/repeatprobe.py`, checked in): the export sits ON the
+> ideal-random floor on every window of both maps while the pre-arc pinned
+> control separates 3–9×. Two adversarial reviewers returned SURVIVES; one
+> found a real mislabel (Kamadan's whole-GRID row is 68% out-of-bounds filler)
+> and it is corrected in place.
+>
+> **§7.21 — the `arg4 = 0` scope caveat is DISCHARGED**, and `trnvariation`
+> claim 1 is confirmed against the client for the first time. Row 34429 tile
+> (4,3) captured whole — 1024/1024 cells, 590 with authored tag 3: the
+> draw-CONSUMED model scores **1024/1024** against the skip model's 693/1024,
+> and the 331 cells where they disagree are **exactly** the 331 predicted
+> before the run. An authored cell draws its authored value 590/590, and
+> §7.14's cover-word rule holds 735/735 on an authored block.
+> **Aiming the instrument was the work**: `trnhook/trnblock.c` filters on the
+> block's own reseed and stays armed until the target completes (33,639 hits
+> across 32 blocks in one run), and `trnhook/autoinject.py` exists because
+> terrain builds ONCE at map load — a poll-then-inject round trip returns
+> `hits 0` with a perfectly correct breakpoint.
+>
+> **§9 — prop material fall-through is CLOSED, and the recorded 31.6% was
+> OVERSTATED rather than stale.** The population never moved (13 sub-models
+> then and now); 12 of the 13 bind to material slot 0 explicitly, which is the
+> slot the default would have given — identical pixels. Only **one** sub-model
+> (0.11% of Kamadan's prop area, 0 on Lornar's) is genuinely unbound, and it
+> now draws a marker instead of impersonating a textured surface.
+> **Two claims refuted**: the dark rocks are the ART (12 of 12 fall-back
+> sub-models draw the only colour map their model owns), and "decode AMAT" was
+> wrong in kind — **AMAT is a compiled SHADER binary** (`TECH`/`PASS` chunk
+> tags), not a texture-index table.
+>
+> **§10–§12 — the FIELD OF VIEW is measured, and so is its axis.** Exactly
+> **75.000° HORIZONTAL**, far plane **48000**, read live from the global at
+> `0x00C078C4` (`toolkit/clientscan/fovread.py`). The axis was settled twice:
+> the projection's adjacent scale pair puts `cot(75/2)` as the x scale, and an
+> aspect test — the same client resized wide→portrait — kept `m00` pinned
+> while `m11` tracked the aspect (vertical 43.6° at 16:9, 95.3° at 0.699).
+> `gwcam.py`'s 28 mm placeholder is gone. **Left unexplained, deliberately**:
+> this contradicts ArenaNet's 2018-06-06 patch note describing a *vertical*
+> calculation. The measurement stands; the reconciliation is not guessed.
+>
+> **What is still open** is FINDINGS §8, and it is now short: the lightmap's
+> TRANSFER CURVE (tag 9 applied as the simplest mapping the measurement
+> allows), the quadrant's `+u` ORIENTATION (a convention, not a measurement),
+> and three named-but-not-understood fields (`table_b`, tag 0's `tex_word`,
+> the 4-dword table at `0x00A73DF8`). **Nothing on that list blocks a render.**
 
-**Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
-[`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
+**Cold session: read [`studies/terrain/HANDOFF.md`](studies/terrain/HANDOFF.md)
+FIRST** — the traps, not the status, in the pattern `studies/isle/HANDOFF.md`
+established. Then [`FINDINGS.md`](studies/terrain/FINDINGS.md) §7.6–§12, and
+[`studies/terrain/PLAN.md`](studies/terrain/PLAN.md) for the original ladder.
+
+**The 2026-08-15 text from here down is HISTORY.** The props round trip landed on a map
 whose GROUND has no material: measured in Blender itself, the terrain is the only
 object in the scene with no material slot — **186,368 of 326,708 faces (57%)** and very
 nearly all of the visible area. Every one of the 516 props is textured; the map surface
