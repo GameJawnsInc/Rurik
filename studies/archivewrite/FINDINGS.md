@@ -932,6 +932,38 @@ single-variant key** rather than one. Then whatever the creature plays, roughly 
 plays are ours and the difference is a gross deformation rather than a nuance. That is a
 yes/no a viewer can call in one second over a laggy link.
 
+### 9.3d RUN 2 IS STAGED, NOT DEPLOYED — the signal is now unmissable
+
+Built by `vault/research/archivewrite/a4stage2.py` from `Gw.dat.retail`, staged at
+`vault/exports/archivewrite/a4run2/Gw.a4run2.dat`. **Not deployed, not launched.**
+
+```
+donor 222949: 85 of 86 node bases scaled x3 (11,878 B, unchanged length)
+link selector 16; 216 single-variant keys of 224 total
+sequences 242 -> 458; shell 29,802 -> 34,776 B (+4,974)
+216/216 of those keys now have exactly 2 variants
+-> ~96% of this creature's animation keys are a coin flip
+
+preflight 10 of 10 | generations 6 of 6 | crc sweep 177,320 payloads, 0 bad
+size 4,198,489,600 B unchanged; diff is exactly 2 rows
+```
+
+**Both of run 1's design errors are addressed, one each.** Coverage: 216 keys instead
+of 1, so the creature cannot avoid the modified branch by simply not performing one
+animation. Amplitude: the new file's node bases are scaled x3 rather than duplicated,
+so a pick is a *gross deformation* rather than plausible motion — the same edit that
+produced U7's one-word report, "deformed", and the reason `feedback-make-the-signal-
+unmistakable` says change SHAPE, not timing.
+
+It uses a **different file id** (389633, not run 1's 389632) and is built from retail
+rather than from run 1's archive, so the two experiments cannot contaminate each other.
+
+**Prediction, stated before the run:** the client loads it — run 1 already proved the
+16-link shape loads — and the hatcher is visibly deformed on roughly half its animation
+plays. **If it looks entirely normal, our records are never being selected**, and the
+per-file reading of the selector needs re-examining. That is a real result, and it is
+the one thing run 1 could not deliver.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
