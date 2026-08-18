@@ -42,9 +42,9 @@ import checks  # noqa: E402
 import damagepass  # noqa: E402
 import vaultpath  # noqa: E402
 
-# Floor set from a real green run (64 checks, 2026-08-18); every section
+# Floor set from a real green run (68 checks, 2026-08-18); every section
 # runs unconditionally, so the mandatory core is the whole file.
-LEDGER = checks.Ledger("damagepass", floor=64)
+LEDGER = checks.Ledger("damagepass", floor=68)
 check = checks.adopt(LEDGER)
 
 f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
@@ -104,6 +104,29 @@ check(d_bad["spread"] > 1.0,
 # No attenuation: r >= 1 must report None, not a complex D.
 d_flat = damagepass.divisor_fit({60: 100.0, 80: 100.0})
 check(d_flat["D_per_ar"][80] is None, "r=1.0 reports None (form refuted)")
+
+# ERROR BARS ARE NOT OPTIONAL, and this is the correction the rung-7
+# adversarial review forced. Fed raw samples, the fit must report an interval;
+# fed bare means it must report None rather than a fake precision. The rung-7
+# run's D = 38.16 read as "D is not 40" until the interval appeared -- 40 sits
+# 0.8 sigma away, well inside.
+import random as _random                                          # noqa: E402
+_random.seed(20260818)
+sam = {60: [_random.gauss(22.84, 2.6) for _ in range(67)],
+       80: [_random.gauss(15.88, 1.8) for _ in range(50)],
+       100: [_random.gauss(11.39, 1.3) for _ in range(61)]}
+d_s = damagepass.divisor_fit(sam)
+check(d_s["n"][80] == 50 and d_s["sem"][80] is not None,
+      "fed raw samples the fit reports n and a standard error per AR")
+check(d_s["D_ci"][80] is not None and
+      d_s["D_ci"][80][0] < d_s["D_per_ar"][80] < d_s["D_ci"][80][1],
+      "and a 95% interval bracketing its own point estimate",
+      f"D={d_s['D_per_ar'][80]:.2f} CI={d_s['D_ci'][80]}")
+check(d_s["sigma_from_40"][80] is not None,
+      "and the distance of the wiki's D=40 from it, in sigma",
+      f"{d_s['sigma_from_40'][80]:+.2f}")
+check(d["D_ci"].get(80) is None and d["n"].get(80) is None,
+      "fed bare means the same fields come back None -- no invented precision")
 
 # Missing base AR refuses.
 try:
