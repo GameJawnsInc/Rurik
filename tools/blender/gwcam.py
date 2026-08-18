@@ -15,12 +15,21 @@ WHAT IS MEASURED HERE AND WHAT IS NOT, because the difference matters:
   * MEASURED -- the world scale. Cell pitch is 96 units (T3), maps are tens of
     thousands of units across, and a character occupies a couple of hundred.
     Every distance below is expressed in those units and is checkable.
-  * NOT MEASURED -- the LENS. Guild Wars' field of view is not read out of the
-    client anywhere in this repo; the client has an `oldfov` command-line flag
-    (studies/datwrite) which says the value exists and changed, and nobody has
-    gone and got it. `--lens` defaults to 28 mm because a third-person chase
-    camera is wide, and that is a STARTING POINT, not a finding. If the framing
-    matters to a conclusion, measure the FOV first.
+  * MEASURED 2026-08-18 -- the FIELD OF VIEW, at last. Read out of a running
+    client at default settings: **exactly 75.000 degrees**
+    (1.3089969158172607 rad), and the far plane the client's own frustum
+    builder uses is **48000** units. `studies/terrain/FINDINGS.md` section 10.
+    The read self-validates -- the camera `target` beside it equalled the
+    map's known spawn point, a number the reader was never given.
+  * STILL NOT MEASURED -- WHICH AXIS that 75 degrees spans. Vertical,
+    horizontal and diagonal readings are all arithmetically possible and they
+    are not close: at a 1.92 aspect they give a horizontal field of 111.6,
+    75.0 and 68.5 degrees respectively. This script takes the VERTICAL
+    reading because ArenaNet's own patch notes (2018-06-06) say the client
+    switched to a vertical calculation and `-oldfov` restores the older
+    diagonal one -- but one upstream reverse-engineering effort states 50
+    degrees vertical instead, which contradicts it, so `--fov-axis` exists
+    and the assumption is printed on every run.
 
 The pitch and distance defaults come from matching screenshots by eye and are
 in the same category: adjustable, not authoritative.
@@ -33,18 +42,38 @@ import bpy
 
 CELL_PITCH = 96.0          # MEASURED, T3
 
+#: MEASURED 2026-08-18 off a running client at default settings, read from the
+#: field-of-view global the frustum builder is handed (FINDINGS section 10).
+#: Exactly 75 degrees -- 1.3089969158172607 rad, which is 75 * pi/180 to the
+#: last bit, so it is an authored round number and not an artefact.
+GW_FOV_DEG = 75.0
+#: WHICH AXIS it spans is NOT measured. ArenaNet's 2018-06-06 patch notes say
+#: the client moved to a VERTICAL calculation (`-oldfov` restores the diagonal
+#: one), which is the best evidence there is; it is still an assumption and one
+#: upstream disagrees outright. Change it here or with --fov-axis.
+GW_FOV_AXIS = "vertical"
+#: MEASURED: the literal the client's own frustum builder loads (0x00946EBC).
+GW_FAR_PLANE = 48000.0
+
 
 def _args(argv):
     argv = argv[argv.index("--") + 1:] if "--" in argv else []
     if len(argv) < 2:
         raise SystemExit("usage: gwcam.py -- <world_x> <world_y> "
-                         "[--dist D] [--pitch DEG] [--yaw DEG] [--lens MM]")
+                         "[--dist D] [--pitch DEG] [--yaw DEG] "
+                         "[--fov DEG] [--fov-axis vertical|horizontal|diagonal]")
     x, y = float(argv[0]), float(argv[1])
-    opt = {"dist": 1100.0, "pitch": 32.0, "yaw": 215.0, "lens": 28.0}
+    opt = {"dist": 1100.0, "pitch": 32.0, "yaw": 215.0, "fov": GW_FOV_DEG}
     for k in list(opt):
         flag = "--" + k
         if flag in argv:
             opt[k] = float(argv[argv.index(flag) + 1])
+    axis = GW_FOV_AXIS
+    if "--fov-axis" in argv:
+        axis = argv[argv.index("--fov-axis") + 1]
+    if axis not in ("vertical", "horizontal", "diagonal"):
+        raise SystemExit("--fov-axis must be vertical, horizontal or diagonal")
+    opt["axis"] = axis
     return x, y, opt
 
 
@@ -82,9 +111,32 @@ def main():
     diag = math.dist(lo, hi) if lo[0] < 1e17 else 40000.0
 
     cam = bpy.data.cameras.new("gw_cam")
-    cam.lens = opt["lens"]
+    # The field of view is set as an ANGLE on a named axis rather than as a
+    # focal length, because a lens in millimetres only means something once the
+    # sensor and its fit are pinned too -- and the fit is exactly the part that
+    # is assumed here. Blender's `angle_y`/`angle_x` want the matching
+    # `sensor_fit`, so set the fit FIRST.
+    fov = math.radians(opt["fov"])
+    if opt["axis"] == "vertical":
+        cam.sensor_fit = "VERTICAL"
+        cam.angle_y = fov
+    elif opt["axis"] == "horizontal":
+        cam.sensor_fit = "HORIZONTAL"
+        cam.angle_x = fov
+    else:
+        # A diagonal field has no direct Blender setter: convert it to the
+        # vertical one for the render's own aspect, which is what the camera
+        # actually needs.
+        r = bpy.context.scene.render
+        aspect = (r.resolution_x * r.pixel_aspect_x) / max(
+            r.resolution_y * r.pixel_aspect_y, 1e-9)
+        cam.sensor_fit = "VERTICAL"
+        cam.angle_y = 2.0 * math.atan(math.tan(fov / 2.0)
+                                      / math.hypot(aspect, 1.0))
     cam.clip_start = CELL_PITCH          # a cell: never clips what you stand on
-    cam.clip_end = max(diag * 2.0, 10000.0)
+    # The client's own far plane, MEASURED, when it covers the map; otherwise
+    # the map's extent, because a 48000 far plane cannot show a 40 km map whole.
+    cam.clip_end = max(GW_FAR_PLANE, diag * 2.0, 10000.0)
     ob = bpy.data.objects.new("gw_cam", cam)
     bpy.context.scene.collection.objects.link(ob)
 
@@ -100,8 +152,11 @@ def main():
 
     print("gw_cam at (%.0f, %.0f, %.0f) looking at (%.0f, %.0f, %.0f)"
           % (ob.location[0], ob.location[1], ob.location[2], x, y, z0))
-    print("  lens %.0f mm (NOT MEASURED), pitch %.0f deg, dist %.0f units"
-          % (opt["lens"], opt["pitch"], d))
+    print("  fov %.3f deg on the %s axis (MEASURED 2026-08-18; the AXIS is "
+          "assumed)" % (opt["fov"], opt["axis"]))
+    print("  -> lens %.2f mm at sensor %.1f mm, pitch %.0f deg, dist %.0f units"
+          % (cam.lens, cam.sensor_height if cam.sensor_fit == "VERTICAL"
+             else cam.sensor_width, opt["pitch"], d))
     print("  clip %.0f .. %.0f  (ratio %.0f -- Blender's default is 1e8)"
           % (cam.clip_start, cam.clip_end, cam.clip_end / cam.clip_start))
     if bpy.data.filepath:
