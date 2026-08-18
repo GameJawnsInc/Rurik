@@ -30,6 +30,13 @@ are the arc's main output so far.
 **What is NOT shown:** a linked file's *content* changing what appears on screen. The only
 property we tested in a linked file is the one linked files do not own.
 
+**What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
+retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted
+byte-identically** (428 rows, CRC-matched); **ArenaNet's table encoder is longest-run
+greedy**, bit-exact on 2,194/2,194 tables; and a literal-only encoder is **dead** by
+391,648 B. **Not shown:** anything about the LZ77 matcher, which is where the whole
+remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7.
+
 ---
 
 ## 2. State of the machine
@@ -60,6 +67,7 @@ Nothing is running: no client, no server, no background task.
 | `archive.py` `mftOffset` u64 | was `<I`; silently **capped archive growth** | §11 |
 | `datwrite` header refusal | `[0x00,0x10)` — the one corruption with no recovery | `test_datwrite.py` |
 | `datplan` extent projection | a generation's declared extent crosses run boundaries | `test_datplan.py` §9 |
+| `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
@@ -86,28 +94,61 @@ Full detail in §5. The short form:
 
 ## 5. What to do next, cheapest first
 
-**A. Show a linked file's CONTENT changing the screen.** The one thing five client runs
-never demonstrated. Bases are the wrong lever — scale the **channel values** (rotations,
-translations) of a writable link instead, or zero them, and watch an animation that link
-actually serves. Note the trap that cost this session: **the hatcher only ever plays its
-casting animation** in the harness's `--enemy` setup, so pick a link that serves *that*, or
-provoke other animations. 13 of 15 links are writable; the two that are not (15018, 87333)
-hold 149 of 242 records.
+**A. Show a linked file's CONTENT changing the screen — DESIGNED AND DE-RISKED 2026-08-18,
+§11. It is ready to stage; it has not been staged or launched.** The trap named here (the
+hatcher only plays its cast in the `--enemy` setup) is **solved, and not by finding the cast
+file**: the creature's most universal animation is **base key 3,259,067,510, 1.067 s, present
+in 26–32 of 32 corpus shells, and all six of its weapon-class variants are served by
+selector 10 = file 109464 — 27,948 B stored, WRITABLE, already relocated in run 5.** That is
+locomotion, and the harness re-triggers it on demand: the enemy re-chases whenever the player
+moves >120 u (`ENEMY_DEST_RESEND`). **Provoke the WALK, not the cast.**
 
-**B. Decide the encoder on its real merits.** It is off the critical path for shape, but it
-is what reaches *motion* in the 62% of records held by unwritable files. A2 measured the
-stdlib beating ArenaNet's own ratio on that payload by **11,930 B**, so the difficulty is
-format conformance, not compression. Rung **A6** — the entropy accountant, ~80 lines, no
-bitstream — is the cheapest thing that can kill it.
+Ship the stripped version: compose a **180° quaternion flip onto every rotation key** of the
+writable links (length-preserving, so nothing relocates and no record, key table or window
+changes — §9.3g's rules 1/3/4/7 are untouched rather than satisfied), plus the **positive
+control in the same archive** — the shell's head cluster, **nodes 51–64, bases ×3**, audited
+as genuinely the head (subtree of node 50: mirrored horns, a jaw chain) and visible in the
+first still before anything animates. Decision table: giant head + mangled limbs = answered;
+giant head + normal limbs = the first real negative; **normal head = pipeline broken, abort,
+and nothing else in the run means anything.**
+
+**Do NOT decimate keyframes for this run** even though it works — §11.3. It fits in place,
+it needs no free run, and it would unblock 73940 to reach 15-of-15 links; but its rotation
+error is **p99 46.6°, max 169.3°**, the same order as the flip that is supposed to *be* the
+readout. Stripping costs coverage of 73940 only (12 of 15 links), which does not matter
+because the walk is 109464.
+
+**B. ~~Decide the encoder on its real merits.~~ A6 RAN, 2026-08-18 — see §10. It did NOT
+kill the encoder, and the risk is now entirely the LZ77 matcher.** Re-costing retail's own
+token stream for row 11196 gives **+8 B on 1,029,564**. But read §10.2 before quoting that:
+the token term is 95.6% of the stream and Huffman optimality is a theorem, so it *had* to
+tie — A6 excluded a defect in our own cost model, not a risk in the encoder. **The figure
+that decides A7 is the block overhead:** table transmission is 1,686 B = **25× the row's
+68 B of slack**, one extra block ≈ **1.5× the whole authoring budget**, and a matcher only
+**+2.7%** worse in token count overflows the reservation on table cost alone.
+**What the skeptics left behind is worth more than the verdict:** retail's stored row was
+**re-emitted byte-identically** (428 rows, zero failures, CRC matching the MFT), and
+**ArenaNet's table encoder is identified as longest-run greedy** (bit-exact on 2,194/2,194
+tables). Every piece of a compression-8 encoder now exists **except the matcher**. Also
+settled: a literal-only encoder is **DEAD** — 1,421,280 B, 391,648 B over the reservation.
+**A7's remaining question is a size-only matcher experiment**, and it needs no bitstream:
+build a hash-chain/lazy-matching LZ77, feed its token stream to `gwentropy`'s existing
+cost model, and see whether it lands under 1,029,632 B *including* whatever block count it
+implies. That is the cheapest thing that can still kill A7.
 
 **C. A1b, downgraded but real.** `schema/messages.json` has **zero** occurrences of `anim`,
 `sequence`, `seq`, `emote`, `gesture` — *"the server tells the client to play sequence N"*
 was never a measured wire fact. Find who fills the per-agent key array at `+0x2C`/`+0x34`.
 
-**D. A5, still unrun and still the biggest lever on the wall.** Does the client read a
-1,514,855 B **stored** row placed past the old EOF? That population is currently empty —
-retail's largest ordinary stored content row is 19,292 B. One caged run on a copy, with a
-byte-identical payload so the answer cannot be confounded.
+**D. A5 — still unrun, and CHEAPER than this file said. Its premise expired (correction
+C-9).** "That population is currently empty" was true of *retail* and is no longer true of
+*us*: `datmove` writes compression 0 unconditionally, so **run 5 shipped eleven stored rows
+above 19,292 B — the largest 765,378 B — and the owner deployed and launched it with no
+assert.** So the honest bar is 11× the largest **proven-read** stored row and **0.5× the
+largest already deployed without a crash**, not "unprecedented". Retail's own 19,292 B
+ceiling still reproduces (0 of 38,621 rows above it), so the question is real — it is just
+much better supported than the ladder priced it. One caged run on a copy, byte-identical
+payload so the answer cannot be confounded.
 
 ---
 

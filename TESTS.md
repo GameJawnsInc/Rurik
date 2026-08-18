@@ -1199,6 +1199,54 @@ Every one of these, in the order they were written:
   act -- because a single fixed floor left the vaulted run eight checks of
   slack and the audit deleted the whole sabotage section inside it. ~5 s),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
+  `toolkit/mapdata/test_gwentropy.py` (rung **A6**, the entropy accountant --
+  `gwentropy.py` recovers RETAIL'S OWN token stream out of a compression-8 row and
+  re-costs it under a from-scratch Huffman plus this format's meta-coder, so the
+  standing hazard is that our decoder is the only referee and a round trip through it
+  proves nothing. Every section is picked for what a RED would mean. **C1** is the
+  one that earns the file: the segment accounting -- header + both tables + block_size
+  fields + tokens + extra bits -- must equal the MEASURED final bit position, with the
+  token term MODELLED from reconstructed length x count rather than read off
+  `bit_end - bit_after_size`, which is the version that could not fail and is
+  deliberately not what this does. It closes to **0 bits on 11 of 11 rows**. **C1b** is
+  the reader identity `bitpos + 32 + avail == 8*idx` with `idx == len(data) - 4` --
+  written as an identity because "within one 32-bit word" is FALSE as literally stated
+  (the reader permanently holds 32 look-ahead bits it never consumes; real tail slack
+  is 33..63). **C1c** asserts the derived `bitpos` equals an independently accumulated
+  counter, so `bitpos` is a measurement and not a definition. **C2** is why duplicating
+  gwdat's block loop is affordable: `trace()` and `replay()` must each reproduce
+  `gwdat.decompress`'s bytes, the second from the recorded token arrays ALONE with no
+  Huffman table and no bit reader. **C5 is the check nothing of ours forces** -- retail's
+  own decoded code lengths go back through our meta-coder DP and the answer is compared
+  to the table bits measured off the bit reader, and `above > 0` (the DP costing MORE
+  than retail's real bits) is impossible unless our cost model is wrong, since the DP is
+  the minimum over the same alphabet. It gets **4,450 chances in section 5** and fires
+  zero times; SABOTAGED by shaving one bit off one of the 256 meta tokens it goes red in
+  both directions (2 tables `below`, and 2 `above` with the bit added). **C4** exists
+  because C3 cannot substitute for it: swapping two symbols' code lengths leaves Kraft
+  at exactly 0 and moves C1 by 3,528 bits, and only C4 -- which rebuilds all 256 nodes,
+  24 `trans` rows and every `vals` entry from the reconstructed lengths and diffs them
+  against what `build_table` produced -- names the node. **FRM** is the bits-to-bytes
+  bridge (`4*ceil((bits+32)/32) + 4`) and this entry used to call it a prediction of the
+  MFT's own `size` field, "a field that is not an input to the calculation". **That was
+  wrong and the skeptic pass caught it**: `ar.raw(e)` slices the payload to `e.size`, so
+  `len(data) == e.size` by construction, C1b already pins `idx == len(data) - 4`, and the
+  algebra forces agreement for every stored size divisible by 4 -- which is **138,708 of
+  138,708 comp-8 rows**. FRM cannot fail anywhere in the population it runs over; it is
+  C1b in other units, kept as bookkeeping and no longer counted as evidence. Note also
+  that **C5's independence is narrower than "nothing of ours forces it"**: it is genuinely
+  independent of `table_lengths` and of the DP's run logic, but the DP and `build_table`'s
+  measured consumption are both driven by the same borrowed `CODE_LENGTH_THRESHOLDS` /
+  `CODE_LENGTH_SYMBOLS`, so a shared error in THOSE is invisible to it -- the standing
+  `gwdat.py` risk that the xentax.cpp diff has never been run. Section 1 pushes
+  all **65,536** 16-bit prefixes through `build_table`'s own band-selection expression
+  and requires our inverted cost table to agree; section 3 brute-forces every complete
+  length assignment for small alphabets, which is what makes "our token bits tie
+  retail's" a result rather than an artifact of reusing their numbers. There is
+  deliberately **no authored bitstream** here -- that needs a packer, and A6 is a
+  bit-COUNTING rung. Floor 91 with ZERO headroom, measured green; `--stride` moves how
+  many rows section 5 sweeps and not how many checks run. Without the archive it skips
+  to 13 and goes RED, which is the intended verdict. ~41 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
