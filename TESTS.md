@@ -1247,6 +1247,55 @@ Every one of these, in the order they were written:
   bit-COUNTING rung. Floor 91 with ZERO headroom, measured green; `--stride` moves how
   many rows section 5 sweeps and not how many checks run. Without the archive it skips
   to 13 and goes RED, which is the intended verdict. ~41 s),
+  `toolkit/mapdata/test_gwmatch.py` (rung **A7a**, the LZ77 matcher — `gwmatch.py`
+  reports a byte figure for a token stream **nobody ever emitted**, and every cheap way
+  to make that figure look good is a stream that could not be decoded: a distance one
+  past the window, a match reaching back further than the bytes produced so far, an
+  overlapping copy the encoder and decoder disagree about. All three make the file
+  SMALLER. So the two sections that carry this file are the ones that make a small
+  number mean something. **R1, reconstruction:** `gwentropy.replay()` rebuilds the
+  payload from our token arrays ALONE — gwdat's own `LENGTH_BASE`/`DISTANCE_BASE`,
+  gwdat's own one-byte-at-a-time copy loop so overlapping matches behave exactly as the
+  decoder makes them behave, no Huffman table and no bit reader anywhere — and it must
+  be byte-for-byte equal on **every real row and every synthetic**. That is why A7a
+  needs no bitstream writer to be believed. **R2, decodability:** `validate()`
+  re-derives each constraint from `gwdat.decompress`'s own arms rather than from the
+  emit path. **And the SABOTAGE section keeps both honest** — six corruptions of a real
+  token stream, each asserted CAUGHT, with an uncorrupted control beside them so the
+  reddening is the sabotage and not the fixture: (a) a distance off by one *chosen to
+  stay entirely legal*, where **R2 sees nothing and R1 is the only thing standing
+  there** — the single sharpest argument for why a size-only rung still needs a
+  reconstruction; (b) a match one byte longer than it is, where every per-token arm of
+  R2 stays silent and only R1 plus R2's global byte count fire; (c) a distance past the
+  bytes produced, which is what `gwdat` RAISES on; (d) distance symbol 30, off the end
+  of the real `DISTANCE_BASE` and into the garbage the 46-entry table holds; (e) a
+  non-final block that does not fill its declared size, which silently decodes the next
+  block's tokens through this block's tables; (f) a length extra one bit wider than its
+  own field. Section 1 derives every format parameter from `gwdat`'s tables rather than
+  typing it and checks **all 32,768 window positions and all 256 length bases**
+  round-trip, with the load-bearing arm being that **no distance ever reaches a symbol
+  above 29**. Section 2 is the degenerate controls where the answer is known by hand:
+  all-zeros is exactly `1 + ceil((n−1)/258)` tokens and every match is distance 1 (an
+  overlapping copy), a 2-byte cycle is `2 + ceil((n−2)/258)`, and an incompressible
+  payload may not come out smaller than itself. **Section 4's load-bearing check is not
+  a size at all** — it is that **no uniform partition beats the partition DP**, measured
+  over all 16, which is impossible unless the DP is wrong since the DP is the minimum
+  over that same space; same shape as `test_gwentropy.py`'s C5, and it is the check that
+  earns A7a's headline, because the partition is where the result came from. Also per
+  row: C1 (the segment accounting re-summed by `gwentropy.segment_bits` must equal the
+  cursor `build_stream` accumulated — a partition bug desynchronises them, so it is worth
+  keeping, **but on OUR stream it is BOOKKEEPING, not evidence, and cannot fail**: both
+  sides derive from the same `token_bits` formula, unlike on retail's stream where the
+  token term is modelled and the final position is measured. **This is the second time in
+  two rungs that a forced check was written up as a refutable one** — see `FRM` in
+  `test_gwentropy.py` above — and it is why CLAUDE.md's "a check that cannot fail is not a
+  check" is worth re-reading before writing the verdict line, not after) and the Huffman
+  bracket (token bits at or above the per-block Shannon entropy and within one bit per
+  symbol of it, a theorem rather than a property of our code). There is deliberately
+  **no bitstream and no round trip through `gwdat.decompress`** — A7a is size-only.
+  Floor 62 with ZERO headroom, measured green; `--rows` moves section 4's check count,
+  so shortening it reddens the run on purpose, and without the archive it drops to 34
+  and goes RED. ~28 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
