@@ -350,3 +350,13 @@ The original sketch, kept for the record:
   carry `title_id`/`track_id` with no scope marker) — answerable only with
   real title traffic, i.e. a live capture outside Pre-Searing, or a probe.
 - `is_pvp`'s two open probes from FINDINGS.md §b stand unchanged.
+- **Balthazar award semantics are DEFERRED to a PvP arc — owner's call,
+  2026-08-18.** The kill-accrual gate (`balthazar_rate`) exists and defaults
+  to zero everywhere; do NOT author a `balthazar_per_kill` map row yet. The
+  reason is sequencing, not caution for its own sake: faction awards are a
+  PvP-system behaviour (arena fights, rated play, the cap growth that
+  rides rank) and no PvP analysis exists — no captures of arena play, no
+  study arc, nothing to derive magnitudes or triggers from beyond the two
+  training-arena data points. Authoring the row now would fix semantics for
+  a system nobody has measured. When a PvP arc opens, this is one of its
+  deliverables.
