@@ -18,6 +18,25 @@ buried under it. Nothing here was rewritten in the move; only `CLAUDE.md`'s poin
 
 Every one of these, in the order they were written:
 
+  `toolkit/schema/test_smsgnames.py` (the eight opcode names the 2026-08-17 Factions
+  captures earned, checked against the WIRE rather than against themselves. Section 1
+  pins each row in `schema/overrides.json` -- name, `high` confidence, a citation to
+  `studies/newopcodes/FINDINGS.md`, and NO field claim, since these are name-only rows.
+  Section 2 is the half that can actually go red: every invariant is re-derived from the
+  decrypted captures, so a name that stopped describing the traffic would fail. `0x011A
+  TOWN_ALLIANCE_OBJECT` must carry two strings in all 126 sightings AND its key must
+  stand in a BIJECTION with the guild name -- 18 keys, 18 (key,name) pairs, each
+  announced 7 times, one per channel. **That check replaced one that failed for the wrong
+  reason**: the first version asked how many first fields collided with a created agent
+  id, scored 63/126, and reddened -- which is what coincidence looks like when small
+  integers meet a 116-agent id space, not evidence about the name. Agent-keying is now
+  refuted the discriminating way, since players sharing a guild would put one name under
+  many keys. `0x00C4 WINDOW_OWNER`'s argument must be a live agent; `0x00F5 TITLE_UPDATE`
+  must only name tracks `0x00F6 TITLE_TRACK_INFO` declared; `0x017E` STOP must never
+  outnumber `0x0180`. Two sabotages built and run -- renaming `0x011A` back to the
+  refuted `GUILD_LADDER_ENTRY`, and breaking the bijection -- and both redden. Needs the
+  vault; declares a LEDGER.skip when the captures are absent rather than scoring zero.
+  15 checks, ~20 s),
   `toolkit/schema/test_codec.py` (codec vs. real captured bytes — and
   since 2026-08-11 the `string16` round trip: **22,524 of 22,524** live GAME_SMSG
   re-encode to ArenaNet's own bytes, where 133 in twelve opcodes did not, because

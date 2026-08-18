@@ -885,231 +885,6 @@
    }
   },
   "GAME_SMSG": {
-   "140": {
-    "opcode": 140,
-    "table": "GAME_SMSG_0140",
-    "declared_unpack_size": 11,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     }
-    ],
-    "why": "MAP_EXPLORATION_MARK -- the INCREMENTAL reveal, one message per newly-explored patch as the character walks. Handler 0x0091E940 -> 0x00811BE0, which is its SOLE caller (`codescan --xrefs 0x00811BE0`: 1 direct rel32 reference, 0 words holding the VA in any section). Three asserts name the three fields -- ChCliApi:201 'x + markSpanCount <= context->mapDims.x' @ 0x00811D12, :202 'y < mapDims.y', :203 'markSpanCount' -- and :214 ties the block grid to the area row's own footprint rect. It ORs bits into mapBits (ChCliApi:207/226, ArenaNet's token) and posts frame message 0x10000090, whose subscribers are Compass.cpp, GmMapWorld.cpp and GmMapWindow.cpp: ONE opcode feeds the compass and both maps. Wire: 47 live over 6 connections, t = 3.5-190.7 s; 47 of 47 marks land inside the area row's own footprint at >>5 (rivals: shift 0, 4 and 6 all score 0/47, and non-vacuity is measured -- only 3-8 of the 888 rows contain a given connection's whole mark set); 41 of 41 successive marks are Chebyshev-adjacent blocks, which a catalogue or an init stream is not. FIELD 3 IS THE HALF-SPAN (a radius in blocks), NOT markSpanCount -- markSpanCount is the client's derived local, the clamped x1 - x0 at 0x00811CE5, so f3 = 1 reveals a 3x3 window; all 47 live values are 1, so the wire cannot discriminate at n=1 and the disassembly settles it. INERT until the 0x008B + 0x008A pair has run (0x00811BEE cmp dword [eax+0x5ac], 0; je), which is why smsgsweep's 108 prior sends of this opcode measured nothing. NAME CONFIDENCE is MEDIUM and deliberately below the other two: mapBits is ArenaNet's, but both MARK and EXPLORATION are ours -- `asserts.py --grep '(?i)explor'` returns 0 of 19,758 readable sites and '(?i)fog' returns 0 too, the same shape that put COMPASS_PING at medium in 4.1. The MECHANISM is CORROBORATED; the WORD is not ArenaNet's. studies/minimap/FINDINGS.md 4.2. Our table stops one field short. Binary cmds[] @VA 0x00bfff98 (file offset 0x7fef98) is [0x0000008c, 0x00000404, 0x00000404, 0x00000104]; the MsgFormatRecv entry @VA 0x00bc93a0 (file 0x7c83a0) statically holds count=4, i.e. cmds[0]+3 fields, and the next cmds[] array begins exactly 4 dwords later, so there is no room for more or fewer. Slots 1..3 are zero in the file and are written by the MSVC dynamic initializer at VA 0x00464650-0x0046466e (`a1 74 f8 bf 00 / a3 9c ff bf 00` etc.), copying the statically-present constants [0x00bff874]=0x404, [0x00bff878]=0x404, [0x00bff87c]=0x104. cmd 0x104 = type 4, count 1 = a 1-byte unsigned int (our `byte`). We are missing that trailing byte, so we frame this message as 10 bytes when the client writes 11 and every later message in the datagram shifts.",
-    "name": "MAP_EXPLORATION_MARK",
-    "name_confidence": "medium"
-   },
-   "146": {
-    "opcode": 146,
-    "table": "GAME_SMSG_0146",
-    "declared_unpack_size": 12,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "word",
-      "length": 0
-     }
-    ],
-    "why": "Our table stops one field short. Binary cmds[] @VA 0x00bffffc (file 0x7feffc) is [0x00000092, 0x00000404, 0x00000404, 0x00000204]; MsgFormatRecv entry @VA 0x00bc93e8 (file 0x7c83e8) statically holds count=4 and the next cmds[] array begins exactly 4 dwords later. Initializer at VA 0x00464730-0x0046474e copies [0x00bff8cc]=0x404, [0x00bff7d8]=0x404, [0x00bff888]=0x204, all statically present. cmd 0x204 = type 4, count 2 = a 2-byte unsigned int (our `word`). We are missing that trailing word: 12 bytes on the wire, not 10. NAMED 2026-08-14 from the binary, at MEDIUM because the mechanism is OBSERVED and the WORD is not ArenaNet's: `ping` occurs zero times in all 19,758 readable asserts, so the name comes from GWW (which documents a compass ping as a coloured ripple circle) rather than from the image. THE MECHANISM: handler 0x0091EAB0 reads field 1 as TWO signed int16 out of one dword (0x0091EAB9 / 0x0091EAC3, low half first) -- the identical knot encoding GAME_CMSG 0x002B and GAME_SMSG 0x0091 use, which independently corroborates THIS entry's own trailing-word correction from a message the field-list work never touched -- posts frame message 0x1000009F via 0x00812180, and Compass.cpp subscribes to it at 0x008BB5E4, one line after 0x1000009E's. That reaches 0x008BF160, which multiplies both halves by the terrain cell pitch (the double 96.0 at 0x0094DE10) and calls 0x008BE5D0, the ping-ripple constructor (max 8 concurrent, 0x008BE5D6 `cmp [esi+0xa4],8`). RECONSTRUCTION on the remaining two fields, stated as such: field 2 lands in the ripple's [+8] slot, where a locally-originated ping passes the global at 0x00BFAC24 whose STATIC INITIALISER is 0xFFFF0000 -- opaque red -- so it reads as a colour, with the caveat msgshape.py's docstring is about, that a .data initialiser can be overwritten at load; and field 3 is compared against 1 at 0x008BE61D, where equality SKIPS the ping sound at 0x008BE64A, so it reads as a silent flag whose other values are UNVERIFIED. Live count 0 of 22,524, expected for a solo operator.",
-    "name": "COMPASS_PING",
-    "name_confidence": "medium"
-   },
-   "278": {
-    "opcode": 278,
-    "table": "GAME_SMSG_0278",
-    "declared_unpack_size": 25,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "word",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 16
-     },
-     {
-      "type": "byte",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     }
-    ],
-    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte, dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d0c: [0x116, 0x204, 0x1005, 0x104, 0x404]; MsgFormat entry @VA 0xbca870. Wire size is a constant 25 bytes."
-   },
-   "279": {
-    "opcode": 279,
-    "table": "GAME_SMSG_0279",
-    "declared_unpack_size": 18,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 16
-     }
-    ],
-    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d20: [0x117, 0x1005]; MsgFormat entry @VA 0xbca87c. Wire size is a constant 18 bytes."
-   },
-   "280": {
-    "opcode": 280,
-    "table": "GAME_SMSG_0280",
-    "declared_unpack_size": 21,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "word",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 16
-     },
-     {
-      "type": "byte",
-      "length": 0
-     }
-    ],
-    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d8c: [0x118, 0x204, 0x1005, 0x104]; MsgFormat entry @VA 0xbca8d0. Wire size is a constant 21 bytes."
-   },
-   "292": {
-    "opcode": 292,
-    "table": "GAME_SMSG_0292",
-    "declared_unpack_size": 19,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 16
-     },
-     {
-      "type": "byte",
-      "length": 0
-     }
-    ],
-    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00e8c: [0x124, 0x1005, 0x104]; MsgFormat entry @VA 0xbca960. Wire size is a constant 19 bytes."
-   },
-   "405": {
-    "opcode": 405,
-    "table": "GAME_SMSG_0405",
-    "declared_unpack_size": 26,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "vec2",
-      "length": 0
-     },
-     {
-      "type": "word",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 8
-     }
-    ],
-    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, vec2, word, byte, byte, blob(8). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc019c8: [0x195, 0x404, 0x12, 0x204, 0x104, 0x104, 0x805]; MsgFormat entry @VA 0xbcb27c. Wire size is a constant 26 bytes."
-   },
-   "421": {
-    "opcode": 421,
-    "table": "GAME_SMSG_0421",
-    "declared_unpack_size": 39,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 0
-     },
-     {
-      "type": "blob",
-      "length": 24
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     },
-     {
-      "type": "word",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "byte",
-      "length": 0
-     }
-    ],
-    "name": "GAME_SERVER_TRANSFER",
-    "why": "Our table stops one field short AND mismarks the message variable. Binary cmds[] @VA 0x00c01b70 (file 0x800b70) is [0x000001a5, 0x00001805, 0x00000404, 0x00000104, 0x00000204, 0x00000104, 0x00000404, 0x00000104]; MsgFormatRecv entry @VA 0x00bcb36c (file 0x7ca36c) statically holds count=8 and the next cmds[] array begins exactly 8 dwords later. Initializer at VA 0x004661d0-0x00466216 copies the statically-present constants [0x00c015a8]=0x1805, [0x00c015ac]=0x404, [0x00c01668]=0x104, [0x00c015dc]=0x204, [0x00c015e4]=0x104, [0x00c01520]=0x404, [0x00c0152c]=0x104. The final 0x104 = type 4, count 1 = a trailing `byte` we do not have: 39 bytes, not 38. No type 7/11/12 field is present, so the message is FIXED, not variable_length.NAMED 2026-08-10, and it is the FIRST name any GAME_SMSG opcode has carried -- the imported catalog has field layouts for 487 of them and names for none. This one is earned the same way the seven GAME_CMSG names were: from a witness that was not consulted to make the claim. It is the GAME-channel twin of AUTH_SMSG 0x0009 GAME_SERVER_INFO. Field 1 is a sockaddr_in for the next instance (family u16 LE, port u16 BE, IPv4 -- the mixed endianness is the client's, and reading the port the other way round is a documented past failure), and fields 2, 4 and 6 are the next instance's world_id, map_id and player_id. EVIDENCE: across the three transitions in one recorded session, every one of those four values equals what the NEXT connection then sent in its own client-to-server VERSION frame -- 12 of 12 fields, parsed straight off wire.jsonl, which the decrypted channel files do not even carry. toolkit/authsrv/tape.py's chain() re-derives that every run and REFUSES a link it cannot prove, rather than ordering hops by timestamp. THE VALUES THEMSELVES ARE NOT RECORDED HERE and must not be: world_id and player_id are live session identifiers from the owner's own account, schema/ is tracked and the vault is not. Field 5 (offset +33) was 1, 0, 1 across the three hops, correlating with destination map 146/164/146 -- possibly an is-explorable flag, UNVERIFIED at n=3 with two of the three being the same map, so it stays unnamed. The 39-byte length this entry corrects is now CORROBORATED by ArenaNet's own stream as well as by the client's tables: in all three tapes the next message begins exactly 39 bytes later."
-   },
    "12": {
     "opcode": 12,
     "table": "GAME_SMSG_0012",
@@ -1143,6 +918,24 @@
     "name": "LATENCY_REPORT",
     "name_confidence": "high",
     "why": "OBSERVED. The store at 0x0048DA40 discards the value unless it is <= 5000 ('cmp esi,0x1388 / ja'), then memmoves a 36-byte ring and writes the newest sample at its head; the accessor walks up to 10 non-zero samples and returns (latest, mean). A current-and-average pair over a 10-deep ring is a latency graph and little else, and the UiRoot.cpp assert string 's_netGraph' sits immediately before one of that accessor's only two callers. 79 messages, exactly equal to 0x000C's 79 per connection (10/10, 29/29, 2/2, 3/3, 37/37)."
+   },
+   "14": {
+    "opcode": 14,
+    "name": "NETWORK_ERROR_NOTICE",
+    "why": "OBSERVED on screen, 20260813T121533. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Green chat \"Network error 0.\" 2 newlines \"Please check your connection to the Internet and try again.\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "20": {
+    "opcode": 20,
+    "name": "TRIAL_TIME_REMAINING",
+    "why": "OBSERVED on screen, 20260813T121902. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Free trial playtime left toast\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "28": {
+    "opcode": 28,
+    "name": "SKILL_UNLOCKED",
+    "why": "OBSERVED on screen, 20260813T122107. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Skill Unlocked! popup, shows name icon and description\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
    },
    "30": {
     "opcode": 30,
@@ -1447,6 +1240,70 @@
     "name_confidence": "medium",
     "why": "INFERRED from the call it gates, not from an assert naming the bit -- hence medium. The flag gates 0x0082dbb0, whose arguments the client asserts as CpsApi:520 'composite', CpsApi:504 'teamColorId' and :505 'composite', and CpsTex:459 pairs 'teamColorId || tabard'. On the wire: 130 messages over 58 agents, field 2 only ever 0 or 1, no agent ever receiving both; the agent set is EXACTLY 0x006E's (58/58) and it immediately follows 0x006E 130/130 times."
    },
+   "73": {
+    "opcode": 73,
+    "name": "QUEST_ADD",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F0A0 posts frame 0x1000014E at 0x0080F238; QuestLog.cpp subscribes to 0x1000014E at 0x0057BD35, as do QuestTaskTracker, GmView, GmHelpGuide, Compass and UiCtlInstance. Second lineage, the wire: 10 live arrivals, and at capture 20260807T143055 t=28.179 it lands 32 ms after a c2s 0x003B carrying code 1 for the same quest id -- the accept-then-add pair is 5 of 5 across five independent ids. The 10-field catalog layout matches the client's own descriptor. IMPLEMENTOR WARNING, and it has bitten: the body writes charContext+0x528 (mov [ebx+0x528], ebx at 0x0080F20B), so restoring several held quests with this opcode silently makes the LAST one pushed the active quest. 0x0050 does not touch that field and is what an instance-load replay must use. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
+    "name_confidence": "high"
+   },
+   "74": {
+    "opcode": 74,
+    "name": "QUEST_REMOVE_AND_UNLIST",
+    "why": "RECONSTRUCTION from position in an observed sequence, not from the body. MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F250 is 32 bytes and posts NO quest-bus frame id at all -- a measured negative, and it is the only thing separating this from 0x0052 QUEST_REMOVE, which posts 0x10000152. 6 live arrivals, every one terminal: turn-in is 0x0052 twice then 0x004A, 3 of 3. The 'AND_UNLIST' half is a guess about purpose and is why this is medium; what would settle it is one labelled run that sends 0x0052 alone and reads the log. studies/quests/FINDINGS.md 2.1, 2.3.",
+    "name_confidence": "medium"
+   },
+   "75": {
+    "opcode": 75,
+    "why": "NOT NAMED ON PURPOSE, 2026-08-16, rung Q1. Body 0x0080F270 is 32 bytes, takes [array32[64]] and bulk-assigns the list at charContext+0x518. It posts NO quest-bus frame id -- measured by the same push-imm32 scan that paired the other nine bodies -- and has 2 live arrivals with no observed consequence. A name here would describe the argument rather than the effect, which is the guess this file exists to avoid. What would settle it: one labelled run that sends it and reads the log. studies/quests/FINDINGS.md 2.1."
+   },
+   "76": {
+    "opcode": 76,
+    "name": "QUEST_DESCRIPTION",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F290 posts frame 0x1000014F at 0x0080F3A1; QuestChallenge and QuestTaskTracker subscribe. Second lineage, the wire: 40 live arrivals, and it is the reply to c2s 0x0012 in 4 of 4 accepts -- the client asks even when already told, so the responder is mandatory and the restraint is not. Third, the discriminator that settled the dialog pair: the 0x0080 string at t=27.719 and this opcode's description slot at t=28.241 share an identical leading 22-code-unit run, same string id and same embedded literal, diverging only at the tail. Layout [msg_header, u32 id, str16(128), str16(128)]. Send this BEFORE 0x0054 for the same id -- see that row's gate. studies/quests/FINDINGS.md 2.1, 1.6, 2.3, 2.5.",
+    "name_confidence": "high"
+   },
+   "77": {
+    "opcode": 77,
+    "name": "QUEST_SET_MARKER",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F3C0 posts frame 0x10000154 at 0x0080F44E; QuestChallenge, QuestTaskTracker and Compass subscribe. 6 live arrivals, paired with 0x004C as an objective advance. THE PAYLOAD DOES NOT DISTINGUISH IT: 0x004D, 0x0051 and 0x0053 share one 5-field layout [u32 id, vec2, u16, u16], and what separates the three is the frame id each posts and that id's subscriber set -- measured. The English is RECONSTRUCTION on top of that, hence medium. studies/quests/FINDINGS.md 2.1, 1.6.",
+    "name_confidence": "medium"
+   },
+   "78": {
+    "opcode": 78,
+    "name": "QUEST_COMPLETE_PANEL",
+    "why": "RENAMED 2026-08-16 from VICTORY_BANNER. Both readings are kept below because they are the same thing seen from two ends, and the rename swaps a name taken from an APPEARANCE for one taken from the client's own WIRING. PRIOR NAME, which stands as an observation: OBSERVED on screen 20260813T123003, one opcode fired at a fresh client, screenshots joined to the send by wall clock, and the operator wrote \"some sort of victory flag animation UI in the center of the screen\" -- filed medium at the time precisely because a name from a picture of an effect is a guess about purpose (studies/smsgsweep/FINDINGS.md 7.6). WHAT IS NEW, 2026-08-16: MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F670 does push 0x10000155 at 0x0080F6C7 followed by call 0x00633D70, and 0x10000155 is the first id of the band GmQuestComplete subscribes to. No int3 padding anywhere in [0x0080F670, 0x0080F6C7), so the push site is inside this handler and not in a helper wedged between two bodies -- that containment was the failure mode worth checking, because the join was otherwise arithmetic across two tables. GmQuestComplete is a 3D scene rather than a dialog (:138 modelFileName, :155 !m_light), which is what a centre-screen banner animation looks like from outside. Two lineages that share no ancestry, one static and one on-screen, so the naming is CORROBORATED. This also retires studies/quests/FINDINGS.md 7.6's \"Nothing static will substitute\": half the join was already sitting in that same document's 1.6 table, unjoined. ZERO wire samples remain -- what the panel EXPECTS in its three dwords is still unknown, and that is the open half.",
+    "name_confidence": "high"
+   },
+   "80": {
+    "opcode": 80,
+    "name": "QUEST_ADD_NO_MARKER",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F470 posts frame 0x1000014E at 0x0080F636 -- the SAME id as 0x0049 QUEST_ADD, measured, and that shared id is the strongest single argument that both opcodes are adds. 12 live arrivals, all at instance load. The body stages the frame payload immediately before the post and one of the staged dwords is 0x378 == 888 (mov [ebp-0x20], 0x378 at 0x0080F649), which is the 'no marker' map id: 888 is one past the last valid map, corroborated independently by toolkit/clientscan/areatable.py printing 888 valid records on this same image. Derive 888 from areatable.py rather than pinning the literal, and never send (0,0), which drops a marker at the map origin. Unlike 0x0049 this body does NOT write charContext+0x528, which is why an instance-load replay uses it. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
+    "name_confidence": "high"
+   },
+   "81": {
+    "opcode": 81,
+    "name": "QUEST_MOVE_MARKER",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F6F0 posts frame 0x10000151 at 0x0080F779, and its subscriber set is the tightest in the family -- QuestTaskTracker and Compass, both spatial, nothing that draws text. 40 live arrivals, the most-sent of the group. The clear idiom is measured rather than guessed: [(inf, inf), 0, 888], marker x = marker y = 0x7F800000. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
+    "name_confidence": "high"
+   },
+   "82": {
+    "opcode": 82,
+    "name": "QUEST_REMOVE",
+    "why": "Body 0x0080F7A0 is the array deleter and reads as one: imul edi, ecx, 0x34 at 0x0080F7C2, the tail memmove at 0x0080F84D, dec dword ptr [ebx+0x534] at 0x0080F855. That is the quest log itself -- array at charContext+0x52C, count at +0x534, stride 0x34 = 52 bytes -- and the client names the element `challenge` at ChCliApi.cpp:4237 (0x0080DDA7). MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. The same body posts frame 0x10000152 at 0x0080F8C2 to QuestLog, QuestTaskTracker, GmHelpGuide, GmMapCtlLocationTag and Compass. 12 live arrivals. studies/quests/FINDINGS.md 2.1, 2.2, 1.6.",
+    "name_confidence": "high"
+   },
+   "83": {
+    "opcode": 83,
+    "name": "QUEST_SET_ACTIVE_MARKER",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F8E0 posts frame 0x10000153 at 0x0080F96A; QuestLog, QuestTaskTracker, GmMapCtlLocationTag and Compass subscribe. 6 live arrivals, each at instance load after c2s 0x0090 and for exactly one quest per session. 'ACTIVE' is RECONSTRUCTION from that position -- one quest per load is consistent with an active-quest concept and is not proof of one -- and the payload is the same 5-field layout as 0x004D and 0x0051. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
+    "name_confidence": "medium"
+   },
+   "84": {
+    "opcode": 84,
+    "name": "QUEST_OBJECTIVES_UPDATE",
+    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F990 posts frame 0x1000014F at 0x0080FA12 -- the SAME id as 0x004C QUEST_DESCRIPTION, measured, and both carry str16(128) into the log, so the shared id is a structural agreement rather than a coincidence. 40 live arrivals. THE GATE, and it is the one that makes a correct implementation look like an ignored one: the body tests the description-filled flag at 0x0080F9CD, so sending this before 0x004C for the same quest id is a SILENT no-op. ArenaNet's own server trips it twice in the corpus. Layout [msg_header, u32 id, str16(128)]. studies/quests/FINDINGS.md 2.1, 1.6.",
+    "name_confidence": "high"
+   },
    "86": {
     "opcode": 86,
     "table": "GAME_SMSG_0086",
@@ -1564,6 +1421,12 @@
     "name_confidence": "high",
     "why": "OBSERVED. CharData:178 'slot < arrsize(s_appearanceSlot)' and :180 'data.slot == slot' are hit with slot=3 and field 3 as the packed value, so field 3 is an appearance slot payload; ChCliApi:4966 '!(playerId & CHAR_CLASS_BASE_MASK)' names field 1's id space, and the function indexes the same 80-byte-stride array the name-plate module addresses by playerId. 61 on the wire; field 1 shares an id space with 0x00B0/0x00B1 field 1, and field 2 was created by an 0x0020 in the same tape 58/61."
    },
+   "108": {
+    "opcode": 108,
+    "name": "CHEST_REWARD_EFFECT",
+    "why": "OBSERVED on screen, 20260813T123733. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"dungeon chest animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
    "110": {
     "opcode": 110,
     "table": "GAME_SMSG_0110",
@@ -1619,6 +1482,117 @@
     "name_confidence": "high",
     "why": "SOURCED. ChCliApi.cpp:51 'No valid case for switch variable \\'prop\\'' IS the default arm of this worker's own 9-way jump table ('cmp ebx,8 / ja / jmp [ebx*4+0x8110c4]'), and the payload is exactly 9 dwords after the agent id -- the wire shape and the jump table agree without either producing the other. Two arms name themselves: ConstCostume.cpp:1188 'set - 1 < COSTUME_BODY_COUNT' on the prop-7 arm and :1217 'set - 1 < COSTUME_HAT_COUNT' on prop-8. 130 messages, 55 agents, followed by 0x0048 130/130. PRECONDITION for a server: every id here must have been declared by a prior 0x015E/0x0161 (621/621 on ArenaNet's own traffic)."
    },
+   "128": {
+    "opcode": 128,
+    "name": "NPC_DIALOG_TEXT",
+    "why": "Three lineages. (1) CORPUS ASSOCIATION: 15 occurrences in 11,241 s2c messages at 20260807T143055 and 13 in 10,896 at 20260810T235916, yet 11 of 11 in each session fall inside [t-1.5s, t+0.5s] of a c2s 0x003B select -- against a 0.13% background rate that is not adjacency by chance. (2) THE DISCRIMINATOR: the 0x0080 string at t=27.719 and the description slot of s2c 0x004C at t=28.241 share an identical leading 22-code-unit run -- same string id, same embedded literal UTF-16 character name, same framing -- diverging only at the tail. 0x0080 is the NPC's speech; 0x004C is the same text filed into the quest log. (3) OURS, 2026-08-15: this server now SENDS it and an NPC dialog window opens on a retail client (rung Q4). That supersedes studies/quests/FINDINGS.md 2.5's \"neither has been fired at a client\", which was true when written. Layout [msg_header, string16(122)]; the text accumulates and 0x0081 flushes. This opcode is why \"dialogue is blocked because nobody knows the reply\" is dead.",
+    "name_confidence": "high"
+   },
+   "129": {
+    "opcode": 129,
+    "name": "NPC_DIALOG_SHOW",
+    "why": "(1) CORPUS: carries a single agent_id and it is the interacted NPC. Across three keyed sessions there are 29 c2s 0x0039 INTERACT messages; 23 are followed within 8 s by an 0x0081 naming the SAME agent and 0 name a different one. The 6 that draw no 0x0081 are consistent with the repeat clicks a player emits while walking into range -- which is also the evidence that ArenaNet's server range-gates the interact and ours does not. (2) OURS, 2026-08-15: sending 0x0080 then 0x0081 opens the window on a retail client, and sending 0x0081 with NO preceding 0x0080 closes it, so this is the flush/show rather than a second text message (rungs Q4, Q5). NOT SETTLED: 0x0081 also fires alone at every quest-accept instant, six firings beyond the 15 paired ones, so it may serve a second purpose a labelled single-action run would separate. Layout [msg_header, agent_id].",
+    "name_confidence": "high"
+   },
+   "130": {
+    "opcode": 130,
+    "name": "EQUIP_TEMPORARY_SKILL",
+    "why": "OBSERVED on screen, 20260813T124501. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Equip Temporary Skill\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "138": {
+    "opcode": 138,
+    "name": "MAP_EXPLORATION_INIT_DATA",
+    "why": "MAP_EXPLORATION_INIT_DATA -- the PAYLOAD half, carrying the RLE-compressed bitmap the 0x008B declare sized. Handler body 0x00811AA0..0x00811B2A: memcpy(data + offset, &array, min(4 * count, declared - offset)), then calls the expander 0x00817550 at 0x00811AFB once the buffer fills, and frees. It holds ChCliApi:1641 'accumMapInitOffset < accumMapInitData.Count()' @ 0x00811AB9 -- ArenaNet's own name for the array this message fills. Wire: 8 live, ALWAYS immediately after its own 0x008B, 8 of 8; and ceil(declared_bytes / 4) equals the array32 element count on 8 of 8 (26->7, 31->8, 38->10, 38->10, 36->9, 36->9, 26->7, 29->8), two numbers from two different messages -- which is why 0x00811AA0 clamps the memcpy to count - offset, and why the rival reading 'declared is a dword count' fails all eight. The expander was re-derived and then RUN on ArenaNet's own payloads: 16-row blocks, u16 section length, 0xFF-continuation runs, alternating colour -- 8 of 8 chains close EXACTLY at the declared byte count with dims.y/16 = 8 blocks, against four rival framings at 0 of 8. NAME CONFIDENCE: accumMapInitData is ArenaNet's token; the MAP_EXPLORATION_ prefix is ours, and `asserts.py --grep '(?i)explor'` returns 0 sites. studies/minimap/FINDINGS.md 4.2.",
+    "name_confidence": "high"
+   },
+   "139": {
+    "opcode": 139,
+    "name": "MAP_EXPLORATION_INIT_BEGIN",
+    "why": "MAP_EXPLORATION_INIT_BEGIN -- the DECLARE half of the two-message stream that seeds a character's explored-area bitmap on entering an instance. Handler body 0x00811B30..0x00811BDE: writes accumMapInitDims = (f1, f2) to ctx+0x50/+0x54, sizes the Array at ctx+0x44 to f3 BYTES, zeroes accumMapInitOffset (+0x58), and if f3 == 0 expands immediately at 0x00811BD6. ArenaNet's own token for the field it fills is accumMapInitDims (ChCliApi:77 @ 0x0081756C). Wire: 8 live occurrences, once per instance at t = 0.58-0.73 s, and it IMMEDIATELY PRECEDES its 0x008A 8 of 8. f1 is dims.x, settled from the wire independently of the disassembly: the pair is (64, 128) on 8 of 8 and only 64 % 32 == 0 satisfies ChCliApi:77 in that slot; read as (y, x) the grid would be 128 wide and continent 1 is 83 blocks tall, which does not fit. The grid is CONTINENT-ABSOLUTE, not per-map. Established twice from opposite ends with the rival answers withheld (rung S8), agreeing on every VA and all five live counts. NAME CONFIDENCE is high on the operative token and NOT on the prefix: accumMapInit* is ArenaNet's, BEGIN is our word for the declare half, and `asserts.py --grep '(?i)explor'` returns 0 of 19,758 readable sites -- the client never says 'exploration', nor 'fog'. studies/minimap/FINDINGS.md 4.2.",
+    "name_confidence": "high"
+   },
+   "140": {
+    "opcode": 140,
+    "table": "GAME_SMSG_0140",
+    "declared_unpack_size": 11,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "why": "MAP_EXPLORATION_MARK -- the INCREMENTAL reveal, one message per newly-explored patch as the character walks. Handler 0x0091E940 -> 0x00811BE0, which is its SOLE caller (`codescan --xrefs 0x00811BE0`: 1 direct rel32 reference, 0 words holding the VA in any section). Three asserts name the three fields -- ChCliApi:201 'x + markSpanCount <= context->mapDims.x' @ 0x00811D12, :202 'y < mapDims.y', :203 'markSpanCount' -- and :214 ties the block grid to the area row's own footprint rect. It ORs bits into mapBits (ChCliApi:207/226, ArenaNet's token) and posts frame message 0x10000090, whose subscribers are Compass.cpp, GmMapWorld.cpp and GmMapWindow.cpp: ONE opcode feeds the compass and both maps. Wire: 47 live over 6 connections, t = 3.5-190.7 s; 47 of 47 marks land inside the area row's own footprint at >>5 (rivals: shift 0, 4 and 6 all score 0/47, and non-vacuity is measured -- only 3-8 of the 888 rows contain a given connection's whole mark set); 41 of 41 successive marks are Chebyshev-adjacent blocks, which a catalogue or an init stream is not. FIELD 3 IS THE HALF-SPAN (a radius in blocks), NOT markSpanCount -- markSpanCount is the client's derived local, the clamped x1 - x0 at 0x00811CE5, so f3 = 1 reveals a 3x3 window; all 47 live values are 1, so the wire cannot discriminate at n=1 and the disassembly settles it. INERT until the 0x008B + 0x008A pair has run (0x00811BEE cmp dword [eax+0x5ac], 0; je), which is why smsgsweep's 108 prior sends of this opcode measured nothing. NAME CONFIDENCE is MEDIUM and deliberately below the other two: mapBits is ArenaNet's, but both MARK and EXPLORATION are ours -- `asserts.py --grep '(?i)explor'` returns 0 of 19,758 readable sites and '(?i)fog' returns 0 too, the same shape that put COMPASS_PING at medium in 4.1. The MECHANISM is CORROBORATED; the WORD is not ArenaNet's. studies/minimap/FINDINGS.md 4.2. Our table stops one field short. Binary cmds[] @VA 0x00bfff98 (file offset 0x7fef98) is [0x0000008c, 0x00000404, 0x00000404, 0x00000104]; the MsgFormatRecv entry @VA 0x00bc93a0 (file 0x7c83a0) statically holds count=4, i.e. cmds[0]+3 fields, and the next cmds[] array begins exactly 4 dwords later, so there is no room for more or fewer. Slots 1..3 are zero in the file and are written by the MSVC dynamic initializer at VA 0x00464650-0x0046466e (`a1 74 f8 bf 00 / a3 9c ff bf 00` etc.), copying the statically-present constants [0x00bff874]=0x404, [0x00bff878]=0x404, [0x00bff87c]=0x104. cmd 0x104 = type 4, count 1 = a 1-byte unsigned int (our `byte`). We are missing that trailing byte, so we frame this message as 10 bytes when the client writes 11 and every later message in the datagram shifts.",
+    "name": "MAP_EXPLORATION_MARK",
+    "name_confidence": "medium"
+   },
+   "145": {
+    "opcode": 145,
+    "table": "GAME_SMSG_0145",
+    "declared_unpack_size": 76,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 145
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "array32",
+      "length": 16
+     }
+    ],
+    "name": "COMPASS_DRAW_BROADCAST",
+    "name_confidence": "high",
+    "why": "OBSERVED, from build 38797's own binary; ZERO live samples exist and the name rests entirely on the chain, which is why the chain is given whole. HIGH here where GAME_CMSG 43 is only MEDIUM, because THIS end names itself: handler 0x0091EA20 asserts CharMsg.cpp:4934 `message.knotCount <= CHAR_MAX_DRAW_MINIMAP_KNOT_COUNT` @0x0091EA43 -- the ONLY occurrence of the substring MINIMAP anywhere in the image (1 ASCII hit at 0xbc8c9f, inside that expression; 0 UTF-16). It posts frame message 0x1000009E via 0x00812140; a sweep of every `push <frame msgId>` in .text classified by the call that follows shows 0x1000009E with EXACTLY ONE POSTER AND EXACTLY ONE SUBSCRIBER -- Compass.cpp at 0x008BB5D7 -- against controls that are not degenerate (0x10000090 has 1 poster and 3 subscribers; 0x1000014E has 2 and 7). Compass.cpp's frame proc dispatches it at 0x008BBF38 into CompassCanvas's 0x008BE680, which appends the knots to a polyline; and the polyline renderer -- the function holding `CompassCanvas.cpp:1372 knotCount >= 2` @0x008c11b2 -- is 0x008C10D8, whose ONLY caller is 0x008C0840, the same function that flushes knots to the server. One function draws the ink and sends it. (The last hop, subscription handle -> which switch arm -> the point array, is NOT disassembled: the subscribe passes a control handle rather than a callback, so that step is RECONSTRUCTION.) IT IS GAME_CMSG 0x002B PLUS A LEADING u16, AND THE u16 IS AN OWNER TAG WHOSE LOCAL VALUE IS ZERO. Fields 1 and 2 are used for exactly one thing: as the two components of the key passed to the line lookup at 0x008BE696-0x008BE6A1, and the client builds that same key for its OWN strokes with the first component hard-zeroed -- 0x008C0091 `mov dword [esi],0` on creation and 0x008BF43B `mov dword [ebp-8],0` on the drag-path lookup. SO A REBROADCAST MUST CARRY A NON-ZERO FIELD 1 or the drawing client merges the echo into its own line and doubles the stroke. Nothing in the compass group resolves field 1 to an agent, a name or a colour, and the client types it u16 (cmd 0x204) rather than with its type-0 agent_id tag, so 'sender id' is RECONSTRUCTION about the number space and OBSERVED only as identity; what number space it draws from is NOT FOUND. Field 2 is the client's own stroke handle coming back (GAME_CMSG 0x002B field 1). Field 3 is the polyline: two SIGNED int16 per u32 with the LOW HALF FIRST, sign-extended by the movsx at 0x0091EA60/0x0091EA67 and multiplied back by the double 96.0 at 0x0094DE10 in all three consumers -- the exact inverse of the sender's divide at 0x008C07FB -- so knots are ABSOLUTE world coordinates in terrain cells and must be near the player to be inside the compass at all. A knotCount of 1 on a key with no existing line draws a PING RIPPLE instead of a line (0x008BE6B3 `cmp edi,1`) in the colour whose static initialiser at 0x00BFAC24 is 0xFFFF0000, opaque red -- which is what GWW documents a compass ping to be, and is the cheapest possible server-side demonstration. THE OVER-RANGE HAZARD IS VOID AND THIS ENTRY EXISTS PARTLY TO RETIRE IT: studies/minimap/FINDINGS.md 4.1 warned that a knotCount > 16 walks past knotData[16] into the security cookie and fast-fails the PROCESS. Every clause about the HANDLER is true (it re-loads the count at 0x0091EA52 AFTER the assert returns, the destination array is [ebp-0x84,ebp-0x04) with `sub esp,0x84` = 128+4, and 0x0091EA9E calls __security_check_cookie before the epilogue) -- but MsgConn.cpp's generic unpacker refuses the message first: 0x007DC455 `shr eax,8` reads the declared capacity out of the cmd (0x102b -> 16), 0x007DC458 `cmp ecx,eax`, 0x007DC45A `ja 0x007DC620`, which sets error state 2 and returns WITHOUT storing the count and WITHOUT ever calling the dispatch member at 0x007DC5C4. The bound is tight, no off-by-one, so CharMsg:4934 is unreachable from the network and an over-range send is INERT rather than dangerous -- it measures nothing. NAMING HAZARD: GAME_CMSG 0x0091 is a DIFFERENT, already-handled message -- `[u8, u8]`, 4 bytes, SEND table 0x00BCB030, bound in toolkit/authsrv/authsrv.py:980 as GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS with a live dispatch arm. Different channel dict, one line away from a reader conflating them. Live count 0 of 22,524 s2c GAME_SMSG, which is expected rather than absent evidence: draws are party-visible and every live capture is a solo operator. Our server sends nothing on this opcode and drops its c2s partner."
+   },
+   "146": {
+    "opcode": 146,
+    "table": "GAME_SMSG_0146",
+    "declared_unpack_size": 12,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "why": "Our table stops one field short. Binary cmds[] @VA 0x00bffffc (file 0x7feffc) is [0x00000092, 0x00000404, 0x00000404, 0x00000204]; MsgFormatRecv entry @VA 0x00bc93e8 (file 0x7c83e8) statically holds count=4 and the next cmds[] array begins exactly 4 dwords later. Initializer at VA 0x00464730-0x0046474e copies [0x00bff8cc]=0x404, [0x00bff7d8]=0x404, [0x00bff888]=0x204, all statically present. cmd 0x204 = type 4, count 2 = a 2-byte unsigned int (our `word`). We are missing that trailing word: 12 bytes on the wire, not 10. NAMED 2026-08-14 from the binary, at MEDIUM because the mechanism is OBSERVED and the WORD is not ArenaNet's: `ping` occurs zero times in all 19,758 readable asserts, so the name comes from GWW (which documents a compass ping as a coloured ripple circle) rather than from the image. THE MECHANISM: handler 0x0091EAB0 reads field 1 as TWO signed int16 out of one dword (0x0091EAB9 / 0x0091EAC3, low half first) -- the identical knot encoding GAME_CMSG 0x002B and GAME_SMSG 0x0091 use, which independently corroborates THIS entry's own trailing-word correction from a message the field-list work never touched -- posts frame message 0x1000009F via 0x00812180, and Compass.cpp subscribes to it at 0x008BB5E4, one line after 0x1000009E's. That reaches 0x008BF160, which multiplies both halves by the terrain cell pitch (the double 96.0 at 0x0094DE10) and calls 0x008BE5D0, the ping-ripple constructor (max 8 concurrent, 0x008BE5D6 `cmp [esi+0xa4],8`). RECONSTRUCTION on the remaining two fields, stated as such: field 2 lands in the ripple's [+8] slot, where a locally-originated ping passes the global at 0x00BFAC24 whose STATIC INITIALISER is 0xFFFF0000 -- opaque red -- so it reads as a colour, with the caveat msgshape.py's docstring is about, that a .data initialiser can be overwritten at load; and field 3 is compared against 1 at 0x008BE61D, where equality SKIPS the ping sound at 0x008BE64A, so it reads as a silent flag whose other values are UNVERIFIED. Live count 0 of 22,524, expected for a solo operator.",
+    "name": "COMPASS_PING",
+    "name_confidence": "medium"
+   },
    "166": {
     "opcode": 166,
     "table": "GAME_SMSG_0166",
@@ -1669,6 +1643,54 @@
     "name_confidence": "medium",
     "why": "INFERRED -- the mechanism is exact but the noun 'party' is our reading, hence medium. ChCliApi:4966 '!(playerId & CHAR_CLASS_BASE_MASK)' is asserted on the register that three instructions later indexes the array this handler writes; PtUtil:221 'leader' is the party module's word for the role field 2 points at. 162 on the wire: field 1 is a playerId the same tape created via 0x0059 in 161/162 and field 2 in 150/162, NEVER a value the tape did not create. TRAP: the subject link runs from 0x00B0's field 1 to this message's SECOND word, so the pair reads [new, old] -- an assumption that both are the same field gets it backwards."
    },
+   "184": {
+    "opcode": 184,
+    "name": "TRIAL_FEATURE_RESTRICTED",
+    "why": "OBSERVED on screen, 20260813T125947. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"trial toast about restricted game features\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "185": {
+    "opcode": 185,
+    "name": "MISSION_INFOBOX_ADD",
+    "why": "2 sightings. The strongest evidence available here is our OWN: this opcode was already SEEN ON SCREEN 2026-08-12 (studies/smsgsweep/FINDINGS.md:238) and the competing proposal CLIENT_NOTICE_QUEUE_ADD never consulted that record; refuted on it. Name UPSTREAM at delta 0 in both lineages, corroborated by our own screen observation. studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "187": {
+    "opcode": 187,
+    "name": "MISSION_OBJECTIVE_ADD",
+    "why": "2 sightings, adjacent, one channel. Proposed as HELP_GUIDE_TIP_ADD and refuted on seven counts. Name UPSTREAM at delta 0 in ldufr__OpenTyria and the maintained gwdevhub GWCA (ldufr__Headquarter is the SAME author and is not a second witness; Py4GW grants nothing and is verify-only). A rival alignment one lower exists and is addressed in the study. studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "196": {
+    "opcode": 196,
+    "name": "WINDOW_OWNER",
+    "why": "2 sightings. SOURCED and decisive: codescan.py --xrefs over the two globals 0x010876C8/0x010876CC returns every reference, and they are not merchant-specific -- so the MERCHANT qualifier in ldufr's MERCHANT_WINDOW_UPDATE_OWNER is REFUTED by our own client and the maintained GWCA's plain WINDOW_OWNER stands. A case where the two lineages disagree and the binary arbitrates. studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "227": {
+    "opcode": 227,
+    "name": "SKILL_ACTIVATED",
+    "why": "The confirmation of a cast the CLIENT initiated: the client matches it against the pending entry it created at USE_SKILL and says so in its own log when the echo is wrong ('Pending skill %u copy %d not found', VA 0x00823090). All 6 live occurrences name the player, and it sits third in the observed answer cycle E4->E5->E3->E6, 6/6 complete cycles across both captures. Class: skill. studies/combat/PLAN.md section 1 H1 and section 6.",
+    "name_confidence": "high"
+   },
+   "228": {
+    "opcode": 228,
+    "name": "SKILL_ACTIVATED_BROADCAST",
+    "why": "How you see OTHER people cast: the receive handler compares the named agent against your own and RETURNS EARLY on a match (measured in build 38797; pinned at test_agentlife.py). On the wire it is broadcast uniformly -- all 7 live occurrences name the receiving connection's OWN player agent, verified two independent ways (first 0x0037 at load; 0x0022 [agent,3]), so the real server relies on the client-side self-discard. First in the cycle, ~34-54ms after the c2s press. studies/combat/PLAN.md section 6, 0a.",
+    "name_confidence": "high"
+   },
+   "229": {
+    "opcode": 229,
+    "name": "SKILL_RECHARGE",
+    "why": "Activation completes and recharge starts; the trailing dword is the recharge in WHOLE SECONDS and is the first client-side skill constant ever checked against ArenaNet: the live values {153:8, 105:6, 394:3} matched the client table's +0x4C on exactly 1 of 41 dword columns (studies/reconstruction/FINDINGS.md 2.9.2, which recommended this promotion with ArenaNet's own traffic as the independent leg). Second in the cycle, at cast completion.",
+    "name_confidence": "high"
+   },
+   "230": {
+    "opcode": 230,
+    "name": "SKILL_RECHARGED",
+    "why": "Recharge ends: fires at E5 + recharge to within 13.7ms on ALL 6 complete cycles across both captures (spread -0.3ms..+13.7ms); the rival hypotheses -- keyed to cast-end, or tick-quantised -- were checked against every cycle and fit none. Zero E5s lack a matching E6. studies/combat/PLAN.md section 6, 0b.",
+    "name_confidence": "high"
+   },
    "240": {
     "opcode": 240,
     "table": "GAME_SMSG_0240",
@@ -1715,6 +1737,140 @@
     "name_confidence": "high",
     "why": "OBSERVED. Same field and same bit as 0x00F0 (ChCliInt.h:254), reached through the sibling setter AvApi.cpp:1423 twelve source lines after 0x00F0's at :1411. 0 of 312 arrive before their agent's create, against 0x00F0's 187 -- narrow and deep (34 distinct agents, one of them 42 times) where 0x00F0 is broad and shallow (187 agents, mostly once). Carries the burrow cycle's two 2.00 s windows: payload 0x0000 at 2.00 +/-0.06 s after create (148/148) and 0x1000 at 2.00 +/-0.06 s before remove (141/141), both exclusively for one creature class. REFUTES gw-preservation's INSTANCE_LOADED reading -- the handler takes an agent id and indexes a per-agent array."
    },
+   "245": {
+    "opcode": 245,
+    "name": "TITLE_UPDATE",
+    "why": "5 sightings over 3 channels. SOURCED: this handler and 0x00F6's write the SAME array at [ctx+0x81c] (stride 0x2C, capacity [ctx+0x824]). Name UPSTREAM at delta 0 in both lineages; the skeptic did not refute it but corrected the presented reasoning, and the corrected reasoning is what this cites. studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "246": {
+    "opcode": 246,
+    "name": "TITLE_TRACK_INFO",
+    "why": "7 sightings in 7 channels. SOURCED: handler 0x0091F8F0 -> 0x00814FE0 grows the array at [ctx+0x81c] to index+1 and rep movsd's the record in -- the same array 0x00F5 updates, which is what ties the pair together. Ten dwords plus two EncStrings; one title track only in this corpus, so the FIELD meanings stay UNVERIFIED for want of a second character. studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "251": {
+    "opcode": 251,
+    "name": "HARD_MODE_SUCCESS_BANNER",
+    "why": "OBSERVED on screen, 20260813T132453. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"hard mode mission success animation UI in center of screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
+   "253": {
+    "opcode": 253,
+    "name": "PLAYER_REPORT_MENU",
+    "why": "OBSERVED on screen, 20260813T132618. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Player Report reason menu\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "257": {
+    "opcode": 257,
+    "name": "CINEMATIC_WAIT_SCREEN",
+    "why": "OBSERVED on screen, 20260813T132742. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"A Cinematic is in Progress waiting screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "278": {
+    "opcode": 278,
+    "table": "GAME_SMSG_0278",
+    "declared_unpack_size": 25,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 16
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte, dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d0c: [0x116, 0x204, 0x1005, 0x104, 0x404]; MsgFormat entry @VA 0xbca870. Wire size is a constant 25 bytes."
+   },
+   "279": {
+    "opcode": 279,
+    "table": "GAME_SMSG_0279",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 16
+     }
+    ],
+    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d20: [0x117, 0x1005]; MsgFormat entry @VA 0xbca87c. Wire size is a constant 18 bytes."
+   },
+   "280": {
+    "opcode": 280,
+    "table": "GAME_SMSG_0280",
+    "declared_unpack_size": 21,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 16
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d8c: [0x118, 0x204, 0x1005, 0x104]; MsgFormat entry @VA 0xbca8d0. Wire size is a constant 21 bytes."
+   },
+   "282": {
+    "opcode": 282,
+    "name": "TOWN_ALLIANCE_OBJECT",
+    "why": "126 sightings across 7 of 8 channels in the 2026-08-17 Factions captures -- the best-evidenced result of that pass. Shape SOURCED (msgshape.py 0x011A, build 38797, RECV table 0x00bca870). Payload carries a guild NAME and TAG as literal text ('a guild name' / 'a tag'), the only literal text in the family; first field is a word and NOT an agent id. Proposed as GUILD_LADDER_ENTRY and killed by two independent refutations converging on this name; UPSTREAM at delta 0 in BOTH ldufr__OpenTyria and the MAINTAINED gwdevhub GWCA mirror (see PLAN.md 6.1's mirror-trap note: the archived GWCA copies are +1 above 0x003B). studies/newopcodes/FINDINGS.md",
+    "name_confidence": "high"
+   },
+   "291": {
+    "opcode": 291,
+    "name": "ALLIANCE_INVITE_RECEIVED",
+    "why": "OBSERVED on screen, 20260813T134214. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"green chat, Guild received alliance invitation \"Your guild received an alliance invitation from  .\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "292": {
+    "opcode": 292,
+    "table": "GAME_SMSG_0292",
+    "declared_unpack_size": 19,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 16
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00e8c: [0x124, 0x1005, 0x104]; MsgFormat entry @VA 0xbca960. Wire size is a constant 19 bytes."
+   },
    "319": {
     "opcode": 319,
     "table": "GAME_SMSG_0319",
@@ -1754,71 +1910,96 @@
     "name_confidence": "high",
     "why": "OBSERVED. ItCliInv:38 'No valid case for switch variable \\'bagType\\'' is the client's own name for field 2; ItCliApi:1942 'inventory' guards the hash lookup keyed by field 1; ItCliBag:167 'slot != m_bagArray.Count()' is the remove-then-insert path keyed on field 4. Exactly 9 per tape in all four tapes, and the nine (bagType, field 3, capacity) triples are identical across all four: (1,0,20), (2,21,9), (3,6,12), (4,7..11,25) five times, (5,5,42). NOT a shippable constant table -- fields 1 and 4 are session-scoped ids a server must allocate itself."
    },
-   "14": {
-    "opcode": 14,
-    "name": "NETWORK_ERROR_NOTICE",
-    "why": "OBSERVED on screen, 20260813T121533. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Green chat \"Network error 0.\" 2 newlines \"Please check your connection to the Internet and try again.\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+   "382": {
+    "opcode": 382,
+    "name": "INSTANCE_COUNTDOWN_STOP",
+    "why": "2 sightings. SOURCED by the client naming its own object: 0x0180's worker allocates through the debug allocator with a literal SOURCE PATH tag, which is what settles the pair (see 0x0180). Name UPSTREAM at delta 0 in both lineages. studies/newopcodes/FINDINGS.md",
     "name_confidence": "high"
    },
-   "20": {
-    "opcode": 20,
-    "name": "TRIAL_TIME_REMAINING",
-    "why": "OBSERVED on screen, 20260813T121902. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Free trial playtime left toast\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+   "384": {
+    "opcode": 384,
+    "name": "INSTANCE_COUNTDOWN",
+    "why": "3 sightings -- the proposal said two and missed a byte-adjacent duplicate at 183756/52294 idx 1201 and 1202. SOURCED: worker 0x0084FC30 allocates a 0x10-byte object through the client's own debug allocator tagged with a literal source path, so the client names this subsystem itself. Name UPSTREAM at delta 0 in both lineages. studies/newopcodes/FINDINGS.md",
     "name_confidence": "high"
    },
-   "28": {
-    "opcode": 28,
-    "name": "SKILL_UNLOCKED",
-    "why": "OBSERVED on screen, 20260813T122107. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Skill Unlocked! popup, shows name icon and description\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
+   "405": {
+    "opcode": 405,
+    "table": "GAME_SMSG_0405",
+    "declared_unpack_size": 26,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 8
+     }
+    ],
+    "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, vec2, word, byte, byte, blob(8). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc019c8: [0x195, 0x404, 0x12, 0x204, 0x104, 0x104, 0x805]; MsgFormat entry @VA 0xbcb27c. Wire size is a constant 26 bytes."
    },
-   "78": {
-    "opcode": 78,
-    "name": "QUEST_COMPLETE_PANEL",
-    "why": "RENAMED 2026-08-16 from VICTORY_BANNER. Both readings are kept below because they are the same thing seen from two ends, and the rename swaps a name taken from an APPEARANCE for one taken from the client's own WIRING. PRIOR NAME, which stands as an observation: OBSERVED on screen 20260813T123003, one opcode fired at a fresh client, screenshots joined to the send by wall clock, and the operator wrote \"some sort of victory flag animation UI in the center of the screen\" -- filed medium at the time precisely because a name from a picture of an effect is a guess about purpose (studies/smsgsweep/FINDINGS.md 7.6). WHAT IS NEW, 2026-08-16: MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F670 does push 0x10000155 at 0x0080F6C7 followed by call 0x00633D70, and 0x10000155 is the first id of the band GmQuestComplete subscribes to. No int3 padding anywhere in [0x0080F670, 0x0080F6C7), so the push site is inside this handler and not in a helper wedged between two bodies -- that containment was the failure mode worth checking, because the join was otherwise arithmetic across two tables. GmQuestComplete is a 3D scene rather than a dialog (:138 modelFileName, :155 !m_light), which is what a centre-screen banner animation looks like from outside. Two lineages that share no ancestry, one static and one on-screen, so the naming is CORROBORATED. This also retires studies/quests/FINDINGS.md 7.6's \"Nothing static will substitute\": half the join was already sitting in that same document's 1.6 table, unjoined. ZERO wire samples remain -- what the panel EXPECTS in its three dwords is still unknown, and that is the open half.",
-    "name_confidence": "high"
-   },
-   "108": {
-    "opcode": 108,
-    "name": "CHEST_REWARD_EFFECT",
-    "why": "OBSERVED on screen, 20260813T123733. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"dungeon chest animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "medium"
-   },
-   "130": {
-    "opcode": 130,
-    "name": "EQUIP_TEMPORARY_SKILL",
-    "why": "OBSERVED on screen, 20260813T124501. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Equip Temporary Skill\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
-   },
-   "184": {
-    "opcode": 184,
-    "name": "TRIAL_FEATURE_RESTRICTED",
-    "why": "OBSERVED on screen, 20260813T125947. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"trial toast about restricted game features\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
-   },
-   "251": {
-    "opcode": 251,
-    "name": "HARD_MODE_SUCCESS_BANNER",
-    "why": "OBSERVED on screen, 20260813T132453. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"hard mode mission success animation UI in center of screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "medium"
-   },
-   "253": {
-    "opcode": 253,
-    "name": "PLAYER_REPORT_MENU",
-    "why": "OBSERVED on screen, 20260813T132618. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Player Report reason menu\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
-   },
-   "257": {
-    "opcode": 257,
-    "name": "CINEMATIC_WAIT_SCREEN",
-    "why": "OBSERVED on screen, 20260813T132742. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"A Cinematic is in Progress waiting screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
-   },
-   "291": {
-    "opcode": 291,
-    "name": "ALLIANCE_INVITE_RECEIVED",
-    "why": "OBSERVED on screen, 20260813T134214. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"green chat, Guild received alliance invitation \"Your guild received an alliance invitation from  .\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
-    "name_confidence": "high"
+   "421": {
+    "opcode": 421,
+    "table": "GAME_SMSG_0421",
+    "declared_unpack_size": 39,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 24
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "GAME_SERVER_TRANSFER",
+    "why": "Our table stops one field short AND mismarks the message variable. Binary cmds[] @VA 0x00c01b70 (file 0x800b70) is [0x000001a5, 0x00001805, 0x00000404, 0x00000104, 0x00000204, 0x00000104, 0x00000404, 0x00000104]; MsgFormatRecv entry @VA 0x00bcb36c (file 0x7ca36c) statically holds count=8 and the next cmds[] array begins exactly 8 dwords later. Initializer at VA 0x004661d0-0x00466216 copies the statically-present constants [0x00c015a8]=0x1805, [0x00c015ac]=0x404, [0x00c01668]=0x104, [0x00c015dc]=0x204, [0x00c015e4]=0x104, [0x00c01520]=0x404, [0x00c0152c]=0x104. The final 0x104 = type 4, count 1 = a trailing `byte` we do not have: 39 bytes, not 38. No type 7/11/12 field is present, so the message is FIXED, not variable_length.NAMED 2026-08-10, and it is the FIRST name any GAME_SMSG opcode has carried -- the imported catalog has field layouts for 487 of them and names for none. This one is earned the same way the seven GAME_CMSG names were: from a witness that was not consulted to make the claim. It is the GAME-channel twin of AUTH_SMSG 0x0009 GAME_SERVER_INFO. Field 1 is a sockaddr_in for the next instance (family u16 LE, port u16 BE, IPv4 -- the mixed endianness is the client's, and reading the port the other way round is a documented past failure), and fields 2, 4 and 6 are the next instance's world_id, map_id and player_id. EVIDENCE: across the three transitions in one recorded session, every one of those four values equals what the NEXT connection then sent in its own client-to-server VERSION frame -- 12 of 12 fields, parsed straight off wire.jsonl, which the decrypted channel files do not even carry. toolkit/authsrv/tape.py's chain() re-derives that every run and REFUSES a link it cannot prove, rather than ordering hops by timestamp. THE VALUES THEMSELVES ARE NOT RECORDED HERE and must not be: world_id and player_id are live session identifiers from the owner's own account, schema/ is tracked and the vault is not. Field 5 (offset +33) was 1, 0, 1 across the three hops, correlating with destination map 146/164/146 -- possibly an is-explorable flag, UNVERIFIED at n=3 with two of the three being the same map, so it stays unnamed. The 39-byte length this entry corrects is now CORROBORATED by ArenaNet's own stream as well as by the client's tables: in all three tapes the next message begins exactly 39 bytes later."
    },
    "426": {
     "opcode": 426,
@@ -1855,139 +2036,6 @@
     "name": "MISSION_ENTRY_CONFIRM",
     "why": "OBSERVED on screen, 20260813T144929. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"mission entry screen \"Your party has characters from another campaign. Are you sure you wish to enter this mission?\"\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
     "name_confidence": "high"
-   },
-   "145": {
-    "opcode": 145,
-    "table": "GAME_SMSG_0145",
-    "declared_unpack_size": 76,
-    "variable_length": true,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 145
-     },
-     {
-      "type": "word",
-      "length": 0
-     },
-     {
-      "type": "dword",
-      "length": 0
-     },
-     {
-      "type": "array32",
-      "length": 16
-     }
-    ],
-    "name": "COMPASS_DRAW_BROADCAST",
-    "name_confidence": "high",
-    "why": "OBSERVED, from build 38797's own binary; ZERO live samples exist and the name rests entirely on the chain, which is why the chain is given whole. HIGH here where GAME_CMSG 43 is only MEDIUM, because THIS end names itself: handler 0x0091EA20 asserts CharMsg.cpp:4934 `message.knotCount <= CHAR_MAX_DRAW_MINIMAP_KNOT_COUNT` @0x0091EA43 -- the ONLY occurrence of the substring MINIMAP anywhere in the image (1 ASCII hit at 0xbc8c9f, inside that expression; 0 UTF-16). It posts frame message 0x1000009E via 0x00812140; a sweep of every `push <frame msgId>` in .text classified by the call that follows shows 0x1000009E with EXACTLY ONE POSTER AND EXACTLY ONE SUBSCRIBER -- Compass.cpp at 0x008BB5D7 -- against controls that are not degenerate (0x10000090 has 1 poster and 3 subscribers; 0x1000014E has 2 and 7). Compass.cpp's frame proc dispatches it at 0x008BBF38 into CompassCanvas's 0x008BE680, which appends the knots to a polyline; and the polyline renderer -- the function holding `CompassCanvas.cpp:1372 knotCount >= 2` @0x008c11b2 -- is 0x008C10D8, whose ONLY caller is 0x008C0840, the same function that flushes knots to the server. One function draws the ink and sends it. (The last hop, subscription handle -> which switch arm -> the point array, is NOT disassembled: the subscribe passes a control handle rather than a callback, so that step is RECONSTRUCTION.) IT IS GAME_CMSG 0x002B PLUS A LEADING u16, AND THE u16 IS AN OWNER TAG WHOSE LOCAL VALUE IS ZERO. Fields 1 and 2 are used for exactly one thing: as the two components of the key passed to the line lookup at 0x008BE696-0x008BE6A1, and the client builds that same key for its OWN strokes with the first component hard-zeroed -- 0x008C0091 `mov dword [esi],0` on creation and 0x008BF43B `mov dword [ebp-8],0` on the drag-path lookup. SO A REBROADCAST MUST CARRY A NON-ZERO FIELD 1 or the drawing client merges the echo into its own line and doubles the stroke. Nothing in the compass group resolves field 1 to an agent, a name or a colour, and the client types it u16 (cmd 0x204) rather than with its type-0 agent_id tag, so 'sender id' is RECONSTRUCTION about the number space and OBSERVED only as identity; what number space it draws from is NOT FOUND. Field 2 is the client's own stroke handle coming back (GAME_CMSG 0x002B field 1). Field 3 is the polyline: two SIGNED int16 per u32 with the LOW HALF FIRST, sign-extended by the movsx at 0x0091EA60/0x0091EA67 and multiplied back by the double 96.0 at 0x0094DE10 in all three consumers -- the exact inverse of the sender's divide at 0x008C07FB -- so knots are ABSOLUTE world coordinates in terrain cells and must be near the player to be inside the compass at all. A knotCount of 1 on a key with no existing line draws a PING RIPPLE instead of a line (0x008BE6B3 `cmp edi,1`) in the colour whose static initialiser at 0x00BFAC24 is 0xFFFF0000, opaque red -- which is what GWW documents a compass ping to be, and is the cheapest possible server-side demonstration. THE OVER-RANGE HAZARD IS VOID AND THIS ENTRY EXISTS PARTLY TO RETIRE IT: studies/minimap/FINDINGS.md 4.1 warned that a knotCount > 16 walks past knotData[16] into the security cookie and fast-fails the PROCESS. Every clause about the HANDLER is true (it re-loads the count at 0x0091EA52 AFTER the assert returns, the destination array is [ebp-0x84,ebp-0x04) with `sub esp,0x84` = 128+4, and 0x0091EA9E calls __security_check_cookie before the epilogue) -- but MsgConn.cpp's generic unpacker refuses the message first: 0x007DC455 `shr eax,8` reads the declared capacity out of the cmd (0x102b -> 16), 0x007DC458 `cmp ecx,eax`, 0x007DC45A `ja 0x007DC620`, which sets error state 2 and returns WITHOUT storing the count and WITHOUT ever calling the dispatch member at 0x007DC5C4. The bound is tight, no off-by-one, so CharMsg:4934 is unreachable from the network and an over-range send is INERT rather than dangerous -- it measures nothing. NAMING HAZARD: GAME_CMSG 0x0091 is a DIFFERENT, already-handled message -- `[u8, u8]`, 4 bytes, SEND table 0x00BCB030, bound in toolkit/authsrv/authsrv.py:980 as GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS with a live dispatch arm. Different channel dict, one line away from a reader conflating them. Live count 0 of 22,524 s2c GAME_SMSG, which is expected rather than absent evidence: draws are party-visible and every live capture is a solo operator. Our server sends nothing on this opcode and drops its c2s partner."
-   },
-   "138": {
-    "opcode": 138,
-    "name": "MAP_EXPLORATION_INIT_DATA",
-    "why": "MAP_EXPLORATION_INIT_DATA -- the PAYLOAD half, carrying the RLE-compressed bitmap the 0x008B declare sized. Handler body 0x00811AA0..0x00811B2A: memcpy(data + offset, &array, min(4 * count, declared - offset)), then calls the expander 0x00817550 at 0x00811AFB once the buffer fills, and frees. It holds ChCliApi:1641 'accumMapInitOffset < accumMapInitData.Count()' @ 0x00811AB9 -- ArenaNet's own name for the array this message fills. Wire: 8 live, ALWAYS immediately after its own 0x008B, 8 of 8; and ceil(declared_bytes / 4) equals the array32 element count on 8 of 8 (26->7, 31->8, 38->10, 38->10, 36->9, 36->9, 26->7, 29->8), two numbers from two different messages -- which is why 0x00811AA0 clamps the memcpy to count - offset, and why the rival reading 'declared is a dword count' fails all eight. The expander was re-derived and then RUN on ArenaNet's own payloads: 16-row blocks, u16 section length, 0xFF-continuation runs, alternating colour -- 8 of 8 chains close EXACTLY at the declared byte count with dims.y/16 = 8 blocks, against four rival framings at 0 of 8. NAME CONFIDENCE: accumMapInitData is ArenaNet's token; the MAP_EXPLORATION_ prefix is ours, and `asserts.py --grep '(?i)explor'` returns 0 sites. studies/minimap/FINDINGS.md 4.2.",
-    "name_confidence": "high"
-   },
-   "139": {
-    "opcode": 139,
-    "name": "MAP_EXPLORATION_INIT_BEGIN",
-    "why": "MAP_EXPLORATION_INIT_BEGIN -- the DECLARE half of the two-message stream that seeds a character's explored-area bitmap on entering an instance. Handler body 0x00811B30..0x00811BDE: writes accumMapInitDims = (f1, f2) to ctx+0x50/+0x54, sizes the Array at ctx+0x44 to f3 BYTES, zeroes accumMapInitOffset (+0x58), and if f3 == 0 expands immediately at 0x00811BD6. ArenaNet's own token for the field it fills is accumMapInitDims (ChCliApi:77 @ 0x0081756C). Wire: 8 live occurrences, once per instance at t = 0.58-0.73 s, and it IMMEDIATELY PRECEDES its 0x008A 8 of 8. f1 is dims.x, settled from the wire independently of the disassembly: the pair is (64, 128) on 8 of 8 and only 64 % 32 == 0 satisfies ChCliApi:77 in that slot; read as (y, x) the grid would be 128 wide and continent 1 is 83 blocks tall, which does not fit. The grid is CONTINENT-ABSOLUTE, not per-map. Established twice from opposite ends with the rival answers withheld (rung S8), agreeing on every VA and all five live counts. NAME CONFIDENCE is high on the operative token and NOT on the prefix: accumMapInit* is ArenaNet's, BEGIN is our word for the declare half, and `asserts.py --grep '(?i)explor'` returns 0 of 19,758 readable sites -- the client never says 'exploration', nor 'fog'. studies/minimap/FINDINGS.md 4.2.",
-    "name_confidence": "high"
-   },
-   "227": {
-    "opcode": 227,
-    "name": "SKILL_ACTIVATED",
-    "why": "The confirmation of a cast the CLIENT initiated: the client matches it against the pending entry it created at USE_SKILL and says so in its own log when the echo is wrong ('Pending skill %u copy %d not found', VA 0x00823090). All 6 live occurrences name the player, and it sits third in the observed answer cycle E4->E5->E3->E6, 6/6 complete cycles across both captures. Class: skill. studies/combat/PLAN.md section 1 H1 and section 6.",
-    "name_confidence": "high"
-   },
-   "228": {
-    "opcode": 228,
-    "name": "SKILL_ACTIVATED_BROADCAST",
-    "why": "How you see OTHER people cast: the receive handler compares the named agent against your own and RETURNS EARLY on a match (measured in build 38797; pinned at test_agentlife.py). On the wire it is broadcast uniformly -- all 7 live occurrences name the receiving connection's OWN player agent, verified two independent ways (first 0x0037 at load; 0x0022 [agent,3]), so the real server relies on the client-side self-discard. First in the cycle, ~34-54ms after the c2s press. studies/combat/PLAN.md section 6, 0a.",
-    "name_confidence": "high"
-   },
-   "229": {
-    "opcode": 229,
-    "name": "SKILL_RECHARGE",
-    "why": "Activation completes and recharge starts; the trailing dword is the recharge in WHOLE SECONDS and is the first client-side skill constant ever checked against ArenaNet: the live values {153:8, 105:6, 394:3} matched the client table's +0x4C on exactly 1 of 41 dword columns (studies/reconstruction/FINDINGS.md 2.9.2, which recommended this promotion with ArenaNet's own traffic as the independent leg). Second in the cycle, at cast completion.",
-    "name_confidence": "high"
-   },
-   "230": {
-    "opcode": 230,
-    "name": "SKILL_RECHARGED",
-    "why": "Recharge ends: fires at E5 + recharge to within 13.7ms on ALL 6 complete cycles across both captures (spread -0.3ms..+13.7ms); the rival hypotheses -- keyed to cast-end, or tick-quantised -- were checked against every cycle and fit none. Zero E5s lack a matching E6. studies/combat/PLAN.md section 6, 0b.",
-    "name_confidence": "high"
-   },
-   "73": {
-    "opcode": 73,
-    "name": "QUEST_ADD",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F0A0 posts frame 0x1000014E at 0x0080F238; QuestLog.cpp subscribes to 0x1000014E at 0x0057BD35, as do QuestTaskTracker, GmView, GmHelpGuide, Compass and UiCtlInstance. Second lineage, the wire: 10 live arrivals, and at capture 20260807T143055 t=28.179 it lands 32 ms after a c2s 0x003B carrying code 1 for the same quest id -- the accept-then-add pair is 5 of 5 across five independent ids. The 10-field catalog layout matches the client's own descriptor. IMPLEMENTOR WARNING, and it has bitten: the body writes charContext+0x528 (mov [ebx+0x528], ebx at 0x0080F20B), so restoring several held quests with this opcode silently makes the LAST one pushed the active quest. 0x0050 does not touch that field and is what an instance-load replay must use. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
-    "name_confidence": "high"
-   },
-   "74": {
-    "opcode": 74,
-    "name": "QUEST_REMOVE_AND_UNLIST",
-    "why": "RECONSTRUCTION from position in an observed sequence, not from the body. MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F250 is 32 bytes and posts NO quest-bus frame id at all -- a measured negative, and it is the only thing separating this from 0x0052 QUEST_REMOVE, which posts 0x10000152. 6 live arrivals, every one terminal: turn-in is 0x0052 twice then 0x004A, 3 of 3. The 'AND_UNLIST' half is a guess about purpose and is why this is medium; what would settle it is one labelled run that sends 0x0052 alone and reads the log. studies/quests/FINDINGS.md 2.1, 2.3.",
-    "name_confidence": "medium"
-   },
-   "76": {
-    "opcode": 76,
-    "name": "QUEST_DESCRIPTION",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F290 posts frame 0x1000014F at 0x0080F3A1; QuestChallenge and QuestTaskTracker subscribe. Second lineage, the wire: 40 live arrivals, and it is the reply to c2s 0x0012 in 4 of 4 accepts -- the client asks even when already told, so the responder is mandatory and the restraint is not. Third, the discriminator that settled the dialog pair: the 0x0080 string at t=27.719 and this opcode's description slot at t=28.241 share an identical leading 22-code-unit run, same string id and same embedded literal, diverging only at the tail. Layout [msg_header, u32 id, str16(128), str16(128)]. Send this BEFORE 0x0054 for the same id -- see that row's gate. studies/quests/FINDINGS.md 2.1, 1.6, 2.3, 2.5.",
-    "name_confidence": "high"
-   },
-   "77": {
-    "opcode": 77,
-    "name": "QUEST_SET_MARKER",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F3C0 posts frame 0x10000154 at 0x0080F44E; QuestChallenge, QuestTaskTracker and Compass subscribe. 6 live arrivals, paired with 0x004C as an objective advance. THE PAYLOAD DOES NOT DISTINGUISH IT: 0x004D, 0x0051 and 0x0053 share one 5-field layout [u32 id, vec2, u16, u16], and what separates the three is the frame id each posts and that id's subscriber set -- measured. The English is RECONSTRUCTION on top of that, hence medium. studies/quests/FINDINGS.md 2.1, 1.6.",
-    "name_confidence": "medium"
-   },
-   "80": {
-    "opcode": 80,
-    "name": "QUEST_ADD_NO_MARKER",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F470 posts frame 0x1000014E at 0x0080F636 -- the SAME id as 0x0049 QUEST_ADD, measured, and that shared id is the strongest single argument that both opcodes are adds. 12 live arrivals, all at instance load. The body stages the frame payload immediately before the post and one of the staged dwords is 0x378 == 888 (mov [ebp-0x20], 0x378 at 0x0080F649), which is the 'no marker' map id: 888 is one past the last valid map, corroborated independently by toolkit/clientscan/areatable.py printing 888 valid records on this same image. Derive 888 from areatable.py rather than pinning the literal, and never send (0,0), which drops a marker at the map origin. Unlike 0x0049 this body does NOT write charContext+0x528, which is why an instance-load replay uses it. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
-    "name_confidence": "high"
-   },
-   "81": {
-    "opcode": 81,
-    "name": "QUEST_MOVE_MARKER",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F6F0 posts frame 0x10000151 at 0x0080F779, and its subscriber set is the tightest in the family -- QuestTaskTracker and Compass, both spatial, nothing that draws text. 40 live arrivals, the most-sent of the group. The clear idiom is measured rather than guessed: [(inf, inf), 0, 888], marker x = marker y = 0x7F800000. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
-    "name_confidence": "high"
-   },
-   "82": {
-    "opcode": 82,
-    "name": "QUEST_REMOVE",
-    "why": "Body 0x0080F7A0 is the array deleter and reads as one: imul edi, ecx, 0x34 at 0x0080F7C2, the tail memmove at 0x0080F84D, dec dword ptr [ebx+0x534] at 0x0080F855. That is the quest log itself -- array at charContext+0x52C, count at +0x534, stride 0x34 = 52 bytes -- and the client names the element `challenge` at ChCliApi.cpp:4237 (0x0080DDA7). MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. The same body posts frame 0x10000152 at 0x0080F8C2 to QuestLog, QuestTaskTracker, GmHelpGuide, GmMapCtlLocationTag and Compass. 12 live arrivals. studies/quests/FINDINGS.md 2.1, 2.2, 1.6.",
-    "name_confidence": "high"
-   },
-   "83": {
-    "opcode": 83,
-    "name": "QUEST_SET_ACTIVE_MARKER",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F8E0 posts frame 0x10000153 at 0x0080F96A; QuestLog, QuestTaskTracker, GmMapCtlLocationTag and Compass subscribe. 6 live arrivals, each at instance load after c2s 0x0090 and for exactly one quest per session. 'ACTIVE' is RECONSTRUCTION from that position -- one quest per load is consistent with an active-quest concept and is not proof of one -- and the payload is the same 5-field layout as 0x004D and 0x0051. studies/quests/FINDINGS.md 2.1, 1.6, 2.3.",
-    "name_confidence": "medium"
-   },
-   "84": {
-    "opcode": 84,
-    "name": "QUEST_OBJECTIVES_UPDATE",
-    "why": "MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F990 posts frame 0x1000014F at 0x0080FA12 -- the SAME id as 0x004C QUEST_DESCRIPTION, measured, and both carry str16(128) into the log, so the shared id is a structural agreement rather than a coincidence. 40 live arrivals. THE GATE, and it is the one that makes a correct implementation look like an ignored one: the body tests the description-filled flag at 0x0080F9CD, so sending this before 0x004C for the same quest id is a SILENT no-op. ArenaNet's own server trips it twice in the corpus. Layout [msg_header, u32 id, str16(128)]. studies/quests/FINDINGS.md 2.1, 1.6.",
-    "name_confidence": "high"
-   },
-   "128": {
-    "opcode": 128,
-    "name": "NPC_DIALOG_TEXT",
-    "why": "Three lineages. (1) CORPUS ASSOCIATION: 15 occurrences in 11,241 s2c messages at 20260807T143055 and 13 in 10,896 at 20260810T235916, yet 11 of 11 in each session fall inside [t-1.5s, t+0.5s] of a c2s 0x003B select -- against a 0.13% background rate that is not adjacency by chance. (2) THE DISCRIMINATOR: the 0x0080 string at t=27.719 and the description slot of s2c 0x004C at t=28.241 share an identical leading 22-code-unit run -- same string id, same embedded literal UTF-16 character name, same framing -- diverging only at the tail. 0x0080 is the NPC's speech; 0x004C is the same text filed into the quest log. (3) OURS, 2026-08-15: this server now SENDS it and an NPC dialog window opens on a retail client (rung Q4). That supersedes studies/quests/FINDINGS.md 2.5's \"neither has been fired at a client\", which was true when written. Layout [msg_header, string16(122)]; the text accumulates and 0x0081 flushes. This opcode is why \"dialogue is blocked because nobody knows the reply\" is dead.",
-    "name_confidence": "high"
-   },
-   "129": {
-    "opcode": 129,
-    "name": "NPC_DIALOG_SHOW",
-    "why": "(1) CORPUS: carries a single agent_id and it is the interacted NPC. Across three keyed sessions there are 29 c2s 0x0039 INTERACT messages; 23 are followed within 8 s by an 0x0081 naming the SAME agent and 0 name a different one. The 6 that draw no 0x0081 are consistent with the repeat clicks a player emits while walking into range -- which is also the evidence that ArenaNet's server range-gates the interact and ours does not. (2) OURS, 2026-08-15: sending 0x0080 then 0x0081 opens the window on a retail client, and sending 0x0081 with NO preceding 0x0080 closes it, so this is the flush/show rather than a second text message (rungs Q4, Q5). NOT SETTLED: 0x0081 also fires alone at every quest-accept instant, six firings beyond the 15 paired ones, so it may serve a second purpose a labelled single-action run would separate. Layout [msg_header, agent_id].",
-    "name_confidence": "high"
-   },
-   "75": {
-    "opcode": 75,
-    "why": "NOT NAMED ON PURPOSE, 2026-08-16, rung Q1. Body 0x0080F270 is 32 bytes, takes [array32[64]] and bulk-assigns the list at charContext+0x518. It posts NO quest-bus frame id -- measured by the same push-imm32 scan that paired the other nine bodies -- and has 2 live arrivals with no observed consequence. A name here would describe the argument rather than the effect, which is the guess this file exists to avoid. What would settle it: one labelled run that sends it and reads the log. studies/quests/FINDINGS.md 2.1."
    }
   }
  }
