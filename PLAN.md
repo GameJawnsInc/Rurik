@@ -1538,10 +1538,16 @@ same day, study **§27**: the commander panel's paperdoll indexes the char-by-id
 correction that matters — **`0x0020` create doesn't either** (it builds a char object,
 never the by-id entry, so `--hero-body` is NOT this fix). The registrar is opcode
 **`0x009A`** `[agent_id, dword]`, whose handler grows the table *before* its bounds check
-(hand-verified on the run's exe). `--hero-char` (new, opt-in) sends it per hero slot. Next
-click: §26.3's command + `--hero-char`, prediction **the panel opens and stays** — the
-doll NULL-falls-back to the hero record and its slot loop lands on inventory 2, which §26
-already registered.
+(hand-verified on the run's exe). `--hero-char` (new, opt-in) sends it per hero slot. **That click ran too — `Array:587`
+CLEARED — and named floor three** (study §28): the doll's fallback feeds
+`0x0074`'s two u32s at `+0x14`/`+0x18` (sent as zeros since the message existed) to the
+**CpsMonster composite factory** as (model file id, optional skeleton file id), and the
+File.cpp codec asserts `fileId` on the zero — `File.cpp(367)`, capture `20260818T142252`.
+`--hero-appearance D1[,D2]` (new) fills the pair; the staged first click sends the
+burrower's self-contained unit file `116366` (measured content row). Prediction: the
+commander panel opens with a worm in the paperdoll — or the next assert names the FFNA
+gate. Three clicks, three floors, one afternoon; every fix so far was a message already
+in the tree carrying a field we sent as zero.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

@@ -1729,3 +1729,49 @@ all four now close on bytes:
    empty slots return NULL cleanly.
 
 Whatever the next click hits past all of this belongs here.
+
+## 28. Floor three: `File.cpp:367 fileId` — the hero's appearance pair, and it is a monster composite (2026-08-18)
+
+§27.4's fix arm ran the same afternoon (capture `20260818T142252`). **`Array:587` CLEARED —
+both `CharBy` predictions held** — and the doll rendered far enough to open a FILE:
+`Assertion: fileId / File.cpp(367)`. The captured stack retrodicts §27.5's traced fallback
+*exactly*, hop for hop (rebase −0x930000): PushAppearance's hero-record branch
+(`0x00538331`) → the composite factory `0x0082DB40` → `CpsMonster` ctor → the
+fileId→filename codec `0x004702B0` asserting on a **zero**.
+
+### 28.1 The pair, both ends read — OBSERVED (38833)
+
+- **Producer:** the `0x0074` worker (`0x81DB70`) stores wire fields `+0x14`/`+0x18` — the
+  two u32s between the three leading u8s and the chunk, our builder's `d1`/`d2`, sent as
+  zeros since the day the message existed — verbatim at hero-record `+0x14`/`+0x18`
+  (stores `0x0081DBE1`/`0x0081DBE7`).
+- **Consumer:** PushAppearance pushes the pair into `0x0082DB40(d1, d2, &zeroVec3, 0)`,
+  which op-news 0x10C and runs `0x0082F510` — **unconditionally the `CpsMonster.cpp`
+  constructor** (vtable hard-set; the CpsPlayer factory is the sibling `0x0082DBA0` and
+  nothing on the hero path calls it). Inside: `d1` flows **untransformed** to
+  `0x004702B0(d1, &out)`, the File.cpp codec, which asserts `fileId` at :367 on zero —
+  no early-out exists, so **`d1 = 0` is never legal** and "no appearance" is expressed
+  only by not calling. `d2` selects the MdlBuild variant: non-zero → build **with
+  skeleton file** (`MdlBuild:1868`), **zero → legal**, the fileName-only build
+  (`MdlBuild:1835`). So: **`d1` = the model file id, `d2` = an optional skeleton file id.**
+- All four callers of the factory pass the pair from data, never literals — there is no
+  zero-sentinel anywhere in the image.
+
+**A finding beyond this arc:** the own-player branch does not use the pair at all — it
+reads the persistent composite `s_controlledPlayer` (`[0x01087784]`, named by
+`CpsApi.cpp`'s own assert) and serializes its five equip-slot records into an **outbound
+`0x57`** — the client telling the server its own look. The hero/merc path instead expects
+a **baked model file**, monster-style, which is consistent with retail rendering a
+mercenary from a saved appearance snapshot rather than live composite state.
+
+### 28.2 The staged arms — `--hero-appearance D1[,D2]`, values all measured content rows
+
+| arm | pair | what it tests |
+|---|---|---|
+| **first click** | `116366` (burrower's self-contained unit file: FA0+FA1+FA5+FA6, `content/npcs.toml`) | the single-variable arm: one complete file, `d2=0` legal — File:367 clears and *something* renders, or the next assert names the file class the ctor wants |
+| follow-up | `116703,116228` (hatcher body + shell) | the (model, skeleton) reading of (d1, d2) |
+| order control | `116228,116703` | the swap, if the above asserts |
+
+Prediction for the first click: `File.cpp:367` clears; the panel opens with a worm in the
+paperdoll, or the next assert names the FFNA gate. Either way the field is named by
+experiment: **`0x0074 +0x14` is the hero's appearance model file id.**
