@@ -1816,6 +1816,32 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
+**SEVEN CLIENT RUNS, 2026-08-17/18. Handoff:
+[studies/archivewrite/HANDOFF.md](studies/archivewrite/HANDOFF.md).**
+
+**The arc's two opening premises were both WRONG, and that is its main output.** File 15018
+never needed 1.5 MB of contiguous space — it already owns a 1,029,632 B reservation and
+ships compressed, so the bar is *match ArenaNet in place* (zlib clears it) rather than
+*beat them by 7.35%*. And **bone lengths come from the SHELL, not from the linked animation
+files**: run 5 scaled twelve links' bases across 32% of the creature's records and nothing
+changed, while run 6 scaled the shell's and the hatcher exploded (OBSERVED, owner
+screenshot). The rest skeleton is replicated into every animation file and only the shell's
+copy is used. **So the compression wall does not block shape authoring at all** — the lever
+is a 29,802 B file we can already write.
+
+**Proven at the retail client:** a shell we authored renders (U7, reproduced larger as run
+6); the client accepts a **16th FA8 link and a 243-record sequence table** with no assert;
+and our authored records **are selected** by the client's own variant picker. **Not shown:**
+a linked file's *content* changing the screen — the only property tested in a linked file
+is the one linked files do not own.
+
+**Also corrected:** retail's nine record-shape invariants are now measured at 100.0000%
+(252 shells, 31,700 records, plus an independent 6,000-id sample), and two of them killed
+the coin-flip design outright — a key must exist in the linked file's own table, and equal-
+key runs are homogeneous, so a key is served by exactly one file.
+
+**Previously recorded and still true:**
+
 **THE RUN HAPPENED, 2026-08-17, and the client ACCEPTS the addition.** Study §9.3c.
 `RUN VERDICT: PASS (target: map)`, exit 0, eight of eight capture-derived checkpoints, body
 in the map at t+16.3s, **no `MdlLoad`/`MdlSeq`/`MdlAnim` assert**. The retail client loads an

@@ -1153,6 +1153,45 @@ preflight 10/10, crc 177,319 payloads 0 bad. It is U7's own edit, larger.
 - **It does not deform** → the chain between our writer and the screen is broken, **runs
   1–5 are void**, and that is what to debug. Nothing else should be believed first.
 
+### 9.3k RUN 6 FIRED — **bone lengths come from the SHELL only.** The oracle is alive
+
+**Owner: "yep, extreme deformation now."** Screenshot: the hatcher exploded into splayed
+shards, nameplate `Hatcher [Collector]` still on it. One file changed — the shell, 85 node
+bases x3 — with all 15 links byte-identical to retail.
+
+**Put beside run 5, this settles it.**
+
+| run | what was scaled | records affected | result |
+|---|---|---|---|
+| 5 | **12 linked files'** bases, x3 / x0.25 | 78 of 242 (32%) | **nothing** |
+| 6 | **the shell's** bases, x3 | all | **extreme deformation** |
+
+**CONFIRMED (OBSERVED): the rest skeleton is REPLICATED into every animation file but only
+the SHELL's copy is used.** `sum|base|` = 3,928.2 in thirteen of the sixteen files, and
+that replication is not use. Linked files supply **motion channels**; the shell supplies
+the **skeleton**. Reading (b) of 9.3j is confirmed and reading (a) — "the cast lives in the
+unwritable files" — is **not needed to explain anything**.
+
+**Three consequences, and the first is the one that matters.**
+
+1. **The 1.5 MB wall does NOT block shape authoring.** The lever for a creature's
+   proportions is its shell — 29,802 B, comfortably writable, already relocated and
+   rendered four times today. What the unwritable files hold is *motion*, not *form*.
+2. **The whole chain is validated end to end**: `skelfile` decode → typed repr →
+   `skelwrite` encode → `rebuild_container` → `datmove` → archive → **retail renderer**.
+   Every "no deformation" in runs 1–5 was a true negative about *linked bases*, not a
+   broken pipeline. The control should have run first; it would have saved three runs.
+3. **U7's summit is reproduced and enlarged** — same creature, same edit, bigger scale, a
+   fresh archive built from retail.
+
+**What runs 1–4 did establish, and it is not nothing:** the client accepts a 16th FA8 link
+and a 243-record sequence table (run 1, no assert); our authored records ARE selected by
+the client's own variant picker (run 2, "half the animations"); and retail's nine
+record-shape invariants are now measured at 100.0000% with an independent sample (9.3g).
+The additive path is archive-legal and reaches the picker. What has **never** been shown is
+a linked file's *content* changing what appears on screen — because the only property we
+tested in a linked file, the bases, is the one property linked files do not own.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
