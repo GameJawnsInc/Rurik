@@ -1548,6 +1548,42 @@ RightHand 1 / LeftHand 0). NOT FOUND for 38797 specifically, after sweeping fift
 > screenshot will ever settle; the routes that could are a memory read of the equipped
 > bag or a behavior keyed to position (costume slots 7/8 are the candidates).
 
+> **SETTLED THE SAME DAY, BY RETAIL'S OWN WIRE — and the ONE lineage beat the TWO.**
+> The note above listed the routes that could decide this and missed the one that did:
+> ArenaNet sending the message itself. The Shing Jea capture
+> (`vault/captures/live/20260817T183756`) carries seven `0x006F` per-slot writes for one
+> player, agent 356, each immediately preceded by the `0x015E` that declares its item —
+> so the item TYPE is on the wire beside the slot number, and the mapping is read rather
+> than inferred (OBSERVED; reproduced first-party by the orchestrator after the decode
+> pass proposed it):
+>
+> | slot | item id | declared item type |
+> |---|---|---|
+> | 2 | 5059, 5472 | 7 = Body |
+> | 3 | 3680 | 4 = **Boots** |
+> | 4 | 3787 | 19 = **Legs** |
+> | 5 | 4729 | 13 = **Gloves** |
+> | 6 | 3263 | 16 = **Head** |
+>
+> The bulk message for the same agent closes it: `0x006E [356, 0,0, 5059, 3680, 3787,
+> 4729, 3263, 0,0]` — the nine-dword array uses the SAME numbering, so `0x006E` and
+> `0x006F` index one array and the per-slot form is the readable window onto it. Thirty
+> other players in the same town show the identical `0,0,X,X,X,X,X,0,0` shape.
+>
+> **That is GWLP-R's PERMUTED reading exactly (Boots 3, Legs 4, Gloves 5, Head 6), and it
+> REFUTES bag order (Legs 3, Head 4, Boots 5, Gloves 6).** The section above counted "2
+> lineages against 1" and leaned on the majority; the majority is wrong. ldufr's builder
+> assigns bag index *i* into wire position *i* and GWCA's array is named in the same
+> order, so the two agree because they make the same assumption — which is one witness
+> counted twice, the exact defect this repo names for `schema/messages.json` and
+> OpenTyria. **Counting lineages is not counting witnesses.**
+>
+> Consequence for us: the `0x006E` position comments in `toolkit/authsrv/authsrv.py` say
+> "position order is bag order, which is 2 lineages against 1" and are now wrong in their
+> reasoning though harmless in effect — we send zeros in 1..8 and only position 0 (the
+> weapon) is exercised, which both readings agree on. Anything that dresses a body must
+> use the measured order above. Full record: [../newopcodes/FINDINGS.md](../newopcodes/FINDINGS.md) `0x006F`.
+
 ### How the client knows what an item looks like
 
 **Appearance comes from `file_id`, which the client calls `model_file_id` — never from
