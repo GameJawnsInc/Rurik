@@ -2026,6 +2026,28 @@ Every one of these, in the order they were written:
   and the sweep connection's own debits (41→25→5) reproduce the same 36 while splitting
   it into rank 11 = 16 points and rank 12 = 20. Needs `vault/captures/live/`; without it
   the corpus sections cannot run and the floor of 64 takes it red),
+  `toolkit/authsrv/test_bufflog.py` (the rung-8 effects consumer — `0x0042` apply /
+  `0x0044` remove read as EPISODES, built before its live session the way rung 7's
+  analyzer was. **Its retail pins carry a headline that retires the rung-8 design's
+  central worry**: `studies/isle/PLAN.md` §3.3 says `0x0042` has ZERO ArenaNet
+  witnesses, so "conditions ride some other channel" was the expected outcome — the
+  corpus in fact holds **97 retail applies and 88 removals**, six of them known
+  CONDITION skill ids, arriving in the rung-6 arena detour and the east run's Pin Down.
+  The removal lands at **apply + duration** (median 1.3 ms on the arena connection), so
+  an episode closes EXPIRED, STRIPPED (early — all four in the corpus are one stance
+  cut by 3.6–8.7 s) or OPEN (still live at the last byte, never scored as expired). The
+  synthetic half attacks the pairing where it can silently lie: **buff ids are reused
+  within a session**, so a global id→apply map pairs an apply with a *later* episode's
+  removal and reports a wild residual while looking fine; two targets holding the same
+  id at the same moment must not cross-pair either. **A CURE is pinned from ArenaNet's
+  own wire, the first in this repo**: the Isle's Crippled episode is stripped 11.2 s
+  early and skill 364's apply carries the *identical* timestamp as that removal — so a
+  cure closes a condition through the same `0x0044` an expiry uses and only the residual
+  separates them. Also pinned: the attribution REFUSAL (`0x0042` has no source-agent
+  field, so an episode outside every mark window stays `step = None` and is never
+  assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
+  `dword` while the client does `fld`, so the broken reading is reproduced inline and
+  required to differ). Needs `vault/captures/live/`; floor 36),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
