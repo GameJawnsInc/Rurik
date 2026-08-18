@@ -1632,15 +1632,43 @@ left" branch did NOT fire. Scope: the client-truth side still rests on one
   side-by-side against retail still shows a difference, look at RENDERING —
   fog, mips, the lo path, t3's lerp, the lightmap curve — not at layout.
   Instrument: `studies/terrain/repeatprobe.py`, artifact-gated, reruns offline.
-- **The `arg4 = 0` scope caveat (§7.13/§7.14) has a named capture target.**
-  Corpus scanned 2026-08-18: 181 of 349 maps author tag 3 somewhere, and the
-  densest single block is **row 46101, tile (1,1) — 767/1024 cells authored,
-  all three pinnable values present** (file ids `0x1F268`/`0x5CF0A`).
-  Fallbacks: rows 132053 t(2,7) / 132040 t(2,4) at 688, 34429 t(4,3) at 590.
-  A `trnlayers` capture there is what turns the 212/212 and 512/512 rules
-  from one-block facts into general ones — the draw-consumed-either-way
-  claim (`trnvariation` claim 1) is the specific thing an authored block
-  exercises that Lornar's never did.
+- **The `arg4 = 0` scope caveat (§7.13/§7.14) has a named capture target, and
+  it is NOT the densest block.** Corpus scanned 2026-08-18: 181 of 349 maps
+  author tag 3 somewhere. Ranked by authored count alone the winner is row
+  46101 tile (1,1), 767/1024 — **and it is unreachable: 0 of 64 walkable
+  probes.** So are the next three (132053 t(2,7), 132040 t(2,4), 59717
+  t(7,2)): all 0/64. **Dense authored tag 3 sits mostly on decorative terrain
+  the player cannot stand on**, which a density ranking cannot see, and this
+  is the same shape of error as §7.5's probe — a number that is correct about
+  the wrong thing.
+  **The target is `row 34429, file id 0xB5FF, tile block (4,3)`** — 590
+  authored of 1024, **50 of 64 probes walkable**, 757 of its 1024 cells
+  landing in exactly one trapezoid. Spawn **(1584.0, 1488.0)**, cell
+  (144,112), the block's centre: 1 trapezoid in its own mesh, 0 in Kamadan
+  and 0 in Pre-Searing, against a base rate of 14.5% walkable over the map's
+  rect. Same map's fallbacks, all walkable: t(3,2) 519, t(4,4) 458, t(2,2)
+  550. The map is 256×256 and the client's own table cannot name it (35 rival
+  rows); it loads by file id through a test slot, the pattern `[map.143]` and
+  `[map.144]` already establish.
+- **THE PREDICTION, stated before the run** (house rule: a probe with no
+  stated expectation can be rationalised into agreeing with anything). Block
+  (4,3) holds 590 authored cells AND 434 deferred ones, which makes it the
+  first block in the arc that can test **`trnvariation` claim 1 — "the draw
+  happens either way"** at all. Every prior capture had `arg4 = 0` on every
+  cell, where the two readings are identical by construction.
+  - **H1-true** (claim 1 stands): an authored cell consumes its place in the
+    stream and ignores what it drew.
+  - **H1-false**: an authored cell skips the draw, shifting every later cell
+    in its tile.
+  These predict **different base quadrants on 331 of 1024 cells (32.3%)** —
+  the capture discriminates them outright. Under H1-true our model predicts
+  for that block: layer counts `{1: 289, 2: 326, 3: 409}`, overlay cover
+  words `{0x0:153, 0x1:210, 0x2:133, 0x3:166, 0x8000:105, 0x8001:127,
+  0x8002:76, 0x8003:174}`, base quadrants `{0:110, 1:302, 2:311, 3:301}`.
+  That quadrant-0 deficit is itself a signature: authored values can only pin
+  1–3, so quadrant 0 is reachable only through a draw (§3.2).
+  §7.14's cover-word rule should hold unchanged regardless of tag 3; if it
+  does not, the 212/212 was one block's accident.
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
   (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
