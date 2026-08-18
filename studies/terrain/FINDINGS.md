@@ -1514,8 +1514,133 @@ none of those anywhere.
 **Cost: one command, no client, no vault captures.** Worth re-running after any
 edit to `cell_layers` or `corner_selector`.
 
+### 7.20 ANSWERED: the ground does not repeat beyond the mechanism's floor (2026-08-18)
+
+§7.18 killed the last mechanism-level suspect for large-scale repetition, which
+left §8's top item as a pure measurement: composite the ground exactly as the
+export says to draw it and MEASURE the periodicity, instead of eyeballing a
+render. `studies/terrain/repeatprobe.py` is that instrument — the §7.5/§7.16
+texture-space compositor rebuilt (the original died with its session
+scratchpad, which is why this one is checked in), with its predictions stated
+before the first run:
+
+- **P1, instrument validity**: the pre-arc model (identity selector, quadrant
+  0 everywhere — "pinned") must show autocorrelation peaks at cell-period
+  lags, or the instrument cannot see repetition and the run measured nothing.
+- **P2, the question**: if the closed mechanism is what stops the repetition,
+  the export ("full") collapses to an ideal-random-quadrant floor ("random":
+  base quadrant drawn uniformly per cell, fixed seed); if instead
+  full ≈ pinned, the ground still repeats and no hypothesis is left.
+
+**The gate before the measurement** — §7.15's lesson, diff the artifact — the
+probe re-derives `layers.u16` from `tiles.u8` + `variation.u8` through
+`trnblend`/`trnvariation` and demands byte equality: **PASS on all 186,368
+Kamadan cells and all 266,240 Lornar's cells.** The gate caught a real
+misreading on its first firing: `.variation.u8` is the AUTHORED tag 3, not
+the resolved quadrant, and feeding it in raw tripped the gate on exactly
+**75.02% of cells = P(draw ≠ 0)** — the failure signature that identified the
+fix. (On Kamadan the authored array is all-zero: the whole city defers to the
+PRNG.)
+
+**The result, prominence of the autocorrelation peak at the 1-cell lag**
+(luma, mean of the +x/+y profiles; identical-neighbours = adjacent cell pairs
+drawing byte-identical ground):
+
+| | full | random floor | pinned ceiling |
+|---|---|---|---|
+| Kamadan, whole GRID (68% oob filler, see below) | **+0.1050** | +0.1051 | +0.1821 |
+| Kamadan focus (256,0), oob filler | +0.6861 | +0.6935 | +0.9831 |
+| Kamadan focus (84,165), plaza | +0.0520 | +0.0520 | +0.1063 |
+| Kamadan focus (220,265), beach path | +0.1432 | +0.1445 | +0.2897 |
+| Kamadan identical-neighbours | **19.27%** | 19.42% | 77.87% |
+| Lornar's, whole map | **+0.0239** | +0.0240 | +0.0460 |
+| Lornar's focus (0,513) | +0.0481 | +0.0475 | +0.1290 |
+| Lornar's identical-neighbours | **8.62%** | 8.74% | 34.94% |
+
+**P1 passes everywhere, and P2 lands on the good branch: the export sits ON
+the random floor on every window of both maps** — between −2.5% and +0.7% of
+the pinned−random span. The cell arrangement we ship extracts everything the
+four-quadrant mechanism can give; there is no residual arrangement defect to
+find. Visually the same: the pinned composite shows one-cell staircase edges
+on every material boundary and a woven lattice in uniform ground; the full
+composite's boundaries are organic (the owner's own criterion from the
+retail photograph). PNGs and per-window metrics:
+`vault/research/terrain/repeatprobe/`.
+
+**ADVERSARIALLY VERIFIED before this section landed** — two independent
+skeptics, each told to refute, both returning SURVIVES, and one real flaw
+between them, corrected here rather than found later:
+
+- **The flaw: "whole map" was the wrong label.** 67.8% of Kamadan's cell grid
+  (126,408 of 186,368) is a single out-of-bounds filler tile, so the whole-GRID
+  row above compares conditions over mostly-void — valid as a comparison (all
+  three conditions share the void) but not a statement about "the ground". The
+  skeptic recomposited the two verified real-terrain windows at the same res=8
+  coarseness: full/random/pinned = **0.0458 / 0.0457 / 0.0740** (plaza) and
+  **0.1142 / 0.1145 / 0.2391** (beach) — the same pattern, on real ground.
+- **The sampling conventions held to the byte.** An independent hand-sampler
+  (PIL, not the toolkit's decoder) reproduced `build_patches` exactly on all
+  non-rotated words; the rotated ones differed by exactly one texel, traced
+  algebraically to two equally valid discretizations of the same 180°
+  rotation about the same centre — applied uniformly to all three conditions,
+  so it cannot move a separation measured at 3–10×.
+- **The verdict is not a luma artifact.** Recomputed on R, G, B, R−G and G−B
+  directly from the PNGs: chroma carries up to 3.5× the periodicity signal of
+  luma, and full ≈ random holds on every channel of every window. And
+  "random" is a genuine perturbation, not a near-clone of full — it moves
+  51–54% of pixels.
+
+**Two numbers worth keeping.** The FLOOR is a property of the ART, not the
+arrangement, and that is measured rather than asserted: the mean pairwise
+correlation between a texture's four quadrant windows is **+0.611** for
+Kamadan's filler tile 25 (floor +0.69) and **+0.148** for Lornar's snow
+tile 2 (floor +0.05) — the floor tracks how alike the artist drew the four
+variants, and the client has the same floor by construction. And at DISTANCE
+the question dissolves: pooled to 1 px per cell, every condition including
+pinned scores ≈ +0.01 — cell-scale repetition is invisible at range in any
+model; what survives at range is material-region structure.
+
+**The renders agree.** Headless EEVEE renders of the rebuilt scenes
+(1280×720, camera at eye height and high-oblique) show no lattice: Lornar's
+snowfield-to-horizon shot and Kamadan's canyon path are organic at every
+distance in frame. Same directory. Three render-side facts a follow-on
+session should not rediscover: **the scenes carry NO light objects** (the
+lighting is baked into the `gw_light` vertex colours; render with a plain
+white world background, strength 1.0 — an added sun double-lights and washes
+the albedo flat), **`gwcam.py` SAVES the .blend it opens** when run as its
+docstring shows (`bpy.ops.wm.save_mainfile` on exit — open via
+`open_mainfile` and never save, or work on a copy), and **kamadan.blend has a
+void-skirt plane at z ≈ −5002** holding 17.7% of its terrain vertices, which
+any "find open ground from the bbox" heuristic finds first.
+
+**What this closes and what it does not.** It closes §8's "does the ground
+still repeat at distance" — it does not, beyond a floor the art itself sets.
+The arrangement we ship is the arrangement the client computes (§7.9's
+2048/2048 selector, §7.12's 511/511 stream, §7.14's 212/212 cover words), so
+any repetition retail avoids that our RENDER does not, it avoids by rendering
+means — fog, mip selection, the lo path, the t3 diffuse/specular lerp, the
+lightmap's transfer curve — not by a different layout. The "no hypothesis
+left" branch did NOT fire. Scope: the client-truth side still rests on one
+`arg4 = 0` Lornar's block (§7.13's caveat), unchanged by this section.
+
 ## 8. What is still open
 
+- ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
+  NO beyond the art's own floor.** The export sits on the ideal-random floor
+  on every window of both maps (pinned control separates 3–9×), and the
+  arrangement is the client's own (2048/2048, 511/511, 212/212). If a live
+  side-by-side against retail still shows a difference, look at RENDERING —
+  fog, mips, the lo path, t3's lerp, the lightmap curve — not at layout.
+  Instrument: `studies/terrain/repeatprobe.py`, artifact-gated, reruns offline.
+- **The `arg4 = 0` scope caveat (§7.13/§7.14) has a named capture target.**
+  Corpus scanned 2026-08-18: 181 of 349 maps author tag 3 somewhere, and the
+  densest single block is **row 46101, tile (1,1) — 767/1024 cells authored,
+  all three pinnable values present** (file ids `0x1F268`/`0x5CF0A`).
+  Fallbacks: rows 132053 t(2,7) / 132040 t(2,4) at 688, 34429 t(4,3) at 590.
+  A `trnlayers` capture there is what turns the 212/212 and 512/512 rules
+  from one-block facts into general ones — the draw-consumed-either-way
+  claim (`trnvariation` claim 1) is the specific thing an authored block
+  exercises that Lornar's never did.
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
   (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate

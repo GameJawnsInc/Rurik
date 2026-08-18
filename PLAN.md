@@ -2728,6 +2728,27 @@ missing piece is committed code plus the client's own FVF dispatch.
 
 ### The terrain texturing arc — ALL SIX RUNGS LANDED; the ground still does not match retail (2026-08-15)
 
+> **UPDATE 2026-08-18 — the mechanism is now CLOSED against the client and the
+> repeat question is ANSWERED; two claims below are superseded.** The 08-15
+> text under this heading stood while a later session closed the whole chain
+> (`studies/terrain/FINDINGS.md` §7.11–§7.19, all locked to client captures):
+> the coverage pick is a function of (types, selector) — 212/212 — the mask is
+> PHYSICAL (the permuted reading scored 31.1%), the base layer is the corner
+> that SORTS FIRST (102/102), `trnvariation` reproduces the client's stream on
+> 511/511 consecutive live draws, and **§7.2's second UV rectangle is REFUTED**
+> (0 of 512 cells; the `0xFFFF` path is an unused-slot no-op). So the
+> "blocking format bug" paragraph below (§7.10) was subsumed — the fix landed
+> in `cell_layers`, the exporter and the importer, each of which carried its
+> own drifted copy of the rule — and the "base layer's OWN UV rectangle" it
+> calls the likeliest repetition mechanism DOES NOT EXIST. **2026-08-18,
+> §7.20: the exported ground does NOT repeat beyond the art's own floor** —
+> measured with a prediction-first, artifact-gated compositor
+> (`studies/terrain/repeatprobe.py`): the export sits ON the ideal-random
+> floor on every window of Kamadan and Lornar's while the pre-arc pinned
+> control separates 3–9×. What remains open is in FINDINGS §8: the lightmap
+> transfer curve, the one-block `arg4 = 0` scope caveat, prop fall-through,
+> and the unmeasured FOV.
+
 **Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
 [`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
 whose GROUND has no material: measured in Blender itself, the terrain is the only
