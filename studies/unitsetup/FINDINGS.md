@@ -214,12 +214,32 @@ for every agent cannot misbehave at create time: the only bit the create path br
 is death, and `0` clears it. The non-zero payloads are a fidelity gap, not a correctness
 one — we are not failing to trigger anything the client does when the body appears.
 
-**What would finish it:** find the reader of `record+0x30`. `codescan --field 0x30`
-returns a single row, which is the "answer looks too small" case that module's own
-docstring warns about — a subsystem holding a biased `this` spells the same field with a
-different displacement, and the fix it prescribes is to re-run at disp−4 and disp+4 and to
-scope by module. Until that read is done, every bit above 4 is **UNVERIFIED in meaning**,
-and this document says so rather than naming them from their correlations.
+**The reader, found — and it is another hop rather than an answer.** `codescan --field
+0x30` returns a single row, the "answer looks too small" case that module's own docstring
+warns about. The fix here was not the prescribed disp±4 sweep but a better anchor: every
+function touching this table must multiply by the record stride, so scanning `.text` for
+`imul r32, r32, 0x34` (`6B /r ib`, register form) finds all 151 sites, of which sixteen
+sit in the agent-record neighbourhood. Exactly one of those reads offset 0x30:
+
+    0081A5FF  mov eax, [ebx+0x7c]            ; the record table
+    0081A602  imul ecx, esi, 0x34            ; agent * stride
+    0081A605  mov eax, [ecx+eax+0x30]        ; <-- the stored status word
+    0081A609  mov [edi+0x10c], eax           ; copied WHOLESALE into another object
+
+`--field 0x30` could never have seen it: the access is the base+index+displacement form,
+which that scanner does not search (its docstring lists the encodings it covers, and this
+is not among them — worth knowing for any future field hunt).
+
+So the word **propagates rather than being decided on**: create path stores it, this
+function copies all 32 bits into an object at `+0x10C`, and no bit above 4 has been
+branched on anywhere yet. The enclosing routine looks like a constructor — two
+`memset`-shaped calls (sizes 0x24 and 8) and a `cmp dword [ebx+0x4ec], 0xDDDDDDDD` debug
+sentinel above the copy.
+
+**What would finish it** is now one well-defined step rather than a search: find what
+reads `+0x10C` of the object that constructor builds. Until then every bit above 4 is
+**UNVERIFIED in meaning**, and this document says so rather than naming them from their
+correlations — three hops of propagation is not a semantics.
 
 ---
 
