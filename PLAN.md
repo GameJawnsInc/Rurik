@@ -1903,6 +1903,10 @@ a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment sa
 
 **FLAGGED, NOT FIXED:** `authsrv.py` holds `MAP_ID_COUNT = 877` and now `NO_MARKER_MAP = 888`, both meaning "one past the last map" in different places. Either they are two different quantities or one is wrong, and nothing here has measured which — 888 is re-derived from `areatable.py` by `test_quests.py` §19, 877 is not. Do not quietly make them equal.
 
+**THE 38797→38833 RE-CHECK RAN 2026-08-17 AND EVERY CLAIM HELD.** The eleven quest handler bodies were re-derived by a different route — the client's own receive table via `msghandler.classify` — matching FINDINGS §2.1 11 of 11 on the pin and **unmoved on 38833**. Twelve byte-level citations are byte-identical across the two builds, the frame-bus pairing is 11 of 11 on both, `CHALLENGES` is 1465 on both (the authored-id band is intact) and `areatable`'s extent is 888 on both. What moved: the dispatch stubs (+0x60, uniform) and the `UiCtlWebLink:576` assert site (+0xD0).
+
+**The scope is narrower than "these addresses are stable", and the check says so.** On the vaulted 38519 build — ~90 days older — **0 of 12 sites match and the frame-bus scan finds nothing in any quest body at all.** So the claim is that nothing moved across the 15-day 38797→38833 patch, which is much smaller than durability; 38519 is now the control that proves the equality is a measurement rather than a tautology. `test_quests.py` §20 (77 checks) re-runs the whole thing, and a fourth vaulted build is covered without an edit.
+
 **Next offline, cheapest first:** (no `0x0050`/`0x0051`/`0x0053`
 senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
 `0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is

@@ -30,9 +30,11 @@ import content                                               # noqa: E402
 import questdefs                                             # noqa: E402
 import authsrv                                              # noqa: E402
 
-# MEASURED 2026-08-17: 74 with the vault present, 73 without (section 19
-# re-derives 888 from the client image and declares a skip if it is not
-# there). The floor is 73 -- what ONE quest row runs on a bare machine.
+# MEASURED 2026-08-17: 77 with the vault present, 73 without. Sections 19
+# and 20 read the client image (888's re-derivation, and the cross-build
+# site check) and declare skips without it; 20 also skips if fewer than two
+# builds at or after the pin are vaulted. The floor is 73 -- what ONE quest
+# row runs on a bare machine.
 #
 # THE PREVIOUS DERIVATION WAS STALE AND SAID SO CONFIDENTLY: "13 checks are
 # row-count independent and each quest row adds 4, so 17 is what the
@@ -578,6 +580,112 @@ def main():
               f"FINDINGS 2.3 says derive it rather than pin it; the server path "
               f"may not import a vault reader at startup, so it is pinned there "
               f"and re-derived here")
+
+    print("\n20. every cited site, re-checked on the build the owner RUNS")
+    # WHY THIS SECTION EXISTS. FINDINGS 7.9's last bullet said every binary
+    # claim in the arc was build 38797 and none had been re-checked against
+    # 38833, which is what the owner's install runs -- and closed with "probably
+    # did not move" is what the VA-drift rule exists to refuse. This measures it
+    # instead, and it keeps measuring it: a third build lands in BUILDS and this
+    # section covers it without an edit.
+    #
+    # The sites are the arc's own citations, each with the length of the
+    # instruction it names. Byte-identical across builds is the strong form --
+    # it says the citation reads the same code, not merely that something lives
+    # at that address.
+    SITES = [
+        (0x0080F7C2, 3, "2.2 imul edi, ecx, 0x34 (the log's 52-byte stride)"),
+        (0x0080F84D, 5, "2.2 the tail memmove"),
+        (0x0080F855, 6, "2.2 dec [ebx+0x534] (the log count)"),
+        (0x0080F85B, 7, "2.2 imul esi, [ebx+0x534], 0x34"),
+        (0x0080F20B, 6, "2.3 0x0049 writes charContext+0x528 (the ACTIVE quest)"),
+        (0x0080F574, 6, "2.3 0x0050 loads the +inf marker constant"),
+        (0x0080F600, 6, "2.3 ...and again"),
+        (0x0080F9CD, 6, "Q3  the description-filled gate on 0x0054"),
+        (0x0080DDA7, 5, "2.2 challengeSortArray.Find (ChCliApi:4237)"),
+        (0x00633D70, 8, "1.6 the frame-bus POST helper"),
+        (0x00633BD0, 8, "1.6 the frame-bus SUBSCRIBE helper"),
+        (0x00948654, 4, "2.3 the +inf constant itself, in .rdata"),
+    ]
+    try:
+        sys.path.insert(0, os.path.join(HERE, "clientscan"))
+        import framebus, pinned, vaultpath
+        imgs = []
+        for b in pinned.BUILDS:
+            path = os.path.join(vaultpath.vault_root(), "client", b.stamp, "Gw.exe")
+            if os.path.exists(path):
+                imgs.append((b.number, framebus.Image(path)))
+    except Exception as exc:                                    # noqa: BLE001
+        imgs = []
+        LEDGER.skip("the cross-build site check", f"{type(exc).__name__}: {exc}")
+    # THE SPLIT IS THE FINDING, and the first draft of this section did not have
+    # it. The vault holds THREE builds and the arc's citations hold on two of
+    # them: 38797 (the pin) and 38833 (what the owner's install runs). On 38519
+    # -- roughly ninety days older -- every one of these sites reads different
+    # bytes and the frame-bus scan finds NOTHING in any quest body. So the claim
+    # is not "these addresses are stable"; it is "they did not move across the
+    # 15-day 38797->38833 patch", which is a much smaller claim and the true one.
+    #
+    # 38519 then does the job a synthetic control would do worse: it proves the
+    # equality above is a measurement rather than a tautology. A first draft
+    # asserted identity across ALL vaulted builds and went red on exactly this,
+    # which is the check reporting a fact rather than a defect.
+    def window(im, va, n):
+        """`n` bytes at `va`, or None if this image does not map it.
+
+        None rather than a raise: an older build legitimately may not have
+        that address, and "absent" is a real answer here, not an error.
+        """
+        try:
+            o = im.offset(va)
+        except ValueError:
+            return None
+        return None if o is None else im.blob[o:o + n]
+
+    PIN = 38797
+    recent = [(n, im) for n, im in imgs if n >= PIN]
+    older = [(n, im) for n, im in imgs if n < PIN]
+    if len(recent) < 2:
+        LEDGER.skip("the cross-build site check",
+                    f"needs two builds at or after {PIN}; have "
+                    f"{[n for n, _ in recent]}")
+    else:
+        names = ", ".join(str(n) for n, _ in recent)
+
+        drift = [(va, what) for va, n, what in SITES
+                 if len({window(im, va, n) for _x, im in recent}) != 1
+                 or window(recent[0][1], va, n) is None]
+        check(not drift,
+              f"all {len(SITES)} cited sites are byte-identical across {names}",
+              f"DRIFTED: {[(hex(v), w) for v, w in drift]} -- a citation whose "
+              f"bytes differ between the pin and the build the owner RUNS is "
+              f"reading different code than it was measured on, which is the "
+              f"failure studies/pvpui/FINDINGS.md 4 and 15.0 each paid for once")
+
+        want = {o: sorted(v) for o, v in framebus.QUEST_EXPECTED.items()}
+        bad = {n: g for n, g in ((n, framebus.quest_family(im))
+                                 for n, im in recent) if g != want}
+        check(not bad,
+              f"and the frame-bus pairing holds on every one of them",
+              f"{bad} -- 11 of 11 bodies posting the recorded frame id is what "
+              f"twelve names in overrides.json rest on, and it is worth knowing "
+              f"on the build the owner actually runs, not only on the pin")
+
+    if not older:
+        LEDGER.skip("the older-build control",
+                    f"no vaulted build before {PIN} to drift against")
+    else:
+        num, im = older[0]
+        ref = recent[0][1] if recent else imgs[-1][1]
+        same = [hex(va) for va, n, _w in SITES
+                if window(im, va, n) is not None
+                and window(im, va, n) == window(ref, va, n)]
+        check(len(same) < len(SITES) // 2,
+              f"CONTROL: on build {num} most of these sites read DIFFERENTLY",
+              f"{len(same)} of {len(SITES)} still match ({same}). Build {num} is "
+              f"~90 days older and everything moved; the frame-bus scan finds "
+              f"nothing in any quest body there. Without this, 'byte-identical' "
+              f"above could be true of a reader that never opened a file")
 
     return LEDGER.verdict()
 
