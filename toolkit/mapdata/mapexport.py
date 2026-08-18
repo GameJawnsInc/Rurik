@@ -904,7 +904,15 @@ def build_blend_layers(trn):
             i = row + gx
             corners = (tiles[i], tiles[row + gx1],
                        tiles[row1 + gx], tiles[row1 + gx1])
-            layers = trnblend.cell_layers(corners, table_a, var[i])
+            # THE CELL IS DRAWN IN SORTED ORDER BUT MASKED IN PHYSICAL ONE.
+            # `map_layers` does this too; this loop is a second copy and for
+            # one export it silently kept the pre-selector behaviour, so the
+            # 212/212 fix landed in trnblend and changed NOTHING here.
+            # FINDINGS 7.14.
+            sel = trnblend.corner_selector(tuple(table_a[c] for c in corners))
+            perm = tuple((sel >> (2 * k)) & 3 for k in range(4))
+            layers = trnblend.cell_layers(tuple(corners[p] for p in perm),
+                                          table_a, var[i], perm=perm)
             counts[len(layers)] += 1
             for s in range(BLEND_LAYERS):
                 if s < len(layers):

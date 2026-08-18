@@ -1322,6 +1322,37 @@ the client. The suite scores 32 with the vault, floor 26 without.
 
 **Scope unchanged from §7.13**: 512 cells, one Lornar's block, all `arg4 = 0`.
 
+### 7.15 The fix reached trnblend and NOT the exporter (2026-08-17)
+
+Landing §7.14 and re-exporting changed **exactly zero bytes** — 0 of 186,368
+Kamadan cells. The fix was correct and it went nowhere.
+
+`map_layers` and `mapexport.build_blend_layers` are **two copies of the same
+loop**. §7.14 corrected the first; the exporter calls `cell_layers` directly
+and kept the pre-selector behaviour. So every `.blend` scene ever rendered from
+this arc — including the ones whose screenshots drove §7.10 and §7.11 — was
+built without the selector at all.
+
+With the exporter fixed too:
+
+| | cells changed | of mixed |
+|---|---|---|
+| Kamadan | 26,211 (14.1%) | **77.5%** |
+| Lornar's Pass | 111,561 (41.9%) | **76.4%** |
+
+which agrees with the 31.1% match rate §7.14 measured against the client:
+roughly three quarters of mixed cells were drawing the wrong row. Rebuilt
+scenes move accordingly — Kamadan 58,456 → 48,689 overlay faces with rotated
+up 14,183 → 20,113; Lornar's 252,291 → 216,623 with rotated 59,096 → 86,539.
+
+**ONLY THE OUTPUT DIFF CAUGHT THIS.** Every test was green before and after,
+because both copies were internally consistent and §5's client check exercises
+`cell_layers`, which was already right. `test_mapexport` now asserts the two
+loops agree cell for cell, with a fixture that must contain mixed cells or the
+check is vacuous. The general lesson is the repo's own: **a rule implemented
+twice will drift, and a suite that tests each copy against itself cannot see
+it.** Diff the artifact, not just the unit.
+
 ## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14

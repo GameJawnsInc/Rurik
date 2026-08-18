@@ -184,7 +184,7 @@ DEFAULT_SAMPLE = 12
 # 185 -> 188 on 2026-08-14, when T6's variation sidecar joined the tiles
 # export: the synthetic fixture now packs a per-cell variation 0..3 and
 # section 1 asserts it de-tiles with the measured (i&3)*2 bit order.
-FLOOR = 189
+FLOOR = 191
 
 
 # ------------------------------------------------------------------ helpers
@@ -346,6 +346,7 @@ def main(argv=None):
         _section4(check)
         _section4b(check)
         _section4c(check, tmp)
+        _section_selector_parity(check)
         _vault_sections(check, led, args, tmp)
 
     print(f"\n({time.perf_counter() - t0:.1f}s)")
@@ -1532,6 +1533,48 @@ def _section7(check, led, ar, tmp):
                    or all(0 <= p < pd["count"]
                           for _v, p in pd["refs6"]["entries"])),
               f"row {row}: every model index and tag-4/6 reference is in range")
+
+
+def _section_selector_parity(check):
+    """`build_blend_layers` must agree with `trnblend.map_layers`, cell for cell.
+
+    These are TWO COPIES of the same loop, and on 2026-08-17 only one of them
+    got the physical-mask fix: trnblend was corrected to 212/212 against the
+    client and the exporter silently kept the pre-selector behaviour, so a full
+    re-export changed exactly ZERO bytes. The diff caught it; nothing in the
+    suite would have. This check is that hole closed.
+    """
+    import trnblend
+    import trnvariation
+    dim_x = dim_y = 6
+    # a patch with real material boundaries, so most cells are mixed
+    tiles = [(0 if (gx // 2 + gy // 3) % 2 else 2) if gx != 3 else 1
+             for gy in range(dim_y) for gx in range(dim_x)]
+    table_a = [0, 1, 2]
+    var = [0] * (dim_x * dim_y)
+
+    want = trnblend.map_layers(dim_x, dim_y, tiles, table_a, var)
+    got = []
+    for gy in range(dim_y):
+        gy1 = min(gy + 1, dim_y - 1)
+        for gx in range(dim_x):
+            gx1 = min(gx + 1, dim_x - 1)
+            corners = (tiles[gy * dim_x + gx], tiles[gy * dim_x + gx1],
+                       tiles[gy1 * dim_x + gx], tiles[gy1 * dim_x + gx1])
+            sel = trnblend.corner_selector(tuple(table_a[c] for c in corners))
+            perm = tuple((sel >> (2 * k)) & 3 for k in range(4))
+            got.append(trnblend.cell_layers(tuple(corners[p] for p in perm),
+                                            table_a, var[gy * dim_x + gx],
+                                            perm=perm))
+    same = sum(1 for a, b in zip(want, got) if a == b)
+    mixed = sum(1 for v in want if len(v) > 1)
+    check(same == len(want),
+          "the exporter's loop and map_layers agree cell for cell -- two "
+          "copies of one rule cannot drift apart silently",
+          f"{same}/{len(want)}")
+    check(mixed >= 8,
+          "and the fixture actually exercises mixed cells, or the check above "
+          "is vacuous", f"{mixed} mixed")
 
 
 if __name__ == "__main__":
