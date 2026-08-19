@@ -1951,6 +1951,20 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 # 1, and given a correctly-stated agent the client picks arm 0 by itself.
 GAME_CMSG_ATTACK_AGENT = 0x0026
 
+# What the commander panel's stance buttons send. OBSERVED 2026-08-19, agent-
+# piloted clicks (pvpui 28.5): each of the three AI-mode buttons emits exactly
+# one of these -- [agent_id, mode-dword] with the mode tracking the click 3/3
+# in the enum 0x0072's own format string names aiMode (Fight=0, Guard=1,
+# Avoid=2, CHAR_AI_MODES == 3). Two things the static trace could not see:
+# the send lives on the BUTTON path, not the GmAgentCommander setter heroes
+# 3.3 traced to a dead end -- so that NOT FOUND was a wrong-place answer, not
+# a wrong answer -- and the client does NOT move its own stance ring on
+# click. The ring waits for the server, and the echo below (0x0072 with the
+# requested mode) is both the arm that proves it and the behaviour a real
+# server needs anyway. Only hero agents were observed; whether pets share the
+# message is untested (the panel class is GmPetCommander, so they might).
+GAME_CMSG_HERO_AI_MODE = 0x0015
+
 # What the client sends when the player clicks an agent meaning to do something
 # to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
 # in another, in a TOWN, while this server answered none of them
@@ -2583,6 +2597,12 @@ HERO_APPEARANCE = None
 # 1/0 -- they read per-agent stores a bodiless agent can carry, so 0x009F
 # health(42)/energy(41) for the hero agent is the staged follow-up.
 HERO_LEVEL = None
+# That follow-up: 0x009F PROP_HEALTH_MAX(42) and PROP_ENERGY_MAX(41) for each
+# hero agent, the MAX setters (agents.py's comments carry the refuted "and
+# refills" reading -- these set the ceiling, not the fill). The 28.4 bars read
+# 1/0 with neither ever sent; whether they display current or max is exactly
+# what this arm asks. None = never sent.
+HERO_VITALS = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -6626,6 +6646,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that provoke a c2s reply, and "how many came back" is the
                         # question a send-then-count experiment asks.
                         state["ack_0079_count"] = state.get("ack_0079_count", 0) + 1
+                    elif opcode == GAME_CMSG_HERO_AI_MODE:
+                        # The stance echo. values[0] is the header word; the
+                        # payload is [agent_id, mode]. Acts only on an agent
+                        # that is one of this run's hero slots, so the arm is
+                        # inert on every non-hero rig.
+                        _aid, _mode = values[1], values[2]
+                        for _hid, _haid, _hdef in hero_slots():
+                            if _haid == _aid:
+                                send(*agents.hero_activate(
+                                    _hid, _haid, HERO_INVENTORY, _mode))
+                                print(f"[c{conn_id}] hero stance echo: agent "
+                                      f"{_aid} -> aiMode {_mode}", flush=True)
+                                break
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
@@ -7705,6 +7738,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                                   [agents.PROP_LEVEL, _haid, HERO_LEVEL],
                                   f"level {HERO_LEVEL} on hero agent {_haid}")
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_VITALS is not None
+                                                   else ()):
+                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                                  [agents.PROP_HEALTH_MAX, _haid,
+                                   HERO_VITALS[0]],
+                                  f"health max {HERO_VITALS[0]} on hero "
+                                  f"agent {_haid}")
+                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                                  [agents.PROP_ENERGY_MAX, _haid,
+                                   HERO_VITALS[1]],
+                                  f"energy max {HERO_VITALS[1]} on hero "
+                                  f"agent {_haid}")
                         # The hero's body, at HERO_AGENT_ID. MANDATORY for the
                         # commander binding rather than optional like the
                         # henchman's: GmHeroCommander:120/121 assert a
@@ -8608,6 +8654,11 @@ def main():
                          "commander panel title's 'Lvl 255' is the no-entry "
                          "sentinel for this exact property -- the cheap arm "
                          "pvpui 28.3 stages; --hero-body is the heavy one.")
+    ap.add_argument("--hero-vitals", default=None, metavar="H[,E]",
+                    help="Send int properties 42 (health MAX) and 41 (energy "
+                         "MAX) for each hero agent. pvpui 28.4: the panel's "
+                         "vitals bars render 1/0 with neither sent; this arm "
+                         "asks whether they display current or max.")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8887,6 +8938,15 @@ def main():
             HERO_APPEARANCE = (_hap[0], _hap[1] if len(_hap) > 1 else 0)
         global HERO_LEVEL
         HERO_LEVEL = a.hero_level
+        global HERO_VITALS
+        if a.hero_vitals is not None:
+            _hv = [int(x, 0) for x in str(a.hero_vitals).split(",")]
+            if len(_hv) > 2:
+                raise SystemExit(
+                    f"--hero-vitals got {len(_hv)} values; it is health max "
+                    f"and optionally energy max, a third would silently be "
+                    f"dropped")
+            HERO_VITALS = (_hv[0], _hv[1] if len(_hv) > 1 else 0)
         if HERO_BAGS and HERO_INVENTORY in (0, 1):
             raise SystemExit(
                 f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "
