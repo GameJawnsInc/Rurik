@@ -396,6 +396,39 @@ class SubModel:
         which means it is RIGIDLY bound: `u0 == 1` on all 26,418 such
         sub-models, so every vertex takes group 0 and needs no selector.
 
+        THE ID IS THE SHELL'S blk2C NODE ORDINAL, AND THAT IS SETTLED FROM
+        ARENANET'S CODE -- 2026-08-19, after being carried as UNVERIFIED for a
+        day. The worry was real: the client passes the id through a table
+        called `transformRemap`, so "does a composited character renumber?"
+        had to be answered before anyone authored against a player model.
+        It does not. The table has ONE ENTRY PER blk2C NODE OF THE SHELL and is
+        INDEXED BY THE RAW ON-DISK ID; what it maps TO (`.transform`, +0x18) is
+        a dense 0-based counter over nodes whose `BoneFlags == 1`, assigned by
+        the three-case switch at `MdlCombine:1425`, and consumed at
+        `MdlCombine:850` where the group lists are rewritten for the combined
+        geometry. **The renumbering is on the OUTPUT, not the input.** So
+        "id == blk2C ordinal" is the FILE's meaning and is correct to author
+        against; "id == the index Gr finally sees" is false and was never the
+        claim. Re-derived independently by a skeptic from the pinned image.
+
+        MULTI-BODY COMPOSITES SHARE ONE GLOBAL ID SPACE: one table, sized by
+        the one skeleton, handed unchanged to every body -- nothing renumbers
+        per body. The archive agrees on a check that could have failed: in the
+        corpus's only two-body composite (shell 116377, bodies 116759+116760)
+        the second body's ids are a SUBSET of the first's, where concatenated
+        per-body spaces would have made them disjoint.
+
+        AND THE GEOMETRIC TEST DISAGREES ON THAT SHELL, which is recorded
+        rather than buried. Scoring `id -> node (i+k)` on 116377 prefers k=+1
+        over the direct reading by 17%, while the same metric prefers k=0 on
+        the hatcher (client-confirmed) by 6%. It is a resolution limit, not
+        counter-evidence: 116377's node bases are packed at a median spacing of
+        2.26 u with 23 of 68 pairs under 1 u, against the hatcher's 4.30 u and
+        4 of 85, so plus-or-minus-one is exactly what that shell cannot
+        discriminate. The instruction that indexes the table outranks a
+        proximity argument on a skeleton too dense to resolve one node -- but
+        anyone who finds a second multi-body composite should re-run it.
+
         The range check is the one that discriminates. `max(group) < u0` is
         weak -- it cannot separate this reading from a direct palette index --
         so the assertion here is the tight one: the group values are exactly
