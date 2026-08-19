@@ -1444,6 +1444,20 @@ nothing about this prop is special. The outline being visible while the mesh
 was not is what distinguishes "absent" from "invisible", and it is worth
 keeping as a diagnostic.
 
+**Blast radius, recorded 2026-08-18: this fix reached the UNIT arc too, and
+turned one of its checks red.** `_alpha_class` classifies the hatcher's
+picked diffuse (`tex_1C7DB.png`) an eraser, so the unit viewer stopped
+wiring its alpha and that body's default render went from a floating head
+to a whole body — which killed rung U5's `--opaque` control, whose entire
+job was measuring the gap between those two renders (both arms then read
+0.1932). Nothing was wrong with either arc; a shared classifier simply
+changed what a downstream test was measuring. The unit check has been
+rewritten around a tamper control that reinstates the eraser verdict on
+demand, so the phenomenon §7.17 fixed stays REPRODUCIBLE after the fix —
+[studies/unitexport/FINDINGS.md](../unitexport/FINDINGS.md) §5.1. Worth
+knowing before `_alpha_class`'s rule is next tuned: its verdicts are now
+load-bearing in two arcs, and the unit-side tamper arm will say so.
+
 ### 7.18 §7.2 REFUTED: there is no second rectangle (2026-08-17)
 
 §7.2 read two UV rectangles in `0x00757A80` — a masked path using the quadrant
@@ -1514,8 +1528,583 @@ none of those anywhere.
 **Cost: one command, no client, no vault captures.** Worth re-running after any
 edit to `cell_layers` or `corner_selector`.
 
+### 7.20 ANSWERED: the ground does not repeat beyond the mechanism's floor (2026-08-18)
+
+§7.18 killed the last mechanism-level suspect for large-scale repetition, which
+left §8's top item as a pure measurement: composite the ground exactly as the
+export says to draw it and MEASURE the periodicity, instead of eyeballing a
+render. `studies/terrain/repeatprobe.py` is that instrument — the §7.5/§7.16
+texture-space compositor rebuilt (the original died with its session
+scratchpad, which is why this one is checked in), with its predictions stated
+before the first run:
+
+- **P1, instrument validity**: the pre-arc model (identity selector, quadrant
+  0 everywhere — "pinned") must show autocorrelation peaks at cell-period
+  lags, or the instrument cannot see repetition and the run measured nothing.
+- **P2, the question**: if the closed mechanism is what stops the repetition,
+  the export ("full") collapses to an ideal-random-quadrant floor ("random":
+  base quadrant drawn uniformly per cell, fixed seed); if instead
+  full ≈ pinned, the ground still repeats and no hypothesis is left.
+
+**The gate before the measurement** — §7.15's lesson, diff the artifact — the
+probe re-derives `layers.u16` from `tiles.u8` + `variation.u8` through
+`trnblend`/`trnvariation` and demands byte equality: **PASS on all 186,368
+Kamadan cells and all 266,240 Lornar's cells.** The gate caught a real
+misreading on its first firing: `.variation.u8` is the AUTHORED tag 3, not
+the resolved quadrant, and feeding it in raw tripped the gate on exactly
+**75.02% of cells = P(draw ≠ 0)** — the failure signature that identified the
+fix. (On Kamadan the authored array is all-zero: the whole city defers to the
+PRNG.)
+
+**The result, prominence of the autocorrelation peak at the 1-cell lag**
+(luma, mean of the +x/+y profiles; identical-neighbours = adjacent cell pairs
+drawing byte-identical ground):
+
+| | full | random floor | pinned ceiling |
+|---|---|---|---|
+| Kamadan, whole GRID (68% oob filler, see below) | **+0.1050** | +0.1051 | +0.1821 |
+| Kamadan focus (256,0), oob filler | +0.6861 | +0.6935 | +0.9831 |
+| Kamadan focus (84,165), plaza | +0.0520 | +0.0520 | +0.1063 |
+| Kamadan focus (220,265), beach path | +0.1432 | +0.1445 | +0.2897 |
+| Kamadan identical-neighbours | **19.27%** | 19.42% | 77.87% |
+| Lornar's, whole map | **+0.0239** | +0.0240 | +0.0460 |
+| Lornar's focus (0,513) | +0.0481 | +0.0475 | +0.1290 |
+| Lornar's identical-neighbours | **8.62%** | 8.74% | 34.94% |
+
+**P1 passes everywhere, and P2 lands on the good branch: the export sits ON
+the random floor on every window of both maps** — between −2.5% and +0.7% of
+the pinned−random span. The cell arrangement we ship extracts everything the
+four-quadrant mechanism can give; there is no residual arrangement defect to
+find. Visually the same: the pinned composite shows one-cell staircase edges
+on every material boundary and a woven lattice in uniform ground; the full
+composite's boundaries are organic (the owner's own criterion from the
+retail photograph). PNGs and per-window metrics:
+`vault/research/terrain/repeatprobe/`.
+
+**ADVERSARIALLY VERIFIED before this section landed** — two independent
+skeptics, each told to refute, both returning SURVIVES, and one real flaw
+between them, corrected here rather than found later:
+
+- **The flaw: "whole map" was the wrong label.** 67.8% of Kamadan's cell grid
+  (126,408 of 186,368) is a single out-of-bounds filler tile, so the whole-GRID
+  row above compares conditions over mostly-void — valid as a comparison (all
+  three conditions share the void) but not a statement about "the ground". The
+  skeptic recomposited the two verified real-terrain windows at the same res=8
+  coarseness: full/random/pinned = **0.0458 / 0.0457 / 0.0740** (plaza) and
+  **0.1142 / 0.1145 / 0.2391** (beach) — the same pattern, on real ground.
+- **The sampling conventions held to the byte.** An independent hand-sampler
+  (PIL, not the toolkit's decoder) reproduced `build_patches` exactly on all
+  non-rotated words; the rotated ones differed by exactly one texel, traced
+  algebraically to two equally valid discretizations of the same 180°
+  rotation about the same centre — applied uniformly to all three conditions,
+  so it cannot move a separation measured at 3–10×.
+- **The verdict is not a luma artifact.** Recomputed on R, G, B, R−G and G−B
+  directly from the PNGs: chroma carries up to 3.5× the periodicity signal of
+  luma, and full ≈ random holds on every channel of every window. And
+  "random" is a genuine perturbation, not a near-clone of full — it moves
+  51–54% of pixels.
+
+**Two numbers worth keeping.** The FLOOR is a property of the ART, not the
+arrangement, and that is measured rather than asserted: the mean pairwise
+correlation between a texture's four quadrant windows is **+0.611** for
+Kamadan's filler tile 25 (floor +0.69) and **+0.148** for Lornar's snow
+tile 2 (floor +0.05) — the floor tracks how alike the artist drew the four
+variants, and the client has the same floor by construction. And at DISTANCE
+the question dissolves: pooled to 1 px per cell, every condition including
+pinned scores ≈ +0.01 — cell-scale repetition is invisible at range in any
+model; what survives at range is material-region structure.
+
+**The renders agree.** Headless EEVEE renders of the rebuilt scenes
+(1280×720, camera at eye height and high-oblique) show no lattice: Lornar's
+snowfield-to-horizon shot and Kamadan's canyon path are organic at every
+distance in frame. Same directory. Three render-side facts a follow-on
+session should not rediscover: **the scenes carry NO light objects** (the
+lighting is baked into the `gw_light` vertex colours; render with a plain
+white world background, strength 1.0 — an added sun double-lights and washes
+the albedo flat), **`gwcam.py` SAVES the .blend it opens** when run as its
+docstring shows (`bpy.ops.wm.save_mainfile` on exit — open via
+`open_mainfile` and never save, or work on a copy), and **kamadan.blend has a
+void-skirt plane at z ≈ −5002** holding 17.7% of its terrain vertices, which
+any "find open ground from the bbox" heuristic finds first.
+
+**What this closes and what it does not.** It closes §8's "does the ground
+still repeat at distance" — it does not, beyond a floor the art itself sets.
+The arrangement we ship is the arrangement the client computes (§7.9's
+2048/2048 selector, §7.12's 511/511 stream, §7.14's 212/212 cover words), so
+any repetition retail avoids that our RENDER does not, it avoids by rendering
+means — fog, mip selection, the lo path, the t3 diffuse/specular lerp, the
+lightmap's transfer curve — not by a different layout. The "no hypothesis
+left" branch did NOT fire. Scope: the client-truth side still rests on one
+`arg4 = 0` Lornar's block (§7.13's caveat), unchanged by this section.
+
+### 7.21 CLOSED: the arg4 = 0 caveat, and claim 1 confirmed against the client (2026-08-18)
+
+**Every prediction §8 recorded before this run came back exact.** Row 34429,
+tile block (4,3), 1024 of 1024 cells, client alive afterwards with no assert
+dialog.
+
+| | predicted, before the run | measured |
+|---|---|---|
+| authored / deferred cells | 590 / 434 | **590 / 434** |
+| `arg4` histogram | — | `{0:434, 1:189, 2:198, 3:203}` |
+| cells where H1's two readings differ | **331** | **331** |
+
+    H1  base quadrant == draw-CONSUMED model : 1024/1024 = 100.0%
+    H1  base quadrant == draw-SKIPPED  model :  693/1024 =  67.7%
+    H2  an authored cell draws its authored value : 590/590
+    H3  our cover words == the client's           : 735/735
+
+**H1 — `trnvariation` CLAIM 1 IS CONFIRMED, and this is its first test.** The
+claim is that an authored cell *still consumes its place in the PRNG stream*
+and then ignores what it drew; the rival skips the draw and shifts every later
+cell in the tile. Both readings are identical on a block where tag 3 is zero,
+which is every block ever captured before this one — so a claim carried since
+2026-08-14 had never been exposed to a case that could refute it. It survives
+at 1024/1024, and the 331 cells where the two disagree are **exactly** the 331
+predicted: on every one of them the consume model is right and the skip model
+is wrong. 67.7% is what the wrong model scores, which is the useful number —
+it is high enough to look like agreement to anyone not differencing the two.
+
+**H2** settles the other half: an authored cell's base quadrant IS the authored
+value, 590 of 590, and quadrant 0 appears only among the 434 deferred cells,
+which is §3.2's "tag 3 can only pin 1–3" seen from the client side.
+
+**H3 — §7.14 GENERALISES.** The physical-mask cover-word rule reproduces the
+client on **735 of 735** mixed cells of a block where 58% of cells carry
+authored tag 3. The 212/212 was not one block's accident, and tag 3 does not
+interact with the mask at all.
+
+**SO §7.13's SCOPE CAVEAT IS DISCHARGED.** Every client-truth number in
+§7.11–§7.14 rested on one Lornar's block with `arg4 = 0`; the rules now hold on
+a second map, a second block, and the authored branch that block could not
+reach.
+
+**THE INSTRUMENT HAD TO BE AIMED FIRST, and that is the reusable part.**
+`trnlayers.c` stores the first 512 cells that hit the breakpoint, so the block
+it captures is whichever the client builds first — four runs, four different
+un-requested blocks. Standing in the right place cannot aim it either: ranked
+by authored density the top four blocks in the archive have **zero** walkable
+probes, decorative terrain no player reaches. `trnblock.c` filters on
+`chunk+0x2A4`'s first dword, the block's unstepped reseed `(tx << 16) ^ ty`,
+and keeps the patch armed until that block completes. This run saw **33,639
+hits across 32 distinct blocks** — the client builds the whole map at load —
+and kept the 1024 that matched. `layers_row34429_t4_3_tag3.bin`.
+
+**AND IT TOOK TWO RUNS, for a reason worth carrying.** The first came back
+`hits 0`, with a perfectly correct ASLR-resolved breakpoint at `0x00DB1A25`
+(the client relocated to `0x00A50000`). The client started at 16:30:45, the
+map loaded at 16:30:52, and the injection landed at ~16:31:15. **Terrain
+builds ONCE, at map load** — arming the hook after that point sees nothing at
+all, and a human-paced "poll for the pid, then inject" round trip does not fit
+in seven seconds. `autoinject.py` waits at 25 ms and injects in the same
+breath: 1.5 s after the process appeared, on a run started *before* the client
+was launched. A zero-hit capture is also now diagnosable rather than
+ambiguous, because the sidecar records hits, matches and every block id seen —
+"the target never built" and "the hook never fired" are different failures and
+used to look identical.
+
+**Two run-side notes.** The map is reached with a borrowed map-id slot
+(`content/maps.toml [map.27]`, file id `0xB5FF`), and the client draws the
+SLOT's name and world map over our terrain — the owner reported the minimap
+"didn't really fit the map", which is that split showing, not a fault. Opening
+the world map (M) crashed the client on the first run; `Gw.log` stops mid-auth
+chatter with no error line, the same signature as §7.6's first crash. Not
+diagnosed, plausibly the same label/content mismatch, and avoidable: the
+capture needs no input at all.
+
+## 9. The prop fall-through: overstated, not stale, and the fix is in (2026-08-18)
+
+`PLAN.md` §4 and the importer's own docstring recorded this defect as **31.6%
+of Kamadan's prop area**, 13 of 207 sub-models, "and for the five rock models
+slot 0 is a near-black texture -- which is why they render dark rather than
+untextured."
+
+> **THIS SECTION'S FIRST VERSION SAID "31.6% -> 0.11%, stale by 287x", AND
+> THAT WAS WRONG** -- caught the same day by dating the code rather than
+> trusting the improvement. Both the layered chain and the `none` fallback
+> landed in `da35145` at **10:51 on 2026-08-14**, and the 31.6% claim landed in
+> `39db117` at **13:01 the same day**. The binding code has not changed since.
+> Nothing collapsed, and comparing the two numbers compares two different
+> metrics. The corrected account is below. It is a smaller claim and it is the
+> true one.
+
+**THE POPULATION NEVER MOVED: 13 sub-models then, 13 now.** Measured on today's
+Kamadan export, sub-models with no layered material number **exactly 13** --
+the 08-14 count, unchanged. What differs is which of them a reader calls
+"falling through":
+
+| metric, same data | sub-models | prop AREA |
+|---|---|---|
+| A: no layered material (**the 08-14 population**) | **13** | 55.61% |
+| B: left at Blender's DEFAULT, no explicit choice | **1** | **0.11%** |
+
+The gap between A and B is the **12 `none`-kind sub-models**, and the reason
+they are not a rendering defect is exact rather than approximate: the importer
+binds them to `slots[material_index]`, `material_index` is **0 on all 12**, and
+`by_image` is built in slot order -- so they land on material slot 0, **the
+same slot Blender's default would have given.** Explicit or defaulted, the
+pixels are identical. The 31.6% was therefore never 31.6% of *wrongly drawn*
+surface; it was the area of sub-models reached by a path nobody trusted.
+
+**Only ONE sub-model is genuinely unbound** -- model `0x3C5AC`, the AMAT
+`binary` path, 7 instances, 0.11% of prop area (2,665,424 of 2,342,145,300
+area-units) -- and Lornar's Pass has **none at all**, 0 of 391. Measured twice
+independently, by me and by an agent that wrote its own scripts and never saw
+mine, landing on the same sub-model and the same figures. **The fix below
+changes what is drawn on that one sub-model and nowhere else.**
+
+**AND THE ROCKS ARE NOT THIS DEFECT** -- this is the part of the original claim
+that is genuinely refuted rather than re-framed, and it is why the 12 above are
+not a defect at all. The correction has a measurement behind it:
+`tex_3C172.png` really is that texture and really is dark (mean rgba
+**[42, 40, 32]**, fully opaque, max channel 107) -- but the 10 models that draw
+it (not five; **156 instances**, not 123) are **single-sub-model models whose
+material kind is `none`, and it is the ONLY colour map any of them owns.**
+Classifying all four slots of the worst offender by pixel statistics:
+
+    slot 0  tex_3C172.png  512x256  mean [42,39,31]   <- the only COLOUR map
+    slot 1  tex_3C174.png  512x256  mean [127,127,253]   flat blue: a NORMAL map
+    slot 2  tex_32F2E.png  128x128  mean [128,127,127]   grayscale, r constant
+    slot 3  tex_2D885.png    64x64  mean [255,255,255]   flat white
+
+**12 of 12** fall-back sub-models draw the only colour map their model owns.
+So the binding is right, and the darkness is **the art**, not our bug. That
+matters because it was the stated motivation for decoding AMAT.
+
+**THE FIX, and it is the cheap half deliberately.** A sub-model whose material
+cannot be resolved now gets its own `gw_unbound_material` -- magenta, no image
+-- instead of keeping Blender's default index 0 and drawing whichever image
+landed first. This is the prop half of a convention the terrain path already
+had (`gw_untextured_<fid>`), whose docstring names this very defect as what it
+refuses to repeat. The render gets worse on 0.11% of one map and stops lying.
+
+**AND A CHECK THAT CAN ACTUALLY FAIL**, because the first version could not.
+`props_summary` now reports `unbound_faces` and `unbound_meshes` off the BUILT
+polygons -- without that the dump cannot express the defect at all, so nothing
+outside Blender could see it return. `test_blenderimport` §5b recomputes the
+expectation from the **model manifests** rather than the importer's own
+bookkeeping, so an importer that went back to defaulting fails even though its
+dump stays self-consistent (§7.15's lesson). On Pre-Searing that comparison is
+0 against 0 and would pass over the defect, so **§5c BREAKS one on purpose**:
+it copies a placed model's family to a scratch dir, points its first sub-model
+at an unresolvable material, and requires the marker on exactly those 578
+faces. The suite is 122 green, floor 122.
+
+**WHAT IS NOT DONE, and why the plan for it has changed.** `PLAN.md` §4 called
+decoding AMAT (`0xFAD`) "the real fix". **It is not the fix for this**, and the
+recorded chain is wrong in kind. Read out of the pinned client (build 38797,
+`asserts.py` + `codescan.py`, capstone under carve-out 1):
+
+- The layered branch **never touches AMAT at all**. `mtlIndex` selects a
+  material with `pixelShaderId != 8`, whose layers carry `texPathIndex`
+  resolved through `baseTexs[texPathIndex]` -- bounds- and null-checked exactly
+  where `modelfile.py`'s format-derived chain says (`MdlCombine.cpp:568`,
+  `MdlTex.cpp:673`). That is independent corroboration of the structural
+  reading, from different evidence.
+- The `binary` branch is the minority, taken when `pixelShaderId == 8`
+  (`MdlLoad.cpp:1150`), and its `amatIndex` is bounds-checked against a
+  **separate** `amatPathCount` (`MdlCombine.cpp:632`) that loads an
+  out-of-model resource.
+- **AMAT is a compiled SHADER binary, not a texture-index table.** Its parser
+  keys on 4-byte ASCII chunk tags `TECH` and `PASS`
+  (`Dx9ShaderBinary.cpp:482` and `:489`, the literals `0x48434554` and
+  `0x53534150` compared in code). So "-> the FA5 slot" is the wrong
+  destination: an AMAT file declares its own texture roles internally.
+
+So decoding AMAT is a **shader-decoding arc**, it would buy 0.11% of one map,
+and `modelexport.py`'s hypothesis should be corrected rather than pursued.
+**LABEL: this last block is DISASSEMBLY, not tested against a running client** —
+the exact failure mode that cost this arc four retracted claims (§7.18). The
+`TECH`/`PASS` tags and the bounds checks are solid because they are literal
+byte comparisons beside their own asserts; **which slot the client calls
+"diffuse" is NOT established** and the agent that found this flagged it.
+
+**One non-defect, recorded so it is not chased.** 59 of Kamadan's 145
+referenced models have no `.gwmodel.json` at all (40.7%), which looks alarming
+and is not: **all 59 have ZERO placements.** The list is the map's model
+dependency list, not its placement list. Lornar's is 135 of 135.
+
+## 10. The field of view is 75.000 degrees, and the axis is not (2026-08-18)
+
+`gwcam.py` has carried `--lens 28` marked NOT MEASURED since it was written.
+It is measured now, off a running client, and the number is exact.
+
+    fov = 1.3089969158172607 rad = 75.000 degrees, to the last bit
+    far plane = 48000.0 units
+
+**HOW, and why it is a read rather than a disassembly claim.** Chasing it
+statically ends at a VARIABLE, not a literal, so a static answer would have
+been a guess about which constant the camera lands on -- the shape of claim
+this arc has retracted four times (§7.18). The trace (build 38797):
+
+- `GmView.cpp`'s frustum builder at **`0x004ED3C0`** takes `fov` as its fourth
+  argument and asserts `fov != 0.0f` (**GmView.cpp:3737**). Its failure path
+  prints `Invalid frustum:` / `Fov = %f` / `Position = %f, %f, %f`.
+- Both callers (`0x004E2866`, `0x004E29F8`) push the float at
+  **`0x00C078C4`**, alongside `0x00C07860` and `0x00C0786C` -- the position
+  and target that same dump prints.
+- That global is FILLED by the camera update `0x004F6360` -> `0x004F3420`
+  (`this` = `0x00C079A8`), which asserts it again at **GmCam.cpp:1728**.
+- The far plane is the literal at `0x00946EBC` = **48000.0**.
+
+So `toolkit/clientscan/fovread.py` reads the global out of a live client with
+`ReadProcessMemory` -- no injection, no breakpoint, nothing written, and no
+6-second window to miss.
+
+**THE READ SELF-VALIDATES, which is what makes it a measurement and not a
+plausible number.** Beside the fov the same globals gave
+
+    position = (9435.99, 8077.0, -805.42)
+    target   = (9826.0,  8077.0, -716.57)
+
+and `content/maps.toml [map.148]` records Pre-Searing's spawn as
+**(9826.0, 8077.0)** -- the target equals the map's known spawn point, a
+number `fovread.py` was never given. The camera-to-target distance is
+**400.0 units**, inside the 25..750 zoom range the wiki documents. An address
+read from the wrong place does not land on a coordinate we already knew.
+
+**Conditions**: default settings. `HKCU\\Software\\ArenaNet` does not exist on
+this machine, so the client had no saved preferences and started on its own
+defaults -- which matters, because the 2018-06-06 patch added an in-game
+**Field of View slider**, so this is *a* default and not a universal constant.
+
+**WHAT IS NOT ESTABLISHED, and it is the half that decides framing: WHICH AXIS
+the 75 degrees spans.** The three readings are far apart -- at the 1.918
+aspect measured on the render area (1920x1001):
+
+| if 75 deg is | vertical | horizontal | diagonal |
+|---|---|---|---|
+| VERTICAL | 75.000 | 111.612 | 117.864 |
+| HORIZONTAL | 43.608 | 75.000 | 81.743 |
+| DIAGONAL | 39.063 | 68.463 | 75.000 |
+
+`gwcam.py` takes the **vertical** reading, because ArenaNet's own patch notes
+(2018-06-06, GWW) say the client moved to a vertical calculation and
+`-oldfov` restores the older **diagonal** one. That is documentation from the
+publisher about this exact mechanism, and it is still an assumption.
+**One upstream contradicts it**: GuildWarsMapBrowser states 50 degrees
+vertical (single witness, UPSTREAM, unverified). Nothing here reproduces 50 on
+any reading, so one of the two is wrong and it is not settled by argument.
+
+**Two routes tried that did NOT settle it**, recorded so they are not retried
+blind: a memory scan for the projection matrix over **399 MB** of the live
+client's committed pages found **zero** true perspective matrices (filtering on
+`m23 == 1`, `m33 == 0`, `1 < m22 < 1.5`, `m32 < 0`) -- it is not lying around
+in that form. And the `oldfov` flag itself does not carry a second FOV: the
+wide string sits at `0x00943254` in a 41-entry `{name, id, flags}` switch
+table as **id 25**, whose only reader is the bounds-checked getter
+`0x004997A0`, and of its 50 callers exactly **4** push id 25 -- all four
+converting the boolean to a MODE (0 or 2) fed to a shared text helper, none
+loading a second FOV-shaped constant. So on this build the flag does not
+select between two values the way its name suggests. *(Static, untested
+against a running client -- and what MODE 0 vs 2 does was not decoded.)*
+
+**THE TEST THAT WOULD CLOSE IT** is geometric and needs one client run: stand
+at a known point, screenshot, and locate a world feature whose position we
+already know exactly (we ship the terrain heights, so any ridge line will do).
+The pixel position of a known world point against a known camera pose gives
+the horizontal and vertical fields directly, with no free parameter.
+
+**One correction to a tool while here.** `toolkit/clientscan/asserts.py`'s
+census does not contain **GmCam.cpp:1728**, and an agent reasonably challenged
+that citation on those grounds. Re-read from the raw bytes at `0x004F38D9`:
+`push 0x6C0` (1728), `mov edx, 0x0094E064` -> `P:\\Code\\Gw\\Ui\\Game\\GmCam.cpp`,
+`mov ecx, 0x0094D2A4` -> `fov != 0.0f`. The citation stands and the census is
+incomplete -- worth knowing before trusting it as exhaustive.
+
+## 11. CLOSED: the 75 degrees is the HORIZONTAL field of view (2026-08-18)
+
+§10 measured the angle and could not name its axis. Two independent tests
+settle it, and they agree.
+
+**TEST 1 — the client's own projection scales, from memory.** A perspective
+projection holds `m00 = cot(h/2)` and `m11 = cot(v/2)`, and `m11/m00` is the
+render aspect. So each reading of "75 degrees" predicts a DIFFERENT pair, and
+the pairs are computable exactly. Requiring the two to be **adjacent floats**
+(gap ≤ 3 slots, so a coincidence has to be a coincidence of ORDER as well as
+of value) over 505 MB of the live client:
+
+| the pair a reading demands | sites found |
+|---|---|
+| **HORIZONTAL** — `cot(75/2)=1.303225` then `1.303225 × aspect = 2.499693` | **2** |
+| VERTICAL — `1.303225 / aspect = 0.679442` then `1.303225` | **0** |
+| DIAGONAL — `1.469707` then `2.819018` | **0** |
+
+`0x25D3A6E8` and `0x25DEA770`, gap 1 in both. Standard D3D builds
+`xScale = yScale / aspect`, so the SMALLER of the pair is the x scale — and
+`cot(75/2)` is the smaller. **The 75 degrees is the horizontal field.** The
+looser test in §10's first pass "confirmed" both readings because the two
+predicted pairs SHARE the value 1.303225 and differ only by a factor of the
+aspect; requiring adjacency is what separates them, and a bare-value search
+never could.
+
+**TEST 2 — geometry against a screenshot, which refutes the vertical reading
+outright.** Camera pose read live, terrain height read from our own export,
+one screenshot (`vault/research/terrain/fov_client.png`, 1920×1001, Ascalon
+City):
+
+    camera  (9435.993, 8077.0, -805.418)      target (9826.0, 8077.0, -716.565)
+    camera -> target = 400.000 units exactly
+
+All three points share y = 8077, so the whole problem lies in the vertical
+plane and the target projects to the exact centre row. The character stands at
+the spawn — **(9826, 8077), which is `content/maps.toml [map.148]`'s own
+spawn** — and its feet are at row **693** in the image. Inverting each reading
+to the ground height it would require:
+
+| reading | vertical fov | required feet Z | vs the terrain (642.02) |
+|---|---|---|---|
+| 75 is VERTICAL | 75.000 | 586.40 | **−55.62 — BELOW the ground** |
+| 75 is HORIZONTAL | 43.608 | 650.97 | +8.95 |
+| 75 is DIAGONAL | 39.063 | 658.64 | +16.62 |
+
+**A character cannot stand 55 units under the terrain**, so the vertical
+reading is refuted by the picture itself. The horizontal reading needs the
+smallest correction — 9 units, which a paved plaza sitting just above the
+height lattice supplies — and it is the one test 1 names independently.
+
+**So: horizontal 75.000 degrees, vertical 43.608 degrees at 1920×1001**, and
+the vertical moves with the render aspect while the horizontal does not.
+`gwcam.py` sets `sensor_fit = HORIZONTAL` and `angle_x = 75 deg` (lens 23.46 mm
+on a 36 mm sensor).
+
+**A CONFLICT WITH ARENANET'S OWN PATCH NOTE — now tested, §12.** The
+2018-06-06 note says the client moved to a *vertical* calculation with
+`-oldfov` restoring a diagonal one, and a horizontal-fixed projection is
+neither. §11's first version left that standing; §12 ran the aspect test and
+the client held HORIZONTAL fixed.
+
+**Instruments:** `toolkit/clientscan/fovaxis.py` (the adjacency test, read-only)
+and `fovread.py`. Both rerun in a minute against any running client.
+
+## 12. THE ASPECT TEST: the client holds HORIZONTAL fixed (2026-08-18)
+
+§11 named the test that would settle §11's own conflict with ArenaNet's patch
+note: **run it again at a different window aspect.** A horizontal-fixed
+projection keeps `m00` and moves `m11`; a vertical-fixed one does the reverse.
+It ran, on one client, resized mid-session from wide to portrait.
+
+| render area | aspect | m00 | m11 | horizontal | vertical |
+|---|---|---|---|---|---|
+| 1920 x 1001 | 1.918 | **1.303225** | 2.499693 | 75.000 | 43.608 |
+| 700 x 1001 | 0.699 | **1.303225** | 0.911346 | **75.000** | 95.311 |
+
+**`m00` does not move. `m11` tracks the aspect exactly.** At the portrait
+aspect the vertical reading requires the pair `(1.863612, 1.303225)` and it
+appears at **ZERO** sites, against 10 confirmed sites for the horizontal pair;
+the diagonal is zero as well. So the field of view the client holds constant is
+the HORIZONTAL one, and the vertical is whatever the window makes it — 43.6
+degrees on a wide window, 95.3 on a tall one.
+
+**Choosing the aspect was the part that needed care.** At aspect **1.0 the two
+hypotheses predict the SAME pair** — `cot(75/2)` twice — so a square window is
+the one shape that could not have settled anything. Portrait was chosen for the
+opposite reason: below 1.0 the two readings do not merely differ, they **swap
+which cotangent is larger**, so the answer is a qualitative flip rather than a
+fitted number.
+
+**THREE INDEPENDENT CHECKS THAT THE RESIZE WAS REAL**, because an OS window
+resize is not the same thing as a D3D9 swap-chain rebuild and a skeptic rated
+that LOW confidence before the run:
+
+1. The client's own record of its render size moved to `(700.0, 1001.0)` at
+   **175 sites**; the stale `(1920.0, 1001.0)` survives at 27.
+2. **`m11` moved at all.** Had the client ignored the resize, the projection
+   would still read 2.499693 — the measurement itself refutes the confound.
+3. The portrait screenshot (`fov_client_portrait.png`) shows **no letterbox**:
+   the world fills the window, the HUD re-laid itself out, the horizontal
+   extent is preserved and the vertical extent grows hugely. That is the same
+   verdict from pixels, with no arithmetic at all.
+
+**THE DESIGN WAS REVIEWED ADVERSARIALLY BEFORE IT RAN, and the reviewer
+returned FLAWED.** Its primary attack was exactly the aspect-1.0 collision —
+and worse than uninformative there, because `fovaxis.py`'s partner check
+searches a window that always contains the found float itself, so at aspect 1.0
+each hypothesis would *self*-confirm off one stored value. That is a real
+defect in the tool at that one aspect. It did not bite because the aspect was
+pinned to 0.699 first, where the predictions sit 0.39 apart — roughly 2,000×
+the tolerance. **A near-square window is worse than an exact one**: at 0.9999
+the two predictions are ~2.6e-4 apart, at the tool's own noise floor, where
+exact 1.0 at least fails loudly as UNSETTLED.
+
+**The reviewer's other live confound — a second in-engine camera (minimap,
+shadow, cutscene) contributing a matching pair by coincidence — is answered by
+the two runs together.** `fovaxis.py` confirms on numeric adjacency alone and
+does not tie a hit back to the camera chain, so a decoy is possible in
+principle. But a decoy would have to produce the horizontal pair at BOTH
+aspects, never produce the vertical pair at either, and have its second value
+land on `cot(75/2) × aspect` for two different windows — 2.499693 and then
+0.911346. A camera with its own field of view does not track OUR window twice.
+
+**SO THE PATCH NOTE AND THIS CLIENT DISAGREE, and the disagreement is now a
+measurement rather than a loose end.** On build 38797, launched without
+`-oldfov`, the projection is horizontal-fixed. What that means for ArenaNet's
+"vertical calculation" wording is still NOT established — the honest options
+are that the slider is expressed horizontally while something else is derived
+vertically, that the behaviour changed again after 2018, or that the note
+describes the *option's* framing rather than the matrix. **Naming one would be
+a guess**, and this arc has retracted four of those. What is measured is the
+table above.
+
+**Cost: one client run, two scans, one screenshot.** `fovaxis.py` needs no
+argument — it reads the fov and the window itself and recomputes the
+predictions, so re-running it after any resize is the whole procedure.
+
 ## 8. What is still open
 
+- ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
+  NO beyond the art's own floor.** The export sits on the ideal-random floor
+  on every window of both maps (pinned control separates 3–9×), and the
+  arrangement is the client's own (2048/2048, 511/511, 212/212). If a live
+  side-by-side against retail still shows a difference, look at RENDERING —
+  fog, mips, the lo path, t3's lerp, the lightmap curve — not at layout.
+  Instrument: `studies/terrain/repeatprobe.py`, artifact-gated, reruns offline.
+- ~~The `arg4 = 0` scope caveat (§7.13/§7.14).~~ **DISCHARGED 2026-08-18,
+  §7.21.** Row 34429 tile (4,3) captured whole: 1024/1024, 590 cells with
+  authored tag 3. `trnvariation` claim 1 confirmed against the client for the
+  first time (1024/1024 consume vs 693/1024 skip, the 331 differing cells
+  exactly as predicted); an authored cell's base quadrant is its authored
+  value 590/590; §7.14's cover-word rule holds 735/735 on the authored block.
+  The target-selection record below is kept because the reasoning is the
+  reusable part.
+- **How that target was chosen, and the error worth not repeating.** Corpus
+  scanned 2026-08-18: 181 of 349 maps
+  author tag 3 somewhere. Ranked by authored count alone the winner is row
+  46101 tile (1,1), 767/1024 — **and it is unreachable: 0 of 64 walkable
+  probes.** So are the next three (132053 t(2,7), 132040 t(2,4), 59717
+  t(7,2)): all 0/64. **Dense authored tag 3 sits mostly on decorative terrain
+  the player cannot stand on**, which a density ranking cannot see, and this
+  is the same shape of error as §7.5's probe — a number that is correct about
+  the wrong thing.
+  **The target is `row 34429, file id 0xB5FF, tile block (4,3)`** — 590
+  authored of 1024, **50 of 64 probes walkable**, 757 of its 1024 cells
+  landing in exactly one trapezoid. Spawn **(1584.0, 1488.0)**, cell
+  (144,112), the block's centre: 1 trapezoid in its own mesh, 0 in Kamadan
+  and 0 in Pre-Searing, against a base rate of 14.5% walkable over the map's
+  rect. Same map's fallbacks, all walkable: t(3,2) 519, t(4,4) 458, t(2,2)
+  550. The map is 256×256 and the client's own table cannot name it (35 rival
+  rows); it loads by file id through a test slot, the pattern `[map.143]` and
+  `[map.144]` already establish.
+- **THE PREDICTION, stated before the run and CONFIRMED EXACTLY by §7.21**
+  (house rule: a probe with no stated expectation can be rationalised into
+  agreeing with anything — this one could not have been, and was not). Block
+  (4,3) holds 590 authored cells AND 434 deferred ones, which makes it the
+  first block in the arc that can test **`trnvariation` claim 1 — "the draw
+  happens either way"** at all. Every prior capture had `arg4 = 0` on every
+  cell, where the two readings are identical by construction.
+  - **H1-true** (claim 1 stands): an authored cell consumes its place in the
+    stream and ignores what it drew.
+  - **H1-false**: an authored cell skips the draw, shifting every later cell
+    in its tile.
+  These predict **different base quadrants on 331 of 1024 cells (32.3%)** —
+  the capture discriminates them outright. Under H1-true our model predicts
+  for that block: layer counts `{1: 289, 2: 326, 3: 409}`, overlay cover
+  words `{0x0:153, 0x1:210, 0x2:133, 0x3:166, 0x8000:105, 0x8001:127,
+  0x8002:76, 0x8003:174}`, base quadrants `{0:110, 1:302, 2:311, 3:301}`.
+  That quadrant-0 deficit is itself a signature: authored values can only pin
+  1–3, so quadrant 0 is reachable only through a draw (§3.2).
+  §7.14's cover-word rule should hold unchanged regardless of tag 3; if it
+  does not, the 212/212 was one block's accident.
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
   (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
@@ -1546,6 +2135,20 @@ edit to `cell_layers` or `corner_selector`.
   factory's argument that lands at stage record +0x10. Named, not
   understood, and asserted nowhere.
 
+- ~~GW's FOV is unmeasured.~~ **MEASURED 2026-08-18, §10: exactly 75.000
+  degrees** at default settings, with a far plane of 48000, read live from
+  `0x00C078C4` by `toolkit/clientscan/fovread.py` and self-validated against a
+  known spawn point. ~~Still open: which axis.~~ **ALSO CLOSED, §11: it is
+  the HORIZONTAL field** — the projection's adjacent scale pair puts
+  cot(75/2) as the x scale (2 sites; the vertical and diagonal pairs appear
+  nowhere), and the vertical reading is refuted geometrically because it would
+  put the character 55 units under the terrain. Vertical is 43.608 deg at
+  1920x1001 and moves with the aspect. ~~Left open: the conflict with
+  ArenaNet's 2018 patch note.~~ **TESTED 2026-08-18, §12**: resized to a
+  portrait window mid-session, `m00` stayed pinned at cot(75/2) while `m11`
+  tracked the aspect, and the vertical pair scored ZERO sites. The client
+  holds HORIZONTAL fixed. Why the patch note says *vertical* remains
+  unexplained, and is left that way rather than guessed.
 - The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
   measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
   is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and

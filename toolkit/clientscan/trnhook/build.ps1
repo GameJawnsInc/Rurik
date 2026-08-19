@@ -1,6 +1,13 @@
 # Build trnhook.dll as 32-bit, because Gw.exe is 32-bit and a 64-bit DLL
 # cannot be injected into it. MSVC only; no third-party library is linked, so
 # CLAUDE.md carve-out 3 covers this and the second gate needs no new row.
+#
+# The source defaults to trnhook.c so every existing invocation is unchanged;
+# pass another to build a variant: `& build.ps1 trnblock.c`. The DLL takes the
+# source's own base name, so variants never overwrite each other's output --
+# which matters because inject.py takes the DLL path and a stale one would
+# inject silently.
+param([string]$Source = "trnhook.c")
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $msvc = Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\VC\Tools\MSVC\*" -Directory |
@@ -22,10 +29,12 @@ $env:PATH = "$($msvc.FullName)\bin\Hostx64\x86;$env:PATH"
 
 Push-Location $here
 try {
-    & $cl /nologo /W3 /O2 /LD /MT trnhook.c /Fe:trnhook.dll `
+    if (-not (Test-Path (Join-Path $here $Source))) { throw "no such source: $Source" }
+    $stem = [IO.Path]::GetFileNameWithoutExtension($Source)
+    & $cl /nologo /W3 /O2 /LD /MT $Source /Fe:"$stem.dll" `
         /link /SUBSYSTEM:WINDOWS kernel32.lib
     if ($LASTEXITCODE -ne 0) { throw "cl failed with $LASTEXITCODE" }
-    $dll = Join-Path $here "trnhook.dll"
+    $dll = Join-Path $here "$stem.dll"
     $bytes = [IO.File]::ReadAllBytes($dll)
     $pe = [BitConverter]::ToInt32($bytes, 0x3C)
     $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)

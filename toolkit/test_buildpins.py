@@ -193,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 82,
-      "82 class-(a) occurrences -- the census",
+check(len(live) == 86,
+      "86 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -241,8 +241,9 @@ check(len(live) == 82,
       f"this check should be read against: the liability is real and it is "
       f"guarded at the point of use. Do not scrub them. If this number should "
       f"come DOWN, the way is genericvalue.py's -- derive the sites from a table "
-      f"the client itself carries instead of naming them")
-check(len(files) == 11, "across 11 files", f"{len(files)}: {sorted(files)}")
+      f"the client itself carries instead of naming them."
+      f" **86 on 2026-08-18, +4 from two files that did not exist that morning** -- clientscan/fovread.py (3: the field-of-view global at 0x00C078C4 and the camera position and target beside it, 0x00C07860/0x00C0786C) and clientscan/fovaxis.py (1: the same fov global again). These are the CHEAPEST class in the census and the one the mitigation above fits best: both tools resolve every address as an RVA off the module base read at run time, so ASLR is handled rather than assumed, and both refuse loudly when the fov reads 0.0 -- which is what a wrong address looks like. They also earned their keep: the measurement they exist for closed studies/terrain FINDINGS 10-12 (the field of view is 75.000 deg HORIZONTAL, far plane 48000) after a static hunt ended at a runtime VARIABLE with no literal to read.")
+check(len(files) == 13, "across 13 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed
 # the two live-memory readers would be reassuring and wrong.

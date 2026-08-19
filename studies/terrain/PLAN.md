@@ -1,5 +1,13 @@
 # The terrain texturing arc — scope
 
+> **THE ARC CLOSED 2026-08-18. This file is the ORIGINAL SCOPE and is kept for
+> the reasoning, not the status.** A cold session should read
+> [HANDOFF.md](HANDOFF.md) first (the traps), then [FINDINGS.md](FINDINGS.md)
+> §7.6–§12. All six rungs landed, the mechanism is locked to client captures,
+> the ground does not repeat beyond the art's own floor, the prop fall-through
+> is closed, and the field of view is measured at 75.000° horizontal. §4's
+> "fold in while here" note below is superseded — see FINDINGS §9.
+
 **PROPOSAL, 2026-08-14.** A proposal until the owner adopts it, like every scope
 in this repo. Written the day the props round trip landed, because that arc ends
 with a fully textured prop layer standing on **bare grey ground**.
@@ -267,6 +275,22 @@ the visible result.
 ---
 
 ## 4. Fold in while here: the prop fall-through
+
+> **DONE 2026-08-18 -- and the number below is OVERSTATED rather than stale;
+> see [FINDINGS.md](FINDINGS.md) §9.** The population is unchanged (13
+> sub-models with no layered material, then and now), but **12 of the 13 bind
+> to material slot 0 explicitly, which is the same slot the default gives** --
+> so they were never drawn wrongly. Only **one** sub-model is genuinely left at
+> Blender's default: **0.11% of Kamadan's prop area**, and **zero** on
+> Lornar's Pass. The cheap half landed: that sub-model now draws
+> `gw_unbound_material` instead of slot 0, with `test_blenderimport` §5b
+> checking it against the manifests and §5c breaking one on purpose.
+> **Two claims below are REFUTED.** The rocks are not this defect -- all 12
+> fall-back sub-models draw the only colour map their model owns, and
+> `tex_3C172.png` is simply a dark rock albedo. And "decoding AMAT is the real
+> fix" is wrong in kind: AMAT is a compiled SHADER binary (`TECH`/`PASS`
+> chunks), not a texture-index table, so it is a shader arc that would buy
+> 0.11% of one map.
 
 Not part of this arc, but adjacent and cheap, and it is a live defect.
 

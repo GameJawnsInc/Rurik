@@ -6,20 +6,24 @@ restate it, for the reason `CLAUDE.md` opens with. What is here is what the code
 commits cannot tell you: the traps, and the things a cold session predictably gets wrong.
 
 **Read in this order.** `PLAN.md` §3 *R-ISLE* (where it is) → `studies/isle/PLAN.md` §8
-(the eleven-rung ladder, per-rung status) → `studies/isle/FINDINGS.md` §"Rung 6 prep" and
-§"Rung 6b" (what the two live runs settled). `studies/isle/PLAN.md` is ~1,000 lines; do not
-read it front to back to start work.
+(the eleven-rung ladder, per-rung status) → `studies/isle/FINDINGS.md` §"Rung 7, LIVE #2"
+(the damage formula, and the three claims review overturned) and §"Rung 6b" (the east).
+`studies/isle/PLAN.md` is ~1,000 lines; do not read it front to back to start work.
 
 ---
 
 ## 1. The one-paragraph state
 
-**Rungs 1–6 are done.** The Isle is mapped: two live captures (`20260817T231139` west and
+**Rungs 1–7 are done.** The Isle is mapped: two live captures (`20260817T231139` west and
 centre, `20260818T094648` east) give an agent-id ↔ definition-slot ↔ model ↔ `enc_name` ↔
 coordinate table for ~110 stations, the range ladder is closed to ±12.4 u, and the east
-holds the skill-bar foe Masters with their pets and spirits. What is **not** done is
-everything downstream of naming and damage: no body on the island has a *name* we can
-prove, and no swing has been taken. Next is **rung 7, the damage pass**.
+holds the skill-bar foe Masters with their pets and spirits. **Rung 7 landed 2026-08-18**
+(`20260818T132739`, 495 damage events): the whole outbound damage formula is measured and
+adversarially verified, `GV_CRITICAL = 17` is CONFIRMED after months CONTESTED, and gate
+1's attribute channel came free with it. Read `FINDINGS.md` "Rung 7, LIVE #2" — especially
+its corrections, because three of that pass's own claims were overturned by review. What
+is **not** done: no body on the island has a *name* we can prove. Next is **rung 8, the
+effects pass**, whose channel question is already answered once (see §4).
 
 ## 2. What will bite you, in the order it will bite
 
@@ -32,7 +36,29 @@ at the *Suits*, its profession (Warrior) contradicts GWW's Elementalist Master o
 there was no health datum to break the tie. **Structure is evidence; a name is not, until
 it is rendered.** The one time a multi-axis structural claim survived (§"Rung 6b": profession
 + level + allegiance + summon shape agreeing at once, across three bodies) it is still
-labelled RECONSTRUCTION.
+labelled RECONSTRUCTION. Rung 7's Master of Damage is the same shape and the same label,
+even though it now agrees on **five** axes — profession 6, level 20, health 590, position
+between two target stations, and its own announced damage total matching our summed
+points. Five agreeing axes is still not a rendered name.
+
+**CHECK THE VAULT BEFORE YOU DESIGN THE SESSION. It has happened three times now.**
+Rung 6's 70-step targeting plan became 18 steps of walking once someone measured that
+names arrive unprompted. Rung 7's analyzer found its whole proving corpus in a *detour*
+nobody planned. Rung 8's central question — does effect application ride `0x0042`, with
+the design expecting a refutation — was answered by **97 applies already sitting in
+`vault/captures/live/`**, along with the hex and enchantment the same document called
+"the largest single miss across all four families". In all three cases the incidental
+traffic outvalued the deliberate traffic, and in all three the cost of checking first
+was under an hour. **Point the reader at the corpus before the client.**
+
+**And a number is not a result until you have asked what its error bar is.** The rung-7
+first pass reported `D = 38.16 and 39.88` against a predicted 40 and read it as a near
+miss; the interval is [37.30, 42.00] and contains 40 at −0.8σ. It also reported a rank
+"kink ratio" of 2.23 against 2.4 — whose 95% interval turns out to be [−17, 24], a
+statistic that cannot tell 2.4 from 1.0. Both survived a whole analysis pass and died to
+a bootstrap that needed no new data. **The strongest evidence in that run — a band test
+with no free parameters — was available from the first minute and nobody made it until an
+adversary asked what pinned the number.**
 
 **Targeting buys you almost nothing, and a plan full of it wastes the run.** Measured: the
 four spot-check steps produced **0 new stations out of 95 creates**. Names, slots, models,
@@ -74,13 +100,27 @@ its directory disagree, believe the directory and re-run `--assemble`.
 
 ## 4. Open, and worth taking in this order
 
-1. **Rung 7 — the damage pass.** Auto-attack only against the Suits, aggregated on
-   **(target, cause, swing-kind)**. Design and confounds in `studies/isle/PLAN.md`. The
-   armor bench and the Master of Damage are already located and their coordinates recorded.
-2. **Rung 8 — the effects pass.** Its material was found a rung early: the east's foe
-   Masters, with pets and spirits, at known coordinates. Order still stands — Torches first,
-   because if effect application does not arrive on `0x0042` the channel assumption is
-   refuted in two minutes rather than a whole session.
+1. **Rung 8 — the effects pass. PREPPED, and its exit criterion was met OFFLINE** (see
+   FINDINGS "Rung 8 prep"). The corpus already held **97 `0x0042` applies**, the
+   apply/remove lifecycle is exact to the millisecond, **field 3 is the applier's
+   attribute rank**, and hexes and enchantments — the design's "largest single miss …
+   no instrument at all" — were **already captured and merely unidentified** (skill 984
+   = Torch Enchantment, 998 = Torch Hex). The session is staged at
+   `vault/plans/isle_rung8_effects.txt` for the four things the vault cannot give:
+   skill **999** (the degeneration torch), the five foe Students' condition ids,
+   degeneration in pips, and rung 7's rank ladder. **The torches are not clicked** —
+   they re-apply every ~2 s to anyone adjacent.
+2. **The rung-7 residual is the highest-value single measurement left on the island**, and
+   it is small: **one block at rank 7 or 6, or one weapon with a different requirement.**
+   Three separate rung-7 results (the formula's unmet-requirement term, the rank-8
+   critical, and the 0.29 ratio) all fail at the same term, and the data cannot say which
+   of {divisor, strike-level drop, crit rule} carries it. Anything that touches the Isle
+   again should carry this block.
+3. **Rung 7 is DONE and its analyzer is the model for the next one** — build the consumer
+   BEFORE the session, because it is what turns a run into a result. But note the two
+   traps it hit: `tape.load_tape` times are connection-local while marks are
+   capture-global (add `info["t0"]`, or blocks come back silently MISLABELLED, not
+   unlabelled), and a point estimate without an interval will be over-read every time.
 3. **Three definition indices — 130, 139, 146 — have never appeared in any capture we
    hold.** Seven of their ten siblings turned up in the east exactly as predicted. If a
    future pass does not produce these three, they belong to another map and the Isle roster
@@ -93,8 +133,9 @@ its directory disagree, believe the directory and re-run `--assemble`.
    and a live conflict about whether `0x0020` field 7 is a unit vector or a world position —
    the repo currently holds both readings.
 5. **Loopback residuals**, cheap, any harness window: the multi-word varint send, the `0x5F`
-   overhead channel (never bare-sid — it crashes the client), skill 2077's render, and the
-   energy drain-pool probe, which has never been run.
+   overhead channel (never bare-sid — it crashes the client; but note rung 7 observed 18
+   healthy `0x5F` lines paired with `0x5D`, so the hazard is the BARE sid, not the opcode),
+   skill 2077's render, and the energy drain-pool probe, which has never been run.
 
 ## 5. What NOT to redo
 

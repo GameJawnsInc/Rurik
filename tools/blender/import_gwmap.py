@@ -121,8 +121,12 @@ Three deliberate limits, stated so a render is read for what it is:
     nothing measured orients the quadrant yet.
   * **A tile whose texture did not decode gets its OWN empty material**
     (`gw_untextured_<fid>`), never slot 0 -- the prop fall-through defect
-    (31.6% of Kamadan's prop area silently drawing whichever image landed
-    first) is exactly what this refuses to repeat.
+    is exactly what this refuses to repeat. Props now do the same
+    (`gw_unbound_material`). That defect was recorded at 31.6% of Kamadan's
+    prop area; measured, **one** sub-model is genuinely left at the default
+    (0.11%, the AMAT `binary` path) and none at all on Lornar's Pass -- the
+    rest of that 31.6% binds to slot 0 explicitly, which is the slot the
+    default gives anyway. `studies/terrain/FINDINGS.md` §9.
 
 PROPS (format_version 2, 2026-08-13). When the export carries a props sidecar,
 every placement becomes a PROXY object in a `<name>.props` collection --
@@ -1261,6 +1265,29 @@ def gwmodel_materials(meta, models_dir):
     return by_image, per_sub
 
 
+UNBOUND_MATERIAL = "gw_unbound_material"
+
+
+def unbound_material():
+    """The shared marker material for a sub-model we could not bind.
+
+    One datablock for the whole scene, named so it is obvious in the material
+    list, and MAGENTA rather than plausible: the point is that the surface
+    reads as a gap. The terrain path uses `gw_untextured_<fid>` for the same
+    reason; this is the prop half of that convention, and the render gets
+    worse and stops lying.
+    """
+    mat = bpy.data.materials.get(UNBOUND_MATERIAL)
+    if mat is None:
+        mat = bpy.data.materials.new(UNBOUND_MATERIAL)
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        if bsdf is not None:
+            bsdf.inputs["Base Color"].default_value = (1.0, 0.0, 1.0, 1.0)
+        mat.diffuse_color = (1.0, 0.0, 1.0, 1.0)
+    return mat
+
+
 def gwmodel_mesh(meta, positions, idx, mesh_name, uvs=(),
                  materials=None, sub_images=None):
     """A Blender mesh for one model, in Blender's world-up convention.
@@ -1316,15 +1343,31 @@ def gwmodel_mesh(meta, positions, idx, mesh_name, uvs=(),
     # One material slot per sub-model TEXTURE SLOT, so a face draws with the
     # image its sub-model names. See `modelexport`'s `texture` field for how
     # well supported that binding is -- it is INFERRED, not proven.
+    # A sub-model whose material could not be resolved gets ITS OWN slot, never
+    # slot 0. Leaving the default meant those faces silently drew whichever
+    # image happened to land first, which reads as a deliberately textured
+    # surface rather than as a gap -- the same failure shape as the specular-map
+    # incident, and the defect the terrain path above already refuses to repeat.
+    # MEASURED 2026-08-18: one sub-model of Kamadan (model 0x3C5AC, the AMAT
+    # `binary` path), 0.11% of prop area, and none at all on Lornar's Pass.
+    # The 12 `none`-kind sub-models are NOT here -- they resolve a slot above
+    # and merely happen to resolve slot 0, which is why this fix moves so few
+    # pixels and why the recorded 31.6% overstated it (FINDINGS §9).
     if materials:
         slot_of = {}
         for image_name, mat in materials.items():
             slot_of[image_name] = len(mesh.materials)
             mesh.materials.append(mat)
+        unbound_slot = None
         for poly, s in zip(mesh.polygons, face_sub):
             name = sub_images.get(s)
             if name in slot_of:
                 poly.material_index = slot_of[name]
+                continue
+            if unbound_slot is None:
+                unbound_slot = len(mesh.materials)
+                mesh.materials.append(unbound_material())
+            poly.material_index = unbound_slot
     return mesh
 
 
@@ -1454,9 +1497,30 @@ def props_summary(objs, gwmap):
                                 for v in obj.data.vertices),
                     "zmax": max((obj.matrix_world @ v.co).z
                                 for v in obj.data.vertices)})
+    # UNBOUND FACES, counted off the BUILT polygons. Without this the dump
+    # cannot express "a surface drew the marker", so nothing outside Blender
+    # could ever catch the fall-through coming back -- and a check that cannot
+    # fail is not a check. Read per mesh datablock (props share them) so the
+    # count is of distinct geometry rather than of placements.
+    unbound_meshes, unbound_faces = [], 0
+    for name in sorted({o.data.name for o in objs if o["gw_real"]}):
+        mesh = bpy.data.meshes.get(name)
+        if mesh is None:
+            continue
+        slots = [i for i, m in enumerate(mesh.materials)
+                 if m and m.name == UNBOUND_MATERIAL]
+        if not slots:
+            continue
+        n = sum(1 for p in mesh.polygons if p.material_index in slots)
+        if n:
+            unbound_meshes.append({"mesh": name, "faces": n})
+            unbound_faces += n
+
     pd = gwmap.props or {}
     return {"count": len(objs),
             "sidecar_count": pd.get("count", 0),
+            "unbound_faces": unbound_faces,
+            "unbound_meshes": unbound_meshes,
             "outlined": sum(1 for o in objs if o["gw_proxy"] == "outline"),
             "real": sum(1 for o in objs if o["gw_real"]),
             "proxy": sum(1 for o in objs if not o["gw_real"]),

@@ -238,6 +238,71 @@ user32.AttachThreadInput.restype = wintypes.BOOL
 user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c_void_p,
                                          wintypes.UINT]
 user32.SystemParametersInfoW.restype = wintypes.BOOL
+user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                ctypes.c_int, ctypes.c_int, wintypes.UINT]
+user32.SetWindowPos.restype = wintypes.BOOL
+
+SWP_NOMOVE = 0x0002
+SWP_NOZORDER = 0x0004
+SWP_NOACTIVATE = 0x0010
+
+# THE GEOMETRY EVERY FRACTIONAL CLICK IS CALIBRATED IN, and why this is a
+# constant rather than a comment. `click()` takes fractions "so the same action
+# script survives a resized window", and for anything the game draws by
+# proportion that is true. **Character select is not drawn by proportion.** On
+# 2026-08-18 another session left the client at 716x1040 and PLAY_FX/PLAY_FY --
+# measured in a ~1926x1039 window -- landed on **Delete**, six times, opening
+# the "type the name to delete Test Warrior" confirmation. Nothing was lost
+# (that dialog needs the name typed and defaults to Cancel) but the harness
+# reported only "clicks landed: True" and a failed map checkpoint, so a run that
+# opened a DELETION dialog looked exactly like an ordinary timeout.
+#
+# The fix is to stop guessing where the button moved to and make the window the
+# size the calibration assumes. `normalize_window` is called before the Play
+# click; if it cannot get there, `_play` REFUSES to click rather than firing at
+# a coordinate whose meaning is unknown -- fail closed, because the failure mode
+# is destructive and silent.
+CLIENT_W, CLIENT_H = 1936, 1040
+# How far the aspect may drift before a fractional click is meaningless. 2% is
+# well inside the 1.862-vs-0.688 disaster and well outside ordinary border jitter.
+ASPECT_TOLERANCE = 0.02
+
+
+def window_size(hwnd):
+    """(width, height) of the window rect, or None if it cannot be read."""
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return None
+    return (rect.right - rect.left, rect.bottom - rect.top)
+
+
+def normalize_window(hwnd, w=CLIENT_W, h=CLIENT_H):
+    """Resize the client to the geometry the click fractions were measured in.
+
+    Returns (ok, before, after). `ok` is True when the window ends up within
+    ASPECT_TOLERANCE of the target aspect -- not when SetWindowPos returns true,
+    because a window can refuse to take the size it was given and the only thing
+    that matters here is the size it actually IS.
+
+    Position and z-order are left alone (SWP_NOMOVE|SWP_NOZORDER) and the window
+    is not activated: this runs while the harness is already driving the client,
+    and stealing activation here would fight `_force_foreground` rather than help
+    it. Resizing a windowed D3D client is something the game already handles --
+    the operator does it by dragging, which is how it got to 716 wide.
+    """
+    before = window_size(hwnd)
+    if before is None:
+        return False, None, None
+    if before != (w, h):
+        user32.SetWindowPos(hwnd, None, 0, 0, w, h,
+                            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)
+        time.sleep(0.4)          # let the client rebuild its UI at the new size
+    after = window_size(hwnd)
+    if not after or after[1] <= 0:
+        return False, before, after
+    want = w / float(h)
+    got = after[0] / float(after[1])
+    return abs(got - want) / want <= ASPECT_TOLERANCE, before, after
 SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
 _fg_lock_cleared = False
 

@@ -754,6 +754,17 @@ GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
+# [agent_id, dword]. Grows the char client's char-by-id table ([charctx+0x7CC],
+# stride 0x38, count +0x7D4) to COVER the agent id, then stores the dword at
+# record+0x30 -- and the grow runs BEFORE the bounds check (recv 0x0091ECA0 ->
+# 0x008124E0 -> ensure 0x00817A80, read on 38833), so one send REGISTERS an id.
+# That table is what GmAgentDoll's CharBy(agentId) indexes when the commander
+# panel draws a hero, and agent 200 past its count was the 2026-08-18 click
+# crash (Array:587). 0x0020 does NOT grow it -- the create path builds a char
+# OBJECT but never the by-id entry. Retail sends value = percent<<24 (100<<24
+# the mode, 38-connection census); the NAME IS OURS, from the mechanism -- no
+# ArenaNet string names this opcode. studies/pvpui/FINDINGS.md 27.
+GAME_SMSG_CHAR_TABLE_VALUE = 0x009A
 # The equipped-items bag: type 2, model 21, nine slots, weapon in slot 0.
 # CORROBORATED across ldufr (GmInventory.c:21-27, GmInventory.h:6-10) and
 # gw-preservation (item/item.go:139-152).
@@ -2501,10 +2512,14 @@ HERO_SWAP = False
 # ZEROES that field itself in its create path -- so with this flag off, clicking
 # the party-window hero button asserts `heroData->agentId` / GmView.cpp(5898) no
 # matter what any other message carries. OFF is the arm that crashes EARLIER,
-# not the safe one; ON, the same click gets past GmView entirely and stops at
-# ItCliApi.cpp(488). It stays off only because no full session has been measured
-# with it on, which is a cheap run. studies/pvpui/FINDINGS.md 25 -- and 26 for
-# what clears ItCliApi:488 (pair with --hero-inventory 2 --hero-bags).
+# not the safe one; ON, the same click gets past GmView entirely. The "no full
+# session measured with it on" reason for staying off is GONE as of 2026-08-18:
+# the whole cluster ran to a stable, open commander panel (pair with
+# --hero-inventory 2 --hero-bags --hero-char --hero-appearance 116366;
+# studies/pvpui/FINDINGS.md 25 through 28.3). It stays off now only as flag
+# hygiene -- every knob in this block is opt-in so old arms stay reproducible
+# -- and flipping the cluster's defaults together is a decision worth making
+# deliberately once the hero rig stops being an experiment.
 HERO_ACTIVATE = False
 # HeroActivate's field 3, and the question the old comment posed ("if field 3
 # really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
@@ -2532,6 +2547,26 @@ HERO_INVENTORY = 0
 # which is enough for a one-hero rig and wrong past that -- a per-hero key
 # wants plumbing only after the single-hero click survives.
 HERO_BAGS = False
+# Register each hero's agent id in the char client's char-by-id table (one
+# 0x009A per hero slot, value 100<<24 as retail sends it). This is the floor
+# AFTER ItCliApi:488: the cleared click reached GmAgentDoll::CharBy(agentId),
+# which died on Array:587 because nothing had ever grown that table past 200
+# (measured 2026-08-18, full stack in the harness capture). CharBy tolerates a
+# REGISTERED id whose slot holds no char object -- it returns NULL and the
+# doll falls back to the hero record -- so registration alone is the minimal
+# arm. --hero-body is NOT this fix: 0x0020 builds a char object but never the
+# by-id entry (read end to end on 38833). studies/pvpui/FINDINGS.md 27.
+HERO_CHAR = False
+# 0x0074's two u32s at msg +0x14/+0x18 (builder d1/d2), stored verbatim at
+# hero-record +0x14/+0x18 (worker 0x81DB70, stores at 0x0081DBE1/0x0081DBE7,
+# 38833) and read back by the commander paperdoll's fallback: PushAppearance
+# hands the pair to 0x0082DB40 -> CpsPlayer/CpsMonster (Gw/Composite/), which
+# opens a FILE by it -- zeros assert `fileId` File.cpp:367, which is exactly
+# the 2026-08-18 14:23 click. So this pair is the hero's APPEARANCE COMPOSITE
+# file reference. ANSWERED by the owner's click, 2026-08-18: 116366 (the
+# burrower's self-contained unit file) RENDERED and the commander panel
+# opened and stayed -- the full ladder is studies/pvpui/FINDINGS.md 28.3.
+HERO_APPEARANCE = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -2786,6 +2821,17 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 #      0x002F was tested and did nothing, and it retires that whole line: there
 #      is no post-construction setter to reach, so allegiance is decided when the
 #      agent is CREATED and no later message can correct it.
+#      **CORRECTED 2026-08-18 -- the last clause is FALSE, and the word
+#      "allegiance" was equivocating.** Probe `allegiance_split` (harness
+#      20260818T171349) sent 0x002F ALONE to a body created 'mons' and its
+#      compass dot went RED -> GREEN in the next frame, while a body given only
+#      0x00AA stayed red 53 s and an untouched control stayed red all run. So a
+#      later message DOES correct displayed allegiance. What survives is this
+#      paragraph's actual subject: +0x1B5, the ATTACKABILITY enum, still has no
+#      post-construction writer, and the 0x002F test that "did nothing" was
+#      watching attack initiation -- a different store from the team token the
+#      compass and nameplate read (agent +0xE8, ChCliBase.cpp:326). Two stores,
+#      two answers, both true. studies/newopcodes/FINDINGS.md, the 0x002F row.
 #
 # AND THE READ SAYS BOTH GATES PASS (agentprobe.py, 2026-08-11): our Hatcher
 # carries +0x9C == 0xDB (a CHARACTER) and +0x1B5 == 3 (ALLEGIANCE_ENEMY), with
@@ -5899,15 +5945,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
-                              # here until 2026-08-16, which is a trap rather
-                              # than a bug while the constant is also 1: this
-                              # field is what the client stores at
-                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
-                              # GmHeroCommander's scan filters hero entries by
-                              # comparing that value against 0x01C2's msg+8.
-                              # A literal here silently stops tracking the
-                              # constant. studies/heroes/FINDINGS.md 22.
+                 [PLAYER_NUMBER,  # the player NUMBER -- despite the client's
+                              # own descriptor typing this field agent_id.
+                              # Retail separates the two id spaces (player 1,
+                              # agents 27/395/311 across 20260817T183756's four
+                              # channels) and field 1 tracks the NUMBER every
+                              # time. The client stores it at ctx[0x44][0x2ac]
+                              # (handler 0x0084EF00), which GmHeroCommander's
+                              # scan compares against 0x01C2's msg+8 -- so the
+                              # PLAYER_AGENT_ID sent here 2026-08-16..18 was
+                              # one half of heroes 21.2's split-filter mirror.
+                              # A solo instance hides the difference (both 1).
+                              # studies/heroes/FINDINGS.md 22, the CORRECTED
+                              # block.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -7119,8 +7169,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # only the absolute time. Splitting the
                                     # pipeline across the load boundary is what
                                     # kept asserting, in both directions.
+                                    _hap = HERO_APPEARANCE or (0, 0)
                                     _seq.append(agents.mercenary_info(
                                         _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                        d1=_hap[0], d2=_hap[1],
                                         d3=HERO_FLAG, chunk=HERO_CHUNK,
                                         enc_name=_iname))
                             # What 0x01C2's identity words mean, four rounds
@@ -7713,6 +7765,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                                  f"SKILLBAR_UPDATE(hero agent "
                                  f"{_haid}){_hskills}")
+                        # The char-by-id registration, BEFORE activate so the
+                        # table covers the id by the time any click can open
+                        # the commander panel. One message per hero slot; the
+                        # value is retail's modal 100<<24 and lands at
+                        # record+0x30, whatever that field turns out to mean.
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_CHAR else ()):
+                            hsend(GAME_SMSG_CHAR_TABLE_VALUE,
+                                  [_haid, 100 << 24],
+                                  f"CHAR_TABLE_VALUE(hero agent {_haid})")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -8484,6 +8546,20 @@ def main():
                          "own. Refused for keys 0 and 1 -- 0 declares nothing "
                          "and 1 is the player's key, which 0x0144's handler "
                          "asserts against re-declaring (ItCliApi:2010).")
+    ap.add_argument("--hero-char", action="store_true",
+                    help="Register each hero agent id in the char client's "
+                         "char-by-id table (0x009A, one per hero slot). The "
+                         "floor after ItCliApi:488: the commander panel's "
+                         "paperdoll indexes that table by agent id and "
+                         "Array:587s on an unregistered one. Registration "
+                         "alone suffices -- a NULL slot falls back cleanly.")
+    ap.add_argument("--hero-appearance", default=None, metavar="D1[,D2]",
+                    help="0x0074's two u32s at msg +0x14/+0x18 -- the hero's "
+                         "appearance composite file reference, fed by the "
+                         "commander paperdoll to CpsPlayer/CpsMonster. Zeros "
+                         "(the default) assert `fileId` File.cpp:367 on the "
+                         "hero-button click once --hero-char clears the char "
+                         "table. The floor after Array:587.")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8716,7 +8792,12 @@ def main():
         PLAYER_NUMBER = a.player_number
         print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
               f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
-              f"which is the whole point of the arm.")
+              f"which is the whole point of the arm. NOTE: since 2026-08-18 "
+              f"the 0x0199 send tracks PLAYER_NUMBER (heroes 22's correction), "
+              f"so the roster filter and the commander scan move TOGETHER "
+              f"under this flag; heroes 21's mirror rig -- roster row and "
+              f"commander binding mutually exclusive -- is no longer "
+              f"reproducible from this flag alone.")
 
     if a.hero is not None:
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
@@ -8745,6 +8826,17 @@ def main():
         HERO_INVENTORY = a.hero_inventory
         global HERO_BAGS
         HERO_BAGS = a.hero_bags
+        global HERO_CHAR
+        HERO_CHAR = a.hero_char
+        global HERO_APPEARANCE
+        if a.hero_appearance is not None:
+            _hap = [int(x, 0) for x in str(a.hero_appearance).split(",")]
+            if len(_hap) > 2:
+                raise SystemExit(
+                    f"--hero-appearance got {len(_hap)} values; the pair is "
+                    f"two u32s (msg +0x14/+0x18), a third would silently "
+                    f"be dropped")
+            HERO_APPEARANCE = (_hap[0], _hap[1] if len(_hap) > 1 else 0)
         if HERO_BAGS and HERO_INVENTORY in (0, 1):
             raise SystemExit(
                 f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "

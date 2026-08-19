@@ -1130,6 +1130,26 @@ GV_ATTACK_STARTED = 4
 GV_ADD_EFFECT = 6
 GV_REMOVE_EFFECT = 7
 GV_CRITICAL = 17
+# CONFIRMED 2026-08-18 on retail traffic -- this name was UPSTREAM from ONE
+# lineage (Py4GW) and CONTESTED for months; the corpus could only say "17 is a
+# damage kind occupying a swing slot", which blocked, glancing and a bonus kind
+# all satisfy. The Isle rung-7 damage pass settles it four ways at once
+# (`studies/isle/FINDINGS.md` "Rung 7, LIVE #2" 4):
+#   * the pre-registered ZERO-VARIANCE law holds 10 of 10 blocks, 100 of 100
+#     events -- a critical always deals the weapon range's MAXIMUM, so it pins
+#     to one value while property 16 spreads over the range;
+#   * p16 + p17 = 495 = exactly one event per swing at a 1.330 s median gap in
+#     every block, so 17 REPLACES 16 rather than annotating it;
+#   * one multiplier fits NINE blocks inside a 0.83% window, [1.40866,
+#     1.42045), which contains sqrt(2) -- i.e. the target's armour reduced by
+#     20, since 2^(20/40) = sqrt(2). To +-0.8%, so 1.41 and 1.42 also fit;
+#   * crit RATE rises monotonically with attribute rank on one body at one
+#     armour rating: 6.25 / 15.69 / 18.60 / 23.68 / 34.29% at ranks
+#     8/9/11/12/13. A cap or a fixed bonus has no reason to do that.
+# The one block it does NOT fit is the unmet-requirement rank-8 block, and that
+# failure belongs to the unmet-requirement term rather than to this one: rank 8
+# admits c in [1.20530, 1.36600), disjoint from the nine met blocks, and no
+# rounding rule reconciles them. OPEN, and named in that study 9.
 GV_EFFECT_ON_TARGET = 20
 GV_EFFECT_ON_AGENT = 21
 GV_ANIMATION = 22

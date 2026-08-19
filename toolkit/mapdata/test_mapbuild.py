@@ -97,6 +97,9 @@ EXPECT_BORROWED = 232                   # == sum(BORROWED_SIZES.values())
 EXPECT_STRICT = 5502
 EXPECT_PCT = 92.0                       # the headline, floored a little under
 EXPECT_CARRIED_KINDS = 13               # 8 opaque + the five constants
+GATE_COUNT = 18                         # 17 from FINDINGS 17.4/17.5, +1 from
+                                        # FINDINGS 30: every REACHABLE plane
+                                        # above 0 names a prop that exists
 
 LEDGER = checks.Ledger("map builder", floor=98)
 check = checks.adopt(LEDGER)
@@ -572,8 +575,16 @@ def section6(ar, mi, source, mf):
     bad = [n for n, ok, _d in result if not ok]
     check(not bad, f"all {len(result)} gates accept ArenaNet's own row "
           f"{TARGET_ROW}", "; ".join(bad) or "a gate a real map fails is OUR bug")
-    check(len(result) >= 17, "and the gate set is the whole one, not a subset",
-          f"{len(result)} rules")
+    # PINNED, NOT BOUNDED. This read `>= 17` while the set was already 18, so the
+    # one gate the portal work added -- "every REACHABLE plane above 0 names a prop
+    # that exists", the rule that came out of FINDINGS 30 after a bad plane_map
+    # crashed a client twice -- could be deleted with this check still green. A
+    # lower bound cannot notice a rule going missing, which is the only thing this
+    # check is for. Raise the number deliberately when a gate is added.
+    check(len(result) == GATE_COUNT,
+          "and the gate set is the whole one, not a subset",
+          f"{len(result)} rules against {GATE_COUNT} expected -- a gate that "
+          f"vanishes has to redden something, and this is the something")
     built = gates(mf, reference_order=retail.ids)
     check([n for n, ok, _d in built if not ok] == [],
           "and it accepts the rebuild too, in the file's own chunk order")

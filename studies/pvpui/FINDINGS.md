@@ -586,6 +586,16 @@ comparison against `0x01C2`'s `msg+8`, and sends `PLAYER_AGENT_ID` for it. **Two
 independent derivations, opposite directions, same answer** — CORROBORATED, and not news.
 The opcode is `0x0199`, `GAME_SMSG_INSTANCE_LOAD_INFO`, which we already send.
 
+> **CORRECTED 2026-08-18.** The mechanism above stands — `ctx[0x44][0x2ac]` is the
+> identity the commander model tests — but the VALUE retail puts there is the player
+> **NUMBER**, not the agent id: the Factions capture separates the two id spaces for the
+> first time (player 1, agents 27/395/311) and `0x0199` field 1 tracks the number on all
+> four channels (heroes §22's CORRECTED block, `vault/captures/live/20260817T183756`).
+> "Sends `PLAYER_AGENT_ID` for it" was our server's choice, indistinguishable from the
+> number in a solo instance; the send site fills it with `PLAYER_NUMBER` as of 2026-08-18.
+> Nothing in §13's conclusions moves — both values were 1 in every rig this section
+> reasons about.
+
 So the identity is not the problem. Heroes §21 measured that with `--player-number 2` the
 roster row renders when `msg+8` equals the declared player number, while the commander
 binding vanishes, and called the two "DIFFERENT `my id` notions". With both values at 1 in
@@ -1614,3 +1624,191 @@ is the same party-window hero button the owner drove in §25:
 | `--hero-inventory 2 --hero-bags` | `:488` clears; the panel proceeds, empty gear being legal per `0x84AA50` |
 
 Anything else the cleared click hits next is a new floor and belongs here when it lands.
+
+## 27. The cleared click's next floor: `Array:587` in the char client, and `0x009A` is the registrar (2026-08-18)
+
+§26.3's arm ran the same day. **`ItCliApi:488` CLEARED — both predictions held** — and the
+click died one floor deeper: `Assertion: index < m_count / Array.h(587)`, build 38833
+(dialog). The harness captured ArenaNet's **full crash report** including a 40-frame stack
+(`vault/captures/harness/20260818T121224/crash-dialog.txt`), which is what made this floor
+cheap: everything below is desk work over that stack, three fan-out rounds of it, with the
+load-bearing hops re-verified by hand. Runtime base `0x00330000`, so static = PC +
+`0xD0000`; the deepest frame rebases into the assert routine `0x00487BC0`, which anchors
+the rebase. **All VAs in this section are 38833 static** (the click's own build, unlike
+§26's 38797).
+
+### 27.1 The chain, frame by frame — OBSERVED (static, retrodicting the dialog's stack)
+
+```
+PtTeamAgent (party-row click)  ->  GmView case 0x100001A4 [0x004E38DA..]
+  :5890/:5891/:5897/:5898 all pass, ShowFloatingDialog opens AgentCommander{slot}
+  0x004E396D  FrameSendMessage(dialogFrame, 0x56, heroData->agentId, 0)
+AgentCommander proc 0x004FB500, case 0x56 [0x004FB5E2]
+  stores agentId at commanderObj+4 (0x004FC7B6); title refresh 0x004FCB80
+  (its three per-agent lookups all TOLERATED id 200); child sends;
+  0x004FC884  child 3 (the paperdoll) <- msg 0x64, param agentId
+GmAgentDoll proc 0x005374A0, msg 0x64 -> SetShownId 0x00538030
+  stores id at doll+4; clears 9 slots; PushAppearance 0x005381F0
+    id != localPlayer -> CharBy 0x0080CE60(200)
+      cmp 200, [charctx+0x7D4]  ->  Array:587    <- THE CRASH
+```
+
+Two vocabulary facts fell out, named by the client's own assert `GmAgentDoll:1039`
+(`!((hdr.msgId >= FRAME_MSG_EX) && (hdr.msgId < DOLL_MSG_EX))`): **`FRAME_MSG_EX = 0x56`**
+(the `0x56` in the crash args is a frame-message id, not data) and **`DOLL_MSG_EX = 0x64`**.
+The commander case's *last* act raises event `0x1000018E` with the agent id — it never got
+that far.
+
+### 27.2 The table, and who can grow it — OBSERVED, with one correction that kills the obvious fix
+
+`CharBy` indexes the char client's **char-by-id table** at `[charctx+0x7CC]` (count
+`+0x7D4`, stride 0x38). Its grower is the ensure-helper `0x00817A80`, and **all nine of
+its direct callers are attributed**:
+
+- **Four GAME_SMSG opcodes grow it from the wire**, all generic unnameds in our schema:
+  **`0x009A`** `[agent_id, dword]` (setter `0x008124E0` — and the ensure runs **before**
+  the bounds check, so one send registers the id, then writes `record+0x30`);
+  **`0x009B`** `[agent_id, string16]` (`record+0x34`); **`0x009F`** and **`0x00A0`**
+  (selected cases of the shared property setter `0x00812790`). The `0x009A` chain was
+  re-verified by hand on the run's own exe (`msghandler.py 0x009A --follow`), byte for byte.
+- The rest are the internal dispatcher path (`0x0081B270` case 0 → `0x0080D750`) plus one
+  indirect-only sibling (`0x00815270`).
+
+**The correction: `0x0020 WORLD_CREATE_AGENT` never grows this table.** Traced end to end:
+the create handler (`0x005FD080`) is the *sole* static route into the per-class factory
+table, and class 1 — which our creates select via field 3, `AGENT_TYPE_LIVING` — does build
+a char **object** (`0x00824640`, agent id at `char+0x14`) and files it in a registry. But
+nothing on that path touches `+0x7CC`. So **`--hero-body` is not this floor's fix**; the
+first-instinct hypothesis is refuted in the disassembly. (Whether the runtime event pump
+later posts the case-0 event that links created chars into the table is statically
+unresolvable — the dispatcher is only ever invoked indirectly. A `--hero-body` click is the
+cheap experiment that would answer it, filed as the science arm below.)
+
+Two tolerances that shape the minimal fix, both OBSERVED: `CharBy` returns a
+registered-but-empty slot's NULL **cleanly** (the assert is only the count bound), and
+`PushAppearance` branches to a hero-record fallback (`0x00538308`) on NULL. So the fix
+needs only the **count** to cover id 200 — no char object required. One catch:
+`SetShownId` calls `CharBy` **twice** (again at `0x005380CB`), so tolerating the miss
+client-side was never an option; the table must grow.
+
+### 27.3 What retail does — OBSERVED census, 38 connections
+
+None of the four grower opcodes is retail's per-character registrar for other players:
+their keys match kind-5 create ids essentially never (`0x009A` 0/410, `0x009B` 0/1629; the
+`0x009F`/`0x00A0` streams are generic per-agent traffic). The registrar-*shaped* pair on
+retail wire is **`0x006E` + `0x0048`**: exactly one of each per kind-5 create — 650/650/650
+corpus-wide, zero orphans, never for kind-9 — and neither handler is among the nine ensure
+callers, so if they seed the char table it is via the indirect case-0 event
+(RECONSTRUCTION; `0x0048 [agent, flag]` is the natural "char ready" candidate). For our
+hero, none of that is needed: `0x009A`'s direct grow is sufficient by construction.
+
+### 27.4 The staged arm — `--hero-char`
+
+Sends `0x009A [hero agent id, 100<<24]` (retail's modal value) per hero slot, in the build
+window before HERO_ACTIVATE. Predictions, on record before the next click:
+
+| arm | prediction |
+|---|---|
+| §26.3's command (control — already measured) | `Array.h(587)`, the 2026-08-18 click |
+| + `--hero-char` | both `CharBy(200)` calls pass and return NULL; the doll falls back to the hero record; the slot loop hits inventory 2 (exists, empty bag) through the same `ItCliApi:485/:488` helper §26 cleared; **the panel opens and stays** |
+| + `--hero-body` instead of `--hero-char` (science, optional) | answers whether the create path's runtime event grows the table: no crash → it does; same `Array:587` → it does not |
+
+### 27.5 The residuals, adversarially checked — every surface closed, one real trap recorded
+
+An adversarial pass attacked "the fix arm completes without asserting" on four surfaces;
+all four now close on bytes:
+
+1. **Both `CharBy(200)` calls** pass with the grown table; neither result is ever
+   dereferenced when NULL (the second is a pure loop boolean at `0x005380D6`). OBSERVED.
+2. **The `PushAppearance` fallback is the one real find**: with a live hero record, the
+   branch taken (`0x0053830C`) **unconditionally dereferences
+   `0x0080E370(heroRecord[+0])`** — no NULL check, so a miss is a hard access violation,
+   not an assert. Defused for our rig, on bytes: the `0x0072` worker writes the **hero id**
+   at activation-record `+0` (`0x0081DB47 mov [edx], ebx`, 38833), so the lookup is
+   `0x0080E370(1)` — the same heroData record GmView's `:5897` assert already passed and
+   dereferenced upstream in the same click. **The trap, for future rigs:** `0x0072` sent
+   for a hero id that has no `0x0074` record would fault here raw — but GmView's `:5897`
+   gates the commander path before the doll can run, so the click cannot reach it; only a
+   rig that opens the doll some other way could.
+3. **Event `0x1000018E`** (the commander case's last act) has exactly one subscriber —
+   PtHero — which equality-filters the payload id against its tracked hero and touches no
+   by-id array. OBSERVED, three sites total in the image.
+4. **The doll's slot loop** re-runs `ItCliApi:485/:488` with our key 2 (registered, §26)
+   and `GetSlot` bounds `slot < slots->m_count` — our `0x013F` capacity field is 9 and the
+   handler sizes and zeroes the array from it (smsg, SOURCED), so slots 0..8 hold and
+   empty slots return NULL cleanly.
+
+Whatever the next click hits past all of this belongs here.
+
+## 28. Floor three: `File.cpp:367 fileId` — the hero's appearance pair, and it is a monster composite (2026-08-18)
+
+§27.4's fix arm ran the same afternoon (capture `20260818T142252`). **`Array:587` CLEARED —
+both `CharBy` predictions held** — and the doll rendered far enough to open a FILE:
+`Assertion: fileId / File.cpp(367)`. The captured stack retrodicts §27.5's traced fallback
+*exactly*, hop for hop (rebase −0x930000): PushAppearance's hero-record branch
+(`0x00538331`) → the composite factory `0x0082DB40` → `CpsMonster` ctor → the
+fileId→filename codec `0x004702B0` asserting on a **zero**.
+
+### 28.1 The pair, both ends read — OBSERVED (38833)
+
+- **Producer:** the `0x0074` worker (`0x81DB70`) stores wire fields `+0x14`/`+0x18` — the
+  two u32s between the three leading u8s and the chunk, our builder's `d1`/`d2`, sent as
+  zeros since the day the message existed — verbatim at hero-record `+0x14`/`+0x18`
+  (stores `0x0081DBE1`/`0x0081DBE7`).
+- **Consumer:** PushAppearance pushes the pair into `0x0082DB40(d1, d2, &zeroVec3, 0)`,
+  which op-news 0x10C and runs `0x0082F510` — **unconditionally the `CpsMonster.cpp`
+  constructor** (vtable hard-set; the CpsPlayer factory is the sibling `0x0082DBA0` and
+  nothing on the hero path calls it). Inside: `d1` flows **untransformed** to
+  `0x004702B0(d1, &out)`, the File.cpp codec, which asserts `fileId` at :367 on zero —
+  no early-out exists, so **`d1 = 0` is never legal** and "no appearance" is expressed
+  only by not calling. `d2` selects the MdlBuild variant: non-zero → build **with
+  skeleton file** (`MdlBuild:1868`), **zero → legal**, the fileName-only build
+  (`MdlBuild:1835`). So: **`d1` = the model file id, `d2` = an optional skeleton file id.**
+- All four callers of the factory pass the pair from data, never literals — there is no
+  zero-sentinel anywhere in the image.
+
+**A finding beyond this arc:** the own-player branch does not use the pair at all — it
+reads the persistent composite `s_controlledPlayer` (`[0x01087784]`, named by
+`CpsApi.cpp`'s own assert) and serializes its five equip-slot records into an **outbound
+`0x57`** — the client telling the server its own look. The hero/merc path instead expects
+a **baked model file**, monster-style, which is consistent with retail rendering a
+mercenary from a saved appearance snapshot rather than live composite state.
+
+### 28.2 The staged arms — `--hero-appearance D1[,D2]`, values all measured content rows
+
+| arm | pair | what it tests |
+|---|---|---|
+| **first click** | `116366` (burrower's self-contained unit file: FA0+FA1+FA5+FA6, `content/npcs.toml`) | the single-variable arm: one complete file, `d2=0` legal — File:367 clears and *something* renders, or the next assert names the file class the ctor wants |
+| follow-up | `116703,116228` (hatcher body + shell) | the (model, skeleton) reading of (d1, d2) |
+| order control | `116228,116703` | the swap, if the above asserts |
+
+Prediction for the first click: `File.cpp:367` clears; the panel opens with a worm in the
+paperdoll, or the next assert names the FFNA gate. Either way the field is named by
+experiment: **`0x0074 +0x14` is the hero's appearance model file id.**
+
+### 28.3 IT OPENED. Owner's click, 2026-08-18 — the commander panel is wire-authorable end to end
+
+`--hero-appearance 116366` and the panel **opened and stayed**: title "Hero 1: Lvl 255
+Norgu", health bar, the AI-mode buttons, the hero's eight-skill bar (the `0x00DA` ids,
+rendered), and the paperdoll drawing the burrower — janky, but drawn, which is what the
+arm predicted a worm in a humanoid pane would be. No assert. Owner's screenshot is the
+verdict; the appearance-quality judgment stays with the owner per the standing rule.
+
+**That closes the whole ladder this study opened in §24** — four floors, each a field or
+message already in the tree that had only ever been sent as zero or never sent at all:
+
+| floor | assert | fix |
+|---|---|---|
+| `GmView:5898` heroData->agentId | `0x0072` was never sent | `--hero-activate` (§25) |
+| `ItCliApi:488` inventory | inventoryTable had no hero key | `--hero-inventory 2 --hero-bags` (§26) |
+| `Array:587` char table | nothing grew `+0x7CC` past 200 | `--hero-char`, opcode `0x009A` (§27) |
+| `File.cpp:367` fileId | `0x0074 +0x14/+0x18` sent as zeros | `--hero-appearance 116366` (§28) |
+
+Cosmetic residue, deliberately not floors: the **Lvl 255** in the title is the known
+no-agent sentinel (heroes §10.1 — the label reads the AGENT's level and agent 200 has no
+body and no property-36 entry; unit-setup measured prop 36 as a per-agent store readable
+without a create, so `0x009F [36, 200, N]` is the cheap arm, `--hero-body` the heavier
+one). The **janky doll** is a burrower posed in a humanoid paperdoll; §28.2's follow-up
+pair `116703,116228` (hatcher body + skeleton shell) is the staged humanoid arm, and a
+real answer to "what file does retail bake for a mercenary" would need a live capture of
+an account that owns one — no tape in the vault carries a single `0x0074`.
