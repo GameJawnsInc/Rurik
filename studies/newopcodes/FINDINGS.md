@@ -2265,6 +2265,55 @@ should not go into `overrides.json` on this evidence.
 > produced a confident sequence. In both cases the tool answered a question it had not
 > been asked.
 
+> ### THE DESK ROUTE WON: the client NAMES its vendor screens, and a fatal arm names its own. 2026-08-19, SOURCED
+>
+> Extractor `toolkit/clientscan/vendorscreens.py`, build 38797, stdlib only.
+>
+> **`0x00C3`'s subscriber, read rather than probed.** `0x004E8510` (the `0x100000B5`
+> consumer, `GmView`) takes the payload in `edi` — and here `edi` is `payload + 0`, so
+> `[edi]` is **field 1**, `[edi+4]` the owner agent (stored to `0x00C078D0`), `[edi+0xc]`
+> the owner flag. It branches on field 1 exactly three ways:
+>
+> | field 1 | branch |
+> |---|---|
+> | **6** | a different child view — `0x4E1EC0(ebx, **0x38**, 1, 0)` instead of `0x37` |
+> | **8 or 9** | sets the flag that selects the template **`GmView-Vendor-Big`** (`0x0094D874`) |
+> | anything else, **11 included** | **`GmView-Vendor`** (`0x0094D898`) |
+>
+> The client carries **16 `GmView-*` view templates**, and the vendor pair is two of them.
+>
+> **AND THE CLIENT NAMES ITS VENDOR SCREENS — thirty of them**, one source file each under
+> `Ui\Game\Vendor`. They map onto WIKI (GWW, "NPC service") almost line for line:
+> `VnBuy` / `VnSell` are the merchant (kind 11, OBSERVED), `VnTradeBuy` / `VnTradeSell` the
+> six traders, `VnCollect` the collector, `VnCraft` the crafters, `VnLearnSkill` the skill
+> trainer, `VnGuildRegister` / `VnGuildTabard*` / `VnGuildAddService` /
+> `VnGuildAdjustFaction` the guild services, `VnUnlockHero*` / `VnUnlockSkill` /
+> `VnUnlockItem` the PvP and mercenary unlocks. The rest (`VnFrame`, `VnQuantity`,
+> `VnBagSelect`, `VnItem`, `VnPlayerInventory`, `VnElementCache`, …) are components, not
+> kinds.
+>
+> **THE RESULT THAT CHANGES THE METHOD: a fatal arm NAMES ITS OWN SCREEN.** Kind 6 did not
+> die as "an invalid value" — it died on
+> **`No valid case for switch variable 'faction'`, `VnGuildAdjustFaction.cpp(87)`**. That
+> is the guild-faction vendor reaching its own code and refusing a *second* field we never
+> sent. So the sweep is not a survival test, it is a **naming exercise**: every kind that
+> kills the client still identifies which vendor it is, and the interesting reading of the
+> earlier deaths flips with it — kinds **0** and **1** die inside the ITEM client
+> (`ItCliApi:859`, an item-detail accessor) rather than in a vendor file, which points at
+> item-list vendors whose entries need detail our stock declarations do not carry.
+>
+> | kind | screen | how we know |
+> |---|---|---|
+> | **11** | **`VnBuy` / `VnSell`** — merchant, both directions transact | OBSERVED, four runs |
+> | **6** | **`VnGuildAdjustFaction`** — guild faction | its own assert names the file |
+> | 0, 1 | an item-list vendor, unidentified | `ItCliApi:859`, no vendor file named |
+> | 8, 9 | predicted `GmView-Vendor-Big` | branch read statically, NOT yet run |
+> | 2–5, 7, 10, 12–15 | unknown | not run |
+>
+> **Cost, now that a run buys a name rather than a survival bit:** ten values remain and
+> each costs one run — but the desk gave the branch structure, the template names and the
+> screen list for none, and it turned the fatal arms already paid for into two more rows.
+
 > ### SWEEPING `0x00C3`'s KIND: 11 works, 0 and 1 are FATAL — and the first sweep design was wrong. 2026-08-19, OBSERVED
 >
 > **THE HYPOTHESIS SPACE IS THE GAME'S OWN SERVICE LIST.** WIKI (GWW, "NPC service",
