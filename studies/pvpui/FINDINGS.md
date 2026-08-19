@@ -1962,3 +1962,34 @@ confidence (static chain + the client drawing it), the two lock c2s at medium (s
 only). The commander UI is now round-trip complete: stance, hero flag, and party flag
 each close click → c2s → server echo → render, on a server that knows all six messages
 by name.
+
+### 28.7 The lock, captured and closed — and the toggle-off is `0x16 [hero, 0]`, not `0x17` (2026-08-19, still the same day)
+
+Three runs, an instrument correction between each, every deviation informative:
+
+1. **No foe in the world** (runs `104437` and its outpost sibling): the crosshair click
+   landed and the client refused locally with the exact string-table toast the static
+   trace predicted — "You must select a foe before you can lock Norgu's target" — and
+   sent nothing. Also a harness lesson re-learned: `session.py` defaults the world to
+   `--no-enemy`; the opt-in is the session-level `--enemy`, not a game-arg.
+2. **Foe present, no echo** (run `105048`): `C` targeted the practice target and the
+   crosshair click sent **`0x0016 [200, 10]` — captured**, upgrading the name to wire
+   confidence. The second click sent `0x0016 [200, 10]` AGAIN: the client's lock state
+   is server-set, same pattern as the ring and the flags.
+3. **Echo armed** (run `105652`): the lock echo is **s2c `0x0063` HERO_LOCK_TARGET_SET
+   `[heroAgent, targetAgent]`** — found by desk work in minutes because §28.6's flag
+   tracer had already mapped the record: handler `0x0091E080` → wrapper `0x008107E0`
+   (hero container +0x584 AND pet container +0x6AC) → setter `0x0081D9C0`, writing
+   activation-record **+0x20** and raising `0x1000003F`. Wire verdict: click 1 locked —
+   crosshair lit gold, tooltip "**Hatcher [Collector] is locked as Norgu's target**"
+   (the client resolves the target's name) — and click 2 sent **`0x0016 [200, 0]`**,
+   the `rec+0x20 != 0` clear branch the static trace predicted, which our echo
+   `[200, 0]` answered and the crosshair unlit.
+
+So the lock protocol on this path is `0x16 [hero, target]` to lock and `0x16 [hero, 0]`
+to clear, echoed by `0x0063` both ways; **`0x0017` never fired** — its guard (getter
+`0x0080CEE0`) reads a state this rig does not set, with the pet container +0x6AC the
+standing suspect. The activation record's map after today: +0 heroId, +4 agentId
+(0x0072), +8 inventoryId (0x0072), +0xC aiMode (0x0062 / 0x0072), +0x10..0x1C flag
+{x,y,plane,0} (0x0066), +0x20 lockedTarget (0x0063) — six wire-reachable fields, each
+with its opcode and its event, every one confirmed by the client drawing something.

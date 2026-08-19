@@ -976,8 +976,8 @@
      }
     ],
     "name": "HERO_LOCK_TARGET",
-    "name_confidence": "medium",
-    "why": "OBSERVED static only (38833), no capture yet: send wrapper 0x0091FD60 (opcode immediate 0x16) via thunk 0x0080DFD0, called from GmAgentCommander frame proc 0x004FBAF0's msg-0x24 handler 0x004FBD20 -- the commander crosshair. Lock branch reads the selected target via AvApi 0x007E1090 and sends [heroAgent, targetAgent]. The UI gate (needs a selected foe, refused in outposts) sits upstream of msg 0x24, so a live confirm needs an --enemy run with a foe selected. studies/pvpui/FINDINGS.md 28.6."
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: send wrapper 0x0091FD60 (opcode immediate 0x16) via thunk 0x0080DFD0, GmAgentCommander msg-0x24 handler 0x004FBD20 (the commander crosshair); lock branch reads the selected target via AvApi 0x007E1090. Wire: captured [200, 10] with a practice target selected via the C keybind, and -- once the 0x0063 echo set record+0x20 -- the SECOND click sent [200, 0], the rec+0x20!=0 clear branch the static trace predicted. So the toggle-off on this path is 0x16 [hero, 0], not opcode 23; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7)."
    },
    "23": {
     "opcode": 23,
@@ -996,7 +996,7 @@
     ],
     "name": "HERO_UNLOCK_TARGET",
     "name_confidence": "medium",
-    "why": "OBSERVED static only (38833), no capture yet: send wrapper 0x0091FDB0 (opcode immediate 0x17) via thunk 0x0080DFE0, the already-locked branch of the same crosshair handler 0x004FBD20 -- sends [heroAgent] alone. Same live-confirm caveat as opcode 22. studies/pvpui/FINDINGS.md 28.6."
+    "why": "OBSERVED static only (38833), still uncaptured: send wrapper 0x0091FDB0 (opcode 0x17) via thunk 0x0080DFE0, the isLocked (getter 0x0080CEE0) branch of crosshair handler 0x004FBD20. The 2026-08-19 round-trip runs never produced it -- with record+0x20 set by the 0x0063 echo the client clears via 0x16 [hero, 0] instead -- so whatever state 0x0080CEE0 reads (the pet container +0x6AC is the standing suspect) is not set by this rig. studies/pvpui/FINDINGS.md 28.7."
    }
   },
   "GAME_SMSG": {
@@ -2656,6 +2656,29 @@
     "name": "PARTY_FLAG_SET",
     "name_confidence": "high",
     "why": "OBSERVED both ways. Static: handler 0x0091E120 (38833) -> worker 0x00810890 writes charCtx+0x9C..0xA8 {x,y,plane,0} (a single slot, not an array), posts frame event 0x100000A1, same CompassCanvas path as opcode 102, compass slot 0, distinct flag model. Wire: sending [coords, plane] planted the party pennant beside the hero flag; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). Clear form: coords (+INF, +INF), plane 0. The s2c echo for GAME_CMSG 27 PARTY_FLAG_PLACE."
+   },
+   "99": {
+    "opcode": 99,
+    "table": "GAME_SMSG_0099",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 99
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "HERO_LOCK_TARGET_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E080 (38833) pushes msg+8, msg+4 -> wrapper 0x008107E0 (hero container +0x584 AND pet container +0x6AC) -> setter 0x0081D9C0, which writes activation-record+0x20 and raises frame event 0x1000003F. Wire: echoing [200, 10] lit the commander crosshair gold with 'Hatcher [Collector] is locked as Norgu's target'; [200, 0] cleared it back to the offer tooltip; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7). [heroAgent, targetAgent]; target 0 clears. The s2c echo for GAME_CMSG 22."
    }
   }
  }

@@ -1995,6 +1995,12 @@ GAME_SMSG_PARTY_FLAG_SET = 0x0067
 # ChCliHero::SetAiMode's own opcode -- [agent_id, dword aiMode], the display
 # echo for a 0x0015 stance click. See GAME_CMSG_HERO_AI_MODE above.
 GAME_SMSG_HERO_AI_MODE_SET = 0x0062
+# The locked-target twin, found the same way after 0x0016 was captured
+# re-sending on the second click (the client's is-locked getter reads a store
+# only the server can set): handler 0x0091E080 (38833) pushes msg+8, msg+4 ->
+# wrapper 0x008107E0 -> setter 0x0081D9C0, which writes activation-record
+# +0x20 and raises 0x1000003F. [heroAgent, targetAgent]; target 0 clears.
+GAME_SMSG_HERO_LOCK_TARGET_SET = 0x0063
 
 # What the client sends when the player clicks an agent meaning to do something
 # to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
@@ -6694,6 +6700,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 print(f"[c{conn_id}] hero stance echo: agent "
                                       f"{_aid} -> aiMode {_mode} via 0x0062",
                                       flush=True)
+                                break
+                    elif opcode == GAME_CMSG_HERO_LOCK_TARGET:
+                        # The lock echo: rec+0x20 is server-set, so without
+                        # this the crosshair never lights and a second click
+                        # re-sends LOCK instead of UNLOCK (captured 2026-08-19
+                        # run 105048, 0x0016 twice).
+                        _aid, _tid = values[1], values[2]
+                        for _hid, _haid, _hdef in hero_slots():
+                            if _haid == _aid:
+                                send(GAME_SMSG_HERO_LOCK_TARGET_SET,
+                                     [_aid, _tid],
+                                     f"HERO_LOCK_TARGET_SET(agent {_aid} -> "
+                                     f"target {_tid})")
+                                print(f"[c{conn_id}] hero lock echo: agent "
+                                      f"{_aid} -> target {_tid}", flush=True)
+                                break
+                    elif opcode == GAME_CMSG_HERO_UNLOCK_TARGET:
+                        _aid = values[1]
+                        for _hid, _haid, _hdef in hero_slots():
+                            if _haid == _aid:
+                                send(GAME_SMSG_HERO_LOCK_TARGET_SET,
+                                     [_aid, 0],
+                                     f"HERO_LOCK_TARGET_SET(agent {_aid} -> "
+                                     f"clear)")
+                                print(f"[c{conn_id}] hero unlock echo: agent "
+                                      f"{_aid}", flush=True)
                                 break
                     elif opcode == GAME_CMSG_HERO_FLAG_PLACE:
                         # The hero flag echo: the client sent [agent, [x,y],
