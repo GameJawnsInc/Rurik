@@ -2072,6 +2072,36 @@ Every one of these, in the order they were written:
   at exactly the index it asserted at. Without it the ten checks above are ours
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
+  `toolkit/authsrv/test_playerbags.py` (the player's nine containers, and **WHERE**
+  the burst sends them. Until 2026-08-19 this server created ONE bag, and the
+  symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
+  priced shop and Buy rendered ENABLED, an operator watched a click on Buy land
+  and produce ZERO c2s traffic. The client refuses a purchase it has nowhere to
+  put and refuses it LOCALLY, so ArenaNet's "inventory full" path costs no wire
+  message and the null read as a missed click. Two defects hid each other -- the
+  bag SET was one ninth of retail's, and the one bag we sent was created inside
+  `if EQUIP_WEAPON:`, so every inventory question depended on a weapon flag.
+  Sections 1-4 check `authsrv.PLAYER_BAGS` against ArenaNet's own wire through
+  `invcensus.bag_shapes()` -- ONE extractor, shared with the tool a human runs,
+  so a census printed by hand and one asserted here cannot disagree -- and the
+  corpus is not a sample: **49 of 49 live connections carry the same nine
+  (type, model, slots) triples**, one distinct set. It also pins the reading of
+  the message's trailing field: nonzero on the type-1 backpack and NOTHING else,
+  49/49 an item id declared by an `0x0161` in the same tape -- the Backpack is a
+  real item in Guild Wars and the equipped/storage/material containers are not.
+  Sections 8-9 are the ones no value can express, and they are where BOTH real
+  defects lived: a SYNTAX-TREE check that the burst iterates the table outside
+  any `if EQUIP_WEAPON`, and one that no loop TARGET shadows a name the
+  enclosing handler already binds. Naming a target `kind` overwrote the
+  connection's channel discriminator with the last bag's TYPE -- every later
+  c2s message then missed `if kind == "game"`, so the client's
+  INSTANCE_LOAD_REQUEST_SPAWN_POINT went unanswered (hung at 100% on the load
+  screen) and its keep-alive decoded as an auth message whose handler died on
+  `values[3]` (`Code=007`). Two run failures from one loop variable, with every
+  number in the table correct throughout. Five controls: two break the table on
+  purpose, and three feed the detectors the exact buggy source so a green check
+  cannot mean the detector is blind. Floor 15; sections 1-4 print a `skip`
+  without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   that an unframeable opcode stops the framer instead of being framed past, and

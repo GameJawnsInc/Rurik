@@ -113,6 +113,22 @@ GRANDFATHERED = {
     # proportion as the entries above, and the same check applies -- read them and ask
     # whether any argues for nothing.
     os.path.join("studies", "pvpui", "FINDINGS.md"): 30,      # 13: the assert-by-assert walk of GmView's commander case
+    # 16 on 2026-08-19, and it was ALREADY over the newcomer ceiling at 15 before
+    # this session touched the file -- the tripwire had fired and nobody had ruled
+    # on it, which is exactly the state it exists to make visible. The ruling: this
+    # document argues from its citations and is not a dump. The distinct asserts are
+    # in single digits and each is load-bearing for one claim -- `ItCliApi.cpp(859)`
+    # is the crash that produced (and then lost) the item-id reading of 0x00C3's
+    # field 1, `Array:587` is the bound inside the WRONG SUBSCRIBER that receives
+    # 0x100000B5, `ChCliApi.cpp(1587)` is the count bookkeeping a drain arm would
+    # have contradicted, `ItCliApi:1955`/`:1969` are the two gold containers'
+    # registration guards, and `ItCliApi:488` is the party-window equip walk. Take
+    # any of them out and the claim beside it stops being auditable without the
+    # binary. Six of the sixteen are repeats of `Array:587` across sections that
+    # each cite it once. Note who raised it: the session whose own arc hit the wall.
+    # The check that matters is unchanged and cheap -- read the citations and ask
+    # whether any argues for nothing.
+    os.path.join("studies", "newopcodes", "FINDINGS.md"): 30,  # 16
     # 15 on 2026-08-15, over NEWCOMER_CEILING on the arc's first commit, which is what
     # this row is for. 25 is the proportion the four 11-12 entries above already carry,
     # not a new number. The document argues from every one of them: `QuestChallenge:197`

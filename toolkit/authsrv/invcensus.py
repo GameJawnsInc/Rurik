@@ -37,8 +37,76 @@ from codec import Codec  # noqa: E402
 STREAM_CREATE = 0x0144
 HERO_ACTIVATE = 0x0072
 CREATE_BAG = 0x013F
+NAMED_ITEM = 0x0161
 OPS = {STREAM_CREATE: "STREAM_CREATE", HERO_ACTIVATE: "HERO_ACTIVATE",
        CREATE_BAG: "CREATE_BAG"}
+
+
+def bag_shapes():
+    """[(capture, connection, [(type, model, slots)], {backpack item ids})].
+
+    THE EXTRACTOR BEHIND `authsrv.PLAYER_BAGS`, named there by path so the
+    table is reproducible rather than asserted. Build 38833.
+
+    `0x013F` is `[op, inventory, type, model, bag_id, slots, item]`. Only the
+    (type, model, slots) triples are ArenaNet's data; `bag_id` is an arbitrary
+    per-connection handle -- the same nine bags drew 8..16 on one connection
+    and 570/496/398/328/438/654/571/462/658 on another, exactly as the
+    inventory key itself drew 4 / 159 / 183 -- so a server allocates its own.
+
+    The trailing field is the BAG'S OWN ITEM, and that reading is the corpus's
+    rather than a guess: it is nonzero on the type-1 backpack and on nothing
+    else, and every nonzero value is an item id declared by an `0x0161` in the
+    SAME tape. Guild Wars agrees -- the Backpack is a real item; the equipped,
+    storage and material containers are not.
+    """
+    codec = Codec()
+    out = []
+    for capture_dir in npcdefs.live_captures():
+        for row in tape.channel_files(capture_dir):
+            connection = row["connection"]
+            info, events = tape.load_tape(capture_dir, connection)
+            if info.get("origin", "unknown") != "live":
+                raise SystemExit(f"{capture_dir} {connection}: not live")
+            msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
+            consumed, total, err = receipt
+            if err is not None or consumed != total:
+                raise SystemExit(f"{capture_dir} {connection} framed "
+                                 f"{consumed}/{total} ({err})")
+            shapes, items = [], {}
+            declared = {v[1] for _t, op, v in msgs
+                        if op in (NAMED_ITEM, 0x015E) and len(v) > 1}
+            for _t, op, v in msgs:
+                if op != CREATE_BAG or len(v) < 7:
+                    continue
+                shapes.append((v[2], v[3], v[5]))
+                if v[6]:
+                    items[(v[2], v[6])] = v[6] in declared
+            if shapes:
+                out.append((info.get("capture")
+                            or os.path.basename(capture_dir),
+                            connection, shapes, items))
+    return out
+
+
+def print_bag_shapes():
+    """The census as a table, plus the two claims the corpus can refute."""
+    rows = bag_shapes()
+    if not rows:
+        raise SystemExit("zero live connections carry bags: measured nothing.")
+    sets = collections.Counter(tuple(s) for _c, _n, s, _i in rows)
+    print(f"\n== bag SHAPES over {len(rows)} live connection(s): "
+          f"{len(sets)} distinct set(s)")
+    for shape, n in sets.most_common():
+        print(f"   x{n}  {len(shape)} bags")
+        for kind, model, slots in shape:
+            print(f"        type {kind}  model {model:3d}  {slots:2d} slots")
+    nonzero = [(k, ok) for _c, _n, _s, items in rows for (k, _i), ok
+               in items.items()]
+    print(f"   trailing item field: nonzero {len(nonzero)} time(s), "
+          f"on bag type(s) {sorted({k for k, _ok in nonzero})}, "
+          f"declared in the same tape "
+          f"{sum(1 for _k, ok in nonzero if ok)}/{len(nonzero)}")
 
 
 def main():
@@ -85,6 +153,7 @@ def main():
         raise SystemExit("zero decodable live connections: the census "
                          "measured nothing, which is a failure, not an "
                          "empty answer.")
+    print_bag_shapes()
     print(f"\n{connections} connection(s); "
           f"{violations} bag-before-registration violation(s)")
     if violations:

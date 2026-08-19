@@ -609,6 +609,15 @@ _STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
 # Mirrors authsrv.py: the ONE container this server registers (0x013F).
 EQUIPPED_BAG_ID = 1
+# THE PURSE IS THE INVENTORY KEY, NOT A BAG -- and this name was wrong even
+# though the number was right. `0x0140 [1, 500]` funded the shop and the code
+# said `EQUIPPED_BAG_ID`, which is a bag id that happens to also be 1 on this
+# server. The corpus separates them: on three live connections `0x0140` named
+# **4 / 159 / 183**, which are the `0x0144 ITEM_STREAM_CREATE` keys, while the
+# bag ids on those same connections were 8..16, 474.., and 570.. -- two
+# different namespaces that only collide here because we allocate 1 in both.
+# studies/newopcodes/FINDINGS.md, the merchant-capture section.
+PLAYER_INVENTORY = 1
 
 
 # Prices for the stock arm. OUR OWN numbers, deliberately not retail's table --
@@ -617,10 +626,30 @@ EQUIPPED_BAG_ID = 1
 # content/items.toml carries value = 0 on every row (correct for starter gear,
 # and what put "0" in every price column of the 20260818T211036 panel), so the
 # price is overridden here rather than written into the content rows.
-_STOCK_PRICES = {"warrior_legs": 25, "warrior_boots": 50, "warrior_gloves": 100}
+#
+# ELEVEN ROWS, and the count is the experiment rather than a garnish. Every
+# merchant window in the live corpus -- 6 of 6, three connections, two
+# different shopkeepers with entirely different stock -- stages exactly ELEVEN
+# ids and is followed by `0x00C3 [11, 0]`. This project has sent `0x00C3` three
+# times and never once with retail's own shape behind it (3 staged / field 3,
+# 3 staged / field 40, both dead). This restores the shape.
+#
+# The panel renders TWICE the declared value (measured `20260819T140723`:
+# 25 / 50 / 100 went up as 50 / 100 / 200), so these show as 10, 20, ... 110 --
+# eleven distinct quotes, so the gold a purchase debits names the row it bought.
+# content/items.toml carries value = 0 on every row (correct for starter gear),
+# so the price is overridden here and not written back into the content rows.
+_STOCK_TEMPLATES = ("warrior_legs", "warrior_boots", "warrior_gloves",
+                    "warrior_body", "warrior_head")
+_STOCK_FIRST_ID = 40
+_STOCK_COUNT = 11
+_STOCK = tuple((_STOCK_FIRST_ID + i,
+                _STOCK_TEMPLATES[i % len(_STOCK_TEMPLATES)],
+                5 * (i + 1))
+               for i in range(_STOCK_COUNT))
 
 
-def _stock_item(key):
+def _stock_item(key, value):
     """A content item re-declared as merchant stock: a real per-item price.
 
     THE FLAGS OVERRIDE IS OFF, and the reason is measured rather than argued.
@@ -637,90 +666,90 @@ def _stock_item(key):
     Kept as a named constant so the next arm can switch it on deliberately.
     """
     row = dict(item_template(key))
-    row["value"] = _STOCK_PRICES[key]
+    row["value"] = value
     return row
 
 
 def _merchant_window_steps(agent_id, origin):
-    """Can we AUTHOR a merchant/collector window on an NPC we spawned -- and does
-    the accum buffer feed it? The last live candidate for `0x00E1`'s subscriber.
+    """Two questions in one run, the client-killer last.
 
-    WHY THIS AND NOT ANOTHER BARE DRAIN. Two runs established that `0x00E1`
-    renders nothing with no window open (`20260818T180039`) and nothing with the
-    Inventory and Skills panels open (`20260818T184210`, skill list
-    pixel-identical). The one surviving explanation is the context this repo has
-    actually OBSERVED reading the accum buffer -- the `0x00C5` flow -- and it
-    hangs off a window that only an NPC can own. A keypress cannot reach it, so
-    this run authors it from the server side instead.
+    Q1 -- CAN THE PLAYER BUY? `20260819T140723` built a complete, funded,
+    correctly-priced shop on our own NPC and the operator watched a Buy click
+    land and produce **zero** c2s traffic. The operator then pressed I and
+    found the cause: **no backpack**. The client refuses a purchase it has
+    nowhere to put, and refuses it LOCALLY, so the null cost no wire message
+    and looked exactly like a missed click. Retail sends all nine bags during
+    LOAD, right after `0x0144`, so they moved into the login burst
+    (`authsrv.PLAYER_BAGS`) -- this probe no longer sends `0x013F` at all, and
+    a 20-slot grid under `I` is the login burst's acceptance test rather than
+    one of these steps. What this probe wants is `GAME_CMSG 0x4D`, which would
+    be the first purchase request this project has ever RECEIVED rather than
+    watched somebody else receive.
 
-    RETAIL'S OWN SEQUENCE, which this replicates rather than invents
-    (`studies/newopcodes/FINDINGS.md`, capture `183756`, both sightings):
+    Q2 -- WHAT IS `0x00C3` FIELD 1? A row this arc created and left CONTESTED.
+    Three readings were live: an item id (ours, from the crashes), the COUNT of
+    staged items, or a TYPE constant. **The corpus killed the first one**: the
+    field is 11 on six windows across three connections, and item ids on those
+    same connections are per-connection handles that vary wildly (the bag ids
+    alone drew 8..16 on one and 570/496/398.. on another), so a constant 11 is
+    not a handle. The corpus cannot separate the other two, because all six
+    windows staged exactly eleven items -- count and type predict the same
+    number every time.
 
-        s1  0x00C4[272] -> 11x 0x0161 -> 0x0084[11 ids] -> 0x00CA[1, 1.0f] -> 0x00C3[11, 0]
-        s2  0x00C4[279] ->  3x 0x0161 -> 0x0084[3 ids]  -> 0x00C5[2, composed string]
+    So this run does the thing nobody has done: **send retail's own shape**.
+    Eleven items staged, `0x00C3 [11, 0]`, in retail's exact order
+    (`0x00C4` -> `0x0084` -> `0x00CA` -> `0x00C3`, back to back). Every prior
+    attempt sent 3 or 40 over a 3-item list.
 
-    This runs s1 with our own numbers: three items instead of eleven, so
-    `0x00C3`'s first field carries **3**. `0x00CA`'s dword is the bit pattern of
-    1.0f, which is what retail sent there.
+      * If it SURVIVES, both survivors stay alive and one more run separates
+        them (5 staged with `[11,0]` against 5 staged with `[5,0]`). It also
+        retires "0x00C3 is not authorable by a server".
+      * If it DIES on the same `c0000005`, that is an answer too, and a
+        stronger one: with retail's own count, retail's own order, a funded
+        purse and a working shop behind it, no field we send is the problem --
+        the earlier disassembly stands (the message reaches the WRONG
+        SUBSCRIBER, which reads a fifth dword and calls the stack cookie),
+        field 1 carries nothing recoverable from the wire, and the CONTESTED
+        row closes as "unknowable from this side" instead of sitting open.
 
-    THE BUILT-IN CONTROL, and it is why this design can distinguish "the message
-    did nothing" from "the message never arrived": `0x00C4`'s handler is SOURCED
-    to call `0x00817950`, which fetches both agents' positions and **turns the
-    player to face the named agent**. So the character pivoting toward the NPC is
-    proof the window-owner register was written, independent of whether any
-    window draws. A run where nothing opens AND the character never turns is a
-    delivery failure and must not be read as a null.
+    THE SHOP IS OPENED TWICE ON PURPOSE. `0x00CA` alone opens it (measured
+    twice), so opening 1 carries the Buy test with `0x00C3` withheld and banks
+    everything valuable; opening 2 replays retail's four-message burst with
+    `0x00C3` restored. Re-arming is proven (`20260818T234622`, three arms,
+    three windows), and this ordering means a death on Q2 cannot cost Q1.
 
-    RUN 1 ANSWERED THE ORIGINAL QUESTION, 2026-08-18 (`20260818T211036`), and
-    it was `0x00CA` rather than `0x00C3` that did the work: a panel titled
-    `Hatcher [Collector]` -- our own NPC -- listing all three staged items by
-    name, with Buy/Goodbye. The accum buffer feeds a window; `0x0084` earns its
-    `WINDOW_ADD_ITEMS` name. Then `0x00C3 [3, 0]` CRASHED the client on
-    `Assertion: item`, `ItCliApi.cpp(859)`, same-second attribution.
+    THE BUILT-IN CONTROL, unchanged and still the reason a null is readable:
+    `0x00C4`'s handler is SOURCED to call `0x00817950`, which fetches both
+    agents' positions and TURNS THE PLAYER TO FACE the named agent. A run where
+    nothing opens AND the character never turns is a delivery failure, not a
+    null.
 
-    THIS RUN TESTS ONE THING, predicted before it fires: **`0x00C3`'s field 1
-    is an ITEM ID, not a count.** The assert site takes an item id, indexes the
-    item table at `[globals+0x40]+0xB8` and asserts non-null; we sent 3, which
-    this session never declared, while retail's `[11, 0]` would have been an id
-    in its own stream. Sending 40 -- declared and staged -- should NOT assert.
-    If it asserts anyway the id was never the problem, and that is a result to
-    report rather than a cue to invent a third reading.
-
-    CRASH NOTES so a death is a diagnosis: `0x00C5` (deliberately NOT sent here)
-    asserts `accumIntList[0].Count() >= 1` at `ChCliApi.cpp:2956`; `0x00C3` and
-    `0x00CA` are two of the eight readers of the owner register, and each
-    consumes-and-clears it, so the ORDER above matters -- an out-of-order send is
-    the likely assert, not the payload.
+    `0x00C5` is deliberately never sent: it asserts
+    `accumIntList[0].Count() >= 1` at `ChCliApi.cpp:2956` and composes a string
+    embedding an item name we cannot build. The `0x00E1` drain tail that used
+    to hang off this probe is gone -- that question closed, the drain being as
+    quiet with a merchant window open as with none.
     """
     ox, oy, plane = origin
     h = HATCHER
     a = _MERCHANT_NPC_AGENT
-    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    ids = [i for i, _k, _v in _STOCK]
+    declarations = [
+        Step(3.0 if n == 0 else 0.6, 0x0161,
+             named_item(item_id, _stock_item(key, value)),
+             f"0x0161: declare stock {item_id} ({key}), value {value} "
+             f"-> quoted {value * 2}",
+             "nothing -- declarations are quiet." if n == 0 else "nothing.")
+        for n, (item_id, key, value) in enumerate(_STOCK)]
     return [
-        Step(2.0, 0x013F, [EQUIPPED_BAG_ID, 1, 0, 2, 20, 638],
-             "0x013F: give the player a BACKPACK (type 1, 20 slots)",
-             "no visible change yet -- press I and a backpack grid should be "
-             "there. THIS IS THE DESTINATION CONTAINER. The 20260819T141246 "
-             "run had a funded purse, an enabled Buy, and an operator-watched "
-             "click that produced NOTHING on the wire: the client refuses a "
-             "purchase it has nowhere to put, which is ArenaNet's "
-             "'Inventory full' path and costs no traffic. Parameters are "
-             "retail's own, read from capture 20260819T132414 idx 8 "
-             "([inv, type 1, model 0, bag, 20 slots, 638]); the same burst's "
-             "type-5/42-slot bag is material storage, which is a GW fact "
-             "nobody here supplied and is why the reading is trusted."),
-        Step(2.0, 0x0140, [EQUIPPED_BAG_ID, 500],
-             f"0x0140 [purse {EQUIPPED_BAG_ID}, +500] -- FUND THE PLAYER",
-             "THE FIRST TEST. 0x0140's setter is `add [ecx+0x90], eax` -- it "
-             "CREDITS carried gold on the container its field 1 names "
-             "(handler 0x00846120 -> 0x00849FE0, refuted our own 'nothing "
-             "writes carried gold' the same day). Container 1 is the only one "
-             "this server creates (0x013F) and 0x0141 [1,0] is legal at login, "
-             "so this must not assert. Whether container 1 is the PURSE -- the "
-             "one ItemCliGetGold reads through [ctx+0x40]+0xF8 -- is exactly "
-             "what the shop's 'Your Funds' line will say. An `inventory` "
-             "assert at ItCliApi:1955 instead means id 1 is not registered "
-             "the way 0x0141's success implied."),
+        Step(2.0, 0x0140, [PLAYER_INVENTORY, 2000],
+             f"0x0140 [inventory {PLAYER_INVENTORY}, +2000] -- FUND THE PLAYER",
+             "'Your Funds' reads 2000 when the shop opens, and the inventory "
+             "window's own gold field agrees (both measured at 500 in "
+             "20260819T140723). 2000 covers every quote on the list, so a "
+             "refusal to buy cannot be blamed on funds. 0x0140's setter is "
+             "`add [ecx+0x90], eax` -- it CREDITS, and its field 1 is the "
+             "INVENTORY key, not a bag id."),
         Step(2.0, 0x0056,
              [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
@@ -732,79 +761,58 @@ def _merchant_window_steps(agent_id, origin):
                           AGENT_KIND_NPC, ox + 250, oy, plane,
                           allegiance=0x706C6179),
              f"create the shopkeeper: agent {a}, 250u to the side, 'play' token",
-             "a Hatcher stands there, green. It is a body, not yet a merchant."),
-        Step(8.0, 0x00C4, [a],
-             f"0x00C4 WINDOW_OWNER = agent {a} -- retail's first message",
-             "THE CONTROL: the character should TURN TO FACE the NPC "
-             "(0x00C4's handler computes the angle between the two agents and "
-             "applies it). If it turns, the owner register was written even if "
-             "no window ever draws."),
-        Step(2.0, 0x0141, [1, 500],
-             "0x0141 UPDATE_GOLD_STORAGE [1, 500] -- FUND THE CHARACTER",
-             "the login burst sends [1, 0], and with 0 funds the shop's Buy "
-             "button renders GREYED and a click on it produces NOTHING on the "
-             "wire (measured 20260818T235130: click delivered, the only c2s "
-             "traffic after it was the 5 s keep-alive 0x8009, byte-identical "
-             "at both timestamps). So the client gates purchase on funds "
-             "LOCALLY. 500 covers the 50/100/200 quotes; watch 'Your Funds'."),
-        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
-                                     _stock_item("warrior_legs")),
-             "0x0161: declare stock item 40 (leggings), flags 0x20001003, price 25", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
-                                     _stock_item("warrior_boots")),
-             "0x0161: declare stock item 41 (boots), flags 0x20001003, price 50", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
-                                     _stock_item("warrior_gloves")),
-             "0x0161: declare stock item 42 (gloves), flags 0x20001003, price 100", "nothing."),
-        Step(3.0, 0x0084, [ids],
-             "0x0084: stage the three stock ids into accumIntList[0]",
+             "a Hatcher stands there, green. A body, not yet a merchant."),
+    ] + declarations + [
+        Step(4.0, 0x00C4, [a],
+             f"OPENING 1 -- 0x00C4 WINDOW_OWNER = agent {a}",
+             "THE CONTROL: the character should TURN TO FACE the NPC. If it "
+             "turns, the owner register was written even if no window draws."),
+        Step(1.0, 0x0084, [ids],
+             f"0x0084: stage all {len(ids)} stock ids into accumIntList[0]",
              "nothing -- the appender is QUIET, measured twice."),
-        Step(3.0, 0x00CA, [1, 0x3F800000],
-             "0x00CA [1, 1.0f] -- THE SHOP OPENER, now with priced stock",
-             "the shop opens (measured twice, 56,928 / 56,909 px). THE TEST IS "
-             "THE PRICE COLUMN: 25 / 50 / 100 read back verbatim means F9 is "
-             "the price as sent and this field's 1.0f does not scale it. Any "
-             "other numbers -- doubled, halved, rounded -- means 0x00CA field 2 "
-             "IS a multiplier, which no run has been able to see while every "
-             "price was 0. 'Your funds' should stay 0; we grant no gold."),
-        Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
-             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD: three runs, three deaths",
-             "THE TEST. Both prior runs died on this message; both declared "
-             "killed the client 13 s before the drain below, which is the only "
-             "arm nobody has ever observed. It is also UNNECESSARY: 0x00CA "
-             "opens the shop by itself, twice measured (56,928 and 56,909 px). "
-             "What it already taught is banked -- field 1 is an item id "
-             "(undeclared 3 -> Assertion: item; declared 40 -> the guard "
-             "PASSED and the failure moved to a c0000005 at ASCII 'msg.'), so "
-             "a plain 0x0161 item is not merchant stock. RESTORED for the "
-             "flags test: the control is run 2, which sent this exact message "
-             "at these exact items and died -- the ONLY difference now is F8 "
-             "bit 2. IT DID NOT SURVIVE: run 20260818T224156 carried "
-             "F8=0x20001003 (bit0 set, bit2 clear, retail's own pattern, "
-             "confirmed by decoding our capture) and died on the IDENTICAL "
-             "c0000005 writing 0x2e67736d -- ASCII 'msg.' -- so the gate is "
-             "real but is not what this path is missing. WITHHELD again: it "
-             "kills the client every time and 0x00CA opens the shop without "
-             "it. The live lead is the CtlPage row callback, not a 0x0161 "
-             "field.",
-             sends=False),
-        Step(10.0, 0x0084, [ids],
-             "restage column 0 -- now ask the ORIGINAL question in this context",
-             "nothing by itself."),
-        Step(1.0, 0x00D8, [[1, 1, 1]],
-             "stage column 1 = [1,1,1]", "nothing by itself."),
-        Step(2.0, 0x00E1, [0],
-             "0x00E1 DRAIN in the merchant context -- the question this whole "
-             "line has been chasing",
-             "NOW THIS ARM IS LIVE: 0x00CA opened a collector window in the "
-             "20260818T211036 run and the client died before reaching here, "
-             "so if 0x00C3 survives this time the drain finally fires with a "
-             "window OPEN -- the experiment three runs of nulls could not "
-             "perform. Does the panel gain rows, change, or close?"),
-        Step(10.0, 0x0000, [],
-             "END: quiet frames so the last two sends have coverage after them",
-             "the run's final state. Note whether the character is still facing "
-             "the NPC.", sends=False),
+        Step(1.0, 0x00CA, [1, 0x3F800000],
+             "0x00CA [1, 1.0f] -- THE SHOP OPENER (0x00C3 WITHHELD here)",
+             f"a panel titled 'Hatcher [Collector]' listing {len(ids)} rows "
+             f"quoted 10, 20 ... {len(ids) * 10}, 'Your Funds: 2000', and Buy "
+             f"ENABLED. This is the Q1 arm and it must not be risked, so the "
+             f"message that has killed the client three times is withheld "
+             f"until opening 2."),
+        Step(30.0, 0x0000, [],
+             "THE BUY WINDOW: click a row, then click Buy",
+             "THE QUESTION OF THIS RUN. With bags now created during LOAD, a "
+             "click on Buy should put GAME_CMSG 0x4D on the wire -- the first "
+             "purchase request this project has ever received. Retail's own "
+             "is 0x4D [1, 40, [], b'', 0, [item], b'\\x01']: quantity 1, "
+             "price 40, one item id. Watch the gamesrv log for a c2s 0x004D, "
+             "and watch the funds line fall by the quoted price -- the client "
+             "debits ITSELF, measured on retail, where no server message "
+             "carries the debit. Silence here means the backpack was not the "
+             "whole story.", sends=False),
+        Step(4.0, 0x00C4, [a],
+             f"OPENING 2 -- re-arm the owner register on agent {a}",
+             "the panel may close and reopen; re-arming three times in one "
+             "session is proven (20260818T234622). From here the four "
+             "messages go out back-to-back, in retail's order."),
+        Step(0.5, 0x0084, [ids],
+             f"restage all {len(ids)} ids -- every reader drains this buffer",
+             "nothing."),
+        Step(0.5, 0x00CA, [1, 0x3F800000],
+             "0x00CA [1, 1.0f] -- reopen", "the shop opens again."),
+        Step(3.0, 0x00C3, [_STOCK_COUNT, 0],
+             f"0x00C3 [{_STOCK_COUNT}, 0] -- RETAIL'S OWN SHAPE, never tried",
+             "THE Q2 TEST, and both outcomes are answers. SURVIVES: the count "
+             "and type readings both live, one more run separates them, and "
+             "'0x00C3 is not authorable by a server' is retired. DIES on the "
+             "same c0000005 writing 0x2e67736d: with retail's count, retail's "
+             "order and a working shop behind it, nothing we send is the "
+             "problem -- the wrong-subscriber disassembly stands and field 1 "
+             "is unknowable from the wire. Prior deaths: [3,0] -> "
+             "`Assertion: item` ItCliApi.cpp(859); [40,0] -> c0000005. Both "
+             "were 3 staged."),
+        Step(12.0, 0x0000, [],
+             "END: quiet frames so the last send has coverage after it",
+             "the run's final state. Note whether the character is still "
+             "facing the NPC, and whether the panel survived.", sends=False),
     ]
 
 
@@ -858,11 +866,11 @@ def _gold_purse_steps(agent_id, origin):
                           AGENT_KIND_NPC, ox + 250, oy, plane,
                           allegiance=0x706C6179),
              f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
-        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs", 25)),
              "0x0161: leggings, value 25 (quotes at 50)", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots", 50)),
              "0x0161: boots, value 50 (quotes at 100)", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves", 100)),
              "0x0161: gauntlets, value 100 (quotes at 200)", "nothing."),
     ]
     # field1 = 0 IS A CLIENT-KILLER: `Assertion: inventory`,
@@ -947,11 +955,11 @@ def _shop_price_scale_steps(agent_id, origin):
                           AGENT_KIND_NPC, ox + 250, oy, plane,
                           allegiance=0x706C6179),
              f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
-        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs", 25)),
              "0x0161: leggings, value 25", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots", 50)),
              "0x0161: boots, value 50", "nothing."),
-        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves", 100)),
              "0x0161: gauntlets, value 100", "nothing."),
     ]
     arms = [("A", 0x3F800000, "1.0f", "50 / 100 / 200 -- the CONTROL; if this "
@@ -6622,30 +6630,41 @@ PROBES = {
              "bit 2 makes every row an hourglass this server never resolves.",
     ),
     "merchant_window": lambda a, o: Probe(
-        question="Can we author a merchant/collector window on an NPC we "
-                 "spawned, by replaying retail's own 0x00C4 -> 0x0161 -> "
-                 "0x0084 -> 0x00CA -> 0x00C3 sequence -- and does the accum "
-                 "buffer feed it? The last live candidate for 0x00E1's "
-                 "subscriber.",
-        predicts="Run 1 already opened the shop (0x00CA, panel titled "
-                 "'Hatcher [Collector]' listing all three items). THIS run "
-                 "tests one claim: 0x00C3's field 1 is an ITEM ID, not a "
-                 "count. [3, 0] asserted `item` at ItCliApi.cpp(859) because 3 "
-                 "was undeclared; [40, 0] names a declared, staged item and "
-                 "should NOT assert. If it survives, the count reading is "
-                 "retired AND the trailing 0x00E1 drain finally fires with a "
-                 "window open -- the experiment three runs of nulls could not "
-                 "reach. If it asserts anyway, the id was never the problem.",
+        question="Two, and the second cannot cost the first. (Q1) With the "
+                 "player's bags now created during LOAD rather than after "
+                 "spawn, does pressing Buy on our own authored shop finally "
+                 "put GAME_CMSG 0x4D on the wire? (Q2) What is 0x00C3 field "
+                 "1 -- a COUNT of staged items or a TYPE constant -- when the "
+                 "message is finally sent in retail's own shape?",
+        predicts="Q1: 20260819T140723 had a funded purse, correct prices and "
+                 "Buy ENABLED, and an operator-watched click produced ZERO "
+                 "c2s traffic because the client had nowhere to put the item. "
+                 "authsrv.PLAYER_BAGS now sends retail's nine bags in the "
+                 "login burst, so a click on Buy should emit 0x004D and the "
+                 "funds line should fall by the quoted price WITHOUT any "
+                 "server message carrying the debit. Silence means the "
+                 "backpack was not the whole story. Q2: prior 0x00C3 sends "
+                 "carried 3 and 40 over a THREE-item list and both died; the "
+                 "corpus has 0x00C3 [11, 0] over ELEVEN staged items, 6 of 6, "
+                 "and that shape has never been tried here. Survival keeps "
+                 "count and type alive for one more run to separate; another "
+                 "c0000005 says no field we send is the problem and closes "
+                 "the row as unknowable from the wire.",
         steps=_merchant_window_steps(a, o),
-        note="Follows retail's s1 sighting message-for-message (newopcodes, "
-             "capture 183756: 0x00C4[272] -> 11x 0x0161 -> 0x0084[11] -> "
-             "0x00CA[1,1.0f] -> 0x00C3[11,0]) with three items instead of "
-             "eleven, so 0x00C3 carries 3. 0x00CA's dword is the bit pattern "
-             "of 1.0f because that is what retail sent. ORDER IS THE RISK, not "
-             "the payload: 0x00C3 and 0x00CA are two of the eight readers that "
-             "consume-and-clear the owner register 0x00C4 writes. 0x00C5 is "
-             "deliberately NOT sent -- it asserts accumIntList[0].Count() >= 1 "
-             "and composes a string embedding an item name we cannot build.",
+        note="THE ITEM-ID READING IS ALREADY DEAD, and the corpus killed it "
+             "at the desk rather than on the client: 0x00C3 field 1 is 11 on "
+             "six windows across three connections and two different "
+             "shopkeepers, while item handles on those same connections vary "
+             "per connection (the bag ids alone drew 8..16 on one and "
+             "570/496/398.. on another). A constant is not a handle. What "
+             "the corpus CANNOT do is separate count from type, because all "
+             "six windows staged exactly eleven -- which is why this run "
+             "stages eleven too. ORDER IS THE RISK, not the payload: 0x00C3 "
+             "and 0x00CA are two of eight readers that consume-and-clear the "
+             "owner register 0x00C4 writes, so opening 2 sends all four "
+             "back-to-back the way retail does. 0x00C5 is deliberately never "
+             "sent -- it asserts accumIntList[0].Count() >= 1 and composes a "
+             "string embedding an item name we cannot build.",
     ),
     "accum_drain_e1": lambda a, o: Probe(
         question="What does the 0x00E1 drain (event 0x100000BA, upstream "

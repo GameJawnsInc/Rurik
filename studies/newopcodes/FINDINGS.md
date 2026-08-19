@@ -2076,6 +2076,177 @@ should not go into `overrides.json` on this evidence.
 > acceptance test: press I, see a 20-slot grid, then Buy and watch for `GAME_CMSG 0x4D` —
 > which would be the first purchase request this project has ever *received*.
 
+> ### RETAIL'S NINE BAGS, READ OUT OF THE CORPUS — and two readings that validate themselves. 2026-08-19, OBSERVED
+>
+> Extractor: `toolkit/authsrv/invcensus.py` (`bag_shapes()` / `print_bag_shapes()`),
+> build 38833, over every live capture in the vault. Pinned by
+> `toolkit/authsrv/test_playerbags.py`.
+>
+> **This is not a sample. 49 of 49 live connections carry the SAME nine bags** — one
+> distinct `(type, model, slots)` set across every character, every session and every
+> map in the corpus. `0x013F` is `[inventory, type, model, bag_id, slots, item]`:
+>
+> | type | model | slots | reading |
+> |---|---|---|---|
+> | 1 | 0 | **20** | **backpack** |
+> | 2 | 21 | 9 | equipped items |
+> | 3 | 6 | 12 | belt pouch |
+> | 4 | 7–11 | 25 ×5 | storage panes |
+> | 5 | 5 | **42** | **material storage** |
+>
+> **TWO READINGS FALL OUT AND BOTH CHECK THEMSELVES, which is the only reason they are
+> OBSERVED rather than guessed.**
+>
+> **(1) The type-5 bag holds 42 slots** — exactly Guild Wars' material-storage capacity.
+> That number came out of the capture; nobody here put it in.
+>
+> **(2) The trailing field is the BAG'S OWN ITEM.** It is nonzero on the type-1 backpack
+> and on **nothing else**, and **49 of 49** of those nonzero values are an item id
+> **declared by an `0x0161` in the same tape, at the same timestamp**. Guild Wars agrees
+> from the other side: the Backpack is a real item a player can hold, and the equipped,
+> storage and material containers are not. Our probe had been sending `638` there — a
+> value copied off one connection and undeclared in ours. We now send **0**, which is
+> retail's own value for five of the six types rather than an invention.
+>
+> **THE BAG IDS ARE A NAMESPACE, NOT DATA.** Retail's are arbitrary per-connection
+> handles: the same nine bags drew **8..16** on one connection and
+> **570 / 496 / 398 / 328 / 438 / 654 / 571 / 462 / 658** on another, exactly as the
+> `0x0144` inventory key itself drew **4 / 159 / 183**. So only the `(type, model,
+> slots)` triples are ArenaNet's; a server allocates its own ids, and ours keeps
+> `EQUIPPED_BAG_ID = 1` because `ITEM_MOVED_TO_LOCATION` already names it.
+>
+> **AND `0x0140`'s CONTAINER IS THE INVENTORY KEY, NOT A BAG.** The gold credit named
+> **4 / 159 / 183** on three connections — the `0x0144` keys — while those same
+> connections' bag ids were 8..16 and 570.. . Ours worked only because this server
+> allocates 1 in *both* namespaces, so the code said `EQUIPPED_BAG_ID` and was right by
+> coincidence. Renamed `PLAYER_INVENTORY`.
+
+> ### `0x00C3` FIELD 1: THE ITEM-ID READING IS DEAD, AND THE CORPUS KILLED IT AT THE DESK. 2026-08-19, OBSERVED
+>
+> The CONTESTED row above listed three readings — an **item id** (ours, inferred from two
+> crashes), the **count** of staged items, or a **type** constant. A scan of every
+> `0x00C3` in the live corpus settles one of them without launching anything.
+>
+> | capture | conn | merchant | staged | `0x00C3` |
+> |---|---|---|---|---|
+> | `20260817T183756` | 58389 | 272 | 11 | `[11, 0]` |
+> | `20260819T132414` | 53419 | 272 | 11 | `[11, 0]` |
+> | `20260819T132414` | 53419 | 272 | 11 | `[11, 0]` |
+> | `20260819T132414` | 55414 | 272 | 11 | `[11, 0]` |
+> | `20260819T132414` | 55414 | 272 | 11 | `[11, 0]` |
+> | `20260819T132414` | 55414 | **273** | 11 | `[11, 0]` |
+>
+> **Six windows, three connections, two different shopkeepers with entirely different
+> stock lists** (`[2473..2483]` and `[2207, 2208, 2173, 2199..2206]`). Field 1 is **11**
+> every time.
+>
+> **THAT KILLS THE ITEM-ID READING.** Item ids in this protocol are per-connection
+> handles that vary wildly — the same nine bags drew ids 8..16 on one connection and
+> 570.. on another, and the inventory key drew 4 / 159 / 183. **A value that is constant
+> across three connections is not a handle.** Our reading came from two crashes
+> (`[3, 0]` → `Assertion: item`; `[40, 0]` → `c0000005`) and the later disassembly
+> already explained those without it: the message reaches the wrong subscriber, which
+> reads a fifth dword and calls the `/GS` stack cookie.
+>
+> **THE CORPUS CANNOT SEPARATE COUNT FROM TYPE**, and it is worth saying why rather than
+> picking one: all six windows staged exactly **eleven** items, so "the count of staged
+> items" and "a constant" predict the same number in every row the corpus has.
+>
+> **The c2s side offers 11 where no count can, and it is NOT decisive either.** In the
+> same window the client sends `0x004A [11, 0, [item], n, []]` — a SELL, one item, `n`
+> the price — answered by `0x00CC [11]`; and `0x004D [1, 40, [], b'', 0, [item], b'\x01']`
+> — the BUY — answered by `0x00CC [1]`. So **11 and 1 are members of a transaction-kind
+> enum**, 11 = sell and 1 = buy, echoed by the ack, 9 of 9. Whether `0x00C3`'s 11 is that
+> same enum or a coincidence with the stock count is exactly the question, and a window
+> that hosts BOTH a `[1, ...]` buy and an `[11, ...]` sell shows the c2s value tracks the
+> ACTION rather than the window — which weakens, rather than supports, reading `0x00C3`'s
+> 11 as "the sell kind".
+>
+> **SO THE RUN IS THE DISCRIMINATOR, and it now has a shape nobody has tried.** Every
+> `0x00C3` this project has sent carried 3 or 40 over a THREE-item list. `merchant_window`
+> now stages **eleven** and sends `0x00C3 [11, 0]` in retail's exact order, with the Buy
+> test banked first because this message has killed the client every time.
+
+> ### THE FIRST PURCHASE REQUEST THIS PROJECT HAS EVER RECEIVED — and `0x00C3` SURVIVES in retail's shape. 2026-08-19, OBSERVED
+>
+> Harness **`20260819T160503`**, probe `merchant_window`, bags moved into the login burst.
+>
+> **`GAME_CMSG 0x804D` × 2.** The client asked to buy. That is the message this arc has
+> only ever watched ArenaNet's server receive, and the backpack was the whole blocker:
+> same shop, same funds, same enabled Buy as `20260819T141246`, and the only change is
+> that nine bags now go out during LOAD instead of one after spawn.
+>
+> **The shop is complete on every axis we can author.** Eleven rows with a working
+> scrollbar, quoted **10 / 20 / 30 … 110** — our declared values doubled, so
+> `displayed = value × 2` holds at n = 11 — real item names resolved from the client's own
+> archive (`Ringmail Leggings`, `Ringmail Hauberk`, `Recruit's Cap`), `Armor: 25` and
+> `Armor +20 (vs. physical damage)` on the selected row, a quantity spinner, and
+> **`Your funds: 2⬥ 0●`** — 2000 gold, from one `0x0140 [1, 2000]`.
+>
+> **The inventory renders the whole container set.** Press `I` and there is a bag row, the
+> equipment doll with the hammer in hand, `Identify All`, `Weapon Sets`, and **six
+> container icons along the bottom** where before there were none.
+>
+> **`0x00C3 [11, 0]` DID NOT KILL THE CLIENT.** Fourteen keep-alives over ~70 s after it,
+> then a clean shutdown. Three prior sends died — `[3, 0]` on `Assertion: item`
+> `ItCliApi.cpp(859)`, `[40, 0]` and the flags arm on `c0000005` — and all three staged
+> **three** items. This one staged **eleven**, in retail's own order
+> (`0x00C4` → `0x0084` → `0x00CA` → `0x00C3`, back to back). **"`0x00C3` is not authorable
+> by a server" is RETIRED**, and so is the reading that a `0x0161` field or the payload
+> shape was ever the problem.
+>
+> **WHAT THAT DOES AND DOES NOT SETTLE FOR FIELD 1.** The item-id reading was already dead
+> at the desk. Survival at `[11, 0]` over 11 staged items is consistent with **both**
+> survivors — count and type — because they predict the same number here, exactly as in
+> all six corpus windows. **The separating run is now cheap and safe**, since the message
+> no longer crashes: stage **five** items and send `0x00C3 [5, 0]`, then `[11, 0]`. Count
+> says the first is right and the second overruns; type says the reverse. One run.
+>
+> **AND THE PURCHASE DID NOT COMPLETE, which is correct and is the next arm.** Funds
+> stayed at 2000 and no item appeared, because this server has no arm for `0x4D` — it
+> logged `UNHANDLED GAME_CMSG 0x804d`. **So the client does NOT debit itself on sending;
+> it waits for the server.** See the correction below.
+
+> ### ⚠ CORRECTION — `0x014F` IS THE GOLD DEBIT. "The client debits its own purse" is REFUTED. 2026-08-19
+>
+> This document twice says no server message carries a purchase debit, "measured from the
+> binary and now from retail's own wire, the two independent methods agree". **Both were
+> wrong, and the loopback run above is what exposed it**: our client sent `0x4D`, got no
+> answer, and its funds did not move.
+>
+> Retail's reply to the one BUY in the corpus, all in the frame **0.04 s** after it:
+>
+> ```
+> c2s 0x004D [1, 40, [], b'', 0, [2474], b'\x01']    quantity 1, price 40, item 2474
+> s2c 0x00CC [1]                     transaction done, kind 1 = buy
+> s2c 0x013E [183, 4130, 570, 1]     ITEM_MOVED: inventory 183, NEW item 4130, bag 570, slot 1
+> s2c 0x014F [183, 40]               <-- THE DEBIT: inventory key, 40 gold
+> s2c 0x0161 [4130, ...]             CREATE_NAMED_ITEM declaring the item just moved
+> ```
+>
+> **`0x014F` is `0x0140`'s mirror** — same field 1 (the `0x0144` inventory key, 183), field 2
+> the amount, and the balance went 108 → 68 across this moment. Bag **570** is that
+> connection's **backpack**, so a purchase lands in the backpack, which is why a client
+> without one refuses before it speaks.
+>
+> **WHY THE NEGATIVE WAS WRONG, and it is the same defect twice in two days.** The scan
+> looked for the **balances** (108 / 68 / 88) and for a fixed opcode set that did not
+> include `0x014F`; it never asked whether a **delta** was on the wire. That is the second
+> published negative this session from a search with no positive control — after the
+> `0x0140` walk that enumerated one of two receive tables. **A negative from a filtered
+> scan needs the filter to find something you already know about before you believe what
+> it cannot find.**
+>
+> **STATED HONESTLY: `0x014F` is n = 1.** One sighting in the whole corpus, because one
+> purchase was ever made in front of a capture. It is a strong single observation — right
+> time, right amount, right container, mirror of a 31-sighting opcode — but it is
+> **OBSERVED-once**, not CORROBORATED, and the way to promote it is to implement the arm
+> and watch our own client's funds fall by the quoted price.
+>
+> **THE PURCHASE RECIPE IS NOW WRITTEN DOWN AND IS ONE SERVER ARM:** answer `0x4D` with
+> `0x00CC [1]` + `0x0161`(new item) + `0x013E`(into the backpack) + `0x014F [inventory,
+> price]`. That is the next rung, and its acceptance test is the funds line moving.
+
 > ### ⚠ REFUTED THE SAME DAY — `0x0140` IS THE GOLD CREDIT. Read this before the section below.
 >
 > The section that follows concludes *"no `GAME_SMSG` sets carried gold"*, from six static
