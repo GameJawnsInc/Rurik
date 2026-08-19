@@ -1689,8 +1689,22 @@ distance as the trigger: a body at −3000u is dropped from the compass in the s
 and its row stays lit. The predicate is agent-presence; retail's range greying is that
 same rule with server-side visibility culling in front of it (`agentroster.py`'s corpus
 churn), which is a server feature we have not built rather than a message we have not
-sent. `--hero-body-offset` (new) is the placement knob. Still open: pets sharing the
-commander messages, and `0x0017`'s trigger state.
+sent. `--hero-body-offset` (new) is the placement knob.
+**`0x0017`'s name is RETRACTED (§28.11)** — it is not the unlock. Its branch is chosen
+by a getter reading a per-agent ChCliApi `obj+0x24`, the same store GmBundle,
+GmWeaponBar and GmCoreAction treat as "carrying a bundle"; the real toggle-off is
+`0x0016 [hero, 0]`, its own zero form, and the crosshair paint reads both stores in the
+same priority order so there was never a disagreement. The schema entry is deleted
+rather than renamed (the mechanism is OBSERVED, a name would be inference) and its
+writer is NOT FOUND on four searched surfaces, so `0x0017` is unreachable from any rig
+we can build. **Pets DO share the commander messages (§28.12)**: `0x0062`/`0x0063` write
+the pet container at `+0x6AC` with the same agent id, 28-byte records (+0x14 aiMode,
++0x18 lockedTarget) — but only after a declaration we have never sent, s2c `0x00B2
+PET_ADD`; without it both mirror writes hit a NULL find and silently do nothing, which
+is why the pet half was invisible all arc. `0x00B2`/`0x00B3`/`0x00B4` PET_ADD/REMOVE/
+RENAME named from the client's own log strings, medium (static-only, no capture).
+Next in this corner: the `+0x6BC` and `+0x6F0` sibling containers, wholly unread
+(`PtMinionRoster.cpp` is the candidate for one), read by the log-string method.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

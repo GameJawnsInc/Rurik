@@ -977,26 +977,7 @@
     ],
     "name": "HERO_LOCK_TARGET",
     "name_confidence": "high",
-    "why": "OBSERVED both ways. Static: send wrapper 0x0091FD60 (opcode immediate 0x16) via thunk 0x0080DFD0, GmAgentCommander msg-0x24 handler 0x004FBD20 (the commander crosshair); lock branch reads the selected target via AvApi 0x007E1090. Wire: captured [200, 10] with a practice target selected via the C keybind, and -- once the 0x0063 echo set record+0x20 -- the SECOND click sent [200, 0], the rec+0x20!=0 clear branch the static trace predicted. So the toggle-off on this path is 0x16 [hero, 0], not opcode 23; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7)."
-   },
-   "23": {
-    "opcode": 23,
-    "table": "GAME_CMSG_0023",
-    "declared_unpack_size": 6,
-    "variable_length": false,
-    "fields": [
-     {
-      "type": "msg_header",
-      "length": 23
-     },
-     {
-      "type": "agent_id",
-      "length": 0
-     }
-    ],
-    "name": "HERO_UNLOCK_TARGET",
-    "name_confidence": "medium",
-    "why": "OBSERVED static only (38833), still uncaptured: send wrapper 0x0091FDB0 (opcode 0x17) via thunk 0x0080DFE0, the isLocked (getter 0x0080CEE0) branch of crosshair handler 0x004FBD20. The 2026-08-19 round-trip runs never produced it -- with record+0x20 set by the 0x0063 echo the client clears via 0x16 [hero, 0] instead -- so whatever state 0x0080CEE0 reads (the pet container +0x6AC is the standing suspect) is not set by this rig. studies/pvpui/FINDINGS.md 28.7."
+    "why": "OBSERVED static + CONFIRMED live. Static (38833): send wrapper 0x0091FD60 via thunk 0x0080DFD0, from GmAgentCommander frame proc 0x004FBAF0's msg-0x24 handler 0x004FBD20; the lock branch reads the selected target via AvApi 0x007E1090. Live 2026-08-19 (run 20260819T105652): captured as [200, 10] with a foe selected; once the server echoed 0x0063 the crosshair lit gold and the tooltip named the locked target. THE TOGGLE-OFF IS THIS SAME OPCODE WITH TARGET 0, not 0x0017 -- captured, and explained at 0x004FBDB7: with the bundle store clear, the handler re-reads hero record +0x20 and branches to 0x0016 [hero, 0] when it is non-zero. An earlier reading that paired this with 0x0017 was refuted 2026-08-19; see studies/pvpui/FINDINGS.md 28.11."
    }
   },
   "GAME_SMSG": {
@@ -2606,7 +2587,7 @@
     ],
     "name": "HERO_AI_MODE_SET",
     "name_confidence": "high",
-    "why": "OBSERVED both ways. Static: handler 0x0091E060 (38833) -> ChCliApi wrapper 0x008107A0 -> ChCliHero::SetAiMode 0x0081D990, which writes activation-record+0xC and raises frame event 0x1000003A -- the ONE event GmAgentCommander subscribes to (0x0072 raises 0x10000038, which the panel has no case for; that asymmetry was measured first as an inert 0x0072 echo). Wire: sending [200, 1] moved the commander panel's stance ring to Guard AND triggered the hero's spoken Guard acknowledgment line; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). The s2c display echo for GAME_CMSG 21 HERO_AI_MODE."
+    "why": "OBSERVED both ways. Static: handler 0x0091E060 (38833) -> ChCliApi wrapper 0x008107A0 -> ChCliHero::SetAiMode 0x0081D990, which writes activation-record+0xC and raises frame event 0x1000003A -- the ONE event GmAgentCommander subscribes to (0x0072 raises 0x10000038, which the panel has no case for; that asymmetry was measured first as an inert 0x0072 echo). Wire: sending [200, 1] moved the commander panel's stance ring to Guard AND triggered the hero's spoken Guard acknowledgment line; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). The s2c display echo for GAME_CMSG 21 HERO_AI_MODE. ALSO WRITES THE PET CONTAINER (2026-08-19): the wrapper mirrors the same agent-keyed write into charCtx[+0x2C]+0x6AC rec+0x14 (aiMode), raising event 0x1000004B -- so ONE opcode drives the hero panel and the pet panel, but only for an agent already declared by PET_ADD; the mirror is a silent no-op otherwise. FINDINGS 28.12."
    },
    "102": {
     "opcode": 102,
@@ -2679,7 +2660,88 @@
     ],
     "name": "HERO_LOCK_TARGET_SET",
     "name_confidence": "high",
-    "why": "OBSERVED both ways. Static: handler 0x0091E080 (38833) pushes msg+8, msg+4 -> wrapper 0x008107E0 (hero container +0x584 AND pet container +0x6AC) -> setter 0x0081D9C0, which writes activation-record+0x20 and raises frame event 0x1000003F. Wire: echoing [200, 10] lit the commander crosshair gold with 'Hatcher [Collector] is locked as Norgu's target'; [200, 0] cleared it back to the offer tooltip; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7). [heroAgent, targetAgent]; target 0 clears. The s2c echo for GAME_CMSG 22."
+    "why": "OBSERVED both ways. Static: handler 0x0091E080 (38833) pushes msg+8, msg+4 -> wrapper 0x008107E0 (hero container +0x584 AND pet container +0x6AC) -> setter 0x0081D9C0, which writes activation-record+0x20 and raises frame event 0x1000003F. Wire: echoing [200, 10] lit the commander crosshair gold with 'Hatcher [Collector] is locked as Norgu's target'; [200, 0] cleared it back to the offer tooltip; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7). [heroAgent, targetAgent]; target 0 clears. The s2c echo for GAME_CMSG 22. ALSO WRITES THE PET CONTAINER (2026-08-19): the wrapper mirrors the same agent-keyed write into charCtx[+0x2C]+0x6AC rec+0x18 (lockedTarget), raising event 0x1000004C -- so ONE opcode drives the hero panel and the pet panel, but only for an agent already declared by PET_ADD; the mirror is a silent no-op otherwise. FINDINGS 28.12."
+   },
+   "178": {
+    "opcode": 178,
+    "table": "GAME_SMSG_0178",
+    "declared_unpack_size": 90,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 178
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PET_ADD",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F040 -> 0x008137B0 -> inserter 0x0081F750, which builds a 28-byte record in the pet container charCtx[+0x2C]+0x6AC: rec+0 = the pet's agent id (the sorted key), +4 = a second agent id (owner), +8 = the name, +0xC/+0x10 unread, +0x14 = aiMode, +0x18 = lockedTarget (zeroed at insert). Its not-found log reads 'PetAdd (agent %d, aiMode %d): Pet already added' (VA 0x00A959F0), which is what names the opcode AND identifies field 6 as aiMode. THIS IS THE PET'S DECLARATION: without it, s2c 0x0062 and 0x0063 mirror-write into the pet container, find no record, and silently do nothing (0x0081F6E4 / 0x0081F724)."
+   },
+   "179": {
+    "opcode": 179,
+    "table": "GAME_SMSG_0179",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 179
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "PET_REMOVE",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F070 -> 0x008137E0 -> 0x0081F850; log 'PetRemove (agent %d): Pet not added' (VA 0x00A95A20)."
+   },
+   "180": {
+    "opcode": 180,
+    "table": "GAME_SMSG_0180",
+    "declared_unpack_size": 74,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 180
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     }
+    ],
+    "name": "PET_RENAME",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F090 -> 0x00813800 -> 0x0081F900; log 'PetRename (agent %d): Pet data not reported' (VA 0x00A95A44)."
    }
   }
  }
