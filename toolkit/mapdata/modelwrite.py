@@ -163,6 +163,15 @@ def extract(payload):
             "collisions": colls, "tail": bytes(payload[end:])}
 
 
+def _groups_of(s):
+    """The per-group transform id tuples of one typed sub-model."""
+    out, c = [], 0
+    for n in s["group_counts"]:
+        out.append(tuple(s["transforms"][c:c + n]))
+        c += n
+    return out
+
+
 def _submodel_size(s):
     ti = len(s["indices"])
     nv = s["nv"]
@@ -204,6 +213,22 @@ def encode(t):
               f"sub-model {i}: group transform counts total "
               f"{sum(s['group_counts'])}, not the {len(s['transforms'])} "
               f"transforms present (MdlCombine:860)")
+        # THE CLIENT'S OWN GROUP INVARIANTS, and note which one is NOT here.
+        # `MAX_TRANSFORM_IDS` is 4 and a group is a duplicate-free set: both
+        # hold on 14,660 of 14,660 retail groups (sizes 1:7,038 2:6,015
+        # 3:1,466 4:141, zero duplicates), so both are refusals. The client
+        # also treats a group as SORTED -- it interns them by hash, so on-disk
+        # order is irrelevant at runtime -- and that is deliberately NOT
+        # enforced: retail ships 1,064 of 14,660 groups (7.3%) in non-ascending
+        # order, so a writer that required sorting would refuse ArenaNet's own
+        # data. Measured before it was written, which is the only reason this
+        # comment is not a bug.
+        for gi, ids in enumerate(_groups_of(s)):
+            _need(1 <= len(ids) <= 4,
+                  f"sub-model {i} group {gi} binds {len(ids)} transforms; the "
+                  f"client's own bound is 1..4 (MAX_TRANSFORM_IDS)")
+            _need(len(set(ids)) == len(ids),
+                  f"sub-model {i} group {gi} repeats a transform id: {ids}")
         _need(len(s["u2_records"]) % 12 == 0,
               f"sub-model {i}: the u2 block is {len(s['u2_records'])} bytes, "
               f"not a whole number of 12-byte records")
