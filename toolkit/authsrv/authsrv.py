@@ -888,9 +888,25 @@ EQUIPPED_SLOT_COUNT = 9
 # six bag types, not an invented one. If the grid fails to appear, declaring an
 # item for this field is the next arm, and it is a one-line change.
 BAG_TYPE_BACKPACK = 1
+# The Backpack is an ITEM and the client will not draw the container
+# without it. `0x013F`'s trailing field is that item's id -- nonzero on
+# the type-1 bag and on nothing else, 49 of 49 in the live corpus an id
+# declared by an `0x0161` in the SAME tape. We sent 0 on 2026-08-19 and
+# got eight containers and no Backpack, which is the FIRST of the four
+# item containers -- WIKI (GWW, "Container", rev. 2026): "1 Backpack, 1
+# Belt Pouch, 2 Bags and 1 Equipment Pack", the Backpack at 20 slots and
+# unable to be "dragged away into another container or be destroyed".
+# The row is content/items.toml [item.backpack], read off ArenaNet's own
+# declaration; only this id is ours, as the bag ids and the 0x0144 key are.
+BACKPACK_ITEM_ID = 2
+# The 0x0144 ITEM_STREAM_CREATE key this server registers, and the id
+# 0x0140 / 0x0141 / 0x014F select a purse with. NOT a bag id: retail's
+# gold messages named 4 / 159 / 183 -- their connections' stream keys --
+# while the bag ids on those same connections were 8..16 and 570.. .
+PLAYER_INVENTORY_KEY = 1
 PLAYER_BAGS = (
     # (bag_id, type, model, slots, item)
-    (2, BAG_TYPE_BACKPACK, 0, 20, 0),           # backpack
+    (2, BAG_TYPE_BACKPACK, 0, 20, BACKPACK_ITEM_ID),   # backpack
     (EQUIPPED_BAG_ID, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED,
      EQUIPPED_SLOT_COUNT, 0),                   # equipped items
     (3, 3, 6, 12, 0),                           # belt pouch
@@ -3988,6 +4004,124 @@ def skill_timing(skill_id):
             float(row["recharge"]))
 
 
+# ------------------------------------------------- buying from a merchant
+#
+# GAME_CMSG 0x004D is the client asking to buy, and until 2026-08-19 this
+# server had never RECEIVED one: the client refuses a purchase it has nowhere
+# to put, refuses it LOCALLY, and costs no wire message doing it. Nine bags in
+# the login burst fixed that (PLAYER_BAGS), and the request arrived twice.
+#
+# THE REQUEST, ours and ArenaNet's, identical in shape:
+#
+#   ours    0x4D [1, 10, [], b'', 0, [40],   b'\x01']
+#   retail  0x4D [1, 40, [], b'', 0, [2474], b'\x01']
+#
+# field 1 the transaction KIND (1 = buy; the sell message 0x004A carries 11 and
+# 0x00CC echoes whichever it was, 9 of 9), field 2 the QUOTED price -- ours
+# said 10 for a row we declared at value 5, which is the `displayed = value x 2`
+# rule the panel already showed -- field 6 the item ids, field 7 one quantity
+# byte per id.
+#
+# THE REPLY IS FOUR MESSAGES, and their ORDER is retail's rather than ours.
+# Read off the single purchase in the live corpus (20260819T132414, conn 55414,
+# +0.04 s after the request, extractor toolkit/authsrv/cmsgstream.py, build
+# 38833):
+#
+#   0x00CC [1]                    transaction done, echoing the kind
+#   0x013E [183, 4130, 570, 1]    the NEW item into bag 570 -- the BACKPACK
+#   0x014F [183, 40]              the DEBIT: inventory key, quoted price
+#   0x0161 [4130, ...]            and only NOW is the item declared
+#
+# The move precedes the declaration and that is not a transcription slip -- it
+# is what the bytes say, in one frame, so it is what we send. Note also that
+# the bought item gets a NEW id (2474 -> 4130): merchant stock is a catalogue,
+# and buying MINTS a copy rather than handing over the listed row.
+#
+# 0x014F IS OBSERVED ONCE. One purchase was ever made in front of a capture, so
+# n = 1 -- a strong single observation (right moment, right amount, right
+# container, exact mirror of 0x0140's 31-sighting credit) and NOT corroborated.
+# The way to promote it is this arm plus a client whose funds fall by the quote.
+# studies/newopcodes/FINDINGS.md, the purchase-recipe section.
+GAME_CMSG_ITEM_PURCHASE = 0x004D
+GAME_SMSG_TRANSACTION_DONE = 0x00CC
+GAME_SMSG_GOLD_DEBIT = 0x014F
+TRANSACTION_KIND_BUY = 1
+# Where a purchase lands. PLAYER_BAGS gives the backpack this id; retail put
+# its bought item in the backpack too (bag 570 of nine, the type-1 container).
+BACKPACK_BAG_ID = 2
+BACKPACK_SLOT_COUNT = 20
+# New ids for minted copies. Clear of the probe stock (40..50), the starter
+# hammer (1) and the drain items -- an id collision would silently overwrite a
+# declaration rather than error.
+PURCHASED_ITEM_ID_BASE = 5000
+
+
+def handle_item_purchase(values, send, state, conn_id, rec):
+    """Answer one GAME_CMSG 0x004D: mint the item, place it, take the money.
+
+    REFUSALS ARE LOUD AND COST NOTHING, which matters more here than usual: the
+    client has already decided locally that it can afford this and has room for
+    it, so anything we cannot answer is a disagreement between its model and
+    ours -- exactly the thing that must not be papered over with a plausible
+    reply. An unknown item id, a missing declaration or a malformed request is
+    printed and dropped, and the client simply sees no transaction.
+    """
+    kind = values[1] if len(values) > 1 else None
+    price = values[2] if len(values) > 2 else 0
+    items = values[6] if len(values) > 6 else []
+    counts = values[7] if len(values) > 7 else b""
+    if not isinstance(items, (list, tuple)) or not items:
+        print(f"[c{conn_id}] BUY refused: no item in the request {values[1:]!r}",
+              flush=True)
+        return
+    if kind != TRANSACTION_KIND_BUY:
+        # 11 is the SELL kind and has its own message (0x004A). Anything else
+        # is a transaction type nothing here has ever seen.
+        print(f"[c{conn_id}] BUY refused: transaction kind {kind}, "
+              f"expected {TRANSACTION_KIND_BUY}", flush=True)
+        return
+    declared = state.setdefault("declared_items", {})
+    stock_id = items[0]
+    row = declared.get(stock_id)
+    if row is None:
+        print(f"[c{conn_id}] BUY refused: item {stock_id} was never declared "
+              f"by this session ({len(declared)} on file)", flush=True)
+        return
+    slot = state.get("backpack_next_slot", 0)
+    if slot >= BACKPACK_SLOT_COUNT:
+        print(f"[c{conn_id}] BUY refused: backpack full ({slot} slots used)",
+              flush=True)
+        return
+    # array8 decodes to a str of code points, the same shape the settings blob
+    # arrives in; one byte per item id, so the first is this item's quantity.
+    try:
+        quantity = (counts[0] if isinstance(counts, (bytes, bytearray))
+                    else ord(counts[0]))
+    except (IndexError, TypeError):
+        quantity = 1
+    new_id = state.get("next_purchased_item", PURCHASED_ITEM_ID_BASE)
+    state["next_purchased_item"] = new_id + 1
+    state["backpack_next_slot"] = slot + 1
+    minted = list(row)
+    minted[0] = new_id
+    if len(minted) > 10:
+        minted[10] = quantity
+
+    send(GAME_SMSG_TRANSACTION_DONE, [kind],
+         f"TRANSACTION_DONE(kind {kind})")
+    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
+         f"ITEM_MOVED_TO_LOCATION(bought {new_id} -> backpack slot {slot})")
+    send(GAME_SMSG_GOLD_DEBIT, [PLAYER_INVENTORY_KEY, price],
+         f"GOLD_DEBIT({price})")
+    send(GAME_SMSG_CREATE_NAMED_ITEM, minted,
+         f"CREATE_NAMED_ITEM(bought copy {new_id} of stock {stock_id})")
+    rec.event("purchase", stock_id=stock_id, new_id=new_id, price=price,
+              quantity=quantity, bag=BACKPACK_BAG_ID, slot=slot)
+    print(f"[c{conn_id}] BUY: stock {stock_id} -> item {new_id} x{quantity} "
+          f"into backpack slot {slot}, {price} gold debited", flush=True)
+
+
 def handle_skill_press(values, send, state, conn_id, opcode):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -6331,6 +6465,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 if isinstance(spot, (list, tuple)) and len(spot) == 2:
                     state.setdefault("agent_pos", {})[values[0]] = (
                         float(spot[0]), float(spot[1]))
+            # EVERY ITEM WE DECLARE, kept so a purchase can mint a copy
+            # of it. Hooked here for the same reason the create above is:
+            # probes declare stock by sending 0x0161 directly, so no
+            # bookkeeping outside this function sees them.
+            if opcode == GAME_SMSG_CREATE_NAMED_ITEM and values:
+                state.setdefault("declared_items", {})[values[0]] = list(
+                    values)
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
@@ -6808,6 +6949,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # indexed values[3] and killed the thread. TWO run
                         # failures, `Code=007` on the first and a hung load on
                         # the second, from one loop variable.
+                        # The Backpack's own item, declared BEFORE the
+                        # container that cites it -- retail's order, and
+                        # the only bag of the nine that names one.
+                        send(GAME_SMSG_CREATE_NAMED_ITEM,
+                             agents.named_item(
+                                 BACKPACK_ITEM_ID,
+                                 agents.item_template("backpack")),
+                             "CREATE_NAMED_ITEM(backpack)")
                         for bag_id, bag_type, model, slots, item in PLAYER_BAGS:
                             send(GAME_SMSG_INVENTORY_CREATE_BAG,
                                  [1, bag_type, model, bag_id, slots, item],
@@ -8643,6 +8792,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The load bar reaches 100% without this and stops there.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                    elif opcode == GAME_CMSG_ITEM_PURCHASE:
+                        handle_item_purchase(values, send, state,
+                                             conn_id, rec)
                     elif opcode == GAME_CMSG_CLIENT_PERF_REPORT:
                         handle_perf_report(values, send, state, conn_id)
                     else:

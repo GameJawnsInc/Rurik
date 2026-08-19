@@ -54,10 +54,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+import agents  # noqa: E402
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=15)
+LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=18)
 
 # (type, model, slots), in retail's own send order. Duplicated here rather than
 # imported from authsrv so the check has two independent sides: if someone
@@ -65,6 +66,13 @@ LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=15)
 RETAIL_SHAPES = ((1, 0, 20), (2, 21, 9), (3, 6, 12),
                  (4, 7, 25), (4, 8, 25), (4, 9, 25), (4, 10, 25), (4, 11, 25),
                  (5, 5, 42))
+
+
+def freeze(v):
+    """Hashable copy of a decoded payload -- the modifier tail is a list of lists."""
+    if isinstance(v, (list, tuple)):
+        return tuple(freeze(x) for x in v)
+    return v
 
 
 def ours():
@@ -143,6 +151,7 @@ def shadowed_by_bag_loop(tree):
 
 
 def main():
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
     # ---- 1-4. against ArenaNet's own wire -------------------------------
     try:
         import invcensus
@@ -181,6 +190,25 @@ def main():
                   f"SAME TAPE. Guild Wars agrees: the Backpack is a real "
                   f"item, the equipped/storage/material containers are not")
 
+        packs = invcensus.backpack_items()
+        theirs_item = {freeze(d[1:]) for _c, _n, d in packs}
+        ours_item = freeze(agents.named_item(
+            authsrv.BACKPACK_ITEM_ID,
+            agents.item_template("backpack"))[1:])
+        LEDGER.ok(len(theirs_item) == 1 and packs,
+                  "ArenaNet's BACKPACK item is ONE row, not a per-character one",
+                  f"{len(theirs_item)} distinct declaration(s) over "
+                  f"{len(packs)} connection(s), identical but for the item id, "
+                  f"which is a per-connection handle like the bag ids and the "
+                  f"0x0144 key")
+        LEDGER.ok(ours_item in theirs_item,
+                  "and content/items.toml reproduces it FIELD FOR FIELD",
+                  f"file id, type, dyes, flags 0x{ours_item[6]:08X}, value, "
+                  f"model, the encoded name and the single modifier word -- all "
+                  f"as retail declares them. Three of these were mistyped on "
+                  f"first write and the encode is what caught it, which is why "
+                  f"this check exists rather than a reading of the table")
+
     # ---- 5-7. shape rules, no vault needed ------------------------------
     ids = [b[0] for b in authsrv.PLAYER_BAGS]
     LEDGER.ok(len(set(ids)) == len(ids) == 9,
@@ -199,15 +227,36 @@ def main():
               f"{authsrv.EQUIPPED_SLOT_WEAPON}. The hammer is placed by id, so "
               f"renumbering this bag silently unequips it")
     stray = [b for b in authsrv.PLAYER_BAGS if b[4] and b[1] != 1]
-    LEDGER.ok(not stray and all(b[4] == 0 for b in authsrv.PLAYER_BAGS),
-              "we send 0 for every bag's item field, and that is retail's own "
-              "value for five of six types",
-              "we declare no backpack item, and the corpus never carries a "
-              "nonzero one on any type but 1. If a grid ever fails to appear, "
-              "declaring an item for the backpack is the next arm")
+    pack = [b for b in authsrv.PLAYER_BAGS if b[1] == 1]
+    LEDGER.ok(not stray and len(pack) == 1
+              and pack[0][4] == authsrv.BACKPACK_ITEM_ID,
+              "the item field is set on the BACKPACK and on nothing else",
+              f"backpack cites item {pack[0][4] if pack else None}, the other "
+              f"{len(authsrv.PLAYER_BAGS) - 1} send 0. That is the corpus's own "
+              f"rule -- nonzero on the type-1 container and no other, 49/49 an "
+              f"id declared in the same tape. Sending 0 here produced eight "
+              f"containers and NO Backpack on 2026-08-19")
+    decl_line = min(
+        (n.lineno for n in ast.walk(ast.parse(src))
+         if isinstance(n, ast.Call)
+         and isinstance(n.func, ast.Name) and n.func.id == "send"
+         and any(isinstance(a, ast.Name) and a.id == "BACKPACK_ITEM_ID"
+                 for a in ast.walk(n))
+         and any(isinstance(a, ast.Name)
+                 and a.id == "GAME_SMSG_CREATE_NAMED_ITEM"
+                 for a in ast.walk(n))), default=None)
+    loop_line = min((n.lineno for n in ast.walk(ast.parse(src))
+                     if isinstance(n, ast.For)
+                     and any(isinstance(x, ast.Name) and x.id == "PLAYER_BAGS"
+                             for x in ast.walk(n.iter))), default=None)
+    LEDGER.ok(decl_line is not None and loop_line is not None
+              and decl_line < loop_line,
+              "and the burst DECLARES that item before the bag that cites it",
+              f"0x0161 at line {decl_line}, the bag loop at {loop_line}. A "
+              f"container citing an undeclared item is the state that drew no "
+              f"Backpack; retail declares it first, in the same frame")
 
     # ---- 8. the syntax tree: WHERE the burst sends them ------------------
-    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
     sites = bag_loop_sites(ast.parse(src))
     LEDGER.ok(len(sites) == 1 and sites[0][0],
               "the login burst iterates PLAYER_BAGS and sends each one",

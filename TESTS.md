@@ -2072,6 +2072,23 @@ Every one of these, in the order they were written:
   at exactly the index it asserted at. Without it the ten checks above are ours
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
+  `toolkit/authsrv/test_purchase.py` (answering `GAME_CMSG 0x004D` -- the four
+  messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents,
+  because retail's reply puts `0x013E ITEM_MOVED` **before** the `0x0161` that
+  declares the item it moves, in one frame; that reads like a transcription slip
+  and is not one, so a tidy-up reorder has to go red here. Checked against two
+  real requests written in as literals -- ours `[1, 10, [], b'', 0, [40],
+  b'']` and retail's `[1, 40, [], b'', 0, [2474], b'']` -- so a change to
+  the handler cannot quietly redefine what a request is. Buying MINTS a new item
+  id (retail 2474 -> 4130: stock is a catalogue, not the goods) and the copy
+  keeps every declared field but the id. Six refusals with a positive control
+  beside them -- undeclared item, the SELL kind on the BUY message, no item, a
+  truncated request, a full backpack -- because the client has already decided
+  locally that it can afford this and has room, so anything we cannot answer is
+  a disagreement between its model and ours, where a plausible reply is worse
+  than none. `0x014F`, the debit, is OBSERVED-ONCE and the file says so: one
+  purchase was ever made in front of a capture. Floor 18. No vault, no socket,
+  no client. ~1 s),
   `toolkit/authsrv/test_playerbags.py` (the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
@@ -2100,7 +2117,7 @@ Every one of these, in the order they were written:
   `values[3]` (`Code=007`). Two run failures from one loop variable, with every
   number in the table correct throughout. Five controls: two break the table on
   purpose, and three feed the detectors the exact buggy source so a green check
-  cannot mean the detector is blind. Floor 15; sections 1-4 print a `skip`
+  cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,

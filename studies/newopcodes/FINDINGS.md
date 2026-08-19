@@ -2207,6 +2207,47 @@ should not go into `overrides.json` on this evidence.
 > logged `UNHANDLED GAME_CMSG 0x804d`. **So the client does NOT debit itself on sending;
 > it waits for the server.** See the correction below.
 
+> ### THE BACKPACK RENDERS, AND THE PURCHASE ARM CRASHES ON ITS OWN SECOND MESSAGE. 2026-08-19, OBSERVED
+>
+> Harness **`20260819T162758`**. Two results, one good and one that names its own fix.
+>
+> **THE BACKPACK APPEARS.** `0x013F`'s trailing field is the container's own ITEM and it
+> has to be a declared one; sending 0 produced eight containers and no Backpack, which is
+> the FIRST of the four item containers and the one the rest hang under. Declaring it
+> fixes it. WIKI (GWW, "Container", rev. 2026) is the outside witness: *"Every character's
+> inventory has place for 1 Backpack, 1 Belt Pouch, 2 Bags and 1 Equipment Pack"*, the
+> Backpack's default capacity is **20** — exactly the type-1 bag's slot count in all 49
+> connections — and *"the Backpack cannot be dragged away into another container or be
+> destroyed"*. An item that cannot be removed is still an item.
+>
+> **The row is retail's, field for field**, and it is the most constrained item row in
+> `content/items.toml`: **one distinct declaration across the whole corpus**, 49
+> connections spanning **five distinct characters** (character A, character B,
+> character C, character D, character E), differing only in the per-connection item id.
+> `file_id 0x8001B536`, `item_type 3`, `flags 0x20001000`, `value 5`, `model_id 32`, one
+> modifier word `0x24481400`. **Three of those were mistyped on first write** — decimal to
+> hex by hand — and the ENCODE caught it, not a reading; `test_playerbags.py` now pins our
+> row against the corpus's so it cannot drift back.
+>
+> **THE PURCHASE ARM ANSWERED, AND KILLED THE CLIENT.** Our four messages went out in the
+> order read off retail's own frame — `0x00CC [1]` → `0x013E` → `0x014F [inv, 10]` →
+> `0x0161` — and the client died on **`Assertion: item`, `ItCliApi.cpp(1883)`**.
+>
+> **THE ASSERT NAMES THE FIX, statically, with no further runs.** Site `0x00845FB3`, and
+> the next two asserts in the same routine are `ItCliApi:1886 bag` (`0x00845FD9`) and
+> `ItCliApi:1889 inventory` (`0x00846002`). **item → bag → inventory is exactly
+> `0x013E ITEM_MOVED_TO_LOCATION`'s argument validation** — it takes (inventory, item,
+> bag, slot) and asserts each lookup in turn. So the move failed on the FIRST lookup: the
+> item it names had not been declared yet.
+>
+> **WHICH MEANS OUR READING OF RETAIL'S FRAME ORDER IS THE THING IN DOUBT, not the
+> messages.** All four of retail's replies share one timestamp, so "move before declare"
+> came from the decoder's offset order within a single segment. Either that ordering is
+> being read wrong, or retail's client already knew item 4130 by then. **The one-variable
+> next run is to send `0x0161` BEFORE `0x013E` and change nothing else**; if it still
+> dies, bisect by sending `0x00CC` alone. Nothing else about the arm is implicated —
+> `0x00CC` and `0x014F` both landed without complaint before the move.
+
 > ### ⚠ CORRECTION — `0x014F` IS THE GOLD DEBIT. "The client debits its own purse" is REFUTED. 2026-08-19
 >
 > This document twice says no server message carries a purchase debit, "measured from the
