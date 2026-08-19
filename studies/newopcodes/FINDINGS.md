@@ -2031,6 +2031,51 @@ should not go into `overrides.json` on this evidence.
 > `PLAN.md` §8 names as never once observed in 513 prop-36 sightings. That is its own study
 > and this section deliberately does not mine it.
 
+> ### AN AUTHORED SHOP, FUNDED AND PRICED — AND THE PURCHASE IS BLOCKED ON A BACKPACK. 2026-08-19, OBSERVED
+>
+> `0x0140 [1, 500]` → **`Your Funds: 500`** on the merchant panel *and* `500` in the
+> inventory window's own gold field (`20260819T140723`). **Container 1 is the purse** — the
+> object `ItemCliGetGold` reaches through `[ctx+0x40]+0xF8` — confirmed on two independent
+> surfaces, and the credit is legal (no `ItCliApi:1955`). The refuted negative now has its
+> constructive half: **a server can fund a client.**
+>
+> **The shop is complete.** Every message from our own server, on our own NPC: title
+> `Hatcher [Collector]`, the client's own instruction *"Select an item from my list below,
+> then press \"Buy.\""*, three rows at 50 / 100 / 200, the selected row's **real stats
+> resolved** (`Armor: 25`, `Armor +20 (vs. physical damage)`), a quantity spinner, and **Buy
+> ENABLED rather than greyed**.
+>
+> **And pressing Buy does nothing, on purpose.** The operator watched the click land; the
+> client emitted **zero** c2s traffic — not a purchase, not a target, nothing. **Operator
+> diagnosis, from opening the inventory afterwards: there is no BACKPACK.** The client
+> refuses a purchase it has nowhere to put, and refuses it **locally, without touching the
+> wire** — ArenaNet's "Inventory full" path. That is consistent with everything else this
+> arc measured about this client validating before it talks. A null that took an operator's
+> eye to turn into a diagnosis; the pixel evidence alone said only "nothing happened".
+>
+> **Retail's real bag set, read from `20260819T132414` rather than guessed** (nine `0x013F`,
+> all on inventory id **4** — the same id `0x0140 [4, 38]` credits, so bag owner and purse
+> are one namespace):
+>
+> | type | model | slots | reading |
+> |---|---|---|---|
+> | 1 | 0 | **20** | **BACKPACK** — the one we lack |
+> | 2 | 21 | 9 | equipped (the only bag we send) |
+> | 3 | 6 | 12 | belt pouch |
+> | 4 | 7–11 | 25 ×5 | storage panes |
+> | 5 | 5 | **42** | **material storage** |
+>
+> **The reading validates itself:** GW's material storage holds exactly **42** slots, a fact
+> the capture supplied and nobody here put in.
+>
+> **What did NOT work, and it is the next step rather than a mystery:** sending
+> `0x013F [1, 1, 0, 2, 20, 638]` **after spawn** produced no backpack grid — the bag row is
+> unchanged and the purchase still refuses. Retail sends its bags **during load**, right
+> after `0x0144 ITEM_STREAM_CREATE`, i.e. before the inventory UI is built. **So the bags
+> belong in the login burst, not in a probe**, and that is a server change with a clean
+> acceptance test: press I, see a 20-slot grid, then Buy and watch for `GAME_CMSG 0x4D` —
+> which would be the first purchase request this project has ever *received*.
+
 > ### ⚠ REFUTED THE SAME DAY — `0x0140` IS THE GOLD CREDIT. Read this before the section below.
 >
 > The section that follows concludes *"no `GAME_SMSG` sets carried gold"*, from six static
