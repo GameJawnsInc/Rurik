@@ -640,16 +640,33 @@ def attach_lightmap(mesh, gwmap):
 
     **WHY MULTIPLY.** ArenaNet's terrain pixel shader (FINDINGS §6.4, ps_1_1
     at `0x00A737E8`) ends its tile blend with `mul r0, v0, r1` -- the
-    composited ground times the vertex diffuse colour. Multiplying a baked
-    light term into base colour is that instruction.
+    composited ground times the pixel-shader diffuse `v0`. Multiplying a baked
+    light term into base colour is the spirit of that instruction, and it is
+    the right call for a still render regardless of the open question below.
 
-    **WHAT IS NOT ESTABLISHED, and it is the transfer curve.** `terrain.py`
-    records that 348 of 349 maps SATURATE at 255, so the mapping from stored
-    byte to light is not settled and this module applies the simplest one
-    that respects the measurement -- `shade / 255` as a linear multiplier,
-    which leaves fully-lit ground untouched and darkens only where the bake
-    says shadow. A gamma or a scale-and-bias would also fit the corpus; none
-    is measured, so none is invented here. `--no-lightmap` is the control.
+    **THE TRANSFER CURVE IS SETTLED (FINDINGS §13.1), and it changes nothing
+    here.** The BAKE that produced the stored byte is a quartic ease-out,
+    `255*(1 - (1 - N.L)^4)`, read byte-exact from the generator `0x0075CC30`
+    and reproduced by `studies/terrain/trnbake.py`. That is how the byte was
+    WRITTEN; this module consumes the already-baked byte, so it still applies
+    `shade / 255` as a linear multiplier -- the quartic is not re-applied.
+
+    **TWO THINGS ARE OPEN, both flagged rather than guessed:**
+    - *Colour space (FINDINGS §13.2).* The client's render pipeline is
+      colour-NAIVE -- no sRGB sampler or write states exist in the image, and
+      the gamma slider is a scanout-only ramp -- so it multiplies texture x
+      light in RAW BYTE space. Blender multiplies this attribute in
+      scene-linear space, a different space. Making the two match is a VISUAL
+      question (render headless, compare to retail), not a blind colourspace
+      flip, so it is left as a gap rather than changed here.
+    - *Whether the client even displays the baked lightmap (FINDINGS §13.3).*
+      Both terrain vertex shaders write a DEPTH-FADE to `v0`, not tag 9; where
+      the baked lightmap reaches the screen was not found statically and needs
+      a live check. Multiplying by tag 9 stays faithful either way -- it is the
+      map's baked directional lighting, and if the client computes it live,
+      live N.L and baked N.L are the same quantity.
+
+    `--no-lightmap` is the control.
     """
     light = gwmap.corner_shade()
     if light is None:

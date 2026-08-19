@@ -2784,11 +2784,27 @@ missing piece is committed code plus the client's own FVF dispatch.
 > this contradicts ArenaNet's 2018-06-06 patch note describing a *vertical*
 > calculation. The measurement stands; the reconciliation is not guessed.
 >
-> **What is still open** is FINDINGS §8, and it is now short: the lightmap's
-> TRANSFER CURVE (tag 9 applied as the simplest mapping the measurement
-> allows), the quadrant's `+u` ORIENTATION (a convention, not a measurement),
-> and three named-but-not-understood fields (`table_b`, tag 0's `tex_word`,
-> the 4-dword table at `0x00A73DF8`). **Nothing on that list blocks a render.**
+> **§13 — the lightmap's TRANSFER CURVE is SETTLED (2026-08-19), and it is a
+> QUARTIC.** The bake is `255·(1 − (1 − N·L)⁴)`, a fast ease-out — not the
+> linear `shade/255` the earlier text assumed and not a gamma — read byte-exact
+> from the generator `0x0075CC30` and reproduced on 667,647/667,648 corpus
+> cells (and 1024/1024 on four client compiles) by
+> `studies/terrain/trnbake.py`, which reads the client's invsqrt table at run
+> time and commits none of it. The quartic's fast saturation is why 348/349
+> maps peg at 255 and why §6.5's linear fit could only reach r 0.887. No
+> cast-shadow term; the bake is a pure function of (heights, sun angle).
+> **Two follow-ons replace it, neither blocking a render**: how the client
+> *displays* the baked lightmap (§13.3 — both terrain vertex shaders write a
+> DEPTH-FADE to the shader's `v0`, not tag 9; the lightmap's on-screen consumer
+> was NOT FOUND statically and needs a live vertex-declaration capture, NOT
+> more disassembly), and Blender's lightmap COLOUR-SPACE (§13.2 — the client
+> blends in raw byte-space, `import_gwmap` in scene-linear; a visual fix, not a
+> blind flip).
+>
+> **What else is still open** is FINDINGS §8, and it is now short: the
+> quadrant's `+u` ORIENTATION (a convention, not a measurement), and three
+> named-but-not-understood fields (`table_b`, tag 0's `tex_word`, the 4-dword
+> table at `0x00A73DF8`). **Nothing on that list blocks a render.**
 
 **Cold session: read [`studies/terrain/HANDOFF.md`](studies/terrain/HANDOFF.md)
 FIRST** — the traps, not the status, in the pattern `studies/isle/HANDOFF.md`

@@ -576,6 +576,17 @@ ground beneath it.
 
 What is NOT settled is the transfer curve — see §7.
 
+**UPDATE 2026-08-19, §13.** The transfer curve is now settled: the BAKE is a
+quartic ease-out `255·(1 − (1 − N·L)⁴)`, not the linear `shade/255` this
+section assumed, read byte-exact from the generator. **And two claims here are
+now CONTESTED by the generator/apply read (§13.3):** that `mul r0, v0, r1`
+multiplies by "the vertex diffuse colour = tag 9", and that tag 9 is "applied
+per VERTEX". The multiply is real, but both terrain vertex shaders write a
+DEPTH-FADE to `v0`, not the lightmap, and where the baked lightmap reaches the
+screen was NOT FOUND statically — a live check, not a disassembly one. The N·L
+identification of tag 9 stands (it is a baked directional lightmap); how the
+renderer consumes it does not, yet.
+
 ---
 
 ## 7. The assembly rule — what we get wrong (2026-08-14, MEASURED)
@@ -2036,6 +2047,161 @@ table above.
 argument — it reads the fov and the window itself and recomputes the
 predictions, so re-running it after any resize is the whole procedure.
 
+## 13. The lightmap transfer curve: a QUARTIC ease-out, byte-exact (2026-08-19)
+
+Opened to settle §8's last render-affecting item. §6.5 identified tag 9 as a
+baked directional lightmap and applied it as `shade / 255` — "the simplest
+mapping the measurement allows" — while recording that 348/349 maps saturate
+at 255, so a gamma or a scale-and-bias would fit the corpus equally well. That
+was a statement about the corpus fit. This closes the curve itself, and it is
+neither linear nor a gamma. **Two halves that are not the same question: the
+BAKE (what the map compiler writes into the byte) and the APPLY (what the
+renderer does with the byte). Settled separately below, and the split matters —
+§6.5's "shade/255" is an APPLY claim, "a gamma would fit" is a BAKE claim.**
+
+### 13.1 The bake: `255·(1 − (1 − N·L)⁴)`, reproduced byte-for-byte (OBSERVED)
+
+The generator is `0x0075CC30` — the function customarea/FINDINGS §"Tag 9 is
+BAKED" *identified but did not read* ("0x0075CC30 was identified, not read").
+Read whole in build 38797. The transfer is a **quartic ease-out**:
+
+```
+byte = RoundHalfAwayFromZero( 255 · (1 − (1 − clamp(N·L, 0, 1))⁴) )
+```
+
+- **N** = `normalize( Σ_{i=1..4} normalize(tri_i) )`, the four quadrant-triangle
+  normals of the 5-point stencil `{C, N, S, W, E}` at ±96 world units, each
+  normalized before the sum; every missing edge neighbour is replaced by C
+  (verified in all eight border paths).
+- **L** = `(cos θ, 0, sin θ)`, θ = tag 0's sun elevation; the `y` term of N·L
+  is dropped outright — legal because the client asserts `lightDir.y == 0`
+  (`TrnTexIntensity.cpp:342`), which §6.5 already cited from the other side.
+- Every step is float32-spilled. Normalization is the client's own **8-bit
+  table inverse-sqrt** (`0x0046E530` over a 256-entry table at `0x0093C6C8`),
+  whose ~0.4% error is load-bearing. Rounding is **round-half-away-from-zero**
+  with no `+0.5` (`0x0046E000`, `Math.cpp:240`).
+
+**VERIFICATION — a replica with no free parameter, `studies/terrain/trnbake.py`.**
+It reproduces the stored Bloated tag-9 bytes:
+
+| set | result |
+|---|---|
+| five corpus maps (Kamadan `0x345CC`, Pre-Searing row 7982, rows 22E2C/46196/32347) | **667,647 / 667,648 cells exact** |
+| the e10* CLIENT COMPILES, geometry the replica was never tuned on (LIGHT 36.5°, GRASS 68.7°, e10d A, rungG) | **1024/1024 each** |
+
+The single corpus miss (row 32347, one cell) computes to **exactly 210.5**
+under every precision model; build 38797 rounds it to 211, the archive stores
+210 — that one map's lightmap was baked by an older binary whose tie broke the
+other way. A 1-in-667,648 boundary case; the formula is settled. `trnbake.py`
+reads the invsqrt table out of the pinned pristine client at run time and
+commits none of it (the measurement pattern `mapbuild` uses for FINDINGS 14's
+chunks); a double-precision `1/sqrt` misses a handful of ties per map, so the
+table is required for byte-exactness.
+
+**What the curve explains, and what it rules out:**
+- The quartic saturates fast, which is **why 348/349 maps peg at 255** and why
+  §6.5's linear fit plateaued at r 0.887 — the linear model was this curve seen
+  through a correlation coefficient. A gamma is refuted directly: on the clean
+  compiled data the best pure power fit is far worse at a nonsense exponent.
+- **No cast-shadow term.** The byte depends on five heights and the angle,
+  nothing else — proven three ways: no ray-march in the disassembly, byte-exact
+  reproduction from heights+angle alone, and e10d's A/B compiles (props differ)
+  baking **byte-identically** (1024/1024). Tag 7's shadow record correlates with
+  darker tag-9 via slope, not via a term in this bake.
+- **The environment chunk's lights do not feed the bake.** e10h LIGHT ≡ e10i
+  ENV ≡ e10j SOUND ≡ e10l AUTHORED, shade byte-identical 1024/1024 across all
+  three additions; corpus-side, fitted curve parameters vs env tag-3 light
+  pairs over 96 maps show |r| < 0.19. **The bake is a pure function of (tag-1
+  heights, tag-0 angle).**
+
+*(Two intermediate readings of mine are retracted here for the record: an
+"overdriven affine s≈clip(96·N·L+189)" and a "signed N·L without max(0,·)"
+were the quartic seen through central-difference normals over one compile. The
+affine's a+b>255 was the quartic's fast saturation; the "zero regime" of 30
+cells was the clamp d≤0→0, not a shadow term. A curve read through the wrong
+normal stencil fits a wrong family convincingly — the byte-exact replica is
+what separated them.)*
+
+### 13.2 The apply: the pipeline is COLOUR-NAIVE (OBSERVED, adversarially held)
+
+Does the client apply a colour curve between the shader result and the screen?
+**No.** Confirmed against the bytes and survived an independent skeptic that
+re-derived the whole census and decoded every embedded ps_2_0/ps_3_0 to rule
+out a gamma post-pass:
+
+- **No sRGB anywhere.** `D3DRS_SRGBWRITEENABLE = 194` is structurally
+  inexpressible — the shader render-state machine is a 64-entry table
+  (`0x00A652D0`) indexed by the D3DRS number and asserted `< 0x40`. Sampler
+  bit 11 `D3DSAMP_SRGBTEXTURE` is `NODEF (-1)` in the 32-entry default table
+  (`0x00A653D0`) and would trip `result != NODEF` on restore. The terrain path
+  reaches the device only through this Gr/Dx9 layer, so sRGB read/write is
+  unreachable in the whole image.
+- **The gamma slider is scanout-only.** The one `SetGammaRamp` site
+  (`0x006D1614`) builds a power-curve LUT `ramp[i] = 65535·(i/255)^(1/g)`, g a
+  16.16 pref (default 1.0), and applies it to R/G/B equally post-framebuffer —
+  it cannot change the lightmap-vs-texture relationship. No
+  `Set/GetDeviceGammaRamp` GDI import exists.
+- **Backbuffer is 8-bit integer** (`X8R8G8B8`/`R5G6B5`), no 10-bit or float
+  path reachable.
+
+So the client multiplies texture × lighting in **raw stored-byte space** and
+displays it naively. For our own Blender reproduction this is the load-bearing
+fact: `import_gwmap` multiplies the lightmap in Blender's *scene-linear* space,
+which is a different space from the client's byte-space multiply — a real
+fidelity gap, but one whose fix is a **visual** question (the two render
+differently and only a side-by-side against retail says which is right), so it
+is recorded, not guessed. Docstrings in `import_gwmap.py` now carry it.
+
+### 13.3 CONTESTED: whether the baked lightmap reaches `v0` at all
+
+§6.4/§6.5 stated `mul r0, v0, r1` multiplies the blended ground by v0 = the
+baked tag-9 lightmap "applied per vertex". The `mul` is real and carries no
+modifier (re-confirmed). **The "v0 = tag 9" half is now CONTESTED**, and by the
+client's own bytes:
+
+- Both terrain vertex shaders (`0x00A73B00`, `0x00A73910`) write the pixel
+  shader's diffuse input as `mul oD0, r2, c10` where **r2 is a view-space
+  DEPTH-FADE scalar** (`dp4 v0,c6` through c7/c8/c9), not a lighting term;
+  vertex input v3 feeds the tangent basis (oT1..oT3) *after* the oD0 write and
+  never reaches v0.
+- Neither terrain vertex builder (`0x0075DD50` HI, `0x0075E650` LO) reads the
+  shade array; a complete write census of both and every record-touching callee
+  (including `0x00757A80`, which the first pass missed) finds only float
+  position/UV stores. No terrain code packs a colour byte into the vertex
+  stream (0 D3DCOLOR-replicate idioms over the whole terrain code range).
+- The baked lightmap is consumed by `TrnTexIntensity` (LUT `0x00BF7678`) into a
+  separate **intensity buffer** — whose display consumer was **NOT FOUND
+  statically**. A ps-only fixed-function-vertex path (`0x0074BAA2`) exists where
+  v0 would be the FF diffuse from a vertex colour element, but the write census
+  shows no colour is ever written to the stream, and the vertex declaration is
+  synthesized inside `0x006646B0` where static analysis could not read it.
+
+This is a live question and is left as one — the arc's signature failure is
+resolving exactly this kind of thing by disassembly (four retractions, §7.2
+among them). **The live check** (one client run): capture the vertex
+declaration and stream bound for a terrain `DrawIndexedPrimitive`, confirm there
+is no COLOR element sourced from tag 9, and read c10 for the draw. Until then,
+`import_gwmap` multiplying the ground by the baked lightmap stays the right
+call regardless of the outcome: tag 9 IS the map's baked directional lighting,
+and if the client instead computes it live, live N·L and baked N·L are the same
+quantity — which is also why §6.5's r 0.887 could never have distinguished the
+two.
+
+### 13.4 The corpus fit is the WRONG instrument (a method note)
+
+`studies/terrain/shadecurve.py` (new) tried to reproduce §6.5's per-vertex fit
+(median r 0.887 / 345 maps) and reached only ~0.50 on the same recipe; the
+original method is not preserved in the tree. Its **gate correctly refused** to
+print a curve verdict on geometry that failed reproduction — a run that
+measured the wrong thing prints no verdict, per the repo's test discipline. The
+lesson, recorded so it is not repeated: the retail corpus cannot see this curve
+— retail bakes carry cast/AO shadows (e10h's own note: a Lambertian best-fits
+5° against a true 36.5°), and the fit is affine-invariant and gamma-blind. **The
+right instrument was the vault's client-compiled artifacts of known geometry**,
+where the bake is clean — which is what §13.1 used. `shadecurve.py` is kept as
+that recorded negative and as a reusable light-direction fitter, gated and
+labelled.
+
 ## 8. What is still open
 
 - ~~Does the ground still repeat at distance?~~ **ANSWERED 2026-08-18, §7.20:
@@ -2091,11 +2257,27 @@ predictions, so re-running it after any resize is the whole procedure.
   1–3, so quadrant 0 is reachable only through a draw (§3.2).
   §7.14's cover-word rule should hold unchanged regardless of tag 3; if it
   does not, the 212/212 was one block's accident.
-- **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
-  (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
-  as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
-  at 255, so a gamma or a scale-and-bias would fit the corpus equally well
-  and none is measured. `--no-lightmap` is the control.
+- ~~The lightmap's TRANSFER CURVE.~~ **SETTLED 2026-08-19, §13.1: the BAKE
+  is a quartic ease-out `255·(1 − (1 − N·L)⁴)`**, read from the generator
+  `0x0075CC30` and reproduced byte-for-byte (667,647/667,648 corpus cells,
+  1024/1024 on four client compiles) by `studies/terrain/trnbake.py`. Not
+  linear, not gamma; the quartic's fast saturation is why 348/349 maps peg at
+  255. No cast-shadow term; the bake is a pure function of (heights, sun
+  angle). The APPLY pipeline is colour-NAIVE (§13.2: no sRGB, scanout-only
+  gamma slider).
+- **NEW, §13.3 — does the baked lightmap reach the screen, and how?**
+  CONTESTED. Both terrain vertex shaders write a DEPTH-FADE to the pixel
+  shader's `v0`, not the lightmap; the baked lightmap goes to a separate
+  intensity buffer whose display consumer was NOT FOUND statically. The live
+  check: capture the vertex declaration/stream for a terrain
+  `DrawIndexedPrimitive` and read c10. This does not change `import_gwmap`'s
+  choice to multiply by tag 9 (a faithful proxy either way), but it is the
+  honest state of "how tag 9 is displayed."
+- **NEW, §13.2 — Blender multiplies the lightmap in the WRONG SPACE.** The
+  client blends in raw byte-space (naive, no sRGB); `import_gwmap` multiplies
+  in Blender's scene-linear space. A real fidelity gap, but its fix is visual
+  (render headless, compare to retail) rather than a blind colourspace flip.
+  `--no-lightmap` remains the control.
 - ~~The SOURCE of the per-cell corner selector.~~ ~~What GENERATES it.~~
   **BOTH CLOSED 2026-08-15, §7.6 and §7.9.** `chunk+0x2B4` is a per-cell corner
   PERMUTATION, and it is a **selection-sort comparator network** over the four
