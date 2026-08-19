@@ -988,3 +988,58 @@ handler before sending anything:
 sub-records (portals, x/y BSP nodes, sink nodes, edge vectors) are decoded. Every
 click the server declines is the client covering for us. A real server owns
 pathing and sends the legs of the route.
+
+## The position-trust LATCH — measured 2026-08-19, and it is a real defect
+
+**The owner reported a warp from memory**: click far, go hands-off, then mix in
+WASD (they later reproduced it by holding **S** while spamming click-to-move) and
+the character sometimes jumps. Hard to reproduce deliberately, so the session
+added `--trace-move` (prints every client position report beside the server's own
+belief, plus the origin each click's collision ray is cast from) and the owner
+drove a 6-minute session on map 449 — harness `20260819T113049`, gamesrv log,
+240 position reports and 102 clicks.
+
+**The measurement, and the two regimes are categorically different:**
+
+| | `\|dX\|` median | `\|dY\|` median |
+|---|---|---|
+| ADOPTED (n=190) | **2 u** | **19 u** |
+| REJECTED (n=50) | **497 u** | **1457 u** |
+
+When the model tracks, it tracks to a couple of units. The rejections are not the
+tail of that distribution — they are a different population, which rules out
+gradual speed drift as their cause (`DEFAULT_RUN_SPEED` 288 u/s against a client
+measured at ~197–211 would accumulate hundreds of units smoothly, not jump).
+
+**THE DEFECT IS THAT THE GUARD LATCHES.** `_adopt_client_position` refuses any
+report more than `CLIENT_POSITION_TRUST_RADIUS = 900 u` from our belief. That is
+sound against a lying client and exactly backwards against a *diverged server*:
+once the error exceeds 900 u, every subsequent correction is also >900 u, so the
+model can never resynchronise. **Longest unbroken reject streak: 36 reports.**
+21% of all reports in the session (50 of 240) were refused. A guard whose failure
+mode is "stay wrong forever" needs an escape hatch — a consecutive-rejection
+counter that capitulates, or a re-sync on any message that carries an
+authoritative position.
+
+**What the warp then looks like on the wire.** Three clicks were cast from a ray
+origin more than 900 u from where the client itself had just said it was
+(1030 u, 1106 u, 1151 u), and each produced an `AGENT_MOVE_TO_POINT` computed
+from that wrong origin — a destination with a plausible shape and the wrong
+place. That is a warp with a straight face. It is only 3 of 102 clicks, though:
+**the ray origin is usually fine** (median error 30 u, 90th percentile 115 u), so
+this is a consequence of the latch rather than an independent bug, and the
+click-origin hypothesis the session started with is REFUTED as a general cause.
+
+**What is NOT established: the floors.** The owner suspected planes, and the
+three bad clicks all carried `on plane 5->0`, and 53% of the session's move
+orders cross a plane (48 same-plane, 54 changing among planes 0, 5, 27). But of
+the four reject streaks, only **one** was preceded by a plane-changing move
+order. So plane changes are frequent and suggestive and the correlation does not
+hold up — UNVERIFIED, and worth one designed probe rather than another eyeball.
+The known plane weakness is still on record above: clicking sends no plane, so
+the server only learns it from keyboard packets.
+
+**Why this outranks the walk-to-interact work.** `0x002A` was shipped OFF the
+same day for dragging the player through a staircase, and any server-driven walk
+inherits this: it moves the player with no position report to correct the model,
+which is precisely the condition that opens a >900 u gap. Fix the latch first.
