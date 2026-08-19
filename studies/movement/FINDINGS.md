@@ -1460,3 +1460,59 @@ arrives on the very next millisecond). Under the mechanism now confirmed, that
 warp should not have happened. `movetap.py` attached to a `--stop-echo` run
 settles it in one pass, and that is the next measurement rather than the next
 guess.
+
+## `--heading-grant` REFUTED — my fix caused warps (2026-08-19)
+
+Run `20260819T152716`, `--heading-grant` on, operator spam-clicking distant
+ground while holding S. **Two teleports in six seconds, each onto a point this
+server had just granted:**
+
+| grant sent | landed | separation | jump | speed |
+|---|---|---|---|---|
+| t=36.719 `(9591, 8245)` | t=37.000 `(9590.70, 8245.42)` | **0.51 u** | 767 u | 2,719 u/s |
+| t=38.903 `(9487, 8786)` | t=39.190 `(9490.63, 8771.30)` | 15.1 u | 752 u | 2,617 u/s |
+
+Both fired **0.28 s** after their grant. The operator experienced it as being
+warped *backwards*, and that is exactly right: they were holding S, so the
+heading pointed behind them, `pos + heading` was 766 u behind them, and the
+grant scheduled a teleport to it.
+
+**The error in the model, which matters more than the flag.** I read `0x0029` as
+"tell the client where it is heading". It is not. **It is a scheduled teleport to
+that point.** It only looks harmless when the client really does cover the
+distance in the scheduled time. Grant a point the player is not travelling
+toward at full speed and you have scheduled a warp.
+
+**And rapid re-granting makes it worse, not better.** The arrival distance is
+measured from the agent's *cached* `m_point`, which each grant carries forward at
+the previous grant's velocity — so the second grant's arrival came due in 0.28 s
+rather than the 2.66 s its 766 u implies. Stacking grants does not bound the
+teleport; it converts one large one into many small frequent ones. That refutes
+"refresh like ArenaNet" **as implemented here**, and it also explains why the
+original far-click warp did not reproduce in this session: the flag was
+manufacturing its own warps continuously, so no grant ever survived long enough
+to mature.
+
+**Why ArenaNet's version works and ours does not.** Their granted point is the
+**client's own** proposed endpoint — the client's reported position plus the
+client's own vec2, echoed back with half a unit added — so client and server
+agree on where the agent is going. Ours is a server extrapolation from a report
+already a few hundred milliseconds stale, and the client is asked to be somewhere
+it was never going.
+
+**The prediction was met and the conclusion was still wrong.** It said "no
+arrival consumption exceeds roughly 800 u"; observed 767 u and 752 u. It bounded
+the **size** of the teleports and said nothing about their **number**. A
+prediction that cannot fail in the direction the harm actually arrives is not a
+prediction — the fourth over-fit of this arc, and the first one where the metric
+itself was the mistake.
+
+**Where that leaves the fix.** Three candidates are now dead: suppressing the
+grant (retail sends it), echoing on move-cancel (`--stop-echo`, refuted), and
+refreshing on every heading (`--heading-grant`, refuted and harmful). What
+survives, untried: grant the client's own endpoint verbatim the way retail does —
+`reported position + the client's own vec2 + 0.5 u along it` — rather than a
+server-computed point, which is a different message from the one tested here.
+And the `0x0027` lever, which re-arms `+0x48` from the agent's *current*
+position, remains the only measured way to re-aim a stale grant without naming a
+new point.

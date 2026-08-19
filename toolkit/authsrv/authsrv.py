@@ -982,9 +982,34 @@ TRACE_MOVE = False
 # startup so it cannot be rationalised afterwards.
 STOP_ECHO = False
 
-# Answer every keyboard heading with a fresh 0x0029 at the client's own proposed
-# endpoint, so the destination armed in the client is never more than about
-# 2.66 s old. OFF by default until one run scores it. `--heading-grant`.
+# Answer every keyboard heading with a fresh 0x0029 at the player's proposed
+# endpoint. **REFUTED on run 20260819T152716 -- it CAUSES warps.** Kept only so
+# the negative result is reproducible. `--heading-grant`.
+#
+# WHAT HAPPENED. Two teleports in six seconds, both onto a point this code had
+# just granted: at t=36.719 it sent (9591,8245) and 0.282 s later the client
+# reported (9590.70, 8245.42) -- 767 u at 2,719 u/s, a separation of 0.51 u.
+# Again at t=38.903 -> t=39.190, 752 u at 2,617 u/s. The operator felt it as
+# being warped BACKWARDS, because they were holding S: the heading pointed
+# behind them, so pos + heading was behind them, and the grant scheduled a
+# teleport to it.
+#
+# THE ERROR IN MY MODEL, and it is worth more than the flag. I read 0x0029 as
+# "tell the client where it is heading". It is not. **It is a scheduled teleport
+# to that point**, and it only looks harmless when the client really does travel
+# the distance in the scheduled time. The player was moving backward at ~150 u/s
+# while spam-clicking; the point was 766 u behind them; the client snapped.
+#
+# AND RAPID RE-GRANTING MAKES IT WORSE, NOT BETTER. The arrival distance is
+# measured from the agent's CACHED m_point, which each grant carries forward at
+# the previous grant's velocity -- so the second grant's arrival was 0.28 s out
+# rather than the 2.66 s the distance implies. Stacking grants does not bound the
+# teleport; it converts one large one into many small frequent ones.
+#
+# Why ArenaNet gets away with the same shape: its granted point is the CLIENT'S
+# OWN proposed endpoint, echoed back with a half-unit added, so client and server
+# agree on where the agent is going. Ours is a server extrapolation from a report
+# that is already a few hundred milliseconds stale.
 #
 # THE DEFECT IT TARGETS, measured in the client's memory rather than argued.
 # agent+0x48 (m_timeStopMovement) is set once when a grant lands and is NEVER
@@ -9058,8 +9083,9 @@ def main():
                          "position report at all, for up to 12.9 s measured, "
                          "and that silence is what the trace is now for.")
     ap.add_argument("--heading-grant", action="store_true",
-                    help="THE CANDIDATE WARP FIX, OFF by default until one run "
-                         "scores it. Answer every keyboard heading with a "
+                    help="REFUTED 2026-08-19 -- it CAUSES warps. Kept only so "
+                         "the negative result is reproducible. Answers every "
+                         "keyboard heading with a "
                          "0x0029 at the client's own proposed endpoint "
                          "(reported position + its own vec2, clipped), so the "
                          "destination armed in the client is refreshed roughly "
@@ -9536,21 +9562,17 @@ def main():
     if a.heading_grant:
         global HEADING_GRANT
         HEADING_GRANT = True
-        print("HEADING GRANT: answering every keyboard heading with a 0x0029 at "
-              "the client's own proposed endpoint, which is what ArenaNet does "
-              "for 88.5% of its player grants.")
-        print("  PREDICTION, stated before the run: the destination armed in "
-              "the client (agent+0x48) never sits more than ~2.8 s in the "
-              "future while the player is on the keyboard, so no arrival "
-              "consumption exceeds roughly 800 u and the far teleport cannot "
-              "occur. Watch it directly with:")
-        print("    python toolkit/clientscan/movetap.py --seconds 300 "
-              "--any-build")
-        print("  REFUTED IF: movetap still records an arrival landing on "
-              "m_targetPoint from more than ~1,000 u away, or +0x48 is still "
-              "seen holding a value more than 5 s out while headings are "
-              "arriving. Either means refreshing does not disarm the stale "
-              "grant, and the fix is wrong rather than mis-tuned.")
+        print("HEADING GRANT: REFUTED on run 20260819T152716 -- it CAUSED two "
+              "teleports in six seconds, each landing within 15 u of a point "
+              "this flag had granted 0.28 s earlier (767 u at 2,719 u/s, and "
+              "752 u at 2,617 u/s). 0x0029 is a SCHEDULED TELEPORT, not a "
+              "heading hint, and re-granting rapidly turns one big warp into "
+              "many small frequent ones. You are re-running a known negative.")
+        print("  The prediction it was built on -- 'no arrival consumption "
+              "exceeds roughly 800 u' -- was technically MET (767 u and 752 u) "
+              "and the conclusion was still wrong, because the prediction "
+              "measured the wrong thing: it bounded the SIZE of the teleports "
+              "and said nothing about their NUMBER.")
 
     if a.stop_echo:
         global STOP_ECHO
