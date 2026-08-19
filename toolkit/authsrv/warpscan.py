@@ -60,7 +60,13 @@ import vaultpath  # noqa: E402
 TRIAL_QUIET = 10.0    # seconds a grant must survive un-overwritten to count as
                       # a trial; 3 of 8 such grants teleported (37.5%)
 IMPOSSIBLE = 320.0    # u/s; the fastest legitimate cruise step measured is 291.20
-EXACT = 1.0           # a "bit-exact" landing, in units
+# How close a landing must be to a granted point to be ATTRIBUTED to it. NOT a
+# detection gate -- the detector is the impossible step alone. This started at
+# 1.0 u ("bit-exact") and missed a real teleport on run 20260819T135526: the
+# client snapped to the granted point and then walked 42 u before it reported,
+# which is 0.23 s at the 186 u/s it was already moving. The two bit-exact cases
+# were the ones whose report happened to land on the instant of the snap.
+NEAR_GRANT = 150.0
 GRANT_RE = re.compile(r"\(([-\d]+),([-\d]+) on plane (\d+)->(\d+)")
 
 
@@ -99,17 +105,28 @@ def scan(path):
         nxt = grants[i + 1][0] - gt if i + 1 < len(grants) else float("inf")
         if nxt >= TRIAL_QUIET:
             trials.append((gt, dest, p_from, p_to, dist))
-    # any report reachable only by teleport, landing on a grant we made
+    # THE DETECTOR IS THE IMPOSSIBLE STEP, on its own. Requiring the landing to
+    # sit on a granted point was a second gate, and it silently suppressed a real
+    # teleport -- see NEAR_GRANT. Attribution to a grant is now reported, never
+    # required, so a teleport with no grant behind it shows up as a finding
+    # rather than as silence.
     for j in range(1, len(reports)):
         (t0, q0, _a), (t1, q1, _b) = reports[j - 1], reports[j]
         dt = t1 - t0
         d = math.hypot(q1[0] - q0[0], q1[1] - q0[1])
         if dt <= 0 or d <= 500 or d / dt <= IMPOSSIBLE:
             continue
+        best = None
         for gt, dest, _pf, _pt in grants:
-            if gt < t1 and math.hypot(dest[0] - q1[0], dest[1] - q1[1]) <= EXACT:
-                warps.append((t1, d / dt, d, t1 - gt))
-                break
+            if gt >= t1:
+                continue
+            sep = math.hypot(dest[0] - q1[0], dest[1] - q1[1])
+            if best is None or sep < best[0]:
+                best = (sep, gt)
+        if best is not None and best[0] <= NEAR_GRANT:
+            warps.append((t1, d / dt, d, t1 - best[1], best[0]))
+        else:
+            warps.append((t1, d / dt, d, None, None if best is None else best[0]))
     return grants, reports, echoes, trials, warps
 
 
@@ -121,9 +138,11 @@ def report(path):
     for gt, dest, pf, pt, dist in trials:
         print(f"  TRIAL at t={gt:.2f}: grant {dist:.0f}u to "
               f"({dest[0]:.0f},{dest[1]:.0f}) plane {pf}->{pt}, left alone")
-    for t, v, d, lag in warps:
-        print(f"  *** TELEPORT at t={t:.2f}: {d:.0f}u at {v:.0f} u/s, "
-              f"landing on a grant {lag:.1f}s old")
+    for t, v, d, lag, sep in warps:
+        where = (f"{sep:.0f}u from a grant {lag:.1f}s old" if lag is not None
+                 else f"NOT near any grant (nearest {sep:.0f}u)"
+                 if sep is not None else "no grant in this run")
+        print(f"  *** TELEPORT at t={t:.2f}: {d:.0f}u at {v:.0f} u/s -- {where}")
     if not trials:
         print("  VERDICT: 0 trials -- this run did NOT test the fix.")
         if grants:

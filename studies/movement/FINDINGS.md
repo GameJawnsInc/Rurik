@@ -1281,6 +1281,41 @@ whole waiting period** — a tap of W every couple of seconds is enough to keep
 the instrument recording. A detector that goes blind exactly when the phenomenon
 fires is worse than no detector, because it reports a clean null.
 
+### CONFIRMED ON THE WIRE, without the echo (run `20260819T135526`)
+
+The teleport reproduced with `--stop-echo` OFF and the operator tapping W
+through the wait, so the client kept reporting and the landing is recorded:
+
+```
+t=29.889  s2c AGENT_MOVE_TO_POINT(10987,5432 on plane 0->18, clear line)
+   ... 10.4 s of ordinary keyboard movement at 184-288 u/s ...
+t=40.248  c2s MOVE_SET_HEADING (11028.8, 5427.9) plane 18
+          2,305 u in 0.23 s = 9,878 u/s -- 34x run speed
+```
+
+The plane flips 0→18 with the position, as before. **Lag 10.36 s**, joining
+0.9, 2.1, 10.8, 16.3 and 19.7 s. No function of the grant distance fits that
+spread, so the arrival-tick arithmetic stays OPEN.
+
+**The path-back was MY bug, not the game's.** With `--stop-echo` on, the
+operator saw the character walk back toward the pre-warp position immediately
+after the teleport. With the echo off, on the very next run, it did not. n=1
+each and operator-observed rather than on the wire (the client went silent for
+17.8 s after the landing), but the direction is unambiguous and it matches the
+mechanism: the echo plants a destination at every place the player stops.
+
+**And "bit-exact landing" was never a property of the teleport.** This landing
+sits **42 u** from the granted point, not on it — the client snapped and then
+walked 42 u before its next report, which is 0.23 s at the 186 u/s it was
+already moving. The two bit-exact cases were simply the ones whose report fell
+on the instant of the snap. `warpscan.py` had that 1.0 u tolerance as a
+DETECTION GATE and it silently suppressed this teleport entirely, reporting
+"1 trial, no teleport" for a run the operator had just watched warp. The
+detector is now the impossible step alone; grant proximity is reported, never
+required. Corpus-wide that turns 4 detected teleports into **12 — 7 near a
+grant, 5 not** — and the 5 unattributed are the same CONTESTED population as
+before.
+
 ### What the refuted fix was, and why it looked good
 
 
