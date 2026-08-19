@@ -3944,6 +3944,50 @@ def _quest_name_steps(origin):
     ]
 
 
+def _quest_name_authored_steps(origin):
+    """Q2b's screen half: does OUR OWN string render where Ascalon's did?
+
+    quest_name (above) proved the id->text seam with ArenaNet's one corpus
+    word, 0x3D64. This is the same experiment with the variable moved one
+    step: the treatment's words come from the CONTENT ROW -- the two-word
+    varint [0x8103, 0x0CC8] naming string id 100552, text file 98 record 200,
+    written 2026-08-19 by textwrite.py --set into the reskin-roster archive.
+    The control re-sends 0x3D64 first as the rig check, and 0x0049's
+    last-pushed-becomes-active write (charContext+0x528, the trap HANDOFF
+    warns about in replay) is exactly what makes an A/B possible in ONE run:
+    the tracker follows the active quest, so it should read 'Ascalon' after
+    the control and SWITCH to 'A First Errand' after the treatment.
+
+    THE CLIENT IS PART OF THE EXPERIMENT: only an archive holding record 200
+    can resolve 100552, and today that is vault/run/reskin-roster/ alone. Run
+    against any other client and the treatment arm measures the wrong thing
+    (a blank there would indict the archive, not the encoding).
+    """
+    x, y, plane = origin
+    row = questdefs.load()[1463]
+    nm = questdefs.enc_string(row.get("enc_name") or [])
+    return [
+        Step(8.0, 0x0049,
+             [1, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              _ENC_ASCALON, _ENC_ASCALON, _ENC_ASCALON, _QUEST_NAME_MAP],
+             "CONTROL: quest 1 named with ArenaNet's 0x3D64, the Q0 word",
+             "the tracker reads 'Ascalon' -- the rig check, quest_name's own "
+             "result reproduced. Absent means the rig, not the record; stop "
+             "reading here."),
+        Step(20.0, 0x0049,
+             [1463, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              nm, nm, nm, _QUEST_NAME_MAP],
+             "TREATMENT: quest 1463 named from the content row -- our id "
+             "100552 as the varint the row commits",
+             "the tracker SWITCHES to 'A First Errand'. 'Ascalon' persisting "
+             "= the add landed but the client kept the old active quest, or "
+             "our words did not parse -- check the log for the 0x0049 before "
+             "deciding which. Blank or '?' = the client could not resolve "
+             "100552: wrong archive (this run MUST use the reskin-roster "
+             "client) before wrong encoding."),
+    ]
+
+
 def _quest_description_steps(origin):
     """Q3: add two quests that differ ONLY in how their prose is framed.
 
@@ -5001,6 +5045,35 @@ PROBES = {
              "on. The quest tracker is map-independent, so nothing about this "
              "question is weakened by the substitution -- but the COMPASS arm "
              "is not measured here and must not be read out of this run.",
+    ),
+    "quest_name_authored": lambda a, o: Probe(
+        question="Does the quest name WE authored (string id 100552, written "
+                 "by textwrite.py --set) render in the tracker where "
+                 "ArenaNet's 0x3D64 did?",
+        predicts="An A/B in one run, riding 0x0049's last-pushed-becomes-"
+                 "active write: the tracker reads 'Ascalon' after the control "
+                 "and SWITCHES to 'A First Errand' after the treatment, whose "
+                 "words come from content/quests.toml's committed varint "
+                 "[0x8103, 0x0CC8] rather than a probe literal. That would "
+                 "close rung Q2b end to end: our record, our id, our words, "
+                 "their renderer. Blank or '?' on the treatment alone indicts "
+                 "the archive/encoding seam, with the control proving the rig.",
+        steps=_quest_name_authored_steps(o),
+        note="RUN WITH --map 449 AND --exe pointing at the reskin-roster "
+             "client -- vault/run/reskin-roster/Gw.exe -- because only ITS "
+             "archive holds record 200; the default run archive resolves "
+             "100552 to an empty record and the treatment arm would measure "
+             "the wrong thing. Agent-pilotable (fixed-position tracker, no "
+             "clicks): actions '0:play', cadence shots, hold ~60 s. "
+             "ANSWERED 2026-08-19, agent-piloted (harness 20260819T085654): "
+             "control tracker 'Ascalon:' + toast 'Quest Added: Ascalon'; "
+             "treatment tracker 'A First Errand: Speak with the scout, then "
+             "return.' + toast 'Quest Added: A First Errand' -- BOTH screen "
+             "surfaces render the authored record, the tracker switched on "
+             "the second add exactly as the last-pushed-becomes-active write "
+             "predicts, and the client's own 0x8012 for 1463 was answered "
+             "with the template 0x004C mid-run. Rung Q2b closed end to end. "
+             "Kept runnable as the authored-name calibration.",
     ),
     "compass_fog_nomark": lambda a, o: Probe(
         question="PLAN C4 isolation, half 1 of 2: what does the fog INIT PAIR "

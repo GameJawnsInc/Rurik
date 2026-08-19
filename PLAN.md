@@ -2381,11 +2381,13 @@ in place, journalled (`questname.journal`), read back exactly, neighbours and id
 tier intact — and `content/quests.toml`'s `enc_name` now commits the bare id as the
 two-word varint `[0x8103, 0x0CC8]` (`codedstr.encode_id`), replacing ArenaNet's `0x3D64`
 placeholder. `textwrite.py` gained the generic `--set RECORD TEXT` source (the 188 skill
-names were a special case). **The SCREEN half is pending and needs one run**: the name
-renders only for a client reading an archive that holds record 200 — today that is the
-reskin-roster run dir, so the verify run pairs THAT client with the quest server flow
-(`--map 449`, the quest_name probe pattern, agent-pilotable: the tracker is fixed-position
-UI). **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
+names were a special case). **AND THE SCREEN HALF RAN THE SAME DAY — Q2b IS CLOSED.**
+Probe `quest_name_authored`, agent-piloted, harness `20260819T085654`, reskin-roster
+client (the one archive holding record 200): the control arm rendered 'Ascalon' and the
+treatment arm rendered **'A First Errand'** in BOTH the tracker and the 'Quest Added'
+toast — an A/B in one run, riding `0x0049`'s last-pushed-becomes-active write. The quest
+now announces itself in our words on their renderer; the reskin-roster pairing trap is
+recorded in the probe's note. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
 known, and which one is wrong is a measurement nobody has taken.
 
 **Two runs were what the arc was waiting on; the loopback one RAN 2026-08-19 (the dwords
