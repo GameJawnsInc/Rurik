@@ -819,6 +819,40 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > that runs, field 1's meaning is RECONSTRUCTION and the count reading is **withdrawn**,
 > not merely doubted.
 >
+> ### RUN 2 — `0x00C3[40, 0]`, the test named above. The item-id reading SURVIVES; the message still does not.
+>
+> Harness **`20260818T212544`**, single variable changed: `0x00C3`'s field 1 from `3`
+> (undeclared) to `40` (declared and staged). Everything else byte-identical.
+>
+> **The shop REPRODUCED.** `0x00CA` opened the same collector panel — **56,909** changed
+> pixels against run 1's **56,928**, one frame after the send. n=2, so the authored shop is
+> not a one-off.
+>
+> **The `item` assert did NOT fire, and that is the result.** With `3` the client died on
+> `Assertion: item` at `ItCliApi.cpp(859)` — the null guard. With `40` that guard **passed**:
+> the id resolved to a real record. Changing only the id moved the failure past the check
+> that reads it, which is what "field 1 is consumed as an item id" predicts and what a count
+> reading cannot explain. **Field 1 is an ITEM ID — upgraded from RECONSTRUCTION to
+> SOURCED-plus-OBSERVED**, and retail's `[11, 0]` is an id in its own stream, not a tally.
+>
+> **But `0x00C3` still killed the client, and the honest reading is that the id was never
+> the whole problem.** Same step, same second (`21:26:43` against a send at `01:26:43Z`),
+> different failure: **`Exception: c0000005, memory at address 0x2e67736d could not be
+> written`** — not an assert but an access violation, and that address is ASCII **`"msg."`**
+> read little-endian, i.e. execution followed a pointer out of string data. So the id
+> cleared the guard and the path then walked into memory it had no business in: **a plain
+> `0x0161` item is not a merchant-stock item.** What retail's eleven carried that ours does
+> not — a price, a quantity, a collector-offer record — is the open question, and the
+> `0x0161` payload is where to look for it. Pre-registered criterion honoured in both
+> directions: the named assert did not fire, and the run still failed, so the claim earned
+> is exactly the narrow one about field 1.
+>
+> **`0x00C3` IS NOT NEEDED TO OPEN THE SHOP.** `0x00CA` does that, twice over. So the
+> cheapest next run drops `0x00C3` entirely and goes `0x00C4` → `0x0161`×3 → `0x0084` →
+> `0x00CA` → `0x0084`/`0x00D8` → `0x00E1`, which finally fires a drain **into an open
+> window** — the experiment three runs of nulls could not reach, blocked both times only by
+> this message.
+>
 > **What this run did NOT measure:** the trailing `0x00E1` arm fired at t=44.6 s, thirteen
 > seconds *after* the client died at t=31.6 s, so it observed nothing and must not be
 > counted as a fourth null. Asking whether a drain appends into an open collector window
