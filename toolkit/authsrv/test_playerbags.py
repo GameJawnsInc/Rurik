@@ -28,9 +28,16 @@ WHAT IS ASSERTED, and it is deliberately two different kinds of claim:
        the type-1 backpack and NOTHING else, 49/49, always an item declared in
        the same tape; we declare no bag item, so 0 is retail's own value for
        the other five types rather than an invention).
-  8.   the SYNTAX TREE: the burst iterates `PLAYER_BAGS`, and does so OUTSIDE
-       any `if EQUIP_WEAPON`. That is the bug that shipped, and it is not
-       visible in any value -- only in where the call sits.
+  8-9. the SYNTAX TREE, which is where both real defects lived and neither is
+       visible in a value. The burst must iterate `PLAYER_BAGS` OUTSIDE any
+       `if EQUIP_WEAPON`; and no loop TARGET may shadow a name the enclosing
+       handler already binds. Naming one of them `kind` overwrote the
+       connection's channel discriminator with the last bag's TYPE, so every
+       later c2s message missed `if kind == "game"` -- the client's
+       INSTANCE_LOAD_REQUEST_SPAWN_POINT went unanswered (hung at 100% on the
+       load screen) and its keep-alive was decoded as an auth message whose
+       handler died on `values[3]` (`Code=007`). Two run failures, one loop
+       variable, and every number in the table correct throughout.
 
 Each positive check has a control beside it that breaks the table on purpose,
 because a comparison that cannot fail is not a comparison.
@@ -50,7 +57,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=12)
+LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=15)
 
 # (type, model, slots), in retail's own send order. Duplicated here rather than
 # imported from authsrv so the check has two independent sides: if someone
@@ -94,6 +101,45 @@ def bag_loop_sites(tree):
                     for n in ast.walk(node))
         sites.append((sends, guarded))
     return sites
+
+
+def shadowed_by_bag_loop(tree):
+    """Loop-target names the bag loop STEALS from its enclosing function.
+
+    The bag burst is a `for` at the bottom of a thousand-line handler, and
+    Python has no block scope: a target named after something the handler
+    already uses silently rebinds it for the rest of the call. That is not
+    hypothetical -- naming one of them `kind` overwrote the connection's
+    `kind = "auth" if ... else "game"` with the last bag's TYPE, so every
+    later c2s message missed `if kind == "game"`, the client's spawn request
+    went unanswered and its keep-alive was decoded as an auth message whose
+    handler died on `values[3]`. Two run failures from one loop variable, and
+    no value in the table was wrong.
+    """
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            child.parent = node
+    out = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.For):
+            continue
+        if not any(isinstance(n, ast.Name) and n.id == "PLAYER_BAGS"
+                   for n in ast.walk(node.iter)):
+            continue
+        targets = {n.id for n in ast.walk(node.target)
+                   if isinstance(n, ast.Name)}
+        fn = node
+        while getattr(fn, "parent", None) is not None:
+            fn = fn.parent
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                break
+        inside = {id(n) for n in ast.walk(node)}
+        outside = {n.id for n in ast.walk(fn)
+                   if isinstance(n, ast.Name)
+                   and isinstance(n.ctx, ast.Store)
+                   and id(n) not in inside}
+        out |= targets & outside
+    return out
 
 
 def main():
@@ -173,6 +219,19 @@ def main():
               "--no-weapon left the character with no containers at all and "
               "every inventory question depended on a weapon flag")
 
+    stolen = shadowed_by_bag_loop(ast.parse(src))
+    LEDGER.ok(not stolen,
+              "and no loop target SHADOWS a name the handler already uses",
+              "Python has no block scope, so a target named after something "
+              "the enclosing handler binds rebinds it for the rest of the "
+              "call. Naming one `kind` overwrote the connection's channel "
+              "discriminator with the last bag's TYPE: every later c2s "
+              "message missed `if kind == \"game\"`, the client's "
+              "INSTANCE_LOAD_REQUEST_SPAWN_POINT went unanswered and its "
+              "keep-alive was decoded as an auth message whose handler died "
+              "on values[3]. Two run failures, and no value in the table was "
+              f"wrong. Stolen now: {sorted(stolen) or 'none'}")
+
     # ---- controls: each check above can go red --------------------------
     broken = [b for b in authsrv.PLAYER_BAGS if b[1] != 1]      # no backpack
     LEDGER.ok([(k, m, s) for _b, k, m, s, _i in broken] != list(RETAIL_SHAPES),
@@ -191,6 +250,17 @@ def main():
               "CONTROL: the guard detector SEES a loop nested under the flag",
               "otherwise section 8's second check passes because the detector "
               "is blind, not because the code is right")
+    LEDGER.ok(shadowed_by_bag_loop(ast.parse(
+        "def handle():\n"
+        "    kind = 'game'\n"
+        "    for bag_id, kind, model, slots, item in PLAYER_BAGS:\n"
+        "        send(kind)\n"
+        "    return kind\n")) == {"kind"},
+              "CONTROL: the shadow detector SEES the bug that cost two runs",
+              "this is the exact source that shipped -- `kind` bound by the "
+              "handler, stolen by the loop. Without this control the check "
+              "above is green because nothing looks, not because nothing "
+              "shadows")
     LEDGER.ok(bag_loop_sites(ast.parse("x = 1")) == [],
               "CONTROL: and finds nothing where there is no loop",
               "a detector that reports a site in unrelated source would make "

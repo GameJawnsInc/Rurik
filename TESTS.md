@@ -1850,11 +1850,19 @@ Every one of these, in the order they were written:
   the message's trailing field: nonzero on the type-1 backpack and NOTHING else,
   49/49 an item id declared by an `0x0161` in the same tape -- the Backpack is a
   real item in Guild Wars and the equipped/storage/material containers are not.
-  Section 8 is the one no value can express: a SYNTAX-TREE check that the burst
-  iterates the table and does so OUTSIDE any `if EQUIP_WEAPON`. Four controls,
-  including two that break the table on purpose and two that prove the guard
-  detector is not simply blind. Floor 12; sections 1-4 print a `skip` without
-  the vault. No socket, no client. ~4 s),
+  Sections 8-9 are the ones no value can express, and they are where BOTH real
+  defects lived: a SYNTAX-TREE check that the burst iterates the table outside
+  any `if EQUIP_WEAPON`, and one that no loop TARGET shadows a name the
+  enclosing handler already binds. Naming a target `kind` overwrote the
+  connection's channel discriminator with the last bag's TYPE -- every later
+  c2s message then missed `if kind == "game"`, so the client's
+  INSTANCE_LOAD_REQUEST_SPAWN_POINT went unanswered (hung at 100% on the load
+  screen) and its keep-alive decoded as an auth message whose handler died on
+  `values[3]` (`Code=007`). Two run failures from one loop variable, with every
+  number in the table correct throughout. Five controls: two break the table on
+  purpose, and three feed the detectors the exact buggy source so a green check
+  cannot mean the detector is blind. Floor 15; sections 1-4 print a `skip`
+  without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   that an unframeable opcode stops the framer instead of being framed past, and

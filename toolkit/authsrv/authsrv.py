@@ -6287,10 +6287,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # inventory UI is ever built. Same message, same
                         # fields, different moment -- and the moment is the
                         # variable this move tests.
-                        for bag_id, kind, model, slots, item in PLAYER_BAGS:
+                        # `bag_type`, NOT `kind`. Naming it `kind` shadowed
+                        # THIS handler's channel discriminator -- the `kind =
+                        # "auth" if header == AUTH_CMSG_VERSION_HEADER else
+                        # "game"` a thousand lines up -- and left it holding
+                        # 5, the last bag's type, for the rest of the
+                        # connection. Every c2s message after the burst then
+                        # missed `if kind == "game"` and fell into the auth
+                        # arm: the client's INSTANCE_LOAD_REQUEST_SPAWN_POINT
+                        # went unanswered and its 5 s keep-alive was read as
+                        # AUTH_CMSG UPDATE_CHARACTER_SETTINGS, whose handler
+                        # indexed values[3] and killed the thread. TWO run
+                        # failures, `Code=007` on the first and a hung load on
+                        # the second, from one loop variable.
+                        for bag_id, bag_type, model, slots, item in PLAYER_BAGS:
                             send(GAME_SMSG_INVENTORY_CREATE_BAG,
-                                 [1, kind, model, bag_id, slots, item],
-                                 f"INVENTORY_CREATE_BAG(type {kind}, "
+                                 [1, bag_type, model, bag_id, slots, item],
+                                 f"INVENTORY_CREATE_BAG(type {bag_type}, "
                                  f"bag {bag_id}, {slots} slots)")
                         # The item has to exist before a weapon set can name it,
                         # and upstream sends inventory before the slots for that
@@ -7986,7 +7999,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       state["settings_buf"]).decode())
                         send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
                              f"REQUEST_RESPONSE(settings {req_id})")
-                elif opcode == 0x0009:  # UPDATE_CHARACTER_SETTINGS
+                elif opcode == 0x0009 and len(values) >= 4:
+                    # UPDATE_CHARACTER_SETTINGS.
+                    #
+                    # THE LENGTH TEST IS THE ARM'S GUARD, and it is not
+                    # defensive habit -- it is a measured failure. `0x0009` is
+                    # UPDATE_CHARACTER_SETTINGS on the auth side and the 5 s
+                    # KEEP-ALIVE on the game side, and both ride one socket.
+                    # On 2026-08-19 a keep-alive reached here classified as
+                    # auth, carried three values, and `values[3]` raised
+                    # IndexError -- which killed the handler THREAD, dropped
+                    # the connection, and showed the operator `Code=007` at
+                    # the character screen. First occurrence in 41 harness
+                    # runs that day, and it arrived earlier in the sequence
+                    # than usual (right after INSTANCE_LOAD_REQUEST_SPAWN_
+                    # POINT rather than after the spawn), so the trigger is
+                    # timing: a longer login burst moved the keep-alive
+                    # relative to whatever flips this connection's kind.
+                    #
+                    # A short one now falls through to the D9(a) arm below,
+                    # where it is named, counted and printed. That is the
+                    # repo's own rule applied to a collision: an opcode we
+                    # cannot frame stops loudly and does not get invented
+                    # past -- and a message we merely cannot IDENTIFY must
+                    # not take the session down with it. The real fix is for
+                    # the classifier to stop calling a game keep-alive auth,
+                    # which is a separate question this arm cannot answer.
+                    #
                     # [req_id, character name, settings blob]. OBSERVED
                     # 2026-08-16: a client whose account has a STORED character
                     # sends this ~2 s after entering a map -- persisting its
