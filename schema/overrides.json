@@ -882,6 +882,79 @@
    "19": {
     "opcode": 19,
     "why": "NOT NAMED ON PURPOSE, 2026-08-16, rung Q1. Layout is [msg_header] alone -- no payload at all -- and ZERO arrivals in 971 c2s messages. A payload-less opcode in the quest range supports 'it clears something' and cannot say what; 'QUEST_CLEAR_ACTIVE' is a plausible reading of a blank message and nothing more. What would settle it: one labelled run that clears the tracked quest in the log. studies/quests/FINDINGS.md 2.1."
+   },
+   "21": {
+    "opcode": 21,
+    "table": "GAME_CMSG_0021",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 21
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_AI_MODE",
+    "name_confidence": "high",
+    "why": "OBSERVED 2026-08-19, agent-piloted clicks on the open commander panel (studies/pvpui/FINDINGS.md 28.5, capture vault/captures/gamesrv/authsrv-20260819T090943-c1.jsonl): each of the three stance buttons emitted exactly one frame, [agent=200 (the hero's agent), dword] with the dword tracking the click order Guard=1, Avoid=2, Fight=0 -- the same enum 0x0072's own format string names aiMode (CHAR_AI_MODES == 3). The client does not move its own stance ring on click; it waits for the server. Named HERO because only hero agents were observed; the panel class is GmPetCommander, so pets may share it -- untested."
+   },
+   "26": {
+    "opcode": 26,
+    "table": "GAME_CMSG_0026",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 26
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_FLAG_PLACE",
+    "name_confidence": "medium",
+    "why": "OBSERVED 2026-08-19, one agent-piloted arm (pvpui 28.5, capture vault/captures/gamesrv/authsrv-20260819T093801-c1.jsonl): clicking the compass's hero-1 flag widget then the ground emitted exactly one of these -- [agent=200 (the hero's agent), ground coords, plane] -- and the ground click was consumed (no MOVE_TO_COORD). The client drew no flag afterward: rendering waits for a server echo this server does not send yet. Confidence medium, n=1: the cancel/recall variant and whether the same opcode re-places an existing flag are untested."
+   },
+   "27": {
+    "opcode": 27,
+    "table": "GAME_CMSG_0027",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 27
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PARTY_FLAG_PLACE",
+    "name_confidence": "medium",
+    "why": "OBSERVED 2026-08-19, one agent-piloted arm (pvpui 28.5, same capture as opcode 26): clicking the compass's all-party flag widget then the ground emitted exactly one of these -- [ground coords, plane], no agent, which is what distinguishes it from 26. Same caveats: n=1, no cancel arm, no render without a server echo. Not to be confused with authsrv.py's GAME_CMSG_ATTACK_SKILL = 0x0027, which is 39 decimal; this key is 27 decimal = 0x001B."
    }
   },
   "GAME_SMSG": {

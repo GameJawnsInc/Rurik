@@ -1653,12 +1653,21 @@ field we sent as zero or never sent. The full rig:
 Lvl 255 sentinel (prop 36 for agent 200, or a body) and the humanoid-doll arm
 (`--hero-appearance 116703,116228`). **Both residue arms RAN 2026-08-19, agent-piloted
 (§28.4):** the appearance pair is ORDER-SENSITIVE — `116228,116703` draws a humanoid
-bust, the reverse draws an empty doll, neither asserts, so a wrong pair fails silently;
-and `--hero-level 20` (new flag, `0x009F` prop 36 pre-body) cleared the Lvl 255 sentinel
-in the panel title AND the roster row, and made the panel's vitals bars render (1/0) for
-the first time — staged follow-up: `0x009F` health/energy for the hero agent, and
-re-reading the hatcher content rows whose body/shell labels the swap result says are
-probably reversed.
+bust, the reverse draws an empty doll, neither asserts, so a wrong pair fails silently
+(§28.5's dat chunk-walk settled the semantics: d1 must carry the FA1 skeleton chunk, d2
+supplies the geometry — the content labels were right and §28.4's swapped-labels
+speculation is refuted); and `--hero-level 20` (new flag, `0x009F` prop 36 pre-body)
+cleared the Lvl 255 sentinel in the panel title AND the roster row. **Then the c2s wall
+fell (§28.5, same day):** the open panel made heroes §3.3's triple NOT FOUND clickable,
+and three opcodes came off it in one afternoon — `0x0015` HERO_AI_MODE `[agent, mode]`
+(3/3 stance clicks, enum = 0x0072's aiMode; echo arm wired into authsrv, fires
+confirmed), `0x001A` HERO_FLAG_PLACE `[agent, coords, plane]` and `0x001B`
+PARTY_FLAG_PLACE `[coords, plane]` (compass flag widgets, arm-then-ground, n=1 each) —
+all three named in `schema/overrides.json`. `--hero-vitals 480,45` (new) fills the
+panel bars exactly. Open, staged: the client renders NOTHING it sends (stance ring and
+flag marker both wait on unknown s2c echoes — re-sent `0x0072` does NOT move the ring);
+target-lock's c2s needs a foe (`--enemy` arm); the greyed Norgu row is the
+out-of-compass-range rendering (owner's reading) and predicts a body/position lights it.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

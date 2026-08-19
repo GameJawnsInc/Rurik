@@ -242,6 +242,22 @@ hero/henchman/pet stance widget, not a monster-AI concept.
 All three are **floors, not censuses** — `asserts.py` itself warns that every "no assert
 names X" answer is short by the ~370 sites its fixed patterns cannot read.
 
+**CORRECTED 2026-08-19, and the first bullet is the one that fell — by clicking, not by
+reading.** Once the commander panel opened (pvpui §28.3), the stance buttons became
+clickable for the first time ever, and each of the three emitted exactly one
+`GAME_CMSG 0x0015` — `[agent_id, mode]`, agent 200, mode tracking the click order
+Guard=1/Avoid=2/Fight=0, the same enum `0x0072`'s own format string names `aiMode`.
+Full record: [pvpui §28.5](../pvpui/FINDINGS.md); named `HERO_AI_MODE` in
+`schema/overrides.json`. Two refinements, not a contradiction: the send lives on the
+**button path**, not the `GmAgentCommander` setter this section traced (that dead end
+was a wrong-place answer, and the floors-not-censuses caveat above was doing exactly
+its job), and the client does **not** move its own stance ring on click — it waits for
+the server, so stance is server-authoritative and the setter presumably runs on the
+`0x0072` echo. Flag placement stayed unemitted in the outpost run, but not as a null:
+the client refused it on its own — "Norgu cannot have a target while in an outpost" —
+so that bullet's verdict now lives with the explorable-map run in pvpui §28.5. Hiring
+remains NOT FOUND.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative

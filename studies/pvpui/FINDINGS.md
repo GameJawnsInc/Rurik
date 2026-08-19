@@ -1848,3 +1848,65 @@ rendered as empty black strips in every previous run of this arc, now RENDER, re
 the client's own floor values; the cheap follow-up is `0x009F` health (42, OBSERVED)
 and energy (41, UPSTREAM) for the hero agent, which would put real numbers in bars
 that demonstrably read per-agent stores a bodiless agent can carry.
+
+### 28.5 THE C2S WALL FELL — three opcodes off the commander UI in one afternoon of piloted clicks (2026-08-19)
+
+Heroes §3.3's "c2s direction NOT FOUND, three times" was a static floor, and the open
+panel turned it into a clicking problem. Six more `RUN VERDICT: PASS` runs, same rig
+plus `--hero-vitals 480,45` (new) and `--explorable` where noted. Every capture cited is
+under `vault/captures/gamesrv/`, every screenshot under `vault/captures/harness/`.
+
+**Vitals (run `20260819T090643`).** `--hero-vitals 480,45` (`0x009F` 42/41, the MAX
+setters) put exactly 480/45 in the panel's bars, rendered full. With neither sent the
+bars read 1/0 (§28.4), so the panel vitals read the per-agent max stores — a bodiless
+agent carries them fine.
+
+**The appearance pair, settled by the dat (desk check, `modelfile.py`).** Chunk walks
+of the three files: 116366 = `FA0+FA5+FA6+FA1` (geometry AND skeleton — the
+self-contained file that renders alone); 116228 = `FA6+FA1+FA8` (skeleton/animation,
+NO geometry); 116703 = `FA0+FA5` (geometry, NO skeleton). That REFUTES §28.4's
+swapped-labels speculation — the content rows were right — and corrects §28.1's
+reading: **d1 (+0x14) must carry the FA1 skeleton/animation chunk** (2/2 rendering
+cases have it in d1, the 1 empty-doll case does not), and **d2 (+0x18) supplies the
+geometry** in the two-file form. The humanoid bust the swap drew is 116703's mesh
+riding 116228's skeleton.
+
+**Stance: `GAME_CMSG 0x0015`, now named HERO_AI_MODE (capture
+`authsrv-20260819T090943-c1.jsonl`).** Each of the three stance buttons emitted exactly
+one frame, `[agent=200, mode]`, mode tracking the click order Guard=1 / Avoid=2 /
+Fight=0 — the enum `0x0072`'s own format string calls `aiMode`. Two things the static
+trace could not see: the send lives on the BUTTON path (not the GmAgentCommander setter
+§3.3 traced to a dead end), and the client does NOT move its own stance ring on click.
+An echo arm now answers `0x0015` with `0x0072` carrying the requested mode (authsrv
+dispatch, always-on, inert off-rig) — the echo fires (`hero stance echo: agent 200 ->
+aiMode 1`, run `20260819T093153`) but the ring STILL does not move, so the ring's
+display store is NOT satisfied by a re-sent `0x0072`. Where the ring reads from is a
+new, open question; stance is server-authoritative either way.
+
+**The crosshair button is TARGET-LOCK, not the flag.** Clicked in the outpost it said
+"Norgu cannot have a target while in an outpost"; clicked in the explorable it said
+"You must select a foe before you can lock No[rgu's target]". Its c2s (if any) needs a
+foe on screen — a staged `--enemy` arm, not run.
+
+**Flags: `0x001A` HERO_FLAG_PLACE and `0x001B` PARTY_FLAG_PLACE (capture
+`authsrv-20260819T093801-c1.jsonl`).** The real flag controls are the widget strip
+under the compass (all-party flag + one numbered flag per hero; hero 1's lit, 2/3
+greyed because those heroes don't exist). Arm-then-ground, one arm each: the hero-1
+flag's ground click emitted `[agent=200, coords, plane]` (0x001A) and the all-flag's
+emitted `[coords, plane]` (0x001B) — no agent field is what distinguishes the pair —
+and BOTH ground clicks were consumed (zero MOVE_TO_COORD in the run). The client drew
+no flag in the world or on the compass: like the stance ring, flag rendering waits for
+a server echo nobody has found or built yet. Both names are in `schema/overrides.json`
+at medium confidence — n=1 each, cancel/recall variants untested.
+
+**The greyed Norgu row — owner's reading, and it fits everything.** In the explorable
+party list Norgu's name renders greyed/dark: that is the client's out-of-COMPASS-RANGE
+rendering, and agent 200 has no body and no position, so he scores as permanently out
+of range. Prediction it stages for free: give the hero a body (`--hero-body`) or
+whatever store feeds compass range, and the row lights up.
+
+Scoreboard for heroes §3.3 after today: stance FOUND (3/3, named, echo-armed), hero
+flag FOUND (n=1, named), party flag FOUND (n=1, named), target-lock located and gated
+(needs a foe), hiring still NOT FOUND. What the client does with all three is
+send-and-wait — every confirmed display (stance ring, flag marker) waits on a s2c echo
+that is now the arc's next mechanism to find.
