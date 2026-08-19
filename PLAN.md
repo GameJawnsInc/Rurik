@@ -1863,9 +1863,18 @@ open for eleven days. §3's ladder is A1–A8; **A1, A2, A3, A4, A6, A7a, A7b an
 run — only A5 has not.** (This paragraph read "Nothing is built" for a day after A3 and A4
 landed, and then said A7 and A8 "have not" run for a day after both did.)
 
-**RUN 7 IS STAGED, 2026-08-19 — study §11.6.** `vault/research/archivewrite/a4stage7.py`,
-not deployed and not launched; it needs the owner at the keyboard and its readout is a
-model-appearance verdict. A8 rewrote its design: **fourteen of the hatcher's fifteen linked
+**RUN 7 FIRED, 2026-08-19 — study §11.7. A LINKED FILE'S CONTENT REACHES THE SCREEN, and
+the arc's animating question is ANSWERED.** Owner, at the keyboard: *"their bodies are kind
+of twisted like pretzels… idle/walk/cast all have pretzel model animations."* Six runs had
+failed to show it. `vault/research/archivewrite/a4stage7.py` flipped every rotation key in
+fourteen linked files by 180°, wrote all fifteen rows **in place at compression 8**, and the
+retail client rendered from every one: spawn 8 of 8 PASS, **no assert**, and the post-launch
+diff shows only the client's own scratch rows 8315/8316 moved, no growth, and **our 15
+edited rows byte-identical after the launch**. That validates the compression-8 write path
+under a CONTENT change, which A8 — byte-identical payload by design — could not. **The
+positive control failed and is recorded as a failure (§11.7b)**: the head was not enlarged,
+and the reason it costs nothing is §11.6e's decision-table rewrite, which scores that exact
+cell ANSWERED where §11.5's original scored it ABORT. A8 rewrote its design: **fourteen of the hatcher's fifteen linked
 animation files fit their OWN reservation compressed**, including the two §11.5 called
 unreachable, so the run relocates nothing, grows nothing and changes exactly 15 rows in
 place. It also produced correction **C-10**, which reaches backwards — `blk2C` bases are

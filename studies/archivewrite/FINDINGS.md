@@ -1503,7 +1503,9 @@ mechanically supported today.**
 > below are right and independently reproduced; every DISTANCE is ~11× too large,
 > because this section accumulated `blk2C` bases down the parent chain and they are
 > **absolute rest positions**. Corrected: the head cluster moves **1.98× the whole
-> creature's extent**, not 0.67×. The control is stronger than this section claims.
+> creature's extent**, not 0.67×. The control is stronger than this section claims
+> on paper — and **it still did not fire in the run: §11.7b.** "Orthogonal to a
+> limb-flip readout", below, is the sentence that did not survive contact.
 
 Nodes 51–64 **are** the head cluster. The hierarchy was rebuilt from `blk2C`'s parent field
 (reading the self-link as "continue from the previous node", the only interpretation yielding
@@ -1702,6 +1704,98 @@ staging from an already-deployed archive would restore retail limbs while taking
 the head to ×9 — landing precisely on the NEGATIVE cell, produced by a bug.
 Every payload is read from `Gw.dat.retail` and the source is fingerprinted
 against retail's own stored sizes for all sixteen rows before a byte is flipped.
+
+### 11.7 RUN 7 FIRED — 2026-08-19. **A linked file's CONTENT reaches the screen.** The arc's question is ANSWERED
+
+**Owner, at the keyboard: "their bodies are kind of twisted like pretzels…
+idle/walk/cast all have pretzel model animations."** Screenshot: two bodies
+folded through themselves, nameplate `Hatcher [Collector]` on one of them.
+
+**That is the answer six runs failed to get.** Runs 1–5 scaled linked-file
+*bases* and nothing moved; run 6 scaled the *shell's* bases and the creature
+exploded, which proved (§9.3k) that linked bases are never read. The property
+linked files actually own — their rotation channels — had never been tested.
+Run 7 flipped every rotation key in fourteen of them by 180° and **every
+animation the creature plays came back deformed**.
+
+| | |
+|---|---|
+| verdict | **ANSWERED.** Linked animation content reaches the renderer. |
+| treatment | 232,764 rotation keys, 14 linked files, `q → (1,0,0,0)·q` in (x,y,z,w) |
+| transport | 15 rows rewritten **in place at compression 8** by our own encoder |
+| client | spawn 8 of 8 PASS, **no assert**, `RUN VERDICT: PASS` |
+| coverage observed | idle, walk **and** cast all deformed — the owner reports **no normal animation at all** |
+
+#### 11.7a The write path is validated under a CONTENT change, which A8 could not do
+
+A8 proved the client reads a row our encoder compressed **with a byte-identical
+payload** — it isolated the compressor, deliberately. Run 7 is the other half:
+**fifteen rows whose payloads we authored**, compressed by `gwenc`, written in
+place, and the client **rendered from all fifteen**. §13.5's gap A did not fire
+on any of them, as §11.6d predicted from the symbol counts.
+
+The post-launch diff (§5.6 rule 6) is the strongest single line in the run:
+
+    rows changed since deploy: 2   -- 8315, 8316, the client's own scratch rows
+    growth: None | preflight 10/10 | generations 6/6 | 4,198,489,600 B
+    our 15 edited rows still byte-identical to what we deployed: 15/15
+
+**No repair fired, nothing was discarded, no generation was adopted, and the
+archive did not grow by a byte.** Rows 8315/8316 move on every launch and are
+not a repair. The 1.5 MB wall is not merely passable — a row past it was written
+with new content and read back by the retail renderer.
+
+#### 11.7b The control FAILED, and it is recorded as a failure
+
+**The head was not enlarged.** Nodes 51–64 at ×3 should have displaced that
+cluster ~2× the creature's own height (§11.6a, and the FK model reproduces every
+rest position to 0.000000). It did not read on screen. Two candidates, and this
+arc does not get to pick the flattering one:
+
+1. **The binding proxy was wrong.** §11.6b measured 21.1% of mesh vertices as
+   *nearest* a node in 51..64 and labelled it **RECONSTRUCTION** because this
+   tree does not decode skin weights. Nearest-joint is not binding. If the head
+   geometry is weighted elsewhere, scaling those nodes moves nothing visible —
+   and the label was carrying exactly that risk.
+2. **A pretzeled body makes an enlarged head unreadable**, which two skeptics
+   predicted in almost these words.
+
+**It does not touch the verdict**, and that is the whole point of §11.6e's
+rewrite: the cell we landed in is *head normal + limbs contorted*, which the
+corrected table scores **ANSWERED, control invalid, DO NOT ABORT**. **§11.5's
+original three-way table sent this exact cell to ABORT.** Had the run gone out
+as designed on 2026-08-18, a positive result would have been scored as a broken
+pipeline and thrown away. That correction came out of the adjudication pass, not
+from the run.
+
+#### 11.7c Two things the run turned up that were not in the design
+
+- **The owner reports NO normal animation.** §11.6 predicted two records would
+  survive unflipped — they carry **selector 0**, meaning "served by this file",
+  so their channels come from the shell's own `blk2C` and no link is involved.
+  Either those two never play on a hatcher, or the selector-0 reading is wrong.
+  **UNVERIFIED, and cheap to settle** from the archive without a client.
+- **A second model may be deformed.** The owner's screenshot shows a second
+  body pretzeled beside the hatcher. If that is the player character, the
+  fourteen files are **shared animation libraries**, and the flip reached a
+  model whose shell we never touched — consistent with §11.1's measurement that
+  the top keys appear in **26–32 of 32 corpus shells**. **NOT CONFIRMED**: the
+  second body was not identified at the keyboard and the harness stills are all
+  empty (`client not foreground`, every shot skipped), so the only visual record
+  is the owner's own capture, `2026-08-19 07-30-25.mkv`. Settle it by naming the
+  models before quoting it.
+
+#### 11.7d What this closes, and what it opens
+
+**Closed:** the arc's animating question, and the encoder arc with it. The route
+is `skelfile` → typed repr → `skelwrite` → `rebuild_container` → `gwenc` →
+`datwrite.replace(compression=8)` → **retail renderer**, end to end, with 62% of
+this creature's animation records no longer unreachable and **no relocation, no
+growth and no free-space consumption anywhere in it**.
+
+**Open:** the positive control's premise (does geometry follow nodes 51–64 —
+needs skin weights, which `modelfile.py` does not decode); the selector-0 pair;
+and whether the linked files are shared across models. None blocks anything.
 
 ---
 
