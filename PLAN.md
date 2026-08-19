@@ -1361,8 +1361,30 @@ send-only.
 is implemented and OFF (`b0cd014`). It answers each move-cancel with a
 zero-distance `0x0029` at the player's own reported position, which is what
 ArenaNet does in **70 of 88** live cases and which should overwrite the armed
-destination. Repro: click a far target across a plane boundary (a bridge or
-stairs), cancel part-way, then move on WASD and wait ~10–20 s.
+destination.
+
+**THE REPRO, corrected 2026-08-19 after a run that produced ZERO trials.** The
+first version of this said "click a far target across a plane boundary", and
+both extra terms were fitted to the two cases studied hardest — `100340` warped
+onto a **206 u same-plane** grant. What actually matters is two things:
+
+1. **The click must be GRANTED**, and `authsrv` refuses a click when our last
+   position report is over **1.0 s** old. The client sends no position while
+   standing still, so a click made from a standstill is *never* granted — the
+   corpus maximum staleness at a granted click is 0.95 s. **Click while you are
+   still moving.**
+2. **Then stop clicking.** A grant is cleared by being consumed at its arrival
+   tick or overwritten by a newer grant, so a second click disarms the first.
+   Keep playing on the keyboard for ~20 s.
+
+A grant left un-overwritten for 10 s is a trial, and **3 of 8 such trials in the
+corpus teleported (37.5%)**. Six clean trials give a ~94% chance of at least one
+teleport if nothing is fixed — about three minutes of play.
+
+**Score the run rather than eyeballing it**, because "I didn't get warped" was
+uninformative once: `python toolkit/authsrv/warpscan.py` reads the newest
+capture and prints the trial count first and the teleport count second. Zero
+trials means the run did not test the fix.
 
 - **Prediction, stated first:** no teleport onto the cancelled destination.
 - **Refutation, just as clear:** a warp still landing bit-exactly on an earlier
