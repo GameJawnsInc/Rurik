@@ -1973,6 +1973,27 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
+**A8 IS STAGED, 2026-08-18 — NOT DEPLOYED, NOT LAUNCHED.** Study §15.
+`vault/research/archivewrite/a4stage8.py` built
+`vault/exports/archivewrite/a4run8/Gw.a4run8.dat`: row 11196 (file 15018) **re-compressed by
+OUR encoder** to 1,011,244 B, 18,320 B smaller than retail's, fitting **in place** with no
+relocation. **The payload is byte-identical to retail's 1,514,855 B — the only variable is
+who compressed it**, which is what makes "no visible change" the PASS and any assert
+attributable to the encoder alone. Verified independently of the script that built it:
+size **4,198,489,600 B unchanged**, preflight **10/10**, generations **6/6**, CRC sweep
+**177,319 payloads 0 bad**, **1** row changed, five neighbours byte-identical, and the row
+decompresses to the original payload with the declared size matching.
+
+**The deploy and the launch are the owner's** — the launch is the irreversible step (§5.6
+rule 1: the client Flushes, and a repair deletes the whole `nextStream` chain permanently
+after one launch). `python vault/research/archivewrite/a4stage8.py --deploy`, then look at
+the hatcher; `--retail` restores the baseline.
+
+**Correction to the arc's own state note:** the deployed archive is **RETAIL, not run 6** —
+`vault/run/.../Gw.dat` was restored at 21:34 that day by another session, and the handoff
+claimed run 6 for hours afterwards. Check the run directory before believing any claim about
+it; it is shared.
+
 **THE WRITE PATH IS BUILT, 2026-08-18 — and the skeptics found FOUR holes in it.** Study
 §14. `datwrite.replace(..., compression=8, expect=payload)` writes a compressed row and
 **decompresses to verify before committing** — the only refutation available, since
