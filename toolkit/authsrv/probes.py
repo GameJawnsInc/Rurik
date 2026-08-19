@@ -628,16 +628,20 @@ def _merchant_window_steps(agent_id, origin):
     window draws. A run where nothing opens AND the character never turns is a
     delivery failure and must not be read as a null.
 
-    PREDICTIONS, stated before the run:
-      - `0x00C3` opens a stock/collector window listing our three items -> the
-        accum buffer feeds a window after all, `0x0084`'s upstream name
-        `WINDOW_ADD_ITEMS` earns its "items", and the follow-up arm can finally
-        ask whether `0x00E1` appends INTO that window.
-      - the character turns but no window draws -> the owner register is not
-        sufficient; the window needs client-side state a wire replay cannot
-        reach, and `0x00E1`'s subscriber stays NOT FOUND with every reachable
-        context now eliminated.
-      - nothing at all happens -> delivery failure, see the control above.
+    RUN 1 ANSWERED THE ORIGINAL QUESTION, 2026-08-18 (`20260818T211036`), and
+    it was `0x00CA` rather than `0x00C3` that did the work: a panel titled
+    `Hatcher [Collector]` -- our own NPC -- listing all three staged items by
+    name, with Buy/Goodbye. The accum buffer feeds a window; `0x0084` earns its
+    `WINDOW_ADD_ITEMS` name. Then `0x00C3 [3, 0]` CRASHED the client on
+    `Assertion: item`, `ItCliApi.cpp(859)`, same-second attribution.
+
+    THIS RUN TESTS ONE THING, predicted before it fires: **`0x00C3`'s field 1
+    is an ITEM ID, not a count.** The assert site takes an item id, indexes the
+    item table at `[globals+0x40]+0xB8` and asserts non-null; we sent 3, which
+    this session never declared, while retail's `[11, 0]` would have been an id
+    in its own stream. Sending 40 -- declared and staged -- should NOT assert.
+    If it asserts anyway the id was never the problem, and that is a result to
+    report rather than a cue to invent a third reading.
 
     CRASH NOTES so a death is a diagnosis: `0x00C5` (deliberately NOT sent here)
     asserts `accumIntList[0].Count() >= 1` at `ChCliApi.cpp:2956`; `0x00C3` and
@@ -683,12 +687,15 @@ def _merchant_window_steps(agent_id, origin):
         Step(3.0, 0x00CA, [1, 0x3F800000],
              "0x00CA [1, 1.0f] -- retail's next message in s1",
              "unknown; upstream does not name it. Watch for anything at all."),
-        Step(3.0, 0x00C3, [len(ids), 0],
-             f"0x00C3 [{len(ids)}, 0] -- s1's commit, our count instead of 11",
-             "THE PAYOFF FRAME. A merchant/collector window naming our three "
-             "armor pieces would mean the accum buffer feeds a window and we "
-             "have authored a shop. Nothing, with the character still turned, "
-             "means the register is not sufficient."),
+        Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
+             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- an ITEM ID, not a count",
+             "THE TEST, and the whole reason for this re-run. [3, 0] asserted "
+             "`item` at ItCliApi.cpp(859) on 2026-08-18 because 3 was never a "
+             "declared item; 40 IS declared and staged. NO ASSERT here "
+             "confirms field 1 is an item id and retires the count reading "
+             "we took from retail's [11, 0]. An assert ANYWAY means the id was "
+             "never the problem and field 1 is something else again -- in "
+             "which case say so rather than inventing a third reading."),
         Step(10.0, 0x0084, [ids],
              "restage column 0 -- now ask the ORIGINAL question in this context",
              "nothing by itself."),
@@ -697,9 +704,11 @@ def _merchant_window_steps(agent_id, origin):
         Step(2.0, 0x00E1, [0],
              "0x00E1 DRAIN in the merchant context -- the question this whole "
              "line has been chasing",
-             "if a window opened above, does the drain append into it? If no "
-             "window opened, this arm inherits the earlier nulls and adds "
-             "nothing -- say so rather than counting it as a fourth null."),
+             "NOW THIS ARM IS LIVE: 0x00CA opened a collector window in the "
+             "20260818T211036 run and the client died before reaching here, "
+             "so if 0x00C3 survives this time the drain finally fires with a "
+             "window OPEN -- the experiment three runs of nulls could not "
+             "perform. Does the panel gain rows, change, or close?"),
         Step(10.0, 0x0000, [],
              "END: quiet frames so the last two sends have coverage after them",
              "the run's final state. Note whether the character is still facing "
@@ -5834,18 +5843,15 @@ PROBES = {
                  "0x0084 -> 0x00CA -> 0x00C3 sequence -- and does the accum "
                  "buffer feed it? The last live candidate for 0x00E1's "
                  "subscriber.",
-        predicts="Three outcomes, all distinguishable. (a) A window opens "
-                 "listing our three armor pieces: the buffer feeds a window, "
-                 "0x0084's upstream 'WINDOW_ADD_ITEMS' earns its 'items', and "
-                 "the trailing arm can ask whether 0x00E1 appends into it. "
-                 "(b) The character TURNS to face the NPC but no window draws: "
-                 "the owner register is written and is not sufficient, so the "
-                 "window needs client-side state no wire replay reaches and "
-                 "0x00E1's subscriber stays NOT FOUND with every reachable "
-                 "context eliminated. (c) Nothing happens at all, character "
-                 "included: a delivery failure, NOT a null -- 0x00C4's "
-                 "face-the-agent side effect is the control that separates "
-                 "(b) from (c).",
+        predicts="Run 1 already opened the shop (0x00CA, panel titled "
+                 "'Hatcher [Collector]' listing all three items). THIS run "
+                 "tests one claim: 0x00C3's field 1 is an ITEM ID, not a "
+                 "count. [3, 0] asserted `item` at ItCliApi.cpp(859) because 3 "
+                 "was undeclared; [40, 0] names a declared, staged item and "
+                 "should NOT assert. If it survives, the count reading is "
+                 "retired AND the trailing 0x00E1 drain finally fires with a "
+                 "window open -- the experiment three runs of nulls could not "
+                 "reach. If it asserts anyway, the id was never the problem.",
         steps=_merchant_window_steps(a, o),
         note="Follows retail's s1 sighting message-for-message (newopcodes, "
              "capture 183756: 0x00C4[272] -> 11x 0x0161 -> 0x0084[11] -> "
