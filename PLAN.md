@@ -2637,10 +2637,14 @@ FOUND three times over (stance change, flag placement, hiring), and both reading
 client-local UI vs an opcode we missed — fit the evidence. And **follow AI does not exist**
 on our server; the movement messages do, so it is unbuilt work rather than an unknown.
 
-**One defect to fix in passing:** `msgshape.py` prints `string16(0)` for *every* wide-string
-field — `Field.__repr__` reads `self.cap` but the `wstring` branch never passes `cap=`. The
-real capacity is only recoverable by back-solving from the wire total, which will mislead
-anyone who trusts the printed number.
+**One defect to fix in passing — FIXED `c81d6d1`, CHECKED 2026-08-19:** `msgshape.py` printed
+`string16(0)` for *every* wide-string field — `Field.__repr__` reads `self.cap` but the
+`wstring` branch never passed `cap=`, so the real capacity was only recoverable by
+back-solving from the wire total. It now prints the declared capacity, pinned by
+`test_msgshape.py` §4 over all 141 wide-string fields on all three vaulted builds (floor
+44 → 73). **The fix landed on 2026-08-15 and this paragraph still called it open on
+2026-08-19**, because nothing checked it — the same failure the top of `CLAUDE.md` is about,
+in miniature: a rule nothing checks is a wish, and so is a fix nothing pins.
 
 ### Combat — steps 0-9 landed and the caged runs happened; NOTHING is left (2026-08-15)
 
