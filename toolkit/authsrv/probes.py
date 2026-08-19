@@ -595,6 +595,118 @@ _DRAIN_ITEM_B = 41
 _DRAIN_ITEM_C = 42
 
 
+_MERCHANT_NPC_AGENT = 21
+
+
+def _merchant_window_steps(agent_id, origin):
+    """Can we AUTHOR a merchant/collector window on an NPC we spawned -- and does
+    the accum buffer feed it? The last live candidate for `0x00E1`'s subscriber.
+
+    WHY THIS AND NOT ANOTHER BARE DRAIN. Two runs established that `0x00E1`
+    renders nothing with no window open (`20260818T180039`) and nothing with the
+    Inventory and Skills panels open (`20260818T184210`, skill list
+    pixel-identical). The one surviving explanation is the context this repo has
+    actually OBSERVED reading the accum buffer -- the `0x00C5` flow -- and it
+    hangs off a window that only an NPC can own. A keypress cannot reach it, so
+    this run authors it from the server side instead.
+
+    RETAIL'S OWN SEQUENCE, which this replicates rather than invents
+    (`studies/newopcodes/FINDINGS.md`, capture `183756`, both sightings):
+
+        s1  0x00C4[272] -> 11x 0x0161 -> 0x0084[11 ids] -> 0x00CA[1, 1.0f] -> 0x00C3[11, 0]
+        s2  0x00C4[279] ->  3x 0x0161 -> 0x0084[3 ids]  -> 0x00C5[2, composed string]
+
+    This runs s1 with our own numbers: three items instead of eleven, so
+    `0x00C3`'s first field carries **3**. `0x00CA`'s dword is the bit pattern of
+    1.0f, which is what retail sent there.
+
+    THE BUILT-IN CONTROL, and it is why this design can distinguish "the message
+    did nothing" from "the message never arrived": `0x00C4`'s handler is SOURCED
+    to call `0x00817950`, which fetches both agents' positions and **turns the
+    player to face the named agent**. So the character pivoting toward the NPC is
+    proof the window-owner register was written, independent of whether any
+    window draws. A run where nothing opens AND the character never turns is a
+    delivery failure and must not be read as a null.
+
+    PREDICTIONS, stated before the run:
+      - `0x00C3` opens a stock/collector window listing our three items -> the
+        accum buffer feeds a window after all, `0x0084`'s upstream name
+        `WINDOW_ADD_ITEMS` earns its "items", and the follow-up arm can finally
+        ask whether `0x00E1` appends INTO that window.
+      - the character turns but no window draws -> the owner register is not
+        sufficient; the window needs client-side state a wire replay cannot
+        reach, and `0x00E1`'s subscriber stays NOT FOUND with every reachable
+        context now eliminated.
+      - nothing at all happens -> delivery failure, see the control above.
+
+    CRASH NOTES so a death is a diagnosis: `0x00C5` (deliberately NOT sent here)
+    asserts `accumIntList[0].Count() >= 1` at `ChCliApi.cpp:2956`; `0x00C3` and
+    `0x00CA` are two of the eight readers of the owner register, and each
+    consumes-and-clears it, so the ORDER above matters -- an out-of-order send is
+    the likely assert, not the payload.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    return [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}, 250u to the side, 'play' token",
+             "a Hatcher stands there, green. It is a body, not yet a merchant."),
+        Step(8.0, 0x00C4, [a],
+             f"0x00C4 WINDOW_OWNER = agent {a} -- retail's first message",
+             "THE CONTROL: the character should TURN TO FACE the NPC "
+             "(0x00C4's handler computes the angle between the two agents and "
+             "applies it). If it turns, the owner register was written even if "
+             "no window ever draws."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
+                                     item_template("warrior_legs")),
+             "0x0161: declare stock item 40 (leggings)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
+                                     item_template("warrior_boots")),
+             "0x0161: declare stock item 41 (boots)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
+                                     item_template("warrior_gloves")),
+             "0x0161: declare stock item 42 (gloves)", "nothing."),
+        Step(3.0, 0x0084, [ids],
+             "0x0084: stage the three stock ids into accumIntList[0]",
+             "nothing -- the appender is QUIET, measured twice."),
+        Step(3.0, 0x00CA, [1, 0x3F800000],
+             "0x00CA [1, 1.0f] -- retail's next message in s1",
+             "unknown; upstream does not name it. Watch for anything at all."),
+        Step(3.0, 0x00C3, [len(ids), 0],
+             f"0x00C3 [{len(ids)}, 0] -- s1's commit, our count instead of 11",
+             "THE PAYOFF FRAME. A merchant/collector window naming our three "
+             "armor pieces would mean the accum buffer feeds a window and we "
+             "have authored a shop. Nothing, with the character still turned, "
+             "means the register is not sufficient."),
+        Step(10.0, 0x0084, [ids],
+             "restage column 0 -- now ask the ORIGINAL question in this context",
+             "nothing by itself."),
+        Step(1.0, 0x00D8, [[1, 1, 1]],
+             "stage column 1 = [1,1,1]", "nothing by itself."),
+        Step(2.0, 0x00E1, [0],
+             "0x00E1 DRAIN in the merchant context -- the question this whole "
+             "line has been chasing",
+             "if a window opened above, does the drain append into it? If no "
+             "window opened, this arm inherits the earlier nulls and adds "
+             "nothing -- say so rather than counting it as a fourth null."),
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so the last two sends have coverage after them",
+             "the run's final state. Note whether the character is still facing "
+             "the NPC.", sends=False),
+    ]
+
+
 def _accum_drain_e1_steps(agent_id):
     """`0x00E1` with real ids staged, THREE times -- the arm nobody photographed.
 
@@ -5715,6 +5827,35 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "merchant_window": lambda a, o: Probe(
+        question="Can we author a merchant/collector window on an NPC we "
+                 "spawned, by replaying retail's own 0x00C4 -> 0x0161 -> "
+                 "0x0084 -> 0x00CA -> 0x00C3 sequence -- and does the accum "
+                 "buffer feed it? The last live candidate for 0x00E1's "
+                 "subscriber.",
+        predicts="Three outcomes, all distinguishable. (a) A window opens "
+                 "listing our three armor pieces: the buffer feeds a window, "
+                 "0x0084's upstream 'WINDOW_ADD_ITEMS' earns its 'items', and "
+                 "the trailing arm can ask whether 0x00E1 appends into it. "
+                 "(b) The character TURNS to face the NPC but no window draws: "
+                 "the owner register is written and is not sufficient, so the "
+                 "window needs client-side state no wire replay reaches and "
+                 "0x00E1's subscriber stays NOT FOUND with every reachable "
+                 "context eliminated. (c) Nothing happens at all, character "
+                 "included: a delivery failure, NOT a null -- 0x00C4's "
+                 "face-the-agent side effect is the control that separates "
+                 "(b) from (c).",
+        steps=_merchant_window_steps(a, o),
+        note="Follows retail's s1 sighting message-for-message (newopcodes, "
+             "capture 183756: 0x00C4[272] -> 11x 0x0161 -> 0x0084[11] -> "
+             "0x00CA[1,1.0f] -> 0x00C3[11,0]) with three items instead of "
+             "eleven, so 0x00C3 carries 3. 0x00CA's dword is the bit pattern "
+             "of 1.0f because that is what retail sent. ORDER IS THE RISK, not "
+             "the payload: 0x00C3 and 0x00CA are two of the eight readers that "
+             "consume-and-clear the owner register 0x00C4 writes. 0x00C5 is "
+             "deliberately NOT sent -- it asserts accumIntList[0].Count() >= 1 "
+             "and composes a string embedding an item name we cannot build.",
     ),
     "accum_drain_e1": lambda a, o: Probe(
         question="What does the 0x00E1 drain (event 0x100000BA, upstream "

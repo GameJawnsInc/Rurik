@@ -778,6 +778,53 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > masked region.** That is why this result carries a visual and a structural check on top
 > of the pixel count.
 
+> ### THE MERCHANT ARM RAN, AND IT OPENED A SHOP — 2026-08-18. OBSERVED, and it CORRECTS this section's framing.
+>
+> Probe `merchant_window`, harness **`20260818T211036`**, replaying retail's own s1
+> sighting with our own numbers: `0x00C4[21]` → 3× `0x0161` → `0x0084[[40,41,42]]` →
+> `0x00CA[1, 1.0f]` → `0x00C3[3, 0]`.
+>
+> **`0x00CA` OPENS AND POPULATES A COLLECTOR WINDOW FROM THE ACCUM BUFFER.** The frame
+> after it holds a titled panel reading **`Hatcher [Collector]`** — our own spawned NPC's
+> name — with *"Select an item from my list below, then press ‘Buy.’"*, **all three of our
+> staged items listed by name** (`Ringmail Leggings`, `Ringmail Boots`, `Ringmail
+> Gauntlets`), a selection pane showing `Armor: 25 / Armor +20 (vs. physical damage)`, a
+> quantity spinner, `Your funds: 0`, and **Buy / Goodbye** buttons. Attribution is tight:
+> the preceding frame pair (spanning `0x0084`) changed **264 px**; the pair spanning
+> `0x00CA` changed **56,928**, two orders of magnitude past anything else in the session.
+>
+> **So the accum buffer DOES feed a window, `0x0084`'s upstream name `WINDOW_ADD_ITEMS`
+> earns its "items" after all, and `0x00C4` really does bind the window to the named
+> agent** — the panel is titled with our NPC's own name, which is stronger evidence than
+> the face-the-agent control the probe was relying on. **Three prior nulls are now
+> explained rather than merely recorded:** the drains rendered nothing because *no window
+> was open*, and the one message that opens the window was never among them. This
+> section's own "Census: none of the drains ever fires" stands, and its implication that
+> the buffer was untestable does not.
+>
+> **`0x00C3` then CRASHED the client**: `Assertion: item`, `ItCliApi.cpp(859)`, at
+> `21:11:29` against a `0x00C3` send timestamped the same second — exact attribution, not
+> adjacency. The assert site (`0x00845B60`) takes an **item id**, bounds-checks it against
+> the item client's table at `[globals+0x40]+0xB8` / count `+0xC0`, indexes
+> `[base + id*4]`, and asserts the entry is non-null; its caller (`0x005A1D00`) reads that
+> id out of a UI object's `+8` field and passes it in. Same subsystem as the heroes arc's
+> `ItCliApi:488`, one function along.
+>
+> **RECONSTRUCTION, and the cheap test is named: `0x00C3`'s field 1 is an ITEM ID, not a
+> count.** We read retail's `0x00C3[11, 0]` as "11 = the number of items" and sent
+> `[3, 0]` for three items; **3 is not an item we declared** (this session created 40, 41,
+> 42 plus the login hammer at 1), and the crash is exactly what an undeclared id produces
+> on that path. Retail's `11` would then be an item id that existed in *its* stream. **The
+> one-run test:** send `0x00C3[40, 0]` — a declared id — and it should not assert. Until
+> that runs, field 1's meaning is RECONSTRUCTION and the count reading is **withdrawn**,
+> not merely doubted.
+>
+> **What this run did NOT measure:** the trailing `0x00E1` arm fired at t=44.6 s, thirteen
+> seconds *after* the client died at t=31.6 s, so it observed nothing and must not be
+> counted as a fourth null. Asking whether a drain appends into an open collector window
+> is now a live, cheap experiment — open the window with `0x00CA`, then drain — and it is
+> the obvious next run.
+
 **ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
 have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
 disassembled, the assert-carrying one re-verified by a second reader):
