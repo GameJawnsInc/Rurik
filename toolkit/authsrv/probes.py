@@ -4018,6 +4018,60 @@ def _completion_reward_steps():
     ]
 
 
+def _walk_to_npc_steps(origin):
+    """Does 0x002A actually move the client, and does the held interact fire?
+
+    THE VARIABLE IS THE ORDER, AND NOTHING ELSE. The NPC is placed 900 units
+    out -- far past INTERACT_RANGE (250) and far enough that a walk takes a
+    visible ~2.3 s at 288 u/s -- and then this probe stops sending. The
+    interact is driven off the wire by `toolkit/harness/control.py`
+    request_interact, so no click and no keystroke is involved and nothing here
+    aims at anything: the whole readout is the server's own log plus the
+    client's position reports.
+
+    WHAT WOULD FALSIFY IT. `_handle_interact` orders the walk and holds the
+    request; if the client ignores 0x002A the position reports never change,
+    the held interact never arrives, and the gamesrv log simply never prints
+    "ARRIVES" -- which refutes the fix without ambiguity, because the previous
+    behaviour (drop it and print nothing) and the new one differ in exactly
+    that line. If instead the client walks and the dialog opens on arrival,
+    both halves are shown at once: 0x002A is the auto-walk order, and holding
+    the interact is what makes arriving on foot mean something.
+
+    Note the probe sends NO 0x0080/0x0081 of its own -- the dialog that appears
+    must be the one the held interact produced, not one this list staged.
+    """
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 900, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT}) at +900u",
+             "a body with a nameplate, 900 units away -- well past the "
+             "250-unit interact range, and far enough that the walk itself "
+             "takes about 2.3 s at run speed."),
+        Step(4.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"GENERIC_VALUE property {PROP_QUEST_MARKER} -- the green '!'",
+             "the marker, so the body reads as a giver rather than scenery."),
+        Step(3.0, 0x0000, [], "NOW DRIVE THE INTERACT OFF THE WIRE",
+             "run, in another terminal: python -c \"import sys; "
+             "sys.path.insert(0,'toolkit'); from harness import control; "
+             f"control.request_interact({_GIVER_AGENT})\" -- then WATCH THE "
+             "GAMESRV LOG. Expect, in order: 'walking the player over and "
+             "HOLDING the interact (~2.3 s at run speed)', the character "
+             "actually running to the NPC on screen, and then 'held INTERACT "
+             f"for agent {_GIVER_AGENT} ARRIVES -- answering it now' followed "
+             "by the dialog window opening. No 'ARRIVES' line means the "
+             "client ignored 0x002A and the fix is refuted.", sends=False),
+    ]
+
+
 def _completion_panel_steps():
     """0x0098 stages reward lines, 0x0097 consumes them -- and the gate that
     killed the first cold fire was THE MAP, not the payload.
@@ -5209,6 +5263,28 @@ PROBES = {
              "predicts, and the client's own 0x8012 for 1463 was answered "
              "with the template 0x004C mid-run. Rung Q2b closed end to end. "
              "Kept runnable as the authored-name calibration.",
+    ),
+    "walk_to_npc": lambda a, o: Probe(
+        question="Does GAME_SMSG 0x002A walk the client to an NPC, and does "
+                 "the held interact fire when it arrives?",
+        predicts="Both halves of the 2026-08-19 fix, in one run and with one "
+                 "variable. The corpus says 0x002A is the auto-walk order (17 "
+                 "name the player's agent, 16 within a round trip of the "
+                 "interact naming the agent walked to) and that ArenaNet "
+                 "answers an out-of-range interact LATE rather than dropping "
+                 "it. So: the character should run ~900 u to the NPC, and the "
+                 "gamesrv log should print 'HOLDING' and then 'ARRIVES' about "
+                 "2.3 s later, with the dialog opening on arrival. A missing "
+                 "'ARRIVES' line refutes it cleanly -- the old behaviour and "
+                 "the new one differ in exactly that line.",
+        steps=_walk_to_npc_steps(o),
+        note="RUN ON --map 449. Agent-pilotable and CLICK-FREE by "
+             "construction: the interact is driven through "
+             "toolkit/harness/control.py request_interact(99), not a mouse, so "
+             "nothing here aims at anything. The last step sends no packet -- "
+             "it carries the operator/driver instruction. Watch the GAMESRV "
+             "LOG first and the screen second; the log lines are the "
+             "measurement and the walking character is the corroboration.",
     ),
     "completion_panel": lambda a, o: Probe(
         question="Was 0x0097's crash the MAP rather than the payload -- and "

@@ -185,13 +185,22 @@ def _objective_quests(state, agent):
 # AGGRO_RANGE above, and said plainly: nothing has measured ArenaNet's.
 #
 # WHAT IS MEASURED IS THE BEHAVIOUR, and it is why this gate exists at all. The
-# CLIENT sends 0x0039 on the click, from wherever you are standing, and then
-# walks you over -- so range is not something the client enforces before asking.
-# ArenaNet's server answers only some of them: 29 interacts in the live corpus,
-# 23 followed by an 0x0081 within 8 s naming the same agent, and 6 followed by
-# nothing. FINDINGS 2.5 already reads those 6 as the repeat-clicks a player
-# emits while walking into range, which is exactly the shape of a server that
-# ignores an out-of-range interact rather than refusing it.
+# CLIENT sends 0x0039 on the click, from wherever you are standing -- so range
+# is not something the client enforces before asking. ArenaNet's server answers
+# only some of them: 29 interacts in the live corpus, 23 followed by an 0x0081
+# within 8 s naming the same agent, and 6 followed by nothing.
+#
+# THIS PARAGRAPH USED TO SAY THE CLIENT "then walks you over", and that one
+# clause cost three days. It made the missing auto-walk look like a client
+# behaviour we could not reach, so PLAN.md recorded bug 2 as unfixable-without-
+# a-walk and chained it to this constant as "one fix". REFUTED 2026-08-19: the
+# client sends no movement order of its own on an NPC click (46 c2s INTERACTs
+# across five keyed captures, 0 with a 0x003E MOVE_TO_COORD within 100 ms), and
+# the 2026-08-16 bug session's own capture has the player's position
+# byte-identical across two clicks 1.34 s apart. The walk is a SERVER order,
+# 0x002A, and `_order_walk` below sends it. FINDINGS 2.5's reading of the 6
+# silent interacts as repeat-clicks-while-walking still stands -- but the walk
+# they were emitted during was one ArenaNet's server had ordered.
 #
 # So: SILENCE, not a refusal message. Our server previously answered every
 # interact at any distance, which let the owner hold a conversation from across
@@ -199,7 +208,10 @@ def _objective_quests(state, agent):
 # nothing usable -- the player's position is unknown at most interact moments
 # and the agent positions available are stale spawn coordinates, giving 541 to
 # 4275 units, which is not a range, it is a bad join. Left as ours until a probe
-# walks a player in and finds the boundary.
+# walks a player in and finds the boundary. THE NUMBER IS NOW INDEPENDENTLY
+# TIGHTENABLE, because the walk exists: with an out-of-range interact held and
+# served on arrival, a smaller range costs the player nothing but a moment's
+# walking, which is what it costs in the real game.
 INTERACT_RANGE = 250.0
 
 

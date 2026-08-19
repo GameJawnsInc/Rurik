@@ -2263,6 +2263,25 @@ client**, with the offer and turn-in screens carrying a reward line and the mark
 between giver and objective NPC. `studies/quests/` has the arc; `content/quests.toml` is the
 table; `toolkit/test_quests.py` (62 checks) is what holds it.
 
+**BUG 2 IS FIXED 2026-08-19 AND ITS DIAGNOSIS BELOW WAS WRONG IN BOTH HALVES; BUG 1
+STANDS, AND THE TWO WERE NEVER ONE FIX.** The block below is left as written because the
+error is instructive — read it, then read this. The client does **not** walk you over on
+its own: 46 c2s INTERACTs across five keyed captures carry **zero** `0x003E MOVE_TO_COORD`
+within 100 ms, and the 2026-08-16 session's own capture has the player's position
+byte-identical across two clicks 1.34 s apart. The walk is a **server** order,
+`GAME_SMSG 0x002A AGENT_UPDATE_DESTINATION` — decoded and named `high` in
+`schema/overrides.json` all along, never once sent by `authsrv.py`, the fifth time the
+mechanism was already in the tree. ArenaNet also does not DROP an out-of-range interact;
+it answers it after about `(gap − range) / 288 u/s`, the walk's own duration (1054 u:
+predicted 2.79 s, observed 2.56 s). Both behaviours now exist: `_order_walk` sends the
+order, `interact_pending_tick` serves the held interact on the client's own reported
+arrival, and `toolkit/authsrv/test_interact.py` (19 checks, floor 19) covers a path
+nothing in the suite touched before. **Bug 1 is untouched and still admitted-invented** —
+no measured talk range exists in this repo, the client has no distance gate on either
+send, and the one real 156.0 proximity constant has no call edge to the click path — but
+it is now independently tightenable, which is exactly what the "one fix" framing denied.
+The verification run is staged and not yet done (harness contention).
+
 **TWO BUGS ARE KNOWN AND DELIBERATELY LEFT** — owner's call, end of session 2026-08-16.
 Neither blocks the lifecycle; both are wrong against stock and should be fixed before this
 is called done.
