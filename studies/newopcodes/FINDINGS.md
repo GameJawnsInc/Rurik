@@ -853,6 +853,60 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### THE CONTRADICTION RESOLVES: the array is the SUBSCRIBER LIST, and the payload rides beside it. 2026-08-18, SOURCED
+>
+> The previous section flagged a tension — alignment evidence said the "row" is `payload+4`,
+> while `Array:587 index < m_count` said something indexes a real array. **Both are true and
+> they are different structures.** The dispatcher at `0x0064BE20` shows them together:
+>
+> ```
+> 0064BEFA  lea  edi,[esi+esi*2] / shl edi,2   ; edi = esi * 12   <-- 12-BYTE STRIDE
+> 0064BF0E  cmp  esi,[ebx+0xB0]                ; bounds check against the COUNT
+> 0064BF16  push 0x24B  (= 587)                ; -> Array:587 "index < m_count"  THE assert
+> 0064BF2A  mov  eax,[ebx+0xA8]                ; the array base
+> 0064BF30  mov  eax,[edi+eax]                 ; element +0
+> 0064BF33  mov  [ebp-4],eax                   ; ...is a FUNCTION POINTER
+> 0064BF36  test eax,eax / je                  ; skip empty slots
+>   ...
+> 0064BFAC  push [ebp+0x10]                    ; > 0064BFAF  push [ebp+0xC]                     ;  > three args
+> 0064BFBC  push eax  (= &[ebp-0x1C])          ; /
+> 0064BFBD  call dword ptr [ebp-4]             ; CALL THE REGISTERED HANDLER
+> ```
+>
+> **`[ebx+0xA8]` is the subscriber list**: 12-byte entries, count at `[ebx+0xB0]`, element `+0`
+> a handler pointer, walked by a countdown loop (`dec esi`) that calls every registered
+> subscriber. That is what `Array:587` guards, and it is what `0x004E8510`'s array indexing
+> is doing too. **It was never a list of item rows.** The payload is threaded *alongside* it
+> as arguments 2 and 3, which is why the row CtlPage walks is `payload+4` — no conflict.
+>
+> **And resolving it exposes the defect in sharper form than either half suggested.** This
+> call site pushes **three** arguments. The handler it selects, `CtlPage`'s dispatch at
+> `0x0061F570`, reads **six** — `[ebp+8]`, `+0xC`, `+0x10`, `+0x14`, `+0x18`, `+0x1C`,
+> copying the last five into its own block:
+>
+> ```
+> 0061F576  mov eax,[ebp+0x0C] -> [ebp-0x14]      0061F588  mov eax,[ebp+0x18] -> [ebp-0x08]
+> 0061F57C  mov eax,[ebp+0x10] -> [ebp-0x10]      0061F58E  mov eax,[ebp+0x1C] -> [ebp-0x04]
+> 0061F582  mov eax,[ebp+0x14] -> [ebp-0x0C]
+> ```
+>
+> **Three pushed, six read — the callee reads three dwords past the call site's arguments**,
+> straight into the dispatcher's own frame. That is the same class of fault as the `+0x10`
+> cookie read, one level up, and it is the concrete form of "delivered to the wrong
+> subscriber": **the handler pointer comes out of a registration array, so a mismatched
+> signature is a registration problem, not a message problem.** A subscriber registered for
+> a different calling convention is invoked with this dispatcher's three arguments and reads
+> whatever follows.
+>
+> **Net effect on the merchant question, and it is now a closed direction:** every layer from
+> the wire down has been eliminated — the `0x0161` fields (bit 2 tested and refuted, price
+> reasoned out), the `0x00C3` payload (counted: four dwords, exactly what retail's handler
+> writes), and now the delivery path (a registration array we do not populate and cannot
+> reach from the wire). **`0x00C3` is not authorable by a server.** What remains is entirely
+> about which subscriber our session has registered for `0x100000B5` and why — a client-side
+> UI-state question, in `GmView`, whose subscription timing already has a measured history
+> (`studies/pvpui` §19, 53 ms).
+>
 > ### WHAT SUBSCRIBES TO `0x100000B5` — **GmView**, and the arc's recurring antagonist again. 2026-08-18, SOURCED
 >
 > **Method note worth keeping: you cannot find this by searching the constant.** All **nine**
