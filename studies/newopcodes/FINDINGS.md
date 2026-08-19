@@ -1969,6 +1969,39 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### PRESSING BUY — the client refuses LOCALLY, and my funding attempt was wrong. 2026-08-19, OBSERVED
+>
+> Two runs, `20260818T235130` (unfunded) and `20260818T235758` (funding attempted). The
+> harness clicked the **Buy** button at fractional `0.529, 0.716`, measured off the panel
+> (Buy spans x 978–1070, Goodbye starts at 1077, so the click is dead centre and cannot
+> stray). `report.json` records `"sent": true` for both.
+>
+> **Result, both runs: the click produces NOTHING on the wire.** Every c2s frame after the
+> shop opened is the 5 s keep-alive — `09801000000000000000`, opcode `0x8009`,
+> byte-identical at all thirteen timestamps — plus one `0880` (`0x8008`) at t=96.6, which is
+> the teardown message every session ends with. **No purchase request exists on the wire.**
+>
+> **Why: the Buy button is GREYED.** Read off the frame in both runs, with
+> `Your Funds: 0` and the cheapest quote at 50. Goodbye renders lit beside it. So **the
+> client gates purchase on affordability locally and never asks the server** — a server
+> cannot expect to see a buy request from a player who cannot pay, and this is the reason
+> the c2s half of this family has never appeared in any capture we hold.
+>
+> **AND THE SECOND RUN FAILED AT WHAT IT SET OUT TO TEST — my error, recorded as one.** It
+> sent `0x0141 [1, 500]` to fund the character first. `Your Funds` stayed **0**, so Buy
+> stayed greyed and the run measured the same thing twice. The flaw was predicted in advance
+> and I sent it anyway: **`0x0141` is `UPDATE_GOLD_STORAGE`**, Guild Wars separates carried
+> gold from Xunlai storage, and field 1 was set to `1` purely by copying the login burst's
+> own value without ever testing what that selector means. **What is now measured is a
+> negative about `0x0141`, not a positive about Buy:** `[1, N]` does not fund the purse the
+> merchant reads.
+>
+> **The open question is therefore narrower than it looks:** which purse the shop's
+> `Your Funds` reads, and what `0x0141` field 1 selects. Cheap next arms — vary field 1
+> (0, 2, the player number) and watch that one line; or find the carried-gold write in the
+> client and see which message reaches it. Only after `Your Funds` moves does pressing Buy
+> test anything.
+
 > ### `0x00CA` FIELD 2 IS A PRICE MULTIPLIER — the formula is `displayed = F9 x 2 x field2`. 2026-08-19, OBSERVED
 >
 > Harness `20260818T234622`. Three arms, **only the second field varied**, items valued
