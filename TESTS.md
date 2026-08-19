@@ -4071,16 +4071,39 @@ Every one of these, in the order they were written:
   background Blender had not evaluated the parent's matrix_world before the
   parent-inverse was taken from it -- and the hatcher's thin silhouette
   refuted the guessed 0.02 coverage floor at 0.0147 -- and that number has
-  a measured CAUSE, pinned by the --opaque control: the hatcher's bound
-  diffuse texture carries alpha ~0 on 99.9% of its texels and the inherited
-  prop convention wires texture alpha as transparency, so the default
-  render is a floating head over an invisible torso; --opaque at least
-  triples the coverage (0.0147 -> 0.1932), and what the alpha channel MEANS
-  on a unit texture stays NOT DECODED with the AMAT chain. Floor 72 from
-  the green run (71 -> 72 with the review's real-data tiling check);
-  sections 0-1 (synthetics + the resolve_outdir refusal with its positive
-  controls and the mapexport delegation check) score 28 vault-less and go
-  RED; with the archive but no Blender, 53, also RED),
+  a measured CAUSE: the hatcher's bound diffuse texture carries alpha ~0 on
+  99.9% of its texels and the inherited prop convention wired texture alpha
+  as transparency, so the default render was a floating head over an
+  invisible torso, and --opaque tripled the coverage (0.0147 -> 0.1932).
+  **THE ALPHA ARM HAS SINCE MOVED, and the checks moved with it.** The
+  terrain arc fixed that cause upstream (FINDINGS 7.17: `_alpha_class`
+  calls this texture an "eraser", `gwmodel_materials` skips the wiring for
+  that class alone), so both arms measured 0.1932 and the >=3x gap check
+  became one that could not fail either way -- the suite's only
+  pre-existing red, 2026-08-18. It was REWRITTEN to assert the new truth
+  rather than relaxed, in four parts, because the obvious single
+  replacement is vacuous: "default == opaque" is satisfied just as well by
+  a viewer that has stopped wiring alpha ENTIRELY. So: the classifier's
+  verdict is named in section 2 (a decoder fact, checked without Blender --
+  the eraser list is exactly [tex_1C7DB.png], since a count would pass if
+  the verdict moved slots); (a) default and --opaque agree within 0.005 and
+  both show the whole body; (b) the POSITIVE CONTROL -- a manifest copy
+  with the eraser verdict reinstated (a display field no sidecar digest
+  covers; load_gwmodel still verifies every sha256) collapses to under a
+  third of the coverage on IDENTICAL geometry, reproducing 0.0147 on
+  demand; (c) --opaque still triples it back on that tampered manifest,
+  which is the original assertion kept alive on the one input where it can
+  still fail. All four are MUTATION-TESTED red (wire alpha always -> a,b;
+  never wire alpha -> b,c with (a) PASSING, which is the whole argument for
+  (b); a no-op _force_opaque -> c; a classifier that never says "erases" ->
+  the naming check and a). What the alpha channel MEANS on a unit texture
+  stays NOT DECODED with the AMAT chain -- `_alpha_class` is a floor rule,
+  not a decoding. Floor 76 from the green run, 23.6 s (72 -> 76 with the
+  rewrite, two of its five Blender runs being the tamper arms; 71 -> 72
+  with the review's real-data tiling check); sections 0-1 (synthetics + the
+  resolve_outdir refusal with its positive controls and the mapexport
+  delegation check) score 28 vault-less and go RED; with the archive but no
+  Blender, 54, also RED),
   `toolkit/mapdata/test_unitauthor.py` (rung A4, the ADDITIVE path: add a 16th
   linked file to a creature's shell and one sequence record that selects it.
   Two of the three things it must get right cannot fail a checksum, cannot fail
