@@ -710,10 +710,21 @@ def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,
                       returns [rec+0x44] & 1 and its caller picks between
                       two render paths. b5 as the initial value is
                       RECONSTRUCTION.
-        d3  -> +0x48  an ID whose 0 means "none". It GATES the name (below)
-                      on both the write and the read side, and it selects
-                      whether the equipment display reads this record or
-                      walks the live item container.
+        d3  -> +0x48  a PACKED CHARACTER-APPEARANCE dword (the bitfield
+                      CharData.cpp reaches through s_appearanceSlot, 8
+                      slots), 0 = none. It GATES the name (below) on both
+                      the write and the read side, and selects whether the
+                      equipment display reads this record or walks the live
+                      item container -- one field for both because a record
+                      WITH an appearance is a character-derived,
+                      mercenary-style hero carrying that character's own
+                      name and gear. The bit layout is undecoded, so a
+                      non-zero value is a probe, not a real appearance.
+        (none)-> +0x20  a COUNT, and +0x24..+0x43 eight SKILL IDS that seed
+                      the deck builder's available-skills bitset. This
+                      opcode hardcodes the count to 0; its sibling 0x0073
+                      supplies them -- and the two are MUTUALLY DESTRUCTIVE,
+                      each zeroing what the other carries. pvpui 30.3.
         chunk-> +0x4c EQUIPPED-ITEM SNAPSHOT, not an attribute block (that
              and +0x60 hypothesis is refuted, heroes 12). Two parallel
                       five-entry arrays, one pair per item-container slot

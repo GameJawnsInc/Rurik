@@ -2241,6 +2241,11 @@ the worker does not write inherits **stale bytes from whatever record previously
 that index** — which on this opcode means `+0x24..+0x43` always, and `+0x74..+0x9B`
 whenever `d3 == 0`.
 
+> **Corrected §30.3, same day:** the stale-bytes mechanism is real, but `+0x24..+0x43` is
+> not permanently stale — the sibling opcode `0x0073` writes it in full through the same
+> worker. What is true, and worse, is that **`0x0073` and `0x0074` are mutually
+> destructive**: each zeroes the fields the other carries.
+
 ### 29.2 The map, and what reads each field
 
 | rec | wire | meaning | label |
@@ -2253,10 +2258,10 @@ whenever `d3 == 0`.
 | `+0x14` | d1 | appearance `file_id` (§28.13) | OBSERVED |
 | `+0x18` | d2 | appearance `model_id` (§28.13) | OBSERVED |
 | `+0x1C` | b4 | **nothing reads it** | NOT FOUND |
-| `+0x20` | — | element count; the `0x0074` handler hardcodes 0 | OBSERVED |
-| `+0x24..+0x43` | — | not written by this opcode — inherits stale bytes | OBSERVED |
+| `+0x20` | — | **a COUNT for the array below**; the *`0x0074` handler* hardcodes it to 0, but the shared worker writes whatever its caller passes — `0x0073` passes a real one (corrected §30.3) | OBSERVED |
+| `+0x24..+0x43` | — | **eight SKILL IDs**, written in full by **`0x0073`** through the same worker; they seed the deck builder's available-skills bitset (corrected §30.3) | OBSERVED |
 | `+0x44` bit 0 | b5 | **hero-DISABLED flag** | OBSERVED (b5 as its initial value: RECONSTRUCTION) |
-| `+0x48` | d3 | **an id, 0 = none**; gates the name AND the equipment block | OBSERVED |
+| `+0x48` | d3 | **a packed CHARACTER-APPEARANCE dword** (the `s_appearanceSlot` bitfield, 8 slots), 0 = none; gates the name AND the equipment block (sharpened §30.3) | OBSERVED |
 | `+0x4C`, `+0x60` | chunk[0..4], [5..9] | **an EQUIPPED-ITEM snapshot**, five slots | OBSERVED |
 | `+0x74..+0x9B` | name | **overrides the hero's default name**, gated by `d3` | OBSERVED |
 
@@ -2351,3 +2356,132 @@ appearance/composite entity, RECONSTRUCTION, and it also has a local non-wire wr
 Remaining genuinely open in this message: `b4` (nothing reads it), `+0x24..+0x43` (this
 opcode never writes it, so another message must), and what `d3`'s value *is* beyond
 non-zero.
+
+## 30. The sibling containers, read — a profession table, a skill-bar store, and the minion answer (2026-08-19)
+
+Four tracers, eight meaning claims, **all eight CONFIRMED by their skeptics**. Two of the
+six containers hanging off `charCtx[+0x2C]` are no longer unread, and one long-standing
+guess is refuted. Two of the claims correct §29, published earlier the same day.
+
+### 30.1 `+0x6BC` is the per-agent PROFESSION table — and this server has been writing it blind
+
+The log-string trick again, in one call: the not-found path of the `+0x0C` setter
+(`0x0081FD50`) logs *"OnProfessionSecondaryBits (agent %d, secondaryBits %d): Agent not
+found in sort array"* (`0x00A95A70`) — naming the API, the container ("sort array") and
+the parameter at once.
+
+A sorted 20-byte-record array keyed on agent id: **`+0x00` agent, `+0x04` primary
+profession, `+0x08` secondary, `+0x0C` a profession BITMASK, `+0x10` a boolean**. Both
+profession getters return **11** (`CHAR_PROFESSIONS`, ids 0..10) for an absent agent, an
+out-of-band "unknown" sentinel, and a predicate answers *does this agent have profession
+X, primary or secondary*. The mask at `+0x0C` is proven a mask by its consumer, which
+shifts and tests it bit by bit, and by the literal `0x7FF` (eleven bits) the same code
+substitutes as an all-professions override.
+
+Two opcodes reach it: **`0x00B7`** `[agent, u8, u8, u8]` inserts/updates the professions,
+and **`0x00B6`** `[agent, u32]` writes the bitmask. Events `0x1000004D`/`0x1000004E`.
+
+**This is the container the hero attribute pair already depends on.** `authsrv.py`'s
+`HERO_ATTRIBS` comment has said since 2026-08-16 that "`0x00B7` writes the array at
+`ctx[0x2c]+0x6BC` — what the ATTRIBUTE code reads", and that an agent missing from it
+asserts `ConstChar:1296`. That was true and blind: we knew the write and not the record.
+Now the layout is read, `0x00B6` is a second door into the same table we never knew
+existed, and the primary/secondary assignment rests on ArenaNet's own assert
+`agentPrimaryProf != agentSecondaryProf` (`GmDeckBuilder.cpp:2321`) sitting in the one
+function that calls both getters back to back — strong, but ORDERING evidence, so it is
+labelled RECONSTRUCTION rather than measured, with the arm that would settle it named.
+`+0x10`'s boolean is a fenced NOT FOUND: one reader, reached only for the local player.
+
+### 30.2 `+0x6F0` is the per-agent SKILL BAR — `hotKeyState`, named by containment
+
+The client names it `hotKeyState` in `ChCliSkill.cpp`, and the name is earned by
+CONTAINMENT rather than proximity: the assert `hotKeyState` (`ChCliSkill:718`) sits
+inside the function reached with `ecx = charCtx[+0x2C]+0x6F0`, with two more containments
+backing it. As with the pet container there is no dedicated `.cpp` — the thin wrappers
+are `ChCliApi`.
+
+Stride **0xBC**, keyed on agent id, holding **eight 0x14-byte entries** from `+0x04`
+closing exactly on `+0xA4` — a count measured from a walk in the client that sets its own
+terminator at `+0xA4` and steps by `0x14`, not inferred from arithmetic alone. Inside an
+entry, `+0x0C` is a **skill id** and `+0x10` a **skill copy index**, named by the writer's
+own guards `ChCliSkill:515 targetSkill != sourceSkill` and `:516 sourceSkillCopy >= 0`.
+`+0xA4` is an **8-bit mask, one bit per slot**.
+
+Two more opcodes, and one of them closes an old loose end: **`0x0064`** `[agent, u8, u8]`
+sets a single bit (`bts`/`btr` by index, event `0x1000005A` carrying
+`{agent, bit, value}`, silently dropped on an unknown agent), and **`0x0065`**
+`[agent, u8]` writes the whole mask and diffs it bit by bit, firing one event per changed
+bit. **`0x0065` was one of the four "adjacent unnamed SMSGs" §28.6 listed as candidates
+for the stance echo** — it was never that; it is the skill-bar mask.
+
+### 30.3 `0x0074`'s leftovers — and two corrections to §29
+
+**§29 got two rows wrong and they are fixed above.** The premise "`0x0074` never writes
+`+0x24..+0x43`" was true of the OPCODE and false of the FIELD: the shared worker takes a
+**count** in one argument and a **pointer** in another and memcpys `count*4` bytes into
+`+0x24`. The `0x0074` handler passes a literal zero — which is why the span looked
+unwritten from where §29 stood — and the sibling **`0x0073`** passes a real count and a
+real array. So `+0x20` is that count, not a property of the handler that happened to zero
+it.
+
+**The eight dwords are SKILL IDS**, used as bit indices to build the deck builder's
+available-skills bitset — and the naming comes from the sibling branch again: when the
+count is zero, `GmDeckBuilder` does not read the record at all but fetches the
+account/character list instead, whose result the client's own assert calls
+`unlockedSkills`.
+
+**`d3` is a packed CHARACTER-APPEARANCE dword** — the same 32-bit bitfield
+`CharData.cpp` addresses through `s_appearanceSlot` (8 slots, `slot <
+arrsize(s_appearanceSlot)`) — not an entity id and not a content-row id. That explains
+why one field gates both the name and the equipment: **a record with an appearance is a
+character-derived, mercenary-style hero**, so it carries that character's own name and
+gear; a record without one falls back to `s_heroClientData`. The bit layout was not
+decoded — the type is named, a specific value is not.
+
+**An operational hazard, and it is sharp: `0x0073` and `0x0074` are mutually destructive
+on the same record.** They share one worker and each zeroes what the other carries —
+`0x0073` forces `d3 = 0`, the name to NULL and both equipment arrays to zero; `0x0074`
+forces the skill count to 0 and its pointer to NULL. Neither is a partial update, and
+order decides what survives. Our server sends `0x0074`; anything that later adds `0x0073`
+must know this.
+
+Second hazard, server-side: the worker's memcpy is `count*4` with **no bound check of its
+own**. Eight dwords end at `+0x43`, so a count above 8 walks over the disabled bit, `d3`
+and the equipment block. The wire descriptor caps it at 8, so a conformant sender cannot
+trip it — ours must respect that cap deliberately rather than by luck.
+
+### 30.4 The minion answer: there is no minion message, and PtMinionRoster is not in this family
+
+The standing guess that `PtMinionRoster.cpp` consumes one of the unread containers is
+**REFUTED by reading its consumer.** Both of its list accessors resolve the TLS root and
+take `[root+0x4C]` — the PARTY CLIENT context (`PyCliParty.cpp`), not `charCtx[+0x2C]` at
+all. It iterates a party entry's `Array<agentId>` ("teamAgent") and subscribes to
+`0x1000013B` (added) / `0x1000013C` (removed), both emitted by PyCliParty and shared with
+`PtRoster.cpp`, whose asserts name three sibling lists — **member, henchman, teamAgent** —
+of which this panel handles only the third.
+
+**Minion-ness is not declared by a minion opcode.** The panel decides it itself: the agent
+must be in the party's teamAgent array, and its monster-definition flags word must pass a
+bit test (`0x100` or `0x4000`, with `0x4000` choosing which of two sub-lists the row lands
+in, plus a conditional `0x400` under one frame style). The teamAgent list is filled by
+whatever message creates the agent's char display record — the chain is traced link by
+link to a forwarder handler, and **the opcode number is a deliberate NOT FOUND**, not a
+guess.
+
+One payload detail worth keeping for anyone replaying these events: on the ADD event
+`msg+4` is a POINTER to the array slot, while on REMOVE it is the agent id BY VALUE.
+
+### 30.5 Where the family stands
+
+| container | what it is | opcodes | status |
+|---|---|---|---|
+| `+0xAC` | — | — | unread |
+| `+0x508` | — | — | unread |
+| `+0x584` / `+0x594` | hero activation / hero pool | `0x0072`, `0x0074`, `0x0073` | read (§29) |
+| `+0x6AC` | pets | `0x00B2`/`B3`/`B4`, mirrored by `0x0062`/`0x0063` | read (§28.12) |
+| `+0x6BC` | per-agent professions | `0x00B7`, `0x00B6` | read (§30.1) |
+| `+0x6F0` | per-agent skill bar (`hotKeyState`) | `0x0064`, `0x0065` | read (§30.2) |
+
+Four of six read, six new opcodes named across today, and the two that remain are the
+cheapest next targets — the method is now routine: start at the remover the despawn sweep
+names, read the log string on the not-found path, then find the sibling branch.

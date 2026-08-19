@@ -1719,9 +1719,26 @@ window — the roster reads the AGENT, these drive the hero-pool/search lists; h
 every run ever made sent 0. Prediction on record: `--hero-info-name` WITH a non-zero
 `--hero-flag` should change the pool/search name. Fields now authorable: level, both
 professions, the disabled bit, a five-slot equipment display.
-Next in this corner: the `+0x6BC` and `+0x6F0` sibling containers, wholly unread
-(`PtMinionRoster.cpp` is the candidate for one), read by the log-string method; and
-`+0x24..+0x43`, which `0x0074` never writes, so another message must.
+**FOUR OF THE SIX SIBLING CONTAINERS ARE NOW READ (§30)**, all eight meaning claims
+CONFIRMED by their skeptics. `+0x6BC` is the **per-agent PROFESSION table** — 20-byte
+records {agent, primary, secondary, a profession BITMASK, a boolean}, named by its own log
+string *"OnProfessionSecondaryBits … Agent not found in sort array"* — which is the table
+this server has been writing blind since 2026-08-16 via `0x00B7` (now named
+AGENT_PROFESSIONS, and the hero attribute path depends on it); `0x00B6`
+AGENT_PROFESSION_BITS is a second door we never knew existed. `+0x6F0` is the **per-agent
+SKILL BAR**, the client's own `hotKeyState` (ChCliSkill.cpp), stride 0xBC, eight 0x14-byte
+entries closing exactly on a 8-bit slot mask at `+0xA4`, driven by `0x0064`/`0x0065` (now
+named) — and `0x0065` was one of §28.6's four candidates for the stance echo, so that
+loose end is closed as a negative. **The minion guess is REFUTED**: `PtMinionRoster` reads
+the PARTY client at `[root+0x4C]`, not this family at all, and minion-ness is a
+monster-definition FLAG TEST the panel performs itself, not a declaration opcode.
+**Two §29 rows corrected in place:** `+0x24..+0x43` is eight SKILL IDS seeding the deck
+builder (written by sibling `0x0073`, not permanently stale), `+0x20` is their count, and
+`d3` is a **packed character-appearance dword** (`s_appearanceSlot`), not an id — which is
+why one field gates both the name and the equipment. **Hazard on record: `0x0073` and
+`0x0074` are mutually destructive**, each zeroing what the other carries.
+Next in this corner: `+0xAC` and `+0x508`, the last two unread, by the now-routine method
+(despawn-sweep remover → log string on the not-found path → sibling branch).
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
