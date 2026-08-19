@@ -1,0 +1,431 @@
+{
+ "_status": "PROMOTED 2026-08-18 into schema/overrides.json (these 16 entries (13 + 3 follow-up PARTIALs earned 2026-08-18) are now live). Survivors of the static reachable-handler naming pass (FINDINGS.md): two-witness naming + adversarial refutation + consistency critic, with an independent msgshape field-width cross-check and the 0x0027/0x002B resolution applied. This file is the historical proposal, now merged; the schema is the authority.",
+ "channels": {
+  "GAME_SMSG": {
+   "39": {
+    "opcode": 39,
+    "table": "GAME_SMSG_0039",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 39
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "float",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_SPEED_BASE",
+    "name_confidence": "high",
+    "why": "OBSERVED. field1=agent id; field2=float maxSpeed, stored to agent+0x5c and asserted AgAgent:2317 'maxSpeed >= 0' before the movement update re-runs; 288.0 = 1.0x run speed. DISTINCT from 0x002B AGENT_UPDATE_SPEED, whose float is the applied moveSpeed CAPPED at 1.0 with a facing byte -- the client's own words split them maxSpeed vs moveSpeed. RESOLUTION 2026-08-18: 0x002B is NOT renamed to _MODIFIER; its own entry already OBSERVED-refutes the GWLP-R 'SpeedModifier' gloss the rename would rest on, so _BASE here is the deliberate disambiguator between maxSpeed (0x0027) and moveSpeed (0x002B). Two witnesses (binary assert + 1/288-multiple wire); refuter CONFIRMED. studies/smsgnames."
+   },
+   "40": {
+    "opcode": 40,
+    "table": "GAME_SMSG_0040",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 40
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_STOP_MOVING",
+    "name_confidence": "high",
+    "why": "OBSERVED. field1=agent id. The handler resolves sync+async agent pointers and calls 0x602540, gated on the in-motion flag (test [agent+0x20],0x20000): when moving it cancels the queued move (agent+0x50), re-reads the timer-queue GetTime and re-runs the movement update; when not moving it is a no-op. A header-plus-one-id message whose whole effect is to halt the agent. Two witnesses (binary + prior OBSERVED send); refuter CONFIRMED. studies/smsgnames."
+   },
+   "42": {
+    "opcode": 42,
+    "table": "GAME_SMSG_0042",
+    "declared_unpack_size": 22,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 42
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_DESTINATION",
+    "name_confidence": "high",
+    "why": "OBSERVED. Per-agent destination/follow update. field1=agent id (validated in-world); field2=vec2 checked against the four worldDims bounds (0x5fcec0, agint:929 pos.x>=x0 ...) -- proving a position, not a direction -- then written to the agent's goal slots (+0x88..+0xa8) by 0x602a40; field3/field4=planes; field5=followed/target agent id (agent+0x98/+0x80, hardcoded 0 in sibling 0x0029 AGENT_MOVE_TO_POINT). Same goal-slot setter as 0x0029; the extra followed-agent field is the distinction. Two witnesses + three prior studies; refuter CONFIRMED. studies/smsgnames."
+   },
+   "44": {
+    "opcode": 44,
+    "table": "GAME_SMSG_0044",
+    "declared_unpack_size": 16,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 44
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_POSITION",
+    "name_confidence": "high",
+    "why": "OBSERVED. Hard position set / teleport. field1=agent id; field2=vec2 bounds-checked against worldDims; an indexed slot in the [agent+0x1cc] array is cleared, then 0x602b20 writes the point to the agent's current-position slots (+0x68..+0x74), sets destination=current and zeroes velocity; field3=plane. Snaps the agent rather than steering it (contrast 0x002A/0x0029). Two witnesses (binary + prior OBSERVED); refuter CONFIRMED. studies/smsgnames."
+   },
+   "90": {
+    "opcode": 90,
+    "table": "GAME_SMSG_0090",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 90
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PLAYER_REMOVE",
+    "name_confidence": "medium",
+    "why": "OBSERVED. field1=playerId. Clears the player record at index playerId in the ChCliApi player array (ctx+0x2c+0x80c, count+0x814, stride 0x50): unlinks the record's agent binding (0x80ecf0) and frees its name string (0x80bba0). Clean inverse of 0x0059 PLAYER_INFO on the same array. Confidence medium: the binary teardown is decisive but the second witness is structural (inverse of 0x0059), with no opcode-specific live probe. Refuter CONFIRMED. studies/smsgnames."
+   },
+   "155": {
+    "opcode": 155,
+    "table": "GAME_SMSG_0155",
+    "declared_unpack_size": 74,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 155
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     }
+    ],
+    "name": "AGENT_SET_NAME",
+    "name_confidence": "medium",
+    "why": "OBSERVED. field1=agent id; field2=string16(32) stored at record+0x34 in the ChCli per-agent-by-id array (ctx+0x2c+0x7cc, count+0x7d4, stride 0x38; grown to fit -- Array:587 at 0x008126d2). field2 is the agent's NAME: newopcodes/FINDINGS.md:511 OBSERVES it byte-identical to the agent's name string (idx 160), cross-checked against the speaker-attribution opcodes, and player names arrive instead as LITERAL text via 0x017D -- so 0x009B is the encoded (.dat-string) name path used for NPCs/agents. Two witnesses: store mechanism SOURCED (smsg/FINDINGS.md:1013) + name identity OBSERVED (newopcodes:511); field2 role was INFERRED in smsg, elevated to OBSERVED there. Compare-else-realloc-copy so a repeat with an equal string is a no-op. Reconciles enemy/PLAN.md's AGENT_UPDATE_NPC_NAME (same message; the mechanism is not NPC-gated). studies/smsgnames."
+   },
+   "159": {
+    "opcode": 159,
+    "table": "GAME_SMSG_0159",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 159
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROPERTY_UPDATE_INT",
+    "name_confidence": "medium",
+    "why": "OBSERVED. Sets integer property[prop_id]=value on an agent (GWCA 'GenericValue'). Worker 0x008128f0 indexes the agent-property array (ctx+0x2c+0x7c, count+0x84, stride 0x34) by agent slot, resolves the agent via ChCliGetAgent, and dispatches on prop_id through a jump table; the source-agent arg is hardcoded 0 (0x009F carries no cause). field1=property id (enum 0..66; per-id meaning UPSTREAM -- 42=max-health OBSERVED live, 41=energy UPSTREAM); field2=target agent; field3=int value. test_msghandler CORROBORATES the 0x009F/0x00A0 shared-callee pairing. Independently matches the name test_agentlife.py pins. Two witnesses + live crash probe; refuter CONFIRMED. studies/smsgnames."
+   },
+   "160": {
+    "opcode": 160,
+    "table": "GAME_SMSG_0160",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 160
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROPERTY_UPDATE_INT_TARGET",
+    "name_confidence": "medium",
+    "why": "OBSERVED. Integer-property update carrying a second agent (the cause/source). Same worker 0x008128f0 as 0x009F; the source-agent slot 0x009F zeroes is filled from field3. field1=property id; field2=target agent; field3=cause/source agent; field4=int value. Matches the name test_agentlife.py pins. Refuter CONFIRMED. studies/smsgnames."
+   },
+   "162": {
+    "opcode": 162,
+    "table": "GAME_SMSG_0162",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 162
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROPERTY_UPDATE_FLOAT",
+    "name_confidence": "medium",
+    "why": "OBSERVED. Float twin of 0x009F: sets float property[prop_id]=value on an agent via the same +0x7c/stride-0x34 array but the float-channel worker 0x00813040/0x00818210 (fld/fstp path). field1=property id; field2=target agent; field3=float value. Weakest-confirmed of the four: no opcode-specific live crash probe (0x009F/0x00A0/0x00A3 each have one); rests on the distinct float path + wire float distribution. Refuter CONFIRMED. studies/smsgnames."
+   },
+   "163": {
+    "opcode": 163,
+    "table": "GAME_SMSG_0163",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 163
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROPERTY_UPDATE_FLOAT_TARGET",
+    "name_confidence": "medium",
+    "why": "OBSERVED. Float-property update carrying a cause/source agent (float twin of 0x00A0). Same worker 0x00813040; value is a float, second agent slot filled from field3. field1=property id (16=damage OBSERVED, enemy/PLAN 7.4; per-id UPSTREAM); field2=target agent; field3=cause/source agent; field4=float value. OBSERVED from the other end 2026-08-11: CharPool.cpp:84 crash trace carries our 0x00A3. Matches the name test_agentlife.py pins. Refuter CONFIRMED. studies/smsgnames."
+   },
+   "243": {
+    "opcode": 243,
+    "table": "GAME_SMSG_0243",
+    "declared_unpack_size": 34,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 243
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 8
+     }
+    ],
+    "name": "TITLE_RANK_DATA",
+    "name_confidence": "medium",
+    "why": "OBSERVED mechanism, CORROBORATED as title data. Indexed store of a rank definition {flags, threshold, coded-name pointer} keyed by rank_id (field1) into the title-tier table at ctx+0x2c+0x82c (stride 12). It is the vocabulary the confirmed title display 0x00F4 indexes: 0x00F4 writes a rank_id to a player and the displayed row NAME is this opcode's coded string (character/RUNS.md:192). Chains to the HIGH-confidence title opcodes via the shared title UI panel (see 0x00F4's why). fields: rank_id, flags, threshold, coded name. The 'title' label was UPSTREAM (ldufr/GWLP-R; GWCA binds title structs to siblings 0x00F5/0x00F6) until this pass tied 0x00F3/0x00F4 to the title UI panel. studies/smsgnames + character/STORAGE + newopcodes."
+   },
+   "244": {
+    "opcode": 244,
+    "table": "GAME_SMSG_0244",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 244
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "TITLE_RANK_DISPLAY",
+    "name_confidence": "medium",
+    "why": "OBSERVED. field1=player_id (word), field2=rank_id (dword; references the 0x00F3 title-rank table). Writes rank_id to player_record+0x30 in the ChCliApi player array (ctx+0x2c+0x80c, stride 0x50) and posts frame 0x10000064. INDEPENDENT WITNESS that this is title display: the sole subscriber to 0x10000064 is a CtlText UI panel (fn 0x008aa080) that ALSO subscribes to 0x10000065 -- the frame posted by 0x00F5 TITLE_UPDATE (0x00F5 handler->callee 0x00814f60, which posts 0x10000065; 0x00F5 is schema-confirmed HIGH). So 0x00F4 drives the SAME UI panel as the confirmed title opcode. Wire: OBSERVED 0x00F4 x215 in towns, binding OTHER players to rank records (character/STORAGE.md:201) -- the signature of a title shown under other players' nameplates. Closes the open lead at character/RUNS.md:203 ('0x00F4's under-nameplate display is still unread'); elevated from UPSTREAM to OBSERVED this pass. studies/smsgnames."
+   },
+   "318": {
+    "opcode": 318,
+    "table": "GAME_SMSG_0318",
+    "declared_unpack_size": 11,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 318
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_ADD_TO_INVENTORY",
+    "name_confidence": "medium",
+    "why": "OBSERVED. Places an existing item into an inventory bag slot. Handler 0x00845f80 resolves item (ItCliApi:1883), bag (:1886, bag array ctx+0x24), inventory (:1889, inventoryTable ctx+0xD4), then the add-worker 0x849ea0 asserts the destination slot is EMPTY (ItCliInv:105 !bagParent->GetItem(slot)), writes the item to bag[slot], and sets its INVENTORY flag and parent bag/slot. field1=inventory key (u16); field2=item id; field3=bag id (u16); field4=slot (u8, asserted empty). Field widths per msgshape (an agent read had over-widened field1 u32->u16). Pure add path; 0x014B is the remove-then-add variant on the same worker. Two witnesses (empty-slot assert + wire) + pvpui 26; refuter CONFIRMED. studies/smsgnames."
+   },
+   "324": {
+    "opcode": 324,
+    "table": "GAME_SMSG_0324",
+    "declared_unpack_size": 5,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 324
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_STREAM_CREATE",
+    "name_confidence": "high",
+    "why": "OBSERVED. Registers a new inventory under field1 in inventoryTable (ctx+0xD4): handler 0x00846260 asserts the key is NOT already present (ItCliApi:2010 !inventory -- a key is declared once), then 0x84a060 allocates a CInventory and inserts it under that key (pvpui 26.1: 0x84a060 has one caller). field1=inventory key (u16, an arbitrary per-connection handle, not a character id); field2=flag (u8, always 0 in corpus; sets a boolean inside 0x84a060). Field widths per msgshape. Three witnesses (binary + authsrv.py send + pvpui); refuter CONFIRMED. studies/smsgnames."
+   },
+   "331": {
+    "opcode": 331,
+    "table": "GAME_SMSG_0331",
+    "declared_unpack_size": 11,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 331
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_CHANGE_LOCATION",
+    "name_confidence": "high",
+    "why": "OBSERVED. Relocates an item between bag slots. Handler 0x00846520 resolves item (ItCliApi:2126), bag (:2129), inventory (:2132), then 0x84acb0: if the item currently has a bag (item+0xc) it first REMOVES it from its current bag/slot (0x84aeb0, ItCliInv:621) then ADDS it to the destination (0x849ea0, the same add-worker as 0x013E). Remove-then-add = a move. field1=inventory key (u16); field2=item id; field3=destination bag id (u16); field4=destination slot (u8). Field widths per msgshape. Two witnesses; refuter CONFIRMED. studies/smsgnames."
+   },
+   "333": {
+    "opcode": 333,
+    "table": "GAME_SMSG_0333",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 333
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_REMOVE_FROM_INVENTORY",
+    "name_confidence": "medium",
+    "why": "OBSERVED (mechanism binary-decisive; the wire confirms field identity, not the 'remove' semantic -- label OBSERVED, not CORROBORATED). Handler 0x00846630 requires the item to carry ITEM_FLAG_INTERNAL_INVENTORY (ItCliApi:2172, flag 4), resolves the inventory (:2175), then 0x84adb0 removes the item from its bag/slot (0x84aeb0) and, if it has equip-set bits (item+0x4e), unequips it from the sets (0x84a3a0). field1=inventory key (u16); field2=item id (must have the INVENTORY flag). Field widths per msgshape. Thinnest name in the set (single decisive witness). Refuter CONFIRMED. studies/smsgnames."
+   }
+  }
+ }
+}
