@@ -609,10 +609,33 @@ _STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
 
 
+# Prices for the stock arm. OUR OWN numbers, deliberately not retail's table --
+# nothing here needs to match a real shop, and three DISTINCT round values make
+# the readout unambiguous: each row's price identifies which row it came from.
+# content/items.toml carries value = 0 on every row (correct for starter gear,
+# and what put "0" in every price column of the 20260818T211036 panel), so the
+# price is overridden here rather than written into the content rows.
+_STOCK_PRICES = {"warrior_legs": 25, "warrior_boots": 50, "warrior_gloves": 100}
+
+
 def _stock_item(key):
-    """A content item re-declared as merchant stock: bit 2 cleared, bit 0 set."""
+    """A content item re-declared as merchant stock: a real per-item price.
+
+    THE FLAGS OVERRIDE IS OFF, and the reason is measured rather than argued.
+    `_STOCK_FLAGS` clears F8 bit 2 to match retail, and bit 2 is SOURCED to gate
+    the client's item-detail fetch. Run `20260818T233955` shows what that costs
+    us: with bit 2 cleared the client DOES request detail, this server never
+    answers, and all three rows render as **hourglass placeholders that never
+    resolve** -- still hourglasses 35 s after the shop opened. With the content
+    row's own flags (bit 2 SET, "detail already present") the same three items
+    render their real armour icons (`20260818T211036`). So retail's bit pattern
+    is only correct for a server that implements the detail response, and ours
+    does not. The override also did NOT fix the `0x00C3` crash, which was its
+    whole reason for existing -- so it buys nothing and costs the icons.
+    Kept as a named constant so the next arm can switch it on deliberately.
+    """
     row = dict(item_template(key))
-    row["flags"] = _STOCK_FLAGS
+    row["value"] = _STOCK_PRICES[key]
     return row
 
 
@@ -692,19 +715,24 @@ def _merchant_window_steps(agent_id, origin):
              "no window ever draws."),
         Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
                                      _stock_item("warrior_legs")),
-             "0x0161: declare stock item 40 (leggings), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 40 (leggings), flags 0x20001003, price 25", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
                                      _stock_item("warrior_boots")),
-             "0x0161: declare stock item 41 (boots), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 41 (boots), flags 0x20001003, price 50", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
                                      _stock_item("warrior_gloves")),
-             "0x0161: declare stock item 42 (gloves), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 42 (gloves), flags 0x20001003, price 100", "nothing."),
         Step(3.0, 0x0084, [ids],
              "0x0084: stage the three stock ids into accumIntList[0]",
              "nothing -- the appender is QUIET, measured twice."),
         Step(3.0, 0x00CA, [1, 0x3F800000],
-             "0x00CA [1, 1.0f] -- retail's next message in s1",
-             "unknown; upstream does not name it. Watch for anything at all."),
+             "0x00CA [1, 1.0f] -- THE SHOP OPENER, now with priced stock",
+             "the shop opens (measured twice, 56,928 / 56,909 px). THE TEST IS "
+             "THE PRICE COLUMN: 25 / 50 / 100 read back verbatim means F9 is "
+             "the price as sent and this field's 1.0f does not scale it. Any "
+             "other numbers -- doubled, halved, rounded -- means 0x00CA field 2 "
+             "IS a multiplier, which no run has been able to see while every "
+             "price was 0. 'Your funds' should stay 0; we grant no gold."),
         Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
              f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD: three runs, three deaths",
              "THE TEST. Both prior runs died on this message; both declared "

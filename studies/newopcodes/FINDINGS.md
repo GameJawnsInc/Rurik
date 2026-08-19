@@ -1969,6 +1969,51 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### PRICED STOCK RUN — the shop charges **2x** what we send, and bit 2 shows itself on screen. 2026-08-18, OBSERVED
+>
+> Harness `20260818T233955`. Three items declared with **distinct** prices in `F9` — our own
+> round numbers, not retail's table — so each row's price identifies its source.
+>
+> | item | `F9` sent | price displayed |
+> |---|---|---|
+> | Ringmail Leggings | **25** | **50** |
+> | Ringmail Boots | **50** | **100** |
+> | Ringmail Gauntlets | **100** | **200** |
+>
+> **Exactly 2x on all three.** So `F9` is the item's **value**, and what the shop quotes is a
+> **doubled** sell price — the displayed number is not the field. Every earlier run had
+> `value = 0`, where 2x0 = 0, which is why this was invisible until a real price was sent.
+> `Your funds: 0` stayed 0 as predicted (we grant no gold).
+>
+> **What it does NOT settle:** whether the 2x lives in the client's merchant markup or in
+> `0x00CA`'s second field, which we sent as `1.0f` because retail does. A run varying that
+> field separates them in one shot and is now the cheapest open question on this line.
+>
+> ### AND F8 BIT 2 IS NOW OBSERVED FROM THE SCREEN, BOTH DIRECTIONS — including its cost to us
+>
+> The same run accidentally settled the bit-2 mechanism visually, because it carried
+> `_STOCK_FLAGS` (bit 2 CLEAR, retail's pattern) while the earlier shop run carried the
+> content rows' own flags (bit 2 SET):
+>
+> | run | `F8` | bit 2 | item icons |
+> |---|---|---|---|
+> | `20260818T211036` | `0x20001006` | **set** | **real armour icons** — leggings, boots, gauntlets |
+> | `20260818T233955` | `0x20001003` | **clear** | **hourglass placeholders, permanent** — still hourglasses 35 s later |
+>
+> This is the disassembly confirmed from pixels, in both directions: bit 2 set means "detail
+> already present" and the client draws what it has; **bit 2 clear makes the client REQUEST
+> the item detail, and this server never answers, so the rows sit as loading placeholders
+> forever.**
+>
+> **Practical consequence, and a correction to my own earlier judgement.** I kept
+> `_STOCK_FLAGS = 0x20001003` on the grounds that it "matches retail on both bits and is
+> better-founded than what it replaced". It is better-founded and it is **worse in practice**:
+> it fixed nothing (the `0x00C3` crash was identical) and it breaks the icons. **The override
+> is now OFF** — the probe uses the content rows' own flags — and the constant is kept named
+> so a future arm that implements the detail response can switch it back on deliberately.
+> **Retail's bit pattern is correct for a server that answers the detail request; ours is
+> not that server yet.**
+>
 ## `0x00CA` — **IT OPENS THE SHOP.** Behaviour OBSERVED 2026-08-18; the NAME still NOT FOUND
 
 > **OBSERVED, first-party, twice** (harness `20260818T211036` and `20260818T212611`, 56,928
