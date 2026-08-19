@@ -688,14 +688,17 @@ def _merchant_window_steps(agent_id, origin):
              "0x00CA [1, 1.0f] -- retail's next message in s1",
              "unknown; upstream does not name it. Watch for anything at all."),
         Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
-             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- an ITEM ID, not a count",
-             "THE TEST, and the whole reason for this re-run. [3, 0] asserted "
-             "`item` at ItCliApi.cpp(859) on 2026-08-18 because 3 was never a "
-             "declared item; 40 IS declared and staged. NO ASSERT here "
-             "confirms field 1 is an item id and retires the count reading "
-             "we took from retail's [11, 0]. An assert ANYWAY means the id was "
-             "never the problem and field 1 is something else again -- in "
-             "which case say so rather than inventing a third reading."),
+             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD, and this is why",
+             "NOT SENT. Both prior runs died on this message and both times it "
+             "killed the client 13 s before the drain below, which is the only "
+             "arm nobody has ever observed. It is also UNNECESSARY: 0x00CA "
+             "opens the shop by itself, twice measured (56,928 and 56,909 px). "
+             "What it already taught is banked -- field 1 is an item id "
+             "(undeclared 3 -> Assertion: item; declared 40 -> the guard "
+             "PASSED and the failure moved to a c0000005 at ASCII 'msg.'), so "
+             "a plain 0x0161 item is not merchant stock. Withholding it costs "
+             "nothing and buys the drain its first look at an OPEN window.",
+             sends=False),
         Step(10.0, 0x0084, [ids],
              "restage column 0 -- now ask the ORIGINAL question in this context",
              "nothing by itself."),
