@@ -853,6 +853,57 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### WHICH ARM ADDS A ROW — NONE OF THEM. The dispatch is an ACCESSOR interface. 2026-08-18, SOURCED
+>
+> The switch is `cmp eax, 0x5a / ja default / jmp [eax*4 + 0x61F8C8]`. Dumping that table
+> (via `pefile`, read-only, carve-out 1) gives **16 real cases**, 0x00–0x0F; the remaining
+> entries are `0x0F0F0F0F` filler, so the bound is generous and the arm count is 16.
+>
+> | case | arm | client's own asserts |
+> |---|---|---|
+> | 0x00 | `0x0061F657` | |
+> | 0x01 | `0x0061F665` | `CtlPage:598 !obj` |
+> | 0x02 | `0x0061F6B4` | `CtlPage:603 obj` |
+> | 0x03–0x05 | `0x0061F6E4` / `F72B` / `F738` | |
+> | **0x06** | **`0x0061F745`** | **ours — walks the row, calls its `proc`** |
+> | 0x07, 0x08 | `0x0061F762` / `F753` | |
+> | 0x09 | `0x0061F771` | `CtlPage:527 code` |
+> | 0x0A | `0x0061F79A` | `CtlPage:536 itemFrame` |
+> | 0x0B | `0x0061F7DE` | `CtlPage:546 pageCode`, `:58 IsBtnCode(btnCode)` |
+> | 0x0C | `0x0061F816` | `CtlPage:554 isEnabled`, `:50 !IsBtnCode(pageCode)`, `:558 btnFrame` |
+> | 0x0D | `0x0061F88F` | `CtlPage:566 !IsBtnCode(code)` |
+> | 0x0E, 0x0F | `0x0061F642` / `F8B3` (default) | |
+>
+> **The two obvious "add item" candidates are getters.** Read, not guessed:
+>
+> ```
+> case 0x09  0061F771  mov eax,[edi] / test ebx,ebx / jne     ; ebx is an OUT pointer
+>            0061F790  mov eax,[eax+4] / mov [ebx],eax        ; writes the CALLER's variable
+> case 0x0A  0061F79A  mov edi,[edi] / test ebx,ebx / jne     ; OUT pointer again
+>            0061F7B4  test esi,esi / jns                     ; esi is an INDEX, asserted >= 0
+> ```
+>
+> `case 0x09` is `GetCode(out)`, `case 0x0A` is `GetItemFrame(index, out)`. **No arm appends
+> anything.** This dispatch is a get/set command interface over a page object that already
+> exists — the assert names (`code`, `itemFrame`, `pageCode`, `isEnabled`, `btnFrame`) are
+> its property vocabulary, not a builder API.
+>
+> **And the row does not come from a stored array at all:** `0061F61E mov esi,[ebp+0xC]` —
+> **`esi` is the dispatch's SECOND ARGUMENT**, handed straight to case 0x06's worker. So the
+> "row" whose `proc` we call is a pointer supplied by the CALLER, one frame up in the frame
+> layer (`Rt:010bbfc0` → static **`0x0064BFC0`**), which is the same `0x0064Bxxx` region as
+> the function that ultimately executes `call eax`.
+>
+> **What that means for the merchant question.** The `proc` is not missing from a table we
+> failed to populate; it is read at `+0xC` of **a payload the poster supplied**, and the
+> posters of frame message `0x100000B5` are the eight readers of the window-owner register —
+> `0x00C3` among them. The leading reading is now a **payload-shape mismatch**: the handler
+> posts `{id, stored_agent, 0, stored_flag, …}` (this document's own §`0x00C4`), `+0x8` is
+> the `0` that satisfies the `CtlPage:434` guard, and `+0xC` is read as a `proc` the handler
+> never had reason to fill — so it holds whatever was on the stack, here the opening bytes
+> of an assert string. **Next desk step:** disassemble `0x00C3`'s own handler in
+> `0x00813F80–0x00814496` and read exactly how many dwords it writes before posting.
+>
 > ### THE ROW IS NAMED BY THE CLIENT ITSELF — `CtlPage` item, `+0xC` is `proc`. 2026-08-18, SOURCED
 >
 > One frame further up, and the client names its own structure. The chain from our message
@@ -884,8 +935,11 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > **`CtlPage` is generic paged-control machinery**, not merchant code — its eleven assert
 > sites map the whole API: `code` (527), `itemFrame` (536), `pageCode` (546), `isEnabled`
 > (554), `btnFrame` (558), `!IsBtnCode(code)` (566), `IsBtnCode(btnCode)` (58), `!obj` (598),
-> `obj` (603). The arms carrying 527–566 sit inside the same dispatch our path enters, i.e.
-> **that dispatch is how item rows are ADDED**, by commands the client issues to itself.
+> `obj` (603). ~~The arms carrying 527–566 sit inside the same dispatch our path enters, i.e.
+> **that dispatch is how item rows are ADDED**, by commands the client issues to itself.~~
+> **REFUTED the same day by reading them — see the case map below. They are GETTERS.** That
+> sentence was an inference from assert names and it was wrong; it is struck rather than
+> edited away, because it is the kind of guess that reads like a finding.
 >
 > **The sharpest fact, and the one that closes the wire theory:** the `CtlPage:434` guard
 > **passed**. The row's `code` at `+0x8` looked legitimate while its `proc` at `+0xC` held
