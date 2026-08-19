@@ -1083,8 +1083,19 @@ STOP_ECHO = False
 # for the player is 0.492 s, and 88.5% of its player grants answer a heading. So
 # this is not a workaround, it is the shape we were missing.
 HEADING_GRANT = False
-# --client-endpoint. THE FIFTH CANDIDATE, and four are already dead, so the
-# prediction is written here BEFORE the run and in the units the harm arrives in.
+# --client-endpoint. **REFUTED 2026-08-19 by the run built for it**, and left
+# here because a refuted candidate with its number attached is worth more than
+# a deleted one: run 20260819T182652 scored **14.6 jumps/min against the stated
+# bound of 2**, worse than --heading-grant's 12.8 and worse than the default
+# build's 5.7. IT MET BOTH TERMS IT WAS DESIGNED FOR -- the point was the
+# client's own unclipped endpoint, refreshed at a 0.28 s median grant age,
+# faster than retail -- and the character warped MORE. What the run says is
+# wrong is the SPEED: the player moved at a median 111.7 u/s while every grant
+# told the client moveSpeed 1.0 = 288.0. Do not re-enable it. The prediction
+# it was scored against follows, unedited.
+#
+# THE FIFTH CANDIDATE, and four were already dead, so the prediction was
+# written here BEFORE the run and in the units the harm arrives in.
 #
 # WHAT THE MEASUREMENTS CONSTRAIN. The warp is the client snapping its predicted
 # copy onto the server-authoritative one (measured both sides at once, run
