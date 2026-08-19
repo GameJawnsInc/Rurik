@@ -131,6 +131,27 @@ GRANDFATHERED = {
     # `attribState` four -- the smsg shape (one quote, many claims), not a dump. 30 is
     # snug over 22, in the proportion the 11-15 entries above carry.
     os.path.join("studies", "heroes", "FINDINGS.md"): 30,
+    # 14 on 2026-08-18, over NEWCOMER_CEILING while the arc is still landing opcodes --
+    # six commits to this document in a day, and documenting an opcode tends to bring
+    # its assert with it. Ruled on by the quests-doc session (a DIFFERENT arc -- the
+    # newopcodes session should apply the docstring's check itself and object if this is
+    # wrong). The 14 sites are 9 DISTINCT asserts -- the generic `Array.h:587
+    # index < m_count` five times, `ItCliApi.cpp:859 item` twice -- which is the smsg
+    # shape (one quote, many claims), not a dump. Every one argues, and three in the
+    # strongest form available: :832 is a CONTROLLED EXPERIMENT where the assert NOT
+    # firing is the result (field 1 = 3 died on `item`, 40 passed the same guard, so the
+    # field is an item id and not a count); :451 cites the generic assert as a NEGATIVE
+    # result, the honest limit on naming the implementation module; :1857 reads
+    # `PrApi.cpp:1431 bytes || !data` at an exact VA to identify 0x00B5's Preferences
+    # API. The rest pin single facts -- `ConstTitle:81` bounds the 48-entry title table
+    # and replaces a name that rested on one mirror, `MsCliApi:396` is the guard under
+    # which an allegiance token becomes a roster key, `ChCliApi.cpp:2956` proves 0x00C5
+    # cannot be first in its sequence. Two of the fourteen are CRASH DIALOGS, which
+    # CLAUDE.md's refinement puts outside extraction entirely. 30 is pvpui's proportion
+    # (13 -> 30) rather than a new number, chosen over 25 because this arc is mid-flight:
+    # re-arming with 11 of headroom fires on the next ordinary commit, which is the
+    # failure this file's own docstring is about.
+    os.path.join("studies", "newopcodes", "FINDINGS.md"): 30,
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own
