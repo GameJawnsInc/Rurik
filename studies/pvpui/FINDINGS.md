@@ -1993,3 +1993,28 @@ standing suspect. The activation record's map after today: +0 heroId, +4 agentId
 (0x0072), +8 inventoryId (0x0072), +0xC aiMode (0x0062 / 0x0072), +0x10..0x1C flag
 {x,y,plane,0} (0x0066), +0x20 lockedTarget (0x0063) — six wire-reachable fields, each
 with its opcode and its event, every one confirmed by the client drawing something.
+
+### 28.8 The body run — the row goes retail-format and the agent store outranks the record (2026-08-19)
+
+Run `20260819T110510`, the full rig plus `--hero-body`. The scripted panel click
+missed (`NO WINDOW` — the client came up slow after `--replace` cleaned out another
+session's listeners) and it did not matter: the commander panel opened anyway,
+UNVERIFIED whether from the client's own persisted per-character UI layout or a
+body-triggered path — worth one control run before relying on either reading. The
+verdicts, from the hold screenshots:
+
+- **The party row upgraded to retail's format**: "Lvl 20 Norgu" (bodiless) became
+  "**Mo20 Norgu**" — the profession segment reads the AGENT (heroes §23's roster-reads-
+  the-agent claim, reconfirmed from the other side), and the level moved into the same
+  profession+level rendering a real hero row has. Nothing greyed with the body in
+  compass range; the greyed-row-means-out-of-range reading still wants its positive
+  control (a body placed far away).
+- **The panel's vitals re-sourced**: health reads 100 (the body's `create_agent_world`
+  value), no longer the bodiless prop-42 store's 480 — when both exist, the AGENT's
+  store outranks the activation-era property store. Energy stayed 45 (no agent-side
+  energy was sent, so the prop-41 store still shows through — the two bars source
+  independently).
+- **The hero body stands in the world** (spawn offset, third in line behind the
+  practice target), so `--hero-body` composes with the whole echo rig with no assert —
+  activation, char-table, appearance, level, vitals, stance, flags, and lock all
+  coexisted with a real agent in one session.
