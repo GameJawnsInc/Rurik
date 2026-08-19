@@ -294,3 +294,80 @@ The review pass flagged three contradictions between subsystem reports. Each was
     - **A death and a revival on the real service, the first ever captured.** Agent 27 took `0x00F1` with the status word `0x10`, then `0x00F1` with `0x0` — and was still there to revive, so death is a **status bit and not a removal**, exactly as predicted and as [../agentprops/FINDINGS.md](../agentprops/FINDINGS.md) measured from our own client. Other status words seen: `0x100` (×8) and `0x80` (×1), both unread.
     - **Levels that are not 1**: prop 36 carried 2, 3, 4, 8, 9, 10, 11, 20 and **30** — the last above the player cap, so some body (a boss or a special NPC) is level 30. No level-1 sighting at all in the Monastery capture.
     **What the run did NOT settle, honestly:** a level *changing* on one agent (still unobserved — see PLAN §8's named tutorial capture), and one integrity puzzle worth chasing — `tape.py` refused one channel because it counted **50,391** wire bytes where the decrypt consumed **50,153** (the manifest agrees with the decrypt), so ~216 bytes in `wire.jsonl` are not part of that channel's plaintext. TCP retransmits are the obvious candidate and nothing has checked. The channel's plaintext itself decodes perfectly, so only *tape replay* is affected, not the census.
+
+## THE LEVEL-UP, OBSERVED — twice, and the open question above is CLOSED. 2026-08-19
+
+This document's own "what the run did NOT settle" names *"a level **changing** on one
+agent (still unobserved)"*. It is observed now, in capture `20260819T132414` (the operator
+marked it live, note ordinal 2) and again in `20260807T143055`, which had been sitting in
+the vault for twelve days.
+
+**METHOD: the quest reward is the CONTROL.** A window around a level-up alone names forty
+opcodes and proves nothing. The operator marked two events — note 1 "accepting quest
+reward" (`wire_t` 227.60) and note 2 the level-up (278.49) — and **both are quest turn-ins
+answered by the same reward machinery**, so differencing them isolates the transition.
+Shared by both, and therefore NOT levelling: `0x005D`/`0x005E` chat, `0x009C [agent, 100]`,
+`0x00EE [10, 0]`, the XP row `0x00EE [0, N]` (**100** vs **1000**), the gold credit
+`0x0140 [inv, N]` (**10** vs **50**), and `0x0052` quest-remove.
+
+**THE BURST, and it is one frame:**
+
+| message | reading | evidence |
+|---|---|---|
+| `0x009F [37, agent, 3]` | **LEVEL UP — the new level** | see below |
+| `0x009F [42, agent, 140]` | **maximum health** | `100 + 20×(level−1)` |
+| `0x0039 [agent, 10]` | **total attribute points** | the wiki's level table |
+| `0x0038 [agent, 6]` | **NOT IDENTIFIED** | see the caution below |
+| `0x00EE [14,1] [13,1] [9,1]` | three reward rows absent from the control | |
+
+**PROP 37 IS THE EVENT, PROP 36 IS THE STATE — and that distinction is what makes this
+readable.** `0x009F` prop 36 has **1,819** sightings across the corpus (values 1–20 and 30,
+dominated by 1 and 20): every agent's level, broadcast at creation. Prop 37 has **two**, and
+both sit at a transition. Agent 323 in `20260807T143055` is the clean one:
+
+```
+t=10.98   prop 36 = 16      the state
+t=21.06   prop 37 = 17      THE LEVEL-UP, carrying the NEW level
+t=24.90   prop 36 = 17      the state again, now agreeing
+```
+
+**AND THE ARITHMETIC CLOSES ON GW'S OWN PUBLISHED TABLES, which the capture did not
+supply.** Our player (agent 27) loaded at prop 36 = **2** with prop 42 = **120**, then
+levelled to prop 37 = **3** with prop 42 = **140**:
+
+> WIKI (GWW, "Health" §Maximum health, fetched 2026-08-19): *"Roleplaying characters start
+> at level 1 with 100 health. This increases at 20 health per level up to a maximum of 480
+> health at level 20."*
+
+`100 + 20×(2−1) = 120` ✓ and `100 + 20×(3−1) = 140` ✓. The whole prop-42 histogram lands on
+that ladder — **100 ×16, 120 ×11, 140 ×7, 480 ×35** — with the off-ladder values (455, 483,
+555, 590) all under the wiki's stated 610 rune-and-insignia ceiling, which is what that page
+says should happen. And:
+
+> WIKI (GWW, "Attribute point" §Level progression, fetched 2026-08-19): level 3 → **10**
+> total attribute points.
+
+`0x0039 [27, **10**]` at a level-up to 3. **Three fields, one level, agreeing through two
+tables from a source that shares no code or ancestry with anything in `vault/`** — so this
+is CORROBORATED rather than one witness counted twice.
+
+**WHAT IS PRIVATE AND WHAT IS PUBLIC, stated as the leading reading rather than a fact:**
+the 16→17 level-up carried **only** props 37 and 36, with no `0x0039`, no `0x0038` and no
+prop 42, while our own player's carried all of them. The natural explanation is that level
+is broadcast to everyone in view and attribute points and maximum health go only to the
+owner — but agent 323's identity was never established, so this is RECONSTRUCTION. The
+cheap test is a second player in view of one of ours.
+
+**TWO HONEST GAPS.** `0x0038 [27, 6]` sits in the level-up frame and is **not** level-up
+machinery: it has 15 sightings across the corpus on four other agents, values 5/25/41/54/65/74,
+including a descending run 65→54→41→25→5 that looks like a bar draining. It is NOT
+IDENTIFIED and 6 is not the level, the points or the health. And prop 36 was **not** re-sent
+to agent 27 after its level-up, though it was to 323 — recorded because it is a real
+asymmetry and not smoothed over.
+
+**A NEAR-MISS WORTH KEEPING.** The first pass read prop 37 as "the level" outright and would
+have contradicted this document's settled prop-36 finding. What caught it was checking the
+existing claim before publishing rather than after: 1,819 sightings against 2 is not two
+readings of one field, it is two different fields. **The corpus's own frequency was the
+tell, and a single-capture reading could not have seen it.**
+
