@@ -3601,7 +3601,7 @@ Every one of these, in the order they were written:
   missing build by raising **SystemExit**, a BaseException that sails through
   `except Exception` — so the skip that this paragraph credits it with was
   unreachable, and a skip that cannot be reached is the same defect as no skip
-  at all. That is the identical failure `test_unitwrite.py`'s entry records at
+  at all. That is the identical failure `test_skelwrite.py`'s entry records at
   the end of this file (`require_dir` raises SystemExit past `except
   Exception`), hit twice in two files, which is what makes it a shape rather
   than an accident. Both except clauses now name SystemExit, and a bare run
