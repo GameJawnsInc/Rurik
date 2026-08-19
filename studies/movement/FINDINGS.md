@@ -1790,3 +1790,118 @@ AND dt ≥ 0.05 s` **for the controlled agent only** — retail declares `0x0027
 for party-member agents 69 times, leaving a 400 u/s ceiling 0.25% of headroom on those —
 plus the dt-free `dd > 520 u within 2.0 s`, and qualify every negative with the blind
 budget.
+
+## The warp is a RESYNC, not the `+0x48` teleport — two-sided, simultaneous (2026-08-19)
+
+Run `20260819T171436` (movetap, 61 s, agent 1) against gamesrv capture
+`authsrv-20260819T171153-c1.jsonl`, `--heading-grant` ON, operator holding S and
+clicking distant ground. **The first run in this arc to watch both sides at once**, and
+it overturns the mechanism this document has carried since the arc began.
+
+**CAVEAT FIRST, because it governs how much weight this carries.** The run is **below
+`movetap`'s own floor and the tool printed FAIL**: 786 samples against a floor of 7,500.
+That is an instrument defect, not an operator error — `movetap` requests 50 Hz and
+sustains **12.9 Hz** (p50 sample gap 76 ms), so `floor = seconds * hz * 0.5` can never
+be met at the default rate and every run at `--hz 50` fails it. A floor governs a
+**null**; this run is not a null (750 of 786 samples carry an armed arrival, and 13
+jumps were caught), so the positives below stand and no negative is claimed from it.
+n = 7 arrivals, 13 jumps, one 61 s window, one run.
+
+### The two instruments describe the same character and disagree
+
+Matching each client position report to the nearest `movetap` sample by wall clock
+(n = 182 pairs inside the window):
+
+| movetap field | p50 | p90 | max |
+|---|---|---|---|
+| `live` (reconstructed) vs the client's own report | **125.9 u** | 455.7 u | **673.7 u** |
+| `point` (+0x78, un-extrapolated) vs the same | 122.1 u | 469.1 u | 632.9 u |
+
+**It is not a reconstruction artifact.** If `live`'s extrapolation were drifting, the
+raw `point` would track the wire *better*; the ratio of p50s is **0.97**, and the
+extrapolation age is p50 **0.10 s** (p90 0.30). Both fields disagree with the client
+equally, so the disagreement is in the client, not in our arithmetic.
+
+**`movetap` reads the SYNC array (`[AGBASE+0xE8]`). The client reports from the copy it
+predicts and renders.** This answers the open question `PLAN.md` §8 has carried as
+"sync (`+0xE8`) vs async (`+0x14C`) decides whether the model we watch is the one the
+player sees": **it is not.**
+
+### The wire's "teleports" are the client re-converging onto the authoritative agent
+
+Every client step > 300 u inside the window, with the separation either side:
+
+| server t | step | separation BEFORE | AFTER |
+|---|---|---|---|
+| 166.899 | 747.8 u | 537.3 u | 114.6 u |
+| 169.368 | 757.5 u | **673.7 u** | **49.5 u** |
+| 171.637 | 746.7 u | 567.4 u | 91.9 u |
+| 173.756 | 748.8 u | 510.5 u | 152.1 u |
+| 218.485 | 753.8 u | 610.3 u | 90.0 u |
+
+**13 of 13**, mean separation **395.1 u → 119.7 u, a 70% collapse**, and the size of the
+jump tracks the size of the gap it closes. The largest jump closes the largest gap. A
+teleport onto a granted point would show no such relation — and `warpscan` already said
+so from the other side without being able to say why: **10 of its 12 detections are
+"NOT near any grant"**, because the landing point is on the authoritative agent's glide
+path, not at any granted endpoint.
+
+### What that overturns in this document
+
+- **"`+0x48` is set once and never re-armed" — REFUTED as a general statement.** With
+  `--heading-grant` on it was re-armed **304 times in 61 s** (7 arms from zero, 7 clears,
+  304 re-arms). The original observation stands for a *single click grant*; it was never
+  a property of `+0x48`.
+- **"Stacked grants come due almost immediately" — REFUTED as typical.** Re-arm lead
+  times: min 61 ms, **p10 1,009 ms, p50 2,890 ms**, p90 8,949, max 17,664; **6 of 304**
+  under 200 ms and **0** already in the past. Last session's 0.28 s was the tail, quoted
+  as the rule.
+- **The `+0x48` snap is nearly invisible.** All 7 arrivals landed **0.0 u from
+  `m_targetPoint`** with the glide bit clear — so every one took the teleport branch, as
+  predicted — and the **visible** jump (`live` immediately before the snap vs the target)
+  was **2.4, 4.2, 4.7, 7.0, 12.0, 21.6 and 2.4 u**. The last of those is the decisive
+  row: the cached `m_point` was **593.7 u** stale and the player still moved 2.4 u,
+  because dead reckoning had already carried the agent to the target. **A stale
+  `m_point` does not produce a visible jump.**
+
+**So the mechanism is:** our `0x0029` makes the client's authoritative copy glide to the
+granted point at 288 u/s regardless of what the player is doing. The predicted copy
+follows the player's input. They separate at roughly the speed difference, and every
+~2.4 s the client snaps the predicted copy onto the authoritative one. **That snap is
+the warp.** It explains the operator's own observation that it is "easiest to trigger at
+longer ranges" — a longer grant is a longer authoritative glide and a bigger gap to
+close — and it explains why retail never does it: retail's granted point is the client's
+own proposal, so the two copies agree by construction, **and** retail re-grants every
+median 0.490 s, continuously re-pinning the authoritative copy to the player's real
+motion.
+
+### What it means for the fix
+
+**It does not resurrect any dead candidate on its own terms.** "Echo the client's own
+vector" is still arithmetically a no-op — retail's `reported + vec2 + 0.5` and our
+`state["pos"] + heading` remain the same expression. But the *reason* the surviving
+candidate should work has changed and is now mechanistic rather than mimetic: granting
+on every heading from the client's own report keeps the authoritative copy pinned to the
+player, so the resync has nothing to close. That is a stronger argument than "retail
+does it", and it is testable directly.
+
+**The metric to watch is SEPARATION, not jump size, and no instrument reports it.** That
+is the actionable change: `warpscan` scores landing points against granted points, which
+is why 10 of 12 came back "NOT near any grant" — it is measuring the right events under
+the wrong model. A separation series needs both sides, which this run now proves is
+possible.
+
+**Unmeasured, and stated as inference rather than result:** that the same resync drives
+the **default-build click warp**. This run had `--heading-grant` on. The mechanism and
+the operator's range observation both point that way, and nothing here establishes it.
+
+### Two instrument defects found by this run
+
+1. **`movetap`'s floor is unmeetable.** It sustains ~12.9 Hz against a requested 50, so
+   `seconds * hz * 0.5` fails every default run. Either the floor is computed from the
+   achieved rate or the default `--hz` drops to something the reader can hold. As it
+   stands the tool cries FAIL on runs that measured plenty, which is how a real FAIL gets
+   ignored.
+2. **`warpscan` names resync events "TELEPORT ... NOT near any grant".** The detections
+   are real events; the model behind the label is wrong. Its own "not near any grant"
+   line was the evidence, sitting unread in the output for two runs.
