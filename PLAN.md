@@ -2335,6 +2335,21 @@ a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment sa
 
 **The scope is narrower than "these addresses are stable", and the check says so.** On the vaulted 38519 build — ~90 days older — **0 of 12 sites match and the frame-bus scan finds nothing in any quest body at all.** So the claim is that nothing moved across the 15-day 38797→38833 patch, which is much smaller than durability; 38519 is now the control that proves the equality is a measurement rather than a tautology. `test_quests.py` §20 (77 checks) re-runs the whole thing, and a fourth vaulted build is covered without an edit.
 
+**THE THREE DWORDS ARE MEASURED — the loopback run this block asks for below RAN
+2026-08-19, agent-piloted, and the panel named its own fields** (harness
+`20260819T071548`, `--probe quest_panel`, five sentinel arms with the prediction filed
+first): **dword 1 is EXPERIENCE, dword 2 GOLD, dword 3 SKILL POINTS**, read from the
+panel's own toast — the (111, 222, 333) arm rendered *"You have earned 111 experience,
+222 gold, and 333 skill points!"*. Zero-valued fields are omitted from the sentence,
+which explains the 2026-08-13 sweep's silent banner (its all-zero payload suppressed
+the toast entirely); the panel re-fires per send, five renders in one session; max
+dwords render unsigned with no assert. The arm-3 hypothesis (field 1 = quest id) is
+REFUTED — 1463 came back as "1,463 experience". **What it is not: a grant.** The Level
+chip read 1 beside a 4.29-billion-experience toast, and
+`0x006C`/`0x0096`/`0x0097`/`0x00FB` stay 0-of-corpus — display vs grant is now the
+reward arc's live-capture question. `studies/quests/FINDINGS.md` §9.6 is the record;
+the probe stays registered as the completion-panel calibration.
+
 **Next offline, cheapest first, and the offline half is the short half. Q2b — author the
 NAME.** The description is ours and the name is still ArenaNet's `0x3D64`, so a quest we wrote
 announces itself in their words. Q0 went green 2026-08-15 (`studies/quests/AUTHORING.md` §1)
@@ -2343,12 +2358,11 @@ tested, and has 188 authored skill names on a retail screen behind it. The autho
 needs no client. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
 known, and which one is wrong is a measurement nobody has taken.
 
-**Two runs are what the arc is actually waiting on, and they are different asks.** **Q6 needs
-the owner:** walk a portal, the log survives. The code and its checks are landed, and nothing
-offline substitutes for that criterion. **The reward grant needs ONE LOOPBACK RUN, not a live
-campaign** — `0x004E` is named and its readout is a centre-screen panel rather than a
-world-anchored click, so the first real question, what `QUEST_COMPLETE_PANEL` expects in its
-three dwords, is one send away.
+**Two runs were what the arc was waiting on; the loopback one RAN 2026-08-19 (the dwords
+paragraph above), so Q6 is the run that remains.** **Q6 needs the owner:** walk a portal, the
+log survives. The code and its checks are landed, and nothing offline substitutes for that
+criterion. What is left of the reward arc past the panel display is the GRANT protocol,
+which is a live-capture question (a narrated mission completion), not a loopback one.
 
 **And the largest piece is the two known bugs at the top of this block, which are ONE fix and
 not two:** the range gate is only correct once click-to-walk exists, and shipping it alone

@@ -83,15 +83,16 @@ the quest fields' caps as unverified hazards, not boundaries that pass.
 
 ## 4. Where the next real result probably is
 
-**`0x004E` = `QUEST_COMPLETE_PANEL`.** Its body posts `0x10000155` into the band
-`GmQuestComplete` subscribes to, and the 2026-08-13 sweep already fired it at a client and
-photographed a centre-screen banner. `FINDINGS.md` §7.6 had ruled this needed a narrated
-live mission completion and that *"nothing static will substitute"* — half the join was
-sitting in its own §1.6 table. **The reward arc is now one loopback run from its first
-real question**, which is what the panel expects in its three dwords. Note the panel is
-fed by *five* frame ids and only one comes from the quest opcode block; the other four
-publishers are mapped in §9.3 and unattributed. `framebus.py --at` answers them one body
-at a time.
+**The `0x004E` loopback run HAPPENED (2026-08-19) and the three dwords are named:**
+experience, gold, skill points — the panel's own toast read them back off sentinel
+values. `FINDINGS.md` §9.6 is the record; the probe is `quest_panel`, kept runnable as
+the completion-panel calibration. What the reward arc still does not have is a **grant**:
+the toast is display, no client state moved, and the rest of the completion family
+(`0x006C`, `0x0096`, `0x0097`, `0x00FB`) is 0-of-corpus — that half needs a narrated
+live mission completion. The static leads that remain cheap: the four unattributed
+publishers of GmQuestComplete's other frame ids (§9.3 — `framebus.py --at`, one body at
+a time, `0x006C` the first candidate), and Q2b's name authoring via `textwrite.py`,
+which needs no client at all.
 
 ## 5. Open, unmeasured, and deliberately not guessed
 

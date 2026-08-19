@@ -1308,6 +1308,46 @@ is reproducible **by running** rather than by rewriting.
 verification that is a claim in prose and not a check, and the fact that **every binary
 claim in this document is build 38797** and none has been re-checked against 38833.
 
+#### 9.6 The three dwords: MEASURED, one agent-piloted loopback run (2026-08-19)
+
+§7.6's remaining half — *what the panel expects in those three dwords* — is answered,
+and it took exactly the one loopback run §9.3 predicted. Harness `20260819T071548`,
+caged loopback, build 38797 client, `--probe quest_panel`: five arms with the
+prediction filed in the probe before launch, cadence frames at 1 s scored by
+`shotlabel.diff_score` joined to the capture's own wall clocks, then read by eye at
+every arm (the masked scorer's banner blind spot from `studies/newopcodes` cannot bite
+here — the committed scorer is full-frame — but the panel draws exactly where a mask
+would sit, so the eye pass was mandatory either way).
+
+| Arm | Payload | On screen — OBSERVED |
+|---|---|---|
+| 1 | `(0, 0, 0)` | The 20260813T123003 render reproduces: a 3D victory monument (red-gold panel, eye motif) materializes centre-world in a pyrotechnic burst ~1.5 s after the send, animating ~8–10 s. **No toast.** |
+| 2 | `(0, 0, 0)` again | The identical render, again. **The panel re-fires per send** — not one-shot, so value ladders fit in one session. |
+| 3 | `(1463, 0, 0)` | The banner, plus a centre-bottom toast: **"You have earned 1,463 experience!"** |
+| 4 | `(111, 222, 333)` | **"You have earned 111 experience, 222 gold, and 333 skill points!"** |
+| 5 | `(0xFFFFFFFF, ×3)` | **"You have earned 4,294,967,295 experience, 4,294,967,295 gold, and 4,294,967,295 skill points!"** No assert, no clamp, client alive to teardown. |
+
+**The reading, from the client's own sentence: dword 1 is EXPERIENCE, dword 2 is GOLD,
+dword 3 is SKILL POINTS.** Zero-valued fields are omitted from the sentence — arm 3
+names only experience, arms 1–2 draw no toast at all — which *explains* the 2026-08-13
+sweep's silent banner rather than contradicting it: the sweep's all-zero payload
+suppressed the whole sentence. Values render unsigned and comma-formatted. Arm 3's
+stated hypothesis (field 1 = quest id) is **REFUTED**, and the sentinel property is
+what made the refutation legible: 1463 sits outside every corpus range, so its
+appearance as "1,463 experience" is not ambiguous with any real quest binding.
+
+**What this does and does not settle.** It settles the DISPLAY — what the panel does
+with its payload. It does **not** settle a grant: the Level chip read 1 in the same
+frame as the 4.29-billion-experience toast, no client-side state visibly changed, and
+the rest of the completion family (`0x006C`, `0x0096`, `0x0097`, `0x00FB`) stays 0 of
+22,524 in the corpus. Whether retail pairs this display with a separate state-changing
+grant protocol is still the live-capture question, and Q7's acceptance criterion still
+must not claim a reward. Also unmoved: which opcodes publish the other four frame ids
+GmQuestComplete subscribes to (§9.3). One softening of §9.3's caution: this run fed the
+scene exactly ONE of its five subscribed ids and the banner-and-toast path rendered
+complete-looking anyway, so an underfed render is a risk for the scene's *other*
+content (medals, completion notes, reward models), not for this path.
+
 #### Reproducing §9
 
 ```bash
@@ -1316,4 +1356,5 @@ cd <tree> && python toolkit/clientscan/framebus.py
 cd <tree> && python toolkit/clientscan/framebus.py --at 0x0080F670 --end 0x0080F6F0
 cd <tree> && python toolkit/clientscan/test_framebus.py
 cd <tree> && python toolkit/authsrv/test_dispatch.py
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 120 --game-args '--probe quest_panel'
 ```
