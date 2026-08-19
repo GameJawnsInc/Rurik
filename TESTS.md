@@ -60,7 +60,22 @@ Every one of these, in the order they were written:
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
   in the gamesrv log appears on a clean teardown too. The dialog is faked in the
-  test so the extraction is checked without crashing a client. Also `hold_key`,
+  test so the extraction is checked without crashing a client. **And since
+  2026-08-18 it checks that capturing the dialog RETRACTS THE VERDICT**, which is a
+  different thing and was not true: `hold_open` has returned `"exited"` for a client
+  that died during the hold since `276080a`, and the comment at that `return` says
+  *"a corpse afterwards unmakes it"* — but the only call site was a **bare expression
+  statement**, `ok` was never reassigned after it, and such a run still printed
+  `RUN VERDICT: PASS` and exited 0. `customarea/FINDINGS.md` §31.4 recorded the
+  defect as fixed on the strength of that `return`; the statement shipped and the
+  wiring did not. The rule now lives in `session.verdict_after_hold(ok, held)` with a
+  three-row truth table here (a corpse retracts a pass, a hold that merely ran out
+  does not, and it never PROMOTES a failed run), **plus a structural check that
+  `run_client` actually consumes `hold_open`'s return** — because a correct helper
+  nobody invokes is precisely the bug being fixed and looks identical from the
+  outside. That structural check is the one that was red when the defect was found,
+  and its own control parses the pre-fix shape verbatim and requires the detector to
+  call it broken. Also `hold_key`,
   the held movement key `--walk` drives, against a fake `user32`: that every
   event carries a NON-ZERO scan code, that the key is released on every exit
   path including an exception mid-hold, that losing the foreground cuts the leg
@@ -1941,8 +1956,15 @@ Every one of these, in the order they were written:
   map it is rebuilding and NAMES any substitution -- and the sabotage that trusts the
   donor still round-trips row 46196 while breaking row 26209, which is the shape of a
   bug that ships. `gates()` reproduces the loader's open-time rules and its control is
-  that ArenaNet's own row 46196 passes all 17 before anything we built is judged; five
-  rules are then broken on purpose and must go red ALONE. Section 2 also refuses
+  that ArenaNet's own row 46196 passes all **18** before anything we built is judged;
+  five rules are then broken on purpose and must go red ALONE. **18, not the 17 this
+  entry said until 2026-08-18** — the 18th came out of FINDINGS 30 (*every REACHABLE
+  plane above 0 names a prop that exists*), the rule added after a bad `plane_map`
+  crashed a client twice, and it is what the authored portal's arms are scored against
+  in customarea §31. The completeness check was `len(result) >= 17` while the set was
+  already 18, so **that gate could have been deleted with the check still green**; it
+  now pins `GATE_COUNT` exactly and goes red on either direction, verified by
+  mis-stating it. Section 2 also refuses
   `--out` into EVERY checkout of this repo rather than the one the file sits in: a
   git worktree's repo root is not the main checkout's, and until `working_tree_roots`
   existed a build written to `<main>/toolkit/` was allowed straight into version
