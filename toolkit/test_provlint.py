@@ -131,6 +131,52 @@ GRANDFATHERED = {
     # `attribState` four -- the smsg shape (one quote, many claims), not a dump. 30 is
     # snug over 22, in the proportion the 11-15 entries above carry.
     os.path.join("studies", "heroes", "FINDINGS.md"): 30,
+    # 14 on 2026-08-18, over NEWCOMER_CEILING while the arc is still landing opcodes --
+    # six commits to this document in a day, and documenting an opcode tends to bring
+    # its assert with it. Ruled on by the quests-doc session (a DIFFERENT arc -- the
+    # newopcodes session should apply the docstring's check itself and object if this is
+    # wrong). The 14 sites are 9 DISTINCT asserts -- the generic `Array.h:587
+    # index < m_count` five times, `ItCliApi.cpp:859 item` twice -- which is the smsg
+    # shape (one quote, many claims), not a dump. Every one argues, and three in the
+    # strongest form available: :832 is a CONTROLLED EXPERIMENT where the assert NOT
+    # firing is the result (field 1 = 3 died on `item`, 40 passed the same guard, so the
+    # field is an item id and not a count); :451 cites the generic assert as a NEGATIVE
+    # result, the honest limit on naming the implementation module; :1857 reads
+    # `PrApi.cpp:1431 bytes || !data` at an exact VA to identify 0x00B5's Preferences
+    # API. The rest pin single facts -- `ConstTitle:81` bounds the 48-entry title table
+    # and replaces a name that rested on one mirror, `MsCliApi:396` is the guard under
+    # which an allegiance token becomes a roster key, `ChCliApi.cpp:2956` proves 0x00C5
+    # cannot be first in its sequence. Two of the fourteen are CRASH DIALOGS, which
+    # CLAUDE.md's refinement puts outside extraction entirely. 30 is pvpui's proportion
+    # (13 -> 30) rather than a new number, chosen over 25 because this arc is mid-flight:
+    # re-arming with 11 of headroom fires on the next ordinary commit, which is the
+    # failure this file's own docstring is about.
+    os.path.join("studies", "newopcodes", "FINDINGS.md"): 30,
+    # 11 on 2026-08-18, one over NEWCOMER_CEILING, and this row exists because the
+    # alternative was tried first and was WRONG. Updating 3's R5m row and 8's item
+    # 10(b) to customarea 31's portal landing cited `Array.h(587) index < m_count`
+    # at both sites -- the control that makes the green arm mean anything -- which
+    # took the file 9 -> 11. The session's first move was to SCRUB one of the two and
+    # cite it by reference instead, landing PLAN.md at exactly 10 of 10. That is the
+    # state the comment at the top of this dict names as the failure mode: a tripwire
+    # with zero headroom fires on the next ordinary edit, and PLAN.md is the most
+    # edited document in the repo -- 3 is the single status authority, so every arc
+    # that lands touches it. CLAUDE.md's refinement is the other half: a SINGLE assert
+    # cited as the evidence for a claim is MEASUREMENT, kept with its file and line
+    # "because the quote is what lets a reader audit the claim without the binary",
+    # and "the direction of error in this repo is over-refusal". A reader of 3 should
+    # not have to jump to 8 to audit the row. So the citation is restored and the
+    # ceiling is raised, which is the move 154 above made two commits earlier.
+    # The 11 are 9 DISTINCT asserts, none of them a dump: `Array.h:587` twice for the
+    # ONE portal control (the same quote at the two claim sites that argue from it),
+    # `GmView:5897/5898` + `ItCliApi:488` walking the pvpui click assert by assert,
+    # `PathBuild:2297` bounding trapezoidCount, `PathData:365` on segment counts,
+    # `GdCliApi.cpp:430` fixing the gadget agentDef, `ConstChar`/`CharPool` pinning
+    # the 0x003A and revive crashes -- plus one CRASH DIALOG (`Map.cpp:1762`), which
+    # CLAUDE.md's refinement puts outside extraction entirely. 25 is the proportion
+    # the 11-entry rows above already carry (reconstruction 11 -> 25, enemy/PLAN.md
+    # 11 -> 25), not a new number.
+    "PLAN.md": 25,
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own

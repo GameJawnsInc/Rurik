@@ -53,6 +53,7 @@ The house rule is that corrections go where they cannot be missed.
 | **C-7** | — | `archive.py:322` reads the header `mftOffset` as **`<I`**; `datcheck.py:223` and `datwrite.py:101` read it as **`<Q`**. Two of three readers say u64 and the outlier is the one every tool imports. Latent (all 14 vault archives have the high dword zero) and ~93 MB of file growth away from firing silently on the 38833 line. **OBSERVED (mine, all three lines read).** |
 | **C-9** | §2.5: *"the population supporting 'the client reads a large stored row' is EMPTY, not thin"* — retail's largest ordinary stored content row is 19,292 B and our one precedent is U7's 29,802 B | **STALE, and by our own hand.** The retail census still reproduces exactly (0 of 38,621 stored rows above 19,292 B, excluding the structural rows). But `datmove` writes compression 0 unconditionally, so **run 5 shipped ELEVEN stored rows above 19,292 B — the largest 765,378 B (file 117797) — and it was deployed and launched by the owner with no assert** (§9.3i/j). The honest framing is now **11× beyond the largest PROVEN-READ stored row and 0.5× the largest DEPLOYED-WITHOUT-CRASH one**, not "the population is empty". This materially de-risks **A5**, whose whole premise was that empty population. **OBSERVED** (run-7 skeptics, two independently, 2026-08-18) |
 | **C-8** | — | Two row censuses disagree by 16: 138,708 comp-8 rows (Route E) vs 138,692 (Route C skeptic), against 38,621+12 vs 38,629 comp-0. The sums are 177,341 and 177,321 — `len(entries)` versus live rows. `archive.py:413-431` warns about exactly this and names the study it already corrupted. **Unresolved bookkeeping**, and it is load-bearing for the "661 rows" headline. |
+| **C-10** | §9.3g: *"the node bases are **bone lengths**"*, and §11.4's positive-control geometry — node 62 at world z −805.3, a "whole-creature extent of 805" — accumulated down the parent chain | **Both wrong, and the second reproduced the first rather than catching it.** `blk2C` bases are **ABSOLUTE MODEL-SPACE REST POSITIONS**, not parent-relative offsets. **ArenaNet's own mesh is the referee**: file 116703's bounding box is **72.6 units** across, the absolute reading seats all 86 joints **inside the skin** (joint→nearest-vertex median **1.40 u**, max 5.67), and the accumulated reading puts them **532 u away** (median). A forward-kinematics model taking the offset as `base[i] − base[parent[i]]` reproduces every stored rest position to **0.000000** with identity rotations — a check that can fail, and the accumulating model fails it. The *consequence* §9.3g drew is untouched (scaling bases still explodes the skeleton, and run 6 fired), but every distance in §11.4 is ~11× too large and the real numbers are **better**: head ×3 moves the cluster **1.98× the creature's entire extent**, not 0.67×. **OBSERVED (mine, 2026-08-18); the refutation came from a run-7 skeptic and I reproduced it against the mesh.** |
 
 ---
 
@@ -1382,11 +1383,13 @@ lever there is still the 29,802 B shell.
 
 ---
 
-## 11. Run 7 — designed, then taken apart. The walk is the readout, and it is WRITABLE
+## 11. Run 7 — designed, taken apart, rebuilt, and STAGED (§11.6). The walk is the readout, and it is WRITABLE
 
 A design pass proposed run 7; three skeptics on distinct lenses attacked it and **all three
-refuted it**. Nothing here has been staged or launched. The design's two headline claims are
-recorded with what survived, because both are real mechanisms wrapped in over-claims.
+refuted it**. That rebuild is §11.1–11.5. It was then superseded in turn by A8 and taken
+apart again by five more lenses and fourteen refutations: **§11.6 is the run that is staged,
+and it is the one to read.** §11.1–11.5 are kept because their reasoning stands — what
+expired is 11.5's transport assumption and 11.4's arithmetic (C-10).
 
 ### 11.1 The finding that decides the run, and nobody had it before today
 
@@ -1496,6 +1499,12 @@ mechanically supported today.**
 
 ### 11.4 The positive control survives, and it was audited rather than taken on trust
 
+> **ITS NUMBERS ARE WRONG — see C-10 and §11.6a.** The hierarchy and the node set
+> below are right and independently reproduced; every DISTANCE is ~11× too large,
+> because this section accumulated `blk2C` bases down the parent chain and they are
+> **absolute rest positions**. Corrected: the head cluster moves **1.98× the whole
+> creature's extent**, not 0.67×. The control is stronger than this section claims.
+
 Nodes 51–64 **are** the head cluster. The hierarchy was rebuilt from `blk2C`'s parent field
 (reading the self-link as "continue from the previous node", the only interpretation yielding
 a connected tree): spine 0→25, two symmetric limb clusters each with five 3-bone digits at
@@ -1505,7 +1514,7 @@ node 62 from z −805 to z −1343 against a whole-creature extent of 805. **Unm
 first still, orthogonal to a limb-flip readout, and independent of the picker, the key law
 and the file selection.**
 
-### 11.5 What to ship
+### 11.5 What to ship — SUPERSEDED 2026-08-19 by §11.6; kept because its reasoning stands and only its transport assumption expired
 
 **The stripped run, plus the two things the skeptics added.** Flip every rotation key by 180°
 in the writable links — **including 109464, which serves the universal walk in all six weapon
@@ -1519,6 +1528,180 @@ run to land in and coverage is **12 of 15 links**, exactly as run 5 recorded. Th
 matter for this readout, because the walk is served by 109464. **Decimation stays on the
 shelf as a proven capability for the day something needs 15 of 15** — §11.3's numbers are
 sound and its in-place form is safer than the relocation the design proposed.
+
+---
+
+### 11.6 Run 7 IS STAGED — 2026-08-19. A8 rewrote the design, and the skeletal geometry this arc has been using is wrong
+
+`vault/research/archivewrite/a4stage7.py`. **Not deployed, not launched.** Five
+adjudication lenses and fourteen refutations; two `kills-the-run` findings, one
+of which stands and one of which the corrected geometry retires.
+
+**§11.5's design is superseded, and it is A8 that superseded it.** 11.5 assumed
+writes go in as compression 0, which is what runs 4–6 did through `datmove`;
+under that assumption 15018 and 87333 are unreachable, coverage is 12 of 15
+links, and several rows relocate. Re-measured with the flip applied and costed
+through `gwenc`, **fourteen of fifteen links fit their OWN existing reservation
+compressed — including both files 11.5 called unreachable** (15018 at +16,544 B
+of slack, 87333 at +15,020). So the run **relocates nothing, grows nothing, and
+consumes no free run**: exactly 15 rows change in place. Strictly less
+disturbance than 11.5's design and strictly more coverage. **222949 is the one
+exclusion — 12 B over at every quality dial 0..9 with `optimal` both ways.**
+Coverage is **234 of 242 sequence records (96.7%)**; of the 8 missed, 6 are
+222949's and **2 carry selector 0, meaning "this file"** — served by the shell's
+own `blk2C`, no link involved.
+
+#### 11.6a The correction that reaches backwards — C-10
+
+**`blk2C` bases are ABSOLUTE MODEL-SPACE REST POSITIONS.** §9.3g called them
+bone lengths; §11.4 accumulated them down the parent chain; this arc's first
+draft of the staging script reproduced the error rather than catching it. **The
+referee is ArenaNet's own mesh** (file 116703, bbox **72.6 u**): the absolute
+reading seats all 86 joints inside the skin at median **1.40 u** from a real
+vertex, the accumulated reading puts them **532 u** away. An FK model taking the
+offset as `base[i] − base[parent[i]]` reproduces every stored rest position to
+**0.000000** under identity rotations. Full entry: **C-10**.
+
+The consequence §9.3g drew survives untouched — scaling bases still explodes the
+skeleton, and run 6 fired. What changes is every distance, and **in the
+favourable direction.**
+
+| instrument | under the corrected geometry |
+|---|---|
+| head cluster ×3, at rest | head nodes move mean **135.8** / max **143.6** = **1.98× the creature's entire extent**; all 72 other nodes move **exactly 0.0000** |
+| the flip, over link 109464's own 200 key times | mean joint displacement **83–88**, max **113** = **1.55× extent** |
+| both instruments on | the head scale still moves head nodes **up to 151.7 (2.09× extent)** and non-head nodes **exactly 0.0** |
+
+**That last row retires the sharper of the two `kills-the-run` findings.** A
+lens charged that the flip destroys the positive control — "the creature
+collapses from 805 units to 75, the control's spike reverses" — and proposed
+restricting the treatment to an arms-only subtree. Every number in that charge
+was computed on the accumulated geometry. Measured correctly, **the two
+instruments are additive and disjoint**, so the dose does not change. Two
+skeptics reached the same place independently, one of them by refuting the
+geometry outright.
+
+They also **fail looking different**, which is what makes both readable: the
+head scale changes bone lengths (run 6's "splayed shards"), the flip preserves
+every bone length to **0.0000** and only rotates — and it is not a
+re-orientation, since the best-fit rigid residual between the retail pose and
+the flipped pose is a fifth of the creature against **0.000000** for an actual
+whole-body rotation.
+
+#### 11.6b The control's premise is now measured, not trusted
+
+"Normal head = pipeline broken" needs geometry to actually follow nodes 51–64,
+and **nothing in this repo had ever checked it** — a lens flagged it as the one
+verdict resting on an unmeasured assumption, and this arc has lost runs to a
+control taken on trust. Nearest-joint assignment over ArenaNet's own **1,463**
+mesh vertices: **308 (21.1%) are nearest a node in 51..64**, **all fourteen**
+own at least one vertex, two whole submodels are head-dominated (**270 verts at
+77.8%**, 39 at 89.7%), and the head-assigned vertices occupy **z ∈ [−72.6,
+−57.3]** — the top fifth of the creature, 10 u wide and centred.
+**RECONSTRUCTION**, labelled: this tree does not decode skin weights, so
+nearest-joint is a proxy. It is a strong one.
+
+#### 11.6c The edit is settled against the client, not against our own model
+
+- **slot[3] IS the scalar**, read out of `0x00783F10` — the function composing
+  quaternion + position into the 3×4 handed to Gr at `0x00671FF0`. `q[3]`
+  (`[eax+0xc]`) appears six times and every one is a cross term
+  `2(qa·qb ± qc·q3)`, never a bare `1−2(·²+·²)` diagonal; the scalar is by
+  definition the component that never appears in a diagonal square. This
+  **CORROBORATES** the statistical read (slot 3 carries mean |v| 0.92–0.97
+  against 0.05–0.19) rather than merely agreeing with it.
+- The multiplier is exactly `M → M · Rot180X` **in the client's own
+  arithmetic** — 3.3e−07 over 30,000 real keys, with **five rival compositions
+  all off by 2.0**. The check selects one of six rather than confirming itself.
+- **The no-op count is 0 of 249,050 keys, and it is an identity.**
+  `|Rq − q|² = |Rq + q|² = 2` for every unit q, so every flipped key sits at
+  exactly √2 from both `+q` and `−q`. `q ≡ −q` would have been **invisible**;
+  it is unreachable, not merely rare.
+- The client's shortest-path nlerp is **provably untouched** — 0 branch changes,
+  0 gate changes in 1,240,480 samples, residual exactly 0.0, because a constant
+  left-multiplication is an isometry and the flip is a signed permutation
+  (bit-exact in f32). Side result: **retail already ships 0.12% of blends
+  outside the `[0.9,1.1]` renormalize gate**, and the flip leaves that count
+  unchanged at 1,527.
+- **+X is near-optimal and +Z would have been a near-miss.** The hatcher's bones
+  run **95.5% along Z** and the extra rotation lands in the child frame, so 180°
+  about X reverses a z-aligned bone: 198.8 u (X) / 202.1 (Y) / **29.3 (Z)**.
+  Nobody wrote that down; do not let it be "simplified" to +Z.
+- **No retail invariant is broken.** Rules 1/3/4/7 are untouched *by
+  construction* — the edit changes zero bytes in the n18 sequence-record span
+  and the n3C key-table span in 16 of 16 files — so re-scoring them is not a
+  check and the byte-confinement is. The one invariant a rotation edit could
+  genuinely break, **per-channel hemisphere continuity (adjacent-key dot ≥ 0,
+  100.000000% in retail)**, is preserved exactly for the same isometry reason.
+  Two conventions the flip *does* disturb are not invariants: retail ships
+  1.996% negative-`w` keys, and 3.3% of channels start more than 1° from
+  identity with a measured maximum of **179.43°** — the flip's own magnitude.
+
+#### 11.6d The shell goes in compressed, in place — argued, not defaulted
+
+The alternative was run 6's proven transport (stored, relocated), which would
+make the control fail **independently** of the links. It was rejected: it leaves
+the fourteen compression-8 link writes with **no witness**, so the run's most
+likely informative outcome — giant head, unchanged limbs — could not be told
+apart from "the link writes never landed". And the failure it protects against
+is not reachable: all sixteen payloads encode to literal `symbol_count` 270–285
+and distance `symbol_count` 23–30 with **zero tables under 2**, strictly inside
+retail's attested envelope, so **§13.5's gap A is not entered by any row here**.
+A shell that failed to decode would not render a normal hatcher anyway — white
+box, error 12 at `0x0079644E`, or an AV on the unchecked `links[sel-1]` deref.
+
+#### 11.6e The decision table, replaced — the old one sent a positive result to ABORT
+
+| observation | verdict |
+|---|---|
+| head grows + limbs contorted | **ANSWERED.** Linked content reaches the screen. |
+| head grows + limbs normal | **NEGATIVE — but only after ≥3 logged `walks to` cycles.** Two records are selector 0 and served by the shell, one a **2.000 s whole-body cycle over 46 of 86 nodes** — the shape of a standing idle. A hatcher watched while stationary shows this cell with the run working perfectly. **Never score a negative from a still.** |
+| head NORMAL + limbs contorted | **ANSWERED, control invalid. DO NOT ABORT.** The treatment fired; only the control failed. §11.5's table sent this to abort and discarded a positive. |
+| head normal + limbs normal | pipeline broken. ABORT — **but run `datcheck --generations` and `--diff` first**: a generation adoption reverts all fifteen rows at once and is the only mechanism producing a clean null on both arms. |
+| creature missing / white box | the shell load path failed — the cell that isolates a shell-write problem. |
+| assert or access violation | a **RESULT**. Compression layer → fix already costed; `n2C == 0` or a chunk gate → indicts our `skelwrite`; AV with no assert → a link that failed to load. |
+
+#### 11.6f The flag that would have silently voided the run
+
+    python toolkit/harness/session.py --enemy --hold 420 --shots 5 \
+        --walk "zoom:-12 pitch:300 alt:3 shot:1 wait:4"
+
+**`--practice-target` is FORBIDDEN here.** It sets `ENEMY_ATTACKS_BACK` False
+and the chase loop `continue`s on `not attacks_back` **before a single
+MOVE_TO_POINT goes out**, so the creature never walks. Project memory points at
+that flag because it is what makes the *player* kill something — a different
+goal with the opposite requirement. `--explorable` is unnecessary; nothing in
+the chase or attack path reads it. The >120 u re-chase (`ENEMY_DEST_RESEND`) is
+one constant with one call site and the server **prints a timestamped line every
+time it fires** — that line, not the operator's memory, is what licenses any
+claim about what the creature looked like while walking.
+
+**Coverage is better than 11.1 thought**: the corpus's two most universal
+animations are rank-1 key 2,307,259,448 (36/36 shells, selector 1 = **15018**)
+and rank-2 key 3,259,067,528 (36/36, selector 10 = **109464**) — and A8 makes
+**both** writable, so both are flipped. The readout no longer hinges on catching
+one cycle.
+
+#### 11.6g What sabotage found, and it is the fifth rung running
+
+Five guards were broken on purpose. Four refused correctly — identity multiplier,
+222949's 12-byte overflow, a non-retail source archive, and a below-threshold
+head scale. **The fifth passed green: with `HEAD_SCALE = 1.0` the positive
+control is a complete no-op and every gate in the script stayed green.** Fixed
+with a displacement floor denominated in the creature's own extent (smallest
+head-node displacement ≥ 0.5 × span), which now refuses ×1.0 *and* ×1.4. This is
+the fifth consecutive rung where a check claimed more than the artifact
+delivered, and sabotage is still the only technique that catches it.
+
+Two guards the write path needed and did not have, both now in the script:
+**`Writer.replace` has NO identity gate** — writing file A's payload into file
+B's row is accepted and every rule this project owns stays green (reproduced end
+to end on a synthetic fixture); `restore()` has `check_identity()`, `replace()`
+has nothing. And **`flip(flip(q))` is bit-exactly `−q`, the same rotation**, so
+staging from an already-deployed archive would restore retail limbs while taking
+the head to ×9 — landing precisely on the NEGATIVE cell, produced by a bug.
+Every payload is read from `Gw.dat.retail` and the source is fingerprinted
+against retail's own stored sizes for all sixteen rows before a byte is flipped.
 
 ---
 

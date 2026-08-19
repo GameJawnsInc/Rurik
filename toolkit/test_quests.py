@@ -10,8 +10,11 @@ ARTIFACT can refute -- a fabricated id, a description that will not fit the
 client's field, a framing constant that drifted from the captures it was read
 out of.
 
-NO VAULT, NO CLIENT, NO SOCKET. Everything here is the content store and pure
-arithmetic, so it cannot skip and its floor is its whole count.
+NO VAULT, NO CLIENT, NO SOCKET -- for sections 0 to 18. Everything there is the
+content store and pure arithmetic, so it cannot skip, and that is what lets the
+floor be a whole count rather than a guess. Sections 19 and 20 came later and DO
+read the client image, so they skip without it; the floor is 0-18's count, not
+this file's. See the MEASURED note on the ledger below for the two numbers.
 
 THE ONE THING IT DELIBERATELY DOES NOT ASSERT is which framing is CORRECT.
 `bare` and `template` are two spellings of the same sentence and only a client
@@ -570,7 +573,14 @@ def main():
         # consecutive valid records" the CLI prints, reached by calling the
         # module rather than by parsing its output.
         n = areatable.extent(pe.data, base_off)
-    except Exception as exc:                                    # noqa: BLE001
+    # SystemExit EXPLICITLY, and it is the whole reason this section could not
+    # skip. `pinned.find()` -- reached through `srctree.default_exe()` -- reports
+    # a missing build by raising SystemExit, which is a BaseException and sails
+    # straight through `except Exception`. MEASURED 2026-08-18: with no vault this
+    # section did not declare a skip, it killed the run at section 19 of 20, so
+    # the floor of 73 was unreachable even once the import was fixed. A skip that
+    # cannot be reached is the same defect as no skip at all.
+    except (Exception, SystemExit) as exc:                      # noqa: BLE001
         LEDGER.skip("the no-marker sentinel against areatable",
                     f"{type(exc).__name__}: {exc}")
     else:
@@ -615,7 +625,7 @@ def main():
             path = os.path.join(vaultpath.vault_root(), "client", b.stamp, "Gw.exe")
             if os.path.exists(path):
                 imgs.append((b.number, framebus.Image(path)))
-    except Exception as exc:                                    # noqa: BLE001
+    except (Exception, SystemExit) as exc:                      # noqa: BLE001
         imgs = []
         LEDGER.skip("the cross-build site check", f"{type(exc).__name__}: {exc}")
     # THE SPLIT IS THE FINDING, and the first draft of this section did not have

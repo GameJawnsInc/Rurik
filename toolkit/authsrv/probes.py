@@ -609,10 +609,33 @@ _STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
 
 
+# Prices for the stock arm. OUR OWN numbers, deliberately not retail's table --
+# nothing here needs to match a real shop, and three DISTINCT round values make
+# the readout unambiguous: each row's price identifies which row it came from.
+# content/items.toml carries value = 0 on every row (correct for starter gear,
+# and what put "0" in every price column of the 20260818T211036 panel), so the
+# price is overridden here rather than written into the content rows.
+_STOCK_PRICES = {"warrior_legs": 25, "warrior_boots": 50, "warrior_gloves": 100}
+
+
 def _stock_item(key):
-    """A content item re-declared as merchant stock: bit 2 cleared, bit 0 set."""
+    """A content item re-declared as merchant stock: a real per-item price.
+
+    THE FLAGS OVERRIDE IS OFF, and the reason is measured rather than argued.
+    `_STOCK_FLAGS` clears F8 bit 2 to match retail, and bit 2 is SOURCED to gate
+    the client's item-detail fetch. Run `20260818T233955` shows what that costs
+    us: with bit 2 cleared the client DOES request detail, this server never
+    answers, and all three rows render as **hourglass placeholders that never
+    resolve** -- still hourglasses 35 s after the shop opened. With the content
+    row's own flags (bit 2 SET, "detail already present") the same three items
+    render their real armour icons (`20260818T211036`). So retail's bit pattern
+    is only correct for a server that implements the detail response, and ours
+    does not. The override also did NOT fix the `0x00C3` crash, which was its
+    whole reason for existing -- so it buys nothing and costs the icons.
+    Kept as a named constant so the next arm can switch it on deliberately.
+    """
     row = dict(item_template(key))
-    row["flags"] = _STOCK_FLAGS
+    row["value"] = _STOCK_PRICES[key]
     return row
 
 
@@ -690,21 +713,34 @@ def _merchant_window_steps(agent_id, origin):
              "(0x00C4's handler computes the angle between the two agents and "
              "applies it). If it turns, the owner register was written even if "
              "no window ever draws."),
+        Step(2.0, 0x0141, [1, 500],
+             "0x0141 UPDATE_GOLD_STORAGE [1, 500] -- FUND THE CHARACTER",
+             "the login burst sends [1, 0], and with 0 funds the shop's Buy "
+             "button renders GREYED and a click on it produces NOTHING on the "
+             "wire (measured 20260818T235130: click delivered, the only c2s "
+             "traffic after it was the 5 s keep-alive 0x8009, byte-identical "
+             "at both timestamps). So the client gates purchase on funds "
+             "LOCALLY. 500 covers the 50/100/200 quotes; watch 'Your Funds'."),
         Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
                                      _stock_item("warrior_legs")),
-             "0x0161: declare stock item 40 (leggings), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 40 (leggings), flags 0x20001003, price 25", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
                                      _stock_item("warrior_boots")),
-             "0x0161: declare stock item 41 (boots), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 41 (boots), flags 0x20001003, price 50", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
                                      _stock_item("warrior_gloves")),
-             "0x0161: declare stock item 42 (gloves), flags 0x20001003", "nothing."),
+             "0x0161: declare stock item 42 (gloves), flags 0x20001003, price 100", "nothing."),
         Step(3.0, 0x0084, [ids],
              "0x0084: stage the three stock ids into accumIntList[0]",
              "nothing -- the appender is QUIET, measured twice."),
         Step(3.0, 0x00CA, [1, 0x3F800000],
-             "0x00CA [1, 1.0f] -- retail's next message in s1",
-             "unknown; upstream does not name it. Watch for anything at all."),
+             "0x00CA [1, 1.0f] -- THE SHOP OPENER, now with priced stock",
+             "the shop opens (measured twice, 56,928 / 56,909 px). THE TEST IS "
+             "THE PRICE COLUMN: 25 / 50 / 100 read back verbatim means F9 is "
+             "the price as sent and this field's 1.0f does not scale it. Any "
+             "other numbers -- doubled, halved, rounded -- means 0x00CA field 2 "
+             "IS a multiplier, which no run has been able to see while every "
+             "price was 0. 'Your funds' should stay 0; we grant no gold."),
         Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
              f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD: three runs, three deaths",
              "THE TEST. Both prior runs died on this message; both declared "
@@ -744,6 +780,183 @@ def _merchant_window_steps(agent_id, origin):
              "the run's final state. Note whether the character is still facing "
              "the NPC.", sends=False),
     ]
+
+
+def _gold_purse_steps(agent_id, origin):
+    """Which purse does the shop's `Your Funds` read, and what does `0x0141`
+    field 1 select?
+
+    THE ERROR THIS EXISTS TO FIX. `20260818T235758` sent `0x0141 [1, 500]` to
+    fund a purchase, `Your Funds` stayed **0**, Buy stayed greyed, and the run
+    re-measured the unfunded case. The `1` was copied from the login burst's own
+    `send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0])` without anyone testing what it
+    selects -- and the opcode is named `UPDATE_GOLD_**STORAGE**`, while Guild
+    Wars separates carried gold from Xunlai storage. So `[1, N]` is measured NOT
+    to feed the merchant's purse, and this varies the selector.
+
+    THE ARMS. Distinct amounts, so the number on screen names the arm that
+    produced it -- no arm can be credited with another's effect:
+
+        A  field1 = 0   amount 111
+        B  field1 = 2   amount 222
+        C  field1 = 1   amount 333   <- the control: the value already REFUTED
+                                        at 500, re-sent at a different amount
+                                        so "wrong selector" and "wrong amount"
+                                        cannot be confused
+
+    Each arm re-opens the shop (`0x00C4` -> `0x0084` -> `0x00CA`), because the
+    funds line is drawn when the panel is built and nothing here knows whether
+    it re-renders in place. Re-arming is proven to work (`20260818T234622`,
+    three arms, three windows).
+
+    READING IT. `Your Funds` showing 111 / 222 / 333 identifies the selector
+    outright. **All three staying 0 is the informative negative**: it would mean
+    `0x0141` does not drive this display at all and the merchant's purse is fed
+    by something else -- and there is already a suspect, since the login burst
+    also sends `CHARACTER_UPDATE_INFO ["", 0, 0, 1000, 0, 0, 0]`, whose `1000`
+    nobody has ever explained. That would be the next arm, not this one.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+             "0x0161: leggings, value 25 (quotes at 50)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+             "0x0161: boots, value 50 (quotes at 100)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+             "0x0161: gauntlets, value 100 (quotes at 200)", "nothing."),
+    ]
+    # field1 = 0 IS A CLIENT-KILLER: `Assertion: inventory`,
+    # ItCliApi.cpp(1969), same-second attribution, run 20260819T002038. It took
+    # arms B and C down with it (the probe sends on a timer, so the rest of that
+    # run went into a dead client). Field 1 names a CONTAINER that must exist,
+    # so 0 is refused by the client, not merely ignored. Arms start at 2.
+    for tag, f1, amount in (("A", 2, 222), ("B", 3, 333), ("C", 1, 444)):
+        note = (" -- the CONTROL: this selector is already refuted at 500, so a "
+                "change here would mean the amount mattered, not the selector"
+                if f1 == 1 else "")
+        steps += [
+            Step(8.0, 0x0141, [f1, amount],
+                 f"ARM {tag}: 0x0141 [field1={f1}, {amount}]{note}",
+                 "nothing yet -- the shop below is what renders the number."),
+            Step(2.0, 0x00C4, [a],
+                 f"ARM {tag}: re-arm the window owner",
+                 "the character turns to face the NPC."),
+            Step(1.0, 0x0084, [ids], f"ARM {tag}: restage the ids", "nothing."),
+            Step(2.0, 0x00CA, [1, 0x3F800000],
+                 f"ARM {tag}: open the shop and READ 'Your Funds'",
+                 f"THE READOUT, one line only: `Your Funds: {amount}` means "
+                 f"field 1 = {f1} is the merchant's purse. Still 0 means this "
+                 f"selector is not it. Prices stay 50/100/200 either way -- if "
+                 f"THOSE move, something is wrong with the run, not the purse."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so arm C has coverage after it",
+             "if all three read 0, 0x0141 does not feed this display and the "
+             "next suspect is CHARACTER_UPDATE_INFO's unexplained 1000.",
+             sends=False))
+    return steps
+
+
+def _shop_price_scale_steps(agent_id, origin):
+    """Is `0x00CA`'s second field a PRICE MULTIPLIER, or is the 2x a fixed
+    client markup? The one question the priced-stock run could not answer.
+
+    WHAT IS ALREADY MEASURED (`20260818T233955`): with `F9` = 25 / 50 / 100 the
+    shop quoted **50 / 100 / 200** -- exactly 2x, on three distinct values. The
+    second field carried `0x3F800000` (1.0f) in that run because retail sends
+    1.0f, so a multiplier of 1.0 and a fixed 2x markup predict the SAME numbers
+    and nothing separates them. This varies the field and only the field.
+
+    THE ARMS, and their predictions, on record before the run:
+
+        A  1.0f  0x3F800000   control, must reproduce 50 / 100 / 200
+        B  2.0f  0x40000000   multiplier -> 100 / 200 / 400
+        C  0.5f  0x3F000000   multiplier -> 25 / 50 / 100  (== what we SENT)
+
+    Arm C is the sharp one: if the field scales, C's prices collapse onto the
+    raw `F9` values, which is a shape change no rounding can fake. If all three
+    arms read 50 / 100 / 200, the field is INERT for price and the 2x belongs to
+    the client's own merchant markup -- also a real answer.
+
+    WHY EACH ARM RE-SENDS `0x00C4` AND `0x0084`: `0x00CA` is one of the eight
+    readers that CONSUME the window-owner register and then write
+    `[0x010876CC] = 0` (this document's `0x00C4` section). A second `0x00CA`
+    with the register cleared is a different experiment from the first, so each
+    arm re-arms the owner and restages the id list. If arms B and C draw
+    nothing at all, THAT is the finding -- the register is single-shot and the
+    price question needs a fresh window per value.
+
+    Items are declared ONCE, with the content rows' own flags (bit 2 set): the
+    `_STOCK_FLAGS` override is off because clearing bit 2 makes every row an
+    hourglass placeholder this server never resolves (same run, above).
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+             "0x0161: leggings, value 25", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+             "0x0161: boots, value 50", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+             "0x0161: gauntlets, value 100", "nothing."),
+    ]
+    arms = [("A", 0x3F800000, "1.0f", "50 / 100 / 200 -- the CONTROL; if this "
+             "arm does not reproduce the measured prices, stop and read no "
+             "other arm as a verdict"),
+            ("B", 0x40000000, "2.0f", "100 / 200 / 400 if the field is a "
+             "multiplier; 50 / 100 / 200 if it is inert"),
+            ("C", 0x3F000000, "0.5f", "25 / 50 / 100 if the field is a "
+             "multiplier -- prices collapsing onto the RAW values we sent is "
+             "the unmistakable shape; 50 / 100 / 200 if inert")]
+    for tag, bits, label, expect in arms:
+        steps += [
+            Step(8.0, 0x00C4, [a],
+                 f"ARM {tag}: re-arm 0x00C4 (the owner register is consumed by "
+                 f"each 0x00CA)",
+                 "the character turns to face the NPC -- the control that "
+                 "proves the register was written."),
+            Step(2.0, 0x0084, [ids],
+                 f"ARM {tag}: restage the three ids", "nothing."),
+            Step(2.0, 0x00CA, [1, bits],
+                 f"ARM {tag}: 0x00CA [1, {label}]  (0x{bits:08X})",
+                 f"THE READOUT: expect {expect}. Read the PRICE COLUMN, not "
+                 f"the item names."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so arm C has coverage after it",
+             "compare the three price columns. If B and C never drew a window, "
+             "say so -- that is the single-shot answer, not a null.",
+             sends=False))
+    return steps
 
 
 def _accum_drain_e1_steps(agent_id):
@@ -3839,25 +4052,58 @@ _ARENANET_OFFER_LINE = [0x2AE6, 0xF9CB, 0xE939, 0x5DD2, 0x010A,
 # npcdefs' own docstring cites it.
 GIVER_DEFINITION = 1480         # agent 99's, the one whose line we replay
 _GIVER_AGENT = 99
-# npc_template, NOT WORLD.rows(...) -- the raw row's `enc_name` is a LIST of
-# string ids and the codec wants an encoded str. Reaching for the row directly
-# gives `string of 26 code units exceeds cap 8`, which is the error
-# npc_template's own docstring exists to prevent. Hit it anyway on the first try.
-GIVER_NPC = npc_template("def_1480")
+_VAULT_NPC_CACHE = {}
+
+
+def _vault_npc(key):
+    """An NPC row that lives ONLY in `vault/content/npcs.toml`, read at CALL time.
+
+    NOT at import time, and that distinction is the entire function. `def_1480`
+    and `def_1473` are bulk-extracted live definitions, so they are vault rows by
+    the repo/vault split `toolkit/content.py` documents -- and binding one at
+    module level made EVERY importer of this file die on a machine with no vault.
+    MEASURED 2026-08-18, `RURIK_VAULT` pointed at a nonexistent directory: the
+    server's own `import authsrv` raised `no npc row 'def_1480'`, and so did
+    twelve tests, four of whose docstrings say "no vault, no socket, no client"
+    flatly. They did not fail their floors -- the exception escaped before
+    `checks.py` could report, so `test_quests.py` never reached check 1 of the 73
+    its floor claims a bare machine runs.
+
+    Call time is the RIGHT time, not merely a workaround: these rows are only ever
+    read to build Step sequences that drive a real client, and client builds live
+    in the vault too. A machine that cannot resolve the row could not have run the
+    probe anyway, which is also why the fix is not a repo-side copy of the row --
+    that would buy an import rather than a capability, and the vault row would
+    override it by key on every machine where the probe can actually run.
+
+    `toolkit/test_bareimport.py` is the guard, and it goes red on a new one.
+    """
+    # npc_template, NOT WORLD.rows(...) -- the raw row's `enc_name` is a LIST of
+    # string ids and the codec wants an encoded str. Reaching for the row directly
+    # gives `string of 26 code units exceeds cap 8`, which is the error
+    # npc_template's own docstring exists to prevent. Hit it anyway on the first try.
+    if key not in _VAULT_NPC_CACHE:
+        _VAULT_NPC_CACHE[key] = npc_template(key)
+    return _VAULT_NPC_CACHE[key]
+
+
+def giver_npc():
+    """The live giver's own type row. A CALL, not a constant -- see `_vault_npc`."""
+    return _vault_npc("def_1480")
 
 
 def _quest_giver_def_steps(origin):
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION} -- the live "
              f"giver's own type, from vault/content/npcs.toml",
              "nothing yet. This defines a TYPE, not a body -- and it is NOT "
              "optional: without it the create indexes past the end of the "
              "definition array and the client dies on Array.h:587."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION} -> model "
-             f"{GIVER_NPC['model_id']}",
+             f"{giver_npc()['model_id']}",
              "still nothing. One more message before a body can appear."),
         Step(4.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -3980,7 +4226,11 @@ _OBJECTIVE_AGENT = 98
 # is another live NPC from the same capture, with its own model id and its own
 # profession. An ambiguous frame is an unreadable result.
 _OBJECTIVE_DEFINITION = 1473
-_OBJECTIVE_NPC = npc_template('def_1473')
+
+
+def _objective_npc():
+    """The gate guard's own type row. A CALL, not a constant -- see `_vault_npc`."""
+    return _vault_npc("def_1473")
 
 
 def _quest_objective_steps(origin):
@@ -3996,9 +4246,9 @@ def _quest_objective_steps(origin):
     """
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(2.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4007,11 +4257,11 @@ def _quest_objective_steps(origin):
              f"WORLD_CREATE_AGENT({_GIVER_AGENT}) -- THE GIVER",
              "a body ahead and to one side."),
         Step(1.0, 0x0056,
-             npc_properties(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+             npc_properties(_OBJECTIVE_DEFINITION, _objective_npc()),
              f"NPC_UPDATE_PROPERTIES def {_OBJECTIVE_DEFINITION} -- the "
              f"GUARD's OWN type, so the two are told apart on sight",
              "nothing yet."),
-        Step(0.5, 0x0057, npc_model(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+        Step(0.5, 0x0057, npc_model(_OBJECTIVE_DEFINITION, _objective_npc()),
              f"NPC_UPDATE_MODEL def {_OBJECTIVE_DEFINITION}",
              "still nothing."),
         Step(1.0, 0x0020,
@@ -4055,9 +4305,9 @@ def _dialog_icons_steps(origin):
              (questdefs.SERVICE_SHOW, 18), (questdefs.SERVICE_ADVANCE, 21),
              (questdefs.SERVICE_IN_PROGRESS, 22), (questdefs.SERVICE_TURN_IN, 23)]
     steps = [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4099,9 +4349,9 @@ def _quest_marker_sweep_steps(origin):
     ox, oy, plane = origin
     hold = 5.0
     steps = [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4148,10 +4398,10 @@ def _quest_marker_states_steps(origin):
     ox, oy, plane = origin
     hold = 7.0
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
              "nothing yet, and mandatory before the create."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4201,10 +4451,10 @@ def _quest_marker_states_steps(origin):
 def _quest_giver_mark_steps(origin):
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
              "nothing yet -- and mandatory before the create, or Array.h:587."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}",
              "still nothing."),
         Step(3.0, 0x0020,
@@ -4276,9 +4526,9 @@ def _quest_turnin_steps(origin):
     """
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4300,9 +4550,9 @@ def _quest_option_steps(origin):
     row = questdefs.load()[1463]
     tag = questdefs.encode_service_select(1463, questdefs.SERVICE_ACCEPT)
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -5957,6 +6207,45 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "gold_purse": lambda a, o: Probe(
+        question="Which purse does the shop's 'Your Funds' read, and what does "
+                 "0x0141 field 1 select?",
+        predicts="Three arms with DISTINCT amounts so the number names its own "
+                 "arm: field1=0 -> 111, field1=2 -> 222, field1=1 -> 333 (the "
+                 "control, already refuted at 500). Whichever amount appears "
+                 "identifies the selector. All three staying 0 is the "
+                 "informative negative -- 0x0141 would not drive this display "
+                 "at all, and the next suspect is CHARACTER_UPDATE_INFO's "
+                 "unexplained 1000 in the login burst.",
+        steps=_gold_purse_steps(a, o),
+        note="Fixes a measured mistake rather than opening new ground: "
+             "20260818T235758 sent 0x0141 [1, 500], Your Funds stayed 0, Buy "
+             "stayed greyed, and the run re-measured the unfunded case. The 1 "
+             "was copied from the login burst without testing what it selects, "
+             "and the opcode is UPDATE_GOLD_STORAGE while GW separates carried "
+             "gold from Xunlai storage. Each arm re-opens the shop because the "
+             "funds line is drawn when the panel is built; re-arming is proven "
+             "(20260818T234622). Buy is NOT clicked here -- one question.",
+    ),
+    "shop_price_scale": lambda a, o: Probe(
+        question="Is 0x00CA's second field a price multiplier, or is the "
+                 "measured 2x a fixed client markup?",
+        predicts="Three arms at 1.0f / 2.0f / 0.5f against items valued "
+                 "25/50/100. If the field scales price: 50/100/200, then "
+                 "100/200/400, then 25/50/100 -- arm C collapsing onto the raw "
+                 "values is a shape change no rounding can fake. If all three "
+                 "read 50/100/200 the field is inert for price and the 2x is "
+                 "the client's own merchant markup. Arm A is the control and "
+                 "must reproduce 20260818T233955's numbers.",
+        steps=_shop_price_scale_steps(a, o),
+        note="Each arm re-sends 0x00C4 and 0x0084 because 0x00CA CONSUMES the "
+             "window-owner register and writes [0x010876CC]=0 -- a second "
+             "0x00CA on a cleared register is a different experiment. If arms "
+             "B and C draw nothing, the register is single-shot per window and "
+             "the price question needs one window per value; that is a result, "
+             "not a null. Items use the content rows' own flags: clearing F8 "
+             "bit 2 makes every row an hourglass this server never resolves.",
     ),
     "merchant_window": lambda a, o: Probe(
         question="Can we author a merchant/collector window on an NPC we "

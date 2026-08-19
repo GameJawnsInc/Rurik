@@ -60,7 +60,22 @@ Every one of these, in the order they were written:
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
   in the gamesrv log appears on a clean teardown too. The dialog is faked in the
-  test so the extraction is checked without crashing a client. Also `hold_key`,
+  test so the extraction is checked without crashing a client. **And since
+  2026-08-18 it checks that capturing the dialog RETRACTS THE VERDICT**, which is a
+  different thing and was not true: `hold_open` has returned `"exited"` for a client
+  that died during the hold since `276080a`, and the comment at that `return` says
+  *"a corpse afterwards unmakes it"* — but the only call site was a **bare expression
+  statement**, `ok` was never reassigned after it, and such a run still printed
+  `RUN VERDICT: PASS` and exited 0. `customarea/FINDINGS.md` §31.4 recorded the
+  defect as fixed on the strength of that `return`; the statement shipped and the
+  wiring did not. The rule now lives in `session.verdict_after_hold(ok, held)` with a
+  three-row truth table here (a corpse retracts a pass, a hold that merely ran out
+  does not, and it never PROMOTES a failed run), **plus a structural check that
+  `run_client` actually consumes `hold_open`'s return** — because a correct helper
+  nobody invokes is precisely the bug being fixed and looks identical from the
+  outside. That structural check is the one that was red when the defect was found,
+  and its own control parses the pre-fix shape verbatim and requires the detector to
+  call it broken. Also `hold_key`,
   the held movement key `--walk` drives, against a fake `user32`: that every
   event carries a NON-ZERO scan code, that the key is released on every exit
   path including an exception mid-hold, that losing the foreground cuts the leg
@@ -1941,8 +1956,15 @@ Every one of these, in the order they were written:
   map it is rebuilding and NAMES any substitution -- and the sabotage that trusts the
   donor still round-trips row 46196 while breaking row 26209, which is the shape of a
   bug that ships. `gates()` reproduces the loader's open-time rules and its control is
-  that ArenaNet's own row 46196 passes all 17 before anything we built is judged; five
-  rules are then broken on purpose and must go red ALONE. Section 2 also refuses
+  that ArenaNet's own row 46196 passes all **18** before anything we built is judged;
+  five rules are then broken on purpose and must go red ALONE. **18, not the 17 this
+  entry said until 2026-08-18** — the 18th came out of FINDINGS 30 (*every REACHABLE
+  plane above 0 names a prop that exists*), the rule added after a bad `plane_map`
+  crashed a client twice, and it is what the authored portal's arms are scored against
+  in customarea §31. The completeness check was `len(result) >= 17` while the set was
+  already 18, so **that gate could have been deleted with the check still green**; it
+  now pins `GATE_COUNT` exactly and goes red on either direction, verified by
+  mis-stating it. Section 2 also refuses
   `--out` into EVERY checkout of this repo rather than the one the file sits in: a
   git worktree's repo root is not the main checkout's, and until `working_tree_roots`
   existed a build written to `<main>/toolkit/` was allowed straight into version
@@ -3023,7 +3045,19 @@ Every one of these, in the order they were written:
   pattern, each with a positive control that the real one still resolves
   afterwards. §3 drives `measured_nothing()` with a doctored table set and pairs
   it with real builds, because a predicate answering True to everything would
-  pass the vacuity check alone. Needs the vault throughout. Floor 37, ~35 s),
+  pass the vacuity check alone. §4 pins the WIDE-STRING CAPACITY, a twice-
+  documented display defect (`Field.__repr__` prints `self.cap` and the `wstring`
+  branch passed no `cap=`, so all 141 wide strings read `string16(0)`) that was
+  fixed in `c81d6d1` and then sat four days with two study docs still calling it
+  open — a fix nothing pins reads exactly like a fix nobody made. It asserts the
+  capacity histogram over all 141 fields on each vaulted build, identical across
+  the three (§2's claim from another direction), and two opcodes whose capacity
+  has an INDEPENDENT witness: `0x01BF`'s `string16(20)` in 50 B corroborating
+  GWCA, `0x0074`'s `string16(32)` in the 127 B that refuted the upstream 4-field
+  reading — the wire total being the half a wrong capacity cannot fake. Its
+  negative control builds a `Field` the old way and asserts it STILL prints
+  `string16(0)`, so dropping `cap=` again reddens 14 checks; verified by doing
+  exactly that. Needs the vault throughout. Floor 73, ~75 s),
   `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
   the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
   used to answer with `os.path.isfile` and return, so `identify()`, the only
@@ -3573,21 +3607,54 @@ Every one of these, in the order they were written:
   do not fit `template` -- an error that would only ever show up on screen.
   **What it deliberately does NOT assert is which framing is correct**: only a
   client can say, and asserting one here would be two of our own components
-  agreeing and calling it evidence. No vault, no client, no socket, so nothing
-  can skip. §7 pins the two field widths APART -- `0x0080`'s dialog line is
+  agreeing and calling it evidence. **§§0-18 need no vault, no client and no
+  socket** — the content store and pure arithmetic — which is why the floor can
+  be their whole count rather than a guess; §19 and §20 came later and read the
+  client image, so "nothing here can skip", true when written and stated flatly
+  in this entry until 2026-08-18, is now only true of the part the floor covers.
+  §7 pins the two field widths APART -- `0x0080`'s dialog line is
   `string16(122)` and `0x004C`'s description is `string16(128)`, six units
   distant, and the check that earns its place is the one asserting a line which
   FITS the description field is REFUSED for the dialog one; a single shared
   constant would pass everything else and put that error where only a screen
-  could find it. **Floor 73 against a healthy 74** (§19 re-derives 888 from the
-  client image and skips without the vault). It was **17 against a run of 22**
-  when written, with a careful on-paper derivation — 13 row-independent checks
-  plus 4 per row — and the file then grew to 74 against the same one-row table
-  while the floor stayed at 17, so a healthy run did four times its own
-  minimum and three whole sections could have vanished unnoticed. That is the
-  failure `checks.py` exists to refuse, arriving by growth rather than by a bad
-  guess, and the lesson is that a DERIVED floor goes stale silently where a
-  measured one goes stale loudly. Recomputed 2026-08-17 from a real green run.
+  could find it. **Floor 73 against a healthy 77 with the vault present, 73
+  without** — §19 re-derives 888 from the client image and §20 re-checks the
+  twelve cited sites across builds, so those two sections carry four checks
+  between them and declare skips on a machine with no vault (§20 also skips
+  on fewer than two vaulted builds at or after the pin). 73 is what remains
+  when all four stand down, which is where the floor sits and why adding a
+  vault-gated section never has to move it. **AND 73 IS NOW A MEASURED NUMBER
+  RATHER THAN AN ARITHMETIC ONE, which it was not until 2026-08-18**: it was
+  77 minus the four vault-gated checks, sound as subtraction and impossible to
+  observe, because TWO separate defects stopped a bare run before the verdict.
+  `import authsrv` (line 34, added by `5ab72e4` — the same commit that wrote
+  this floor) reached `probes.py`'s module-level `npc_template("def_1480")`, a
+  vault-only row, so the run died at IMPORT and never reached check 1 of the 73;
+  see `toolkit/test_bareimport.py`, which now guards exactly that. With the
+  import fixed §19 still killed the run, because `pinned.find()` reports a
+  missing build by raising **SystemExit**, a BaseException that sails through
+  `except Exception` — so the skip that this paragraph credits it with was
+  unreachable, and a skip that cannot be reached is the same defect as no skip
+  at all. That is the identical failure `test_skelwrite.py`'s entry records at
+  the end of this file (`require_dir` raises SystemExit past `except
+  Exception`), hit twice in two files, which is what makes it a shape rather
+  than an accident. Both except clauses now name SystemExit, and a bare run
+  scores **73 with 3 declared skips, green** — measured, not derived.
+  **This entry said "a healthy 74"
+  until 2026-08-18**: 74 was the count before §20, which landed hours after
+  the recompute in `d0b97b9` — the same commit that wrote §20's paragraph
+  above and left the figure two sentences away from it untouched. It was
+  **17 against a run of 22** when written, with a careful on-paper
+  derivation — 13 row-independent checks plus 4 per row — and the file then
+  grew to 74 against the same one-row table while the floor stayed at 17, so
+  a healthy run did four times its own minimum and three whole sections could
+  have vanished unnoticed. That is the failure `checks.py` exists to refuse,
+  arriving by growth rather than by a bad guess, and the lesson was that a
+  DERIVED floor goes stale silently where a measured one goes stale loudly.
+  Recomputed 2026-08-17 from a real green run — and then the healthy count
+  beside it went stale silently anyway, because `checks.py` can only make the
+  number in the CODE go loud. Nothing reads this paragraph, so when a section
+  lands, the figure here is the one to re-measure by hand.
   §§17-19 are rung Q6: that the replay uses `0x0050` and never `0x0049` (whose
   body writes `charContext+0x528`, silently making the last quest pushed the
   active one), that `0x004C` precedes `0x0054` — **deliberately NOT ArenaNet's
@@ -4199,4 +4266,39 @@ Every one of these, in the order they were written:
   the exact unguarded-exception failure the models-arc review named, now
   guarded and commented. ~40 s default; nothing outside the vault is ever
   written -- the rebuilt archive and its journals live under
-  `vault/exports/unitwrite/`).
+  `vault/exports/unitwrite/`),
+  `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
+  vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
+  `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and
+  `def_1480` is a bulk-extracted live NPC definition that exists only in
+  `vault/content/npcs.toml`. From that commit `import authsrv` raised
+  `ContentError` on any bare machine -- the server's own import, not a test's --
+  and nothing went red for three days, because the suite runs where a vault IS.
+  Twelve tests died at import, four of whose docstrings say "no vault, no
+  socket, no client" flatly (`test_ping.py`, `test_dispatch.py`,
+  `test_population.py`, `test_killwindow.py`). **They did not fail their floors**:
+  the exception escaped before `checks.py` could rule, so a bare run produced a
+  traceback rather than a verdict naming the shortfall -- which is the same
+  defect as a missing floor, approached from outside the ledger. §0 imports
+  `authsrv` with `RURIK_VAULT` aimed at a path that does not exist; its CONTROL
+  is load-bearing, because "the server imported fine" is also what a stand-in
+  vault silently resolving to the real one would print, so the control demands
+  that `def_1480` still be UNREACHABLE in that same subprocess. §1 imports
+  `probes` alone, since an import chain that routes around the bind today could
+  stop tomorrow. §2 is the half that survives the next mistake: an AST walk of
+  the server path for module-level content binds, each key resolved against
+  `content.load(vault_dir="")` -- repo tables only -- and it names file:line
+  rather than making someone reproduce a bare machine. It also asserts the scan
+  MATCHED something (5 binds today), because a scanner that quietly stopped
+  matching would pass §2 while checking nothing, which is `test_codec.py`'s
+  fixture-glob defect one level up. **The fix was NOT a repo-side copy of the
+  row, and §2's failure text says so**: CLAUDE.md's measurement-vs-expression
+  boundary permits it -- `def_1480` names its extractor, its build and its
+  provenance per row -- but those rows are only ever read to build Step
+  sequences that drive a REAL CLIENT, and client builds live in the vault too,
+  so on the one machine where a committed copy would be read there is no client
+  to run the probe against. It would buy an import, not a capability, while the
+  vault row overrode it by key everywhere the probe can actually run. The bind
+  moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
+  reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
+  nothing here can skip, which is the whole claim. <1 s).
