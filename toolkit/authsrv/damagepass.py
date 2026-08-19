@@ -81,7 +81,14 @@ from codec import Codec  # noqa: E402
 OP_FLOAT_TARGET = 0xA3    # [prop, target, cause, f32] -- the damage channel
 OP_INT_NOTARGET = 0x9F    # [prop, agent, value] -- PROP_HEALTH_MAX rides here
 OP_CHAT_CODED = 0x5D      # [string16] coded chat; numeric args are cleartext
-OP_CHAT_TAG = 0x5E        # [word, byte] -- 0x5D renders only with this tag
+OP_CHAT_TAG = 0x5E        # [word, byte] -- ONE of 0x5D's two observed pairings.
+# CORRECTED 2026-08-18. This line used to read "0x5D renders only with this
+# tag", from rung 4's loopback probe where a bare 0x5D rendered nothing and the
+# captured 0x5E made it render. The rung-7 capture refutes the "only": all 18
+# Master-of-Damage lines carry NO 0x5E and are paired with 0x5F instead, which
+# binds the speech to a speaking AGENT. So 0x5E is the channel tag for a
+# channel-addressed line and 0x5F for an agent-addressed one; what rung 4
+# actually established is that a bare 0x5D with NEITHER renders nothing.
 OP_CAST_START = 0xE5      # [caster, skill, ...] -- the purity check reads this
 OP_PROJECTILE = 0xA4      # [shooter, aim vec2, ...] -- one per wand/bow shot
 
@@ -122,6 +129,14 @@ def read_events(capture_dir, connection, codec=None):
     """
     codec = codec or Codec()
     info, events = tape.load_tape(capture_dir, connection)
+    # Tape timestamps are CONNECTION-LOCAL (t=0 at the first s2c segment);
+    # plan marks are on the CAPTURE's wire clock. info["t0"] is the bridge,
+    # and skipping it shifts every mark-window label by the connection's
+    # opening offset -- measured on the rung-7 capture as the Master of
+    # Damage's engage-block swings labelling to the WALK step, one ~60 s
+    # offset. Everything this module stores is capture-global time.
+    t_base = info.get("t0") or 0.0
+    events = [(round(t + t_base, 6), payload) for t, payload in events]
     msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
     consumed, total, err = receipt
     if err is not None or consumed != total:
@@ -278,48 +293,101 @@ def h_family_contains(h0, predicted):
 # ---------------------------------------------------------------------------
 # the divisor fit -- rung 7's registered exit criterion
 
-def divisor_fit(means_by_ar, base_ar=60):
-    """D from r80 and r100, separately and jointly, with their consistency.
+def divisor_fit(samples_by_ar, base_ar=60):
+    """D from r80 and r100, separately and jointly, WITH ERROR BARS.
 
-    `means_by_ar` maps armour rating -> mean damage (points or fractions --
-    the ratio cancels any common scale, which is the design's whole point).
-    Returns {ratios, D_per_ar, D_joint, spread} or raises when the base AR
-    group is missing: without the 60-AR denominator there is no ratio to fit,
-    and inventing a base would be the exact circularity §3.1 struck.
+    `samples_by_ar` maps armour rating -> the list of per-hit values (points or
+    fractions -- the ratio cancels any common scale, which is the design's
+    whole point). A mapping to bare means is still accepted and then the
+    uncertainty fields come back None, flagged by `n = None`.
 
+    Returns {ratios, D_per_ar, D_joint, spread, means, n, sem, D_ci, sigma}.
+    Raises when the base AR group is missing: without the 60-AR denominator
+    there is no ratio to fit, and inventing a base would be the exact
+    circularity §3.1 struck.
+
+    WHY THE ERROR BARS ARE NOT OPTIONAL, and it is this repo's own rule from
+    the other side. The rung-7 run fitted D = 38.16 (from r80) and 39.88 (from
+    r100). Quoted bare, those two numbers read as "D is not 40" -- and the
+    adversarial review found the opposite: the 95% bootstrap interval for the
+    joint estimate is [37.30, 42.00] and contains 40 on both legs (-0.79 sigma
+    and -0.11 sigma). A point estimate quoted past the precision its method
+    supports is a check that cannot fail, wearing the costume of one that did.
+    What actually pins D is the BAND test (`h_fit` supports against the
+    predicted endpoints), which has no free parameter at all; this fit is the
+    weaker witness and must present itself as such.
+
+    The interval is the delta-method propagation of the per-AR standard error
+    through D = -delta / log2(r), which is adequate here and is labelled
+    approximate rather than bootstrapped, because a bootstrap belongs to the
+    caller that holds the raw samples.
     The fit: r(AR) = 2^(-(AR-base)/D), so log2 r = -delta/D. Least squares
     through the origin over (delta, log2 r) gives 1/D; each AR also gives its
     own D so the report can show the two-estimate consistency the exit
     criterion names. A ratio >= 1 (no attenuation) has no finite D and reports
     None for that AR rather than a complex number.
     """
-    if base_ar not in means_by_ar:
+    if base_ar not in samples_by_ar:
         raise DamagePassError(
             f"no AR={base_ar} group: the divisor fit needs the base-AR "
             f"denominator, and substituting one would be §3.1's circularity")
-    base = means_by_ar[base_ar]
+
+    def _stat(v):
+        """(mean, sem, n) from a sample list, or (value, None, None) from a mean."""
+        if isinstance(v, (int, float)):
+            return float(v), None, None
+        vals = [float(x) for x in v]
+        n = len(vals)
+        mean = sum(vals) / n
+        if n < 2:
+            return mean, None, n
+        var = sum((x - mean) ** 2 for x in vals) / (n - 1)
+        return mean, math.sqrt(var / n), n
+
+    stats = {ar: _stat(v) for ar, v in samples_by_ar.items()}
+    base, base_sem, base_n = stats[base_ar]
     if base <= 0:
         raise DamagePassError(f"AR={base_ar} mean is {base}; ratios need a "
                               f"positive denominator")
-    ratios, d_per, num, den = {}, {}, 0.0, 0.0
-    for ar, mean in sorted(means_by_ar.items()):
+
+    ratios, d_per, d_ci, sigma = {}, {}, {}, {}
+    means = {ar: s[0] for ar, s in stats.items()}
+    sems = {ar: s[1] for ar, s in stats.items()}
+    ns = {ar: s[2] for ar, s in stats.items()}
+    num = den = 0.0
+    for ar in sorted(stats):
         if ar == base_ar:
             continue
+        mean, sem, _n = stats[ar]
         delta = ar - base_ar
         r = mean / base
         ratios[ar] = r
         if r >= 1.0 or r <= 0.0:
-            d_per[ar] = None       # no attenuation: the form itself is refuted
+            d_per[ar] = d_ci[ar] = sigma[ar] = None
             continue
         y = math.log2(r)
-        d_per[ar] = -delta / y
+        d = -delta / y
+        d_per[ar] = d
         num += delta * y
         den += delta * delta
+        # Delta method: r's relative error propagates to D through log2.
+        if sem is not None and base_sem is not None:
+            rel = math.sqrt((sem / mean) ** 2 + (base_sem / base) ** 2)
+            r_sem = r * rel
+            # dD/dr = delta / (r * (ln2) * y^2)
+            d_sem = abs(delta / (r * math.log(2) * y * y)) * r_sem
+            d_ci[ar] = (d - 1.96 * d_sem, d + 1.96 * d_sem)
+            # How many sigma is the wiki's D=40 from this estimate?
+            sigma[ar] = (d - 40.0) / d_sem if d_sem else None
+        else:
+            d_ci[ar] = sigma[ar] = None
+
     d_joint = (-den / num) if num else None
     finite = [d for d in d_per.values() if d is not None]
     spread = (max(finite) - min(finite)) if len(finite) >= 2 else None
     return {"ratios": ratios, "D_per_ar": d_per, "D_joint": d_joint,
-            "spread": spread}
+            "spread": spread, "means": means, "sem": sems, "n": ns,
+            "D_ci": d_ci, "sigma_from_40": sigma}
 
 
 # ---------------------------------------------------------------------------
@@ -494,11 +562,21 @@ def report(capture_dir, connection, codec=None):
                 f"AR groups on mixed bases {ar_basis}: points and fractions "
                 f"cannot share one ratio; either every group's H recovered or "
                 f"none did")
-        means = {ar: sum(v) / len(v) for ar, v in means_by_ar.items()}
-        if 60 in means and len(means) >= 2:
-            rep["divisor"] = divisor_fit(means)
+        if 60 in means_by_ar and len(means_by_ar) >= 2:
+            # RAW SAMPLES, not pre-averaged means: the fit needs the per-hit
+            # spread to put an interval on D, and a bare D reads as a refutation
+            # of 40 when it is nothing of the kind (see divisor_fit's docstring).
+            rep["divisor"] = divisor_fit(means_by_ar)
             rep["divisor"]["basis"] = next(iter(set(ar_basis.values())))
-            rep["divisor"]["means"] = means
+            # Body count per AR: the ratio's real error budget includes
+            # body-to-body variance, and an AR resting on ONE body cannot show
+            # it. The rung-7 run had 2 bodies at AR60 and 1 each at 80/100.
+            bodies = {}
+            for g in rep["groups"]:
+                if g["kind"] == 16 and g["ar"] is not None and g["rank"] is None:
+                    bodies.setdefault(g["ar"], set()).add(g["target"])
+            rep["divisor"]["bodies_per_ar"] = {
+                ar: len(v) for ar, v in bodies.items()}
     return rep
 
 
@@ -563,9 +641,24 @@ def main():
                       f"{_fmt_target(p['target'])}")
         if rep["divisor"]:
             d = rep["divisor"]
-            print(f"    DIVISOR basis={d['basis']} means={d['means']} "
-                  f"ratios={d['ratios']} D={d['D_per_ar']} "
-                  f"joint={d['D_joint']} spread={d['spread']}")
+            print(f"    DIVISOR basis={d['basis']} "
+                  f"bodies/AR={d.get('bodies_per_ar')}")
+            for ar in sorted(d["ratios"]):
+                sem = d["sem"].get(ar)
+                ci = d["D_ci"].get(ar)
+                sig = d["sigma_from_40"].get(ar)
+                print(f"      AR={ar}: mean={d['means'][ar]:.4f}"
+                      f"{f' +/- {sem:.4f}' if sem else ''} "
+                      f"n={d['n'].get(ar)}  r={d['ratios'][ar]:.4f} "
+                      f"(wiki {2 ** (-(ar - 60) / 40):.4f})  "
+                      f"D={d['D_per_ar'][ar]:.2f}"
+                      f"{f' 95% CI [{ci[0]:.2f}, {ci[1]:.2f}]' if ci else ''}"
+                      f"{f'  {sig:+.2f} sigma from 40' if sig is not None else ''}")
+            print(f"      joint D={d['D_joint']:.2f}  spread={d['spread']:.2f}"
+                  if d["D_joint"] else "      joint D=None")
+            print(f"      NOTE: the BAND test (per-group h_fit supports vs the "
+                  f"predicted endpoints) is the stronger witness; this fit has "
+                  f"a free parameter and these intervals are wide.")
     return 0
 
 

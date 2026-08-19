@@ -16,6 +16,30 @@ nothing if we are casual about the ones that do grant a licence.
 
 **Used by:** `toolkit/mapdata/gwdat.py` (the `Gw.dat` huffman/LZ77 decompressor and its
 six constant tables, derived from `SourceFiles/xentax.cpp`) and
+`toolkit/mapdata/gwentropy.py` (the A6 entropy accountant — it re-uses two of those same
+tables, `CODE_LENGTH_THRESHOLDS` and `CODE_LENGTH_SYMBOLS`, in the ENCODE direction, and
+re-runs `gwdat.decompress`'s block loop with counters attached. It **imports** both
+tables from `gwdat.py` and re-transcribes neither, so nothing new is taken from upstream
+— but the direction is new, and it is new because upstream never wrote it: all five
+mirrored lineages of this format declare decode only. `PLAN.md` §6.1) and
+`toolkit/mapdata/gwmatch.py` (the A7a LZ77 matcher — it **imports** four more of those
+same six tables, `LENGTH_BASE`, `LENGTH_EXTRA_BITS`, `DISTANCE_BASE` and
+`DISTANCE_EXTRA_BITS`, to read off the format's min match, max match, alphabets and
+window, and re-transcribes none of them. The *search* is not upstream's at all — a hash
+chain with lazy matching, following deflate's published design — and nobody upstream has
+a matcher for this format to take. `PLAN.md` §6.1) and
+`toolkit/mapdata/gwenc.py` (the A7b **bitstream writer** — the inverse of `gwdat.py`'s
+`BitReader`, of `build_table`'s meta-token walk over `CODE_LENGTH_THRESHOLDS` /
+`CODE_LENGTH_SYMBOLS`, and of its canonical code assignment. It **imports** every
+constant from `gwdat.py` and `gwentropy.py` and re-transcribes none. What is upstream's
+is the format — the meta alphabet, the assignment rule, and the 32-bit little-endian
+word order with MSB-first bits inside each word, all recovered by GWMB from ArenaNet's
+compressed archive. What is ours is only the direction: all five mirrored lineages
+declare decode only, so there is no writer, no table serializer and no compressor
+anywhere upstream to copy. Worth saying plainly, because this module's headline result
+is *byte-identical re-emission of ArenaNet's own stored rows* — that result is evidence
+we hold **GWMB's recovery of the format** correctly, and it would not have been reachable
+without it. `PLAN.md` §6.1) and
 `toolkit/mapdata/pathmap.py` (the FFNA pathing-chunk struct layout and field names,
 derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
 `toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`

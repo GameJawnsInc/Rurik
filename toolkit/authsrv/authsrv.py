@@ -2647,14 +2647,27 @@ HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
 # hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
 HERO_INFO = True
-# Send the 0x0037 + 0x003A pair for the HERO's agent. DEFAULT OFF, and the
-# default is the finding: this pair DOES clear the attribState gate (the assert
-# moves on, measured), but it then takes the client down on
+# Send the hero's attribute state -- 0x0037 -> 0x00B7 -> 0x003A for the HERO's
+# agent. The knob is HERO_ATTRIBS, assigned above beside HERO_SKILLBAR and
+# HERO_BODY_NPC; this block is the only prose about it, and being detached from
+# its own assignment is how it went on describing an earlier arc for a day.
+# HISTORY, because the reversal IS the finding, and the assert is the evidence.
+# This pair started DEFAULT OFF: 0x0037 + 0x003A does clear the attribState
+# gate (the assert moves on, measured), but it then took the client down on
 #   profession < arrsize(s_profChapter)   ConstChar.cpp(1296)
-# and it does so with or without the trailing 0x0072 -- so as constructed it
-# REGRESSES a hero that otherwise renders fine. Opt in with --hero-attribs to
-# continue the investigation; leave it off to keep a working hero.
-# studies/heroes/FINDINGS.md 13.
+# with or without the trailing 0x0072 -- so as first constructed it REGRESSED a
+# hero that otherwise rendered fine. studies/heroes/FINDINGS.md 13.2.
+# RESOLVED, and by two measured changes that both live at the send site below.
+# (1) 0x00B7 for the HERO's agent, not just the player's, which is what puts it
+# in the ctx[0x2c]+0x6BC profession array ConstChar:1296 reads. (2) ORDER:
+# attribute POINTS first, profession SECOND -- 0x0037 -> 0x00B7 -> 0x003A --
+# because clearing :1296 with 0x00B7 first only moved the assert to
+# `attribState ChCliAttrib.cpp(435)`, which this server's own player-side
+# comment had already recorded. FINDINGS 14.3 carries the four-gate table.
+# So the DEFAULT IS NOW ON, and the opt-out is --no-hero-attribs -- there is no
+# --hero-attribs flag to opt in with, which is the other half this comment had
+# stale. The 2026-08-18 panel-open run took it defaulted on and never reached
+# ConstChar:1296 (studies/pvpui/FINDINGS.md 28.3). Reconciled 2026-08-19.
 # 0x0074's ten unexplained dwords, and the u32 flag that gates the client's
 # CONDITIONAL third copy of the second group to record+0x74. Both exist to test
 # one hypothesis and to let it FAIL: if the trailing 0x0072 still asserts
@@ -2821,6 +2834,17 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 #      0x002F was tested and did nothing, and it retires that whole line: there
 #      is no post-construction setter to reach, so allegiance is decided when the
 #      agent is CREATED and no later message can correct it.
+#      **CORRECTED 2026-08-18 -- the last clause is FALSE, and the word
+#      "allegiance" was equivocating.** Probe `allegiance_split` (harness
+#      20260818T171349) sent 0x002F ALONE to a body created 'mons' and its
+#      compass dot went RED -> GREEN in the next frame, while a body given only
+#      0x00AA stayed red 53 s and an untouched control stayed red all run. So a
+#      later message DOES correct displayed allegiance. What survives is this
+#      paragraph's actual subject: +0x1B5, the ATTACKABILITY enum, still has no
+#      post-construction writer, and the 0x002F test that "did nothing" was
+#      watching attack initiation -- a different store from the team token the
+#      compass and nameplate read (agent +0xE8, ChCliBase.cpp:326). Two stores,
+#      two answers, both true. studies/newopcodes/FINDINGS.md, the 0x002F row.
 #
 # AND THE READ SAYS BOTH GATES PASS (agentprobe.py, 2026-08-11): our Hatcher
 # carries +0x9C == 0xDB (a CHARACTER) and +0x1B5 == 3 (ALLEGIANCE_ENEMY), with
@@ -5934,15 +5958,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
-                              # here until 2026-08-16, which is a trap rather
-                              # than a bug while the constant is also 1: this
-                              # field is what the client stores at
-                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
-                              # GmHeroCommander's scan filters hero entries by
-                              # comparing that value against 0x01C2's msg+8.
-                              # A literal here silently stops tracking the
-                              # constant. studies/heroes/FINDINGS.md 22.
+                 [PLAYER_NUMBER,  # the player NUMBER -- despite the client's
+                              # own descriptor typing this field agent_id.
+                              # Retail separates the two id spaces (player 1,
+                              # agents 27/395/311 across 20260817T183756's four
+                              # channels) and field 1 tracks the NUMBER every
+                              # time. The client stores it at ctx[0x44][0x2ac]
+                              # (handler 0x0084EF00), which GmHeroCommander's
+                              # scan compares against 0x01C2's msg+8 -- so the
+                              # PLAYER_AGENT_ID sent here 2026-08-16..18 was
+                              # one half of heroes 21.2's split-filter mirror.
+                              # A solo instance hides the difference (both 1).
+                              # studies/heroes/FINDINGS.md 22, the CORRECTED
+                              # block.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -8777,7 +8805,12 @@ def main():
         PLAYER_NUMBER = a.player_number
         print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
               f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
-              f"which is the whole point of the arm.")
+              f"which is the whole point of the arm. NOTE: since 2026-08-18 "
+              f"the 0x0199 send tracks PLAYER_NUMBER (heroes 22's correction), "
+              f"so the roster filter and the commander scan move TOGETHER "
+              f"under this flag; heroes 21's mirror rig -- roster row and "
+              f"commander binding mutually exclusive -- is no longer "
+              f"reproducible from this flag alone.")
 
     if a.hero is not None:
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO

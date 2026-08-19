@@ -35,6 +35,7 @@ import datcheck  # noqa: E402
 import datmove  # noqa: E402
 import datplan  # noqa: E402
 import datwrite  # noqa: E402
+import gwenc  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR: 98, MEASURED from a green run on 2026-08-15, not guessed. Every section
@@ -82,7 +83,7 @@ import checks  # noqa: E402
 # caught only because the fixture plants a container generation where a best fit
 # will reach it. On the real archive the withheld runs are 13 MB and the usable
 # ones are small, so the same mistake would be caught by luck.
-LEDGER = checks.Ledger("dat alloc", floor=98)
+LEDGER = checks.Ledger("dat alloc", floor=100)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -437,13 +438,31 @@ def section_refusals(tmp):
               "an extraBytes the corpus has never held: refused",
               "the histogram is {0, 8} over 177,740 rows")
         m = why([datalloc.Stream(b"abcdefgh", 259, extra_bytes=8)], 0x3000)
-        check(m and "0x0102 at bytes 2..4" in m,
+        check(m and "does not DECODE" in m,
               "extraBytes 8 over a plainly stored payload: refused",
-              "6000/6000 real rows carry the marker, 0/6000 controls")
+              "the gate decodes rather than matching a two-byte marker")
+        # CORRECTED 2026-08-18. This used to assert that `b"ab\x01\x02efgh"` is
+        # ACCEPTED "because it carries the marker" -- a test pinning a defect as
+        # correct. Those eight bytes decode as nothing, so accepting them mints a
+        # green, unreadable compression-8 row from the CREATION path, which is the
+        # one A8 will use. The marker was never evidence of anything; it was a
+        # correlate that happens to hold on large payloads.
+        m = why([datalloc.Stream(b"ab\x01\x02efgh", 259, extra_bytes=8)], 0x3000)
+        check(m and "does not DECODE" in m,
+              "AND a payload that merely CARRIES the marker without decoding is "
+              "refused too -- the marker is a correlate, not evidence")
+        real = gwenc.encode(b"tiny")
+        check(not datwrite.looks_compressed(b"ab\x01\x02efgh")
+              and datwrite.looks_compressed(real),
+              "CONTROL, both directions: the marker-carrying fake does not "
+              "decode, and a REAL gwenc stream too small to carry the marker "
+              "does -- the case the old gate wrongly refused",
+              f"gwenc.encode(b'tiny') is {len(real)} B, data[2]="
+              f"0x{real[2]:02X}")
         check(refusal(datalloc.plan_alloc, ar,
-                      [datalloc.Stream(b"ab\x01\x02efgh", 259, extra_bytes=8)],
+                      [datalloc.Stream(real, 259, extra_bytes=8)],
                       0x3000) is None,
-              "but a payload that DOES carry the marker is accepted")
+              "...and that real stream is ACCEPTED as extraBytes 8")
 
         # Growth past the MFT's own last block.
         many = [datalloc.Stream(b"", 259)] + [

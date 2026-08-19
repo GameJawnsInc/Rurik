@@ -586,6 +586,16 @@ comparison against `0x01C2`'s `msg+8`, and sends `PLAYER_AGENT_ID` for it. **Two
 independent derivations, opposite directions, same answer** — CORROBORATED, and not news.
 The opcode is `0x0199`, `GAME_SMSG_INSTANCE_LOAD_INFO`, which we already send.
 
+> **CORRECTED 2026-08-18.** The mechanism above stands — `ctx[0x44][0x2ac]` is the
+> identity the commander model tests — but the VALUE retail puts there is the player
+> **NUMBER**, not the agent id: the Factions capture separates the two id spaces for the
+> first time (player 1, agents 27/395/311) and `0x0199` field 1 tracks the number on all
+> four channels (heroes §22's CORRECTED block, `vault/captures/live/20260817T183756`).
+> "Sends `PLAYER_AGENT_ID` for it" was our server's choice, indistinguishable from the
+> number in a solo instance; the send site fills it with `PLAYER_NUMBER` as of 2026-08-18.
+> Nothing in §13's conclusions moves — both values were 1 in every rig this section
+> reasons about.
+
 So the identity is not the problem. Heroes §21 measured that with `--player-number 2` the
 roster row renders when `msg+8` equals the declared player number, while the commander
 binding vanishes, and called the two "DIFFERENT `my id` notions". With both values at 1 in

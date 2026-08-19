@@ -60,7 +60,22 @@ Every one of these, in the order they were written:
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
   in the gamesrv log appears on a clean teardown too. The dialog is faked in the
-  test so the extraction is checked without crashing a client. Also `hold_key`,
+  test so the extraction is checked without crashing a client. **And since
+  2026-08-18 it checks that capturing the dialog RETRACTS THE VERDICT**, which is a
+  different thing and was not true: `hold_open` has returned `"exited"` for a client
+  that died during the hold since `276080a`, and the comment at that `return` says
+  *"a corpse afterwards unmakes it"* — but the only call site was a **bare expression
+  statement**, `ok` was never reassigned after it, and such a run still printed
+  `RUN VERDICT: PASS` and exited 0. `customarea/FINDINGS.md` §31.4 recorded the
+  defect as fixed on the strength of that `return`; the statement shipped and the
+  wiring did not. The rule now lives in `session.verdict_after_hold(ok, held)` with a
+  three-row truth table here (a corpse retracts a pass, a hold that merely ran out
+  does not, and it never PROMOTES a failed run), **plus a structural check that
+  `run_client` actually consumes `hold_open`'s return** — because a correct helper
+  nobody invokes is precisely the bug being fixed and looks identical from the
+  outside. That structural check is the one that was red when the defect was found,
+  and its own control parses the pre-fix shape verbatim and requires the detector to
+  call it broken. Also `hold_key`,
   the held movement key `--walk` drives, against a fake `user32`: that every
   event carries a NON-ZERO scan code, that the key is released on every exit
   path including an exception mid-hold, that losing the foreground cuts the leg
@@ -247,7 +262,78 @@ Every one of these, in the order they were written:
   present, the bit-31 spelling as the argument, and a target row failing its
   own crc (a relink must not make a corrupt row addressable); plan-only without
   `--confirm` writes nothing, and `--revert` restores the renamed state
-  exactly. No vault, no client. 78 checks against a floor of 78, was 66),
+  exactly. No vault, no client.
+  **Sections 9 and 10 (2026-08-18) are the COMPRESSION-8 WRITE VERB and the C-6
+  guard, floor 87 -> 136.** Until `gwenc.py` existed nothing in this project
+  could produce compression-8 bytes, so `replace()` hardcoded the field to 0;
+  it is now a keyword argument whose default reproduces the old behaviour byte
+  for byte, because `iconset`, `rebloat`, `textwrite`, `deploy.py`'s subprocess
+  and the six `a4stage*.py` staging scripts under `vault/research/archivewrite/`
+  all depend on "it marks the row stored" and none of them is edited. Section 9
+  is the whole pipeline of studies/archivewrite FINDINGS **A8 minus the client**:
+  payload -> `gwenc.encode` -> the verb -> a FRESH `Archive.read()` ->
+  unmodified `gwdat.decompress` -> the same payload, with the row afterwards
+  saying compression 8, the STORED length, and a crc over the stored bytes (the
+  domain FINDINGS 1.1 measured on retail's own comp-8 rows). It runs on
+  **`test_datcheck`'s fixture, not this file's** -- this file's payload rows sit
+  below `INDEX_FIRST_FILE = 16`, so `datcheck.preflight` is permanently 9/10 on
+  it and a "ten open-time rules pass" claim could not be made honestly
+  (measured both ways: 9/10 here, 10/10 there). **Section 9d is the
+  load-bearing one and it asserts a DEFECT**: it stages FINDINGS C-6 on purpose
+  -- correct compressed bytes with the code poked back to 0, self-crc repaired
+  -- and measures that all ten open-time rules, the crc sweep and all three
+  checksum rules stay GREEN over a file that no longer reads. That is why the
+  verb decompresses and compares against a MANDATORY declared payload *before*
+  the first byte is written: nothing this project owns can refute a
+  conforming-but-wrong compressed row afterwards, and `datcheck.py` has no
+  notion of a compression code at all. The corruptions that test the arm are
+  **earned, not staged** -- one flipped bit inside a real compressed payload
+  (which decodes to the right LENGTH without raising, so only a byte comparison
+  sees it) and a real payload with its mandatory tail word removed (FINDINGS
+  13.3's measured silent short decode). Section 10 closes C-6 in `datmove`,
+  whose defect was correctly stated as *"no safe relocation verb exists for
+  compressed rows"* rather than *"datmove corrupts archives today"*: the silent
+  case is now a refusal naming the fix, `--compression 8 --expect` is the safe
+  relocation verb, and a plaintext move with no keyword still succeeds as the
+  control. The C-6 test itself is a measurement rather than a marker: retail's
+  `0x01 0x02` at offset 2 MISSES six of eighteen `gwenc` outputs, every one a
+  payload under 256 bytes, so `looks_compressed()` uses the byte as a prefilter
+  and DECODES to decide -- measured 20 of 20 gwenc streams and 10 of 10 retail
+  rows caught, 0 false positives in 6,005 synthetic plaintext samples, and both
+  rates are re-measured by checks in the run rather than quoted from a
+  docstring. **The false-refusal rate is NOT zero and the docstring names the
+  rows**: 4 of 38,621 real stored rows in `dat_study` decode under our decoder
+  (177242, 177264, 177332, 177333) although they do not re-emit like genuine
+  comp-8 rows. Kept deliberately -- a false refusal is loud, writes nothing and
+  costs one re-run with `expect=data`, while a miss is silent and costs the
+  whole file and its nextStream chain permanently at the next repair (FINDINGS
+  5.1). The trailer-agreement half of the test is honestly labelled as weak,
+  because `gwdat` takes the declared size FROM the trailer and uses it as the
+  decode loop's bound, so it can only refute a stream that runs out of input --
+  and there is a check isolating exactly that, rather than a docstring claiming
+  more. Re-emission was tried as a stronger confirmation and REJECTED on
+  measurement: it reproduces retail's streams but 0 of 15 of our own. What
+  none of it establishes: the round trip is through `gwdat`, which is OUR
+  decoder, so it proves agreement and not correctness -- **A8, a caged client
+  reading the row, is still the only oracle.**
+  **Three defects found by the skeptic pass and fixed the same day, all one class
+  — a guard that looked closed and was not.** (1) The C-6 arm was gated on
+  `expect is None`, and `expect == data` is trivially true for ANY bytes, so
+  `--data s.bin --compression 0 --expect s.bin` with genuine `gwenc` output wrote
+  compressed bytes under a stored code through the documented CLI — exit 0,
+  preflight 10 of 10, log line indistinguishable from an ordinary replace. The arm
+  now consults the decode regardless of `expect`; the override is
+  `--stored-lookalike-ok`, which announces itself. The old "hatch" control used
+  bytes that do NOT decode, i.e. only the harmless half; `hatch_real` now covers
+  the dangerous one. (2) `--overwrite` never reached `declaration_fault` and never
+  touches the compression field, so overwriting a comp-8 row with same-length
+  plaintext left a green archive whose `Archive.read()` returns **zero bytes**;
+  it is guarded now. (3) The `toobig` case claimed to test the relocation refusal
+  but `pattern()` compresses ~12x, so it fitted the reservation and was a second
+  copy of the C-6 check wearing a false label — **the fourth recurrence in this
+  arc of a check claiming more than the artifact does** (§10.6, §12.7, §13.6). It
+  uses incompressible bytes now. 138 checks against a floor of
+  138, was 136, was 87, was 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -1199,6 +1285,164 @@ Every one of these, in the order they were written:
   act -- because a single fixed floor left the vaulted run eight checks of
   slack and the audit deleted the whole sabotage section inside it. ~5 s),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
+  `toolkit/mapdata/test_gwentropy.py` (rung **A6**, the entropy accountant --
+  `gwentropy.py` recovers RETAIL'S OWN token stream out of a compression-8 row and
+  re-costs it under a from-scratch Huffman plus this format's meta-coder, so the
+  standing hazard is that our decoder is the only referee and a round trip through it
+  proves nothing. Every section is picked for what a RED would mean. **C1** is the
+  one that earns the file: the segment accounting -- header + both tables + block_size
+  fields + tokens + extra bits -- must equal the MEASURED final bit position, with the
+  token term MODELLED from reconstructed length x count rather than read off
+  `bit_end - bit_after_size`, which is the version that could not fail and is
+  deliberately not what this does. It closes to **0 bits on 11 of 11 rows**. **C1b** is
+  the reader identity `bitpos + 32 + avail == 8*idx` with `idx == len(data) - 4` --
+  written as an identity because "within one 32-bit word" is FALSE as literally stated
+  (the reader permanently holds 32 look-ahead bits it never consumes; real tail slack
+  is 33..63). **C1c** asserts the derived `bitpos` equals an independently accumulated
+  counter, so `bitpos` is a measurement and not a definition. **C2** is why duplicating
+  gwdat's block loop is affordable: `trace()` and `replay()` must each reproduce
+  `gwdat.decompress`'s bytes, the second from the recorded token arrays ALONE with no
+  Huffman table and no bit reader. **C5 is the check nothing of ours forces** -- retail's
+  own decoded code lengths go back through our meta-coder DP and the answer is compared
+  to the table bits measured off the bit reader, and `above > 0` (the DP costing MORE
+  than retail's real bits) is impossible unless our cost model is wrong, since the DP is
+  the minimum over the same alphabet. It gets **4,450 chances in section 5** and fires
+  zero times; SABOTAGED by shaving one bit off one of the 256 meta tokens it goes red in
+  both directions (2 tables `below`, and 2 `above` with the bit added). **C4** exists
+  because C3 cannot substitute for it: swapping two symbols' code lengths leaves Kraft
+  at exactly 0 and moves C1 by 3,528 bits, and only C4 -- which rebuilds all 256 nodes,
+  24 `trans` rows and every `vals` entry from the reconstructed lengths and diffs them
+  against what `build_table` produced -- names the node. **FRM** is the bits-to-bytes
+  bridge (`4*ceil((bits+32)/32) + 4`) and this entry used to call it a prediction of the
+  MFT's own `size` field, "a field that is not an input to the calculation". **That was
+  wrong and the skeptic pass caught it**: `ar.raw(e)` slices the payload to `e.size`, so
+  `len(data) == e.size` by construction, C1b already pins `idx == len(data) - 4`, and the
+  algebra forces agreement for every stored size divisible by 4 -- which is **138,708 of
+  138,708 comp-8 rows**. FRM cannot fail anywhere in the population it runs over; it is
+  C1b in other units, kept as bookkeeping and no longer counted as evidence. Note also
+  that **C5's independence is narrower than "nothing of ours forces it"**: it is genuinely
+  independent of `table_lengths` and of the DP's run logic, but the DP and `build_table`'s
+  measured consumption are both driven by the same borrowed `CODE_LENGTH_THRESHOLDS` /
+  `CODE_LENGTH_SYMBOLS`, so a shared error in THOSE is invisible to it -- the standing
+  `gwdat.py` risk that the xentax.cpp diff has never been run. Section 1 pushes
+  all **65,536** 16-bit prefixes through `build_table`'s own band-selection expression
+  and requires our inverted cost table to agree; section 3 brute-forces every complete
+  length assignment for small alphabets, which is what makes "our token bits tie
+  retail's" a result rather than an artifact of reusing their numbers. There is
+  deliberately **no authored bitstream** here -- that needs a packer, and A6 is a
+  bit-COUNTING rung. Floor 91 with ZERO headroom, measured green; `--stride` moves how
+  many rows section 5 sweeps and not how many checks run. Without the archive it skips
+  to 13 and goes RED, which is the intended verdict. ~41 s),
+  `toolkit/mapdata/test_gwmatch.py` (rung **A7a**, the LZ77 matcher — `gwmatch.py`
+  reports a byte figure for a token stream **nobody ever emitted**, and every cheap way
+  to make that figure look good is a stream that could not be decoded: a distance one
+  past the window, a match reaching back further than the bytes produced so far, an
+  overlapping copy the encoder and decoder disagree about. All three make the file
+  SMALLER. So the two sections that carry this file are the ones that make a small
+  number mean something. **R1, reconstruction:** `gwentropy.replay()` rebuilds the
+  payload from our token arrays ALONE — gwdat's own `LENGTH_BASE`/`DISTANCE_BASE`,
+  gwdat's own one-byte-at-a-time copy loop so overlapping matches behave exactly as the
+  decoder makes them behave, no Huffman table and no bit reader anywhere — and it must
+  be byte-for-byte equal on **every real row and every synthetic**. That is why A7a
+  needs no bitstream writer to be believed. **R2, decodability:** `validate()`
+  re-derives each constraint from `gwdat.decompress`'s own arms rather than from the
+  emit path. **And the SABOTAGE section keeps both honest** — six corruptions of a real
+  token stream, each asserted CAUGHT, with an uncorrupted control beside them so the
+  reddening is the sabotage and not the fixture: (a) a distance off by one *chosen to
+  stay entirely legal*, where **R2 sees nothing and R1 is the only thing standing
+  there** — the single sharpest argument for why a size-only rung still needs a
+  reconstruction; (b) a match one byte longer than it is, where every per-token arm of
+  R2 stays silent and only R1 plus R2's global byte count fire; (c) a distance past the
+  bytes produced, which is what `gwdat` RAISES on; (d) distance symbol 30, off the end
+  of the real `DISTANCE_BASE` and into the garbage the 46-entry table holds; (e) a
+  non-final block that does not fill its declared size, which silently decodes the next
+  block's tokens through this block's tables; (f) a length extra one bit wider than its
+  own field. Section 1 derives every format parameter from `gwdat`'s tables rather than
+  typing it and checks **all 32,768 window positions and all 256 length bases**
+  round-trip, with the load-bearing arm being that **no distance ever reaches a symbol
+  above 29**. Section 2 is the degenerate controls where the answer is known by hand:
+  all-zeros is exactly `1 + ceil((n−1)/258)` tokens and every match is distance 1 (an
+  overlapping copy), a 2-byte cycle is `2 + ceil((n−2)/258)`, and an incompressible
+  payload may not come out smaller than itself. **Section 4's load-bearing check is not
+  a size at all** — it is that **no uniform partition beats the partition DP**, measured
+  over all 16, which is impossible unless the DP is wrong since the DP is the minimum
+  over that same space; same shape as `test_gwentropy.py`'s C5, and it is the check that
+  earns A7a's headline, because the partition is where the result came from. Also per
+  row: C1 (the segment accounting re-summed by `gwentropy.segment_bits` must equal the
+  cursor `build_stream` accumulated — a partition bug desynchronises them, so it is worth
+  keeping, **but on OUR stream it is BOOKKEEPING, not evidence, and cannot fail**: both
+  sides derive from the same `token_bits` formula, unlike on retail's stream where the
+  token term is modelled and the final position is measured. **This is the second time in
+  two rungs that a forced check was written up as a refutable one** — see `FRM` in
+  `test_gwentropy.py` above — and it is why CLAUDE.md's "a check that cannot fail is not a
+  check" is worth re-reading before writing the verdict line, not after) and the Huffman
+  bracket (token bits at or above the per-block Shannon entropy and within one bit per
+  symbol of it, a theorem rather than a property of our code). There is deliberately
+  **no bitstream and no round trip through `gwdat.decompress`** — A7a is size-only.
+  Floor 62 with ZERO headroom, measured green; `--rows` moves section 4's check count,
+  so shortening it reddens the run on purpose, and without the archive it drops to 34
+  and goes RED. ~28 s),
+  `toolkit/mapdata/test_gwenc.py` (rung **A7b**, the bitstream writer — `gwenc.py` is
+  the first thing in this arc that emits bits, and the whole point of the file is that
+  its three checks are **not equally strong**, because `gwdat.py` is OUR decoder and its
+  own docstring (`gwdat.py:81-84`) says the diff against `xentax.cpp` has never been run.
+  **B1, byte-identical re-emission of retail's own rows** (§5, §7) is the only check in
+  the rung that does not assume `gwdat` is correct: trace a stored row, re-emit from what
+  the trace recorded, require the bytes to equal the row on disk **and `crc32` to equal
+  the MFT's own recorded value**. A wrong bit order, a wrong canonical assignment, wrong
+  extra-bit widths or a wrong meta-token encoding cannot accidentally reproduce
+  ArenaNet's bytes. Its population is drawn by a **stated reproducible rule** — every
+  comp-8 row of the archive bucketed into five stored-size bands, sampled with
+  `random.Random(20260818)`, plus the anchors, `gwentropy.WITNESS`, and the four rows
+  carrying the divergent zero-length distance table — and failures are reported **by
+  class**, because a systematic class is a finding about the format while a scatter is a
+  bug in the writer. **The scope limit travels with it**: B1 validates the BIT layer and
+  not the SEMANTIC tables, since `LENGTH_BASE` / `DISTANCE_BASE` / the
+  `first_four + base + 1` arithmetic are replayed verbatim from the trace — a wrong one
+  of those gives a wrong payload and a *bit-identical* stream. **B2, the round trip**
+  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fifteen adversarial
+  synthetics (empty, one byte, all-zeros, a single symbol at index 255, incompressible
+  noise, run-length and short cycles, a match at **exactly** the 32,768 window edge
+  with a check that the edge is genuinely REACHED rather than merely survived, and two
+  `uniform=1`/`uniform=2` partitions so the "a non-final block holds exactly its declared
+  token count" rule is exercised a dozen times) — and it proves **agreement with our own
+  decoder, not correctness**. *(Two of those annotations used to claim which table SHAPE
+  each fixture reached — "a single symbol at index 255 so the literal table takes the
+  all-skip zero-length shape" and "incompressible noise so the distance table is empty".
+  A skeptic measured both FALSE: `all 0xFF` yields an ordinary 3-symbol literal table and
+  its zero-length table is the DISTANCE one, and `incompressible` has 101 matches and no
+  zero-length table at all. The shapes are covered by other fixtures; nothing ASSERTED
+  the mapping, so the comments drifted — the same defect §3's window-edge "genuinely
+  REACHED" assertion exists to prevent, applied to only one of the fixtures that needed
+  it. Corrected in the file.)* **B3, the size closure** (§4) compares the writer's ACTUAL
+  emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in **bits**, because
+  the byte figure is a 32-bit-quantised view and a writer 31 bits off the model still
+  lands on the same stored size. **And B3 has been WATCHED FIRE**, which took finding the
+  right row: `gwmatch` plans its tables with the meta DP and a writer hardcoding retail's
+  greedy emits more bits than the planner charged, but on *most* streams the two agree
+  exactly — 0 bits apart across row 11196's own 218 tables — so a randomly chosen row
+  demonstrates nothing. Row **73015** is pinned because there the wrong flag costs **+9
+  bits**, and the resulting stream **still decodes perfectly**, so B3's comparison is the
+  only thing in the file that sees it. §2 is the arm FINDINGS §12.6 says A7a never had: 328
+  tables our encoder implies, serialized and rebuilt by **`gwdat.build_table` itself**
+  rather than by a model of it, with the decoded lengths diffed against the intended
+  ones. §6 is the breakage set, and **(c) is the one that matters** — flipping the meta
+  plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
+  **valid, smaller, DIFFERENT** stream, which is what makes A6's "retail's table encoder
+  is greedy" load-bearing here rather than decorative. §6(d) records the format's most
+  dangerous property for a writer, in two halves: dropping the `0x80010008` look-ahead
+  word **entirely** still decodes (the u32 trailer slides into the slot, so `gwdat` does
+  not need the sentinel at all), and one word shorter again **truncates SILENTLY** — no
+  raise, no short-read signal, and the row still passes every checksum rule because the
+  MFT crc is over the stored bytes. **Deliberately NOT listed as evidence:**
+  `len(out) == framing_bytes(consumed)` is asserted inside `gwenc.finish`, which computes
+  the length from that very formula — it cannot fail, and the refutable form is §4's.
+  There is deliberately **no `datwrite` verb and no archive is opened for writing**; A7b
+  produces bytes in memory. Floor **55** with ZERO headroom, measured green;
+  `--per-band` / `--quick` move how many ROWS §5 re-emits and not how many checks run, so
+  the row count is itself the last check of §5 and `--quick` reddens it on purpose.
+  Without the archive it drops to 28 and goes **RED** — the same verdict its two siblings
+  give, and for the same reason: B1 never ran. ~150 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
@@ -1712,8 +1956,15 @@ Every one of these, in the order they were written:
   map it is rebuilding and NAMES any substitution -- and the sabotage that trusts the
   donor still round-trips row 46196 while breaking row 26209, which is the shape of a
   bug that ships. `gates()` reproduces the loader's open-time rules and its control is
-  that ArenaNet's own row 46196 passes all 17 before anything we built is judged; five
-  rules are then broken on purpose and must go red ALONE. Section 2 also refuses
+  that ArenaNet's own row 46196 passes all **18** before anything we built is judged;
+  five rules are then broken on purpose and must go red ALONE. **18, not the 17 this
+  entry said until 2026-08-18** — the 18th came out of FINDINGS 30 (*every REACHABLE
+  plane above 0 names a prop that exists*), the rule added after a bad `plane_map`
+  crashed a client twice, and it is what the authored portal's arms are scored against
+  in customarea §31. The completeness check was `len(result) >= 17` while the set was
+  already 18, so **that gate could have been deleted with the check still green**; it
+  now pins `GATE_COUNT` exactly and goes red on either direction, verified by
+  mis-stating it. Section 2 also refuses
   `--out` into EVERY checkout of this repo rather than the one the file sits in: a
   git worktree's repo root is not the main checkout's, and until `working_tree_roots`
   existed a build written to `<main>/toolkit/` was allowed straight into version
@@ -2004,9 +2255,50 @@ Every one of these, in the order they were written:
   a guess. The plan STEP joins the scoping key whenever mark windows exist — the
   rank-sweep extension re-engages ONE Suit at five ranks, and without the block
   dimension those blocks pool into a mean about nothing; `RANK=`-tagged blocks feed
-  the rank curve and are excluded from the divisor fit by construction. Needs
-  `vault/captures/live/`; without it the corpus sections cannot run and the floor
-  of 44 takes it red),
+  the rank curve and are excluded from the divisor fit by construction. **§7 pins the
+  timebase join, and it pins a real silent bug**: `tape.load_tape` returns
+  CONNECTION-LOCAL times (t=0 at that connection's first s2c segment) while plan marks
+  are on the capture's GLOBAL wire clock, so reading events without adding `info["t0"]`
+  shifts every label into a NEIGHBOURING step — mislabelled, not unlabelled, and nothing
+  errors. On the rung-7 capture the 67.9 s offset put the Master of Damage's 42-swing
+  block under the *walk* step and split the AR=100 block across two labels. The pins are
+  refutable by construction: the two pure-walking steps must hold ZERO damage events,
+  step 9 must hold exactly the 42-swing slot-144 block, and the bench must carry exactly
+  the three pre-registered armour labels. **§7b is the attribute channel gate 1 asked
+  for and no capture had ever carried** — a REAL rank reassignment: `0x0037
+  [agent, unspent, 200]` and `0x003A [agent, ids | base | effective]` at instance load,
+  `0x003B [agent, attr, base, effective]` per change and `0x0038 [agent, unspent]`
+  mid-instance. It pins that the budget is 200, that the session's first unspent
+  reading is 5 (matching the operator's own screenshot before any arithmetic), that
+  `0x003A`'s two rank columns differ on Swordsmanship alone — the **+1 bonus visible on
+  the wire** — and that all 14 changes name attribute 20 with effective = base + 1. The
+  point costs then close two independent ways: three equations over four instance-load
+  readings give cum(8) = 37, cum(10) = 61, **cum(12) = 97** with no cost table assumed,
+  and the sweep connection's own debits (41→25→5) reproduce the same 36 while splitting
+  it into rank 11 = 16 points and rank 12 = 20. Needs `vault/captures/live/`; without it
+  the corpus sections cannot run and the floor of 64 takes it red),
+  `toolkit/authsrv/test_bufflog.py` (the rung-8 effects consumer — `0x0042` apply /
+  `0x0044` remove read as EPISODES, built before its live session the way rung 7's
+  analyzer was. **Its retail pins carry a headline that retires the rung-8 design's
+  central worry**: `studies/isle/PLAN.md` §3.3 says `0x0042` has ZERO ArenaNet
+  witnesses, so "conditions ride some other channel" was the expected outcome — the
+  corpus in fact holds **97 retail applies and 88 removals**, six of them known
+  CONDITION skill ids, arriving in the rung-6 arena detour and the east run's Pin Down.
+  The removal lands at **apply + duration** (median 1.3 ms on the arena connection), so
+  an episode closes EXPIRED, STRIPPED (early — all four in the corpus are one stance
+  cut by 3.6–8.7 s) or OPEN (still live at the last byte, never scored as expired). The
+  synthetic half attacks the pairing where it can silently lie: **buff ids are reused
+  within a session**, so a global id→apply map pairs an apply with a *later* episode's
+  removal and reports a wild residual while looking fine; two targets holding the same
+  id at the same moment must not cross-pair either. **A CURE is pinned from ArenaNet's
+  own wire, the first in this repo**: the Isle's Crippled episode is stripped 11.2 s
+  early and skill 364's apply carries the *identical* timestamp as that removal — so a
+  cure closes a condition through the same `0x0044` an expiry uses and only the residual
+  separates them. Also pinned: the attribution REFUSAL (`0x0042` has no source-agent
+  field, so an episode outside every mark window stays `step = None` and is never
+  assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
+  `dword` while the client does `fld`, so the broken reading is reproduced inline and
+  required to differ). Needs `vault/captures/live/`; floor 36),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
@@ -2753,7 +3045,19 @@ Every one of these, in the order they were written:
   pattern, each with a positive control that the real one still resolves
   afterwards. §3 drives `measured_nothing()` with a doctored table set and pairs
   it with real builds, because a predicate answering True to everything would
-  pass the vacuity check alone. Needs the vault throughout. Floor 37, ~35 s),
+  pass the vacuity check alone. §4 pins the WIDE-STRING CAPACITY, a twice-
+  documented display defect (`Field.__repr__` prints `self.cap` and the `wstring`
+  branch passed no `cap=`, so all 141 wide strings read `string16(0)`) that was
+  fixed in `c81d6d1` and then sat four days with two study docs still calling it
+  open — a fix nothing pins reads exactly like a fix nobody made. It asserts the
+  capacity histogram over all 141 fields on each vaulted build, identical across
+  the three (§2's claim from another direction), and two opcodes whose capacity
+  has an INDEPENDENT witness: `0x01BF`'s `string16(20)` in 50 B corroborating
+  GWCA, `0x0074`'s `string16(32)` in the 127 B that refuted the upstream 4-field
+  reading — the wire total being the half a wrong capacity cannot fake. Its
+  negative control builds a `Field` the old way and asserts it STILL prints
+  `string16(0)`, so dropping `cap=` again reddens 14 checks; verified by doing
+  exactly that. Needs the vault throughout. Floor 73, ~75 s),
   `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
   the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
   used to answer with `os.path.isfile` and return, so `identify()`, the only
@@ -3303,21 +3607,54 @@ Every one of these, in the order they were written:
   do not fit `template` -- an error that would only ever show up on screen.
   **What it deliberately does NOT assert is which framing is correct**: only a
   client can say, and asserting one here would be two of our own components
-  agreeing and calling it evidence. No vault, no client, no socket, so nothing
-  can skip. §7 pins the two field widths APART -- `0x0080`'s dialog line is
+  agreeing and calling it evidence. **§§0-18 need no vault, no client and no
+  socket** — the content store and pure arithmetic — which is why the floor can
+  be their whole count rather than a guess; §19 and §20 came later and read the
+  client image, so "nothing here can skip", true when written and stated flatly
+  in this entry until 2026-08-18, is now only true of the part the floor covers.
+  §7 pins the two field widths APART -- `0x0080`'s dialog line is
   `string16(122)` and `0x004C`'s description is `string16(128)`, six units
   distant, and the check that earns its place is the one asserting a line which
   FITS the description field is REFUSED for the dialog one; a single shared
   constant would pass everything else and put that error where only a screen
-  could find it. **Floor 73 against a healthy 74** (§19 re-derives 888 from the
-  client image and skips without the vault). It was **17 against a run of 22**
-  when written, with a careful on-paper derivation — 13 row-independent checks
-  plus 4 per row — and the file then grew to 74 against the same one-row table
-  while the floor stayed at 17, so a healthy run did four times its own
-  minimum and three whole sections could have vanished unnoticed. That is the
-  failure `checks.py` exists to refuse, arriving by growth rather than by a bad
-  guess, and the lesson is that a DERIVED floor goes stale silently where a
-  measured one goes stale loudly. Recomputed 2026-08-17 from a real green run.
+  could find it. **Floor 73 against a healthy 77 with the vault present, 73
+  without** — §19 re-derives 888 from the client image and §20 re-checks the
+  twelve cited sites across builds, so those two sections carry four checks
+  between them and declare skips on a machine with no vault (§20 also skips
+  on fewer than two vaulted builds at or after the pin). 73 is what remains
+  when all four stand down, which is where the floor sits and why adding a
+  vault-gated section never has to move it. **AND 73 IS NOW A MEASURED NUMBER
+  RATHER THAN AN ARITHMETIC ONE, which it was not until 2026-08-18**: it was
+  77 minus the four vault-gated checks, sound as subtraction and impossible to
+  observe, because TWO separate defects stopped a bare run before the verdict.
+  `import authsrv` (line 34, added by `5ab72e4` — the same commit that wrote
+  this floor) reached `probes.py`'s module-level `npc_template("def_1480")`, a
+  vault-only row, so the run died at IMPORT and never reached check 1 of the 73;
+  see `toolkit/test_bareimport.py`, which now guards exactly that. With the
+  import fixed §19 still killed the run, because `pinned.find()` reports a
+  missing build by raising **SystemExit**, a BaseException that sails through
+  `except Exception` — so the skip that this paragraph credits it with was
+  unreachable, and a skip that cannot be reached is the same defect as no skip
+  at all. That is the identical failure `test_skelwrite.py`'s entry records at
+  the end of this file (`require_dir` raises SystemExit past `except
+  Exception`), hit twice in two files, which is what makes it a shape rather
+  than an accident. Both except clauses now name SystemExit, and a bare run
+  scores **73 with 3 declared skips, green** — measured, not derived.
+  **This entry said "a healthy 74"
+  until 2026-08-18**: 74 was the count before §20, which landed hours after
+  the recompute in `d0b97b9` — the same commit that wrote §20's paragraph
+  above and left the figure two sentences away from it untouched. It was
+  **17 against a run of 22** when written, with a careful on-paper
+  derivation — 13 row-independent checks plus 4 per row — and the file then
+  grew to 74 against the same one-row table while the floor stayed at 17, so
+  a healthy run did four times its own minimum and three whole sections could
+  have vanished unnoticed. That is the failure `checks.py` exists to refuse,
+  arriving by growth rather than by a bad guess, and the lesson was that a
+  DERIVED floor goes stale silently where a measured one goes stale loudly.
+  Recomputed 2026-08-17 from a real green run — and then the healthy count
+  beside it went stale silently anyway, because `checks.py` can only make the
+  number in the CODE go loud. Nothing reads this paragraph, so when a section
+  lands, the figure here is the one to re-measure by hand.
   §§17-19 are rung Q6: that the replay uses `0x0050` and never `0x0049` (whose
   body writes `charContext+0x528`, silently making the last quest pushed the
   active one), that `0x004C` precedes `0x0054` — **deliberately NOT ArenaNet's
@@ -3801,16 +4138,39 @@ Every one of these, in the order they were written:
   background Blender had not evaluated the parent's matrix_world before the
   parent-inverse was taken from it -- and the hatcher's thin silhouette
   refuted the guessed 0.02 coverage floor at 0.0147 -- and that number has
-  a measured CAUSE, pinned by the --opaque control: the hatcher's bound
-  diffuse texture carries alpha ~0 on 99.9% of its texels and the inherited
-  prop convention wires texture alpha as transparency, so the default
-  render is a floating head over an invisible torso; --opaque at least
-  triples the coverage (0.0147 -> 0.1932), and what the alpha channel MEANS
-  on a unit texture stays NOT DECODED with the AMAT chain. Floor 72 from
-  the green run (71 -> 72 with the review's real-data tiling check);
-  sections 0-1 (synthetics + the resolve_outdir refusal with its positive
-  controls and the mapexport delegation check) score 28 vault-less and go
-  RED; with the archive but no Blender, 53, also RED),
+  a measured CAUSE: the hatcher's bound diffuse texture carries alpha ~0 on
+  99.9% of its texels and the inherited prop convention wired texture alpha
+  as transparency, so the default render was a floating head over an
+  invisible torso, and --opaque tripled the coverage (0.0147 -> 0.1932).
+  **THE ALPHA ARM HAS SINCE MOVED, and the checks moved with it.** The
+  terrain arc fixed that cause upstream (FINDINGS 7.17: `_alpha_class`
+  calls this texture an "eraser", `gwmodel_materials` skips the wiring for
+  that class alone), so both arms measured 0.1932 and the >=3x gap check
+  became one that could not fail either way -- the suite's only
+  pre-existing red, 2026-08-18. It was REWRITTEN to assert the new truth
+  rather than relaxed, in four parts, because the obvious single
+  replacement is vacuous: "default == opaque" is satisfied just as well by
+  a viewer that has stopped wiring alpha ENTIRELY. So: the classifier's
+  verdict is named in section 2 (a decoder fact, checked without Blender --
+  the eraser list is exactly [tex_1C7DB.png], since a count would pass if
+  the verdict moved slots); (a) default and --opaque agree within 0.005 and
+  both show the whole body; (b) the POSITIVE CONTROL -- a manifest copy
+  with the eraser verdict reinstated (a display field no sidecar digest
+  covers; load_gwmodel still verifies every sha256) collapses to under a
+  third of the coverage on IDENTICAL geometry, reproducing 0.0147 on
+  demand; (c) --opaque still triples it back on that tampered manifest,
+  which is the original assertion kept alive on the one input where it can
+  still fail. All four are MUTATION-TESTED red (wire alpha always -> a,b;
+  never wire alpha -> b,c with (a) PASSING, which is the whole argument for
+  (b); a no-op _force_opaque -> c; a classifier that never says "erases" ->
+  the naming check and a). What the alpha channel MEANS on a unit texture
+  stays NOT DECODED with the AMAT chain -- `_alpha_class` is a floor rule,
+  not a decoding. Floor 76 from the green run, 23.6 s (72 -> 76 with the
+  rewrite, two of its five Blender runs being the tamper arms; 71 -> 72
+  with the review's real-data tiling check); sections 0-1 (synthetics + the
+  resolve_outdir refusal with its positive controls and the mapexport
+  delegation check) score 28 vault-less and go RED; with the archive but no
+  Blender, 54, also RED),
   `toolkit/mapdata/test_unitauthor.py` (rung A4, the ADDITIVE path: add a 16th
   linked file to a creature's shell and one sequence record that selects it.
   Two of the three things it must get right cannot fail a checksum, cannot fail
@@ -3906,4 +4266,39 @@ Every one of these, in the order they were written:
   the exact unguarded-exception failure the models-arc review named, now
   guarded and commented. ~40 s default; nothing outside the vault is ever
   written -- the rebuilt archive and its journals live under
-  `vault/exports/unitwrite/`).
+  `vault/exports/unitwrite/`),
+  `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
+  vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
+  `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and
+  `def_1480` is a bulk-extracted live NPC definition that exists only in
+  `vault/content/npcs.toml`. From that commit `import authsrv` raised
+  `ContentError` on any bare machine -- the server's own import, not a test's --
+  and nothing went red for three days, because the suite runs where a vault IS.
+  Twelve tests died at import, four of whose docstrings say "no vault, no
+  socket, no client" flatly (`test_ping.py`, `test_dispatch.py`,
+  `test_population.py`, `test_killwindow.py`). **They did not fail their floors**:
+  the exception escaped before `checks.py` could rule, so a bare run produced a
+  traceback rather than a verdict naming the shortfall -- which is the same
+  defect as a missing floor, approached from outside the ledger. §0 imports
+  `authsrv` with `RURIK_VAULT` aimed at a path that does not exist; its CONTROL
+  is load-bearing, because "the server imported fine" is also what a stand-in
+  vault silently resolving to the real one would print, so the control demands
+  that `def_1480` still be UNREACHABLE in that same subprocess. §1 imports
+  `probes` alone, since an import chain that routes around the bind today could
+  stop tomorrow. §2 is the half that survives the next mistake: an AST walk of
+  the server path for module-level content binds, each key resolved against
+  `content.load(vault_dir="")` -- repo tables only -- and it names file:line
+  rather than making someone reproduce a bare machine. It also asserts the scan
+  MATCHED something (5 binds today), because a scanner that quietly stopped
+  matching would pass §2 while checking nothing, which is `test_codec.py`'s
+  fixture-glob defect one level up. **The fix was NOT a repo-side copy of the
+  row, and §2's failure text says so**: CLAUDE.md's measurement-vs-expression
+  boundary permits it -- `def_1480` names its extractor, its build and its
+  provenance per row -- but those rows are only ever read to build Step
+  sequences that drive a REAL CLIENT, and client builds live in the vault too,
+  so on the one machine where a committed copy would be read there is no client
+  to run the probe against. It would buy an import, not a capability, while the
+  vault row overrode it by key everywhere the probe can actually run. The bind
+  moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
+  reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
+  nothing here can skip, which is the whole claim. <1 s).

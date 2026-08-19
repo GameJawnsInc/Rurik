@@ -802,6 +802,27 @@ def _play(tails, proc, outdir, warn=3.0):
         if not hwnd:
             break
         time.sleep(0.5)                          # let character select paint
+        # NORMALISE BEFORE AIMING. PLAY_FX/PLAY_FY are a position in ONE window
+        # shape, and character select does not lay its buttons out by
+        # proportion: at 716x1040 this same fraction is the DELETE button
+        # (2026-08-18, another session had resized the client; see
+        # drive_client.CLIENT_W). Resizing to the calibrated geometry is what
+        # makes the fraction mean what it was measured to mean.
+        ok, before, after = dc.normalize_window(hwnd)
+        if before != after:
+            print(f"  play: window {before} -> {after} "
+                  f"(calibrated {dc.CLIENT_W}x{dc.CLIENT_H})", flush=True)
+        if not ok:
+            # FAIL CLOSED. An un-normalised window means we do not know what is
+            # under the cursor, and the observed cost of guessing wrong is a
+            # character-deletion dialog, not a wasted click.
+            print(f"  play: REFUSING to click -- the window is {after} and the "
+                  f"Play fraction is calibrated for {dc.CLIENT_W}x"
+                  f"{dc.CLIENT_H}. At a different aspect this coordinate is a "
+                  f"DIFFERENT BUTTON (it was Delete on 2026-08-18). Resize the "
+                  f"client, or recalibrate PLAY_FX/PLAY_FY and say so here.",
+                  flush=True)
+            return False
         if dc.click(hwnd, proc.pid, PLAY_FX, PLAY_FY):
             delivered = True
         got, idx = tails["auth"].wait_for(by(kind="game_instance_request"),
@@ -1095,6 +1116,31 @@ def hold_open(proc, seconds, tails, outdir, quiet=False, shot_every=0.0):
         capture_error_dialog(outdir, wait=1.0, quiet=True)
 
 
+def verdict_after_hold(ok, hold_result):
+    """Fold the hold's outcome into the run verdict. It may only ever REMOVE a pass.
+
+    THIS FUNCTION EXISTS BECAUSE THE RETURN ABOVE USED TO GO NOWHERE. `hold_open`
+    has returned "exited" for a client that died during the hold since 276080a --
+    the portal commit -- and the comment at that `return` says "a corpse
+    afterwards unmakes it". It did not: the only call site was a bare expression
+    statement, `ok` was never reassigned after it, and a run whose client
+    asserted during the hold still printed RUN VERDICT: PASS and exited 0.
+    `customarea/FINDINGS.md` 31.4 recorded the defect as FIXED on the strength of
+    that `return`. The statement shipped; the wiring did not.
+
+    So the rule lives in a pure function with a truth table in `test_harness.py`
+    rather than inline at the call site, and the test also asserts STRUCTURALLY
+    that `run_client` consumes `hold_open`'s value -- because a correct helper
+    nobody invokes is precisely the bug being fixed, and it would otherwise look
+    identical from here.
+
+    Retraction only. A hold cannot turn a failed run green: the verdict is read
+    before the walk and says something true about the spawn, and the hold can
+    only add bad news.
+    """
+    return bool(ok) and hold_result != "exited"
+
+
 def capture_error_dialog(outdir, wait=12.0, quiet=False):
     """Read the client's fatal-error dialog into the run's own report.
 
@@ -1336,8 +1382,15 @@ def run_client(a, outdir):
                       "there is nothing to walk", flush=True)
 
         if a.keep_open:
-            hold_open(proc, a.hold, tails, outdir,
-                      quiet=prompts_operator(a), shot_every=a.shots)
+            held = hold_open(proc, a.hold, tails, outdir,
+                             quiet=prompts_operator(a), shot_every=a.shots)
+            # THE HOLD CAN TAKE THE VERDICT AWAY, same as the walk above. Until
+            # 2026-08-18 this call dropped its own return and a client that died
+            # during the hold still printed PASS -- see verdict_after_hold.
+            was_ok, ok = ok, verdict_after_hold(ok, held)
+            if was_ok and not ok:
+                print("  RUN VERDICT RETRACTED: the run passed its checkpoints, "
+                      "then the client died during the hold.", flush=True)
     finally:
         # READ THE CRASH DIALOG BEFORE ANYTHING CLOSES IT, ON EVERY PATH.
         # `capture_error_dialog` used to be reachable ONLY from hold_open(),

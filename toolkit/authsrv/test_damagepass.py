@@ -42,9 +42,9 @@ import checks  # noqa: E402
 import damagepass  # noqa: E402
 import vaultpath  # noqa: E402
 
-# Floor set from a real green run (44 checks, 2026-08-18); every section
+# Floor set from a real green run (68 checks, 2026-08-18); every section
 # runs unconditionally, so the mandatory core is the whole file.
-LEDGER = checks.Ledger("damagepass", floor=44)
+LEDGER = checks.Ledger("damagepass", floor=68)
 check = checks.adopt(LEDGER)
 
 f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
@@ -104,6 +104,29 @@ check(d_bad["spread"] > 1.0,
 # No attenuation: r >= 1 must report None, not a complex D.
 d_flat = damagepass.divisor_fit({60: 100.0, 80: 100.0})
 check(d_flat["D_per_ar"][80] is None, "r=1.0 reports None (form refuted)")
+
+# ERROR BARS ARE NOT OPTIONAL, and this is the correction the rung-7
+# adversarial review forced. Fed raw samples, the fit must report an interval;
+# fed bare means it must report None rather than a fake precision. The rung-7
+# run's D = 38.16 read as "D is not 40" until the interval appeared -- 40 sits
+# 0.8 sigma away, well inside.
+import random as _random                                          # noqa: E402
+_random.seed(20260818)
+sam = {60: [_random.gauss(22.84, 2.6) for _ in range(67)],
+       80: [_random.gauss(15.88, 1.8) for _ in range(50)],
+       100: [_random.gauss(11.39, 1.3) for _ in range(61)]}
+d_s = damagepass.divisor_fit(sam)
+check(d_s["n"][80] == 50 and d_s["sem"][80] is not None,
+      "fed raw samples the fit reports n and a standard error per AR")
+check(d_s["D_ci"][80] is not None and
+      d_s["D_ci"][80][0] < d_s["D_per_ar"][80] < d_s["D_ci"][80][1],
+      "and a 95% interval bracketing its own point estimate",
+      f"D={d_s['D_per_ar'][80]:.2f} CI={d_s['D_ci'][80]}")
+check(d_s["sigma_from_40"][80] is not None,
+      "and the distance of the wiki's D=40 from it, in sigma",
+      f"{d_s['sigma_from_40'][80]:+.2f}")
+check(d["D_ci"].get(80) is None and d["n"].get(80) is None,
+      "fed bare means the same fields come back None -- no invented precision")
 
 # Missing base AR refuses.
 try:
@@ -263,6 +286,161 @@ check(len(nonzero) >= 1,
       "skill-polluted arena p17 groups show nonzero variance -- §3.1's "
       "attack-skill confound, measured; the Isle removes it by design",
       f"{len(nonzero)}/{len(big)} groups nonzero")
+
+# ---------------------------------------------------------------------------
+print("== 7. the timebase join: tape-local vs capture-global ==")
+
+# THE BUG THIS PINS, found on the rung-7 capture: tape.load_tape returns times
+# measured from the connection's OWN first s2c segment, while plan marks are on
+# the capture's global wire clock. Reading events without adding info["t0"]
+# shifts every label by the connection's opening offset -- silently, into a
+# NEIGHBOURING step, so blocks come back mislabelled rather than unlabelled.
+# On this capture the Master of Damage's 42-swing engage block landed under the
+# WALK step (which should hold zero swings), and the AR=100 block split across
+# two labels. Nothing errored; the numbers were simply wrong.
+rung7 = vaultpath.require_dir(
+    "captures", "live", "20260818T132739",
+    why="the timebase pin needs the rung-7 capture")
+CONN7 = "10.0.0.210:53202->44.217.41.117:80"
+info7, _ = damagepass.tape.load_tape(rung7, CONN7)
+t0_7 = info7.get("t0")
+check(t0_7 is not None and t0_7 > 1.0,
+      "the rung-7 bench connection opens well after the capture's t=0",
+      f"t0={t0_7}")
+
+ev7 = damagepass.join_targets(damagepass.read_events(rung7, CONN7))
+w7 = damagepass.mark_windows(rung7)
+check(len(w7) == 22, f"the sealed 22-step plan yields 22 mark windows "
+                     f"(got {len(w7)})")
+first_dmg = min(d["t"] for d in ev7["damage"])
+check(first_dmg > t0_7,
+      "damage times are on the capture clock, not the connection clock",
+      f"first damage t={first_dmg:.1f} vs connection t0={t0_7:.1f}")
+
+g7 = damagepass.scoped_groups(ev7, w7)
+lab7 = damagepass.label_groups(g7, w7)
+# The walk-to-the-bench step (3) and the walk-to-the-MoD step (8) are pure
+# travel: a correct join puts NO engagement block in either.
+walk_steps = {3, 8}
+walk_hits = sum(len(rows) for key, rows in g7.items() if key[3] in walk_steps)
+check(walk_hits == 0,
+      "no damage lands in the two pure-walking steps (the shifted join put "
+      "42 swings there)", f"{walk_hits} events")
+# And the MoD block (step 9) must hold the Master of Damage's own body.
+mod = [key for key in g7
+       if key[3] == 9 and key[0] and key[0][1] == 144 and key[2] == 16]
+check(len(mod) == 1 and len(g7[mod[0]]) == 42,
+      "step 9 holds exactly the 42-swing Master of Damage block",
+      f"{[len(g7[k]) for k in mod]}")
+ar_labels = {lab["ar"] for key, lab in lab7.items() if lab["ar"] is not None}
+check(ar_labels == {60, 80, 100},
+      "the bench blocks carry exactly the three pre-registered armour labels",
+      f"{sorted(ar_labels)}")
+
+# ---------------------------------------------------------------------------
+print("== 7b. the attribute channel, measured on the rung-7 rank sweep ==")
+
+# GATE 1 ASKED FOR THIS AND NO CAPTURE HAD EVER CARRIED IT: `0x003A` column 3,
+# `0x0037`'s points, and the point budget, from a REAL rank reassignment. The
+# rung-7 rank sweep produced all three, and they cross-check arithmetically.
+#
+#   0x0037 [agent, unspent, 200]      at instance load
+#   0x003A [agent, ids | base | eff]  at instance load, COLUMN-MAJOR
+#   0x003B [agent, attr, base, eff]   one per mid-instance raise
+#   0x0038 [agent, unspent]           the raise's cost, debited
+#
+# The operator's own screenshot says "Attributes (5 unused points)" with
+# Strength 8 / Swordsmanship 13 / Tactics 10 -- and the wire's first 0x0037
+# says 5 against a budget of 200, so the two agree before any arithmetic.
+attr = {"0x0037": [], "0x003A": [], "0x003B": [], "0x0038": []}
+per_conn = {}
+for row in damagepass.tape.channel_files(rung7):
+    info, events = damagepass.tape.load_tape(rung7, row["connection"])
+    t0 = info.get("t0") or 0.0
+    events = [(round(t + t0, 6), p) for t, p in events]
+    msgs, _ = damagepass.tape.decode_all(events, damagepass.Codec(),
+                                         "GAME_SMSG", 0)
+    for t, op, v in msgs:
+        key = {0x37: "0x0037", 0x3A: "0x003A", 0x3B: "0x003B",
+               0x38: "0x0038"}.get(op)
+        if key:
+            attr[key].append((t, v[1:]))
+            per_conn.setdefault(row["connection"], {}).setdefault(
+                key, []).append(v[1:])
+
+budgets = {v[2] for _, v in attr["0x0037"]}
+check(budgets == {200}, "0x0037 field 3 is a constant 200 -- the level-20 "
+                        "attribute point budget", f"{budgets}")
+first_unspent = min(attr["0x0037"], key=lambda r: r[0])[1][1]
+check(first_unspent == 5,
+      "0x0037 field 2 at session start is 5, matching the operator's own "
+      "screenshot ('5 unused points')")
+
+# 0x003A is column-major: 3 ids, then 3 base ranks, then 3 effective ranks.
+_, first_a = min(attr["0x003A"], key=lambda r: r[0])
+arr = first_a[1]
+check(len(arr) == 9 and arr[:3] == [17, 20, 21],
+      "0x003A carries 3 attribute ids (17 Strength, 20 Swordsmanship, "
+      "21 Tactics) in its first column", f"{arr}")
+check(arr[3:6] == [8, 12, 10] and arr[6:] == [8, 13, 10],
+      "columns 2 and 3 are BASE and EFFECTIVE rank, and they differ on "
+      "Swordsmanship alone -- the operator's +1 bonus, visible on the wire",
+      f"base {arr[3:6]} eff {arr[6:]}")
+
+# A mid-instance attribute CHANGE: 0x003B names the attribute and both ranks.
+# There are 14 across the session, and that count is itself the operator's
+# report on the wire: the Isle steps RAISE, the Great Temple of Balthazar
+# visits LOWER (the game refuses to lower in an explorable area), and the
+# closing restore step walks 8 back up to 13 in five single steps.
+steps = [v for _, v in sorted(attr["0x003B"], key=lambda r: r[0])]
+check(len(steps) == 14, f"14 attribute changes across the session "
+                        f"(got {len(steps)})")
+check(all(v[1] == 20 for v in steps),
+      "every one of them names attribute 20, Swordsmanship -- no other "
+      "attribute moved all session")
+check(all(v[3] == v[2] + 1 for v in steps),
+      "effective is base+1 in all 14 -- the +1 bonus is a constant offset, "
+      "not something the change messages recompute")
+# The bench connection carrying the 11/12/13 sweep holds exactly two raises.
+sweep = per_conn["10.0.0.210:55252->52.3.40.244:80"]
+check(sweep["0x003B"] == [[25, 20, 11, 12], [25, 20, 12, 13]],
+      "the rank-sweep connection holds exactly the two pre-registered raises",
+      f"{sweep['0x003B']}")
+
+# The budget closes: three independent equations, no cost table assumed.
+by_base = {}
+for t, v in attr["0x0037"]:
+    if v[0] == 25:      # the player's own agent
+        near = [a for a in attr["0x003A"] if abs(a[0] - t) < 1.0]
+        if near:
+            by_base[near[0][1][1][7]] = v[1]     # effective sword rank -> unspent
+check(by_base == {13: 5, 11: 41, 9: 65, 8: 74},
+      "unspent points at each declared rank, off four instance loads",
+      f"{by_base}")
+# cum(8) + cum(12) + cum(10) = 195, cum(12)=cum(10)+36, cum(10)=cum(8)+24
+cum8 = (195 - (41 - 5) - (65 - 41) * 2) / 3
+check(cum8 == 37.0,
+      "solving the three equations gives cum(8) = 37 attribute points",
+      f"{cum8}")
+check(cum8 + 24 == 61 and cum8 + 60 == 97,
+      "hence cum(10) = 61 and cum(12) = 97 -- and 97 is the number GWW "
+      "publishes for rank 12, reached here with no cost table assumed")
+# And the sweep connection's own 0x0038 debits confirm that 36 independently,
+# splitting it into the two per-rank costs the instance-load readings cannot
+# separate: 41 -> 25 -> 5, so base 10->11 costs 16 and 11->12 costs 20.
+debits = [v[1] for v in sweep["0x0038"]]
+check(debits == [25, 5],
+      "the sweep connection debits unspent 41 -> 25 -> 5 as the two raises "
+      "land", f"{debits}")
+check((41 - 25) + (25 - 5) == 36,
+      "those two debits sum to the same 36 the instance-load readings gave "
+      "for base 10->12 -- two unrelated routes to one number")
+check((41 - 25, 25 - 5) == (16, 20),
+      "and they SPLIT it: rank 11 costs 16 points, rank 12 costs 20 -- "
+      "per-rank costs the load readings alone cannot separate")
+
+# ---------------------------------------------------------------------------
+print("== 8. corpus, continued ==")
 
 # The chat channel: the level-up template's cleartext args (B8's pin).
 lvl = damagepass.read_events(

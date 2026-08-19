@@ -41,6 +41,14 @@ WHAT MAKES A MOVE SAFE, and every one of these is a refusal rather than a note:
   * **All four MFT fields move together** -- offset, size, compression, crc --
     plus the table's self-crc. Getting three of four right looks exactly like a
     malformed payload from the client's side.
+  * **The compression code is DECLARED, and the declaration is checked against
+    the bytes.** Default 0, which is what this verb has always written and what
+    every existing caller depends on. `--compression 8` requires `--expect`, and
+    the bytes are decompressed and compared against it before anything is
+    written. Relocating compressed bytes while marking the row stored --
+    FINDINGS C-6, a green archive holding an unreadable file -- is now a loud
+    refusal instead of a silent success. See `move()` and
+    `datwrite.declaration_fault`.
 
 WHAT DOES NOT CHANGE, and it is worth knowing before reaching for this:
 
@@ -191,17 +199,49 @@ def plan_move(ar, row, payload_size):
                     new_res, block, len(usable), largest, excluded)
 
 
-def move(path, row, data, journal_path, confirm=False, plan=None):
+def move(path, row, data, journal_path, confirm=False, plan=None,
+         compression=0, expect=None, stored_lookalike_ok=False):
     """Do it. Returns the MovePlan that was carried out.
 
     Order is deliberate and is the one thing a reader should check: the payload
     goes to its new home FIRST, then the MFT is pointed at it, then the old
     reservation is zeroed. An interrupted run therefore leaves the row pointing
     at either the old bytes or the new ones and never at a hole.
+
+    THE COMPRESSION CODE IS AN ARGUMENT AS OF 2026-08-18, and its default is the
+    behaviour every existing caller depends on. This verb wrote `compression -> 0`
+    UNCONDITIONALLY for its whole life, which is *coherent* for its designed use
+    -- you hand it plaintext, it marks the row stored -- and is what
+    `textwrite.py`, `deploy.py`'s subprocess and the six `a4stage*.py` staging
+    scripts under `vault/research/archivewrite/` all rely on. None of them is
+    edited. `a4stage5` drove eleven real rows through this path on a real 4.2 GB
+    copy that the owner then launched.
+
+    WHAT CHANGED IS THAT THE SILENT CASE IS NOW LOUD. Hand this a compression-8
+    row's stored bytes to relocate them and, until today, it produced a **green
+    archive holding an unreadable file**: the row is marked stored while its
+    bytes are still compressed, the entry CRC is over the stored bytes and does
+    not move, so all three checksum rules and all ten open-time rules still pass.
+    That is studies/archivewrite/FINDINGS.md **C-6**, and the honest statement of
+    it was always *"no safe relocation verb exists for compressed rows"* rather
+    than *"datmove corrupts archives today"*. Nobody could reach it, because
+    until `gwenc.py` existed nothing in this project could produce compression-8
+    bytes. Now they can, so both halves are closed here: the declaration is
+    checked against the bytes (`datwrite.declaration_fault`), and the safe
+    relocation verb is `compression=8` with the payload it must decompress to.
+
+    The check runs before `Refused("refusing to write without --confirm")` on
+    purpose: a `--plan` run should report a bad declaration rather than pass and
+    then fail on the real invocation.
     """
     datwrite.guard(path)
     datwrite.guard_source(path)
     data = bytes(data)
+    fault = datwrite.declaration_fault(data, compression, expect,
+                                       stored_lookalike_ok)
+    if fault:
+        raise Refused(f"will not move row {row} as compression {compression}.\n"
+                      f"  {fault}")
     with Archive(path) as probe:
         plan = plan or plan_move(probe, row, len(data))
     if not confirm:
@@ -219,8 +259,9 @@ def move(path, row, data, journal_path, confirm=False, plan=None):
               f"0x{plan.new_offset:X}")
         w.put(base + ENTRY_SIZE_OFF, struct.pack("<I", len(data)),
               f"MFT row {row} size {plan.old_size} -> {len(data)}")
-        w.put(base + ENTRY_COMP_OFF, struct.pack("<H", 0),
-              f"MFT row {row} compression -> 0 (stored)")
+        w.put(base + ENTRY_COMP_OFF, struct.pack("<H", compression),
+              f"MFT row {row} compression -> {compression}"
+              + (" (stored)" if compression == 0 else ""))
         w.set_entry_crc(row, binascii.crc32(data))
         # LAST, and only now that nothing points at it any more.
         w.put(plan.old_offset, b"\x00" * plan.old_reservation,
@@ -266,6 +307,15 @@ def _main(argv=None):
     ap.add_argument("--confirm", action="store_true",
                     help="required by --move; it writes to the archive")
     ap.add_argument("--journal", default=None)
+    ap.add_argument("--compression", type=int, choices=(0, 8), default=0,
+                    help="the compression code to MARK the moved row with "
+                         "(default 0, stored -- what every caller of this tool "
+                         "has always got). 8 requires --expect.")
+    ap.add_argument("--expect", metavar="FILE",
+                    help="the payload a reader must get back. MANDATORY with "
+                         "--compression 8: the entry crc is over the STORED "
+                         "bytes, so nothing can check a compressed row after "
+                         "the move.")
     ap.add_argument("--check-overlaps", action="store_true",
                     help="read-only: no two rows may share a block")
     a = ap.parse_args(argv)
@@ -281,17 +331,32 @@ def _main(argv=None):
 
     if not a.data:
         ap.error("--data is required")
+    if a.compression == 8 and not a.expect:
+        ap.error("--compression 8 needs --expect FILE (the payload a reader "
+                 "must get back). See datwrite.declaration_fault.")
+    # --expect with --compression 0 is permitted and means something: for a
+    # stored row the bytes ARE the payload, so passing it is the caller stating
+    # that positively rather than switching a check off.
     with open(a.data, "rb") as fh:
         payload = fh.read()
+    want = None
+    if a.expect:
+        with open(a.expect, "rb") as fh:
+            want = fh.read()
 
     try:
         if a.plan or not a.move:
+            fault = datwrite.declaration_fault(payload, a.compression, want)
+            if fault:
+                raise Refused(f"will not move row {a.row} as compression "
+                              f"{a.compression}.\n  {fault}")
             with Archive(a.dat) as ar:
                 plan_move(ar, a.row, len(payload)).show()
             print("\nnothing was written. Add --move --confirm to do it.")
             return 0
         journal = a.journal or (a.dat + f".move{a.row}.journal.json")
-        plan = move(a.dat, a.row, payload, journal, confirm=a.confirm)
+        plan = move(a.dat, a.row, payload, journal, confirm=a.confirm,
+                    compression=a.compression, expect=want)
         print(f"\nmoved. journal: {journal}")
         print(f"revert with:\n  python toolkit/mapdata/datwrite.py "
               f"--revert {journal}")

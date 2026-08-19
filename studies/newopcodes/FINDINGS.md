@@ -352,7 +352,32 @@ per-map-load reset on characters that are not new Factions characters.
 | field | reading | label |
 |---|---|---|
 | 1 `string16(128)` | the callout text, as a **server-allocated dynamic string handle** | **OBSERVED** — four code units, and the first unit **increments by one** between the two sightings (`0x4A9E` → `0x4A9F`). That is a handle, not text. Contrast the same stream at idx 335 (`0x005D`), whose 4-unit prefix is followed by `0x0107` and literal UTF-16 `character B` |
-| 2 `u32` | 1, then 0 | **UNVERIFIED**. Worth recording: the smsgsweep run that produced the observed on-screen callout used the all-other-fields-zero regime, so **field2 = 0 is the value proven to render a framed closable callout**, and one of our two live sightings is exactly field2 = 0. field2 = 1 is untested |
+| 2 `u32` | 1, then 0 | **OBSERVED 2026-08-18 — it is a TEXT-STYLE flag: 0 renders the string cream/white, 1 renders it GOLD.** Two runs differing in this field alone (below) |
+
+> ### RUN 2026-08-18 — field 2 is a TEXT-STYLE flag, and both arms are on disk. OBSERVED
+>
+> Two loopback runs identical but for this field, the same one-unit EncString (`0x3D64`,
+> which the client resolves to **"Ascalon"**) in both, scored by the same instrument:
+> `20260818T172323` (field2 = 0, plain `b900 0100 643d 0000 0000`) and `20260818T172508`
+> (field2 = 1, plain `b900 0100 643d 0100 0000`).
+>
+> **Both render the framed closable callout**, at the same screen position, with the same
+> box and the same X button, ~3 s after the send, and it persists (the run's per-frame
+> changed-pixel baseline is otherwise exactly 0, so the appearance is unmissable: 975 px
+> at field2 = 0, 1,015 px at field2 = 1). The callouts' outer bounding boxes are
+> **identical**. What differs is **884 px inside the box**: the glyph colour, measured over
+> the bright text pixels — **(211,199,182) at field2 = 0** versus **(210,193,151) at
+> field2 = 1**. Red holds while blue falls 31, i.e. the warm bias roughly doubles
+> (R−B +29 → +59). Cream/white versus gold.
+>
+> So the 2026-08-12 operator reading is now reproducible from a recorded command line
+> rather than a remembered screenshot, and the flag that was UNVERIFIED has an effect.
+> **The MEANING stays UNVERIFIED** — gold could be completed, bonus, primary, or merely
+> new, and colour alone cannot say which. What makes that worth chasing rather than
+> guessing: **retail exercises both values**, in adjacent messages, in the same stream
+> (idx 329 field2 = 1, idx 331 field2 = 0, each behind a `0x00BB` carrying a byte-identical
+> string), so the discriminator is a capture in which the two objectives' states are known
+> on screen, not another loopback arm.
 
 **The proposal's whole coherence story does not survive the wire.** It framed
 {`0x00B8` canned toast, `0x00B9` append, `0x00BA` clear} as a triplet. Census over all live
@@ -648,6 +673,655 @@ observed reader of `accumIntList[0]` in the corpus, and no agent found it.
 the ids of the immediately preceding `0x0161` batch = **OBSERVED**, n = 2; mechanism =
 appends each dword to `ChCliApi accumIntList[0]` = **SOURCED**; **"items" specifically =
 NOT ESTABLISHED.** A mechanism-honest alternative name is `ACCUM_INT_LIST0_APPEND`.
+
+**RUN 2026-08-18 — `accum_drains`, harness `20260818T171920`. Three drains QUIET with real
+ids staged; one arm UNMEASURED; the assert reading is confirmed positively.** OBSERVED.
+With items 40/41/42 declared by `0x0161` and staged through `0x0084` (and column 1 fed
+`[1,1,1]` where both lists are read), the drains produced **no UI change whatsoever**:
+`0x0085`, `0x00D4` and `0x0086` each sat in a run whose per-frame changed-pixel baseline
+was **exactly 0** outside the player's own idle animation. That is the pre-registered null,
+and per this probe's own note it **refutes nothing** — the only observed reader of the
+staged buffer (the `0x00C5` flow) rides a window context, and this run opened no window.
+**The positive result is the assert:** `0x0086` with counts deliberately equal (3 == 3) was
+accepted with **no `ChCliApi.cpp(1587)`**, so the disassembly's equal-counts guard is
+confirmed from the running client rather than only from the listing — and the ladder's
+original design, which would have sent 3 against 0, is confirmed as the crash it was
+predicted to be.
+
+**Two honest gaps, neither papered over.** (1) **`0x00E1` was never observed**: the client
+left the OS foreground for ~23 s and `shot_if_foreground` correctly declined to photograph
+another window, so ten frames spanning that drain do not exist. The one drain carrying an
+upstream name worth testing is the one with no coverage. **CLOSED below.** (2) The single
+non-zero frame in the run — 7,172 changed pixels at the `0x00D4` drain — is a **skill
+tooltip** ("Battle Rage…") raised by the mouse resting over the skill bar, plus the chat
+input taking focus. It looked like a hit at the aggregate level and is an artifact;
+recorded because the next reader will otherwise re-derive it from the same numbers.
+
+> ### `0x00E1`'s gap is CLOSED, 2026-08-18 — three drains, full coverage, nothing renders. OBSERVED, and read the scope line.
+>
+> Probe `accum_drain_e1` (three drains ~11 s apart, both columns restaged before each,
+> independent because every drain zeroes both counts). Run **`20260818T180039`** is the
+> record: **29 frames, max inter-frame gap 2.3 s, every drain bracketed within 3 s on both
+> sides.** An earlier identical run (`20260818T175506`) agrees exactly but is **kept only
+> as corroboration — the operator clicked in the client during it**, and a session with
+> unlogged human input is not the one to hang a null on.
+>
+> **Result: no observable change on any photographed surface, at any of the three drains.**
+> Verified three independent ways, because the first way had a hole (below): the masked
+> scorer reads **exactly 0** changed pixels outside the player's body from settling to end
+> of run; **direct visual inspection** of pre-drain vs drain+4 s frames shows identical
+> screens but for the player's arm; and inside the region the scorer masks, the largest
+> connected changed-blobs at drains (929 / 517 / 918 px, all ~40×40, limb-shaped) are
+> **indistinguishable from no-drain control pairs** (871 / 511 px) and nothing like the wide
+> coherent rectangle a banner or panel would draw.
+>
+> **THE SCOPE, and it is the whole finding.** This says *a bare drain renders nothing with
+> no UI window open*. It does **not** say `0x00E1` does nothing: the worker posts frame-bus
+> event `0x100000BA`, and if nothing subscribes in this client state then zero pixels is a
+> statement about the **subscriber**, not the opcode. The only observed reader of this
+> buffer, the `0x00C5` flow, rides a window context this run never opened — pre-registered
+> in the probe before the run, and unchanged by it. The next experiment opens a window
+> first; it is not another bare drain.
+>
+> ### THE WINDOW ARM RAN — 2026-08-18, and the window-gated hypothesis FAILS for both panels. OBSERVED
+>
+> Run **`20260818T184210`**: the **same probe**, byte-identical sends, with **only the
+> window state changed** (`--actions "0:play 7:key:I 2:key:K"`). A single-variable
+> comparison against the no-window run above, which is what makes it worth a launch.
+>
+> **Precondition verified from the frames before anything was scored** — a null from a
+> window that never opened would repeat the exact mistake this arm exists to fix. Both
+> panels are open and legible in every drain frame: **`Inventory (Test Warrior) [I]`**
+> (equipment slots, bag row, Weapon Sets, 0 gold) and **`Skills and Attributes (Test
+> Warrior) [K]`** (Profession: Warrior; Strength 12 / Axe Mastery 9 / Hammer Mastery 6 /
+> Swordsmanship 3 / Tactics 1; and the scrolling skill list showing `Air Magic (30 Skills)`
+> and `Axe Mastery (19 Skills)`).
+>
+> **Result: nothing lands in either panel.** Measured on sub-regions chosen to exclude the
+> inventory's animated paper doll, across all three drains (pre-drain-1 → post-drain-3):
+> **skill list 0 changed pixels, skill category headers 0, inventory bag row 0.** The skill
+> list is *pixel-identical* — the `(30 Skills)` / `(19 Skills)` counts included, so not one
+> row was appended. The only churn is the inventory's left slot column (1,103 px across the
+> drains against **904 px in a no-drain control pair**), which is the doll's animated weapon
+> overlapping that column, not a signal.
+>
+> **So the subscriber is neither the Inventory nor the Skills panel**, and upstream's
+> `SKILL_ADD_TO_WINDOWS_END` does not mean "appends to the skills panel a player can open".
+> That is a real narrowing rather than another empty result: the window-gated explanation
+> was the leading one and it is now refuted for the two panels a player can raise with a
+> keypress. **What survives:** the `0x00C5` flow's own context — a merchant/collector/trade
+> window, which needs an NPC to open and is therefore a different experiment, not another
+> keypress. Also still unobserved by any of these runs: sounds, cursor changes, and any
+> panel that requires an NPC or a map transition.
+>
+> **The wire side was independently verified** rather than assumed: decoding the captured
+> plaintext with this repo's own `toolkit/schema/codec.py` gives `0x0084 = [[40, 41, 42]]`
+> and `0x00D8 = [[1, 1, 1]]`, each consuming its buffer to the exact byte with a correct
+> `array32` count prefix, the three `0x0161` declarations preceding all three reps, ticks
+> continuous at ~50 ms across every drain, zero `Undecodable`, and the eventual
+> `ConnectionResetError` at t=73.0 s — thirty seconds after the last drain. So the client
+> really did hold three real item ids in list 0 and three in list 1 at each drain.
+>
+> **AND A DEFECT IN THE INSTRUMENT, which outlives this result.** The masked scorer used
+> here and above excludes the player's body rect `(850,300)-(1120,760)` to suppress idle
+> animation — and that rect is **where Guild Wars draws its centred area banners and
+> toasts.** Re-scoring the `0x00B9` positive control proves the cost: of 2,079 changed
+> pixels when that callout arrived, **1,104 (53%) fall inside the excluded rect**, and of
+> the 975 that survive, 880 come from a separate small box that merely happened to render
+> above it — had the banner been alone, the countable signal would have been **95 scattered
+> anti-aliased pixels**. A player-centred toast is exactly what an upstream name like
+> `SKILL_ADD_TO_WINDOWS_END` might produce, so this mask could have hidden the very thing
+> the run was looking for. Also measured: the `delta > 28` rule is a **hard step function**
+> — a synthetic uniform patch shifted by 28 scores **0** and by 29 scores **512** — so any
+> change subtler than that, such as the text-colour shift `0x00B9`'s field 2 produces, is
+> invisible to it. **Never publish a null from this scorer without also looking at the
+> masked region.** That is why this result carries a visual and a structural check on top
+> of the pixel count.
+
+> ### THE MERCHANT ARM RAN, AND IT OPENED A SHOP — 2026-08-18. OBSERVED, and it CORRECTS this section's framing.
+>
+> Probe `merchant_window`, harness **`20260818T211036`**, replaying retail's own s1
+> sighting with our own numbers: `0x00C4[21]` → 3× `0x0161` → `0x0084[[40,41,42]]` →
+> `0x00CA[1, 1.0f]` → `0x00C3[3, 0]`.
+>
+> **`0x00CA` OPENS AND POPULATES A COLLECTOR WINDOW FROM THE ACCUM BUFFER.** The frame
+> after it holds a titled panel reading **`Hatcher [Collector]`** — our own spawned NPC's
+> name — with *"Select an item from my list below, then press ‘Buy.’"*, **all three of our
+> staged items listed by name** (`Ringmail Leggings`, `Ringmail Boots`, `Ringmail
+> Gauntlets`), a selection pane showing `Armor: 25 / Armor +20 (vs. physical damage)`, a
+> quantity spinner, `Your funds: 0`, and **Buy / Goodbye** buttons. Attribution is tight:
+> the preceding frame pair (spanning `0x0084`) changed **264 px**; the pair spanning
+> `0x00CA` changed **56,928**, two orders of magnitude past anything else in the session.
+>
+> **So the accum buffer DOES feed a window, `0x0084`'s upstream name `WINDOW_ADD_ITEMS`
+> earns its "items" after all, and `0x00C4` really does bind the window to the named
+> agent** — the panel is titled with our NPC's own name, which is stronger evidence than
+> the face-the-agent control the probe was relying on. **Three prior nulls are now
+> explained rather than merely recorded:** the drains rendered nothing because *no window
+> was open*, and the one message that opens the window was never among them. This
+> section's own "Census: none of the drains ever fires" stands, and its implication that
+> the buffer was untestable does not.
+>
+> **`0x00C3` then CRASHED the client**: `Assertion: item`, `ItCliApi.cpp(859)`, at
+> `21:11:29` against a `0x00C3` send timestamped the same second — exact attribution, not
+> adjacency. The assert site (`0x00845B60`) takes an **item id**, bounds-checks it against
+> the item client's table at `[globals+0x40]+0xB8` / count `+0xC0`, indexes
+> `[base + id*4]`, and asserts the entry is non-null; its caller (`0x005A1D00`) reads that
+> id out of a UI object's `+8` field and passes it in. Same subsystem as the heroes arc's
+> `ItCliApi:488`, one function along.
+>
+> **RECONSTRUCTION, and the cheap test is named: `0x00C3`'s field 1 is an ITEM ID, not a
+> count.** We read retail's `0x00C3[11, 0]` as "11 = the number of items" and sent
+> `[3, 0]` for three items; **3 is not an item we declared** (this session created 40, 41,
+> 42 plus the login hammer at 1), and the crash is exactly what an undeclared id produces
+> on that path. Retail's `11` would then be an item id that existed in *its* stream. **The
+> one-run test:** send `0x00C3[40, 0]` — a declared id — and it should not assert. Until
+> that runs, field 1's meaning is RECONSTRUCTION and the count reading is **withdrawn**,
+> not merely doubted.
+>
+> ### RUN 2 — `0x00C3[40, 0]`, the test named above. The item-id reading SURVIVES; the message still does not.
+>
+> Harness **`20260818T212544`**, single variable changed: `0x00C3`'s field 1 from `3`
+> (undeclared) to `40` (declared and staged). Everything else byte-identical.
+>
+> **The shop REPRODUCED.** `0x00CA` opened the same collector panel — **56,909** changed
+> pixels against run 1's **56,928**, one frame after the send. n=2, so the authored shop is
+> not a one-off.
+>
+> **The `item` assert did NOT fire, and that is the result.** With `3` the client died on
+> `Assertion: item` at `ItCliApi.cpp(859)` — the null guard. With `40` that guard **passed**:
+> the id resolved to a real record. Changing only the id moved the failure past the check
+> that reads it, which is what "field 1 is consumed as an item id" predicts and what a count
+> reading cannot explain. **Field 1 is an ITEM ID — upgraded from RECONSTRUCTION to
+> SOURCED-plus-OBSERVED**, and retail's `[11, 0]` is an id in its own stream, not a tally.
+>
+> **But `0x00C3` still killed the client, and the honest reading is that the id was never
+> the whole problem.** Same step, same second (`21:26:43` against a send at `01:26:43Z`),
+> different failure: **`Exception: c0000005, memory at address 0x2e67736d could not be
+> written`** — not an assert but an access violation, and that address is ASCII **`"msg."`**
+> read little-endian, i.e. execution followed a pointer out of string data. So the id
+> cleared the guard and the path then walked into memory it had no business in: **a plain
+> `0x0161` item is not a merchant-stock item.** What retail's eleven carried that ours does
+> not — a price, a quantity, a collector-offer record — is the open question, and the
+> `0x0161` payload is where to look for it. Pre-registered criterion honoured in both
+> directions: the named assert did not fire, and the run still failed, so the claim earned
+> is exactly the narrow one about field 1.
+>
+> **`0x00C3` IS NOT NEEDED TO OPEN THE SHOP.** `0x00CA` does that, twice over. So the
+> cheapest next run drops `0x00C3` entirely and goes `0x00C4` → `0x0161`×3 → `0x0084` →
+> `0x00CA` → `0x0084`/`0x00D8` → `0x00E1`, which finally fires a drain **into an open
+> window** — the experiment three runs of nulls could not reach, blocked both times only by
+> this message.
+>
+> ### THE CONTRADICTION RESOLVES: the array is the SUBSCRIBER LIST, and the payload rides beside it. 2026-08-18, SOURCED
+>
+> The previous section flagged a tension — alignment evidence said the "row" is `payload+4`,
+> while `Array:587 index < m_count` said something indexes a real array. **Both are true and
+> they are different structures.** The dispatcher at `0x0064BE20` shows them together:
+>
+> ```
+> 0064BEFA  lea  edi,[esi+esi*2] / shl edi,2   ; edi = esi * 12   <-- 12-BYTE STRIDE
+> 0064BF0E  cmp  esi,[ebx+0xB0]                ; bounds check against the COUNT
+> 0064BF16  push 0x24B  (= 587)                ; -> Array:587 "index < m_count"  THE assert
+> 0064BF2A  mov  eax,[ebx+0xA8]                ; the array base
+> 0064BF30  mov  eax,[edi+eax]                 ; element +0
+> 0064BF33  mov  [ebp-4],eax                   ; ...is a FUNCTION POINTER
+> 0064BF36  test eax,eax / je                  ; skip empty slots
+>   ...
+> 0064BFAC  push [ebp+0x10]                    ; > 0064BFAF  push [ebp+0xC]                     ;  > three args
+> 0064BFBC  push eax  (= &[ebp-0x1C])          ; /
+> 0064BFBD  call dword ptr [ebp-4]             ; CALL THE REGISTERED HANDLER
+> ```
+>
+> **`[ebx+0xA8]` is the subscriber list**: 12-byte entries, count at `[ebx+0xB0]`, element `+0`
+> a handler pointer, walked by a countdown loop (`dec esi`) that calls every registered
+> subscriber. That is what `Array:587` guards, and it is what `0x004E8510`'s array indexing
+> is doing too. **It was never a list of item rows.** The payload is threaded *alongside* it
+> as arguments 2 and 3, which is why the row CtlPage walks is `payload+4` — no conflict.
+>
+> **And resolving it exposes the defect in sharper form than either half suggested.** This
+> call site pushes **three** arguments. The handler it selects, `CtlPage`'s dispatch at
+> `0x0061F570`, reads **six** — `[ebp+8]`, `+0xC`, `+0x10`, `+0x14`, `+0x18`, `+0x1C`,
+> copying the last five into its own block:
+>
+> ```
+> 0061F576  mov eax,[ebp+0x0C] -> [ebp-0x14]      0061F588  mov eax,[ebp+0x18] -> [ebp-0x08]
+> 0061F57C  mov eax,[ebp+0x10] -> [ebp-0x10]      0061F58E  mov eax,[ebp+0x1C] -> [ebp-0x04]
+> 0061F582  mov eax,[ebp+0x14] -> [ebp-0x0C]
+> ```
+>
+> **Three pushed, six read — the callee reads three dwords past the call site's arguments**,
+> straight into the dispatcher's own frame. That is the same class of fault as the `+0x10`
+> cookie read, one level up, and it is the concrete form of "delivered to the wrong
+> subscriber": **the handler pointer comes out of a registration array, so a mismatched
+> signature is a registration problem, not a message problem.** A subscriber registered for
+> a different calling convention is invoked with this dispatcher's three arguments and reads
+> whatever follows.
+>
+> **Net effect on the merchant question, and it is now a closed direction:** every layer from
+> the wire down has been eliminated — the `0x0161` fields (bit 2 tested and refuted, price
+> reasoned out), the `0x00C3` payload (counted: four dwords, exactly what retail's handler
+> writes), and now the delivery path (a registration array we do not populate and cannot
+> reach from the wire). **`0x00C3` is not authorable by a server.** What remains is entirely
+> about which subscriber our session has registered for `0x100000B5` and why — a client-side
+> UI-state question, in `GmView`, whose subscription timing already has a measured history
+> (`studies/pvpui` §19, 53 ms).
+>
+> ### WHAT SUBSCRIBES TO `0x100000B5` — **GmView**, and the arc's recurring antagonist again. 2026-08-18, SOURCED
+>
+> **Method note worth keeping: you cannot find this by searching the constant.** All **nine**
+> references to `0x100000B5` in the image are `push imm32` — every one a POSTER, not a
+> consumer. Subscription passes the id as a runtime value, so no `cmp` against it exists.
+> (Eight posters are the window-owner family at `0x00813FB3`–`0x0081448B`, matching this
+> document's eight readers. **The ninth, `0x004ECEFD`, is new** — a poster in the UI region
+> itself, outside that family, and nothing here has looked at it.)
+>
+> **What does work is the crash trace, which walks the delivery path for us.** Rebased
+> (delta `0xA70000`), outermost post → innermost fault:
+>
+> ```
+> 0x00813FBC  our poster returns here      (0x00C3 -> post 0x100000B5)
+> 0x0064CA58 -> 0x0064C8EA -> 0x0064CA24   frame layer
+> 0x004E5603                               <== THE SUBSCRIBER SIDE
+> 0x004E869A                                   (inside 0x004E8510)
+> 0x00633C7C -> 0x0064C996 -> 0x0064CA24 -> 0x0064BFC0   frame layer again
+> 0x0061F74E  CtlPage dispatch (case 0x06)
+> 0x0061FA72  CtlPage row walker
+> 0x00630DB4  -> call eax
+> ```
+>
+> **The subscriber call site, read directly:**
+>
+> ```
+> 004E55FB  push edi
+> 004E55FC  push [esi]
+> 004E55FE  call 0x4E8510     ; <-- the handler
+> 004E5603  add esp, 8        ; <-- the trace's return address
+> ```
+>
+> **And the client names the module:** the function containing that call carries
+> **`GmView:7684 msg.data`** and **`GmView:7723 msg.data`** (`0x004E583D`, `0x004E58DA`).
+> The handler it calls, `0x004E8510`, carries **`Array:587 index < m_count`** at
+> `0x004E879D` — it indexes an array.
+>
+> **So `GmView` is what subscribes**, which puts this crash in the same component the heroes
+> arc spent seven passes on and the PvP-UI arc finally cracked — and it makes the PvP-UI
+> finding directly relevant: **GmView subscribes to frame events LATE** (measured there at
+> **53 ms** after instance load for `0x10000114`, which is why `--party-mine-late` exists at
+> all). A subsystem whose subscription timing already broke one arc is now the subscriber
+> for the message that crashes this one.
+>
+> **What this does and does not settle.** It answers *who receives it*: GmView, via
+> `0x004E8510`. It does **not** yet show *why GmView's page has no valid rows* — the
+> `Array:587` guard inside `0x004E8510` says it indexes a real array, so the next question is
+> what that array holds in our session versus retail's. Note the tension to resolve rather
+> than paper over: the alignment evidence says the row is `payload+4`, while `0x004E8510`
+> indexes an array — both cannot be the whole story, and the reconciliation is the next
+> desk step.
+>
+> ### COUNTED: `0x00C3` POSTS FOUR DWORDS AND THE CONSUMER READS A FIFTH — IT CALLS THE /GS STACK COOKIE. 2026-08-18, SOURCED
+>
+> The stub `0x0091F230` passes the two wire fields to worker **`0x00813F80`**, which builds
+> its payload in a `sub esp, 0x14` frame and posts it:
+>
+> | slot | write | contents |
+> |---|---|---|
+> | `+0x00` | `mov [ebp-0x14], eax` | wire **field 1** |
+> | `+0x04` | `mov [ebp-0x10], eax` | `[0x010876C8]` — the owner register's **agent** |
+> | `+0x08` | `mov [ebp-0x0C], eax` | wire **field 2** |
+> | `+0x0C` | `mov [ebp-0x08], eax` | `[0x010876CC]` — the owner **flag** |
+> | `+0x10` | `mov [ebp-0x04], eax` | **`/GS` STACK COOKIE** — `[0xBF4440] xor ebp`, verified by the epilogue's `xor ecx, ebp / call 0x5AE7A9` (`__security_check_cookie`). **NOT payload.** |
+>
+> **So the payload is exactly FOUR dwords.** `lea eax,[ebp-0x14]` / `push 0x100000B5` /
+> `call 0x633D70` posts it.
+>
+> **And the consumer reads a fifth.** The dump captured the row's fields as
+> `[edi+4]=0`, `[edi+8]=1`, `[edi+0xC]=0x2E67736D`. Testing the two possible alignments
+> against those three values:
+>
+> | alignment | `[edi+4]` | `[edi+8]` | `[edi+0xC]` |
+> |---|---|---|---|
+> | `edi = payload+0` | agent ✗ | field2=0 ✗ | flag=1 ✗ |
+> | **`edi = payload+4`** | **field2 = 0 ✓** | **flag = 1 ✓** | **cookie ✓ (garbage)** |
+>
+> Three independent matches against one alignment and none against the other. **`edi` is
+> `payload + 4`, and the `proc` at `edi+0xC` is `payload+0x10` — one dword PAST what the
+> handler wrote.** The client then executes `call eax` on its own stack canary.
+>
+> **This corrects my own reading from earlier today.** I wrote that `"msg."` is "the opening
+> bytes of an assert-expression string" and built a paragraph on which string it might be.
+> It is not: it is the **security cookie**, `global XOR ebp`, effectively random per frame,
+> whose value in this run happened to be four printable bytes (~2% by chance). The whole
+> `NET_SHOP_*` line of inquiry was chasing a coincidence, and the earlier caution not to
+> build a theory on it turns out to have been the right instinct for the wrong reason.
+>
+> **What it proves.** The handler is client code and always writes four dwords, in retail as
+> here — so retail's subscriber for `0x100000B5` **reads only three** (agent, field 2, flag)
+> and never touches `+0x10`. The consumer we reach reads a fourth and treats it as a
+> callback. **The bug is therefore that the message is delivered to the wrong subscriber**,
+> and that subscriber exists because our client's UI is in a state retail's never is when
+> this message arrives. Nothing in the payload is wrong; nothing in `0x0161` is wrong. It is
+> **client-side UI state**, which is exactly where the `0x0161` field hunt, the bit-2 fix and
+> the price hypothesis each failed to reach — three refutations that now have one cause.
+>
+> **Residual, stated rather than assumed:** *why* a `CtlPage`-backed page is subscribed to
+> `0x100000B5` in our session is not established. That is the next question, and it is about
+> what our session opened (or failed to open) before `0x00C3`, not about any field we send.
+>
+> ### WHICH ARM ADDS A ROW — NONE OF THEM. The dispatch is an ACCESSOR interface. 2026-08-18, SOURCED
+>
+> The switch is `cmp eax, 0x5a / ja default / jmp [eax*4 + 0x61F8C8]`. Dumping that table
+> (via `pefile`, read-only, carve-out 1) gives **16 real cases**, 0x00–0x0F; the remaining
+> entries are `0x0F0F0F0F` filler, so the bound is generous and the arm count is 16.
+>
+> | case | arm | client's own asserts |
+> |---|---|---|
+> | 0x00 | `0x0061F657` | |
+> | 0x01 | `0x0061F665` | `CtlPage:598 !obj` |
+> | 0x02 | `0x0061F6B4` | `CtlPage:603 obj` |
+> | 0x03–0x05 | `0x0061F6E4` / `F72B` / `F738` | |
+> | **0x06** | **`0x0061F745`** | **ours — walks the row, calls its `proc`** |
+> | 0x07, 0x08 | `0x0061F762` / `F753` | |
+> | 0x09 | `0x0061F771` | `CtlPage:527 code` |
+> | 0x0A | `0x0061F79A` | `CtlPage:536 itemFrame` |
+> | 0x0B | `0x0061F7DE` | `CtlPage:546 pageCode`, `:58 IsBtnCode(btnCode)` |
+> | 0x0C | `0x0061F816` | `CtlPage:554 isEnabled`, `:50 !IsBtnCode(pageCode)`, `:558 btnFrame` |
+> | 0x0D | `0x0061F88F` | `CtlPage:566 !IsBtnCode(code)` |
+> | 0x0E, 0x0F | `0x0061F642` / `F8B3` (default) | |
+>
+> **The two obvious "add item" candidates are getters.** Read, not guessed:
+>
+> ```
+> case 0x09  0061F771  mov eax,[edi] / test ebx,ebx / jne     ; ebx is an OUT pointer
+>            0061F790  mov eax,[eax+4] / mov [ebx],eax        ; writes the CALLER's variable
+> case 0x0A  0061F79A  mov edi,[edi] / test ebx,ebx / jne     ; OUT pointer again
+>            0061F7B4  test esi,esi / jns                     ; esi is an INDEX, asserted >= 0
+> ```
+>
+> `case 0x09` is `GetCode(out)`, `case 0x0A` is `GetItemFrame(index, out)`. **No arm appends
+> anything.** This dispatch is a get/set command interface over a page object that already
+> exists — the assert names (`code`, `itemFrame`, `pageCode`, `isEnabled`, `btnFrame`) are
+> its property vocabulary, not a builder API.
+>
+> **And the row does not come from a stored array at all:** `0061F61E mov esi,[ebp+0xC]` —
+> **`esi` is the dispatch's SECOND ARGUMENT**, handed straight to case 0x06's worker. So the
+> "row" whose `proc` we call is a pointer supplied by the CALLER, one frame up in the frame
+> layer (`Rt:010bbfc0` → static **`0x0064BFC0`**), which is the same `0x0064Bxxx` region as
+> the function that ultimately executes `call eax`.
+>
+> **What that means for the merchant question.** The `proc` is not missing from a table we
+> failed to populate; it is read at `+0xC` of **a payload the poster supplied**, and the
+> posters of frame message `0x100000B5` are the eight readers of the window-owner register —
+> `0x00C3` among them. The leading reading is now a **payload-shape mismatch**: the handler
+> posts `{id, stored_agent, 0, stored_flag, …}` (this document's own §`0x00C4`), `+0x8` is
+> the `0` that satisfies the `CtlPage:434` guard, and `+0xC` is read as a `proc` the handler
+> never had reason to fill — so it holds whatever was on the stack, here the opening bytes
+> of an assert string. **Next desk step:** disassemble `0x00C3`'s own handler in
+> `0x00813F80–0x00814496` and read exactly how many dwords it writes before posting.
+>
+> ### THE ROW IS NAMED BY THE CLIENT ITSELF — `CtlPage` item, `+0xC` is `proc`. 2026-08-18, SOURCED
+>
+> One frame further up, and the client names its own structure. The chain from our message
+> to the fault is now complete, every hop read out of the binary:
+>
+> ```
+> 0x00C3 handler -> posts UI frame message 0x100000B5   (the eight-reader family, section above)
+>   -> frame dispatch                                    (0x100000b5 appears in the dump's own Arg list)
+>     -> CtlPage command dispatch      0x0061F570..0x0061F8B3
+>       -> 0061F745  mov ecx,[edi] / push esi / call 0x61fa00
+>         -> 0061FA09  mov edi,[ebp+8]        ; edi = the ITEM ROW
+>            0061FA11  cmp [edi+8],0 / jge    ; guard, CtlPage:434
+>            0061FA64  push [edi+0xC]         ; the row's PROC
+>           -> 0064C2C3  mov eax,[ebp+8] / 0064C2CE  call eax   ; THE FAULT
+> ```
+>
+> **The client's own asserts name the fields** — this is no longer inference from a dump:
+>
+> ```
+> 0x0061FA1C  CtlPage:434   !IsBtnCode(item.code)     <- guards [edi+8] in OUR path
+> 0x0061FA9A  CtlPage:50    !IsBtnCode(pageCode)
+> ```
+>
+> So `edi` is a **`CtlPage` item row**, `+0x8` is **`item.code`**, and the field pushed as the
+> callback, `+0xC`, is the row's **`proc`**. The crash-dump pass called it "the row's callback
+> field ('proc', offset +0xC)" from the dump alone; the binary agrees on the name, the offset
+> and the role.
+>
+> **`CtlPage` is generic paged-control machinery**, not merchant code — its eleven assert
+> sites map the whole API: `code` (527), `itemFrame` (536), `pageCode` (546), `isEnabled`
+> (554), `btnFrame` (558), `!IsBtnCode(code)` (566), `IsBtnCode(btnCode)` (58), `!obj` (598),
+> `obj` (603). ~~The arms carrying 527–566 sit inside the same dispatch our path enters, i.e.
+> **that dispatch is how item rows are ADDED**, by commands the client issues to itself.~~
+> **REFUTED the same day by reading them — see the case map below. They are GETTERS.** That
+> sentence was an inference from assert names and it was wrong; it is struck rather than
+> edited away, because it is the kind of guess that reads like a finding.
+>
+> **The sharpest fact, and the one that closes the wire theory:** the `CtlPage:434` guard
+> **passed**. The row's `code` at `+0x8` looked legitimate while its `proc` at `+0xC` held
+> `.rdata` string bytes — so the client's own validity check does not catch this row, and no
+> value we could put in any message would make it. **The rows are built by the client's own
+> UI construction; `0x00C3` walks a page it assumes was already populated.** `0x00CA` renders
+> a shop because it never walks this array.
+>
+> **Honest limits.** Which of the 527–566 arms actually appends a row is NOT pinned, and
+> which event populates a *merchant* page specifically is NOT identified — both are the next
+> desk step, not results. What IS settled: the failure is structural client-side UI state,
+> the `+0xC` naming is first-party, and every remaining "fix it from the wire" idea for
+> `0x00C3` is refuted, including the two this arc spent runs on.
+>
+> ### THE CtlPage LEAD, CHASED — 2026-08-18. The faulting instruction is located, and no `0x0161` field can reach it. SOURCED
+>
+> Desk work on the dump from `20260818T224156`, rebased and disassembled. **This retires the
+> "what does `0x0161` need" framing for the crash**, and confirms the crash-dump pass's
+> `+0xC` claim by disassembly rather than inference.
+>
+> **First, a correction to my own earlier reading.** The dialog says *"Memory at address
+> 2e67736d could not be written"*, which I first read as a bad store. The thread block
+> settles it: **`eip = 2e67736d`**. Execution *transferred* to `"msg."`. It is an indirect
+> CALL through a garbage function pointer, not a write.
+>
+> **The EBP chain lies here, and the stack top tells the truth.** The trace's first frame
+> reports `Rt:010a0db4` (static `0x00630DB4`), whose call site is a *direct* `call 0x64bfd0`
+> — which cannot produce this fault. The faulting frame had not established `ebp` yet: a
+> `call` through a bad pointer pushes its return address and then faults on the fetch. So
+> the real return address is at `esp` itself (`0x0684F0C0` → `010bc2d0`), giving static
+> **`0x0064C2D0`**, and the instruction before it is the fault:
+>
+> ```
+> 0064C2C3  mov  eax, dword ptr [ebp + 8]   ; eax = this function's FIRST ARGUMENT
+> 0064C2C6  push 0
+> 0064C2C8  lea  ecx, [ebp - 0x60]
+> 0064C2CB  push 0
+> 0064C2CD  push ecx
+> 0064C2CE  call eax                        ; <-- THE FAULT
+> ```
+>
+> **Where the pointer comes from, traced by hand up two frames.** Rebase delta is `0xA70000`
+> (`BaseAddr 00E70000`, image base `0x00400000`). At `0x0061FA53`–`0x0061FA6D` the caller
+> builds the argument list from a descriptor in `edi`:
+>
+> ```
+> 0061FA53  mov  ecx, [edi + 4]      0061FA64  push [edi + 0xc]   ; <-- arg4, the callback
+> 0061FA5B  or   ecx, 0x200          0061FA67  push [edi + 8]
+> 0061FA6A  push ecx                 0061FA6B  push [ebx]
+> 0061FA6D  call 0x630c90
+> ```
+>
+> The dump's own argument capture for that frame reads `1d0c8e58 00000200 00000001
+> 2e67736d` — arg2 is `0x200` exactly as the `or ecx, 0x200` predicts, and **arg4 is
+> `"msg."`**. So the value is **`[descriptor + 0xC]`**: the crash-dump pass named `+0xC` from
+> the dump alone and the disassembly agrees, independently.
+>
+> **What `"msg."` actually is, and the trap in over-reading it.** Those four bytes occur
+> **73** times in the image, always as the opening of an **assert-expression string** in
+> `.rdata` (`msg.currency < NET_SHOP_CURRENCIES`, `msg.itemCount <= NET_SHOP_ITEMS`,
+> `msg.itemId && msg.it…`, `msg.index < m_cards…`, `msg.summaryBytes <= …`). **Which one
+> this is remains undetermined** — the search returns candidates, not the site. In
+> particular the `NET_SHOP_*` pair belongs to `Store.cpp` / `StoreCheckout.cpp`, ArenaNet's
+> **online store**, and is almost certainly a coincidence of prefix rather than evidence the
+> merchant path touches it; it is recorded here only so the next reader does not "discover"
+> it and build a theory on it.
+>
+> **The conclusion, and it is a negative that closes a direction:** the descriptor register
+> is pointing into `.rdata` string data, so **there is no valid row descriptor at all** —
+> its `+0xC` is not a wrong callback, it is not a callback. That is structural, and **no
+> value in any `0x0161` field can repair it**, which is why the bit-2 fix changed nothing
+> and why `F9`'s price would not have either. It also explains the shape of the failure:
+> `0x00CA` renders a shop fine because that path never walks this descriptor array;
+> `0x00C3` does.
+>
+> **The precise next step, desk work only:** find what POPULATES the array `edi` walks — the
+> `{+0x4 flags, +0x8, +0xC proc, +0x10}` row — by going one frame further up
+> (`Rt:0108f74e` → static **`0x0061F74E`**) to whoever builds it. The question is no longer
+> "which field is wrong" but **"which message or client-side event allocates the row set that
+> `0x00C3` assumes exists"**.
+>
+> ### WHAT `0x0161` NEEDS FOR MERCHANT STOCK — desk work, 2026-08-18
+>
+> > **TESTED AND REFUTED THE SAME DAY. Read this first.** The bit-2 fix below was run
+> > (`20260818T224156`) and **did not work**: the wire carried `F8 = 0x20001003` on all
+> > three items — bit0 set, bit2 clear, retail's exact pattern, verified by decoding our
+> > own capture — and the client died on `0x00C3` with the **identical** fault,
+> > `c0000005` writing address **`0x2e67736d`**, which is `"msg."` little-endian, the same
+> > address as run 2. Zero client-originated rows follow the send, so the probe spent its
+> > last 13 s talking to a corpse. **The gate itself is not in doubt** — the disassembly
+> > below is re-verified and bit 2 really does skip the detail fetch — **but it is not
+> > what the merchant path is missing.** The prediction was on record before the run and
+> > it failed; that is the result, not a step toward one.
+> >
+> > **What this promotes:** the crash-dump pass's dissent, recorded below precisely
+> > because it disagreed. It said a single `0x0161` scalar was an unlikely cause and put
+> > the fault two levels downstream, in `CtlPage`'s per-row descriptor where a callback at
+> > `+0xC` is read and **called** holding the bytes `msg.`. The crash address is that
+> > string, so the dissent now has the strongest evidence in the file and is the next
+> > lead. **`F9` (price) stays untested and is now the weaker candidate** — a missing
+> > gold value does not plausibly put ASCII where a function pointer belongs.
+> >
+> > The `_STOCK_FLAGS = 0x20001003` override is **kept** in `probes.py`: it matches
+> > retail on both bits and is better-founded than what it replaced, but it is
+> > RECONSTRUCTION and **not** a fix, and must not be cited as one.
+>
+> Desk work as it stood before that run:
+>
+> Three independent passes (retail's bytes, the crash dump, our sender). They **disagreed**,
+> and the disagreement is what located the answer.
+>
+> **THE GATE, SOURCED and re-verified by hand in the pinned build — `0x00848450`, the
+> item-construct function the `0x0161` handler (`0x00846D70`) calls:**
+>
+> ```
+> 008484F4  shr edx, 0x1f      ; edx = F2 (fileId) bit31, extracted from the RAW value
+> 008484FA  mov ecx, [ebp+0x28] ; ecx = F8
+> 008484FD  mov [esi+0x28], ecx ; F8 stored verbatim at item+0x28
+> 0084852E  test edx, edx
+> 00848530  je   0x848549      ; fileId bit31 clear -> no fetch
+> 00848532  test cl, 4         ; <-- F8 BIT 2
+> 00848535  jne  0x848549      ; BIT 2 SET -> SKIP THE FETCH
+> 00848544  call 0x84be50      ; the item-detail load, keyed by masked fileId
+> ```
+>
+> **The client loads an item's detail record only when `fileId` bit31 is SET and `F8` bit2 is
+> CLEAR.** Setting bit 2 tells the client the detail is already present.
+>
+> **Ours sets it; retail's never does.** Our three items carry `F8 = 0x20001006` — bit2 **set**,
+> bit0 **clear** — identical across all three. All **14** retail priced-stock declarations
+> (11 in s1 + 3 in s2) have bit2 **clear** (14/14) and bit0 **set** (14/14): the exact inverse
+> on both bits. Across ~40 *ordinary* retail `0x0161`s in the same captures, bit2 is set in
+> **none** — so bit2-clear is near-universal and our items are the outlier, while bit0-set is
+> specific to the stock context.
+>
+> **This reconciles the crash.** The dump pass, working from the dump alone and knowing
+> nothing of the gate, concluded the fault is two levels downstream of the item table — in
+> `CtlPage`'s per-row descriptor feeding a field-registration helper, where the row's
+> callback at `+0xC` is **read and CALLED** holding the bytes `msg.`. It judged a single
+> `0x0161` scalar an unlikely cause. **Both are right:** bit2 set → detail never fetched →
+> the row descriptor is built over an unpopulated record → its callback is garbage →
+> `c0000005`. The dissent is recorded because it is the half that says *where* the damage
+> surfaces, and because if the bit-2 fix fails it is the better lead.
+>
+> **`F9` is the price, and ours is 0.** Retail stock carries 20–1250 (13 of 14 non-zero); it
+> lands at `item+0x24`, and an independent 394-record census in
+> `studies/reconstruction/FINDINGS.md` already identified it as the per-instance gold value
+> the merchant quotes. Our `content/items.toml` rows are all 0 — correct for starter gear
+> (retail's own default-armor table has no price either), but it means **nothing in this repo
+> models a priced item at all**.
+>
+> **The ladder, one change per test:** (1) `F8 = 0x20001003` — bit2 cleared, bit0 set, other
+> bits untouched — and re-run the withheld `0x00C3`. (2) If it still dies, `F9` = a real
+> price. (3) If it still dies, follow the dump pass's `CtlPage` lead instead. Prices are a
+> MEASUREMENT under the provenance boundary (our own extractor, recorded build, per-row
+> provenance) and are already cited per-item in this document.
+>
+> ### RUN 3 — THE DRAIN FINALLY FIRED INTO AN OPEN SHOP, AND IT DID NOTHING. The `0x00E1` line CLOSES.
+>
+> Harness **`20260818T213244`**. `0x00C3` withheld as a declared refusal (it is unnecessary
+> — `0x00CA` opens the shop — and it had killed the client 13 s before this arm twice).
+> No crash, no assert, all steps ran.
+>
+> **The measurement, with an in-run sensitivity control that makes the null mean something:**
+>
+> | event | full-frame | collector panel |
+> |---|---|---|
+> | `0x00CA` opens the shop | **56,910** | **56,949** |
+> | `0x00E1` drain, both columns restaged | **1** | **0** |
+> | next frame | 0 | 0 |
+> | ambient noise elsewhere in run | 0–27 | 0–27 |
+>
+> The scorer that saw **56,910** pixels sixteen seconds earlier saw **one** at the drain, and
+> the panel it was aimed at saw **zero**. Confirmed by eye per this file's own rule about
+> nulls from that scorer: the panel two seconds after the drain is pixel-identical and still
+> reads `Hatcher [Collector]` with `Ringmail Leggings / Boots / Gauntlets` — **nothing
+> appended, nothing cleared, not closed.**
+>
+> **This is the strongest null the line can produce, and it is now a real negative rather
+> than an absence of evidence.** Every precondition anyone proposed is satisfied at once: the
+> window is OPEN and visibly so; the accum buffer PROVABLY feeds this exact window, since
+> `0x00CA` built its three rows out of it moments before; both columns were restaged
+> immediately before the drain; and the instrument is demonstrably alive in the same run.
+> **So `0x00E1`'s frame-bus event `0x100000BA` has no subscriber in any context this project
+> can reach** — not bare, not with Inventory or Skills open (`20260818T184210`), and not with
+> the one window that reads its own buffer. Upstream's `SKILL_ADD_TO_WINDOWS_END` remains
+> unearned on every rendered surface.
+>
+> **What still cannot be claimed:** that `0x00E1` is inert. It zeroes both accum counts —
+> the disassembly is unambiguous — so it has a real effect on client state that no
+> screenshot can see. The honest statement is that it has **no VISIBLE effect**, and the
+> instrument for the invisible half is a memory read, not a frame.
+>
+> **What this run did NOT measure:** the trailing `0x00E1` arm fired at t=44.6 s, thirteen
+> seconds *after* the client died at t=31.6 s, so it observed nothing and must not be
+> counted as a fourth null. Asking whether a drain appends into an open collector window
+> is now a live, cheap experiment — open the window with `0x00CA`, then drain — and it is
+> the obvious next run.
+
+**ADDENDUM 2026-08-18 — the four drain workers are read, and §4 item 7 as written would
+have crashed the client.** SOURCED (build 38797, pinned pristine; all four workers
+disassembled, the assert-carrying one re-verified by a second reader):
+
+| drain | worker | event | lists touched | zeroes |
+|---|---|---|---|---|
+| `0x0085` | `0x008119C0` | `0x100000B8` | list 0 only | count 0 only |
+| `0x0086` | `0x00811A00` | `0x100000B9` | **both, as parallel columns** | both |
+| `0x00D4` | `0x008145C0` | `0x10000052` | both | both |
+| `0x00E1` | `0x00814860` | `0x100000BA` | both | both |
+
+Three consequences. **(1)** `0x0086`'s worker opens with
+`Assertion: context->accumIntList[0].Count() == context->accumIntList[1].Count()`,
+`ChCliApi.cpp(1587)` — and then posts ONE count with BOTH base pointers, so its consumer
+reads the two lists as columns of one table. Item 7's "send `0x0084` with N ids then
+`0x0086`" is therefore a guaranteed assert (N ≠ 0); the 2026-08-13 screen pass survived
+`0x0086` only because empty == empty passes. **(2)** The drains cannot separate the
+appenders — `0x0085` is the only single-list drain, and the naive `0x00D7`→`0x00E1`
+pairing does not exist: `0x00E1` drains both lists, which makes upstream's
+`SKILL_ADD_TO_WINDOWS_END` incomplete rather than wrong. **(3)** Nothing separates the
+appenders at all — `0x0084` and `0x00D7` share handler `0x0091E820` (§ above), so the
+client cannot see which opcode staged the row and no experiment can either; only the
+declared wire lengths differ (array32(16) vs array32(8)). Item 7 is REPLACED by the
+`accum_drains` probe (`toolkit/authsrv/probes.py`): one appender, all four drain events
+with three declared, distinctly named item ids staged, column 1 fed `[1,1,1]` on every
+multi-list arm, the assert-carrying drain last. Prediction on record there; a null result
+refutes nothing (subscribers may need an open window — the `0x00C5` flow is the only
+observed reader and it rides a window context).
 
 ---
 
@@ -1295,7 +1969,209 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
-## `0x00CA` — NOT FOUND, deliberately, following prior art's own refusal
+> ### `0x0141` FIELD 1 IS A CONTAINER ID, AND 0 KILLS THE CLIENT. 2026-08-19, OBSERVED
+>
+> Run `20260819T002038`, three arms with distinct amounts (`field1 = 0/2/1` -> 111/222/333).
+> **Arm A killed it.** `Assertion: inventory`, **`P:\Code\Gw\Item\Cli\ItCliApi.cpp(1969)`**,
+> crash stamped `00:21:21` against arm A's send at wall `04:21:21Z` — same-second
+> attribution. Arms B and C are **UNMEASURED**: the probe sends on a timer, so the rest of
+> the run went into a dead client, and the frames from `hold009` on are the error dialog.
+>
+> **So field 1 is not a "carried vs storage" purse selector — it is a CONTAINER ID, and it
+> must name a container that exists.** The client asserts the inventory rather than ignoring
+> a bad value, which is why `0` is fatal and why the login burst's `[1, 0]` is legal:
+> container **1** exists. This is the same subsystem the heroes arc hit at `ItCliApi:488`
+> ("the hero has no per-owner container in the item client's table") — the item client keys
+> everything by container, and gold is no exception.
+>
+> **Which reframes the funding question rather than answering it.** `[1, 500]` was legal and
+> left `Your Funds` at 0, so container 1 is a real container that is *not* the merchant's
+> purse. The question is now **which container id the carried purse is**, and the honest
+> position is that we do not know how many exist: our login burst creates exactly one bag
+> (`0x013F INVENTORY_CREATE_BAG(equipped)`), where retail's character has a backpack, belt
+> pouch, satchels and storage. **The next arm is enumeration** — ids 2, 3, 4… with distinct
+> amounts, watching that one line — and the probe now starts at 2 with `0` permanently
+> excluded and the reason written at the call site.
+>
+> **My own error, second in this area and the same shape:** I picked `0` as an obvious
+> "other value" without first checking what the field indexes, exactly as I earlier picked
+> `1` by copying the login burst without checking what it selects. Both were guesses at a
+> field whose type was discoverable by reading `ItCliApi` first. The disciplined order here
+> is read the consumer, then vary the value.
+
+> ### PRESSING BUY — the client refuses LOCALLY, and my funding attempt was wrong. 2026-08-19, OBSERVED
+>
+> Two runs, `20260818T235130` (unfunded) and `20260818T235758` (funding attempted). The
+> harness clicked the **Buy** button at fractional `0.529, 0.716`, measured off the panel
+> (Buy spans x 978–1070, Goodbye starts at 1077, so the click is dead centre and cannot
+> stray). `report.json` records `"sent": true` for both.
+>
+> **Result, both runs: the click produces NOTHING on the wire.** Every c2s frame after the
+> shop opened is the 5 s keep-alive — `09801000000000000000`, opcode `0x8009`,
+> byte-identical at all thirteen timestamps — plus one `0880` (`0x8008`) at t=96.6, which is
+> the teardown message every session ends with. **No purchase request exists on the wire.**
+>
+> **Why: the Buy button is GREYED.** Read off the frame in both runs, with
+> `Your Funds: 0` and the cheapest quote at 50. Goodbye renders lit beside it. So **the
+> client gates purchase on affordability locally and never asks the server** — a server
+> cannot expect to see a buy request from a player who cannot pay, and this is the reason
+> the c2s half of this family has never appeared in any capture we hold.
+>
+> **AND THE SECOND RUN FAILED AT WHAT IT SET OUT TO TEST — my error, recorded as one.** It
+> sent `0x0141 [1, 500]` to fund the character first. `Your Funds` stayed **0**, so Buy
+> stayed greyed and the run measured the same thing twice. The flaw was predicted in advance
+> and I sent it anyway: **`0x0141` is `UPDATE_GOLD_STORAGE`**, Guild Wars separates carried
+> gold from Xunlai storage, and field 1 was set to `1` purely by copying the login burst's
+> own value without ever testing what that selector means. **What is now measured is a
+> negative about `0x0141`, not a positive about Buy:** `[1, N]` does not fund the purse the
+> merchant reads.
+>
+> **The open question is therefore narrower than it looks:** which purse the shop's
+> `Your Funds` reads, and what `0x0141` field 1 selects. Cheap next arms — vary field 1
+> (0, 2, the player number) and watch that one line; or find the carried-gold write in the
+> client and see which message reaches it. Only after `Your Funds` moves does pressing Buy
+> test anything.
+
+> ### `0x00CA` FIELD 2 IS A PRICE MULTIPLIER — the formula is `displayed = F9 x 2 x field2`. 2026-08-19, OBSERVED
+>
+> Harness `20260818T234622`. Three arms, **only the second field varied**, items valued
+> 25 / 50 / 100 throughout. Every prediction was on record before the run:
+>
+> | arm | field 2 | predicted | **displayed** |
+> |---|---|---|---|
+> | A | `1.0f` `0x3F800000` | 50 / 100 / 200 (control) | **50 / 100 / 200** |
+> | B | `2.0f` `0x40000000` | 100 / 200 / 400 if a multiplier | **100 / 200 / 400** |
+> | C | `0.5f` `0x3F000000` | 25 / 50 / 100 if a multiplier | **25 / 50 / 100** |
+>
+> **Nine of nine cells exact.** Arm A reproduced the earlier run, so the control holds; arm C
+> collapsed the column onto the **raw `F9` values we sent**, which is the shape change the
+> design called unfakeable.
+>
+> **So both components are now separated and measured:**
+>
+> ```
+> displayed price = F9 x 2 x field2
+> ```
+>
+> a **fixed 2x client markup** AND a **float multiplier on the wire**. At retail's `1.0f`
+> the two collapse to the 2x that the previous run measured — which is exactly why one
+> value could never separate them. `F9` is the item's VALUE; the quoted price is derived.
+>
+> **Three things banked in passing:**
+> 1. **Re-arming works.** `0x00CA` consumes the owner register (`[0x010876CC] = 0`), and
+>    re-sending `0x00C4` + `0x0084` before each arm reopened the shop every time — arms B
+>    and C both drew. The consume-and-clear is per-window, not per-session, so a server can
+>    refresh a shop as often as it likes.
+> 2. **The flags revert is confirmed on screen**: with the content rows' own flags (bit 2
+>    set) all three rows render their **real armour icons** again, not the hourglass
+>    placeholders `_STOCK_FLAGS` produced. Both directions of the bit-2 gate now have a
+>    matching screenshot.
+> 3. `Your funds: 0` in all three arms — the multiplier touches the quote, not the purse.
+>
+> **What is still NOT known:** whether the `2` is a merchant-type constant (a collector,
+> a trader and a merchant might each carry their own) or a global. One NPC, one window
+> type, n = 1 on that axis. And nothing here has pressed **Buy** — every price above is a
+> quote, not a transaction.
+>
+> ### PRICED STOCK RUN — the shop charges **2x** what we send, and bit 2 shows itself on screen. 2026-08-18, OBSERVED
+>
+> Harness `20260818T233955`. Three items declared with **distinct** prices in `F9` — our own
+> round numbers, not retail's table — so each row's price identifies its source.
+>
+> | item | `F9` sent | price displayed |
+> |---|---|---|
+> | Ringmail Leggings | **25** | **50** |
+> | Ringmail Boots | **50** | **100** |
+> | Ringmail Gauntlets | **100** | **200** |
+>
+> **Exactly 2x on all three.** So `F9` is the item's **value**, and what the shop quotes is a
+> **doubled** sell price — the displayed number is not the field. Every earlier run had
+> `value = 0`, where 2x0 = 0, which is why this was invisible until a real price was sent.
+> `Your funds: 0` stayed 0 as predicted (we grant no gold).
+>
+> **What it does NOT settle:** whether the 2x lives in the client's merchant markup or in
+> `0x00CA`'s second field, which we sent as `1.0f` because retail does. A run varying that
+> field separates them in one shot and is now the cheapest open question on this line.
+>
+> ### AND F8 BIT 2 IS NOW OBSERVED FROM THE SCREEN, BOTH DIRECTIONS — including its cost to us
+>
+> The same run accidentally settled the bit-2 mechanism visually, because it carried
+> `_STOCK_FLAGS` (bit 2 CLEAR, retail's pattern) while the earlier shop run carried the
+> content rows' own flags (bit 2 SET):
+>
+> | run | `F8` | bit 2 | item icons |
+> |---|---|---|---|
+> | `20260818T211036` | `0x20001006` | **set** | **real armour icons** — leggings, boots, gauntlets |
+> | `20260818T233955` | `0x20001003` | **clear** | **hourglass placeholders, permanent** — still hourglasses 35 s later |
+>
+> This is the disassembly confirmed from pixels, in both directions: bit 2 set means "detail
+> already present" and the client draws what it has; **bit 2 clear makes the client REQUEST
+> the item detail, and this server never answers, so the rows sit as loading placeholders
+> forever.**
+>
+> **Practical consequence, and a correction to my own earlier judgement.** I kept
+> `_STOCK_FLAGS = 0x20001003` on the grounds that it "matches retail on both bits and is
+> better-founded than what it replaced". It is better-founded and it is **worse in practice**:
+> it fixed nothing (the `0x00C3` crash was identical) and it breaks the icons. **The override
+> is now OFF** — the probe uses the content rows' own flags — and the constant is kept named
+> so a future arm that implements the detail response can switch it back on deliberately.
+> **Retail's bit pattern is correct for a server that answers the detail request; ours is
+> not that server yet.**
+>
+## `0x00CA` — **IT OPENS THE SHOP.** Behaviour OBSERVED 2026-08-18; the NAME still NOT FOUND
+
+> **OBSERVED, first-party, twice** (harness `20260818T211036` and `20260818T212611`, 56,928
+> and 56,909 changed pixels). `0x00CA` is the message that puts a **working merchant window
+> on screen, on an NPC we spawned, stocked with items we declared.** The name stays NOT
+> FOUND — no lineage offers one and behaviour is not a name — but the mechanism is now
+> measured rather than refused.
+>
+> **The minimal sequence, replayed from retail's own s1 sighting and confirmed to work with
+> our numbers:**
+>
+> ```
+> 0x00C4 [agent]                 window owner  (also turns the player to face it)
+> 0x0161 x N                     declare each item
+> 0x0084 [[id, id, ...]]         stage the ids into accumIntList[0]
+> 0x00CA [1, 0x3F800000]         <-- THE OPENER   (second field is 1.0f, as retail sends)
+> ```
+>
+> `0x00C3` is **not** required and must not be sent — see the crash chain above; it is not
+> authorable by a server at all. **`0x00CA` alone opens and populates the window.**
+>
+> **What rendered, read off the frame** (`hold012.png`, the first frame after the send):
+> a framed, closable panel titled **`Hatcher [Collector]`**, prompt *"Select an item from my
+> list below, then press \"Buy.\""*, **`Your funds: 0`**, and a scrolling stock list of the
+> three staged items with their icons — **`Ringmail Leggings`, `Ringmail Boots`,
+> `Ringmail Gauntlets`** — each with a price column; a detail pane for the selected row
+> showing its icon, a quantity spinner **`x 1`**, its price, and its stats
+> (**`Armor: 25`**, **`Armor +20 (vs. physical damage)`**); and **`Buy`** / **`Goodbye`**
+> buttons.
+>
+> **Four things that panel proves, none of which was established before:**
+> 1. **`0x0161`'s `enc_name` resolves through the archive** — our content rows are named
+>    "starter leggings (Prophecies warrior)" internally, and the client rendered retail's own
+>    strings, so the string ids are right.
+> 2. **`0x0161`'s modifier list is decoded and DISPLAYED** — `Armor: 25` and
+>    `Armor +20 (vs. physical damage)` come from the `modifiers` array in `content/items.toml`.
+>    Nothing had ever confirmed the client parses that array, let alone shows it.
+> 3. **`F9` is the price, confirmed FROM THE SCREEN.** Every row shows **0** gold, and every
+>    one of our rows carries `value = 0`. That is the desk-work claim (`item+0x24`, the
+>    394-record census) verified by a completely independent route.
+> 4. **The icons render**, so `file_id`/`model_id` reach the item UI intact.
+>
+> **A naming trap, flagged before anyone falls in it:** the title reads `[Collector]` because
+> that is **our NPC's own name string** (`content/npcs.toml`'s Hatcher, whose `enc_name`
+> resolves to "Hatcher [Collector]" — the same label the roster showed in the heroes arc).
+> It is **not** evidence that this is a "collector window" as opposed to a merchant one, and
+> nothing here distinguishes the two. Do not let the screenshot name the opcode.
+>
+> **Untested, and cheap to test later:** `0x00CA`'s second field. We sent `1.0f` because
+> retail did; whether it scales price, sets a tax, or is inert has never been varied. With
+> `F9 = 0` on every row the price column cannot show a multiplier either way, so a run with
+> a real price is the experiment.
+
+## `0x00CA` — the original refusal, superseded above but kept for its reasoning
 
 **1 sighting**, `183756/58389` idx 1512: `(byte = 1, dword = 1065353216 = 1.0f)`.
 
@@ -1324,7 +2200,48 @@ was written. That is one of the three unknowns in that section's payload closed.
 
 ---
 
-## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — **CONTESTED**
+## `0x002F` — `AGENT_UPDATE_ALLEGIANCE` — ~~CONTESTED~~ **RESOLVED 2026-08-18: the name is right, and it is now OBSERVED on our own client**
+
+> **THE CONTEST IS OVER, AND UPSTREAM WINS — `0x002F` ALONE updates displayed allegiance.**
+> Harness `20260818T171349`, probe `allegiance_split`, four cells, arms 10 s apart,
+> predictions on record before the run. Four bodies all created `'mons'` (all red):
+>
+> | body | received | compass result |
+> |---|---|---|
+> | agent 10 EAST | **`0x00AA` alone** | **no change** — still red **53 s** later |
+> | agent 11 WEST | **`0x002F` alone** | **RED → GREEN, in the very next frame** |
+> | agent 12 NORTH | both, retail's order | **RED → GREEN** |
+> | agent 13 SOUTH | nothing | **red throughout** (negative control holds) |
+>
+> Red pixels stepped 55 → 42 → 29 — exactly one dot per flip — and the two survivors are
+> the `0x00AA`-only body and the untouched control. Per-mark connected components confirm
+> the specific dots: `(65,106)` flipped at ARM B, `(56,97)` at ARM C, `(74,97)` never.
+> Agent 10 carried the client's target ring, so its core was decomposed separately to rule
+> out a flip hiding under the ring: **RED 18 → 17 px** across the whole run, i.e. intact.
+>
+> **`0x00AA` is neither necessary nor sufficient**, which refutes the leading hypothesis
+> this probe was built on (that `0x00AA` creates the record `0x002F` writes into, so the
+> pair is required). Written down before the run and wrong.
+>
+> **And `studies/enemy/PLAN.md`'s null result STANDS — the two findings do not collide.**
+> That pass sent `0x002F` and reported "no change"; it was watching **attack initiation**,
+> which is gated by the `+0x1B5` enum, and `+0x1B5` really is write-once at construction
+> (two writers, both constructors). So allegiance lives in **at least two stores**: the
+> **displayed** team token, which `0x002F` writes at any time, and the **attackability**
+> byte, which nothing after construction has ever been shown to move. Both prior claims
+> were true about different surfaces, and the word "allegiance" was doing the equivocating.
+> `authsrv.py:2818-2823`'s "no later message can correct it" is now **wrong as written**
+> and is corrected at the site.
+>
+> **Open, and sharpened rather than closed:** the SOURCED reading below says the handler
+> stamps field 2 into `+0xE8` of the AgMsg sync/async records, "nowhere near" the rendered
+> allegiance — yet the rendered surface demonstrably moved. Since `studies/smsg` puts the
+> **team token at agent `+0xE8`**, read by `AgentGetTeamToken` (`ChCliBase.cpp:326`), the
+> "identical offset in a different structure" reading is the thing to re-derive first.
+> **Not yet measured:** the nameplate surface (uncaptured in both runs — the `--walk` plan
+> released ALT before the shutter), whether an outpost behaves the same (both runs were
+> `--explorable`, and `0x00AA`'s roster step is `MISSION_MAP_GAME`-gated), whether the flip
+> also restores attackability, and the reverse direction (`'play'` → a hostile token).
 
 **2 sightings**, `(15, 'play')` and `(17, 'play')`, immediately after the two `0x00AA`
 sightings for the same agents in the same order. No refutation pass; treat accordingly.
@@ -1354,6 +2271,58 @@ by ArenaNet's own server — **and our probe tested only half of the mechanism.*
 
 **That is the experiment that would resolve this, and it is cheap.** Nothing in either side
 is refuted yet, so the label stays CONTESTED and the name does not ship.
+
+**Probe staged 2026-08-18: `allegiance_pair`** (`toolkit/authsrv/probes.py`, encodes clean,
+prediction on record). One design correction to the ladder's item 5: replaying retail's
+nonc→play *exactly* cannot render a verdict, because `'nonc'` and `'play'` both draw
+GREEN (`npc_allegiance`, 2026-08-06) — the faithful arm is kept for non-colour artifacts,
+and the discriminating arm sends the same pair, still carrying `'play'` in field 2, at a
+body created `'mons'` (red): the readout is a red→green flip against an untouched `'mons'`
+control. Run `--explorable`, because `0x00AA`'s roster-key step is gated on
+`MISSION_MAP_GAME` and has never fired anywhere — both retail sightings are outpost
+captures. The static reading predicts nothing moves; upstream predicts the flip; an
+`AgMsg.cpp(655/660)` assert is the third recordable outcome.
+
+> ### RUN 2026-08-18 — **THE PAIR FLIPS IT. The probe's own prediction is REFUTED, and so is this repo's static reading.** OBSERVED, harness `20260818T165525`, n=1
+>
+> A body created `'mons'` rendered a **RED** compass dot; ~1.5 s after receiving
+> `0x00AA` + `0x002F` (both carrying `'play'`) it rendered **GREEN at the same compass
+> position**, while a second `'mons'` body that was never messaged kept a
+> **pixel-identical** red dot (15 px, same centre, same frame). Measured by connected
+> components, not by eye: before, the mark is a 78 px blob mixing the yellow target ring,
+> red, and a touching neighbour; after, it resolves to a clean 14 px green mark at the
+> same centre (65,92), and the control's red at (71,97) is unchanged in both.
+>
+> **The instrument's own control is what makes this readable.** Across all 37 walk frames
+> the compass changed at exactly **two** frame pairs: when the `'mons'` body was created
+> (red appears, matching the create timestamp `t=10.43`) and immediately after its pair
+> (`t=37.46`/`38.46`). Every other pair, including three ALT-key holds and the entire
+> 60 s hold, changed **zero** compass pixels. The bodies' own regions change constantly
+> (idle animation, 18–8089 px per pair), which is why the body surface is not the readout.
+>
+> So **`+0x1B5` being write-once at construction does not mean displayed allegiance is
+> fixed** — `authsrv.py:2818-2823`'s "no post-construction setter to reach, so allegiance
+> is decided when the agent is CREATED and no later message can correct it" is refuted as
+> a statement about what the player SEES. The rendered path reads the teamToken
+> (`ChCliBase.cpp:326`), and something in this pair updates it. `studies/enemy/PLAN.md`'s
+> "sending it changed nothing" stands as written — it watched **attack initiation**, not
+> the compass, which is a different surface from the one that moved here.
+>
+> **What this run CANNOT say, stated before anyone quotes it:** the two messages went out
+> 1.0 s apart against a 2 s frame cadence, so **no frame separates them** and the flip is
+> attributable to the pair, not to either message. That attribution *is* the CONTESTED
+> question, so the row does **not** close here. `allegiance_split` runs the four cells
+> (`0x00AA` alone / `0x002F` alone / both / neither) 10 s apart. Also honest: **nameplates
+> were never captured** — the `--walk` plan put `shot:` after `alt:`, so ALT is released
+> before the shutter and no frame in the run shows a nameplate; that surface is untested,
+> and the plan ordering is a harness trap worth fixing. And the target-ring vanished in
+> the same frame as the flip, consistent with the client dropping a target that stopped
+> being hostile, but the two were not independent in this rig.
+>
+> Banked in passing, and it closes an UNVERIFIED note: the wire bytes are
+> `aa00 05000000 79616c70 02000020` — the allegiance dword **is** transmitted
+> byte-reversed relative to its ASCII spelling (`'play'` → `79 61 6c 70`), which a recon
+> pass had derived arithmetically and flagged as needing a capture to confirm. **OBSERVED.**
 
 **Open:** what `+0xE8` on the AgMsg sync/async record is read for (no consumer traced);
 whether `0x002F` ever fires with a non-`'play'` value — no enemy-side token has ever been
@@ -1417,17 +2386,28 @@ repeated:
    `0x0084`, `0x005F`, `0x009E`, `0x003A` at medium with the label splits above, and put
    **nothing** in for the eight NOT FOUND. Each entry needs a `test_smsgnames.py`-style wire
    invariant that could go red.
-5. **One loopback run settles `0x002F`, and it is the only CONTESTED row.**
-   Send `0x00AA(agent, 'play', model)` **then** `0x002F(agent, 'play')` against our own
-   server, on an agent created with `'nonc'`. `studies/enemy/PLAN.md` tested `0x002F` alone,
-   and retail never sends it alone. Hand-driven, no aiming, fixed-position readout.
-6. **One loopback run resolves `0x00B9`'s flag.** Re-run the existing smsgsweep
-   `--encstring --only 0x00B9` apparatus with field2 = 1 against the already-proven
-   field2 = 0, `--shots 2`. Same instrument that named three of the four in that table; it
-   is already built.
+5. ~~**One loopback run settles `0x002F`, and it is the only CONTESTED row.**~~
+   **DONE 2026-08-18, and it took two runs rather than one.** The first sent the pair and
+   measured a red→green flip it could not attribute; the second (`allegiance_split`, four
+   cells 10 s apart) attributed it: **`0x002F` ALONE does it, `0x00AA` is neither necessary
+   nor sufficient.** The row is resolved in upstream's favour and the name is OBSERVED on
+   our own client. The design note this item carried — "retail never sends it alone" — was
+   sound reasoning that turned out not to matter. See the `0x002F` row.
+6. ~~**One loopback run resolves `0x00B9`'s flag.**~~ **DONE 2026-08-18**, exactly as
+   specified and with the instrument that already existed (`--set 0x00B9:2=1` needed no new
+   code). **field 2 is a text-style flag: 0 renders the callout string cream, 1 renders it
+   gold**; box, position and close button identical. Meaning still UNVERIFIED and the
+   discriminator is a retail capture, not another arm — see the `0x00B9` row.
 7. **One loopback run separates `0x0084` from `0x00D7`.** Send `0x0084` with N ids then
    `0x0086`; separately `0x00D7` then `0x00E1`; see which UI surface receives each. That
    separates the two appenders the binary cannot.
+   **SUPERSEDED 2026-08-18 — this design would have crashed, and its premise is refuted.**
+   The desk read it needed (the `0x0084` section's ADDENDUM): `0x0086` asserts the two
+   accum counts EQUAL (`ChCliApi.cpp(1587)`), so "`0x0084` with N ids then `0x0086`" is a
+   guaranteed assert; and nothing separates the appenders — they share one handler, so the
+   client never sees which opcode staged a row. The runnable replacement is the
+   `accum_drains` probe: one appender, all four drain events, real named ids, column 1 fed
+   equal-length, the assert-carrying drain last.
 8. **One capture more than three hours after `20260817T183756` confirms `0x011A`.** GWW's
    border recomputes on a three-hour cadence, so a later capture is the only thing that can
    watch fields 3 and 4 move and turn two RECONSTRUCTIONs into OBSERVED. It costs a login,
