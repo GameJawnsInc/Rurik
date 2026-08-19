@@ -1910,3 +1910,55 @@ flag FOUND (n=1, named), party flag FOUND (n=1, named), target-lock located and 
 (needs a foe), hiring still NOT FOUND. What the client does with all three is
 send-and-wait — every confirmed display (stance ring, flag marker) waits on a s2c echo
 that is now the arc's next mechanism to find.
+
+### 28.6 THE LOOP CLOSED — every echo found by desk work, then confirmed by the client drawing it (2026-08-19, same day)
+
+Three parallel static tracers on the 38833 image found every echo §28.5 left open, and
+one wire run confirmed all of them (`RUN VERDICT: PASS`, run `20260819T101254`):
+
+**The stance ring, explained to the byte and then moved.** `0x0072`'s aiMode lands at
+activation-record+0xC but raises frame event `0x10000038` — an event GmAgentCommander
+has NO case for, which is the measured §28.5 inert-echo, now explained. The ring itself
+is a UI-local member (`ctrl+8`, painted by `0x004FC9D0`, highlight images
+0xAC7C/D/E) whose only writer is the panel's child-message 0x57. The dedicated setter
+the client listens for is **s2c `0x0062` — now named `HERO_AI_MODE_SET`
+`[agent_id, dword aiMode]`** (handler `0x0091E060` → `ChCliHero::SetAiMode`
+`0x0081D990`): writes the same rec+0xC but raises `0x1000003A`, the one event the panel
+subscribes to. The authsrv stance echo now answers `0x0015` with `0x0062`, and the wire
+verdict was better than predicted: **the ring moved to Guard AND Norgu spoke his
+Guard acknowledgment line in chat** — the stance loop renders and narrates.
+
+**The flags, traced store-to-model and then planted.** **s2c `0x0066` HERO_FLAG_SET
+`[agent_id, vec2, word plane]`** (handler `0x0091E0E0`): writes the hero ACTIVATION
+record's +0x10..0x1C — the same `ctx[+0x2C]+0x584` record `0x0072` creates, so the
+store is gated on activation existing, and ArenaNet's own failure trace names the
+action `CommandMoveToPoint` — posts frame event `0x100000A0`, and Compass.cpp
+(`0x008BB520` → `CompassCanvas_SetFlag 0x008BF730`) creates BOTH the compass marker and
+the world flag model. CompassCanvas is the sole image-wide caller of AvFlag
+create/destroy: the world flag is downstream of the compass widget, one event feeds
+both displays. **s2c `0x0067` PARTY_FLAG_SET `[vec2, word plane]`** is the twin (store
+`charCtx+0x9C..0xA8`, event `0x100000A1`, compass slot 0). Per-slot flag models ride an
+8-entry file-id table at `0x00A94358` (party 11092856; heroes 1–3 11092864/72/80). The
+clear/remove form is coords `(+INF, +INF)` with plane 0. Wire verdict: **both flags
+planted** — the hero triangle and the party pennant, visibly different models, plus
+both compass markers and the cancel widget lighting up. The authsrv echo arms answer
+`0x001A`→`0x0066` and `0x001B`→`0x0067`.
+
+**Target-lock, static only (medium).** The crosshair sends **c2s `0x0016`
+HERO_LOCK_TARGET `[heroAgent, targetAgent]`** / **`0x0017` HERO_UNLOCK_TARGET
+`[heroAgent]`** from GmAgentCommander's msg-0x24 handler `0x004FBD20` (lock reads the
+selected target via AvApi `0x007E1090`; re-lock same target is local-only). The
+foe/outpost gate sits upstream of msg 0x24 and its error strings are string-table ids,
+not .text literals. Live confirm needs an `--enemy` run with a foe selected — staged.
+
+**Hiring, still NOT FOUND, with a much stronger floor:** all 174 callers of the
+channel-send `0x007DCF00` were enumerated and their opcode immediates recovered — the
+commander/flag UI family sends ONLY 0x15/0x16/0x17/0x1A/0x1B, and the party-add
+opcodes (0x01BF/0x01C2) do not use this send path at all (they ride the party-build
+batcher, a different helper whose callers are the place to look next).
+
+All five opcodes are named in `schema/overrides.json` — the three s2c at high
+confidence (static chain + the client drawing it), the two lock c2s at medium (static
+only). The commander UI is now round-trip complete: stance, hero flag, and party flag
+each close click → c2s → server echo → render, on a server that knows all six messages
+by name.

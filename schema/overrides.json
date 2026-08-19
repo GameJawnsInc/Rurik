@@ -955,6 +955,48 @@
     "name": "PARTY_FLAG_PLACE",
     "name_confidence": "medium",
     "why": "OBSERVED 2026-08-19, one agent-piloted arm (pvpui 28.5, same capture as opcode 26): clicking the compass's all-party flag widget then the ground emitted exactly one of these -- [ground coords, plane], no agent, which is what distinguishes it from 26. Same caveats: n=1, no cancel arm, no render without a server echo. Not to be confused with authsrv.py's GAME_CMSG_ATTACK_SKILL = 0x0027, which is 39 decimal; this key is 27 decimal = 0x001B."
+   },
+   "22": {
+    "opcode": 22,
+    "table": "GAME_CMSG_0022",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 22
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "HERO_LOCK_TARGET",
+    "name_confidence": "medium",
+    "why": "OBSERVED static only (38833), no capture yet: send wrapper 0x0091FD60 (opcode immediate 0x16) via thunk 0x0080DFD0, called from GmAgentCommander frame proc 0x004FBAF0's msg-0x24 handler 0x004FBD20 -- the commander crosshair. Lock branch reads the selected target via AvApi 0x007E1090 and sends [heroAgent, targetAgent]. The UI gate (needs a selected foe, refused in outposts) sits upstream of msg 0x24, so a live confirm needs an --enemy run with a foe selected. studies/pvpui/FINDINGS.md 28.6."
+   },
+   "23": {
+    "opcode": 23,
+    "table": "GAME_CMSG_0023",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 23
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "HERO_UNLOCK_TARGET",
+    "name_confidence": "medium",
+    "why": "OBSERVED static only (38833), no capture yet: send wrapper 0x0091FDB0 (opcode immediate 0x17) via thunk 0x0080DFE0, the already-locked branch of the same crosshair handler 0x004FBD20 -- sends [heroAgent] alone. Same live-confirm caveat as opcode 22. studies/pvpui/FINDINGS.md 28.6."
    }
   },
   "GAME_SMSG": {
@@ -2541,6 +2583,79 @@
     "name": "MISSION_ENTRY_CONFIRM",
     "why": "OBSERVED on screen, 20260813T144929. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"mission entry screen \"Your party has characters from another campaign. Are you sure you wish to enter this mission?\"\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
     "name_confidence": "high"
+   },
+   "98": {
+    "opcode": 98,
+    "table": "GAME_SMSG_0098",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 98
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_AI_MODE_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E060 (38833) -> ChCliApi wrapper 0x008107A0 -> ChCliHero::SetAiMode 0x0081D990, which writes activation-record+0xC and raises frame event 0x1000003A -- the ONE event GmAgentCommander subscribes to (0x0072 raises 0x10000038, which the panel has no case for; that asymmetry was measured first as an inert 0x0072 echo). Wire: sending [200, 1] moved the commander panel's stance ring to Guard AND triggered the hero's spoken Guard acknowledgment line; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). The s2c display echo for GAME_CMSG 21 HERO_AI_MODE."
+   },
+   "102": {
+    "opcode": 102,
+    "table": "GAME_SMSG_0102",
+    "declared_unpack_size": 16,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 102
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "HERO_FLAG_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E0E0 (38833) writes the hero ACTIVATION record's +0x10..0x1C {x,y,plane,0} (same ctx[+0x2C]+0x584 record opcode 0x0072 creates -- store is gated on activation existing; ArenaNet's own failure trace calls the action CommandMoveToPoint), posts frame event 0x100000A0, and Compass.cpp 0x008BB520 -> CompassCanvas_SetFlag 0x008BF730 creates BOTH the compass marker and the world flag model (AvFlag, per-slot file ids at 0x00A94358). Wire: sending [200, coords, plane] planted the hero flag model in the world and the compass marker; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). Clear form: coords (+INF, +INF), plane 0. The s2c echo for GAME_CMSG 26 HERO_FLAG_PLACE."
+   },
+   "103": {
+    "opcode": 103,
+    "table": "GAME_SMSG_0103",
+    "declared_unpack_size": 12,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 103
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "PARTY_FLAG_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E120 (38833) -> worker 0x00810890 writes charCtx+0x9C..0xA8 {x,y,plane,0} (a single slot, not an array), posts frame event 0x100000A1, same CompassCanvas path as opcode 102, compass slot 0, distinct flag model. Wire: sending [coords, plane] planted the party pennant beside the hero flag; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). Clear form: coords (+INF, +INF), plane 0. The s2c echo for GAME_CMSG 27 PARTY_FLAG_PLACE."
    }
   }
  }
