@@ -2265,6 +2265,55 @@ should not go into `overrides.json` on this evidence.
 > produced a confident sequence. In both cases the tool answered a question it had not
 > been asked.
 
+> ### SWEEPING `0x00C3`'s KIND: 11 works, 0 and 1 are FATAL — and the first sweep design was wrong. 2026-08-19, OBSERVED
+>
+> **THE HYPOTHESIS SPACE IS THE GAME'S OWN SERVICE LIST.** WIKI (GWW, "NPC service",
+> rev. 2026) enumerates what a Guild Wars NPC can offer, and the ones that plausibly need a
+> window of their own are: **Merchant**, the six **Traders** (dye, material, rare material,
+> rare scroll, rune, sigil), **Collector**, the **Crafters** (armorer, weaponsmith, artisan,
+> consumable), **Skill trainer**, **Xunlai storage**, **Guild registrar/Emblemer**, **Map
+> travel**, **Mercenary registrar**, **Profession changer**, **Pet tamer**. That is roughly
+> sixteen — which is why the sweep runs 0..15, a range taken from the game rather than
+> guessed at the enum's width.
+>
+> | kind | result | evidence |
+> |---|---|---|
+> | **11** | **MERCHANT** — Buy/Sell tabs, both directions transact | `20260819T173300`, `173604`, and the control of three later runs |
+> | **0** | **FATAL** — `Assertion: item`, `ItCliApi.cpp(859)` | `20260819T174603` |
+> | **1** | **FATAL** — same assert, same site | `20260819T175553` |
+> | 2–10, 12–15 | **NOT TESTED** | see the cost, below |
+>
+> **THE ASSERT SITE IS AN ITEM-DETAIL ACCESSOR**, `0x00845B8D`, whose immediate neighbours
+> assert `item`, `item->IsDetailHigh()`, `ptr` and `ptr->IsDetailHigh()` (`ItCliApi:813`,
+> `823`, `824`, `848`, `849`). So an unrecognised kind falls into a path that resolves an
+> ITEM — which is exactly why the very first `0x00C3 [3, 0]` looked like an item-id message.
+> That reading was wrong about the field and right about the code path it reaches.
+>
+> **THE FIRST SWEEP DESIGN WAS WRONG AND THE LOG HID IT.** Sixteen arms were queued 7 s
+> apart; the client died on the **second** and the remaining fourteen were sent to a corpse,
+> while the server log printed sixteen sends that all looked alike. **The capture is what
+> caught it** — the client's last c2s was at `t = 38.1` and arms three onward were all sent
+> after that.
+>
+> **AND THE FIX WAS NOT ENOUGH EITHER, which is the part worth keeping.** Reading "fatal" as
+> *"arm sent after the last c2s"* is unsound: a kind that kills the client instantly is,
+> by definition, sent after the last c2s — so the fatal arm and the arm after it are
+> indistinguishable at 5 s spacing, and one run mis-attributed kind 1's death to the
+> control. **The attribution rule has to be positive:** the client keep-alives every ~5 s,
+> so arms are spaced **13 s** and a kind that did NOT kill the client is followed by **at
+> least two** c2s messages. Survival is then evidence, not the absence of evidence.
+>
+> **THE COST, stated because it is the decision:** an invalid kind ends the run, so a sweep
+> advances only as far as its first fatal value — **one value per run** while invalid kinds
+> outnumber valid ones. Thirteen remain. `RURIK_C3_KINDS` makes each run a resume rather
+> than a rewrite, and the control is prepended automatically because a run where nothing
+> draws must be distinguishable from a rig that is broken.
+>
+> **THE CHEAPER ROUTE, not yet taken:** `0x00C3`'s payload reaches GmView's subscriber
+> `0x004E8510`, which indexes an array under `Array:587 index < m_count`. If the kind
+> selects a tab-set from a bounded table, the bound is readable at the desk and would give
+> the whole enum without another run.
+
 > ### `0x00C3` IS THE SELL TAB — the CONTESTED row is SETTLED, and the round trip closes. 2026-08-19, OBSERVED
 >
 > **`0x00C3` field 1 is a TRANSACTION KIND, not a count.** Settled by a positive result
