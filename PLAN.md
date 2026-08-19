@@ -1332,6 +1332,42 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### Model authoring — the PLAYER path is open, and one bit decides whether it animates (2026-08-19)
+
+[studies/playercomposite/FINDINGS.md](studies/playercomposite/FINDINGS.md), rung U10 in
+[studies/unitmodels/PLAN.md](studies/unitmodels/PLAN.md). Monster authoring is closed end to end
+(U1–U9: decode → modify → re-emit → the retail client renders it). The player analogue had no
+resolver at all, and the named suspect was wrong — `ConstComposite`'s pointer tables in `Gw.exe`
+hold no file id at any depth, they are texture-atlas RECTs. **The ids come from Gw.dat file
+`0x33EA`**, and `toolkit/mapdata/cpsdata.py` + `test_cpsdata.py` (58 checks, floor 58) now parse
+it: residue 0 on 105,531 B, 3,803 records, cross-half type agreement 3803/3803. The two-witness
+join runs in-suite — composite type 1 resolves to **exactly the twenty shells an independent FFNA
+walk names, 20/20 composited**, and type 2 is a second twenty on element-for-element identical
+node counts.
+
+**NEXT, in cost order:**
+1. **What is `arg0`, whose bit 0 picks composite type 1 over type 2?** (`and eax,1; inc eax` at
+   `0x008315B5`, stored `this+0x3E4`; trace back through `0x0082DBB0`/`0x0082DBA0`'s callers.)
+   Two complete twenty-shell sets exist on identical skeletons — one with 220–289 sequences, one
+   with 10–17 — so **authoring against the wrong one produces a character that cannot animate.**
+   One bit, total consequence. Everything else on this path is cheaper than it is important.
+2. **P2** `toolkit/clientscan/composite.py` — the static half (`s_components` `0x00A3AE58`,
+   `s_dims` `0x00BF37F8`, `s_fileFlags` `0x00A978EC`, base pieces `0x00A96D9C`,
+   `s_appearanceSlot` `0x00BC8AC8`, the ConstComposite CSR/rect pair). Stdlib only, bare-machine.
+3. **P3** `toolkit/mapdata/playerassembly.py`, after a behaviour-neutral `seeds` refactor of
+   `unitassembly.Resolver` — its pinned 54/54 is the refactor's regression oracle.
+4. **The wire item-type ↔ composite-type mapping** (§2 step E). Our server picks the wire type; if
+   it does not induce the right composite type, every equipped piece lands on the wrong component.
+5. **`npcdefs.py` refuses on the full 14-capture pool** — "definition 159 has two move speeds
+   (288.0, 144.0)", and 144 is exactly half of 288, so field 9 may be an observed instantaneous
+   speed rather than a definition constant. Every `unitassembly`/`unitmodels` figure in the tree is
+   therefore a **3-capture number**. Content-pipeline work, not model work; belongs with R4c.
+
+**Cross-arc, and neither side could see it alone: file 15018 — the archivewrite arc's standing
+"unwritable" wall (row 11196, 1,029,564 B in a 1,029,632 B reservation) — is the human male player
+shell for profession 1.** The hardest write target in the archive is a player shell.
+
+
 ### Movement — the latch is FIXED; the teleport is EXPLAINED and three fixes are dead (2026-08-19)
 
 Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two
