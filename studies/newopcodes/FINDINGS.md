@@ -853,6 +853,42 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### RUN 3 — THE DRAIN FINALLY FIRED INTO AN OPEN SHOP, AND IT DID NOTHING. The `0x00E1` line CLOSES.
+>
+> Harness **`20260818T213244`**. `0x00C3` withheld as a declared refusal (it is unnecessary
+> — `0x00CA` opens the shop — and it had killed the client 13 s before this arm twice).
+> No crash, no assert, all steps ran.
+>
+> **The measurement, with an in-run sensitivity control that makes the null mean something:**
+>
+> | event | full-frame | collector panel |
+> |---|---|---|
+> | `0x00CA` opens the shop | **56,910** | **56,949** |
+> | `0x00E1` drain, both columns restaged | **1** | **0** |
+> | next frame | 0 | 0 |
+> | ambient noise elsewhere in run | 0–27 | 0–27 |
+>
+> The scorer that saw **56,910** pixels sixteen seconds earlier saw **one** at the drain, and
+> the panel it was aimed at saw **zero**. Confirmed by eye per this file's own rule about
+> nulls from that scorer: the panel two seconds after the drain is pixel-identical and still
+> reads `Hatcher [Collector]` with `Ringmail Leggings / Boots / Gauntlets` — **nothing
+> appended, nothing cleared, not closed.**
+>
+> **This is the strongest null the line can produce, and it is now a real negative rather
+> than an absence of evidence.** Every precondition anyone proposed is satisfied at once: the
+> window is OPEN and visibly so; the accum buffer PROVABLY feeds this exact window, since
+> `0x00CA` built its three rows out of it moments before; both columns were restaged
+> immediately before the drain; and the instrument is demonstrably alive in the same run.
+> **So `0x00E1`'s frame-bus event `0x100000BA` has no subscriber in any context this project
+> can reach** — not bare, not with Inventory or Skills open (`20260818T184210`), and not with
+> the one window that reads its own buffer. Upstream's `SKILL_ADD_TO_WINDOWS_END` remains
+> unearned on every rendered surface.
+>
+> **What still cannot be claimed:** that `0x00E1` is inert. It zeroes both accum counts —
+> the disassembly is unambiguous — so it has a real effect on client state that no
+> screenshot can see. The honest statement is that it has **no VISIBLE effect**, and the
+> instrument for the invisible half is a memory read, not a frame.
+>
 > **What this run did NOT measure:** the trailing `0x00E1` arm fired at t=44.6 s, thirteen
 > seconds *after* the client died at t=31.6 s, so it observed nothing and must not be
 > counted as a fourth null. Asking whether a drain appends into an open collector window
