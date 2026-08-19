@@ -25,6 +25,20 @@
 >    hardest write target in the archive is a player shell**, which is both bad
 >    news for authoring it in place and the reason its 68-byte slack matters.
 >
+> **A third correction, found by building §5's P1 rather than by reading.**
+> §5's sabotage 1 — *"Parse `s_items` with 10 or 12 file slots instead of 11 →
+> residue must become non-zero"* — **is wrong, and it is the kind of wrong this
+> repo has a rule about.** Every record consumes `4 + 4*popcount` bytes, so
+> section 2 is entirely dword-aligned and ANY dword-consuming parser lands on
+> the exact final byte: measured residue 0 at 9, 10, 11, 12 and 13 slots alike.
+> Residue only catches a truncation that is not a multiple of four. What
+> actually pins the framing is that the file states the same count twice in
+> disjoint halves: **`len(records)` must equal section 1's total id count**
+> (3,803 == 3,803, against the rivals' 3,992 / 3,858 / 3,795 / 3,752), and
+> **cross-half type agreement** must be total (3803/3803, against 3,212 /
+> 2,547 / 2,927 / 3,075). `cpsdata.py` enforces the first as a refusal and
+> `test_cpsdata.py` §2 now checks the vacuity itself so nobody re-derives it.
+>
 > Nothing here was checked against a running client — see §4.12.
 
 ---
