@@ -773,6 +773,49 @@ BAG_MODEL_EQUIPPED = 21
 EQUIPPED_BAG_ID = 1
 EQUIPPED_SLOT_WEAPON = 0
 EQUIPPED_SLOT_COUNT = 9
+# THE WHOLE BAG SET, and until 2026-08-19 this server sent one ninth of it.
+# The symptom was not a missing grid, it was a MISSING PURCHASE: with a funded
+# purse, a priced shop and Buy enabled, an operator-watched click on Buy
+# produced ZERO c2s traffic (`20260819T141246`). The client refuses a purchase
+# it has nowhere to put and refuses it LOCALLY -- ArenaNet's "inventory full"
+# path costs no wire message, so the null looked like "the click missed".
+#
+# MEASURED, not guessed: `(type, model, slots)` are read from live capture
+# `20260819T132414` (extractor `toolkit/authsrv/invcensus.py`, build 38833),
+# where every one of 38 connections carries exactly these nine bags, all citing
+# the connection's own `0x0144` key. THE READING VALIDATES ITSELF -- the type-5
+# bag has 42 slots, which is exactly Guild Wars' material-storage capacity, a
+# number the capture supplied and nobody here put in.
+#
+# THE BAG IDS ARE OURS AND THAT IS CORRECT. Retail's are arbitrary
+# per-connection handles: the same nine bags drew 8..16 on one connection and
+# 570/496/398/328/438/654/571/462/658 on another, exactly as the inventory key
+# itself drew 4 / 159 / 183. So only the (type, model, slots) triples are
+# retail's data; the ids are a namespace we allocate, and EQUIPPED_BAG_ID stays
+# 1 because ITEM_MOVED_TO_LOCATION below already names it.
+#
+# THE TRAILING FIELD IS THE BAG'S OWN ITEM, and it is 0 here on purpose. In the
+# live corpus it is nonzero on the type-1 BACKPACK and on nothing else -- and
+# **49 of 49** of those nonzero values are an item id DECLARED BY 0x0161 IN THE
+# SAME TAPE AT THE SAME TIMESTAMP. That fits Guild Wars, where the Backpack is
+# a real item and the equipped/storage/material bags are not. We declare no
+# backpack item, so we send 0 -- which is retail's own value for five of the
+# six bag types, not an invented one. If the grid fails to appear, declaring an
+# item for this field is the next arm, and it is a one-line change.
+BAG_TYPE_BACKPACK = 1
+PLAYER_BAGS = (
+    # (bag_id, type, model, slots, item)
+    (2, BAG_TYPE_BACKPACK, 0, 20, 0),           # backpack
+    (EQUIPPED_BAG_ID, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED,
+     EQUIPPED_SLOT_COUNT, 0),                   # equipped items
+    (3, 3, 6, 12, 0),                           # belt pouch
+    (4, 4, 7, 25, 0),                           # storage pane 1
+    (5, 4, 8, 25, 0),                           # storage pane 2
+    (6, 4, 9, 25, 0),                           # storage pane 3
+    (7, 4, 10, 25, 0),                          # storage pane 4
+    (8, 4, 11, 25, 0),                          # storage pane 5
+    (9, 5, 5, 42, 0),                           # material storage
+)
 # agent_id + NINE item ids. The message that puts equipment on a BODY, as
 # opposed to CREATE_NAMED_ITEM which only declares an item's bytes and
 # ITEM_WEAPON_SET which fills the weapon-swap UI.
@@ -6236,6 +6279,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
                                   EQUIPPED_SLOT_COUNT, 0],
                                  "INVENTORY_CREATE_BAG(hero equipped)")
+                        # THE PLAYER'S BAGS, and they belong HERE rather than
+                        # in a probe. Sending 0x013F AFTER spawn produced no
+                        # grid at all (`20260819T141246`, a backpack sent 40 s
+                        # into a live session); retail sends all nine
+                        # IMMEDIATELY after its 0x0144, i.e. before the
+                        # inventory UI is ever built. Same message, same
+                        # fields, different moment -- and the moment is the
+                        # variable this move tests.
+                        for bag_id, kind, model, slots, item in PLAYER_BAGS:
+                            send(GAME_SMSG_INVENTORY_CREATE_BAG,
+                                 [1, kind, model, bag_id, slots, item],
+                                 f"INVENTORY_CREATE_BAG(type {kind}, "
+                                 f"bag {bag_id}, {slots} slots)")
                         # The item has to exist before a weapon set can name it,
                         # and upstream sends inventory before the slots for that
                         # reason. CREATE_NAMED_ITEM only DECLARES the bytes --
@@ -6273,10 +6329,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # client's view-layer AvChar rather than on the
                             # agent every search so far has scanned.
                             # studies/enemy/PLAN.md 6p.
-                            send(GAME_SMSG_INVENTORY_CREATE_BAG,
-                                 [1, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED,
-                                  EQUIPPED_BAG_ID, EQUIPPED_SLOT_COUNT, 0],
-                                 "INVENTORY_CREATE_BAG(equipped)")
+                            #
+                            # The equipped bag USED TO BE CREATED HERE, inside
+                            # this `if`. It moved into PLAYER_BAGS above on
+                            # 2026-08-19, which fixes a second bug in passing:
+                            # `--no-weapon` used to leave the character with no
+                            # containers at all, so every inventory question
+                            # silently depended on a weapon flag.
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                                  [1, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
                                   EQUIPPED_SLOT_WEAPON],
