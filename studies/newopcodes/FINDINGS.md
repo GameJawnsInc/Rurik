@@ -2265,6 +2265,43 @@ should not go into `overrides.json` on this evidence.
 > produced a confident sequence. In both cases the tool answered a question it had not
 > been asked.
 
+> ### `0x00C3` IS THE SELL TAB — the CONTESTED row is SETTLED, and the round trip closes. 2026-08-19, OBSERVED
+>
+> **`0x00C3` field 1 is a TRANSACTION KIND, not a count.** Settled by a positive result
+> rather than by a crash, and by accident: `20260819T172944` opened the shop with `0x00CA`
+> alone, bought twice, and **could not sell** — clicking a backpack item resolved its
+> tooltip and the panel stayed *"press Buy"* with no Sell control and no `0x004A` on the
+> wire. The one message retail sends into that window that we had withheld was `0x00C3`.
+> Sent in opening 1 (`20260819T173300`), the panel grows a **`Buy` / `Sell` TAB PAIR**.
+>
+> So `0x00C3 [11, 0]` **declares what the window can do**, and 11 is the same constant the
+> client then sends on `0x004A` and gets back on `0x00CC` — one enum, three opcodes, two
+> directions. The count reading is dead: it was only ever supported by the coincidence that
+> all six corpus windows staged exactly eleven items, and here eleven rows plus `[11, 0]`
+> produced a *tab*, not a list length. The upstream name `WINDOW_MERCHANT` /
+> `MERCHANT_WINDOW_OPEN` is **earned at last** — `0x00CA` opens a buy-only panel and
+> `0x00C3` is what makes it a merchant.
+>
+> **THE ROUND TRIP CLOSES** (`20260819T173604`). Buy → Sell tab → Sell:
+>
+> ```
+> c2s 0x804D [1, 10, [], b'', 0, [40], b'']    buy at the quote
+> s2c 0x014F / 0x0161 / 0x013E / 0x00CC            pay, mint, place, confirm
+> c2s 0x804A [11, 0, [5000], 5, []]                sell it back at HALF
+> s2c 0x014D / 0x0140 / 0x00CC                     remove, pay, confirm
+> ```
+>
+> **`2000 − 10 + 5 = 1995`, and the client displays 1995.** The Sell tab shows the client's
+> own instruction *"Select an item from your inventory below, then press \"Sell.\""*, a
+> container row with the backpack ticked, **`Backpack (empty)`** where the item used to be,
+> and Sell greyed because there is nothing left to sell. Half price is the client's own
+> arithmetic — it asked for 5 on an item it paid 10 for, the same ratio as retail's 40 → 20.
+>
+> **A run-procedure note worth keeping** (operator, 2026-08-19): *the first row of a
+> merchant window is pre-selected when the window opens*, so a click to select it is
+> unnecessary — and a click aimed at a row that is already selected is one more chance to
+> land in the world instead. Two of this session's action scripts carried that useless click.
+
 > ### THE PURCHASE COMPLETES. A player bought an item from a server we wrote. 2026-08-19, OBSERVED
 >
 > Harness **`20260819T170427`**, one variable changed from the run that crashed: the reply

@@ -2072,7 +2072,7 @@ Every one of these, in the order they were written:
   at exactly the index it asserted at. Without it the ten checks above are ours
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
-  `toolkit/authsrv/test_purchase.py` (answering `GAME_CMSG 0x004D` -- the four
+  `toolkit/authsrv/test_purchase.py` (answering the merchant, BOTH directions -- the four
   messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents:
   **pay, mint, place, confirm** -- `0x014F` debit, `0x0161` declare, `0x013E`
   move, `0x00CC` done. The first arm sent that nearly backwards and the client
@@ -2092,8 +2092,17 @@ Every one of these, in the order they were written:
   locally that it can afford this and has room, so anything we cannot answer is
   a disagreement between its model and ours, where a plausible reply is worse
   than none. `0x014F`, the debit, is OBSERVED-ONCE and the file says so: one
-  purchase was ever made in front of a capture. Floor 18. No vault, no socket,
-  no client. ~1 s),
+  purchase was ever made in front of a capture. **SELL (`0x004A`) is the same file's
+  section 6** and its trap is that the request is NOT the buy message's shape: five
+  fields against seven, and the price sits at index **4** here and index 2 there, so
+  reading the buy's index would credit 0 every time and do it silently. Its reply is
+  three messages -- `0x014D` remove, `0x0140` credit, `0x00CC [11]` -- read by byte
+  offset from all EIGHT sales, with no `0x013E` and no re-declaration because the
+  item ceases to exist. `0x00CC` is last in all nine transactions, the one ordering
+  invariant this family has. The backpack is asserted to be a slot MAP and not a
+  cursor (a sale frees its slot, the next buy reuses it) -- a cursor would call a
+  20-slot bag full after twenty transactions on an empty one. Floor 27. No vault, no
+  socket, no client. ~1 s),
   `toolkit/authsrv/test_playerbags.py` (the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a

@@ -777,8 +777,24 @@ def _merchant_window_steps(agent_id, origin):
              f"ENABLED. This is the Q1 arm and it must not be risked, so the "
              f"message that has killed the client three times is withheld "
              f"until opening 2."),
-        Step(30.0, 0x0000, [],
-             "THE BUY WINDOW: click a row, then click Buy",
+        Step(2.0, 0x00C3, [_STOCK_COUNT, 0],
+             f"0x00C3 [{_STOCK_COUNT}, 0] in OPENING 1 -- the sell-capability test",
+             "THE COUNT-VS-TYPE DISCRIMINATOR, from a direction that does not "
+             "need a crash. 20260819T172944 opened this window with 0x00CA "
+             "alone, bought twice, and could NOT sell: clicking a backpack item "
+             "resolved its tooltip and the panel stayed 'press Buy' with no "
+             "Sell control and no 0x004A on the wire. The one message retail "
+             "sends that we withheld from that window is this one, and its "
+             "field 1 is 11 -- which is ALSO the sell transaction kind on "
+             "0x004A and 0x00CC, 8 of 8. ANSWERED 20260819T173300: a Buy/Sell "
+             "TAB PAIR appears. Field 1 is a TRANSACTION KIND, the count "
+             "reading is dead, and the upstream name WINDOW_MERCHANT is "
+             "earned -- 0x00CA opens a buy-only panel and this is what makes "
+             "it a merchant. The round trip then closed (20260819T173604): "
+             "buy at 10, sell back at 5, funds 2000 -> 1990 -> 1995 on screen.",
+             ),
+        Step(28.0, 0x0000, [],
+             "THE BUY/SELL WINDOW: click a row, Buy, then try to sell",
              "THE QUESTION OF THIS RUN. With bags now created during LOAD, a "
              "click on Buy should put GAME_CMSG 0x4D on the wire -- the first "
              "purchase request this project has ever received. Retail's own "
