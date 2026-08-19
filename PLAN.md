@@ -2325,10 +2325,25 @@ a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment sa
 
 **The scope is narrower than "these addresses are stable", and the check says so.** On the vaulted 38519 build — ~90 days older — **0 of 12 sites match and the frame-bus scan finds nothing in any quest body at all.** So the claim is that nothing moved across the 15-day 38797→38833 patch, which is much smaller than durability; 38519 is now the control that proves the equality is a measurement rather than a tautology. `test_quests.py` §20 (77 checks) re-runs the whole thing, and a fourth vaulted build is covered without an edit.
 
-**Next offline, cheapest first:** (no `0x0050`/`0x0051`/`0x0053`
-senders exist, so the quest log empties on a map transition — and do NOT bulk-restore with
-`0x0049`, whose body writes `charContext+0x528`); and every binary claim in the quests arc is
-build 38797, none re-checked against 38833.
+**Next offline, cheapest first, and the offline half is the short half. Q2b — author the
+NAME.** The description is ours and the name is still ArenaNet's `0x3D64`, so a quest we wrote
+announces itself in their words. Q0 went green 2026-08-15 (`studies/quests/AUTHORING.md` §1)
+and it was the only gate on this rung; `toolkit/mapdata/textwrite.py` already exists, is
+tested, and has 188 authored skill names on a retail screen behind it. The authoring half
+needs no client. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
+known, and which one is wrong is a measurement nobody has taken.
+
+**Two runs are what the arc is actually waiting on, and they are different asks.** **Q6 needs
+the owner:** walk a portal, the log survives. The code and its checks are landed, and nothing
+offline substitutes for that criterion. **The reward grant needs ONE LOOPBACK RUN, not a live
+campaign** — `0x004E` is named and its readout is a centre-screen panel rather than a
+world-anchored click, so the first real question, what `QUEST_COMPLETE_PANEL` expects in its
+three dwords, is one send away.
+
+**And the largest piece is the two known bugs at the top of this block, which are ONE fix and
+not two:** the range gate is only correct once click-to-walk exists, and shipping it alone
+makes the quest unplayable. Neither half is measured, and the cheap route to the range is
+still the owner's number rather than a probe.
 
 
 ### Heroes and henchmen — R4c-H MET, hero row renders, next gate NAMED (2026-08-16)
