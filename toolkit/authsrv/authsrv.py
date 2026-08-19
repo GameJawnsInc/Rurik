@@ -2647,14 +2647,27 @@ HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
 # hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
 HERO_INFO = True
-# Send the 0x0037 + 0x003A pair for the HERO's agent. DEFAULT OFF, and the
-# default is the finding: this pair DOES clear the attribState gate (the assert
-# moves on, measured), but it then takes the client down on
+# Send the hero's attribute state -- 0x0037 -> 0x00B7 -> 0x003A for the HERO's
+# agent. The knob is HERO_ATTRIBS, assigned above beside HERO_SKILLBAR and
+# HERO_BODY_NPC; this block is the only prose about it, and being detached from
+# its own assignment is how it went on describing an earlier arc for a day.
+# HISTORY, because the reversal IS the finding, and the assert is the evidence.
+# This pair started DEFAULT OFF: 0x0037 + 0x003A does clear the attribState
+# gate (the assert moves on, measured), but it then took the client down on
 #   profession < arrsize(s_profChapter)   ConstChar.cpp(1296)
-# and it does so with or without the trailing 0x0072 -- so as constructed it
-# REGRESSES a hero that otherwise renders fine. Opt in with --hero-attribs to
-# continue the investigation; leave it off to keep a working hero.
-# studies/heroes/FINDINGS.md 13.
+# with or without the trailing 0x0072 -- so as first constructed it REGRESSED a
+# hero that otherwise rendered fine. studies/heroes/FINDINGS.md 13.2.
+# RESOLVED, and by two measured changes that both live at the send site below.
+# (1) 0x00B7 for the HERO's agent, not just the player's, which is what puts it
+# in the ctx[0x2c]+0x6BC profession array ConstChar:1296 reads. (2) ORDER:
+# attribute POINTS first, profession SECOND -- 0x0037 -> 0x00B7 -> 0x003A --
+# because clearing :1296 with 0x00B7 first only moved the assert to
+# `attribState ChCliAttrib.cpp(435)`, which this server's own player-side
+# comment had already recorded. FINDINGS 14.3 carries the four-gate table.
+# So the DEFAULT IS NOW ON, and the opt-out is --no-hero-attribs -- there is no
+# --hero-attribs flag to opt in with, which is the other half this comment had
+# stale. The 2026-08-18 panel-open run took it defaulted on and never reached
+# ConstChar:1296 (studies/pvpui/FINDINGS.md 28.3). Reconciled 2026-08-19.
 # 0x0074's ten unexplained dwords, and the u32 flag that gates the client's
 # CONDITIONAL third copy of the second group to record+0x74. Both exist to test
 # one hypothesis and to let it FAIL: if the trailing 0x0072 still asserts
