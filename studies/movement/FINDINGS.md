@@ -1406,3 +1406,57 @@ position has to be reconstructed —
 `(+0x78,+0x7C) + (+0xB0,+0xB4) * (now − +0x58) * 0.001` — and
 `toolkit/clientscan/movetap.py`'s selftest refuses to pass unless every term of
 it is in the record.
+
+## MEASURED IN THE CLIENT'S OWN MEMORY: the teleport is not a bug (2026-08-19)
+
+`toolkit/clientscan/movetap.py`, two runs, 2,332 samples at 50 Hz. The WOW64 TEB
+walk resolved on the first attempt, and `maxSpeed = 288.0` / `moveSpeed = 1.0`
+are now **read directly out of the agent** rather than fitted to the wire.
+
+**Seven arrival consumptions** — a sample where `m_point` lands on
+`m_targetPoint` (within 1 u) while `+0x48` clears to 0 and the target goes
+`+inf`. That is the teleport primitive `0x006020B0` firing:
+
+| jump | armed | fired | error |
+|---|---|---|---|
+| 98 u | 194118 | 194129 | +11 ms |
+| 680 u | 29567 | 29657 | +90 ms |
+| 803 u | 197017 | 197032 | +15 ms |
+| 2,129 u | 50133 | 50145 | +12 ms |
+| 2,743 u | 274733 | 274770 | +37 ms |
+| 3,393 u | 158718 | 158751 | +33 ms |
+| **5,238 u** | **218272** | **218299** | **+27 ms** |
+
+Every one fires within one 20 ms sample of its scheduled tick. **So the snap is
+how the client completes EVERY server-granted move** — the 98 u one is
+invisible, the 5,238 u one is "the warp", and they are the same code path.
+
+**`+0x48` is set once at the grant and never re-armed** — reading (B) is
+**REFUTED**. In the flagship case it was armed at `t+63.98` to `218272`
+("due in +18.09 s", target `(11039.38, 5465.95)`) and fired at `t+82.34`, 18.36 s
+later, onto exactly that point, plane 0→18. The formula predicted 18,187 ms
+against 18,087 actual — **0.55%, with no free parameter**, using constants read
+out of the client.
+
+**So the cause is entirely ours.** We grant a destination 5,238 u away, the
+client schedules its arrival 18 s out, the player walks somewhere else, and at
+the scheduled instant the client does what it always does. ArenaNet never gets
+here because it **re-grants every ~0.5 s** (median inter-grant 0.492 s, 88.5%
+triggered by a `0x003D` heading, granting the client's own proposed endpoint plus
+0.5 u): its arrival ticks are always half a second out and a few units away, so
+the snap is a sub-unit correction that nobody can see. Ours matures for
+eighteen seconds.
+
+**A trap for the next reader, and it is why the first probe design was scrapped.**
+Most `m_point` jumps in the trace are NOT teleports — they are the cached point
+being brought forward by `0x005FF880` when a new grant arrives. Of eleven jumps
+over 300 u in the long run, only four are arrivals. The discriminator is not the
+jump size: it is **landing on `m_targetPoint` while `+0x48` clears**.
+
+**Still unexplained:** the `--stop-echo` run warped even though the echo fired
+9.86 s after the grant and should have overwritten the destination (a
+zero-distance move takes the `distSq <= 1.0` short-circuit at `0x005FEA90` and
+arrives on the very next millisecond). Under the mechanism now confirmed, that
+warp should not have happened. `movetap.py` attached to a `--stop-echo` run
+settles it in one pass, and that is the next measurement rather than the next
+guess.
