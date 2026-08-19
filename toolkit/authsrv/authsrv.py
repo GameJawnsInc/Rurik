@@ -2922,6 +2922,15 @@ HERO_CHAR = False
 # order fails SILENTLY -- 116228,116703 draws a humanoid bust, 116703,116228
 # draws an empty white doll, neither asserts. d1 is the slot the composite
 # draws; "no crash" is not a verdict on an appearance pair.
+# AND IT IS A PAIR WE ALREADY HAVE (28.13): d1/d2 are a content row's
+# file_id/model_id, in that order. Read out of the owner's archive: a
+# file_id carries the 0xFA1 skeleton chunk and a model_id carries the 0xFA0
+# geometry, and d1 must be the skeleton-bearing one -- the reverse of 28.1's
+# first role names, which came from MdlBuild's variant labels rather than
+# from looking inside the files. Send d2=0 where a row has no model_id: the
+# burrower's row has none ON PURPOSE, because retail declares that unit
+# 0x0056-only and sends no MONSTER_COMPOSITE, which is exactly why 116366
+# rendered alone.
 HERO_APPEARANCE = None
 # The hero AGENT's displayed level -- int property 36 on 0x009F, the same
 # channel the player's own agent gets in the create preamble and the

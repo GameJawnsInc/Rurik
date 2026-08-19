@@ -1764,6 +1764,11 @@ fileId→filename codec `0x004702B0` asserting on a **zero**.
   only by not calling. `d2` selects the MdlBuild variant: non-zero → build **with
   skeleton file** (`MdlBuild:1868`), **zero → legal**, the fileName-only build
   (`MdlBuild:1835`). So: **`d1` = the model file id, `d2` = an optional skeleton file id.**
+  **← THAT LAST SENTENCE IS BACKWARDS, corrected 2026-08-19 by reading the three files'
+  own chunk tables (§28.13): `d1` is the FILE id — the one carrying the skeleton — and
+  `d2` is the MODEL id, the geometry.** Every code fact above stands; only the two role
+  names were wrong, and they came from the MdlBuild variant labels rather than from
+  measuring what the files contain.
 - All four callers of the factory pass the pair from data, never literals — there is no
   zero-sentinel anywhere in the image.
 
@@ -1838,6 +1843,10 @@ is a claim about `content/npcs.toml`'s row naming, RECONSTRUCTION until the rows
 extraction is re-read. What is OBSERVED and matters for the wire: **the pair is
 order-sensitive, the failure mode of the wrong order is an empty doll and not an
 assert**, so "it didn't crash" is not a verdict on an appearance pair.
+
+> **That RECONSTRUCTION was REFUTED the same day (§28.13): the content rows are labelled
+> correctly and it was this arc's ordering that was wrong.** Left standing above because
+> the guess and its refutation are both part of the record. The OBSERVED sentence holds.
 
 **The level finding — OBSERVED, and it bought more than the title.** `--hero-level 20`
 (`0x009F [36, 200, 20]`, sent through the hero pipeline before any body) cleared the
@@ -2166,3 +2175,40 @@ hero, `+0x6AC` pet, `+0x6BC`, `+0x6F0`), and the last two are wholly unread —
 `PtMinionRoster.cpp` is in the assert surface and is the obvious candidate for one.
 The method that cracked the pet container in one call is the one to repeat: read the
 log format string on the not-found path.
+
+
+### 28.13 The appearance pair IS the content row's `(file_id, model_id)` — §28.1's role names were backwards (2026-08-19)
+
+One desk check, no client: read the three appearance files' own chunk tables out of the
+owner's archive with `toolkit/mapdata/modelfile.py`, where `0xFA0` is geometry and
+`0xFA1` the skeleton/animation chunk.
+
+| file | chunks | geometry? | skeleton? |
+|---|---|---|---|
+| 116366 (burrower) | `0xFA0, 0xFA5, 0xFA6, 0xFA1` | yes | yes |
+| 116228 (hatcher `file_id`) | `0xFA6, 0xFA1, 0xFA8` | **no** | yes |
+| 116703 (hatcher `model_id`) | `0xFA0, 0xFA5` | yes | **no** |
+
+Line that up with §28.4's three arms and one rule fits all of them: **`d1` must be a file
+carrying a `0xFA1` skeleton.** 116366 has one and rendered alone; 116228 has one and
+rendered with 116703 supplying the geometry; 116703 has none and rendered an empty doll
+even though it is the file with the actual body in it. So `d1` is the skeleton-bearing
+FILE and `d2` supplies the MODEL — **the reverse of §28.1's role names**, which were
+assigned from the MdlBuild variant labels (`build with skeleton file`) rather than from
+looking inside the files. Corrected in place there.
+
+**And the pair is not a new concept at all — it is the pair `content/npcs.toml` already
+carries.** The hatcher row's own field names are `file_id = 116228` and
+`model_id = 116703`, and the working order is exactly that order. The burrower row is
+the control that makes it airtight: it has **no `model_id` on purpose**, with a comment
+recording that ArenaNet declares it with `0x0056` and sends **no** `0x0057`
+MONSTER_COMPOSITE — 8 of 44 definitions in the capture are `0x0056`-only. A
+self-contained file needs no model, which is precisely why `--hero-appearance 116366`
+worked with `d2 = 0`. The same rule governs both the NPC path and the hero path.
+
+**Two consequences.** §28.4's guess that the content rows were mislabelled is REFUTED —
+the rows were right and this arc's ordering was wrong. And hero appearance authoring
+collapses to a rule with no new measurement in it: *to dress a hero as any NPC we
+already have a row for, send that row's `file_id` and `model_id` as `d1`/`d2`, and send
+`d2 = 0` where the row has no `model_id`.* Cheapest confirmation available: any third
+content row with both ids, one click.
