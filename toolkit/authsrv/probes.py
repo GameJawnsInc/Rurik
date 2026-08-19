@@ -3839,25 +3839,58 @@ _ARENANET_OFFER_LINE = [0x2AE6, 0xF9CB, 0xE939, 0x5DD2, 0x010A,
 # npcdefs' own docstring cites it.
 GIVER_DEFINITION = 1480         # agent 99's, the one whose line we replay
 _GIVER_AGENT = 99
-# npc_template, NOT WORLD.rows(...) -- the raw row's `enc_name` is a LIST of
-# string ids and the codec wants an encoded str. Reaching for the row directly
-# gives `string of 26 code units exceeds cap 8`, which is the error
-# npc_template's own docstring exists to prevent. Hit it anyway on the first try.
-GIVER_NPC = npc_template("def_1480")
+_VAULT_NPC_CACHE = {}
+
+
+def _vault_npc(key):
+    """An NPC row that lives ONLY in `vault/content/npcs.toml`, read at CALL time.
+
+    NOT at import time, and that distinction is the entire function. `def_1480`
+    and `def_1473` are bulk-extracted live definitions, so they are vault rows by
+    the repo/vault split `toolkit/content.py` documents -- and binding one at
+    module level made EVERY importer of this file die on a machine with no vault.
+    MEASURED 2026-08-18, `RURIK_VAULT` pointed at a nonexistent directory: the
+    server's own `import authsrv` raised `no npc row 'def_1480'`, and so did
+    twelve tests, four of whose docstrings say "no vault, no socket, no client"
+    flatly. They did not fail their floors -- the exception escaped before
+    `checks.py` could report, so `test_quests.py` never reached check 1 of the 73
+    its floor claims a bare machine runs.
+
+    Call time is the RIGHT time, not merely a workaround: these rows are only ever
+    read to build Step sequences that drive a real client, and client builds live
+    in the vault too. A machine that cannot resolve the row could not have run the
+    probe anyway, which is also why the fix is not a repo-side copy of the row --
+    that would buy an import rather than a capability, and the vault row would
+    override it by key on every machine where the probe can actually run.
+
+    `toolkit/test_bareimport.py` is the guard, and it goes red on a new one.
+    """
+    # npc_template, NOT WORLD.rows(...) -- the raw row's `enc_name` is a LIST of
+    # string ids and the codec wants an encoded str. Reaching for the row directly
+    # gives `string of 26 code units exceeds cap 8`, which is the error
+    # npc_template's own docstring exists to prevent. Hit it anyway on the first try.
+    if key not in _VAULT_NPC_CACHE:
+        _VAULT_NPC_CACHE[key] = npc_template(key)
+    return _VAULT_NPC_CACHE[key]
+
+
+def giver_npc():
+    """The live giver's own type row. A CALL, not a constant -- see `_vault_npc`."""
+    return _vault_npc("def_1480")
 
 
 def _quest_giver_def_steps(origin):
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION} -- the live "
              f"giver's own type, from vault/content/npcs.toml",
              "nothing yet. This defines a TYPE, not a body -- and it is NOT "
              "optional: without it the create indexes past the end of the "
              "definition array and the client dies on Array.h:587."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION} -> model "
-             f"{GIVER_NPC['model_id']}",
+             f"{giver_npc()['model_id']}",
              "still nothing. One more message before a body can appear."),
         Step(4.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -3980,7 +4013,11 @@ _OBJECTIVE_AGENT = 98
 # is another live NPC from the same capture, with its own model id and its own
 # profession. An ambiguous frame is an unreadable result.
 _OBJECTIVE_DEFINITION = 1473
-_OBJECTIVE_NPC = npc_template('def_1473')
+
+
+def _objective_npc():
+    """The gate guard's own type row. A CALL, not a constant -- see `_vault_npc`."""
+    return _vault_npc("def_1473")
 
 
 def _quest_objective_steps(origin):
@@ -3996,9 +4033,9 @@ def _quest_objective_steps(origin):
     """
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(2.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4007,11 +4044,11 @@ def _quest_objective_steps(origin):
              f"WORLD_CREATE_AGENT({_GIVER_AGENT}) -- THE GIVER",
              "a body ahead and to one side."),
         Step(1.0, 0x0056,
-             npc_properties(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+             npc_properties(_OBJECTIVE_DEFINITION, _objective_npc()),
              f"NPC_UPDATE_PROPERTIES def {_OBJECTIVE_DEFINITION} -- the "
              f"GUARD's OWN type, so the two are told apart on sight",
              "nothing yet."),
-        Step(0.5, 0x0057, npc_model(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+        Step(0.5, 0x0057, npc_model(_OBJECTIVE_DEFINITION, _objective_npc()),
              f"NPC_UPDATE_MODEL def {_OBJECTIVE_DEFINITION}",
              "still nothing."),
         Step(1.0, 0x0020,
@@ -4055,9 +4092,9 @@ def _dialog_icons_steps(origin):
              (questdefs.SERVICE_SHOW, 18), (questdefs.SERVICE_ADVANCE, 21),
              (questdefs.SERVICE_IN_PROGRESS, 22), (questdefs.SERVICE_TURN_IN, 23)]
     steps = [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4099,9 +4136,9 @@ def _quest_marker_sweep_steps(origin):
     ox, oy, plane = origin
     hold = 5.0
     steps = [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4148,10 +4185,10 @@ def _quest_marker_states_steps(origin):
     ox, oy, plane = origin
     hold = 7.0
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
              "nothing yet, and mandatory before the create."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4201,10 +4238,10 @@ def _quest_marker_states_steps(origin):
 def _quest_giver_mark_steps(origin):
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
              "nothing yet -- and mandatory before the create, or Array.h:587."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}",
              "still nothing."),
         Step(3.0, 0x0020,
@@ -4276,9 +4313,9 @@ def _quest_turnin_steps(origin):
     """
     ox, oy, plane = origin
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
@@ -4300,9 +4337,9 @@ def _quest_option_steps(origin):
     row = questdefs.load()[1463]
     tag = questdefs.encode_service_select(1463, questdefs.SERVICE_ACCEPT)
     return [
-        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
-        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
              f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
         Step(3.0, 0x0020,
              create_agent(_GIVER_AGENT,
