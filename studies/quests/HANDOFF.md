@@ -95,11 +95,16 @@ the toast is display, no client state moved, and the rest of the completion fami
 live mission completion. **The publisher question is CLOSED (2026-08-19, §9.7): those
 same four opcodes are the panel's other four publishers** — the five-id band and the
 completion family close on each other, with a `0x0096`/`0x0097` frame-id swap that
-`test_framebus.py` now asserts so nobody tidies it away. Q2b is closed, both halves
-(§3 above). The cheap probe that remains, one loopback run: a ladder over `0x0096`'s
-completion-flag bits and `0x0097`'s u8+string (the one completion message carrying
-TEXT) — expect asserts, and read them as answers; both opcodes died on zero payloads
-in the 2026-08-12 sweep, so the arms start from the sweep's own gate readings.
+`test_framebus.py` now asserts so nobody tidies it away. **The ladder over that family
+RAN (2026-08-19, §9.8): `0x0096` is MISSION_COMPLETE** — one flag bit draws the whole 3D
+scene, f1 is `completionFlagsGained` (bit0 mission / bit1 bonus, gate at :729), and
+fields 3/4/5 are a reward triple that rendered "111 experience, 222 gold, 333 skill
+points" (so f3=xp, f5=gold in the MIDDLE slot, f4=skill points). `0x0097` is a sub-panel
+keyed by a u8 over state a PRIOR completion message stages — a cold fire asserts at :678.
+Q2b is closed, both halves (§3 above). **Everything the wire governs on the completion
+DISPLAY is now mapped** (`0x004E`+`0x0096` rendered from our server, `0x0097`'s gate
+located, `0x006C`/`0x00FB` screen-name-only). What is left is not offline: the GRANT
+(client state moving, live capture) and `0x0097`'s priming message.
 
 ## 5. Open, unmeasured, and deliberately not guessed
 
