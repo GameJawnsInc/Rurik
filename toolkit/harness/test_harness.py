@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=141)
+LEDGER = checks.Ledger("harness", floor=146)
 check = checks.adopt_named(LEDGER)
 
 
@@ -1170,6 +1170,55 @@ def section_hold_key():
               "cannot fail")
 
 
+def section_window_geometry():
+    """The Play click's aspect guard -- the rule that a fraction is only a
+    position in the window shape it was measured in.
+
+    Written because the failure was silent AND destructive: on 2026-08-18 the
+    client sat at 716x1040 (another session had resized it), PLAY_FX/PLAY_FY
+    landed on DELETE, and `_play` clicked it six times, opening the
+    "type the name to delete Test Warrior" dialog. The run reported only
+    "clicks landed: True" and a failed map checkpoint, i.e. it looked like an
+    ordinary timeout. These checks are on the pure arithmetic, which is the
+    half that can be tested without a window.
+    """
+    print("\n11. the Play click refuses a window shape it was not calibrated in")
+    want = dc.CLIENT_W / float(dc.CLIENT_H)
+
+    def deviation(w, h):
+        return abs((w / float(h)) - want) / want
+
+    LEDGER.ok(deviation(dc.CLIENT_W, dc.CLIENT_H) == 0.0
+              and deviation(1926, 1039) <= dc.ASPECT_TOLERANCE,
+              "the calibrated geometry and the ORIGINAL measurement window "
+              "both pass",
+              "PLAY_FX/PLAY_FY were measured at 1926x1039 and the runs since "
+              "use 1936x1040; a guard that rejected either would be a guard "
+              "against our own working configuration")
+    LEDGER.ok(deviation(716, 1040) > dc.ASPECT_TOLERANCE,
+              "the 716x1040 window that clicked DELETE is REFUSED",
+              "the regression this whole section exists for -- 63% off, and "
+              "the old code fired at it anyway")
+    LEDGER.ok(deviation(1600, 900) > dc.ASPECT_TOLERANCE
+              and deviation(1024, 768) > dc.ASPECT_TOLERANCE,
+              "ordinary 16:9 and 4:3 windows are refused too, rather than "
+              "special-casing the one shape that burned us",
+              "they are legitimate sizes -- normalize_window resizes them "
+              "FIRST, and the refusal only fires when that failed, so this is "
+              "the fail-closed path and not a rejection of 16:9 as such")
+    LEDGER.ok(0 < dc.ASPECT_TOLERANCE < 0.05,
+              f"the tolerance is a real number in a sane range "
+              f"({dc.ASPECT_TOLERANCE})",
+              "a tolerance of 0 would refuse border jitter; one above ~5% "
+              "starts admitting shapes where the button bar has relaid out")
+    LEDGER.ok(callable(getattr(dc, "normalize_window", None))
+              and callable(getattr(dc, "window_size", None)),
+              "normalize_window and window_size exist and are callable",
+              "the guard is only half the fix: without the resize every "
+              "non-standard window becomes a refusal instead of a run")
+
+
 section_press_key()
 section_hold_key()
+section_window_geometry()
 sys.exit(LEDGER.verdict())

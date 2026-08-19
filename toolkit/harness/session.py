@@ -802,6 +802,27 @@ def _play(tails, proc, outdir, warn=3.0):
         if not hwnd:
             break
         time.sleep(0.5)                          # let character select paint
+        # NORMALISE BEFORE AIMING. PLAY_FX/PLAY_FY are a position in ONE window
+        # shape, and character select does not lay its buttons out by
+        # proportion: at 716x1040 this same fraction is the DELETE button
+        # (2026-08-18, another session had resized the client; see
+        # drive_client.CLIENT_W). Resizing to the calibrated geometry is what
+        # makes the fraction mean what it was measured to mean.
+        ok, before, after = dc.normalize_window(hwnd)
+        if before != after:
+            print(f"  play: window {before} -> {after} "
+                  f"(calibrated {dc.CLIENT_W}x{dc.CLIENT_H})", flush=True)
+        if not ok:
+            # FAIL CLOSED. An un-normalised window means we do not know what is
+            # under the cursor, and the observed cost of guessing wrong is a
+            # character-deletion dialog, not a wasted click.
+            print(f"  play: REFUSING to click -- the window is {after} and the "
+                  f"Play fraction is calibrated for {dc.CLIENT_W}x"
+                  f"{dc.CLIENT_H}. At a different aspect this coordinate is a "
+                  f"DIFFERENT BUTTON (it was Delete on 2026-08-18). Resize the "
+                  f"client, or recalibrate PLAY_FX/PLAY_FY and say so here.",
+                  flush=True)
+            return False
         if dc.click(hwnd, proc.pid, PLAY_FX, PLAY_FY):
             delivered = True
         got, idx = tails["auth"].wait_for(by(kind="game_instance_request"),
