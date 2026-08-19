@@ -973,7 +973,8 @@ Every one of these, in the order they were written:
   and the client's closure at `0x007957CB` refuses the chunk. §5 provokes seven
   refusals by name, §2 pins both unit anchors (hatcher 116703, worm 116366) at
   chunk *and* whole-container level, §3 sweeps the corpus **250/250 across 12
-  vertex formats** (`--all` for every row). Floor **20**, and it was set the
+  vertex formats** (`--all` for every row; the module's own CLI census took
+  it to **6,846/6,846 archive-wide with 0 undecodable**, 2026-08-19). Floor **20**, and it was set the
   hard way: the first declared floor of 24 was a guess, the run executed 20, and
   the ledger refused it. ~24 s),
   `toolkit/mapdata/test_skelfile.py` (the SKELETON/ANIMATION chunk `0xFA1` --
