@@ -2000,6 +2000,82 @@ initiative.
 
 ---
 
+## 16. A8 IS GREEN — the retail client read a row this project compressed
+
+**Deployed and launched 2026-08-18 22:16, loopback, pinned build 38797, agent-driven with
+the owner's explicit go-ahead.** Capture `vault/captures/harness/20260818T221652`.
+
+### 16.1 The result
+
+`RUN VERDICT: PASS (target: map)` — **eight of eight capture checkpoints**, from
+`client keyed the auth channel` to `body is in the map` at t+17.4 s.
+
+**The creature loaded and performed.** `created agent 10 (Hatcher [Collector]) — hostile`,
+spawned 300 units out, walked in (`agent 10 walks to (9826,8077)`), `attacks the player`,
+and then **cast repeatedly for the rest of the 150-second hold** — skills 276, 253 and 289
+cycling. Walk, melee and cast: the three animation classes the arc has been chasing, all
+served out of the creature's link set while row 11196 sat in the archive **compressed by us**.
+
+**No assert, anywhere.** A grep for `assert|Assertion|MdlAnim|MdlSeq|MdlLoad|error|crash|
+exception|refus` across the whole capture directory — all three server logs and the report —
+returns **no matches**.
+
+**And the archive survived the launch**, which is the check that matters most because the
+client Flushes and a repair is permanent after one launch:
+
+| after the run | |
+|---|---|
+| `datcheck --preflight` | **10/10** |
+| payload CRC sweep | **177,319 payloads, 0 bad** |
+| size on disk | **4,198,489,600 B**, growth none |
+| **row 11196** | **size 1,011,244, compression 8, decompresses to 1,514,855 B, declared 1,514,855** |
+
+**Our row was not repaired and not discarded.** Two rows did change — **8315** (88 → 92 B)
+and **8316**, both relocated. Those are the client's own scratch rows, and this
+independently reproduces `studies/datwrite` §6's observation from a caged session months
+ago ("8315 moved and grew 92 → 96 bytes, 8316 moved"). Same two rows, same behaviour,
+ordinary play churn — **not a repair touching anything of ours.**
+
+A screenshot from the middle of the hold shows the player and the Hatcher both rendered with
+normal proportions in a normal map. That is the predicted null, and for this run it is
+confirmation rather than the readout: **the payload is byte-identical to retail's, so if the
+client reads our row at all the animation is identical by construction.**
+
+### 16.2 What this does and does not settle
+
+**Does:** ArenaNet's retail client reads compression-8 bytes produced by
+`gwmatch` + `gwenc`, decompresses them to the right payload, and animates from them across
+locomotion, melee and casting without complaint. **The encoder arc — A6, A7a, A7b — is
+finished and the wall this arc opened against is down.** §2.2's standing worry that
+"a bit-exact round trip through a wrong decoder proves agreement, not correctness" is
+answered by the only oracle that could answer it.
+
+**One envelope claim is directly widened.** §13.5's gap C noted our encoder declares
+literal-table `symbol_count` values below retail's attested floor of 258. **The deployed row
+declares a minimum of 257** across its 218 tables, and the client read it. That part of gap C
+is retired by direct evidence.
+
+**Does NOT: gap A is untouched, because this payload never reached it.** Measured on the
+deployed row itself — 109 blocks, 218 tables, **declared literal counts 257–285, declared
+distance counts 24–30, and ZERO tables declaring fewer than 2.** The `symbol_count == 1`
+shape our encoder emits on 3.4% of a mixed corpus comes from *tiny and degenerate* payloads,
+and a 1.5 MB animation library has none. **So A8 says nothing about gap A**, and the fix
+stays costed and unspent: a two-symbol distance table inside retail's attested envelope, a
+few bits larger, on a path 138,708 rows witness. Anyone compressing a small file should
+assume that branch is still unproven.
+
+**Also not settled:** everything §13.5 lists as reachable only through code paths retail
+never took — a zero-block stream, the zero-length *literal* table, and three meta indices in
+the 16-bit band. This run exercised one large, ordinary payload, not the envelope's edges.
+
+### 16.3 State of the machine
+
+`vault/run/2026-07-29_221c13772c7a/Gw.dat` **is the A8 archive and is left deployed**, verified
+clean after the launch. `a4stage8.py --retail` restores the baseline. The run directory is
+shared with other sessions; another restored it to retail at 21:34 the same evening.
+
+---
+
 ## Appendix — what I verified myself
 
 **OBSERVED (mine), run read-only in `C:/gd/Rurik/.claude/worktrees/great-heyrovsky-7fe716`, vault located via `toolkit/vaultpath.py` → `C:\gd\Rurik\vault`:**

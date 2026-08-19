@@ -47,11 +47,15 @@ and the file's mtime is 21:34 that day — another session restored the baseline
 paragraph claimed run 6 for hours after it stopped being true, which is the failure the top
 of `CLAUDE.md` is about. **Check before believing it**, and note the run directory is shared.
 
-**A8 IS STAGED AND NOT LAUNCHED** — `vault/exports/archivewrite/a4run8/Gw.a4run8.dat`, built
-by `a4stage8.py` (§15). Row 11196 re-compressed by OUR encoder to 1,011,244 B with a
-byte-identical 1,514,855 B payload; preflight 10/10, generations 6/6, 177,319 payload CRCs
-0 bad, size unchanged, one row changed, neighbours byte-identical. Deploy and launch are the
-owner's — the launch is the irreversible step.
+**A8 IS GREEN AND THE A8 ARCHIVE IS DEPLOYED** — §16. Launched 2026-08-18 22:16 on loopback,
+build 38797, agent-driven with the owner's go-ahead. `RUN VERDICT: PASS`, 8 of 8 checkpoints,
+**no assert anywhere**. The Hatcher walked, attacked and cast for the full 150 s hold while
+row 11196 sat in the archive **compressed by us**. After the launch: preflight 10/10, CRC
+sweep 177,319 payloads 0 bad, size unchanged, **row 11196 still 1,011,244 B at compression 8
+decompressing to 1,514,855 B** — not repaired, not discarded. The only rows that moved were
+8315 and 8316, the client's own scratch rows, reproducing `studies/datwrite` §6.
+
+**`a4stage8.py --retail` restores the baseline.** The run directory is shared.
 
 ```bash
 python C:\gd\Rurik\vault\research\archivewrite\a4stage6.py --retail

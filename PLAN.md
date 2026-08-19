@@ -1973,7 +1973,35 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
-**A8 IS STAGED, 2026-08-18 — NOT DEPLOYED, NOT LAUNCHED.** Study §15.
+**A8 IS GREEN, 2026-08-18 22:16 — THE RETAIL CLIENT READ A ROW THIS PROJECT COMPRESSED.**
+Study §16. Deployed and launched on loopback, pinned build 38797, agent-driven with the
+owner's explicit go-ahead. `RUN VERDICT: PASS (target: map)`, **8 of 8 capture checkpoints**,
+body in the map at t+17.4 s. The Hatcher spawned, **walked, attacked and cast repeatedly for
+the whole 150-second hold** — the three animation classes this arc has chased — while row
+11196 sat in the archive compressed by `gwmatch` + `gwenc`. **No assert anywhere**: a grep
+for `assert|MdlAnim|MdlSeq|MdlLoad|error|crash` across all three logs and the report returns
+nothing.
+
+**The archive survived the launch**, which is the check that matters because the client
+Flushes and a repair is permanent after one: preflight **10/10**, CRC sweep **177,319
+payloads 0 bad**, size **unchanged**, and **row 11196 still 1,011,244 B at compression 8,
+decompressing to 1,514,855 B**. Two rows moved — 8315 (88→92 B) and 8316 — which are the
+client's own scratch rows and independently reproduce `studies/datwrite` §6's caged-session
+observation. **Nothing of ours was repaired or discarded.**
+
+**So the encoder arc is FINISHED — A6, A7a, A7b, A8 — and §2.2's standing worry that a round
+trip through our own decoder "proves agreement, not correctness" is answered by the only
+oracle that could answer it.** The 1.5 MB wall this arc opened against is down, and 62% of
+the hatcher's animation records stop being unreachable.
+
+**What A8 does NOT settle, measured rather than assumed: gap A is untouched.** The deployed
+row's 218 tables declare literal counts 257–285 and distance counts 24–30, with **zero tables
+declaring fewer than 2** — so the `symbol_count == 1` shape our encoder emits on small and
+degenerate payloads was never reached. Its fix stays costed and unspent. One envelope claim
+*is* directly widened: the row declares a minimum of 257, below retail's attested floor of
+258, and the client read it, retiring that part of gap C.
+
+**A8 was STAGED earlier the same day.** Study §15.
 `vault/research/archivewrite/a4stage8.py` built
 `vault/exports/archivewrite/a4run8/Gw.a4run8.dat`: row 11196 (file 15018) **re-compressed by
 OUR encoder** to 1,011,244 B, 18,320 B smaller than retail's, fitting **in place** with no
