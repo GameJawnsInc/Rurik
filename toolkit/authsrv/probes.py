@@ -3944,6 +3944,56 @@ def _quest_name_steps(origin):
     ]
 
 
+def _completion_gate_steps():
+    """The 0x0096/0x0097 ladder: which field feeds the completion-flag gate,
+    and what the simple-reward triple renders.
+
+    Both bodies are READ (FINDINGS.md 9.7 follow-up, disassembled 2026-08-19):
+    0x0096 normalizes f1 and f2 into two independent 2-bit masks, builds a
+    tagged record {4, f3, f5, f4} -- tag 4 is GmQuestComplete's own
+    isSimpleReward tag -- skipped when f3 == f5 == 0, and posts frame
+    0x10000158. THE HANDLER NEVER ASSERTS: the 2026-08-12 sweep's "at least
+    one of two mission-completion flag bits" death on all-zero lives in the
+    SUBSCRIBER, so which mask the gate reads is exactly what the arm order
+    below can settle even if a crash ends the run early. 0x0097 pairs its
+    string with two STASHED context values ([edi+0x5C]/[edi+0x64]) that some
+    earlier message deposits, posts frame 0x10000157, then frees and zeroes
+    the stash -- a cold fire posts over a null stash, so its arm goes LAST,
+    crash-accepted, the assert being the answer.
+
+    Every value is an invented sentinel (the family is 0 of 22,524); the
+    111/222/333 triple follows quest_panel's precedent -- if the panel
+    renders a reward line, the numbers name their own fields.
+    """
+    return [
+        Step(12.0, 0x0096, [1, 0, 0, 0, 0],
+             "f1 = bit0, everything else zero",
+             "no assert is the first answer (the gate is satisfied by f1);"
+             " a crash here says the gate reads f2 or needs the reward."),
+        Step(15.0, 0x0096, [2, 0, 0, 0, 0],
+             "f1 = bit1",
+             "same gate, other bit -- two survivals mean either bit of f1 "
+             "suffices."),
+        Step(15.0, 0x0096, [0, 1, 0, 0, 0],
+             "f2 = bit0, f1 zero",
+             "the discriminator: surviving BOTH this and arm 1 means either "
+             "mask satisfies the gate; dying here after arm 1 survived pins "
+             "the gate to f1."),
+        Step(15.0, 0x0096, [1, 0, 111, 222, 333],
+             "f1 set plus the simple-reward triple as sentinels",
+             "a reward line rendering 111/222/333 names f3/f4/f5 the way the "
+             "quest_panel run named 0x004E's dwords. The record built is "
+             "{tag 4, f3, f5, f4} -- note f5 rides the MIDDLE slot."),
+        Step(15.0, 0x0097,
+             [1, questdefs.coded_literal("Rurik", "template", limit=127)],
+             "0x0097 cold: u8 = 1, a plain authored literal in the string",
+             "LAST ON PURPOSE: the handler posts over a null stash and the "
+             "sweep's closed-enum assert may fire regardless of our u8. A "
+             "render is a result; an assert NAMING the gate is also a "
+             "result; the run ends either way."),
+    ]
+
+
 def _quest_name_authored_steps(origin):
     """Q2b's screen half: does OUR OWN string render where Ascalon's did?
 
@@ -5074,6 +5124,25 @@ PROBES = {
              "predicts, and the client's own 0x8012 for 1463 was answered "
              "with the template 0x004C mid-run. Rung Q2b closed end to end. "
              "Kept runnable as the authored-name calibration.",
+    ),
+    "completion_gates": lambda a, o: Probe(
+        question="Which field feeds 0x0096's completion-flag gate, and does "
+                 "the tag-4 simple-reward triple render its sentinels?",
+        predicts="Arms 1-3 survive (either 2-bit mask satisfies the gate, "
+                 "since the handler forwards both and the sweep's assert "
+                 "named 'two flag bits' without naming a field); arm 4 draws "
+                 "a reward line reading 111/222/333, naming f3/f4/f5; arm 5 "
+                 "(0x0097 cold, LAST) either renders text or dies on the "
+                 "closed-enum/null-stash gate with an assert that names it. "
+                 "Every survival and every crash placement is a measurement; "
+                 "an early death simply moves the answer earlier.",
+        steps=_completion_gate_steps(),
+        note="Caged loopback, any map, no clicks -- the frames land in "
+             "GmQuestComplete's band like quest_panel's do. Cadence shots "
+             "(--shots 1 --hold 90), actions '0:play'. Read the gamesrv log "
+             "for which arms LANDED before reading any pixel: a crash ends "
+             "the run and the surviving-arm count is the gate map. Expect "
+             "asserts; they are answers here, not failures.",
     ),
     "compass_fog_nomark": lambda a, o: Probe(
         question="PLAN C4 isolation, half 1 of 2: what does the fog INIT PAIR "
