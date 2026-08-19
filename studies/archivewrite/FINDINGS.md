@@ -1770,20 +1770,38 @@ from the run.
 
 #### 11.7c Two things the run turned up that were not in the design
 
-- **The owner reports NO normal animation.** §11.6 predicted two records would
-  survive unflipped — they carry **selector 0**, meaning "served by this file",
-  so their channels come from the shell's own `blk2C` and no link is involved.
-  Either those two never play on a hatcher, or the selector-0 reading is wrong.
-  **UNVERIFIED, and cheap to settle** from the archive without a client.
-- **A second model may be deformed.** The owner's screenshot shows a second
-  body pretzeled beside the hatcher. If that is the player character, the
-  fourteen files are **shared animation libraries**, and the flip reached a
-  model whose shell we never touched — consistent with §11.1's measurement that
-  the top keys appear in **26–32 of 32 corpus shells**. **NOT CONFIRMED**: the
-  second body was not identified at the keyboard and the harness stills are all
-  empty (`client not foreground`, every shot skipped), so the only visual record
-  is the owner's own capture, `2026-08-19 07-30-25.mkv`. Settle it by naming the
-  models before quoting it.
+- **The owner reports NO normal animation — SETTLED 2026-08-19, and it is the
+  expected result.** §11.6 predicted two records would survive unflipped because
+  they carry **selector 0**. They do, and **both are EMPTY**: `keys[90:90]` and
+  `keys[123:123]`, zero keys each, so neither can render anything. Of the
+  creature's 242 records, **2 are empty and 6 are served by 222949**, leaving
+  **234 of the 240 that can play (97.5%) flipped**. There was never an unflipped
+  animation to see. (An adjudication lens called one of them "a 2.000 s
+  whole-body cycle over 46 of 86 nodes"; that is wrong — it has no keys.)
+  **Corollary, and it is the mirror of §9.3k:** the shell carries **48 rotation
+  channels across its 86 nodes and no sequence record selects any of them**. So
+  linked files carry a rest skeleton nothing reads, *and* the shell carries
+  motion nothing plays. Both halves of that redundancy are now measured.
+- **THE FOURTEEN FILES ARE SHARED ANIMATION LIBRARIES — MEASURED 2026-08-19.**
+  A whole-archive scan (177,334 rows; 64,245 model-type FFNA; **252 carry an FA8
+  link list**) finds **twelve of the fourteen linked by exactly 30 distinct
+  shells each**, 15018 by 29 and 169533 by 21 — **30 of 252 shells (11.9%) link
+  at least one.** So run 7's edit reached thirty models, not one, and the
+  authoring capability this arc delivered is **global, not per-creature**:
+  editing a linked animation file changes every model that links it.
+  **They are NOT one family cluster** — the obvious deflation, that these are
+  just the hatcher's relatives, is refuted: only **8 of the 30** sit in rows
+  10,500–14,500 (11196, 11197, 11548, 12241, 12474, 13738, 13739, 13948), so
+  22 live elsewhere in the archive. Note **11196 is file 15018 itself**, so a
+  linked animation file carries its own FA8 list and the link graph is nested.
+  **What is NOT settled** is the owner's screenshot: a second body is pretzeled
+  beside the hatcher and it was not identified at the keyboard. The server knows
+  only two NPCs (`content/npcs.toml`: the hatcher and a burrowing worm) and
+  `--enemy` spawns the hatcher, so the second body is most likely the **player
+  character** — which would mean the player's own shell links one of the
+  fourteen. **UNVERIFIED**, and the harness stills are all empty (`client not
+  foreground`, every shot skipped), so the only visual record is the owner's own
+  capture, `2026-08-19 07-30-25.mkv`. Name the models before quoting it.
 
 #### 11.7d What this closes, and what it opens
 
