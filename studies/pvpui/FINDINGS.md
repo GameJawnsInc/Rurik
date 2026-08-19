@@ -2212,3 +2212,142 @@ collapses to a rule with no new measurement in it: *to dress a hero as any NPC w
 already have a row for, send that row's `file_id` and `model_id` as `d1`/`d2`, and send
 `d2 = 0` where the row has no `model_id`.* Cheapest confirmation available: any third
 content row with both ids, one click.
+
+## 29. `0x0074` MERCENARY_INFO, read field by field — the record is a HERO POOL entry, and two of our own refutations were surface errors (2026-08-19)
+
+Seventeen agents on build 38833: one mapping the worker's every store, four hunting the
+readers of each field group, and a skeptic on every meaning claim carrying the lens the
+day's two retractions earned — *does the evidence show code READING this offset and
+acting on it, or does it rest on a label, a struct position or an upstream guess?*
+Three claims came back downgraded by that pass and are labelled accordingly below.
+
+### 29.1 The container, finally disambiguated — and the two-container trap named
+
+`charCtx[+0x2C]+0x584` is not a record array at all. It is a **ChCliHero aggregate
+holding two arrays**: `+0x00` is `Array<activation>`, **stride 0x24**, keyed by AGENT and
+written by `0x0072`; `+0x10` — i.e. `+0x594` — is `Array<heroData>`, **stride 0x9C**,
+keyed by HERO ID, sorted ascending, binary-searched, and written by `0x0074`. Every
+public getter reaches the data array by taking `+0x584` and re-biasing `+0x10`
+(`0x0080E370` → `0x0081D4B0` → `0x0081D410`), which is exactly the "caller passes an
+already-biased `this`" case `codescan`'s own banner warns about, running in reverse. That
+is why the two containers appeared to have overlapping offsets, and why this arc tripped
+over it once: **`0x0081DB47`, cited in §28.1 as the hero-id store, belongs to the `0x0072`
+activation record, not to this one.** ArenaNet names the thing twice — `ChCliHero:245
+heroData` and `PtSearchHero:171 charHeroData`.
+
+**A hazard worth carrying forward (RECONSTRUCTION, read from code): the insert does not
+zero a new slot.** It memmoves the tail up by one and writes only the id, so every byte
+the worker does not write inherits **stale bytes from whatever record previously sat at
+that index** — which on this opcode means `+0x24..+0x43` always, and `+0x74..+0x9B`
+whenever `d3 == 0`.
+
+### 29.2 The map, and what reads each field
+
+| rec | wire | meaning | label |
+|---|---|---|---|
+| `+0x00` | hero_id | the array's sort key | OBSERVED |
+| `+0x04` | zeroed | the AGENT id — `0x0072` writes it here, `HeroDeactivate` re-zeroes it. `0x0074` zeroing it means *created, not yet activated* | OBSERVED |
+| `+0x08` | b1 | **LEVEL** | OBSERVED |
+| `+0x0C` | b2 | **a profession index, 0..10** (primary — see below) | OBSERVED / CONTESTED label |
+| `+0x10` | b3 | **secondary profession, 0 = none** | OBSERVED |
+| `+0x14` | d1 | appearance `file_id` (§28.13) | OBSERVED |
+| `+0x18` | d2 | appearance `model_id` (§28.13) | OBSERVED |
+| `+0x1C` | b4 | **nothing reads it** | NOT FOUND |
+| `+0x20` | — | element count; the `0x0074` handler hardcodes 0 | OBSERVED |
+| `+0x24..+0x43` | — | not written by this opcode — inherits stale bytes | OBSERVED |
+| `+0x44` bit 0 | b5 | **hero-DISABLED flag** | OBSERVED (b5 as its initial value: RECONSTRUCTION) |
+| `+0x48` | d3 | **an id, 0 = none**; gates the name AND the equipment block | OBSERVED |
+| `+0x4C`, `+0x60` | chunk[0..4], [5..9] | **an EQUIPPED-ITEM snapshot**, five slots | OBSERVED |
+| `+0x74..+0x9B` | name | **overrides the hero's default name**, gated by `d3` | OBSERVED |
+
+**`b1` is the level, and the client says so.** The worker's already-added early-out logs
+*"HeroDataAdd (hero %d, level %d): Hero already added"* (VA `0x00A958DC`) and its second
+vararg is the value stored at `+0x08`. Confirmed independently from the read side: the
+label builder takes it as a numeric argument with **-1 as the omit-the-level sentinel**.
+The upstream guess was right, and this is the first time it has been *read* rather than
+inherited.
+
+**The professions — and heroes §13.2's refutation was a SURFACE error, not a field
+error.** `+0x0C` and `+0x10` both flow unmodified into `0x005AB7D0`, a bound-checked
+table read whose own guard is the client's assert `profession <
+arrsize(s_charProfessionAbbrev)` (`ConstChar.cpp:1290`) — ArenaNet naming the parameter
+`profession`, which is as direct as this repo's evidence ever gets. `+0x10`'s zero-ness
+picks a one-name vs two-name label template, so it is the SECONDARY and `+0x0C` the
+primary; the skeptic accepted "a profession index" as OBSERVED but marked the
+PRIMARY/SECONDARY assignment as resting on argument order, so the ordering is recorded
+as strong-but-inferred rather than measured. **The reconciliation with §13.2 is the
+finding:** the consumers are `PtSearchHero.cpp` and `PtHero.cpp` — the hero-pool and
+party-search lists — *not* the roster row. §13.2 varied these bytes and watched the
+ROSTER, which reads the AGENT's profession (heroes §14, §23). Both results are true and
+neither is about the other. A field is only refuted on the surface you looked at.
+
+**`b5` → `+0x44` bit 0 is the hero-disabled flag.** A one-line accessor returns
+`[rec+0x44] & 1`, exported through ChCliApi, and its single caller branches on it to pick
+between two different render calls for the same hero label. Bit 0 is the only bit
+anything reads.
+
+**`b4` is NOT FOUND** — a measured floor, not a shrug: the store at `0x0081DBED` is the
+only instruction in the image that touches that offset. Two senders write it
+(`0x0074` and `0x0073`) and nothing reads it.
+
+### 29.3 The ten-dword chunk is an EQUIPPED-ITEM SNAPSHOT — and the naming came from the sibling branch
+
+Two parallel five-element arrays, `A[i]` at `+0x4C` and `B[i]` at `+0x60`, paired
+`chunk[i]`↔`chunk[5+i]`. Two independent readers in the `GmMercenaryRoster` band walk
+exactly five entries, split `A[i]` at bit 16, and push `{low16, high16, B[i]}` into UI
+message `0x63` — one message per non-zero entry.
+
+**What they ARE comes from the alternative branch of the same reader, which is why this
+is a measurement rather than a guess.** When `d3 == 0`, `0x0050CD60` does not read the
+record at all — it walks the **live item container** through ItCliApi's equip-slot getter
+`0x00845530` for slots 0..8, skipping 0 and 1 and gating 7 and 8 on flag bits. So the
+record's five entries are the frozen form of the same thing the live path fetches:
+`A[i] = (byte[item+5] << 16) | dword[item+0]`, `B[i] = word[item+6]`, for item-container
+slots **2..6**. The write side agrees exactly — the packer at `0x0081DE8B..0x0081DEF8`
+looks each slot up through the same `0x00845530`.
+
+**And the packer is `0x0081DE20`, which is the function §24.2 named as "the next thing to
+read, and it is desk work".** It is read: `HeroEnable`, named by its own log string
+*"HeroEnable (hero %d): Hero not in hero pool"* (VA `0x00A95970`). Two long-standing
+items closed by one disassembly.
+
+The attribute-block hypothesis (heroes §12) stays refuted, and now has a positive
+replacement rather than a hole.
+
+### 29.4 `d3` gates the name — which explains heroes §30.2's inert EncString
+
+`d3` is an id with 0 = none, and it is the predicate on **both sides of the name**: the
+worker copies the wire name into `+0x74` **only when `d3 != 0`** (`0x0081DC1F`), and four
+readers test the same dword before touching `+0x74`, substituting a default otherwise.
+The default is `s_heroClientData[hero_id]+0x0C` through TextApi — the table heroes §2
+already located — so **the record's name is an OVERRIDE, not a fallback**: when `d3` is
+non-zero the record's own buffer replaces the table lookup and the TextApi selector flips
+from 11 to 8.
+**That is a direct, testable explanation for heroes 30.2**, where a real EncString sent
+on `0x0074` was inert: every run this arc has ever made sent `d3 = 0`, so the string was
+never copied into the record and no reader would have looked at it if it had been. The
+prediction is sharp: `--hero-info-name` with a NON-ZERO `--hero-flag` should change the
+displayed name in the pool and search lists, and `--hero-info-name` alone should keep
+doing nothing.
+
+`d3` has a second use that is not about the name: one site passes its full 32-bit value
+into a UI call with tag `0x57`, in the same slot where a `d3 == 0` client substitutes the
+first dword of a struct built by `0x0082DD30` -- the module adjacent to the `CpsMonster`
+factory the appearance pair already runs through. So `d3` plausibly names an
+appearance/composite entity, RECONSTRUCTION, and it also has a local non-wire writer.
+
+### 29.5 What this changes for the server
+
+- **`--hero-info-name` has never been able to work.** Sending a name without `d3` copies
+  nothing. The two flags are coupled and the code now says so.
+- **The record is a HERO POOL entry**, and its readers are the hero-pool/search UI --
+  `PtHero`, `PtSearchHero`, `GmMercenaryRoster` -- not the party roster. That is why so
+  much of this message measured as inert: the arc was watching the wrong window.
+- **Frame event `0x10000039`** carries the record POINTER as payload, so a subscriber
+  reads every field; `PtHero` is a confirmed subscriber.
+- Fields worth authoring now that each is named: level (`b1`), the two professions
+  (`b2`/`b3`), the disabled bit (`b5`), and a five-slot equipment display (the chunk).
+
+Remaining genuinely open in this message: `b4` (nothing reads it), `+0x24..+0x43` (this
+opcode never writes it, so another message must), and what `d3`'s value *is* beyond
+non-zero.

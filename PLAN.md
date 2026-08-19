@@ -1779,8 +1779,26 @@ the pet container at `+0x6AC` with the same agent id, 28-byte records (+0x14 aiM
 PET_ADD`; without it both mirror writes hit a NULL find and silently do nothing, which
 is why the pet half was invisible all arc. `0x00B2`/`0x00B3`/`0x00B4` PET_ADD/REMOVE/
 RENAME named from the client's own log strings, medium (static-only, no capture).
+**`0x0074` IS READ, FIELD BY FIELD (§29)** — the arc's biggest standing unknown, and it
+answers two of our own refutations. The record is a **HERO POOL entry** (the 0x9c-stride
+hero-keyed array at `+0x594`, finally disambiguated from the 0x24-stride agent-keyed
+activation array at `+0x584`; the same object holds both, which is what this arc kept
+tripping on). Named from their own consumers: **b1 = LEVEL** (the client's own log string
+says so), **b2/b3 = primary/secondary profession** (into a table whose assert names the
+parameter, `ConstChar.cpp:1290`), **b5 bit 0 = hero-disabled**, **d3 = an id, 0 = none**,
+and **the ten-dword chunk = an EQUIPPED-ITEM SNAPSHOT** for item slots 2..6, named from
+the sibling branch of its own reader that walks the live item container when d3 is 0.
+Its packer is `0x0081DE20` = HeroEnable — **the function §24.2 named as "the next thing
+to read"**, now read. `b4` is a measured NOT FOUND. Two refutations explained rather than
+overturned: heroes §13.2 (professions) varied the right bytes and watched the wrong
+window — the roster reads the AGENT, these drive the hero-pool/search lists; heroes §30.2
+(inert EncString) never had a chance, because the name copy is **gated on d3 != 0** and
+every run ever made sent 0. Prediction on record: `--hero-info-name` WITH a non-zero
+`--hero-flag` should change the pool/search name. Fields now authorable: level, both
+professions, the disabled bit, a five-slot equipment display.
 Next in this corner: the `+0x6BC` and `+0x6F0` sibling containers, wholly unread
-(`PtMinionRoster.cpp` is the candidate for one), read by the log-string method.
+(`PtMinionRoster.cpp` is the candidate for one), read by the log-string method; and
+`+0x24..+0x43`, which `0x0074` never writes, so another message must.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
