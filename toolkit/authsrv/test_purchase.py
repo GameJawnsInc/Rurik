@@ -1,4 +1,4 @@
-r"""Answering GAME_CMSG 0x004D: the four messages, in ArenaNet's order.
+r"""Answering the merchant: BUY (0x004D) and SELL (0x004A), in ArenaNet's order.
 
     python toolkit/authsrv/test_purchase.py
 
@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("answering a purchase", floor=18)
+LEDGER = checks.Ledger("answering a transaction", floor=27)
 
 # The two requests, verbatim. values[0] is the header, as everywhere in the
 # dispatch chain.
@@ -66,7 +66,7 @@ class Rec:
         self.events.append((kind, kw))
 
 
-def run(request, declared=None, state=None):
+def run(request, declared=None, state=None, fn=None):
     """(sent, state, rec) for one request. `sent` is [(opcode, values)]."""
     sent = []
     state = state if state is not None else {}
@@ -74,7 +74,7 @@ def run(request, declared=None, state=None):
                      dict(declared if declared is not None
                           else {STOCK[0]: list(STOCK)}))
     rec = Rec()
-    authsrv.handle_item_purchase(
+    (fn or authsrv.handle_item_purchase)(
         request, lambda op, values, label, quiet=False: sent.append(
             (op, list(values))), state, 1, rec)
     return sent, state, rec
@@ -172,11 +172,68 @@ def main():
     LEDGER.ok(not run(OURS[:3])[0],
               "and a TRUNCATED request is refused, not indexed into",
               "same lesson, from the other side")
-    full = {"backpack_next_slot": authsrv.BACKPACK_SLOT_COUNT}
+    full = {"backpack": {i: 900 + i
+                         for i in range(authsrv.BACKPACK_SLOT_COUNT)}}
     LEDGER.ok(not run(OURS, state=full)[0],
               "a full backpack is refused",
               f"{authsrv.BACKPACK_SLOT_COUNT} slots is the type-1 bag's own "
               f"capacity, measured 49/49 in the live corpus")
+
+
+    # ---- 6. SELL: remove, pay, confirm ----------------------------------
+    # Retail's, all 8 identical: 0x004A [11, 0, [item], price, []] answered by
+    # 0x014D -> 0x0140 -> 0x00CC [11], read BY BYTE OFFSET. Different shape AND
+    # different price index from the buy message, which is the trap this
+    # section exists to hold shut.
+    SELL = [0x804A, 11, 0, [5000], 7, []]
+    state = {}
+    run(OURS, state=state)                       # buy something to sell
+    sent, state, rec = run(SELL, state=state, fn=authsrv.handle_item_sale)
+    ops = [op for op, _v in sent]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_ITEM_REMOVED,
+                      authsrv.GAME_SMSG_GOLD_CREDIT,
+                      authsrv.GAME_SMSG_TRANSACTION_DONE],
+              "SELL answers with three messages -- remove, pay, confirm",
+              f"{[hex(o) for o in ops]}, 8 of 8 in the corpus. NO 0x013E and no "
+              f"re-declaration: nothing moves because the item ceases to exist")
+    by = dict(sent)
+    LEDGER.ok(by[authsrv.GAME_SMSG_ITEM_REMOVED] ==
+              [authsrv.PLAYER_INVENTORY_KEY, 5000],
+              "0x014D names the item that leaves",
+              f"{by[authsrv.GAME_SMSG_ITEM_REMOVED]}")
+    LEDGER.ok(by[authsrv.GAME_SMSG_GOLD_CREDIT] ==
+              [authsrv.PLAYER_INVENTORY_KEY, 7],
+              "0x0140 credits the price from FIELD 4, not field 2",
+              "the buy message carries its price at index 2 and the sell "
+              "message at index 4; reading the buy's index here would credit "
+              "0 every time, silently. Retail's field 4 matched the following "
+              "credit 8 of 8")
+    LEDGER.ok(by[authsrv.GAME_SMSG_TRANSACTION_DONE] == [11],
+              "and 0x00CC echoes the SELL kind, 11",
+              "the buy path echoes 1; the same message carries both")
+    LEDGER.ok(state["backpack"] == {},
+              "the slot is FREED, so the bag is a map and not a cursor",
+              f"backpack {state['backpack']}. A monotonic cursor would call a "
+              f"20-slot bag full after twenty transactions on an empty one")
+    sent2, state, _r = run(OURS, state=state)
+    LEDGER.ok(dict(sent2)[authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION][3] == 0,
+              "and the next purchase REUSES it",
+              "slot 0 again -- the freed slot is the lowest free one")
+    LEDGER.ok(not run(SELL, state={}, fn=authsrv.handle_item_sale)[0],
+              "selling an item the player does not hold is REFUSED",
+              "the client can name any id; only what we put in the bag is "
+              "sellable, or a server pays for goods it never delivered")
+    buy_kind = list(SELL)
+    buy_kind[1] = authsrv.TRANSACTION_KIND_BUY
+    st = {}
+    run(OURS, state=st)
+    LEDGER.ok(not run(buy_kind, state=st, fn=authsrv.handle_item_sale)[0],
+              "and the BUY kind (1) is refused on the sell message",
+              "the two kinds share 0x00CC, so a handler that ignored kind "
+              "would answer a buy with a credit")
+    LEDGER.ok([k for k, _kw in rec.events] == ["sale"],
+              "the sale is recorded exactly once",
+              f"{rec.events[0][1] if rec.events else 'nothing'}")
 
     # ---- 5. the record ---------------------------------------------------
     _sent, _state, rec = run(OURS)
