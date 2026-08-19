@@ -1331,6 +1331,39 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### GAME_SMSG naming — 16 opcodes named and merged; 14 PARTIALs remain, priced (2026-08-18)
+
+[studies/smsgnames/FINDINGS.md](studies/smsgnames/FINDINGS.md) is the static reachable-handler
+pass over the seen-but-unnamed set: two witnesses (the client's own handler asserts + the decoded
+wire over 46 live connections), adversarial refutation, a consistency critic, and an independent
+`msgshape` field-width cross-check that caught one real error (the item `inventory key` is `u16`,
+not the `u32` a handler's dword load implied). **16 opcodes earned a name and are in
+`schema/overrides.json` (GAME_SMSG 66 → 82):** agent movement `0x0027`/`0x0028`/`0x002A`/`0x002C`,
+the generic-value family `0x009F`/`0x00A0`/`0x00A2`/`0x00A3`, `0x005A PLAYER_REMOVE`, the
+item/inventory block `0x013E`/`0x0144`/`0x014B`/`0x014D`, `0x009B AGENT_SET_NAME`, and the title
+pair `0x00F3 TITLE_RANK_DATA`/`0x00F4 TITLE_RANK_DISPLAY`. Two resolutions worth carrying:
+`0x0027 AGENT_UPDATE_SPEED_BASE` did NOT force a rename of `0x002B AGENT_UPDATE_SPEED` — that
+entry already OBSERVED-refutes the GWLP-R 'SpeedModifier' gloss, and the client splits the pair by
+its own words (maxSpeed vs moveSpeed); and `0x00F3`/`0x00F4` were lifted **UPSTREAM → OBSERVED** by
+the frame bus — `0x00F4`'s frame `0x10000064` and `0x00F5 TITLE_UPDATE`'s `0x10000065` feed the
+same CtlText panel (`toolkit/clientscan/framebus.py` post/subscribe scan, closing the open lead at
+`studies/character/RUNS.md:203`). That shared-panel technique generalizes to any UPSTREAM display opcode.
+
+**NEXT: the 14 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
+deliberately OUT of the schema; full ledger and each held-reason at `studies/smsgnames` §4/§5):
+1. **`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL`** — the critic's strongest withheld pair:
+   a genuine two-witness MESSAGE identity (fileId SOURCED at `ItCliApi:2410`/`:2505`), held only
+   because fields 4–10 are unread. Cheapest: read the shared item builder `0x848450`'s field writes;
+   fix `0x0161`'s off-by-one field indices first (critic flagged: name is wire field 12, code[] field 13).
+2. **`0x009A`** — the char-record `+0x30` dword store keyed by agent id that PAIRS with the now-named
+   `0x009B AGENT_SET_NAME` at `+0x34` (same `0x38`-stride ChCli record). Read what consumes `+0x30`.
+3. **`0x005D`** — candidate `CHAT_MESSAGE`: an encoded (EncString) wide message appended to the
+   string table at `ctx+4`. Needs the sender/body cross-check against the local-chat surface
+   (`studies/recon` §491).
+4. **`0x0147`/`0x0148`** — the equip-set pair, already asserting `ITEM_PLAYER_EQUIP_SETS`
+   (`ItCliInv:375`/`:329`); then the player-record pair `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0` and the
+   marker `0x008D`.
+
 ### Unit setup — the pipeline is one document, ALL 11 questions ran, and the fixes landed (2026-08-17)
 
 The arc is [studies/unitsetup/FINDINGS.md](studies/unitsetup/FINDINGS.md): how a unit comes
