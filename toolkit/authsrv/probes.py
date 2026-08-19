@@ -713,6 +713,14 @@ def _merchant_window_steps(agent_id, origin):
              "(0x00C4's handler computes the angle between the two agents and "
              "applies it). If it turns, the owner register was written even if "
              "no window ever draws."),
+        Step(2.0, 0x0141, [1, 500],
+             "0x0141 UPDATE_GOLD_STORAGE [1, 500] -- FUND THE CHARACTER",
+             "the login burst sends [1, 0], and with 0 funds the shop's Buy "
+             "button renders GREYED and a click on it produces NOTHING on the "
+             "wire (measured 20260818T235130: click delivered, the only c2s "
+             "traffic after it was the 5 s keep-alive 0x8009, byte-identical "
+             "at both timestamps). So the client gates purchase on funds "
+             "LOCALLY. 500 covers the 50/100/200 quotes; watch 'Your Funds'."),
         Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
                                      _stock_item("warrior_legs")),
              "0x0161: declare stock item 40 (leggings), flags 0x20001003, price 25", "nothing."),
