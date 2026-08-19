@@ -977,6 +977,42 @@ Every one of these, in the order they were written:
   it to **6,846/6,846 archive-wide with 0 undecodable**, 2026-08-19). Floor **20**, and it was set the
   hard way: the first declared floor of 24 was a guess, the run executed 20, and
   the ledger refused it. ~24 s),
+  `toolkit/mapdata/test_cpsdata.py` (**the COMPOSITE TABLE, Gw.dat `0x33EA` --
+  where a PLAYER's file ids actually live**, added 2026-08-19 as rung U10's
+  first module. `unitassembly.py` answers "which files does this MONSTER need";
+  players are not on that path and had no answer at all. **The named suspect
+  was wrong**: `ConstComposite`'s two 132-entry pointer tables in `Gw.exe` hold
+  no file id at any depth -- they are texture-atlas RECTs, 359/359 satisfying
+  `0<=l<r<=W, 0<=t<b<=H` where XYWH fails 269/359 and LRTB 284/359. The real
+  table is an archive file, so the module reads `Gw.dat` and owes `Gw.exe`
+  nothing. **The test exists mostly to attack its own decoder**, and it caught a
+  real defect in the acceptance criterion it was written from: §2 first asserted
+  that a wrong slot-mask width leaves a non-zero RESIDUE, and it does not --
+  **every record consumes `4 + 4*popcount` bytes, so 9, 10, 11, 12 and 13 slots
+  ALL close on the exact final byte.** That is a check that cannot fail, and it
+  is now inverted into a check that the vacuity holds, next to the two
+  discriminators that actually work: the record count must equal section 1's id
+  count (3,803 == 3,803, against the rivals' 3,992 / 3,858 / 3,795 / 3,752)
+  and cross-half type agreement must be total (3803/3803, against 3,212 /
+  2,547 / 2,927 / 3,075 disagreements) -- the two halves are disjoint regions
+  of the file, so agreement is two witnesses rather than one restated. The
+  count equality is a REFUSAL in `decode`; the partition is only a method,
+  because it is strictly stronger and §0 builds the fixture that separates them
+  (two records, two ids, one used twice and one never). **§3 is the headline:
+  the two-witness join.** Composite type 1 across every `(group, profession)`
+  cell resolves to twenty file ids and an INDEPENDENT FFNA chunk walk must call
+  all twenty composited (FA1 present, FA0 absent); type 2's twenty must then
+  match type 1's node counts **element for element, 20/20**, on skeletons with
+  10--115 sequences against type 1's 220--289. **§4 is what stops §3 being
+  vacuous**: the hatcher 116228 IS composited and DOES walk, so a set-based
+  check passes it as a player shell -- only the composite table can reject it,
+  and 116228/116703/116377/116366 must all be absent from its 16,567 distinct
+  file ids. Slot kinds are MEASURED from the archive ({0,5,10} `ffna`, 6,703
+  refs; the other eight `ATEX`, 13,535; zero exceptions either way) rather than
+  imported from the client's `s_fileFlags`. Mutation-tested: moving the sex
+  slot or the type shift by one goes red, restoring goes green. Floor **58**,
+  set from the green run -- nothing here can legitimately skip, so the floor IS
+  the count. ~35 s),
   `toolkit/mapdata/test_skelfile.py` (the SKELETON/ANIMATION chunk `0xFA1` --
   rung U1 of `studies/unitmodels/PLAN.md`, the 2026-08-16 recon's verified
   walker promoted to committed code. **The headline is closure, and here

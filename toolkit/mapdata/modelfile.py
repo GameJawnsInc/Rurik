@@ -411,6 +411,25 @@ class SubModel:
         against; "id == the index Gr finally sees" is false and was never the
         claim. Re-derived independently by a skeptic from the pinned image.
 
+        THE ASSERT THAT SPELLS THE INDEXING OUT, added 2026-08-19 because the
+        paragraph above was carrying the claim without its quote:
+
+            (unsigned)-1!=transformRemap[group->transforms[i]].transform
+
+        at `0x00678F68` in build 38797. The subscript is literally
+        `group->transforms[i]` -- the raw id out of the group's own list -- and
+        the field read back is `.transform`, so both halves of the paragraph
+        above are in one line of ArenaNet's source. It also names the sentinel:
+        an unmapped entry is `(unsigned)-1`, not 0.
+
+        AND IT IS NOT THE IDENTITY EVEN FOR A ONE-BODY UNIT, which is the
+        intuition most likely to bite an author. The hatcher body 116703 (4
+        sub-models) references 53 distinct ids against its shell 116228's 86
+        blk2C nodes, and they are SPARSE: min 2, max 84, 32 gaps below the
+        maximum, 33 shell nodes never referenced at all. A dense 0-based input
+        space is not what the file holds; that density is what `.transform`
+        produces on the way out.
+
         MULTI-BODY COMPOSITES SHARE ONE GLOBAL ID SPACE: one table, sized by
         the one skeleton, handed unchanged to every body -- nothing renumbers
         per body. The archive agrees on a check that could have failed: in the
