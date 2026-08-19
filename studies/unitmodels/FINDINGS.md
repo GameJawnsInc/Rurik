@@ -500,6 +500,32 @@ Gw\Char, 21/21 Gw\AgentView):
   subsystem's asserted vocabulary never names per-vertex skinning; the only
   hierarchy machinery is a push/pop rigid transform list. Consistent with
   rigid-segment characters; not proven by absence.
+  **↳ UPGRADED 2026-08-19 — the push/pop reading no longer rests on absence.**
+  Every one of those names is a literal string in build 38797, and they sit in
+  ONE `.rdata` run at `0x00678F44`–`0x00679160` because MSVC emits a TU's
+  assert expressions in source order. Two of them settle the mechanism
+  positively rather than by silence:
+  `(matrixIdTop >= 0) || !parentId` (`0x00679028`) and
+  `matrixStack.Count() <= MDLEXP_CHUNKFLAG_LASTPOPCOUNTMASK` (`0x006790EC`).
+  The first ties the stack's TOP to whether the node HAS A PARENT, which is
+  what a hierarchy walk asserts on descent and is meaningless to a skin-matrix
+  palette; the second bounds the stack's depth by a **pop-count mask carried in
+  the chunk flags**, where a palette would be bounded by a hardware register
+  count. `popCount <= MDLEXP_GEOANIMFLAG_POPCOUNTMASK` (`0x00679078`) is the
+  third witness. **CORROBORATED — it is a rigid push/pop hierarchy flattener,
+  not a skinning palette.**
+  **And `parentId` is ARENANET'S OWN NAME for the blk2C link byte** — the
+  bits-0-7 LINK field of [../anim/FINDINGS.md](../anim/FINDINGS.md) §3.4,
+  `< n2C` and `<= own index` on 121,532/121,532 — which moves it from
+  RECONSTRUCTION to **OBSERVED**. Two more names in the same run are the
+  asserts behind guards `modelwrite.py` already enforces:
+  `transformCount <= MAX_TRANSFORM_IDS` (`0x00678F44`, the 1..4 group bound)
+  and `sum == transforms->Count()` (`0x00678FA8`, MdlCombine:860's closure).
+  A fourth is new information: `(*transformRemap)[src].actionPtCount <
+  MDLEXP_MAX_ANIM_ACTIONPOINTS` (`0x006790A8`) shows a remap entry carries an
+  **actionPtCount** beside its `.transform` — action points are per-transform,
+  and we have never decoded them. OBSERVED, build 38797, by string search
+  (`bytes.find`, no disassembler).
 - The layering is clean: **Gw\Char** (stats/appearance-slot data) →
   **Engine\Agent** (world object: position, movement, timers — zero
   model vocabulary) → **Gw\AgentView** (render proxy: AvChar's action/sequence
@@ -509,6 +535,43 @@ Gw\Char, 21/21 Gw\AgentView):
 - MdlLoad:1150 tests an `MDLEXP_` constant against just-loaded data — the
   on-disk format and the MdlCombine/MdlDecomp "export format" constants are
   one vocabulary, which matters for authoring (the ladder's summit).
+
+### 3.11 Two facts an author needs, measured 2026-08-19
+
+Both came out of the composite-remap pass and neither was written down; both
+are cheap to re-run and the commands are in the bullets.
+
+- **A SKELETON IS SHARED ACROSS SHELLS, so editing one edits several
+  creatures.** Median per-node base distance between shells claimed to share a
+  skeleton, over `Skeleton.load(fid).anims()`:
+
+  | group | n nodes | median per-node distance |
+  |---|---|---|
+  | 116228 ↔ 184409 | 86 | **0.0002 u** |
+  | 116227 ↔ 141551 / 141267 / 141285 / 279140 | 90 | **0.0000 u** (all four) |
+  | 116225 ↔ 141286 / 161433 | 105 | **0.0000 u** (both) |
+
+  **The metric is not vacuous, and the control is what says so**: the same
+  comparison on a pair nobody claims are related (116228 vs the burrowing worm
+  116366) does not even reach the distance test — the node counts differ, 86
+  vs 20. Six of the seven pairs are at 0.0000 u, i.e. bit-identical rest
+  poses, not merely similar ones. OBSERVED. **Consequence for `skelwrite`: a
+  base edit like U7's ×2 reaches every shell in the group, and the file id you
+  wrote is not the only creature that changes.** Nothing in the toolkit warns
+  about this yet.
+
+- **`transformRemap` is NOT the identity even for a ONE-BODY unit**, so the
+  "one body means no renumbering" intuition is wrong. On the client-confirmed
+  hatcher pair — shell 116228 (86 blk2C nodes), body 116703 (4 sub-models):
+  the body's vertex groups reference **53 distinct transform ids**, and they
+  are **sparse** — `min 2`, `max 84`, with **32 gaps** below the maximum
+  (0, 1, 3, 4, 6, 7, 11, 12, 14, 15, 16, 17, 25, 30, 46, 47, 50–57, …) and
+  **33 of the 86 shell nodes never referenced at all**. That sparse set is
+  precisely why the table exists and why `.transform` is a dense counter on
+  the OUTPUT side (U9 follow-up in [PLAN.md](PLAN.md)). OBSERVED. It also
+  re-explains an old dead end: nodes 51–57 sit in the unreferenced run, which
+  is the same region the nearest-joint proxy kept nominating and no vertex
+  ever binds to.
 
 ---
 
