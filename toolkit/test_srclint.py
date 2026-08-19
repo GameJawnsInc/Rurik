@@ -23,6 +23,7 @@ standard library only.
 
     python toolkit/test_srclint.py
 """
+import ast
 import os
 import re
 import sys
@@ -54,7 +55,14 @@ import srclint  # noqa: E402
 # real green run, not a guess -- the first write of section 8 asserted `== []`
 # where the honest assertion was narrower, and the floor guard would have taken
 # the wrong number.
-LEDGER = checks.Ledger("srclint", floor=20)
+# 20 -> 22 on 2026-08-19 with section 9, a lone `%` in an argparse help string.
+# argparse %-formats every help string, so one raises at add_argument -- before
+# any flag is parsed, so the program dies on every invocation including --help.
+# One took the whole gamesrv down at harness start and cost a client run. The
+# check has a CONTROL because its first draft flagged two innocent files
+# (`help="...%d." % N`, already formatted) and the top of this file says a false
+# positive is worse than a miss.
+LEDGER = checks.Ledger("srclint", floor=22)
 
 
 def names(src):
@@ -336,6 +344,83 @@ def main():
               "and the whole tree is clean of it",
               f"CONDITIONAL GLOBALS: {live} -- these raise NameError on any path "
               f"that does not run the block assigning them")
+
+    print("\n9. a lone `%` in an argparse help string")
+    # WHY THIS EARNED A SECTION. argparse runs every help string through
+    # %-formatting, so a literal percent must be doubled. A single one raises
+    # `ValueError: badly formed help string` from add_argument -- at IMPORT of
+    # the parser, before any flag is parsed, so the program dies on EVERY
+    # invocation including --help. On 2026-08-19 that took the whole gamesrv
+    # down at harness start ("gamesrv exited with code 1 before listening") over
+    # the string "88.5% of its player grants", and cost a client run.
+    #
+    # It is also a trap for the checker: `--help` still PRINTS the offending
+    # text, inside the traceback, so grepping the output for the flag name finds
+    # it and looks green. The exit code is the thing to test, and here the
+    # syntax tree is cheaper than either.
+    def _bad_help(path):
+        try:
+            tree = ast.parse(open(path, encoding="utf-8").read())
+        except (SyntaxError, UnicodeDecodeError):
+            return []
+        out = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "add_argument"):
+                continue
+            for kw in node.keywords:
+                if kw.arg != "help":
+                    continue
+                # ONLY a literal. `help="...%d." % (N)` is already formatted
+                # before argparse ever sees it, and an f-string likewise -- both
+                # are fine, and the first draft of this check flagged both
+                # because it concatenated raw Constants out of the subtree and
+                # scored the TEMPLATE. That is a false positive in a linter,
+                # which the top of this file calls worse than a miss.
+                try:
+                    s = ast.literal_eval(kw.value)
+                except (ValueError, SyntaxError, TypeError):
+                    continue
+                if not isinstance(s, str):
+                    continue
+                # What argparse itself does: `help % params`, where params holds
+                # the action's attributes. So `%(default)s` is legal and a lone
+                # `%` is not. Supply any key so only a malformed SPEC raises.
+                class _Any(dict):
+                    def __missing__(self, _k):
+                        return ""
+                try:
+                    s % _Any()
+                except (ValueError, TypeError):
+                    out.append((os.path.basename(path), node.lineno))
+        return out
+
+    offenders = []
+    for d in (HERE, os.path.join(os.path.dirname(HERE), "tools")):
+        if os.path.isdir(d):
+            for p in srclint.python_files(d):
+                offenders += _bad_help(p)
+    LEDGER.ok(not offenders,
+              "no help string in the tree would kill its own parser",
+              f"BAD HELP: {offenders} -- argparse %-formats every help string, "
+              f"so a lone `%` raises at add_argument and the program cannot "
+              f"start at all. Write it `%%`")
+    # CONTROL, so this cannot pass by matching nothing.
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False,
+                                     encoding="utf-8") as fh:
+        fh.write('import argparse\n'
+                 'p = argparse.ArgumentParser()\n'
+                 'p.add_argument("--x", help="88.5% of them")\n')
+        probe = fh.name
+    try:
+        LEDGER.ok(len(_bad_help(probe)) == 1,
+                  "CONTROL: a planted lone `%` is detected",
+                  "a checker that finds nothing is indistinguishable from a "
+                  "clean tree, which is how the real one shipped")
+    finally:
+        os.unlink(probe)
 
     return LEDGER.verdict()
 

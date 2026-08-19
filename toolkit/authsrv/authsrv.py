@@ -9060,7 +9060,7 @@ def main():
                          "at that exact millisecond -- seven arrivals observed, "
                          "98u to 5238u, all one code path. A far click is "
                          "therefore an 18-second time bomb. ArenaNet refreshes "
-                         "at a median 0.492 s and 88.5% of its player grants "
+                         "at a median 0.492 s and 88.5%% of its player grants "
                          "answer a heading, so this is the shape we were "
                          "missing rather than a workaround. Score it with "
                          "toolkit/clientscan/movetap.py.")
