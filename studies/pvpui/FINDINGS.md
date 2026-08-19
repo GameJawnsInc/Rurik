@@ -1812,3 +1812,39 @@ one). The **janky doll** is a burrower posed in a humanoid paperdoll; §28.2's f
 pair `116703,116228` (hatcher body + skeleton shell) is the staged humanoid arm, and a
 real answer to "what file does retail bake for a mercenary" would need a live capture of
 an account that owns one — no tape in the vault carries a single `0x0074`.
+
+### 28.4 Both residue arms ran, agent-piloted — the pair is ORDER-SENSITIVE and prop 36 clears the sentinel (2026-08-19)
+
+Three harness runs, all `RUN VERDICT: PASS`, all on the 38833 exe
+(`vault/run/2026-08-13_64fae3b1369b/`), each clicking the party window's hero button at
+window fraction `(0.9070, 0.3288)` — measured off a recon run's screenshot
+(`20260819T082215/hold003.png`), not guessed. The click is fixed-position UI, so the
+piloting is inside the agent-pilotable boundary (2026-08-17 precedent); the appearance
+verdicts below are read from screenshots and the owner reviews them.
+
+| run | arm | panel | doll | provenance |
+|---|---|---|---|---|
+| `20260819T082723` | `--hero-appearance 116703,116228` | opened, stable | **EMPTY** — flat white square, still empty 30s later | `2-click.png`, `hold005.png` |
+| `20260819T083034` | `--hero-appearance 116228,116703` (the swap) | opened, stable | **RENDERED** — a humanoid head-and-shoulders bust, the shape a real hero portrait has | `hold005.png` |
+| `20260819T083324` | `--hero-appearance 116366 --hero-level 20` | opened, stable | the 116366 composite | `hold005.png` |
+
+**The pair finding — OBSERVED, and it sharpens §28.1.** Both orders of the hatcher pair
+are assert-free, so `File.cpp:367` and the codec accept either file in either slot — but
+only `d1=116228, d2=116703` builds a drawable: the other order renders an empty doll,
+silently. Combined with §28.3 (`d1=116366, d2=0` rendered), d1 is the slot the composite
+draws. The parsimonious reading is that the content rows' hatcher labels are swapped —
+116228 is the drawable body and 116703 its skeleton, not the other way around — but that
+is a claim about `content/npcs.toml`'s row naming, RECONSTRUCTION until the rows'
+extraction is re-read. What is OBSERVED and matters for the wire: **the pair is
+order-sensitive, the failure mode of the wrong order is an empty doll and not an
+assert**, so "it didn't crash" is not a verdict on an appearance pair.
+
+**The level finding — OBSERVED, and it bought more than the title.** `--hero-level 20`
+(`0x009F [36, 200, 20]`, sent through the hero pipeline before any body) cleared the
+sentinel in BOTH stores at once — the panel title reads "Hero 1: Lvl 20 Norgu" and the
+party roster row reads "Lvl 20 Norgu" — and the panel's health/energy bars, which
+rendered as empty black strips in every previous run of this arc, now RENDER, reading
+1 (red) over 0 (blue). Nothing ever sent health or energy for agent 200, so those are
+the client's own floor values; the cheap follow-up is `0x009F` health (42, OBSERVED)
+and energy (41, UPSTREAM) for the hero agent, which would put real numbers in bars
+that demonstrably read per-agent stores a bodiless agent can carry.

@@ -2566,6 +2566,10 @@ HERO_CHAR = False
 # file reference. ANSWERED by the owner's click, 2026-08-18: 116366 (the
 # burrower's self-contained unit file) RENDERED and the commander panel
 # opened and stayed -- the full ladder is studies/pvpui/FINDINGS.md 28.3.
+# SHARPENED 2026-08-19 (28.4): the pair is ORDER-SENSITIVE and the wrong
+# order fails SILENTLY -- 116228,116703 draws a humanoid bust, 116703,116228
+# draws an empty white doll, neither asserts. d1 is the slot the composite
+# draws; "no crash" is not a verdict on an appearance pair.
 HERO_APPEARANCE = None
 # The hero AGENT's displayed level -- int property 36 on 0x009F, the same
 # channel the player's own agent gets in the create preamble and the
@@ -2573,7 +2577,11 @@ HERO_APPEARANCE = None
 # panel's title reads the AGENT's level, and agent 200 with no prop-36 entry
 # renders the no-entry sentinel -- "Hero 1: Lvl 255 Norgu" on the 2026-08-18
 # panel-open click. None = never sent, which is every hero run before
-# 2026-08-19. The cheap arm pvpui 28.3 stages; --hero-body is the heavy one.
+# 2026-08-19. ANSWERED same day (pvpui 28.4): --hero-level 20 cleared the
+# sentinel in BOTH stores at once (panel title and roster row read "Lvl 20
+# Norgu") and the panel's vitals bars went from empty strips to rendering
+# 1/0 -- they read per-agent stores a bodiless agent can carry, so 0x009F
+# health(42)/energy(41) for the hero agent is the staged follow-up.
 HERO_LEVEL = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and

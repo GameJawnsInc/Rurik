@@ -1651,7 +1651,14 @@ field we sent as zero or never sent. The full rig:
 `--hero 1 --party-mine-late 2.0 --hero-activate --hero-inventory 2 --hero-bags
 --hero-char --hero-appearance 116366`. Cosmetic residue filed in §28.3, not floors: the
 Lvl 255 sentinel (prop 36 for agent 200, or a body) and the humanoid-doll arm
-(`--hero-appearance 116703,116228`).
+(`--hero-appearance 116703,116228`). **Both residue arms RAN 2026-08-19, agent-piloted
+(§28.4):** the appearance pair is ORDER-SENSITIVE — `116228,116703` draws a humanoid
+bust, the reverse draws an empty doll, neither asserts, so a wrong pair fails silently;
+and `--hero-level 20` (new flag, `0x009F` prop 36 pre-body) cleared the Lvl 255 sentinel
+in the panel title AND the roster row, and made the panel's vitals bars render (1/0) for
+the first time — staged follow-up: `0x009F` health/energy for the hero agent, and
+re-reading the hatcher content rows whose body/shell labels the swap result says are
+probably reversed.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
