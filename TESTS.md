@@ -949,7 +949,33 @@ Every one of these, in the order they were written:
   `trailing_end` did not implement until the fixture existed to test it).**
   Three scores, each MEASURED rather than subtracted, because the file needs
   TWO vault artifacts that fail independently -- against a floor of 64
-  (61 -> 64 with the H fixture, measured green before raising). ~121 s),
+  (61 -> 64 with the H fixture, measured green before raising; **64 -> 70 with
+  section 7's skin binding, 2026-08-19**). ~121 s),
+  `toolkit/mapdata/test_modelwrite.py` (**the 0xFA0 GEOMETRY WRITER** -- the
+  mesh half of the round trip and the LAST unwritten layer of a unit, added
+  2026-08-19. Criterion is `skelwrite.py`'s: unmodified re-serialization
+  **byte-identical**, because a writer that stashed the source block would pass
+  every re-parse oracle while decoding nothing (`studies/models/FINDINGS.md`
+  §4.5's memcpy-loader defect). **It could not honestly have been written a day
+  earlier**: until FVF bit 1 was named `GR_FVF_GROUP` a writer had to carry four
+  bytes per vertex as opaque, and with it named, MEASURED
+  `stride - sum(named field sizes) == 0` on **1,618 of 1,618** sub-models across
+  all **14** retail vertex formats -- no padding, no unclaimed byte, so the
+  vertex block is RE-DERIVED field by field rather than copied. §4 is the
+  control that makes identity mean something: it scales positions and requires
+  the diff to land **only inside each vertex's position field**, which a memcpy
+  writer fails; then it writes a changed `GR_FVF_GROUP` and reads it back.
+  §1's synthetic fixtures (struct.pack, no ArenaNet bytes) cover what retail
+  cannot -- the rigid no-binding case, collision meshes, an H/I/J tail, and a
+  preamble whose sub-model count is WRONG and must be re-derived from the typed
+  list rather than carried. The tail fixture found its own lesson: a tail
+  without block J's gate (`u32@0x34`) set is not a tail but trailing garbage,
+  and the client's closure at `0x007957CB` refuses the chunk. §5 provokes seven
+  refusals by name, §2 pins both unit anchors (hatcher 116703, worm 116366) at
+  chunk *and* whole-container level, §3 sweeps the corpus **250/250 across 12
+  vertex formats** (`--all` for every row). Floor **20**, and it was set the
+  hard way: the first declared floor of 24 was a guess, the run executed 20, and
+  the ledger refused it. ~24 s),
   `toolkit/mapdata/test_skelfile.py` (the SKELETON/ANIMATION chunk `0xFA1` --
   rung U1 of `studies/unitmodels/PLAN.md`, the 2026-08-16 recon's verified
   walker promoted to committed code. **The headline is closure, and here
