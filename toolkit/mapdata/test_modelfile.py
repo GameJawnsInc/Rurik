@@ -55,7 +55,8 @@ from archive import Archive, ffna_chunks, file_id_table  # noqa: E402
 import modelfile  # noqa: E402
 from modelfile import (ModelFile, ModelGeometry, NoClose,  # noqa: E402
                        Undecodable, vertex_stride, GEOMETRY_CHUNK,
-                       MODEL_FFNA_TYPE)
+                       MODEL_FFNA_TYPE, SubModel, ffna_type,
+                       FIELD_GROUP, FIELD_DIFFUSE)
 from mapfile import MapFile  # noqa: E402
 from props import BloatedProps  # noqa: E402
 from mapchunks import dependency_file_id  # noqa: E402
@@ -193,7 +194,7 @@ F11_TOL = 1e-5
 # bytes. `--all` adds 10 checks; its runtime is in the module docstring.
 # 2026-08-16: +3 (the block-H fixture and the error-0x1D refusal, rung U1
 # of studies/unitmodels/PLAN.md), 61 -> 64, measured green before raising.
-FLOOR = 64
+FLOOR = 70
 
 
 # ------------------------------------------------------------------ helpers
@@ -577,6 +578,7 @@ def _vault_sections(check, led, args):
         led.skip("2. the reference-map census and the f11 oracle", why)
         led.skip("3. the M2 correction and the ambiguous file", why)
         led.skip("6. the vertex field map against the corpus", why)
+        led.skip("7. the skin binding", why)
         if args.all:
             led.skip("4. the 14-map sample", why)
     else:
@@ -586,6 +588,7 @@ def _vault_sections(check, led, args):
             _section2(check, ar, table, by_row)
             _section3(check, ar, table, by_row)
             _section6(check, ar, table, by_row)
+            _section7(check, ar, table, by_row)
             if args.all:
                 _section4(check, ar, table, by_row)
     _section5(check, led)
@@ -985,9 +988,132 @@ def _section6(check, ar, table, by_row):
     check(idx_tot > 1000 and idx_hi0 == idx_tot and len(idx_vals) < 64
           and max(idx_vals) < 64,
           f"BIT 1 IS NOT A COLOUR: its high 3 bytes are zero on all "
-          f"{idx_tot} and it takes {len(idx_vals)} small values -- an index "
-          f"whose purpose stays UNVERIFIED",
+          f"{idx_tot} and it takes {len(idx_vals)} small values -- the "
+          f"GR_FVF_GROUP index, resolved in section 7",
           f"{len(idx_vals)} values, max {max(idx_vals) if idx_vals else '-'}")
+
+
+# --- 7. the skin binding, and every claim gets a control --------------------
+
+def _section7(check, ar, table, by_row):
+    """`trailing` -> groupTransformCount[] + transforms[], and bit 1 as the
+    per-vertex selector into them.
+
+    EVERY assertion here has a rival that must SCORE WORSE, because the whole
+    decode is arithmetic over small integers and arithmetic over small
+    integers agrees with things by accident. The rivals are the ones a corpus
+    sweep measured: reading the two arrays in the opposite order (4.04%), and
+    taking the selector from the dword one field later (0.03%)."""
+    print()
+    print("== 7. the skin binding: closure, surjectivity, and two rivals ==")
+    # The flags-259 rows are MAP files; skinned geometry lives in the
+    # model-type files those maps depend on, so walk the archive itself.
+    # `magic(e, 5)` costs five decompressed bytes, not a whole file.
+    sms = []
+    for e in ar.entries[::37]:
+        try:
+            head = bytes(ar.magic(e, 5))
+            if head[:4] != b"ffna" or head[4] != MODEL_FFNA_TYPE:
+                continue
+            g = ModelFile.decode(ar.read(e)).geometry()
+        except Exception:
+            continue
+        if g is not None:
+            sms.extend(g.submodels)
+        if len(sms) > 4000:
+            break
+    clo = clo_n = rev = 0
+    surj = surj_n = late = late_n = 0
+    oracle_bad = 0
+    diffuse = 0
+    bad_count = 0
+    groups_seen = 0
+    for sm in sms:
+            u0, u1, u2 = sm.u_counts
+            if len(sm.trailing) != (u0 + u1 + u2 * 3) * 4:
+                continue
+            if sm.dat_fvf >> FIELD_DIFFUSE & 1:
+                diffuse += 1
+            w = struct.unpack_from(f"<{u0 + u1}I", sm.trailing, 0) if u0 + u1 else ()
+            clo_n += 1
+            if sum(w[:u0]) == u1:
+                clo += 1
+            # RIVAL: the two arrays in the opposite order
+            if u0 + u1 and sum(w[u1:u1 + u0]) == u1:
+                rev += 1
+            if sum(w[:u0]) == u1 and u0:
+                counts = w[:u0]
+                if counts and min(counts) >= 1 and max(counts) <= 4:
+                    pass
+                else:
+                    bad_count += 1
+            has_group = bool(sm.dat_fvf >> FIELD_GROUP & 1)
+            if u0 > 1 and not has_group:
+                oracle_bad += 1
+            if not has_group:
+                continue
+            off = sm.fields[FIELD_GROUP]
+            try:
+                vals = {sm.vertex_data[v * sm.stride + off] for v in range(sm.nv)}
+                late_v = {sm.vertex_data[v * sm.stride + off + 4]
+                          for v in range(sm.nv)} if off + 4 < sm.stride else None
+            except IndexError:
+                continue
+            groups_seen += 1
+            surj_n += 1
+            if vals == set(range(u0)):
+                surj += 1
+            if late_v is not None:
+                late_n += 1
+                if late_v == set(range(u0)):
+                    late += 1
+    print(f"    {clo_n} sub-models; {groups_seen} carry GR_FVF_GROUP")
+
+    check(clo_n > 200 and clo == clo_n and rev < clo_n * 0.2,
+          "CLOSURE (ArenaNet's own assert, MdlCombine:860): the group "
+          "transform counts total the transform array, and the reversed-order "
+          "rival does NOT",
+          f"{clo}/{clo_n} closes, rival {rev}/{clo_n}")
+    check(surj_n > 50 and surj == surj_n and late < max(1, late_n) * 0.2,
+          "SURJECTIVITY: the group values are exactly {0..u0-1} -- the tight "
+          "form, which the weak `max < u0` cannot discriminate -- and the "
+          "same field one dword later is NOT",
+          f"{surj}/{surj_n} surjective, rival {late}/{late_n}")
+    check(oracle_bad == 0 and groups_seen > 50,
+          "CROSS-STRUCTURE ORACLE: no sub-model declares more than one group "
+          "without carrying GR_FVF_GROUP to select between them",
+          f"{oracle_bad} violation(s)")
+    check(diffuse == 0 and clo_n > 200,
+          "GR_FVF_DIFFUSE is never set on a model -- the client asserts it "
+          "must not be (MdlCombine:2075)",
+          f"{diffuse} sub-model(s) carry bit {FIELD_DIFFUSE}")
+    check(bad_count == 0 and clo_n > 200,
+          "every group binds 1..4 transforms -- the bound the client's own "
+          "per-group loop supports",
+          f"{bad_count} out of range")
+
+    # SABOTAGE: the closure refusal must be able to FIRE. A decoder whose
+    # guard cannot go red is a comment, and this arc has shipped five of those.
+    hurt = next((sm for sm in sms
+                 if sm.u_counts[0] >= 2 and len(sm.trailing) >= 8), None)
+    if hurt is None:
+        check(False, "SABOTAGE: found no sub-model to corrupt", "none")
+    else:
+        good = hurt.group_transforms()
+        bent = SubModel(hurt.unk, hurt.counts, hurt.nv, hurt.dat_fvf,
+                        hurt.stride, hurt.u_counts, hurt.indices,
+                        hurt.vertex_data,
+                        struct.pack("<I", struct.unpack_from("<I", hurt.trailing, 0)[0] + 1)
+                        + hurt.trailing[4:])
+        try:
+            bent.group_transforms()
+            fired = False
+        except Undecodable:
+            fired = True
+        check(len(good) == hurt.u_counts[0] and fired,
+              "SABOTAGE: bumping one count by 1 makes group_transforms REFUSE "
+              "-- the closure guard can go red",
+              f"{len(good)} groups decoded, refusal fired: {fired}")
 
 
 if __name__ == "__main__":
