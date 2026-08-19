@@ -1968,13 +1968,22 @@ GAME_CMSG_ATTACK_AGENT = 0x0026
 # arm echoes THAT. Only hero agents were observed; whether pets share the
 # message is untested (the panel class is GmPetCommander, so they might).
 GAME_CMSG_HERO_AI_MODE = 0x0015
-# The commander crosshair: lock (0x0016, [heroAgent, targetAgent]) / unlock
-# (0x0017, [heroAgent]) -- OBSERVED static on 38833 (send wrappers 0x0091FD60
-# and 0x0091FDB0 under GmAgentCommander msg 0x24, pvpui 28.6), no capture
-# yet: the button refuses to send without a selected foe, so the live confirm
-# needs an --enemy run. No server arm; named so the framer prints them.
+# The commander crosshair, and READ THE SECOND CONSTANT BEFORE USING IT.
+# 0x0016 is the lock, [heroAgent, targetAgent], CONFIRMED live 2026-08-19 --
+# and its own zero form [heroAgent, 0] is the toggle-OFF, also captured.
 GAME_CMSG_HERO_LOCK_TARGET = 0x0016
-GAME_CMSG_HERO_UNLOCK_TARGET = 0x0017
+# 0x0017 is NOT the unlock. It was named HERO_UNLOCK_TARGET on 2026-08-19 by
+# reading it as "the other branch of the crosshair", and the name was
+# RETRACTED the same day (pvpui 28.11): the branch is chosen by a getter
+# 0x0080CEE0 that reads neither the hero record nor the pet container but a
+# per-agent ChCliApi object's +0x24 -- the same store GmBundle, GmWeaponBar
+# and GmCoreAction all treat as "this char is carrying a bundle". 0x0017
+# fires only when the hero IS carrying something and is not the player's own
+# agent; the player's own case sends c2s 0x002E instead. So it is closer to
+# "hero, drop what you are carrying" -- left UNNAMED in the schema, because
+# that reading is inference and the wrong name already cost one correction.
+# No server arm: nothing we can send moves +0x24, so it cannot fire here.
+GAME_CMSG_HERO_UNNAMED_0017 = 0x0017
 # The flag placements the 2026-08-19 clicks measured (pvpui 28.5): hero flag
 # [agent, vec2, plane], party flag [vec2, plane]. The client draws NOTHING on
 # send -- the draw is the s2c echo pair below (pvpui 28.6).
@@ -6726,17 +6735,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 print(f"[c{conn_id}] hero lock echo: agent "
                                       f"{_aid} -> target {_tid}", flush=True)
                                 break
-                    elif opcode == GAME_CMSG_HERO_UNLOCK_TARGET:
-                        _aid = values[1]
-                        for _hid, _haid, _hdef in hero_slots():
-                            if _haid == _aid:
-                                send(GAME_SMSG_HERO_LOCK_TARGET_SET,
-                                     [_aid, 0],
-                                     f"HERO_LOCK_TARGET_SET(agent {_aid} -> "
-                                     f"clear)")
-                                print(f"[c{conn_id}] hero unlock echo: agent "
-                                      f"{_aid}", flush=True)
-                                break
+                    # 0x0017 deliberately has NO arm -- see its constant. It
+                    # is not the unlock, our rig cannot make it fire, and the
+                    # clear it used to echo is really 0x0016 [hero, 0], which
+                    # the branch above already handles.
                     elif opcode == GAME_CMSG_HERO_FLAG_PLACE:
                         # The hero flag echo: the client sent [agent, [x,y],
                         # plane] and drew nothing -- the draw is 0x0066, and

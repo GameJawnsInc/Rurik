@@ -2080,3 +2080,89 @@ watch the row dim without touching a position.
 `--hero-body-offset DX[,DY]` (new) places the body; it refuses without `--hero-body`,
 because a placement flag on a rig with no body would measure the default and read as a
 null result for the offset.
+
+### 28.11 `0x0017` IS NOT THE UNLOCK — a name this arc published, and retracted the same day (2026-08-19)
+
+§28.6 named c2s `0x0017` **HERO_UNLOCK_TARGET** at medium confidence, on the reasoning
+that it is the other branch of the crosshair handler that sends `0x0016`. §28.7 already
+found it never fires and guessed the pet container as the missing state. Both were
+wrong, and the guard is not a lock state at all.
+
+The branch in `0x004FBD20` (38833) is chosen by **`0x0080CEE0`, which reads neither
+store this arc knows.** It resolves the agent through AgApi `0x005FC380`, requires
+`targetDef == GW_AGENTDEF_CHAR` (the constant is named by its own asserting twin,
+`ChCliApi:3873 targetDef == GW_AGENTDEF_CHAR`) and `obj+0x48 == 6`, and returns
+**`obj+0x24`** — a per-agent ChCliApi field, no `+0x584` or `+0x6AC` displacement
+anywhere in the function. What that field means is settled by its other readers, all
+three named from their own asserts: **GmBundle** (`GmBundle:98 ptr`), **GmWeaponBar**
+(`GmWeaponBar:373 currSlot < ITEM_PLAYER_EQUIP_SETS`, which on non-zero drops the
+carried thing *instead of* switching weapon sets) and **GmCoreAction**
+(`GmCoreAction:933 action < WORLD_ACTIONS`, which disables world actions while it is
+non-zero). Weapon-swap-drops-your-bundle and no-world-actions-while-carrying are retail
+behaviours a player would recognise. So `obj+0x24` is a **carried-bundle** store, and
+the crosshair's real structure is:
+
+```
+bundle store != 0 ?  -> is this hero MY OWN agent ?  yes -> local drop, c2s 0x002E (empty body)
+                                                     no  -> c2s 0x0017 [heroAgent]
+bundle store == 0 ?  -> hero record +0x20 != 0 ?      yes -> c2s 0x0016 [hero, 0]   (the clear)
+                                                     no  -> c2s 0x0016 [hero, target]
+```
+
+Both `0x0016` sends live under the bundle-clear arm, which is exactly what our capture
+showed. **The paint routine `0x004FC0C0` reads both stores in the same priority order**
+into a four-state image index, so the gold crosshair we lit was state 1 (record +0x20),
+not the bundle state — paint and branch agree, and there was never a store
+disagreement to find. `0x0017` sits behind a state this arc has never entered and
+*cannot* enter: nothing in `0x0062/0x0063/0x0066/0x0067/0x0072` touches `obj+0x24`, and
+its writer was searched on four surfaces and is **NOT FOUND** (a `--field 0x48` sweep
+of ChCliApi, an image-wide byte scan for `mov dword [reg+0x48], 6`, all 33 callers of
+the AgApi resolver, and the 477-handler receive map — floors, not censuses).
+
+**The name is retracted rather than replaced.** `HERO_DROP_BUNDLE` fits the mechanism,
+but the mechanism is OBSERVED and the *name* would be inference, so the schema entry is
+deleted and `0x0017` goes back to being a held PARTIAL with its story recorded — the
+repo's own pattern for an opcode whose behaviour is known and whose name is not earned.
+`0x0016`'s entry keeps its high confidence and gains the correction: **the toggle-off is
+`0x0016 [hero, 0]`, its own zero form**, not a second opcode.
+
+Method note, because this is the second correction in two days: the name came from
+structure ("it's the other branch"), and structure is a hypothesis. The refutation cost
+one tracer and would have cost nothing had the name waited for the branch to be read.
+
+### 28.12 Pets share the commander messages — and need one declaration we have never sent (2026-08-19)
+
+The pet-side mirror in both echo wrappers is real and now read end to end. Correction
+to §28.6's note first: the two wrappers call **different** setters — `0x008107A0`
+(aiMode) calls `0x0081F6D0`, `0x008107E0` (lock) calls `0x0081F710` — not one shared
+one.
+
+The container at `charCtx[+0x2C]+0x6AC` is a sorted `rtl` Array of **28-byte records**,
+binary-searched on the first dword: **+0 pet agent id (key), +4 owner agent id, +8
+name, +0xC/+0x10 unread, +0x14 aiMode, +0x18 lockedTarget**. Its events are
+`0x10000049` (add), `0x1000004B` (aiMode), `0x1000004C` (lock) — the pet twins of the
+hero's `0x1000003A`/`0x1000003F`.
+
+**So the answer to "do pets share the commander messages" is yes, keyed identically:**
+s2c `0x0062` and `0x0063` each write the hero container AND the pet container with the
+same `agent_id` field, and `GmPetCommander` shares the hero side's `CHAR_AI_MODE` enum
+(`GmPetCommander:161 petAiMode != CHAR_AI_MODES`). **But a pet needs a declaration we
+have never sent:** s2c **`0x00B2 PET_ADD`**, `[agent_id pet, agent_id owner,
+string16(32) name, u32, u32, u32 aiMode]`, 88 wire bytes. Without a record for that
+agent, both mirror writes hit a NULL find and **silently do nothing** — no log, no
+assert, no return value (`0x0081F6E4`, `0x0081F724`). That silence is why the pet half
+of every run this arc has done was invisible.
+
+Named with it, from the client's own log format strings rather than from asserts —
+there is no `ChCliPet.cpp`, the code sits in the `ChCliApi.cpp` layer: **`0x00B3
+PET_REMOVE`** `[agent_id]` and **`0x00B4 PET_RENAME`** `[agent_id, string16(32)]`.
+`PetAdd`'s string also names its own sixth field: *"PetAdd (agent %d, aiMode %d): Pet
+already added"*. All three are in `schema/overrides.json` at medium confidence —
+static-only, and this repo has never sent or captured one.
+
+Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears **six**
+sibling containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
+hero, `+0x6AC` pet, `+0x6BC`, `+0x6F0`), and the last two are wholly unread —
+`PtMinionRoster.cpp` is in the assert surface and is the obvious candidate for one.
+The method that cracked the pet container in one call is the one to repeat: read the
+log format string on the not-found path.
