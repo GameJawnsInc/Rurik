@@ -1332,81 +1332,65 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
-### Movement — the latch is FIXED; the teleport has a mechanism and one unrun experiment (2026-08-19)
+### Movement — the latch is FIXED; the teleport is EXPLAINED and three fixes are dead (2026-08-19)
 
-Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md), "The warp
-is CLOSED". Two separate bugs, and only one is fixed.
+Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two
+separate bugs; one fixed, one understood and unfixed.
 
 **FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was
-measured from the very value it was preventing from being corrected, so once the
-model was wrong by more than 900 u it could never resynchronise — 36 consecutive
+measured from the value it was preventing from being corrected, so once the model
+was wrong by more than 900 u it could never resynchronise — 36 consecutive
 refusals in one run, 21% of all reports. Scored over the **72** refusals the four
-harness runs actually printed, at 478 u/s (the game's most generous speed):
-**client right 71, guard right 0, undecidable 1.** The budget is now
-`max(900, 580·dt)` — a strict loosening — and the second consecutive refusal is
-adopted regardless. `test_position_trust.py`, floor 20.
+harness runs actually printed, at 478 u/s: **client right 71, guard right 0,
+undecidable 1.** The budget is now `max(900, 580·dt)` — a strict loosening — and
+the second consecutive refusal is adopted regardless. `test_position_trust.py`,
+floor 20.
 
-**NOT FIXED, and it is the bigger one.** The client teleports onto destinations
-*we* grant. Bit-exact (`14cd2b46`/`996ead45` in the click frame, our `0x0029`,
-and the snap alike), 2,844 u at 754 u/s with the character standing still on
-video, 11.594 s after the grant. Four such landings corpus-wide, **all four in
-the 113 granted clicks, none in the 218 refused**. Mechanism read out of the
-client: `0x0029` caches an arrival tick at `agent+0x48` and a syncPoint at
-`+0x9c`; at that tick `0x00600140` copies the syncPoint straight into the
-agent's position via the teleport primitive `0x006020B0`, with no path solve and
-no distance guard — and nothing clears it, because the client's own `0x0047` is
-send-only.
+**THE TELEPORT IS EXPLAINED, MEASURED IN CLIENT MEMORY, AND STILL UNFIXED.**
+`0x0029` is **not a heading hint — it is a scheduled teleport.** It caches an
+arrival tick at `agent+0x48` and a target at `agent+0x9C`; at that exact
+millisecond the client snaps to the target. Seven arrivals observed directly with
+`toolkit/clientscan/movetap.py` (98 u, 680 u, 803 u, 2129 u, 2743 u, 3393 u,
+5238 u), every one landing on `m_targetPoint` and firing within one 20 ms sample
+of schedule. **The snap is how the client completes EVERY granted move** — the
+98 u one is invisible, the 5,238 u one is "the warp". `+0x48` is set once and
+never re-armed; the formula
+`+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms
+against 18,087 actual, with `maxSpeed = 288.0` read out of the agent.
 
-**THE RUN HAPPENED, AND THE FIX IS REFUTED (2026-08-19, `20260819T134811`).**
-One clean trial, a stop echo 9.9 s before the window, and the character
-teleported to the bridge anyway — then walked *back* toward the echoed point,
-which suggests the echo ADDS a destination rather than replacing one. Left off
-and labelled REFUTED. **Note the method failure too:** the client reports no
-position while standing still, so the wire was blind for the 11.74 s containing
-both known warp windows and `warpscan.py` scored it "no teleport". Keep the
-keyboard moving through the wait on any future run.
+**THREE FIXES ARE DEAD, each refuted by the run built for it:**
 
-~~**THE ONE THING THAT NEEDS THE OWNER — a run, and it is cheap.**~~ `--stop-echo`
-is implemented and OFF (`b0cd014`). It answers each move-cancel with a
-zero-distance `0x0029` at the player's own reported position, which is what
-ArenaNet does in **70 of 88** live cases and which should overwrite the armed
-destination.
+1. **Suppress the grant** — retail sends 2,855 player-directed `0x0029`,
+   455 of them cross-plane. Not an invention of ours.
+2. **`--stop-echo`** (echo the client's position back on move-cancel) — the
+   character teleported anyway 9.9 s after an echo fired, *and* the echo added a
+   second destination that dragged the player back.
+3. **`--heading-grant`** (refresh on every keyboard heading) — **caused warps.**
+   Two teleports in six seconds, landing 0.51 u and 15 u from a point granted
+   0.28 s earlier. Re-granting does not bound the teleport: the arrival distance
+   is measured from the agent's *cached* `m_point`, which each grant carries
+   forward, so stacked grants come due almost immediately. Converts one large
+   warp into many small frequent ones.
 
-**THE REPRO, corrected 2026-08-19 after a run that produced ZERO trials.** The
-first version of this said "click a far target across a plane boundary", and
-both extra terms were fitted to the two cases studied hardest — `100340` warped
-onto a **206 u same-plane** grant. What actually matters is two things:
+**THE NEXT RESEARCH PASS — one question, and it is not a retune.** Every fix so
+far granted a **server-extrapolated** point computed from a report already a few
+hundred ms stale. ArenaNet grants the **client's own** endpoint: its reported
+position plus *its own* vec2, plus exactly +0.500 u along it (1,420 of 2,419
+heading-triggered grants). **Ask the live corpus whether ArenaNet's heading
+grants also point BEHIND the player when they are moving backward, and whether
+those ever produce an impossible-speed step.** If they do point behind and never
+warp, our mechanism story is still wrong and the difference lies elsewhere. If
+they never point behind, the fix is to stop extrapolating and echo the client's
+own vector. Either answer is progress; guessing again is not.
 
-1. **The click must be GRANTED**, and `authsrv` refuses a click when our last
-   position report is over **1.0 s** old. The client sends no position while
-   standing still, so a click made from a standstill is *never* granted — the
-   corpus maximum staleness at a granted click is 0.95 s. **Click while you are
-   still moving.**
-2. **Then stop clicking.** A grant is cleared by being consumed at its arrival
-   tick or overwritten by a newer grant, so a second click disarms the first.
-   Keep playing on the keyboard for ~20 s.
+Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted
+point and have no established cause; and the sync (`+0xE8`) vs async (`+0x14C`)
+agent question decides whether the model we watch is the one the player sees.
 
-A grant left un-overwritten for 10 s is a trial, and **3 of 8 such trials in the
-corpus teleported (37.5%)**. Six clean trials give a ~94% chance of at least one
-teleport if nothing is fixed — about three minutes of play.
-
-**Score the run rather than eyeballing it**, because "I didn't get warped" was
-uninformative once: `python toolkit/authsrv/warpscan.py` reads the newest
-capture and prints the trial count first and the teleport count second. Zero
-trials means the run did not test the fix.
-
-- **Prediction, stated first:** no teleport onto the cancelled destination.
-- **Refutation, just as clear:** a warp still landing bit-exactly on an earlier
-  granted point means overwriting the destination is *not* the mechanism and the
-  flag should come out.
-- Either way it is decided by `python toolkit/authsrv/test_position_trust.py`
-  staying green plus one capture; run with `--trace-move --stop-echo`.
-
-**Still open regardless of that run:** 13 grant-triggered displacements that do
-*not* land on a granted point (1 of 13 within 5 u, against a 1-in-80 null). The
-named instrument is a client-side poll of `agent+0x78`/`+0x88`/`+0x9c`/`+0x48`
-across a granted click — `toolkit/harness/keytap.py` already does ASLR-correct
-`ReadProcessMemory` in pure `ctypes`, so no new dependency.
+**Instruments now in the tree:** `toolkit/clientscan/movetap.py` (reads the
+client's own arrival time and reconstructs live position; `--selftest` needs no
+client) and `toolkit/authsrv/warpscan.py` (scores a capture, printing the TRIAL
+count before the verdict — a run with zero armed trials tested nothing).
 
 ### GAME_SMSG naming — 16 opcodes named and merged; 14 PARTIALs remain, priced (2026-08-18)
 
