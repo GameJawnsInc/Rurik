@@ -2567,6 +2567,14 @@ HERO_CHAR = False
 # burrower's self-contained unit file) RENDERED and the commander panel
 # opened and stayed -- the full ladder is studies/pvpui/FINDINGS.md 28.3.
 HERO_APPEARANCE = None
+# The hero AGENT's displayed level -- int property 36 on 0x009F, the same
+# channel the player's own agent gets in the create preamble and the
+# henchman_level probe already moves on a bodiless agent 30. The commander
+# panel's title reads the AGENT's level, and agent 200 with no prop-36 entry
+# renders the no-entry sentinel -- "Hero 1: Lvl 255 Norgu" on the 2026-08-18
+# panel-open click. None = never sent, which is every hero run before
+# 2026-08-19. The cheap arm pvpui 28.3 stages; --hero-body is the heavy one.
+HERO_LEVEL = None
 # 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
 # key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
 # 0x0072's hero id, which is the only way to tell which message supplies the
@@ -7676,6 +7684,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "attacks_back": False,
                                  "skills": [], "skill_ready": []},
                                 "henchman body", conn_id=conn_id)
+                        # The hero AGENT's displayed level, prop 36 on 0x009F.
+                        # Retail's kind-5 idiom rides it BEFORE the create when
+                        # there is one (createburst, 344/366), and the channel
+                        # is a per-agent store that needs no create at all --
+                        # the henchman_level probe moves it on a bodiless
+                        # agent. The panel title's "Lvl 255" is this message's
+                        # ABSENCE rendered, not a missing body (pvpui 28.3).
+                        for _hid, _haid, _hdef in (hero_slots()
+                                                   if HERO_LEVEL is not None
+                                                   else ()):
+                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                                  [agents.PROP_LEVEL, _haid, HERO_LEVEL],
+                                  f"level {HERO_LEVEL} on hero agent {_haid}")
                         # The hero's body, at HERO_AGENT_ID. MANDATORY for the
                         # commander binding rather than optional like the
                         # henchman's: GmHeroCommander:120/121 assert a
@@ -8573,6 +8594,12 @@ def main():
                          "(the default) assert `fileId` File.cpp:367 on the "
                          "hero-button click once --hero-char clears the char "
                          "table. The floor after Array:587.")
+    ap.add_argument("--hero-level", type=int, default=None, metavar="N",
+                    help="Send int property 36 (the agent's displayed level, "
+                         "0x009F) for each hero agent, before any body. The "
+                         "commander panel title's 'Lvl 255' is the no-entry "
+                         "sentinel for this exact property -- the cheap arm "
+                         "pvpui 28.3 stages; --hero-body is the heavy one.")
     ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
                     help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
                          "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
@@ -8850,6 +8877,8 @@ def main():
                     f"two u32s (msg +0x14/+0x18), a third would silently "
                     f"be dropped")
             HERO_APPEARANCE = (_hap[0], _hap[1] if len(_hap) > 1 else 0)
+        global HERO_LEVEL
+        HERO_LEVEL = a.hero_level
         if HERO_BAGS and HERO_INVENTORY in (0, 1):
             raise SystemExit(
                 f"--hero-bags with --hero-inventory {HERO_INVENTORY}: 0 "
@@ -8906,6 +8935,7 @@ def main():
               f"{[HERO_AGENT_ID + i for i in range(len(HERO_IDS))]}; "
               f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
+              f"level={'prop36 %d' % HERO_LEVEL if HERO_LEVEL is not None else 'UNSENT (Lvl 255 sentinel)'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
               f"msg+8 = owner player number (OBSERVED, 21) and msg+0xc = "
               f"agent id (11.1); msg+0x10 is read by the commander scan but "
