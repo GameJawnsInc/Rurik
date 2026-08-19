@@ -111,9 +111,10 @@ authoring half. Commit the id, resolve the string from the archive at run
 time; the record is plain (base=0, bits=0x10), readable with no RC4 key, and
 reads back exactly. Until 2026-08-19 this column held ArenaNet's 0x3D64
 ('Ascalon') as the documented placeholder -- Q0's one value proven to render.
-THE SCREEN HALF IS PENDING: the name renders only for a client reading an
-archive that holds record 200 (today: the reskin-roster run dir), and no run
-has yet shown it in the quest log. The DESCRIPTION and OBJECTIVES below need
+SEEN ON SCREEN 2026-08-19 (probe quest_name_authored, harness
+20260819T085654): the tracker and the 'Quest Added' toast both rendered
+'A First Errand' from this row's words. The name renders only for a client
+reading an archive that holds record 200 -- today, the reskin-roster run dir. The DESCRIPTION and OBJECTIVES below need
 none of that -- they are literals, and the 0x004C field holds 128 code units.
 
 `wire_framing = "template"` wraps the literal as ArenaNet's own 0x004C does:

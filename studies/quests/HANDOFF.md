@@ -71,13 +71,13 @@ the quest fields' caps as unverified hazards, not boundaries that pass.
 - **The dialogue gate is open.** `0x0080`+`0x0081` opens an NPC window; this was recorded
   as a blocker for a long time and is not one. `FINDINGS.md` §2.5.
 - **We can author quest text**, the log *section* (`flags = 32` → Primary Quests), and
-  — since 2026-08-19 — the **name**: Q2b's authoring half wrote 'A First Errand' at
-  string id 100552 (`textwrite.py --set`, reskin-roster archive, journalled) and
-  `content/quests.toml` commits the bare id as `[0x8103, 0x0CC8]`. The name has NOT yet
-  been seen on a screen, and the verify run must use the reskin-roster CLIENT — the
-  default run archive does not hold the record. `textwrite.py` has 188 authored skill
-  names on a retail screen behind it; seven recon lanes missed that tool once — do not
-  re-derive it.
+  — since 2026-08-19, CLOSED both halves — the **name**: 'A First Errand' at string id
+  100552 (`textwrite.py --set`, reskin-roster archive), committed as `[0x8103, 0x0CC8]`
+  in `content/quests.toml`, and RENDERED in the tracker and the 'Quest Added' toast
+  (probe `quest_name_authored`, harness `20260819T085654`). The trap that outlives the
+  rung: only the reskin-roster archive holds record 200, so any run that must show the
+  name uses THAT client. `textwrite.py` has 188 authored skill names plus this behind
+  it; seven recon lanes missed that tool once — do not re-derive it.
 - **The binary claims are re-checked on 38833** (what the owner runs) as of 2026-08-17 —
   bodies unmoved, 12 cited sites byte-identical, `CHALLENGES` still 1465. But the scope is
   *"nothing moved across the 15-day 38797→38833 patch"*, **not** "these addresses are
@@ -95,11 +95,11 @@ the toast is display, no client state moved, and the rest of the completion fami
 live mission completion. **The publisher question is CLOSED (2026-08-19, §9.7): those
 same four opcodes are the panel's other four publishers** — the five-id band and the
 completion family close on each other, with a `0x0096`/`0x0097` frame-id swap that
-`test_framebus.py` now asserts so nobody tidies it away. Q2b's authoring half is done
-(§3 above). The cheap probes that remain, each one loopback run: a ladder over
-`0x0096`'s completion-flag bits and `0x0097`'s u8+string (the one completion message
-carrying TEXT), and the Q2b screen verify (reskin-roster client + `--map 449`, the
-`quest_name` probe pattern).
+`test_framebus.py` now asserts so nobody tidies it away. Q2b is closed, both halves
+(§3 above). The cheap probe that remains, one loopback run: a ladder over `0x0096`'s
+completion-flag bits and `0x0097`'s u8+string (the one completion message carrying
+TEXT) — expect asserts, and read them as answers; both opcodes died on zero payloads
+in the 2026-08-12 sweep, so the arms start from the sweep's own gate readings.
 
 ## 5. Open, unmeasured, and deliberately not guessed
 
