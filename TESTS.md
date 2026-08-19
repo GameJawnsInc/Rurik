@@ -2299,8 +2299,21 @@ Every one of these, in the order they were written:
   and the alignment sweep must PEAK at the offset the 8,573 timestamps gave,
   which was never fitted to maximise the headline. §5 asserts `movetap` now
   calibrates its floor against measured capability and survives Ctrl+C with a
-  verdict. Floor **13**, the bare-machine subset, against a green **19** with
-  both captures; §4 declares `LEDGER.skip` without them. No client. ~2 s),
+  verdict. **§6-§8 are the wire-only half**, which asks the same question of a
+  capture with NO movetap and still refuses to reconstruct anything: a resync
+  landing point is a *reading* of the authoritative agent (measured at 1.0-59.5 u
+  from movetap's, n=13), so the test is three measured positions and a geometry
+  question -- does the landing lie on the segment from where the client said it
+  was when we granted, to the point we granted? §7 replays the **DEFAULT-build**
+  capture `authsrv-20260819T145717-c1.jsonl`, the one carrying the corpus's
+  biggest warps: **18 of 30 landings on-path against 0 of 31** for an unrelated
+  grant, perpendicular offset **43.9 u against 744.8 u**, and a median grant age
+  of **5.84 s** at the jump. §8 is the gate that makes those numbers mean
+  something -- the client emits `0x003D` only while moving, so a capture at
+  2.75 s cadence has 57% of its intervals clearing the 300 u jump bar and its
+  control scores as well as its treatment; `--wire-only` declines a verdict above
+  0.5 s. Floor **17**, the bare-machine subset, against a green **28** with every
+  capture present; §4 and §7 declare `LEDGER.skip` without them. No client. ~3 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

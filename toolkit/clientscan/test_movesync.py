@@ -33,18 +33,21 @@ import checks     # noqa: E402
 import movesync   # noqa: E402
 import vaultpath  # noqa: E402
 
-# MEASURED from a real green run: 19 checks with both captures present, 13
+# MEASURED from a real green run: 28 checks with every capture present, 17
 # without -- and written down as 17 first, from a count in the author's head,
 # which is the same slip test_interact.py records. Sections 1-3 and 5 are
 # pure logic and take no fixture; section 4 replays the pair that established
 # the mechanism and declares LEDGER.skip when this vault lacks it. 13 is the
 # bare-machine subset.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=13)
+                       floor=17)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
 CAPTURE = "authsrv-20260819T171153-c1.jsonl"
+# The DEFAULT build -- recorded before --heading-grant existed, and the
+# capture that carries the corpus's biggest warps (3,405 / 3,166 / 2,583 u).
+DEFAULT_BUILD_CAPTURE = "authsrv-20260819T145717-c1.jsonl"
 
 
 def main():
@@ -180,6 +183,77 @@ def main():
           "and Ctrl+C still prints a summary",
           "the operator stops when the thing they were reproducing has "
           "happened; that used to escape as a traceback with no verdict")
+
+    print("\n6. wire-only: a landing scored against the path it was granted")
+    # The geometry itself, first. A point ON the segment must read perp 0 and a
+    # fraction inside [0,1]; a point off to the side must not.
+    d, f = movesync.on_segment([0.0, 0.0], [100.0, 0.0], [40.0, 0.0])
+    check(abs(d) < 1e-6 and abs(f - 0.4) < 1e-6,
+          "a point on the segment reads perp 0 at its own fraction",
+          f"perp {d}, frac {f}")
+    d, f = movesync.on_segment([0.0, 0.0], [100.0, 0.0], [40.0, 250.0])
+    check(abs(d - 250.0) < 1e-6,
+          "and a point beside it reads its true offset",
+          f"perp {d} -- if this collapsed to 0 the whole test would pass "
+          f"for anything")
+    d, f = movesync.on_segment([0.0, 0.0], [100.0, 0.0], [-60.0, 0.0])
+    check(f < 0,
+          "a landing BEHIND the origin reads a negative fraction",
+          f"frac {f} -- those rows exist in the corpus and must not be "
+          f"counted as on-path")
+
+    print("\n7. replay: the wire-only test on a DEFAULT-build capture")
+    try:
+        cap = os.path.join(vaultpath.vault_path("captures", "gamesrv"),
+                           DEFAULT_BUILD_CAPTURE)
+        have = os.path.exists(cap)
+    except Exception:
+        have = False
+    if not have:
+        LEDGER.skip("wire-only replay",
+                    f"this vault has no {DEFAULT_BUILD_CAPTURE}")
+    else:
+        w = movesync.wire_only(cap)
+        check(w["cadence"] <= movesync.GOOD_CADENCE,
+              f"the capture's report cadence is {w['cadence']:.2f}s, dense "
+              f"enough to judge",
+              f"{w['cadence']:.2f}s -- above {movesync.GOOD_CADENCE}s the "
+              f"jump population is contaminated with ordinary walking")
+        onp = movesync.on_path(w["scored"])
+        con = movesync.on_path(w["control"])
+        check(onp >= 15,
+              f"{onp} of {len(w['scored'])} landings sit on the granted path",
+              f"{onp} -- measured at 18 of 30")
+        check(con <= 2,
+              f"CONTROL: only {con} of {len(w['control'])} sit on an unrelated "
+              f"grant's path",
+              f"{con} -- measured at 0 of 31. If an unrelated grant scored as "
+              f"well, the map geometry would be doing the work")
+        perp = sorted(r["perp"] for r in w["scored"])
+        cperp = sorted(r["perp"] for r in w["control"])
+        check(cperp[len(cperp) // 2] > 5 * perp[len(perp) // 2],
+              "and the control's perpendicular offset is far larger",
+              f"{cperp[len(cperp)//2]:.1f} u vs {perp[len(perp)//2]:.1f} u -- "
+              f"measured at 744.8 against 43.9")
+        ages = sorted(r["age"] for r in w["scored"])
+        check(ages[len(ages) // 2] > 2.0,
+              f"and the grant was already {ages[len(ages)//2]:.1f}s old at the "
+              f"jump",
+              f"{ages[len(ages)//2]:.2f}s -- this is the DEFAULT build, where a "
+              f"grant sits outstanding an order of magnitude longer than "
+              f"retail's median 0.490s re-grant")
+
+    print("\n8. the cadence gate can actually refuse")
+    # A gate that never fires is not a gate. Build a capture-shaped input whose
+    # reports are 3 s apart and confirm the cadence lands above the bar.
+    sparse = [(k * 3.0, [k * 900.0, 0.0]) for k in range(10)]
+    gaps = [sparse[i][0] - sparse[i - 1][0] for i in range(1, len(sparse))]
+    cad = sorted(gaps)[len(gaps) // 2]
+    check(cad > movesync.GOOD_CADENCE,
+          "CONTROL: a 3 s cadence is recognised as too sparse to judge",
+          f"{cad:.2f}s against a bar of {movesync.GOOD_CADENCE}s -- capture "
+          f"20260819T113105 is exactly this at 2.75s, and its control scores "
+          f"as well as its treatment, which is the gate earning itself")
 
     return LEDGER.verdict()
 

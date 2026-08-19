@@ -1465,6 +1465,33 @@ scale-invariant. Fixed because it is wrong and costs one line; locked by
 "why 26.57° and not 45°": the diagonal is `normalize(2·v + perp(v))`, sqrt-free, and
 `atan(1/2)` is what that costs.
 
+**THE GENERALISATION IS CLOSED (2026-08-19).** The resync mechanism was
+established with `--heading-grant` on and its extension to the default build was
+flagged as inference. `movesync.py --wire-only` closed it retrospectively from
+captures already in the vault, using **measured positions only** -- no glide
+reconstruction, because a resync landing point is itself a *reading* of the
+authoritative agent (1.0-59.5 u from movetap's, n=13). On the **default build**
+capture `20260819T145717`: landings sit **43.9 u** from the path they were
+granted against **744.8 u** for an unrelated grant, **18 of 30 on-path against
+0 of 31**, and the corpus's biggest warps (3,166 u / 2,583 u / 2,234 u) land at
+fractions 0.5-1.0 along grants **12-21 seconds old**. Two further captures refuse
+a verdict rather than being averaged in -- one at 2.75 s report cadence where 57%
+of intervals clear the jump bar, one at n=3 -- and `--wire-only` now declines
+above 0.5 s cadence.
+
+**THE CONSTRAINT THAT KILLS THE EASY FIX.** Grant age at the jump is **5.84 s
+median** in the default build against retail's **0.490 s** re-grant, so "just
+re-grant more often" is the obvious read -- and it is wrong. `--heading-grant`
+held grant age to **0.32 s**, faster than retail, and still warped, with mean
+separation 587 u before each resync. **Both terms are required: the granted point
+must be where the player is actually going AND it must be refreshed.** Each of
+our two configurations does exactly one of those.
+
+**LARGEST REMAINING HOLE:** capture `20260811T173940` has **5 jumps and zero
+player grants**. If nothing we sent steered the authoritative copy, this
+mechanism did not move the player. Same population as the 5-of-12 teleports that
+land nowhere near a grant.
+
 **THE NEXT EXPERIMENT, and it is a measurement rather than a fix.** The surviving
 candidate — grant on every heading, ungated, `0x0025`+`0x002B`+`0x0029`, from the
 client's just-reported position — is a **refinement of the REFUTED `--heading-grant`

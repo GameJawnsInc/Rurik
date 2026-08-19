@@ -1935,3 +1935,92 @@ reading: it scores landing points against granted points, which is the wrong
 model for this event and is why 10 of its 12 detections said "NOT near any
 grant". `movesync.py` prints the PAIR COUNT before the verdict, for the same
 reason `warpscan` prints the TRIAL count.
+
+## The resync explains the DEFAULT-build warp too, from measured positions alone (2026-08-19)
+
+The previous section established the mechanism with `--heading-grant` ON and
+flagged the generalisation to the default build as **inference, not measurement**.
+This closes it, retrospectively, over captures already in the vault, with no
+client run.
+
+**NO GLIDE RECONSTRUCTION, deliberately.** The obvious retrospective test is to
+integrate the authoritative agent forward from each grant at 288 u/s and compare.
+That stacks four assumptions -- a speed, a straight line, no collision, an
+arrival rule -- underneath the conclusion. None is needed, because of one
+measured fact from the two-sided run: **the position the client reports
+immediately after a resync sits 1.0-59.5 u from movetap's reading of the sync
+agent** (n=13, mean 22.3). A landing point is therefore a *reading* of the
+authoritative agent. So the test uses three measured quantities -- the landing,
+the client's own reported position when we granted, and the point we granted
+(decoded from the logged wire bytes, filtered to agent 1 because NPC grants share
+the opcode) -- and asks pure geometry: does the landing lie on the segment
+between the other two?
+
+`toolkit/clientscan/movesync.py --wire-only`. Two gates run before any verdict:
+
+| capture | build | cadence | jumps | perp p50 | CONTROL p50 | on-path | control on-path | grant age p50 |
+|---|---|---|---|---|---|---|---|---|
+| `20260819T145717` | **default** | 0.25 s | 31 | **43.9 u** | **744.8 u** | **18/30** | **0/31** | **5.84 s** |
+| `20260819T171153` | heading-grant | 0.29 s | 32 | 2.8 u | 119.1 u | 24/32 | 9/32 | 0.32 s |
+| `20260819T113105` | default | 2.75 s | 24 | 80.3 u | 108.2 u | 9/20 | 8/24 | 1.20 s |
+| `20260819T145421` | default | 0.25 s | 6 | 8.2 u | 21.5 u | 2/3 | 3/6 | 10.09 s |
+| `20260811T173940` | default | 1.28 s | 5 | — | — | **no player grants at all** | | |
+
+**The verdict rests on the top two rows and only those.** The other three cannot
+carry it and say so rather than being quietly averaged in:
+
+- `113105`'s report cadence is **2.75 s**. The client emits `0x003D` only while
+  moving, so at 288 u/s it travels ~790 u between reports and **57% of its
+  intervals clear the 300 u jump bar** -- the jump population is contaminated
+  with ordinary walking. Its control duly scores as well as its treatment
+  (108.2 vs 80.3, 8/24 vs 9/20), which is the gate earning itself rather than a
+  refutation. `--wire-only` now refuses a verdict above 0.5 s cadence.
+- `145421` has n=3.
+- `173940` has **5 jumps and zero player grants**. This model says nothing about
+  those and they remain unexplained; see below.
+
+**On the two captures whose data can carry the test, it holds.** The default
+build's discrimination is the stronger of the two: **43.9 u against 744.8 u, and
+18 of 30 landings on-path against 0 of 31 for an unrelated grant.** The
+corpus's biggest warps are in it and they land where the model says:
+
+| t | step | perp | frac | grant age |
+|---|---|---|---|---|
+| 224.770 | **3,166 u** | 19.0 u | 0.980 | **18.77 s** |
+| 164.527 | 2,583 u | 0.0 u | 1.000 | 12.41 s |
+| 293.523 | 2,234 u | 8.4 u | 0.518 | 21.54 s |
+
+A 3,166 u jump landing 19 u off a line drawn to a point granted **18.77 seconds
+earlier** is the flagship warp profile, and it is on the granted path.
+
+**THE NUMBER THAT MATTERS FOR THE FIX is the grant age at the jump.** Default
+build **5.84 s median, 56.17 s max**. `--heading-grant` **0.32 s**. Retail
+re-grants at a median **0.490 s**. So the default build leaves a grant
+outstanding an order of magnitude longer than retail ever does, and the
+authoritative copy glides along it the whole time.
+
+**But cadence alone is NOT the fix, and this is the constraint that kills the
+easy answer.** `--heading-grant` held grant age to 0.32 s -- *faster* than
+retail -- and still warped, with mean separation 587 u before each resync. So a
+grant that is fresh but points somewhere the player is not going diverges just as
+surely as a stale one. **Both terms are required: the granted point must be where
+the player is actually going, AND it must be refreshed.** Retail does both; each
+of our two configurations does exactly one.
+
+**Still unexplained: `173940`'s 5 jumps with no player grant preceding any of
+them.** If nothing we sent steered the authoritative copy, this mechanism cannot
+be what moved the player. That capture is sparse (28 reports, 1.28 s cadence) so
+some of the 5 may be ordinary walking mis-scored, but the count is not zero and
+it is not explained. It is the same open population as the "5 of 12 corpus
+teleports that land nowhere near a granted point" recorded earlier in this
+document, and it is now the largest remaining hole in the mechanism.
+
+**A correction to my own method, recorded because the failure was instructive.**
+The first version of this test also predicted that the position just *before* a
+jump would sit further from the segment than the landing. It came back **0.0 u
+for almost every row**, which read as a refutation and was a tautology: where
+grants outnumber reports, the "client position at grant time" is often the *same
+record* as the pre-jump position, so it lies on its own segment by construction.
+Those rows are now counted and reported (`origin==pre-jump record`: 28 of 32 in
+`171153`, 11 of 30 in `145717`) and no claim rests on them. The surviving half of
+the test -- the landing against the segment -- never depended on it.

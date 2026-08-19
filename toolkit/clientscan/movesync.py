@@ -186,6 +186,155 @@ def newest(pattern):
     return hits[-1] if hits else None
 
 
+# --- wire-only: the same question asked of a capture with no movetap ---------
+#
+# WHY THIS IS NOT A RECONSTRUCTION, which is the whole point of it. The obvious
+# way to test the resync model retrospectively is to integrate the authoritative
+# agent's glide from each grant at 288 u/s and compare. That assumes a speed, a
+# straight line, no collision and an arrival rule -- four assumptions stacked
+# under a conclusion.
+#
+# None of that is needed, because of one MEASURED fact: in run 20260819T171153,
+# scored against movetap's reading of the SYNC agent, the position the client
+# reports immediately AFTER a resync sits 1.0-59.5 u from that agent (n=13,
+# mean 22.3). **A landing point is therefore a reading of the authoritative
+# agent**, not a model of one. So the test is built from three measured things
+# -- the landing, the client's own position when we granted, and the point we
+# granted -- and asks a pure geometry question: does the landing lie on the
+# segment between the other two?
+#
+# TWO THINGS THE CAPTURE MUST CARRY BEFORE ANY OF IT MEANS ANYTHING, and both
+# are checked rather than assumed:
+#   - REPORT CADENCE. The client emits 0x003D only while moving. A capture whose
+#     median gap is 2.75 s is one where 288 u/s carries the player 790 u between
+#     reports, so every ordinary interval clears a 300 u "jump" bar and the jump
+#     population is contaminated with plain walking. Capture 20260819T113105 is
+#     exactly this -- 57% of its intervals score as jumps -- and its control
+#     scores as well as its treatment, correctly refusing to support anything.
+#   - ORIGIN != PRE-JUMP RECORD. Where grants outnumber reports, the "client
+#     position at grant time" is often the SAME RECORD as the pre-jump position,
+#     which puts it on its own segment by construction. Those rows are counted
+#     and reported; the first version of this analysis read their tautological
+#     0.0 as a refutation.
+PLAYER_AGENT = 1
+OP_MOVE_TO_POINT = 41
+GOOD_CADENCE = 0.5
+
+
+def load_grants(path, agent=PLAYER_AGENT):
+    """Every 0x0029 we sent to one agent, decoded from the logged wire bytes.
+
+    From `plain` rather than from the label: NPC grants share the opcode and
+    only the agent id in the payload tells them apart. A label match would have
+    pooled the player's grants with every creature's.
+    """
+    import struct
+    out = []
+    for line in open(path, encoding="utf-8", errors="replace"):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("kind") != "sent" or r.get("opcode") != OP_MOVE_TO_POINT:
+            continue
+        raw = r.get("plain")
+        if not raw:
+            continue
+        b = bytes.fromhex(raw)
+        if len(b) < 14:
+            continue
+        aid, = struct.unpack_from("<I", b, 2)
+        if aid != agent:
+            continue
+        x, y = struct.unpack_from("<ff", b, 6)
+        out.append((r["t"], [x, y]))
+    return out
+
+
+def on_segment(o, g, p):
+    """(perpendicular offset, along-track fraction) of p against o->g."""
+    dx, dy = g[0] - o[0], g[1] - o[1]
+    L2 = dx * dx + dy * dy
+    if L2 <= 1e-9:
+        return math.hypot(p[0] - o[0], p[1] - o[1]), 0.0
+    f = ((p[0] - o[0]) * dx + (p[1] - o[1]) * dy) / L2
+    return (math.hypot(p[0] - (o[0] + f * dx), p[1] - (o[1] + f * dy)), f)
+
+
+def wire_only(path):
+    """Score every resync landing in one capture against the path it was granted."""
+    reps, _walls = load_reports(path)
+    grants = load_grants(path)
+    gaps = [reps[i][0] - reps[i - 1][0] for i in range(1, len(reps))]
+    cadence = sorted(gaps)[len(gaps) // 2] if gaps else float("inf")
+    jumps, scored, nogrant, degenerate = [], [], 0, 0
+    for i in range(1, len(reps)):
+        (t0, p0), (t1, p1) = reps[i - 1], reps[i]
+        if math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < JUMP_UNITS:
+            continue
+        jumps.append((t0, p0, t1, p1))
+        prior = [g for g in grants if g[0] <= t1]
+        earlier = [(t, p) for t, p in reps if t <= prior[-1][0]] if prior else []
+        if not prior or not earlier:
+            nogrant += 1
+            continue
+        gt, G = prior[-1]
+        ot, O = earlier[-1]
+        d, f = on_segment(O, G, p1)
+        if ot == t0:
+            degenerate += 1
+        scored.append({"t": t1, "perp": d, "frac": f, "age": t1 - gt,
+                       "step": math.hypot(p1[0] - p0[0], p1[1] - p0[1]),
+                       "degenerate": ot == t0})
+    # THE CONTROL: the same landings against the session's LAST grant, which has
+    # nothing to do with any of them.
+    control = []
+    if grants:
+        Gc = grants[-1][1]
+        for t0, p0, t1, p1 in jumps:
+            d, f = on_segment(p0, Gc, p1)
+            control.append({"perp": d, "frac": f})
+    return {"reports": len(reps), "grants": len(grants), "jumps": len(jumps),
+            "cadence": cadence,
+            "jump_fraction": len(jumps) / max(1, len(reps) - 1),
+            "scored": scored, "control": control,
+            "nogrant": nogrant, "degenerate": degenerate}
+
+
+def on_path(rows):
+    return sum(1 for r in rows if r["perp"] < 100 and 0.0 <= r["frac"] <= 1.05)
+
+
+def print_wire_only(path, w):
+    print(f"\n=== {os.path.basename(path)}")
+    print(f"    {w['reports']} reports, {w['grants']} player grants, "
+          f"{w['jumps']} jumps >{JUMP_UNITS:.0f} u")
+    print(f"    report cadence {w['cadence']:.2f}s   "
+          f"{100 * w['jump_fraction']:.0f}% of intervals score as jumps")
+    if w["cadence"] > GOOD_CADENCE:
+        print(f"    REFUSING a verdict: at this cadence the client is silent long "
+              f"enough that ordinary walking clears the {JUMP_UNITS:.0f} u bar, so "
+              f"the jump population is contaminated. Nothing below decides "
+              f"anything.")
+    if not w["scored"]:
+        print(f"    no scorable jumps ({w['nogrant']} had no player grant before "
+              f"them -- this model says nothing about those)")
+        return
+    perp = sorted(r["perp"] for r in w["scored"])
+    ages = sorted(r["age"] for r in w["scored"])
+    print(f"    LANDING vs the granted path: perp p50 {perp[len(perp)//2]:.1f} u   "
+          f"on-path {on_path(w['scored'])}/{len(w['scored'])}")
+    if w["control"]:
+        c = sorted(r["perp"] for r in w["control"])
+        print(f"    CONTROL (an unrelated grant):  perp p50 {c[len(c)//2]:.1f} u   "
+              f"on-path {on_path(w['control'])}/{len(w['control'])}")
+    print(f"    grant age at the jump: p50 {ages[len(ages)//2]:.2f}s  "
+          f"max {ages[-1]:.2f}s")
+    print(f"    {w['nogrant']} jump(s) with no grant before them; "
+          f"{w['degenerate']} row(s) where the grant-time report IS the pre-jump "
+          f"record")
+
+
 def selftest():
     """Everything checkable with no captures. Exits non-zero on any gap."""
     bad = 0
@@ -273,9 +422,22 @@ def main():
                          "+0x78 and is the check that the result is not an "
                          "artifact of the reconstruction.")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--wire-only", action="store_true",
+                    help="score resync landings against the path they were "
+                         "granted, from the capture alone -- no movetap, and "
+                         "nothing integrated. Use it on captures that predate "
+                         "the two-sided instrument.")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.wire_only:
+        cap = a.capture or newest(os.path.join(
+            vaultpath.vault_path("captures", "gamesrv"), "*.jsonl"))
+        if not cap:
+            print("no capture")
+            return 2
+        print_wire_only(cap, wire_only(cap))
+        return 0
 
     mt = a.movetap or newest(os.path.join(
         vaultpath.vault_path("captures", "movetap"), "movetap-*.jsonl"))
