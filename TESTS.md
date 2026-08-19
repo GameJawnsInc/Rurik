@@ -2073,10 +2073,15 @@ Every one of these, in the order they were written:
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
   `toolkit/authsrv/test_purchase.py` (answering `GAME_CMSG 0x004D` -- the four
-  messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents,
-  because retail's reply puts `0x013E ITEM_MOVED` **before** the `0x0161` that
-  declares the item it moves, in one frame; that reads like a transcription slip
-  and is not one, so a tidy-up reorder has to go red here. Checked against two
+  messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents:
+  **pay, mint, place, confirm** -- `0x014F` debit, `0x0161` declare, `0x013E`
+  move, `0x00CC` done. The first arm sent that nearly backwards and the client
+  died on `Assertion: item` `ItCliApi.cpp(1883)`, which is `0x013E`'s own argument
+  check failing on its first lookup. The bad order was MANUFACTURED by the tool
+  that read it -- all four share one segment timestamp, a timeline script sorted
+  whole tuples, and the tie fell through to the OPCODE NUMBER, so ascending
+  opcodes reached a study document dressed as a finding. Within one frame, byte
+  offset is the only ordering evidence there is. Checked against two
   real requests written in as literals -- ours `[1, 10, [], b'', 0, [40],
   b'']` and retail's `[1, 40, [], b'', 0, [2474], b'']` -- so a change to
   the handler cannot quietly redefine what a request is. Buying MINTS a new item

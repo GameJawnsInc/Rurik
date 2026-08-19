@@ -2,12 +2,21 @@ r"""Answering GAME_CMSG 0x004D: the four messages, in ArenaNet's order.
 
     python toolkit/authsrv/test_purchase.py
 
-WHY THE ORDER IS ASSERTED AND NOT JUST THE CONTENTS. Retail's reply to the one
-purchase in the corpus puts `0x013E ITEM_MOVED` **before** the `0x0161` that
-declares the item it moves, in the same frame. That reads like a transcription
-slip and is not one -- it is what the bytes say -- so this file pins the whole
-sequence rather than the set. A reordering "for tidiness" would be the kind of
-change that looks harmless in review and is not verbatim.
+WHY THE ORDER IS ASSERTED AND NOT JUST THE CONTENTS. Retail's reply is four
+messages in one frame and the client cares which comes first: **pay, mint,
+place, confirm** -- `0x014F` debit, `0x0161` declare, `0x013E` move, `0x00CC`
+done. The first version of this arm sent that nearly backwards and the client
+died on `Assertion: item`, `ItCliApi.cpp(1883)`, which is `0x013E`'s own
+argument check failing on its first lookup because the item did not exist yet.
+
+AND THE BAD ORDER WAS MANUFACTURED BY THE TOOL THAT READ IT, which is the part
+worth keeping: all four messages share one segment timestamp, and the timeline
+script sorted whole tuples, so the tie fell through to comparing the OPCODE
+NUMBER -- 0x00CC < 0x013E < 0x014F < 0x0161. Ascending opcodes wearing the
+costume of a finding, and it survived into a study document and a commit
+message before the client refuted it. **Within a single frame, byte offset is
+the only ordering evidence there is.** The literals below are offsets for that
+reason.
 
 WHAT IT IS CHECKED AGAINST. Two real requests, written into this file as
 literals so a change to the handler cannot quietly redefine what a request is:
@@ -77,13 +86,15 @@ def main():
         stock = dict(STOCK_FOR(req))
         sent, state, rec = run(req, declared=stock)
         ops = [op for op, _v in sent]
-        LEDGER.ok(ops == [authsrv.GAME_SMSG_TRANSACTION_DONE,
+        LEDGER.ok(ops == [authsrv.GAME_SMSG_GOLD_DEBIT,
+                          authsrv.GAME_SMSG_CREATE_NAMED_ITEM,
                           authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-                          authsrv.GAME_SMSG_GOLD_DEBIT,
-                          authsrv.GAME_SMSG_CREATE_NAMED_ITEM],
-                  f"{who}: four messages, in retail's own order",
-                  f"{[hex(o) for o in ops]} -- 0x013E before the 0x0161 that "
-                  f"declares what it moves, which is what the wire says")
+                          authsrv.GAME_SMSG_TRANSACTION_DONE],
+                  f"{who}: four messages -- pay, mint, place, confirm",
+                  f"{[hex(o) for o in ops]}, retail's order at offsets 36392 / "
+                  f"36400 / 36452 / 36463. DECLARE BEFORE MOVE: the reverse "
+                  f"killed the client on ItCliApi.cpp(1883), 0x013E's own "
+                  f"first argument check")
         by = dict(sent)
         LEDGER.ok(by[authsrv.GAME_SMSG_TRANSACTION_DONE] == [req[1]],
                   f"{who}: 0x00CC echoes the transaction kind",

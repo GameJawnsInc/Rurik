@@ -4025,17 +4025,27 @@ def skill_timing(skill_id):
 # THE REPLY IS FOUR MESSAGES, and their ORDER is retail's rather than ours.
 # Read off the single purchase in the live corpus (20260819T132414, conn 55414,
 # +0.04 s after the request, extractor toolkit/authsrv/cmsgstream.py, build
-# 38833):
+# 38833), BY BYTE OFFSET in the decrypted stream:
 #
-#   0x00CC [1]                    transaction done, echoing the kind
-#   0x013E [183, 4130, 570, 1]    the NEW item into bag 570 -- the BACKPACK
-#   0x014F [183, 40]              the DEBIT: inventory key, quoted price
-#   0x0161 [4130, ...]            and only NOW is the item declared
+#   36392  0x014F [183, 40]              the DEBIT, before the item exists
+#   36400  0x0161 [4130, ...]            DECLARE the minted copy
+#   36452  0x013E [183, 4130, 570, 1]    move it into bag 570 -- the BACKPACK
+#   36463  0x00CC [1]                    transaction done, LAST, echoing the kind
 #
-# The move precedes the declaration and that is not a transcription slip -- it
-# is what the bytes say, in one frame, so it is what we send. Note also that
-# the bought item gets a NEW id (2474 -> 4130): merchant stock is a catalogue,
-# and buying MINTS a copy rather than handing over the listed row.
+# Pay, mint, place, confirm. Note that the bought item gets a NEW id
+# (2474 -> 4130): merchant stock is a catalogue, and buying MINTS a copy rather
+# than handing over the listed row.
+#
+# THE FIRST VERSION OF THIS ARM SENT THAT BACKWARDS AND KILLED THE CLIENT
+# (`Assertion: item`, ItCliApi.cpp(1883) -- site 0x00845FB3, whose sibling
+# asserts at :1886 `bag` and :1889 `inventory` identify the routine as 0x013E's
+# own argument check, failing on its FIRST lookup because the item was not
+# declared yet). The bad order was not misread from the bytes, it was
+# MANUFACTURED by the tool that read them: a timeline script sorted whole
+# tuples, and with all four messages sharing one segment timestamp the sort
+# fell through to comparing the OPCODE NUMBER -- 0x00CC < 0x013E < 0x014F <
+# 0x0161. Ascending opcodes wearing the costume of a finding. Offsets are the
+# only ordering evidence a single frame can give; ask for them explicitly.
 #
 # 0x014F IS OBSERVED ONCE. One purchase was ever made in front of a capture, so
 # n = 1 -- a strong single observation (right moment, right amount, right
@@ -4107,15 +4117,16 @@ def handle_item_purchase(values, send, state, conn_id, rec):
     if len(minted) > 10:
         minted[10] = quantity
 
-    send(GAME_SMSG_TRANSACTION_DONE, [kind],
-         f"TRANSACTION_DONE(kind {kind})")
-    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
-         f"ITEM_MOVED_TO_LOCATION(bought {new_id} -> backpack slot {slot})")
+    # Pay, mint, place, confirm -- retail's own order, by byte offset.
     send(GAME_SMSG_GOLD_DEBIT, [PLAYER_INVENTORY_KEY, price],
          f"GOLD_DEBIT({price})")
     send(GAME_SMSG_CREATE_NAMED_ITEM, minted,
          f"CREATE_NAMED_ITEM(bought copy {new_id} of stock {stock_id})")
+    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
+         f"ITEM_MOVED_TO_LOCATION(bought {new_id} -> backpack slot {slot})")
+    send(GAME_SMSG_TRANSACTION_DONE, [kind],
+         f"TRANSACTION_DONE(kind {kind})")
     rec.event("purchase", stock_id=stock_id, new_id=new_id, price=price,
               quantity=quantity, bag=BACKPACK_BAG_ID, slot=slot)
     print(f"[c{conn_id}] BUY: stock {stock_id} -> item {new_id} x{quantity} "
