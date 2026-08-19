@@ -7351,10 +7351,47 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             state["dest"], state["clipped"] = model_dest, blocked
                             if turned or state.get("walking") is not True:
                                 state["walking"] = True
+                                # UNIT LENGTH. This field is a DIRECTION and we
+                                # were putting a DISPLACEMENT in it: `heading` is
+                                # the client's own 0x003D vec2, whose magnitude is
+                                # 765.017..768.000, and we passed it through raw.
+                                #
+                                # MEASURED on both sides of the wire, 2026-08-19.
+                                # Retail: |v| in [0.996546, 1.000000] in 3,789 of
+                                # 3,789 live 0x0025, 0 above 100 u. Ours: 4,704 of
+                                # 4,760 at 765-768. Zero overlap between the two
+                                # populations. The `:.0f` in the log line below is
+                                # the tell -- it was written expecting a big
+                                # number, so nobody ever saw a "1,0" go past.
+                                #
+                                # IT WAS INERT, AND THE REASON IS NOT THE OBVIOUS
+                                # ONE. "The client normalizes it" is FALSE for the
+                                # dominant path: setter 0x00602660's case 1 (0 deg,
+                                # 0x0060267D) is a bare dword copy and case 4
+                                # (180 deg) is Vec2Negate into that same tail, so
+                                # for 3,918 of our 4,760 sends the client stored
+                                # the 765-long vector RAW at agent+0xbc/+0xc0.
+                                # What makes it harmless is the CONSUMER: the only
+                                # float read of +0xBC in AgAgent is 0x005FFA1D, a
+                                # lazy angle cache that loads +0xc0/+0xbc on a
+                                # +inf-sentinel miss and calls 0x005BCA00 -- whose
+                                # CRT descriptor at 0x00A3E770 reads 'atan2'.
+                                # atan2 is scale-invariant, so the stored angle is
+                                # identical either way. Fixed because it is wrong
+                                # and costs one line, NOT as a warp fix; the +0x48
+                                # writer census already rules this path out.
+                                mag = math.hypot(*heading)
+                                unit = ([heading[0] / mag, heading[1] / mag]
+                                        if mag > 1e-6 else [0.0, 0.0])
+                                # The trailing byte is ALREADY RIGHT and must not
+                                # be "fixed" to an angle: retail echoes the
+                                # client's own movementType, 2,215 of 2,254
+                                # (98.27%), the 39 disagreements all adjacent enum
+                                # values at transition instants.
                                 send(GAME_SMSG_AGENT_MOVE_DIRECTION,
-                                     [PLAYER_AGENT_ID, list(heading), moving],
+                                     [PLAYER_AGENT_ID, unit, moving],
                                      f"AGENT_MOVE_DIRECTION"
-                                     f"({heading[0]:.0f},{heading[1]:.0f} "
+                                     f"({unit[0]:.3f},{unit[1]:.3f} "
                                      f"type {moving})")
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is

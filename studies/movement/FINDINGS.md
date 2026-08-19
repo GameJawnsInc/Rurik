@@ -1516,3 +1516,277 @@ server-computed point, which is a different message from the one tested here.
 And the `0x0027` lever, which re-arms `+0x48` from the agent's *current*
 position, remains the only measured way to re-aim a stale grant without naming a
 new point.
+
+## The live corpus answers §8's question, and §8 asked the wrong axis (2026-08-19)
+
+Method: 9 live captures, all `origin = live` from `wire.jsonl`'s own record and
+corroborated by a manifest naming an exe under `vault/run-live/`, framing residual
+**0** on every connection in both directions; 44 (capture, connection) series with a
+controlled agent resolved from `0x0022`/`0x0037`/`0x003A`/`0x00DA`/`0x00B7` plus
+`0x0195`-vs-`0x0020` spawn geometry — an identification that touches neither `0x0029`
+nor `0x0025`, so nothing about the grant relation is circular on identity. Four
+measurements, each attacked by an independent skeptic who re-implemented the
+arithmetic without reading the measurer's scripts; contested quantities re-measured a
+third time. Numbers marked **ADJUDICATED** are the third reading and are the ones to
+carry.
+
+### 1. The answer, and why the question's two branches both miss
+
+**§8 asked: do retail's heading grants point BEHIND a backward-moving player, and do
+those ever produce an impossible-speed step? If they point behind and never warp our
+mechanism story is wrong; if they never point behind, the fix is to echo the client's
+own vector.**
+
+**Neither branch fires, because both assume the DIRECTION of the granted point is what
+separates us from retail. It is not.**
+
+**Against TRAVEL — OBSERVED, they never point behind.** Backward-family headings
+(c2s `0x003D`, `movementType` ∈ {4,5,6}) are **64 of 2,675** (2.4%); **64 of 64** drew
+a player-directed `0x0029` within 1.0 s, median latency 0.034 s.
+
+| family | n | grants >90° from travel | median angle | max |
+|---|---|---|---|---|
+| backward {4,5,6} | 44 | **0** | 4.16° | 70.0° |
+| forward {1,2,3} | 2,333 | 51 (2.2%) | 2.06° | 180.0° |
+| side {7,8} | 41 | 1 (2.4%) | 8.08° | 176.3° |
+
+Reproduced three times to the same rows. A 20-cell filter sweep (`maxdt` 1/2/3/5/∞ ×
+`mintravel` 0/4/16/64) returns behind = 0 in every cell, n 13–57; unfiltered it is
+0 of 57, and the 16 excluded rows were opened and none is behind.
+
+**But quote the null at cluster level.** The 44 rows sit on **12 connection clusters
+in 6 captures** and **31 of 44 come from one capture** (`20260817T231139`). Rows inside
+one held-S segment are not independent draws. 0 of 12 clusters gives a 95% upper bound
+of **22.1%**, against the forward family's own 2.2% background. **This shows backward
+is not different from forward — not that backward is clean.**
+
+**Against FACING — 25 of 29 (86.2%) point behind, and the number says nothing about
+ArenaNet.** The skeptic ran the substitution control: delete the server's messages
+entirely and score the *client's own* `vec2` against the same reconstructed facing.
+Result **25 of 29, median 135.0°** — byte-identical. The 86.2% restates
+"backpedalling means moving opposite your facing", which is how the facing
+reconstruction was defined. It is a property of the client's message, not of the
+server's reply.
+
+**Impossible steps — OBSERVED, zero.** Over the controlled agent's own self-reports:
+**0 of 2,565** intervals at `dt ≥ 0.05 s` exceed 400 u/s (0 exceed 390); **0 of 2,524**
+exceed 520 u inside 2.0 s. Largest step inside 2 s **517.87 u / 1.352 s = 383.1 u/s**;
+largest implied speed **388.80 u/s**, which is 0.75% over the fastest speed the wire
+itself ever declares for a player (`0x0027` = 385.92 u/s).
+
+**And the null's recall is 0 of 1.** The corpus's one genuine retail teleport —
+`20260817T183756` conn 52294, a 5,376 u `0x002C` hard-set at t=363.324 — is invisible
+to this detector, because the client's last `0x003D` on that connection is t=337.242
+and none follows. The instrument goes blind exactly where the phenomenon lives, the
+same defect as the `--stop-echo` run's null. State exposure in **grants**: **2,830 of
+3,098 player-directed `0x0029` (91.3%) land inside a watched interval**; 268 (8.7%) do
+not, over 1,503.7 s of a 5,297.8 s corpus.
+
+**So: never behind travel, usually behind facing, never warping — and the fix follows
+from none of it.**
+
+### 2. The framing correction that matters more than the answer
+
+**`HEADING_GRANT = False` (`authsrv.py:1026`), set only by an opt-in flag at 9564. In
+the default build the heading arm sends NO `0x0029` at all** — only `0x0025`; the
+`clip_to_walkable` destination is `state["dest"]`, the server's internal model, and
+never reaches the wire. **The teleport the owner watched in the default configuration
+therefore arrives through the CLICK arm** (`authsrv.py:7617`, the `clear line` log line
+present in both confirmed warp runs), where `dest = values[1]` is the client's own
+clicked point verbatim — **which is exactly what retail sends too** (18 of 41 click
+grants land on the clicked point to 0.0000 u, 0 at +0.5).
+
+**The difference on that path is not the point. It is that retail's click grant is
+superseded within a median 0.490 s by the heading grants that follow, and ours is never
+superseded by anything.** That is the strongest available reading of "ours matures for
+eighteen seconds". It is a hypothesis under test, not a result — and it is close enough
+to what `--heading-grant` tried that the difference must be stated precisely (§4).
+
+**Three of the four dead fixes were aimed at a path that, by default, sends nothing.**
+
+### 3. Our `0x0025` carries a vector 765× too long. It is real, it is fixed, and it is
+inert.
+
+Found independently by the orchestrator from our own captures, and confirmed by the
+corpus pass from the other side.
+
+| | n | \|v\| p50 | unit-length (<1.01) |
+|---|---|---|---|
+| Retail, 9 live captures | 3,789 | 0.999593 | **3,789 / 3,789** |
+| Ours, 119 vault captures | 4,760 | 766.942 | **56 / 4,760** |
+
+Zero overlap; retail has 0 samples above 100 u, we have 4,704. Decoded from the wire
+bytes on both sides. Cause: `authsrv.py` answered a heading with `list(heading)` —
+`values[3]` of the client's `0x003D`, a **displacement** of magnitude 765.017–768.000 —
+in a field the client reads as a **direction**. The log line beside it formats `:.0f`,
+written expecting a large number, so no reader ever saw a `1,0` go past.
+
+**Why it is inert, and the first reason given was WRONG.** "The client normalizes it"
+is false for the dominant path. Setter `0x00602660`'s **case 1 (0°, `0x0060267D`) is a
+bare dword copy** and **case 4 (180°) is `Vec2Negate` into that same tail**, so for
+**3,918 of 4,760 sends (82.3%) the client stored our 765-long vector RAW** at
+`agent+0xbc/+0xc0`. What makes it harmless is the consumer: `--field 0xBC --in AgAgent`
+finds 7 accesses, and the only float read is `0x005FFA1D`, a **lazy angle cache** —
+compare `+0xb8` against the `+inf` sentinel at `0x00948654`, and on a miss load
+`+0xc0`/`+0xbc` and call `0x005BCA00`, whose CRT descriptor at `0x00A3E770` reads
+`\x05atan2`. **atan2 is scale-invariant**, so the stored angle is identical either way.
+It is also not the warp on independent grounds: the `+0x48` writer census finds five
+stores and none is on this path.
+
+**Fixed anyway** — one line, matching retail exactly, locked by `test_position_trust.py`
+§8 with a control that hands the matcher the defect on purpose. Shipped as a
+correctness fix, **not** as a warp fix.
+
+**Two side results.** 56 of our sends carried `facing = 0`; the client's table is
+`dec eax; cmp eax,7; ja default`, so 0 underflows to the default and does nothing —
+retail never sends 0. And this closes an open question in `studies/smsg`, which flagged
+"cases 2 and 3 are ±atan(1/2) = 26.57°, not the 45° a forward-diagonal would suggest"
+as an oddity it could not explain: the construction is `normalize(2·v + perp(v))`, a
+sqrt-free diagonal, two parts along the heading to one across. `tan a = 1/2` is what
+that costs. It was never meant to be 45°.
+
+### 4. What a refuter overturned
+
+**OVERTURNED — the "one displacement quantum, never extended" clamp.** Proposed as an
+invariant (`k = |target − report| / |vec2| ≤ 1.001` in 2,689 of 2,689). **REFUTED.**
+**ADJUDICATED** under the stated pairing rule (most recent c2s movement message is a
+`0x003D` within 1.0 s; n = 2,938 of 3,170 player grants):
+
+| class | n | over one quantum | max \|dest − report\| | max k |
+|---|---|---|---|---|
+| on the client's ray (\|cross\| ≤ 1 u) | 2,599 | 44 (1.69%) | 1,036.7 u | 1.35 |
+| off the client's ray | 339 | 20 (5.9%) | **1,420.3 u** | 1.85 |
+| all heading-triggered | 2,938 | **64 (2.18%)** | 1,420.3 u | 1.851 |
+
+Retail exceeds one quantum *on the client's own ray*, so **a hard 768 u cap is tighter
+than retail.** Two agents contradicted each other at k = 4.196 / 3,210.2 u; that row
+(`20260807T143055` conn 62994, t=146.471) has a `0x003E` click between the heading and
+the grant and is a **click** grant. Both were reading real rows from different
+populations; the direction of the finding survives every rule.
+
+**CORROBORATED, and killed as a fix — the "+0.500 u" endpoint.** Retail's heading grant
+is `dest = reported_pos + vec2 + 0.500·unit(vec2)`. 1,642 of 2,938 (55.9%) sit within
+1 u of the client's ray with along-track residual 0.500 ± 0.01; max deviation 0.0025 u,
+tracking the float32 ULP by binade. **0 of 2,938 land on the bare endpoint.** The
+constant is **additive, not multiplicative**, at 70σ. Present in 8 of 8 captures, every
+per-capture median within 4e−5 of 0.500000. **Cite the constant, not the 55.9% — the
+rate varies 32.8%–88.3% by session.** It also corroborates the agent identification
+rather than depending on it: of 1,642 hits found with *no agent filter at all*, 1,642
+land on an independently-identified controlled agent and 0 elsewhere.
+
+**WEAKENED — `0x002C` is not reserved for scene transitions.** 12 in the corpus. 4
+address the controlled agent on 3 occasions, all scene events. **8 address other agents,
+and 6 of those are mid-session teleports of 1,262–4,633 u with no `0x0021` removals
+within ±1 s, on a hard 30.0 s cadence** — a recall or respawn timer, not a transition.
+"ArenaNet does not write positions at a moving player" survives **only for the
+controlled agent**.
+
+**CONTESTED — `0x002B`'s float as a direction-family speed.** Forward 1.0000 in 627/840
+and backward 0.6600 in 47/57 by one attribution rule; backward carrying 1.0000 in 15/69
+and ~180 distinct one-off floats by another, i.e. the channel also carries snares and
+buffs. **Neither wins on the wire; do not average them.** Settled by `movetap.py` on
+`agent+0x5C`/`+0x60` during sustained backpedalling.
+
+**WEAKENED — the `movementType` enum as a metric compass.** The per-value angle table
+is **RECONSTRUCTION** and its two advertised controls cannot fail: "the cycle closes to
+360.0°" is arithmetically forced (eight random angles also sum to 360.000) and the
+"unfitted strafe control at exactly 90.0" reads back its own assignment. Measured
+rather than snapped, `1→4` is median 162.5° (n=4) and mt=6 clusters 10° off its
+assigned 135°. The **sign** survives a ±20° perturbation; the precision does not. It is
+a direction family — anchored independently by the speed split, forward 287.79 u/s
+(n=1,493) vs backward 189.51 (n=14), ratio 0.6585 — but it is not an angle table.
+
+**OVERTURNED, in both directions — the `0x0025`/`0x002B` trailing byte.** It is the
+`movementType` echo: values {1..8} only, equal to the most recent c2s `0x003D`'s
+`movementType` in **2,215 of 2,254 (98.27%)**, the 39 disagreements all adjacent enum
+values at transition instants. **Reading it as an ANGLE is REFUTED** — and so is the
+follow-on recommendation to rename it in `schema/overrides.json`, which **must not be
+actioned**: `facing` rests on ArenaNet's own assert `AgAgent.cpp:2368
+'!(facing & ~AGENT_FACING_MASK)'`, a mask-bounded enum is exactly what that implies,
+and the schema's field lists carry no field names at all. There is nothing to rename.
+
+**OVERTURNED — the `vec2` magnitude constants are not unexplained.** 765.017474 ..
+768.000021 over n=2,675 with **0 above 768.001** (a hard ceiling), dominated by
+765.017539 (n=1,456, 54.4%, internal spread 1.4e−4) and 768.000000 (n=367, 13.7%). It
+does **not** scale with speed. Filed as mechanism NOT FOUND with `movementType`
+specifically excluded — **that exclusion is REFUTED**: mt=1 lands on a discrete constant
+in **1,594 of 1,753 (91.2%)** against **168 of 754 (22.3%)** for mt ∈ {2,3}, replicated
+within-connection on **17 of 17** connections carrying ≥10 of each.
+
+### 5. Four candidates killed. One survives, and it is not new.
+
+1. **KILLED — "stop extrapolating, echo the client's own vector."** §8's branch 2 is a
+   no-op. Retail's expression is `reported_pos + vec2 (+0.5 u)`; ours is
+   `state["pos"] + heading`. **The formula is the same.** Confirmed independently by
+   two agents from opposite directions.
+2. **KILLED, again — "on `0x0047`, echo the client's stop point back."** Re-proposed
+   this pass as a new requirement with a counterfactual crediting it with the whole
+   effect. **It is `--stop-echo`,** already implemented at `authsrv.py:7716-7730` with
+   the recommended opcode, point and latency, and already refuted by the run built for
+   it. The grounds for reviving it misread this document: the 9.86 s figure is the
+   interval from the *grant* to the echo, not the echo's latency.
+3. **KILLED — any direction test, backward special case, or "refuse to grant behind the
+   player" guard.** Retail has none: 25 of 29 backward grants point behind facing, up
+   to 768.5 u. Such a guard would be wrong on every backpedal — the fifth over-fit.
+4. **KILLED — "add the +0.500 u" as the fix.** The constant is real to ±0.00003 in 8 of
+   8 captures and is *not* a fix: `+0x48` is a scheduled tick, and 0.5 u moves the
+   schedule by **2 ms at maxSpeed 288**, below the 20 ms resolution at which this repo
+   verified its seven arrivals. Unmeasurable by our own instrument, against a harm of
+   5,238 u. Ship it as a shape detail, never as the change.
+
+**A safety claim struck before it gets built.** "A `k ≤ 1` clamp bounds any warp to
+768 u regardless of how stale `p` is" is **false**. The clamp bounds the grant to 768 u
+from the `p` *the server holds*, and that is the broken quantity: post-collision drift
+is a median 538 u and a max 1,429 u, so the real bound is ~2,200 u. A bound asserted
+over the wrong variable is this arc's signature failure.
+
+**What survives:** grant on every `0x003D` while moving (retail does not gate on
+"turned"; inter-grant median **0.490 s**, 82.1% of gaps ≤ 1.0 s, n=3,127), from the
+client's **just-reported** position, as `0x0025` then `0x002B`-if-the-family-changed
+then `0x0029` (retail's shapes: `0x0025`+`0x0029` 48.5%, `0x0025`+`0x002B`+`0x0029`
+23.2%, bare `0x0029` 19.1%), clipped short on collision (909 of 2,938 are).
+
+**Standing: UNPROVEN, and it is a refinement of a REFUTED run.** It differs from
+`--heading-grant` in the origin term and the moveSpeed term — **and the origin term is
+now known to be a no-op.** `_take_client_position` sets `state["pos"] = reported` on
+every accepted report, and the heading arm reads `px, py = state["pos"]` immediately
+after; the two are equal except on a refusal, which the latch fix made rare and
+never longer than 2. **So the surviving candidate differs from the refuted run by the
+moveSpeed term and the cached-`m_point` carry, and by nothing else.** A run that
+changes more than that at once teaches us nothing about which mattered.
+
+### 6. Still unknown, cheapest measurement each
+
+1. **Which term made `--heading-grant` warp?** NOT FOUND from the wire and *cannot* be
+   found there — a cache-free model reproduces every mechanism conclusion equally well,
+   so nothing in the carry model is load-bearing evidence. **Cheapest: `movetap.py` on
+   `+0x48`/`+0x9C`/`+0x78` across a `--heading-grant` run.** The arrival formula has no
+   free parameter and already predicted 18,187 ms against 18,087 actual. **This is the
+   next experiment.**
+2. **Does `0x002B`'s float track the direction family?** CONTESTED. `movetap.py` on
+   `agent+0x5C`/`+0x60` during deliberate sustained backpedalling, wire logged alongside.
+3. **The two `vec2` magnitude constants.** Mechanism NOT FOUND, but `movementType`
+   stratifies them 91.2% vs 22.3%, 17/17 within-connection. **Cheapest: a controlled
+   session holding W alone versus W+A, counted by class.** No memory probe for the first
+   cut.
+4. **Is `768 = 8 × 96` causal?** UNVERIFIED. The ceiling is exact (0 of 2,675 above
+   768.001) but only 10 of 68 distinct integral grant destinations are multiples of 96
+   in both coordinates. Treat the terrain-pitch reading as a label, not a measurement.
+5. **Retail's off-ray grants.** 339 of 2,938 (11.5%) leave the ray by >1 u; 147 of 339
+   (43.4%) have both coordinates integral against 4 of 2,599 on-ray (0.2%), and 74.8% of
+   integral destinations are reused points — the same signature in NPC grants. Server
+   -authored waypoints. Purpose NOT FOUND, low priority: they are not the player's warp.
+6. **The 5 of 12 corpus teleports that land nowhere near a granted point.** Untouched.
+7. **Retail's blind budget.** 268 of 3,098 player grants (8.7%) sit outside any watched
+   interval, and the detector demonstrably misses the corpus's one real retail teleport.
+   Nothing in the corpus buys this back. **Any future warp run must keep the keyboard
+   moving through the whole waiting period**, or the instrument goes blind exactly when
+   the phenomenon fires.
+
+**Instrument note. Retire the 320 u/s ceiling** used earlier in this arc: it fires on
+**505 of 2,565 (19.7%)** of legitimate retail intervals, because it sits below the
+383.04 u/s movement-boost mode the wire declares literally. Use `implied speed > 400 u/s
+AND dt ≥ 0.05 s` **for the controlled agent only** — retail declares `0x0027` = 399.00
+for party-member agents 69 times, leaving a 400 u/s ceiling 0.25% of headroom on those —
+plus the dt-free `dd > 520 u within 2.0 s`, and qualify every negative with the blind
+budget.

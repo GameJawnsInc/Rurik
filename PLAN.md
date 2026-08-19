@@ -1368,65 +1368,92 @@ node counts.
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
 
-### Movement — the latch is FIXED; the teleport is EXPLAINED and three fixes are dead (2026-08-19)
+### Movement — latch FIXED; teleport EXPLAINED; FOUR fixes dead and the arc re-aimed (2026-08-19)
 
-Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two
-separate bugs; one fixed, one understood and unfixed.
+Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two separate
+bugs; one fixed, one understood and unfixed.
 
-**FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was
-measured from the value it was preventing from being corrected, so once the model
-was wrong by more than 900 u it could never resynchronise — 36 consecutive
-refusals in one run, 21% of all reports. Scored over the **72** refusals the four
-harness runs actually printed, at 478 u/s: **client right 71, guard right 0,
-undecidable 1.** The budget is now `max(900, 580·dt)` — a strict loosening — and
-the second consecutive refusal is adopted regardless. `test_position_trust.py`,
-floor 20.
+**FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was measured
+from the value it was preventing from being corrected, so once the model was wrong by
+more than 900 u it could never resynchronise — 36 consecutive refusals in one run.
+Scored over the **72** refusals the four harness runs printed: client right 71, guard
+right 0, undecidable 1. Budget is now `max(900, 580·dt)` — a strict loosening — and the
+second consecutive refusal is adopted regardless. `test_position_trust.py`, floor 28.
 
-**THE TELEPORT IS EXPLAINED, MEASURED IN CLIENT MEMORY, AND STILL UNFIXED.**
-`0x0029` is **not a heading hint — it is a scheduled teleport.** It caches an
-arrival tick at `agent+0x48` and a target at `agent+0x9C`; at that exact
-millisecond the client snaps to the target. Seven arrivals observed directly with
-`toolkit/clientscan/movetap.py` (98 u, 680 u, 803 u, 2129 u, 2743 u, 3393 u,
-5238 u), every one landing on `m_targetPoint` and firing within one 20 ms sample
-of schedule. **The snap is how the client completes EVERY granted move** — the
-98 u one is invisible, the 5,238 u one is "the warp". `+0x48` is set once and
-never re-armed; the formula
-`+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms
-against 18,087 actual, with `maxSpeed = 288.0` read out of the agent.
+**THE TELEPORT IS EXPLAINED AND STILL UNFIXED.** `0x0029` is **not a heading hint — it
+is a scheduled teleport.** It caches an arrival tick at `agent+0x48` and a target at
+`agent+0x9C`; at that exact millisecond the client snaps. Seven arrivals watched
+directly in client memory (98 u to 5,238 u), each within one 20 ms sample of schedule;
+`+0x48` is set once and never re-armed. The formula
+`+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms against
+18,087 actual.
 
-**THREE FIXES ARE DEAD, each refuted by the run built for it:**
+**THE CORPUS PASS ANSWERED §8'S QUESTION AND RE-AIMED THE ARC** (12 agents over the
+9-capture live corpus, every measurement attacked by an independent skeptic; framing
+residual 0 on every connection). Three things changed:
 
-1. **Suppress the grant** — retail sends 2,855 player-directed `0x0029`,
-   455 of them cross-plane. Not an invention of ours.
-2. **`--stop-echo`** (echo the client's position back on move-cancel) — the
-   character teleported anyway 9.9 s after an echo fired, *and* the echo added a
-   second destination that dragged the player back.
-3. **`--heading-grant`** (refresh on every keyboard heading) — **caused warps.**
-   Two teleports in six seconds, landing 0.51 u and 15 u from a point granted
-   0.28 s earlier. Re-granting does not bound the teleport: the arrival distance
-   is measured from the agent's *cached* `m_point`, which each grant carries
-   forward, so stacked grants come due almost immediately. Converts one large
-   warp into many small frequent ones.
+1. **The question's two branches both miss.** Retail's heading grants never point behind
+   the player's **travel** (0 of 44, and 0 of 12 connection clusters — but the forward
+   family's own background is 2.2%, so this says backward is *not different*, not that
+   it is clean); they usually point behind **facing** (25 of 29), and that number is a
+   property of the client's own message — a substitution control with the server deleted
+   reproduces it byte-identically. **Zero impossible-speed steps** in 2,565 intervals,
+   largest 388.80 u/s — but the null's **recall is 0 of 1**: it misses the corpus's one
+   real retail teleport, because the client stops reporting when it stops moving.
+   And §8's branch-2 prescription is a **no-op**: retail's expression is
+   `reported_pos + vec2 (+0.5 u)` and ours is `state["pos"] + heading` — the same formula.
+2. **`HEADING_GRANT` is `False` by default, so the heading arm sends NO `0x0029` at
+   all.** The warp the owner watches arrives through the **CLICK** arm
+   (`authsrv.py:7617`), where our destination is the client's own clicked point —
+   exactly what retail sends. **The difference is not the point: retail's click grant is
+   superseded within a median 0.490 s by the heading grants that follow, and ours is
+   never superseded by anything.** Three of the four dead fixes were aimed at a path
+   that by default sends nothing.
+3. **A FOURTH fix is dead** — "echo the client's own vector", killed as a no-op above,
+   joining suppress-the-grant, `--stop-echo` and `--heading-grant`. Also struck: any
+   backward/direction guard (retail has none, and it would be the fifth over-fit), the
+   `+0.500 u` constant as a fix (real to ±0.00003 in 8 of 8 captures, but it moves the
+   schedule 2 ms against a 5,238 u harm), and a `k ≤ 1` clamp "bounding any warp to
+   768 u" — false, because it bounds against the server's own `p`, whose measured drift
+   is a median 538 u and a max 1,429 u.
 
-**THE NEXT RESEARCH PASS — one question, and it is not a retune.** Every fix so
-far granted a **server-extrapolated** point computed from a report already a few
-hundred ms stale. ArenaNet grants the **client's own** endpoint: its reported
-position plus *its own* vec2, plus exactly +0.500 u along it (1,420 of 2,419
-heading-triggered grants). **Ask the live corpus whether ArenaNet's heading
-grants also point BEHIND the player when they are moving backward, and whether
-those ever produce an impossible-speed step.** If they do point behind and never
-warp, our mechanism story is still wrong and the difference lies elsewhere. If
-they never point behind, the fix is to stop extrapolating and echo the client's
-own vector. Either answer is progress; guessing again is not.
+**ALSO FIXED, and deliberately NOT billed as a warp fix.** Our `0x0025` carried a vector
+**765× too long** — 4,704 of 4,760 sends at 765–768 where retail is unit-length in
+3,789 of 3,789, zero overlap. Inert: the only float read of `+0xBC` in `AgAgent` is a
+lazy angle cache calling `atan2` (`0x005BCA00`, CRT descriptor `\x05atan2`), which is
+scale-invariant. Fixed because it is wrong and costs one line; locked by
+`test_position_trust.py` §8 with a control. It also closes `studies/smsg`'s open
+"why 26.57° and not 45°": the diagonal is `normalize(2·v + perp(v))`, sqrt-free, and
+`atan(1/2)` is what that costs.
 
-Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted
-point and have no established cause; and the sync (`+0xE8`) vs async (`+0x14C`)
-agent question decides whether the model we watch is the one the player sees.
+**THE NEXT EXPERIMENT, and it is a measurement rather than a fix.** The surviving
+candidate — grant on every heading, ungated, `0x0025`+`0x002B`+`0x0029`, from the
+client's just-reported position — is a **refinement of the REFUTED `--heading-grant`
+run**, and it differs from it in exactly two terms: the origin and the moveSpeed. **The
+origin term is now known to be a no-op** (`_take_client_position` writes
+`state["pos"] = reported` on accept, and the heading arm reads it back immediately), so
+**it differs by the moveSpeed term and the cached-`m_point` carry, and nothing else.**
+The wire cannot separate those — a cache-free model reproduces every mechanism
+conclusion equally well. **Run `movetap.py` on `+0x48`/`+0x9C`/`+0x78` across a
+`--heading-grant` run.** The arrival formula has no free parameter. Do not ship a fix
+that changes both terms at once; a green run would teach us nothing about which mattered.
 
-**Instruments now in the tree:** `toolkit/clientscan/movetap.py` (reads the
-client's own arrival time and reconstructs live position; `--selftest` needs no
-client) and `toolkit/authsrv/warpscan.py` (scores a capture, printing the TRIAL
-count before the verdict — a run with zero armed trials tested nothing).
+**Standing rule for any future warp run:** keep the keyboard moving through the whole
+waiting period. The client emits `0x003D` only while moving, so a stationary wait blinds
+every wire-side instrument exactly when the phenomenon fires — 8.7% of retail's own
+grants sit outside any watched interval for this reason. And **retire the 320 u/s
+ceiling**: it fires on 19.7% of legitimate retail intervals, because it sits below the
+383.04 u/s boost mode the wire declares literally.
+
+Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted point; the
+two `0x003D` magnitude constants (765.017539 / 768.000000) stratify by `movementType`
+91.2% vs 22.3% but have no mechanism; and the sync (`+0xE8`) vs async (`+0x14C`) agent
+question decides whether the model we watch is the one the player sees.
+
+**Instruments:** `toolkit/clientscan/movetap.py` (client-side arrival time and live
+position; `--selftest` needs no client) and `toolkit/authsrv/warpscan.py` (scores a
+capture, printing the TRIAL count before the verdict — a run with zero armed trials
+tested nothing).
 
 ### GAME_SMSG naming — 16 opcodes named and merged; 14 PARTIALs remain, priced (2026-08-18)
 
