@@ -107,9 +107,9 @@ all 40 entries — so the client's own data states the size of every field, and
 `dat_fvf` bit b maps to one of them:
 
     bit 0        12  position f32 x, y, z        (offset 0; pinned by f11)
-    bit 1         4  a small INDEX, purpose UNVERIFIED (see below)
+    bit 1         4  GR_FVF_GROUP, the per-vertex skin group index
     bit 2        12  NORMAL, unit f32 x, y, z
-    bit 3         4  UNVERIFIED (absent from every corpus format)
+    bit 3         4  GR_FVF_DIFFUSE; the client ASSERTS models lack it
     bits 12, 13  12  TANGENT FRAME, unit f32 x, y, z each
     bits 4..11    8  texture coordinates, f32 u, v (up to eight sets)
     bits 14, 15   —  DROPPED by the remap; they cost nothing
@@ -134,11 +134,27 @@ size was wrong). MEASURED over 90,108 vertices of a 7-map sample:
     of the two is tangent vs binormal is NOT established.
   * **bits 4-11 are texture coordinates**: two f32, 97.8% inside +/-16 with a
     full range of -519.7 .. 520.4 — wrapped/atlased UVs, not normalised ones.
-  * **bit 1 is NOT a colour.** The D3DCOLOR reading is REFUTED: its high three
-    bytes are zero on 9,128 of 9,128 and the low byte takes ten values, all
-    <= 9. It is a small integer index and its PURPOSE IS UNVERIFIED — naming
-    it (matrix index? material slot?) would be the size-inference mistake
-    again.
+  * **bit 1 is `GR_FVF_GROUP`, the skin group index — SETTLED 2026-08-19,
+    and the caution above was paid off rather than kept.** This paragraph used
+    to end "its PURPOSE IS UNVERIFIED — naming it (matrix index? material
+    slot?) would be the size-inference mistake again", which was the right
+    posture until there was evidence. There is now, from ArenaNet's own code:
+    the name is `GR_FVF_GROUP` (`MdlCombine:2073` at `0x007A685E` and
+    `GrGeo:738` at `0x0065AA8F`, two independent modules), and the pair
+    `GR_FVF_POSITION|GR_FVF_GROUP` maps to `D3DFVF_XYZB1|
+    D3DFVF_LASTBETA_D3DCOLOR` — **one beta dword and ZERO weight floats**.
+    The D3DCOLOR reading stays REFUTED, and now for a stated reason: bit 3 is
+    the colour (`GR_FVF_DIFFUSE`), and the client asserts a model must not
+    carry it (`MdlCombine:2075` at `0x007A6898`), which is why bit 3 is set on
+    **0 of 49,026** sub-models archive-wide.
+    **It is a u32, not a byte.** The client loads the whole dword
+    (`mov eax, dword ptr [edx+0xc]`) and indexes at `group*16`; the high three
+    bytes are zero on every vertex of all 22,608 bit-1 sub-models because the
+    index is small, not because they are a separate quantity. **Skin weights
+    are RULED OUT, not merely unestablished** — there is no weight anywhere in
+    the vertex, and the client's per-vertex loop takes exactly ONE matrix row,
+    so per-vertex blending is refuted at the instruction level. Whatever
+    combines a group's 2..4 transforms happens per GROUP, CPU-side.
 
 WHAT IS OPAQUE, so nobody reads more than was measured: the preamble, the
 sub-model `unk` word, the trailing blocks, the meaning of the texture-name
@@ -240,10 +256,12 @@ FIELD_SIZE = {0: 12, 1: 4, 2: 12, 3: 4,
 FIELD_ORDER = (0, 1, 2, 3, 12, 13, 4, 5, 6, 7, 8, 9, 10, 11)
 
 #: Names for the bits a refutable corpus prediction established. Bits 1 and 3
-#: are deliberately absent -- see the docstring; bit 1's colour reading is
-#: REFUTED and its purpose is unverified.
+#: carry ArenaNet's OWN names as of 2026-08-19 (`MdlCombine:2073`/`:2075`);
+#: before that they were deliberately unnamed -- see the docstring.
 FIELD_POSITION = 0
+FIELD_GROUP = 1                 #: GR_FVF_GROUP -- the skin group index
 FIELD_NORMAL = 2
+FIELD_DIFFUSE = 3               #: GR_FVF_DIFFUSE -- asserted absent on models
 FIELD_TANGENT_BITS = (12, 13)
 FIELD_TEXCOORD_BITS = (4, 5, 6, 7, 8, 9, 10, 11)
 
@@ -324,6 +342,76 @@ class SubModel:
         for i in range(self.nv):
             out.append(POSITION.unpack_from(self.vertex_data, i * self.stride))
         return out
+
+    def groups(self):
+        """The per-vertex `GR_FVF_GROUP` index, or None when absent.
+
+        READ AS A U32 BECAUSE THE CLIENT DOES -- `mov eax, dword ptr [edx+0xc]`
+        is a full dword load, then it indexes at `group*16`. The high three
+        bytes are zero on every vertex of all 22,608 bit-1 sub-models in the
+        archive, but that is the index being small, not a separate field, and
+        a reader that took only byte 0 would be describing the data rather
+        than the format.
+        """
+        off = self.fields.get(FIELD_GROUP)
+        if off is None:
+            return None
+        return [struct.unpack_from("<I", self.vertex_data, i * self.stride + off)[0]
+                for i in range(self.nv)]
+
+    def group_transforms(self):
+        """`trailing` -> one tuple of transform ids per group.
+
+        The block is `groupTransformCount[u0]`, then the concatenated
+        `transforms[u1]`, then `u2` twelve-byte records this does not decode.
+        Both array names are ArenaNet's.
+
+        THE CLOSURE IS ARENANET'S OWN ASSERT, not a corpus regularity we
+        noticed: `sum(groupTransformCount) == transformCount` is
+        `MdlCombine:860`. It holds on 49,026 of 49,026 sub-models archive-wide
+        and the reversed-order rival scores 4.04%, so it is also a check that
+        can fail -- which is why it is a refusal here and not a comment.
+        """
+        u0, u1, u2 = self.u_counts
+        need = (u0 + u1 + u2 * 3) * 4
+        if len(self.trailing) != need:
+            raise Undecodable(
+                f"trailing block is {len(self.trailing)} bytes, and the header's "
+                f"counts {self.u_counts} require {need}")
+        words = struct.unpack_from(f"<{u0 + u1}I", self.trailing, 0) if u0 + u1 else ()
+        counts, ids = words[:u0], words[u0:u0 + u1]
+        if sum(counts) != u1:
+            raise Undecodable(
+                f"group transform counts total {sum(counts)}, not the "
+                f"{u1} transforms the header declares (MdlCombine:860)")
+        out, c = [], 0
+        for n in counts:
+            out.append(tuple(ids[c:c + n]))
+            c += n
+        return out
+
+    def vertex_transforms(self):
+        """Per-vertex tuple of transform ids -- `groups()` resolved through
+        `group_transforms()`. None when the sub-model carries no group field,
+        which means it is RIGIDLY bound: `u0 == 1` on all 26,418 such
+        sub-models, so every vertex takes group 0 and needs no selector.
+
+        The range check is the one that discriminates. `max(group) < u0` is
+        weak -- it cannot separate this reading from a direct palette index --
+        so the assertion here is the tight one: the group values are exactly
+        `{0 .. u0-1}`, surjective, which holds on 22,608 of 22,608 against
+        0.03% for the same byte one field later.
+        """
+        g = self.groups()
+        if g is None:
+            return None
+        gt = self.group_transforms()
+        bad = [x for x in g if not 0 <= x < len(gt)]
+        if bad:
+            raise Undecodable(
+                f"group index {bad[0]} is outside the {len(gt)} groups the "
+                f"sub-model declares")
+        return [gt[x] for x in g]
 
     def normals(self):
         """Unit f32 (x, y, z) per vertex, or None when the format has none.

@@ -1760,6 +1760,20 @@ arc does not get to pick the flattering one:
 2. **A pretzeled body makes an enlarged head unreadable**, which two skeptics
    predicted in almost these words.
 
+**ANSWERED 2026-08-19, and it is candidate 1.** The skin binding in the 0xFA0
+geometry chunk is now decoded (`toolkit/mapdata/modelfile.py`
+`group_transforms`/`vertex_transforms`, `test_modelfile.py` §7, register row in
+`PLAN.md` §6.1). Resolving every vertex of file 116703 through it: **ZERO
+vertices bind to any node in 51..64.** The head skin binds to **nodes 48 and
+49** — submodel 3 (39 verts) to node 49 alone, submodel 2 (270 verts) to 48 and
+49 — and the fourteen bones run 7 scaled ×3 carry **no geometry at all**. They
+are the horn and jaw bones; nothing is weighted to them. The control could not
+have fired, and the run's own bytes say so. **The proxy was the failure**:
+"nearest joint" measured proximity, and binding is not proximity — 21.1% of
+vertices being spatially nearest those nodes was true and irrelevant. That is
+exactly the risk the RECONSTRUCTION label was carrying, and it is the second
+proxy to break in one day.
+
 **It does not touch the verdict**, and that is the whole point of §11.6e's
 rewrite: the cell we landed in is *head normal + limbs contorted*, which the
 corrected table scores **ANSWERED, control invalid, DO NOT ABORT**. **§11.5's

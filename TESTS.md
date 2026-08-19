@@ -915,7 +915,29 @@ Every one of these, in the order they were written:
   93.0% orthogonal against a 26.0% next-vertex control, texcoords 97.8% inside
   +/-16 over a real range of -519.7..520.4 so a consumer must WRAP not clamp,
   and **bit 1's D3DCOLOR reading REFUTED** -- high three bytes zero on 9,128 of
-  9,128, ten values all <= 9, so it is an index whose purpose stays UNVERIFIED.
+  9,128, ten values all <= 9, so it is an index. **Section 7 (added 2026-08-19)
+  says WHICH index, and the answer is ArenaNet's own: `GR_FVF_GROUP`, the
+  per-vertex skin group** (`MdlCombine:2073`, `GrGeo:738` -- two independent
+  modules), resolved through `SubModel.trailing` into
+  `groupTransformCount[u0]` + `transforms[u1]`. Every check carries the rival
+  that must score worse, because the whole decode is arithmetic over small
+  integers and that agrees with things by accident: **closure 1,285/1,285 with
+  the reversed-order rival at 55** (`sum(groupTransformCount) == transformCount`
+  is the client's OWN assert, `MdlCombine:860`, not a regularity we noticed);
+  **surjectivity -- the group values are exactly {0..u0-1} -- 560/560 with the
+  same field one dword later at 0/560**, and that tight form is the one that
+  matters because the weak `max < u0` cannot separate this reading from a direct
+  palette index; a **cross-structure oracle** (no sub-model declares more than
+  one group without carrying the field to select between them) at 0 violations;
+  and `GR_FVF_DIFFUSE` set on 0, which the client asserts it must be
+  (`MdlCombine:2075`). **Skin weights are RULED OUT, not unestablished** -- the
+  vertex holds no weight anywhere and the client's per-vertex loop takes exactly
+  one matrix row, so per-vertex blending is refuted at the instruction level.
+  A **sabotage** bumps one count by 1 and the closure refusal must fire, because
+  a guard that cannot go red is a comment -- this arc has shipped five of those.
+  The decode is what explains run 7's failed positive control
+  (`studies/archivewrite/FINDINGS.md` 11.7b): **zero** vertices bind to the
+  nodes that run scaled.
   A sabotage that quietly reads the 3D radius as the 2D
   one was built and run and reddens 5 checks from three directions, the
   synthetic literal plus both maps' oracle and rival. **The block-H fixture
