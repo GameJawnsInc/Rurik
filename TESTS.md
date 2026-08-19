@@ -2150,10 +2150,31 @@ Every one of these, in the order they were written:
   to the click's `dest` would turn a no-op into a real teleport at the player on
   **every stop**, which is precisely the damage the `0x0047` arm's own comment
   records ("teleporting a player nine units is pure damage"); a grep cannot tell
-  those apart and the tree can. §8 replays the capture. Floor **20**, the
-  bare-machine subset, against a green **24** with
-  `authsrv-20260819T114759-c1.jsonl` present; §8 declares `LEDGER.skip` without
-  it. No client. ~1 s),
+  those apart and the tree can. **§8 locks the direction vector to UNIT LENGTH**,
+  and it is a lock on an *inert* bug on purpose. We answered every keyboard
+  heading with `list(heading)` -- the client's own `0x003D` vec2, a
+  **displacement** of magnitude 765.017..768.000 -- in a field retail fills with
+  a unit vector in **3,789 of 3,789** live samples against our **4,704 of 4,760**
+  at 765-768, two populations with zero overlap, decoded from the wire bytes on
+  both sides. It reached nothing: setter `0x00602660`'s case 1 is a bare dword
+  copy and case 4 is `Vec2Negate` into the same tail, so the client stored our
+  number **raw** for 82% of sends -- but the only float read of `+0xBC` inside
+  `AgAgent` is the lazy angle cache at `0x005FFA1D`, which calls `atan2`
+  (`0x005BCA00`, CRT descriptor `\x05atan2`), and atan2 is scale-invariant. The
+  section exists because *verbatim-first* is how this repo decides what is true,
+  and a wire field disagreeing with retail by 768x is a standing invitation to
+  explain some future symptom with the wrong cause. It asserts one send site,
+  that the payload's vec2 is the node `unit` and **not** `list(heading)`, the
+  zero-length guard (55 of our own sends carried `|v| = 0`, a `ZeroDivisionError`
+  in the naive form), and -- against a 2026-08-19 workflow recommendation that
+  was **refuted in the same pass** -- that the trailing byte is still `moving`,
+  the client's own `movementType`, which retail echoes in 2,215 of 2,254 (98.27%)
+  and which is not an angle. Its **control hands the matcher `list(heading)` on
+  purpose**, because the rejecting branch is the one that never runs against
+  healthy source and so is exactly the branch a typo would silently disable.
+  §9 replays the capture. Floor **28**, the bare-machine subset, against a green
+  **32** with `authsrv-20260819T114759-c1.jsonl` present; §9 declares
+  `LEDGER.skip` without it. No client. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

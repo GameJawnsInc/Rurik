@@ -37,6 +37,7 @@ what makes 36-in-a-row unreachable for any constants. Section 2 is the headline.
 """
 import ast
 import json
+import math
 import os
 import sys
 
@@ -49,14 +50,15 @@ import authsrv    # noqa: E402
 import vaultpath  # noqa: E402
 
 # MEASURED from a real green run: 24 checks with the capture present, 20
-# without. The floor is the BARE-MACHINE subset -- sections 0 to 7 are pure
-# policy and syntax tree and take no fixture, while section 8 replays a real
-# capture and declares LEDGER.skip when this vault has no copy of it. Setting
-# the floor at 24 would red every machine that is not the owner's; 20 still
-# catches the failure this rule exists for, which is a section quietly
-# evaporating.
+# without; section 8, the unit-vector lock, added 8 more on 2026-08-19, so
+# 32 and 28. The floor is the BARE-MACHINE subset -- sections 0 to 8 are
+# pure policy and syntax tree and take no fixture, while section 9 replays a
+# real capture and declares LEDGER.skip when this vault has no copy of it.
+# Setting the floor at 32 would red every machine that is not the owner's;
+# 28 still catches the failure this rule exists for, which is a section
+# quietly evaporating.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=20)
+                       floor=28)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -263,7 +265,107 @@ def main():
           f"ever becomes state['pos'] or the click's dest, the message stops "
           f"being a no-op and starts teleporting the player on every stop")
 
-    print("\n8. replay: the real refusals from run 20260819T114743")
+
+    print("\n8. the direction we answer a heading with is UNIT LENGTH")
+    # MEASURED on both sides of the wire, 2026-08-19. Retail's 0x0025 vec2:
+    # |v| in [0.996546, 1.000000] in 3,789 of 3,789 across the 9 live captures,
+    # 0 of 3,789 above 100 u. Ours before this fix: 4,704 of 4,760 at 765-768,
+    # because the handler passed the client's own 0x003D heading -- a
+    # DISPLACEMENT of magnitude 765.017..768.000 -- straight into a field the
+    # client reads as a DIRECTION. Two populations, zero overlap.
+    #
+    # WHY A TEST FOR AN INERT BUG. It is inert: setter 0x00602660's case 1 is a
+    # bare dword copy (so the client stores our number RAW for 82% of sends),
+    # but the only float read of +0xBC inside AgAgent is the lazy angle cache at
+    # 0x005FFA1D, which calls atan2 -- and atan2 is scale-invariant, so the
+    # magnitude cannot reach anything. It is still worth locking, because
+    # verbatim-first is how this repo decides what is true, and a wire field that
+    # disagrees with retail by 768x is a standing invitation to explain some
+    # future symptom with the wrong cause. The lock is here so that the next
+    # person who "simplifies" this back to list(heading) argues with a red test.
+    move_dir_sends = []
+    for call in ast.walk(src):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id == "send" and len(call.args) >= 2
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id == "GAME_SMSG_AGENT_MOVE_DIRECTION"
+                and isinstance(call.args[1], ast.List)):
+            move_dir_sends.append(call.args[1].elts)
+    check(len(move_dir_sends) == 1,
+          "there is exactly one AGENT_MOVE_DIRECTION send site",
+          f"{len(move_dir_sends)} -- a second one is a second policy, and the "
+          f"765x defect survived this long because nobody looked at the one")
+
+    def vector_arg(payload):
+        """The vec2 slot of an [agent, vec2, byte] payload, or None."""
+        return payload[1] if len(payload) > 1 else None
+
+    vec = vector_arg(move_dir_sends[0] if move_dir_sends else [])
+    # THE MUTATION THIS LOCKS, stated as the thing it must NOT be. list(heading)
+    # is the defect, and it is one keystroke away from the fix.
+    raw_passthrough = (isinstance(vec, ast.Call)
+                       and isinstance(vec.func, ast.Name)
+                       and vec.func.id == "list"
+                       and len(vec.args) == 1
+                       and isinstance(vec.args[0], ast.Name)
+                       and vec.args[0].id == "heading")
+    check(not raw_passthrough,
+          "and it does not pass the client's raw heading through",
+          "it sends list(heading) -- that vector is 765-768 units long, and "
+          "retail's is 1.0 in 3,789 of 3,789")
+    check(isinstance(vec, ast.Name) and vec.id == "unit",
+          "it sends a normalised `unit`",
+          f"{ast.dump(vec) if vec is not None else None}")
+
+    # THE CONTROL. An AST matcher that cannot reject is not a check -- and the
+    # rejecting branch above is the one that never runs against healthy source,
+    # so it is exactly the branch a typo would silently disable. Hand it the
+    # defect on purpose and require it to still recognise it.
+    bad = ast.parse("send(GAME_SMSG_AGENT_MOVE_DIRECTION,"
+                    " [PLAYER_AGENT_ID, list(heading), moving], 'x')")
+    bad_payload = []
+    for call in ast.walk(bad):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id == "send" and len(call.args) >= 2
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id == "GAME_SMSG_AGENT_MOVE_DIRECTION"
+                and isinstance(call.args[1], ast.List)):
+            bad_payload = call.args[1].elts
+    bad_vec = vector_arg(bad_payload)
+    check(isinstance(bad_vec, ast.Call) and isinstance(bad_vec.func, ast.Name)
+          and bad_vec.func.id == "list",
+          "and the same matcher still SEES the defect when handed it on purpose",
+          "the matcher no longer recognises list(heading), so the check above "
+          "passes for the wrong reason")
+
+    # THE TRAILING BYTE IS ALREADY CORRECT, and this locks it AGAINST a
+    # recommendation. Retail echoes the client's own movementType: 2,215 of
+    # 2,254 (98.27%), the 39 disagreements all adjacent enum values at
+    # transition instants. A 2026-08-19 workflow agent recommended rewriting it
+    # as an angle; that was REFUTED in the same pass. Without this check a later
+    # reader can find the recommendation and not the refutation.
+    byte = move_dir_sends[0][2] if len(move_dir_sends[0]) > 2 else None
+    check(isinstance(byte, ast.Name) and byte.id == "moving",
+          "and the trailing byte is still the client's own movementType",
+          f"{ast.dump(byte) if byte is not None else None} -- retail echoes the "
+          f"enum in 98.27% of 2,254; it is not an angle")
+
+    # The arithmetic, against the two magnitudes the client actually emits.
+    for m in (765.017539, 768.000000):
+        ux, uy = (m * 0.6) / m, (m * 0.8) / m
+        check(abs(math.hypot(ux, uy) - 1.0) < 1e-9,
+              f"normalising a {m:.3f}-unit heading yields |v| = 1",
+              f"{math.hypot(ux, uy)!r}")
+    # And the zero guard: 55 of our own sends carried |v| exactly 0, which is a
+    # ZeroDivisionError in the naive form and kills the connection mid-session.
+    zero_mag = 0.0
+    guarded = ([0.0 / zero_mag, 0.0 / zero_mag] if zero_mag > 1e-6
+               else [0.0, 0.0])
+    check(guarded == [0.0, 0.0],
+          "and a zero-length heading is guarded, not divided by",
+          f"{guarded} -- 55 of 4,760 of our own sends carried |v| = 0")
+
+    print("\n9. replay: the real refusals from run 20260819T114743")
     path = os.path.join(vaultpath.vault_path("captures", "gamesrv"), CAPTURE)
     if not os.path.exists(path):
         LEDGER.skip("capture replay",
