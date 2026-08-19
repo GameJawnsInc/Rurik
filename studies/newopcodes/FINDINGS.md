@@ -2031,6 +2031,60 @@ should not go into `overrides.json` on this evidence.
 > `PLAN.md` §8 names as never once observed in 513 prop-36 sightings. That is its own study
 > and this section deliberately does not mine it.
 
+> ### ⚠ REFUTED THE SAME DAY — `0x0140` IS THE GOLD CREDIT. Read this before the section below.
+>
+> The section that follows concludes *"no `GAME_SMSG` sets carried gold"*, from six static
+> passes. **It is WRONG, and the live capture refuted it within the hour.**
+>
+> **`GAME_SMSG 0x0140` `[u16 purse, u32 amount]`** — handler **`0x00846120`**, which looks
+> the purse id up in the same `inventoryTable` (`[ctx+0x40]+0xD4`) that `0x0141` uses, then
+> calls **`0x00849FE0`**, whose first instruction is:
+>
+> ```
+> 00849FE9  018190000000   add dword ptr [ecx + 0x90], eax      ; carried gold += amount
+> 00849FF1  mov edx, [ecx + 0x90]                               ; ...and broadcast the new total
+> 0084A000  push 0x100000EC / call 0x633D70
+> ```
+>
+> So the pair is symmetric and we had read only half of it: **`0x0140` credits `+0x90`
+> (CARRIED), `0x0141` credits `+0x94` (STORAGE)**, both container-keyed, both `add` not
+> `set`, both asserting `inventory` on an unregistered id (`ItCliApi:1955` and `:1969`).
+> `ItemCliGetGold`'s `[ctx+0x40]+0xF8` is not a *different* object — it is a pointer to one
+> of those very containers, which is why crediting the right id moves the merchant's line.
+>
+> **WHY THE NEGATIVE WAS WRONG, and it is not the tool's fault.** `codescan --field 0x90
+> --writes` lists `0x00849FE9` correctly, in its 150. The failure was the **reachability
+> walk** built on top of it: it reported 13 of 146 reachable from 472 handlers and none the
+> singleton, yet this store is **one call level** below a receive handler. The likeliest
+> cause is that `0x0140` lives in receive table **`0x00bcad58`** while the opcodes that pass
+> examined sit in **`0x00bc8f68`** — **there are two tables**, and a walk that enumerates one
+> produces a confident empty set. **The lesson is the repo's own rule applied to a search: a
+> negative from an automated multi-step walk needs a positive control — make it find a
+> writer you already know about before believing the ones it cannot find.** I published this
+> negative without that control, and it is the second methodology hole this session after
+> the biased-`this` displacement scan.
+>
+> **THE ARITHMETIC CLOSES ON THE OPERATOR'S OWN READINGS, with no free parameter.** Per map
+> instance the server credits the whole balance at load, then credits deltas as they are
+> earned; the client debits purchases itself. Across the three instances of
+> `20260819T132414`, purse ids differ per instance and the totals chain exactly:
+>
+> | instance | credits on the wire | ends |
+> |---|---|---|
+> | `53419` t55–137 | `[159,22]` load, then +2 +2 +3 +3 +2 +2 +2 | **38** |
+> | `52606` t137–293 | `[4,38]` load — *equals the previous instance's total* — then +10 +10 +50 | **108** |
+> | `55414` t294–421 | `[183,108]` load — *again the carry* — then `[183,20]` at the sell | **88** |
+>
+> **108 is exactly what the operator read before buying**; −40 for the purchase appears on
+> **no** message (the client debits locally, which the section below got right); +20 for the
+> sell arrives as `0x0140 [183, 20]`; and 68 + 20 = **88**, the third reading. Three
+> cross-instance continuity checks and three screen readings, all consistent.
+>
+> **Practical, and it is one loopback run:** send `0x0140 [purse, N]` before opening the
+> shop. The open question is *which* container id is the purse — retail's varies per instance
+> (4 / 159 / 183) and ours creates exactly one bag via `0x013F`. Try `[1, N]`; if `Your
+> Funds` moves, the shop can transact and `0x4D` can finally be answered.
+
 > ### THE CHARACTER-LOAD PATH IS READ, AND NO WIRE MESSAGE WRITES CARRIED GOLD. 2026-08-19
 >
 > Three further passes, from three directions. Every load-bearing claim re-verified here by
