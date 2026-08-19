@@ -1554,7 +1554,12 @@ def main():
                          "or '--map 146 --explorable'. The instance loads on "
                          "the game channel, so anything about the world lives "
                          "there; the authsrv gets none of it. Without this the "
-                         "one-command loop could not run a probe at all.")
+                         "one-command loop could not run a probe at all. "
+                         "USE THE = FORM FOR A SINGLE FLAG: --game-args="
+                         "'--trace-move'. argparse reads a value starting with "
+                         "'-' as another option unless it contains a space, so "
+                         "two flags in one string happen to work and one flag "
+                         "alone dies with 'expected one argument'.")
     ap.add_argument("--client-arg", action="append", metavar="FLAG",
                     help="Extra flag for the CLIENT, repeatable -- the other "
                          "side of --game-args, which reaches only the server. "
