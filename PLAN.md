@@ -1664,10 +1664,22 @@ and three opcodes came off it in one afternoon — `0x0015` HERO_AI_MODE `[agent
 confirmed), `0x001A` HERO_FLAG_PLACE `[agent, coords, plane]` and `0x001B`
 PARTY_FLAG_PLACE `[coords, plane]` (compass flag widgets, arm-then-ground, n=1 each) —
 all three named in `schema/overrides.json`. `--hero-vitals 480,45` (new) fills the
-panel bars exactly. Open, staged: the client renders NOTHING it sends (stance ring and
-flag marker both wait on unknown s2c echoes — re-sent `0x0072` does NOT move the ring);
-target-lock's c2s needs a foe (`--enemy` arm); the greyed Norgu row is the
-out-of-compass-range rendering (owner's reading) and predicts a body/position lights it.
+panel bars exactly. **Then the loop CLOSED (§28.6, still the same day):** three static
+tracers found every echo and one wire run confirmed all of them — s2c `0x0062`
+HERO_AI_MODE_SET moves the stance ring (and Norgu speaks his Guard line; `0x0072` was
+inert because it raises `0x10000038`, an event the panel has no case for), s2c `0x0066`
+HERO_FLAG_SET plants the hero flag (world model + compass marker, via activation-record
++0x10..0x1C → event `0x100000A0` → CompassCanvas, ArenaNet's verb: CommandMoveToPoint),
+s2c `0x0067` PARTY_FLAG_SET plants the party pennant. The crosshair's c2s pair `0x0016`
+HERO_LOCK_TARGET `[hero, target]` / `0x0017` HERO_UNLOCK_TARGET `[hero]` is read static
+(medium; live confirm staged behind an `--enemy` run with a foe selected). All named in
+`schema/overrides.json`; authsrv answers `0x0015`→`0x0062`, `0x001A`→`0x0066`,
+`0x001B`→`0x0067`. The commander UI is round-trip complete: click → c2s → echo →
+render, six messages, all named. Hiring stays NOT FOUND with a stronger floor (all 174
+channel-send callers enumerated; the party-add opcodes ride a different send helper —
+that helper's callers are the next place to look). Still open: the greyed Norgu row
+(out-of-compass-range, owner's reading — a body/position should light it); pets sharing
+the commander messages untested.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

@@ -1959,11 +1959,42 @@ GAME_CMSG_ATTACK_AGENT = 0x0026
 # the send lives on the BUTTON path, not the GmAgentCommander setter heroes
 # 3.3 traced to a dead end -- so that NOT FOUND was a wrong-place answer, not
 # a wrong answer -- and the client does NOT move its own stance ring on
-# click. The ring waits for the server, and the echo below (0x0072 with the
-# requested mode) is both the arm that proves it and the behaviour a real
-# server needs anyway. Only hero agents were observed; whether pets share the
+# click. The ring waits for the server. The first echo tried was 0x0072 and
+# it was INERT, measured and then explained to the byte (pvpui 28.6): 0x0072
+# writes rec+0xC but raises event 0x10000038, which GmAgentCommander has NO
+# case for; the dedicated setter the client listens for is s2c 0x0062
+# (ChCliHero::SetAiMode, 0x0081D990 on 38833) -- it writes the same rec+0xC
+# and raises 0x1000003A, the one event the panel subscribes to. The dispatch
+# arm echoes THAT. Only hero agents were observed; whether pets share the
 # message is untested (the panel class is GmPetCommander, so they might).
 GAME_CMSG_HERO_AI_MODE = 0x0015
+# The commander crosshair: lock (0x0016, [heroAgent, targetAgent]) / unlock
+# (0x0017, [heroAgent]) -- OBSERVED static on 38833 (send wrappers 0x0091FD60
+# and 0x0091FDB0 under GmAgentCommander msg 0x24, pvpui 28.6), no capture
+# yet: the button refuses to send without a selected foe, so the live confirm
+# needs an --enemy run. No server arm; named so the framer prints them.
+GAME_CMSG_HERO_LOCK_TARGET = 0x0016
+GAME_CMSG_HERO_UNLOCK_TARGET = 0x0017
+# The flag placements the 2026-08-19 clicks measured (pvpui 28.5): hero flag
+# [agent, vec2, plane], party flag [vec2, plane]. The client draws NOTHING on
+# send -- the draw is the s2c echo pair below (pvpui 28.6).
+GAME_CMSG_HERO_FLAG_PLACE = 0x001A
+GAME_CMSG_PARTY_FLAG_PLACE = 0x001B
+# The s2c flag echoes, traced end to end on 38833 (pvpui 28.6): 0x0066
+# [agent_id, vec2, word plane] -> handler 0x0091E0E0 -> writes the hero
+# ACTIVATION record's +0x10..0x1C (the same ctx[+0x2C]+0x584 record 0x0072
+# creates, so the store is GATED on activation existing) -> posts frame
+# event 0x100000A0 -> Compass.cpp 0x008BB520 -> CompassCanvas_SetFlag
+# 0x008BF730, which creates BOTH the compass marker and the world flag model
+# (AvFlag, per-slot file ids at 0x00A94358; ArenaNet's own trace string
+# calls the action CommandMoveToPoint). 0x0067 [vec2, word plane] is the
+# party twin (store charCtx+0x9C..0xA8, event 0x100000A1, compass slot 0).
+# The clear/remove form is coords (+INF, +INF) with plane 0.
+GAME_SMSG_HERO_FLAG_SET = 0x0066
+GAME_SMSG_PARTY_FLAG_SET = 0x0067
+# ChCliHero::SetAiMode's own opcode -- [agent_id, dword aiMode], the display
+# echo for a 0x0015 stance click. See GAME_CMSG_HERO_AI_MODE above.
+GAME_SMSG_HERO_AI_MODE_SET = 0x0062
 
 # What the client sends when the player clicks an agent meaning to do something
 # to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
@@ -6650,15 +6681,42 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The stance echo. values[0] is the header word; the
                         # payload is [agent_id, mode]. Acts only on an agent
                         # that is one of this run's hero slots, so the arm is
-                        # inert on every non-hero rig.
+                        # inert on every non-hero rig. 0x0062 and not 0x0072:
+                        # see the constants block -- 0x0072's event is one the
+                        # panel ignores, measured 2026-08-19.
                         _aid, _mode = values[1], values[2]
                         for _hid, _haid, _hdef in hero_slots():
                             if _haid == _aid:
-                                send(*agents.hero_activate(
-                                    _hid, _haid, HERO_INVENTORY, _mode))
+                                send(GAME_SMSG_HERO_AI_MODE_SET,
+                                     [_aid, _mode],
+                                     f"HERO_AI_MODE_SET(agent {_aid}, "
+                                     f"mode {_mode})")
                                 print(f"[c{conn_id}] hero stance echo: agent "
-                                      f"{_aid} -> aiMode {_mode}", flush=True)
+                                      f"{_aid} -> aiMode {_mode} via 0x0062",
+                                      flush=True)
                                 break
+                    elif opcode == GAME_CMSG_HERO_FLAG_PLACE:
+                        # The hero flag echo: the client sent [agent, [x,y],
+                        # plane] and drew nothing -- the draw is 0x0066, and
+                        # its store is gated on the 0x0072 activation record
+                        # existing, which the hero-slot check mirrors.
+                        _aid, _axy, _apl = values[1], values[2], values[3]
+                        for _hid, _haid, _hdef in hero_slots():
+                            if _haid == _aid:
+                                send(GAME_SMSG_HERO_FLAG_SET,
+                                     [_aid, _axy, _apl],
+                                     f"HERO_FLAG_SET(agent {_aid}, "
+                                     f"{_axy}, plane {_apl})")
+                                print(f"[c{conn_id}] hero flag echo: agent "
+                                      f"{_aid} at {_axy}", flush=True)
+                                break
+                    elif opcode == GAME_CMSG_PARTY_FLAG_PLACE:
+                        # The party flag echo -- no agent field on either leg.
+                        _axy, _apl = values[1], values[2]
+                        send(GAME_SMSG_PARTY_FLAG_SET, [_axy, _apl],
+                             f"PARTY_FLAG_SET({_axy}, plane {_apl})")
+                        print(f"[c{conn_id}] party flag echo: {_axy}",
+                              flush=True)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
