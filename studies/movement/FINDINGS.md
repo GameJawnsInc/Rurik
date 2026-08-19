@@ -1251,7 +1251,39 @@ that reduces `player_health` and the only path that sets `player_dead` — swung
 and connected, at a player standing **2,844 u away** with nothing on screen to
 explain it.
 
-### The candidate warp fix, NOT yet shipped
+### The candidate warp fix — RUN, and REFUTED (2026-08-19)
+
+**Result first.** `--stop-echo` does **not** stop the teleport. Harness run
+`20260819T134811`: one clean trial — a 4,118 u grant to (11010, 5471) plane
+0→18 at t=25.05, the same shape as both teleports on record — with a stop echo
+fired at t=34.91, 9.86 s later and well inside both known lags. The operator
+watched the character teleport to the bridge regardless. The prediction printed
+at startup named that outcome as the refutation, so there is nothing to
+reinterpret: **overwriting the armed destination is not the mechanism.**
+
+**And the echo may be harmful, which is a stronger result than the null.** The
+operator also reported that immediately after the teleport the character began
+walking *back* toward where it had warped from — which is precisely where the
+echo had planted a destination a moment earlier. So the echo does not *replace*
+the pending click destination; it **adds a second one**. Since it fires on every
+stop, it leaves a live destination at every place the player has ever stood
+still — and "you get dragged back to where you stopped" is the other half of the
+warp the owner originally reported from memory. Left off, and now labelled
+REFUTED at the flag rather than merely unproven.
+
+**A method note that cost this run its wire evidence.** The client sends no
+position while standing still, and it was silent for the final **11.74 s** —
+which contains both known warp windows (11.6 s and 19.7 s post-grant). The
+capture therefore shows no impossible step at all, and `warpscan.py` scored the
+run "1 trial, no teleport". That verdict was wrong, and only the operator's own
+eyes caught it. **Any future warp run must keep the keyboard moving through the
+whole waiting period** — a tap of W every couple of seconds is enough to keep
+the instrument recording. A detector that goes blind exactly when the phenomenon
+fires is worse than no detector, because it reports a clean null.
+
+### What the refuted fix was, and why it looked good
+
+
 
 ArenaNet answers `0x0047` (move-cancel): **70 of 88** replies are a
 zero-distance `0x0029` whose destination equals the position the client just

@@ -935,8 +935,29 @@ INTERACT_WALK = False
 TRACE_MOVE = False
 
 # Answer a client move-cancel with a zero-distance destination at the position
-# the client just reported. OFF by default: this is the CANDIDATE fix for the
-# teleport, and it is unproven. `--stop-echo`.
+# the client just reported. OFF by default, and now **REFUTED** rather than
+# merely unproven. `--stop-echo`.
+#
+# THE RUN THAT KILLED IT, 2026-08-19, harness 20260819T134811. One clean trial:
+# a 4,118 u grant to (11010, 5471) on plane 0->18 at t=25.05 -- the same shape as
+# both teleports on record (4,074 u and 4,065 u, both 0->18) -- with a STOP ECHO
+# fired at t=34.91, 9.86 s later and comfortably before either known lag. The
+# operator watched the character teleport to the bridge anyway. The prediction
+# printed at startup named exactly this outcome as the refutation, so there is
+# nothing to reinterpret: overwriting the armed destination is NOT the mechanism.
+#
+# AND IT MAY BE ACTIVELY HARMFUL. The operator also reported that after the
+# teleport the character immediately began walking BACK toward where it had
+# warped from -- which is where the echo had just planted a destination. So the
+# echo does not overwrite the pending click destination; it adds a SECOND one.
+# Since it fires on every stop, it leaves a destination at every place the player
+# has ever stood still, and "you get dragged back to where you stopped" is the
+# other half of the warp the owner reported from memory in the first place.
+#
+# The wire could not see any of this: the client sends no position while standing
+# still, and it was silent for the 11.74 s that contains both known warp windows.
+# The operator's own observation is the whole of the evidence, and it is enough.
+# Do not turn this on again without a mechanism that survives it.
 #
 # WHY IT MIGHT WORK, read out of the client (build 38797) rather than guessed.
 # 0x0029 stores its point into the agent's syncPoint at +0x9c and caches an
@@ -8935,7 +8956,8 @@ def main():
                          "position report at all, for up to 12.9 s measured, "
                          "and that silence is what the trace is now for.")
     ap.add_argument("--stop-echo", action="store_true",
-                    help="THE CANDIDATE WARP FIX, unproven, OFF by default. On "
+                    help="REFUTED 2026-08-19, kept only so the negative result "
+                         "is reproducible -- do not reach for this as a fix. On "
                          "a client move-cancel (0x0047) echo the player's own "
                          "reported position straight back as a zero-distance "
                          "0x0029. Prediction, stated before the run: this "
@@ -9396,13 +9418,12 @@ def main():
     if a.stop_echo:
         global STOP_ECHO
         STOP_ECHO = True
-        print("STOP ECHO: answering every 0x0047 move-cancel with a "
-              "zero-distance 0x0029 at the player's own reported position. "
-              "PREDICTION, stated before the run: no more teleports onto a "
-              "click destination the player cancelled seconds earlier. The "
-              "refutation is just as clear -- if a warp still lands bit-exactly "
-              "on an earlier granted point, overwriting the armed destination "
-              "is not the mechanism and this flag should come out.")
+        print("STOP ECHO: REFUTED on run 20260819T134811 -- the character "
+              "teleported to the bridge anyway, 9.9 s after an echo had fired, "
+              "and then walked BACK toward the echoed point. Overwriting the "
+              "armed destination is not the mechanism, and the echo appears to "
+              "ADD a destination rather than replace one. You are re-running a "
+              "known negative.")
 
     if a.interact_walk:
         global INTERACT_WALK

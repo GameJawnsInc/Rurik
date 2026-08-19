@@ -1357,7 +1357,16 @@ agent's position via the teleport primitive `0x006020B0`, with no path solve and
 no distance guard — and nothing clears it, because the client's own `0x0047` is
 send-only.
 
-**THE ONE THING THAT NEEDS THE OWNER — a run, and it is cheap.** `--stop-echo`
+**THE RUN HAPPENED, AND THE FIX IS REFUTED (2026-08-19, `20260819T134811`).**
+One clean trial, a stop echo 9.9 s before the window, and the character
+teleported to the bridge anyway — then walked *back* toward the echoed point,
+which suggests the echo ADDS a destination rather than replacing one. Left off
+and labelled REFUTED. **Note the method failure too:** the client reports no
+position while standing still, so the wire was blind for the 11.74 s containing
+both known warp windows and `warpscan.py` scored it "no teleport". Keep the
+keyboard moving through the wait on any future run.
+
+~~**THE ONE THING THAT NEEDS THE OWNER — a run, and it is cheap.**~~ `--stop-echo`
 is implemented and OFF (`b0cd014`). It answers each move-cancel with a
 zero-distance `0x0029` at the player's own reported position, which is what
 ArenaNet does in **70 of 88** live cases and which should overwrite the armed
