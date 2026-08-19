@@ -130,9 +130,30 @@ Full detail in §5. The short form:
 
 ## 5. What to do next, cheapest first
 
-**A. Show a linked file's CONTENT changing the screen — STAGED 2026-08-19, §11.6.
-`vault/research/archivewrite/a4stage7.py`. Not deployed, not launched: it needs the
-owner at the keyboard, because its readout is a model-appearance verdict.**
+**A. Show a linked file's CONTENT changing the screen — ✅ ANSWERED 2026-08-19, §11.7.
+RUN 7 FIRED AND THE CREATURE CAME BACK DEFORMED.** Owner, at the keyboard: *"their
+bodies are kind of twisted like pretzels… idle/walk/cast all have pretzel model
+animations."* Six runs had failed to show this. `a4stage7.py` flipped every rotation
+key in fourteen linked files by 180°, wrote all fifteen rows **in place at
+compression 8**, and the retail client rendered from every one of them: spawn 8 of 8
+PASS, **no assert**, and the post-launch diff shows **only the client's own scratch
+rows 8315/8316 moved, no growth, and our 15 edited rows byte-identical after the
+launch**. So the write path is now validated under a CONTENT change, which A8 —
+byte-identical payload by design — could not do.
+
+**The positive control FAILED and that is recorded as a failure (§11.7b):** the head
+was not enlarged. It does not touch the verdict, and the reason it does not is the
+one correction that mattered — §11.5's original three-way table scored *head normal +
+limbs contorted* as **ABORT**, and §11.6e's rewrite scores it **ANSWERED, control
+invalid**. Shipped as designed, this run's positive result would have been thrown away.
+
+**Still open, none of it blocking:** whether geometry actually binds to nodes 51–64
+(needs skin weights; `modelfile.py` does not decode them, and §11.6b's 21.1% was a
+nearest-joint **proxy**); the two selector-0 records that should have stayed unflipped
+when the owner reports no normal animation at all; and whether the second deformed
+body in the capture is the player, which would make these files **shared libraries**.
+
+<details><summary>The staging procedure, kept — it is reusable</summary>
 
 Run it with `--plan-only` first (costs every edit against retail and stops without
 copying anything), then bare to build the staged archive, then `--deploy` with the
@@ -196,6 +217,8 @@ place, it needs no free run, and it would unblock 73940; but its rotation error 
 readout. And do not take the arms-only dose a lens proposed: it was aimed at
 protecting the control, and the corrected geometry shows the control needs no
 protecting.
+
+</details>
 
 **B. ~~Decide the encoder on its real merits.~~ A6 RAN, 2026-08-18 — see §10. It did NOT
 kill the encoder, and the risk is now entirely the LZ77 matcher.** Re-costing retail's own
