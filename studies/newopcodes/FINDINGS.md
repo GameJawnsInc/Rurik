@@ -853,6 +853,53 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### THE ROW IS NAMED BY THE CLIENT ITSELF — `CtlPage` item, `+0xC` is `proc`. 2026-08-18, SOURCED
+>
+> One frame further up, and the client names its own structure. The chain from our message
+> to the fault is now complete, every hop read out of the binary:
+>
+> ```
+> 0x00C3 handler -> posts UI frame message 0x100000B5   (the eight-reader family, section above)
+>   -> frame dispatch                                    (0x100000b5 appears in the dump's own Arg list)
+>     -> CtlPage command dispatch      0x0061F570..0x0061F8B3
+>       -> 0061F745  mov ecx,[edi] / push esi / call 0x61fa00
+>         -> 0061FA09  mov edi,[ebp+8]        ; edi = the ITEM ROW
+>            0061FA11  cmp [edi+8],0 / jge    ; guard, CtlPage:434
+>            0061FA64  push [edi+0xC]         ; the row's PROC
+>           -> 0064C2C3  mov eax,[ebp+8] / 0064C2CE  call eax   ; THE FAULT
+> ```
+>
+> **The client's own asserts name the fields** — this is no longer inference from a dump:
+>
+> ```
+> 0x0061FA1C  CtlPage:434   !IsBtnCode(item.code)     <- guards [edi+8] in OUR path
+> 0x0061FA9A  CtlPage:50    !IsBtnCode(pageCode)
+> ```
+>
+> So `edi` is a **`CtlPage` item row**, `+0x8` is **`item.code`**, and the field pushed as the
+> callback, `+0xC`, is the row's **`proc`**. The crash-dump pass called it "the row's callback
+> field ('proc', offset +0xC)" from the dump alone; the binary agrees on the name, the offset
+> and the role.
+>
+> **`CtlPage` is generic paged-control machinery**, not merchant code — its eleven assert
+> sites map the whole API: `code` (527), `itemFrame` (536), `pageCode` (546), `isEnabled`
+> (554), `btnFrame` (558), `!IsBtnCode(code)` (566), `IsBtnCode(btnCode)` (58), `!obj` (598),
+> `obj` (603). The arms carrying 527–566 sit inside the same dispatch our path enters, i.e.
+> **that dispatch is how item rows are ADDED**, by commands the client issues to itself.
+>
+> **The sharpest fact, and the one that closes the wire theory:** the `CtlPage:434` guard
+> **passed**. The row's `code` at `+0x8` looked legitimate while its `proc` at `+0xC` held
+> `.rdata` string bytes — so the client's own validity check does not catch this row, and no
+> value we could put in any message would make it. **The rows are built by the client's own
+> UI construction; `0x00C3` walks a page it assumes was already populated.** `0x00CA` renders
+> a shop because it never walks this array.
+>
+> **Honest limits.** Which of the 527–566 arms actually appends a row is NOT pinned, and
+> which event populates a *merchant* page specifically is NOT identified — both are the next
+> desk step, not results. What IS settled: the failure is structural client-side UI state,
+> the `+0xC` naming is first-party, and every remaining "fix it from the wire" idea for
+> `0x00C3` is refuted, including the two this arc spent runs on.
+>
 > ### THE CtlPage LEAD, CHASED — 2026-08-18. The faulting instruction is located, and no `0x0161` field can reach it. SOURCED
 >
 > Desk work on the dump from `20260818T224156`, rebased and disassembled. **This retires the
