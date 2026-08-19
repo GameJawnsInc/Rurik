@@ -853,6 +853,58 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### WHAT SUBSCRIBES TO `0x100000B5` — **GmView**, and the arc's recurring antagonist again. 2026-08-18, SOURCED
+>
+> **Method note worth keeping: you cannot find this by searching the constant.** All **nine**
+> references to `0x100000B5` in the image are `push imm32` — every one a POSTER, not a
+> consumer. Subscription passes the id as a runtime value, so no `cmp` against it exists.
+> (Eight posters are the window-owner family at `0x00813FB3`–`0x0081448B`, matching this
+> document's eight readers. **The ninth, `0x004ECEFD`, is new** — a poster in the UI region
+> itself, outside that family, and nothing here has looked at it.)
+>
+> **What does work is the crash trace, which walks the delivery path for us.** Rebased
+> (delta `0xA70000`), outermost post → innermost fault:
+>
+> ```
+> 0x00813FBC  our poster returns here      (0x00C3 -> post 0x100000B5)
+> 0x0064CA58 -> 0x0064C8EA -> 0x0064CA24   frame layer
+> 0x004E5603                               <== THE SUBSCRIBER SIDE
+> 0x004E869A                                   (inside 0x004E8510)
+> 0x00633C7C -> 0x0064C996 -> 0x0064CA24 -> 0x0064BFC0   frame layer again
+> 0x0061F74E  CtlPage dispatch (case 0x06)
+> 0x0061FA72  CtlPage row walker
+> 0x00630DB4  -> call eax
+> ```
+>
+> **The subscriber call site, read directly:**
+>
+> ```
+> 004E55FB  push edi
+> 004E55FC  push [esi]
+> 004E55FE  call 0x4E8510     ; <-- the handler
+> 004E5603  add esp, 8        ; <-- the trace's return address
+> ```
+>
+> **And the client names the module:** the function containing that call carries
+> **`GmView:7684 msg.data`** and **`GmView:7723 msg.data`** (`0x004E583D`, `0x004E58DA`).
+> The handler it calls, `0x004E8510`, carries **`Array:587 index < m_count`** at
+> `0x004E879D` — it indexes an array.
+>
+> **So `GmView` is what subscribes**, which puts this crash in the same component the heroes
+> arc spent seven passes on and the PvP-UI arc finally cracked — and it makes the PvP-UI
+> finding directly relevant: **GmView subscribes to frame events LATE** (measured there at
+> **53 ms** after instance load for `0x10000114`, which is why `--party-mine-late` exists at
+> all). A subsystem whose subscription timing already broke one arc is now the subscriber
+> for the message that crashes this one.
+>
+> **What this does and does not settle.** It answers *who receives it*: GmView, via
+> `0x004E8510`. It does **not** yet show *why GmView's page has no valid rows* — the
+> `Array:587` guard inside `0x004E8510` says it indexes a real array, so the next question is
+> what that array holds in our session versus retail's. Note the tension to resolve rather
+> than paper over: the alignment evidence says the row is `payload+4`, while `0x004E8510`
+> indexes an array — both cannot be the whole story, and the reconciliation is the next
+> desk step.
+>
 > ### COUNTED: `0x00C3` POSTS FOUR DWORDS AND THE CONSUMER READS A FIFTH — IT CALLS THE /GS STACK COOKIE. 2026-08-18, SOURCED
 >
 > The stub `0x0091F230` passes the two wire fields to worker **`0x00813F80`**, which builds
