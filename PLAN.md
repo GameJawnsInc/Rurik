@@ -1332,6 +1332,37 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### Merchants — a player can now BUY from a server we wrote (2026-08-19)
+
+[studies/newopcodes/FINDINGS.md](studies/newopcodes/FINDINGS.md), the unit-setup arc.
+Authored NPC, authored stock, authored prices, a funded purse, a client that asks and a
+server that answers. `20260819T170427`: `Your Funds` fell **2000 → 1990** — the quoted
+price exactly — on the merchant panel *and* the inventory window's gold line, with the
+bought item in backpack slot 0 carrying its real stats. First transaction this project
+has completed.
+
+**What landed.** `authsrv.PLAYER_BAGS` — retail's nine containers, sent during LOAD where
+retail sends them (49/49 live connections, five distinct characters, one distinct set);
+with one bag the client refused every purchase LOCALLY and cost no wire message doing it.
+`content/items.toml [item.backpack]` — the Backpack is an ITEM, `0x013F`'s trailing field
+is its id, and sending 0 there drew eight containers and no Backpack. `0x014F` is the gold
+DEBIT, mirror of `0x0140`'s credit, which refutes this arc's own "no server message carries
+it". `handle_item_purchase` answers `GAME_CMSG 0x004D`: **pay, mint, place, confirm**.
+Tests: `test_playerbags.py` (18), `test_purchase.py` (22).
+
+**NEXT, in cost order:**
+1. **`0x004A` SELL has no arm**, and its reply triple is already read off the corpus —
+   `0x00CC [11]` → `0x014D` item gone → `0x0140` credit. Same shape of work as the buy,
+   with the corpus carrying 8 examples rather than 1.
+2. **`0x00C3` field 1: count or type.** Survives now in retail's shape (n = 2, separate
+   sessions), so the separating run is cheap and safe: stage **five** items, send `[5, 0]`,
+   then `[11, 0]`. Count says the first is right; type says the reverse.
+3. **A purchase does not persist and stock is infinite** — ids come from a fixed base and
+   slots from a per-connection cursor. Fine for probes, wrong for a world.
+4. **The level-up burst** is still unmined in `20260819T132414` (channel 52606, operator
+   notes at wire_t 227.6 and 278.5) — the transition §8 names as never once observed.
+
+
 ### Model authoring — the PLAYER path is open, and one bit decides whether it animates (2026-08-19)
 
 [studies/playercomposite/FINDINGS.md](studies/playercomposite/FINDINGS.md), rung U10 in
