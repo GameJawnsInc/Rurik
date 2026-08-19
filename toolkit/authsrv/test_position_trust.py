@@ -50,15 +50,18 @@ import authsrv    # noqa: E402
 import vaultpath  # noqa: E402
 
 # MEASURED from a real green run: 24 checks with the capture present, 20
-# without; section 8, the unit-vector lock, added 8 more on 2026-08-19, so
-# 32 and 28. The floor is the BARE-MACHINE subset -- sections 0 to 8 are
-# pure policy and syntax tree and take no fixture, while section 9 replays a
-# real capture and declares LEDGER.skip when this vault has no copy of it.
-# Setting the floor at 32 would red every machine that is not the owner's;
-# 28 still catches the failure this rule exists for, which is a section
+# without; section 8 (the unit-vector lock) added 8 on 2026-08-19 and
+# section 9 (the --client-endpoint shape lock) added 6, so 38 and 34 --
+# and 39/35 was written here first, from a count in the author's head
+# rather than from the run, which would have set the floor ABOVE the
+# bare-machine total and redded every machine without the capture. The floor is the BARE-MACHINE subset -- sections 0 to 8 are
+# pure policy and syntax tree and take no fixture, while section 10 replays
+# a real capture and declares LEDGER.skip when this vault has no copy of it.
+# Setting the floor at 38 would red every machine that is not the owner's;
+# 34 still catches the failure this rule exists for, which is a section
 # quietly evaporating.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=28)
+                       floor=34)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -365,7 +368,81 @@ def main():
           "and a zero-length heading is guarded, not divided by",
           f"{guarded} -- 55 of 4,760 of our own sends carried |v| = 0")
 
-    print("\n9. replay: the real refusals from run 20260819T114743")
+
+    print("\n9. --client-endpoint ships OFF, and grants the CLIENT's own point")
+    check(authsrv.CLIENT_ENDPOINT is False,
+          "--client-endpoint is off by default",
+          "it is the FIFTH candidate fix in this arc and four are dead. It is "
+          "unproven until one run scores it")
+    ce = []
+    for node in ast.walk(src):
+        if not (isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                and node.test.id == "CLIENT_ENDPOINT"):
+            continue
+        for call in ast.walk(node):
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                    and call.func.id == "send" and len(call.args) >= 2
+                    and isinstance(call.args[1], ast.List)):
+                ce.append((node, call.args[1].elts))
+    check(len(ce) == 1, "there is exactly one client-endpoint send",
+          f"{len(ce)} -- two would be two policies, which is how the heading "
+          f"arm ended up granting twice per report")
+
+    # THE FIRST OF THE TWO THINGS THAT KILLED --heading-grant. It sent
+    # `clip_to_walkable(...)` -- a point shortened wherever OUR navmesh says a
+    # wall is. Where that disagrees with the client's own collision we grant a
+    # point short of where the player is really going, the authoritative copy
+    # stops early, and the separation that becomes the warp opens up. The
+    # server's internal model may still clip; the WIRE may not.
+    block = ce[0][0] if ce else None
+    clipped = block is not None and any(
+        isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+        and c.func.id == "clip_to_walkable" for c in ast.walk(block))
+    check(not clipped,
+          "and it does NOT clip the point it sends",
+          "clip_to_walkable is back inside the block -- that is the first of "
+          "the two defects that made --heading-grant warp the owner's character")
+
+    # THE SECOND. It computed from `state["pos"]` rather than the report in
+    # hand. Those are equal on every ACCEPTED report, so this is not a
+    # correctness fix in the common case -- it is a fix for exactly the moment
+    # the trust guard refused, which is when our model is least entitled to name
+    # a destination.
+    names = {n.id for n in ast.walk(block) if isinstance(n, ast.Name)} if block else set()
+    check("reported" in names,
+          "and it derives the point from `reported`",
+          f"{sorted(names)[:8]} -- the client's own figure, so the granted "
+          f"endpoint is the client's own proposal")
+    subs = [n for n in ast.walk(block)
+            if isinstance(n, ast.Subscript)] if block else []
+    uses_state_pos = any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos" for n in subs)
+    check(not uses_state_pos,
+          "and not from state['pos']",
+          "state['pos'] is back -- it is the last report the guard ACCEPTED, "
+          "which is stale in exactly the window a refusal opens")
+
+    # THE CONTROL. Both matchers above only ever run against healthy source, so
+    # both are branches a typo would silently disable. Hand them the defect.
+    bad = ast.parse("if CLIENT_ENDPOINT:\n"
+                    "    d = clip_to_walkable(state, (state['pos'][0], 0))\n"
+                    "    send(OP, [PLAYER_AGENT_ID, list(d), plane, plane], 'x')")
+    bnode = next(n for n in ast.walk(bad)
+                 if isinstance(n, ast.If) and isinstance(n.test, ast.Name))
+    bad_clip = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                   and c.func.id == "clip_to_walkable" for c in ast.walk(bnode))
+    bad_state = any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos"
+        for n in ast.walk(bnode) if isinstance(n, ast.Subscript))
+    check(bad_clip and bad_state,
+          "CONTROL: both matchers still SEE the old defects when handed them",
+          f"clip={bad_clip} state_pos={bad_state} -- if either stopped "
+          f"matching, the two checks above would pass for the wrong reason")
+    print("\n10. replay: the real refusals from run 20260819T114743")
     path = os.path.join(vaultpath.vault_path("captures", "gamesrv"), CAPTURE)
     if not os.path.exists(path):
         LEDGER.skip("capture replay",

@@ -1492,6 +1492,29 @@ player grants**. If nothing we sent steered the authoritative copy, this
 mechanism did not move the player. Same population as the 5-of-12 teleports that
 land nowhere near a grant.
 
+**THE FIFTH CANDIDATE IS IN THE TREE, OFF, WITH ITS PREDICTION STATED FIRST.**
+`--client-endpoint` (`authsrv.py`, `CLIENT_ENDPOINT`) answers every keyboard
+heading with **`reported + heading + 0.5 * unit(heading)`, UNCLIPPED** -- retail's
+own expression, the client's reported position plus its own vec2 plus the +0.500 u
+constant measured to +/-0.00003 in 8 of 8 live captures. It differs from the
+refuted `--heading-grant` in exactly the two things that made that one warp: it
+does not send `clip_to_walkable`'s shortened point, and it derives from the report
+in hand rather than `state["pos"]`. `test_position_trust.py` §9 locks both, with a
+control that hands the matchers the old defects and requires them to still fire.
+Floor 34, green 38.
+
+**THE PREDICTION, in two parts because the last one had only one and failed by
+it** -- it bounded teleport SIZE while the harm arrived as FREQUENCY:
+- **SIZE:** mean separation before a resync stays under **150 u** (587.0 u measured
+  under `--heading-grant`).
+- **FREQUENCY:** client steps over 300 u fall under **2 per minute** (12.8/min
+  under `--heading-grant`, 5.7/min in the default build).
+**Refuted if either fails.** Both are readable from one 60-second run, and the
+frequency half needs no client-memory probe at all:
+
+    python toolkit/harness/session.py --keep-open --exe <38797 build> --game-args='--client-endpoint'
+    python toolkit/clientscan/movesync.py --wire-only
+
 **THE NEXT EXPERIMENT, and it is a measurement rather than a fix.** The surviving
 candidate — grant on every heading, ungated, `0x0025`+`0x002B`+`0x0029`, from the
 client's just-reported position — is a **refinement of the REFUTED `--heading-grant`

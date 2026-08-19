@@ -2269,9 +2269,20 @@ Every one of these, in the order they were written:
   and which is not an angle. Its **control hands the matcher `list(heading)` on
   purpose**, because the rejecting branch is the one that never runs against
   healthy source and so is exactly the branch a typo would silently disable.
-  §9 replays the capture. Floor **28**, the bare-machine subset, against a green
-  **32** with `authsrv-20260819T114759-c1.jsonl` present; §9 declares
-  `LEDGER.skip` without it. No client. ~1 s),
+  **§9 locks the shape of `--client-endpoint`**, the FIFTH candidate fix, against
+  the two defects that made the fourth warp the owner's character. It ships OFF;
+  its send must NOT contain `clip_to_walkable` (our navmesh shortens a leg
+  wherever it thinks a wall is, and where it disagrees with the client's own
+  collision we grant a point short of where the player is really going -- the
+  authoritative copy stops early and the gap that becomes the warp opens); and it
+  must derive the point from `reported`, not `state["pos"]` (equal on every
+  ACCEPTED report, and different in exactly the window a refusal opens, which is
+  when our model is least entitled to name a destination). Both matchers run only
+  against healthy source, so both are branches a typo would silently disable --
+  the control hands them source carrying both old defects and requires them to
+  still fire. §10 replays the capture. Floor **34**, the bare-machine subset,
+  against a green **38** with `authsrv-20260819T114759-c1.jsonl` present; §10
+  declares `LEDGER.skip` without it. No client. ~1 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we

@@ -1083,6 +1083,44 @@ STOP_ECHO = False
 # for the player is 0.492 s, and 88.5% of its player grants answer a heading. So
 # this is not a workaround, it is the shape we were missing.
 HEADING_GRANT = False
+# --client-endpoint. THE FIFTH CANDIDATE, and four are already dead, so the
+# prediction is written here BEFORE the run and in the units the harm arrives in.
+#
+# WHAT THE MEASUREMENTS CONSTRAIN. The warp is the client snapping its predicted
+# copy onto the server-authoritative one (measured both sides at once, run
+# 20260819T171436: 13 of 13 jumps collapse a mean 587.0 u separation to 22.3 u,
+# and the wire-only test finds the same signature in the DEFAULT build -- 18 of
+# 30 landings on the granted path against 0 of 31 for an unrelated grant). Two
+# terms drive that separation and BOTH must hold, which is exactly why the four
+# dead candidates died -- each fixed one:
+#   (1) the granted point must be where the player is actually going, and
+#   (2) it must be refreshed.
+# `--heading-grant` satisfied (2) at a median grant age of 0.32 s -- FASTER than
+# retail's 0.490 s -- and still warped, because it failed (1) twice over: it sent
+# `clip_to_walkable(...)`, a point shortened by OUR navmesh where the client's
+# own collision disagrees, and it computed it from `state["pos"]` rather than the
+# report in hand. The default build fails (2) instead: a click grant sits
+# outstanding a median 5.84 s and a maximum 56.17 s while the authoritative copy
+# glides along it.
+#
+# WHAT THIS SENDS: `reported + heading + 0.5 * unit(heading)`, UNCLIPPED, on
+# every heading while moving. That is retail's own expression -- the client's
+# reported position plus its own vec2 plus exactly +0.500 u along it, measured to
+# +/-0.00003 in 8 of 8 live captures -- and the clip is dropped because the
+# client collides for itself and does it better than our navmesh does. The
+# server's internal model keeps its clipped leg; only the wire changes.
+#
+# THE PREDICTION, in two parts because the last one failed by having only one.
+# It bounded teleport SIZE and the harm arrived as FREQUENCY.
+#   SIZE:      mean separation before any resync stays under 150 u, against the
+#              587.0 u measured under --heading-grant.
+#   FREQUENCY: client steps over 300 u fall under 2 per minute, against the 13
+#              in 61 s (12.8/min) under --heading-grant and the 31 in 329 s
+#              (5.7/min) in the default build.
+# REFUTED IF EITHER FAILS. Both are readable from one 60-second run:
+# `movesync.py` for the separation, `movesync.py --wire-only` for the rate, and
+# the rate needs no movetap at all.
+CLIENT_ENDPOINT = False
 
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
@@ -7670,6 +7708,42 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      f"HEADING GRANT ({model_dest[0]:.0f},"
                                      f"{model_dest[1]:.0f}) plane {plane}"
                                      f"{' clipped' if blocked else ''}")
+                            if CLIENT_ENDPOINT:
+                                # THE CLIENT'S OWN ENDPOINT, VERBATIM. See the
+                                # flag's comment for the two terms this has to
+                                # satisfy at once and the prediction that
+                                # decides it.
+                                #
+                                # `reported`, not `state["pos"]`: they are equal
+                                # on every ACCEPTED report -- _take_client_position
+                                # writes it and this arm reads it back four lines
+                                # later -- and they differ exactly when the trust
+                                # guard refused, which is the moment our model is
+                                # least entitled to name a destination.
+                                #
+                                # UNCLIPPED. `clip_to_walkable` shortens the leg
+                                # wherever OUR navmesh says a wall is, and where
+                                # it disagrees with the client's own collision we
+                                # grant a point short of where the player is
+                                # really going -- the authoritative copy stops
+                                # early, the player walks past it, and the gap
+                                # that separation measures opens. The client
+                                # collides for itself.
+                                hx, hy = heading
+                                hm = math.hypot(hx, hy)
+                                if hm > 1e-6:
+                                    # +0.500 u along the heading. ArenaNet's
+                                    # constant, additive and not multiplicative
+                                    # (70 sigma), in 8 of 8 live captures. It is
+                                    # a shape detail, NOT the fix: 0.5 u moves
+                                    # the arrival tick by 2 ms at maxSpeed 288.
+                                    ex = reported[0] + hx + 0.5 * hx / hm
+                                    ey = reported[1] + hy + 0.5 * hy / hm
+                                    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                         [PLAYER_AGENT_ID, [ex, ey], plane,
+                                          plane],
+                                         f"CLIENT ENDPOINT ({ex:.0f},{ey:.0f}) "
+                                         f"plane {plane}")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -9459,6 +9533,13 @@ def main():
                          "client at 282 -- but a click-walk still sends no "
                          "position report at all, for up to 12.9 s measured, "
                          "and that silence is what the trace is now for.")
+    ap.add_argument("--client-endpoint", action="store_true",
+                    help="Answer every keyboard heading with the "
+                         "CLIENT'S OWN endpoint -- its reported "
+                         "position plus its own vec2 plus 0.5 u "
+                         "along it, unclipped, which is retail's "
+                         "own expression. The fifth candidate fix; "
+                         "four are dead. Its prediction is stated at CLIENT_ENDPOINT and bounds BOTH the separation and the jump RATE, because the last one bounded size while the harm arrived as frequency.")
     ap.add_argument("--heading-grant", action="store_true",
                     help="REFUTED 2026-08-19 -- it CAUSES warps. Kept only so "
                          "the negative result is reproducible. Answers every "
@@ -9936,6 +10017,16 @@ def main():
               "printed. Watch for a REJECT whose drift is large and whose "
               "budget is 900 -- and for the CAPITULATE that must follow it.")
 
+    if a.client_endpoint:
+        global CLIENT_ENDPOINT
+        CLIENT_ENDPOINT = True
+        print("[map] --client-endpoint ON. PREDICTION, stated before the run:")
+        print("      SIZE      mean separation before a resync stays under 150 u")
+        print("                (587.0 u measured under --heading-grant)")
+        print("      FREQUENCY client steps over 300 u fall under 2 per minute")
+        print("                (12.8/min under --heading-grant, 5.7/min default)")
+        print("      REFUTED IF EITHER FAILS. Score it with:")
+        print("        python toolkit/clientscan/movesync.py --wire-only")
     if a.heading_grant:
         global HEADING_GRANT
         HEADING_GRANT = True
