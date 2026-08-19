@@ -607,6 +607,8 @@ _DRAIN_ITEM_C = 42
 # hypothesis, not a correction to them.
 _STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
+# Mirrors authsrv.py: the ONE container this server registers (0x013F).
+EQUIPPED_BAG_ID = 1
 
 
 # Prices for the stock arm. OUR OWN numbers, deliberately not retail's table --
@@ -695,6 +697,30 @@ def _merchant_window_steps(agent_id, origin):
     a = _MERCHANT_NPC_AGENT
     ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
     return [
+        Step(2.0, 0x013F, [EQUIPPED_BAG_ID, 1, 0, 2, 20, 638],
+             "0x013F: give the player a BACKPACK (type 1, 20 slots)",
+             "no visible change yet -- press I and a backpack grid should be "
+             "there. THIS IS THE DESTINATION CONTAINER. The 20260819T141246 "
+             "run had a funded purse, an enabled Buy, and an operator-watched "
+             "click that produced NOTHING on the wire: the client refuses a "
+             "purchase it has nowhere to put, which is ArenaNet's "
+             "'Inventory full' path and costs no traffic. Parameters are "
+             "retail's own, read from capture 20260819T132414 idx 8 "
+             "([inv, type 1, model 0, bag, 20 slots, 638]); the same burst's "
+             "type-5/42-slot bag is material storage, which is a GW fact "
+             "nobody here supplied and is why the reading is trusted."),
+        Step(2.0, 0x0140, [EQUIPPED_BAG_ID, 500],
+             f"0x0140 [purse {EQUIPPED_BAG_ID}, +500] -- FUND THE PLAYER",
+             "THE FIRST TEST. 0x0140's setter is `add [ecx+0x90], eax` -- it "
+             "CREDITS carried gold on the container its field 1 names "
+             "(handler 0x00846120 -> 0x00849FE0, refuted our own 'nothing "
+             "writes carried gold' the same day). Container 1 is the only one "
+             "this server creates (0x013F) and 0x0141 [1,0] is legal at login, "
+             "so this must not assert. Whether container 1 is the PURSE -- the "
+             "one ItemCliGetGold reads through [ctx+0x40]+0xF8 -- is exactly "
+             "what the shop's 'Your Funds' line will say. An `inventory` "
+             "assert at ItCliApi:1955 instead means id 1 is not registered "
+             "the way 0x0141's success implied."),
         Step(2.0, 0x0056,
              [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
