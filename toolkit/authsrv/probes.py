@@ -595,7 +595,25 @@ _DRAIN_ITEM_B = 41
 _DRAIN_ITEM_C = 42
 
 
+# THE ONE VARIABLE OF THE 2026-08-18 test. Our content rows carry
+# flags = 0x20001006; every one of retail's 14 priced-stock declarations has
+# bit 2 CLEAR and bit 0 SET, and bit 2 is SOURCED to gate the item-detail
+# fetch (0x00848450: `test cl,4 / jne` skips the call to 0x84be50 when set).
+# So a stock item we declare is telling the client "detail already loaded"
+# and the client never loads it. This clears bit 2 and sets bit 0 and touches
+# NOTHING else -- bits 1 and 12 stay, so whatever they encode is held fixed.
+# Overridden here rather than in content/items.toml on purpose: the toml rows
+# are measured starter gear with their own provenance, and this is a
+# hypothesis, not a correction to them.
+_STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
+
+
+def _stock_item(key):
+    """A content item re-declared as merchant stock: bit 2 cleared, bit 0 set."""
+    row = dict(item_template(key))
+    row["flags"] = _STOCK_FLAGS
+    return row
 
 
 def _merchant_window_steps(agent_id, origin):
@@ -673,14 +691,14 @@ def _merchant_window_steps(agent_id, origin):
              "applies it). If it turns, the owner register was written even if "
              "no window ever draws."),
         Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A,
-                                     item_template("warrior_legs")),
-             "0x0161: declare stock item 40 (leggings)", "nothing."),
+                                     _stock_item("warrior_legs")),
+             "0x0161: declare stock item 40 (leggings), flags 0x20001003", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B,
-                                     item_template("warrior_boots")),
-             "0x0161: declare stock item 41 (boots)", "nothing."),
+                                     _stock_item("warrior_boots")),
+             "0x0161: declare stock item 41 (boots), flags 0x20001003", "nothing."),
         Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C,
-                                     item_template("warrior_gloves")),
-             "0x0161: declare stock item 42 (gloves)", "nothing."),
+                                     _stock_item("warrior_gloves")),
+             "0x0161: declare stock item 42 (gloves), flags 0x20001003", "nothing."),
         Step(3.0, 0x0084, [ids],
              "0x0084: stage the three stock ids into accumIntList[0]",
              "nothing -- the appender is QUIET, measured twice."),
@@ -688,16 +706,25 @@ def _merchant_window_steps(agent_id, origin):
              "0x00CA [1, 1.0f] -- retail's next message in s1",
              "unknown; upstream does not name it. Watch for anything at all."),
         Step(3.0, 0x00C3, [_DRAIN_ITEM_A, 0],
-             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD, and this is why",
-             "NOT SENT. Both prior runs died on this message and both times it "
+             f"0x00C3 [{_DRAIN_ITEM_A}, 0] -- WITHHELD: three runs, three deaths",
+             "THE TEST. Both prior runs died on this message; both declared "
              "killed the client 13 s before the drain below, which is the only "
              "arm nobody has ever observed. It is also UNNECESSARY: 0x00CA "
              "opens the shop by itself, twice measured (56,928 and 56,909 px). "
              "What it already taught is banked -- field 1 is an item id "
              "(undeclared 3 -> Assertion: item; declared 40 -> the guard "
              "PASSED and the failure moved to a c0000005 at ASCII 'msg.'), so "
-             "a plain 0x0161 item is not merchant stock. Withholding it costs "
-             "nothing and buys the drain its first look at an OPEN window.",
+             "a plain 0x0161 item is not merchant stock. RESTORED for the "
+             "flags test: the control is run 2, which sent this exact message "
+             "at these exact items and died -- the ONLY difference now is F8 "
+             "bit 2. IT DID NOT SURVIVE: run 20260818T224156 carried "
+             "F8=0x20001003 (bit0 set, bit2 clear, retail's own pattern, "
+             "confirmed by decoding our capture) and died on the IDENTICAL "
+             "c0000005 writing 0x2e67736d -- ASCII 'msg.' -- so the gate is "
+             "real but is not what this path is missing. WITHHELD again: it "
+             "kills the client every time and 0x00CA opens the shop without "
+             "it. The live lead is the CtlPage row callback, not a 0x0161 "
+             "field.",
              sends=False),
         Step(10.0, 0x0084, [ids],
              "restage column 0 -- now ask the ORIGINAL question in this context",
