@@ -575,7 +575,7 @@ to the two globals `0x010876C8` / `0x010876CC` — 11 and 19, all inside
 gives, exactly:
 
 - **one writer**: `0x00C4` → `0x00813FE0` (store agent, set flag = 1)
-- **eight readers**: `0x00C3`, `0x00C5`, `0x00C6`, `0x00C8`, `0x00C9`, `0x00CA`, `0x00CB`,
+- **eight readers**: `0x00C3`, `0x00C5`, **`0x00C7`** (← CORRECTED 2026-08-19, this row read `0x00C6`), `0x00C8`, `0x00C9`, `0x00CA`, `0x00CB`,
   `0x00CD` — each builds `{id, stored_agent, 0, stored_flag, …payload}`, posts it with UI
   frame message `0x100000B5` via `0x00633D70` (whose own assert is
   `FrApi.cpp:3901 msgId >= FRAME_MSG_EX`), then `mov [0x010876CC], 0` — consume and clear
@@ -1968,6 +1968,49 @@ delta 0; our own wire context is **consistent** but not decisive; the client con
 should not go into `overrides.json` on this evidence.
 
 ---
+
+> ### THE FIVE UNREAD READERS ARE ALL RULED OUT, AND THE READER LIST HAD AN OFF-BY-ONE. 2026-08-19
+>
+> Six parallel reads of the pinned build, every structural claim re-verified by hand here.
+>
+> **No wire message we can find writes carried gold.** `0x00C6`, `0x00C8`, `0x00C9`,
+> `0x00CB` and `0x00CD` were each fully disassembled through their single workers:
+> **all five are clean negatives** — none stores to the item singleton's `+0x90`, and
+> four of the five never reference the singleton at all. A sixth agent hunted the writer by
+> four further routes (xrefs on both gold getters, neighbour-function sweeps either side of
+> them, `--field 0x90 --writes` across other modules, and the `VnGuildAddService:969`
+> spend path) and returned **NOT FOUND** with its bounds stated. Together with the banked
+> negative, that is **six independent passes** and the honest position is that carried gold
+> is not server-settable by anything this project has located — not that it is unsettable.
+>
+> **CORRECTION, and it is ours: `0x00C6` is NOT one of the eight owner-register readers —
+> `0x00C7` is.** Verified by hand both ways:
+>
+> ```
+> 0x00C6 -> handler 0x0091F290 -> worker 0x00814100
+>   00814118  push 0x100000b6      ; a DIFFERENT frame message
+>   0081411D  call 0x633d70        ; and it never touches 0x010876C8/CC at all
+>
+> 0x00C7 -> handler 0x0091F2F0 -> worker 0x00814130
+>   0081414F  mov eax,[0x10876c8]  ; the owner agent
+>   00814157  mov eax,[0x10876cc]  ; the active flag
+>   0081416B  push 0x100000b5      ; the eight-reader frame message
+> ```
+>
+> `0x00C6` packs its two wire fields into an 8-byte buffer and posts `0x100000B6` — a
+> self-contained leaf that is **not** part of this family, so upstream's
+> `TRANSACTION_REJECT` name, whatever it means, does not reach the window mechanism. The
+> §"`0x00C4`" row above is corrected in place. Worth naming the failure mode: the reader
+> set was derived by mapping xref sites to opcodes, and **one mapping slipped by one** —
+> exactly the "handler-address adjacency proves nothing" trap this document already warns
+> about, caught this time only because a task went and read the function.
+>
+> **Where that leaves the shop.** Buy stays quoted-only, and the remaining explanations are
+> now few and testable: carried gold may arrive with character/account load rather than in
+> the instance protocol (the login burst's unexplained `1000` in `CHARACTER_UPDATE_INFO` is
+> the standing suspect), or it may be written through a `this` pointer no anchored scan
+> reaches. **Neither is a client run** — the next move is reading the character-load path,
+> not another probe.
 
 > ### DESK WORK, 2026-08-19: `0x0141` CANNOT EVER FUND THE SHOP — it is correctly named, and we misread the name. SOURCED
 >
