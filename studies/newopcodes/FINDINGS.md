@@ -853,7 +853,32 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
-> ### WHAT `0x0161` NEEDS FOR MERCHANT STOCK — desk work, 2026-08-18. The gate is FOUND and VERIFIED first-party.
+> ### WHAT `0x0161` NEEDS FOR MERCHANT STOCK — desk work, 2026-08-18
+>
+> > **TESTED AND REFUTED THE SAME DAY. Read this first.** The bit-2 fix below was run
+> > (`20260818T224156`) and **did not work**: the wire carried `F8 = 0x20001003` on all
+> > three items — bit0 set, bit2 clear, retail's exact pattern, verified by decoding our
+> > own capture — and the client died on `0x00C3` with the **identical** fault,
+> > `c0000005` writing address **`0x2e67736d`**, which is `"msg."` little-endian, the same
+> > address as run 2. Zero client-originated rows follow the send, so the probe spent its
+> > last 13 s talking to a corpse. **The gate itself is not in doubt** — the disassembly
+> > below is re-verified and bit 2 really does skip the detail fetch — **but it is not
+> > what the merchant path is missing.** The prediction was on record before the run and
+> > it failed; that is the result, not a step toward one.
+> >
+> > **What this promotes:** the crash-dump pass's dissent, recorded below precisely
+> > because it disagreed. It said a single `0x0161` scalar was an unlikely cause and put
+> > the fault two levels downstream, in `CtlPage`'s per-row descriptor where a callback at
+> > `+0xC` is read and **called** holding the bytes `msg.`. The crash address is that
+> > string, so the dissent now has the strongest evidence in the file and is the next
+> > lead. **`F9` (price) stays untested and is now the weaker candidate** — a missing
+> > gold value does not plausibly put ASCII where a function pointer belongs.
+> >
+> > The `_STOCK_FLAGS = 0x20001003` override is **kept** in `probes.py`: it matches
+> > retail on both bits and is better-founded than what it replaced, but it is
+> > RECONSTRUCTION and **not** a fix, and must not be cited as one.
+>
+> Desk work as it stood before that run:
 >
 > Three independent passes (retail's bytes, the crash dump, our sender). They **disagreed**,
 > and the disagreement is what located the answer.
