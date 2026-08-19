@@ -113,31 +113,71 @@ authoritative agent arrives and stops until the next grant re-arms it, so its
 average speed is below 288; and separation is a vector distance, so it depends on
 the angle between the two copies' travel. **Speed is a major term, not the model.**
 
-**CONTESTED and now load-bearing:** whether `0x002B`'s float tracks the direction
-family. One attribution rule gives forward 1.0000 in 627/840 and backward 0.6600
-in 47/57 (and 0.66 × 284.96 = 188, the measured backward speed); another gives
-backward carrying 1.0000 in 15 of 69 plus ~180 one-off floats, i.e. the channel
-also carries snares and buffs. **Do not average them.** Settled by `movetap` on
-`agent+0x5C`/`+0x60` during deliberate sustained backpedalling with the wire
-logged alongside — the instrument exists and needs no new tooling.
+**RESOLVED at the naming level (2026-08-19 corpus pass — FINDINGS "the corpus
+pass on the handoff's list"):** both rules were right about different factors of
+one product. `0x002B` = `direction_factor × modifier` (1.00 fwd / 0.66 back /
+0.75 side, × snare), locked to its own trailing byte 0/1,049 violations; the
+absolute base rides `0x0027 AGENT_UPDATE_SPEED_BASE` (288.0, boost 383.04 —
+23% of retail intervals run boosted; we send `0x0027` never and `0x002B` = 1.0
+always, 621/621). Rule B's backward-1.0 was a join-lag artifact.
+**⚠ The CAUSAL step did not survive:** we send 1.0 always and our client STILL
+backpedals at ~186 u/s (0.66× forward) in 8 of 12 runs — the factor is applied
+client-side to the predicted copy regardless of the wire float. The corpus
+settles the VALUES; whether a non-1.0 rate steers the AUTHORITATIVE copy is
+open, decidable by static analysis of the `0x002B`/`0x0027` handlers or by the
+movetap backpedal run. **And the paired movetap join says the default build's
+authoritative copy is mostly PARKED** (moving 39.8% of backward intervals, mean
+114.57 u/s; duty cycle tracks grant rate 0%→98%) — separation there is the
+client walking away from a parked point, which a speed multiplier cannot touch
+while it is parked.
 
 ---
 
 ## 4. The next thing to do, in order
 
-1. **CHECK BEFORE DESIGNING.** Does retail send `0x0028 AGENT_STOP_MOVING` to the
-   player when keyboard movement begins while a click destination is outstanding?
-   The live corpus answers it and no client run is needed. **Do this first** — the
-   sixth candidate should come out of the corpus, not out of the same reasoning
-   that produced the fourth and fifth.
-2. **If it does:** the intervention is a **subtraction** — clear the outstanding
-   destination rather than re-aiming it. Every failed candidate was an addition.
-3. **Settle the `0x002B` contest** (§3) — it decides whether a speed term is even
-   available to us.
-4. **The unexplained population.** Capture `20260811T173940` has **5 jumps and
-   zero player grants**; if nothing we sent steered the authoritative copy, this
-   mechanism did not move the player. Same population as the "5 of 12 corpus
-   teleports that land nowhere near a granted point". Largest remaining hole.
+**Items 1–4 of the old list were run on 2026-08-19** (FINDINGS, "the corpus pass
+on the handoff's list" — every number adversarially re-derived). Outcomes: (1)
+**NO** — retail never stops on keyboard onset (1 of 499 onsets, and that one was
+a zone transfer; retail's shape is supersession at one RTT, and its only
+subtractive move is a zero-length grant answering the client's own `0x0047`);
+(2) therefore **the subtraction branch never opens — do not build the
+`0x0028`-at-onset fix**, and do not build supersede-every-heading either, which
+IS dead candidates 3/5 (both already ran a TIGHTER leash than retail and warped
+more — the point is bracketed from both sides and is not the free variable);
+(3) resolved at the naming level, causal step open — see §3; (4)
+`20260811T173940` was an instrument artifact (the client walked; pre-2026-08-19
+captures logged only the `0x0047` stop arm, hiding 130 of 158 positions), but
+the impossible-step population in OUR gamesrv corpus is live and larger: **26
+unattributed detections at v p50 2,521 u/s** across 7 captures, one of them the
+default build.
+
+The new list, all corpus/offline before any client run:
+
+1. **Measure the snap trigger** from the five existing movetap runs: timer or
+   separation threshold? This decides whether ANY slow-the-copy fix can bound
+   FREQUENCY — if the resync is timer-driven, a speed term shrinks magnitude
+   only, the arc's own named failure mode. Never computed; the data is in hand.
+2. **Measure the default build's own harm**: separation p50/max by direction
+   family and snap cadence from movetap `145939` ⊂ capture `145717`. Every
+   quoted separation bound (125.9 / 150 u) is imported from a refuted
+   configuration.
+3. **Rebuild the scoreboard speed-gated.** Retail through our 300 u detector
+   scores 6.4/min with ZERO intervals above 400 u/s; our builds score 1.3 / 5.4
+   / 11.9 hard-jumps/min (was: 5.7 / 12.8 / 14.6). Fix movesync to read the
+   spliced `0x003D`+`0x0047` stream (warpscan already does), speed-gate the
+   jump bar, print the honest bar and the MAX cadence.
+4. **Static-analyse the client's `0x002B`/`0x0027` handlers**
+   (msghandler/codescan) — decides offline whether a non-1.0 rate steers the
+   authoritative copy, possibly retiring the client run.
+5. **Adjudicate the 26 impossible-step population** (15 of 26 sit at 729–768 u,
+   dt ≈ 0.30 s — the `0x003D` heading-vector length; one measurement's lead).
+6. **Fix `pinned.py`** before the next live run: accepted-digest SETS appended
+   by the patcher (or structural patch-site verification), plus a 38833 row.
+
+Only then decide the sixth candidate. Its VALUES are ready (backward 0.66 as
+literal `c3f5283f`, side 0.75, base 288.0 via `0x0027` at spawn as its own
+change, speed-before-point order, re-send at report cadence — "edge-triggered"
+was falsified at 72.2% same-family repeats). Its CAUSAL step is not.
 
 ---
 
@@ -158,6 +198,15 @@ python toolkit/clientscan/movesync.py --wire-only
 count before the verdict, refuses above a 0.5 s report cadence, and gives you
 jumps/min directly. Compare against the scoreboard in §2: **anything at or above
 5.7/min is worse than shipping nothing.**
+
+**⚠ 2026-08-19: that bar is contaminated and must be speed-gated before the next
+candidate is scored** (§4 item 3): the 300 u rule counts ordinary walking across
+report gaps — retail itself scores 6.4/min on it with zero intervals above
+400 u/s. The hard-jump numbers are 1.3/min (default) / 5.4 (`--heading-grant`) /
+11.9 (`--client-endpoint`). Until movesync is fixed, gate by implied speed
+(>400 u/s, dt ≥ 0.05 s) and quote BOTH the magnitude and the rate. And when
+movesync REFUSES a verdict, the counts printed above the refusal are refused
+too — that is how the "5 unexplained jumps" hole got minted.
 
 For the separation number too, run `movetap.py --seconds 300` in a second terminal
 once the map has loaded, then `movesync.py` without `--wire-only`.

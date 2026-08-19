@@ -1407,7 +1407,7 @@ node counts.
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
 
-### Movement — latch FIXED; teleport EXPLAINED; FOUR fixes dead and the arc re-aimed (2026-08-19)
+### Movement — latch FIXED; teleport EXPLAINED; FIVE fixes dead and the arc re-aimed (2026-08-19)
 
 **Picking this up cold? Read
 [studies/movement/HANDOFF.md](studies/movement/HANDOFF.md) first** -- the
@@ -1427,7 +1427,8 @@ second consecutive refusal is adopted regardless. `test_position_trust.py`, floo
 is a scheduled teleport.** It caches an arrival tick at `agent+0x48` and a target at
 `agent+0x9C`; at that exact millisecond the client snaps. Seven arrivals watched
 directly in client memory (98 u to 5,238 u), each within one 20 ms sample of schedule;
-`+0x48` is set once and never re-armed. The formula
+`+0x48` is set once **per isolated click grant — under re-grants it re-arms freely
+(304 re-arms in 61 s; FINDINGS refuted the unqualified "never re-armed")**. The formula
 `+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms against
 18,087 actual.
 
@@ -1491,10 +1492,16 @@ separation 587 u before each resync. **Both terms are required: the granted poin
 must be where the player is actually going AND it must be refreshed.** Each of
 our two configurations does exactly one of those.
 
-**LARGEST REMAINING HOLE:** capture `20260811T173940` has **5 jumps and zero
-player grants**. If nothing we sent steered the authoritative copy, this
-mechanism did not move the player. Same population as the 5-of-12 teleports that
-land nowhere near a grant.
+**THE "LARGEST REMAINING HOLE" IS CLOSED (2026-08-19, later): an instrument
+artifact.** Capture `20260811T173940`'s five jumps were a client WALKING —
+pre-2026-08-19 captures emitted `position_report` from the `0x0047` stop arm
+only, hiding 130 of the capture's 158 position observations; spliced, 0 of 5
+jumps exceed run speed (max implied 243.3 u/s) and positions are bit-identical
+across every client silence. The number had been quoted from above movesync's
+own REFUSING-a-verdict line. The live half of the population is OUR gamesrv
+corpus's **26 unattributed, kinematically impossible steps** (v p50 2,521 u/s,
+max 23,279 u/s, 7 captures, one of them the default build) — see the FINDINGS
+corpus-pass section.
 
 **THE FIFTH CANDIDATE IS REFUTED (2026-08-19), and it is the worst of the
 three configurations.** Run `20260819T182652`: **14.6 jumps/min against a stated
@@ -1560,10 +1567,37 @@ grants sit outside any watched interval for this reason. And **retire the 320 u/
 ceiling**: it fires on 19.7% of legitimate retail intervals, because it sits below the
 383.04 u/s boost mode the wire declares literally.
 
-Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted point; the
+Secondary, still open: 26 of 43 warpscan detections in OUR gamesrv corpus are
+kinematically impossible and unattributed (v p50 2,521 u/s; 15 of 26 sit at
+729–768 u ≈ the `0x003D` heading-vector length — one measurement's lead); the
 two `0x003D` magnitude constants (765.017539 / 768.000000) stratify by `movementType`
 91.2% vs 22.3% but have no mechanism; and the sync (`+0xE8`) vs async (`+0x14C`) agent
 question decides whether the model we watch is the one the player sees.
+
+**THE SECOND CORPUS PASS (2026-08-19, later) — the handoff's §4 list was run, every
+number adversarially re-derived; record in FINDINGS "the corpus pass on the handoff's
+list", next actions in HANDOFF §4.** In brief: (1) retail does NOT stop on keyboard
+onset (1 of 499 onsets, a zone transition) — it SUPERSEDES at one RTT, so the
+`0x0028` subtraction candidate is dead before it was built, and supersede-every-heading
+IS dead candidates 3/5 (both already ran a tighter leash than retail and warped more —
+the point is bracketed from both sides). (2) The `0x002B` contest resolves:
+`0x002B = direction_factor × modifier` (1.00/0.66/0.75 × snare, byte↔float lock
+0/1,049), the absolute base rides `0x0027` (288 / 383.04 boost; we send `0x0027`
+never, `0x002B`=1.0 always) — but the CAUSAL step is open: our client backpedals at
+0.66× while we send 1.0, so the factor is client-side on the predicted copy, and
+whether the wire float steers the AUTHORITATIVE copy needs the handlers or a client
+run. (3) TWO new structural findings: the 300 u scoreboard metric is contaminated
+(retail scores 6.4/min on it with ZERO intervals over 400 u/s; speed-gated our
+configs read 1.3 / 5.4 / 11.9 hard-jumps/min, not 5.7 / 12.8 / 14.6), and the default
+build's authoritative copy is mostly PARKED (moving 39.8% of backward intervals,
+mean 114.57 u/s; duty cycle tracks grant rate 0%→98%) — its separation is the client
+walking away from a parked point. (4) The snap trigger (timer vs threshold) has
+never been measured and decides whether any slow-the-copy fix can bound FREQUENCY;
+the five movetap runs already hold the answer. Sixth-candidate VALUES are ready
+(0.66 = `c3f5283f`, 0.75, `0x0027 288.0` at spawn as its own change, re-send at
+report cadence — "edge-triggered" falsified at 72.2% same-family repeats); its
+causal step is NOT. `pinned.py` still blocks the next live run (stale patched hash;
+no 38833 row).
 
 **Instruments:** `toolkit/clientscan/movetap.py` (client-side arrival time and live
 position; `--selftest` needs no client) and `toolkit/authsrv/warpscan.py` (scores a

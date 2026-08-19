@@ -2087,3 +2087,220 @@ shipped in the same breath as this refutation.
 **Recommendation until then: ship the default.** `--client-endpoint` and
 `--heading-grant` both default to off and both should stay off. Neither is a fix
 and both are measurably harmful.
+
+---
+
+## 2026-08-19, later — the corpus pass on the handoff's list
+
+Twelve agents over the full corpus (14 live dirs, 49 game connections, framing
+residual 0 on 98/98 connection/direction rows; all 961 gamesrv files, 2,024,792
+`sent` records), three analysis lanes each attacked by an independent skeptic who
+re-derived the load-bearing numbers with their own parsers. Everything below is
+what SURVIVED that; where a first-pass number died, the death is recorded next to
+the survivor. Player agent per retail connection: `0x0037` primary, corroborated
+by `0x00DA`/`0x00B7`, 48/49 resolved, 0 disagreements — and cross-checked with an
+id-free signature (|grant dest − last self-report| p50 765.52 u for the player vs
+2,186.97 u for every other agent).
+
+### Handoff §4 item 1 is ANSWERED: retail does NOT stop on keyboard onset
+
+**No `0x0028`.** 580 keyboard onsets (a c2s `0x003D` after >1.0 s of silence),
+499 with a player grant outstanding: terminated by a superseding `0x0029` in 496,
+by `0x002A` in 2, by `0x0028` in exactly 1 — and that one sits in the same segment
+as a `0x00F1` status change and a `0x01A5 GAME_SERVER_TRANSFER`, i.e. a zone
+transition. An injection control (a synthetic `0x0028` planted 20 ms after every
+onset, same classifier) reports 496/499, so the zero is ArenaNet's, not the
+code's. Population honesty, per the verifier: 492 of the 499 outstanding grants
+were HEADING grants; the literal click-outstanding case is 5–11 episodes — all
+superseded by `0x0029`, none stopped, latency 0.029–0.063 s. Retail's 95
+player-directed `0x0028` (of 282 all-agent) are STATE messages: zone transfer /
+status / skill at 48% union coverage vs ~7% in a matched control, and they show
+no timing relationship to keyboard onset (within 1 s after an onset: 4.61% of
+onsets vs 4.15% of uniform random moments). Retail's shape is SUPERSESSION — a
+fresh grant answering the heading itself at one RTT (p50 0.035 s), steady-state
+gap p50 0.491 s — and its only genuinely subtractive move is a ZERO-LENGTH grant
+answering the client's own c2s `0x0047` cancel (96 of 114 answered, 70 landing
+<5 u from the reported stop; that is dead candidate #2's shape, with the
+difference that retail's is a REPLY to a client cancel, not a destination planted
+at every stop). **The §4-item-2 subtraction branch does not open. Do not build
+the `0x0028`-at-onset fix** — it would introduce a message we have never sent
+(0 of 2,024,792) for a purpose retail does not use it for. And do not build the
+supersede-every-heading replacement either: that IS candidates 3 and 5, and the
+leash measurement shows both already ran TIGHTER than retail (p90 100.7 / 96.0 u
+vs retail's 384.4 u, retail-length legs) and warped more. Retail's leash is
+bracketed from both sides; **the point is not the free variable**, now measured
+rather than argued.
+
+### Handoff §4 item 4's capture half is CLOSED: an instrument artifact, and the arc's own trap
+
+`20260811T173940`'s five "jumps with zero player grants" were **stop-to-stop
+displacements of a client that walked the whole way.** Until 2026-08-19,
+`position_report` was emitted from the `0x0047` arm ONLY (28 rows in this
+capture, paired 1:1 with the 28 stops to within 0.1 ms, all `source=None`); the
+130 c2s `0x003D` rows carrying the client's position between stops were invisible
+to movesync. Spliced (158 rows, cadence p50 0.251 s instead of 1.284 s), the five
+jumps read 74.4 / 196.5 / 10.0 / 122.3 / 243.3 u/s — 0 of 5 above the 288 u/s run
+speed; largest inner step 512.6 u over 1.801 s = 284.6 u/s. The verifier
+re-derived all of it with its own parser and closed the remaining blind spots:
+displacement across every client silence ≥2 s is EXACTLY 0.0 u (bit-identical
+positions both sides), and `0x003D` field 1 is a live position, not a cache
+(heading[i] predicts the realised displacement to i+1 at p50 5.6°, 0/107 beyond
+90°, vs 33.5° for a shifted control). The capture's 107 `0x0025` sends are all
+bit-exact echoes of the client's own preceding heading at p50 0.22 ms — the
+server expressed no intent of its own. **The `movesync` number that created this
+hole was quoted from above its own REFUSING-a-verdict line** (1.28 s cadence >
+the 0.5 s bar); when a tool refuses, the count it printed above the refusal is
+refused too. The artifact is broad: movesync's 300 u rule reports jumps in ~30 of
+the 50 legacy (stop-arm-only) captures; the spliced stream shows impossible steps
+in only 5 of them.
+
+**The corpus half of item 4 is NOT closed and has GROWN.** warpscan (which globs
+`vault/captures/gamesrv` only — the old "12 corpus teleports" phrasing misread as
+retail) now shows **26 unattributed detections that are kinematically impossible**
+(v p50 2,521 u/s, max 23,279 u/s) across 7 of our captures — including 1 in the
+default-build `145717` and 10 in `171153`. 15 of the 26 sit in a tight 729–768 u
+band at dt ≈ 0.30 s — suspiciously the length of the `0x003D` heading vector —
+but that is one measurement's worth of lead, not a hypothesis.
+
+### The `0x002B` contest RESOLVES — both rules were right about different factors of one product
+
+`0x0029` was never the place to look: its layout is `[hdr, dword agent, vec2,
+word, word]` — **no speed field.** Retail's speed is a two-channel product:
+
+- **`0x002B AGENT_UPDATE_SPEED`** carries `direction_factor × modifier`:
+  1.00 forward / **0.66 backward** / 0.75 side, times a snare in [0.01, 1.0].
+  Locked to the message's own trailing byte with **0 violations in 1,049
+  player-directed rows** (0.66 on backward bytes 46/46, 0.75 on side 55/55, 0.33
+  on forward 44/44; 1.0 never on a back/side byte, ~74 expected under
+  independence). The product structure is carried past n=1 by a family-ceiling
+  test: all 6 backward one-off floats ≤0.66 where 81.7% of forward one-offs
+  exceed it (p = 3.7e-5), all 5 side one-offs ≤0.75 (p = 1.1e-3), and the one
+  bit-decidable case (0.2178 = f32(0.66)×f32(0.33), one ULP off a literal) sits
+  on a backward byte. Rule B's "backward carries 1.0 in 15/69" reproduces (16/69)
+  and is a JOIN-LAG artifact: all 16 carry a non-backward own byte (13× byte 9,
+  which follows a c2s `0x0047` in 86/86 and is always float 1.0). Rule A's exact
+  arithmetic (627/840, 47/57) is NOT recoverable — 47 backward-at-0.66 exceeds
+  the 46 that exist player-directed — but its substance holds (own-byte
+  attribution: 597/849 forward, 46/52 backward).
+- **`0x0027 AGENT_UPDATE_SPEED_BASE`** carries the absolute base in u/s: 288.00
+  ×65, **383.04 ×76** (the boost), 385.92/325.44/230.40/191.52/144.00 tail, over
+  153 player-directed sends. 23–24% of retail's player movement intervals run at
+  a non-288 base (measured p50 ~381 u/s). Buffs live here, not on `0x002B`
+  (which the client asserts into [0.01, 1.0]) — value-vocabulary inference, not
+  a disassembled handler.
+
+The backward VALUE is confirmed by a third record type: sustained same-family
+c2s windows give 287.9 u/s forward vs **189.78 u/s backward, ratio 0.659**,
+against 288 × 0.66 = 190.08 predicted (0.16% error), floor-independent. The side
+factor 0.75 is wire-declared, displacement-UNCONFIRMED (8 intervals,
+turn-contaminated). The family partition {1,2,3}/{4,5,6}/{7,8} is
+displacement-earned for forward and mt=4; mt=5/6 ride on the wire lock alone.
+
+**Ours: `0x002B` = 1.0 in 621/621 player sends; `0x0027` sent 0 times ever.** And
+our runs backpedal 23–82% of the time against retail's corpus at 2.4% — the
+retail corpus under-samples exactly the input that reproduces our bug.
+
+**⚠ THE CAUSAL STEP DID NOT SURVIVE, and this is the pass's most important
+negative.** The displacement measurement was offered as the independent arm, and
+our own corpus is its confound: **we send 1.0 always and our client STILL
+backpedals at ~186 u/s (0.642–0.668 of forward) in 8 of 12 runs** — the 0.66
+factor is applied CLIENT-SIDE to the predicted copy regardless of the wire float.
+So the corpus settles the VALUES and cannot settle whether writing a non-1.0
+rate steers the authoritative copy. That question needs either the client run
+(movetap on `+0x5C`/`+0x60` during sustained backpedal on a build that sends
+`0x002B(0.66, byte 4)`) or static analysis of the client's `0x0027`/`0x002B`
+handlers — `msghandler.py`/`codescan.py` exist and no one has opened the binary
+for this. Also FALSIFIED in passing: "retail's `0x002B` is edge-triggered on the
+family change" — 72.2% of 1,008 consecutive player `0x002B` pairs carry the SAME
+family (36.9% identical family+float), median gap 0.518 s. It re-sends at report
+cadence.
+
+### TWO NEW STRUCTURAL FINDINGS, both from the verifiers
+
+**1. The scoreboard metric cannot tell retail from our worst build.** Retail's
+own client reports, run through our 300 u jump detector: **440 "jumps" = 6.4/min
+on span** — nominally worse than our default build's 5.7 — while having **ZERO of
+2,665 intervals above 400 u/s** (max implied speed 388.8 u/s, just over the
+383.04 boost the wire declares). Our builds by the same speed-gated detector:
+7 / 19 / 11 impossible intervals with maxima **6,334.8 / 4,177.3 / 2,671.0 u/s**.
+That is the cleanest retail-vs-us separation in the arc, and it means the 300 u
+bar (movesync's `JUMP_UNITS`, no time normalisation) counts ordinary walking:
+23 of the default build's 31 "jumps" are ≤288 u/s, and 69% of its rate
+denominator carries no reports at all. **Speed-gated, the three configurations
+read ~1.3 / 5.4 / 11.9 hard jumps/min** (against the recorded 5.7 / 12.8 / 14.6;
+also note 9.1/min reproduces for `171153` where the record says 12.8 — same
+contaminated metric, different denominator — restate both, pick neither). Every
+number a candidate has been scored with inherits this; a sixth candidate scored
+against a 5.7/min bar is scored against noise.
+
+**2. The default build's authoritative copy is mostly PARKED, not gliding.**
+movetap run `145939` sits INSIDE default-build capture `145717` (39 of its 40
+grants in-window). Joined to the family stream: during backward stretches the
+authoritative copy is MOVING in only **109 of 274 20-ms intervals (39.8%), mean
+114.57 u/s** — on average SLOWER than the client's 186, not 102 u/s faster. Its
+duty cycle tracks the grant rate monotonically across all five movetap/gamesrv
+pairs: 2.9 grants/min → 0% moving, 8.5 → 12%, 13.0 → 40%, 190.9 → 91%, 336.7 →
+98%. So in the DEFAULT build the separation is generated by **the client walking
+away from a mostly-parked authoritative point**, and a moveSpeed multiplier on a
+parked object changes nothing for the fraction of time it is parked. The "gap
+102 u/s → 300 u in 2.94 s" harm arithmetic asserted 288 u/s as the copy's speed
+from movetap's FIELD values (+0x5C/+0x60 read 288.0/1.0 in 4,115/4,115 samples —
+true, and not a displacement); it is refuted as arithmetic, though the fix's
+direction may survive. This also explains a third of the old "288 − player
+speed" model's failure without new parameters.
+
+### What this hands the sixth candidate
+
+The VALUES are ready and are the best-evidenced numbers in the arc: backward
+0.66 (send the literal wire float `c3f5283f`), side 0.75, base 288.0 on `0x0027`
+at spawn (its own change, never folded in), retail's order speed-before-point,
+re-send at report cadence not on edges. **The CAUSAL STEP is not ready**: it is
+grounded in nothing our corpus can see, the one paired movetap join points the
+other way (parked copy), and — the critic's sharpest point — **nobody has
+measured what triggers the snap.** If the resync is timer-driven, slowing the
+copy shrinks magnitude and leaves rate untouched: the arc's own named failure
+mode, again. If it is threshold-driven, a speed term buys rate. The five movetap
+runs already hold the answer (inter-snap interval vs separation-at-snap) and it
+has never been computed. A candidate chosen because it matches retail's wire is
+also the common ancestor of dead candidates 3, 4 and 5 — retail-shape imitation,
+not "addition", is the recurring parent.
+
+**The order of work, all corpus/offline before any client run:**
+1. Compute the snap trigger from the five existing movetap runs — timer vs
+   threshold decides whether ANY separation-rate fix can bound frequency.
+2. Re-derive the default build's own separation (p50/max, by family) and snap
+   cadence from movetap `145939` ⊂ `145717` — the harm has never been measured
+   on the configuration being fixed; the 150 u bound quoted everywhere is
+   imported from a refuted configuration.
+3. Rebuild the scoreboard speed-gated (and fix movesync: read the spliced
+   `0x003D`+`0x0047` stream the way warpscan already does, print the honest bar
+   — at 288 u/s a 300 u step is free above 1.042 s of silence — and print the
+   MAX cadence, not only the p50; pin `JUMP_UNITS` with a test).
+4. Static-analyse the client's `0x002B`/`0x0027`/`0x0029` handlers
+   (msghandler/codescan) to decide whether a non-1.0 rate steers the sync copy
+   — the cheapest unspent instrument; it may retire the client run entirely.
+5. Adjudicate the 26 impossible-step population (item 4's live half).
+6. Fix `pinned.py` before the next live run needs it: the recorded `patched`
+   hash predates the current patcher (three extra sites), 38833 has no patched
+   hash at all, so movetap's gate refuses a legitimately patched 38797 and
+   cannot represent 38833. Direction: per-build SETS of accepted patched
+   digests appended by the patcher itself, or structural verification
+   (pristine size + every differing byte inside a registered patch-site
+   allowlist) — not a whole-file hash that goes stale on every patcher change.
+
+### Corrections to the record found in passing
+
+- FINDINGS above (:1340): corpus-wide base rates are now **282 / 95 / 114**
+  (0x0028 all / 0x0028 player / c2s 0x0047) over all 14 dirs, superseding
+  257 / 81 / 88 (9 captures).
+- The "12 corpus teleports / 5 near no grant" population is GAMESRV (our runs),
+  not retail, and is now 43 / 26.
+- `PLAN.md` §8's header said "FOUR fixes dead" over a body that counts five, and
+  its "+0x48 is set once and never re-armed" line predates its own refutation
+  (:1851). Both fixed this pass.
+- The scored-run measurements `analyze_movement.py` greps labels for
+  (`keyboard`/`click`) do not exist in the corpus — all 40 default-build grants
+  are labeled `AGENT_MOVE_TO_POINT(... clear line)`.
+- Guide-level: `codec.decode_one` returns a THREE-tuple `(opcode, values,
+  nbytes)`; unpacking two inside a broad `except: continue` silently zeroes a
+  census (it did, once, mid-pass, and was caught by a row count).
