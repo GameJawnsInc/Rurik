@@ -751,6 +751,10 @@ server all day; nothing happens and nothing breaks.
 5. `SKILLBAR_UPDATE` (218) — eight zeros
 6. `UPDATE_UNLOCKED_SKILLS` (219) — empty
    *(2–6 are one function, `GameSrv_SendSkillsAndAttributes`, `GameSrv.c:1469`)*
+
+Those are **upstream's own symbol names**, quoted as it writes them. In this
+repo 183 is `AGENT_PROFESSIONS` and 182 is `AGENT_PROFESSION_BITS`, named
+from the client instead — see the provenance stamp further down this file.
 7. `AGENT_UPDATE_ATTRIBUTES` (58) — `GameSrv.c:1473`
 8. two `AGENT_PROPERTY_UPDATE_INT` + one `_FLOAT` — energy, health, regen
 9. `AGENT_INITIAL_EFFECTS` (240) — always zero
@@ -1205,6 +1209,13 @@ captures label opcode 183 `PLAYER_UPDATE_PROFESSION`, which is OpenTyria's
 number, while GWCA and Py4GW both put that message at 182. So "SMSG 29 =
 PVP_UNLOCKED_SKILLS" is **observed bytes with a sourced name**, not an
 independent observation. Worth stamping the label table with its provenance.
+
+**Stamped, and the label lost, 2026-08-19.** `183` is `AGENT_PROFESSIONS` and
+`182` is `AGENT_PROFESSION_BITS` in `schema/overrides.json`, both named from
+the client's own code rather than from any lineage's header
+([../pvpui/FINDINGS.md](../pvpui/FINDINGS.md) §30), and the server renamed
+its constants to match. The OpenTyria names listed above are left as
+written: they cite upstream's own source, and are not a claim about retail.
 
 **Reusable infrastructure** for a skills experiment, all opcode-family-agnostic
 and none of it skill-specific today: the capture and client-driving harness

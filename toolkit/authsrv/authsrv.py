@@ -1086,7 +1086,16 @@ GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_INFO = 0x0059
-GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
+# 0x00B7 inserts/updates the per-AGENT profession record at charCtx[+0x2C]+0x6BC
+# -- primary and secondary ids at record+0x04/+0x08 (studies/pvpui/FINDINGS.md
+# §30). RENAMED 2026-08-19 from PLAYER_UPDATE_PROFESSION, which was ldufr's /
+# OpenTyria's label and UPSTREAM, not a fact about retail: the record is keyed on
+# AGENT -- we send this for the hero's agent too, below -- and the rest of that
+# cluster (gw-preservation, GWCA, Py4GW) hangs the profession message on 0x00B6,
+# which is a DIFFERENT writer into the same table, not this one off by one.
+# schema/overrides.json is the naming authority, and test_agentlife.py's AXIS 3
+# is what keeps the two from drifting apart again.
+GAME_SMSG_AGENT_PROFESSIONS = 0x00B7
 GAME_SMSG_PLAYER_PARTY_SIZE = 0x00B0
 GAME_SMSG_PLAYER_SET_PARTY = 0x00B1
 # Three bits in the player record, (value, mask). See agents.player_flags for the
@@ -1098,7 +1107,7 @@ GAME_SMSG_PLAYER_FLAGS = 0x003C
 # yet (studies/profession/RUNS.md §13). Default 0, which is what ArenaNet's own
 # server sends for a character with nothing unlocked: 11 of 11 samples in our
 # live corpus carry mask 0.
-GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS = 0x00B6
+GAME_SMSG_AGENT_PROFESSION_BITS = 0x00B6
 SECONDARY_BITS = 0
 
 # The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
@@ -8025,9 +8034,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
                              [PLAYER_AGENT_ID, ATTRIBUTE_POINTS,
                               ATTRIBUTE_POINTS], "AGENT_ATTRIBUTE_POINTS")
-                        send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                        send(GAME_SMSG_AGENT_PROFESSIONS,
                              spawn_profession_values(),
-                             f"PLAYER_UPDATE_PROFESSION(prof {SPAWN_PROFESSION})")
+                             f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION})")
                         # ...and the AGENT-side pair, which we had never sent
                         # for the player's own agent -- only for NPCs.
                         #
@@ -8050,10 +8059,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # per-agent record 0x00B6 writes into. Reversed, the
                         # client drops it with no error (RUNS.md §13).
                         if SECONDARY_BITS:
-                            send(GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS,
+                            send(GAME_SMSG_AGENT_PROFESSION_BITS,
                                  agents.agent_set_secondary_bits(
                                      PLAYER_AGENT_ID, SECONDARY_BITS),
-                                 f"PLAYER_UPDATE_SECONDARY_BITS"
+                                 f"AGENT_PROFESSION_BITS"
                                  f"(0x{SECONDARY_BITS:04X})")
                         # The skill block. Upstream's SendSkillsAndAttributes
                         # sends the bar (218) BEFORE the unlock list (219); we
@@ -8430,9 +8439,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [_haid, ATTRIBUTE_POINTS, ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
                                  f"{_haid})")
-                            hsend(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                            hsend(GAME_SMSG_AGENT_PROFESSIONS,
                                  spawn_profession_values(_hprof, _haid),
-                                 f"PLAYER_UPDATE_PROFESSION(hero agent "
+                                 f"AGENT_PROFESSIONS(hero agent "
                                  f"{_haid}, prof {_hprof})")
                             _hcols = attribute_columns()
                             hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,

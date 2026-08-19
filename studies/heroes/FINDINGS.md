@@ -273,7 +273,8 @@ found no skill-bar-shaped field (8 discrete skill ids in sequence) in any of `0x
 at `:2301`/`:2321`/`:2334` inside one function iterating 11 attribute slots, gated by
 `test byte ptr [edi+8], 0x10`. But the attribute getters it uses resolve **unconditionally**
 to the *local player's* record (`ctx+0x2c+0x6bc` — the same array
-[profession RUNS.md](../profession/RUNS.md) found is written only by `PLAYER_UPDATE_PROFESSION`).
+[profession RUNS.md](../profession/RUNS.md) found is written only by `AGENT_PROFESSIONS`
+0x00B7, called `PLAYER_UPDATE_PROFESSION` until 2026-08-19).
 Whether the deck builder ever repoints that singleton at a hero's own record while editing a
 hero build is **NOT FOUND**.
 
@@ -931,7 +932,7 @@ is a real one — it produces a hero row labelled from the body instead of the h
 0x0056/0x0057/0x0020            the body, at that agent id
 0x00A6  AGENT_SET_PROFESSION    the agent's own profession bytes
 0x0037  AGENT_ATTRIBUTE_POINTS  creates attribState        <-- order
-0x00B7  PLAYER_UPDATE_PROFESSION  ctx+0x6BC, for the HERO   <-- is
+0x00B7  AGENT_PROFESSIONS         ctx+0x6BC, for the HERO   <-- is
 0x003A  AGENT_UPDATE_ATTRIBUTES   fills attrib[]            <-- load-bearing
 ```
 
@@ -1022,7 +1023,7 @@ attack next, and it is the reason §15.1's limit stands.
 0x01D3/0x01B2                    commit + set mine
 0x0056/0x0057/0x0020             the body, at that agent id
 0x00A6  AGENT_SET_PROFESSION     the agent's own profession bytes
-0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  PLAYER_UPDATE_PROFESSION ctx+0x6BC, for the HERO       > order matters
+0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  AGENT_PROFESSIONS        ctx+0x6BC, for the HERO       > order matters
 0x003A  AGENT_UPDATE_ATTRIBUTES  fills attrib[]               /
 0x00DA  SKILLBAR_UPDATE          the eight slots
 0x0072  HERO_ACTIVATE            hero, agent, inventoryId, aiMode

@@ -1289,14 +1289,22 @@ def section_opcode_pins():
         ("GAME_SMSG_PLAYER_SET_PARTY", 0x00B1, ("word", "word"),
          "overrides.json, confidence MEDIUM -- the weakest name of the eight, "
          "which is a reason to pin it rather than not to"),
-        ("GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS", 0x00B6,
+        ("GAME_SMSG_AGENT_PROFESSION_BITS", 0x00B6,
          ("agent_id", "dword"),
-         "no catalog name; the client's own OnProfessionSecondaryBits "
-         "(studies/profession/RUNS.md 13). Its neighbour 0x00B7 is the message "
-         "it must be sent AFTER, so a +1 slip here is the exact confusion"),
-        ("GAME_SMSG_PLAYER_UPDATE_PROFESSION", 0x00B7,
+         "overrides.json since 2026-08-19, confidence MEDIUM -- named from the "
+         "client's own OnProfessionSecondaryBits log string "
+         "(studies/pvpui/FINDINGS.md 30; studies/profession/RUNS.md 13). Its "
+         "neighbour 0x00B7 is the message it must be sent AFTER, so a +1 slip "
+         "here is the exact confusion"),
+        ("GAME_SMSG_AGENT_PROFESSIONS", 0x00B7,
          ("agent_id", "byte", "byte", "byte"),
-         "no catalog name. 9 wire bytes carrying profession as one byte"),
+         "overrides.json since 2026-08-19, high. 9 wire bytes carrying "
+         "profession as one byte. This server called it "
+         "PLAYER_UPDATE_PROFESSION until then -- ldufr/OpenTyria's label, "
+         "UPSTREAM, and wrong twice: the record is keyed on AGENT (we send it "
+         "for the hero's agent, not only the player's) and the rest of that "
+         "cluster puts the name on 0x00B6 (studies/skills/FINDINGS.md; "
+         "studies/character/FINDINGS.md). The catalog's name won"),
         ("GAME_SMSG_SKILL_ACTIVATED", 0x00E3, ("agent_id", "word", "dword"),
          "no catalog name, and 0x00E3 rather than 0x00E4 is MEASURED: 0x00E4's "
          "handler compares the agent against your own and returns early"),
@@ -1333,7 +1341,7 @@ def section_opcode_pins():
               "format tables -- so a wrong literal here would have to be wrong "
               "in ArenaNet's tables too")
 
-    # AXIS 3: the eight the catalog NAMES. overrides.json's names came off
+    # AXIS 3: the fourteen the catalog NAMES. overrides.json's names came off
     # ArenaNet's recorded traffic joined to the client's dispatch handlers
     # (studies/smsg), i.e. from outside this repo's own opinions.
     with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
@@ -1345,17 +1353,26 @@ def section_opcode_pins():
                 for name, opcode, _s, _w in PINNED
                 if opcode in named and name != "GAME_SMSG_" + named[opcode]]
     hits = [name for name, opcode, _s, _w in PINNED if opcode in named]
-    LEDGER.ok(not disagree and len(hits) == 12,
-              "and the twelve the catalog names are named the same thing here",
-              f"{disagree or len(hits)} of 12 -- 0x0021, 0x0029, 0x002B, 0x002E, "
-              "0x0059, 0x009F, 0x00A0, 0x00A3, 0x00A6, 0x00B1, 0x00E3, 0x00F1. "
-              "(Nine until 2026-08-18, when the smsgnames static pass named "
-              "0x009F/0x00A0/0x00A3 AGENT_PROPERTY_UPDATE_INT/_INT_TARGET/"
-              "_FLOAT_TARGET in overrides.json -- studies/smsgnames, the exact "
-              "names this file already pinned. Eight until 2026-08-14, when the "
-              "cast-cycle promotion named 0x00E3 SKILL_ACTIVATED -- studies/"
-              "combat step 3.) The other three have no name in overrides.json "
-              "at all, which is why their `why` column has to carry the evidence")
+    LEDGER.ok(not disagree and len(hits) == 14,
+              "and the fourteen the catalog names are named the same thing here",
+              f"{disagree or len(hits)} of 14 -- 0x0021, 0x0029, 0x002B, 0x002E, "
+              "0x0059, 0x009F, 0x00A0, 0x00A3, 0x00A6, 0x00B1, 0x00B6, 0x00B7, "
+              "0x00E3, 0x00F1. (Twelve until 2026-08-19, when the pvpui pass "
+              "read the per-agent PROFESSION table at charCtx+0x6BC and named "
+              "0x00B6/0x00B7 AGENT_PROFESSION_BITS/AGENT_PROFESSIONS -- "
+              "studies/pvpui/FINDINGS.md 30. Those two are the first the "
+              "catalog named DIFFERENTLY from this server, and the CATALOG "
+              "won: PLAYER_UPDATE_PROFESSION was ldufr/OpenTyria's label, "
+              "UPSTREAM, and it hangs the wrong noun on an agent-keyed message "
+              "we also send for the hero. Nine until 2026-08-18, when the "
+              "smsgnames static pass named 0x009F/0x00A0/0x00A3 "
+              "AGENT_PROPERTY_UPDATE_INT/_INT_TARGET/_FLOAT_TARGET in "
+              "overrides.json -- studies/smsgnames, the exact names this file "
+              "already pinned. Eight until 2026-08-14, when the cast-cycle "
+              "promotion named 0x00E3 SKILL_ACTIVATED -- studies/combat step "
+              "3.) The one that remains -- 0x00B0 -- has no name in "
+              "overrides.json at all, which is why its `why` column has to "
+              "carry the evidence")
 
 
 def section_opcode_catalog():
@@ -1374,11 +1391,11 @@ def section_opcode_catalog():
     of the 62 constants by +1 one at a time: **42 of 62 detected, 20 blind**,
     and the blind set is named because a control read as total coverage is
     worse than no control. Fourteen constants have no literal-list send site to
-    measure at all -- AGENT_SET_PROFESSION, AGENT_SET_TABARD_VISIBLE,
-    AGENT_UPDATE_ALLEGIANCE, AGENT_UPDATE_FLAGS, AGENT_UPDATE_POSITION,
-    AGENT_UPDATE_SPEED, CHARACTER_UPDATE_FACTIONS, CREATE_NAMED_ITEM,
-    MONSTER_COMPOSITE, NPC_UPDATE_PROPERTIES, PLAYER_PARTY_SIZE,
-    PLAYER_SET_PARTY, PLAYER_UPDATE_PROFESSION, PLAYER_UPDATE_SECONDARY_BITS
+    measure at all -- AGENT_PROFESSIONS, AGENT_PROFESSION_BITS,
+    AGENT_SET_PROFESSION, AGENT_SET_TABARD_VISIBLE, AGENT_UPDATE_ALLEGIANCE,
+    AGENT_UPDATE_FLAGS, AGENT_UPDATE_POSITION, AGENT_UPDATE_SPEED,
+    CHARACTER_UPDATE_FACTIONS, CREATE_NAMED_ITEM, MONSTER_COMPOSITE,
+    NPC_UPDATE_PROPERTIES, PLAYER_PARTY_SIZE, PLAYER_SET_PARTY
     (they are sent through a builder, or with a computed list) -- and six more
     land on a NEIGHBOUR OF THE SAME ARITY and are invisible to this mechanism:
     AGENT_INITIAL_STATUS 0x00F0, MAP_UPDATE_CURRENT 0x0099,
@@ -1883,9 +1900,9 @@ def section_secondary_bits():
                 and node.func.id == "send" and node.args
                 and isinstance(node.args[0], ast.Name)):
             name = node.args[0].id
-            if name == "GAME_SMSG_PLAYER_UPDATE_PROFESSION" and prof_line is None:
+            if name == "GAME_SMSG_AGENT_PROFESSIONS" and prof_line is None:
                 prof_line = node.lineno
-            if name == "GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS":
+            if name == "GAME_SMSG_AGENT_PROFESSION_BITS":
                 sec_line = node.lineno
     LEDGER.ok(prof_line is not None and sec_line is not None
               and prof_line < sec_line,
@@ -2268,7 +2285,7 @@ def section_spawn_profession():
              if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                  and node.func.id == "send" and node.args
                  and isinstance(node.args[0], ast.Name)
-                 and node.args[0].id == "GAME_SMSG_PLAYER_UPDATE_PROFESSION")]
+                 and node.args[0].id == "GAME_SMSG_AGENT_PROFESSIONS")]
     wired = bool(sites) and all(
         any(isinstance(inner, ast.Call)
             and isinstance(inner.func, ast.Name)
