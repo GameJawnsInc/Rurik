@@ -10,8 +10,11 @@ ARTIFACT can refute -- a fabricated id, a description that will not fit the
 client's field, a framing constant that drifted from the captures it was read
 out of.
 
-NO VAULT, NO CLIENT, NO SOCKET. Everything here is the content store and pure
-arithmetic, so it cannot skip and its floor is its whole count.
+NO VAULT, NO CLIENT, NO SOCKET -- for sections 0 to 18. Everything there is the
+content store and pure arithmetic, so it cannot skip, and that is what lets the
+floor be a whole count rather than a guess. Sections 19 and 20 came later and DO
+read the client image, so they skip without it; the floor is 0-18's count, not
+this file's. See the MEASURED note on the ledger below for the two numbers.
 
 THE ONE THING IT DELIBERATELY DOES NOT ASSERT is which framing is CORRECT.
 `bare` and `template` are two spellings of the same sentence and only a client

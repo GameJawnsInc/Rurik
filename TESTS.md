@@ -3573,21 +3573,37 @@ Every one of these, in the order they were written:
   do not fit `template` -- an error that would only ever show up on screen.
   **What it deliberately does NOT assert is which framing is correct**: only a
   client can say, and asserting one here would be two of our own components
-  agreeing and calling it evidence. No vault, no client, no socket, so nothing
-  can skip. §7 pins the two field widths APART -- `0x0080`'s dialog line is
+  agreeing and calling it evidence. **§§0-18 need no vault, no client and no
+  socket** — the content store and pure arithmetic — which is why the floor can
+  be their whole count rather than a guess; §19 and §20 came later and read the
+  client image, so "nothing here can skip", true when written and stated flatly
+  in this entry until 2026-08-18, is now only true of the part the floor covers.
+  §7 pins the two field widths APART -- `0x0080`'s dialog line is
   `string16(122)` and `0x004C`'s description is `string16(128)`, six units
   distant, and the check that earns its place is the one asserting a line which
   FITS the description field is REFUSED for the dialog one; a single shared
   constant would pass everything else and put that error where only a screen
-  could find it. **Floor 73 against a healthy 74** (§19 re-derives 888 from the
-  client image and skips without the vault). It was **17 against a run of 22**
-  when written, with a careful on-paper derivation — 13 row-independent checks
-  plus 4 per row — and the file then grew to 74 against the same one-row table
-  while the floor stayed at 17, so a healthy run did four times its own
-  minimum and three whole sections could have vanished unnoticed. That is the
-  failure `checks.py` exists to refuse, arriving by growth rather than by a bad
-  guess, and the lesson is that a DERIVED floor goes stale silently where a
-  measured one goes stale loudly. Recomputed 2026-08-17 from a real green run.
+  could find it. **Floor 73 against a healthy 77 with the vault present, 73
+  without** — §19 re-derives 888 from the client image and §20 re-checks the
+  twelve cited sites across builds, so those two sections carry four checks
+  between them and declare skips on a machine with no vault (§20 also skips
+  on fewer than two vaulted builds at or after the pin). 73 is what remains
+  when all four stand down, which is where the floor sits and why adding a
+  vault-gated section never has to move it. **This entry said "a healthy 74"
+  until 2026-08-18**: 74 was the count before §20, which landed hours after
+  the recompute in `d0b97b9` — the same commit that wrote §20's paragraph
+  above and left the figure two sentences away from it untouched. It was
+  **17 against a run of 22** when written, with a careful on-paper
+  derivation — 13 row-independent checks plus 4 per row — and the file then
+  grew to 74 against the same one-row table while the floor stayed at 17, so
+  a healthy run did four times its own minimum and three whole sections could
+  have vanished unnoticed. That is the failure `checks.py` exists to refuse,
+  arriving by growth rather than by a bad guess, and the lesson was that a
+  DERIVED floor goes stale silently where a measured one goes stale loudly.
+  Recomputed 2026-08-17 from a real green run — and then the healthy count
+  beside it went stale silently anyway, because `checks.py` can only make the
+  number in the CODE go loud. Nothing reads this paragraph, so when a section
+  lands, the figure here is the one to re-measure by hand.
   §§17-19 are rung Q6: that the replay uses `0x0050` and never `0x0049` (whose
   body writes `charContext+0x528`, silently making the last quest pushed the
   active one), that `0x004C` precedes `0x0054` — **deliberately NOT ArenaNet's
