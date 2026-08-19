@@ -1969,6 +1969,58 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### THE CHARACTER-LOAD PATH IS READ, AND NO WIRE MESSAGE WRITES CARRIED GOLD. 2026-08-19
+>
+> Three further passes, from three directions. Every load-bearing claim re-verified here by
+> hand. **All three are negatives, and together they close the question this arc could ask
+> of the wire.**
+>
+> **1. The standing suspect is dead.** `0x0030 CHARACTER_UPDATE_INFO`'s field 4 — the
+> unexplained `1000` our login burst has always sent — **is not gold**. The handler
+> (`0x0091D750`) forwards all seven fields to one worker (`0x0080E850`), which allocates a
+> fresh ~0x24-byte record, writes field 4 to **`record+0x0C`**, hangs the record off
+> **`ctx+0x2C`** and raises event `0x1000002A`. Gold lives down a structurally different
+> branch of the same per-thread context — `ctx+0x40` → `+0xF8` → `+0x90` — and the
+> complete depth-2 closure of `0x0030`'s receive path contains no `+0x90` store and no call
+> to either gold getter. Also worth recording: **our own code never documented that
+> constant** — `authsrv.py`'s send site carries `1000` with no comment, at the opcode
+> declaration or the call.
+>
+> **2. Nothing constructs the singleton anywhere we can see.** `--field 0xF8 --in ItCliApi`
+> returns **20 instructions, 0 stores, 20 reads** — verified here — so the module that
+> reads gold never assigns the pointer it reads through. Image-wide there are 45 real
+> `+0xF8` stores, none inside the item module; three that superficially matched the
+> item-client prologue are different classes with different vtables reusing the
+> displacement. `0x0144 ITEM_STREAM_CREATE` and `0x013F INVENTORY_CREATE_BAG` **neither
+> build the singleton nor touch `+0x90`/`+0x94`**.
+>
+> **3. The inverted search — the strongest of the three, because it is not anchored on
+> `+0xF8` at all** and so is immune to the biased-`this` blind spot that hid the answer from
+> our earlier scans. Every `+0x90` store in `.text` (150, of which **146** are genuine
+> field writes) was resolved to its containing function and tested for reachability from any
+> of the **472** `GAME_SMSG` receive handlers, two call levels up. **13** were reachable;
+> **all 13 were disassembled by hand**, and none writes the item singleton — 6 write an
+> agent/movement struct reached through the agent-id table, and one is not even code (a
+> Capstone re-decode of the tail byte of a `push`, never executed as the store it resembles;
+> a nice illustration of why the pass read them rather than counted them).
+>
+> **So: no `GAME_SMSG` sets carried gold.** Established now from both ends — backward from
+> the singleton (five readers plus four search routes) and forward from every candidate
+> store. **The bound, stated rather than buried:** the forward pass followed direct
+> `call`/`jmp rel32` only, to two levels. A writer reached through a **vtable/indirect call**,
+> or at three-plus removes, would not appear — and this client's UI leans on vtables. That
+> is the one hole left in an otherwise closed argument, and it is the next thing to search
+> if anyone wants to reopen this.
+>
+> **What it means for the shop.** `Buy` is quoted-only *by the protocol*, not by our
+> ignorance: the panel prices correctly, the client refuses the purchase locally against a
+> purse no message we can find is able to fill. Either carried gold is client-authoritative
+> from a source outside the instance protocol, or it moves only as a *result* of a
+> transaction the client itself initiates. **The live c2s capture is now the cheaper
+> instrument than any further reading** — a real merchant purchase on retail would show
+> both the request and whatever comes back, and settles in one capture what six static
+> passes could not.
+
 > ### THE FIVE UNREAD READERS ARE ALL RULED OUT, AND THE READER LIST HAD AN OFF-BY-ONE. 2026-08-19
 >
 > Six parallel reads of the pinned build, every structural claim re-verified by hand here.
