@@ -203,6 +203,61 @@ def _objective_quests(state, agent):
 INTERACT_RANGE = 250.0
 
 
+def _order_walk(send, state, conn_id, agent_id, spot):
+    """Send the player's own agent to `spot` -- ArenaNet's auto-walk order.
+
+    ONE message, and deliberately not two. ArenaNet pairs this with an
+    AGENT_UPDATE_SPEED in some sequences; that is left out until this alone is
+    shown insufficient, because a two-message fix that works cannot say which
+    message did it.
+
+    We do NOT set state["dest"] here, and that is the load-bearing choice. The
+    server's own integrator would then advance our idea of the player's position
+    toward the NPC whether or not the client actually got there -- and the held
+    interact below is gated on that position, so a client stopped by its own
+    collision would have a dialog open at a distance while it stood still. The
+    client's reported position is the authority (it is what the receive path
+    writes into state["pos"]), so arrival is something the client TELLS us, not
+    something we assume it did.
+    """
+    plane = int(state.get("plane", 0))
+    send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+         [PLAYER_AGENT_ID, (float(spot[0]), float(spot[1])), plane, plane,
+          agent_id],
+         f"AGENT_UPDATE_DESTINATION player -> agent {agent_id}")
+
+
+def interact_pending_tick(send, state, conn_id):
+    """Serve a held interact once the CLIENT reports it has arrived.
+
+    Polled from the world tick rather than driven by a timer, like every other
+    `*_tick` here. It re-runs `_handle_interact` unchanged rather than
+    duplicating its body -- that function is already the whole consequence of an
+    interact and is identical whoever asks, which is the property its own
+    docstring is about.
+    """
+    pending = state.get("pending_interact")
+    if not pending:
+        return
+    agent_id, interact_byte = pending
+    spot = state.get("agent_pos", {}).get(agent_id)
+    if spot is None:
+        # The body went away while we were walking to it -- a despawn, a kill,
+        # a map change. Drop the hold rather than carrying a reference to an
+        # agent id the world no longer has.
+        state.pop("pending_interact", None)
+        print(f"[c{conn_id}] held INTERACT for agent {agent_id} dropped: "
+              f"the agent is gone", flush=True)
+        return
+    px, py = state["pos"]
+    if math.hypot(spot[0] - px, spot[1] - py) > INTERACT_RANGE:
+        return
+    state.pop("pending_interact", None)
+    print(f"[c{conn_id}] held INTERACT for agent {agent_id} ARRIVES -- "
+          f"answering it now", flush=True)
+    _handle_interact(send, state, conn_id, agent_id, interact_byte)
+
+
 def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     """Everything an INTERACT does, whichever side asked for it.
 
@@ -221,15 +276,32 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     if spot is not None:
         gap = math.hypot(spot[0] - px, spot[1] - py)
         if gap > INTERACT_RANGE:
-            # SILENTLY, as ArenaNet does. A refusal message would be a
-            # behaviour no capture shows, and the client is already walking the
-            # player over -- the next click, when it lands, is the one that
-            # gets an answer.
+            # WALK THEM OVER, THEN HOLD THE INTERACT. This branch used to print
+            # and `return`, on the reading that the client walks itself and the
+            # player's next click would be answered. Both halves were wrong, and
+            # the corpus says so from two directions: the client sends no
+            # movement order of its own on an NPC click (0 of 46), and
+            # ArenaNet's server does not drop the out-of-range interact either
+            # -- it answers it LATE, after about (gap - range) / 288 u/s, which
+            # is the time the walk itself takes (agent 99 at 1054 u: predicted
+            # 2.79 s, observed 2.56 s; agent 53 at 1054 u: 2.94 s), with no new
+            # client packet in the gap. So the interact is held, not refused.
+            #
+            # Silence is still what an out-of-range interact gets on the wire in
+            # the sense that matters: no refusal message is invented. What goes
+            # out is the destination the player asked for by clicking.
+            _order_walk(send, state, conn_id, agent_id, spot)
+            state["pending_interact"] = (agent_id, interact_byte)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
-                  f"ignored, which is what ArenaNet does with 6 of its 29",
-                  flush=True)
+                  f"walking the player over and HOLDING the interact "
+                  f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
+                  f"at run speed)", flush=True)
             return
+    # Serving any interact cancels a held one: the player changed their mind,
+    # and firing the stale one on arrival would open a window they no longer
+    # asked for.
+    state.pop("pending_interact", None)
     state["interacting"] = agent_id
     state["interact_byte"] = interact_byte
     # ANSWER IT. The comment above used to end "until an
@@ -798,6 +870,30 @@ GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
 # AvChar::SetAttackSpeed argument names. See agents.ATTACK_SPEED and
 # studies/enemy/PLAN.md 6q.
 GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED = 0x0035
+
+# [agent, vec2 destination, plane, plane, target_agent] -- THE AUTO-WALK ORDER,
+# and the answer to a bug this server carried from 2026-08-16 to 2026-08-19.
+#
+# Clicking a distant NPC did not move the player, and the standing diagnosis
+# (PLAN.md's quests block, and the comment on INTERACT_RANGE below) was that the
+# CLIENT walks you over on its own. IT DOES NOT. Measured across five keyed live
+# captures: 46 c2s INTERACTs, and ZERO of them carry a `0x003E MOVE_TO_COORD`
+# within 100 ms -- the stock client issues no movement order of its own when you
+# click an NPC. What moves the player is THIS message, from the SERVER: 17 of
+# them name the player's own agent in the corpus and 16 of those follow a c2s
+# INTERACT or ATTACK naming exactly the agent walked to, at one round trip, with
+# the destination equal to the target's own position in 12 of 23.
+#
+# It was decoded and named `high` in schema/overrides.json all along and this
+# file had never once sent it -- the fifth time this project has found the
+# mechanism already in the tree (after 0x0037, 0x003A, 0x00B7, 0x00DA).
+#
+# NOT the thing the world tick refuses to broadcast. That rule (see the tick's
+# own comment) is about AGENT_UPDATE_POSITION, a position GRANT, which warped a
+# player 765 units because our integrator's opinion overrode the client's. This
+# is a DESTINATION, which the client paths to against its own collision and may
+# refuse -- the opposite direction of trust.
+GAME_SMSG_AGENT_UPDATE_DESTINATION = 0x002A
 
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
@@ -6101,6 +6197,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (studies/pvpui/FINDINGS.md 19).
                         party_mine_late_tick(send, state, conn_id)
                         ping_tick(send, state, conn_id)
+                        # Before anything that could move the player or the
+                        # world: a held interact is waiting on the CLIENT's own
+                        # reported arrival, so it should be served on the first
+                        # tick after that report rather than one interval later.
+                        interact_pending_tick(send, state, conn_id)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.

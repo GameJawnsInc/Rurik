@@ -2030,6 +2030,36 @@ Every one of these, in the order they were written:
   never an `if not step.values` shape test, because a malformed valueless step
   that DOES claim to send is exactly what the encoder check exists to catch and
   the two are identical in shape. Floor 214 against a green 223),
+  `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
+  interact that is HELD rather than dropped. **Nothing exercised
+  `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
+  in a docstring, so the range gate and every consequence of talking to an NPC
+  were carried by no check, and a bug lived in that gap from 2026-08-16. The bug:
+  clicking a distant NPC did not move the player, and the recorded diagnosis —
+  that the CLIENT walks you over and only our range number was wrong — was wrong
+  in both halves. Measured over five keyed live captures: the stock client sends
+  **no** movement order of its own on an NPC click (46 interacts, 0 with a
+  `0x003E` inside 100 ms), ArenaNet's server sends `0x002A`
+  `AGENT_UPDATE_DESTINATION` naming the PLAYER's agent (17 in the corpus, 16
+  within one round trip of the interact naming the agent walked to), and it does
+  not drop the out-of-range interact — it answers it after about
+  `(gap − range) / 288 u/s`, the walk's own duration (1054 u: predicted 2.79 s,
+  observed 2.56 s). §1–2 assert the order goes out and carries the corpus's own
+  payload (player's agent, the target's position, the target in the follow slot
+  `0x0029` hardcodes to zero) and that it frames to the declared 22 B. §3 asserts
+  the hold is served on arrival **and only then**, including that a tick with the
+  player still distant re-sends nothing — a 20 Hz destination storm no capture
+  shows. **§4 is the control that matters**: `_order_walk` must NOT set
+  `state["dest"]`, because the server's integrator would then advance our idea of
+  the player's position whether or not the client moved, and the hold is gated on
+  that position — a client stopped by its own collision would get a dialog opened
+  while standing still, the same shape as the 765-unit warp the world tick's
+  comment records. A test asserting only "the interact eventually fires" passes
+  with that bug in. §5 is the in-range control (served at once, no walk order,
+  nothing held) and §6 covers the two ways a hold must not outlive its reason: a
+  second interact cancels it, and an agent that leaves the world drops it. Floor
+  19, measured — it was written as 18 from a count in the author's head and
+  corrected against the run. No vault, no client. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
