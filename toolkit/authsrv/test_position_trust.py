@@ -35,6 +35,7 @@ a tightening was designed, costed at 8 newly-refused true reports, and thrown
 away. On top of it, the Nth consecutive refusal is adopted regardless, which is
 what makes 36-in-a-row unreachable for any constants. Section 2 is the headline.
 """
+import ast
 import json
 import os
 import sys
@@ -47,15 +48,15 @@ import checks     # noqa: E402
 import authsrv    # noqa: E402
 import vaultpath  # noqa: E402
 
-# MEASURED from the first green run: 21 checks with the capture present, 17
-# without. The floor is the BARE-MACHINE subset -- sections 0 to 6 are pure
-# policy and take no fixture, while section 7 replays a real capture and
-# declares LEDGER.skip when this vault has no copy of it. Setting the floor at
-# 21 would red every machine that is not the owner's; setting it at 17 still
+# MEASURED from a real green run: 24 checks with the capture present, 20
+# without. The floor is the BARE-MACHINE subset -- sections 0 to 7 are pure
+# policy and syntax tree and take no fixture, while section 8 replays a real
+# capture and declares LEDGER.skip when this vault has no copy of it. Setting
+# the floor at 24 would red every machine that is not the owner's; 20 still
 # catches the failure this rule exists for, which is a section quietly
 # evaporating.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=17)
+                       floor=20)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -221,7 +222,48 @@ def main():
     check(st["pos"] == JUMPED and st["plane"] == JUMPED_PLANE,
           "and it moves both halves too", f"{st['pos']} plane {st['plane']}")
 
-    print("\n7. replay: the real refusals from run 20260819T114743")
+    print("\n7. the stop echo ships OFF, and it echoes the CLIENT")
+    check(authsrv.STOP_ECHO is False,
+          "--stop-echo is off by default",
+          "it is the candidate fix for the teleport and it is unproven. The "
+          "same corpus holds 13 grant-triggered displacements that do NOT land "
+          "on a granted point, so disarming the destination may fix nothing. "
+          "One watched run decides it")
+    src = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    echoes = []
+    for node in ast.walk(src):
+        if not (isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                and node.test.id == "STOP_ECHO"):
+            continue
+        for call in ast.walk(node):
+            if (isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Name)
+                    and call.func.id == "send"
+                    and len(call.args) >= 2
+                    and isinstance(call.args[1], ast.List)):
+                echoes.append(call.args[1].elts)
+    check(len(echoes) == 1, "there is exactly one echo send",
+          f"{len(echoes)} -- two would mean two policies again")
+    # THE MUTATION THIS LOCKS. The echo must carry the position the CLIENT just
+    # reported. Rewriting it to send `state["pos"]`, or the click's `dest`,
+    # turns a no-op into a real teleport at the player -- the exact damage the
+    # 0x0047 arm's own comment records ("teleporting a player nine units is
+    # pure damage"), sent on every single stop. A grep cannot tell the two
+    # apart; the syntax tree can.
+    payload = echoes[0] if echoes else []
+    dest_arg = payload[1] if len(payload) > 1 else None
+    check(isinstance(dest_arg, ast.Call)
+          and isinstance(dest_arg.func, ast.Name) and dest_arg.func.id == "list"
+          and len(dest_arg.args) == 1
+          and isinstance(dest_arg.args[0], ast.Name)
+          and dest_arg.args[0].id == "reported",
+          "and its destination is `reported` -- the client's own figure, so the "
+          "echo is zero-distance by construction",
+          f"{ast.dump(dest_arg) if dest_arg is not None else None} -- if this "
+          f"ever becomes state['pos'] or the click's dest, the message stops "
+          f"being a no-op and starts teleporting the player on every stop")
+
+    print("\n8. replay: the real refusals from run 20260819T114743")
     path = os.path.join(vaultpath.vault_path("captures", "gamesrv"), CAPTURE)
     if not os.path.exists(path):
         LEDGER.skip("capture replay",

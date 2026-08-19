@@ -934,6 +934,33 @@ INTERACT_WALK = False
 # per-packet trace, not a thing to leave on. `--trace-move`.
 TRACE_MOVE = False
 
+# Answer a client move-cancel with a zero-distance destination at the position
+# the client just reported. OFF by default: this is the CANDIDATE fix for the
+# teleport, and it is unproven. `--stop-echo`.
+#
+# WHY IT MIGHT WORK, read out of the client (build 38797) rather than guessed.
+# 0x0029 stores its point into the agent's syncPoint at +0x9c and caches an
+# ARRIVAL TICK at +0x48; when that tick comes, the movement tick at 0x00600140
+# copies +0x9c straight into the agent's position via the teleport primitive
+# 0x006020B0 -- no path solve, no collision check, no distance guard. The
+# exhaustive writer census of +0x88/+0x9c finds no clear anywhere except that
+# arrival, and the client's own 0x0047 is SEND-ONLY with no receive handler in
+# the agent table. So a destination we grant is armed until it fires or until a
+# newer grant overwrites it, and cancelling does not disarm it. That is the
+# teleport: 2,844 u onto a point we granted 11.594 s earlier, bit-exact,
+# recorded on video with the character standing still.
+#
+# WHY IT IS ATTESTED: 70 of ArenaNet's 88 replies to a live 0x0047 are exactly
+# this -- a 0x0029 whose destination equals the position the client reported, to
+# 0.000 u. We answer with nothing at all.
+#
+# WHY IT IS STILL OFF: it may fix nothing. The same corpus holds 13
+# grant-triggered displacements that do NOT land on a granted point (1 of 13
+# within 5 u, against a 1-in-80 null), so the armed-destination story is not the
+# whole phenomenon. One watched run decides it, and the prediction is printed at
+# startup so it cannot be rationalised afterwards.
+STOP_ECHO = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -7427,6 +7454,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               "0x0047", stop=True,
                                               on_mesh=on_mesh,
                                               clipped=was_clipped)
+                        if STOP_ECHO:
+                            # DISARM the destination the client is still
+                            # holding. Zero-distance by construction -- the
+                            # destination IS the position it just reported, so
+                            # this cannot move anybody even if the mechanism is
+                            # wrong. Both plane words are the client's own
+                            # reported plane, which is what "you are here and
+                            # you are staying here" means in this message's
+                            # field order (first = destination's plane, second =
+                            # the agent's current plane).
+                            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                 [PLAYER_AGENT_ID, list(reported), plane,
+                                  plane],
+                                 f"STOP ECHO: 0x0029 at ({reported[0]:.0f},"
+                                 f"{reported[1]:.0f}) plane {plane} -- "
+                                 f"disarming any destination left armed in the "
+                                 f"client")
                         if on_mesh is False:
                             # Worth knowing about, not worth acting on. Every
                             # one of these is a hole in our trapezoids at a spot
@@ -8770,12 +8814,30 @@ def main():
                          "has its own idea of what stands where.")
     ap.add_argument("--trace-move", action="store_true",
                     help="Trace every client position report against the "
-                         "server's own belief, and the origin each click's "
-                         "collision ray is cast from. For the click-then-WASD "
-                         "warp: our integrator runs 288 u/s against a client "
-                         "measured at ~197-211 and a click-walk sends no "
-                         "position report at all, so the two can diverge with "
-                         "nothing to correct them.")
+                         "server's own belief, plus the verdict, the budget it "
+                         "was scored against and the arm it arrived on, and the "
+                         "origin each click's collision ray is cast from. The "
+                         "drift story this flag was added to test is REFUTED -- "
+                         "the integrator runs 282.3 u/s effective against a "
+                         "client at 282 -- but a click-walk still sends no "
+                         "position report at all, for up to 12.9 s measured, "
+                         "and that silence is what the trace is now for.")
+    ap.add_argument("--stop-echo", action="store_true",
+                    help="THE CANDIDATE WARP FIX, unproven, OFF by default. On "
+                         "a client move-cancel (0x0047) echo the player's own "
+                         "reported position straight back as a zero-distance "
+                         "0x0029. Prediction, stated before the run: this "
+                         "overwrites the destination armed in the client by an "
+                         "earlier granted click -- which the client clears ONLY "
+                         "by consuming it at its arrival tick or by a newer "
+                         "grant, since its own 0x0047 is send-only and has no "
+                         "receive handler -- so the pending teleport becomes a "
+                         "no-op and the character stops warping onto stale "
+                         "click destinations seconds after cancelling. Attested "
+                         "in retail: 70 of 88 of ArenaNet's move-cancel replies "
+                         "are exactly this echo. It may fix nothing for the 13 "
+                         "grant-triggered jumps that do NOT land on a granted "
+                         "point; those have no established cause.")
     ap.add_argument("--interact-walk", action="store_true",
                     help="Send GAME_SMSG 0x002A when an interact arrives from "
                          "out of range. OFF by default and it should stay off "
@@ -9211,7 +9273,19 @@ def main():
         global TRACE_MOVE
         TRACE_MOVE = True
         print("TRACE MOVE: every position report and click ray origin will be "
-              "printed. Watch for drift growing between 'ours' and 'theirs'.")
+              "printed. Watch for a REJECT whose drift is large and whose "
+              "budget is 900 -- and for the CAPITULATE that must follow it.")
+
+    if a.stop_echo:
+        global STOP_ECHO
+        STOP_ECHO = True
+        print("STOP ECHO: answering every 0x0047 move-cancel with a "
+              "zero-distance 0x0029 at the player's own reported position. "
+              "PREDICTION, stated before the run: no more teleports onto a "
+              "click destination the player cancelled seconds earlier. The "
+              "refutation is just as clear -- if a warp still lands bit-exactly "
+              "on an earlier granted point, overwriting the armed destination "
+              "is not the mechanism and this flag should come out.")
 
     if a.interact_walk:
         global INTERACT_WALK

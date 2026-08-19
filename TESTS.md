@@ -2094,10 +2094,17 @@ Every one of these, in the order they were written:
   emitted from the stop arm only, so the flagship capture's JSONL held 5 of 62
   reports and none of the four refusals, our own instrumentation failing the
   "a check that cannot fail is not a check" rule — and that the stop arm now
-  *declares* its unconditionality rather than holding it by omission. §7 replays
-  the capture. Floor **17**, the bare-machine subset, against a green **21**
-  with `authsrv-20260819T114759-c1.jsonl` present; §7 declares `LEDGER.skip`
-  without it. No client. ~1 s),
+  *declares* its unconditionality rather than holding it by omission. **§7 locks
+  the candidate warp fix**: `--stop-echo` ships OFF, and the echo's destination
+  must be the syntax-tree node `reported` — the client's own figure, so the
+  message is zero-distance *by construction*. Rewriting it to `state["pos"]` or
+  to the click's `dest` would turn a no-op into a real teleport at the player on
+  **every stop**, which is precisely the damage the `0x0047` arm's own comment
+  records ("teleporting a player nine units is pure damage"); a grep cannot tell
+  those apart and the tree can. §8 replays the capture. Floor **20**, the
+  bare-machine subset, against a green **24** with
+  `authsrv-20260819T114759-c1.jsonl` present; §8 declares `LEDGER.skip` without
+  it. No client. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
