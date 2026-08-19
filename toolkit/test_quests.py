@@ -573,7 +573,14 @@ def main():
         # consecutive valid records" the CLI prints, reached by calling the
         # module rather than by parsing its output.
         n = areatable.extent(pe.data, base_off)
-    except Exception as exc:                                    # noqa: BLE001
+    # SystemExit EXPLICITLY, and it is the whole reason this section could not
+    # skip. `pinned.find()` -- reached through `srctree.default_exe()` -- reports
+    # a missing build by raising SystemExit, which is a BaseException and sails
+    # straight through `except Exception`. MEASURED 2026-08-18: with no vault this
+    # section did not declare a skip, it killed the run at section 19 of 20, so
+    # the floor of 73 was unreachable even once the import was fixed. A skip that
+    # cannot be reached is the same defect as no skip at all.
+    except (Exception, SystemExit) as exc:                      # noqa: BLE001
         LEDGER.skip("the no-marker sentinel against areatable",
                     f"{type(exc).__name__}: {exc}")
     else:
@@ -618,7 +625,7 @@ def main():
             path = os.path.join(vaultpath.vault_root(), "client", b.stamp, "Gw.exe")
             if os.path.exists(path):
                 imgs.append((b.number, framebus.Image(path)))
-    except Exception as exc:                                    # noqa: BLE001
+    except (Exception, SystemExit) as exc:                      # noqa: BLE001
         imgs = []
         LEDGER.skip("the cross-build site check", f"{type(exc).__name__}: {exc}")
     # THE SPLIT IS THE FINDING, and the first draft of this section did not have

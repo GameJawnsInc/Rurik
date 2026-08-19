@@ -3589,7 +3589,24 @@ Every one of these, in the order they were written:
   between them and declare skips on a machine with no vault (§20 also skips
   on fewer than two vaulted builds at or after the pin). 73 is what remains
   when all four stand down, which is where the floor sits and why adding a
-  vault-gated section never has to move it. **This entry said "a healthy 74"
+  vault-gated section never has to move it. **AND 73 IS NOW A MEASURED NUMBER
+  RATHER THAN AN ARITHMETIC ONE, which it was not until 2026-08-18**: it was
+  77 minus the four vault-gated checks, sound as subtraction and impossible to
+  observe, because TWO separate defects stopped a bare run before the verdict.
+  `import authsrv` (line 34, added by `5ab72e4` — the same commit that wrote
+  this floor) reached `probes.py`'s module-level `npc_template("def_1480")`, a
+  vault-only row, so the run died at IMPORT and never reached check 1 of the 73;
+  see `toolkit/test_bareimport.py`, which now guards exactly that. With the
+  import fixed §19 still killed the run, because `pinned.find()` reports a
+  missing build by raising **SystemExit**, a BaseException that sails through
+  `except Exception` — so the skip that this paragraph credits it with was
+  unreachable, and a skip that cannot be reached is the same defect as no skip
+  at all. That is the identical failure `test_unitwrite.py`'s entry records at
+  the end of this file (`require_dir` raises SystemExit past `except
+  Exception`), hit twice in two files, which is what makes it a shape rather
+  than an accident. Both except clauses now name SystemExit, and a bare run
+  scores **73 with 3 declared skips, green** — measured, not derived.
+  **This entry said "a healthy 74"
   until 2026-08-18**: 74 was the count before §20, which landed hours after
   the recompute in `d0b97b9` — the same commit that wrote §20's paragraph
   above and left the figure two sentences away from it untouched. It was
@@ -4215,4 +4232,39 @@ Every one of these, in the order they were written:
   the exact unguarded-exception failure the models-arc review named, now
   guarded and commented. ~40 s default; nothing outside the vault is ever
   written -- the rebuilt archive and its journals live under
-  `vault/exports/unitwrite/`).
+  `vault/exports/unitwrite/`),
+  `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
+  vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
+  `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and
+  `def_1480` is a bulk-extracted live NPC definition that exists only in
+  `vault/content/npcs.toml`. From that commit `import authsrv` raised
+  `ContentError` on any bare machine -- the server's own import, not a test's --
+  and nothing went red for three days, because the suite runs where a vault IS.
+  Twelve tests died at import, four of whose docstrings say "no vault, no
+  socket, no client" flatly (`test_ping.py`, `test_dispatch.py`,
+  `test_population.py`, `test_killwindow.py`). **They did not fail their floors**:
+  the exception escaped before `checks.py` could rule, so a bare run produced a
+  traceback rather than a verdict naming the shortfall -- which is the same
+  defect as a missing floor, approached from outside the ledger. §0 imports
+  `authsrv` with `RURIK_VAULT` aimed at a path that does not exist; its CONTROL
+  is load-bearing, because "the server imported fine" is also what a stand-in
+  vault silently resolving to the real one would print, so the control demands
+  that `def_1480` still be UNREACHABLE in that same subprocess. §1 imports
+  `probes` alone, since an import chain that routes around the bind today could
+  stop tomorrow. §2 is the half that survives the next mistake: an AST walk of
+  the server path for module-level content binds, each key resolved against
+  `content.load(vault_dir="")` -- repo tables only -- and it names file:line
+  rather than making someone reproduce a bare machine. It also asserts the scan
+  MATCHED something (5 binds today), because a scanner that quietly stopped
+  matching would pass §2 while checking nothing, which is `test_codec.py`'s
+  fixture-glob defect one level up. **The fix was NOT a repo-side copy of the
+  row, and §2's failure text says so**: CLAUDE.md's measurement-vs-expression
+  boundary permits it -- `def_1480` names its extractor, its build and its
+  provenance per row -- but those rows are only ever read to build Step
+  sequences that drive a REAL CLIENT, and client builds live in the vault too,
+  so on the one machine where a committed copy would be read there is no client
+  to run the probe against. It would buy an import, not a capability, while the
+  vault row overrode it by key everywhere the probe can actually run. The bind
+  moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
+  reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
+  nothing here can skip, which is the whole claim. <1 s).
