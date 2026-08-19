@@ -670,6 +670,129 @@ def _stock_item(key, value):
     return row
 
 
+# The 0x00C3 field-1 values to sweep. 11 is the merchant (Buy/Sell tabs,
+# OBSERVED 20260819T173300) and is included as the run's POSITIVE CONTROL --
+# without it, a run where every arm draws nothing is indistinguishable from a
+# run where the rig is broken.
+#
+# WIKI (GWW, "NPC service", rev. 2026) lists the services a Guild Wars NPC can
+# offer, and the ones that plausibly need a window of their own are: Merchant,
+# the six Traders (dye, material, rare material, rare scroll, rune, sigil),
+# Collector, the Crafters (armorer, weaponsmith, artisan, consumable), Skill
+# trainer, Xunlai storage, Guild registrar/Emblemer, Map travel, Mercenary
+# registrar, Profession changer, Pet tamer. That is ~16 kinds, which is why
+# this sweep runs 0..15 -- a range chosen from the game's own service list
+# rather than from a guess about the enum's width.
+#
+# ONE UNKNOWN PER RUN IS THE REAL COST, learned by getting it wrong: the first
+# sweep queued sixteen arms and the client died on the SECOND (kind 0,
+# `Assertion: item` ItCliApi.cpp(859), site 0x00845B8D -- an item-detail
+# accessor whose neighbours assert `item->IsDetailHigh()`). The remaining
+# fourteen arms went to a corpse and the log looked exactly like sixteen
+# successful sends. The capture is what caught it: the client's last c2s was at
+# t=38.1 and arms three onward were all sent after that. So an invalid kind
+# ENDS the run, a sweep advances only as far as its first fatal value, and any
+# run must be read against the client's last c2s rather than against the send
+# log.
+#
+# RESUMABLE: set RURIK_C3_KINDS to the ascending list still to test. The
+# control is prepended automatically and is not optional.
+_WINDOW_KIND_CONTROL = 11
+_WINDOW_KINDS = tuple(
+    [_WINDOW_KIND_CONTROL]
+    + [int(x) for x in os.environ.get("RURIK_C3_KINDS", "1,2,3,4,5").split(",")
+       if x.strip()])
+
+
+def _shop_window_kinds_steps(agent_id, origin):
+    """What ELSE can `0x00C3` field 1 make the merchant window into?
+
+    `0x00C3 [11, 0]` adds a **Buy/Sell tab pair** to the panel `0x00CA` opens
+    (`20260819T173300`), so field 1 is a transaction KIND rather than a count,
+    and 11 is the same constant the client sends on `0x004A` and receives back
+    on `0x00CC`. This sweeps the rest of the small integers to see which other
+    windows the client already knows how to draw.
+
+    EACH ARM RE-ARMS, and that is not optional: `0x00C3` and `0x00CA` are two of
+    the eight readers that consume-and-clear the owner register `0x00C4` writes,
+    so an arm that skipped `0x00C4` would test a cleared register instead of a
+    kind.
+
+    HOW TO READ IT -- the readout is the TAB STRIP and the instruction line,
+    both fixed-position UI:
+
+      * a different tab set, or a differently-worded instruction, is a distinct
+        window kind and names itself on screen (the merchant's reads
+        *"Select an item from my list below, then press \"Buy.\""*);
+      * an unchanged buy-only panel means the kind is inert or unimplemented;
+      * a crash names the kind that did it, with the arm bracketed in the log.
+
+    A DEATH TRUNCATES THE RUN, so 11 goes FIRST as the positive control and the
+    unknowns follow in ascending order: whatever the client does with kind k,
+    every arm before it has already been photographed. Two prior `0x00C3`
+    deaths were at 3 and 40 -- but both were sent over a THREE-item list by a
+    client with no bags and no funds, so they are not evidence about the kind.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [i for i, _k, _v in _STOCK]
+    steps = [
+        Step(2.0, 0x0140, [PLAYER_INVENTORY, 2000],
+             f"0x0140 [inventory {PLAYER_INVENTORY}, +2000] -- fund the player",
+             "'Your Funds' reads 2000 on every window that shows funds."),
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+    ]
+    steps += [
+        Step(3.0 if n == 0 else 0.6, 0x0161,
+             named_item(item_id, _stock_item(key, value)),
+             f"0x0161: declare stock {item_id} ({key}), value {value}",
+             "nothing -- declarations are quiet.")
+        for n, (item_id, key, value) in enumerate(_STOCK)]
+    for n, kind in enumerate(_WINDOW_KINDS):
+        note = (" -- POSITIVE CONTROL, known to draw Buy/Sell tabs"
+                if kind == 11 else "")
+        steps += [
+            Step(2.0, 0x00C4, [a],
+                 f"ARM {n + 1}/{len(_WINDOW_KINDS)}: re-arm the owner register",
+                 "the character turns to face the NPC; the previous panel may "
+                 "close."),
+            Step(0.5, 0x0084, [ids],
+                 f"stage {len(ids)} stock ids", "nothing."),
+            Step(0.5, 0x00CA, [1, 0x3F800000],
+                 "0x00CA [1, 1.0f] -- open the base panel",
+                 "a buy-only panel, the same on every arm. This is the "
+                 "BASELINE each 0x00C3 below is read against."),
+            # TEN SECONDS, and the number is the attribution rule rather than
+            # padding. The client keep-alives every ~5 s, so a kind that does
+            # NOT kill it is followed by at least two c2s messages; a kind that
+            # does is followed by none. At the 4 s spacing this probe shipped
+            # with, a fatal arm and the arm after it both landed inside one
+            # keep-alive period and the capture could not say which was which.
+            Step(10.0, 0x00C3, [kind, 0],
+                 f"0x00C3 [{kind}, 0]{note}",
+                 f"THE ARM. Kind {kind}: does the tab strip change, does the "
+                 f"instruction line change, or is the panel identical to the "
+                 f"0x00CA baseline three seconds ago?"),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames after the last arm",
+             "the final panel state, and whether the client is still alive.",
+             sends=False))
+    return steps
+
+
 def _merchant_window_steps(agent_id, origin):
     """Two questions in one run, the client-killer last.
 
@@ -6644,6 +6767,30 @@ PROBES = {
              "the price question needs one window per value; that is a result, "
              "not a null. Items use the content rows' own flags: clearing F8 "
              "bit 2 makes every row an hourglass this server never resolves.",
+    ),
+    "shop_window_kinds": lambda a, o: Probe(
+        question="0x00C3 field 1 is a transaction KIND -- what kinds are "
+                 "there? Sweep 0..15 and photograph the tab strip.",
+        predicts="11 draws Buy/Sell tabs (OBSERVED 20260819T173300) and runs "
+                 "FIRST as the positive control, so an all-null run cannot be "
+                 "confused with a broken rig. WIKI (GWW, 'NPC service') lists "
+                 "merchant, six traders, collector, four crafters, skill "
+                 "trainer, Xunlai storage, guild registrar, map travel, "
+                 "mercenary registrar -- so if the enum follows the game's own "
+                 "services, several more of 0..15 should draw SOMETHING, and a "
+                 "different tab strip or instruction line names the kind on "
+                 "screen. The informative negative is a sweep where only 11 "
+                 "draws: that would mean the other windows are opened by other "
+                 "opcodes in the eight-reader family, not by this field.",
+        steps=_shop_window_kinds_steps(a, o),
+        note="EACH ARM RE-ARMS 0x00C4 -> 0x0084 -> 0x00CA before its 0x00C3, "
+             "because both 0x00C3 and 0x00CA consume-and-clear the owner "
+             "register. Arms are 7 s and the client is photographed "
+             "throughout, so an arm that kills the client is bracketed by the "
+             "log and everything before it is already banked. Prior 0x00C3 "
+             "deaths at 3 and 40 are NOT evidence about the kind: both were "
+             "sent over a three-item list by a client with no bags and no "
+             "funds, which is a different experiment.",
     ),
     "merchant_window": lambda a, o: Probe(
         question="Two, and the second cannot cost the first. (Q1) With the "
