@@ -4364,6 +4364,69 @@ def _quest_offer_steps():
     ]
 
 
+def _quest_panel_steps():
+    """QUEST_COMPLETE_PANEL (0x004E): which of its three dwords does the render read?
+
+    The whole completion family is 0 of 22,524 s2c in the corpus, so unlike
+    merchant_window there is no retail sequence to replicate: every value
+    below is an INVENTED sentinel, chosen to be unmistakable, and the probe's
+    job is to let the render -- or an assert -- name the fields. The one
+    prior firing is the 2026-08-13 screen pass (20260813T123003): all-zero
+    payload, centre-screen victory animation, no assert. So (0,0,0) is the
+    known-safe replication arm, and it goes first because nothing after it
+    is readable if it does not reproduce.
+
+    Arm 2 re-sends the IDENTICAL payload and is the load-bearing control:
+    nothing anywhere says the panel renders twice in one session. If arm 2
+    draws nothing, every later arm is unreadable in this rig and the design
+    moves to one arm per launch -- both outcomes are wanted, neither is a
+    broken run.
+
+    Arm 3 carries the one semantic hypothesis worth pre-registering: field 1
+    as a quest id. 1463 is OUR authored quest (content/quests.toml), so if
+    the panel binds it, text we control appears on a completion screen and
+    the reward arc joins the authoring arc. RECONSTRUCTION, admitted as such.
+
+    Arm 4's 111/222/333 follow the quest_reward precedent -- sentinels
+    outside every corpus range, so a numerically rendered field names its
+    own screen position. Arm 5 is the assert fisher, max dword in all three
+    fields, deliberately LAST: 0x0096/0x0097 taught that out-of-range
+    completion values kill the client, and an assert here ends the run --
+    its dialog text names the gate, which is a result, not a failure.
+
+    The panel is fed by FIVE frame ids and this probe supplies exactly one
+    (0x10000155, posted by 0x004E's own handler at 0x0080F6C7). An underfed
+    or partial render is EXPECTED and is not evidence the fields are wrong
+    (studies/quests/FINDINGS.md 9.3).
+    """
+    QUEST_COMPLETE_PANEL = 0x004E  # deliberately NOT in authsrv.py's constants:
+    # the server's own turn-in path refuses the completion family on purpose
+    # (authsrv.py's SERVICE_TURN_IN comment), and this probe must not change that.
+    return [
+        Step(15.0, QUEST_COMPLETE_PANEL, [0, 0, 0],
+             "all-zero replication of 20260813T123003",
+             "the centre-screen victory animation. Absent means the rig, not "
+             "the fields -- stop reading here."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [0, 0, 0],
+             "identical re-fire -- the one-shot control",
+             "whether a SECOND render happens at all. No render here makes "
+             "every later arm unreadable in this rig, and that is a finding."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [1463, 0, 0],
+             "field 1 = 1463, our authored quest id",
+             "any TEXT on the render: quest 1463's strings are ours, so "
+             "authored text appearing binds field 1 to a quest id."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [111, 222, 333],
+             "distinct sentinels in all three fields",
+             "any NUMBER on the render: 111/222/333 sit outside every corpus "
+             "range, so a rendered value names which field it came from."),
+        Step(20.0, QUEST_COMPLETE_PANEL,
+             [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF],
+             "max-dword assert fisher, deliberately last",
+             "an assert dialog naming a gate (a result -- the run ends with "
+             "it), or a render identical to arm 1 (the fields are unread)."),
+    ]
+
+
 PROBES = {
     "quest_objective": lambda a, o: Probe(
         question="Does a quest with a real objective show the gold '?' between "
@@ -4494,6 +4557,34 @@ PROBES = {
              "rather than replaying a script. Click the NPC around "
              "(0.499, 0.625) and the option around (0.480, 0.545) at "
              "1936x1040, twice each, then press L.",
+    ),
+    "quest_panel": lambda a, o: Probe(
+        question="Which of QUEST_COMPLETE_PANEL's three dwords does the "
+                 "render read -- the reward arc's first real question?",
+        predicts="Arm 1 reproduces the 2026-08-13 centre-screen victory "
+                 "animation from an all-zero payload; that much is OBSERVED "
+                 "(20260813T123003) and everything else is invention, stated "
+                 "as such. Arm 2's identical re-fire renders AGAIN -- "
+                 "RECONSTRUCTION from the handler's unconditional frame post "
+                 "at 0x0080F6C7 -- and a one-shot panel instead is itself a "
+                 "finding that moves the design to one arm per launch. If "
+                 "field 1 is a quest id, arm 3 puts OUR text on the render "
+                 "(quest 1463 is ours); if any field renders numerically, "
+                 "arm 4's 111/222/333 names it; arm 5's max dwords either "
+                 "change nothing or buy an assert whose text names the gate. "
+                 "An underfed render is expected throughout: this supplies "
+                 "one of the FIVE frame ids the scene subscribes to.",
+        steps=_quest_panel_steps(),
+        note="Agent-pilotable (the henchman_level/faction_max precedent: a "
+             "fixed-position centre-screen render, no aiming, no clicks). "
+             "Launch caged loopback with cadence shots -- actions '0:play', "
+             "--shots 1 --hold 120 -- so hold*.png brackets every arm and "
+             "shotlabel.py scores them by wall clock. Sends land at about "
+             "t+15/35/55/75/95 after the probe thread starts. Read the "
+             "gamesrv log for all five PROBE lines before believing any "
+             "screen reading, and read frames by EYE as well as by diff: "
+             "the committed scorer has no player-body mask, and the panel "
+             "draws exactly where a mask would sit.",
     ),
     "quest_option": lambda a, o: Probe(
         question="Can a player accept OUR quest, from OUR dialog, by clicking "
