@@ -1427,6 +1427,11 @@ arms were informed rather than blind. What the screen returned:
   null on a cold fire) is not a member. Confirms the static read: `0x0097` is not a
   standalone message; it renders a completion sub-panel keyed by a u8 over state a prior
   message stages. Its name stays abstained.
+  **↑ THAT SENTENCE IS WRONG AND §9.9 CORRECTS IT.** The crash is real and the stash is
+  real, but they are not the same fact: the `:678` switch never reads the posted record,
+  and the reason the fire died was **the map**. Left in place rather than rewritten,
+  because the shape of the error is the point — a crash and a suspicious-looking read in
+  one function got joined without checking that the assert's own variable came from it.
 
 **This is still DISPLAY, not GRANT** — the same line the `quest_panel`/§9.6 run drew: the
 reward toast reads back whatever we send, the XP bar and level chip do not move. What §9.8
@@ -1438,6 +1443,127 @@ question, unchanged. Schema: `0x0096` earns the name **MISSION_COMPLETE** (measu
 effect, not a guessed one — the §9.4 bar is cleared); `0x0097` keeps its `why`-only row
 with the enum gate recorded. Two probes kept runnable as the completion-scene calibration.
 Captures `20260819T094757` (gates) and `20260819T095219` (rewards).
+
+#### 9.9 The `:678` gate is the MAP, and `0x0098` is the reward-line append (2026-08-19, static)
+
+§9.8's `0x0097` bullet joined two facts that do not belong together, and both halves are
+now read out of the bytes by two independent routes, each attacked by a skeptic that
+failed to refute it. **Labelled MEASURED (static) — the confirming loopback run is
+staged as probe `completion_panel` and has NOT run** (harness held by another session);
+until it does, no line here rests on a screen.
+
+**The `:678` switch never reads our message.** It is loaded once, at `0x0052F935`, as
+`[esi+4]` where `esi = s_missionClientData[current_map_id]` — the client's own static
+per-mission table (`ConstMission.cpp`, the accessor `0x005A8580` and the map-id getter
+`0x0084D9C0` are the pair `studies/minimap/FINDINGS.md` already named) — and its valid
+cases are **{2, 4, 5}**. The posted record's four fields are consumed only *downstream*
+of it, at `0x0052FA61+`. So a cold fire asserts on any map whose table entry is outside
+{2,4,5}, whatever the payload: capture `20260819T095219` ran on the default world-1 map
+and could not have passed. Ready-made maps that satisfy it, already in `content/maps.toml`:
+**449** Kamadan (world 4), **194** Kaineng Center (world 2), **474** Domain of Anguish
+(world 5). The `switch variable ''` in the dialog is the assert macro's rendering, not
+evidence that a string was empty — reading it as our string is what sent §9.8 wrong.
+
+**The stash is an `Array<T>`, and `0x0098` is its only writer.** `ctx[0x2c]+0x5C/+0x60/
++0x64` are `{data pointer, capacity, count}` — so §9.8's "third field nobody accounted
+for" is simply the **capacity**, and the array's fourth header word `+0x68` (growth
+chunk) is written by the RTL grower as `[ebx+0]`, an encoding no `--field` scan can see,
+which is why it stayed invisible. `GAME_SMSG 0x0098` (stub `0x0091EBF0` → body
+`0x00812510`) is an **inlined Array push/grow**, element stride **0x20** with four dwords
+written per push, and `codescan --xrefs` finds it the sole caller image-wide. `0x0097`
+reads count and data, posts them, frees the buffer and zeroes the header — so each
+consume re-arms from empty. Field **d0 is a reward TYPE tag**: the consumer reads it at
+`0x0052F084` and compares against 4 for `isSimpleReward`, with assert `:246`
+`!(isSimpleReward && rewardCount > 1)` bounding that case to exactly one element.
+
+**So the completion protocol has a shape no study had.** Not five independent renders but
+a staged sequence: **N × `0x0098` append reward lines, then one `0x0097` consumes them
+with a medal and a coded string**, gated on the map's mission-table class. `0x0098` was
+named in no study and carries no `overrides.json` row; its wire shape
+`[u8, u32, u32, u32]` (`schema/messages.json` opcode 152, 15 B) matches the four fields
+its stub pushes. Medal is bounded by `:611` `msg.medal < CHAR_MISSION_MEDALS` and the
+downstream switch accepts {1,2,3}.
+
+**Corrections owed to the two lanes' own reports, recorded because they were caught by
+the skeptics rather than by the finders:** the element stride is 0x20 and not 16 (three
+independent `shl ,5` sites), `0x00812510` is `0x0098`'s own body with the push *inlined*
+rather than a shared RTL routine, and `GmQuestComplete`'s `:721/:729/:748` sit in a
+*different* function from `:678` — what the five completion messages share is the
+5-entry dispatch table at `0x0052FB48`, not a function body.
+
+#### 9.10 The panel RAN: the map was the gate, and the reward pair is decoded (2026-08-19)
+
+§9.9 was static and said so. It ran — probe `completion_panel`, harness
+`20260819T111130`, map 449, agent-piloted, five arms, **no assert and no crash dialog**.
+
+**The correction is confirmed by the strongest test available: the same payload.** Arm 1
+re-sent `0x0097` medal 1 with the identical coded literal that died at
+`GmQuestComplete.cpp:678` in `20260819T095219`, changing *only* the map, and it rendered —
+our own authored string *"Rurik's own completion notes."* as a centre toast and a chat
+line, over a medal emblem. §9.8's stash reading is dead; the gate was
+`s_missionClientData[map]+0x4`, exactly as re-derived.
+
+**`0x0098` stages and `0x0097` consumes — OBSERVED, not reconstructed.** The two `0x0098`
+pushes moved the screen by 0.0015–0.002 (idle animation) and drew nothing; each following
+`0x0097` drew the panel at 0.038–0.047. The reward line appears only after a push, so the
+append/consume pair is real.
+
+**The type tag selects the SENTENCE, and tag 4 is `isSimpleReward` on screen:**
+
+| `d0` | rendered |
+|---|---|
+| 1 | *"You have earned the Standard Reward for **Kamadan, Jewel of Istan**! It is worth 111 experience, 333 gold, and 222 skill points."* |
+| 4 | *"You have earned 444 experience, 666 gold, and 555 skill points!"* |
+
+Tag 1 names the reward **and the map** — the client resolving the same mission-table row
+the `:678` gate reads, which corroborates §9.9's identification from a second direction.
+Tag 4 drops both, which is what a *simple* reward means, and matches the static
+`cmp eax,4` / `isSimpleReward` read exactly.
+
+**Field order, and it swaps the same way `0x0096` does.** Sent `[d0, 111, 222, 333]` →
+rendered *111 experience, 333 gold, 222 skill points*; sent `[d0, 444, 555, 666]` →
+*444 experience, 666 gold, 555 skill points*. Consistent across both arms:
+**`d1` = experience, `d2` = skill points, `d3` = gold** — the middle *rendered* value is
+the **last** wire field, the identical slot-swap as `0x0096`'s `{tag, f3, f5, f4}`. Reading
+the wire fields left to right would mislabel gold and skill points, in both opcodes, and
+that is now measured twice rather than inferred once.
+
+**The medal byte selects the emblem**: medal 1, 2 and 3 each drew a visibly different
+device — a bare shield, a shield with two crossed blades, a shield with blades still
+flying in (the emblem animates, so a frame 4 s after the send can catch it mid-assembly).
+Bounded by `:611` `msg.medal < CHAR_MISSION_MEDALS`.
+
+**And the wiki says exactly what that emblem is — CORROBORATION from a source sharing no
+ancestry with the binary.** WIKI (GWW, *"Cooperative Mission"* §intro, fetched
+2026-08-19): cooperative missions are shown *"as a shield icon"*, and a completed one
+*"will have a number of swords or spears through it indicating whether, or how many of,
+the bonus objectives were achieved"*. That is the render, described by players from the
+game window, matching what our own server drew from a byte we chose — so `medal` is the
+count of bonus objectives achieved, not an arbitrary index.
+
+**A prediction the same page hands us, NOT yet tested.** WIKI (same page, §Mission
+rewards): Prophecies missions have two reward tiers (Primary, Bonus) while *"Factions and
+Nightfall have three mission rewards (Standard, Expert, and Master)"*. Our `d0 = 1`
+rendered *"the **Standard** Reward"* and `d0 = 4` rendered the untiered sentence. So the
+open reading is **`d0` selects the tier — 1 Standard, 2 Expert, 3 Master, 4 simple/
+untiered** — and it is one probe arm away (send `d0 = 2` and `d0 = 3` on map 449 and read
+the sentence). Labelled RECONSTRUCTION until that runs; two of the four values are
+measured and two are inferred from the wiki's own vocabulary appearing verbatim in the
+client's string.
+
+The same page also gives the real magnitudes to expect from retail, which our sentinels
+deliberately are not: a Nightfall normal-mode mission pays 1,000 XP / 100 gold / 1 skill
+point at Standard, rising to 2,000 / 200 / 1 at Master. Kamadan is Istan, so a genuine
+`0x0098` for map 449 would carry those numbers — useful the day a live completion capture
+lands, as an independent check that the field mapping above is right way round.
+
+**Still DISPLAY, not GRANT** — unchanged and worth restating because three separate
+opcodes now say the same thing: the Level chip read 1 through all five arms and no client
+state moved. `0x004E`, `0x0096` and the `0x0098`+`0x0097` pair all read back exactly what
+we send. The grant remains the live-capture question.
+
+Both opcodes have earned names on measured effect rather than a picture:
+`0x0097` → **MISSION_COMPLETE_PANEL**, `0x0098` → **MISSION_REWARD_ADD**.
 
 #### Reproducing §9
 

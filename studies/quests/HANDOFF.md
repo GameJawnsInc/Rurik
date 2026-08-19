@@ -28,10 +28,17 @@ still ArenaNet's string ids, and two known bugs are open by the owner's decision
 
 ## 2. What will bite you, in the order it will bite
 
-**The two open bugs are ONE fix.** `INTERACT_RANGE = 250.0` is too far *and* clicking a
-distant NPC does not walk the player to it. Tightening the range alone makes the quest
-unplayable — the player would be unable to talk to anything they are not already
-standing on. Do not "just fix the range".
+**~~The two open bugs are ONE fix.~~ THEY WERE NEVER ONE FIX, and the walk is DONE
+(2026-08-19).** This bullet used to say that tightening `INTERACT_RANGE` alone would make
+the quest unplayable because clicking a distant NPC does not walk the player over. The
+premise under it — that the *client* walks you over on its own, so the walk was out of
+our reach — is refuted: 46 c2s INTERACTs in the corpus carry 0 movement orders, and the
+walk is a **server** message, `0x002A AGENT_UPDATE_DESTINATION`, that this server had
+never sent. It sends it now, and an out-of-range interact is **held** and served when the
+client reports it arrived (ArenaNet answers late by the walk's own duration, not never).
+So `INTERACT_RANGE = 250.0` is now a plain unmeasured constant you may tighten on its own
+merits — nothing is chained to it. Keep the other half of the old warning though: a
+smaller range with no walk WOULD be unplayable, so never remove the walk to "simplify".
 
 **`0x004C` before `0x0054`, always.** The client gates the objectives line on a
 description-filled flag. Send them the other way and the objectives line is a **silent

@@ -185,13 +185,22 @@ def _objective_quests(state, agent):
 # AGGRO_RANGE above, and said plainly: nothing has measured ArenaNet's.
 #
 # WHAT IS MEASURED IS THE BEHAVIOUR, and it is why this gate exists at all. The
-# CLIENT sends 0x0039 on the click, from wherever you are standing, and then
-# walks you over -- so range is not something the client enforces before asking.
-# ArenaNet's server answers only some of them: 29 interacts in the live corpus,
-# 23 followed by an 0x0081 within 8 s naming the same agent, and 6 followed by
-# nothing. FINDINGS 2.5 already reads those 6 as the repeat-clicks a player
-# emits while walking into range, which is exactly the shape of a server that
-# ignores an out-of-range interact rather than refusing it.
+# CLIENT sends 0x0039 on the click, from wherever you are standing -- so range
+# is not something the client enforces before asking. ArenaNet's server answers
+# only some of them: 29 interacts in the live corpus, 23 followed by an 0x0081
+# within 8 s naming the same agent, and 6 followed by nothing.
+#
+# THIS PARAGRAPH USED TO SAY THE CLIENT "then walks you over", and that one
+# clause cost three days. It made the missing auto-walk look like a client
+# behaviour we could not reach, so PLAN.md recorded bug 2 as unfixable-without-
+# a-walk and chained it to this constant as "one fix". REFUTED 2026-08-19: the
+# client sends no movement order of its own on an NPC click (46 c2s INTERACTs
+# across five keyed captures, 0 with a 0x003E MOVE_TO_COORD within 100 ms), and
+# the 2026-08-16 bug session's own capture has the player's position
+# byte-identical across two clicks 1.34 s apart. The walk is a SERVER order,
+# 0x002A, and `_order_walk` below sends it. FINDINGS 2.5's reading of the 6
+# silent interacts as repeat-clicks-while-walking still stands -- but the walk
+# they were emitted during was one ArenaNet's server had ordered.
 #
 # So: SILENCE, not a refusal message. Our server previously answered every
 # interact at any distance, which let the owner hold a conversation from across
@@ -199,8 +208,66 @@ def _objective_quests(state, agent):
 # nothing usable -- the player's position is unknown at most interact moments
 # and the agent positions available are stale spawn coordinates, giving 541 to
 # 4275 units, which is not a range, it is a bad join. Left as ours until a probe
-# walks a player in and finds the boundary.
+# walks a player in and finds the boundary. THE NUMBER IS NOW INDEPENDENTLY
+# TIGHTENABLE, because the walk exists: with an out-of-range interact held and
+# served on arrival, a smaller range costs the player nothing but a moment's
+# walking, which is what it costs in the real game.
 INTERACT_RANGE = 250.0
+
+
+def _order_walk(send, state, conn_id, agent_id, spot):
+    """Send the player's own agent to `spot` -- ArenaNet's auto-walk order.
+
+    ONE message, and deliberately not two. ArenaNet pairs this with an
+    AGENT_UPDATE_SPEED in some sequences; that is left out until this alone is
+    shown insufficient, because a two-message fix that works cannot say which
+    message did it.
+
+    We do NOT set state["dest"] here, and that is the load-bearing choice. The
+    server's own integrator would then advance our idea of the player's position
+    toward the NPC whether or not the client actually got there -- and the held
+    interact below is gated on that position, so a client stopped by its own
+    collision would have a dialog open at a distance while it stood still. The
+    client's reported position is the authority (it is what the receive path
+    writes into state["pos"]), so arrival is something the client TELLS us, not
+    something we assume it did.
+    """
+    plane = int(state.get("plane", 0))
+    send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+         [PLAYER_AGENT_ID, (float(spot[0]), float(spot[1])), plane, plane,
+          agent_id],
+         f"AGENT_UPDATE_DESTINATION player -> agent {agent_id}")
+
+
+def interact_pending_tick(send, state, conn_id):
+    """Serve a held interact once the CLIENT reports it has arrived.
+
+    Polled from the world tick rather than driven by a timer, like every other
+    `*_tick` here. It re-runs `_handle_interact` unchanged rather than
+    duplicating its body -- that function is already the whole consequence of an
+    interact and is identical whoever asks, which is the property its own
+    docstring is about.
+    """
+    pending = state.get("pending_interact")
+    if not pending:
+        return
+    agent_id, interact_byte = pending
+    spot = state.get("agent_pos", {}).get(agent_id)
+    if spot is None:
+        # The body went away while we were walking to it -- a despawn, a kill,
+        # a map change. Drop the hold rather than carrying a reference to an
+        # agent id the world no longer has.
+        state.pop("pending_interact", None)
+        print(f"[c{conn_id}] held INTERACT for agent {agent_id} dropped: "
+              f"the agent is gone", flush=True)
+        return
+    px, py = state["pos"]
+    if math.hypot(spot[0] - px, spot[1] - py) > INTERACT_RANGE:
+        return
+    state.pop("pending_interact", None)
+    print(f"[c{conn_id}] held INTERACT for agent {agent_id} ARRIVES -- "
+          f"answering it now", flush=True)
+    _handle_interact(send, state, conn_id, agent_id, interact_byte)
 
 
 def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
@@ -221,15 +288,33 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     if spot is not None:
         gap = math.hypot(spot[0] - px, spot[1] - py)
         if gap > INTERACT_RANGE:
-            # SILENTLY, as ArenaNet does. A refusal message would be a
-            # behaviour no capture shows, and the client is already walking the
-            # player over -- the next click, when it lands, is the one that
-            # gets an answer.
+            # WALK THEM OVER, THEN HOLD THE INTERACT. This branch used to print
+            # and `return`, on the reading that the client walks itself and the
+            # player's next click would be answered. Both halves were wrong, and
+            # the corpus says so from two directions: the client sends no
+            # movement order of its own on an NPC click (0 of 46), and
+            # ArenaNet's server does not drop the out-of-range interact either
+            # -- it answers it LATE, after about (gap - range) / 288 u/s, which
+            # is the time the walk itself takes (agent 99 at 1054 u: predicted
+            # 2.79 s, observed 2.56 s; agent 53 at 1054 u: 2.94 s), with no new
+            # client packet in the gap. So the interact is held, not refused.
+            #
+            # Silence is still what an out-of-range interact gets on the wire in
+            # the sense that matters: no refusal message is invented. What goes
+            # out is the destination the player asked for by clicking.
+            if INTERACT_WALK:
+                _order_walk(send, state, conn_id, agent_id, spot)
+            state["pending_interact"] = (agent_id, interact_byte)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
-                  f"ignored, which is what ArenaNet does with 6 of its 29",
-                  flush=True)
+                  f"walking the player over and HOLDING the interact "
+                  f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
+                  f"at run speed)", flush=True)
             return
+    # Serving any interact cancels a held one: the player changed their mind,
+    # and firing the stale one on arrival would open a window they no longer
+    # asked for.
+    state.pop("pending_interact", None)
     state["interacting"] = agent_id
     state["interact_byte"] = interact_byte
     # ANSWER IT. The comment above used to end "until an
@@ -798,6 +883,83 @@ GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
 # AvChar::SetAttackSpeed argument names. See agents.ATTACK_SPEED and
 # studies/enemy/PLAN.md 6q.
 GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED = 0x0035
+
+# [agent, vec2 destination, plane, plane, target_agent] -- THE AUTO-WALK ORDER,
+# and the answer to a bug this server carried from 2026-08-16 to 2026-08-19.
+#
+# Clicking a distant NPC did not move the player, and the standing diagnosis
+# (PLAN.md's quests block, and the comment on INTERACT_RANGE below) was that the
+# CLIENT walks you over on its own. IT DOES NOT. Measured across five keyed live
+# captures: 46 c2s INTERACTs, and ZERO of them carry a `0x003E MOVE_TO_COORD`
+# within 100 ms -- the stock client issues no movement order of its own when you
+# click an NPC. What moves the player is THIS message, from the SERVER: 17 of
+# them name the player's own agent in the corpus and 16 of those follow a c2s
+# INTERACT or ATTACK naming exactly the agent walked to, at one round trip, with
+# the destination equal to the target's own position in 12 of 23.
+#
+# It was decoded and named `high` in schema/overrides.json all along and this
+# file had never once sent it -- the fifth time this project has found the
+# mechanism already in the tree (after 0x0037, 0x003A, 0x00B7, 0x00DA).
+#
+# WHAT THIS DOES NOT DO, MEASURED 2026-08-19 AND SHIPPED OFF BECAUSE OF IT.
+# This comment used to end: "This is a DESTINATION, which the client paths to
+# against its own collision and may refuse -- the opposite direction of trust."
+# THAT WAS INVENTED AND IT IS WRONG. Run 20260819T111841 sent exactly one of
+# these for an NPC 900 u away and the operator watched the character walk
+# STRAIGHT THROUGH A STAIRCASE and come to rest clipping through the geometry
+# underneath it. So a lone 0x002A is not "here is a goal, path yourself" -- the
+# client is dragged along a straight line and does no collision at all.
+#
+# Worse for the arrival half: across that whole walk the client sent NO position
+# report of any kind (13 heartbeats, one 0x00C1 TARGET_SELECT, nothing else), so
+# `interact_pending_tick` below can never see it arrive and the dialog never
+# opened. The one thing the client DID do is target the agent named in field 5.
+#
+# So the correlation in ArenaNet's corpus is real and our reconstruction of what
+# to do with it is NOT stock behaviour. Something else carries the pathing --
+# more messages, a different message, or server-computed waypoints -- and that
+# is a measurement nobody here has taken. Until it is taken, sending this is
+# opt-in (`--interact-walk`) and OFF, because a player dragged through a
+# staircase is worse than a player who does not move.
+GAME_SMSG_AGENT_UPDATE_DESTINATION = 0x002A
+
+# OFF, and the paragraph above is why. The HOLD half below is independent and
+# stays on: it is measured (ArenaNet answers a distant interact late rather than
+# dropping it) and it works today for a player who walks over on the KEYBOARD,
+# because that path does report position.
+INTERACT_WALK = False
+
+# Print every client position report with our own belief beside it, plus the
+# origin each click's collision ray is cast from. OFF by default -- it is a
+# per-packet trace, not a thing to leave on. `--trace-move`.
+TRACE_MOVE = False
+
+# Answer a client move-cancel with a zero-distance destination at the position
+# the client just reported. OFF by default: this is the CANDIDATE fix for the
+# teleport, and it is unproven. `--stop-echo`.
+#
+# WHY IT MIGHT WORK, read out of the client (build 38797) rather than guessed.
+# 0x0029 stores its point into the agent's syncPoint at +0x9c and caches an
+# ARRIVAL TICK at +0x48; when that tick comes, the movement tick at 0x00600140
+# copies +0x9c straight into the agent's position via the teleport primitive
+# 0x006020B0 -- no path solve, no collision check, no distance guard. The
+# exhaustive writer census of +0x88/+0x9c finds no clear anywhere except that
+# arrival, and the client's own 0x0047 is SEND-ONLY with no receive handler in
+# the agent table. So a destination we grant is armed until it fires or until a
+# newer grant overwrites it, and cancelling does not disarm it. That is the
+# teleport: 2,844 u onto a point we granted 11.594 s earlier, bit-exact,
+# recorded on video with the character standing still.
+#
+# WHY IT IS ATTESTED: 70 of ArenaNet's 88 replies to a live 0x0047 are exactly
+# this -- a 0x0029 whose destination equals the position the client reported, to
+# 0.000 u. We answer with nothing at all.
+#
+# WHY IT IS STILL OFF: it may fix nothing. The same corpus holds 13
+# grant-triggered displacements that do NOT land on a granted point (1 of 13
+# within 5 u, against a 1-in-80 null), so the armed-destination story is not the
+# whole phenomenon. One watched run decides it, and the prediction is printed at
+# startup so it cannot be rationalised afterwards.
+STOP_ECHO = False
 
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
@@ -1851,25 +2013,145 @@ def prewarm_pathmap(map_id):
 
 
 # How far the client's reported position may be from ours before we stop
-# believing it. Reports arrive every ~250-340 ms and run speed is 288 u/s, so a
-# legitimate gap is ~100 units; 900 is deliberately loose because the cost of
-# refusing a real report is the drift this exists to prevent, while the cost of
-# accepting a wrong one is one bad leg that the next report corrects. It is a
-# sanity bound against a garbage decode, not an anti-cheat -- this server is
-# loopback only and the client is the one telling the truth here.
+# believing it -- now a FLOOR under a budget that grows with silence, not a
+# ceiling that can trap us.
+#
+# THE DEFECT THIS REPLACES, measured 2026-08-19 and the reason for every line
+# below. The old rule was a flat 900 u radius measured from `state["pos"]`, and
+# `state["pos"]` is the value the rule was preventing from being corrected. So
+# once the model was more than 900 u wrong, every true report was also more than
+# 900 u away and was refused in its turn: the guard latched. Run 20260819T113049
+# rejected 50 reports, 36 of them consecutively, 21% of everything the client
+# said. The model only ever re-synchronised because 0x0047 (below) writes without
+# asking, and because the player happened to stop walking.
+#
+# AND IT NEVER ONCE EARNED ITS KEEP. Scored over the four harness runs that
+# carry rejections -- 7 + 11 + 50 + 4 = 72 of them, counted from the server's own
+# "[map] ignoring a Nu jump" lines and not from a replay -- by asking whether the
+# client's NEXT report is reachable from the point we refused or from the point
+# we preferred, at 478 u/s (Junundu Tunnel, +66%, the most generous ceiling in
+# the game and far above our 288): client right 71, guard right 0, undecidable 1.
+# Zero saves in 72 firings. Largest true-but-refused drift 4,116 u.
+#
+# WHY THE RADIUS SURVIVES AT ALL, given a 0-for-72 record. Two reasons, both
+# small and both honest. It still refuses a single-frame garbage decode at a cost
+# of one report of latency, which is cheap. And it is where the telemetry hangs:
+# a guard that always capitulates is a measuring instrument, and this one found
+# the teleport. What it may never do again is latch, and the streak below makes
+# that unreachable for any constants.
+#
+# THE FIX IS A STRICT LOOSENING, and that is a deliberate property rather than a
+# side effect. budget = max(RADIUS, RATE * seconds since the last report we
+# believed), so the budget is never smaller than the old 900 and no report that
+# passes today is refused tomorrow. A tightening was designed, costed and thrown
+# away: BASE 120 + RATE * dt would newly reject 8 reports across the corpus that
+# the flat 900 accepts, all eight of them in the one run whose displacements have
+# no established cause. Tightening where the model is least understood is how you
+# turn an open question into a regression.
 CLIENT_POSITION_TRUST_RADIUS = 900.0
+# What two HONEST models can do: our integrator's constant 288.0 (it measured
+# 282.3 u/s effective) plus 292, a ceiling over the client's fastest measured
+# cruise step (291.20 u/s, n=184 forward). Two models running directly apart
+# separate at no more than the sum. Arithmetic over two measured ceilings, with
+# nothing fitted. If a future arc implements the cap-breaking speed skills, this
+# is DEFAULT_RUN_SPEED * 1.66 + 288 = 766, not 580.
+CLIENT_POSITION_TRUST_RATE = 580.0
+# The escape hatch, and the whole safety property: the Nth consecutive refusal
+# is adopted regardless. The 0-for-72 record argues for 1 (never refuse); 2 is
+# the smallest value that still buys the single-frame refusal, and it caps the
+# damage of being wrong at exactly one report. 36 in a row is now unreachable by
+# construction.
+CLIENT_POSITION_REJECT_STREAK = 2
 
 
-def _adopt_client_position(state, reported):
-    """Should we take the client's word for where it is standing?"""
+def _position_verdict(state, reported, now):
+    """Pure: should we take the client's word for where it is standing?
+
+    Returns (accept, reason, jump, budget). No side effects, so the policy can
+    be driven from a capture replay without a socket -- which is what
+    test_position_trust.py does with the four real refusals from run
+    20260819T114743.
+    """
     px, py = state["pos"]
     jump = math.hypot(reported[0] - px, reported[1] - py)
-    if jump <= CLIENT_POSITION_TRUST_RADIUS:
-        return True
-    print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
-          f"position -- ours ({px:.0f}, {py:.0f}), theirs "
-          f"({reported[0]:.0f}, {reported[1]:.0f})", flush=True)
-    return False
+    # Time since the last report we BELIEVED, not since the last one we heard.
+    # A refusal must not refresh the anchor, or the budget stops growing exactly
+    # when the model is most wrong -- that is the latch wearing a formula.
+    dt = max(0.0, now - state.get("pos_seen", 0.0))
+    budget = max(CLIENT_POSITION_TRUST_RADIUS, CLIENT_POSITION_TRUST_RATE * dt)
+    if jump <= budget:
+        return True, "in-budget", jump, budget
+    if state.get("pos_rejects", 0) + 1 >= CLIENT_POSITION_REJECT_STREAK:
+        return True, "capitulate", jump, budget
+    return False, "reject", jump, budget
+
+
+def _take_client_position(state, reported, plane, rec, source, now=None,
+                          stop=False, on_mesh=None, clipped=None):
+    """The ONE place the player's position is adopted. Returns whether it was.
+
+    Both receive sites route through here. They used to hold different policies
+    -- 0x003D refused a report more than 900 u out, 0x0047 wrote whatever it was
+    handed -- and nothing in the file said so; the second policy existed by
+    omission. In run 20260819T114743 the unguarded site accepted, 1.24 s later
+    and 44 u away, the very coordinates the guarded site had just called
+    impossible. `stop` keeps that asymmetry, because it is measured to be right
+    (ArenaNet echoes the client's stated stopping point back verbatim in 70 of
+    88 move-cancel windows) -- but it is now DECLARED, with a reason string, so
+    it cannot be quietly deleted or quietly duplicated.
+    """
+    if now is None:
+        now = time.time()
+    px, py = state["pos"]
+    if stop:
+        accept, reason = True, "stop-report"
+        jump = math.hypot(reported[0] - px, reported[1] - py)
+        budget = float("inf")
+    else:
+        accept, reason, jump, budget = _position_verdict(state, reported, now)
+    if accept:
+        # POSITION AND PLANE ARE ONE FACT and are adopted together. They used to
+        # be split: the 0x003D arm wrote state["plane"] unconditionally, 28 lines
+        # ABOVE the position guard, so a refused report left the server holding
+        # the client's NEW plane against its OLD position. Measured at t=54.32 in
+        # run 20260819T114743 -- plane became 18 while the position stayed at
+        # (9463, 7946), which our own navmesh puts on plane 0. The click arm then
+        # reads that plane to decide whether it can place the player at all.
+        state["pos"] = reported
+        state["plane"] = plane
+        state["pos_seen"] = now
+        state["pos_rejects"] = 0
+    else:
+        state["pos_rejects"] = state.get("pos_rejects", 0) + 1
+        print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
+              f"position -- ours ({px:.0f}, {py:.0f}), theirs "
+              f"({reported[0]:.0f}, {reported[1]:.0f}) "
+              f"[{state['pos_rejects']} of {CLIENT_POSITION_REJECT_STREAK}, "
+              f"the next one is taken regardless]", flush=True)
+    if TRACE_MOVE:
+        # EVERY report, accepted or not. The old rejection print was exactly the
+        # wrong sampling for a drift bug: it showed the moment the divergence
+        # became too big and nothing about it growing.
+        print(f"[trace] pos ours ({px:.0f}, {py:.0f}) theirs "
+              f"({reported[0]:.0f}, {reported[1]:.0f}) drift {jump:.0f}u "
+              f"budget {budget:.0f}u {reason.upper()} via {source} "
+              f"dest={state.get('dest')}", flush=True)
+    # A CHECK THAT CANNOT FAIL IS NOT A CHECK. This record used to carry a
+    # literal `accepted=True` and it was emitted ONLY from the stop arm, so the
+    # flagship capture's JSONL showed 5 of 62 reports and NONE of the four
+    # refusals -- a reader reconstructing drift from the file alone was missing
+    # every event that mattered. `source` is what lets a consumer keep asking
+    # the old question: test_movement_fidelity.py's floors were calibrated on
+    # stops and it now filters to them.
+    if rec is not None:
+        rec.event("position_report", drift=round(jump, 2), accepted=accept,
+                  reason=reason, source=source,
+                  budget=(None if budget == float("inf") else round(budget, 2)),
+                  streak=state.get("pos_rejects", 0),
+                  reported=list(reported), ours=[px, py], plane=plane,
+                  server_plane=state["plane"], clipped=clipped,
+                  on_mesh=on_mesh)
+    return accept
 
 
 def clip_to_walkable(state, dest):
@@ -6157,6 +6439,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (studies/pvpui/FINDINGS.md 19).
                         party_mine_late_tick(send, state, conn_id)
                         ping_tick(send, state, conn_id)
+                        # Before anything that could move the player or the
+                        # world: a held interact is waiting on the CLIENT's own
+                        # reported arrival, so it should be served on the first
+                        # tick after that report rather than one interval later.
+                        interact_pending_tick(send, state, conn_id)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -6767,11 +7054,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stand, while clicking sends an absolute destination.
                         # That is why click-to-move worked and WASD did not --
                         # we treated this as a pure turn and did nothing.
-                        # values[4] is an ENUM, not a flag: measured values were 1
-                        # and 4, never 0 (analyze_movement.py, 167 samples across
-                        # two sessions). GWLP-R calls the field movementType.
-                        # Testing it for truthiness happens to work because 0
-                        # never appears, but do not read "moving" into it.
+                        # values[4] is an ENUM, not a flag. GWLP-R calls the
+                        # field movementType. Testing it for truthiness happens
+                        # to work because 0 never appears, but do not read
+                        # "moving" into it.
+                        #
+                        # RE-CENSUSED 2026-08-19 over 7,988 records in 119 vault
+                        # captures, 48x the 167 samples this comment used to
+                        # cite: all of 1..8 occur -- 1 Forward 68.8%, 4 Backward
+                        # 19.7%, 3 5.1%, 2 3.2%, 8 1.1%, 7 1.0%, 6 0.7%, 5 0.4%.
+                        # So "measured values were 1 and 4" was stale (922 of
+                        # this run's records are neither), while the operative
+                        # claim survives at the larger n: 0 NEVER appears, and
+                        # neither does 9.
+                        #
+                        # Speed splits with the enum -- forward {1,2,3} 284.96
+                        # u/s, backward {4,5,6} 187.89, side {7,8} ~215 -- and
+                        # the integrator DELIBERATELY ignores that; see the
+                        # measurement note on DEFAULT_RUN_SPEED's use below.
                         #
                         # values[3] is a fixed-magnitude direction -- |v| was
                         # 765-768 in every sample whichever way the player faced.
@@ -6779,14 +7079,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
-                        state["plane"] = plane
+                        # NO `state["plane"] = plane` HERE. It used to sit on
+                        # this line, unconditional, 28 lines above the position
+                        # guard -- so a refused report left us holding the
+                        # client's new plane against its old position. The plane
+                        # now travels with the position into
+                        # _take_client_position and lands or is dropped with it.
                         # BELIEVE SLOT 1. The client reports where it actually is
-                        # in the same packet as where it wants to go, four times
-                        # a second, and MEASURED it advances at 211 units/sec
-                        # over 120 samples -- it is a live position, not a stale
-                        # echo. Read the pair as "I am here, and I want to go
-                        # there"; computing the leg from OUR position was always
-                        # the approximation.
+                        # in the same packet as where it wants to go -- a live
+                        # position, not a stale echo. Read the pair as "I am
+                        # here, and I want to go there"; computing the leg from
+                        # OUR position was always the approximation.
+                        #
+                        # TWO NUMBERS IN THIS COMMENT WERE WRONG and both were
+                        # load-bearing, so they are corrected rather than
+                        # deleted. "Four times a second": the modal report
+                        # interval is 0.50 s -- TWICE a second -- with a 1.80 s
+                        # mode on a straight line and a measured maximum silence
+                        # of 12.87 s. The client emits 0x003D only while moving
+                        # and 0x0047 only on a stop, so a standing player emits
+                        # NOTHING; corpus-wide silences reach 270 s. "It advances
+                        # at 211 units/sec over 120 samples": the client's
+                        # keyboard cruise is 282 u/s (p50, n=51 here; 284.96
+                        # forward over n=184 corpus-wide). 211 is movementType
+                        # 7's number and the click-walk number, generalised into
+                        # a claim about all movement -- and that generalisation
+                        # is what sized the trust radius against a drift that
+                        # does not exist.
                         #
                         # Why this matters more since collision landed: our
                         # integrator stops dead at a wall while the client slides
@@ -6807,9 +7126,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # client moves itself now, which is precisely what makes
                         # its report worth having.
                         reported = tuple(values[1])
-                        if _adopt_client_position(state, reported):
-                            state["pos"] = reported
-                            state["pos_seen"] = time.time()
+                        _take_client_position(state, reported, plane, rec,
+                                              "0x003D")
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -7095,6 +7413,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{dest[1]:.0f}): {why} -- leaving it to the "
                                   f"client's own pathing", flush=True)
                             continue
+                        if TRACE_MOVE:
+                            # THE HYPOTHESIS THIS FLAG EXISTED TO TEST, AND ITS
+                            # ANSWER. The worry was that `clip_to_walkable` casts
+                            # its ray from OUR position, so a diverged model
+                            # would aim the ray from somewhere the player is not
+                            # -- a warp with a plausible-looking destination.
+                            #
+                            # MEASURED 2026-08-19 and REFUTED as a general
+                            # cause: over 102 clicks the ray-origin error is a
+                            # median of 30 u and a 90th percentile of 115 u, and
+                            # only 3 exceed 900 u. The speed half of the story
+                            # is refuted too -- the integrator's effective rate
+                            # is 282.3 u/s (288.0 * 0.05 / 0.0510, from 1,415
+                            # measured tick sends) against a client at 282 u/s
+                            # p50, a 0.1% mismatch, with adopted-report drift a
+                            # median of 11 u and a maximum of 55.7 u. The two
+                            # models do not drift apart.
+                            #
+                            # What DOES open a gap is this line's other half:
+                            # the client reports nothing at all during a
+                            # click-walk (verified four times, silences of 3.5,
+                            # 8.8, 9.5 and 12.9 s, and identical after a click
+                            # we REFUSED -- so it is the client's behaviour, not
+                            # a consequence of our answer). The trace stays,
+                            # because it is now the instrument for that.
+                            opx, opy = state["pos"]
+                            print(f"[trace] CLICK dest ({dest[0]:.0f}, "
+                                  f"{dest[1]:.0f}) clipped from OUR origin "
+                                  f"({opx:.0f}, {opy:.0f})", flush=True)
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
                         # ArenaNet pairs the rate with the MOVE, not with the
@@ -7121,14 +7468,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # believed. Echoing the client's figure back pinned it to
                         # the spawn point: it reported "still at spawn" because
                         # we had not moved it, and we confirmed that was correct.
-                        # Believe the client, within a tolerance, and say nothing.
+                        # Believe the client and say nothing. ("Within a
+                        # tolerance" is struck: there is no tolerance here and
+                        # there never was one in the code -- see the note at
+                        # _take_client_position, and the second struck sentence
+                        # below.)
                         #
                         # This is a teleport, and a teleport cancels whatever the
                         # client is animating. Sending one on every stop is the
-                        # rubber-banding on sudden stops and turns: our integrator
-                        # runs at DEFAULT_RUN_SPEED while the client's own walk
-                        # measured ~197 units/sec, so we arrive ahead of it and
-                        # then yank it forward.
+                        # rubber-banding on sudden stops and turns. The old
+                        # rationale for that -- "our integrator runs at
+                        # DEFAULT_RUN_SPEED while the client's own walk measured
+                        # ~197 units/sec, so we arrive ahead of it" -- is
+                        # REFUTED: 282.3 u/s against 282 u/s, and 197 appears
+                        # nowhere in the corpus. The conclusion survives its
+                        # broken premise, because sending a teleport at a client
+                        # that is already right is damage whatever the speeds.
                         #
                         # An earlier attempt at this same change made things far
                         # worse -- the character was pinned at spawn. That version
@@ -7143,8 +7498,6 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         state["walking"], state["heading"] = False, None
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
-                        px, py = state["pos"]
-                        drift = math.hypot(reported[0] - px, reported[1] - py)
                         pm = state.get("pathmap")
                         # A wall makes the two models diverge legitimately. We
                         # stop dead at the clip point; the client SLIDES along
@@ -7154,10 +7507,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # coarse -- correcting it is a snap backwards along the
                         # wall, which is exactly the rubber-banding reported.
                         #
-                        # Believe the client instead, on one condition: that
-                        # where it says it is, is somewhere the navmesh agrees
-                        # you can stand. That keeps this from becoming a blanket
-                        # "trust the client" that would undo the collision fix.
+                        # Believe the client instead. This paragraph used to end
+                        # "on one condition: that where it says it is, is
+                        # somewhere the navmesh agrees you can stand" -- and
+                        # THAT CONDITION HAS NEVER EXISTED IN THE CODE. `on_mesh`
+                        # is computed below and passed to the recorder and has
+                        # never been tested, deliberately, for the reason the
+                        # next paragraph gives. Two superseded sentences sat
+                        # above one policy for weeks, both reading as active; a
+                        # 2,837 u write went through that either of them would
+                        # have blocked. They are struck rather than deleted so
+                        # nobody re-derives them.
                         #
                         # THE SERVER NO LONGER ARGUES. Take the position and the
                         # plane, record the disagreement, send nothing.
@@ -7186,14 +7546,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # grounds for moving the player.
                         on_mesh = (None if pm is None
                                    else pm.walkable(reported[0], reported[1]))
-                        rec.event("position_report", drift=round(drift, 2),
-                                  accepted=True, reported=list(reported),
-                                  ours=[px, py], plane=plane,
-                                  server_plane=state["plane"],
-                                  clipped=was_clipped, on_mesh=on_mesh)
-                        state["pos"] = reported
-                        state["plane"] = plane
-                        state["pos_seen"] = time.time()
+                        # stop=True: this site takes the client's word whatever
+                        # the distance, and now SAYS so (reason "stop-report")
+                        # instead of holding the policy by omission. It is the
+                        # arm that rescued the model from both excursions in run
+                        # 20260819T114743, and the only reason the latch above
+                        # was survivable.
+                        _take_client_position(state, reported, plane, rec,
+                                              "0x0047", stop=True,
+                                              on_mesh=on_mesh,
+                                              clipped=was_clipped)
+                        if STOP_ECHO:
+                            # DISARM the destination the client is still
+                            # holding. Zero-distance by construction -- the
+                            # destination IS the position it just reported, so
+                            # this cannot move anybody even if the mechanism is
+                            # wrong. Both plane words are the client's own
+                            # reported plane, which is what "you are here and
+                            # you are staying here" means in this message's
+                            # field order (first = destination's plane, second =
+                            # the agent's current plane).
+                            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                 [PLAYER_AGENT_ID, list(reported), plane,
+                                  plane],
+                                 f"STOP ECHO: 0x0029 at ({reported[0]:.0f},"
+                                 f"{reported[1]:.0f}) plane {plane} -- "
+                                 f"disarming any destination left armed in the "
+                                 f"client")
                         if on_mesh is False:
                             # Worth knowing about, not worth acting on. Every
                             # one of these is a hole in our trapezoids at a spot
@@ -8536,6 +8915,43 @@ def main():
                          "it, since that one is placed by offset from the "
                          "player and would land in the middle of a zone that "
                          "has its own idea of what stands where.")
+    ap.add_argument("--trace-move", action="store_true",
+                    help="Trace every client position report against the "
+                         "server's own belief, plus the verdict, the budget it "
+                         "was scored against and the arm it arrived on, and the "
+                         "origin each click's collision ray is cast from. The "
+                         "drift story this flag was added to test is REFUTED -- "
+                         "the integrator runs 282.3 u/s effective against a "
+                         "client at 282 -- but a click-walk still sends no "
+                         "position report at all, for up to 12.9 s measured, "
+                         "and that silence is what the trace is now for.")
+    ap.add_argument("--stop-echo", action="store_true",
+                    help="THE CANDIDATE WARP FIX, unproven, OFF by default. On "
+                         "a client move-cancel (0x0047) echo the player's own "
+                         "reported position straight back as a zero-distance "
+                         "0x0029. Prediction, stated before the run: this "
+                         "overwrites the destination armed in the client by an "
+                         "earlier granted click -- which the client clears ONLY "
+                         "by consuming it at its arrival tick or by a newer "
+                         "grant, since its own 0x0047 is send-only and has no "
+                         "receive handler -- so the pending teleport becomes a "
+                         "no-op and the character stops warping onto stale "
+                         "click destinations seconds after cancelling. Attested "
+                         "in retail: 70 of 88 of ArenaNet's move-cancel replies "
+                         "are exactly this echo. It may fix nothing for the 13 "
+                         "grant-triggered jumps that do NOT land on a granted "
+                         "point; those have no established cause.")
+    ap.add_argument("--interact-walk", action="store_true",
+                    help="Send GAME_SMSG 0x002A when an interact arrives from "
+                         "out of range. OFF by default and it should stay off "
+                         "until somebody measures what carries the PATHING: on "
+                         "run 20260819T111841 a lone 0x002A dragged the "
+                         "character straight through a staircase in a straight "
+                         "line, left it clipping through the geometry, and "
+                         "produced no position report at all -- so the held "
+                         "interact never saw an arrival and no dialog opened. "
+                         "The flag exists so the next measurement is one "
+                         "argument away, not so this is shipped.")
     ap.add_argument("--practice-target", action="store_true",
                     help="The standing hostile neither chases nor attacks -- a "
                          "PRACTICE TARGET. WIKI (GWW, \"Practice target\", rev. "
@@ -8960,6 +9376,34 @@ def main():
         print(f"AREA: {a.area} -- {len(pop)} spawn row(s): "
               + (", ".join(k for k, _ in pop) or "none")
               + ". This REPLACES the standing test enemy.")
+
+    if a.trace_move:
+        global TRACE_MOVE
+        TRACE_MOVE = True
+        print("TRACE MOVE: every position report and click ray origin will be "
+              "printed. Watch for a REJECT whose drift is large and whose "
+              "budget is 900 -- and for the CAPITULATE that must follow it.")
+
+    if a.stop_echo:
+        global STOP_ECHO
+        STOP_ECHO = True
+        print("STOP ECHO: answering every 0x0047 move-cancel with a "
+              "zero-distance 0x0029 at the player's own reported position. "
+              "PREDICTION, stated before the run: no more teleports onto a "
+              "click destination the player cancelled seconds earlier. The "
+              "refutation is just as clear -- if a warp still lands bit-exactly "
+              "on an earlier granted point, overwriting the armed destination "
+              "is not the mechanism and this flag should come out.")
+
+    if a.interact_walk:
+        global INTERACT_WALK
+        INTERACT_WALK = True
+        print("INTERACT WALK: sending 0x002A on an out-of-range interact. "
+              "MEASURED BROKEN 20260819T111841 -- a lone 0x002A drags the "
+              "character in a STRAIGHT LINE through geometry (it walked "
+              "through a staircase and stopped clipping under it) and produces "
+              "no position report, so the held interact never sees an arrival. "
+              "This flag is for measuring what actually carries the pathing.")
 
     if a.practice_target:
         global ENEMY_ATTACKS_BACK
