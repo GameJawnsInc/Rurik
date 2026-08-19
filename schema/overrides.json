@@ -2750,6 +2750,110 @@
     "name": "PET_RENAME",
     "name_confidence": "medium",
     "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F090 -> 0x00813800 -> 0x0081F900; log 'PetRename (agent %d): Pet data not reported' (VA 0x00A95A44)."
+   },
+   "100": {
+    "opcode": 100,
+    "table": "GAME_SMSG_0100",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 100
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SKILLBAR_SLOT_FLAG",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). Handler 0x0091E0A0 -> 0x00810820 (add ecx,0x6f0) -> 0x008220A0, a per-BIT setter on the per-agent skill-bar store the client calls hotKeyState (ChCliSkill.cpp, assert 'hotKeyState' ChCliSkill:718, reached with ecx = charCtx[+0x2C]+0x6F0). Field 2 is a bit index and field 3 its value: bts on non-zero, btr on zero, into the 8-bit mask at record+0xA4, then frame event 0x1000005A {agent, bit, value}. An unknown agent is silently dropped -- no insert, no assert, no log. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "101": {
+    "opcode": 101,
+    "table": "GAME_SMSG_0101",
+    "declared_unpack_size": 7,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 101
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SKILLBAR_SLOT_FLAGS",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). The whole-mask sibling of opcode 100: handler 0x0091E0C0 -> 0x00810850 -> 0x00822120 writes all eight bits of record+0xA4 at once, then DIFFS old against new and fires one 0x1000005A per changed bit. The mask width is measured, not assumed -- the diff loop runs 0..7. NOTE FOR READERS OF FINDINGS 28.6: this opcode was listed there among four adjacent unnamed candidates for the stance-ring echo. It is not that; the stance echo is opcode 98. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "182": {
+    "opcode": 182,
+    "table": "GAME_SMSG_0182",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 182
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROFESSION_BITS",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). Handler chain reaches setter 0x0081FD50 on the per-agent PROFESSION table at charCtx[+0x2C]+0x6BC (sorted 20-byte records keyed on agent). The client names both the call and this field on the setter's not-found path: 'OnProfessionSecondaryBits (agent %d, secondaryBits %d): Agent not found in sort array'. Field 2 lands at record+0x0C and is a BITMASK indexed by profession id, proven by its consumer, which shifts 1 by a profession index and tests -- and by the literal 0x7FF (eleven bits, CHAR_PROFESSIONS) the same code substitutes as an all-professions override. Distinct from opcode 183, which writes the two profession ids in the same record. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "183": {
+    "opcode": 183,
+    "table": "GAME_SMSG_0183",
+    "declared_unpack_size": 9,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 183
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROFESSIONS",
+    "name_confidence": "high",
+    "why": "OBSERVED static (38833) AND load-bearing in this server since 2026-08-16. Inserts/updates the per-agent PROFESSION record at charCtx[+0x2C]+0x6BC: fields 2 and 3 are the primary and secondary profession ids (record+0x04 / +0x08), field 4 a boolean normalised to 0/1 at record+0x10 whose meaning is NOT FOUND. Both getters return 11 = CHAR_PROFESSIONS for an absent agent, an out-of-band 'unknown'. WHY IT MATTERS TO US: the hero attribute path asserts ConstChar:1296 for an agent missing from this table, which is why authsrv sends this for the hero's agent and not only the player's (studies/heroes/FINDINGS.md 14). The primary/secondary ORDER rests on ArenaNet's assert 'agentPrimaryProf != agentSecondaryProf' (GmDeckBuilder.cpp:2321) in the one function calling both getters back to back -- strong but ordering evidence, so the order is RECONSTRUCTION while the two-professions claim is OBSERVED. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
    }
   }
  }

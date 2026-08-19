@@ -3092,9 +3092,24 @@ HERO_INFO = True
 #   The reader is GmMercenaryRoster; the packer is HeroEnable (0x0081DE20).
 #   The attribute-block hypothesis stays refuted and now has a replacement.
 #   HERO_FLAG (d3) does NOT gate "a third copy of the second group". Record
-#   +0x74 is the NAME, and d3 gates THAT -- see HERO_INFO_NAME below. d3 is an
-#   id whose zero means "none", and it is the read-side predicate too: four
-#   consumers test it before touching the name and take a default otherwise.
+#   +0x74 is the NAME, and d3 gates THAT -- see HERO_INFO_NAME below. It is
+#   the read-side predicate too: four consumers test it before touching the
+#   name and take a default otherwise. WHAT d3 IS, read 2026-08-19 (pvpui
+#   30.3): a PACKED CHARACTER-APPEARANCE DWORD, the same bitfield
+#   CharData.cpp addresses through s_appearanceSlot (8 slots) -- not an
+#   entity id and not a content-row id. That is why ONE field gates both the
+#   name and the equipment: a record carrying an appearance is a
+#   character-derived, mercenary-style hero, so it brings that character's
+#   own name and gear; without one the client falls back to
+#   s_heroClientData. The bit layout is not decoded, so any non-zero value
+#   is a probe rather than a meaningful appearance.
+#   AND THE RECORD HAS A SIBLING WRITER THAT FIGHTS THIS ONE. s2c 0x0073
+#   shares 0x0074's worker and each zeroes what the other carries: 0x0073
+#   forces d3, the name and BOTH equipment arrays to zero; 0x0074 forces the
+#   skill-id count and pointer to zero (record +0x20/+0x24..+0x43, eight
+#   skill ids that seed the deck builder). Neither is a partial update and
+#   order decides what survives. We send only 0x0074 today; anything that
+#   adds 0x0073 must send them as a pair or lose half the record.
 HERO_CHUNK = None
 HERO_FLAG = 0
 HERO_BYTES = None
