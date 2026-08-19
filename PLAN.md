@@ -1367,8 +1367,13 @@ stage eleven items.
 **NEXT, in cost order:**
 1. **A purchase does not persist and stock is infinite** — ids come from a fixed base and
    slots from a per-connection cursor. Fine for probes, wrong for a world.
-3. **The level-up burst** is still unmined in `20260819T132414` (channel 52606, operator
-   notes at wire_t 227.6 and 278.5) — the transition §8 names as never once observed.
+3. ~~**The level-up burst**~~ **DONE 2026-08-19** — observed twice and written up in
+   [studies/unitsetup/FINDINGS.md](studies/unitsetup/FINDINGS.md). `0x009F` prop **37** is
+   the level-up carrying the new level (2 sightings, both at a transition) and prop **36**
+   is the level state (1,819); `0x0039` is total attribute points and prop **42** maximum
+   health, both closing on GWW's published tables the capture never supplied. Left open:
+   `0x0038` is NOT IDENTIFIED, and whether attribute points and health are owner-private
+   is RECONSTRUCTION needing a second player in view.
 
 
 ### Model authoring — the PLAYER path is open, and one bit decides whether it animates (2026-08-19)
