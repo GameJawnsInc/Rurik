@@ -151,3 +151,56 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 source = "opentyria"
 verified = ""
 note = "Verbatim from GmDefaultArmors.c entry 5. See the family note above."
+
+# THE BACKPACK, and it is a real ITEM rather than a bag the server conjures.
+#
+# `0x013F`'s trailing field is the container's own item id, nonzero on the type-1
+# backpack and on NOTHING else, and 49 of 49 in the live corpus are an id declared
+# by an `0x0161` in the SAME tape at the same timestamp. Sending that field as 0
+# creates a container the inventory panel does not draw: the run on 2026-08-19
+# (`20260819T160503`) got eight of the nine bags rendering and no Backpack, which
+# is the first of the four item containers and the one the others sit under.
+#
+# WIKI (GWW, "Container", rev. 2026): "Every character's inventory has place for
+# 1 Backpack, 1 Belt Pouch, 2 Bags and 1 Equipment Pack", the Backpack's default
+# capacity is **20** -- matching the type-1 bag's slot count exactly -- and "the
+# Backpack cannot be dragged away into another container or be destroyed". An item
+# that cannot be removed is still an item, and the client wants it declared.
+[item.backpack]
+name = "Backpack (the first item container)"
+file_id = 0x8001B536
+item_type = 3               # bag/container
+dye_tint = 1
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20001000
+value = 5
+model_id = 32
+quantity = 1
+enc_name = [0x21A8, 0xD157, 0xB58F, 0x166F]
+modifiers = [0x24481400]
+
+[item.backpack.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED, and the strongest item row in this file. Every field is read \
+off ArenaNet's own GAME_SMSG 0x0161 declaring the backpack container, and the row is \
+CONSTANT: across the whole live corpus there is exactly ONE distinct backpack \
+declaration -- 49 connections spanning FIVE distinct characters (character A, Redwar \
+Tywin, character C, character D, character E) and three campaigns -- differing only in the \
+per-connection item id, which is an arbitrary handle exactly as the bag ids and the \
+0x0144 inventory key are. So the id is ours to allocate and everything else is theirs.
+
+The extractor is `toolkit/authsrv/invcensus.py` (`bag_shapes()`), build 38833; the join \
+is `0x013F` field 6 -> the `0x0161` declaring that id in the same tape. Cross-checked \
+against a source that shares no code or ancestry with the capture: WIKI (GWW, \
+"Container", rev. 2026) gives the Backpack a default capacity of 20, which is exactly \
+the type-1 bag's slot count in every one of those 49 connections. Wiki and wire agreeing \
+is real corroboration -- unlike two of our mirrors agreeing, which is one witness twice.
+
+NOT decoded, and deliberately not guessed: `flags` 0x20001400 and the single modifier \
+word 0x24470000. They go out verbatim because that is what retail sends. `enc_name` is \
+the encoded string id, which is the pattern CLAUDE.md names -- commit the id, let the \
+client resolve the text out of the owner's own archive."""

@@ -38,8 +38,40 @@ STREAM_CREATE = 0x0144
 HERO_ACTIVATE = 0x0072
 CREATE_BAG = 0x013F
 NAMED_ITEM = 0x0161
+BAG_TYPE_BACKPACK = 1
 OPS = {STREAM_CREATE: "STREAM_CREATE", HERO_ACTIVATE: "HERO_ACTIVATE",
        CREATE_BAG: "CREATE_BAG"}
+
+
+def backpack_items():
+    """[(capture, connection, declaration)] for every BACKPACK item in the corpus.
+
+    The join is `0x013F` field 6 -> the `0x0161` that declares that id in the
+    SAME tape. `declaration` is the 0x0161 payload from the item id onward, so
+    element 0 is the per-connection handle and everything after it is
+    ArenaNet's. Consumed by `test_playerbags.py`, which asserts our own
+    content row reproduces it field for field.
+    """
+    codec = Codec()
+    out = []
+    for capture_dir in npcdefs.live_captures():
+        for row in tape.channel_files(capture_dir):
+            connection = row["connection"]
+            info, events = tape.load_tape(capture_dir, connection)
+            if info.get("origin", "unknown") != "live":
+                raise SystemExit(f"{capture_dir} {connection}: not live")
+            msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
+            if receipt[2] is not None or receipt[0] != receipt[1]:
+                raise SystemExit(f"{capture_dir} {connection}: partial decode")
+            want = {v[6] for _t, op, v in msgs
+                    if op == CREATE_BAG and len(v) > 6
+                    and v[2] == BAG_TYPE_BACKPACK and v[6]}
+            for _t, op, v in msgs:
+                if op == NAMED_ITEM and len(v) > 1 and v[1] in want:
+                    out.append((info.get("capture")
+                                or os.path.basename(capture_dir),
+                                connection, list(v[1:])))
+    return out
 
 
 def bag_shapes():

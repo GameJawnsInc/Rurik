@@ -2207,6 +2207,102 @@ should not go into `overrides.json` on this evidence.
 > logged `UNHANDLED GAME_CMSG 0x804d`. **So the client does NOT debit itself on sending;
 > it waits for the server.** See the correction below.
 
+> ### THE BACKPACK RENDERS, AND THE PURCHASE ARM CRASHES ON ITS OWN SECOND MESSAGE. 2026-08-19, OBSERVED
+>
+> Harness **`20260819T162758`**. Two results, one good and one that names its own fix.
+>
+> **THE BACKPACK APPEARS.** `0x013F`'s trailing field is the container's own ITEM and it
+> has to be a declared one; sending 0 produced eight containers and no Backpack, which is
+> the FIRST of the four item containers and the one the rest hang under. Declaring it
+> fixes it. WIKI (GWW, "Container", rev. 2026) is the outside witness: *"Every character's
+> inventory has place for 1 Backpack, 1 Belt Pouch, 2 Bags and 1 Equipment Pack"*, the
+> Backpack's default capacity is **20** — exactly the type-1 bag's slot count in all 49
+> connections — and *"the Backpack cannot be dragged away into another container or be
+> destroyed"*. An item that cannot be removed is still an item.
+>
+> **The row is retail's, field for field**, and it is the most constrained item row in
+> `content/items.toml`: **one distinct declaration across the whole corpus**, 49
+> connections spanning **five distinct characters** (character A, character B,
+> character C, character D, character E), differing only in the per-connection item id.
+> `file_id 0x8001B536`, `item_type 3`, `flags 0x20001000`, `value 5`, `model_id 32`, one
+> modifier word `0x24481400`. **Three of those were mistyped on first write** — decimal to
+> hex by hand — and the ENCODE caught it, not a reading; `test_playerbags.py` now pins our
+> row against the corpus's so it cannot drift back.
+>
+> **THE PURCHASE ARM ANSWERED, AND KILLED THE CLIENT.** Our four messages went out in the
+> order read off retail's own frame — `0x00CC [1]` → `0x013E` → `0x014F [inv, 10]` →
+> `0x0161` — and the client died on **`Assertion: item`, `ItCliApi.cpp(1883)`**.
+>
+> **THE ASSERT NAMES THE FIX, statically, with no further runs.** Site `0x00845FB3`, and
+> the next two asserts in the same routine are `ItCliApi:1886 bag` (`0x00845FD9`) and
+> `ItCliApi:1889 inventory` (`0x00846002`). **item → bag → inventory is exactly
+> `0x013E ITEM_MOVED_TO_LOCATION`'s argument validation** — it takes (inventory, item,
+> bag, slot) and asserts each lookup in turn. So the move failed on the FIRST lookup: the
+> item it names had not been declared yet.
+>
+> **AND THE READING WAS WRONG — CORRECTED THE SAME SESSION, BY BYTE OFFSET.** Retail's
+> real order in the decrypted stream is **pay, mint, place, confirm**:
+>
+> ```
+> 36392  0x014F [183, 40]              the DEBIT, before the item exists
+> 36400  0x0161 [4130, ...]            DECLARE the minted copy
+> 36452  0x013E [183, 4130, 570, 1]    move it into bag 570 -- the BACKPACK
+> 36463  0x00CC [1]                    transaction done, LAST
+> ```
+>
+> **THE BAD ORDER WAS MANUFACTURED BY THE TOOL THAT READ IT**, and that is the finding
+> worth keeping. All four messages sit in one segment and share one timestamp; the
+> timeline script sorted whole TUPLES, so the tie fell through to comparing the next
+> field — the **opcode number**. `0x00CC` (204) < `0x013E` (318) < `0x014F` (335) <
+> `0x0161` (353). *Ascending opcodes wearing the costume of a finding*, and it reached a
+> study document, a test that pinned it, and a commit message before the client refuted
+> it by dying. **Within a single frame, byte offset is the only ordering evidence there
+> is** — a timestamp cannot order messages that share one, and a sort that silently
+> supplies a tiebreak will invent an order rather than admit it has none.
+>
+> Same family as the two negatives-without-controls earlier in this session, from the
+> other direction: there a filtered search produced a confident absence; here a sort
+> produced a confident sequence. In both cases the tool answered a question it had not
+> been asked.
+
+> ### THE PURCHASE COMPLETES. A player bought an item from a server we wrote. 2026-08-19, OBSERVED
+>
+> Harness **`20260819T170427`**, one variable changed from the run that crashed: the reply
+> goes out in retail's real order.
+>
+> ```
+> c2s 0x804D [1, 10, [], b'', 0, [40], b'']      the client asks
+> s2c 0x014F [1, 10]                                 pay
+> s2c 0x0161 [5000, ...]                             mint a copy of stock 40
+> s2c 0x013E [1, 5000, 2, 0]                         place it in backpack slot 0
+> s2c 0x00CC [1]                                     confirm
+> ```
+>
+> **Every readout agrees and none of them is our own log.** `Your Funds` fell from
+> **2000 to 1990** — the quoted price, exactly — on the merchant panel *and* on the
+> inventory window's own gold line. The **backpack opens** and slot 0 holds the item, whose
+> tooltip reads `Ringmail Leggings / Armor: 25 / Armor +20 (vs. physical damage)`: the
+> minted copy carries the stock row's declared fields, so a bought item is a real item and
+> not a label. No assert, no dialog, and the session ran to the end of the probe.
+>
+> **This is the first transaction this project has ever completed**, and it closes the loop
+> the arc opened: authored NPC, authored stock, authored prices, a funded purse, a client
+> that asks, and a server that answers.
+>
+> **`0x00C3 [11, 0]` survived a second time** in the same run, which is worth more than the
+> first: the result now has n = 2 on separate sessions.
+>
+> **The debit is `0x014F` and it is now CORROBORATED by construction.** It was
+> OBSERVED-once — one purchase in the whole corpus — and the way named to promote it was
+> "implement the arm and watch our own client's funds fall by the quote". They did.
+>
+> **Still open, and named rather than buried:** we allocate item ids from a fixed base
+> (`PURCHASED_ITEM_ID_BASE`) and slots from a per-connection cursor, so nothing yet
+> persists a purchase across instances or refuses a second buy of a one-off; the merchant
+> keeps infinite stock; and **`0x004A` SELL has no arm** — its reply triple is already read
+> off the corpus (`0x00CC [11]` → `0x014D` item gone → `0x0140` credit), so it is the same
+> shape of work as this one.
+
 > ### ⚠ CORRECTION — `0x014F` IS THE GOLD DEBIT. "The client debits its own purse" is REFUTED. 2026-08-19
 >
 > This document twice says no server message carries a purchase debit, "measured from the
