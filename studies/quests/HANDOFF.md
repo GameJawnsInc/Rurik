@@ -89,9 +89,12 @@ values. `FINDINGS.md` §9.6 is the record; the probe is `quest_panel`, kept runn
 the completion-panel calibration. What the reward arc still does not have is a **grant**:
 the toast is display, no client state moved, and the rest of the completion family
 (`0x006C`, `0x0096`, `0x0097`, `0x00FB`) is 0-of-corpus — that half needs a narrated
-live mission completion. The static leads that remain cheap: the four unattributed
-publishers of GmQuestComplete's other frame ids (§9.3 — `framebus.py --at`, one body at
-a time, `0x006C` the first candidate), and Q2b's name authoring via `textwrite.py`,
+live mission completion. **The publisher question is CLOSED (2026-08-19, §9.7): those
+same four opcodes are the panel's other four publishers** — the five-id band and the
+completion family close on each other, with a `0x0096`/`0x0097` frame-id swap that
+`test_framebus.py` now asserts so nobody tidies it away. The cheap probes that remain:
+a loopback ladder over `0x0096`'s completion-flag bits and `0x0097`'s u8+string (the
+one completion message carrying TEXT), and Q2b's name authoring via `textwrite.py`,
 which needs no client at all.
 
 ## 5. Open, unmeasured, and deliberately not guessed

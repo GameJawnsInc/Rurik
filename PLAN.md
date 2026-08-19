@@ -2350,6 +2350,20 @@ chip read 1 beside a 4.29-billion-experience toast, and
 reward arc's live-capture question. `studies/quests/FINDINGS.md` §9.6 is the record;
 the probe stays registered as the completion-panel calibration.
 
+**AND THE OTHER FOUR PUBLISHERS ARE ATTRIBUTED — §9.3's "next static question" ran
+2026-08-19, same day.** The five frame ids GmQuestComplete subscribes to are published
+by exactly the five completion-family opcodes: `0x006C`→`0x10000156`,
+`0x0097`→`0x10000157`, `0x0096`→`0x10000158` (**mind the swap** — frame-id order does
+not follow opcode order), `0x00FB`→`0x10000159`, each body located through the receive
+table and the pairing confirmed by two instruments (msghandler's disassembly,
+framebus's scan). The scene and the 0-of-corpus family CLOSE ON EACH OTHER, which
+structures the grant question: `0x0097` is the one message carrying a STRING (the
+rewards-blurb candidate, RECONSTRUCTION), `0x0096` is gated on completion-flag bits
+(the sweep's assert), and a loopback ladder over those with the `quest_panel` rig is
+the next cheap probe. `framebus.py` prints the pairing and `test_framebus.py` asserts
+it (27 checks, floor 16); `0x0096`/`0x0097` get `why`-only schema rows per §9.4's
+restraint. `studies/quests/FINDINGS.md` §9.7.
+
 **Next offline, cheapest first, and the offline half is the short half. Q2b — author the
 NAME.** The description is ours and the name is still ArenaNet's `0x3D64`, so a quest we wrote
 announces itself in their words. Q0 went green 2026-08-15 (`studies/quests/AUTHORING.md` §1)

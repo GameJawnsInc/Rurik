@@ -2878,10 +2878,18 @@ Every one of these, in the order they were written:
   the defect survived: against the pin the constant is correct. Same shape in
   three other tools that day — `worldmap.py`, `consttable.py`, `heroes_table.py`
   — all routed through `buildid.of_image`, with the shared helper guarded by
-  `test_buildid.py` §5. §1 runs on a bare machine — `framebus.py`
+  `test_buildid.py` §5. **2026-08-19, the COMPLETION FAMILY joined the check**
+  (`studies/quests/FINDINGS.md` §9.7): §9.3's four unattributed publishers of
+  GmQuestComplete's band turned out to be the other four completion-family
+  opcodes' own bodies — `0x006C`→`0x10000156`, `0x0096`→`0x10000158`,
+  `0x0097`→`0x10000157`, `0x00FB`→`0x10000159` — and §1 now asserts the
+  five-id closure and the `0x0096`/`0x0097` SWAP structurally (the one detail
+  an assume-adjacent reading gets wrong; an edit that re-sorts the pairing into
+  opcode order goes red), while §2 re-reads both from the pinned image via
+  `completion_family()`. §1 runs on a bare machine — `framebus.py`
   is a fixed-byte-pattern tool and takes no disassembler — and §2 and §3 each
-  declare a `LEDGER.skip` without the vault, which is why the floor is 14 and
-  not 23. ~4 s),
+  declare a `LEDGER.skip` without the vault, which is why the floor is 16 and
+  not 27. ~4 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
