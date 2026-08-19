@@ -853,6 +853,73 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### THE CtlPage LEAD, CHASED — 2026-08-18. The faulting instruction is located, and no `0x0161` field can reach it. SOURCED
+>
+> Desk work on the dump from `20260818T224156`, rebased and disassembled. **This retires the
+> "what does `0x0161` need" framing for the crash**, and confirms the crash-dump pass's
+> `+0xC` claim by disassembly rather than inference.
+>
+> **First, a correction to my own earlier reading.** The dialog says *"Memory at address
+> 2e67736d could not be written"*, which I first read as a bad store. The thread block
+> settles it: **`eip = 2e67736d`**. Execution *transferred* to `"msg."`. It is an indirect
+> CALL through a garbage function pointer, not a write.
+>
+> **The EBP chain lies here, and the stack top tells the truth.** The trace's first frame
+> reports `Rt:010a0db4` (static `0x00630DB4`), whose call site is a *direct* `call 0x64bfd0`
+> — which cannot produce this fault. The faulting frame had not established `ebp` yet: a
+> `call` through a bad pointer pushes its return address and then faults on the fetch. So
+> the real return address is at `esp` itself (`0x0684F0C0` → `010bc2d0`), giving static
+> **`0x0064C2D0`**, and the instruction before it is the fault:
+>
+> ```
+> 0064C2C3  mov  eax, dword ptr [ebp + 8]   ; eax = this function's FIRST ARGUMENT
+> 0064C2C6  push 0
+> 0064C2C8  lea  ecx, [ebp - 0x60]
+> 0064C2CB  push 0
+> 0064C2CD  push ecx
+> 0064C2CE  call eax                        ; <-- THE FAULT
+> ```
+>
+> **Where the pointer comes from, traced by hand up two frames.** Rebase delta is `0xA70000`
+> (`BaseAddr 00E70000`, image base `0x00400000`). At `0x0061FA53`–`0x0061FA6D` the caller
+> builds the argument list from a descriptor in `edi`:
+>
+> ```
+> 0061FA53  mov  ecx, [edi + 4]      0061FA64  push [edi + 0xc]   ; <-- arg4, the callback
+> 0061FA5B  or   ecx, 0x200          0061FA67  push [edi + 8]
+> 0061FA6A  push ecx                 0061FA6B  push [ebx]
+> 0061FA6D  call 0x630c90
+> ```
+>
+> The dump's own argument capture for that frame reads `1d0c8e58 00000200 00000001
+> 2e67736d` — arg2 is `0x200` exactly as the `or ecx, 0x200` predicts, and **arg4 is
+> `"msg."`**. So the value is **`[descriptor + 0xC]`**: the crash-dump pass named `+0xC` from
+> the dump alone and the disassembly agrees, independently.
+>
+> **What `"msg."` actually is, and the trap in over-reading it.** Those four bytes occur
+> **73** times in the image, always as the opening of an **assert-expression string** in
+> `.rdata` (`msg.currency < NET_SHOP_CURRENCIES`, `msg.itemCount <= NET_SHOP_ITEMS`,
+> `msg.itemId && msg.it…`, `msg.index < m_cards…`, `msg.summaryBytes <= …`). **Which one
+> this is remains undetermined** — the search returns candidates, not the site. In
+> particular the `NET_SHOP_*` pair belongs to `Store.cpp` / `StoreCheckout.cpp`, ArenaNet's
+> **online store**, and is almost certainly a coincidence of prefix rather than evidence the
+> merchant path touches it; it is recorded here only so the next reader does not "discover"
+> it and build a theory on it.
+>
+> **The conclusion, and it is a negative that closes a direction:** the descriptor register
+> is pointing into `.rdata` string data, so **there is no valid row descriptor at all** —
+> its `+0xC` is not a wrong callback, it is not a callback. That is structural, and **no
+> value in any `0x0161` field can repair it**, which is why the bit-2 fix changed nothing
+> and why `F9`'s price would not have either. It also explains the shape of the failure:
+> `0x00CA` renders a shop fine because that path never walks this descriptor array;
+> `0x00C3` does.
+>
+> **The precise next step, desk work only:** find what POPULATES the array `edi` walks — the
+> `{+0x4 flags, +0x8, +0xC proc, +0x10}` row — by going one frame further up
+> (`Rt:0108f74e` → static **`0x0061F74E`**) to whoever builds it. The question is no longer
+> "which field is wrong" but **"which message or client-side event allocates the row set that
+> `0x00C3` assumes exists"**.
+>
 > ### WHAT `0x0161` NEEDS FOR MERCHANT STOCK — desk work, 2026-08-18
 >
 > > **TESTED AND REFUTED THE SAME DAY. Read this first.** The bit-2 fix below was run
