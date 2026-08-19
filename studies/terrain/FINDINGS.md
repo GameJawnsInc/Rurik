@@ -1444,6 +1444,20 @@ nothing about this prop is special. The outline being visible while the mesh
 was not is what distinguishes "absent" from "invisible", and it is worth
 keeping as a diagnostic.
 
+**Blast radius, recorded 2026-08-18: this fix reached the UNIT arc too, and
+turned one of its checks red.** `_alpha_class` classifies the hatcher's
+picked diffuse (`tex_1C7DB.png`) an eraser, so the unit viewer stopped
+wiring its alpha and that body's default render went from a floating head
+to a whole body — which killed rung U5's `--opaque` control, whose entire
+job was measuring the gap between those two renders (both arms then read
+0.1932). Nothing was wrong with either arc; a shared classifier simply
+changed what a downstream test was measuring. The unit check has been
+rewritten around a tamper control that reinstates the eraser verdict on
+demand, so the phenomenon §7.17 fixed stays REPRODUCIBLE after the fix —
+[studies/unitexport/FINDINGS.md](../unitexport/FINDINGS.md) §5.1. Worth
+knowing before `_alpha_class`'s rule is next tuned: its verdicts are now
+load-bearing in two arcs, and the unit-side tamper arm will say so.
+
 ### 7.18 §7.2 REFUTED: there is no second rectangle (2026-08-17)
 
 §7.2 read two UV rectangles in `0x00757A80` — a masked path using the quadrant

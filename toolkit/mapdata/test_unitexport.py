@@ -40,6 +40,17 @@ Rung U5 of `studies/unitmodels/PLAN.md`. Three claims, three kinds of check:
      bbox through the dump's ortho scale, within 4 px. A render check whose
      control cannot go black would be decoration.
 
+     THE ALPHA ARM MOVED, and the shape of the checks moved with it. The
+     hatcher's diffuse used to erase its own torso in the default render,
+     and `--opaque` measured the cost; the terrain arc then taught the
+     exporter to CLASSIFY that texture (`modelexport._alpha_class`, its
+     "erases" class) and the viewer to skip the wiring, so the two arms
+     converged and the gap check could no longer fail either way. What is
+     asserted now is that the classifier is what closed it -- pinned by a
+     TAMPER control that puts the eraser verdict back and measures the
+     torso vanishing again, because "the default looks right" is equally
+     true of a viewer that ignores alpha altogether.
+
   THE POSE THAT SHIPPED IS THE FLAT PLACEMENT -- FA0 vertices as stored, no
   node transform applied -- and section 2 pins the measurement that makes
   that the BIND POSE rather than a guess: every channel-carrying node's base
@@ -119,14 +130,33 @@ ALPHA_MIN = 26
 #: so a 0.02 floor was refuted by the first real run and lowered.
 COVER_MIN = 0.005
 
-# FLOOR: 71, from a real green run on `vault/dat_study/Gw.dat` with Blender
-# 5.1.1, 2026-08-16 (8.3 s; the three Blender runs are most of it).
+#: The hatcher's FA5 slot 1, MEASURED alpha < 26/255 on 99.9% of its texels
+#: (`studies/unitexport/FINDINGS.md` §5) -- which is what makes it an
+#: "eraser" to `modelexport._alpha_class` (alpha < 16 on >90%).
+HATCHER_ERASER = "tex_1C7DB.png"
+#: Coverage of the hatcher's silhouette when its diffuse alpha IS wired as
+#: transparency -- head and thin edges, the torso gone. MEASURED 0.0147 at
+#: 256^2, first by the pre-classifier default render (§5) and again by the
+#: tamper arm below; used only as an upper bound on "erased".
+ERASED_COVER = 0.0147
+#: How far the default and --opaque renders may sit apart while counting as
+#: the SAME picture. The two measure bit-identically today (12,659 of
+#: 65,536 covered pixels, 0.193161, unchanged over three repeat runs -- the
+#: silhouette is a hard alpha edge, so Cycles' sampling does not move it),
+#: so this is slack for a Blender upgrade, not for noise; it is 26x smaller
+#: than the gap the tamper arm opens.
+OPAQUE_TOL = 0.005
+
+# FLOOR: 76, from a real green run on `vault/dat_study/Gw.dat` with Blender
+# 5.1.1, 2026-08-18 (23.6 s; the five Blender runs are most of it).
 # Sections 0-1 alone score 28 -- MEASURED by pointing --dat at a missing
-# file, not counted by eye -- so a vault-less run lands 43 short and goes
-# RED; a run with the archive but no Blender scores 52 (MEASURED with
-# --no-blender) and lands 19 short, also RED. Both are deliberate:
+# file, not counted by eye -- so a vault-less run lands 48 short and goes
+# RED; a run with the archive but no Blender scores 54 (MEASURED with
+# --no-blender) and lands 22 short, also RED. Both are deliberate:
 # synthetics verify plumbing, and a scene nobody measured is not a viewer.
-# 69 -> 71 the same day, when the hatcher's default render measured a
+# (That middle number read 52 here and 53 in TESTS.md while the truth was
+# 53; both are re-measured above rather than adjusted by arithmetic.)
+# 69 -> 71 on 2026-08-16, when the hatcher's default render measured a
 # floating head over an invisible torso and the --opaque control was added
 # to pin why (its diffuse texture's alpha, wired as transparency by the
 # inherited prop convention, is ~0 on 99.9% of texels).
@@ -142,7 +172,17 @@ COVER_MIN = 0.005
 # 71 -> 72 with the U5 review's RISK-1: the spans-tiling check now runs on
 # the worm's REAL payload too (five span kinds the synthetic never builds),
 # because it is rung U6's precondition and lived only on a fixture.
-FLOOR = 72
+#
+# 72 -> 76, 2026-08-18: the --opaque check went DEAD when the terrain arc
+# fixed the erasure upstream (both arms 0.1932; see section 3's comment and
+# `studies/unitexport/FINDINGS.md` §5.1). One check that could no longer
+# tell its arms apart became four that can, and each was MUTATION-TESTED to
+# prove it: wiring alpha unconditionally reddens (a) and (b); wiring it
+# never -- the vacuous pass (a) alone would have allowed -- reddens (b) and
+# (c); a no-op --opaque reddens (c); a classifier that never says "erases"
+# reddens section 2's naming check and (a). Two of the five Blender runs
+# are the tamper arms, and they are what the 8.3 s -> 23.6 s buys.
+FLOOR = 76
 
 
 # ------------------------------------------------------------------ helpers
@@ -223,6 +263,37 @@ def coverage(png_path):
     frac = n / float(w * h)
     box = (min(xs), max(xs), min(ys), max(ys)) if xs else None
     return frac, box
+
+
+def tamper_alpha_class(json_path, value):
+    """A copy of the export's manifest with every "erases" verdict changed.
+
+    The POSITIVE CONTROL for the alpha finding, and the same idiom as the
+    tampered start time in section 2: an assertion that the default render
+    shows the whole body proves nothing on its own -- a viewer that ignored
+    alpha entirely would satisfy it -- so the eraser verdict is put back and
+    the erasure has to reappear.
+
+    Writes beside the original ON PURPOSE: the sidecar names in a manifest
+    are relative to its own directory, so the copy reuses the real geometry,
+    UVs and PNGs and `load_gwmodel` still verifies every sha256 it declares.
+    Only `textures[i].alpha` moves -- a display field no digest covers.
+    """
+    out = os.path.join(os.path.dirname(os.path.abspath(json_path)),
+                       "tampered.gwmodel.json")
+    with open(json_path, "r", encoding="utf-8") as fh:
+        meta = json.load(fh)
+    n = 0
+    for entry in meta.get("textures") or []:
+        if entry.get("alpha") == "erases":
+            entry["alpha"] = value
+            n += 1
+    if n == 0:
+        raise ValueError(f"{json_path}: no 'erases' texture to tamper -- "
+                         f"the control has nothing to control")
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=1)
+    return out
 
 
 def run_gwunit(blender, json_path, workdir, tag, render=True, extra=()):
@@ -593,6 +664,19 @@ def _section2(check, ar, table, by_row, tmp):
     check(skeleton_from_export(hexp) is None,
           "skeleton_from_export reads that absence as None")
 
+    # -- THE ERASER, named in the manifest. A decoder fact, so it is checked
+    # HERE rather than behind Blender: `modelexport._alpha_class` calls the
+    # hatcher's diffuse an "eraser" (alpha below 16 on >90% of texels), and
+    # section 3 measures what that verdict is worth on pixels. The image is
+    # named because a count alone would pass if the classifier moved its
+    # verdict onto some other slot.
+    erasers = [e.get("image") for e in hexp.meta["textures"]
+               if e.get("alpha") == "erases"]
+    check(erasers == [HATCHER_ERASER],
+          f"the hatcher's diffuse {HATCHER_ERASER} is classed an ERASER by "
+          f"_alpha_class, and it is the only one of its three textures",
+          f"{erasers}")
+
     # -- a COMPOSITED shell is refused, not invented. The MESSAGE is
     # asserted (U5 review RISK-3): a bare raises() would pass identically
     # if 116228 vanished from the id table or the generic not-a-model
@@ -754,24 +838,86 @@ def _section3(check, led, args, paths, tmp):
           f"(+/-{SIL_TOL_PX}px)",
           f"{got_w}x{got_h} px vs {pred_w:.1f}x{pred_h:.1f}")
 
-    # THE ALPHA FINDING, measured on pixels: the hatcher's bound diffuse
-    # texture carries alpha < 26/255 on 99.9% of its texels (MEASURED on
-    # tex_1C7DB.png), and the prop-path convention wires texture alpha into
-    # the shader, so the DEFAULT render is a floating head over an
-    # invisible torso. What a unit texture's alpha means is NOT DECODED
-    # (the AMAT chain); --opaque is the display control, and the coverage
-    # gap between the two renders is the measurement that pins the finding.
+    # THE ALPHA FINDING, AS IT NOW STANDS -- and it MOVED, so read this
+    # before reading the checks. `studies/unitexport/FINDINGS.md` §5 found
+    # that the hatcher's bound diffuse (tex_1C7DB.png) carries alpha
+    # < 26/255 on 99.9% of its texels, that the prop-path convention wires
+    # texture alpha into the shader, and that the DEFAULT render was
+    # therefore a floating head over an invisible torso -- pinned by a
+    # check that --opaque at least TRIPLED the coverage.
+    #
+    # The terrain arc then fixed the cause upstream (FINDINGS 7.17,
+    # `modelexport._alpha_class` + the "erases" skip in gwmodel_materials),
+    # and that check went DEAD: both arms measure 0.1932, because the
+    # default no longer wires this texture's alpha at all. A control that
+    # cannot distinguish its arms is not a control, so what is asserted
+    # here is the NEW truth, in three parts (`studies/unitexport/
+    # FINDINGS.md` §5.1):
+    #
+    #   (a) the classifier CLOSED the gap -- default == opaque now;
+    #   (b) the erasure was REAL and still is: put the eraser verdict back
+    #       (tamper the manifest's display field, nothing else) and the
+    #       torso vanishes again, to the same 0.0147 §5 recorded;
+    #   (c) --opaque still has POWER -- on that tampered manifest it
+    #       restores the body, which is the original >=3x assertion kept
+    #       alive on the one input where it can still fail.
+    #
+    # (b) is what stops (a) from being vacuous: without it, a viewer that
+    # had stopped wiring alpha ENTIRELY would pass (a) just as happily as
+    # one that honours the classification. What a unit texture's alpha
+    # MEANS is still NOT DECODED (the AMAT chain); nothing here says the
+    # classifier reads ArenaNet's intent, only that it is what currently
+    # decides this render.
     rc, out, osumm = run_gwunit(blender, paths[HATCHER_FILE_ID], tmp,
                                 "hatcher_op", extra=("--opaque",))
     check(rc == 0 and osumm is not None and osumm.get("opaque") is True,
           "the hatcher imports with --opaque and the dump says so",
           f"rc {rc}")
-    if osumm is not None:
-        ofrac, obox = coverage(osumm["render"]["body_png"])
-        check(obox is not None and ofrac > 3 * frac,
-              "--opaque at least triples the hatcher's silhouette coverage "
-              "-- the measured cost of wiring unit texture alpha as "
-              "transparency", f"{frac:.4f} -> {ofrac:.4f}")
+    if osumm is None:
+        return
+    ofrac, obox = coverage(osumm["render"]["body_png"])
+    check(obox is not None and abs(ofrac - frac) <= OPAQUE_TOL
+          and frac > 3 * ERASED_COVER,
+          "(a) --opaque no longer changes the hatcher: the eraser class "
+          "already spared its alpha, so the DEFAULT render is the whole "
+          "body", f"{frac:.4f} vs {ofrac:.4f} opaque")
+
+    # (b)+(c): the tamper. The manifest's `alpha` is a DISPLAY field -- no
+    # sidecar digest covers it -- so the copy sits in the export's own
+    # directory (relative sidecars still resolve, and load_gwmodel still
+    # verifies every one of their sha256s). Geometry is asserted unmoved on
+    # both arms, so a collapse cannot be some other thing going wrong.
+    # The helper RAISES when there is no eraser left to reinstate, and that
+    # is a red check rather than a traceback: the run has to reach its
+    # ledger, or a classifier regression costs the summary as well.
+    try:
+        tpath = tamper_alpha_class(paths[HATCHER_FILE_ID], "cutout")
+    except ValueError as exc:
+        check(False, "(b) the eraser verdict can be reinstated for the "
+                     "positive control", str(exc))
+        return
+    rc, out, tsumm = run_gwunit(blender, tpath, tmp, "hatcher_erase")
+    trc, tout, tosumm = run_gwunit(blender, tpath, tmp, "hatcher_erase_op",
+                                   extra=("--opaque",))
+    check(rc == 0 and trc == 0 and tsumm is not None and tosumm is not None,
+          "the eraser-reinstated manifest imports on both arms",
+          f"rc {rc}/{trc}")
+    if tsumm is None or tosumm is None:
+        return
+    same_mesh = all(x["mesh"]["vertex_count"] == HATCHER["vertices"]
+                    and x["mesh"]["face_count"] == HATCHER["triangles"]
+                    for x in (tsumm, tosumm))
+    tfrac, tbox = coverage(tsumm["render"]["body_png"])
+    tofrac, tobox = coverage(tosumm["render"]["body_png"])
+    check(same_mesh and tbox is not None and tfrac < frac / 3.0,
+          f"(b) and the erasure is REAL: wired as transparency this "
+          f"texture takes the torso back off -- coverage collapses to under "
+          f"a third, on identical geometry ({HATCHER['vertices']} v)",
+          f"{frac:.4f} -> {tfrac:.4f}")
+    check(tobox is not None and tofrac > 3 * tfrac,
+          "(c) and --opaque still TRIPLES it back -- the display control "
+          "kept its power, measured where the erasure still exists",
+          f"{tfrac:.4f} -> {tofrac:.4f}")
 
 
 if __name__ == "__main__":

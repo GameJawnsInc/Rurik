@@ -164,6 +164,100 @@ lives with the AMAT chain (0xFAD), the same open the models arc recorded
 for which FA5 slot is the diffuse. Neither wiring is knowledge; both are
 now measurable.
 
+**That last sentence about the test is no longer how the check reads — see
+§5.1, which is what happened when the finding got fixed underneath it.**
+
+## 5.1 The gap closed, and the check that measured it went dead (2026-08-18)
+
+`test_unitexport.py` was the suite's only pre-existing red, and it had been
+red since at least 16a242f. The failing line was §5's own assertion:
+
+```
+[FAIL] --opaque at least triples the hatcher's silhouette coverage
+       0.1932 -> 0.1932
+```
+
+**Both arms measured the same picture, so the control had stopped
+controlling.** Three causes were possible — the flag no longer reaching the
+viewer, the alpha wiring no longer applied in either path, or a coverage
+metric gone insensitive. It is the second, and it is the benign one.
+
+**MEASURED, cause.** The terrain arc's §7.17 work (commit `3b0d36f`) added
+`modelexport._alpha_class`, which labels a texture `opaque` / `cutout` /
+`erases`, and taught `import_gwmap.gwmodel_materials` to skip the alpha
+wiring for the `erases` class only. Exporting the hatcher today:
+
+| FA5 slot | image | `_alpha_class` |
+|---|---|---|
+| 0 | `tex_2005.png` 256² | opaque |
+| **1 (the picked diffuse)** | **`tex_1C7DB.png` 512²** | **erases** |
+| 2 | `tex_1C7DD.png` 128² | cutout |
+
+The eraser is the exact texture §5 named. So the default render stopped
+wiring its alpha, the torso came back, and the default rose 0.0147 →
+0.1932 — which is what `--opaque` had been producing all along. The worm
+has no eraser (four cutouts and one opaque), which is why its numbers never
+moved. **The `--opaque` flag was never broken and neither was the metric.**
+
+**MEASURED, the tamper probe** (prediction stated before the run, and it
+held to four decimals). Question: is the `erases` verdict the *whole*
+reason? Take the export's manifest, flip slot 1's `alpha` from `erases` to
+`cutout`, change nothing else, re-import:
+
+| arm | coverage | mesh |
+|---|---|---|
+| default | 0.1932 | 1,463 v / 3,746 f |
+| `--opaque` | 0.1932 | 1,463 v / 3,746 f |
+| eraser reinstated | **0.0147** | 1,463 v / 3,746 f |
+| eraser reinstated + `--opaque` | 0.1932 | 1,463 v / 3,746 f |
+
+0.0147 is §5's number, reproduced on demand. Geometry is identical on
+every arm, so the collapse is the alpha wire and nothing else. (The render
+is deterministic despite Cycles: 12,659 of 65,536 covered pixels,
+bit-identical over three repeat runs — the silhouette is a hard alpha edge,
+so sampling noise does not reach it.)
+
+**So the FINDING MOVED and the check was rewritten to assert the new truth,
+not relaxed.** One check that could no longer distinguish its arms became
+four that can, and the reason there are four is that the obvious single
+replacement is vacuous: asserting "default == opaque" is satisfied just as
+happily by a viewer that has stopped wiring alpha *at all* as by one that
+honours the classification. So:
+
+1. **The classifier names the eraser** (section 2, no Blender needed — it
+   is a decoder fact): the hatcher's `erases` list is exactly
+   `[tex_1C7DB.png]`. Naming the image matters; a count would pass if the
+   verdict moved to another slot.
+2. **(a) the gap is closed**: default and `--opaque` agree within 0.005,
+   and both are the full body.
+3. **(b) the erasure is still REAL** — the positive control, and the one
+   that stops (a) being vacuous: reinstate the verdict in a manifest copy
+   and coverage collapses to under a third on identical geometry.
+4. **(c) `--opaque` still has POWER**: on that tampered manifest it triples
+   the coverage back. This is §5's original assertion, kept alive on the
+   one input where it can still fail rather than deleted.
+
+**MUTATION-TESTED, all four** — because the defect being fixed here is
+precisely a check that could not go red, and asserting the replacement can
+would otherwise be the same mistake one level up:
+
+| mutation | reddens |
+|---|---|
+| wire alpha unconditionally (the pre-§7.17 viewer) | (a), (b) |
+| never wire alpha (blanket opaque) | (b), (c) — **(a) passes**, which is the whole argument for (b) |
+| `_force_opaque` made a no-op | (c) |
+| `_alpha_class` never returns `erases` | the naming check, (a) |
+
+Cost: two extra Blender runs, 8.3 s → 23.6 s; floor 72 → 76.
+
+**What this does NOT say.** The classifier is not a decoding of what
+ArenaNet means by this texture's alpha — `_alpha_class` is a floor rule
+("alpha that would erase substantially the whole surface cannot be the
+artist's transparency"), and §5's NOT DECODED stands unchanged: the AMAT
+chain (0xFAD) still owns the real answer. All that is claimed is that the
+classifier is what currently decides this render, and that its verdict here
+is load-bearing rather than cosmetic.
+
 ## 6. Honest opens
 
 1. **The hatcher's opaque body renders dark** (covered-pixel means near
@@ -204,6 +298,14 @@ now measurable.
 - The guessed 0.02 coverage floor was refuted by the hatcher at 0.0147
   and replaced by `COVER_MIN = 0.005` beside the zero-measuring control —
   which then led straight to §5's alpha finding.
+- **A defect IN a check, not found by one** (§5.1): §5's `--opaque` gap
+  assertion went dead when the terrain arc fixed the erasure upstream, and
+  it sat red in the suite rather than announcing that its subject had
+  moved. Nothing here can detect that automatically — a check whose two
+  arms converge looks exactly like a check whose subject regressed, and
+  only reading the cause tells them apart. What the rewrite adds is the
+  tamper arm, which keeps the original phenomenon reproducible on demand
+  even now that the shipped path no longer exhibits it.
 
 No defects found in the read-only dependencies (`skelfile.py`,
 `mdlrefs.py`, `modelfile.py`, `modelexport.py`); none needed a workaround.

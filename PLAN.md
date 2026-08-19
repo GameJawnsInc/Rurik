@@ -1763,9 +1763,16 @@ the FA1 sidecar byte-verbatim plus a typed layer that must equal a fresh decode,
 Blender viewer measured headless (predicted-vs-measured silhouettes, exact-zero hidden
 controls) — the flat placement is pinned as the bind pose by a review-measured
 cloud-occupancy statistic. Honest finds recorded: the hatcher's picked diffuse is 99.9%
-transparent texels (its default render is a floating head — the diffuse-slot question
-stays open with AMAT), and the corpus FA8 graph is acyclic at depth 1, so a synthetic
-cycle fixture is what carries the recursion claim.
+transparent texels (the diffuse-slot question stays open with AMAT), and the corpus FA8
+graph is acyclic at depth 1, so a synthetic cycle fixture is what carries the recursion
+claim. **AMENDED 2026-08-18 — that diffuse no longer renders as a floating head:** the
+terrain arc's `_alpha_class` (FINDINGS 7.17) classes it an eraser and the viewer skips
+its alpha, which closed the gap U5's `--opaque` control was measuring and left that
+check unable to fail either way — the suite's only pre-existing red. Rewritten to assert
+the new truth with a tamper positive control (the erasure stays reproducible on demand),
+all four replacement checks mutation-tested red, floor 72 → 76; the texture measurement
+above is unchanged and alpha's MEANING stays NOT DECODED.
+[studies/unitexport/FINDINGS.md](studies/unitexport/FINDINGS.md) §5.1.
 
 **U6 landed 2026-08-17 — SIX of seven rungs, and everything that can be proven without
 launching the client is proven.** `toolkit/mapdata/skelwrite.py` re-emits the complete
