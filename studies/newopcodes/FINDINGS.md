@@ -853,6 +853,55 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### COUNTED: `0x00C3` POSTS FOUR DWORDS AND THE CONSUMER READS A FIFTH — IT CALLS THE /GS STACK COOKIE. 2026-08-18, SOURCED
+>
+> The stub `0x0091F230` passes the two wire fields to worker **`0x00813F80`**, which builds
+> its payload in a `sub esp, 0x14` frame and posts it:
+>
+> | slot | write | contents |
+> |---|---|---|
+> | `+0x00` | `mov [ebp-0x14], eax` | wire **field 1** |
+> | `+0x04` | `mov [ebp-0x10], eax` | `[0x010876C8]` — the owner register's **agent** |
+> | `+0x08` | `mov [ebp-0x0C], eax` | wire **field 2** |
+> | `+0x0C` | `mov [ebp-0x08], eax` | `[0x010876CC]` — the owner **flag** |
+> | `+0x10` | `mov [ebp-0x04], eax` | **`/GS` STACK COOKIE** — `[0xBF4440] xor ebp`, verified by the epilogue's `xor ecx, ebp / call 0x5AE7A9` (`__security_check_cookie`). **NOT payload.** |
+>
+> **So the payload is exactly FOUR dwords.** `lea eax,[ebp-0x14]` / `push 0x100000B5` /
+> `call 0x633D70` posts it.
+>
+> **And the consumer reads a fifth.** The dump captured the row's fields as
+> `[edi+4]=0`, `[edi+8]=1`, `[edi+0xC]=0x2E67736D`. Testing the two possible alignments
+> against those three values:
+>
+> | alignment | `[edi+4]` | `[edi+8]` | `[edi+0xC]` |
+> |---|---|---|---|
+> | `edi = payload+0` | agent ✗ | field2=0 ✗ | flag=1 ✗ |
+> | **`edi = payload+4`** | **field2 = 0 ✓** | **flag = 1 ✓** | **cookie ✓ (garbage)** |
+>
+> Three independent matches against one alignment and none against the other. **`edi` is
+> `payload + 4`, and the `proc` at `edi+0xC` is `payload+0x10` — one dword PAST what the
+> handler wrote.** The client then executes `call eax` on its own stack canary.
+>
+> **This corrects my own reading from earlier today.** I wrote that `"msg."` is "the opening
+> bytes of an assert-expression string" and built a paragraph on which string it might be.
+> It is not: it is the **security cookie**, `global XOR ebp`, effectively random per frame,
+> whose value in this run happened to be four printable bytes (~2% by chance). The whole
+> `NET_SHOP_*` line of inquiry was chasing a coincidence, and the earlier caution not to
+> build a theory on it turns out to have been the right instinct for the wrong reason.
+>
+> **What it proves.** The handler is client code and always writes four dwords, in retail as
+> here — so retail's subscriber for `0x100000B5` **reads only three** (agent, field 2, flag)
+> and never touches `+0x10`. The consumer we reach reads a fourth and treats it as a
+> callback. **The bug is therefore that the message is delivered to the wrong subscriber**,
+> and that subscriber exists because our client's UI is in a state retail's never is when
+> this message arrives. Nothing in the payload is wrong; nothing in `0x0161` is wrong. It is
+> **client-side UI state**, which is exactly where the `0x0161` field hunt, the bit-2 fix and
+> the price hypothesis each failed to reach — three refutations that now have one cause.
+>
+> **Residual, stated rather than assumed:** *why* a `CtlPage`-backed page is subscribed to
+> `0x100000B5` in our session is not established. That is the next question, and it is about
+> what our session opened (or failed to open) before `0x00C3`, not about any field we send.
+>
 > ### WHICH ARM ADDS A ROW — NONE OF THEM. The dispatch is an ACCESSOR interface. 2026-08-18, SOURCED
 >
 > The switch is `cmp eax, 0x5a / ja default / jmp [eax*4 + 0x61F8C8]`. Dumping that table
