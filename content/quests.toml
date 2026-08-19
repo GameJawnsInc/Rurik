@@ -22,14 +22,16 @@
 # in studies/quests/FINDINGS.md; keeping the row would only buy it again.
 #
 # STRING COLUMNS HOLD WIRE CODE UNITS, NOT ARCHIVE STRING IDS. `enc_name =
-# [0x3D64]` is the u16 the server puts on the wire; the archive id it denotes is
-# 0x3D64 - 0x100 = 15460, which textrec.py resolves to 'Ascalon'. Reading the
-# TOML number as a string id gives 15716, an encrypted record returning None.
-# Same column, two numbers, and only one is what codec.py wants.
+# [0x8103, 0x0CC8]` is the two-word 0x100-biased varint the server puts on the
+# wire (codedstr.encode_id); the archive id it denotes is 100552 -- text file
+# 98, record 200, OUR authored record. A one-word form like the old placeholder
+# [0x3D64] denotes word - 0x100; ids past 0xFEFF need the continuation bit.
+# Reading either TOML form as a raw string id resolves a DIFFERENT record --
+# same column, two numbers, and only one is what codec.py wants.
 
 [quest.rurik_first_errand]
 quest_id     = 1463
-enc_name     = [0x3D64]
+enc_name     = [0x8103, 0x0CC8]
 description  = "Follow the green arrow to my companion, then return to me."
 objectives   = "Speak with the scout, then return."
 wire_framing = "template"
@@ -102,14 +104,17 @@ studies/quests/AUTHORING.md 5 judges Route B better than reproducing ArenaNet's
 quests: their description ids resolve to encrypted archive records whose key is
 NOT FOUND, so their prose was never reachable to copy even if we had wanted it.
 
-`enc_name` cites ArenaNet's own string id 0x3D64 and that is deliberate and
-permitted: commit the id, resolve the string from the owner's own archive at
-run time, exactly as content/maps.toml already does. It is a PLACEHOLDER -- the
-name reads 'Ascalon' because that id is the one value proven to render (Q0).
-Authoring our own NAME means writing a plain text record with
-toolkit/mapdata/textwrite.py and committing a bare id of ours; that is rung Q2b
-and it has not happened. The DESCRIPTION and OBJECTIVES below need none of that
--- they are literals, and the 0x004C field holds 128 code units.
+`enc_name` names OUR OWN string: archive id 100552 (text file 98, record 200,
+'A First Errand'), written 2026-08-19 by toolkit/mapdata/textwrite.py --set
+into vault/run/reskin-roster/Gw.dat (journal questname.journal) -- rung Q2b's
+authoring half. Commit the id, resolve the string from the archive at run
+time; the record is plain (base=0, bits=0x10), readable with no RC4 key, and
+reads back exactly. Until 2026-08-19 this column held ArenaNet's 0x3D64
+('Ascalon') as the documented placeholder -- Q0's one value proven to render.
+THE SCREEN HALF IS PENDING: the name renders only for a client reading an
+archive that holds record 200 (today: the reskin-roster run dir), and no run
+has yet shown it in the quest log. The DESCRIPTION and OBJECTIVES below need
+none of that -- they are literals, and the 0x004C field holds 128 code units.
 
 `wire_framing = "template"` wraps the literal as ArenaNet's own 0x004C does:
 0x0BA9 (the `%str1%` template id) then 0x0107 (the marker preceding every

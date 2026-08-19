@@ -56,12 +56,14 @@ import framebus   # noqa: E402
 import vaultpath  # noqa: E402
 
 # MEASURED from the first green run: §1 is 14 unconditional checks, §2 is 4,
-# and §3 is 5 (2026-08-17, a real green run: 18 -> 23).
-# The floor is 14 -- §1 alone -- and NOT 23, because §2 and §3 both need the
+# and §3 is 5 (2026-08-17, a real green run: 18 -> 23). 2026-08-19, the
+# completion family: §1 gains 2 unconditional (the five-id closure and the
+# 0x0096/0x0097 swap) and §2 gains 2 vault-gated -- a real green run reads 27.
+# The floor is 16 -- §1 alone -- and NOT 27, because §2 and §3 both need the
 # vault and a floor above what a bare machine produces would make "the client
 # is not here" indistinguishable from "the scan broke". Both declare skips
 # instead, which checks.py prints and never scores green.
-LEDGER = checks.Ledger("framebus: the quest frame-bus pairing", floor=14)
+LEDGER = checks.Ledger("framebus: the quest frame-bus pairing", floor=16)
 check = checks.adopt(LEDGER)
 
 IMAGE_BASE = 0x00400000
@@ -293,6 +295,21 @@ def main():
           "the join that renamed it from VICTORY_BANNER and retired FINDINGS "
           "7.6's 'nothing static will substitute'")
 
+    all_five = sorted(framebus.QUEST_EXPECTED[0x004E]
+                      + [f for v in framebus.COMPLETION_EXPECTED.values()
+                         for f in v])
+    check(all_five == [0x10000155 + i for i in range(5)],
+          "the five ids GmQuestComplete subscribes to are covered exactly once "
+          "across 0x004E plus the completion family",
+          f"{[hex(f) for f in all_five]} -- the closure claim of FINDINGS 9.7: "
+          f"five subscribed frames, five publishers, all five now attributed")
+    check(framebus.COMPLETION_EXPECTED[0x0096] == [0x10000158]
+          and framebus.COMPLETION_EXPECTED[0x0097] == [0x10000157],
+          "and the 0x0096/0x0097 swap is recorded as measured, not id order",
+          "0x0096 posts 0x10000158 and 0x0097 posts 0x10000157. An edit that "
+          "re-sorts these into opcode order is un-measuring the one detail an "
+          "assume-adjacent reading gets wrong")
+
     print("\n2. the pinned client, if it is here")
     try:
         real = framebus.Image()
@@ -333,6 +350,19 @@ def main():
               "positives, not a narrower one",
               f"{stray} -- a negative produced by a smaller scan than the "
               f"positives would be an artefact of the scan")
+        cgot = framebus.completion_family(real)
+        cwant = {o: sorted(v) for o, v in framebus.COMPLETION_EXPECTED.items()}
+        check(cgot == cwant,
+              "the four completion-family bodies post GmQuestComplete's other "
+              "four ids on the client's own bytes",
+              "\n".join(f"    0x{o:04X} got {[hex(x) for x in cgot[o]]} "
+                        f"want {[hex(x) for x in cwant[o]]}"
+                        for o in sorted(cwant) if cgot.get(o) != cwant[o])
+              or "n/a")
+        check(cgot[0x0096] == [0x10000158] and cgot[0x0097] == [0x10000157],
+              "including the swap, read from the bytes rather than the table",
+              f"0x0096 {[hex(x) for x in cgot[0x0096]]}, "
+              f"0x0097 {[hex(x) for x in cgot[0x0097]]}")
 
     print("\n3. the printed provenance names the file that was actually read")
     section_label()

@@ -1274,6 +1274,11 @@ sending `0x004E` supplies one fifth of what the scene subscribes to. **Which opc
 the other four is the next static question**, and `framebus.py --at` answers it one body at
 a time — `0x006C`, this arc's named "instruction-identical twin", is the first candidate to
 place. Lane B's by-hand recovery of `0x10000159`'s site at `0x0081529E` is confirmed here.
+**ANSWERED 2026-08-19, §9.7:** all four are the other completion-family opcodes' own
+bodies — `0x006C`→`0x10000156`, `0x0097`→`0x10000157`, `0x0096`→`0x10000158`,
+`0x00FB`→`0x10000159`. The table above stays as written because *"not a quest-family
+handler"* was true; what it could not see is that the family feeding the panel is the
+completion family itself.
 
 #### 9.4 What was NOT named, on purpose
 
@@ -1348,12 +1353,57 @@ scene exactly ONE of its five subscribed ids and the banner-and-toast path rende
 complete-looking anyway, so an underfed render is a risk for the scene's *other*
 content (medals, completion notes, reward models), not for this path.
 
+#### 9.7 The other four publishers: the completion family closes on itself (2026-08-19)
+
+§9.3 ended on *"Which opcodes drive the other four is the next static question"*, and
+the answer has a shape nobody predicted in writing but should have: **the five frame
+ids GmQuestComplete subscribes to are published by exactly the five completion-family
+opcodes** — the same five that are 0 of 22,524 in the corpus. The scene and the
+protocol family close on each other, and `0x006C` was indeed the first candidate to
+place (§9.3 called it; the twin reading holds).
+
+| frame id | publisher VA | receive-table chain — MEASURED | shape |
+|---|---|---|---|
+| `0x10000155` | `0x0080F6C7` | `0x004E` (§9.3, the rename) | `[u32,u32,u32]` |
+| `0x10000156` | `0x00810B47` | **`0x006C`**: stub `0x0091E180` → body `0x00810AF0`..`0x00810B61` | `[u32,u32,u32]` — `0x004E`'s twin |
+| `0x10000157` | `0x008124C8` | **`0x0097`**: stub `0x0091EBD0` → body `0x00812490`..`0x00812505` | `[u8, string16(128)]` |
+| `0x10000158` | `0x00812473` | **`0x0096`**: stub `0x0091EBA0` → body `0x008123E0`..`0x0081248D` | `[u32 ×5]` |
+| `0x10000159` | `0x0081529E` | **`0x00FB`**: stub `0x0091F9D0` → body `0x00815260`..`0x008152D4` | `[u16,u32,u32]` |
+
+**Mind the swap.** `0x0096` posts `0x10000158` and `0x0097` posts `0x10000157` —
+frame-id order does not follow opcode order, which is exactly the detail an
+assume-adjacent reading would get wrong, and `test_framebus.py` §1 now asserts it
+structurally so a tidy-minded edit goes red.
+
+**Two instruments agree.** Each body was located through the client's receive table
+(`msghandler.py <op>`: dispatch stub, one call, the body) and disassembled linearly to
+its `ret`; independently, `framebus.py --at <body> --end <ret>` finds exactly one POST
+of the expected id in each range (`push imm32` / `call 0x00633D70`). The pairing is
+committed as `COMPLETION_BODIES`/`COMPLETION_EXPECTED` in `framebus.py`, printed by the
+no-arg run ("4 of 4 completion bodies match"), and checked by `test_framebus.py`
+(§1 structurally, §2 against the pinned image — 27 checks, floor 16).
+
+**What it reframes.** The reward arc's remaining gap is now *structured*: the grant is
+not one mystery opcode but a five-message scene feed, of which `0x004E` (display:
+experience/gold/skill points, §9.6) is measured, `0x0097` is the one that carries a
+STRING (the completion-notes/rewards-blurb candidate — RECONSTRUCTION), `0x0096` is
+gated on completion-flag bits (the 2026-08-12 sweep's assert), and `0x006C`/`0x00FB`
+have screen observations (world burst; hard-mode banner). A loopback ladder over
+`0x0096`'s two flag bits and `0x0097`'s u8 enum with the `quest_panel` rig is now the
+cheap next probe; the full retail sequencing still needs the narrated live completion.
+Schema: `0x0096`/`0x0097` get `why`-only rows (the §9.4 restraint — the join names
+their wiring, not their effect); `0x006C`'s row records its name/wiring TENSION
+(a chest-labelled burst feeding the quest-completion band) rather than resolving it.
+Build scope: these VAs are 38797 measurements, not re-checked on 38833/38519.
+
 #### Reproducing §9
 
 ```bash
 cd <tree> && git rev-parse --show-toplevel
 cd <tree> && python toolkit/clientscan/framebus.py
 cd <tree> && python toolkit/clientscan/framebus.py --at 0x0080F670 --end 0x0080F6F0
+cd <tree> && python toolkit/clientscan/framebus.py --at 0x00810AF0 --end 0x00810B61
+cd <tree> && python toolkit/clientscan/msghandler.py 0x006C --follow --limit 40
 cd <tree> && python toolkit/clientscan/test_framebus.py
 cd <tree> && python toolkit/authsrv/test_dispatch.py
 cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 120 --game-args '--probe quest_panel'
