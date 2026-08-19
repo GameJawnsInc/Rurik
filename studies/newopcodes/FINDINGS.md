@@ -853,6 +853,57 @@ recorded because the next reader will otherwise re-derive it from the same numbe
 > window** — the experiment three runs of nulls could not reach, blocked both times only by
 > this message.
 >
+> ### WHAT `0x0161` NEEDS FOR MERCHANT STOCK — desk work, 2026-08-18. The gate is FOUND and VERIFIED first-party.
+>
+> Three independent passes (retail's bytes, the crash dump, our sender). They **disagreed**,
+> and the disagreement is what located the answer.
+>
+> **THE GATE, SOURCED and re-verified by hand in the pinned build — `0x00848450`, the
+> item-construct function the `0x0161` handler (`0x00846D70`) calls:**
+>
+> ```
+> 008484F4  shr edx, 0x1f      ; edx = F2 (fileId) bit31, extracted from the RAW value
+> 008484FA  mov ecx, [ebp+0x28] ; ecx = F8
+> 008484FD  mov [esi+0x28], ecx ; F8 stored verbatim at item+0x28
+> 0084852E  test edx, edx
+> 00848530  je   0x848549      ; fileId bit31 clear -> no fetch
+> 00848532  test cl, 4         ; <-- F8 BIT 2
+> 00848535  jne  0x848549      ; BIT 2 SET -> SKIP THE FETCH
+> 00848544  call 0x84be50      ; the item-detail load, keyed by masked fileId
+> ```
+>
+> **The client loads an item's detail record only when `fileId` bit31 is SET and `F8` bit2 is
+> CLEAR.** Setting bit 2 tells the client the detail is already present.
+>
+> **Ours sets it; retail's never does.** Our three items carry `F8 = 0x20001006` — bit2 **set**,
+> bit0 **clear** — identical across all three. All **14** retail priced-stock declarations
+> (11 in s1 + 3 in s2) have bit2 **clear** (14/14) and bit0 **set** (14/14): the exact inverse
+> on both bits. Across ~40 *ordinary* retail `0x0161`s in the same captures, bit2 is set in
+> **none** — so bit2-clear is near-universal and our items are the outlier, while bit0-set is
+> specific to the stock context.
+>
+> **This reconciles the crash.** The dump pass, working from the dump alone and knowing
+> nothing of the gate, concluded the fault is two levels downstream of the item table — in
+> `CtlPage`'s per-row descriptor feeding a field-registration helper, where the row's
+> callback at `+0xC` is **read and CALLED** holding the bytes `msg.`. It judged a single
+> `0x0161` scalar an unlikely cause. **Both are right:** bit2 set → detail never fetched →
+> the row descriptor is built over an unpopulated record → its callback is garbage →
+> `c0000005`. The dissent is recorded because it is the half that says *where* the damage
+> surfaces, and because if the bit-2 fix fails it is the better lead.
+>
+> **`F9` is the price, and ours is 0.** Retail stock carries 20–1250 (13 of 14 non-zero); it
+> lands at `item+0x24`, and an independent 394-record census in
+> `studies/reconstruction/FINDINGS.md` already identified it as the per-instance gold value
+> the merchant quotes. Our `content/items.toml` rows are all 0 — correct for starter gear
+> (retail's own default-armor table has no price either), but it means **nothing in this repo
+> models a priced item at all**.
+>
+> **The ladder, one change per test:** (1) `F8 = 0x20001003` — bit2 cleared, bit0 set, other
+> bits untouched — and re-run the withheld `0x00C3`. (2) If it still dies, `F9` = a real
+> price. (3) If it still dies, follow the dump pass's `CtlPage` lead instead. Prices are a
+> MEASUREMENT under the provenance boundary (our own extractor, recorded build, per-row
+> provenance) and are already cited per-item in this document.
+>
 > ### RUN 3 — THE DRAIN FINALLY FIRED INTO AN OPEN SHOP, AND IT DID NOTHING. The `0x00E1` line CLOSES.
 >
 > Harness **`20260818T213244`**. `0x00C3` withheld as a declared refusal (it is unnecessary
