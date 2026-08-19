@@ -2041,3 +2041,42 @@ session's own use. The generalizable lesson, same family as the two-tree and
 two-capture defects this repo already paid for: **a harness screenshot is not
 attributed to a client by being taken — before believing a UI readout, be sure whose
 window it is** (one `Gw.exe` in the process list, or an identifying element in frame).
+
+### 28.10 The greyed row tracks the BODY, not the distance — the owner's reading confirmed, its mechanism one level down (2026-08-19)
+
+The owner's game-knowledge reading of the dim Norgu row, recorded in §28.5: *"norgu's
+name being greyed out in the party members menu means he's more than a compass range
+away from the player."* Two arms plus a seven-run sweep, and the measurement is a
+GLYPH-COLOUR one, not an eyeball — the first pass sampled the whole row, whose red bar
+swamped the signal and read as "no greying anywhere", which was wrong:
+
+| rig | hero name text | player name text (same frame) |
+|---|---|---|
+| bodiless (4 runs: `092640`, `101254`, `105652`, `123331`) | **(182, 148, 148)** | (220, 181, 181) |
+| body at default −150u (`123525`, `123759`, `124040`) | (223, 184, 184) | (220, 181, 181) |
+| body at −3000u (`124945`, the positive control) | (223, 184, 184) | (220, 181, 181) |
+
+**The greying is real and reproducible** — a bodiless hero's name renders ~17% darker
+than the player's in the same frame, four runs, identical to the byte. **A body lights
+it**, exactly as the owner's reading predicted. **Distance does not re-grey it**, and
+the same frame proves the body was genuinely out of range: the compass shows two green
+marks in the near run (player + body) and **one** in the far run — the client dropped
+the 3000u body from the compass while keeping its party row lit. So the compass and
+the row do not share a predicate.
+
+**The reconciliation, and it makes retail and our rig one rule (RECONSTRUCTION).** The
+row's predicate is *does this party member have a live agent in my table*, not *how far
+away is it*. On retail a player only ever meets that dim state at range because the
+SERVER culls out-of-range agents — `agentroster.py` measured exactly this in the live
+corpus, "visibility churn re-creates a body every time it re-enters compass range"
+(agent 44, four creates per session at one position). Retail's distance greying is
+agent-absence greying with a server-side cull in front of it. Our server has no
+culling, so a 3000u body stays in the table and stays lit. The owner identified the
+retail behaviour correctly; the client-side mechanism is one level below it, and the
+difference is a server feature we have not built rather than a message we have not
+sent. Cheap confirmation available whenever wanted: destroy agent 200 mid-session and
+watch the row dim without touching a position.
+
+`--hero-body-offset DX[,DY]` (new) places the body; it refuses without `--hero-body`,
+because a placement flag on a rig with no body would measure the default and read as a
+null result for the offset.

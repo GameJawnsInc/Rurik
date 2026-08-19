@@ -2543,6 +2543,16 @@ HERO_BODY = False
 HERO_ATTRIBS = True
 HERO_SKILLBAR = True
 HERO_BODY_NPC = "hatcher"
+# Where --hero-body puts the body, as an offset from the player's spawn. The
+# default (-150, +120 per slot) is the "150u out and to the side" placement
+# every probe in this repo uses, so the body is visible without the player
+# model blocking it. Overridable because DISTANCE is itself an experiment:
+# agentroster.py records that the client re-creates a body every time it
+# re-enters compass range, so a body placed far enough out is out of compass
+# range -- the positive control for the greyed party row (heroes 23, pvpui
+# 28.8's open question). Sending it far does NOT move the panel or the row's
+# existence, only what the client can see.
+HERO_BODY_OFFSET = (-150.0, 120.0)
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
 # say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
@@ -7855,7 +7865,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # Fan them out rather than stacking: bodies sharing a
                             # spot read as one body, and "nothing appeared" is the
                             # failure this repo already paid for once.
-                            _rx, _ry = pos[0] - 150.0, pos[1] + 120.0 * _i
+                            _rx = pos[0] + HERO_BODY_OFFSET[0]
+                            _ry = pos[1] + HERO_BODY_OFFSET[1] * _i
                             create_agent_world(
                                 hsend, state, _haid,
                                 {"pos": (_rx, _ry), "plane": cfg[2],
@@ -8744,6 +8755,11 @@ def main():
                          "commander panel title's 'Lvl 255' is the no-entry "
                          "sentinel for this exact property -- the cheap arm "
                          "pvpui 28.3 stages; --hero-body is the heavy one.")
+    ap.add_argument("--hero-body-offset", default=None, metavar="DX[,DY]",
+                    help="Where --hero-body stands, offset from the player's "
+                         "spawn (default -150,120 -- 150u to the side, fanned "
+                         "by slot). DY is per-slot. A large DX is the "
+                         "out-of-compass-range arm for the greyed party row.")
     ap.add_argument("--hero-vitals", default=None, metavar="H[,E]",
                     help="Send int properties 42 (health MAX) and 41 (energy "
                          "MAX) for each hero agent. pvpui 28.4: the panel's "
@@ -9028,6 +9044,20 @@ def main():
             HERO_APPEARANCE = (_hap[0], _hap[1] if len(_hap) > 1 else 0)
         global HERO_LEVEL
         HERO_LEVEL = a.hero_level
+        global HERO_BODY_OFFSET
+        if a.hero_body_offset is not None:
+            _hbo = [float(x) for x in str(a.hero_body_offset).split(",")]
+            if len(_hbo) > 2:
+                raise SystemExit(
+                    f"--hero-body-offset got {len(_hbo)} values; it is DX and "
+                    f"optionally DY (per slot), a third would be dropped")
+            HERO_BODY_OFFSET = (_hbo[0],
+                                _hbo[1] if len(_hbo) > 1 else 120.0)
+            if not HERO_BODY:
+                raise SystemExit(
+                    "--hero-body-offset without --hero-body: there is no body "
+                    "to place, so the run would measure the default rig and "
+                    "look like a null result for the offset.")
         global HERO_VITALS
         if a.hero_vitals is not None:
             _hv = [int(x, 0) for x in str(a.hero_vitals).split(",")]
