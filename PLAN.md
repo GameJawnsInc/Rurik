@@ -1409,7 +1409,11 @@ shell for profession 1.** The hardest write target in the archive is a player sh
 
 ### Movement — latch FIXED; teleport EXPLAINED; FOUR fixes dead and the arc re-aimed (2026-08-19)
 
-Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two separate
+**Picking this up cold? Read
+[studies/movement/HANDOFF.md](studies/movement/HANDOFF.md) first** -- the
+mechanism, the five dead candidates with their numbers, the one-minute scoring
+loop, and the four traps that have each cost a client run. Full record:
+[studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two separate
 bugs; one fixed, one understood and unfixed.
 
 **FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was measured
@@ -1492,7 +1496,29 @@ player grants**. If nothing we sent steered the authoritative copy, this
 mechanism did not move the player. Same population as the 5-of-12 teleports that
 land nowhere near a grant.
 
-**THE FIFTH CANDIDATE IS IN THE TREE, OFF, WITH ITS PREDICTION STATED FIRST.**
+**THE FIFTH CANDIDATE IS REFUTED (2026-08-19), and it is the worst of the
+three configurations.** Run `20260819T182652`: **14.6 jumps/min against a stated
+bound of 2**, versus `--heading-grant`'s 12.8/min and the default build's
+5.7/min. **Both candidate fixes are worse than shipping nothing; the default
+build is still the best configuration this repo has, and both flags stay off.**
+The mechanism confirmed a third time (12 of 16 landings on the granted path,
+perp 7.5 u against 338.9 u control, grant age p50 0.28 s) -- so the fix met both
+terms it was designed for and warped more.
+
+**WHAT THE RUN SAYS IS WRONG IS THE SPEED, NOT THE POINT.** The player moved at a
+median **111.7 u/s** while every grant told the client moveSpeed 1.0 = **288.0
+u/s**, a 2.6x mismatch none of the five candidates touched. **The clean form of
+that claim FAILED and is recorded as a failure**: "separation grows at
+`288 - player speed`" over-predicts (mean predicted 179.6, observed 124.8, mean
+|error| 93.2 u/s over 13 runs). Speed is a major term, not the whole model.
+
+**AFTER FIVE FAILURES, ALL FIVE WERE ADDITIONS AND ALL FIVE PICKED A POINT.** The
+server cannot know the player's instantaneous speed and the client can. The next
+intervention should be a **subtraction**: clear the outstanding destination with
+`0x0028 AGENT_STOP_MOVING` when keyboard movement begins, rather than re-aiming
+it. Untested, deliberately not shipped alongside the refutation.
+
+**THE FORMER FIFTH-CANDIDATE ENTRY, kept for the shape it locked.**
 `--client-endpoint` (`authsrv.py`, `CLIENT_ENDPOINT`) answers every keyboard
 heading with **`reported + heading + 0.5 * unit(heading)`, UNCLIPPED** -- retail's
 own expression, the client's reported position plus its own vec2 plus the +0.500 u

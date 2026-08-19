@@ -2024,3 +2024,66 @@ record* as the pre-jump position, so it lies on its own segment by construction.
 Those rows are now counted and reported (`origin==pre-jump record`: 28 of 32 in
 `171153`, 11 of 30 in `145717`) and no claim rests on them. The surviving half of
 the test -- the landing against the segment -- never depended on it.
+
+## `--client-endpoint` REFUTED, and it is the worst of the three (2026-08-19)
+
+Run `20260819T182652`, `--client-endpoint` on, operator holding S and clicking
+distant ground. **Scored against the prediction stated before the run**, which had
+two parts precisely so it could fail in the direction the harm arrives:
+
+| | bound | observed | |
+|---|---|---|---|
+| FREQUENCY | under 2 jumps/min | **14.6/min** (16 in 65.6 s) | **REFUTED** |
+
+For comparison in the same units: `--heading-grant` **12.8/min**, the default
+build **5.7/min**. **Both of my candidate fixes are worse than shipping nothing**,
+and this one is the worst of the three. The default build remains the best
+configuration this repo has.
+
+**The mechanism is confirmed a third time, which is not the consolation it
+sounds like.** 12 of 16 landings on the granted path, perpendicular offset
+**7.5 u** against **338.9 u** for an unrelated grant, grant age at the jump p50
+**0.28 s**. So the fix satisfied both terms it was designed for -- the point was
+the client's own unclipped endpoint and it was refreshed faster than retail -- and
+the character warped more, not less.
+
+### What the run says is actually wrong, and it is not the point
+
+**The player was moving at a median 111.7 u/s (p25 88.7, p90 282.2) while we told
+the client its moveSpeed was 1.0, which is 288.0 u/s.** A 2.6x mismatch, sent on
+every grant. The authoritative copy glides at the speed WE name toward the point
+we name; the predicted copy moves at whatever the player's input and the client's
+own collision produce. Nothing in any of the five candidates addressed that.
+
+**But the obvious quantitative form of that claim does NOT hold, and it is
+recorded as a failure rather than trimmed.** Predicted: separation grows at
+exactly `288 - (the player's own speed)`, no free parameter. Measured over the 13
+growth runs between resyncs in the two-sided capture: **mean predicted 179.6 u/s,
+mean observed 124.8 u/s, mean |error| 93.2 u/s**, per-run errors from -165.8 to
++91.1. Separation does grow, and the speed mismatch is real and large -- but
+"288 minus the player's speed" over-predicts it by about a third and scatters
+wildly. Two reasons are visible and neither is quantified: the authoritative agent
+ARRIVES and stops until the next grant re-arms it, so its average speed is below
+288; and separation is a vector distance, so it depends on the angle between the
+two copies' travel, not only on the speed difference. **Speed is a major term. It
+is not the whole model, and this document does not claim it is.**
+
+### The structural read, after five failures
+
+All five candidates were variations on **what point to grant**. The measurements
+now say the point is not the free variable: every configuration grants something
+765 u away, and the authoritative copy then glides toward it at a speed the server
+chose rather than the speed the player has. **The server cannot know the player's
+instantaneous speed and the client can** -- it is the product of input the server
+never sees and collision the server models differently.
+
+That suggests the next intervention should be a **subtraction rather than an
+addition**, which every one of the five was. The default build's remaining warps
+come from a click grant left outstanding a median 5.84 s; the candidate primitive
+is `0x0028 AGENT_STOP_MOVING`, which would CLEAR the outstanding destination when
+keyboard movement begins rather than re-aiming it. Untested, and deliberately not
+shipped in the same breath as this refutation.
+
+**Recommendation until then: ship the default.** `--client-endpoint` and
+`--heading-grant` both default to off and both should stay off. Neither is a fix
+and both are measurably harmful.
