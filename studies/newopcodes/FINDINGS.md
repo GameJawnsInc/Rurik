@@ -1969,7 +1969,60 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
-## `0x00CA` — NOT FOUND, deliberately, following prior art's own refusal
+## `0x00CA` — **IT OPENS THE SHOP.** Behaviour OBSERVED 2026-08-18; the NAME still NOT FOUND
+
+> **OBSERVED, first-party, twice** (harness `20260818T211036` and `20260818T212611`, 56,928
+> and 56,909 changed pixels). `0x00CA` is the message that puts a **working merchant window
+> on screen, on an NPC we spawned, stocked with items we declared.** The name stays NOT
+> FOUND — no lineage offers one and behaviour is not a name — but the mechanism is now
+> measured rather than refused.
+>
+> **The minimal sequence, replayed from retail's own s1 sighting and confirmed to work with
+> our numbers:**
+>
+> ```
+> 0x00C4 [agent]                 window owner  (also turns the player to face it)
+> 0x0161 x N                     declare each item
+> 0x0084 [[id, id, ...]]         stage the ids into accumIntList[0]
+> 0x00CA [1, 0x3F800000]         <-- THE OPENER   (second field is 1.0f, as retail sends)
+> ```
+>
+> `0x00C3` is **not** required and must not be sent — see the crash chain above; it is not
+> authorable by a server at all. **`0x00CA` alone opens and populates the window.**
+>
+> **What rendered, read off the frame** (`hold012.png`, the first frame after the send):
+> a framed, closable panel titled **`Hatcher [Collector]`**, prompt *"Select an item from my
+> list below, then press \"Buy.\""*, **`Your funds: 0`**, and a scrolling stock list of the
+> three staged items with their icons — **`Ringmail Leggings`, `Ringmail Boots`,
+> `Ringmail Gauntlets`** — each with a price column; a detail pane for the selected row
+> showing its icon, a quantity spinner **`x 1`**, its price, and its stats
+> (**`Armor: 25`**, **`Armor +20 (vs. physical damage)`**); and **`Buy`** / **`Goodbye`**
+> buttons.
+>
+> **Four things that panel proves, none of which was established before:**
+> 1. **`0x0161`'s `enc_name` resolves through the archive** — our content rows are named
+>    "starter leggings (Prophecies warrior)" internally, and the client rendered retail's own
+>    strings, so the string ids are right.
+> 2. **`0x0161`'s modifier list is decoded and DISPLAYED** — `Armor: 25` and
+>    `Armor +20 (vs. physical damage)` come from the `modifiers` array in `content/items.toml`.
+>    Nothing had ever confirmed the client parses that array, let alone shows it.
+> 3. **`F9` is the price, confirmed FROM THE SCREEN.** Every row shows **0** gold, and every
+>    one of our rows carries `value = 0`. That is the desk-work claim (`item+0x24`, the
+>    394-record census) verified by a completely independent route.
+> 4. **The icons render**, so `file_id`/`model_id` reach the item UI intact.
+>
+> **A naming trap, flagged before anyone falls in it:** the title reads `[Collector]` because
+> that is **our NPC's own name string** (`content/npcs.toml`'s Hatcher, whose `enc_name`
+> resolves to "Hatcher [Collector]" — the same label the roster showed in the heroes arc).
+> It is **not** evidence that this is a "collector window" as opposed to a merchant one, and
+> nothing here distinguishes the two. Do not let the screenshot name the opcode.
+>
+> **Untested, and cheap to test later:** `0x00CA`'s second field. We sent `1.0f` because
+> retail did; whether it scales price, sets a tax, or is inert has never been varied. With
+> `F9 = 0` on every row the price column cannot show a multiplier either way, so a run with
+> a real price is the experiment.
+
+## `0x00CA` — the original refusal, superseded above but kept for its reasoning
 
 **1 sighting**, `183756/58389` idx 1512: `(byte = 1, dword = 1065353216 = 1.0f)`.
 
