@@ -1671,9 +1671,12 @@ HERO_AI_MODE_SET moves the stance ring (and Norgu speaks his Guard line; `0x0072
 inert because it raises `0x10000038`, an event the panel has no case for), s2c `0x0066`
 HERO_FLAG_SET plants the hero flag (world model + compass marker, via activation-record
 +0x10..0x1C → event `0x100000A0` → CompassCanvas, ArenaNet's verb: CommandMoveToPoint),
-s2c `0x0067` PARTY_FLAG_SET plants the party pennant. The crosshair's c2s pair `0x0016`
-HERO_LOCK_TARGET `[hero, target]` / `0x0017` HERO_UNLOCK_TARGET `[hero]` is read static
-(medium; live confirm staged behind an `--enemy` run with a foe selected). All named in
+s2c `0x0067` PARTY_FLAG_SET plants the party pennant. The crosshair's c2s is CAPTURED and its echo
+closed the same day (§28.7): `0x0016` HERO_LOCK_TARGET `[hero, target]` locks and
+`[hero, 0]` clears (both wire-captured), echoed by s2c `0x0063` HERO_LOCK_TARGET_SET
+(activation-record +0x20, event 0x1000003F) — crosshair lit gold with the target's
+resolved name, then unlit. `0x0017` never fired (its 0x0080CEE0 guard reads a state
+this rig does not set; pet container +0x6AC is the suspect) and stays medium. All named in
 `schema/overrides.json`; authsrv answers `0x0015`→`0x0062`, `0x001A`→`0x0066`,
 `0x001B`→`0x0067`. The commander UI is round-trip complete: click → c2s → echo →
 render, six messages, all named. Hiring stays NOT FOUND with a stronger floor (all 174
