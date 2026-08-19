@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=146)
+LEDGER = checks.Ledger("harness", floor=152)
 check = checks.adopt_named(LEDGER)
 
 
@@ -856,6 +856,69 @@ def section_error_dialog():
               f"poll()-guarded if/else branches (exited, expired): {branches} -- a GW "
               "assert leaves the process alive, so the timer path is the one that sees "
               "a real crash. The old substring form of this check passed either way")
+
+    # AND CAPTURING THE DIALOG IS NOT RETRACTING THE VERDICT -- 2026-08-18.
+    # `hold_open` returns "exited" for a client that died during the hold, and
+    # session.py's own comment at that `return` says "a corpse afterwards unmakes
+    # it". It did not. The value went into NOTHING: the call site was a bare
+    # expression statement, `ok` was never reassigned after it, and a run whose
+    # client asserted during the hold still printed RUN VERDICT: PASS and exited 0.
+    # `customarea/FINDINGS.md` 31.4 recorded this defect as FIXED and the `return`
+    # landed in the same commit as the portal (276080a) -- the statement shipped and
+    # the wiring did not, which is the failure mode this repo keeps naming: a rule
+    # nothing checks is a wish. The walk path immediately above it retracts
+    # correctly, and that similarity is what made the gap easy to read past.
+    #
+    # Two checks, because either alone is weak. The BEHAVIOURAL one pins what the
+    # rule means; the STRUCTURAL one pins that the call site actually calls it --
+    # a correct helper nobody invokes is exactly the defect being fixed here.
+    fn = getattr(session, "verdict_after_hold", None)
+    LEDGER.ok(callable(fn),
+              "session.verdict_after_hold exists to fold the hold into the verdict",
+              "a corpse during the hold has to be able to unmake a PASS somewhere; "
+              "this is that somewhere, and it is a pure function so it can be "
+              "exercised without a client")
+    if callable(fn):
+        LEDGER.ok(fn(True, "exited") is False,
+                  "a client that DIED during the hold retracts a passing verdict",
+                  "the run reached the map and then asserted -- PASS is the wrong "
+                  "word for it, and this is the case that was broken")
+        LEDGER.ok(fn(True, "expired") is True,
+                  "and a hold that merely RAN OUT does not",
+                  "otherwise every healthy --keep-open run fails and the retraction "
+                  "gets switched off within a day")
+        LEDGER.ok(fn(False, "expired") is False,
+                  "and it never PROMOTES a failed run to a pass",
+                  "it may only ever take the verdict away")
+    else:
+        LEDGER.skip("the hold-retraction truth table",
+                    "verdict_after_hold does not exist yet")
+
+    def consumes_hold_open(src):
+        """True if no `hold_open(...)` call is left as a bare expression statement.
+
+        A bare call discards the return, which is the whole defect: the value
+        that is supposed to unmake the verdict is computed and dropped.
+        """
+        t = ast.parse(textwrap.dedent(src))
+        calls = [n for n in ast.walk(t) if isinstance(n, ast.Call)
+                 and getattr(n.func, "id", None) == "hold_open"]
+        bare = [n for n in ast.walk(t) if isinstance(n, ast.Expr)
+                and isinstance(n.value, ast.Call)
+                and getattr(n.value.func, "id", None) == "hold_open"]
+        return bool(calls) and not bare
+
+    LEDGER.ok(consumes_hold_open(inspect.getsource(session.run_client)),
+              "and run_client CONSUMES hold_open's return rather than dropping it",
+              "this is the check that was red when the defect was found: the call "
+              "site read `hold_open(...)` as a statement, so the retraction could "
+              "not reach `ok` no matter how right the function was")
+    LEDGER.ok(not consumes_hold_open(
+        "def f():\n    if a.keep_open:\n        hold_open(proc, a.hold)\n"),
+              "and that detector reports the PRE-FIX shape as broken",
+              "the defect as it actually stood, verbatim -- a checker that cannot "
+              "tell the bug from the fix is what let the substring form of the "
+              "check above sit green through the 2026-08-11 crash")
 
     real = sys.modules.get("read_error_dialog")
     try:
