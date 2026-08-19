@@ -1969,6 +1969,69 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### DESK WORK, 2026-08-19: `0x0141` CANNOT EVER FUND THE SHOP — it is correctly named, and we misread the name. SOURCED
+>
+> Read the consumer before varying the value, which is the step two crashed runs skipped.
+> Every claim below is quoted disassembly from the pinned build, re-verified by hand after
+> the agents returned.
+>
+> **The crash mechanism, upgraded from RECONSTRUCTION to SOURCED.** The handler is
+> `0x00846170`; the message is `[u16 container_id, u32 delta]`, 8 bytes. Field 1 is a key
+> into `inventoryTable` at `[ctx+0x40]+0xD4` — the same table `studies/pvpui` documented
+> for the equip walk — looked up by a generic hash `Get` (`0x008445A0`) that returns NULL
+> on a miss. **The assert does not abort:**
+>
+> ```
+> 00846190  test edi, edi          ; edi = Get(container_id)
+> 00846192  jne  0x8461a8          ; found -> skip the assert
+> 00846194  push 0x7b1             ; 1969
+> 008461A3  call 0x487bc0          ; ASSERT(inventory)  <- returns!
+> 008461A8  push [esi+8]           ; <- FALLS THROUGH
+> 008461AB  mov  ecx, edi          ; ecx = NULL
+> 008461AD  call 0x84a020          ; add [ecx+0x94], eax  -> near-NULL write
+> ```
+>
+> So an unregistered id is not "ignored", it is a guaranteed near-null write. **There is no
+> numeric bound on field 1** — the only gate is hash membership — so **enumerating ids
+> 2, 3, 4… is unsafe by construction**: every id the client has not been told to create
+> reproduces this crash exactly. Also measured: field 2 is **added**, not assigned
+> (`add [ecx+0x94], eax` at `0x0084A020`, then event `0x100000ED` with the new total), so
+> our login burst's `[1, 0]` is a genuine no-op and a repeated send would accumulate.
+>
+> **And the funds line reads a different object AND a different field.** `Your Funds` is
+> `ItemCliGetGold()` at `0x00845600` — identified from the client's own assert
+> `VnGuildAddService:969 "gold <= ItemCliGetGold()"`, which compiles to call-then-`cmp`:
+>
+> ```
+> 00845606  mov eax,[eax+0x40]
+> 00845609  mov esi,[eax+0xf8]     ; a fixed SINGLETON, not a table entry
+> 00845627  mov eax,[esi+0x90]     ; <- the funds figure
+> ```
+>
+> A byte-identical companion at `0x00845630` returns `[esi+0x94]` off the **same**
+> singleton. So the object carries **two** currency fields, and the split is now obvious:
+> **`+0x90` is carried gold** (what the merchant quotes against) and **`+0x94` is storage**
+> (what `0x0141` adds to, on a *container*). **`GAME_SMSG_UPDATE_GOLD_STORAGE` is named
+> exactly right and we misread it** — Guild Wars separates the purse from Xunlai storage,
+> the opcode says `STORAGE`, and no amount of it will ever move `Your Funds`. That gives
+> the empirical null (`[1, 500]` accepted, funds unchanged) a byte-level cause: different
+> object, different field, so even a container aliasing the singleton could not do it.
+>
+> **What writes carried gold is NOT FOUND, and here are the search bounds** — stated so
+> the next reader extends rather than repeats: `codescan --field 0x90 --writes --in
+> ItCliApi` returns **0 stores** across `0x00844678..0x008481B7`; and of the **58** sites in
+> `.text` that fetch this singleton (`mov esi,[eax+0xf8]`), **none** stores to `+0x90`
+> within 120 bytes, in any of seven store/add/sub encodings. So the writer holds the object
+> as a plain `this` somewhere else — precisely the biased-pointer blind spot `codescan`'s
+> own footer documents. The unsearched space is named, not waved at.
+>
+> **Consequences for the arc.** Funding a purchase is not reachable by any message we
+> currently know, so the Buy path stays quoted-only. The next candidates are the remaining
+> owner-register readers — `0x00C6` (upstream `TRANSACTION_REJECT`), `0x00C8`, `0x00C9`,
+> `0x00CB`, `0x00CD` — one of which plausibly carries a transaction result and its new
+> balance. **That is a reading task, not another run**, and this section is the argument for
+> doing it in that order.
+
 > ### `0x0141` FIELD 1 IS A CONTAINER ID, AND 0 KILLS THE CLIENT. 2026-08-19, OBSERVED
 >
 > Run `20260819T002038`, three arms with distinct amounts (`field1 = 0/2/1` -> 111/222/333).
