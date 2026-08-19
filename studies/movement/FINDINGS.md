@@ -1126,9 +1126,24 @@ is landing there at an *impossible* speed.
 
 ### The mechanism, read out of the client — MEASURED, build 38797
 
+> **CORRECTED 2026-08-19. The two field names below were SWAPPED, and the
+> correction sharpens the finding rather than softening it.** `+0x88` is
+> **m_segmentPoint** (assert `AgAgent:1143`, guarding the loads at `0x00600227`
+> / `0x00600236`) and `+0x9C` is **m_targetPoint** (assert `AgAgent:1144` at
+> `0x00600282`). "syncPoint" came from `AgAgent:2147`, which names a **stack
+> local in a different function**, not this field. Because they are two
+> different fields, `AgAgent:1158`'s 1.0-unit assert does **not** compare
+> `+0x88` against itself and it **can** fire — that earlier claim is withdrawn.
+> The real gap is sharper: **nothing anywhere compares m_targetPoint against the
+> agent's actual position before `0x0060032E` writes it.**
+>
+> Two more from the same pass. The teleport is **conditional** — `0x006001EB`
+> requires `time == +0x48` **exactly**, and `0x0060029F` then tests m_flags bit
+> 18: SET glides, CLEAR teleports. And `0x00602A40` passes isWaypoint = 0, so
+> **every grant we send arms the teleport branch and never the glide branch.**
+
 `0x0029`'s handler `0x005fd890` calls `0x00602A40`, which stores the wire point
-**twice** — into `m_targetPoint` (`agent+0x88`) and into what `AgAgent:2147`
-calls the syncPoint (`agent+0x9c`) — writes the second plane word to
+**twice** — into m_segmentPoint (`agent+0x88`) and m_targetPoint (`agent+0x9c`) — writes the second plane word to
 `agent+0x80`, clears `INTERNAL_FLAG_MOVEMENT_STALE` (bit 19, from
 `shr eax, 0x13` at `0x0060014E`), and caches a velocity and an **arrival tick**
 at `agent+0x48`. Until that tick, `0x005FFB40` dead-reckons linearly. **At the
@@ -1337,3 +1352,57 @@ flags-4/status-16 → flags-5/status-0 transition after 26 s of client silence.
 That is a death and respawn. **Zero corrective snaps of a walking player in
 1.37 hours.** ArenaNet re-issues a destination or stops the agent; it does not
 write positions at a player who is moving.
+
+### The arrival time is an exact formula, and it does NOT predict our teleport
+
+**MEASURED**, build 38797, `0x005FE950`:
+
+```
+m_timeStopMovement (+0x48) = m_timeUpdated (+0x58)
+                           + floor(dist * 1000 / (maxSpeed(+0x5C) * moveSpeed(+0x60)))
+```
+
+absolute milliseconds on the world clock at `AGBASE + m_world*0x64 + 0x148`.
+
+**Applied to the flagship run with no free parameter it is 5.4 s wrong.** Grant
+distance 4,515.65 u, moveSpeed 1.0, and the velocity fit pins maxSpeed at
+288.0 u/s — that same velocity term tracks the client to **1.3% over 1,864 u**,
+so the arm and the speed are right. `floor(4515.65 * 1000 / 288)` = 15,679 ms
+puts the jump at **t = 45.57 s**. It happened at **t ≈ 40.13 s**.
+
+Two readings survive, and nothing static separates them:
+
+- **(A)** `+0x58` was stale — it is written from a *cached* clock at
+  `0x005FF89E`, not a fresh query.
+- **(B)** something client-side re-armed `+0x48` after the grant.
+
+**The keyboard is REFUTED as the re-armer.** `0x0025`'s handler `0x005FD540`
+reaches only a facing setter writing `+0xB8`/`+0xBC`/`+0xC0`. The exhaustive
+writer census of `+0x48` finds five stores, all in `AgAgent.cpp`: the
+constructor, the spawn path, the two inside `0x005FE950`, and the teleport's own
+clear.
+
+**`0x0027` DOES re-arm** — `SetMaxSpeed` calls back into `0x00602A40` with the
+agent's *current* position — which makes it the cheapest lever we have for
+re-aiming a stale grant without sending a teleport. `0x002B` does **not** re-arm,
+so our `AGENT_UPDATE_SPEED` before each grant changes nothing about a move
+already in flight.
+
+### Why the obvious probe would have been worthless
+
+The first design polled `m_point` (`+0x78`). **It would have reported a teleport
+on every ordinary click-to-move.** `+0x78` is not the agent's position — it is
+the position as of `+0x58`, advanced only when `0x005FF880` runs, and that has
+eight call sites, all event-driven, none per frame. So across a *correct* glide
+the trace is flat for the whole leg then steps once onto the destination —
+identical to a teleport. It would also have **missed** the real failure: if the
+exact-equality tick is ever missed, the agent dead-reckons past its destination
+unbounded (no clamp, only assert `AgAgent:978`) while `+0x78` never moves.
+
+That is the third over-fitted claim of this arc, after the bit-exact-landing
+rule and the four-term warp precondition. All three had the same shape: a
+pattern drawn from the cases studied hardest, then used as a **gate**. The live
+position has to be reconstructed —
+`(+0x78,+0x7C) + (+0xB0,+0xB4) * (now − +0x58) * 0.001` — and
+`toolkit/clientscan/movetap.py`'s selftest refuses to pass unless every term of
+it is in the record.
