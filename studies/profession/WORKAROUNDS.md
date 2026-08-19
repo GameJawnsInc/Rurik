@@ -107,11 +107,33 @@ holds** (MEASURED, build 38797, this pass, by two readers independently):
   `0x008320B8`, `0x008321FB`, `0x0083247E`. Profession is arg0, bound-checked `< 0xB` at
   `0x005AE209`.
 - **Profession is the OUTER axis**, not an inner stride: index is
-  `component + 6·axis2 + 12·profession`, computed by the `lea` chain at
-  `0x005AE291`–`0x005AE29A`. **Append shape, not re-stride.**
+  ~~`component + 6·axis2 + 12·profession`~~ **`blitId + 6·sex + 12·profession`**,
+  computed by the `lea` chain at `0x005AE291`–`0x005AE29A`. **Append shape, not
+  re-stride.** **CORRECTED 2026-08-19** — the outer-axis and append findings
+  stand; the name of the 6-valued fast axis did not. The accessor takes FIVE
+  arguments and ArenaNet names all of them, in source order at ascending
+  addresses: `sex < CHAR_APPEARANCE_SEXES` (`0x00639F44`),
+  `blitId < MODEL_NUM_TEX_BLITIDS` (`0x00639F60`) and
+  `component < COMPOSITE_COMPONENTS` (`0x00639F80`), with
+  `blitId < arrsize(s_dims)` and `blitId < arrsize(s_format)` ahead of them.
+  So the 6 is **blitId** (MODEL_NUM_TEX_BLITIDS, and `s_dims` has 6 rows) and
+  **`component` is a FOURTH argument that indexes INSIDE the pointee**, not a
+  term of this index. COMPOSITE_COMPONENTS is 8, which is why it could never
+  have been the 6. Full account:
+  [../playercomposite/FINDINGS.md](../playercomposite/FINDINGS.md) §1.1–1.3.
 - **It reads two parallel 132-entry dword arrays** at `0x00BF4018` and `0x00BF4228`,
   **exactly 528 bytes apart** (11 × 2 × 6 × 4 = 528 ✓), each holding **17 distinct values**.
 - **They hold POINTERS, not art.** All 132 entries of table B resolve into `.rdata`.
+  **AND THEY ARE NOT A SEAM TO FILE IDS — 2026-08-19, dereferenced at last.** The
+  two arrays are ONE CSR structure, not two alternatives: `B[idx]` is a 9-dword
+  non-decreasing prefix array, `A[idx]` an array of 16-byte records, and the
+  return is `A[idx] + 16*P[component]` with `*count = P[c+1]-P[c]`. The records
+  are **texture-atlas RECTs** `{left, top, right, bottom}`, unsigned — 359/359
+  satisfy `0<=l<r<=W, 0<=t<b<=H` against that blitId's own `s_dims`, where XYWH
+  fails 269/359 and LRTB fails 284/359. The complete value set across all 359
+  records is `{0,128,256,384,448,512}`: **there is no file id anywhere in either
+  table at any depth.** A player's file ids come from Gw.dat file `0x33EA`
+  instead — [../playercomposite/FINDINGS.md](../playercomposite/FINDINGS.md).
 - **And the fact that decides it: only 8 distinct profession rows exist across the 11
   professions, because professions 0, 1, 2 and 9 already share a byte-identical row.**
 
@@ -914,7 +936,8 @@ no launch. The highest-value item in this document.**
 >
 > **What it found** (MEASURED, two readers): accessor `0x005AE200`, `int3`-bounded, `ret` at
 > `0x005AE2BE`, **3 direct callers**; profession is arg0, bounded `< 0xB` at `0x005AE209`;
-> index is `component + 6·axis2 + 12·profession`, so profession is the **outer** axis and the
+> index is `component + 6·axis2 + 12·profession` — **the axis name is CORRECTED to
+> `blitId + 6·sex + 12·profession` 2026-08-19, see line 110** — so profession is the **outer** axis and the
 > growth shape is **append, not re-stride**; two parallel 132-entry dword arrays at
 > `0x00BF4018` / `0x00BF4228`, exactly 528 B apart, 17 distinct values each, table B
 > resolving 132/132 into `.rdata` — **pointers, not art**; and **only 8 distinct profession
