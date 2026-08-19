@@ -982,6 +982,24 @@ TRACE_MOVE = False
 # startup so it cannot be rationalised afterwards.
 STOP_ECHO = False
 
+# Answer every keyboard heading with a fresh 0x0029 at the client's own proposed
+# endpoint, so the destination armed in the client is never more than about
+# 2.66 s old. OFF by default until one run scores it. `--heading-grant`.
+#
+# THE DEFECT IT TARGETS, measured in the client's memory rather than argued.
+# agent+0x48 (m_timeStopMovement) is set once when a grant lands and is NEVER
+# re-armed; at that exact millisecond the client snaps to the granted point.
+# Seven arrivals were observed directly -- 98u, 680u, 803u, 2129u, 2743u, 3393u
+# and 5238u -- every one landing on m_targetPoint and firing within one 20 ms
+# sample of schedule. The snap is not a bug: it is how the client completes
+# EVERY server-granted move. What makes it a warp is leaving the grant to mature
+# while the player walks somewhere else, which is what a single far click does.
+#
+# ArenaNet never reaches that state because it refreshes: median inter-grant gap
+# for the player is 0.492 s, and 88.5% of its player grants answer a heading. So
+# this is not a workaround, it is the shape we were missing.
+HEADING_GRANT = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -7232,6 +7250,47 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      f"AGENT_MOVE_DIRECTION"
                                      f"({heading[0]:.0f},{heading[1]:.0f} "
                                      f"type {moving})")
+                            if HEADING_GRANT:
+                                # REFRESH THE CLIENT'S ARMED DESTINATION. It is
+                                # the only thing that stops a stale one maturing
+                                # into a teleport.
+                                #
+                                # MEASURED in the client's own memory
+                                # (movetap.py, 2,332 samples): agent+0x48 is set
+                                # ONCE at the grant and never re-armed, and at
+                                # that exact millisecond the client SNAPS to the
+                                # granted point. Seven arrivals observed -- 98u,
+                                # 680u, 803u, 2129u, 2743u, 3393u, 5238u -- all
+                                # the same code path, every one firing within one
+                                # 20 ms sample of schedule. So a far click leaves
+                                # an eighteen-second time bomb, and the only
+                                # difference between an invisible correction and
+                                # "the warp" is how long the grant was left to
+                                # mature.
+                                #
+                                # THIS IS ARENANET'S OWN SHAPE, not an
+                                # invention. 88.5% of the 2,855 player-directed
+                                # 0x0029 in the live corpus answer a 0x003D
+                                # heading; they carry the client's OWN proposed
+                                # endpoint (its reported position plus its own
+                                # vec2); 950 of 2,419 are clipped short on
+                                # collision, which is why the point sent here is
+                                # the clipped one; and retail's player
+                                # inter-grant gap is a median 0.492 s. Ours
+                                # becomes the client's own report cadence, also
+                                # ~0.5 s.
+                                #
+                                # Both plane words are the client's own reported
+                                # plane. We cannot know the destination's plane
+                                # from a heading -- only a click tells us that --
+                                # and asserting the current one is the honest
+                                # answer rather than a guess.
+                                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                     [PLAYER_AGENT_ID, list(model_dest), plane,
+                                      plane],
+                                     f"HEADING GRANT ({model_dest[0]:.0f},"
+                                     f"{model_dest[1]:.0f}) plane {plane}"
+                                     f"{' clipped' if blocked else ''}")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -8989,6 +9048,22 @@ def main():
                          "client at 282 -- but a click-walk still sends no "
                          "position report at all, for up to 12.9 s measured, "
                          "and that silence is what the trace is now for.")
+    ap.add_argument("--heading-grant", action="store_true",
+                    help="THE CANDIDATE WARP FIX, OFF by default until one run "
+                         "scores it. Answer every keyboard heading with a "
+                         "0x0029 at the client's own proposed endpoint "
+                         "(reported position + its own vec2, clipped), so the "
+                         "destination armed in the client is refreshed roughly "
+                         "twice a second and never matures. MEASURED in client "
+                         "memory: agent+0x48 is set once at a grant and never "
+                         "re-armed, and the client SNAPS to the granted point "
+                         "at that exact millisecond -- seven arrivals observed, "
+                         "98u to 5238u, all one code path. A far click is "
+                         "therefore an 18-second time bomb. ArenaNet refreshes "
+                         "at a median 0.492 s and 88.5% of its player grants "
+                         "answer a heading, so this is the shape we were "
+                         "missing rather than a workaround. Score it with "
+                         "toolkit/clientscan/movetap.py.")
     ap.add_argument("--stop-echo", action="store_true",
                     help="REFUTED 2026-08-19, kept only so the negative result "
                          "is reproducible -- do not reach for this as a fix. On "
@@ -9448,6 +9523,25 @@ def main():
         print("TRACE MOVE: every position report and click ray origin will be "
               "printed. Watch for a REJECT whose drift is large and whose "
               "budget is 900 -- and for the CAPITULATE that must follow it.")
+
+    if a.heading_grant:
+        global HEADING_GRANT
+        HEADING_GRANT = True
+        print("HEADING GRANT: answering every keyboard heading with a 0x0029 at "
+              "the client's own proposed endpoint, which is what ArenaNet does "
+              "for 88.5% of its player grants.")
+        print("  PREDICTION, stated before the run: the destination armed in "
+              "the client (agent+0x48) never sits more than ~2.8 s in the "
+              "future while the player is on the keyboard, so no arrival "
+              "consumption exceeds roughly 800 u and the far teleport cannot "
+              "occur. Watch it directly with:")
+        print("    python toolkit/clientscan/movetap.py --seconds 300 "
+              "--any-build")
+        print("  REFUTED IF: movetap still records an arrival landing on "
+              "m_targetPoint from more than ~1,000 u away, or +0x48 is still "
+              "seen holding a value more than 5 s out while headings are "
+              "arriving. Either means refreshing does not disarm the stale "
+              "grant, and the fix is wrong rather than mis-tuned.")
 
     if a.stop_echo:
         global STOP_ECHO
