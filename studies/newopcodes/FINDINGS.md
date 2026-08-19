@@ -2265,6 +2265,56 @@ should not go into `overrides.json` on this evidence.
 > produced a confident sequence. In both cases the tool answered a question it had not
 > been asked.
 
+> ### THE WHOLE `0x00C3` ENUM, 0..15 — every kind identified. 2026-08-19, OBSERVED
+>
+> Sixteen runs, one kind each, control (11) first in every one. The **pre-`0x00C3` frame is
+> byte-identical across all of them** (crop hash `0fdf8e543b`), so every difference below is
+> the arm and nothing else.
+>
+> | kind | second tab | screen | result |
+> |---|---|---|---|
+> | 0 | — | an item-list vendor | FATAL `item`, `ItCliApi:859` |
+> | 1 | — | an item-list vendor | FATAL, same |
+> | 2 | — | — | FATAL `c0000005`, **address 00000002** |
+> | 3 | — | an item-list vendor | FATAL, same |
+> | **4** | **Customize** | `VnCustomize` | draws |
+> | 5 | — | `VnGuildAddService` | FATAL `service < GUILD_SERVICES`, `ConstGuild:58` |
+> | 6 | — | `VnGuildAdjustFaction` | FATAL `faction`, `VnGuildAdjustFaction:87` |
+> | **7** | *(a tab with no label)* | unidentified | draws |
+> | **8** | **Guild Registration** | `VnGuildRegister` | draws, **Vendor-Big** |
+> | **9** | **Guild Cape** | `VnGuildTabard*` | draws, **Vendor-Big** |
+> | 10 | — | `VnLearnSkill` | FATAL `index < arrsize(s_skill)`, `ConstSkill:3833` |
+> | **11** | **Sell** | `VnBuy` / `VnSell` | **MERCHANT — transacts both ways** |
+> | **12** | **Buy** | a second buy pane | draws |
+> | **13** | **Sell** | a second buy/sell pair | draws |
+> | **14** | **Unlock Hero** | `VnUnlockHero` | draws |
+> | **15** | **Unlock Item** | `VnUnlockItem` | draws |
+>
+> **THE STATIC PREDICTION WAS CONFIRMED BY PIXELS.** `0x004E8510` branches to
+> `GmView-Vendor-Big` for field 1 ∈ **{8, 9}** and to `GmView-Vendor` otherwise — read off
+> the disassembly and written down BEFORE the runs. On screen, 8 and 9 are the only two
+> that draw the taller panel (ten stock rows against six), and they are the only two whose
+> post-arm frames hash alike. Prediction, then observation, then agreement.
+>
+> **A CAUTION THE SAME NUMBERS ILLUSTRATE:** that shared hash is *not* evidence the two
+> windows are the same. The crop band sat below the tab strip, so it caught the identical
+> list area while the labels above it differ — 8 is `Guild Registration`, 9 is `Guild Cape`.
+> Reading one frame settled what the hash could not. **A hash proves two crops equal; it
+> does not prove two screens equal, and the crop is a choice.**
+>
+> **FATAL IS NOT INVALID — every death named its own screen.** Kind 5 asserts a bound on
+> `GUILD_SERVICES`, 6 on a `faction` switch, 10 on `arrsize(s_skill)`: each reached its own
+> vendor and refused a *second* field we never sent. Kinds 0/1/3 die in the item client
+> rather than in a vendor file, which is the item-list family (collector, crafter, trader)
+> wanting item detail our stock declarations do not carry. Kind 2 is the odd one:
+> `c0000005` reading **address 2**, the kind's own value dereferenced as a pointer.
+>
+> **AGAINST THE WIKI'S SERVICE LIST** (GWW, "NPC service"): merchant (11), the guild trio
+> (5 registration-service, 6 faction, 8 registration, 9 cape), skill trainer (10),
+> customiser (4), hero and item unlocks (14, 15). What no kind produced is a *collector*
+> window, which is `0x00C5`'s job — the one member of the eight-reader family this arc
+> deliberately never sends.
+
 > ### THE DESK ROUTE WON: the client NAMES its vendor screens, and a fatal arm names its own. 2026-08-19, SOURCED
 >
 > Extractor `toolkit/clientscan/vendorscreens.py`, build 38797, stdlib only.
