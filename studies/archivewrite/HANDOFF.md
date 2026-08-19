@@ -28,14 +28,23 @@ are the arc's main output so far.
   scaled, 32% coverage, nothing) against run 6 (shell scaled, everything). §9.3k.
 
 **What is NOT shown:** a linked file's *content* changing what appears on screen. The only
-property we tested in a linked file is the one linked files do not own.
+property we tested in a linked file is the one linked files do not own. **That is run 7, and
+it is STAGED as of 2026-08-19** — §5-A for how to run it, §11.6 for what it says.
+
+**Row 3 of that table is now itself out of date, in the good direction.** "An encoder is not
+on the critical path for shape authoring" was true and remains true; what A7a/A7b/A8 added is
+that the encoder **exists, and the retail client reads its output** — which turns the
+unwritable files writable and takes run 7 from 12 of 15 links to 14 of 15.
 
 **What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
 retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted
 byte-identically** (428 rows, CRC-matched); **ArenaNet's table encoder is longest-run
 greedy**, bit-exact on 2,194/2,194 tables; and a literal-only encoder is **dead** by
 391,648 B. **Not shown:** anything about the LZ77 matcher, which is where the whole
-remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7.
+remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7. **That
+sentence is superseded: A7a, A7b and A8 have all run.** The matcher ties retail's within 12
+tokens in a million, the encoder emits real bits, and **the retail client read a row we
+compressed** — §5-B.
 
 ---
 
@@ -121,29 +130,72 @@ Full detail in §5. The short form:
 
 ## 5. What to do next, cheapest first
 
-**A. Show a linked file's CONTENT changing the screen — DESIGNED AND DE-RISKED 2026-08-18,
-§11. It is ready to stage; it has not been staged or launched.** The trap named here (the
-hatcher only plays its cast in the `--enemy` setup) is **solved, and not by finding the cast
-file**: the creature's most universal animation is **base key 3,259,067,510, 1.067 s, present
-in 26–32 of 32 corpus shells, and all six of its weapon-class variants are served by
-selector 10 = file 109464 — 27,948 B stored, WRITABLE, already relocated in run 5.** That is
-locomotion, and the harness re-triggers it on demand: the enemy re-chases whenever the player
-moves >120 u (`ENEMY_DEST_RESEND`). **Provoke the WALK, not the cast.**
+**A. Show a linked file's CONTENT changing the screen — STAGED 2026-08-19, §11.6.
+`vault/research/archivewrite/a4stage7.py`. Not deployed, not launched: it needs the
+owner at the keyboard, because its readout is a model-appearance verdict.**
 
-Ship the stripped version: compose a **180° quaternion flip onto every rotation key** of the
-writable links (length-preserving, so nothing relocates and no record, key table or window
-changes — §9.3g's rules 1/3/4/7 are untouched rather than satisfied), plus the **positive
-control in the same archive** — the shell's head cluster, **nodes 51–64, bases ×3**, audited
-as genuinely the head (subtree of node 50: mirrored horns, a jaw chain) and visible in the
-first still before anything animates. Decision table: giant head + mangled limbs = answered;
-giant head + normal limbs = the first real negative; **normal head = pipeline broken, abort,
-and nothing else in the run means anything.**
+Run it with `--plan-only` first (costs every edit against retail and stops without
+copying anything), then bare to build the staged archive, then `--deploy` with the
+client closed. `--retail` puts the baseline back.
 
-**Do NOT decimate keyframes for this run** even though it works — §11.3. It fits in place,
-it needs no free run, and it would unblock 73940 to reach 15-of-15 links; but its rotation
-error is **p99 46.6°, max 169.3°**, the same order as the flip that is supposed to *be* the
-readout. Stripping costs coverage of 73940 only (12 of 15 links), which does not matter
-because the walk is 109464.
+**What it does.** Composes a 180° rotation onto every rotation key of fourteen of the
+hatcher's fifteen linked animation files — 232,764 keys — and scales the shell's head
+cluster (nodes 51–64) ×3 as the positive control in the same archive. Nothing else:
+no sequence record, no key table, no playback window, no link list, no new file.
+
+**A8 rewrote this design and §11.5 is superseded.** 11.5 assumed writes go in
+uncompressed, which is what runs 4–6 did through `datmove`; under that assumption
+15018 and 87333 are unreachable and coverage is 12 of 15 links with several
+relocations. Costed through `gwenc`, **fourteen of fifteen links fit their OWN
+existing reservation compressed — including both files 11.5 called unreachable**
+(15018 at +16,544 B of slack, 87333 at +15,020). So the run **relocates nothing,
+grows nothing, consumes no free run, and changes exactly 15 rows in place**. Coverage
+is **234 of 242 sequence records (96.7%)**. The one exclusion is 222949, 12 B over at
+every quality dial.
+
+**The geometry this arc has been using is wrong — correction C-10, and read it before
+quoting any distance from §11.4.** `blk2C` bases are **absolute model-space rest
+positions**, not the bone lengths §9.3g called them. ArenaNet's own mesh is the
+referee: file 116703's bbox is 72.6 u, the absolute reading seats all 86 joints inside
+the skin (median 1.40 u from a real vertex) and the accumulated reading puts them
+532 u away. Every distance in §11.4 is ~11× too large, and the corrected numbers are
+**better**: head ×3 moves the cluster **1.98× the whole creature's extent**, the flip
+moves the average joint **1.55×**, and with the flip already firing the head scale
+still moves head nodes 2.09× and non-head nodes **exactly 0.0**. The two instruments
+are additive and disjoint, which is what retired a skeptic's charge that the flip
+destroys the control.
+
+**Three things to know before the launch, each of which would have cost the run.**
+
+1. **`--practice-target` is FORBIDDEN.** It sets `ENEMY_ATTACKS_BACK` False and the
+   chase loop `continue`s before a single `MOVE_TO_POINT` goes out, so the creature
+   never walks. Use:
+   `python toolkit/harness/session.py --enemy --hold 420 --shots 5 --walk "zoom:-12 pitch:300 alt:3 shot:1 wait:4"`
+2. **Never score a negative from a still.** Two of the creature's records carry
+   selector 0 — served by the shell, not by any link — and one is a 2.000 s whole-body
+   cycle over 46 of 86 nodes, the shape of a standing idle. Giant head + normal limbs
+   on a stationary hatcher is consistent with the run working perfectly. The negative
+   needs **≥3 logged `walks to` cycles**, and the server prints that line every time
+   the >120 u re-chase fires.
+3. **`flip(flip(q))` is bit-exactly `−q`, the same rotation.** Re-running the stage
+   against an already-deployed archive would restore retail limbs while taking the
+   head to ×9 — landing on the NEGATIVE cell, produced by a bug. The script reads only
+   from `Gw.dat.retail` and fingerprints all sixteen rows against retail's own stored
+   sizes first.
+
+**The decision table is replaced, because §11.5's sent a positive result to ABORT** —
+see §11.6e for all six cells. The change that matters: **head NORMAL + limbs
+contorted is ANSWERED with an invalid control, not an abort.** And the control's
+premise is now measured rather than trusted — 308 of ArenaNet's own 1,463 mesh
+vertices (21.1%) sit nearest a node in 51–64, all fourteen own geometry, two whole
+submodels are head-dominated.
+
+**Do NOT decimate keyframes for this run** even though it works — §11.3. It fits in
+place, it needs no free run, and it would unblock 73940; but its rotation error is
+**p99 46.6°, max 169.3°**, the same order as the flip that is supposed to *be* the
+readout. And do not take the arms-only dose a lens proposed: it was aimed at
+protecting the control, and the corrected geometry shows the control needs no
+protecting.
 
 **B. ~~Decide the encoder on its real merits.~~ A6 RAN, 2026-08-18 — see §10. It did NOT
 kill the encoder, and the risk is now entirely the LZ77 matcher.** Re-costing retail's own

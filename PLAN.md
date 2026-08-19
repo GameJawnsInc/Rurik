@@ -1859,8 +1859,18 @@ for the owner rather than a gap in this one.
 **Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
 routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A
 separate pass answered the durability question `studies/datwrite` named as decisive and left
-open for eleven days. §3's ladder is A1–A8; **A1, A2, A3, A4 and A6 have run**, A5, A7 and
-A8 have not. (This paragraph read "Nothing is built" for a day after A3 and A4 landed.)
+open for eleven days. §3's ladder is A1–A8; **A1, A2, A3, A4, A6, A7a, A7b and A8 have all
+run — only A5 has not.** (This paragraph read "Nothing is built" for a day after A3 and A4
+landed, and then said A7 and A8 "have not" run for a day after both did.)
+
+**RUN 7 IS STAGED, 2026-08-19 — study §11.6.** `vault/research/archivewrite/a4stage7.py`,
+not deployed and not launched; it needs the owner at the keyboard and its readout is a
+model-appearance verdict. A8 rewrote its design: **fourteen of the hatcher's fifteen linked
+animation files fit their OWN reservation compressed**, including the two §11.5 called
+unreachable, so the run relocates nothing, grows nothing and changes exactly 15 rows in
+place. It also produced correction **C-10**, which reaches backwards — `blk2C` bases are
+**absolute model-space rest positions**, not the bone lengths §9.3g called them, refereed by
+ArenaNet's own mesh.
 
 **A6 IS RUN, 2026-08-18 — the entropy layer costs +8 bytes, and that is a SMALLER result
 than it sounds.** Study §10. `toolkit/mapdata/gwentropy.py` + `test_gwentropy.py`, 91 checks,
