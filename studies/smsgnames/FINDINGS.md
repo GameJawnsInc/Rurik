@@ -9,6 +9,7 @@ Labels follow [studies/character/FINDINGS.md](../character/FINDINGS.md): OBSERVE
 - **33 opcodes** were in scope — the tractable subset of the 116 (real-file BODY handlers, real-file agent/item blocks, and the Array.h table-registration forwarders). All 116 are **reachable**: 63 FORWARDER + 53 BODY, zero NO_HANDLER, zero table-less. Reachability was never the filter; tractability was.
 - **13 earned a name** (survived two witnesses + adversarial refutation + critic). **17 are PARTIAL** — mechanism understood, purpose not pinned, deliberately kept OUT of the schema. **3 are WITHHELD** — even the mechanism is not settled enough to characterise.
 - **The 13 named opcodes were PROMOTED into `schema/overrides.json` on 2026-08-18** (GAME_SMSG went 66→79 named). All 16 affected tests stay green — including `test_agentlife.py` AXIS 3, whose pin count moved 9→12 because the three property opcodes it had *pre-registered by name* (0x009F/0x00A0/0x00A3) are now named exactly as it expected. [proposed_overrides.json](proposed_overrides.json) is the (now-merged) proposal record.
+- **Follow-up 2026-08-18: three PARTIALs earned names** (GAME_SMSG 79→82), see §8: `0x009B AGENT_SET_NAME`, `0x00F3 TITLE_RANK_DATA`, `0x00F4 TITLE_RANK_DISPLAY`.
 - **0x0027/0x002B resolution.** The critic flagged a naming inversion and suggested renaming the existing 0x002B `AGENT_UPDATE_SPEED` to `_MODIFIER`. That was declined: 0x002B's own overrides entry already **OBSERVED-refutes** the GWLP-R "SpeedModifier" gloss (its float is capped at 1.0, its byte is *facing* not type), and the client's asserts split the pair by their own words — 0x0027's float is `maxSpeed` (base/max, agent+0x5c), 0x002B's is `moveSpeed` (applied). So 0x002B stands unchanged and `_BASE` is the deliberate disambiguator. The rename would also have broken the test pin and the server constant. A UPSTREAM gloss the repo had already rejected nearly rode back in through the critic — caught before promotion.
 - **The wins cluster by subsystem, exactly where `srvtree` said the Cli halves live:** the agent-movement family (`AgMsg.cpp`), the agent-property generic-value family (`ChCliApi`), and the item/inventory block (`ItCliApi.cpp`). Reading these handlers is reading the client half of subsystems whose server half we are reconstructing.
 
@@ -98,3 +99,38 @@ notes**, not correctness problems, and none holds a name out of the schema.
 ## 7. Reproduction
 
 Scoping, evidence bundles and the naming workflow are scripted under the session scratchpad (`scope.py`, `gather.py`, `wf_naming.js`). The bundles are self-contained (shape + wire + annotated disassembly + prior-work pointers). Re-derive the scope with `msghandler.py --classify` and the frequency with `tape.decode_all` over `vault/captures/live/`.
+
+## 8. Follow-up: three PARTIALs earned names (2026-08-18)
+
+Worked the strongest withheld candidates. All three were already characterised across prior
+studies but held short of a schema name; each was earned by supplying the missing witness.
+
+**0x009B `AGENT_SET_NAME` [medium].** Reconciliation, not new work. `smsg/FINDINGS.md:1013`
+proposed the name with the store mechanism SOURCED (per-agent-by-id array, record+0x34, stride
+0x38) but field 2's *meaning* only INFERRED. `newopcodes/FINDINGS.md:511` supplied the second
+witness: field 2's string is OBSERVED byte-identical to the agent's name, and player names arrive
+instead as literal text via 0x017D — so 0x009B is the encoded (.dat-string) name path for
+NPCs/agents. Two witnesses now agree; promoted.
+
+**0x00F3 `TITLE_RANK_DATA` / 0x00F4 `TITLE_RANK_DISPLAY` [medium].** These were the repo's
+canonical UPSTREAM case — `STORAGE.md:175` ("UPSTREAM on names throughout; no observation
+anywhere"), `newopcodes:836` ("UPSTREAM-plus-shape, not independently confirmed"), and even GWCA
+binds the title structs to the *siblings* 0x00F5/0x00F6, not these. The missing witness was
+0x00F4's UI consumer, left explicitly unread at `RUNS.md:203`. Found it via the frame bus:
+
+- 0x00F4's body posts frame `0x10000064`; its **sole subscriber** is a CtlText UI panel
+  (`fn 0x008aa080`).
+- That same panel **also** subscribes to `0x10000065` — the frame posted by **0x00F5
+  `TITLE_UPDATE`** (0x00F5 handler → callee `0x00814f60`, which posts `0x10000065`; 0x00F5 is a
+  schema-confirmed title opcode at HIGH confidence).
+- So 0x00F4 drives the **same UI panel as the confirmed title opcode** — an independent,
+  binary-derived witness (not the mirror) that 0x00F4 is title display. `STORAGE.md:201` adds the
+  wire behaviour: 0x00F4 ×215 in towns, binding *other* players to rank records — the signature of
+  a title rendered under other players' nameplates.
+- 0x00F3 is the rank-definition vocabulary {flags, threshold, coded-name} keyed by rank_id that
+  0x00F4 indexes; the displayed name is 0x00F3's own string (`RUNS.md:192`).
+
+This **elevates 0x00F3/0x00F4 from UPSTREAM to OBSERVED** and closes the open lead at `RUNS.md:203`.
+Tool: `toolkit/clientscan/framebus.py`'s post/subscribe scan (POST 0x00633D70 / SUBSCRIBE
+0x00633BD0), extended to arbitrary frame ids. Confidence is medium, not high: the shared-panel
+chain and town-binding wire are strong, but the panel's exact per-frame scope carries some inference.

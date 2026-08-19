@@ -1716,6 +1716,29 @@
     "name": "COMPASS_PING",
     "name_confidence": "medium"
    },
+   "155": {
+    "opcode": 155,
+    "table": "GAME_SMSG_0155",
+    "declared_unpack_size": 74,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 155
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     }
+    ],
+    "name": "AGENT_SET_NAME",
+    "name_confidence": "medium",
+    "why": "OBSERVED. field1=agent id; field2=string16(32) stored at record+0x34 in the ChCli per-agent-by-id array (ctx+0x2c+0x7cc, count+0x7d4, stride 0x38; grown to fit -- Array:587 at 0x008126d2). field2 is the agent's NAME: newopcodes/FINDINGS.md:511 OBSERVES it byte-identical to the agent's name string (idx 160), cross-checked against the speaker-attribution opcodes, and player names arrive instead as LITERAL text via 0x017D -- so 0x009B is the encoded (.dat-string) name path used for NPCs/agents. Two witnesses: store mechanism SOURCED (smsg/FINDINGS.md:1013) + name identity OBSERVED (newopcodes:511); field2 role was INFERRED in smsg, elevated to OBSERVED there. Compare-else-realloc-copy so a repeat with an equal string is a no-op. Reconciles enemy/PLAN.md's AGENT_UPDATE_NPC_NAME (same message; the mechanism is not NPC-gated). studies/smsgnames."
+   },
    "159": {
     "opcode": 159,
     "table": "GAME_SMSG_0159",
@@ -1975,6 +1998,60 @@
     "name": "AGENT_UPDATE_STATUS",
     "name_confidence": "high",
     "why": "OBSERVED. Same field and same bit as 0x00F0 (ChCliInt.h:254), reached through the sibling setter AvApi.cpp:1423 twelve source lines after 0x00F0's at :1411. 0 of 312 arrive before their agent's create, against 0x00F0's 187 -- narrow and deep (34 distinct agents, one of them 42 times) where 0x00F0 is broad and shallow (187 agents, mostly once). Carries the burrow cycle's two 2.00 s windows: payload 0x0000 at 2.00 +/-0.06 s after create (148/148) and 0x1000 at 2.00 +/-0.06 s before remove (141/141), both exclusively for one creature class. REFUTES gw-preservation's INSTANCE_LOADED reading -- the handler takes an agent id and indexes a per-agent array."
+   },
+   "243": {
+    "opcode": 243,
+    "table": "GAME_SMSG_0243",
+    "declared_unpack_size": 34,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 243
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 8
+     }
+    ],
+    "name": "TITLE_RANK_DATA",
+    "name_confidence": "medium",
+    "why": "OBSERVED mechanism, CORROBORATED as title data. Indexed store of a rank definition {flags, threshold, coded-name pointer} keyed by rank_id (field1) into the title-tier table at ctx+0x2c+0x82c (stride 12). It is the vocabulary the confirmed title display 0x00F4 indexes: 0x00F4 writes a rank_id to a player and the displayed row NAME is this opcode's coded string (character/RUNS.md:192). Chains to the HIGH-confidence title opcodes via the shared title UI panel (see 0x00F4's why). fields: rank_id, flags, threshold, coded name. The 'title' label was UPSTREAM (ldufr/GWLP-R; GWCA binds title structs to siblings 0x00F5/0x00F6) until this pass tied 0x00F3/0x00F4 to the title UI panel. studies/smsgnames + character/STORAGE + newopcodes."
+   },
+   "244": {
+    "opcode": 244,
+    "table": "GAME_SMSG_0244",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 244
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "TITLE_RANK_DISPLAY",
+    "name_confidence": "medium",
+    "why": "OBSERVED. field1=player_id (word), field2=rank_id (dword; references the 0x00F3 title-rank table). Writes rank_id to player_record+0x30 in the ChCliApi player array (ctx+0x2c+0x80c, stride 0x50) and posts frame 0x10000064. INDEPENDENT WITNESS that this is title display: the sole subscriber to 0x10000064 is a CtlText UI panel (fn 0x008aa080) that ALSO subscribes to 0x10000065 -- the frame posted by 0x00F5 TITLE_UPDATE (0x00F5 handler->callee 0x00814f60, which posts 0x10000065; 0x00F5 is schema-confirmed HIGH). So 0x00F4 drives the SAME UI panel as the confirmed title opcode. Wire: OBSERVED 0x00F4 x215 in towns, binding OTHER players to rank records (character/STORAGE.md:201) -- the signature of a title shown under other players' nameplates. Closes the open lead at character/RUNS.md:203 ('0x00F4's under-nameplate display is still unread'); elevated from UPSTREAM to OBSERVED this pass. studies/smsgnames."
    },
    "245": {
     "opcode": 245,
