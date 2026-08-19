@@ -782,6 +782,96 @@ def _merchant_window_steps(agent_id, origin):
     ]
 
 
+def _gold_purse_steps(agent_id, origin):
+    """Which purse does the shop's `Your Funds` read, and what does `0x0141`
+    field 1 select?
+
+    THE ERROR THIS EXISTS TO FIX. `20260818T235758` sent `0x0141 [1, 500]` to
+    fund a purchase, `Your Funds` stayed **0**, Buy stayed greyed, and the run
+    re-measured the unfunded case. The `1` was copied from the login burst's own
+    `send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0])` without anyone testing what it
+    selects -- and the opcode is named `UPDATE_GOLD_**STORAGE**`, while Guild
+    Wars separates carried gold from Xunlai storage. So `[1, N]` is measured NOT
+    to feed the merchant's purse, and this varies the selector.
+
+    THE ARMS. Distinct amounts, so the number on screen names the arm that
+    produced it -- no arm can be credited with another's effect:
+
+        A  field1 = 0   amount 111
+        B  field1 = 2   amount 222
+        C  field1 = 1   amount 333   <- the control: the value already REFUTED
+                                        at 500, re-sent at a different amount
+                                        so "wrong selector" and "wrong amount"
+                                        cannot be confused
+
+    Each arm re-opens the shop (`0x00C4` -> `0x0084` -> `0x00CA`), because the
+    funds line is drawn when the panel is built and nothing here knows whether
+    it re-renders in place. Re-arming is proven to work (`20260818T234622`,
+    three arms, three windows).
+
+    READING IT. `Your Funds` showing 111 / 222 / 333 identifies the selector
+    outright. **All three staying 0 is the informative negative**: it would mean
+    `0x0141` does not drive this display at all and the merchant's purse is fed
+    by something else -- and there is already a suspect, since the login burst
+    also sends `CHARACTER_UPDATE_INFO ["", 0, 0, 1000, 0, 0, 0]`, whose `1000`
+    nobody has ever explained. That would be the next arm, not this one.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+             "0x0161: leggings, value 25 (quotes at 50)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+             "0x0161: boots, value 50 (quotes at 100)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+             "0x0161: gauntlets, value 100 (quotes at 200)", "nothing."),
+    ]
+    # field1 = 0 IS A CLIENT-KILLER: `Assertion: inventory`,
+    # ItCliApi.cpp(1969), same-second attribution, run 20260819T002038. It took
+    # arms B and C down with it (the probe sends on a timer, so the rest of that
+    # run went into a dead client). Field 1 names a CONTAINER that must exist,
+    # so 0 is refused by the client, not merely ignored. Arms start at 2.
+    for tag, f1, amount in (("A", 2, 222), ("B", 3, 333), ("C", 1, 444)):
+        note = (" -- the CONTROL: this selector is already refuted at 500, so a "
+                "change here would mean the amount mattered, not the selector"
+                if f1 == 1 else "")
+        steps += [
+            Step(8.0, 0x0141, [f1, amount],
+                 f"ARM {tag}: 0x0141 [field1={f1}, {amount}]{note}",
+                 "nothing yet -- the shop below is what renders the number."),
+            Step(2.0, 0x00C4, [a],
+                 f"ARM {tag}: re-arm the window owner",
+                 "the character turns to face the NPC."),
+            Step(1.0, 0x0084, [ids], f"ARM {tag}: restage the ids", "nothing."),
+            Step(2.0, 0x00CA, [1, 0x3F800000],
+                 f"ARM {tag}: open the shop and READ 'Your Funds'",
+                 f"THE READOUT, one line only: `Your Funds: {amount}` means "
+                 f"field 1 = {f1} is the merchant's purse. Still 0 means this "
+                 f"selector is not it. Prices stay 50/100/200 either way -- if "
+                 f"THOSE move, something is wrong with the run, not the purse."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so arm C has coverage after it",
+             "if all three read 0, 0x0141 does not feed this display and the "
+             "next suspect is CHARACTER_UPDATE_INFO's unexplained 1000.",
+             sends=False))
+    return steps
+
+
 def _shop_price_scale_steps(agent_id, origin):
     """Is `0x00CA`'s second field a PRICE MULTIPLIER, or is the 2x a fixed
     client markup? The one question the priced-stock run could not answer.
@@ -6026,6 +6116,26 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "gold_purse": lambda a, o: Probe(
+        question="Which purse does the shop's 'Your Funds' read, and what does "
+                 "0x0141 field 1 select?",
+        predicts="Three arms with DISTINCT amounts so the number names its own "
+                 "arm: field1=0 -> 111, field1=2 -> 222, field1=1 -> 333 (the "
+                 "control, already refuted at 500). Whichever amount appears "
+                 "identifies the selector. All three staying 0 is the "
+                 "informative negative -- 0x0141 would not drive this display "
+                 "at all, and the next suspect is CHARACTER_UPDATE_INFO's "
+                 "unexplained 1000 in the login burst.",
+        steps=_gold_purse_steps(a, o),
+        note="Fixes a measured mistake rather than opening new ground: "
+             "20260818T235758 sent 0x0141 [1, 500], Your Funds stayed 0, Buy "
+             "stayed greyed, and the run re-measured the unfunded case. The 1 "
+             "was copied from the login burst without testing what it selects, "
+             "and the opcode is UPDATE_GOLD_STORAGE while GW separates carried "
+             "gold from Xunlai storage. Each arm re-opens the shop because the "
+             "funds line is drawn when the panel is built; re-arming is proven "
+             "(20260818T234622). Buy is NOT clicked here -- one question.",
     ),
     "shop_price_scale": lambda a, o: Probe(
         question="Is 0x00CA's second field a price multiplier, or is the "

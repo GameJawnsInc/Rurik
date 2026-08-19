@@ -1969,6 +1969,36 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### `0x0141` FIELD 1 IS A CONTAINER ID, AND 0 KILLS THE CLIENT. 2026-08-19, OBSERVED
+>
+> Run `20260819T002038`, three arms with distinct amounts (`field1 = 0/2/1` -> 111/222/333).
+> **Arm A killed it.** `Assertion: inventory`, **`P:\Code\Gw\Item\Cli\ItCliApi.cpp(1969)`**,
+> crash stamped `00:21:21` against arm A's send at wall `04:21:21Z` — same-second
+> attribution. Arms B and C are **UNMEASURED**: the probe sends on a timer, so the rest of
+> the run went into a dead client, and the frames from `hold009` on are the error dialog.
+>
+> **So field 1 is not a "carried vs storage" purse selector — it is a CONTAINER ID, and it
+> must name a container that exists.** The client asserts the inventory rather than ignoring
+> a bad value, which is why `0` is fatal and why the login burst's `[1, 0]` is legal:
+> container **1** exists. This is the same subsystem the heroes arc hit at `ItCliApi:488`
+> ("the hero has no per-owner container in the item client's table") — the item client keys
+> everything by container, and gold is no exception.
+>
+> **Which reframes the funding question rather than answering it.** `[1, 500]` was legal and
+> left `Your Funds` at 0, so container 1 is a real container that is *not* the merchant's
+> purse. The question is now **which container id the carried purse is**, and the honest
+> position is that we do not know how many exist: our login burst creates exactly one bag
+> (`0x013F INVENTORY_CREATE_BAG(equipped)`), where retail's character has a backpack, belt
+> pouch, satchels and storage. **The next arm is enumeration** — ids 2, 3, 4… with distinct
+> amounts, watching that one line — and the probe now starts at 2 with `0` permanently
+> excluded and the reason written at the call site.
+>
+> **My own error, second in this area and the same shape:** I picked `0` as an obvious
+> "other value" without first checking what the field indexes, exactly as I earlier picked
+> `1` by copying the login burst without checking what it selects. Both were guesses at a
+> field whose type was discoverable by reading `ItCliApi` first. The disciplined order here
+> is read the consumer, then vary the value.
+
 > ### PRESSING BUY — the client refuses LOCALLY, and my funding attempt was wrong. 2026-08-19, OBSERVED
 >
 > Two runs, `20260818T235130` (unfunded) and `20260818T235758` (funding attempted). The
