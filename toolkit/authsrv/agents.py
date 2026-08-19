@@ -675,20 +675,62 @@ def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,
     THE UPSTREAM SHAPE IS REFUTED. GWCA and OpenTyria publish
     `{hero_id, level, primary, secondary}`; the client's own decoder reads
     TWENTY fields, 127 bytes: `[u16, u8,u8,u8, u32,u32, u8,u8, u32, u32x10,
-    string16(32)]`. Handler 0x0091e2f0 -> 0x00811560 -> 0x0081db20, which
-    looks up OR CREATES a record keyed by the first field inside the LOCAL
-    PLAYER's context at ctx+0x2c+0x584. studies/heroes/FINDINGS.md 1.3.
+    string16(32)]`. Handler 0x0091E350 -> 0x00811560 -> worker 0x0081DB70
+    (ChCliHero HeroDataAdd, VAs re-read on 38833 2026-08-19 -- the older
+    0x0091e2f0/0x0081db20 pair in this docstring was off), which looks up OR
+    CREATES a record keyed by the first field inside the LOCAL PLAYER's
+    context. Upstream's three names turn out to be RIGHT and to cover three
+    of twenty fields. studies/heroes/FINDINGS.md 1.3, pvpui 29.
 
-    Every field but the first is named for its TYPE and defaulted to zero,
-    because that is what we know. What survives of the upstream reading is
-    only that b1/b2/b3 land at record +8/+0xc/+0x10 -- consistent with
-    level/primary/secondary and NOT confirmed, since no consumer of +0xc or
-    +0x10 was traced to a profession bound-check. Do not rename them until
-    one is.
+    THE RECORD IS A HERO POOL ENTRY, and as of 2026-08-19 nearly every field
+    is read from its own consumer rather than guessed. studies/pvpui/
+    FINDINGS.md 29 carries the evidence; the summary, record offsets in the
+    0x9c-stride array at ctx[+0x2c]+0x584 +0x10 (== +0x594, hero-keyed --
+    NOT the 0x24-stride agent-keyed activation array at +0x584 +0x00):
 
-    `chunk` is the ten trailing dwords, which the client splits into TWO
-    5-dword groups stored at record +0x4c and +0x60 (with a conditional
-    third copy to +0x74). Two parallel 20-byte groups, meaning NOT FOUND.
+        b1  -> +0x08  LEVEL. The client says so itself: the worker's
+                      already-added log reads "HeroDataAdd (hero %d,
+                      level %d)". The label builder takes -1 to mean
+                      "omit the level".
+        b2  -> +0x0c  PRIMARY profession, and b3 -> +0x10 SECONDARY (0 =
+        b3  -> +0x10  none, which selects a one-name vs two-name template).
+                      Both flow into a bound-checked table whose own assert
+                      names the parameter -- `profession <
+                      arrsize(s_charProfessionAbbrev)` ConstChar.cpp:1290.
+                      This is the bound-check the previous version of this
+                      docstring demanded before renaming. heroes 13.2's
+                      refutation was a SURFACE error: it varied these and
+                      watched the party ROSTER, which reads the AGENT's
+                      profession -- these two drive the hero-pool and
+                      party-search lists instead.
+        d1  -> +0x14  appearance file_id, d2 -> +0x18 model_id: a content
+        d2  -> +0x18  row's own pair, in the row's order (pvpui 28.13).
+        b4  -> +0x1c  NOT FOUND. Nothing in the image reads this offset.
+        b5  -> +0x44  bit 0 is the hero-DISABLED flag; a one-line accessor
+                      returns [rec+0x44] & 1 and its caller picks between
+                      two render paths. b5 as the initial value is
+                      RECONSTRUCTION.
+        d3  -> +0x48  an ID whose 0 means "none". It GATES the name (below)
+                      on both the write and the read side, and it selects
+                      whether the equipment display reads this record or
+                      walks the live item container.
+        chunk-> +0x4c EQUIPPED-ITEM SNAPSHOT, not an attribute block (that
+             and +0x60 hypothesis is refuted, heroes 12). Two parallel
+                      five-entry arrays, one pair per item-container slot
+                      2..6, packed A[i] = (byte[item+5] << 16) |
+                      dword[item+0] and B[i] = word[item+6]. Named from the
+                      SIBLING BRANCH of its own reader, which walks the live
+                      container through ItCliApi's equip getter when d3 is
+                      0. Reader: GmMercenaryRoster. Packer: HeroEnable.
+        name -> +0x74 OVERRIDES the hero's default name (s_heroClientData
+                      through TextApi) -- but ONLY when d3 is non-zero,
+                      which is why heroes 30.2 measured it inert: every run
+                      before today sent d3 = 0, so it was never copied.
+
+    The parameter names stay WIRE-POSITIONAL on purpose. b4 has no consumer
+    at all and d3's value-space is still unknown, so a half-renamed
+    signature would read as though those two were oversights rather than
+    open questions. The meanings live here.
 
     Returns (opcode, values, label).
     """

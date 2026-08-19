@@ -2732,11 +2732,20 @@ HERO_LATE = None
 # The rows stay where they are -- 15.1 measured them landing BEFORE the raise,
 # which is the order the rebuild needs.
 PARTY_MINE_LATE = None
-# 0x0074's string16(32) name field. EVERY run so far has sent it EMPTY, so the
-# one encstring case this family never tested is the hero's own. The hero row
-# renders its name from s_heroClientData (the body is a hatcher and the row
-# says "Goren"), so this asks whether the data-cache message's own name field
-# overrides that table lookup or is ignored. studies/heroes/FINDINGS.md 30.
+# 0x0074's string16(32) name field, AND IT NEEDS --hero-flag TO DO ANYTHING.
+# heroes 30.2 sent a real EncString here and measured it INERT; pvpui 29.4
+# explains that as a rig error rather than a fact about the field. The worker
+# copies this string into record +0x74 ONLY when d3 (--hero-flag) is non-zero
+# (0x0081DC1F on 38833), and every run this arc ever made sent d3 = 0 -- so
+# the string was never copied, and the four readers that would have shown it
+# all test the same dword first and take the default. The default is
+# s_heroClientData[hero_id]+0x0C through TextApi, so the record name is an
+# OVERRIDE of that table rather than a fallback to it. Prediction on record:
+# --hero-info-name WITH a non-zero --hero-flag changes the displayed name in
+# the hero-pool and party-search lists; --hero-info-name alone stays inert.
+# Note the surface: those lists, not the party roster row, whose name comes
+# from the AGENT (heroes 14, 23) -- watching the roster is what made this
+# message look inert for a week.
 HERO_INFO_NAME = None
 # 0x01C2's msg+0x14 -- the SECOND trailing u8, stored to entry+0x14 and never
 # varied by any run in this arc. Its sibling msg+0x10 turned out inert on every
@@ -2769,10 +2778,20 @@ HERO_INFO = True
 # --hero-attribs flag to opt in with, which is the other half this comment had
 # stale. The 2026-08-18 panel-open run took it defaulted on and never reached
 # ConstChar:1296 (studies/pvpui/FINDINGS.md 28.3). Reconciled 2026-08-19.
-# 0x0074's ten unexplained dwords, and the u32 flag that gates the client's
-# CONDITIONAL third copy of the second group to record+0x74. Both exist to test
-# one hypothesis and to let it FAIL: if the trailing 0x0072 still asserts
-# attribState no matter what rides here, the chunk is not the attribute block.
+# 0x0074's ten dwords and the u32 before them. BOTH ARE NAMED NOW -- the arc
+# spent a week calling them "unexplained" and this comment described the flag
+# WRONGLY (pvpui 29, read end to end on 38833):
+#   HERO_CHUNK is an EQUIPPED-ITEM SNAPSHOT: two parallel five-entry arrays at
+#   record +0x4C and +0x60, one pair per item-container slot 2..6, packed
+#   A[i] = (byte[item+5] << 16) | dword[item+0] and B[i] = word[item+6]. Named
+#   not by shape but by the SIBLING BRANCH of its own reader, which walks the
+#   LIVE item container through ItCliApi's equip getter when HERO_FLAG is 0.
+#   The reader is GmMercenaryRoster; the packer is HeroEnable (0x0081DE20).
+#   The attribute-block hypothesis stays refuted and now has a replacement.
+#   HERO_FLAG (d3) does NOT gate "a third copy of the second group". Record
+#   +0x74 is the NAME, and d3 gates THAT -- see HERO_INFO_NAME below. d3 is an
+#   id whose zero means "none", and it is the read-side predicate too: four
+#   consumers test it before touching the name and take a default otherwise.
 HERO_CHUNK = None
 HERO_FLAG = 0
 HERO_BYTES = None
