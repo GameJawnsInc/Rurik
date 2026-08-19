@@ -3045,7 +3045,19 @@ Every one of these, in the order they were written:
   pattern, each with a positive control that the real one still resolves
   afterwards. §3 drives `measured_nothing()` with a doctored table set and pairs
   it with real builds, because a predicate answering True to everything would
-  pass the vacuity check alone. Needs the vault throughout. Floor 37, ~35 s),
+  pass the vacuity check alone. §4 pins the WIDE-STRING CAPACITY, a twice-
+  documented display defect (`Field.__repr__` prints `self.cap` and the `wstring`
+  branch passed no `cap=`, so all 141 wide strings read `string16(0)`) that was
+  fixed in `c81d6d1` and then sat four days with two study docs still calling it
+  open — a fix nothing pins reads exactly like a fix nobody made. It asserts the
+  capacity histogram over all 141 fields on each vaulted build, identical across
+  the three (§2's claim from another direction), and two opcodes whose capacity
+  has an INDEPENDENT witness: `0x01BF`'s `string16(20)` in 50 B corroborating
+  GWCA, `0x0074`'s `string16(32)` in the 127 B that refuted the upstream 4-field
+  reading — the wire total being the half a wrong capacity cannot fake. Its
+  negative control builds a `Field` the old way and asserts it STILL prints
+  `string16(0)`, so dropping `cap=` again reddens 14 checks; verified by doing
+  exactly that. Needs the vault throughout. Floor 73, ~75 s),
   `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
   the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
   used to answer with `os.path.isfile` and return, so `identify()`, the only

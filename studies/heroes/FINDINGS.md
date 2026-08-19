@@ -2760,11 +2760,22 @@ itself.
 
 ## 9. Defects and corrections this arc produced
 
-- **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
-  `self.cap`, but the `wstring` branch never passes `cap=` to the constructor — only `wire=`.
-  The true capacity is recoverable only by back-solving from the wire total. A real,
-  reproducible display bug that will mislead anyone who trusts the printed capacity, and the
-  reason §1.1 says `string16(20)` where the tool says `(0)`.
+- **`msgshape.py` printed `string16(0)` for every wide-string field — FIXED `c81d6d1`,
+  REGRESSION-CHECKED 2026-08-19.** `Field.__repr__` shows `self.cap`, but the `wstring`
+  branch never passed `cap=` to the constructor — only `wire=`. The true capacity was
+  recoverable only by back-solving from the wire total, which is why §1.1 said
+  `string16(20)` where the tool said `(0)`. The tool now prints the declared capacity
+  (`0x01BF` → `string16(20)`, `0x0074` → `string16(32)`), and `test_msgshape.py` §4 pins it
+  over all **141** wide-string fields in the image, on all three vaulted builds, with the
+  capacity histogram identical across them — the protocol did not move, only the tables did.
+  **The fix sat for four days with nothing checking it**, which is the defect this entry
+  really records: §9 and `PLAN.md` both went on describing an open bug that was already
+  closed, because a fix nobody pinned reads exactly like a fix nobody made. §4's negative
+  control constructs a `Field` the old way and asserts it still prints `string16(0)`, so a
+  future edit that drops `cap=` reddens 14 checks instead of silently returning.
+  **It also unblocked a claim in another arc:** `0x0049`'s three `string16(8)` fields are now
+  legible, which moves `studies/quests/FINDINGS.md`'s cap-of-8 row off OpenTyria's annotation
+  and onto the client's own descriptor.
 - **A 48×12 table at `0xA35B80` is `s_titleClientData`, not `s_heroClientData`** (§2). Two
   adjacent `Const*` accessors; the structural locator closed on the wrong anchor.
 - **`0x0074` is not `{hero_id, level, primary, secondary}`** (§1.3) — 20 fields, 127 bytes.

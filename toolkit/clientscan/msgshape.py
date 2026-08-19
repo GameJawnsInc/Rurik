@@ -256,7 +256,10 @@ def fields(cmds):
             # number was only recoverable by back-solving from the wire total
             # (0x01BF: 50 B - 8 B of fixed fields = 42 = 2 + 2*20), which is a
             # capacity a reader has no reason to distrust and every reason to
-            # quote. Found 2026-08-15, studies/heroes/FINDINGS.md 9.
+            # quote. Found 2026-08-15, studies/heroes/FINDINGS.md 9. PINNED by
+            # test_msgshape.py 4 -- drop `cap=` again and 14 checks redden.
+            # It went unpinned for four days and both study docs went on calling
+            # it open, so the check is the half that was actually missing.
             out.append(Field("wstring", t, index, count, cap=count,
                              wire=2 + 2 * count))
         elif t == 12:

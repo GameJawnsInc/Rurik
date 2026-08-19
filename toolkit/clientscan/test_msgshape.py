@@ -60,7 +60,8 @@ import vaultpath                                             # noqa: E402
 from gwpe import PE                                          # noqa: E402
 
 # floor re-measured 2026-08-14 from a real green run: 37 -> 44, build 38833 joining pinned.BUILDS.
-LEDGER = checks.Ledger("msgshape table derivation", floor=44)
+# 2026-08-19, again from a real green run: 44 -> 73, §4 joining.
+LEDGER = checks.Ledger("msgshape table derivation", floor=73)
 check = checks.adopt(LEDGER)
 
 # The routine's real entry prologue -- `push ebp / mov ebp,esp / sub esp,0x20 /
@@ -264,5 +265,80 @@ if pinned_stamp in PES:
         check("descriptor invariant violations: 0  (over" in r.stdout,
               "and its invariant line states its own coverage",
               "a bare `violations: 0` is the line that lied")
+
+print("\n4. wide-string fields print their REAL capacity")
+
+# The defect this pins: `Field.__repr__` prints `self.cap`, and the `wstring`
+# branch of `fields()` did not pass `cap=`, so all 141 wide strings in the image
+# printed `string16(0)` -- a capacity a reader has no reason to distrust. Fixed
+# in c81d6d1; recorded in studies/heroes/FINDINGS.md §9 and PLAN.md, both of
+# which said "will mislead anyone who trusts the printed number" for four days
+# with nothing checking it.
+#
+# NEGATIVE CONTROL FIRST, because every assertion below is only worth its
+# sensitivity: constructed the old way -- no `cap=` -- the repr is the defect,
+# verbatim. If a future edit drops `cap=` again, that is what the image starts
+# printing and §4 goes red.
+check(repr(MS.Field("wstring", 7, 1, 20)) == "string16(0)",
+      "a wstring Field built WITHOUT cap= still prints string16(0)",
+      "the defect's exact shape -- so the checks below can see it come back")
+check(repr(MS.Field("wstring", 7, 1, 20, cap=20)) == "string16(20)",
+      "and one built WITH it prints the capacity")
+
+# MEASURED 2026-08-19 over all three vaulted builds. Identical on each, which is
+# §2's claim again from a different direction: the tables moved, the protocol
+# did not.
+WSTRING_CAPS = {6: 8, 8: 20, 16: 1, 20: 24, 32: 30, 48: 1,
+                64: 13, 80: 1, 122: 24, 128: 15, 138: 1, 256: 3}
+
+# Two opcodes whose capacity is corroborated by an INDEPENDENT witness, so this
+# is not the decoder agreeing with itself: `0x01BF` PARTY_HENCHMAN_ADD's
+# `string16(20)` and 50-byte total corroborate GWCA (studies/heroes §1.1), and
+# `0x0074` MERCENARY_INFO's `string16(32)` sits in the 127-byte total that
+# REFUTED the upstream 4-field reading (§1.3). The wire total is the half that
+# cannot be faked by a wrong capacity: 2 + 2*cap is most of both numbers, so a
+# cap that is wrong by one puts the total two bytes off a figure measured
+# elsewhere.
+WSTRING_MSGS = {0x0074: (32, 127), 0x01BF: (20, 50)}
+
+for stamp, exe in sorted(EXES.items()):
+    img = MS.Image(exe)
+    ws = []
+    for op, direction, tva, disp, cmds in img.messages():
+        try:
+            fs = MS.fields(cmds)
+        except MS.Undecodable:
+            continue                       # §0's rule: never guessed past
+        ws.extend(f for f in fs if f.kind == "wstring")
+
+    check(len(ws) == 141, f"{stamp}: 141 wide-string fields in the image",
+          f"{len(ws)}")
+    zero = [f for f in ws if repr(f) == "string16(0)"]
+    check(not zero,
+          f"{stamp}: and NOT ONE of them prints string16(0)",
+          f"{len(zero)} do -- before the fix all {len(ws)} did")
+
+    hist = {}
+    for f in ws:
+        hist[f.cap] = hist.get(f.cap, 0) + 1
+    check(hist == WSTRING_CAPS,
+          f"{stamp}: the capacity histogram is the pinned one, exactly",
+          f"{dict(sorted(hist.items()))}")
+
+    for op, (cap, wire) in sorted(WSTRING_MSGS.items()):
+        hits = img.lookup(op, "RECV")
+        check(len(hits) == 1, f"{stamp}: 0x{op:04X} resolves to one RECV entry",
+              f"{len(hits)} hit(s)")
+        if len(hits) != 1:
+            continue
+        cmds = hits[0][4]
+        caps = [f.cap for f in MS.fields(cmds) if f.kind == "wstring"]
+        check(caps == [cap],
+              f"{stamp}: 0x{op:04X} carries one string16({cap})",
+              f"got {caps}")
+        check(MS.wire_max(cmds) == wire,
+              f"{stamp}: and its wire total is {wire} B, as measured elsewhere",
+              f"got {MS.wire_max(cmds)} -- 2 + 2*cap is most of this number")
+
 
 sys.exit(LEDGER.verdict())
