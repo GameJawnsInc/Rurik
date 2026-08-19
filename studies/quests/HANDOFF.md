@@ -8,8 +8,12 @@ stale. What is here is the stuff that is *not* recoverable from the code: the tr
 shape of the work, and the things a cold session predictably gets wrong.
 
 **Read in this order.** `PLAN.md` §8 *Quests* (where it is) → `AUTHORING.md` §4 (the
-ladder, with per-rung status) → `FINDINGS.md` §0 (what the arc settled) → §6 and §7 of
-whichever of the two you are acting on (killed answers, open questions). `FINDINGS.md`
+ladder, with per-rung status) → `FINDINGS.md` §0 (what the arc settled) → the killed
+answers and open questions of whichever of the two you are acting on. The two files
+number those differently: in `FINDINGS.md`, §6 is killed and §7 is open questions; in
+`AUTHORING.md`, §7 is killed and §6 is the blocked-vs-expensive triage — it has no
+open-questions section of its own. (This sentence used to assert one shared §6/§7
+layout, which sent readers of `AUTHORING.md` to the wrong sections.) `FINDINGS.md`
 is ~1,200 lines; do not read it front to back to start work.
 
 ---
@@ -51,6 +55,16 @@ rather than guessing.
 **A literal run must open with a word ≥ `0x100`.** A description beginning `'S'` killed a
 real client on `TextApi.cpp:585`. `coded_literal` refuses to build one — do not route
 around it.
+
+**A literal that exactly fills its field is a silent client kill — MEASURED 2026-08-18,
+the day after this file was written.** Filling a string16 field to exactly its declared
+cap hung a real client instantly (Code=007, **no assert**) on `0x00F3`'s string16(8),
+while 7 of 8 units passed (`studies/character/RUNS.md`, title_track runs 1-2; the note
+lives in `coded_literal`'s docstring). `coded_literal`'s default `limit` is still the
+FULL declared width (128 for `0x004C` descriptions, 122 for `0x0080` dialogue) and its
+length guard is exclusive, so an at-cap line sails through to the wire. Pass
+`limit = declared - 1` — but that rule is measured on one 8-unit field only, so treat
+the quest fields' caps as unverified hazards, not boundaries that pass.
 
 ## 3. Things that are true and easy to disbelieve
 
