@@ -1969,6 +1969,68 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### THE LIVE MERCHANT CAPTURE — `0x4D` IS BUY, THE C2S SIDE DECODES, AND THE CLIENT DEBITS ITSELF. 2026-08-19, OBSERVED
+>
+> Owner-driven live capture **`20260819T132414`** (Assassin, Shing Jea / Sunqua Vale, build
+> **38833**, `game_mode base`, `exe_unchanged true`, **`plan_seals: agree`** against the
+> 9-step pre-registration). Three game channels, **all decoding 100% clean to the final
+> byte** — 9,091 `GAME_SMSG` messages. Operator readings of `Your Funds`: **108 → 68 → 88**.
+>
+> **1. THE C2S SIDE DECODES. The blocker this study has carried since the Factions captures
+> is retired.** §4 item 10 recorded *"the c2s side does not decode — `decode_stream(
+> "GAME_CMSG")` fails at offset 0 on every channel"*, and that blocked every request/response
+> argument in the pass. The cause was never the data: **`GAME_CMSG` carries the same
+> `0x8000` opcode mask the auth channel does**, and our own server has been stripping it in
+> `frame_pending(codec, cmsg, pending, AUTH_CMSG_MASK)` since long before. Framed that way,
+> all three channels give **425 messages, zero trailing bytes, no desync**. The instrument
+> existed in our tree the whole time — the fifth time this arc that the missing piece was
+> already implemented.
+>
+> **2. `GAME_CMSG 0x4D` IS THE PURCHASE REQUEST.** One sighting, and it is unambiguous:
+>
+> ```
+> 0x4D  [1, 40, [], '', 0, [2474], '01']
+>            ^^price          ^^item  ^^qty
+> ```
+>
+> **40 is exactly the operator's observed debit** (108 → 68), and **item 2474 is a member of
+> the merchant's own staged stock** `[2473…2483]` from the `0x0084` in the same window. Three
+> independent facts — the wire, the screen, and the stock list — agree on one message.
+>
+> **3. AND THE SERVER SAID NOTHING ABOUT GOLD.** Between the shop open and the next
+> transaction there is **no message carrying 40, 68, or any balance**; the only traffic is an
+> unrelated player arriving. Across all **9,091** decoded messages, the values **108 / 68 /
+> 88 never appear**. **The client debits its own purse.** This is the live confirmation of
+> the static result above — no `GAME_SMSG` writes carried gold, measured from the binary and
+> now from retail's own wire. The two independent methods agree.
+>
+> **4. `GAME_CMSG 0x4A` and its response triple**, `[11, 0, [item], n, []]`, answered
+> **8 times out of 8** by `0x014D [container, item]` → `0x0140 [container, n]` →
+> `0x00CC [11]`, with item id and `n` matching one-for-one and in order (7 in one channel,
+> 1 in another). A clean request/response pairing, and the first this repo has ever had on
+> the item path.
+>
+> **5. The shop-open sequence is CONFIRMED against our replication**, three times, on two
+> different merchant agents (272 and 273):
+> `0x00C4[agent]` → `0x0084[stock ids]` → `0x00CA[1, 1.0f]` → `0x00C3[11, 0]` —
+> message-for-message what `merchant_window` sends, including `0x00CA`'s `1.0f`.
+>
+> **CONTESTED, and it is our own claim that is now in doubt:** we concluded `0x00C3` field 1
+> is an **item id** (undeclared 3 asserted `item`; declared 40 passed that guard). But retail
+> sends `0x00C3 [11, 0]` while staging exactly **11** items, which reads naturally as a
+> **count** — and `11` also appears as `0x4A`'s first field and as `0x00CC`'s only field,
+> where no count applies, which argues for a **transaction/window TYPE constant** instead.
+> Under the count reading our two crashes re-explain themselves better than before: `[3, 0]`
+> was the *correct* count over items whose detail never resolved (bit-2 set → hourglass), so
+> the per-item lookup asserted; `[40, 0]` claimed 40 entries over a 3-entry list and ran off
+> the end into `c0000005`. **Three readings, one field, and the capture does not separate
+> them** — the discriminator is a shop with a stock count ≠ 11, which is one loopback run.
+>
+> **Bonus, unplanned and unanalysed here:** the capture also contains a **level-up** and
+> **quest-reward** bursts (operator notes 1 and 2, wire_t 227.6 and 278.5) — the transition
+> `PLAN.md` §8 names as never once observed in 513 prop-36 sightings. That is its own study
+> and this section deliberately does not mine it.
+
 > ### THE CHARACTER-LOAD PATH IS READ, AND NO WIRE MESSAGE WRITES CARRIED GOLD. 2026-08-19
 >
 > Three further passes, from three directions. Every load-bearing claim re-verified here by
