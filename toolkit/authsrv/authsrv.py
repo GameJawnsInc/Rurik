@@ -302,7 +302,8 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             # Silence is still what an out-of-range interact gets on the wire in
             # the sense that matters: no refusal message is invented. What goes
             # out is the destination the player asked for by clicking.
-            _order_walk(send, state, conn_id, agent_id, spot)
+            if INTERACT_WALK:
+                _order_walk(send, state, conn_id, agent_id, spot)
             state["pending_interact"] = (agent_id, interact_byte)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
@@ -900,12 +901,38 @@ GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED = 0x0035
 # file had never once sent it -- the fifth time this project has found the
 # mechanism already in the tree (after 0x0037, 0x003A, 0x00B7, 0x00DA).
 #
-# NOT the thing the world tick refuses to broadcast. That rule (see the tick's
-# own comment) is about AGENT_UPDATE_POSITION, a position GRANT, which warped a
-# player 765 units because our integrator's opinion overrode the client's. This
-# is a DESTINATION, which the client paths to against its own collision and may
-# refuse -- the opposite direction of trust.
+# WHAT THIS DOES NOT DO, MEASURED 2026-08-19 AND SHIPPED OFF BECAUSE OF IT.
+# This comment used to end: "This is a DESTINATION, which the client paths to
+# against its own collision and may refuse -- the opposite direction of trust."
+# THAT WAS INVENTED AND IT IS WRONG. Run 20260819T111841 sent exactly one of
+# these for an NPC 900 u away and the operator watched the character walk
+# STRAIGHT THROUGH A STAIRCASE and come to rest clipping through the geometry
+# underneath it. So a lone 0x002A is not "here is a goal, path yourself" -- the
+# client is dragged along a straight line and does no collision at all.
+#
+# Worse for the arrival half: across that whole walk the client sent NO position
+# report of any kind (13 heartbeats, one 0x00C1 TARGET_SELECT, nothing else), so
+# `interact_pending_tick` below can never see it arrive and the dialog never
+# opened. The one thing the client DID do is target the agent named in field 5.
+#
+# So the correlation in ArenaNet's corpus is real and our reconstruction of what
+# to do with it is NOT stock behaviour. Something else carries the pathing --
+# more messages, a different message, or server-computed waypoints -- and that
+# is a measurement nobody here has taken. Until it is taken, sending this is
+# opt-in (`--interact-walk`) and OFF, because a player dragged through a
+# staircase is worse than a player who does not move.
 GAME_SMSG_AGENT_UPDATE_DESTINATION = 0x002A
+
+# OFF, and the paragraph above is why. The HOLD half below is independent and
+# stays on: it is measured (ArenaNet answers a distant interact late rather than
+# dropping it) and it works today for a player who walks over on the KEYBOARD,
+# because that path does report position.
+INTERACT_WALK = False
+
+# Print every client position report with our own belief beside it, plus the
+# origin each click's collision ray is cast from. OFF by default -- it is a
+# per-packet trace, not a thing to leave on. `--trace-move`.
+TRACE_MOVE = False
 
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
@@ -1972,6 +1999,14 @@ def _adopt_client_position(state, reported):
     """Should we take the client's word for where it is standing?"""
     px, py = state["pos"]
     jump = math.hypot(reported[0] - px, reported[1] - py)
+    if TRACE_MOVE:
+        # EVERY report, accepted or not. The rejection below already prints,
+        # which is exactly the wrong sampling for a drift bug: it shows the
+        # moment the divergence became too big and nothing about it growing.
+        print(f"[trace] pos ours ({px:.0f}, {py:.0f}) theirs "
+              f"({reported[0]:.0f}, {reported[1]:.0f}) drift {jump:.0f}u "
+              f"{'ADOPT' if jump <= CLIENT_POSITION_TRUST_RADIUS else 'REJECT'}"
+              f" dest={state.get('dest')}", flush=True)
     if jump <= CLIENT_POSITION_TRUST_RADIUS:
         return True
     print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
@@ -7106,6 +7141,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{dest[1]:.0f}): {why} -- leaving it to the "
                                   f"client's own pathing", flush=True)
                             continue
+                        if TRACE_MOVE:
+                            # THE HYPOTHESIS THIS FLAG EXISTS TO TEST.
+                            # `clip_to_walkable` casts its ray from OUR position,
+                            # not the client's. During a click-walk the client
+                            # reports nothing at all (measured, run
+                            # 20260819T111841) while our integrator runs at
+                            # DEFAULT_RUN_SPEED 288 u/s against a client measured
+                            # at ~197-211, so the two drift apart with nothing to
+                            # correct them -- and a click whose straight line is
+                            # blocked leaves our model standing still entirely.
+                            # If the origin below is far from where the player
+                            # actually is, the point we send is on a ray from
+                            # somewhere they are not, which is a warp with a
+                            # plausible-looking destination.
+                            opx, opy = state["pos"]
+                            print(f"[trace] CLICK dest ({dest[0]:.0f}, "
+                                  f"{dest[1]:.0f}) clipped from OUR origin "
+                                  f"({opx:.0f}, {opy:.0f})", flush=True)
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
                         # ArenaNet pairs the rate with the MOVE, not with the
@@ -8546,6 +8599,25 @@ def main():
                          "it, since that one is placed by offset from the "
                          "player and would land in the middle of a zone that "
                          "has its own idea of what stands where.")
+    ap.add_argument("--trace-move", action="store_true",
+                    help="Trace every client position report against the "
+                         "server's own belief, and the origin each click's "
+                         "collision ray is cast from. For the click-then-WASD "
+                         "warp: our integrator runs 288 u/s against a client "
+                         "measured at ~197-211 and a click-walk sends no "
+                         "position report at all, so the two can diverge with "
+                         "nothing to correct them.")
+    ap.add_argument("--interact-walk", action="store_true",
+                    help="Send GAME_SMSG 0x002A when an interact arrives from "
+                         "out of range. OFF by default and it should stay off "
+                         "until somebody measures what carries the PATHING: on "
+                         "run 20260819T111841 a lone 0x002A dragged the "
+                         "character straight through a staircase in a straight "
+                         "line, left it clipping through the geometry, and "
+                         "produced no position report at all -- so the held "
+                         "interact never saw an arrival and no dialog opened. "
+                         "The flag exists so the next measurement is one "
+                         "argument away, not so this is shipped.")
     ap.add_argument("--practice-target", action="store_true",
                     help="The standing hostile neither chases nor attacks -- a "
                          "PRACTICE TARGET. WIKI (GWW, \"Practice target\", rev. "
@@ -8965,6 +9037,22 @@ def main():
         print(f"AREA: {a.area} -- {len(pop)} spawn row(s): "
               + (", ".join(k for k, _ in pop) or "none")
               + ". This REPLACES the standing test enemy.")
+
+    if a.trace_move:
+        global TRACE_MOVE
+        TRACE_MOVE = True
+        print("TRACE MOVE: every position report and click ray origin will be "
+              "printed. Watch for drift growing between 'ours' and 'theirs'.")
+
+    if a.interact_walk:
+        global INTERACT_WALK
+        INTERACT_WALK = True
+        print("INTERACT WALK: sending 0x002A on an out-of-range interact. "
+              "MEASURED BROKEN 20260819T111841 -- a lone 0x002A drags the "
+              "character in a STRAIGHT LINE through geometry (it walked "
+              "through a staircase and stopped clipping under it) and produces "
+              "no position report, so the held interact never sees an arrival. "
+              "This flag is for measuring what actually carries the pathing.")
 
     if a.practice_target:
         global ENEMY_ATTACKS_BACK

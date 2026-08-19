@@ -75,24 +75,50 @@ def fresh(pos=(0.0, 0.0), spot=FAR):
 
 
 def main():
-    print("1. an out-of-range interact orders the walk and holds the interact")
+    print("0. the walk order ships OFF, and the hold does not")
+    check(authsrv.INTERACT_WALK is False,
+          "INTERACT_WALK defaults to False",
+          "MEASURED BROKEN on run 20260819T111841: a lone 0x002A drags the "
+          "character along a STRAIGHT LINE through geometry -- the operator "
+          "watched it walk through a staircase and stop clipping underneath -- "
+          "and the client sends no position report during it, so the held "
+          "interact never sees an arrival. The corpus correlation is real; our "
+          "reconstruction of what to send is not stock behaviour, and a player "
+          "dragged through a staircase is worse than one who does not move")
     send, state, sent = fresh()
     authsrv._handle_interact(send, state, 1, NPC)
-    ops = [op for op, _v in sent]
-    check(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION in ops,
-          "the walk order goes out",
-          f"{[hex(o) for o in ops]} -- this branch used to print and return, "
-          f"and the client issues no movement order of its own (0 of 46 in the "
-          f"corpus), so nothing at all moved the player")
+    check(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+          not in [op for op, _v in sent],
+          "so by default no walk order goes out",
+          f"{[hex(o) for o, _v in sent]}")
     check(state.get("pending_interact") == (NPC, 0),
-          "and the interact is HELD rather than dropped",
-          f"{state.get('pending_interact')} -- ArenaNet answers it late rather "
-          f"than refusing it; dropping it is why arriving on foot used to do "
-          f"nothing")
-    check(state.get("interacting") is None,
-          "and is NOT served yet",
-          f"{state.get('interacting')} -- serving it here would open a dialog "
-          f"across the map, which is the bug this range gate exists for")
+          "but the interact is still HELD -- the two halves are independent",
+          "the hold is measured (ArenaNet answers a distant interact late "
+          "rather than dropping it) and it works today for a player walking "
+          "over on the KEYBOARD, which does report position")
+
+    print("\n1. with --interact-walk, the order goes out and the interact holds")
+    authsrv.INTERACT_WALK = True
+    try:
+        send, state, sent = fresh()
+        authsrv._handle_interact(send, state, 1, NPC)
+        ops = [op for op, _v in sent]
+        check(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION in ops,
+              "the walk order goes out",
+              f"{[hex(o) for o in ops]} -- kept runnable behind the flag so the "
+              f"next measurement of what carries the PATHING is one argument "
+              f"away rather than a rebuild")
+        check(state.get("pending_interact") == (NPC, 0),
+              "and the interact is HELD rather than dropped",
+              f"{state.get('pending_interact')} -- ArenaNet answers it late "
+              f"rather than refusing it; dropping it is why arriving on foot "
+              f"used to do nothing")
+        check(state.get("interacting") is None,
+              "and is NOT served yet",
+              f"{state.get('interacting')} -- serving it here would open a "
+              f"dialog across the map, which is the range gate's whole job")
+    finally:
+        authsrv.INTERACT_WALK = False
 
     print("\n2. the walk order's payload is the one the corpus shows")
     walk = [v for op, v in sent if op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION]
