@@ -1997,11 +1997,11 @@ with its opcode and its event, every one confirmed by the client drawing somethi
 ### 28.8 The body run — the row goes retail-format and the agent store outranks the record (2026-08-19)
 
 Run `20260819T110510`, the full rig plus `--hero-body`. The scripted panel click
-missed (`NO WINDOW` — the client came up slow after `--replace` cleaned out another
-session's listeners) and it did not matter: the commander panel opened anyway,
-UNVERIFIED whether from the client's own persisted per-character UI layout or a
-body-triggered path — worth one control run before relying on either reading. The
-verdicts, from the hold screenshots:
+missed (`NO WINDOW`) and the commander panel appeared open in the hold shots anyway —
+recorded at first as UNVERIFIED between two readings, both now REFUTED by controls
+(§28.9): the frame almost certainly shows ANOTHER SESSION'S client. The substantive
+verdicts below all reproduced on clean single-client runs the same day
+(`20260819T123759`), so they stand; only the auto-open belonged to the artifact:
 
 - **The party row upgraded to retail's format**: "Lvl 20 Norgu" (bodiless) became
   "**Mo20 Norgu**" — the profession segment reads the AGENT (heroes §23's roster-reads-
@@ -2018,3 +2018,26 @@ verdicts, from the hold screenshots:
   practice target), so `--hero-body` composes with the whole echo rig with no assert —
   activation, char-table, appearance, level, vitals, stance, flags, and lock all
   coexisted with a real agent in one session.
+
+### 28.9 The panel does NOT auto-open — the 110510 anomaly was another session's window (2026-08-19)
+
+Four controlled runs, one variable at a time, all `PASS`, zero clicks unless stated:
+
+| run | rig | prior layout state | panel? |
+|---|---|---|---|
+| `123331` | bodiless | inherited "open" from 110510 | **NO** |
+| `123525` | + `--hero-body` | inherited whatever 123331 saved | **NO** |
+| `123759` | + `--hero-body`, WITH click | — | opens on click (control that the click path works) |
+| `124040` | + `--hero-body`, no click | inherited "open" from 123759's clean `WM_CLOSE` | **NO** |
+
+That kills all three candidate mechanisms: layout persistence (row 1 and row 4 —
+row 4 directly followed a clean panel-open save and restored nothing), body-triggered
+open (row 2), and persistence gated on a body (row 4 again). **The commander panel
+opens only by click on this rig.** What actually happened in 110510: a parallel
+session's client was still running (the harness's `--replace` clears stale Python
+listeners, not clients), which is also why the scripted click reported `NO WINDOW` —
+the hold screenshots captured the OTHER client's window, panel open from that
+session's own use. The generalizable lesson, same family as the two-tree and
+two-capture defects this repo already paid for: **a harness screenshot is not
+attributed to a client by being taken — before believing a UI readout, be sure whose
+window it is** (one `Gw.exe` in the process list, or an identifying element in frame).
