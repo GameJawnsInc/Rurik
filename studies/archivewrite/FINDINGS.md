@@ -1914,6 +1914,92 @@ careful with labels" — it is **break each arm on purpose and require a named c
 
 ---
 
+## 15. A8 is STAGED — and the deploy and the launch are the owner's
+
+`vault/research/archivewrite/a4stage8.py`. **Built and verified 2026-08-18. Not deployed,
+not launched.** The staged archive is
+`vault/exports/archivewrite/a4run8/Gw.a4run8.dat`.
+
+### 15.1 The edit, and why it is the narrowest possible test
+
+Take row 11196 (file 15018, the hatcher's animation library), decompress it, and
+**re-compress the identical bytes with `gwenc`**, then write it back still marked
+compression 8. **The payload a reader gets back is byte-for-byte what ArenaNet ships. The
+only thing that changes is who compressed it.**
+
+Five earlier runs in this arc changed *content* and asked whether the change appeared; each
+could fail for a dozen reasons between the writer and the screen, and §9.3 records that five
+of seven produced no usable verdict. This run has exactly one variable, so **no visible
+change is the PASS** and any assert is attributable to the encoder alone.
+
+### 15.2 Measured on the staged archive, independently of the script that built it
+
+| | |
+|---|---|
+| size on disk | **4,198,489,600 B** — unchanged, growth none |
+| `datcheck --preflight` | **10/10** |
+| surviving MFT generations | **6/6** |
+| payload CRC sweep | **177,319 payloads, 0 bad** |
+| row 11196 | size **1,011,244**, compression **8**, crc `0xd03ab671` |
+| retail's same row | size 1,029,564, compression 8 — **18,320 B larger** |
+| stored bytes differ from retail | **yes** (so the client can tell, i.e. the run is testable) |
+| decompresses to | **the identical 1,514,855 B payload**, declared 1,514,855 |
+| rows changed | **1** |
+| neighbours 13738 / 11141 / 11117 / 8295 / 177242 | **byte-identical to retail** |
+
+18,388 B of the reservation's tail was zeroed. The row fit **in place** — no relocation, no
+free run, nothing else moved. The new verify-before-commit arm fired and passed on the way
+in: *"verified before writing: 1011244 B decompress to the 1514855 B declared (our decoder;
+only the client can settle the rest)."*
+
+### 15.3 The prediction, registered before the launch
+
+**The client reads it and nothing visible changes** — same creature, same animations, no
+assert. Confidence high, not total, and the reason is §13.5's **gap A**: we emit a declared
+`symbol_count == 1` on 3.4% of tables where retail does so **0 times in 138,708 first
+blocks**, so byte-identical re-emission structurally cannot cover it and only our own decoder
+vouches for it. Against that, A7b re-emitted 3,051 retail rows byte-identically, and decoding
+retail's **own** row 8295 with an upstream-faithful table builder **fails** — so `gwdat`'s one
+known divergence is required by ArenaNet's archive rather than being our invention.
+
+**If it asserts, the assert names where**, and gap A's fix is already costed: a two-symbol
+distance table inside retail's attested envelope, a few bits larger, on a path 138,708 rows
+witness. **A size question, not a design one.**
+
+### 15.4 Two defects in the staging script, both mine, both fixed
+
+- `datwrite.Writer` is **not a context manager** — it has `close()`, and every other caller
+  (`datmove`, `datalloc`, `iconset`, `rebloat`) uses `try/finally`. Fixed.
+- **`datcheck.diff`'s `growth` is `None` when the file did not grow**, and a dict when it did
+  (`datcheck.py:998-1001`). Asserting `growth != 0` failed a run whose archive was perfect —
+  the size printed 4,198,489,600 B before *and* after. Fixed to `if d["growth"]:`. Worth
+  recording rather than tidying away: **it is the same shape as this arc's four other
+  corrections** — a check whose label ("the archive grew") did not match what the artifact
+  said — except that this time it produced a false RED rather than a false green, which is
+  the harmless direction and the first time in five that the error ran that way.
+
+The script resolves its toolkit from a `--toolkit` argument defaulting to main and **prints
+the tree and its HEAD commit** (`[tree] C:\gd\Rurik  HEAD 73b6561`), rather than hardcoding a
+foreign worktree the way `a4stage6.py` does. Run scripts live in `vault/research/` and are
+gitignored by design, so this one is not in the commit.
+
+### 15.5 What happens next, and it is not ours to do
+
+```bash
+python C:\gd\Rurik\vault\research\archivewrite\a4stage8.py --deploy
+```
+
+then launch and look at the hatcher. `--retail` puts the baseline back.
+
+**The launch is the irreversible step, not the write** (§5.6 rule 1). The client Flushes, and
+a repair deletes the whole `nextStream` chain of any row whose CRC mismatches — permanent
+after one launch. The archive it would touch is also shared: `vault/run/.../Gw.dat` was
+restored to retail at 21:34 on 2026-08-18 by another session, which is **why §2's claim that
+"the deployed archive is run 6" is stale** and why nothing here deployed on its own
+initiative.
+
+---
+
 ## Appendix — what I verified myself
 
 **OBSERVED (mine), run read-only in `C:/gd/Rurik/.claude/worktrees/great-heyrovsky-7fe716`, vault located via `toolkit/vaultpath.py` → `C:\gd\Rurik\vault`:**

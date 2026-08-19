@@ -41,18 +41,33 @@ remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7
 
 ## 2. State of the machine
 
-**The deployed archive is run 6** — `vault/run/2026-07-29_221c13772c7a/Gw.dat`, carrying the
-shell with bases ×3. The hatcher will look exploded. Retail is preserved beside it.
+**The deployed archive is RETAIL, not run 6.** Checked 2026-08-18 21:50: rows 11196 and
+13738 of `vault/run/2026-07-29_221c13772c7a/Gw.dat` are byte-identical to `Gw.dat.retail`,
+and the file's mtime is 21:34 that day — another session restored the baseline. This
+paragraph claimed run 6 for hours after it stopped being true, which is the failure the top
+of `CLAUDE.md` is about. **Check before believing it**, and note the run directory is shared.
+
+**A8 IS STAGED AND NOT LAUNCHED** — `vault/exports/archivewrite/a4run8/Gw.a4run8.dat`, built
+by `a4stage8.py` (§15). Row 11196 re-compressed by OUR encoder to 1,011,244 B with a
+byte-identical 1,514,855 B payload; preflight 10/10, generations 6/6, 177,319 payload CRCs
+0 bad, size unchanged, one row changed, neighbours byte-identical. Deploy and launch are the
+owner's — the launch is the irreversible step.
 
 ```bash
 python C:\gd\Rurik\vault\research\archivewrite\a4stage6.py --retail
 ```
 
-Six staged archives exist under `vault/exports/archivewrite/` (a4, a4run2…a4run6), each
-4.2 GB and each rebuildable from its script. **Delete them when disk matters** — they are
-outputs, not inputs.
+and `a4stage8.py --retail` puts the baseline back. (That fenced command above still names
+`a4stage6.py`; either script's `--retail` restores the same file.)
 
-Nothing is running: no client, no server, no background task.
+**Seven** staged archives exist under `vault/exports/archivewrite/` (a4, a4run2…a4run6,
+**a4run8**), each 4.2 GB and each rebuildable from its script. **Delete them when disk
+matters** — they are outputs, not inputs. 270 GB was free on 2026-08-18.
+
+Nothing is running: no client, no server, no background task — **checked, not assumed**
+(`tasklist` shows no `Gw.exe`). But **other sessions share this machine**: one restored the
+run directory at 21:34 that day. Attribute before you touch, and never kill a process you
+have not attributed.
 
 ---
 
@@ -75,8 +90,11 @@ Nothing is running: no client, no server, no background task.
 | `datalloc` comp-8 gate | decodes instead of matching a two-byte marker — the row **creation** path | `test_datalloc.py`, 98→100 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
-`vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`), each with its prediction
-stated in its own docstring.
+`vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`, **`a4stage8.py`**), each with
+its prediction stated in its own docstring. They are gitignored by design, so they do not
+travel with a clone. **`a4stage8.py` takes `--toolkit` and PRINTS the tree and HEAD it
+loaded**; `a4stage6.py` hardcodes a foreign worktree 42 commits behind, which is the reason
+that argument exists.
 
 ---
 
