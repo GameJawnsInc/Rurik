@@ -2254,10 +2254,12 @@ is called done.
    standing on. **These two are one fix, not two** — the range gate is only correct once the
    walk exists, and shipping the gate alone would make the quest unplayable.
 
-**What is NOT done beyond those:** no reward is GRANTED (the grant protocol is 0 of 23,495 in
-the corpus and is its own arc), quest names are ArenaNet's string ids rather than ours
-(rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
-per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
+**What is NOT done beyond those:** no reward is GRANTED (the grant protocol is 0 of 22,524
+s2c in the corpus — this line said 23,495 until 2026-08-19, a denominator the study itself
+never used — and is its own arc), the quest name — authored 2026-08-19, string id 100552, see
+the Q2b paragraph below — has not yet been SEEN on a screen, and the giver/objective
+binding is by AGENT ID, which is per-connection and per-spawn — a probe-world binding, not
+a content one (R5's job).
 
 **RUNG Q1 LANDED 2026-08-16, and it was the arc's unbanked value.** Fifteen of the nineteen
 quest opcodes were **absent from `schema/overrides.json` entirely** — `QUEST_ADD`,
@@ -2364,12 +2366,17 @@ the next cheap probe. `framebus.py` prints the pairing and `test_framebus.py` as
 it (27 checks, floor 16); `0x0096`/`0x0097` get `why`-only schema rows per §9.4's
 restraint. `studies/quests/FINDINGS.md` §9.7.
 
-**Next offline, cheapest first, and the offline half is the short half. Q2b — author the
-NAME.** The description is ours and the name is still ArenaNet's `0x3D64`, so a quest we wrote
-announces itself in their words. Q0 went green 2026-08-15 (`studies/quests/AUTHORING.md` §1)
-and it was the only gate on this rung; `toolkit/mapdata/textwrite.py` already exists, is
-tested, and has 188 authored skill names on a retail screen behind it. The authoring half
-needs no client. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
+**Q2b's AUTHORING HALF RAN 2026-08-19.** `textwrite.py --set 200 "A First Errand"` wrote
+OUR name into text file 98, record 200 (string id 100552) of the reskin-roster archive —
+in place, journalled (`questname.journal`), read back exactly, neighbours and identity
+tier intact — and `content/quests.toml`'s `enc_name` now commits the bare id as the
+two-word varint `[0x8103, 0x0CC8]` (`codedstr.encode_id`), replacing ArenaNet's `0x3D64`
+placeholder. `textwrite.py` gained the generic `--set RECORD TEXT` source (the 188 skill
+names were a special case). **The SCREEN half is pending and needs one run**: the name
+renders only for a client reading an archive that holds record 200 — today that is the
+reskin-roster run dir, so the verify run pairs THAT client with the quest server flow
+(`--map 449`, the quest_name probe pattern, agent-pilotable: the tracker is fixed-position
+UI). **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
 known, and which one is wrong is a measurement nobody has taken.
 
 **Two runs were what the arc was waiting on; the loopback one RAN 2026-08-19 (the dwords
