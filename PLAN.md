@@ -1350,16 +1350,24 @@ DEBIT, mirror of `0x0140`'s credit, which refutes this arc's own "no server mess
 it". `handle_item_purchase` answers `GAME_CMSG 0x004D`: **pay, mint, place, confirm**.
 Tests: `test_playerbags.py` (18), `test_purchase.py` (22).
 
+**BOTH DIRECTIONS NOW WORK, and the round trip is on screen** (`20260819T173604`):
+buy at the quote, sell back at half, **2000 − 10 + 5 = 1995**, `Backpack (empty)`, Sell
+greyed. `handle_item_sale` answers `0x004A` with remove → pay → confirm, read by byte
+offset from all **eight** sales — and the trap it holds shut is that the sell request is
+NOT the buy message's shape: five fields against seven, price at index **4** against
+index 2, so reading the buy's index would credit 0 silently.
+
+**`0x00C3`'s CONTESTED row is CLOSED, on a positive result.** `0x00C3 [11, 0]` adds a
+**Buy/Sell tab pair** — it is what turns `0x00CA`'s buy-only panel into a merchant — so
+field 1 is a **transaction KIND**, the same 11 the client sends on `0x004A` and gets back
+on `0x00CC`. One enum, three opcodes, two directions. Upstream's `WINDOW_MERCHANT` is
+earned at last. The count reading rested entirely on all six corpus windows happening to
+stage eleven items.
+
 **NEXT, in cost order:**
-1. **`0x004A` SELL has no arm**, and its reply triple is already read off the corpus —
-   `0x00CC [11]` → `0x014D` item gone → `0x0140` credit. Same shape of work as the buy,
-   with the corpus carrying 8 examples rather than 1.
-2. **`0x00C3` field 1: count or type.** Survives now in retail's shape (n = 2, separate
-   sessions), so the separating run is cheap and safe: stage **five** items, send `[5, 0]`,
-   then `[11, 0]`. Count says the first is right; type says the reverse.
-3. **A purchase does not persist and stock is infinite** — ids come from a fixed base and
+1. **A purchase does not persist and stock is infinite** — ids come from a fixed base and
    slots from a per-connection cursor. Fine for probes, wrong for a world.
-4. **The level-up burst** is still unmined in `20260819T132414` (channel 52606, operator
+3. **The level-up burst** is still unmined in `20260819T132414` (channel 52606, operator
    notes at wire_t 227.6 and 278.5) — the transition §8 names as never once observed.
 
 
