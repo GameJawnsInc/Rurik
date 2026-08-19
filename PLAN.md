@@ -1331,6 +1331,51 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### Movement — the latch is FIXED; the teleport has a mechanism and one unrun experiment (2026-08-19)
+
+Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md), "The warp
+is CLOSED". Two separate bugs, and only one is fixed.
+
+**FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was
+measured from the very value it was preventing from being corrected, so once the
+model was wrong by more than 900 u it could never resynchronise — 36 consecutive
+refusals in one run, 21% of all reports. Scored over the **72** refusals the four
+harness runs actually printed, at 478 u/s (the game's most generous speed):
+**client right 71, guard right 0, undecidable 1.** The budget is now
+`max(900, 580·dt)` — a strict loosening — and the second consecutive refusal is
+adopted regardless. `test_position_trust.py`, floor 20.
+
+**NOT FIXED, and it is the bigger one.** The client teleports onto destinations
+*we* grant. Bit-exact (`14cd2b46`/`996ead45` in the click frame, our `0x0029`,
+and the snap alike), 2,844 u at 754 u/s with the character standing still on
+video, 11.594 s after the grant. Four such landings corpus-wide, **all four in
+the 113 granted clicks, none in the 218 refused**. Mechanism read out of the
+client: `0x0029` caches an arrival tick at `agent+0x48` and a syncPoint at
+`+0x9c`; at that tick `0x00600140` copies the syncPoint straight into the
+agent's position via the teleport primitive `0x006020B0`, with no path solve and
+no distance guard — and nothing clears it, because the client's own `0x0047` is
+send-only.
+
+**THE ONE THING THAT NEEDS THE OWNER — a run, and it is cheap.** `--stop-echo`
+is implemented and OFF (`b0cd014`). It answers each move-cancel with a
+zero-distance `0x0029` at the player's own reported position, which is what
+ArenaNet does in **70 of 88** live cases and which should overwrite the armed
+destination. Repro: click a far target across a plane boundary (a bridge or
+stairs), cancel part-way, then move on WASD and wait ~10–20 s.
+
+- **Prediction, stated first:** no teleport onto the cancelled destination.
+- **Refutation, just as clear:** a warp still landing bit-exactly on an earlier
+  granted point means overwriting the destination is *not* the mechanism and the
+  flag should come out.
+- Either way it is decided by `python toolkit/authsrv/test_position_trust.py`
+  staying green plus one capture; run with `--trace-move --stop-echo`.
+
+**Still open regardless of that run:** 13 grant-triggered displacements that do
+*not* land on a granted point (1 of 13 within 5 u, against a 1-in-80 null). The
+named instrument is a client-side poll of `agent+0x78`/`+0x88`/`+0x9c`/`+0x48`
+across a granted click — `toolkit/harness/keytap.py` already does ASLR-correct
+`ReadProcessMemory` in pure `ctypes`, so no new dependency.
+
 ### GAME_SMSG naming — 16 opcodes named and merged; 14 PARTIALs remain, priced (2026-08-18)
 
 [studies/smsgnames/FINDINGS.md](studies/smsgnames/FINDINGS.md) is the static reachable-handler
