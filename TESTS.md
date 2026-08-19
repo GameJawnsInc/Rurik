@@ -2272,6 +2272,35 @@ Every one of these, in the order they were written:
   §9 replays the capture. Floor **28**, the bare-machine subset, against a green
   **32** with `authsrv-20260819T114759-c1.jsonl` present; §9 declares
   `LEDGER.skip` without it. No client. ~1 s),
+  `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
+  actually predicts a warp, and the guard on the two instruments that reported
+  the wrong one. `warpscan.py` scored a big client step against the points we
+  had GRANTED and answered "NOT near any grant" for **10 of its 12** detections;
+  that line was the finding, not a puzzle -- the landing point sits on the
+  server-authoritative agent's glide path, because `movetap` reads the SYNC
+  array while the client reports from the copy it predicts and renders. And
+  `movetap` scored itself against `seconds * hz * 0.5`, half the REQUESTED rate,
+  while the reader sustains ~13 Hz against a default request of 50, so it
+  printed FAIL over the very run that overturned this arc's mechanism. §1 pins
+  the clock estimator: the capture stamps WHOLE SECONDS, so every sample reads
+  `floor(unix) - t`, the mean is biased low by half a second, and half a second
+  at 288 u/s is **144 units** -- the same size as the separation being measured,
+  which is why the max is taken and why the estimate must never exceed the
+  truth. §2 asserts a pair beyond `MAX_PAIR_GAP` is DROPPED rather than
+  stretched, `vaultpath.require_dir()`'s rule applied to time. §3 is the scorer
+  against a synthetic resync **and** against a control where both copies leap
+  together, so a large step exists and the separation across it does not move --
+  **that control was written VACUOUS**, its synthetic steps sitting below the
+  300 u threshold so `jumps` came back empty and `all([])` passed it having
+  judged nothing; the row count is asserted first now. §4 replays the pair that
+  established the mechanism (`movetap-20260819T171436` + `authsrv-20260819T171153-c1`):
+  183 pairs, 13 resync jumps, separation **587 u -> 22 u, a 96% collapse**, with
+  TWO things that could refute it -- pairing 7 s out of true reproduces only 34%,
+  and the alignment sweep must PEAK at the offset the 8,573 timestamps gave,
+  which was never fitted to maximise the headline. §5 asserts `movetap` now
+  calibrates its floor against measured capability and survives Ctrl+C with a
+  verdict. Floor **13**, the bare-machine subset, against a green **19** with
+  both captures; §4 declares `LEDGER.skip` without them. No client. ~2 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

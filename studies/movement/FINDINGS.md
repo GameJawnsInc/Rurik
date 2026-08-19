@@ -1905,3 +1905,33 @@ the operator's range observation both point that way, and nothing here establish
 2. **`warpscan` names resync events "TELEPORT ... NOT near any grant".** The detections
    are real events; the model behind the label is wrong. Its own "not near any grant"
    line was the evidence, sitting unread in the output for two runs.
+
+### The separation number, re-measured by the instrument (supersedes the hand analysis above)
+
+The table above was scored by hand, pairing each report with the nearest sample
+regardless of how far off it was and taking the clock offset from a single
+stamp. `toolkit/clientscan/movesync.py` does it properly -- offset estimated as
+`max(timegm(wall) - t)` over **8,573** whole-second stamps (truncation only ever
+loses fraction, so the max converges from below; the mean would sit half a
+second low, and half a second at 288 u/s is **144 units**), and any report more
+than 250 ms from a sample dropped rather than stretched.
+
+**183 pairs, 13 resync jumps, mean separation 587.0 u -> 22.3 u: a 96% collapse.**
+Carry these, not the 395.1 -> 119.7 (70%) above; the difference is entirely the
+pairing gate and the offset, and the hand figures are left in place only so the
+correction is visible. Post-jump separations are **1.0 to 59.5 u** -- the resync
+closes the gap almost completely, which the loose pairing had blurred.
+
+**Two things that could have refuted it and did not.** Pairing 7 s out of true
+collapses only **34%**, so the statistic does not survive its own shuffle. And
+the alignment sweep **peaks exactly at the offset the timestamps gave**
+(-1.0 s: 39%, -0.5: 85%, -0.25: 95%, **0.00: 96%**, +0.25: 86%, +0.5: 80%,
++1.0: 65%) -- the offset was derived from the stamps and never fitted to
+maximise the headline, so the peak landing there is an independent check that
+the two clocks are lined up.
+
+**Instrument note.** `warpscan.py` is not retired but it is now the secondary
+reading: it scores landing points against granted points, which is the wrong
+model for this event and is why 10 of its 12 detections said "NOT near any
+grant". `movesync.py` prints the PAIR COUNT before the verdict, for the same
+reason `warpscan` prints the TRIAL count.

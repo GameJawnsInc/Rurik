@@ -85,6 +85,15 @@ import pinned      # noqa: E402
 import vaultpath   # noqa: E402
 import agentprobe  # noqa: E402  (gw_pids only -- its ARRAY is a DIFFERENT struct)
 
+# The two absolute minimums, below which nothing is readable whatever the
+# reader's rate: a run has to have lasted long enough for the phenomenon to
+# occur and to hold enough samples to see it. Set from the shortest run in this
+# arc that produced a real finding (60.8 s, 786 samples) with a wide margin --
+# NOT from a guess, and deliberately far below it so this pair never becomes the
+# binding constraint. The rate floor in main() is the one that does the work.
+MIN_SPAN_SECONDS = 5.0
+MIN_SAMPLES = 40
+
 IMAGE_BASE = 0x00400000
 # _tls_index. The PE TLS directory's AddressOfIndex reads 0x00C0F300, and
 # 0x0047F660 -- the accessor every Agent-context read goes through -- is
@@ -375,6 +384,35 @@ def selftest():
     return 1 if bad else 0
 
 
+def calibrate(handle, agbase, ptr, reads=40):
+    """How fast can this reader ACTUALLY sample? Measured, before the run.
+
+    WHY THIS EXISTS. The floor used to be `seconds * hz * 0.5` -- half the
+    REQUESTED rate. But a full sample is one resolve plus ~20 cross-process
+    ReadProcessMemory calls, and on the owner's machine that sustains about
+    13 Hz against a default request of 50. So the floor could not be met by a
+    healthy run at the default flags, and run 20260819T171436 duly printed FAIL
+    over 786 samples that contained 304 re-arms, 7 arrivals and the measurement
+    that overturned this arc's mechanism. A floor that fires on every good run
+    is worse than no floor: it is how a REAL failure gets waved through.
+
+    The fix must not be "compute the floor from the achieved rate" -- that is
+    circular and could never fail, which is the other half of the same rule.
+    So capability is measured HERE, before the run, and the floor is set from
+    it. A run that then samples at half its own demonstrated capability really
+    did stall, and that is a finding.
+    """
+    t0 = time.perf_counter()
+    got = 0
+    for _ in range(reads):
+        if sample(handle, agbase, ptr) is not None:
+            got += 1
+    dt = time.perf_counter() - t0
+    if dt <= 0 or got == 0:
+        return None
+    return got / dt
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -417,13 +455,25 @@ def main():
     n = 0
     changes = 0
     last = None
-    t_end = time.time() + a.seconds
+    interrupted = False
+    t_start = time.time()
+    t_end = t_start + a.seconds
     period = 1.0 / a.hz
     try:
         with open(out, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({"kind": "head", "pid": pid, "exe": path,
                                  "hz": a.hz, "wall": stamp}) + "\n")
             _ctx, agbase, aid, ptr = resolve(pid, handle, base, verbose=True)
+            cap_hz = calibrate(handle, agbase, ptr)
+            target_hz = a.hz if cap_hz is None else min(a.hz, cap_hz)
+            if cap_hz is None:
+                print("could not calibrate the reader; floor falls back to the "
+                      "requested rate")
+            else:
+                print(f"reader capability {cap_hz:.1f} Hz (measured, 40 reads)"
+                      + (f" -- BELOW the requested {a.hz:.0f} Hz, so the floor "
+                         f"is set from {target_hz:.1f}"
+                         if cap_hz < a.hz * 0.95 else ""))
             print(f"polling agent {aid} at {a.hz:.0f} Hz for {a.seconds:.0f}s "
                   f"-> {out}\n")
             while time.time() < t_end:
@@ -451,20 +501,45 @@ def main():
                           f"  target {s['target'][:2]} glide={s['glide']}")
                 last = s
                 time.sleep(period)
+    except KeyboardInterrupt:
+        # Ctrl+C IS THE NORMAL WAY TO END A RUN. The operator stops when the
+        # thing they were reproducing has happened, which is usually before
+        # --seconds elapses. This used to escape as a traceback, so the summary
+        # and the floor verdict never printed and the operator was left holding
+        # a file with no idea whether it measured anything.
+        interrupted = True
+        print("\n  (interrupted -- scoring what was captured)")
     finally:
         import ctypes
         ctypes.WinDLL("kernel32").CloseHandle(handle)
 
-    print(f"\n{n} samples, {changes} change(s) to +0x48 -> {out}")
-    # A RUN THAT MEASURED NOTHING FAILED. A poller that resolved no agent, or
-    # sampled a handful of times, must not look like a clean null -- that is the
-    # exact failure mode two runs of this investigation already hit.
-    floor = int(a.seconds * a.hz * 0.5)
-    if n < floor:
-        print(f"FAIL: {n} samples is below the floor of {floor} "
-              f"(half the requested rate). This run measured nothing; do not "
-              f"read a null out of it.")
+    elapsed = max(1e-9, time.time() - t_start)
+    rate = n / elapsed
+    print(f"\n{n} samples over {elapsed:.1f}s = {rate:.1f} Hz, "
+          f"{changes} change(s) to +0x48 -> {out}")
+    if interrupted:
+        print(f"  stopped early: {elapsed:.1f}s of the {a.seconds:.0f}s "
+              f"requested. That is not a failure -- the floor below is scored "
+              f"against the time actually run.")
+    # A RUN THAT MEASURED NOTHING FAILED. Two things can make that true and they
+    # are different: the poller never resolved an agent / sampled a handful of
+    # times, or it ran for no time at all. Score them separately, and score the
+    # rate against what this reader DEMONSTRATED it can do rather than against
+    # what was asked for -- see calibrate().
+    floor = int(elapsed * target_hz * 0.5)
+    if elapsed < MIN_SPAN_SECONDS or n < MIN_SAMPLES:
+        print(f"FAIL: {n} samples over {elapsed:.1f}s is too little to read "
+              f"anything from (need {MIN_SAMPLES} samples and "
+              f"{MIN_SPAN_SECONDS:.0f}s). This run measured nothing.")
         return 1
+    if n < floor:
+        print(f"FAIL: {n} samples is below the floor of {floor} -- half of "
+              f"{target_hz:.1f} Hz over {elapsed:.1f}s, and this reader "
+              f"measured itself at {target_hz:.1f} Hz before the run. It "
+              f"stalled; do not read a null out of it.")
+        return 1
+    print(f"  floor {floor} met ({n} samples at half of {target_hz:.1f} Hz "
+          f"over {elapsed:.1f}s).")
     return 0
 
 
