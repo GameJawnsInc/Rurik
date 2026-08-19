@@ -3994,6 +3994,30 @@ def _completion_gate_steps():
     ]
 
 
+def _completion_reward_steps():
+    """The two arms 20260819T094757 could not measure: the crash at arm 3
+    (GmQuestComplete.cpp:729, the completionFlagsGained gate -- the ladder's
+    own answer) froze the client before the reward-triple and 0x0097 arms
+    landed, so they were sent into a modal dialog and measured nothing. Same
+    values, crash-proof order: the known-safe flag bit rides along.
+    """
+    return [
+        Step(12.0, 0x0096, [1, 0, 111, 222, 333],
+             "f1 = mission bit plus the simple-reward triple as sentinels",
+             "the scene plus a REWARD LINE reading 111/222/333 -- a rendered "
+             "number names its field, quest_panel's precedent. The record "
+             "the handler builds is {tag 4, f3, f5, f4}: f5 rides the middle "
+             "slot, so watch the ORDER of the rendered numbers."),
+        Step(20.0, 0x0097,
+             [1, questdefs.coded_literal("Rurik", "template", limit=127)],
+             "0x0097 cold: u8 = 1, a plain authored literal in the string",
+             "LAST ON PURPOSE: the handler posts over a null stash and the "
+             "sweep's closed-enum assert may fire regardless of our u8. A "
+             "render is a result; an assert NAMING the gate is also a "
+             "result; the run ends either way."),
+    ]
+
+
 def _quest_name_authored_steps(origin):
     """Q2b's screen half: does OUR OWN string render where Ascalon's did?
 
@@ -5124,6 +5148,23 @@ PROBES = {
              "predicts, and the client's own 0x8012 for 1463 was answered "
              "with the template 0x004C mid-run. Rung Q2b closed end to end. "
              "Kept runnable as the authored-name calibration.",
+    ),
+    "completion_rewards": lambda a, o: Probe(
+        question="Does 0x0096's tag-4 simple-reward triple render its "
+                 "sentinels, and what does a cold 0x0097 do?",
+        predicts="Arm 1 draws the mission-complete scene (proven repeatable "
+                 "by 20260819T094757's arms 1-2) PLUS a reward line reading "
+                 "111/222/333 in some order -- the order names f3/f4/f5, "
+                 "remembering the handler builds {4, f3, f5, f4}. Arm 2 "
+                 "(0x0097 cold) renders text or dies on the closed-enum/"
+                 "null-stash gate with an assert naming it; either is the "
+                 "answer and the run may end there.",
+        steps=_completion_reward_steps(),
+        note="Caged loopback, any map, no clicks, actions '0:play', "
+             "--shots 1 --hold 60. The follow-up to completion_gates, whose "
+             "arm-3 crash (GmQuestComplete.cpp:729 -- the gate answer) "
+             "blocked these two arms; here the known-safe mission bit rides "
+             "with the triple so nothing crashes before the readout.",
     ),
     "completion_gates": lambda a, o: Probe(
         question="Which field feeds 0x0096's completion-flag gate, and does "

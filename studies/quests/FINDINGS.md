@@ -1396,6 +1396,49 @@ their wiring, not their effect); `0x006C`'s row records its name/wiring TENSION
 (a chest-labelled burst feeding the quest-completion band) rather than resolving it.
 Build scope: these VAs are 38797 measurements, not re-checked on 38833/38519.
 
+#### 9.8 The ladder ran: `0x0096` is MISSION_COMPLETE, its fields decoded from the screen (2026-08-19)
+
+The loopback ladder §9.7 named as the cheap next probe ran the same day — two probes,
+`completion_gates` (five arms) then `completion_rewards` (two arms, the re-fire of the
+two the first run's crash blocked). Both had their bodies disassembled first, so the
+arms were informed rather than blind. What the screen returned:
+
+- **`0x0096` IS the mission-complete message**, and the client says so in its own crash
+  dump: the assert class is `UiMsgQuestCompleteMissionNonMedal`. One send with a single
+  flag bit draws the **entire 3D victory scene** — the "underfed render" caveat (one of
+  five frames) is now retired for this opcode; `0x0096` alone is sufficient.
+- **Field 1 is `completionFlagsGained`, a bit mask, decoded bit-by-bit in the client's
+  own words**: `bit0` → chat "Your party completed the mission.", `bit1` → "Your party
+  completed the bonus goal." The gate is `msg.completionFlagsGained & (PRIMARY |
+  SECONDARY)` at `GmQuestComplete.cpp:729` — arm 3 (f2 set, **f1 = 0**) crashed there
+  while arms 1–2 (f1 bits) rendered, **pinning the gate to f1**. f2's role is
+  forwarded-not-gated and stays UNVERIFIED.
+- **The simple-reward triple renders and DECODES from the screen.** Arm with
+  `[f1=1, f3=111, f4=222, f5=333]` drew "You have earned **111 experience, 222 gold, and
+  333 skill points!**" (centre toast + chat). The handler builds the record `{tag 4, f3,
+  f5, f4}` — tag 4 is GmQuestComplete's `isSimpleReward` — so the render order
+  experience/gold/skill-points gives **f3 = experience, f5 = gold, f4 = skill points**.
+  Note f5 is the MIDDLE rendered field, exactly the slot-order trap the disassembly
+  flagged: reading the wire fields left-to-right would have mislabelled gold and skill
+  points.
+- **`0x0097` cold dies at `GmQuestComplete.cpp:678`, `"No valid case for switch variable
+  ''"`** — the u8 selects a closed enum and the empty stash string (the handler posts
+  over two context values `[edi+0x5C]`/`[edi+0x64]` that some earlier message deposits,
+  null on a cold fire) is not a member. Confirms the static read: `0x0097` is not a
+  standalone message; it renders a completion sub-panel keyed by a u8 over state a prior
+  message stages. Its name stays abstained.
+
+**This is still DISPLAY, not GRANT** — the same line the `quest_panel`/§9.6 run drew: the
+reward toast reads back whatever we send, the XP bar and level chip do not move. What §9.8
+adds is that the display half of the completion scene is now fully mapped from our own
+server: `0x004E` (three reward dwords, §9.6), `0x0096` (mission flags + a second reward
+triple, this section), with `0x0097`'s enum gate located and `0x006C`/`0x00FB` still
+screen-name-only. The grant — client state actually moving — remains the live-capture
+question, unchanged. Schema: `0x0096` earns the name **MISSION_COMPLETE** (measured
+effect, not a guessed one — the §9.4 bar is cleared); `0x0097` keeps its `why`-only row
+with the enum gate recorded. Two probes kept runnable as the completion-scene calibration.
+Captures `20260819T094757` (gates) and `20260819T095219` (rewards).
+
 #### Reproducing §9
 
 ```bash
@@ -1404,7 +1447,10 @@ cd <tree> && python toolkit/clientscan/framebus.py
 cd <tree> && python toolkit/clientscan/framebus.py --at 0x0080F670 --end 0x0080F6F0
 cd <tree> && python toolkit/clientscan/framebus.py --at 0x00810AF0 --end 0x00810B61
 cd <tree> && python toolkit/clientscan/msghandler.py 0x006C --follow --limit 40
+cd <tree> && python toolkit/clientscan/msghandler.py 0x0096 --follow --annotate --limit 60
 cd <tree> && python toolkit/clientscan/test_framebus.py
 cd <tree> && python toolkit/authsrv/test_dispatch.py
 cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 120 --game-args '--probe quest_panel'
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 90 --game-args '--probe completion_gates'
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 60 --game-args '--probe completion_rewards'
 ```

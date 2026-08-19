@@ -2391,6 +2391,21 @@ the next cheap probe. `framebus.py` prints the pairing and `test_framebus.py` as
 it (27 checks, floor 16); `0x0096`/`0x0097` get `why`-only schema rows per §9.4's
 restraint. `studies/quests/FINDINGS.md` §9.7.
 
+**AND THAT LADDER RAN THE SAME DAY — `0x0096` IS MISSION_COMPLETE (§9.8).** Two probes,
+`completion_gates` then `completion_rewards`, bodies disassembled first: one flag bit
+draws the whole 3D scene (so `0x0096` alone suffices — the "underfed" caveat retires for
+it), and the client's own crash class `UiMsgQuestCompleteMissionNonMedal` IS the name.
+Field 1 = `completionFlagsGained` (bit0 "completed the mission", bit1 "completed the
+bonus goal", gate at `GmQuestComplete.cpp:729`, pinned to f1 by the f1=0 crash); fields
+3/4/5 = the reward triple that rendered **"111 experience, 222 gold, 333 skill points"**,
+decoding f3=xp / f5=gold (middle slot, record `{4,f3,f5,f4}`) / f4=skill points. `0x0097`
+cold dies at `:678` ("No valid case for switch") — it is a sub-panel keyed by a u8 over
+state a PRIOR completion message stages, name still abstained. **Still DISPLAY not GRANT**
+(the toast reads back what we send; XP bar unmoved). The completion DISPLAY is now fully
+mapped from our server; the grant and `0x0097`'s priming message are the live-capture
+remainder. `0x0096` earns its name in overrides.json (measured effect, §9.4 bar cleared).
+`studies/quests/FINDINGS.md` §9.8.
+
 **Q2b's AUTHORING HALF RAN 2026-08-19.** `textwrite.py --set 200 "A First Errand"` wrote
 OUR name into text file 98, record 200 (string id 100552) of the reskin-roster archive —
 in place, journalled (`questname.journal`), read back exactly, neighbours and identity
