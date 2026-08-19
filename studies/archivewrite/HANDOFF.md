@@ -41,37 +41,37 @@ remaining risk sits — see §10.2's block-overhead arithmetic before pricing A7
 
 ## 2. State of the machine
 
-**The deployed archive is RETAIL, not run 6.** Checked 2026-08-18 21:50: rows 11196 and
-13738 of `vault/run/2026-07-29_221c13772c7a/Gw.dat` are byte-identical to `Gw.dat.retail`,
-and the file's mtime is 21:34 that day — another session restored the baseline. This
-paragraph claimed run 6 for hours after it stopped being true, which is the failure the top
-of `CLAUDE.md` is about. **Check before believing it**, and note the run directory is shared.
+**DEPLOYED: RETAIL.** End of 2026-08-18, **verified rather than assumed** — row 11196 of
+`vault/run/2026-07-29_221c13772c7a/Gw.dat` is back to 1,029,564 B / crc `0xf862d5c4`, five
+key rows are byte-identical to `Gw.dat.retail`, preflight 10/10, 177,319 payload CRCs 0 bad,
+4,198,489,600 B. **Nothing is running**: no client, no server, no background task (`tasklist`
+shows no `Gw.exe`).
 
-**A8 IS GREEN AND THE A8 ARCHIVE IS DEPLOYED** — §16. Launched 2026-08-18 22:16 on loopback,
-build 38797, agent-driven with the owner's go-ahead. `RUN VERDICT: PASS`, 8 of 8 checkpoints,
-**no assert anywhere**. The Hatcher walked, attacked and cast for the full 150 s hold while
-row 11196 sat in the archive **compressed by us**. After the launch: preflight 10/10, CRC
-sweep 177,319 payloads 0 bad, size unchanged, **row 11196 still 1,011,244 B at compression 8
-decompressing to 1,514,855 B** — not repaired, not discarded. The only rows that moved were
-8315 and 8316, the client's own scratch rows, reproducing `studies/datwrite` §6.
+That line has been wrong before and it is cheap to re-check, so **re-check it**: this file
+claimed "the deployed archive is run 6" for hours after another session had restored the
+baseline at 21:34 that evening, which is exactly the staleness the top of `CLAUDE.md` is
+about. **The run directory is shared.** Attribute before you touch, and never kill a process
+you have not attributed.
 
-**`a4stage8.py --retail` restores the baseline.** The run directory is shared.
+**A8 ran against this machine earlier the same evening and PASSED** — §16, launched 22:16,
+loopback, build 38797. `RUN VERDICT: PASS`, 8 of 8 checkpoints, **no assert anywhere**; the
+Hatcher walked, attacked and cast for the full 150 s hold while row 11196 sat in the archive
+**compressed by us**, and the row came through the launch intact. Retail was restored
+afterwards, which is why the state above reads as it does.
+
+Swapping either way, with the client closed:
 
 ```bash
-python C:\gd\Rurik\vault\research\archivewrite\a4stage6.py --retail
+python C:\gd\Rurik\vault\research\archivewrite\a4stage8.py --deploy
 ```
 
-and `a4stage8.py --retail` puts the baseline back. (That fenced command above still names
-`a4stage6.py`; either script's `--retail` restores the same file.)
+and `--retail` puts the baseline back. (`a4stage6.py --retail` restores the same file; either
+script works, and both re-run the full gate sweep on the way in and out.)
 
 **Seven** staged archives exist under `vault/exports/archivewrite/` (a4, a4run2…a4run6,
-**a4run8**), each 4.2 GB and each rebuildable from its script. **Delete them when disk
-matters** — they are outputs, not inputs. 270 GB was free on 2026-08-18.
-
-Nothing is running: no client, no server, no background task — **checked, not assumed**
-(`tasklist` shows no `Gw.exe`). But **other sessions share this machine**: one restored the
-run directory at 21:34 that day. Attribute before you touch, and never kill a process you
-have not attributed.
+**a4run8** — the A8 one, still built and ready to redeploy), each 4.2 GB and each rebuildable
+from its script. **Delete them when disk matters** — they are outputs, not inputs. 270 GB was
+free on 2026-08-18.
 
 ---
 
