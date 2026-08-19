@@ -882,6 +882,102 @@
    "19": {
     "opcode": 19,
     "why": "NOT NAMED ON PURPOSE, 2026-08-16, rung Q1. Layout is [msg_header] alone -- no payload at all -- and ZERO arrivals in 971 c2s messages. A payload-less opcode in the quest range supports 'it clears something' and cannot say what; 'QUEST_CLEAR_ACTIVE' is a plausible reading of a blank message and nothing more. What would settle it: one labelled run that clears the tracked quest in the log. studies/quests/FINDINGS.md 2.1."
+   },
+   "21": {
+    "opcode": 21,
+    "table": "GAME_CMSG_0021",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 21
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_AI_MODE",
+    "name_confidence": "high",
+    "why": "OBSERVED 2026-08-19, agent-piloted clicks on the open commander panel (studies/pvpui/FINDINGS.md 28.5, capture vault/captures/gamesrv/authsrv-20260819T090943-c1.jsonl): each of the three stance buttons emitted exactly one frame, [agent=200 (the hero's agent), dword] with the dword tracking the click order Guard=1, Avoid=2, Fight=0 -- the same enum 0x0072's own format string names aiMode (CHAR_AI_MODES == 3). The client does not move its own stance ring on click; it waits for the server. Named HERO because only hero agents were observed; the panel class is GmPetCommander, so pets may share it -- untested."
+   },
+   "26": {
+    "opcode": 26,
+    "table": "GAME_CMSG_0026",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 26
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_FLAG_PLACE",
+    "name_confidence": "medium",
+    "why": "OBSERVED 2026-08-19, one agent-piloted arm (pvpui 28.5, capture vault/captures/gamesrv/authsrv-20260819T093801-c1.jsonl): clicking the compass's hero-1 flag widget then the ground emitted exactly one of these -- [agent=200 (the hero's agent), ground coords, plane] -- and the ground click was consumed (no MOVE_TO_COORD). The client drew no flag afterward: rendering waits for a server echo this server does not send yet. Confidence medium, n=1: the cancel/recall variant and whether the same opcode re-places an existing flag are untested."
+   },
+   "27": {
+    "opcode": 27,
+    "table": "GAME_CMSG_0027",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 27
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PARTY_FLAG_PLACE",
+    "name_confidence": "medium",
+    "why": "OBSERVED 2026-08-19, one agent-piloted arm (pvpui 28.5, same capture as opcode 26): clicking the compass's all-party flag widget then the ground emitted exactly one of these -- [ground coords, plane], no agent, which is what distinguishes it from 26. Same caveats: n=1, no cancel arm, no render without a server echo. Not to be confused with authsrv.py's GAME_CMSG_ATTACK_SKILL = 0x0027, which is 39 decimal; this key is 27 decimal = 0x001B."
+   },
+   "22": {
+    "opcode": 22,
+    "table": "GAME_CMSG_0022",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 22
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "HERO_LOCK_TARGET",
+    "name_confidence": "high",
+    "why": "OBSERVED static + CONFIRMED live. Static (38833): send wrapper 0x0091FD60 via thunk 0x0080DFD0, from GmAgentCommander frame proc 0x004FBAF0's msg-0x24 handler 0x004FBD20; the lock branch reads the selected target via AvApi 0x007E1090. Live 2026-08-19 (run 20260819T105652): captured as [200, 10] with a foe selected; once the server echoed 0x0063 the crosshair lit gold and the tooltip named the locked target. THE TOGGLE-OFF IS THIS SAME OPCODE WITH TARGET 0, not 0x0017 -- captured, and explained at 0x004FBDB7: with the bundle store clear, the handler re-reads hero record +0x20 and branches to 0x0016 [hero, 0] when it is non-zero. An earlier reading that paired this with 0x0017 was refuted 2026-08-19; see studies/pvpui/FINDINGS.md 28.11."
    }
   },
   "GAME_SMSG": {
@@ -1375,7 +1471,7 @@
    "78": {
     "opcode": 78,
     "name": "QUEST_COMPLETE_PANEL",
-    "why": "RENAMED 2026-08-16 from VICTORY_BANNER. Both readings are kept below because they are the same thing seen from two ends, and the rename swaps a name taken from an APPEARANCE for one taken from the client's own WIRING. PRIOR NAME, which stands as an observation: OBSERVED on screen 20260813T123003, one opcode fired at a fresh client, screenshots joined to the send by wall clock, and the operator wrote \"some sort of victory flag animation UI in the center of the screen\" -- filed medium at the time precisely because a name from a picture of an effect is a guess about purpose (studies/smsgsweep/FINDINGS.md 7.6). WHAT IS NEW, 2026-08-16: MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F670 does push 0x10000155 at 0x0080F6C7 followed by call 0x00633D70, and 0x10000155 is the first id of the band GmQuestComplete subscribes to. No int3 padding anywhere in [0x0080F670, 0x0080F6C7), so the push site is inside this handler and not in a helper wedged between two bodies -- that containment was the failure mode worth checking, because the join was otherwise arithmetic across two tables. GmQuestComplete is a 3D scene rather than a dialog (:138 modelFileName, :155 !m_light), which is what a centre-screen banner animation looks like from outside. Two lineages that share no ancestry, one static and one on-screen, so the naming is CORROBORATED. This also retires studies/quests/FINDINGS.md 7.6's \"Nothing static will substitute\": half the join was already sitting in that same document's 1.6 table, unjoined. ZERO wire samples remain -- what the panel EXPECTS in its three dwords is still unknown, and that is the open half.",
+    "why": "RENAMED 2026-08-16 from VICTORY_BANNER. Both readings are kept below because they are the same thing seen from two ends, and the rename swaps a name taken from an APPEARANCE for one taken from the client's own WIRING. PRIOR NAME, which stands as an observation: OBSERVED on screen 20260813T123003, one opcode fired at a fresh client, screenshots joined to the send by wall clock, and the operator wrote \"some sort of victory flag animation UI in the center of the screen\" -- filed medium at the time precisely because a name from a picture of an effect is a guess about purpose (studies/smsgsweep/FINDINGS.md 7.6). WHAT IS NEW, 2026-08-16: MEASURED from the pinned pristine build 38797 image (sha256 checked against toolkit/clientscan/pinned.py) by a push-imm32 scan over each handler body for ids in 0x1000014C..0x1000015F, each classified by the call that follows: 0x00633D70 post, 0x00633BD0 subscribe. Body 0x0080F670 does push 0x10000155 at 0x0080F6C7 followed by call 0x00633D70, and 0x10000155 is the first id of the band GmQuestComplete subscribes to. No int3 padding anywhere in [0x0080F670, 0x0080F6C7), so the push site is inside this handler and not in a helper wedged between two bodies -- that containment was the failure mode worth checking, because the join was otherwise arithmetic across two tables. GmQuestComplete is a 3D scene rather than a dialog (:138 modelFileName, :155 !m_light), which is what a centre-screen banner animation looks like from outside. Two lineages that share no ancestry, one static and one on-screen, so the naming is CORROBORATED. This also retires studies/quests/FINDINGS.md 7.6's \"Nothing static will substitute\": half the join was already sitting in that same document's 1.6 table, unjoined. MEASURED 2026-08-19 (loopback harness 20260819T071548, --probe quest_panel, five sentinel arms): the three dwords are [experience, gold, skill points], read from the panel's own toast -- the (111, 222, 333) arm rendered 'You have earned 111 experience, 222 gold, and 333 skill points!'. Zero-valued fields are OMITTED from the sentence, which is why the all-zero 2026-08-13 firing showed a silent banner; values render unsigned at max dword with no assert, and the panel re-fires per send. ZERO retail wire samples still -- the fields are what the panel DISPLAYS, and whether retail pairs the display with a separate state-changing grant is the remaining open half (the Level chip read 1 beside a 4,294,967,295-experience toast). studies/quests/FINDINGS.md 9.6.",
     "name_confidence": "high"
    },
    "80": {
@@ -1547,7 +1643,7 @@
    "108": {
     "opcode": 108,
     "name": "CHEST_REWARD_EFFECT",
-    "why": "OBSERVED on screen, 20260813T123733. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"dungeon chest animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "why": "OBSERVED on screen, 20260813T123733. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"dungeon chest animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6. MEASURED 2026-08-19 (studies/quests/FINDINGS.md 9.7): the receive table's stub 0x0091E180 calls body 0x00810AF0, which does push 0x10000156 at 0x00810B47 / call 0x00633D70 (post) -- the second id of the band GmQuestComplete subscribes to, and the same [u32,u32,u32] shape as 0x004E, its instruction-identical twin. The name and the wiring are now in TENSION, recorded rather than resolved: the screen said a dungeon-chest burst, the frame feeds the QUEST-completion scene's band -- the burst may be the completion scene's world-side effect rather than anything about chests. The name stays medium and unrenamed until behaviour under real payloads separates the two readings.",
     "name_confidence": "medium"
    },
    "110": {
@@ -1715,6 +1811,23 @@
     "why": "Our table stops one field short. Binary cmds[] @VA 0x00bffffc (file 0x7feffc) is [0x00000092, 0x00000404, 0x00000404, 0x00000204]; MsgFormatRecv entry @VA 0x00bc93e8 (file 0x7c83e8) statically holds count=4 and the next cmds[] array begins exactly 4 dwords later. Initializer at VA 0x00464730-0x0046474e copies [0x00bff8cc]=0x404, [0x00bff7d8]=0x404, [0x00bff888]=0x204, all statically present. cmd 0x204 = type 4, count 2 = a 2-byte unsigned int (our `word`). We are missing that trailing word: 12 bytes on the wire, not 10. NAMED 2026-08-14 from the binary, at MEDIUM because the mechanism is OBSERVED and the WORD is not ArenaNet's: `ping` occurs zero times in all 19,758 readable asserts, so the name comes from GWW (which documents a compass ping as a coloured ripple circle) rather than from the image. THE MECHANISM: handler 0x0091EAB0 reads field 1 as TWO signed int16 out of one dword (0x0091EAB9 / 0x0091EAC3, low half first) -- the identical knot encoding GAME_CMSG 0x002B and GAME_SMSG 0x0091 use, which independently corroborates THIS entry's own trailing-word correction from a message the field-list work never touched -- posts frame message 0x1000009F via 0x00812180, and Compass.cpp subscribes to it at 0x008BB5E4, one line after 0x1000009E's. That reaches 0x008BF160, which multiplies both halves by the terrain cell pitch (the double 96.0 at 0x0094DE10) and calls 0x008BE5D0, the ping-ripple constructor (max 8 concurrent, 0x008BE5D6 `cmp [esi+0xa4],8`). RECONSTRUCTION on the remaining two fields, stated as such: field 2 lands in the ripple's [+8] slot, where a locally-originated ping passes the global at 0x00BFAC24 whose STATIC INITIALISER is 0xFFFF0000 -- opaque red -- so it reads as a colour, with the caveat msgshape.py's docstring is about, that a .data initialiser can be overwritten at load; and field 3 is compared against 1 at 0x008BE61D, where equality SKIPS the ping sound at 0x008BE64A, so it reads as a silent flag whose other values are UNVERIFIED. Live count 0 of 22,524, expected for a solo operator.",
     "name": "COMPASS_PING",
     "name_confidence": "medium"
+   },
+   "150": {
+    "opcode": 150,
+    "name": "MISSION_COMPLETE",
+    "why": "MEASURED end to end 2026-08-19 (studies/quests/FINDINGS.md 9.7 and 9.8). WIRING: stub 0x0091EBA0 calls body 0x008123E0, which posts frame 0x10000158 at 0x00812473 / call 0x00633D70 into the band GmQuestComplete subscribes to (note the SWAP: 0x0096 posts 0x10000158 while 0x0097 posts 0x10000157 -- frame-id order does not follow opcode order). EFFECT, rendered at a caged client (probes completion_gates/completion_rewards): one send with a single flag bit draws the entire 3D mission-complete scene by itself. The assert class in the client's own crash dump is UiMsgQuestCompleteMissionNonMedal, which is the name. Shape [u32 x5], wire 22. Field 1 is completionFlagsGained, a bit mask gated by the client at GmQuestComplete.cpp:729 (msg.completionFlagsGained & (PRIMARY|SECONDARY)): bit0 renders 'Your party completed the mission.', bit1 'Your party completed the bonus goal.'; f1=0 crashes the gate (arm 3), so the gate reads f1 (f2 forwarded, role UNVERIFIED). Fields 3/4/5 are the simple-reward triple (handler builds record {tag 4, f3, f5, f4}, tag 4 = isSimpleReward): [f3,f4,f5] = [111,222,333] rendered 'You have earned 111 experience, 222 gold, and 333 skill points!', so f3=experience, f5=gold (MIDDLE render slot), f4=skill points. This is DISPLAY not GRANT -- the toast reads back what we send, the XP bar does not move. 0 of 22,524 live; the name is measured effect, not a screenshot guess."
+   },
+   "151": {
+    "opcode": 151,
+    "why": "NOT NAMED ON PURPOSE, but its frame-bus role is MEASURED 2026-08-19 (studies/quests/FINDINGS.md 9.7): stub 0x0091EBD0 calls body 0x00812490, which posts frame 0x10000157 at 0x008124C8 -- the third id of GmQuestComplete's band (see 0x0096's row for the swap). Shape [u8, string16(128)], wire 261: the ONE completion-family message that carries a string, and it CONSUMES what 0x0098 staged (see that row). Its u8 is msg.medal, bounded by GmQuestComplete.cpp:611 'msg.medal < CHAR_MISSION_MEDALS' with the downstream switch accepting {1,2,3}. CORRECTED 2026-08-19 (FINDINGS 9.9), and the superseded reading is worth knowing because it was ours: a cold fire crashed at GmQuestComplete.cpp:678 'No valid case for switch variable', which this row briefly attributed to an unstaged stash. It is not -- that switch is loaded once at 0x0052F935 from s_missionClientData[current_map_id]+0x4 (the client's own per-mission table; accessor 0x005A8580, map-id getter 0x0084D9C0, both already named in studies/minimap), its valid cases are {2,4,5}, and it never reads the posted record. The crash was THE MAP: that run stood on a world-1 map. Name still abstained: the render is gated on a mission class we have not yet stood in. 0 of 22,524 live. NAMED 2026-08-19 on MEASURED EFFECT (FINDINGS 9.10, harness 20260819T111130, map 449): the correction above was tested with the SAME payload that crashed, changing only the map, and it rendered -- our own authored string as a centre toast and chat line over a medal emblem, no assert. The u8 medal selects the emblem (1/2/3 each drew a different device). It consumes what 0x0098 staged: the reward line appears only after a push. Still DISPLAY, not grant -- the Level chip read 1 through all five arms.",
+    "name": "MISSION_COMPLETE_PANEL",
+    "name_confidence": "high"
+   },
+   "152": {
+    "opcode": 152,
+    "why": "NOT NAMED ON PURPOSE, but its mechanism is MEASURED 2026-08-19 (studies/quests/FINDINGS.md 9.9). This opcode appears in NO study before that date. Stub 0x0091EBF0 -> body 0x00812510, which is an INLINED ArenaNet Array<T> push/grow onto the array whose header sits at ctx[0x2c]+0x5C/+0x60/+0x64 = {data, capacity, count} (+0x68 is the growth chunk, written by the RTL grower as [ebx+0] and invisible to a --field scan). Element stride 0x20, four dwords written per push, confirmed by three independent shl ,5 sites including one in the consumer. codescan --xrefs finds this body is the array's ONLY writer image-wide. GAME_SMSG 0x0097 then reads count and data, posts them to GmQuestComplete's frame 0x10000157, frees the buffer and zeroes the header -- so 0x0098 STAGES reward lines and 0x0097 CONSUMES them, which is the completion protocol's real shape: N appends, then one consume. Field d0 is a reward TYPE tag: the consumer reads it at 0x0052F084 and compares against 4 for isSimpleReward, and assert :246 '!(isSimpleReward && rewardCount > 1)' bounds that case to exactly one element. Shape [u8,u32,u32,u32], wire 15, matching the four fields the stub pushes. 0 of 22,524 live -- the whole completion family is. A name would describe the plumbing rather than the effect (the 0x004B precedent); what would settle it is the staged loopback run (probe completion_panel) reading which rendered slot each of d1/d2/d3 lands in. NAMED 2026-08-19 on MEASURED EFFECT (FINDINGS 9.10): each push draws nothing itself (0.0015-0.002 screen delta, idle animation) and the following 0x0097 renders the reward line, so the append/consume pair is OBSERVED. FIELD ORDER, and it swaps: sent [d0,111,222,333] rendered '111 experience, 333 gold, 222 skill points'; sent [d0,444,555,666] rendered '444 experience, 666 gold, 555 skill points'. So d1=experience, d2=skill points, d3=gold -- the middle RENDERED value is the LAST wire field, the identical slot-swap as 0x0096's {tag,f3,f5,f4}, now measured in two opcodes rather than inferred in one. d0 selects the SENTENCE: tag 1 renders 'the Standard Reward for <map name>! It is worth ...' (the client resolving the same mission-table row the :678 gate reads, which corroborates that gate from a second direction), tag 4 renders the bare 'You have earned ...!' -- isSimpleReward on screen, matching the static cmp eax,4 exactly.",
+    "name": "MISSION_REWARD_ADD",
+    "name_confidence": "high"
    },
    "155": {
     "opcode": 155,
@@ -2068,7 +2181,7 @@
    "251": {
     "opcode": 251,
     "name": "HARD_MODE_SUCCESS_BANNER",
-    "why": "OBSERVED on screen, 20260813T132453. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"hard mode mission success animation UI in center of screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "why": "OBSERVED on screen, 20260813T132453. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"hard mode mission success animation UI in center of screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6. MEASURED 2026-08-19 (studies/quests/FINDINGS.md 9.7): stub 0x0091F9D0 calls body 0x00815260, which posts frame 0x10000159 at 0x0081529E -- the last id of the band GmQuestComplete subscribes to. Consistent with the screen name (a mission-success banner IS a completion). Shape [u16,u32,u32], wire 12. Still 0 of 22,524 live.",
     "name_confidence": "medium"
    },
    "253": {
@@ -2460,6 +2573,287 @@
     "name": "MISSION_ENTRY_CONFIRM",
     "why": "OBSERVED on screen, 20260813T144929. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"mission entry screen \"Your party has characters from another campaign. Are you sure you wish to enter this mission?\"\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
     "name_confidence": "high"
+   },
+   "98": {
+    "opcode": 98,
+    "table": "GAME_SMSG_0098",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 98
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "HERO_AI_MODE_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E060 (38833) -> ChCliApi wrapper 0x008107A0 -> ChCliHero::SetAiMode 0x0081D990, which writes activation-record+0xC and raises frame event 0x1000003A -- the ONE event GmAgentCommander subscribes to (0x0072 raises 0x10000038, which the panel has no case for; that asymmetry was measured first as an inert 0x0072 echo). Wire: sending [200, 1] moved the commander panel's stance ring to Guard AND triggered the hero's spoken Guard acknowledgment line; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). The s2c display echo for GAME_CMSG 21 HERO_AI_MODE. ALSO WRITES THE PET CONTAINER (2026-08-19): the wrapper mirrors the same agent-keyed write into charCtx[+0x2C]+0x6AC rec+0x14 (aiMode), raising event 0x1000004B -- so ONE opcode drives the hero panel and the pet panel, but only for an agent already declared by PET_ADD; the mirror is a silent no-op otherwise. FINDINGS 28.12."
+   },
+   "102": {
+    "opcode": 102,
+    "table": "GAME_SMSG_0102",
+    "declared_unpack_size": 16,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 102
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "HERO_FLAG_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E0E0 (38833) writes the hero ACTIVATION record's +0x10..0x1C {x,y,plane,0} (same ctx[+0x2C]+0x584 record opcode 0x0072 creates -- store is gated on activation existing; ArenaNet's own failure trace calls the action CommandMoveToPoint), posts frame event 0x100000A0, and Compass.cpp 0x008BB520 -> CompassCanvas_SetFlag 0x008BF730 creates BOTH the compass marker and the world flag model (AvFlag, per-slot file ids at 0x00A94358). Wire: sending [200, coords, plane] planted the hero flag model in the world and the compass marker; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). Clear form: coords (+INF, +INF), plane 0. The s2c echo for GAME_CMSG 26 HERO_FLAG_PLACE."
+   },
+   "103": {
+    "opcode": 103,
+    "table": "GAME_SMSG_0103",
+    "declared_unpack_size": 12,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 103
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "PARTY_FLAG_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E120 (38833) -> worker 0x00810890 writes charCtx+0x9C..0xA8 {x,y,plane,0} (a single slot, not an array), posts frame event 0x100000A1, same CompassCanvas path as opcode 102, compass slot 0, distinct flag model. Wire: sending [coords, plane] planted the party pennant beside the hero flag; wire-confirmed 2026-08-19 run vault/captures/harness/20260819T101254 (screenshots) after the static chain was read on 38833 (studies/pvpui/FINDINGS.md 28.6). Clear form: coords (+INF, +INF), plane 0. The s2c echo for GAME_CMSG 27 PARTY_FLAG_PLACE."
+   },
+   "99": {
+    "opcode": 99,
+    "table": "GAME_SMSG_0099",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 99
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "HERO_LOCK_TARGET_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED both ways. Static: handler 0x0091E080 (38833) pushes msg+8, msg+4 -> wrapper 0x008107E0 (hero container +0x584 AND pet container +0x6AC) -> setter 0x0081D9C0, which writes activation-record+0x20 and raises frame event 0x1000003F. Wire: echoing [200, 10] lit the commander crosshair gold with 'Hatcher [Collector] is locked as Norgu's target'; [200, 0] cleared it back to the offer tooltip; runs vault/captures/harness/20260819T105048 (no echo: 0x16 twice) and 20260819T105652 (echo armed: lock then clear, crosshair lit then unlit; studies/pvpui/FINDINGS.md 28.7). [heroAgent, targetAgent]; target 0 clears. The s2c echo for GAME_CMSG 22. ALSO WRITES THE PET CONTAINER (2026-08-19): the wrapper mirrors the same agent-keyed write into charCtx[+0x2C]+0x6AC rec+0x18 (lockedTarget), raising event 0x1000004C -- so ONE opcode drives the hero panel and the pet panel, but only for an agent already declared by PET_ADD; the mirror is a silent no-op otherwise. FINDINGS 28.12."
+   },
+   "178": {
+    "opcode": 178,
+    "table": "GAME_SMSG_0178",
+    "declared_unpack_size": 90,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 178
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PET_ADD",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F040 -> 0x008137B0 -> inserter 0x0081F750, which builds a 28-byte record in the pet container charCtx[+0x2C]+0x6AC: rec+0 = the pet's agent id (the sorted key), +4 = a second agent id (owner), +8 = the name, +0xC/+0x10 unread, +0x14 = aiMode, +0x18 = lockedTarget (zeroed at insert). Its not-found log reads 'PetAdd (agent %d, aiMode %d): Pet already added' (VA 0x00A959F0), which is what names the opcode AND identifies field 6 as aiMode. THIS IS THE PET'S DECLARATION: without it, s2c 0x0062 and 0x0063 mirror-write into the pet container, find no record, and silently do nothing (0x0081F6E4 / 0x0081F724)."
+   },
+   "179": {
+    "opcode": 179,
+    "table": "GAME_SMSG_0179",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 179
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "PET_REMOVE",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F070 -> 0x008137E0 -> 0x0081F850; log 'PetRemove (agent %d): Pet not added' (VA 0x00A95A20)."
+   },
+   "180": {
+    "opcode": 180,
+    "table": "GAME_SMSG_0180",
+    "declared_unpack_size": 74,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 180
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     }
+    ],
+    "name": "PET_RENAME",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833), named by the client's OWN log format strings rather than by asserts (there is no ChCliPet.cpp; the code sits in the ChCliApi.cpp layer and the panel is GmPetCommander.cpp). Field widths cross-checked against msgshape on 38833. studies/pvpui/FINDINGS.md 28.12. No capture yet: this repo has never sent or seen one. Handler 0x0091F090 -> 0x00813800 -> 0x0081F900; log 'PetRename (agent %d): Pet data not reported' (VA 0x00A95A44)."
+   },
+   "100": {
+    "opcode": 100,
+    "table": "GAME_SMSG_0100",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 100
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SKILLBAR_SLOT_FLAG",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). Handler 0x0091E0A0 -> 0x00810820 (add ecx,0x6f0) -> 0x008220A0, a per-BIT setter on the per-agent skill-bar store the client calls hotKeyState (ChCliSkill.cpp, assert 'hotKeyState' ChCliSkill:718, reached with ecx = charCtx[+0x2C]+0x6F0). Field 2 is a bit index and field 3 its value: bts on non-zero, btr on zero, into the 8-bit mask at record+0xA4, then frame event 0x1000005A {agent, bit, value}. An unknown agent is silently dropped -- no insert, no assert, no log. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "101": {
+    "opcode": 101,
+    "table": "GAME_SMSG_0101",
+    "declared_unpack_size": 7,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 101
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SKILLBAR_SLOT_FLAGS",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). The whole-mask sibling of opcode 100: handler 0x0091E0C0 -> 0x00810850 -> 0x00822120 writes all eight bits of record+0xA4 at once, then DIFFS old against new and fires one 0x1000005A per changed bit. The mask width is measured, not assumed -- the diff loop runs 0..7. NOTE FOR READERS OF FINDINGS 28.6: this opcode was listed there among four adjacent unnamed candidates for the stance-ring echo. It is not that; the stance echo is opcode 98. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "182": {
+    "opcode": 182,
+    "table": "GAME_SMSG_0182",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 182
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROFESSION_BITS",
+    "name_confidence": "medium",
+    "why": "OBSERVED static (38833). Handler chain reaches setter 0x0081FD50 on the per-agent PROFESSION table at charCtx[+0x2C]+0x6BC (sorted 20-byte records keyed on agent). The client names both the call and this field on the setter's not-found path: 'OnProfessionSecondaryBits (agent %d, secondaryBits %d): Agent not found in sort array'. Field 2 lands at record+0x0C and is a BITMASK indexed by profession id, proven by its consumer, which shifts 1 by a profession index and tests -- and by the literal 0x7FF (eleven bits, CHAR_PROFESSIONS) the same code substitutes as an all-professions override. Distinct from opcode 183, which writes the two profession ids in the same record. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
+   },
+   "183": {
+    "opcode": 183,
+    "table": "GAME_SMSG_0183",
+    "declared_unpack_size": 9,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 183
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_PROFESSIONS",
+    "name_confidence": "high",
+    "why": "OBSERVED static (38833) AND load-bearing in this server since 2026-08-16. Inserts/updates the per-agent PROFESSION record at charCtx[+0x2C]+0x6BC: fields 2 and 3 are the primary and secondary profession ids (record+0x04 / +0x08), field 4 a boolean normalised to 0/1 at record+0x10 whose meaning is NOT FOUND. Both getters return 11 = CHAR_PROFESSIONS for an absent agent, an out-of-band 'unknown'. WHY IT MATTERS TO US: the hero attribute path asserts ConstChar:1296 for an agent missing from this table, which is why authsrv sends this for the hero's agent and not only the player's (studies/heroes/FINDINGS.md 14). The primary/secondary ORDER rests on ArenaNet's assert 'agentPrimaryProf != agentSecondaryProf' (GmDeckBuilder.cpp:2321) in the one function calling both getters back to back -- strong but ordering evidence, so the order is RECONSTRUCTION while the two-professions claim is OBSERVED. studies/pvpui/FINDINGS.md 30. Static only on build 38833; this repo has never sent or captured one."
    }
   }
  }

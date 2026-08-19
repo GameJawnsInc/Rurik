@@ -242,6 +242,22 @@ hero/henchman/pet stance widget, not a monster-AI concept.
 All three are **floors, not censuses** — `asserts.py` itself warns that every "no assert
 names X" answer is short by the ~370 sites its fixed patterns cannot read.
 
+**CORRECTED 2026-08-19, and the first bullet is the one that fell — by clicking, not by
+reading.** Once the commander panel opened (pvpui §28.3), the stance buttons became
+clickable for the first time ever, and each of the three emitted exactly one
+`GAME_CMSG 0x0015` — `[agent_id, mode]`, agent 200, mode tracking the click order
+Guard=1/Avoid=2/Fight=0, the same enum `0x0072`'s own format string names `aiMode`.
+Full record: [pvpui §28.5](../pvpui/FINDINGS.md); named `HERO_AI_MODE` in
+`schema/overrides.json`. Two refinements, not a contradiction: the send lives on the
+**button path**, not the `GmAgentCommander` setter this section traced (that dead end
+was a wrong-place answer, and the floors-not-censuses caveat above was doing exactly
+its job), and the client does **not** move its own stance ring on click — it waits for
+the server, so stance is server-authoritative and the setter presumably runs on the
+`0x0072` echo. Flag placement stayed unemitted in the outpost run, but not as a null:
+the client refused it on its own — "Norgu cannot have a target while in an outpost" —
+so that bullet's verdict now lives with the explorable-map run in pvpui §28.5. Hiring
+remains NOT FOUND.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative
@@ -257,7 +273,8 @@ found no skill-bar-shaped field (8 discrete skill ids in sequence) in any of `0x
 at `:2301`/`:2321`/`:2334` inside one function iterating 11 attribute slots, gated by
 `test byte ptr [edi+8], 0x10`. But the attribute getters it uses resolve **unconditionally**
 to the *local player's* record (`ctx+0x2c+0x6bc` — the same array
-[profession RUNS.md](../profession/RUNS.md) found is written only by `PLAYER_UPDATE_PROFESSION`).
+[profession RUNS.md](../profession/RUNS.md) found is written only by `AGENT_PROFESSIONS`
+0x00B7, called `PLAYER_UPDATE_PROFESSION` until 2026-08-19).
 Whether the deck builder ever repoints that singleton at a hero's own record while editing a
 hero build is **NOT FOUND**.
 
@@ -915,7 +932,7 @@ is a real one — it produces a hero row labelled from the body instead of the h
 0x0056/0x0057/0x0020            the body, at that agent id
 0x00A6  AGENT_SET_PROFESSION    the agent's own profession bytes
 0x0037  AGENT_ATTRIBUTE_POINTS  creates attribState        <-- order
-0x00B7  PLAYER_UPDATE_PROFESSION  ctx+0x6BC, for the HERO   <-- is
+0x00B7  AGENT_PROFESSIONS         ctx+0x6BC, for the HERO   <-- is
 0x003A  AGENT_UPDATE_ATTRIBUTES   fills attrib[]            <-- load-bearing
 ```
 
@@ -1006,7 +1023,7 @@ attack next, and it is the reason §15.1's limit stands.
 0x01D3/0x01B2                    commit + set mine
 0x0056/0x0057/0x0020             the body, at that agent id
 0x00A6  AGENT_SET_PROFESSION     the agent's own profession bytes
-0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  PLAYER_UPDATE_PROFESSION ctx+0x6BC, for the HERO       > order matters
+0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  AGENT_PROFESSIONS        ctx+0x6BC, for the HERO       > order matters
 0x003A  AGENT_UPDATE_ATTRIBUTES  fills attrib[]               /
 0x00DA  SKILLBAR_UPDATE          the eight slots
 0x0072  HERO_ACTIVATE            hero, agent, inventoryId, aiMode
@@ -2760,11 +2777,22 @@ itself.
 
 ## 9. Defects and corrections this arc produced
 
-- **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
-  `self.cap`, but the `wstring` branch never passes `cap=` to the constructor — only `wire=`.
-  The true capacity is recoverable only by back-solving from the wire total. A real,
-  reproducible display bug that will mislead anyone who trusts the printed capacity, and the
-  reason §1.1 says `string16(20)` where the tool says `(0)`.
+- **`msgshape.py` printed `string16(0)` for every wide-string field — FIXED `c81d6d1`,
+  REGRESSION-CHECKED 2026-08-19.** `Field.__repr__` shows `self.cap`, but the `wstring`
+  branch never passed `cap=` to the constructor — only `wire=`. The true capacity was
+  recoverable only by back-solving from the wire total, which is why §1.1 said
+  `string16(20)` where the tool said `(0)`. The tool now prints the declared capacity
+  (`0x01BF` → `string16(20)`, `0x0074` → `string16(32)`), and `test_msgshape.py` §4 pins it
+  over all **141** wide-string fields in the image, on all three vaulted builds, with the
+  capacity histogram identical across them — the protocol did not move, only the tables did.
+  **The fix sat for four days with nothing checking it**, which is the defect this entry
+  really records: §9 and `PLAN.md` both went on describing an open bug that was already
+  closed, because a fix nobody pinned reads exactly like a fix nobody made. §4's negative
+  control constructs a `Field` the old way and asserts it still prints `string16(0)`, so a
+  future edit that drops `cap=` reddens 14 checks instead of silently returning.
+  **It also unblocked a claim in another arc:** `0x0049`'s three `string16(8)` fields are now
+  legible, which moves `studies/quests/FINDINGS.md`'s cap-of-8 row off OpenTyria's annotation
+  and onto the client's own descriptor.
 - **A 48×12 table at `0xA35B80` is `s_titleClientData`, not `s_heroClientData`** (§2). Two
   adjacent `Const*` accessors; the structural locator closed on the wrong anchor.
 - **`0x0074` is not `{hero_id, level, primary, secondary}`** (§1.3) — 20 fields, 127 bytes.

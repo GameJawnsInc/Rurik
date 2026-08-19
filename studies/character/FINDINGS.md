@@ -248,7 +248,7 @@ PLAYER_CREATE leaving as `5900 | 01000000 | 01000000 | 00001000 | 00 | 00000000
 | 00000000 | 0c00 + "Test Warrior"` — the dword `0x00100000` in the third
 payload slot, byte-verified. The client accepted it and produced a movable
 agent. What we have *not* observed is the client rendering a Warrior *because*
-of this dword — we send PLAYER_UPDATE_PROFESSION (0x00B7) with profession 1 in
+of this dword — we send AGENT_PROFESSIONS (0x00B7) with profession 1 in
 the same burst, 0.4 ms later, which confounds any visual attribution. GWCA
 models the client's Player with `appearance_bitmap` *separate* from
 primary/secondary profession dwords (`.../GameEntities/Player.h:8-18`), so the
@@ -374,7 +374,12 @@ sex bit and silently breaks male characters if imported.
 
 ---
 
-## b. PLAYER_UPDATE_PROFESSION (0x00B7): the three trailing bytes
+## b. AGENT_PROFESSIONS (0x00B7): the three trailing bytes
+
+*(Named PLAYER_UPDATE_PROFESSION when this section was written; renamed
+2026-08-19 to the catalog's `AGENT_PROFESSIONS` — see "Opcode numbering —
+do not import `0x9E`" below and `schema/overrides.json`. The old name was
+ldufr's/OpenTyria's, UPSTREAM.)*
 
 Nine bytes total: a 2-byte header, a 4-byte agent id, then three single bytes.
 Every source on disk agrees on that shape. Only the third byte's *meaning* is
@@ -1251,6 +1256,17 @@ demonstrably accepts, `toolkit/authsrv/authsrv.py:899-910`). **Match by shape,
 never by number.** Calling this "the documented GWCA build drift" is our own
 inference — no drift documentation exists on disk. **RECONSTRUCTION.**
 
+**Resolved 2026-08-19 for the profession pair, and it was not a shift.**
+The pvpui static pass read the per-agent PROFESSION table at
+`charCtx[+0x2C]+0x6BC` and found `0x00B6` and `0x00B7` are two *different*
+writers into it — `AGENT_PROFESSION_BITS` (a profession bitmask) and
+`AGENT_PROFESSIONS` (the two profession ids) — both named from the client's
+own strings ([../pvpui/FINDINGS.md](../pvpui/FINDINGS.md) §30,
+`schema/overrides.json`). So gw-preservation's `0x00B6` is not our `0x00B7`
+off by one; it is the neighbour, and the server dropped the upstream name
+the same day. Whether the other two rows above are shifts or neighbours is
+**UNVERIFIED** — nothing here read them.
+
 ### Why our character shows level 0
 
 **OBSERVED:** in-map level reads 0; the character-select roster says level 1
@@ -1636,7 +1652,7 @@ Not CORROBORATED as a whole. Per step:
 | 1 | 324 `ITEM_STREAM_CREATE` | `[1, 0]` | **CORROBORATED** (ldufr, GWLP-R, explorer). Already sent, `authsrv.py:691`. |
 | 2 | 319 `INVENTORY_CREATE_BAG` | `[1, bag_type=2, bag_model_id=21, bag_id=N, slot_count=9, assoc_item_id=0]` | **CORROBORATED** (ldufr, gw-preservation) for the *shape and values*. That it must precede step 5 is **UNVERIFIED** — it is upstream's emission order, not a stated requirement. |
 | 3 | 353 `CREATE_NAMED_ITEM` ×5 | `file_id`/`item_type`/`dye_tint`/`dye_colors`/`flags`/`model_id`/`quantity`/name from `GmDefaultArmors.c:3-94`; **send 0x8000005B as-is** | **CORROBORATED** across 6 witnesses for the field layout; the *values* are **UPSTREAM** (OpenTyria's table, agreeing with gw-preservation's and GWToolbox's). |
-| 4 | 346 `ITEM_SET_PROFESSION` | `[item_id, 1]` | **CORROBORATED** (ldufr, GWLP-R). Our server already sends `PLAYER_UPDATE_PROFESSION` Warrior=1, so this should be consistent. |
+| 4 | 346 `ITEM_SET_PROFESSION` | `[item_id, 1]` | **CORROBORATED** (ldufr, GWLP-R). Our server already sends `AGENT_PROFESSIONS` (0x00B7) Warrior=1, so this should be consistent. |
 | 5 | 318 `ITEM_MOVED_TO_LOCATION` ×5 | `[1, item_id, bag_id, slot]`, slot = Body 2, Legs 3, Head 4, Boots 5, Gloves 6 | **CORROBORATED** (ldufr, gw-preservation) — **two** lineages on the slot order, not three. |
 | 6 | 110 `UPDATE_AGENT_VISUAL_EQUIPMENT` | `[agent_id, 9 item ids]` | shape **CORROBORATED** (4 witnesses); **the order of positions 3-6 is CONTESTED**, 1 lineage against 2, with gw-preservation abstaining. |
 

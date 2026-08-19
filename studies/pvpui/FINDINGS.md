@@ -1764,6 +1764,11 @@ fileId→filename codec `0x004702B0` asserting on a **zero**.
   only by not calling. `d2` selects the MdlBuild variant: non-zero → build **with
   skeleton file** (`MdlBuild:1868`), **zero → legal**, the fileName-only build
   (`MdlBuild:1835`). So: **`d1` = the model file id, `d2` = an optional skeleton file id.**
+  **← THAT LAST SENTENCE IS BACKWARDS, corrected 2026-08-19 by reading the three files'
+  own chunk tables (§28.13): `d1` is the FILE id — the one carrying the skeleton — and
+  `d2` is the MODEL id, the geometry.** Every code fact above stands; only the two role
+  names were wrong, and they came from the MdlBuild variant labels rather than from
+  measuring what the files contain.
 - All four callers of the factory pass the pair from data, never literals — there is no
   zero-sentinel anywhere in the image.
 
@@ -1812,3 +1817,671 @@ one). The **janky doll** is a burrower posed in a humanoid paperdoll; §28.2's f
 pair `116703,116228` (hatcher body + skeleton shell) is the staged humanoid arm, and a
 real answer to "what file does retail bake for a mercenary" would need a live capture of
 an account that owns one — no tape in the vault carries a single `0x0074`.
+
+### 28.4 Both residue arms ran, agent-piloted — the pair is ORDER-SENSITIVE and prop 36 clears the sentinel (2026-08-19)
+
+Three harness runs, all `RUN VERDICT: PASS`, all on the 38833 exe
+(`vault/run/2026-08-13_64fae3b1369b/`), each clicking the party window's hero button at
+window fraction `(0.9070, 0.3288)` — measured off a recon run's screenshot
+(`20260819T082215/hold003.png`), not guessed. The click is fixed-position UI, so the
+piloting is inside the agent-pilotable boundary (2026-08-17 precedent); the appearance
+verdicts below are read from screenshots and the owner reviews them.
+
+| run | arm | panel | doll | provenance |
+|---|---|---|---|---|
+| `20260819T082723` | `--hero-appearance 116703,116228` | opened, stable | **EMPTY** — flat white square, still empty 30s later | `2-click.png`, `hold005.png` |
+| `20260819T083034` | `--hero-appearance 116228,116703` (the swap) | opened, stable | **RENDERED** — a humanoid head-and-shoulders bust, the shape a real hero portrait has | `hold005.png` |
+| `20260819T083324` | `--hero-appearance 116366 --hero-level 20` | opened, stable | the 116366 composite | `hold005.png` |
+
+**The pair finding — OBSERVED, and it sharpens §28.1.** Both orders of the hatcher pair
+are assert-free, so `File.cpp:367` and the codec accept either file in either slot — but
+only `d1=116228, d2=116703` builds a drawable: the other order renders an empty doll,
+silently. Combined with §28.3 (`d1=116366, d2=0` rendered), d1 is the slot the composite
+draws. The parsimonious reading is that the content rows' hatcher labels are swapped —
+116228 is the drawable body and 116703 its skeleton, not the other way around — but that
+is a claim about `content/npcs.toml`'s row naming, RECONSTRUCTION until the rows'
+extraction is re-read. What is OBSERVED and matters for the wire: **the pair is
+order-sensitive, the failure mode of the wrong order is an empty doll and not an
+assert**, so "it didn't crash" is not a verdict on an appearance pair.
+
+> **That RECONSTRUCTION was REFUTED the same day (§28.13): the content rows are labelled
+> correctly and it was this arc's ordering that was wrong.** Left standing above because
+> the guess and its refutation are both part of the record. The OBSERVED sentence holds.
+
+**The level finding — OBSERVED, and it bought more than the title.** `--hero-level 20`
+(`0x009F [36, 200, 20]`, sent through the hero pipeline before any body) cleared the
+sentinel in BOTH stores at once — the panel title reads "Hero 1: Lvl 20 Norgu" and the
+party roster row reads "Lvl 20 Norgu" — and the panel's health/energy bars, which
+rendered as empty black strips in every previous run of this arc, now RENDER, reading
+1 (red) over 0 (blue). Nothing ever sent health or energy for agent 200, so those are
+the client's own floor values; the cheap follow-up is `0x009F` health (42, OBSERVED)
+and energy (41, UPSTREAM) for the hero agent, which would put real numbers in bars
+that demonstrably read per-agent stores a bodiless agent can carry.
+
+### 28.5 THE C2S WALL FELL — three opcodes off the commander UI in one afternoon of piloted clicks (2026-08-19)
+
+Heroes §3.3's "c2s direction NOT FOUND, three times" was a static floor, and the open
+panel turned it into a clicking problem. Six more `RUN VERDICT: PASS` runs, same rig
+plus `--hero-vitals 480,45` (new) and `--explorable` where noted. Every capture cited is
+under `vault/captures/gamesrv/`, every screenshot under `vault/captures/harness/`.
+
+**Vitals (run `20260819T090643`).** `--hero-vitals 480,45` (`0x009F` 42/41, the MAX
+setters) put exactly 480/45 in the panel's bars, rendered full. With neither sent the
+bars read 1/0 (§28.4), so the panel vitals read the per-agent max stores — a bodiless
+agent carries them fine.
+
+**The appearance pair, settled by the dat (desk check, `modelfile.py`).** Chunk walks
+of the three files: 116366 = `FA0+FA5+FA6+FA1` (geometry AND skeleton — the
+self-contained file that renders alone); 116228 = `FA6+FA1+FA8` (skeleton/animation,
+NO geometry); 116703 = `FA0+FA5` (geometry, NO skeleton). That REFUTES §28.4's
+swapped-labels speculation — the content rows were right — and corrects §28.1's
+reading: **d1 (+0x14) must carry the FA1 skeleton/animation chunk** (2/2 rendering
+cases have it in d1, the 1 empty-doll case does not), and **d2 (+0x18) supplies the
+geometry** in the two-file form. The humanoid bust the swap drew is 116703's mesh
+riding 116228's skeleton.
+
+**Stance: `GAME_CMSG 0x0015`, now named HERO_AI_MODE (capture
+`authsrv-20260819T090943-c1.jsonl`).** Each of the three stance buttons emitted exactly
+one frame, `[agent=200, mode]`, mode tracking the click order Guard=1 / Avoid=2 /
+Fight=0 — the enum `0x0072`'s own format string calls `aiMode`. Two things the static
+trace could not see: the send lives on the BUTTON path (not the GmAgentCommander setter
+§3.3 traced to a dead end), and the client does NOT move its own stance ring on click.
+An echo arm now answers `0x0015` with `0x0072` carrying the requested mode (authsrv
+dispatch, always-on, inert off-rig) — the echo fires (`hero stance echo: agent 200 ->
+aiMode 1`, run `20260819T093153`) but the ring STILL does not move, so the ring's
+display store is NOT satisfied by a re-sent `0x0072`. Where the ring reads from is a
+new, open question; stance is server-authoritative either way.
+
+**The crosshair button is TARGET-LOCK, not the flag.** Clicked in the outpost it said
+"Norgu cannot have a target while in an outpost"; clicked in the explorable it said
+"You must select a foe before you can lock No[rgu's target]". Its c2s (if any) needs a
+foe on screen — a staged `--enemy` arm, not run.
+
+**Flags: `0x001A` HERO_FLAG_PLACE and `0x001B` PARTY_FLAG_PLACE (capture
+`authsrv-20260819T093801-c1.jsonl`).** The real flag controls are the widget strip
+under the compass (all-party flag + one numbered flag per hero; hero 1's lit, 2/3
+greyed because those heroes don't exist). Arm-then-ground, one arm each: the hero-1
+flag's ground click emitted `[agent=200, coords, plane]` (0x001A) and the all-flag's
+emitted `[coords, plane]` (0x001B) — no agent field is what distinguishes the pair —
+and BOTH ground clicks were consumed (zero MOVE_TO_COORD in the run). The client drew
+no flag in the world or on the compass: like the stance ring, flag rendering waits for
+a server echo nobody has found or built yet. Both names are in `schema/overrides.json`
+at medium confidence — n=1 each, cancel/recall variants untested.
+
+**The greyed Norgu row — owner's reading, and it fits everything.** In the explorable
+party list Norgu's name renders greyed/dark: that is the client's out-of-COMPASS-RANGE
+rendering, and agent 200 has no body and no position, so he scores as permanently out
+of range. Prediction it stages for free: give the hero a body (`--hero-body`) or
+whatever store feeds compass range, and the row lights up.
+
+Scoreboard for heroes §3.3 after today: stance FOUND (3/3, named, echo-armed), hero
+flag FOUND (n=1, named), party flag FOUND (n=1, named), target-lock located and gated
+(needs a foe), hiring still NOT FOUND. What the client does with all three is
+send-and-wait — every confirmed display (stance ring, flag marker) waits on a s2c echo
+that is now the arc's next mechanism to find.
+
+### 28.6 THE LOOP CLOSED — every echo found by desk work, then confirmed by the client drawing it (2026-08-19, same day)
+
+Three parallel static tracers on the 38833 image found every echo §28.5 left open, and
+one wire run confirmed all of them (`RUN VERDICT: PASS`, run `20260819T101254`):
+
+**The stance ring, explained to the byte and then moved.** `0x0072`'s aiMode lands at
+activation-record+0xC but raises frame event `0x10000038` — an event GmAgentCommander
+has NO case for, which is the measured §28.5 inert-echo, now explained. The ring itself
+is a UI-local member (`ctrl+8`, painted by `0x004FC9D0`, highlight images
+0xAC7C/D/E) whose only writer is the panel's child-message 0x57. The dedicated setter
+the client listens for is **s2c `0x0062` — now named `HERO_AI_MODE_SET`
+`[agent_id, dword aiMode]`** (handler `0x0091E060` → `ChCliHero::SetAiMode`
+`0x0081D990`): writes the same rec+0xC but raises `0x1000003A`, the one event the panel
+subscribes to. The authsrv stance echo now answers `0x0015` with `0x0062`, and the wire
+verdict was better than predicted: **the ring moved to Guard AND Norgu spoke his
+Guard acknowledgment line in chat** — the stance loop renders and narrates.
+
+**The flags, traced store-to-model and then planted.** **s2c `0x0066` HERO_FLAG_SET
+`[agent_id, vec2, word plane]`** (handler `0x0091E0E0`): writes the hero ACTIVATION
+record's +0x10..0x1C — the same `ctx[+0x2C]+0x584` record `0x0072` creates, so the
+store is gated on activation existing, and ArenaNet's own failure trace names the
+action `CommandMoveToPoint` — posts frame event `0x100000A0`, and Compass.cpp
+(`0x008BB520` → `CompassCanvas_SetFlag 0x008BF730`) creates BOTH the compass marker and
+the world flag model. CompassCanvas is the sole image-wide caller of AvFlag
+create/destroy: the world flag is downstream of the compass widget, one event feeds
+both displays. **s2c `0x0067` PARTY_FLAG_SET `[vec2, word plane]`** is the twin (store
+`charCtx+0x9C..0xA8`, event `0x100000A1`, compass slot 0). Per-slot flag models ride an
+8-entry file-id table at `0x00A94358` (party 11092856; heroes 1–3 11092864/72/80). The
+clear/remove form is coords `(+INF, +INF)` with plane 0. Wire verdict: **both flags
+planted** — the hero triangle and the party pennant, visibly different models, plus
+both compass markers and the cancel widget lighting up. The authsrv echo arms answer
+`0x001A`→`0x0066` and `0x001B`→`0x0067`.
+
+**Target-lock, static only (medium).** The crosshair sends **c2s `0x0016`
+HERO_LOCK_TARGET `[heroAgent, targetAgent]`** / **`0x0017` HERO_UNLOCK_TARGET
+`[heroAgent]`** from GmAgentCommander's msg-0x24 handler `0x004FBD20` (lock reads the
+selected target via AvApi `0x007E1090`; re-lock same target is local-only). The
+foe/outpost gate sits upstream of msg 0x24 and its error strings are string-table ids,
+not .text literals. Live confirm needs an `--enemy` run with a foe selected — staged.
+
+**Hiring, still NOT FOUND, with a much stronger floor:** all 174 callers of the
+channel-send `0x007DCF00` were enumerated and their opcode immediates recovered — the
+commander/flag UI family sends ONLY 0x15/0x16/0x17/0x1A/0x1B, and the party-add
+opcodes (0x01BF/0x01C2) do not use this send path at all (they ride the party-build
+batcher, a different helper whose callers are the place to look next).
+
+All five opcodes are named in `schema/overrides.json` — the three s2c at high
+confidence (static chain + the client drawing it), the two lock c2s at medium (static
+only). The commander UI is now round-trip complete: stance, hero flag, and party flag
+each close click → c2s → server echo → render, on a server that knows all six messages
+by name.
+
+### 28.7 The lock, captured and closed — and the toggle-off is `0x16 [hero, 0]`, not `0x17` (2026-08-19, still the same day)
+
+Three runs, an instrument correction between each, every deviation informative:
+
+1. **No foe in the world** (runs `104437` and its outpost sibling): the crosshair click
+   landed and the client refused locally with the exact string-table toast the static
+   trace predicted — "You must select a foe before you can lock Norgu's target" — and
+   sent nothing. Also a harness lesson re-learned: `session.py` defaults the world to
+   `--no-enemy`; the opt-in is the session-level `--enemy`, not a game-arg.
+2. **Foe present, no echo** (run `105048`): `C` targeted the practice target and the
+   crosshair click sent **`0x0016 [200, 10]` — captured**, upgrading the name to wire
+   confidence. The second click sent `0x0016 [200, 10]` AGAIN: the client's lock state
+   is server-set, same pattern as the ring and the flags.
+3. **Echo armed** (run `105652`): the lock echo is **s2c `0x0063` HERO_LOCK_TARGET_SET
+   `[heroAgent, targetAgent]`** — found by desk work in minutes because §28.6's flag
+   tracer had already mapped the record: handler `0x0091E080` → wrapper `0x008107E0`
+   (hero container +0x584 AND pet container +0x6AC) → setter `0x0081D9C0`, writing
+   activation-record **+0x20** and raising `0x1000003F`. Wire verdict: click 1 locked —
+   crosshair lit gold, tooltip "**Hatcher [Collector] is locked as Norgu's target**"
+   (the client resolves the target's name) — and click 2 sent **`0x0016 [200, 0]`**,
+   the `rec+0x20 != 0` clear branch the static trace predicted, which our echo
+   `[200, 0]` answered and the crosshair unlit.
+
+So the lock protocol on this path is `0x16 [hero, target]` to lock and `0x16 [hero, 0]`
+to clear, echoed by `0x0063` both ways; **`0x0017` never fired** — its guard (getter
+`0x0080CEE0`) reads a state this rig does not set, with the pet container +0x6AC the
+standing suspect. The activation record's map after today: +0 heroId, +4 agentId
+(0x0072), +8 inventoryId (0x0072), +0xC aiMode (0x0062 / 0x0072), +0x10..0x1C flag
+{x,y,plane,0} (0x0066), +0x20 lockedTarget (0x0063) — six wire-reachable fields, each
+with its opcode and its event, every one confirmed by the client drawing something.
+
+### 28.8 The body run — the row goes retail-format and the agent store outranks the record (2026-08-19)
+
+Run `20260819T110510`, the full rig plus `--hero-body`. The scripted panel click
+missed (`NO WINDOW`) and the commander panel appeared open in the hold shots anyway —
+recorded at first as UNVERIFIED between two readings, both now REFUTED by controls
+(§28.9): the frame almost certainly shows ANOTHER SESSION'S client. The substantive
+verdicts below all reproduced on clean single-client runs the same day
+(`20260819T123759`), so they stand; only the auto-open belonged to the artifact:
+
+- **The party row upgraded to retail's format**: "Lvl 20 Norgu" (bodiless) became
+  "**Mo20 Norgu**" — the profession segment reads the AGENT (heroes §23's roster-reads-
+  the-agent claim, reconfirmed from the other side), and the level moved into the same
+  profession+level rendering a real hero row has. Nothing greyed with the body in
+  compass range; the greyed-row-means-out-of-range reading still wants its positive
+  control (a body placed far away).
+- **The panel's vitals re-sourced**: health reads 100 (the body's `create_agent_world`
+  value), no longer the bodiless prop-42 store's 480 — when both exist, the AGENT's
+  store outranks the activation-era property store. Energy stayed 45 (no agent-side
+  energy was sent, so the prop-41 store still shows through — the two bars source
+  independently).
+- **The hero body stands in the world** (spawn offset, third in line behind the
+  practice target), so `--hero-body` composes with the whole echo rig with no assert —
+  activation, char-table, appearance, level, vitals, stance, flags, and lock all
+  coexisted with a real agent in one session.
+
+### 28.9 The panel does NOT auto-open — the 110510 anomaly was another session's window (2026-08-19)
+
+Four controlled runs, one variable at a time, all `PASS`, zero clicks unless stated:
+
+| run | rig | prior layout state | panel? |
+|---|---|---|---|
+| `123331` | bodiless | inherited "open" from 110510 | **NO** |
+| `123525` | + `--hero-body` | inherited whatever 123331 saved | **NO** |
+| `123759` | + `--hero-body`, WITH click | — | opens on click (control that the click path works) |
+| `124040` | + `--hero-body`, no click | inherited "open" from 123759's clean `WM_CLOSE` | **NO** |
+
+That kills all three candidate mechanisms: layout persistence (row 1 and row 4 —
+row 4 directly followed a clean panel-open save and restored nothing), body-triggered
+open (row 2), and persistence gated on a body (row 4 again). **The commander panel
+opens only by click on this rig.** What actually happened in 110510: a parallel
+session's client was still running (the harness's `--replace` clears stale Python
+listeners, not clients), which is also why the scripted click reported `NO WINDOW` —
+the hold screenshots captured the OTHER client's window, panel open from that
+session's own use. The generalizable lesson, same family as the two-tree and
+two-capture defects this repo already paid for: **a harness screenshot is not
+attributed to a client by being taken — before believing a UI readout, be sure whose
+window it is** (one `Gw.exe` in the process list, or an identifying element in frame).
+
+### 28.10 The greyed row tracks the BODY, not the distance — the owner's reading confirmed, its mechanism one level down (2026-08-19)
+
+The owner's game-knowledge reading of the dim Norgu row, recorded in §28.5: *"norgu's
+name being greyed out in the party members menu means he's more than a compass range
+away from the player."* Two arms plus a seven-run sweep, and the measurement is a
+GLYPH-COLOUR one, not an eyeball — the first pass sampled the whole row, whose red bar
+swamped the signal and read as "no greying anywhere", which was wrong:
+
+| rig | hero name text | player name text (same frame) |
+|---|---|---|
+| bodiless (4 runs: `092640`, `101254`, `105652`, `123331`) | **(182, 148, 148)** | (220, 181, 181) |
+| body at default −150u (`123525`, `123759`, `124040`) | (223, 184, 184) | (220, 181, 181) |
+| body at −3000u (`124945`, the positive control) | (223, 184, 184) | (220, 181, 181) |
+
+**The greying is real and reproducible** — a bodiless hero's name renders ~17% darker
+than the player's in the same frame, four runs, identical to the byte. **A body lights
+it**, exactly as the owner's reading predicted. **Distance does not re-grey it**, and
+the same frame proves the body was genuinely out of range: the compass shows two green
+marks in the near run (player + body) and **one** in the far run — the client dropped
+the 3000u body from the compass while keeping its party row lit. So the compass and
+the row do not share a predicate.
+
+**The reconciliation, and it makes retail and our rig one rule (RECONSTRUCTION).** The
+row's predicate is *does this party member have a live agent in my table*, not *how far
+away is it*. On retail a player only ever meets that dim state at range because the
+SERVER culls out-of-range agents — `agentroster.py` measured exactly this in the live
+corpus, "visibility churn re-creates a body every time it re-enters compass range"
+(agent 44, four creates per session at one position). Retail's distance greying is
+agent-absence greying with a server-side cull in front of it. Our server has no
+culling, so a 3000u body stays in the table and stays lit. The owner identified the
+retail behaviour correctly; the client-side mechanism is one level below it, and the
+difference is a server feature we have not built rather than a message we have not
+sent. Cheap confirmation available whenever wanted: destroy agent 200 mid-session and
+watch the row dim without touching a position.
+
+`--hero-body-offset DX[,DY]` (new) places the body; it refuses without `--hero-body`,
+because a placement flag on a rig with no body would measure the default and read as a
+null result for the offset.
+
+### 28.11 `0x0017` IS NOT THE UNLOCK — a name this arc published, and retracted the same day (2026-08-19)
+
+§28.6 named c2s `0x0017` **HERO_UNLOCK_TARGET** at medium confidence, on the reasoning
+that it is the other branch of the crosshair handler that sends `0x0016`. §28.7 already
+found it never fires and guessed the pet container as the missing state. Both were
+wrong, and the guard is not a lock state at all.
+
+The branch in `0x004FBD20` (38833) is chosen by **`0x0080CEE0`, which reads neither
+store this arc knows.** It resolves the agent through AgApi `0x005FC380`, requires
+`targetDef == GW_AGENTDEF_CHAR` (the constant is named by its own asserting twin,
+`ChCliApi:3873 targetDef == GW_AGENTDEF_CHAR`) and `obj+0x48 == 6`, and returns
+**`obj+0x24`** — a per-agent ChCliApi field, no `+0x584` or `+0x6AC` displacement
+anywhere in the function. What that field means is settled by its other readers, all
+three named from their own asserts: **GmBundle** (`GmBundle:98 ptr`), **GmWeaponBar**
+(`GmWeaponBar:373 currSlot < ITEM_PLAYER_EQUIP_SETS`, which on non-zero drops the
+carried thing *instead of* switching weapon sets) and **GmCoreAction**
+(`GmCoreAction:933 action < WORLD_ACTIONS`, which disables world actions while it is
+non-zero). Weapon-swap-drops-your-bundle and no-world-actions-while-carrying are retail
+behaviours a player would recognise. So `obj+0x24` is a **carried-bundle** store, and
+the crosshair's real structure is:
+
+```
+bundle store != 0 ?  -> is this hero MY OWN agent ?  yes -> local drop, c2s 0x002E (empty body)
+                                                     no  -> c2s 0x0017 [heroAgent]
+bundle store == 0 ?  -> hero record +0x20 != 0 ?      yes -> c2s 0x0016 [hero, 0]   (the clear)
+                                                     no  -> c2s 0x0016 [hero, target]
+```
+
+Both `0x0016` sends live under the bundle-clear arm, which is exactly what our capture
+showed. **The paint routine `0x004FC0C0` reads both stores in the same priority order**
+into a four-state image index, so the gold crosshair we lit was state 1 (record +0x20),
+not the bundle state — paint and branch agree, and there was never a store
+disagreement to find. `0x0017` sits behind a state this arc has never entered and
+*cannot* enter: nothing in `0x0062/0x0063/0x0066/0x0067/0x0072` touches `obj+0x24`, and
+its writer was searched on four surfaces and is **NOT FOUND** (a `--field 0x48` sweep
+of ChCliApi, an image-wide byte scan for `mov dword [reg+0x48], 6`, all 33 callers of
+the AgApi resolver, and the 477-handler receive map — floors, not censuses).
+
+**The name is retracted rather than replaced.** `HERO_DROP_BUNDLE` fits the mechanism,
+but the mechanism is OBSERVED and the *name* would be inference, so the schema entry is
+deleted and `0x0017` goes back to being a held PARTIAL with its story recorded — the
+repo's own pattern for an opcode whose behaviour is known and whose name is not earned.
+`0x0016`'s entry keeps its high confidence and gains the correction: **the toggle-off is
+`0x0016 [hero, 0]`, its own zero form**, not a second opcode.
+
+Method note, because this is the second correction in two days: the name came from
+structure ("it's the other branch"), and structure is a hypothesis. The refutation cost
+one tracer and would have cost nothing had the name waited for the branch to be read.
+
+### 28.12 Pets share the commander messages — and need one declaration we have never sent (2026-08-19)
+
+The pet-side mirror in both echo wrappers is real and now read end to end. Correction
+to §28.6's note first: the two wrappers call **different** setters — `0x008107A0`
+(aiMode) calls `0x0081F6D0`, `0x008107E0` (lock) calls `0x0081F710` — not one shared
+one.
+
+The container at `charCtx[+0x2C]+0x6AC` is a sorted `rtl` Array of **28-byte records**,
+binary-searched on the first dword: **+0 pet agent id (key), +4 owner agent id, +8
+name, +0xC/+0x10 unread, +0x14 aiMode, +0x18 lockedTarget**. Its events are
+`0x10000049` (add), `0x1000004B` (aiMode), `0x1000004C` (lock) — the pet twins of the
+hero's `0x1000003A`/`0x1000003F`.
+
+**So the answer to "do pets share the commander messages" is yes, keyed identically:**
+s2c `0x0062` and `0x0063` each write the hero container AND the pet container with the
+same `agent_id` field, and `GmPetCommander` shares the hero side's `CHAR_AI_MODE` enum
+(`GmPetCommander:161 petAiMode != CHAR_AI_MODES`). **But a pet needs a declaration we
+have never sent:** s2c **`0x00B2 PET_ADD`**, `[agent_id pet, agent_id owner,
+string16(32) name, u32, u32, u32 aiMode]`, 88 wire bytes. Without a record for that
+agent, both mirror writes hit a NULL find and **silently do nothing** — no log, no
+assert, no return value (`0x0081F6E4`, `0x0081F724`). That silence is why the pet half
+of every run this arc has done was invisible.
+
+Named with it, from the client's own log format strings rather than from asserts —
+there is no `ChCliPet.cpp`, the code sits in the `ChCliApi.cpp` layer: **`0x00B3
+PET_REMOVE`** `[agent_id]` and **`0x00B4 PET_RENAME`** `[agent_id, string16(32)]`.
+`PetAdd`'s string also names its own sixth field: *"PetAdd (agent %d, aiMode %d): Pet
+already added"*. All three are in `schema/overrides.json` at medium confidence —
+static-only, and this repo has never sent or captured one.
+
+Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears **six**
+sibling containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
+hero, `+0x6AC` pet, `+0x6BC`, `+0x6F0`), and the last two are wholly unread —
+`PtMinionRoster.cpp` is in the assert surface and is the obvious candidate for one.
+The method that cracked the pet container in one call is the one to repeat: read the
+log format string on the not-found path.
+
+
+### 28.13 The appearance pair IS the content row's `(file_id, model_id)` — §28.1's role names were backwards (2026-08-19)
+
+One desk check, no client: read the three appearance files' own chunk tables out of the
+owner's archive with `toolkit/mapdata/modelfile.py`, where `0xFA0` is geometry and
+`0xFA1` the skeleton/animation chunk.
+
+| file | chunks | geometry? | skeleton? |
+|---|---|---|---|
+| 116366 (burrower) | `0xFA0, 0xFA5, 0xFA6, 0xFA1` | yes | yes |
+| 116228 (hatcher `file_id`) | `0xFA6, 0xFA1, 0xFA8` | **no** | yes |
+| 116703 (hatcher `model_id`) | `0xFA0, 0xFA5` | yes | **no** |
+
+Line that up with §28.4's three arms and one rule fits all of them: **`d1` must be a file
+carrying a `0xFA1` skeleton.** 116366 has one and rendered alone; 116228 has one and
+rendered with 116703 supplying the geometry; 116703 has none and rendered an empty doll
+even though it is the file with the actual body in it. So `d1` is the skeleton-bearing
+FILE and `d2` supplies the MODEL — **the reverse of §28.1's role names**, which were
+assigned from the MdlBuild variant labels (`build with skeleton file`) rather than from
+looking inside the files. Corrected in place there.
+
+**And the pair is not a new concept at all — it is the pair `content/npcs.toml` already
+carries.** The hatcher row's own field names are `file_id = 116228` and
+`model_id = 116703`, and the working order is exactly that order. The burrower row is
+the control that makes it airtight: it has **no `model_id` on purpose**, with a comment
+recording that ArenaNet declares it with `0x0056` and sends **no** `0x0057`
+MONSTER_COMPOSITE — 8 of 44 definitions in the capture are `0x0056`-only. A
+self-contained file needs no model, which is precisely why `--hero-appearance 116366`
+worked with `d2 = 0`. The same rule governs both the NPC path and the hero path.
+
+**Two consequences.** §28.4's guess that the content rows were mislabelled is REFUTED —
+the rows were right and this arc's ordering was wrong. And hero appearance authoring
+collapses to a rule with no new measurement in it: *to dress a hero as any NPC we
+already have a row for, send that row's `file_id` and `model_id` as `d1`/`d2`, and send
+`d2 = 0` where the row has no `model_id`.* Cheapest confirmation available: any third
+content row with both ids, one click.
+
+## 29. `0x0074` MERCENARY_INFO, read field by field — the record is a HERO POOL entry, and two of our own refutations were surface errors (2026-08-19)
+
+Seventeen agents on build 38833: one mapping the worker's every store, four hunting the
+readers of each field group, and a skeptic on every meaning claim carrying the lens the
+day's two retractions earned — *does the evidence show code READING this offset and
+acting on it, or does it rest on a label, a struct position or an upstream guess?*
+Three claims came back downgraded by that pass and are labelled accordingly below.
+
+### 29.1 The container, finally disambiguated — and the two-container trap named
+
+`charCtx[+0x2C]+0x584` is not a record array at all. It is a **ChCliHero aggregate
+holding two arrays**: `+0x00` is `Array<activation>`, **stride 0x24**, keyed by AGENT and
+written by `0x0072`; `+0x10` — i.e. `+0x594` — is `Array<heroData>`, **stride 0x9C**,
+keyed by HERO ID, sorted ascending, binary-searched, and written by `0x0074`. Every
+public getter reaches the data array by taking `+0x584` and re-biasing `+0x10`
+(`0x0080E370` → `0x0081D4B0` → `0x0081D410`), which is exactly the "caller passes an
+already-biased `this`" case `codescan`'s own banner warns about, running in reverse. That
+is why the two containers appeared to have overlapping offsets, and why this arc tripped
+over it once: **`0x0081DB47`, cited in §28.1 as the hero-id store, belongs to the `0x0072`
+activation record, not to this one.** ArenaNet names the thing twice — `ChCliHero:245
+heroData` and `PtSearchHero:171 charHeroData`.
+
+**A hazard worth carrying forward (RECONSTRUCTION, read from code): the insert does not
+zero a new slot.** It memmoves the tail up by one and writes only the id, so every byte
+the worker does not write inherits **stale bytes from whatever record previously sat at
+that index** — which on this opcode means `+0x24..+0x43` always, and `+0x74..+0x9B`
+whenever `d3 == 0`.
+
+> **Corrected §30.3, same day:** the stale-bytes mechanism is real, but `+0x24..+0x43` is
+> not permanently stale — the sibling opcode `0x0073` writes it in full through the same
+> worker. What is true, and worse, is that **`0x0073` and `0x0074` are mutually
+> destructive**: each zeroes the fields the other carries.
+
+### 29.2 The map, and what reads each field
+
+| rec | wire | meaning | label |
+|---|---|---|---|
+| `+0x00` | hero_id | the array's sort key | OBSERVED |
+| `+0x04` | zeroed | the AGENT id — `0x0072` writes it here, `HeroDeactivate` re-zeroes it. `0x0074` zeroing it means *created, not yet activated* | OBSERVED |
+| `+0x08` | b1 | **LEVEL** | OBSERVED |
+| `+0x0C` | b2 | **a profession index, 0..10** (primary — see below) | OBSERVED / CONTESTED label |
+| `+0x10` | b3 | **secondary profession, 0 = none** | OBSERVED |
+| `+0x14` | d1 | appearance `file_id` (§28.13) | OBSERVED |
+| `+0x18` | d2 | appearance `model_id` (§28.13) | OBSERVED |
+| `+0x1C` | b4 | **nothing reads it** | NOT FOUND |
+| `+0x20` | — | **a COUNT for the array below**; the *`0x0074` handler* hardcodes it to 0, but the shared worker writes whatever its caller passes — `0x0073` passes a real one (corrected §30.3) | OBSERVED |
+| `+0x24..+0x43` | — | **eight SKILL IDs**, written in full by **`0x0073`** through the same worker; they seed the deck builder's available-skills bitset (corrected §30.3) | OBSERVED |
+| `+0x44` bit 0 | b5 | **hero-DISABLED flag** | OBSERVED (b5 as its initial value: RECONSTRUCTION) |
+| `+0x48` | d3 | **a packed CHARACTER-APPEARANCE dword** (the `s_appearanceSlot` bitfield, 8 slots), 0 = none; gates the name AND the equipment block (sharpened §30.3) | OBSERVED |
+| `+0x4C`, `+0x60` | chunk[0..4], [5..9] | **an EQUIPPED-ITEM snapshot**, five slots | OBSERVED |
+| `+0x74..+0x9B` | name | **overrides the hero's default name**, gated by `d3` | OBSERVED |
+
+**`b1` is the level, and the client says so.** The worker's already-added early-out logs
+*"HeroDataAdd (hero %d, level %d): Hero already added"* (VA `0x00A958DC`) and its second
+vararg is the value stored at `+0x08`. Confirmed independently from the read side: the
+label builder takes it as a numeric argument with **-1 as the omit-the-level sentinel**.
+The upstream guess was right, and this is the first time it has been *read* rather than
+inherited.
+
+**The professions — and heroes §13.2's refutation was a SURFACE error, not a field
+error.** `+0x0C` and `+0x10` both flow unmodified into `0x005AB7D0`, a bound-checked
+table read whose own guard is the client's assert `profession <
+arrsize(s_charProfessionAbbrev)` (`ConstChar.cpp:1290`) — ArenaNet naming the parameter
+`profession`, which is as direct as this repo's evidence ever gets. `+0x10`'s zero-ness
+picks a one-name vs two-name label template, so it is the SECONDARY and `+0x0C` the
+primary; the skeptic accepted "a profession index" as OBSERVED but marked the
+PRIMARY/SECONDARY assignment as resting on argument order, so the ordering is recorded
+as strong-but-inferred rather than measured. **The reconciliation with §13.2 is the
+finding:** the consumers are `PtSearchHero.cpp` and `PtHero.cpp` — the hero-pool and
+party-search lists — *not* the roster row. §13.2 varied these bytes and watched the
+ROSTER, which reads the AGENT's profession (heroes §14, §23). Both results are true and
+neither is about the other. A field is only refuted on the surface you looked at.
+
+**`b5` → `+0x44` bit 0 is the hero-disabled flag.** A one-line accessor returns
+`[rec+0x44] & 1`, exported through ChCliApi, and its single caller branches on it to pick
+between two different render calls for the same hero label. Bit 0 is the only bit
+anything reads.
+
+**`b4` is NOT FOUND** — a measured floor, not a shrug: the store at `0x0081DBED` is the
+only instruction in the image that touches that offset. Two senders write it
+(`0x0074` and `0x0073`) and nothing reads it.
+
+### 29.3 The ten-dword chunk is an EQUIPPED-ITEM SNAPSHOT — and the naming came from the sibling branch
+
+Two parallel five-element arrays, `A[i]` at `+0x4C` and `B[i]` at `+0x60`, paired
+`chunk[i]`↔`chunk[5+i]`. Two independent readers in the `GmMercenaryRoster` band walk
+exactly five entries, split `A[i]` at bit 16, and push `{low16, high16, B[i]}` into UI
+message `0x63` — one message per non-zero entry.
+
+**What they ARE comes from the alternative branch of the same reader, which is why this
+is a measurement rather than a guess.** When `d3 == 0`, `0x0050CD60` does not read the
+record at all — it walks the **live item container** through ItCliApi's equip-slot getter
+`0x00845530` for slots 0..8, skipping 0 and 1 and gating 7 and 8 on flag bits. So the
+record's five entries are the frozen form of the same thing the live path fetches:
+`A[i] = (byte[item+5] << 16) | dword[item+0]`, `B[i] = word[item+6]`, for item-container
+slots **2..6**. The write side agrees exactly — the packer at `0x0081DE8B..0x0081DEF8`
+looks each slot up through the same `0x00845530`.
+
+**And the packer is `0x0081DE20`, which is the function §24.2 named as "the next thing to
+read, and it is desk work".** It is read: `HeroEnable`, named by its own log string
+*"HeroEnable (hero %d): Hero not in hero pool"* (VA `0x00A95970`). Two long-standing
+items closed by one disassembly.
+
+The attribute-block hypothesis (heroes §12) stays refuted, and now has a positive
+replacement rather than a hole.
+
+### 29.4 `d3` gates the name — which explains heroes §30.2's inert EncString
+
+`d3` is an id with 0 = none, and it is the predicate on **both sides of the name**: the
+worker copies the wire name into `+0x74` **only when `d3 != 0`** (`0x0081DC1F`), and four
+readers test the same dword before touching `+0x74`, substituting a default otherwise.
+The default is `s_heroClientData[hero_id]+0x0C` through TextApi — the table heroes §2
+already located — so **the record's name is an OVERRIDE, not a fallback**: when `d3` is
+non-zero the record's own buffer replaces the table lookup and the TextApi selector flips
+from 11 to 8.
+**That is a direct, testable explanation for heroes 30.2**, where a real EncString sent
+on `0x0074` was inert: every run this arc has ever made sent `d3 = 0`, so the string was
+never copied into the record and no reader would have looked at it if it had been. The
+prediction is sharp: `--hero-info-name` with a NON-ZERO `--hero-flag` should change the
+displayed name in the pool and search lists, and `--hero-info-name` alone should keep
+doing nothing.
+
+`d3` has a second use that is not about the name: one site passes its full 32-bit value
+into a UI call with tag `0x57`, in the same slot where a `d3 == 0` client substitutes the
+first dword of a struct built by `0x0082DD30` -- the module adjacent to the `CpsMonster`
+factory the appearance pair already runs through. So `d3` plausibly names an
+appearance/composite entity, RECONSTRUCTION, and it also has a local non-wire writer.
+
+### 29.5 What this changes for the server
+
+- **`--hero-info-name` has never been able to work.** Sending a name without `d3` copies
+  nothing. The two flags are coupled and the code now says so.
+- **The record is a HERO POOL entry**, and its readers are the hero-pool/search UI --
+  `PtHero`, `PtSearchHero`, `GmMercenaryRoster` -- not the party roster. That is why so
+  much of this message measured as inert: the arc was watching the wrong window.
+- **Frame event `0x10000039`** carries the record POINTER as payload, so a subscriber
+  reads every field; `PtHero` is a confirmed subscriber.
+- Fields worth authoring now that each is named: level (`b1`), the two professions
+  (`b2`/`b3`), the disabled bit (`b5`), and a five-slot equipment display (the chunk).
+
+Remaining genuinely open in this message: `b4` (nothing reads it), `+0x24..+0x43` (this
+opcode never writes it, so another message must), and what `d3`'s value *is* beyond
+non-zero.
+
+## 30. The sibling containers, read — a profession table, a skill-bar store, and the minion answer (2026-08-19)
+
+Four tracers, eight meaning claims, **all eight CONFIRMED by their skeptics**. Two of the
+six containers hanging off `charCtx[+0x2C]` are no longer unread, and one long-standing
+guess is refuted. Two of the claims correct §29, published earlier the same day.
+
+### 30.1 `+0x6BC` is the per-agent PROFESSION table — and this server has been writing it blind
+
+The log-string trick again, in one call: the not-found path of the `+0x0C` setter
+(`0x0081FD50`) logs *"OnProfessionSecondaryBits (agent %d, secondaryBits %d): Agent not
+found in sort array"* (`0x00A95A70`) — naming the API, the container ("sort array") and
+the parameter at once.
+
+A sorted 20-byte-record array keyed on agent id: **`+0x00` agent, `+0x04` primary
+profession, `+0x08` secondary, `+0x0C` a profession BITMASK, `+0x10` a boolean**. Both
+profession getters return **11** (`CHAR_PROFESSIONS`, ids 0..10) for an absent agent, an
+out-of-band "unknown" sentinel, and a predicate answers *does this agent have profession
+X, primary or secondary*. The mask at `+0x0C` is proven a mask by its consumer, which
+shifts and tests it bit by bit, and by the literal `0x7FF` (eleven bits) the same code
+substitutes as an all-professions override.
+
+Two opcodes reach it: **`0x00B7`** `[agent, u8, u8, u8]` inserts/updates the professions,
+and **`0x00B6`** `[agent, u32]` writes the bitmask. Events `0x1000004D`/`0x1000004E`.
+
+**This is the container the hero attribute pair already depends on.** `authsrv.py`'s
+`HERO_ATTRIBS` comment has said since 2026-08-16 that "`0x00B7` writes the array at
+`ctx[0x2c]+0x6BC` — what the ATTRIBUTE code reads", and that an agent missing from it
+asserts `ConstChar:1296`. That was true and blind: we knew the write and not the record.
+Now the layout is read, `0x00B6` is a second door into the same table we never knew
+existed, and the primary/secondary assignment rests on ArenaNet's own assert
+`agentPrimaryProf != agentSecondaryProf` (`GmDeckBuilder.cpp:2321`) sitting in the one
+function that calls both getters back to back — strong, but ORDERING evidence, so it is
+labelled RECONSTRUCTION rather than measured, with the arm that would settle it named.
+`+0x10`'s boolean is a fenced NOT FOUND: one reader, reached only for the local player.
+
+### 30.2 `+0x6F0` is the per-agent SKILL BAR — `hotKeyState`, named by containment
+
+The client names it `hotKeyState` in `ChCliSkill.cpp`, and the name is earned by
+CONTAINMENT rather than proximity: the assert `hotKeyState` (`ChCliSkill:718`) sits
+inside the function reached with `ecx = charCtx[+0x2C]+0x6F0`, with two more containments
+backing it. As with the pet container there is no dedicated `.cpp` — the thin wrappers
+are `ChCliApi`.
+
+Stride **0xBC**, keyed on agent id, holding **eight 0x14-byte entries** from `+0x04`
+closing exactly on `+0xA4` — a count measured from a walk in the client that sets its own
+terminator at `+0xA4` and steps by `0x14`, not inferred from arithmetic alone. Inside an
+entry, `+0x0C` is a **skill id** and `+0x10` a **skill copy index**, named by the writer's
+own guards `ChCliSkill:515 targetSkill != sourceSkill` and `:516 sourceSkillCopy >= 0`.
+`+0xA4` is an **8-bit mask, one bit per slot**.
+
+Two more opcodes, and one of them closes an old loose end: **`0x0064`** `[agent, u8, u8]`
+sets a single bit (`bts`/`btr` by index, event `0x1000005A` carrying
+`{agent, bit, value}`, silently dropped on an unknown agent), and **`0x0065`**
+`[agent, u8]` writes the whole mask and diffs it bit by bit, firing one event per changed
+bit. **`0x0065` was one of the four "adjacent unnamed SMSGs" §28.6 listed as candidates
+for the stance echo** — it was never that; it is the skill-bar mask.
+
+### 30.3 `0x0074`'s leftovers — and two corrections to §29
+
+**§29 got two rows wrong and they are fixed above.** The premise "`0x0074` never writes
+`+0x24..+0x43`" was true of the OPCODE and false of the FIELD: the shared worker takes a
+**count** in one argument and a **pointer** in another and memcpys `count*4` bytes into
+`+0x24`. The `0x0074` handler passes a literal zero — which is why the span looked
+unwritten from where §29 stood — and the sibling **`0x0073`** passes a real count and a
+real array. So `+0x20` is that count, not a property of the handler that happened to zero
+it.
+
+**The eight dwords are SKILL IDS**, used as bit indices to build the deck builder's
+available-skills bitset — and the naming comes from the sibling branch again: when the
+count is zero, `GmDeckBuilder` does not read the record at all but fetches the
+account/character list instead, whose result the client's own assert calls
+`unlockedSkills`.
+
+**`d3` is a packed CHARACTER-APPEARANCE dword** — the same 32-bit bitfield
+`CharData.cpp` addresses through `s_appearanceSlot` (8 slots, `slot <
+arrsize(s_appearanceSlot)`) — not an entity id and not a content-row id. That explains
+why one field gates both the name and the equipment: **a record with an appearance is a
+character-derived, mercenary-style hero**, so it carries that character's own name and
+gear; a record without one falls back to `s_heroClientData`. The bit layout was not
+decoded — the type is named, a specific value is not.
+
+**An operational hazard, and it is sharp: `0x0073` and `0x0074` are mutually destructive
+on the same record.** They share one worker and each zeroes what the other carries —
+`0x0073` forces `d3 = 0`, the name to NULL and both equipment arrays to zero; `0x0074`
+forces the skill count to 0 and its pointer to NULL. Neither is a partial update, and
+order decides what survives. Our server sends `0x0074`; anything that later adds `0x0073`
+must know this.
+
+Second hazard, server-side: the worker's memcpy is `count*4` with **no bound check of its
+own**. Eight dwords end at `+0x43`, so a count above 8 walks over the disabled bit, `d3`
+and the equipment block. The wire descriptor caps it at 8, so a conformant sender cannot
+trip it — ours must respect that cap deliberately rather than by luck.
+
+### 30.4 The minion answer: there is no minion message, and PtMinionRoster is not in this family
+
+The standing guess that `PtMinionRoster.cpp` consumes one of the unread containers is
+**REFUTED by reading its consumer.** Both of its list accessors resolve the TLS root and
+take `[root+0x4C]` — the PARTY CLIENT context (`PyCliParty.cpp`), not `charCtx[+0x2C]` at
+all. It iterates a party entry's `Array<agentId>` ("teamAgent") and subscribes to
+`0x1000013B` (added) / `0x1000013C` (removed), both emitted by PyCliParty and shared with
+`PtRoster.cpp`, whose asserts name three sibling lists — **member, henchman, teamAgent** —
+of which this panel handles only the third.
+
+**Minion-ness is not declared by a minion opcode.** The panel decides it itself: the agent
+must be in the party's teamAgent array, and its monster-definition flags word must pass a
+bit test (`0x100` or `0x4000`, with `0x4000` choosing which of two sub-lists the row lands
+in, plus a conditional `0x400` under one frame style). The teamAgent list is filled by
+whatever message creates the agent's char display record — the chain is traced link by
+link to a forwarder handler, and **the opcode number is a deliberate NOT FOUND**, not a
+guess.
+
+One payload detail worth keeping for anyone replaying these events: on the ADD event
+`msg+4` is a POINTER to the array slot, while on REMOVE it is the agent id BY VALUE.
+
+### 30.5 Where the family stands
+
+| container | what it is | opcodes | status |
+|---|---|---|---|
+| `+0xAC` | — | — | unread |
+| `+0x508` | — | — | unread |
+| `+0x584` / `+0x594` | hero activation / hero pool | `0x0072`, `0x0074`, `0x0073` | read (§29) |
+| `+0x6AC` | pets | `0x00B2`/`B3`/`B4`, mirrored by `0x0062`/`0x0063` | read (§28.12) |
+| `+0x6BC` | per-agent professions | `0x00B7`, `0x00B6` | read (§30.1) |
+| `+0x6F0` | per-agent skill bar (`hotKeyState`) | `0x0064`, `0x0065` | read (§30.2) |
+
+Four of six read, six new opcodes named across today, and the two that remain are the
+cheapest next targets — the method is now routine: start at the remover the despawn sweep
+names, read the log string on the not-found path, then find the sibling branch.

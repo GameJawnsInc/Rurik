@@ -1332,6 +1332,66 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### Movement — the latch is FIXED; the teleport is EXPLAINED and three fixes are dead (2026-08-19)
+
+Full record: [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md). Two
+separate bugs; one fixed, one understood and unfixed.
+
+**FIXED (`6793260`).** The position-trust guard latched: its 900 u radius was
+measured from the value it was preventing from being corrected, so once the model
+was wrong by more than 900 u it could never resynchronise — 36 consecutive
+refusals in one run, 21% of all reports. Scored over the **72** refusals the four
+harness runs actually printed, at 478 u/s: **client right 71, guard right 0,
+undecidable 1.** The budget is now `max(900, 580·dt)` — a strict loosening — and
+the second consecutive refusal is adopted regardless. `test_position_trust.py`,
+floor 20.
+
+**THE TELEPORT IS EXPLAINED, MEASURED IN CLIENT MEMORY, AND STILL UNFIXED.**
+`0x0029` is **not a heading hint — it is a scheduled teleport.** It caches an
+arrival tick at `agent+0x48` and a target at `agent+0x9C`; at that exact
+millisecond the client snaps to the target. Seven arrivals observed directly with
+`toolkit/clientscan/movetap.py` (98 u, 680 u, 803 u, 2129 u, 2743 u, 3393 u,
+5238 u), every one landing on `m_targetPoint` and firing within one 20 ms sample
+of schedule. **The snap is how the client completes EVERY granted move** — the
+98 u one is invisible, the 5,238 u one is "the warp". `+0x48` is set once and
+never re-armed; the formula
+`+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms
+against 18,087 actual, with `maxSpeed = 288.0` read out of the agent.
+
+**THREE FIXES ARE DEAD, each refuted by the run built for it:**
+
+1. **Suppress the grant** — retail sends 2,855 player-directed `0x0029`,
+   455 of them cross-plane. Not an invention of ours.
+2. **`--stop-echo`** (echo the client's position back on move-cancel) — the
+   character teleported anyway 9.9 s after an echo fired, *and* the echo added a
+   second destination that dragged the player back.
+3. **`--heading-grant`** (refresh on every keyboard heading) — **caused warps.**
+   Two teleports in six seconds, landing 0.51 u and 15 u from a point granted
+   0.28 s earlier. Re-granting does not bound the teleport: the arrival distance
+   is measured from the agent's *cached* `m_point`, which each grant carries
+   forward, so stacked grants come due almost immediately. Converts one large
+   warp into many small frequent ones.
+
+**THE NEXT RESEARCH PASS — one question, and it is not a retune.** Every fix so
+far granted a **server-extrapolated** point computed from a report already a few
+hundred ms stale. ArenaNet grants the **client's own** endpoint: its reported
+position plus *its own* vec2, plus exactly +0.500 u along it (1,420 of 2,419
+heading-triggered grants). **Ask the live corpus whether ArenaNet's heading
+grants also point BEHIND the player when they are moving backward, and whether
+those ever produce an impossible-speed step.** If they do point behind and never
+warp, our mechanism story is still wrong and the difference lies elsewhere. If
+they never point behind, the fix is to stop extrapolating and echo the client's
+own vector. Either answer is progress; guessing again is not.
+
+Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted
+point and have no established cause; and the sync (`+0xE8`) vs async (`+0x14C`)
+agent question decides whether the model we watch is the one the player sees.
+
+**Instruments now in the tree:** `toolkit/clientscan/movetap.py` (reads the
+client's own arrival time and reconstructs live position; `--selftest` needs no
+client) and `toolkit/authsrv/warpscan.py` (scores a capture, printing the TRIAL
+count before the verdict — a run with zero armed trials tested nothing).
+
 ### GAME_SMSG naming — 16 opcodes named and merged; 14 PARTIALs remain, priced (2026-08-18)
 
 [studies/smsgnames/FINDINGS.md](studies/smsgnames/FINDINGS.md) is the static reachable-handler
@@ -1652,7 +1712,94 @@ field we sent as zero or never sent. The full rig:
 `--hero 1 --party-mine-late 2.0 --hero-activate --hero-inventory 2 --hero-bags
 --hero-char --hero-appearance 116366`. Cosmetic residue filed in §28.3, not floors: the
 Lvl 255 sentinel (prop 36 for agent 200, or a body) and the humanoid-doll arm
-(`--hero-appearance 116703,116228`).
+(`--hero-appearance 116703,116228`). **Both residue arms RAN 2026-08-19, agent-piloted
+(§28.4):** the appearance pair is ORDER-SENSITIVE — `116228,116703` draws a humanoid
+bust, the reverse draws an empty doll, neither asserts, so a wrong pair fails silently
+(§28.5's dat chunk-walk settled the semantics: d1 must carry the FA1 skeleton chunk, d2
+supplies the geometry — the content labels were right and §28.4's swapped-labels
+speculation is refuted); and `--hero-level 20` (new flag, `0x009F` prop 36 pre-body)
+cleared the Lvl 255 sentinel in the panel title AND the roster row. **Then the c2s wall
+fell (§28.5, same day):** the open panel made heroes §3.3's triple NOT FOUND clickable,
+and three opcodes came off it in one afternoon — `0x0015` HERO_AI_MODE `[agent, mode]`
+(3/3 stance clicks, enum = 0x0072's aiMode; echo arm wired into authsrv, fires
+confirmed), `0x001A` HERO_FLAG_PLACE `[agent, coords, plane]` and `0x001B`
+PARTY_FLAG_PLACE `[coords, plane]` (compass flag widgets, arm-then-ground, n=1 each) —
+all three named in `schema/overrides.json`. `--hero-vitals 480,45` (new) fills the
+panel bars exactly. **Then the loop CLOSED (§28.6, still the same day):** three static
+tracers found every echo and one wire run confirmed all of them — s2c `0x0062`
+HERO_AI_MODE_SET moves the stance ring (and Norgu speaks his Guard line; `0x0072` was
+inert because it raises `0x10000038`, an event the panel has no case for), s2c `0x0066`
+HERO_FLAG_SET plants the hero flag (world model + compass marker, via activation-record
++0x10..0x1C → event `0x100000A0` → CompassCanvas, ArenaNet's verb: CommandMoveToPoint),
+s2c `0x0067` PARTY_FLAG_SET plants the party pennant. The crosshair's c2s is CAPTURED and its echo
+closed the same day (§28.7): `0x0016` HERO_LOCK_TARGET `[hero, target]` locks and
+`[hero, 0]` clears (both wire-captured), echoed by s2c `0x0063` HERO_LOCK_TARGET_SET
+(activation-record +0x20, event 0x1000003F) — crosshair lit gold with the target's
+resolved name, then unlit. `0x0017` never fired (its 0x0080CEE0 guard reads a state
+this rig does not set; pet container +0x6AC is the suspect) and stays medium. All named in
+`schema/overrides.json`; authsrv answers `0x0015`→`0x0062`, `0x001A`→`0x0066`,
+`0x001B`→`0x0067`. The commander UI is round-trip complete: click → c2s → echo →
+render, six messages, all named. Hiring stays NOT FOUND with a stronger floor (all 174
+channel-send callers enumerated; the party-add opcodes ride a different send helper —
+that helper's callers are the next place to look). **The greyed row is settled (§28.10):**
+the owner's reading was right that a body lights it — measured on the glyph colour, a
+bodiless hero's name renders (182,148,148) against the player's (220,181,181) across
+four runs, and a body brings it to (223,184,184) — but the positive control refutes
+distance as the trigger: a body at −3000u is dropped from the compass in the same frame
+and its row stays lit. The predicate is agent-presence; retail's range greying is that
+same rule with server-side visibility culling in front of it (`agentroster.py`'s corpus
+churn), which is a server feature we have not built rather than a message we have not
+sent. `--hero-body-offset` (new) is the placement knob.
+**`0x0017`'s name is RETRACTED (§28.11)** — it is not the unlock. Its branch is chosen
+by a getter reading a per-agent ChCliApi `obj+0x24`, the same store GmBundle,
+GmWeaponBar and GmCoreAction treat as "carrying a bundle"; the real toggle-off is
+`0x0016 [hero, 0]`, its own zero form, and the crosshair paint reads both stores in the
+same priority order so there was never a disagreement. The schema entry is deleted
+rather than renamed (the mechanism is OBSERVED, a name would be inference) and its
+writer is NOT FOUND on four searched surfaces, so `0x0017` is unreachable from any rig
+we can build. **Pets DO share the commander messages (§28.12)**: `0x0062`/`0x0063` write
+the pet container at `+0x6AC` with the same agent id, 28-byte records (+0x14 aiMode,
++0x18 lockedTarget) — but only after a declaration we have never sent, s2c `0x00B2
+PET_ADD`; without it both mirror writes hit a NULL find and silently do nothing, which
+is why the pet half was invisible all arc. `0x00B2`/`0x00B3`/`0x00B4` PET_ADD/REMOVE/
+RENAME named from the client's own log strings, medium (static-only, no capture).
+**`0x0074` IS READ, FIELD BY FIELD (§29)** — the arc's biggest standing unknown, and it
+answers two of our own refutations. The record is a **HERO POOL entry** (the 0x9c-stride
+hero-keyed array at `+0x594`, finally disambiguated from the 0x24-stride agent-keyed
+activation array at `+0x584`; the same object holds both, which is what this arc kept
+tripping on). Named from their own consumers: **b1 = LEVEL** (the client's own log string
+says so), **b2/b3 = primary/secondary profession** (into a table whose assert names the
+parameter, `ConstChar.cpp:1290`), **b5 bit 0 = hero-disabled**, **d3 = an id, 0 = none**,
+and **the ten-dword chunk = an EQUIPPED-ITEM SNAPSHOT** for item slots 2..6, named from
+the sibling branch of its own reader that walks the live item container when d3 is 0.
+Its packer is `0x0081DE20` = HeroEnable — **the function §24.2 named as "the next thing
+to read"**, now read. `b4` is a measured NOT FOUND. Two refutations explained rather than
+overturned: heroes §13.2 (professions) varied the right bytes and watched the wrong
+window — the roster reads the AGENT, these drive the hero-pool/search lists; heroes §30.2
+(inert EncString) never had a chance, because the name copy is **gated on d3 != 0** and
+every run ever made sent 0. Prediction on record: `--hero-info-name` WITH a non-zero
+`--hero-flag` should change the pool/search name. Fields now authorable: level, both
+professions, the disabled bit, a five-slot equipment display.
+**FOUR OF THE SIX SIBLING CONTAINERS ARE NOW READ (§30)**, all eight meaning claims
+CONFIRMED by their skeptics. `+0x6BC` is the **per-agent PROFESSION table** — 20-byte
+records {agent, primary, secondary, a profession BITMASK, a boolean}, named by its own log
+string *"OnProfessionSecondaryBits … Agent not found in sort array"* — which is the table
+this server has been writing blind since 2026-08-16 via `0x00B7` (now named
+AGENT_PROFESSIONS, and the hero attribute path depends on it); `0x00B6`
+AGENT_PROFESSION_BITS is a second door we never knew existed. `+0x6F0` is the **per-agent
+SKILL BAR**, the client's own `hotKeyState` (ChCliSkill.cpp), stride 0xBC, eight 0x14-byte
+entries closing exactly on a 8-bit slot mask at `+0xA4`, driven by `0x0064`/`0x0065` (now
+named) — and `0x0065` was one of §28.6's four candidates for the stance echo, so that
+loose end is closed as a negative. **The minion guess is REFUTED**: `PtMinionRoster` reads
+the PARTY client at `[root+0x4C]`, not this family at all, and minion-ness is a
+monster-definition FLAG TEST the panel performs itself, not a declaration opcode.
+**Two §29 rows corrected in place:** `+0x24..+0x43` is eight SKILL IDS seeding the deck
+builder (written by sibling `0x0073`, not permanently stale), `+0x20` is their count, and
+`d3` is a **packed character-appearance dword** (`s_appearanceSlot`), not an id — which is
+why one field gates both the name and the equipment. **Hazard on record: `0x0073` and
+`0x0074` are mutually destructive**, each zeroing what the other carries.
+Next in this corner: `+0xAC` and `+0x508`, the last two unread, by the now-routine method
+(despawn-sweep remover → log string on the not-found path → sibling branch).
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
@@ -2248,6 +2395,25 @@ client**, with the offer and turn-in screens carrying a reward line and the mark
 between giver and objective NPC. `studies/quests/` has the arc; `content/quests.toml` is the
 table; `toolkit/test_quests.py` (62 checks) is what holds it.
 
+**BUG 2 IS FIXED 2026-08-19 AND ITS DIAGNOSIS BELOW WAS WRONG IN BOTH HALVES; BUG 1
+STANDS, AND THE TWO WERE NEVER ONE FIX.** The block below is left as written because the
+error is instructive — read it, then read this. The client does **not** walk you over on
+its own: 46 c2s INTERACTs across five keyed captures carry **zero** `0x003E MOVE_TO_COORD`
+within 100 ms, and the 2026-08-16 session's own capture has the player's position
+byte-identical across two clicks 1.34 s apart. The walk is a **server** order,
+`GAME_SMSG 0x002A AGENT_UPDATE_DESTINATION` — decoded and named `high` in
+`schema/overrides.json` all along, never once sent by `authsrv.py`, the fifth time the
+mechanism was already in the tree. ArenaNet also does not DROP an out-of-range interact;
+it answers it after about `(gap − range) / 288 u/s`, the walk's own duration (1054 u:
+predicted 2.79 s, observed 2.56 s). Both behaviours now exist: `_order_walk` sends the
+order, `interact_pending_tick` serves the held interact on the client's own reported
+arrival, and `toolkit/authsrv/test_interact.py` (19 checks, floor 19) covers a path
+nothing in the suite touched before. **Bug 1 is untouched and still admitted-invented** —
+no measured talk range exists in this repo, the client has no distance gate on either
+send, and the one real 156.0 proximity constant has no call edge to the click path — but
+it is now independently tightenable, which is exactly what the "one fix" framing denied.
+The verification run is staged and not yet done (harness contention).
+
 **TWO BUGS ARE KNOWN AND DELIBERATELY LEFT** — owner's call, end of session 2026-08-16.
 Neither blocks the lifecycle; both are wrong against stock and should be fixed before this
 is called done.
@@ -2264,10 +2430,12 @@ is called done.
    standing on. **These two are one fix, not two** — the range gate is only correct once the
    walk exists, and shipping the gate alone would make the quest unplayable.
 
-**What is NOT done beyond those:** no reward is GRANTED (the grant protocol is 0 of 23,495 in
-the corpus and is its own arc), quest names are ArenaNet's string ids rather than ours
-(rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
-per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
+**What is NOT done beyond those:** no reward is GRANTED (the grant protocol is 0 of 22,524
+s2c in the corpus — this line said 23,495 until 2026-08-19, a denominator the study itself
+never used — and is its own arc), the quest name — authored 2026-08-19, string id 100552, see
+the Q2b paragraph below — has not yet been SEEN on a screen, and the giver/objective
+binding is by AGENT ID, which is per-connection and per-spawn — a probe-world binding, not
+a content one (R5's job).
 
 **RUNG Q1 LANDED 2026-08-16, and it was the arc's unbanked value.** Fifteen of the nineteen
 quest opcodes were **absent from `schema/overrides.json` entirely** — `QUEST_ADD`,
@@ -2345,20 +2513,70 @@ a live instance of the rival reading: `questdefs.py`'s `LITERAL_MARK` comment sa
 
 **The scope is narrower than "these addresses are stable", and the check says so.** On the vaulted 38519 build — ~90 days older — **0 of 12 sites match and the frame-bus scan finds nothing in any quest body at all.** So the claim is that nothing moved across the 15-day 38797→38833 patch, which is much smaller than durability; 38519 is now the control that proves the equality is a measurement rather than a tautology. `test_quests.py` §20 (77 checks) re-runs the whole thing, and a fourth vaulted build is covered without an edit.
 
-**Next offline, cheapest first, and the offline half is the short half. Q2b — author the
-NAME.** The description is ours and the name is still ArenaNet's `0x3D64`, so a quest we wrote
-announces itself in their words. Q0 went green 2026-08-15 (`studies/quests/AUTHORING.md` §1)
-and it was the only gate on this rung; `toolkit/mapdata/textwrite.py` already exists, is
-tested, and has 188 authored skill names on a retail screen behind it. The authoring half
-needs no client. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
+**THE THREE DWORDS ARE MEASURED — the loopback run this block asks for below RAN
+2026-08-19, agent-piloted, and the panel named its own fields** (harness
+`20260819T071548`, `--probe quest_panel`, five sentinel arms with the prediction filed
+first): **dword 1 is EXPERIENCE, dword 2 GOLD, dword 3 SKILL POINTS**, read from the
+panel's own toast — the (111, 222, 333) arm rendered *"You have earned 111 experience,
+222 gold, and 333 skill points!"*. Zero-valued fields are omitted from the sentence,
+which explains the 2026-08-13 sweep's silent banner (its all-zero payload suppressed
+the toast entirely); the panel re-fires per send, five renders in one session; max
+dwords render unsigned with no assert. The arm-3 hypothesis (field 1 = quest id) is
+REFUTED — 1463 came back as "1,463 experience". **What it is not: a grant.** The Level
+chip read 1 beside a 4.29-billion-experience toast, and
+`0x006C`/`0x0096`/`0x0097`/`0x00FB` stay 0-of-corpus — display vs grant is now the
+reward arc's live-capture question. `studies/quests/FINDINGS.md` §9.6 is the record;
+the probe stays registered as the completion-panel calibration.
+
+**AND THE OTHER FOUR PUBLISHERS ARE ATTRIBUTED — §9.3's "next static question" ran
+2026-08-19, same day.** The five frame ids GmQuestComplete subscribes to are published
+by exactly the five completion-family opcodes: `0x006C`→`0x10000156`,
+`0x0097`→`0x10000157`, `0x0096`→`0x10000158` (**mind the swap** — frame-id order does
+not follow opcode order), `0x00FB`→`0x10000159`, each body located through the receive
+table and the pairing confirmed by two instruments (msghandler's disassembly,
+framebus's scan). The scene and the 0-of-corpus family CLOSE ON EACH OTHER, which
+structures the grant question: `0x0097` is the one message carrying a STRING (the
+rewards-blurb candidate, RECONSTRUCTION), `0x0096` is gated on completion-flag bits
+(the sweep's assert), and a loopback ladder over those with the `quest_panel` rig is
+the next cheap probe. `framebus.py` prints the pairing and `test_framebus.py` asserts
+it (27 checks, floor 16); `0x0096`/`0x0097` get `why`-only schema rows per §9.4's
+restraint. `studies/quests/FINDINGS.md` §9.7.
+
+**AND THAT LADDER RAN THE SAME DAY — `0x0096` IS MISSION_COMPLETE (§9.8).** Two probes,
+`completion_gates` then `completion_rewards`, bodies disassembled first: one flag bit
+draws the whole 3D scene (so `0x0096` alone suffices — the "underfed" caveat retires for
+it), and the client's own crash class `UiMsgQuestCompleteMissionNonMedal` IS the name.
+Field 1 = `completionFlagsGained` (bit0 "completed the mission", bit1 "completed the
+bonus goal", gate at `GmQuestComplete.cpp:729`, pinned to f1 by the f1=0 crash); fields
+3/4/5 = the reward triple that rendered **"111 experience, 222 gold, 333 skill points"**,
+decoding f3=xp / f5=gold (middle slot, record `{4,f3,f5,f4}`) / f4=skill points. `0x0097`
+cold dies at `:678` ("No valid case for switch") — it is a sub-panel keyed by a u8 over
+state a PRIOR completion message stages, name still abstained. **Still DISPLAY not GRANT**
+(the toast reads back what we send; XP bar unmoved). The completion DISPLAY is now fully
+mapped from our server; the grant and `0x0097`'s priming message are the live-capture
+remainder. `0x0096` earns its name in overrides.json (measured effect, §9.4 bar cleared).
+`studies/quests/FINDINGS.md` §9.8.
+
+**Q2b's AUTHORING HALF RAN 2026-08-19.** `textwrite.py --set 200 "A First Errand"` wrote
+OUR name into text file 98, record 200 (string id 100552) of the reskin-roster archive —
+in place, journalled (`questname.journal`), read back exactly, neighbours and identity
+tier intact — and `content/quests.toml`'s `enc_name` now commits the bare id as the
+two-word varint `[0x8103, 0x0CC8]` (`codedstr.encode_id`), replacing ArenaNet's `0x3D64`
+placeholder. `textwrite.py` gained the generic `--set RECORD TEXT` source (the 188 skill
+names were a special case). **AND THE SCREEN HALF RAN THE SAME DAY — Q2b IS CLOSED.**
+Probe `quest_name_authored`, agent-piloted, harness `20260819T085654`, reskin-roster
+client (the one archive holding record 200): the control arm rendered 'Ascalon' and the
+treatment arm rendered **'A First Errand'** in BOTH the tracker and the 'Quest Added'
+toast — an A/B in one run, riding `0x0049`'s last-pushed-becomes-active write. The quest
+now announces itself in our words on their renderer; the reskin-roster pairing trap is
+recorded in the probe's note. **Then 877 vs 888** — the FLAGGED paragraph above is the whole of what is
 known, and which one is wrong is a measurement nobody has taken.
 
-**Two runs are what the arc is actually waiting on, and they are different asks.** **Q6 needs
-the owner:** walk a portal, the log survives. The code and its checks are landed, and nothing
-offline substitutes for that criterion. **The reward grant needs ONE LOOPBACK RUN, not a live
-campaign** — `0x004E` is named and its readout is a centre-screen panel rather than a
-world-anchored click, so the first real question, what `QUEST_COMPLETE_PANEL` expects in its
-three dwords, is one send away.
+**Two runs were what the arc was waiting on; the loopback one RAN 2026-08-19 (the dwords
+paragraph above), so Q6 is the run that remains.** **Q6 needs the owner:** walk a portal, the
+log survives. The code and its checks are landed, and nothing offline substitutes for that
+criterion. What is left of the reward arc past the panel display is the GRANT protocol,
+which is a live-capture question (a narrated mission completion), not a loopback one.
 
 **And the largest piece is the two known bugs at the top of this block, which are ONE fix and
 not two:** the range gate is only correct once click-to-walk exists, and shipping it alone
@@ -2647,10 +2865,14 @@ FOUND three times over (stance change, flag placement, hiring), and both reading
 client-local UI vs an opcode we missed — fit the evidence. And **follow AI does not exist**
 on our server; the movement messages do, so it is unbuilt work rather than an unknown.
 
-**One defect to fix in passing:** `msgshape.py` prints `string16(0)` for *every* wide-string
-field — `Field.__repr__` reads `self.cap` but the `wstring` branch never passes `cap=`. The
-real capacity is only recoverable by back-solving from the wire total, which will mislead
-anyone who trusts the printed number.
+**One defect to fix in passing — FIXED `c81d6d1`, CHECKED 2026-08-19:** `msgshape.py` printed
+`string16(0)` for *every* wide-string field — `Field.__repr__` reads `self.cap` but the
+`wstring` branch never passed `cap=`, so the real capacity was only recoverable by
+back-solving from the wire total. It now prints the declared capacity, pinned by
+`test_msgshape.py` §4 over all 141 wide-string fields on all three vaulted builds (floor
+44 → 73). **The fix landed on 2026-08-15 and this paragraph still called it open on
+2026-08-19**, because nothing checked it — the same failure the top of `CLAUDE.md` is about,
+in miniature: a rule nothing checks is a wish, and so is a fix nothing pins.
 
 ### Combat — steps 0-9 landed and the caged runs happened; NOTHING is left (2026-08-15)
 
@@ -3126,11 +3348,27 @@ missing piece is committed code plus the client's own FVF dispatch.
 > this contradicts ArenaNet's 2018-06-06 patch note describing a *vertical*
 > calculation. The measurement stands; the reconciliation is not guessed.
 >
-> **What is still open** is FINDINGS §8, and it is now short: the lightmap's
-> TRANSFER CURVE (tag 9 applied as the simplest mapping the measurement
-> allows), the quadrant's `+u` ORIENTATION (a convention, not a measurement),
-> and three named-but-not-understood fields (`table_b`, tag 0's `tex_word`,
-> the 4-dword table at `0x00A73DF8`). **Nothing on that list blocks a render.**
+> **§13 — the lightmap's TRANSFER CURVE is SETTLED (2026-08-19), and it is a
+> QUARTIC.** The bake is `255·(1 − (1 − N·L)⁴)`, a fast ease-out — not the
+> linear `shade/255` the earlier text assumed and not a gamma — read byte-exact
+> from the generator `0x0075CC30` and reproduced on 667,647/667,648 corpus
+> cells (and 1024/1024 on four client compiles) by
+> `studies/terrain/trnbake.py`, which reads the client's invsqrt table at run
+> time and commits none of it. The quartic's fast saturation is why 348/349
+> maps peg at 255 and why §6.5's linear fit could only reach r 0.887. No
+> cast-shadow term; the bake is a pure function of (heights, sun angle).
+> **Two follow-ons replace it, neither blocking a render**: how the client
+> *displays* the baked lightmap (§13.3 — both terrain vertex shaders write a
+> DEPTH-FADE to the shader's `v0`, not tag 9; the lightmap's on-screen consumer
+> was NOT FOUND statically and needs a live vertex-declaration capture, NOT
+> more disassembly), and Blender's lightmap COLOUR-SPACE (§13.2 — the client
+> blends in raw byte-space, `import_gwmap` in scene-linear; a visual fix, not a
+> blind flip).
+>
+> **What else is still open** is FINDINGS §8, and it is now short: the
+> quadrant's `+u` ORIENTATION (a convention, not a measurement), and three
+> named-but-not-understood fields (`table_b`, tag 0's `tex_word`, the 4-dword
+> table at `0x00A73DF8`). **Nothing on that list blocks a render.**
 
 **Cold session: read [`studies/terrain/HANDOFF.md`](studies/terrain/HANDOFF.md)
 FIRST** — the traps, not the status, in the pattern `studies/isle/HANDOFF.md`

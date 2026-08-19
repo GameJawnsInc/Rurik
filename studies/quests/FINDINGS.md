@@ -794,7 +794,7 @@ Lanes C/D/E read the wire. Lane F read GWW. Neither consulted the other. **Five 
 | **"The escort verb inherits `studies/monsterai`'s unrecoverable problem"** (lane A) | `monsterai/FINDINGS.md:7` says ArenaNet's AI *as a mechanism* is unrecoverable. It says nothing about authoring **our own** escort NPC with a path and a fail state; `content/*.toml` has `source = "invented"` for exactly this | Would refuse work the finding never forbade. Escort is EXPENSIVE (invented pathing, invented fail state, will not match retail) — not blocked. |
 | **"`asserts.py`'s 13 tail-call sites are a slice of its own ~370-site shortfall"** (lane B) | The tool's shortfall is a `call rel32` sweep (20,131 sites). The tail-call shape is `jmp rel32` (13 sites), outside it | Understates the tool's blind spot. The real floor gap is **≥383**, and the tool's self-reported shortfall is itself a floor. |
 | **"R4c-1's criterion is at `PLAN.md:969-970`, proposed and not yet adopted"** (lane A) | `PLAN.md:969-970` is about `dhbuild.py`/`buildid.py` deduplication. PLAN's own R4c-1 wording is at **589-591**, inside §3.2 — and §3 is the repo's single status authority | Quoted MANIFEST's phrasing under PLAN's name, and understated the criterion's standing. Lane G cited it correctly. |
-| **"`0x0049`'s string16 cap of 8 code units is OBSERVED"** (lane D) | The cap comes from `schema/messages.json`, which was imported from OpenTyria's `msgdefs.c`. The client's own recovered descriptor prints `string16(0)`; the 78-byte fixed wire size is *consistent* with 8 but does not pin it | A content schema's literal-name limit resting on an OpenTyria field annotation while wearing an OBSERVED label. The longest value ArenaNet ever sends is 5 words, so the boundary has never been tested from either side. |
+| **"`0x0049`'s string16 cap of 8 code units is OBSERVED"** (lane D) | The cap came from `schema/messages.json`, imported from OpenTyria's `msgdefs.c`. The client's own recovered descriptor printed `string16(0)`; the 78-byte fixed wire size was *consistent* with 8 but did not pin it | A content schema's literal-name limit resting on an OpenTyria field annotation while wearing an OBSERVED label. The longest value ArenaNet ever sends is 5 words, so the boundary has never been tested from either side. **SUPERSEDED 2026-08-19 — the label is now defensible, as CORROBORATED.** That `string16(0)` was a `msgshape.py` display defect, not a silent descriptor (`studies/heroes/FINDINGS.md` §9, fixed `c81d6d1`). The recovered descriptor reads `[u32, vec2, u16, u16, u32, string16(8), string16(8), string16(8), u16]` — **three** wide strings of capacity **8**, and the 78-byte total closes on them exactly (2+4+8+2+2+4+3×18+2). So the cap is pinned by the client's own table, a witness genuinely independent of OpenTyria; the two agree. What does **not** change is the last sentence: the boundary is still untested from either side, and three fields where lane D discussed one is worth re-reading. |
 
 **A note on how this table was produced, because it matters more than any row in it.** Three verification passes ran against the artifacts, not the prose, and between them they refuted five load-bearing claims, corrected eight, and found two things no lane found. Two of the refutations are lane-vs-lane: **lane B was right on the frame-band width and wrong on the helper VA; lane C was right on the helper VA and wrong on the band width.** Neither lane would have caught its own error, and reading only one of them would have produced a confidently wrong document. That is the same structure `studies/smsg/FINDINGS.md` §7 records — and unlike that pass, the "what this means for our server" half here *was* attacked, which is where the `textwrite.py` and `0x0080`/`0x0081` findings came from.
 
@@ -1274,6 +1274,11 @@ sending `0x004E` supplies one fifth of what the scene subscribes to. **Which opc
 the other four is the next static question**, and `framebus.py --at` answers it one body at
 a time — `0x006C`, this arc's named "instruction-identical twin", is the first candidate to
 place. Lane B's by-hand recovery of `0x10000159`'s site at `0x0081529E` is confirmed here.
+**ANSWERED 2026-08-19, §9.7:** all four are the other completion-family opcodes' own
+bodies — `0x006C`→`0x10000156`, `0x0097`→`0x10000157`, `0x0096`→`0x10000158`,
+`0x00FB`→`0x10000159`. The table above stays as written because *"not a quest-family
+handler"* was true; what it could not see is that the family feeding the panel is the
+completion family itself.
 
 #### 9.4 What was NOT named, on purpose
 
@@ -1308,12 +1313,270 @@ is reproducible **by running** rather than by rewriting.
 verification that is a claim in prose and not a check, and the fact that **every binary
 claim in this document is build 38797** and none has been re-checked against 38833.
 
+#### 9.6 The three dwords: MEASURED, one agent-piloted loopback run (2026-08-19)
+
+§7.6's remaining half — *what the panel expects in those three dwords* — is answered,
+and it took exactly the one loopback run §9.3 predicted. Harness `20260819T071548`,
+caged loopback, build 38797 client, `--probe quest_panel`: five arms with the
+prediction filed in the probe before launch, cadence frames at 1 s scored by
+`shotlabel.diff_score` joined to the capture's own wall clocks, then read by eye at
+every arm (the masked scorer's banner blind spot from `studies/newopcodes` cannot bite
+here — the committed scorer is full-frame — but the panel draws exactly where a mask
+would sit, so the eye pass was mandatory either way).
+
+| Arm | Payload | On screen — OBSERVED |
+|---|---|---|
+| 1 | `(0, 0, 0)` | The 20260813T123003 render reproduces: a 3D victory monument (red-gold panel, eye motif) materializes centre-world in a pyrotechnic burst ~1.5 s after the send, animating ~8–10 s. **No toast.** |
+| 2 | `(0, 0, 0)` again | The identical render, again. **The panel re-fires per send** — not one-shot, so value ladders fit in one session. |
+| 3 | `(1463, 0, 0)` | The banner, plus a centre-bottom toast: **"You have earned 1,463 experience!"** |
+| 4 | `(111, 222, 333)` | **"You have earned 111 experience, 222 gold, and 333 skill points!"** |
+| 5 | `(0xFFFFFFFF, ×3)` | **"You have earned 4,294,967,295 experience, 4,294,967,295 gold, and 4,294,967,295 skill points!"** No assert, no clamp, client alive to teardown. |
+
+**The reading, from the client's own sentence: dword 1 is EXPERIENCE, dword 2 is GOLD,
+dword 3 is SKILL POINTS.** Zero-valued fields are omitted from the sentence — arm 3
+names only experience, arms 1–2 draw no toast at all — which *explains* the 2026-08-13
+sweep's silent banner rather than contradicting it: the sweep's all-zero payload
+suppressed the whole sentence. Values render unsigned and comma-formatted. Arm 3's
+stated hypothesis (field 1 = quest id) is **REFUTED**, and the sentinel property is
+what made the refutation legible: 1463 sits outside every corpus range, so its
+appearance as "1,463 experience" is not ambiguous with any real quest binding.
+
+**What this does and does not settle.** It settles the DISPLAY — what the panel does
+with its payload. It does **not** settle a grant: the Level chip read 1 in the same
+frame as the 4.29-billion-experience toast, no client-side state visibly changed, and
+the rest of the completion family (`0x006C`, `0x0096`, `0x0097`, `0x00FB`) stays 0 of
+22,524 in the corpus. Whether retail pairs this display with a separate state-changing
+grant protocol is still the live-capture question, and Q7's acceptance criterion still
+must not claim a reward. Also unmoved: which opcodes publish the other four frame ids
+GmQuestComplete subscribes to (§9.3). One softening of §9.3's caution: this run fed the
+scene exactly ONE of its five subscribed ids and the banner-and-toast path rendered
+complete-looking anyway, so an underfed render is a risk for the scene's *other*
+content (medals, completion notes, reward models), not for this path.
+
+#### 9.7 The other four publishers: the completion family closes on itself (2026-08-19)
+
+§9.3 ended on *"Which opcodes drive the other four is the next static question"*, and
+the answer has a shape nobody predicted in writing but should have: **the five frame
+ids GmQuestComplete subscribes to are published by exactly the five completion-family
+opcodes** — the same five that are 0 of 22,524 in the corpus. The scene and the
+protocol family close on each other, and `0x006C` was indeed the first candidate to
+place (§9.3 called it; the twin reading holds).
+
+| frame id | publisher VA | receive-table chain — MEASURED | shape |
+|---|---|---|---|
+| `0x10000155` | `0x0080F6C7` | `0x004E` (§9.3, the rename) | `[u32,u32,u32]` |
+| `0x10000156` | `0x00810B47` | **`0x006C`**: stub `0x0091E180` → body `0x00810AF0`..`0x00810B61` | `[u32,u32,u32]` — `0x004E`'s twin |
+| `0x10000157` | `0x008124C8` | **`0x0097`**: stub `0x0091EBD0` → body `0x00812490`..`0x00812505` | `[u8, string16(128)]` |
+| `0x10000158` | `0x00812473` | **`0x0096`**: stub `0x0091EBA0` → body `0x008123E0`..`0x0081248D` | `[u32 ×5]` |
+| `0x10000159` | `0x0081529E` | **`0x00FB`**: stub `0x0091F9D0` → body `0x00815260`..`0x008152D4` | `[u16,u32,u32]` |
+
+**Mind the swap.** `0x0096` posts `0x10000158` and `0x0097` posts `0x10000157` —
+frame-id order does not follow opcode order, which is exactly the detail an
+assume-adjacent reading would get wrong, and `test_framebus.py` §1 now asserts it
+structurally so a tidy-minded edit goes red.
+
+**Two instruments agree.** Each body was located through the client's receive table
+(`msghandler.py <op>`: dispatch stub, one call, the body) and disassembled linearly to
+its `ret`; independently, `framebus.py --at <body> --end <ret>` finds exactly one POST
+of the expected id in each range (`push imm32` / `call 0x00633D70`). The pairing is
+committed as `COMPLETION_BODIES`/`COMPLETION_EXPECTED` in `framebus.py`, printed by the
+no-arg run ("4 of 4 completion bodies match"), and checked by `test_framebus.py`
+(§1 structurally, §2 against the pinned image — 27 checks, floor 16).
+
+**What it reframes.** The reward arc's remaining gap is now *structured*: the grant is
+not one mystery opcode but a five-message scene feed, of which `0x004E` (display:
+experience/gold/skill points, §9.6) is measured, `0x0097` is the one that carries a
+STRING (the completion-notes/rewards-blurb candidate — RECONSTRUCTION), `0x0096` is
+gated on completion-flag bits (the 2026-08-12 sweep's assert), and `0x006C`/`0x00FB`
+have screen observations (world burst; hard-mode banner). A loopback ladder over
+`0x0096`'s two flag bits and `0x0097`'s u8 enum with the `quest_panel` rig is now the
+cheap next probe; the full retail sequencing still needs the narrated live completion.
+Schema: `0x0096`/`0x0097` get `why`-only rows (the §9.4 restraint — the join names
+their wiring, not their effect); `0x006C`'s row records its name/wiring TENSION
+(a chest-labelled burst feeding the quest-completion band) rather than resolving it.
+Build scope: these VAs are 38797 measurements, not re-checked on 38833/38519.
+
+#### 9.8 The ladder ran: `0x0096` is MISSION_COMPLETE, its fields decoded from the screen (2026-08-19)
+
+The loopback ladder §9.7 named as the cheap next probe ran the same day — two probes,
+`completion_gates` (five arms) then `completion_rewards` (two arms, the re-fire of the
+two the first run's crash blocked). Both had their bodies disassembled first, so the
+arms were informed rather than blind. What the screen returned:
+
+- **`0x0096` IS the mission-complete message**, and the client says so in its own crash
+  dump: the assert class is `UiMsgQuestCompleteMissionNonMedal`. One send with a single
+  flag bit draws the **entire 3D victory scene** — the "underfed render" caveat (one of
+  five frames) is now retired for this opcode; `0x0096` alone is sufficient.
+- **Field 1 is `completionFlagsGained`, a bit mask, decoded bit-by-bit in the client's
+  own words**: `bit0` → chat "Your party completed the mission.", `bit1` → "Your party
+  completed the bonus goal." The gate is `msg.completionFlagsGained & (PRIMARY |
+  SECONDARY)` at `GmQuestComplete.cpp:729` — arm 3 (f2 set, **f1 = 0**) crashed there
+  while arms 1–2 (f1 bits) rendered, **pinning the gate to f1**. f2's role is
+  forwarded-not-gated and stays UNVERIFIED.
+- **The simple-reward triple renders and DECODES from the screen.** Arm with
+  `[f1=1, f3=111, f4=222, f5=333]` drew "You have earned **111 experience, 222 gold, and
+  333 skill points!**" (centre toast + chat). The handler builds the record `{tag 4, f3,
+  f5, f4}` — tag 4 is GmQuestComplete's `isSimpleReward` — so the render order
+  experience/gold/skill-points gives **f3 = experience, f5 = gold, f4 = skill points**.
+  Note f5 is the MIDDLE rendered field, exactly the slot-order trap the disassembly
+  flagged: reading the wire fields left-to-right would have mislabelled gold and skill
+  points.
+- **`0x0097` cold dies at `GmQuestComplete.cpp:678`, `"No valid case for switch variable
+  ''"`** — the u8 selects a closed enum and the empty stash string (the handler posts
+  over two context values `[edi+0x5C]`/`[edi+0x64]` that some earlier message deposits,
+  null on a cold fire) is not a member. Confirms the static read: `0x0097` is not a
+  standalone message; it renders a completion sub-panel keyed by a u8 over state a prior
+  message stages. Its name stays abstained.
+  **↑ THAT SENTENCE IS WRONG AND §9.9 CORRECTS IT.** The crash is real and the stash is
+  real, but they are not the same fact: the `:678` switch never reads the posted record,
+  and the reason the fire died was **the map**. Left in place rather than rewritten,
+  because the shape of the error is the point — a crash and a suspicious-looking read in
+  one function got joined without checking that the assert's own variable came from it.
+
+**This is still DISPLAY, not GRANT** — the same line the `quest_panel`/§9.6 run drew: the
+reward toast reads back whatever we send, the XP bar and level chip do not move. What §9.8
+adds is that the display half of the completion scene is now fully mapped from our own
+server: `0x004E` (three reward dwords, §9.6), `0x0096` (mission flags + a second reward
+triple, this section), with `0x0097`'s enum gate located and `0x006C`/`0x00FB` still
+screen-name-only. The grant — client state actually moving — remains the live-capture
+question, unchanged. Schema: `0x0096` earns the name **MISSION_COMPLETE** (measured
+effect, not a guessed one — the §9.4 bar is cleared); `0x0097` keeps its `why`-only row
+with the enum gate recorded. Two probes kept runnable as the completion-scene calibration.
+Captures `20260819T094757` (gates) and `20260819T095219` (rewards).
+
+#### 9.9 The `:678` gate is the MAP, and `0x0098` is the reward-line append (2026-08-19, static)
+
+§9.8's `0x0097` bullet joined two facts that do not belong together, and both halves are
+now read out of the bytes by two independent routes, each attacked by a skeptic that
+failed to refute it. **Labelled MEASURED (static) — the confirming loopback run is
+staged as probe `completion_panel` and has NOT run** (harness held by another session);
+until it does, no line here rests on a screen.
+
+**The `:678` switch never reads our message.** It is loaded once, at `0x0052F935`, as
+`[esi+4]` where `esi = s_missionClientData[current_map_id]` — the client's own static
+per-mission table (`ConstMission.cpp`, the accessor `0x005A8580` and the map-id getter
+`0x0084D9C0` are the pair `studies/minimap/FINDINGS.md` already named) — and its valid
+cases are **{2, 4, 5}**. The posted record's four fields are consumed only *downstream*
+of it, at `0x0052FA61+`. So a cold fire asserts on any map whose table entry is outside
+{2,4,5}, whatever the payload: capture `20260819T095219` ran on the default world-1 map
+and could not have passed. Ready-made maps that satisfy it, already in `content/maps.toml`:
+**449** Kamadan (world 4), **194** Kaineng Center (world 2), **474** Domain of Anguish
+(world 5). The `switch variable ''` in the dialog is the assert macro's rendering, not
+evidence that a string was empty — reading it as our string is what sent §9.8 wrong.
+
+**The stash is an `Array<T>`, and `0x0098` is its only writer.** `ctx[0x2c]+0x5C/+0x60/
++0x64` are `{data pointer, capacity, count}` — so §9.8's "third field nobody accounted
+for" is simply the **capacity**, and the array's fourth header word `+0x68` (growth
+chunk) is written by the RTL grower as `[ebx+0]`, an encoding no `--field` scan can see,
+which is why it stayed invisible. `GAME_SMSG 0x0098` (stub `0x0091EBF0` → body
+`0x00812510`) is an **inlined Array push/grow**, element stride **0x20** with four dwords
+written per push, and `codescan --xrefs` finds it the sole caller image-wide. `0x0097`
+reads count and data, posts them, frees the buffer and zeroes the header — so each
+consume re-arms from empty. Field **d0 is a reward TYPE tag**: the consumer reads it at
+`0x0052F084` and compares against 4 for `isSimpleReward`, with assert `:246`
+`!(isSimpleReward && rewardCount > 1)` bounding that case to exactly one element.
+
+**So the completion protocol has a shape no study had.** Not five independent renders but
+a staged sequence: **N × `0x0098` append reward lines, then one `0x0097` consumes them
+with a medal and a coded string**, gated on the map's mission-table class. `0x0098` was
+named in no study and carries no `overrides.json` row; its wire shape
+`[u8, u32, u32, u32]` (`schema/messages.json` opcode 152, 15 B) matches the four fields
+its stub pushes. Medal is bounded by `:611` `msg.medal < CHAR_MISSION_MEDALS` and the
+downstream switch accepts {1,2,3}.
+
+**Corrections owed to the two lanes' own reports, recorded because they were caught by
+the skeptics rather than by the finders:** the element stride is 0x20 and not 16 (three
+independent `shl ,5` sites), `0x00812510` is `0x0098`'s own body with the push *inlined*
+rather than a shared RTL routine, and `GmQuestComplete`'s `:721/:729/:748` sit in a
+*different* function from `:678` — what the five completion messages share is the
+5-entry dispatch table at `0x0052FB48`, not a function body.
+
+#### 9.10 The panel RAN: the map was the gate, and the reward pair is decoded (2026-08-19)
+
+§9.9 was static and said so. It ran — probe `completion_panel`, harness
+`20260819T111130`, map 449, agent-piloted, five arms, **no assert and no crash dialog**.
+
+**The correction is confirmed by the strongest test available: the same payload.** Arm 1
+re-sent `0x0097` medal 1 with the identical coded literal that died at
+`GmQuestComplete.cpp:678` in `20260819T095219`, changing *only* the map, and it rendered —
+our own authored string *"Rurik's own completion notes."* as a centre toast and a chat
+line, over a medal emblem. §9.8's stash reading is dead; the gate was
+`s_missionClientData[map]+0x4`, exactly as re-derived.
+
+**`0x0098` stages and `0x0097` consumes — OBSERVED, not reconstructed.** The two `0x0098`
+pushes moved the screen by 0.0015–0.002 (idle animation) and drew nothing; each following
+`0x0097` drew the panel at 0.038–0.047. The reward line appears only after a push, so the
+append/consume pair is real.
+
+**The type tag selects the SENTENCE, and tag 4 is `isSimpleReward` on screen:**
+
+| `d0` | rendered |
+|---|---|
+| 1 | *"You have earned the Standard Reward for **Kamadan, Jewel of Istan**! It is worth 111 experience, 333 gold, and 222 skill points."* |
+| 4 | *"You have earned 444 experience, 666 gold, and 555 skill points!"* |
+
+Tag 1 names the reward **and the map** — the client resolving the same mission-table row
+the `:678` gate reads, which corroborates §9.9's identification from a second direction.
+Tag 4 drops both, which is what a *simple* reward means, and matches the static
+`cmp eax,4` / `isSimpleReward` read exactly.
+
+**Field order, and it swaps the same way `0x0096` does.** Sent `[d0, 111, 222, 333]` →
+rendered *111 experience, 333 gold, 222 skill points*; sent `[d0, 444, 555, 666]` →
+*444 experience, 666 gold, 555 skill points*. Consistent across both arms:
+**`d1` = experience, `d2` = skill points, `d3` = gold** — the middle *rendered* value is
+the **last** wire field, the identical slot-swap as `0x0096`'s `{tag, f3, f5, f4}`. Reading
+the wire fields left to right would mislabel gold and skill points, in both opcodes, and
+that is now measured twice rather than inferred once.
+
+**The medal byte selects the emblem**: medal 1, 2 and 3 each drew a visibly different
+device — a bare shield, a shield with two crossed blades, a shield with blades still
+flying in (the emblem animates, so a frame 4 s after the send can catch it mid-assembly).
+Bounded by `:611` `msg.medal < CHAR_MISSION_MEDALS`.
+
+**And the wiki says exactly what that emblem is — CORROBORATION from a source sharing no
+ancestry with the binary.** WIKI (GWW, *"Cooperative Mission"* §intro, fetched
+2026-08-19): cooperative missions are shown *"as a shield icon"*, and a completed one
+*"will have a number of swords or spears through it indicating whether, or how many of,
+the bonus objectives were achieved"*. That is the render, described by players from the
+game window, matching what our own server drew from a byte we chose — so `medal` is the
+count of bonus objectives achieved, not an arbitrary index.
+
+**A prediction the same page hands us, NOT yet tested.** WIKI (same page, §Mission
+rewards): Prophecies missions have two reward tiers (Primary, Bonus) while *"Factions and
+Nightfall have three mission rewards (Standard, Expert, and Master)"*. Our `d0 = 1`
+rendered *"the **Standard** Reward"* and `d0 = 4` rendered the untiered sentence. So the
+open reading is **`d0` selects the tier — 1 Standard, 2 Expert, 3 Master, 4 simple/
+untiered** — and it is one probe arm away (send `d0 = 2` and `d0 = 3` on map 449 and read
+the sentence). Labelled RECONSTRUCTION until that runs; two of the four values are
+measured and two are inferred from the wiki's own vocabulary appearing verbatim in the
+client's string.
+
+The same page also gives the real magnitudes to expect from retail, which our sentinels
+deliberately are not: a Nightfall normal-mode mission pays 1,000 XP / 100 gold / 1 skill
+point at Standard, rising to 2,000 / 200 / 1 at Master. Kamadan is Istan, so a genuine
+`0x0098` for map 449 would carry those numbers — useful the day a live completion capture
+lands, as an independent check that the field mapping above is right way round.
+
+**Still DISPLAY, not GRANT** — unchanged and worth restating because three separate
+opcodes now say the same thing: the Level chip read 1 through all five arms and no client
+state moved. `0x004E`, `0x0096` and the `0x0098`+`0x0097` pair all read back exactly what
+we send. The grant remains the live-capture question.
+
+Both opcodes have earned names on measured effect rather than a picture:
+`0x0097` → **MISSION_COMPLETE_PANEL**, `0x0098` → **MISSION_REWARD_ADD**.
+
 #### Reproducing §9
 
 ```bash
 cd <tree> && git rev-parse --show-toplevel
 cd <tree> && python toolkit/clientscan/framebus.py
 cd <tree> && python toolkit/clientscan/framebus.py --at 0x0080F670 --end 0x0080F6F0
+cd <tree> && python toolkit/clientscan/framebus.py --at 0x00810AF0 --end 0x00810B61
+cd <tree> && python toolkit/clientscan/msghandler.py 0x006C --follow --limit 40
+cd <tree> && python toolkit/clientscan/msghandler.py 0x0096 --follow --annotate --limit 60
 cd <tree> && python toolkit/clientscan/test_framebus.py
 cd <tree> && python toolkit/authsrv/test_dispatch.py
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 120 --game-args '--probe quest_panel'
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 90 --game-args '--probe completion_gates'
+cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 60 --game-args '--probe completion_rewards'
 ```

@@ -4,6 +4,8 @@
     python toolkit/mapdata/textwrite.py --dat <archive> --skill-names --plan
     python toolkit/mapdata/textwrite.py --dat <archive> --skill-names --arm \
         --journal names.journal
+    python toolkit/mapdata/textwrite.py --dat <archive> --set 200 "A First Errand" \
+        --plan
 
 WHAT THIS IS. `textrec.encode_file` has existed since the text arc and has
 exactly ONE caller in this repo -- its own test, with two strings. Every string
@@ -244,6 +246,11 @@ def main():
                     help="Client whose pointer table resolves the text file's id.")
     ap.add_argument("--skill-names", action="store_true",
                     help="Source the strings from skillnames.py.")
+    ap.add_argument("--set", nargs=2, action="append", default=[],
+                    metavar=("RECORD", "TEXT"), dest="sets",
+                    help="Write TEXT at record RECORD (repeatable). The generic "
+                         "source --skill-names is a special case of: rung Q2b's "
+                         "one quest name needs one record, not a names module.")
     ap.add_argument("--profession", type=int, default=8)
     ap.add_argument("--plan", action="store_true",
                     help="Report what would be written and exit. Writes nothing.")
@@ -282,14 +289,23 @@ def main():
     if a.arm and not a.journal:
         raise SystemExit("--arm needs --journal: an unjournalled text write is "
                          "not revertible, and the client moves the MFT")
-    if not a.skill_names:
-        raise SystemExit("nothing to write: pass --skill-names")
+    if not (a.skill_names or a.sets):
+        raise SystemExit("nothing to write: pass --skill-names and/or --set")
     guard(a.dat)
     if not os.path.exists(a.dat):
         raise SystemExit("not found: %s" % a.dat)
     exe = a.exe or str(vaultpath.vault_path("run", "reskin-roster", "Gw.exe"))
 
-    strings = skill_name_strings(a.profession, exe, a.dat)
+    strings = {}
+    if a.skill_names:
+        strings.update(skill_name_strings(a.profession, exe, a.dat))
+    for rec_s, text in a.sets:
+        rec = int(rec_s, 0)
+        if rec in strings:
+            raise SystemExit(
+                "record %d named twice (--set colliding with another source); "
+                "refusing to pick a winner silently" % rec)
+        strings[rec] = text
     p = plan(a.dat, exe, strings, a.allow_identity)
 
     print("text file %d -> file id 0x%X -> MFT row %d"

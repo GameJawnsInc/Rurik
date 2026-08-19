@@ -104,8 +104,34 @@ QUEST_EXPECTED = {
     0x004A: [], 0x004B: [],                          # measured negatives
 }
 
+# The completion family, MEASURED 2026-08-19 (`studies/quests/FINDINGS.md`
+# §9.7). §9.3's table left the four publishers above 0x10000155 as "not a
+# quest-family handler" -- true, and incomplete: they are the OTHER FOUR
+# completion-family opcodes' bodies. Each body was located through the receive
+# table (`msghandler.py <op>` prints the dispatch stub and its one call) and
+# bounded by its own ret; the bodies are not contiguous the way QUEST_BODIES
+# are, so each row carries an explicit end rather than borrowing its
+# neighbour's start. Two instruments agree on the pairing: msghandler's linear
+# disassembly and this module's own scan.
+COMPLETION_BODIES = [
+    (0x00810AF0, 0x00810B61, 0x006C),
+    (0x008123E0, 0x0081248D, 0x0096),
+    (0x00812490, 0x00812505, 0x0097),
+    (0x00815260, 0x008152D4, 0x00FB),
+]
+
+# The pairing, stated so a caller can assert on it. THE SWAP IS REAL AND
+# MEASURED: 0x0096 posts 0x10000158 and 0x0097 posts 0x10000157 -- frame-id
+# order does not follow opcode order, which is exactly what a range-only or
+# assume-adjacent reading would get wrong. Do not "fix" it.
+COMPLETION_EXPECTED = {
+    0x006C: [0x10000156], 0x0096: [0x10000158],
+    0x0097: [0x10000157], 0x00FB: [0x10000159],
+}
+
 # Who listens, from §1.6's subscribe-side scan. Prose for the reader; the module
-# asserts nothing about it.
+# asserts nothing about it. 0x10000155-0x10000159 were scanned as ONE band row,
+# so the set shown for those five is the band's, not resolved per id.
 SUBSCRIBERS = {
     0x1000014E: "QuestLog, QuestTaskTracker, GmView, GmHelpGuide, Compass, UiCtlInstance",
     0x1000014F: "QuestChallenge, QuestTaskTracker",
@@ -115,6 +141,10 @@ SUBSCRIBERS = {
     0x10000153: "QuestLog, QuestTaskTracker, GmMapCtlLocationTag, Compass",
     0x10000154: "QuestChallenge, QuestTaskTracker, Compass",
     0x10000155: "GmQuestComplete, GmView, QuestTaskTracker",
+    0x10000156: "GmQuestComplete, GmView, QuestTaskTracker (band row)",
+    0x10000157: "GmQuestComplete, GmView, QuestTaskTracker (band row)",
+    0x10000158: "GmQuestComplete, GmView, QuestTaskTracker (band row)",
+    0x10000159: "GmQuestComplete, GmView, QuestTaskTracker (band row)",
 }
 
 
@@ -216,6 +246,14 @@ def quest_family(img=None):
     return out
 
 
+def completion_family(img=None):
+    """{opcode: [frame ids POSTED]} for the four completion-family bodies."""
+    img = img or Image()
+    return {op: sorted(f for f, kind, _p, _c in publishes(img, lo, hi)
+                       if kind == "post")
+            for lo, hi, op in COMPLETION_BODIES}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=None,
@@ -266,7 +304,26 @@ def main():
                   f"{[hex(x) for x in QUEST_EXPECTED[op]]}")
     print("-" * 100)
     print(f"{agree} of {len(QUEST_BODIES)} bodies match the recorded pairing")
-    return 0 if agree == len(QUEST_BODIES) else 1
+
+    cgot = completion_family(img)
+    cagree = 0
+    print(f"\ncompletion family (GmQuestComplete's other four publishers, §9.7)")
+    print("-" * 100)
+    for lo, _hi, op in COMPLETION_BODIES:
+        ids = cgot[op]
+        ok = ids == sorted(COMPLETION_EXPECTED[op])
+        cagree += ok
+        shown = ", ".join(f"{f:#010x}" for f in ids) or "(none)"
+        print(f"0x{op:04X}   {lo:#012x}  {shown:<12} "
+              f"{SUBSCRIBERS.get(ids[0], '') if ids else '(none)'}")
+        if not ok:
+            print(f"{'':8} {'':12}  ^^ DISAGREES with COMPLETION_EXPECTED "
+                  f"{[hex(x) for x in COMPLETION_EXPECTED[op]]}")
+    print("-" * 100)
+    print(f"{cagree} of {len(COMPLETION_BODIES)} completion bodies match the "
+          f"recorded pairing")
+    return 0 if (agree == len(QUEST_BODIES)
+                 and cagree == len(COMPLETION_BODIES)) else 1
 
 
 if __name__ == "__main__":

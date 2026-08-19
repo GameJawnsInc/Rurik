@@ -2115,6 +2115,81 @@ Every one of these, in the order they were written:
   never an `if not step.values` shape test, because a malformed valueless step
   that DOES claim to send is exactly what the encoder check exists to catch and
   the two are identical in shape. Floor 214 against a green 223),
+  `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
+  interact that is HELD rather than dropped. **Nothing exercised
+  `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
+  in a docstring, so the range gate and every consequence of talking to an NPC
+  were carried by no check, and a bug lived in that gap from 2026-08-16. The bug:
+  clicking a distant NPC did not move the player, and the recorded diagnosis —
+  that the CLIENT walks you over and only our range number was wrong — was wrong
+  in both halves. Measured over five keyed live captures: the stock client sends
+  **no** movement order of its own on an NPC click (46 interacts, 0 with a
+  `0x003E` inside 100 ms), ArenaNet's server sends `0x002A`
+  `AGENT_UPDATE_DESTINATION` naming the PLAYER's agent (17 in the corpus, 16
+  within one round trip of the interact naming the agent walked to), and it does
+  not drop the out-of-range interact — it answers it after about
+  `(gap − range) / 288 u/s`, the walk's own duration (1054 u: predicted 2.79 s,
+  observed 2.56 s). §1–2 assert the order goes out and carries the corpus's own
+  payload (player's agent, the target's position, the target in the follow slot
+  `0x0029` hardcodes to zero) and that it frames to the declared 22 B. §3 asserts
+  the hold is served on arrival **and only then**, including that a tick with the
+  player still distant re-sends nothing — a 20 Hz destination storm no capture
+  shows. **§4 is the control that matters**: `_order_walk` must NOT set
+  `state["dest"]`, because the server's integrator would then advance our idea of
+  the player's position whether or not the client moved, and the hold is gated on
+  that position — a client stopped by its own collision would get a dialog opened
+  while standing still, the same shape as the 765-unit warp the world tick's
+  comment records. A test asserting only "the interact eventually fires" passes
+  with that bug in. §5 is the in-range control (served at once, no walk order,
+  nothing held) and §6 covers the two ways a hold must not outlive its reason: a
+  second interact cancels it, and an agent that leaves the world drops it. Floor
+  19, measured — it was written as 18 from a count in the author's head and
+  corrected against the run. No vault, no client. ~1 s),
+  `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
+  refuse a client-reported position, but it may never **latch**. The old
+  `_adopt_client_position` refused anything more than `900 u` from
+  `state["pos"]` — the value the refusal was preventing from being corrected —
+  so once the model was more than 900 u wrong every true report was also more
+  than 900 u away: run `20260819T113049` refused **50 reports, 36 of them
+  consecutively**, 21% of everything the client said, and only recovered because
+  `0x0047` writes without asking and the player happened to stop. Scored over
+  the **72** refusals the four harness runs actually printed (7 + 11 + 50 + 4,
+  from the servers' own `[map] ignoring a Nu jump` lines and **not** from a
+  replay), asking whether the client's next report is reachable from the point
+  we refused or the one we preferred at 478 u/s — the game's most generous speed,
+  Junundu Tunnel at +66%: **client right 71, guard right 0, undecidable 1.** Two
+  numbers this file deliberately does not use: an earlier replay reported 85
+  refusals and a largest true-but-refused drift of 18,647 u, and both are
+  artifacts — the servers printed 72 and the largest drift in the whole harness
+  tree is 4,116 u. A test pinned to 18,647 would have gone red forever against a
+  number no server ever produced. **§1 is the invariant that shaped the fix**:
+  the budget is `max(900, 580 · dt)`, so it is never *smaller* than the old flat
+  radius, asserted over 20 s of silence in 10 ms steps — a tighter design was
+  drafted, costed at 8 newly-refused true reports across the corpus (all 8 in
+  the one run whose displacements have no established cause) and thrown away.
+  §2 is the headline: twelve presentations of the real 2,844 u jump never refuse
+  more than `CLIENT_POSITION_REJECT_STREAK` in a row. §3 asserts silence widens
+  the budget and that the modal 0.5 s cadence still refuses once, so the guard
+  is loosened rather than deleted. §4 asserts position and plane are **one
+  fact** — the `0x003D` arm used to write the plane unconditionally 28 lines
+  above the position guard, so the server held plane 18 against a point its own
+  navmesh puts on plane 0. §5 asserts a refusal does not refresh `pos_seen`,
+  without which the budget stops growing exactly when the model is most wrong.
+  §6 asserts the telemetry can say `accepted=False` — it was a **literal `True`**
+  emitted from the stop arm only, so the flagship capture's JSONL held 5 of 62
+  reports and none of the four refusals, our own instrumentation failing the
+  "a check that cannot fail is not a check" rule — and that the stop arm now
+  *declares* its unconditionality rather than holding it by omission. **§7 locks
+  the candidate warp fix**: `--stop-echo` ships OFF, and the echo's destination
+  must be the syntax-tree node `reported` — the client's own figure, so the
+  message is zero-distance *by construction*. Rewriting it to `state["pos"]` or
+  to the click's `dest` would turn a no-op into a real teleport at the player on
+  **every stop**, which is precisely the damage the `0x0047` arm's own comment
+  records ("teleporting a player nine units is pure damage"); a grep cannot tell
+  those apart and the tree can. §8 replays the capture. Floor **20**, the
+  bare-machine subset, against a green **24** with
+  `authsrv-20260819T114759-c1.jsonl` present; §8 declares `LEDGER.skip` without
+  it. No client. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -2963,10 +3038,18 @@ Every one of these, in the order they were written:
   the defect survived: against the pin the constant is correct. Same shape in
   three other tools that day — `worldmap.py`, `consttable.py`, `heroes_table.py`
   — all routed through `buildid.of_image`, with the shared helper guarded by
-  `test_buildid.py` §5. §1 runs on a bare machine — `framebus.py`
+  `test_buildid.py` §5. **2026-08-19, the COMPLETION FAMILY joined the check**
+  (`studies/quests/FINDINGS.md` §9.7): §9.3's four unattributed publishers of
+  GmQuestComplete's band turned out to be the other four completion-family
+  opcodes' own bodies — `0x006C`→`0x10000156`, `0x0096`→`0x10000158`,
+  `0x0097`→`0x10000157`, `0x00FB`→`0x10000159` — and §1 now asserts the
+  five-id closure and the `0x0096`/`0x0097` SWAP structurally (the one detail
+  an assume-adjacent reading gets wrong; an edit that re-sorts the pairing into
+  opcode order goes red), while §2 re-reads both from the pinned image via
+  `completion_family()`. §1 runs on a bare machine — `framebus.py`
   is a fixed-byte-pattern tool and takes no disassembler — and §2 and §3 each
-  declare a `LEDGER.skip` without the vault, which is why the floor is 14 and
-  not 23. ~4 s),
+  declare a `LEDGER.skip` without the vault, which is why the floor is 16 and
+  not 27. ~4 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -3130,7 +3213,19 @@ Every one of these, in the order they were written:
   pattern, each with a positive control that the real one still resolves
   afterwards. §3 drives `measured_nothing()` with a doctored table set and pairs
   it with real builds, because a predicate answering True to everything would
-  pass the vacuity check alone. Needs the vault throughout. Floor 37, ~35 s),
+  pass the vacuity check alone. §4 pins the WIDE-STRING CAPACITY, a twice-
+  documented display defect (`Field.__repr__` prints `self.cap` and the `wstring`
+  branch passed no `cap=`, so all 141 wide strings read `string16(0)`) that was
+  fixed in `c81d6d1` and then sat four days with two study docs still calling it
+  open — a fix nothing pins reads exactly like a fix nobody made. It asserts the
+  capacity histogram over all 141 fields on each vaulted build, identical across
+  the three (§2's claim from another direction), and two opcodes whose capacity
+  has an INDEPENDENT witness: `0x01BF`'s `string16(20)` in 50 B corroborating
+  GWCA, `0x0074`'s `string16(32)` in the 127 B that refuted the upstream 4-field
+  reading — the wire total being the half a wrong capacity cannot fake. Its
+  negative control builds a `Field` the old way and asserts it STILL prints
+  `string16(0)`, so dropping `cap=` again reddens 14 checks; verified by doing
+  exactly that. Needs the vault throughout. Floor 73, ~75 s),
   `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
   the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
   used to answer with `os.path.isfile` and return, so `identify()`, the only

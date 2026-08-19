@@ -71,7 +71,7 @@ BURST = [
     # every other row here, so it binds nothing by itself; the check that
     # actually reddens on an ATTRIBUTE_POINTS edit is in section 3.
     (0x0037, [PLAYER_AGENT_ID, 0, 0], "AGENT_UPDATE_ATTRIBUTE_POINTS"),
-    (0x00B7, [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0], "PLAYER_UPDATE_PROFESSION"),
+    (0x00B7, [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0], "AGENT_PROFESSIONS"),
     # THREE COLUMNS, not five triples: every id, then every rank, then the
     # third column. The client slices ONE flat array at n and 2n (handler
     # 0x0091D920), so `(id, rank, rank)` apiece is a different message -- and

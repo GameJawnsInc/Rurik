@@ -988,3 +988,531 @@ handler before sending anything:
 sub-records (portals, x/y BSP nodes, sink nodes, edge vectors) are decoded. Every
 click the server declines is the client covering for us. A real server owns
 pathing and sends the legs of the route.
+
+## The position-trust LATCH — measured 2026-08-19, and it is a real defect
+
+**The owner reported a warp from memory**: click far, go hands-off, then mix in
+WASD (they later reproduced it by holding **S** while spamming click-to-move) and
+the character sometimes jumps. Hard to reproduce deliberately, so the session
+added `--trace-move` (prints every client position report beside the server's own
+belief, plus the origin each click's collision ray is cast from) and the owner
+drove a 6-minute session on map 449 — harness `20260819T113049`, gamesrv log,
+240 position reports and 102 clicks.
+
+**The measurement, and the two regimes are categorically different:**
+
+| | `\|dX\|` median | `\|dY\|` median |
+|---|---|---|
+| ADOPTED (n=190) | **2 u** | **19 u** |
+| REJECTED (n=50) | **497 u** | **1457 u** |
+
+When the model tracks, it tracks to a couple of units. The rejections are not the
+tail of that distribution — they are a different population, which rules out
+gradual speed drift as their cause (`DEFAULT_RUN_SPEED` 288 u/s against a client
+measured at ~197–211 would accumulate hundreds of units smoothly, not jump).
+
+> **The parenthesis above is wrong and the conclusion it supports is right.**
+> There is no 288-vs-197 mismatch: the integrator's *effective* rate is
+> **282.3 u/s** (288.0 × 0.05 ÷ 0.0510, from 1,415 measured tick sends — the
+> loop steps a constant 14.4 u per iteration and the real period is 51 ms, not
+> 50) against a client keyboard cruise of **282 u/s** p50. That is 0.1%, and
+> adopted-report drift is a median of 11 u. `197` appears nowhere in the corpus
+> and `211` is movementType 7's number and the click-walk number, generalised.
+> Speed drift is refuted as a cause *because it does not exist*, not because it
+> would be smooth. Full correction in "Speed is not the divergence" below.
+
+**THE DEFECT IS THAT THE GUARD LATCHES.** `_adopt_client_position` refuses any
+report more than `CLIENT_POSITION_TRUST_RADIUS = 900 u` from our belief. That is
+sound against a lying client and exactly backwards against a *diverged server*:
+once the error exceeds 900 u, every subsequent correction is also >900 u, so the
+model can never resynchronise. **Longest unbroken reject streak: 36 reports.**
+21% of all reports in the session (50 of 240) were refused. A guard whose failure
+mode is "stay wrong forever" needs an escape hatch — a consecutive-rejection
+counter that capitulates, or a re-sync on any message that carries an
+authoritative position.
+
+**What the warp then looks like on the wire.** Three clicks were cast from a ray
+origin more than 900 u from where the client itself had just said it was
+(1030 u, 1106 u, 1151 u), and each produced an `AGENT_MOVE_TO_POINT` computed
+from that wrong origin — a destination with a plausible shape and the wrong
+place. That is a warp with a straight face. It is only 3 of 102 clicks, though:
+**the ray origin is usually fine** (median error 30 u, 90th percentile 115 u), so
+this is a consequence of the latch rather than an independent bug, and the
+click-origin hypothesis the session started with is REFUTED as a general cause.
+
+**What is NOT established: the floors.** The owner suspected planes, and the
+three bad clicks all carried `on plane 5->0`, and 53% of the session's move
+orders cross a plane (48 same-plane, 54 changing among planes 0, 5, 27). But of
+the four reject streaks, only **one** was preceded by a plane-changing move
+order. So plane changes are frequent and suggestive and the correlation does not
+hold up — UNVERIFIED, and worth one designed probe rather than another eyeball.
+The known plane weakness is still on record above: clicking sends no plane, so
+the server only learns it from keyboard packets.
+
+**Why this outranks the walk-to-interact work.** `0x002A` was shipped OFF the
+same day for dragging the player through a staircase, and any server-driven walk
+inherits this: it moves the player with no position report to correct the model,
+which is precisely the condition that opens a >900 u gap. Fix the latch first.
+
+---
+
+## The warp is CLOSED — the client teleports onto a destination WE granted
+
+**OBSERVED, 2026-08-19, run `20260819T114743`.** The owner reproduced the warp
+with a screen recording running. It is not drift, not our ray origin, not the
+enemy, and not the plane fields. It is this:
+
+```
+t=42.726  c2s MOVE_TO_COORD    [10995.26953125, 5549.82470703125]  plane 18
+t=42.726  s2c AGENT_MOVE_TO_POINT(10995,5550 on plane 0->18, clear line)
+          ... player cancels, fights, then stands still. Client sends one ping
+              and one target-deselect. The server sends nothing at the player. ...
+t=54.320  c2s MOVE_SET_HEADING  [10995.26953125, 5549.82470703125]  plane 18
+```
+
+**MEASURED.** 2,843.963 u in 3.770527 s = **754.26 u/s**, 2.62× base run speed,
+while the recording shows the character motionless. The reported position is not
+*near* the destination — it is the **same IEEE-754 bit pattern**, `14cd2b46` /
+`996ead45`, hand-decoded from the raw frame plaintext without the schema
+decoder, in the click frame, in our grant, and in the snap. The plane matches
+too: over all 62 self-reports in the run the plane census is `{0: 61, 18: 1}`,
+and the single `18` is the snap.
+
+**It is a real body position, not an echo — a check with no free parameter.**
+Advance the disputed report's *own* heading `(-511.857, 572.243)`, normalised,
+at 288 u/s for the measured dt of 0.717666 s: predicted `(10857.474, 5703.877)`,
+measured next report `(10858.894, 5702.290)`. Residual **2.130 u over 204.558 u
+travelled**, heading-vs-displacement angle **0.000°** against a run median of
+3.802°. A stale echo cannot predict the next frame.
+
+**No speed in Guild Wars closes the gap.** WIKI (GWW, "Speed boost", fetched
+2026-08-19): boosts cap at +34%; the four cap-breakers top out at Junundu Tunnel
++66%. At the most generous 1.66× the 3.77 s window buys 1,802.6 u against
+2,843.9 needed — short by 1,041 u. The only `AGENT_UPDATE_SPEED` naming the
+player all run was `1.0 = 288 u/s`.
+
+### Three independent clocks agree
+
+| Instrument | Value |
+|---|---|
+| Wire: grant → snap | **11.594 s** |
+| Screen recording duration | **11.867 s** |
+| Recording filename (`11-48-41`) vs the click's wall clock (`11:48:41.7`) | same second |
+
+The recording opens on the player running toward a distant bridge, shows them
+turn, back off, fight, and stand still, and ends with them **standing on the
+bridge**. The warp lands between video 11.050 s and 11.175 s — one 0.125 s
+window, coincident with the first movement input after ~4 s of stillness.
+
+### It is OUR grant, not the client's own click memory
+
+Both carry identical coordinates, so the value cannot separate them. The
+**contrast** can. Across all 918 gamesrv captures: 331 clicks, **113 granted an
+`AGENT_MOVE_TO_POINT`, 218 refused**; 25 inter-report steps exceed 320 u/s;
+**four land bit-exactly on an earlier granted destination — all four in the
+granted arm, none in the refused arm.**
+
+| Run | speed | lag | planes |
+|---|---|---|---|
+| `20260814T100340` | 7,874 u/s | 16.284 s | 0→0 |
+| `20260818T103840` | 402 u/s | 19.686 s | 0→18 |
+| `20260819T113105` | 489 u/s | 0.867 s | 5→0 |
+| `20260819T114743` | 754 u/s | 11.594 s | 0→18 |
+
+`C(113,4)/C(331,4) = 0.0131`. **Bit-exact landing on your own click goal is
+normal** — it is the arrival clamp, and it happens in *both* arms (five in the
+refused arm, at 0.15×–0.86× of base speed). What happens only in the granted arm
+is landing there at an *impossible* speed.
+
+### The mechanism, read out of the client — MEASURED, build 38797
+
+> **CORRECTED 2026-08-19. The two field names below were SWAPPED, and the
+> correction sharpens the finding rather than softening it.** `+0x88` is
+> **m_segmentPoint** (assert `AgAgent:1143`, guarding the loads at `0x00600227`
+> / `0x00600236`) and `+0x9C` is **m_targetPoint** (assert `AgAgent:1144` at
+> `0x00600282`). "syncPoint" came from `AgAgent:2147`, which names a **stack
+> local in a different function**, not this field. Because they are two
+> different fields, `AgAgent:1158`'s 1.0-unit assert does **not** compare
+> `+0x88` against itself and it **can** fire — that earlier claim is withdrawn.
+> The real gap is sharper: **nothing anywhere compares m_targetPoint against the
+> agent's actual position before `0x0060032E` writes it.**
+>
+> Two more from the same pass. The teleport is **conditional** — `0x006001EB`
+> requires `time == +0x48` **exactly**, and `0x0060029F` then tests m_flags bit
+> 18: SET glides, CLEAR teleports. And `0x00602A40` passes isWaypoint = 0, so
+> **every grant we send arms the teleport branch and never the glide branch.**
+
+`0x0029`'s handler `0x005fd890` calls `0x00602A40`, which stores the wire point
+**twice** — into m_segmentPoint (`agent+0x88`) and m_targetPoint (`agent+0x9c`) — writes the second plane word to
+`agent+0x80`, clears `INTERNAL_FLAG_MOVEMENT_STALE` (bit 19, from
+`shr eax, 0x13` at `0x0060014E`), and caches a velocity and an **arrival tick**
+at `agent+0x48`. Until that tick, `0x005FFB40` dead-reckons linearly. **At the
+arrival tick**, the movement tick `0x00600140` copies the 16 bytes at
+`agent+0x9c` and calls `0x006020B0` — the teleport primitive — which writes them
+straight into `agent+0x78/+0x7c/+0x80/+0x84`, zeroes velocity, invalidates the
+destination with `+inf` (`0x00948654` = `0x7F800000`), and drags every attached
+agent along. **No path solve, no collision check, and no distance guard on that
+value**: `AgAgent:1158`'s 1.0-unit assert compares `+0x88` against itself and
+cannot fire, and the call at `0x0060032E` is straight-line past it.
+
+**The destination survives every cancel, by construction.** The exhaustive
+writer census of `+0x88` and `+0x9c` finds no clear anywhere except the `+inf`
+invalidation at arrival. And `0x0047` — the client's own move-cancel — has **no
+receive handler in the agent table at all**; it is send-only. So a granted
+destination is erased only by being consumed or overwritten by a newer grant.
+
+*This closes an open question already on file:* `studies/smsg/FINDINGS.md:390`
+asks whether flag `0x80000` is "moving by direction". It is not — the client
+names it itself, `INTERNAL_FLAG_MOVEMENT_STALE`, one assert site,
+`AgAgent:1198`.
+
+### What this REFUTES, including two of our own leads
+
+- **REFUTED — "cross-plane grants are our invention."** They are attested:
+  **455 of 2,855** player-directed `0x0029` in the live corpus (15.9%) carry
+  differing planes, across 29 of 39 connections, and the exact `(dest=18,
+  cur=0)` pair we sent occurs **11 times in ArenaNet's own traffic**. Do not
+  suppress the message. What is unattested is the **lag** — live cross-plane
+  grants are answered a median **0.465 s** later, and ArenaNet re-grants the
+  player every 0.492 s median, so its destinations are always ~half a second
+  ahead and constantly refreshed. Ours sat armed for 11.6 s.
+- **REFUTED — the click ray-origin hypothesis** (median error 30 u, p90 115 u
+  over 102 clicks; only 3 of 102 exceed 900 u).
+- **REFUTED — "it warps you back to where you started."** Three jumps landed
+  5–37 u from a previously-occupied spot, but the null nearest-neighbour
+  distance to the earlier track has a *minimum* of 5.3 u and a 5th percentile of
+  24.9 u. Those three **are** the null distribution.
+- **CONTESTED — the other 8–13 impossible jumps.** Every one is preceded by a
+  grant (13/13 within one interval, against a 25.3% base rate), but they do
+  **not** land on granted destinations (1 of 13 within 5 u, against a 1-in-80
+  null; median 145 u vs a null of 122 u). Grant-triggered and not
+  grant-landing — the arrival snap does not explain them. Named measurement:
+  poll `agent+0x78/+0x7c`, `+0x88..+0x94`, `+0x9c..+0xa8`, `+0x48` and `+0x20`
+  bit 19 out of the live client across a granted click, which
+  `toolkit/harness/keytap.py` can already do in pure `ctypes`.
+
+### Speed is not the divergence
+
+**MEASURED.** Integrator effective **282.3 u/s** against a client p50 of
+**282 u/s** — 0.1%. Adopted-report drift median 11 u, max 55.7 u over 53
+samples. All of the divergence in the flagship run is the two click excursions
+and none of it is speed.
+
+The client's speed *does* split by `movementType`, and the enum is a direction
+family: forward `{1,2,3}` **284.96 u/s** (n=184), backward `{4,5,6}` **187.89**
+(n=114), side `{7,8}` **~215** (n=48, the weak row). The within-file
+backward/forward ratio is **0.6584–0.6614** across 12 files, which refutes the
+tidy `2/3 = 0.6667`. Two cautions that matter more than the numbers:
+
+- **Do not build a per-type table into the integrator.** Types 7+8 are 0.71% of
+  moving time and account for **0.87%** of the flat-288 over-run. A full
+  per-type table removes 37% of the error; the other 63% is an unexplained slow
+  regime (sustained plateaus at ½ and ⅓ of each type's own cruise, 27% of
+  forward moving time) that no constant models. And the integrator is re-aimed
+  every report while moving, so per-type error cannot accumulate past one
+  interval: max 113.5 u against `INTERACT_RANGE` 250.
+- **The absolute scale is CONTESTED**: 284.96 measured in 2D, versus 288 with
+  ~1% of the motion vertical and therefore invisible to a chord in a format with
+  no height. Both reproduce the ratio. The separating measurement is one capture
+  along a straight leg >512 u inside a single trapezoid of constant elevation.
+
+Also corrected: `0x003D` is **distance-triggered** (fixed ~512 u chord) with a
+~0.5 s heartbeat fallback, not time-triggered — so a `dt < 0.6 s` "curvature
+control" selects only the heartbeat and discards every clean cruise sample.
+
+### The fix that shipped, and what it deliberately is not
+
+`_adopt_client_position` is gone. `_position_verdict` + `_take_client_position`
+replace it, both receive sites route through one function, and the budget is
+`max(900, 580 · dt)` — **never smaller than the old flat radius**, so nothing
+that passes today can be refused tomorrow. The Nth consecutive refusal is
+adopted regardless (`CLIENT_POSITION_REJECT_STREAK = 2`), which makes a 36-long
+streak unreachable for any constants.
+
+**A tighter budget was designed, costed and thrown away.** `BASE 120 + 580·dt`
+would newly refuse **8** corpus reports the flat 900 accepts — all eight in the
+one run whose displacements have no established cause. Tightening where the
+model is least understood turns an open question into a regression.
+
+**The guard's record is 0-for-72.** Counted from the servers' own
+`[map] ignoring a Nu jump` lines across the four harness runs that have any
+(7 + 11 + 50 + 4), scored by asking whether the client's next report is
+reachable from the point we refused or the one we preferred at 478 u/s: **client
+right 71, guard right 0, undecidable 1**. It survives only as a single-frame
+refusal and as the place the telemetry hangs.
+
+> **Do not reuse two numbers from the working notes.** A replay of this question
+> reported **85** refusals and a largest true-but-refused drift of **18,647 u**.
+> Both are artifacts of an unvalidated replay: the servers printed **72**, and
+> the largest drift anywhere in the harness tree is **4,116 u**. Two draft
+> designs had already pinned 18,647 in a test that would have gone red forever
+> against a number no server ever produced.
+
+Also fixed in the same change: the `0x003D` arm wrote `state["plane"]`
+unconditionally **28 lines above** the position guard, so a refused report left
+the server holding the client's new plane against its old position — measured at
+t=54.320, plane 18 against a point our navmesh puts on plane 0. Position and
+plane are now adopted or refused together. And `position_report`'s
+`accepted=True` was a **literal**, emitted from the stop arm only, so the
+flagship capture's JSONL held 5 of 62 reports and none of the four refusals —
+our own telemetry failing the "a check that cannot fail is not a check" rule.
+
+**The latch fix does not fix the teleport, and must not be reported as doing
+so.** The client still relocates onto points we grant; the server now stops
+arguing with it within one report instead of never. The blast radius it *does*
+close is real and was measured: during the excursion the server drove the
+Hatcher to within 9 u of the phantom and `enemy_attack_tick` — the only path
+that reduces `player_health` and the only path that sets `player_dead` — swung
+and connected, at a player standing **2,844 u away** with nothing on screen to
+explain it.
+
+### The candidate warp fix — RUN, and REFUTED (2026-08-19)
+
+**Result first.** `--stop-echo` does **not** stop the teleport. Harness run
+`20260819T134811`: one clean trial — a 4,118 u grant to (11010, 5471) plane
+0→18 at t=25.05, the same shape as both teleports on record — with a stop echo
+fired at t=34.91, 9.86 s later and well inside both known lags. The operator
+watched the character teleport to the bridge regardless. The prediction printed
+at startup named that outcome as the refutation, so there is nothing to
+reinterpret: **overwriting the armed destination is not the mechanism.**
+
+**And the echo may be harmful, which is a stronger result than the null.** The
+operator also reported that immediately after the teleport the character began
+walking *back* toward where it had warped from — which is precisely where the
+echo had planted a destination a moment earlier. So the echo does not *replace*
+the pending click destination; it **adds a second one**. Since it fires on every
+stop, it leaves a live destination at every place the player has ever stood
+still — and "you get dragged back to where you stopped" is the other half of the
+warp the owner originally reported from memory. Left off, and now labelled
+REFUTED at the flag rather than merely unproven.
+
+**A method note that cost this run its wire evidence.** The client sends no
+position while standing still, and it was silent for the final **11.74 s** —
+which contains both known warp windows (11.6 s and 19.7 s post-grant). The
+capture therefore shows no impossible step at all, and `warpscan.py` scored the
+run "1 trial, no teleport". That verdict was wrong, and only the operator's own
+eyes caught it. **Any future warp run must keep the keyboard moving through the
+whole waiting period** — a tap of W every couple of seconds is enough to keep
+the instrument recording. A detector that goes blind exactly when the phenomenon
+fires is worse than no detector, because it reports a clean null.
+
+### CONFIRMED ON THE WIRE, without the echo (run `20260819T135526`)
+
+The teleport reproduced with `--stop-echo` OFF and the operator tapping W
+through the wait, so the client kept reporting and the landing is recorded:
+
+```
+t=29.889  s2c AGENT_MOVE_TO_POINT(10987,5432 on plane 0->18, clear line)
+   ... 10.4 s of ordinary keyboard movement at 184-288 u/s ...
+t=40.248  c2s MOVE_SET_HEADING (11028.8, 5427.9) plane 18
+          2,305 u in 0.23 s = 9,878 u/s -- 34x run speed
+```
+
+The plane flips 0→18 with the position, as before. **Lag 10.36 s**, joining
+0.9, 2.1, 10.8, 16.3 and 19.7 s. No function of the grant distance fits that
+spread, so the arrival-tick arithmetic stays OPEN.
+
+**The path-back was MY bug, not the game's.** With `--stop-echo` on, the
+operator saw the character walk back toward the pre-warp position immediately
+after the teleport. With the echo off, on the very next run, it did not. n=1
+each and operator-observed rather than on the wire (the client went silent for
+17.8 s after the landing), but the direction is unambiguous and it matches the
+mechanism: the echo plants a destination at every place the player stops.
+
+**And "bit-exact landing" was never a property of the teleport.** This landing
+sits **42 u** from the granted point, not on it — the client snapped and then
+walked 42 u before its next report, which is 0.23 s at the 186 u/s it was
+already moving. The two bit-exact cases were simply the ones whose report fell
+on the instant of the snap. `warpscan.py` had that 1.0 u tolerance as a
+DETECTION GATE and it silently suppressed this teleport entirely, reporting
+"1 trial, no teleport" for a run the operator had just watched warp. The
+detector is now the impossible step alone; grant proximity is reported, never
+required. Corpus-wide that turns 4 detected teleports into **12 — 7 near a
+grant, 5 not** — and the 5 unattributed are the same CONTESTED population as
+before.
+
+### What the refuted fix was, and why it looked good
+
+
+
+ArenaNet answers `0x0047` (move-cancel): **70 of 88** replies are a
+zero-distance `0x0029` whose destination equals the position the client just
+reported — a stop-here echo — plus `0x0028 AGENT_STOP_MOVING` (257 corpus-wide,
+81 naming the player). **We send nothing.** Since the client's armed destination
+is cleared only by consumption or by a newer grant, echoing the client's own
+stopping point back would overwrite the syncPoint with where the player already
+is, and the arrival snap becomes a no-op. Attested in shape, grounded in the
+disassembly — and it may fix nothing for the 13 grant-triggered jumps that do
+not land on grants. It needs a flag, a run, and a prediction stated first.
+
+**And do not report `0x002C AGENT_UPDATE_POSITION` as ArenaNet's correction
+channel.** There are 12 in the entire live corpus over 4,916 s of identified
+play; only 2 name the player, both at the same instant inside a
+flags-4/status-16 → flags-5/status-0 transition after 26 s of client silence.
+That is a death and respawn. **Zero corrective snaps of a walking player in
+1.37 hours.** ArenaNet re-issues a destination or stops the agent; it does not
+write positions at a player who is moving.
+
+### The arrival time is an exact formula, and it does NOT predict our teleport
+
+**MEASURED**, build 38797, `0x005FE950`:
+
+```
+m_timeStopMovement (+0x48) = m_timeUpdated (+0x58)
+                           + floor(dist * 1000 / (maxSpeed(+0x5C) * moveSpeed(+0x60)))
+```
+
+absolute milliseconds on the world clock at `AGBASE + m_world*0x64 + 0x148`.
+
+**Applied to the flagship run with no free parameter it is 5.4 s wrong.** Grant
+distance 4,515.65 u, moveSpeed 1.0, and the velocity fit pins maxSpeed at
+288.0 u/s — that same velocity term tracks the client to **1.3% over 1,864 u**,
+so the arm and the speed are right. `floor(4515.65 * 1000 / 288)` = 15,679 ms
+puts the jump at **t = 45.57 s**. It happened at **t ≈ 40.13 s**.
+
+Two readings survive, and nothing static separates them:
+
+- **(A)** `+0x58` was stale — it is written from a *cached* clock at
+  `0x005FF89E`, not a fresh query.
+- **(B)** something client-side re-armed `+0x48` after the grant.
+
+**The keyboard is REFUTED as the re-armer.** `0x0025`'s handler `0x005FD540`
+reaches only a facing setter writing `+0xB8`/`+0xBC`/`+0xC0`. The exhaustive
+writer census of `+0x48` finds five stores, all in `AgAgent.cpp`: the
+constructor, the spawn path, the two inside `0x005FE950`, and the teleport's own
+clear.
+
+**`0x0027` DOES re-arm** — `SetMaxSpeed` calls back into `0x00602A40` with the
+agent's *current* position — which makes it the cheapest lever we have for
+re-aiming a stale grant without sending a teleport. `0x002B` does **not** re-arm,
+so our `AGENT_UPDATE_SPEED` before each grant changes nothing about a move
+already in flight.
+
+### Why the obvious probe would have been worthless
+
+The first design polled `m_point` (`+0x78`). **It would have reported a teleport
+on every ordinary click-to-move.** `+0x78` is not the agent's position — it is
+the position as of `+0x58`, advanced only when `0x005FF880` runs, and that has
+eight call sites, all event-driven, none per frame. So across a *correct* glide
+the trace is flat for the whole leg then steps once onto the destination —
+identical to a teleport. It would also have **missed** the real failure: if the
+exact-equality tick is ever missed, the agent dead-reckons past its destination
+unbounded (no clamp, only assert `AgAgent:978`) while `+0x78` never moves.
+
+That is the third over-fitted claim of this arc, after the bit-exact-landing
+rule and the four-term warp precondition. All three had the same shape: a
+pattern drawn from the cases studied hardest, then used as a **gate**. The live
+position has to be reconstructed —
+`(+0x78,+0x7C) + (+0xB0,+0xB4) * (now − +0x58) * 0.001` — and
+`toolkit/clientscan/movetap.py`'s selftest refuses to pass unless every term of
+it is in the record.
+
+## MEASURED IN THE CLIENT'S OWN MEMORY: the teleport is not a bug (2026-08-19)
+
+`toolkit/clientscan/movetap.py`, two runs, 2,332 samples at 50 Hz. The WOW64 TEB
+walk resolved on the first attempt, and `maxSpeed = 288.0` / `moveSpeed = 1.0`
+are now **read directly out of the agent** rather than fitted to the wire.
+
+**Seven arrival consumptions** — a sample where `m_point` lands on
+`m_targetPoint` (within 1 u) while `+0x48` clears to 0 and the target goes
+`+inf`. That is the teleport primitive `0x006020B0` firing:
+
+| jump | armed | fired | error |
+|---|---|---|---|
+| 98 u | 194118 | 194129 | +11 ms |
+| 680 u | 29567 | 29657 | +90 ms |
+| 803 u | 197017 | 197032 | +15 ms |
+| 2,129 u | 50133 | 50145 | +12 ms |
+| 2,743 u | 274733 | 274770 | +37 ms |
+| 3,393 u | 158718 | 158751 | +33 ms |
+| **5,238 u** | **218272** | **218299** | **+27 ms** |
+
+Every one fires within one 20 ms sample of its scheduled tick. **So the snap is
+how the client completes EVERY server-granted move** — the 98 u one is
+invisible, the 5,238 u one is "the warp", and they are the same code path.
+
+**`+0x48` is set once at the grant and never re-armed** — reading (B) is
+**REFUTED**. In the flagship case it was armed at `t+63.98` to `218272`
+("due in +18.09 s", target `(11039.38, 5465.95)`) and fired at `t+82.34`, 18.36 s
+later, onto exactly that point, plane 0→18. The formula predicted 18,187 ms
+against 18,087 actual — **0.55%, with no free parameter**, using constants read
+out of the client.
+
+**So the cause is entirely ours.** We grant a destination 5,238 u away, the
+client schedules its arrival 18 s out, the player walks somewhere else, and at
+the scheduled instant the client does what it always does. ArenaNet never gets
+here because it **re-grants every ~0.5 s** (median inter-grant 0.492 s, 88.5%
+triggered by a `0x003D` heading, granting the client's own proposed endpoint plus
+0.5 u): its arrival ticks are always half a second out and a few units away, so
+the snap is a sub-unit correction that nobody can see. Ours matures for
+eighteen seconds.
+
+**A trap for the next reader, and it is why the first probe design was scrapped.**
+Most `m_point` jumps in the trace are NOT teleports — they are the cached point
+being brought forward by `0x005FF880` when a new grant arrives. Of eleven jumps
+over 300 u in the long run, only four are arrivals. The discriminator is not the
+jump size: it is **landing on `m_targetPoint` while `+0x48` clears**.
+
+**Still unexplained:** the `--stop-echo` run warped even though the echo fired
+9.86 s after the grant and should have overwritten the destination (a
+zero-distance move takes the `distSq <= 1.0` short-circuit at `0x005FEA90` and
+arrives on the very next millisecond). Under the mechanism now confirmed, that
+warp should not have happened. `movetap.py` attached to a `--stop-echo` run
+settles it in one pass, and that is the next measurement rather than the next
+guess.
+
+## `--heading-grant` REFUTED — my fix caused warps (2026-08-19)
+
+Run `20260819T152716`, `--heading-grant` on, operator spam-clicking distant
+ground while holding S. **Two teleports in six seconds, each onto a point this
+server had just granted:**
+
+| grant sent | landed | separation | jump | speed |
+|---|---|---|---|---|
+| t=36.719 `(9591, 8245)` | t=37.000 `(9590.70, 8245.42)` | **0.51 u** | 767 u | 2,719 u/s |
+| t=38.903 `(9487, 8786)` | t=39.190 `(9490.63, 8771.30)` | 15.1 u | 752 u | 2,617 u/s |
+
+Both fired **0.28 s** after their grant. The operator experienced it as being
+warped *backwards*, and that is exactly right: they were holding S, so the
+heading pointed behind them, `pos + heading` was 766 u behind them, and the
+grant scheduled a teleport to it.
+
+**The error in the model, which matters more than the flag.** I read `0x0029` as
+"tell the client where it is heading". It is not. **It is a scheduled teleport to
+that point.** It only looks harmless when the client really does cover the
+distance in the scheduled time. Grant a point the player is not travelling
+toward at full speed and you have scheduled a warp.
+
+**And rapid re-granting makes it worse, not better.** The arrival distance is
+measured from the agent's *cached* `m_point`, which each grant carries forward at
+the previous grant's velocity — so the second grant's arrival came due in 0.28 s
+rather than the 2.66 s its 766 u implies. Stacking grants does not bound the
+teleport; it converts one large one into many small frequent ones. That refutes
+"refresh like ArenaNet" **as implemented here**, and it also explains why the
+original far-click warp did not reproduce in this session: the flag was
+manufacturing its own warps continuously, so no grant ever survived long enough
+to mature.
+
+**Why ArenaNet's version works and ours does not.** Their granted point is the
+**client's own** proposed endpoint — the client's reported position plus the
+client's own vec2, echoed back with half a unit added — so client and server
+agree on where the agent is going. Ours is a server extrapolation from a report
+already a few hundred milliseconds stale, and the client is asked to be somewhere
+it was never going.
+
+**The prediction was met and the conclusion was still wrong.** It said "no
+arrival consumption exceeds roughly 800 u"; observed 767 u and 752 u. It bounded
+the **size** of the teleports and said nothing about their **number**. A
+prediction that cannot fail in the direction the harm actually arrives is not a
+prediction — the fourth over-fit of this arc, and the first one where the metric
+itself was the mistake.
+
+**Where that leaves the fix.** Three candidates are now dead: suppressing the
+grant (retail sends it), echoing on move-cancel (`--stop-echo`, refuted), and
+refreshing on every heading (`--heading-grant`, refuted and harmful). What
+survives, untried: grant the client's own endpoint verbatim the way retail does —
+`reported position + the client's own vec2 + 0.5 u along it` — rather than a
+server-computed point, which is a different message from the one tested here.
+And the `0x0027` lever, which re-arms `+0x48` from the agent's *current*
+position, remains the only measured way to re-aim a stale grant without naming a
+new point.

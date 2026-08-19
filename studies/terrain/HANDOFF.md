@@ -23,9 +23,11 @@ that sorts first (102/102), `trnvariation` reproduces the client's PRNG stream o
 block that carries 590 authored cells (1024/1024). The exported ground **does not
 repeat** beyond a floor the art itself sets. Props bind correctly except one
 sub-model, which now draws a marker. The camera's field of view is measured —
-75.000° horizontal, far plane 48000. What is left is small and none of it blocks
-a render: the lightmap's transfer curve, the quadrant's `+u` convention, and
-three named-but-not-understood fields.
+75.000° horizontal, far plane 48000. The lightmap's bake curve is settled too —
+a quartic ease-out, byte-exact (§13.1). What is left is small and none of it
+blocks a render: how the client *displays* the baked lightmap (§13.3, a live
+question), Blender's lightmap colour-space (§13.2, a visual one), the quadrant's
+`+u` convention, and three named-but-not-understood fields.
 
 ## 2. What will bite you, in the order it will bite
 
@@ -90,6 +92,8 @@ row, so don't. The capture needs no input at all.
 | tool | what it answers | cost |
 |---|---|---|
 | `studies/terrain/repeatprobe.py` | does the ground repeat? artifact-gated, states its predictions first | offline, minutes |
+| `studies/terrain/trnbake.py` | the tag-9 lightmap bake, reproduced byte-exact from the client's own math | needs the vault client; offline, minutes |
+| `studies/terrain/shadecurve.py` | corpus light-direction fitter + the recorded reason the corpus can't see the bake curve | offline, minutes |
 | `studies/terrain/tag3check.py` | the arg4≠0 claims, from a capture | offline, seconds |
 | `trnhook/trnblock.c` + `autoinject.py` | one NAMED tile block's per-cell descriptors | one client run |
 | `toolkit/clientscan/fovread.py` | the live field of view, camera position and target | seconds, read-only |
@@ -101,10 +105,22 @@ character select the globals read zero and the tools say so.
 
 ## 4. Open, and worth taking in this order
 
-1. **The lightmap's TRANSFER CURVE.** Tag 9 is applied as `shade / 255`, the
-   simplest mapping the measurement allows; 348 of 349 maps saturate at 255, so a
-   gamma or a scale-and-bias would fit the corpus equally well. `--no-lightmap`
-   is the control. This is the last thing that could change how the ground reads.
+1. ~~**The lightmap's TRANSFER CURVE.**~~ **SETTLED 2026-08-19, §13.1.** The
+   bake is a quartic ease-out `255·(1 − (1 − N·L)⁴)`, read byte-exact from the
+   generator `0x0075CC30` and reproduced by `trnbake.py` (667,647/667,648
+   corpus cells). Not linear, not gamma. Two follow-ons took its place:
+   1a. **Does the baked lightmap reach the screen, and how? (§13.3, CONTESTED.)**
+       Both terrain vertex shaders write a DEPTH-FADE to the pixel shader's
+       `v0`, not tag 9; the baked lightmap goes to a separate intensity buffer
+       whose display consumer was NOT FOUND statically. **This is a LIVE check,
+       not a disassembly one** — capture the vertex declaration/stream for a
+       terrain `DrawIndexedPrimitive` and read `c10`. Do not chase it further in
+       the exe; that is exactly the arc's four-retraction failure mode.
+   1b. **Blender multiplies the lightmap in the wrong SPACE (§13.2).** The
+       client is colour-naive (no sRGB, scanout-only gamma) and blends in raw
+       byte-space; `import_gwmap` multiplies in scene-linear. Fixing it is a
+       VISUAL question — render headless, compare to retail — not a blind
+       colourspace flip. `--no-lightmap` is the control.
 2. **The quadrant's `+u` ORIENTATION** — which world axis is `+u` is a
    convention chosen in code, not a measurement.
 3. **Named, not understood**: `table_b` (Kamadan's values are all odd), terrain

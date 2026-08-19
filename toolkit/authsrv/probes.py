@@ -607,6 +607,8 @@ _DRAIN_ITEM_C = 42
 # hypothesis, not a correction to them.
 _STOCK_FLAGS = 0x20001003
 _MERCHANT_NPC_AGENT = 21
+# Mirrors authsrv.py: the ONE container this server registers (0x013F).
+EQUIPPED_BAG_ID = 1
 
 
 # Prices for the stock arm. OUR OWN numbers, deliberately not retail's table --
@@ -695,6 +697,30 @@ def _merchant_window_steps(agent_id, origin):
     a = _MERCHANT_NPC_AGENT
     ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
     return [
+        Step(2.0, 0x013F, [EQUIPPED_BAG_ID, 1, 0, 2, 20, 638],
+             "0x013F: give the player a BACKPACK (type 1, 20 slots)",
+             "no visible change yet -- press I and a backpack grid should be "
+             "there. THIS IS THE DESTINATION CONTAINER. The 20260819T141246 "
+             "run had a funded purse, an enabled Buy, and an operator-watched "
+             "click that produced NOTHING on the wire: the client refuses a "
+             "purchase it has nowhere to put, which is ArenaNet's "
+             "'Inventory full' path and costs no traffic. Parameters are "
+             "retail's own, read from capture 20260819T132414 idx 8 "
+             "([inv, type 1, model 0, bag, 20 slots, 638]); the same burst's "
+             "type-5/42-slot bag is material storage, which is a GW fact "
+             "nobody here supplied and is why the reading is trusted."),
+        Step(2.0, 0x0140, [EQUIPPED_BAG_ID, 500],
+             f"0x0140 [purse {EQUIPPED_BAG_ID}, +500] -- FUND THE PLAYER",
+             "THE FIRST TEST. 0x0140's setter is `add [ecx+0x90], eax` -- it "
+             "CREDITS carried gold on the container its field 1 names "
+             "(handler 0x00846120 -> 0x00849FE0, refuted our own 'nothing "
+             "writes carried gold' the same day). Container 1 is the only one "
+             "this server creates (0x013F) and 0x0141 [1,0] is legal at login, "
+             "so this must not assert. Whether container 1 is the PURSE -- the "
+             "one ItemCliGetGold reads through [ctx+0x40]+0xF8 -- is exactly "
+             "what the shop's 'Your Funds' line will say. An `inventory` "
+             "assert at ItCliApi:1955 instead means id 1 is not registered "
+             "the way 0x0141's success implied."),
         Step(2.0, 0x0056,
              [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
@@ -780,6 +806,96 @@ def _merchant_window_steps(agent_id, origin):
              "the run's final state. Note whether the character is still facing "
              "the NPC.", sends=False),
     ]
+
+
+def _gold_purse_steps(agent_id, origin):
+    """Which purse does the shop's `Your Funds` read, and what does `0x0141`
+    field 1 select?
+
+    THE ERROR THIS EXISTS TO FIX. `20260818T235758` sent `0x0141 [1, 500]` to
+    fund a purchase, `Your Funds` stayed **0**, Buy stayed greyed, and the run
+    re-measured the unfunded case. The `1` was copied from the login burst's own
+    `send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0])` without anyone testing what it
+    selects -- and the opcode is named `UPDATE_GOLD_**STORAGE**`, while Guild
+    Wars separates carried gold from Xunlai storage. So `[1, N]` is measured NOT
+    to feed the merchant's purse, and this varies the selector.
+
+    THE ARMS. Distinct amounts, so the number on screen names the arm that
+    produced it -- no arm can be credited with another's effect:
+
+        A  field1 = 0   amount 111
+        B  field1 = 2   amount 222
+        C  field1 = 1   amount 333   <- the control: the value already REFUTED
+                                        at 500, re-sent at a different amount
+                                        so "wrong selector" and "wrong amount"
+                                        cannot be confused
+
+    Each arm re-opens the shop (`0x00C4` -> `0x0084` -> `0x00CA`), because the
+    funds line is drawn when the panel is built and nothing here knows whether
+    it re-renders in place. Re-arming is proven to work (`20260818T234622`,
+    three arms, three windows).
+
+    READING IT. `Your Funds` showing 111 / 222 / 333 identifies the selector
+    outright. **All three staying 0 is the informative negative**: it would mean
+    `0x0141` does not drive this display at all and the merchant's purse is fed
+    by something else -- and there is already a suspect, since the login burst
+    also sends `CHARACTER_UPDATE_INFO ["", 0, 0, 1000, 0, 0, 0]`, whose `1000`
+    nobody has ever explained. That would be the next arm, not this one.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+             "0x0161: leggings, value 25 (quotes at 50)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+             "0x0161: boots, value 50 (quotes at 100)", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+             "0x0161: gauntlets, value 100 (quotes at 200)", "nothing."),
+    ]
+    # field1 = 0 IS A CLIENT-KILLER: `Assertion: inventory`,
+    # ItCliApi.cpp(1969), same-second attribution, run 20260819T002038. It took
+    # arms B and C down with it (the probe sends on a timer, so the rest of that
+    # run went into a dead client). Field 1 names a CONTAINER that must exist,
+    # so 0 is refused by the client, not merely ignored. Arms start at 2.
+    for tag, f1, amount in (("A", 2, 222), ("B", 3, 333), ("C", 1, 444)):
+        note = (" -- the CONTROL: this selector is already refuted at 500, so a "
+                "change here would mean the amount mattered, not the selector"
+                if f1 == 1 else "")
+        steps += [
+            Step(8.0, 0x0141, [f1, amount],
+                 f"ARM {tag}: 0x0141 [field1={f1}, {amount}]{note}",
+                 "nothing yet -- the shop below is what renders the number."),
+            Step(2.0, 0x00C4, [a],
+                 f"ARM {tag}: re-arm the window owner",
+                 "the character turns to face the NPC."),
+            Step(1.0, 0x0084, [ids], f"ARM {tag}: restage the ids", "nothing."),
+            Step(2.0, 0x00CA, [1, 0x3F800000],
+                 f"ARM {tag}: open the shop and READ 'Your Funds'",
+                 f"THE READOUT, one line only: `Your Funds: {amount}` means "
+                 f"field 1 = {f1} is the merchant's purse. Still 0 means this "
+                 f"selector is not it. Prices stay 50/100/200 either way -- if "
+                 f"THOSE move, something is wrong with the run, not the purse."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so arm C has coverage after it",
+             "if all three read 0, 0x0141 does not feed this display and the "
+             "next suspect is CHARACTER_UPDATE_INFO's unexplained 1000.",
+             sends=False))
+    return steps
 
 
 def _shop_price_scale_steps(agent_id, origin):
@@ -3854,6 +3970,239 @@ def _quest_name_steps(origin):
     ]
 
 
+def _completion_gate_steps():
+    """The 0x0096/0x0097 ladder: which field feeds the completion-flag gate,
+    and what the simple-reward triple renders.
+
+    Both bodies are READ (FINDINGS.md 9.7 follow-up, disassembled 2026-08-19):
+    0x0096 normalizes f1 and f2 into two independent 2-bit masks, builds a
+    tagged record {4, f3, f5, f4} -- tag 4 is GmQuestComplete's own
+    isSimpleReward tag -- skipped when f3 == f5 == 0, and posts frame
+    0x10000158. THE HANDLER NEVER ASSERTS: the 2026-08-12 sweep's "at least
+    one of two mission-completion flag bits" death on all-zero lives in the
+    SUBSCRIBER, so which mask the gate reads is exactly what the arm order
+    below can settle even if a crash ends the run early. 0x0097 pairs its
+    string with two STASHED context values ([edi+0x5C]/[edi+0x64]) that some
+    earlier message deposits, posts frame 0x10000157, then frees and zeroes
+    the stash -- a cold fire posts over a null stash, so its arm goes LAST,
+    crash-accepted, the assert being the answer.
+
+    Every value is an invented sentinel (the family is 0 of 22,524); the
+    111/222/333 triple follows quest_panel's precedent -- if the panel
+    renders a reward line, the numbers name their own fields.
+    """
+    return [
+        Step(12.0, 0x0096, [1, 0, 0, 0, 0],
+             "f1 = bit0, everything else zero",
+             "no assert is the first answer (the gate is satisfied by f1);"
+             " a crash here says the gate reads f2 or needs the reward."),
+        Step(15.0, 0x0096, [2, 0, 0, 0, 0],
+             "f1 = bit1",
+             "same gate, other bit -- two survivals mean either bit of f1 "
+             "suffices."),
+        Step(15.0, 0x0096, [0, 1, 0, 0, 0],
+             "f2 = bit0, f1 zero",
+             "the discriminator: surviving BOTH this and arm 1 means either "
+             "mask satisfies the gate; dying here after arm 1 survived pins "
+             "the gate to f1."),
+        Step(15.0, 0x0096, [1, 0, 111, 222, 333],
+             "f1 set plus the simple-reward triple as sentinels",
+             "a reward line rendering 111/222/333 names f3/f4/f5 the way the "
+             "quest_panel run named 0x004E's dwords. The record built is "
+             "{tag 4, f3, f5, f4} -- note f5 rides the MIDDLE slot."),
+        Step(15.0, 0x0097,
+             [1, questdefs.coded_literal("Rurik", "template", limit=127)],
+             "0x0097 cold: u8 = 1, a plain authored literal in the string",
+             "LAST ON PURPOSE: the handler posts over a null stash and the "
+             "sweep's closed-enum assert may fire regardless of our u8. A "
+             "render is a result; an assert NAMING the gate is also a "
+             "result; the run ends either way."),
+    ]
+
+
+def _completion_reward_steps():
+    """The two arms 20260819T094757 could not measure: the crash at arm 3
+    (GmQuestComplete.cpp:729, the completionFlagsGained gate -- the ladder's
+    own answer) froze the client before the reward-triple and 0x0097 arms
+    landed, so they were sent into a modal dialog and measured nothing. Same
+    values, crash-proof order: the known-safe flag bit rides along.
+    """
+    return [
+        Step(12.0, 0x0096, [1, 0, 111, 222, 333],
+             "f1 = mission bit plus the simple-reward triple as sentinels",
+             "the scene plus a REWARD LINE reading 111/222/333 -- a rendered "
+             "number names its field, quest_panel's precedent. The record "
+             "the handler builds is {tag 4, f3, f5, f4}: f5 rides the middle "
+             "slot, so watch the ORDER of the rendered numbers."),
+        Step(20.0, 0x0097,
+             [1, questdefs.coded_literal("Rurik", "template", limit=127)],
+             "0x0097 cold: u8 = 1, a plain authored literal in the string",
+             "LAST ON PURPOSE: the handler posts over a null stash and the "
+             "sweep's closed-enum assert may fire regardless of our u8. A "
+             "render is a result; an assert NAMING the gate is also a "
+             "result; the run ends either way."),
+    ]
+
+
+def _walk_to_npc_steps(origin):
+    """Does 0x002A actually move the client, and does the held interact fire?
+
+    THE VARIABLE IS THE ORDER, AND NOTHING ELSE. The NPC is placed 900 units
+    out -- far past INTERACT_RANGE (250) and far enough that a walk takes a
+    visible ~2.3 s at 288 u/s -- and then this probe stops sending. The
+    interact is driven off the wire by `toolkit/harness/control.py`
+    request_interact, so no click and no keystroke is involved and nothing here
+    aims at anything: the whole readout is the server's own log plus the
+    client's position reports.
+
+    WHAT WOULD FALSIFY IT. `_handle_interact` orders the walk and holds the
+    request; if the client ignores 0x002A the position reports never change,
+    the held interact never arrives, and the gamesrv log simply never prints
+    "ARRIVES" -- which refutes the fix without ambiguity, because the previous
+    behaviour (drop it and print nothing) and the new one differ in exactly
+    that line. If instead the client walks and the dialog opens on arrival,
+    both halves are shown at once: 0x002A is the auto-walk order, and holding
+    the interact is what makes arriving on foot mean something.
+
+    Note the probe sends NO 0x0080/0x0081 of its own -- the dialog that appears
+    must be the one the held interact produced, not one this list staged.
+    """
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, giver_npc()),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, giver_npc()),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 900, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT}) at +900u",
+             "a body with a nameplate, 900 units away -- well past the "
+             "250-unit interact range, and far enough that the walk itself "
+             "takes about 2.3 s at run speed."),
+        Step(4.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"GENERIC_VALUE property {PROP_QUEST_MARKER} -- the green '!'",
+             "the marker, so the body reads as a giver rather than scenery."),
+        Step(3.0, 0x0000, [], "NOW DRIVE THE INTERACT OFF THE WIRE",
+             "run, in another terminal: python -c \"import sys; "
+             "sys.path.insert(0,'toolkit'); from harness import control; "
+             f"control.request_interact({_GIVER_AGENT})\" -- then WATCH THE "
+             "GAMESRV LOG. Expect, in order: 'walking the player over and "
+             "HOLDING the interact (~2.3 s at run speed)', the character "
+             "actually running to the NPC on screen, and then 'held INTERACT "
+             f"for agent {_GIVER_AGENT} ARRIVES -- answering it now' followed "
+             "by the dialog window opening. No 'ARRIVES' line means the "
+             "client ignored 0x002A and the fix is refuted.", sends=False),
+    ]
+
+
+def _completion_panel_steps():
+    """0x0098 stages reward lines, 0x0097 consumes them -- and the gate that
+    killed the first cold fire was THE MAP, not the payload.
+
+    SELF-CORRECTION. FINDINGS 9.8 read 20260819T095219's crash
+    (GmQuestComplete.cpp:678, "No valid case for switch variable") as an
+    unstaged stash. Two independent static re-derivations say otherwise: the
+    switch variable is loaded ONCE at 0x0052F935 as `[esi+4]` where esi =
+    s_missionClientData[current_map_id] -- the CLIENT'S OWN per-mission table,
+    indexed by the map the player is standing on -- and its valid cases are
+    {2, 4, 5}. It never reads the posted record at all. That run was on the
+    default map (world 1), which cannot satisfy it. Arm 1 below is the
+    one-variable test of that correction: the SAME payload that crashed,
+    on --map 449 (world 4).
+
+    The stash is real, and now attributed: ctx[0x2c]+0x5C/+0x60/+0x64 is an
+    ArenaNet Array<T> {data, capacity, count} (+0x68 is its growth chunk,
+    written by the RTL grower as [ebx+0] and invisible to a --field scan --
+    which is why 9.8 called +0x60 "a field nobody accounted for": it is the
+    capacity). Its sole writer image-wide is GAME_SMSG 0x0098, whose body
+    0x00812510 is an INLINED Array push/grow (element stride 0x20, four dwords
+    written per push). 0x0097 reads count and data, posts them, frees the
+    buffer and zeroes all three -- so each arm below re-primes from empty and
+    the arms do not contaminate each other.
+
+    Field d0 of 0x0098 is the reward TYPE tag, read by the consumer at
+    0x0052F084 and compared against 4 (isSimpleReward) at 0x0052F089. Assert
+    :246 is `!(isSimpleReward && rewardCount > 1)`, so an arm using d0 = 4
+    must push exactly ONE element. Arm 3 respects that deliberately rather
+    than discovering it the expensive way.
+    """
+    lit = questdefs.coded_literal("Rurik's own completion notes.",
+                                  "template", limit=127)
+    return [
+        Step(12.0, 0x0097, [1, lit],
+             "ARM 1, the correction's own test: the payload that crashed "
+             "20260819T095219, unchanged, on a world-4 map",
+             "NO :678 assert. Surviving proves the gate was the MAP and "
+             "clears FINDINGS 9.8's stash reading. Crashing at :678 again "
+             "refutes the correction and sends it back to the disassembly."),
+        Step(18.0, 0x0098, [1, 111, 222, 333],
+             "ARM 2a: push ONE reward element, type tag 1, sentinels",
+             "nothing yet -- 0x0098 only appends to the array. A crash HERE "
+             "would be new: no assert is known on the push path."),
+        Step(6.0, 0x0097, [2, lit],
+             "ARM 2b: consume it, medal 2",
+             "the panel with a REWARD LINE reading 111/222/333, and the "
+             "array count now 1 rather than 0. Which slot each sentinel "
+             "lands in names d1/d2/d3."),
+        Step(18.0, 0x0098, [4, 444, 555, 666],
+             "ARM 3a: push ONE element with type tag 4 = isSimpleReward",
+             "still nothing on screen. Exactly one push, deliberately: "
+             ":246 asserts if isSimpleReward rides a count above 1."),
+        Step(6.0, 0x0097, [3, lit],
+             "ARM 3b: consume it, medal 3",
+             "the SIMPLE-reward rendering of 444/555/666 -- compare against "
+             "arm 2's type-1 rendering. A difference names what the type tag "
+             "selects; identical output means d0 does not reach the render."),
+    ]
+
+
+def _quest_name_authored_steps(origin):
+    """Q2b's screen half: does OUR OWN string render where Ascalon's did?
+
+    quest_name (above) proved the id->text seam with ArenaNet's one corpus
+    word, 0x3D64. This is the same experiment with the variable moved one
+    step: the treatment's words come from the CONTENT ROW -- the two-word
+    varint [0x8103, 0x0CC8] naming string id 100552, text file 98 record 200,
+    written 2026-08-19 by textwrite.py --set into the reskin-roster archive.
+    The control re-sends 0x3D64 first as the rig check, and 0x0049's
+    last-pushed-becomes-active write (charContext+0x528, the trap HANDOFF
+    warns about in replay) is exactly what makes an A/B possible in ONE run:
+    the tracker follows the active quest, so it should read 'Ascalon' after
+    the control and SWITCH to 'A First Errand' after the treatment.
+
+    THE CLIENT IS PART OF THE EXPERIMENT: only an archive holding record 200
+    can resolve 100552, and today that is vault/run/reskin-roster/ alone. Run
+    against any other client and the treatment arm measures the wrong thing
+    (a blank there would indict the archive, not the encoding).
+    """
+    x, y, plane = origin
+    row = questdefs.load()[1463]
+    nm = questdefs.enc_string(row.get("enc_name") or [])
+    return [
+        Step(8.0, 0x0049,
+             [1, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              _ENC_ASCALON, _ENC_ASCALON, _ENC_ASCALON, _QUEST_NAME_MAP],
+             "CONTROL: quest 1 named with ArenaNet's 0x3D64, the Q0 word",
+             "the tracker reads 'Ascalon' -- the rig check, quest_name's own "
+             "result reproduced. Absent means the rig, not the record; stop "
+             "reading here."),
+        Step(20.0, 0x0049,
+             [1463, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              nm, nm, nm, _QUEST_NAME_MAP],
+             "TREATMENT: quest 1463 named from the content row -- our id "
+             "100552 as the varint the row commits",
+             "the tracker SWITCHES to 'A First Errand'. 'Ascalon' persisting "
+             "= the add landed but the client kept the old active quest, or "
+             "our words did not parse -- check the log for the 0x0049 before "
+             "deciding which. Blank or '?' = the client could not resolve "
+             "100552: wrong archive (this run MUST use the reskin-roster "
+             "client) before wrong encoding."),
+    ]
+
+
 def _quest_description_steps(origin):
     """Q3: add two quests that differ ONLY in how their prose is framed.
 
@@ -4524,6 +4873,69 @@ def _quest_offer_steps():
     ]
 
 
+def _quest_panel_steps():
+    """QUEST_COMPLETE_PANEL (0x004E): which of its three dwords does the render read?
+
+    The whole completion family is 0 of 22,524 s2c in the corpus, so unlike
+    merchant_window there is no retail sequence to replicate: every value
+    below is an INVENTED sentinel, chosen to be unmistakable, and the probe's
+    job is to let the render -- or an assert -- name the fields. The one
+    prior firing is the 2026-08-13 screen pass (20260813T123003): all-zero
+    payload, centre-screen victory animation, no assert. So (0,0,0) is the
+    known-safe replication arm, and it goes first because nothing after it
+    is readable if it does not reproduce.
+
+    Arm 2 re-sends the IDENTICAL payload and is the load-bearing control:
+    nothing anywhere says the panel renders twice in one session. If arm 2
+    draws nothing, every later arm is unreadable in this rig and the design
+    moves to one arm per launch -- both outcomes are wanted, neither is a
+    broken run.
+
+    Arm 3 carries the one semantic hypothesis worth pre-registering: field 1
+    as a quest id. 1463 is OUR authored quest (content/quests.toml), so if
+    the panel binds it, text we control appears on a completion screen and
+    the reward arc joins the authoring arc. RECONSTRUCTION, admitted as such.
+
+    Arm 4's 111/222/333 follow the quest_reward precedent -- sentinels
+    outside every corpus range, so a numerically rendered field names its
+    own screen position. Arm 5 is the assert fisher, max dword in all three
+    fields, deliberately LAST: 0x0096/0x0097 taught that out-of-range
+    completion values kill the client, and an assert here ends the run --
+    its dialog text names the gate, which is a result, not a failure.
+
+    The panel is fed by FIVE frame ids and this probe supplies exactly one
+    (0x10000155, posted by 0x004E's own handler at 0x0080F6C7). An underfed
+    or partial render is EXPECTED and is not evidence the fields are wrong
+    (studies/quests/FINDINGS.md 9.3).
+    """
+    QUEST_COMPLETE_PANEL = 0x004E  # deliberately NOT in authsrv.py's constants:
+    # the server's own turn-in path refuses the completion family on purpose
+    # (authsrv.py's SERVICE_TURN_IN comment), and this probe must not change that.
+    return [
+        Step(15.0, QUEST_COMPLETE_PANEL, [0, 0, 0],
+             "all-zero replication of 20260813T123003",
+             "the centre-screen victory animation. Absent means the rig, not "
+             "the fields -- stop reading here."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [0, 0, 0],
+             "identical re-fire -- the one-shot control",
+             "whether a SECOND render happens at all. No render here makes "
+             "every later arm unreadable in this rig, and that is a finding."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [1463, 0, 0],
+             "field 1 = 1463, our authored quest id",
+             "any TEXT on the render: quest 1463's strings are ours, so "
+             "authored text appearing binds field 1 to a quest id."),
+        Step(20.0, QUEST_COMPLETE_PANEL, [111, 222, 333],
+             "distinct sentinels in all three fields",
+             "any NUMBER on the render: 111/222/333 sit outside every corpus "
+             "range, so a rendered value names which field it came from."),
+        Step(20.0, QUEST_COMPLETE_PANEL,
+             [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF],
+             "max-dword assert fisher, deliberately last",
+             "an assert dialog naming a gate (a result -- the run ends with "
+             "it), or a render identical to arm 1 (the fields are unread)."),
+    ]
+
+
 PROBES = {
     "quest_objective": lambda a, o: Probe(
         question="Does a quest with a real objective show the gold '?' between "
@@ -4654,6 +5066,41 @@ PROBES = {
              "rather than replaying a script. Click the NPC around "
              "(0.499, 0.625) and the option around (0.480, 0.545) at "
              "1936x1040, twice each, then press L.",
+    ),
+    "quest_panel": lambda a, o: Probe(
+        question="Which of QUEST_COMPLETE_PANEL's three dwords does the "
+                 "render read -- the reward arc's first real question?",
+        predicts="Arm 1 reproduces the 2026-08-13 centre-screen victory "
+                 "animation from an all-zero payload; that much is OBSERVED "
+                 "(20260813T123003) and everything else is invention, stated "
+                 "as such. Arm 2's identical re-fire renders AGAIN -- "
+                 "RECONSTRUCTION from the handler's unconditional frame post "
+                 "at 0x0080F6C7 -- and a one-shot panel instead is itself a "
+                 "finding that moves the design to one arm per launch. If "
+                 "field 1 is a quest id, arm 3 puts OUR text on the render "
+                 "(quest 1463 is ours); if any field renders numerically, "
+                 "arm 4's 111/222/333 names it; arm 5's max dwords either "
+                 "change nothing or buy an assert whose text names the gate. "
+                 "An underfed render is expected throughout: this supplies "
+                 "one of the FIVE frame ids the scene subscribes to.",
+        steps=_quest_panel_steps(),
+        note="ANSWERED 2026-08-19, agent-piloted (harness 20260819T071548, "
+             "studies/quests/FINDINGS.md 9.6): dword 1 EXPERIENCE, dword 2 "
+             "GOLD, dword 3 SKILL POINTS, read from the panel's own toast on "
+             "the 111/222/333 arm. Zero fields are omitted from the sentence "
+             "(all-zero draws the banner with NO toast, which explains the "
+             "2026-08-13 sweep's silent picture), max dwords render unsigned "
+             "with no assert, and the panel re-fires per send. The arm-3 "
+             "quest-id hypothesis is REFUTED: 1463 rendered as '1,463 "
+             "experience'. Display only -- the Level chip sat at 1 beside a "
+             "4.29-billion-experience toast; the grant protocol remains "
+             "0-of-corpus. Kept runnable as the completion-panel calibration. "
+             "Launch recipe: caged loopback, actions '0:play', --shots 1 "
+             "--hold 120; sends land at about t+15/35/55/75/95. Read the "
+             "gamesrv log for all five PROBE lines before believing any "
+             "screen reading, and read frames by EYE as well as by diff: "
+             "the committed scorer has no player-body mask, and the panel "
+             "draws exactly where a mask would sit.",
     ),
     "quest_option": lambda a, o: Probe(
         question="Can a player accept OUR quest, from OUR dialog, by clicking "
@@ -4813,6 +5260,114 @@ PROBES = {
              "on. The quest tracker is map-independent, so nothing about this "
              "question is weakened by the substitution -- but the COMPASS arm "
              "is not measured here and must not be read out of this run.",
+    ),
+    "quest_name_authored": lambda a, o: Probe(
+        question="Does the quest name WE authored (string id 100552, written "
+                 "by textwrite.py --set) render in the tracker where "
+                 "ArenaNet's 0x3D64 did?",
+        predicts="An A/B in one run, riding 0x0049's last-pushed-becomes-"
+                 "active write: the tracker reads 'Ascalon' after the control "
+                 "and SWITCHES to 'A First Errand' after the treatment, whose "
+                 "words come from content/quests.toml's committed varint "
+                 "[0x8103, 0x0CC8] rather than a probe literal. That would "
+                 "close rung Q2b end to end: our record, our id, our words, "
+                 "their renderer. Blank or '?' on the treatment alone indicts "
+                 "the archive/encoding seam, with the control proving the rig.",
+        steps=_quest_name_authored_steps(o),
+        note="RUN WITH --map 449 AND --exe pointing at the reskin-roster "
+             "client -- vault/run/reskin-roster/Gw.exe -- because only ITS "
+             "archive holds record 200; the default run archive resolves "
+             "100552 to an empty record and the treatment arm would measure "
+             "the wrong thing. Agent-pilotable (fixed-position tracker, no "
+             "clicks): actions '0:play', cadence shots, hold ~60 s. "
+             "ANSWERED 2026-08-19, agent-piloted (harness 20260819T085654): "
+             "control tracker 'Ascalon:' + toast 'Quest Added: Ascalon'; "
+             "treatment tracker 'A First Errand: Speak with the scout, then "
+             "return.' + toast 'Quest Added: A First Errand' -- BOTH screen "
+             "surfaces render the authored record, the tracker switched on "
+             "the second add exactly as the last-pushed-becomes-active write "
+             "predicts, and the client's own 0x8012 for 1463 was answered "
+             "with the template 0x004C mid-run. Rung Q2b closed end to end. "
+             "Kept runnable as the authored-name calibration.",
+    ),
+    "walk_to_npc": lambda a, o: Probe(
+        question="Does GAME_SMSG 0x002A walk the client to an NPC, and does "
+                 "the held interact fire when it arrives?",
+        predicts="Both halves of the 2026-08-19 fix, in one run and with one "
+                 "variable. The corpus says 0x002A is the auto-walk order (17 "
+                 "name the player's agent, 16 within a round trip of the "
+                 "interact naming the agent walked to) and that ArenaNet "
+                 "answers an out-of-range interact LATE rather than dropping "
+                 "it. So: the character should run ~900 u to the NPC, and the "
+                 "gamesrv log should print 'HOLDING' and then 'ARRIVES' about "
+                 "2.3 s later, with the dialog opening on arrival. A missing "
+                 "'ARRIVES' line refutes it cleanly -- the old behaviour and "
+                 "the new one differ in exactly that line.",
+        steps=_walk_to_npc_steps(o),
+        note="RUN ON --map 449. Agent-pilotable and CLICK-FREE by "
+             "construction: the interact is driven through "
+             "toolkit/harness/control.py request_interact(99), not a mouse, so "
+             "nothing here aims at anything. The last step sends no packet -- "
+             "it carries the operator/driver instruction. Watch the GAMESRV "
+             "LOG first and the screen second; the log lines are the "
+             "measurement and the walking character is the corroboration.",
+    ),
+    "completion_panel": lambda a, o: Probe(
+        question="Was 0x0097's crash the MAP rather than the payload -- and "
+                 "does 0x0098 stage the reward lines it consumes?",
+        predicts="Arm 1 sends the exact payload that crashed at "
+                 "GmQuestComplete.cpp:678 on 2026-08-19, unchanged, on a "
+                 "world-4 map, and does NOT assert -- because the switch at "
+                 ":678 reads s_missionClientData[map]+0x4 (cases {2,4,5}), "
+                 "never the record. Arms 2-3 then prove 0x0098 is the "
+                 "reward-line append: one push, then a consume, should draw "
+                 "a reward line carrying 111/222/333, and a second pair with "
+                 "type tag 4 (isSimpleReward, exactly ONE element or :246 "
+                 "fires) should render 444/555/666 differently if the tag "
+                 "reaches the render. A :678 crash on arm 1 refutes the whole "
+                 "correction and FINDINGS 9.8's stash reading stands.",
+        steps=_completion_panel_steps(),
+        note="MUST RUN WITH --map 449. The map IS the experiment: 449 is "
+             "world 4, and the client's own mission table gates the panel on "
+             "{2,4,5}. Do NOT use the default map or 146/148/143 (world 1) -- "
+             "that is what the superseded run did. Agent-pilotable, no "
+             "clicks: actions '0:play', --shots 1 --hold 90.",
+    ),
+    "completion_rewards": lambda a, o: Probe(
+        question="Does 0x0096's tag-4 simple-reward triple render its "
+                 "sentinels, and what does a cold 0x0097 do?",
+        predicts="Arm 1 draws the mission-complete scene (proven repeatable "
+                 "by 20260819T094757's arms 1-2) PLUS a reward line reading "
+                 "111/222/333 in some order -- the order names f3/f4/f5, "
+                 "remembering the handler builds {4, f3, f5, f4}. Arm 2 "
+                 "(0x0097 cold) renders text or dies on the closed-enum/"
+                 "null-stash gate with an assert naming it; either is the "
+                 "answer and the run may end there.",
+        steps=_completion_reward_steps(),
+        note="Caged loopback, any map, no clicks, actions '0:play', "
+             "--shots 1 --hold 60. The follow-up to completion_gates, whose "
+             "arm-3 crash (GmQuestComplete.cpp:729 -- the gate answer) "
+             "blocked these two arms; here the known-safe mission bit rides "
+             "with the triple so nothing crashes before the readout.",
+    ),
+    "completion_gates": lambda a, o: Probe(
+        question="Which field feeds 0x0096's completion-flag gate, and does "
+                 "the tag-4 simple-reward triple render its sentinels?",
+        predicts="Arms 1-3 survive (either 2-bit mask satisfies the gate, "
+                 "since the handler forwards both and the sweep's assert "
+                 "named 'two flag bits' without naming a field); arm 4 draws "
+                 "a reward line reading 111/222/333, naming f3/f4/f5; arm 5 "
+                 "(0x0097 cold, LAST) either renders text or dies on the "
+                 "closed-enum/null-stash gate with an assert that names it. "
+                 "Every survival and every crash placement is a measurement; "
+                 "an early death simply moves the answer earlier.",
+        steps=_completion_gate_steps(),
+        note="Caged loopback, any map, no clicks -- the frames land in "
+             "GmQuestComplete's band like quest_panel's do. Cadence shots "
+             "(--shots 1 --hold 90), actions '0:play'. Read the gamesrv log "
+             "for which arms LANDED before reading any pixel: a crash ends "
+             "the run and the surviving-arm count is the gate map. Expect "
+             "asserts; they are answers here, not failures.",
     ),
     "compass_fog_nomark": lambda a, o: Probe(
         question="PLAN C4 isolation, half 1 of 2: what does the fog INIT PAIR "
@@ -6026,6 +6581,26 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "gold_purse": lambda a, o: Probe(
+        question="Which purse does the shop's 'Your Funds' read, and what does "
+                 "0x0141 field 1 select?",
+        predicts="Three arms with DISTINCT amounts so the number names its own "
+                 "arm: field1=0 -> 111, field1=2 -> 222, field1=1 -> 333 (the "
+                 "control, already refuted at 500). Whichever amount appears "
+                 "identifies the selector. All three staying 0 is the "
+                 "informative negative -- 0x0141 would not drive this display "
+                 "at all, and the next suspect is CHARACTER_UPDATE_INFO's "
+                 "unexplained 1000 in the login burst.",
+        steps=_gold_purse_steps(a, o),
+        note="Fixes a measured mistake rather than opening new ground: "
+             "20260818T235758 sent 0x0141 [1, 500], Your Funds stayed 0, Buy "
+             "stayed greyed, and the run re-measured the unfunded case. The 1 "
+             "was copied from the login burst without testing what it selects, "
+             "and the opcode is UPDATE_GOLD_STORAGE while GW separates carried "
+             "gold from Xunlai storage. Each arm re-opens the shop because the "
+             "funds line is drawn when the panel is built; re-arming is proven "
+             "(20260818T234622). Buy is NOT clicked here -- one question.",
     ),
     "shop_price_scale": lambda a, o: Probe(
         question="Is 0x00CA's second field a price multiplier, or is the "

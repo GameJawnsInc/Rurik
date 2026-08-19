@@ -245,7 +245,19 @@ def main():
             continue
         used.append(os.path.basename(p))
         turns.extend(t)
-        reports.extend(e for e in evs if e.get("kind") == "position_report")
+        # STOPS ONLY, and the filter is load-bearing rather than tidy. Every
+        # floor below -- DRIFT_P50_LIMIT, ACCEPT_RATE_FLOOR, ON_MESH_FLOOR --
+        # was calibrated on n=273 records that were ALL stops, because until
+        # 2026-08-19 `position_report` was emitted from the 0x0047 arm and
+        # nowhere else. That arm now shares one function with the 0x003D arm, so
+        # a fresh capture carries ~62 records per run instead of ~5 and most of
+        # them are mid-walk, where drift is lower and `on_mesh` means something
+        # different. Pooling the two would drift all three floors away from what
+        # their own docstrings say they measure, silently and in the safe-looking
+        # direction. Legacy records carry no `source` and are all stops.
+        reports.extend(e for e in evs
+                       if e.get("kind") == "position_report"
+                       and e.get("source") in (None, "0x0047"))
         if args.latest:
             break
 

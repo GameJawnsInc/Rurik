@@ -575,7 +575,7 @@ to the two globals `0x010876C8` / `0x010876CC` — 11 and 19, all inside
 gives, exactly:
 
 - **one writer**: `0x00C4` → `0x00813FE0` (store agent, set flag = 1)
-- **eight readers**: `0x00C3`, `0x00C5`, `0x00C6`, `0x00C8`, `0x00C9`, `0x00CA`, `0x00CB`,
+- **eight readers**: `0x00C3`, `0x00C5`, **`0x00C7`** (← CORRECTED 2026-08-19, this row read `0x00C6`), `0x00C8`, `0x00C9`, `0x00CA`, `0x00CB`,
   `0x00CD` — each builds `{id, stored_agent, 0, stored_flag, …payload}`, posts it with UI
   frame message `0x100000B5` via `0x00633D70` (whose own assert is
   `FrApi.cpp:3901 msgId >= FRAME_MSG_EX`), then `mov [0x010876CC], 0` — consume and clear
@@ -1968,6 +1968,355 @@ delta 0; our own wire context is **consistent** but not decisive; the client con
 should not go into `overrides.json` on this evidence.
 
 ---
+
+> ### THE LIVE MERCHANT CAPTURE — `0x4D` IS BUY, THE C2S SIDE DECODES, AND THE CLIENT DEBITS ITSELF. 2026-08-19, OBSERVED
+>
+> Owner-driven live capture **`20260819T132414`** (Assassin, Shing Jea / Sunqua Vale, build
+> **38833**, `game_mode base`, `exe_unchanged true`, **`plan_seals: agree`** against the
+> 9-step pre-registration). Three game channels, **all decoding 100% clean to the final
+> byte** — 9,091 `GAME_SMSG` messages. Operator readings of `Your Funds`: **108 → 68 → 88**.
+>
+> **1. THE C2S SIDE DECODES. The blocker this study has carried since the Factions captures
+> is retired.** §4 item 10 recorded *"the c2s side does not decode — `decode_stream(
+> "GAME_CMSG")` fails at offset 0 on every channel"*, and that blocked every request/response
+> argument in the pass. The cause was never the data: **`GAME_CMSG` carries the same
+> `0x8000` opcode mask the auth channel does**, and our own server has been stripping it in
+> `frame_pending(codec, cmsg, pending, AUTH_CMSG_MASK)` since long before. Framed that way,
+> all three channels give **425 messages, zero trailing bytes, no desync**. The instrument
+> existed in our tree the whole time — the fifth time this arc that the missing piece was
+> already implemented.
+>
+> **2. `GAME_CMSG 0x4D` IS THE PURCHASE REQUEST.** One sighting, and it is unambiguous:
+>
+> ```
+> 0x4D  [1, 40, [], '', 0, [2474], '01']
+>            ^^price          ^^item  ^^qty
+> ```
+>
+> **40 is exactly the operator's observed debit** (108 → 68), and **item 2474 is a member of
+> the merchant's own staged stock** `[2473…2483]` from the `0x0084` in the same window. Three
+> independent facts — the wire, the screen, and the stock list — agree on one message.
+>
+> **3. AND THE SERVER SAID NOTHING ABOUT GOLD.** Between the shop open and the next
+> transaction there is **no message carrying 40, 68, or any balance**; the only traffic is an
+> unrelated player arriving. Across all **9,091** decoded messages, the values **108 / 68 /
+> 88 never appear**. **The client debits its own purse.** This is the live confirmation of
+> the static result above — no `GAME_SMSG` writes carried gold, measured from the binary and
+> now from retail's own wire. The two independent methods agree.
+>
+> **4. `GAME_CMSG 0x4A` and its response triple**, `[11, 0, [item], n, []]`, answered
+> **8 times out of 8** by `0x014D [container, item]` → `0x0140 [container, n]` →
+> `0x00CC [11]`, with item id and `n` matching one-for-one and in order (7 in one channel,
+> 1 in another). A clean request/response pairing, and the first this repo has ever had on
+> the item path.
+>
+> **5. The shop-open sequence is CONFIRMED against our replication**, three times, on two
+> different merchant agents (272 and 273):
+> `0x00C4[agent]` → `0x0084[stock ids]` → `0x00CA[1, 1.0f]` → `0x00C3[11, 0]` —
+> message-for-message what `merchant_window` sends, including `0x00CA`'s `1.0f`.
+>
+> **CONTESTED, and it is our own claim that is now in doubt:** we concluded `0x00C3` field 1
+> is an **item id** (undeclared 3 asserted `item`; declared 40 passed that guard). But retail
+> sends `0x00C3 [11, 0]` while staging exactly **11** items, which reads naturally as a
+> **count** — and `11` also appears as `0x4A`'s first field and as `0x00CC`'s only field,
+> where no count applies, which argues for a **transaction/window TYPE constant** instead.
+> Under the count reading our two crashes re-explain themselves better than before: `[3, 0]`
+> was the *correct* count over items whose detail never resolved (bit-2 set → hourglass), so
+> the per-item lookup asserted; `[40, 0]` claimed 40 entries over a 3-entry list and ran off
+> the end into `c0000005`. **Three readings, one field, and the capture does not separate
+> them** — the discriminator is a shop with a stock count ≠ 11, which is one loopback run.
+>
+> **Bonus, unplanned and unanalysed here:** the capture also contains a **level-up** and
+> **quest-reward** bursts (operator notes 1 and 2, wire_t 227.6 and 278.5) — the transition
+> `PLAN.md` §8 names as never once observed in 513 prop-36 sightings. That is its own study
+> and this section deliberately does not mine it.
+
+> ### AN AUTHORED SHOP, FUNDED AND PRICED — AND THE PURCHASE IS BLOCKED ON A BACKPACK. 2026-08-19, OBSERVED
+>
+> `0x0140 [1, 500]` → **`Your Funds: 500`** on the merchant panel *and* `500` in the
+> inventory window's own gold field (`20260819T140723`). **Container 1 is the purse** — the
+> object `ItemCliGetGold` reaches through `[ctx+0x40]+0xF8` — confirmed on two independent
+> surfaces, and the credit is legal (no `ItCliApi:1955`). The refuted negative now has its
+> constructive half: **a server can fund a client.**
+>
+> **The shop is complete.** Every message from our own server, on our own NPC: title
+> `Hatcher [Collector]`, the client's own instruction *"Select an item from my list below,
+> then press \"Buy.\""*, three rows at 50 / 100 / 200, the selected row's **real stats
+> resolved** (`Armor: 25`, `Armor +20 (vs. physical damage)`), a quantity spinner, and **Buy
+> ENABLED rather than greyed**.
+>
+> **And pressing Buy does nothing, on purpose.** The operator watched the click land; the
+> client emitted **zero** c2s traffic — not a purchase, not a target, nothing. **Operator
+> diagnosis, from opening the inventory afterwards: there is no BACKPACK.** The client
+> refuses a purchase it has nowhere to put, and refuses it **locally, without touching the
+> wire** — ArenaNet's "Inventory full" path. That is consistent with everything else this
+> arc measured about this client validating before it talks. A null that took an operator's
+> eye to turn into a diagnosis; the pixel evidence alone said only "nothing happened".
+>
+> **Retail's real bag set, read from `20260819T132414` rather than guessed** (nine `0x013F`,
+> all on inventory id **4** — the same id `0x0140 [4, 38]` credits, so bag owner and purse
+> are one namespace):
+>
+> | type | model | slots | reading |
+> |---|---|---|---|
+> | 1 | 0 | **20** | **BACKPACK** — the one we lack |
+> | 2 | 21 | 9 | equipped (the only bag we send) |
+> | 3 | 6 | 12 | belt pouch |
+> | 4 | 7–11 | 25 ×5 | storage panes |
+> | 5 | 5 | **42** | **material storage** |
+>
+> **The reading validates itself:** GW's material storage holds exactly **42** slots, a fact
+> the capture supplied and nobody here put in.
+>
+> **What did NOT work, and it is the next step rather than a mystery:** sending
+> `0x013F [1, 1, 0, 2, 20, 638]` **after spawn** produced no backpack grid — the bag row is
+> unchanged and the purchase still refuses. Retail sends its bags **during load**, right
+> after `0x0144 ITEM_STREAM_CREATE`, i.e. before the inventory UI is built. **So the bags
+> belong in the login burst, not in a probe**, and that is a server change with a clean
+> acceptance test: press I, see a 20-slot grid, then Buy and watch for `GAME_CMSG 0x4D` —
+> which would be the first purchase request this project has ever *received*.
+
+> ### ⚠ REFUTED THE SAME DAY — `0x0140` IS THE GOLD CREDIT. Read this before the section below.
+>
+> The section that follows concludes *"no `GAME_SMSG` sets carried gold"*, from six static
+> passes. **It is WRONG, and the live capture refuted it within the hour.**
+>
+> **`GAME_SMSG 0x0140` `[u16 purse, u32 amount]`** — handler **`0x00846120`**, which looks
+> the purse id up in the same `inventoryTable` (`[ctx+0x40]+0xD4`) that `0x0141` uses, then
+> calls **`0x00849FE0`**, whose first instruction is:
+>
+> ```
+> 00849FE9  018190000000   add dword ptr [ecx + 0x90], eax      ; carried gold += amount
+> 00849FF1  mov edx, [ecx + 0x90]                               ; ...and broadcast the new total
+> 0084A000  push 0x100000EC / call 0x633D70
+> ```
+>
+> So the pair is symmetric and we had read only half of it: **`0x0140` credits `+0x90`
+> (CARRIED), `0x0141` credits `+0x94` (STORAGE)**, both container-keyed, both `add` not
+> `set`, both asserting `inventory` on an unregistered id (`ItCliApi:1955` and `:1969`).
+> `ItemCliGetGold`'s `[ctx+0x40]+0xF8` is not a *different* object — it is a pointer to one
+> of those very containers, which is why crediting the right id moves the merchant's line.
+>
+> **WHY THE NEGATIVE WAS WRONG, and it is not the tool's fault.** `codescan --field 0x90
+> --writes` lists `0x00849FE9` correctly, in its 150. The failure was the **reachability
+> walk** built on top of it: it reported 13 of 146 reachable from 472 handlers and none the
+> singleton, yet this store is **one call level** below a receive handler. The likeliest
+> cause is that `0x0140` lives in receive table **`0x00bcad58`** while the opcodes that pass
+> examined sit in **`0x00bc8f68`** — **there are two tables**, and a walk that enumerates one
+> produces a confident empty set. **The lesson is the repo's own rule applied to a search: a
+> negative from an automated multi-step walk needs a positive control — make it find a
+> writer you already know about before believing the ones it cannot find.** I published this
+> negative without that control, and it is the second methodology hole this session after
+> the biased-`this` displacement scan.
+>
+> **THE ARITHMETIC CLOSES ON THE OPERATOR'S OWN READINGS, with no free parameter.** Per map
+> instance the server credits the whole balance at load, then credits deltas as they are
+> earned; the client debits purchases itself. Across the three instances of
+> `20260819T132414`, purse ids differ per instance and the totals chain exactly:
+>
+> | instance | credits on the wire | ends |
+> |---|---|---|
+> | `53419` t55–137 | `[159,22]` load, then +2 +2 +3 +3 +2 +2 +2 | **38** |
+> | `52606` t137–293 | `[4,38]` load — *equals the previous instance's total* — then +10 +10 +50 | **108** |
+> | `55414` t294–421 | `[183,108]` load — *again the carry* — then `[183,20]` at the sell | **88** |
+>
+> **108 is exactly what the operator read before buying**; −40 for the purchase appears on
+> **no** message (the client debits locally, which the section below got right); +20 for the
+> sell arrives as `0x0140 [183, 20]`; and 68 + 20 = **88**, the third reading. Three
+> cross-instance continuity checks and three screen readings, all consistent.
+>
+> **Practical, and it is one loopback run:** send `0x0140 [purse, N]` before opening the
+> shop. The open question is *which* container id is the purse — retail's varies per instance
+> (4 / 159 / 183) and ours creates exactly one bag via `0x013F`. Try `[1, N]`; if `Your
+> Funds` moves, the shop can transact and `0x4D` can finally be answered.
+
+> ### THE CHARACTER-LOAD PATH IS READ, AND NO WIRE MESSAGE WRITES CARRIED GOLD. 2026-08-19
+>
+> Three further passes, from three directions. Every load-bearing claim re-verified here by
+> hand. **All three are negatives, and together they close the question this arc could ask
+> of the wire.**
+>
+> **1. The standing suspect is dead.** `0x0030 CHARACTER_UPDATE_INFO`'s field 4 — the
+> unexplained `1000` our login burst has always sent — **is not gold**. The handler
+> (`0x0091D750`) forwards all seven fields to one worker (`0x0080E850`), which allocates a
+> fresh ~0x24-byte record, writes field 4 to **`record+0x0C`**, hangs the record off
+> **`ctx+0x2C`** and raises event `0x1000002A`. Gold lives down a structurally different
+> branch of the same per-thread context — `ctx+0x40` → `+0xF8` → `+0x90` — and the
+> complete depth-2 closure of `0x0030`'s receive path contains no `+0x90` store and no call
+> to either gold getter. Also worth recording: **our own code never documented that
+> constant** — `authsrv.py`'s send site carries `1000` with no comment, at the opcode
+> declaration or the call.
+>
+> **2. Nothing constructs the singleton anywhere we can see.** `--field 0xF8 --in ItCliApi`
+> returns **20 instructions, 0 stores, 20 reads** — verified here — so the module that
+> reads gold never assigns the pointer it reads through. Image-wide there are 45 real
+> `+0xF8` stores, none inside the item module; three that superficially matched the
+> item-client prologue are different classes with different vtables reusing the
+> displacement. `0x0144 ITEM_STREAM_CREATE` and `0x013F INVENTORY_CREATE_BAG` **neither
+> build the singleton nor touch `+0x90`/`+0x94`**.
+>
+> **3. The inverted search — the strongest of the three, because it is not anchored on
+> `+0xF8` at all** and so is immune to the biased-`this` blind spot that hid the answer from
+> our earlier scans. Every `+0x90` store in `.text` (150, of which **146** are genuine
+> field writes) was resolved to its containing function and tested for reachability from any
+> of the **472** `GAME_SMSG` receive handlers, two call levels up. **13** were reachable;
+> **all 13 were disassembled by hand**, and none writes the item singleton — 6 write an
+> agent/movement struct reached through the agent-id table, and one is not even code (a
+> Capstone re-decode of the tail byte of a `push`, never executed as the store it resembles;
+> a nice illustration of why the pass read them rather than counted them).
+>
+> **So: no `GAME_SMSG` sets carried gold.** Established now from both ends — backward from
+> the singleton (five readers plus four search routes) and forward from every candidate
+> store. **The bound, stated rather than buried:** the forward pass followed direct
+> `call`/`jmp rel32` only, to two levels. A writer reached through a **vtable/indirect call**,
+> or at three-plus removes, would not appear — and this client's UI leans on vtables. That
+> is the one hole left in an otherwise closed argument, and it is the next thing to search
+> if anyone wants to reopen this.
+>
+> **What it means for the shop.** `Buy` is quoted-only *by the protocol*, not by our
+> ignorance: the panel prices correctly, the client refuses the purchase locally against a
+> purse no message we can find is able to fill. Either carried gold is client-authoritative
+> from a source outside the instance protocol, or it moves only as a *result* of a
+> transaction the client itself initiates. **The live c2s capture is now the cheaper
+> instrument than any further reading** — a real merchant purchase on retail would show
+> both the request and whatever comes back, and settles in one capture what six static
+> passes could not.
+
+> ### THE FIVE UNREAD READERS ARE ALL RULED OUT, AND THE READER LIST HAD AN OFF-BY-ONE. 2026-08-19
+>
+> Six parallel reads of the pinned build, every structural claim re-verified by hand here.
+>
+> **No wire message we can find writes carried gold.** `0x00C6`, `0x00C8`, `0x00C9`,
+> `0x00CB` and `0x00CD` were each fully disassembled through their single workers:
+> **all five are clean negatives** — none stores to the item singleton's `+0x90`, and
+> four of the five never reference the singleton at all. A sixth agent hunted the writer by
+> four further routes (xrefs on both gold getters, neighbour-function sweeps either side of
+> them, `--field 0x90 --writes` across other modules, and the `VnGuildAddService:969`
+> spend path) and returned **NOT FOUND** with its bounds stated. Together with the banked
+> negative, that is **six independent passes** and the honest position is that carried gold
+> is not server-settable by anything this project has located — not that it is unsettable.
+>
+> **CORRECTION, and it is ours: `0x00C6` is NOT one of the eight owner-register readers —
+> `0x00C7` is.** Verified by hand both ways:
+>
+> ```
+> 0x00C6 -> handler 0x0091F290 -> worker 0x00814100
+>   00814118  push 0x100000b6      ; a DIFFERENT frame message
+>   0081411D  call 0x633d70        ; and it never touches 0x010876C8/CC at all
+>
+> 0x00C7 -> handler 0x0091F2F0 -> worker 0x00814130
+>   0081414F  mov eax,[0x10876c8]  ; the owner agent
+>   00814157  mov eax,[0x10876cc]  ; the active flag
+>   0081416B  push 0x100000b5      ; the eight-reader frame message
+> ```
+>
+> `0x00C6` packs its two wire fields into an 8-byte buffer and posts `0x100000B6` — a
+> self-contained leaf that is **not** part of this family, so upstream's
+> `TRANSACTION_REJECT` name, whatever it means, does not reach the window mechanism. The
+> §"`0x00C4`" row above is corrected in place. Worth naming the failure mode: the reader
+> set was derived by mapping xref sites to opcodes, and **one mapping slipped by one** —
+> exactly the "handler-address adjacency proves nothing" trap this document already warns
+> about, caught this time only because a task went and read the function.
+>
+> **Where that leaves the shop.** Buy stays quoted-only, and the remaining explanations are
+> now few and testable: carried gold may arrive with character/account load rather than in
+> the instance protocol (the login burst's unexplained `1000` in `CHARACTER_UPDATE_INFO` is
+> the standing suspect), or it may be written through a `this` pointer no anchored scan
+> reaches. **Neither is a client run** — the next move is reading the character-load path,
+> not another probe.
+
+> ### DESK WORK, 2026-08-19: `0x0141` CANNOT EVER FUND THE SHOP — it is correctly named, and we misread the name. SOURCED
+>
+> Read the consumer before varying the value, which is the step two crashed runs skipped.
+> Every claim below is quoted disassembly from the pinned build, re-verified by hand after
+> the agents returned.
+>
+> **The crash mechanism, upgraded from RECONSTRUCTION to SOURCED.** The handler is
+> `0x00846170`; the message is `[u16 container_id, u32 delta]`, 8 bytes. Field 1 is a key
+> into `inventoryTable` at `[ctx+0x40]+0xD4` — the same table `studies/pvpui` documented
+> for the equip walk — looked up by a generic hash `Get` (`0x008445A0`) that returns NULL
+> on a miss. **The assert does not abort:**
+>
+> ```
+> 00846190  test edi, edi          ; edi = Get(container_id)
+> 00846192  jne  0x8461a8          ; found -> skip the assert
+> 00846194  push 0x7b1             ; 1969
+> 008461A3  call 0x487bc0          ; ASSERT(inventory)  <- returns!
+> 008461A8  push [esi+8]           ; <- FALLS THROUGH
+> 008461AB  mov  ecx, edi          ; ecx = NULL
+> 008461AD  call 0x84a020          ; add [ecx+0x94], eax  -> near-NULL write
+> ```
+>
+> So an unregistered id is not "ignored", it is a guaranteed near-null write. **There is no
+> numeric bound on field 1** — the only gate is hash membership — so **enumerating ids
+> 2, 3, 4… is unsafe by construction**: every id the client has not been told to create
+> reproduces this crash exactly. Also measured: field 2 is **added**, not assigned
+> (`add [ecx+0x94], eax` at `0x0084A020`, then event `0x100000ED` with the new total), so
+> our login burst's `[1, 0]` is a genuine no-op and a repeated send would accumulate.
+>
+> **And the funds line reads a different object AND a different field.** `Your Funds` is
+> `ItemCliGetGold()` at `0x00845600` — identified from the client's own assert
+> `VnGuildAddService:969 "gold <= ItemCliGetGold()"`, which compiles to call-then-`cmp`:
+>
+> ```
+> 00845606  mov eax,[eax+0x40]
+> 00845609  mov esi,[eax+0xf8]     ; a fixed SINGLETON, not a table entry
+> 00845627  mov eax,[esi+0x90]     ; <- the funds figure
+> ```
+>
+> A byte-identical companion at `0x00845630` returns `[esi+0x94]` off the **same**
+> singleton. So the object carries **two** currency fields, and the split is now obvious:
+> **`+0x90` is carried gold** (what the merchant quotes against) and **`+0x94` is storage**
+> (what `0x0141` adds to, on a *container*). **`GAME_SMSG_UPDATE_GOLD_STORAGE` is named
+> exactly right and we misread it** — Guild Wars separates the purse from Xunlai storage,
+> the opcode says `STORAGE`, and no amount of it will ever move `Your Funds`. That gives
+> the empirical null (`[1, 500]` accepted, funds unchanged) a byte-level cause: different
+> object, different field, so even a container aliasing the singleton could not do it.
+>
+> **What writes carried gold is NOT FOUND, and here are the search bounds** — stated so
+> the next reader extends rather than repeats: `codescan --field 0x90 --writes --in
+> ItCliApi` returns **0 stores** across `0x00844678..0x008481B7`; and of the **58** sites in
+> `.text` that fetch this singleton (`mov esi,[eax+0xf8]`), **none** stores to `+0x90`
+> within 120 bytes, in any of seven store/add/sub encodings. So the writer holds the object
+> as a plain `this` somewhere else — precisely the biased-pointer blind spot `codescan`'s
+> own footer documents. The unsearched space is named, not waved at.
+>
+> **Consequences for the arc.** Funding a purchase is not reachable by any message we
+> currently know, so the Buy path stays quoted-only. The next candidates are the remaining
+> owner-register readers — `0x00C6` (upstream `TRANSACTION_REJECT`), `0x00C8`, `0x00C9`,
+> `0x00CB`, `0x00CD` — one of which plausibly carries a transaction result and its new
+> balance. **That is a reading task, not another run**, and this section is the argument for
+> doing it in that order.
+
+> ### `0x0141` FIELD 1 IS A CONTAINER ID, AND 0 KILLS THE CLIENT. 2026-08-19, OBSERVED
+>
+> Run `20260819T002038`, three arms with distinct amounts (`field1 = 0/2/1` -> 111/222/333).
+> **Arm A killed it.** `Assertion: inventory`, **`P:\Code\Gw\Item\Cli\ItCliApi.cpp(1969)`**,
+> crash stamped `00:21:21` against arm A's send at wall `04:21:21Z` — same-second
+> attribution. Arms B and C are **UNMEASURED**: the probe sends on a timer, so the rest of
+> the run went into a dead client, and the frames from `hold009` on are the error dialog.
+>
+> **So field 1 is not a "carried vs storage" purse selector — it is a CONTAINER ID, and it
+> must name a container that exists.** The client asserts the inventory rather than ignoring
+> a bad value, which is why `0` is fatal and why the login burst's `[1, 0]` is legal:
+> container **1** exists. This is the same subsystem the heroes arc hit at `ItCliApi:488`
+> ("the hero has no per-owner container in the item client's table") — the item client keys
+> everything by container, and gold is no exception.
+>
+> **Which reframes the funding question rather than answering it.** `[1, 500]` was legal and
+> left `Your Funds` at 0, so container 1 is a real container that is *not* the merchant's
+> purse. The question is now **which container id the carried purse is**, and the honest
+> position is that we do not know how many exist: our login burst creates exactly one bag
+> (`0x013F INVENTORY_CREATE_BAG(equipped)`), where retail's character has a backpack, belt
+> pouch, satchels and storage. **The next arm is enumeration** — ids 2, 3, 4… with distinct
+> amounts, watching that one line — and the probe now starts at 2 with `0` permanently
+> excluded and the reason written at the call site.
+>
+> **My own error, second in this area and the same shape:** I picked `0` as an obvious
+> "other value" without first checking what the field indexes, exactly as I earlier picked
+> `1` by copying the login burst without checking what it selects. Both were guesses at a
+> field whose type was discoverable by reading `ItCliApi` first. The disciplined order here
+> is read the consumer, then vary the value.
 
 > ### PRESSING BUY — the client refuses LOCALLY, and my funding attempt was wrong. 2026-08-19, OBSERVED
 >

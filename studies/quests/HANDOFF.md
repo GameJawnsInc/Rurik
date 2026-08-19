@@ -28,10 +28,17 @@ still ArenaNet's string ids, and two known bugs are open by the owner's decision
 
 ## 2. What will bite you, in the order it will bite
 
-**The two open bugs are ONE fix.** `INTERACT_RANGE = 250.0` is too far *and* clicking a
-distant NPC does not walk the player to it. Tightening the range alone makes the quest
-unplayable — the player would be unable to talk to anything they are not already
-standing on. Do not "just fix the range".
+**~~The two open bugs are ONE fix.~~ THEY WERE NEVER ONE FIX, and the walk is DONE
+(2026-08-19).** This bullet used to say that tightening `INTERACT_RANGE` alone would make
+the quest unplayable because clicking a distant NPC does not walk the player over. The
+premise under it — that the *client* walks you over on its own, so the walk was out of
+our reach — is refuted: 46 c2s INTERACTs in the corpus carry 0 movement orders, and the
+walk is a **server** message, `0x002A AGENT_UPDATE_DESTINATION`, that this server had
+never sent. It sends it now, and an out-of-range interact is **held** and served when the
+client reports it arrived (ArenaNet answers late by the walk's own duration, not never).
+So `INTERACT_RANGE = 250.0` is now a plain unmeasured constant you may tighten on its own
+merits — nothing is chained to it. Keep the other half of the old warning though: a
+smaller range with no walk WOULD be unplayable, so never remove the walk to "simplify".
 
 **`0x004C` before `0x0054`, always.** The client gates the objectives line on a
 description-filled flag. Send them the other way and the objectives line is a **silent
@@ -70,11 +77,14 @@ the quest fields' caps as unverified hazards, not boundaries that pass.
 
 - **The dialogue gate is open.** `0x0080`+`0x0081` opens an NPC window; this was recorded
   as a blocker for a long time and is not one. `FINDINGS.md` §2.5.
-- **We can author quest text**, and choose the log *section* (`flags = 32` → Primary
-  Quests). What we cannot yet author is the **name** — that is rung Q2b and
-  `toolkit/mapdata/textwrite.py` already exists, is tested, and has 188 authored skill
-  names on a retail screen behind it. Seven recon lanes missed that tool; do not
-  re-derive it.
+- **We can author quest text**, the log *section* (`flags = 32` → Primary Quests), and
+  — since 2026-08-19, CLOSED both halves — the **name**: 'A First Errand' at string id
+  100552 (`textwrite.py --set`, reskin-roster archive), committed as `[0x8103, 0x0CC8]`
+  in `content/quests.toml`, and RENDERED in the tracker and the 'Quest Added' toast
+  (probe `quest_name_authored`, harness `20260819T085654`). The trap that outlives the
+  rung: only the reskin-roster archive holds record 200, so any run that must show the
+  name uses THAT client. `textwrite.py` has 188 authored skill names plus this behind
+  it; seven recon lanes missed that tool once — do not re-derive it.
 - **The binary claims are re-checked on 38833** (what the owner runs) as of 2026-08-17 —
   bodies unmoved, 12 cited sites byte-identical, `CHALLENGES` still 1465. But the scope is
   *"nothing moved across the 15-day 38797→38833 patch"*, **not** "these addresses are
@@ -83,15 +93,25 @@ the quest fields' caps as unverified hazards, not boundaries that pass.
 
 ## 4. Where the next real result probably is
 
-**`0x004E` = `QUEST_COMPLETE_PANEL`.** Its body posts `0x10000155` into the band
-`GmQuestComplete` subscribes to, and the 2026-08-13 sweep already fired it at a client and
-photographed a centre-screen banner. `FINDINGS.md` §7.6 had ruled this needed a narrated
-live mission completion and that *"nothing static will substitute"* — half the join was
-sitting in its own §1.6 table. **The reward arc is now one loopback run from its first
-real question**, which is what the panel expects in its three dwords. Note the panel is
-fed by *five* frame ids and only one comes from the quest opcode block; the other four
-publishers are mapped in §9.3 and unattributed. `framebus.py --at` answers them one body
-at a time.
+**The `0x004E` loopback run HAPPENED (2026-08-19) and the three dwords are named:**
+experience, gold, skill points — the panel's own toast read them back off sentinel
+values. `FINDINGS.md` §9.6 is the record; the probe is `quest_panel`, kept runnable as
+the completion-panel calibration. What the reward arc still does not have is a **grant**:
+the toast is display, no client state moved, and the rest of the completion family
+(`0x006C`, `0x0096`, `0x0097`, `0x00FB`) is 0-of-corpus — that half needs a narrated
+live mission completion. **The publisher question is CLOSED (2026-08-19, §9.7): those
+same four opcodes are the panel's other four publishers** — the five-id band and the
+completion family close on each other, with a `0x0096`/`0x0097` frame-id swap that
+`test_framebus.py` now asserts so nobody tidies it away. **The ladder over that family
+RAN (2026-08-19, §9.8): `0x0096` is MISSION_COMPLETE** — one flag bit draws the whole 3D
+scene, f1 is `completionFlagsGained` (bit0 mission / bit1 bonus, gate at :729), and
+fields 3/4/5 are a reward triple that rendered "111 experience, 222 gold, 333 skill
+points" (so f3=xp, f5=gold in the MIDDLE slot, f4=skill points). `0x0097` is a sub-panel
+keyed by a u8 over state a PRIOR completion message stages — a cold fire asserts at :678.
+Q2b is closed, both halves (§3 above). **Everything the wire governs on the completion
+DISPLAY is now mapped** (`0x004E`+`0x0096` rendered from our server, `0x0097`'s gate
+located, `0x006C`/`0x00FB` screen-name-only). What is left is not offline: the GRANT
+(client state moving, live capture) and `0x0097`'s priming message.
 
 ## 5. Open, unmeasured, and deliberately not guessed
 
