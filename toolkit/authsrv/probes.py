@@ -4018,6 +4018,67 @@ def _completion_reward_steps():
     ]
 
 
+def _completion_panel_steps():
+    """0x0098 stages reward lines, 0x0097 consumes them -- and the gate that
+    killed the first cold fire was THE MAP, not the payload.
+
+    SELF-CORRECTION. FINDINGS 9.8 read 20260819T095219's crash
+    (GmQuestComplete.cpp:678, "No valid case for switch variable") as an
+    unstaged stash. Two independent static re-derivations say otherwise: the
+    switch variable is loaded ONCE at 0x0052F935 as `[esi+4]` where esi =
+    s_missionClientData[current_map_id] -- the CLIENT'S OWN per-mission table,
+    indexed by the map the player is standing on -- and its valid cases are
+    {2, 4, 5}. It never reads the posted record at all. That run was on the
+    default map (world 1), which cannot satisfy it. Arm 1 below is the
+    one-variable test of that correction: the SAME payload that crashed,
+    on --map 449 (world 4).
+
+    The stash is real, and now attributed: ctx[0x2c]+0x5C/+0x60/+0x64 is an
+    ArenaNet Array<T> {data, capacity, count} (+0x68 is its growth chunk,
+    written by the RTL grower as [ebx+0] and invisible to a --field scan --
+    which is why 9.8 called +0x60 "a field nobody accounted for": it is the
+    capacity). Its sole writer image-wide is GAME_SMSG 0x0098, whose body
+    0x00812510 is an INLINED Array push/grow (element stride 0x20, four dwords
+    written per push). 0x0097 reads count and data, posts them, frees the
+    buffer and zeroes all three -- so each arm below re-primes from empty and
+    the arms do not contaminate each other.
+
+    Field d0 of 0x0098 is the reward TYPE tag, read by the consumer at
+    0x0052F084 and compared against 4 (isSimpleReward) at 0x0052F089. Assert
+    :246 is `!(isSimpleReward && rewardCount > 1)`, so an arm using d0 = 4
+    must push exactly ONE element. Arm 3 respects that deliberately rather
+    than discovering it the expensive way.
+    """
+    lit = questdefs.coded_literal("Rurik's own completion notes.",
+                                  "template", limit=127)
+    return [
+        Step(12.0, 0x0097, [1, lit],
+             "ARM 1, the correction's own test: the payload that crashed "
+             "20260819T095219, unchanged, on a world-4 map",
+             "NO :678 assert. Surviving proves the gate was the MAP and "
+             "clears FINDINGS 9.8's stash reading. Crashing at :678 again "
+             "refutes the correction and sends it back to the disassembly."),
+        Step(18.0, 0x0098, [1, 111, 222, 333],
+             "ARM 2a: push ONE reward element, type tag 1, sentinels",
+             "nothing yet -- 0x0098 only appends to the array. A crash HERE "
+             "would be new: no assert is known on the push path."),
+        Step(6.0, 0x0097, [2, lit],
+             "ARM 2b: consume it, medal 2",
+             "the panel with a REWARD LINE reading 111/222/333, and the "
+             "array count now 1 rather than 0. Which slot each sentinel "
+             "lands in names d1/d2/d3."),
+        Step(18.0, 0x0098, [4, 444, 555, 666],
+             "ARM 3a: push ONE element with type tag 4 = isSimpleReward",
+             "still nothing on screen. Exactly one push, deliberately: "
+             ":246 asserts if isSimpleReward rides a count above 1."),
+        Step(6.0, 0x0097, [3, lit],
+             "ARM 3b: consume it, medal 3",
+             "the SIMPLE-reward rendering of 444/555/666 -- compare against "
+             "arm 2's type-1 rendering. A difference names what the type tag "
+             "selects; identical output means d0 does not reach the render."),
+    ]
+
+
 def _quest_name_authored_steps(origin):
     """Q2b's screen half: does OUR OWN string render where Ascalon's did?
 
@@ -5148,6 +5209,27 @@ PROBES = {
              "predicts, and the client's own 0x8012 for 1463 was answered "
              "with the template 0x004C mid-run. Rung Q2b closed end to end. "
              "Kept runnable as the authored-name calibration.",
+    ),
+    "completion_panel": lambda a, o: Probe(
+        question="Was 0x0097's crash the MAP rather than the payload -- and "
+                 "does 0x0098 stage the reward lines it consumes?",
+        predicts="Arm 1 sends the exact payload that crashed at "
+                 "GmQuestComplete.cpp:678 on 2026-08-19, unchanged, on a "
+                 "world-4 map, and does NOT assert -- because the switch at "
+                 ":678 reads s_missionClientData[map]+0x4 (cases {2,4,5}), "
+                 "never the record. Arms 2-3 then prove 0x0098 is the "
+                 "reward-line append: one push, then a consume, should draw "
+                 "a reward line carrying 111/222/333, and a second pair with "
+                 "type tag 4 (isSimpleReward, exactly ONE element or :246 "
+                 "fires) should render 444/555/666 differently if the tag "
+                 "reaches the render. A :678 crash on arm 1 refutes the whole "
+                 "correction and FINDINGS 9.8's stash reading stands.",
+        steps=_completion_panel_steps(),
+        note="MUST RUN WITH --map 449. The map IS the experiment: 449 is "
+             "world 4, and the client's own mission table gates the panel on "
+             "{2,4,5}. Do NOT use the default map or 146/148/143 (world 1) -- "
+             "that is what the superseded run did. Agent-pilotable, no "
+             "clicks: actions '0:play', --shots 1 --hold 90.",
     ),
     "completion_rewards": lambda a, o: Probe(
         question="Does 0x0096's tag-4 simple-reward triple render its "

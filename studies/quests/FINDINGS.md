@@ -1427,6 +1427,11 @@ arms were informed rather than blind. What the screen returned:
   null on a cold fire) is not a member. Confirms the static read: `0x0097` is not a
   standalone message; it renders a completion sub-panel keyed by a u8 over state a prior
   message stages. Its name stays abstained.
+  **↑ THAT SENTENCE IS WRONG AND §9.9 CORRECTS IT.** The crash is real and the stash is
+  real, but they are not the same fact: the `:678` switch never reads the posted record,
+  and the reason the fire died was **the map**. Left in place rather than rewritten,
+  because the shape of the error is the point — a crash and a suspicious-looking read in
+  one function got joined without checking that the assert's own variable came from it.
 
 **This is still DISPLAY, not GRANT** — the same line the `quest_panel`/§9.6 run drew: the
 reward toast reads back whatever we send, the XP bar and level chip do not move. What §9.8
@@ -1438,6 +1443,53 @@ question, unchanged. Schema: `0x0096` earns the name **MISSION_COMPLETE** (measu
 effect, not a guessed one — the §9.4 bar is cleared); `0x0097` keeps its `why`-only row
 with the enum gate recorded. Two probes kept runnable as the completion-scene calibration.
 Captures `20260819T094757` (gates) and `20260819T095219` (rewards).
+
+#### 9.9 The `:678` gate is the MAP, and `0x0098` is the reward-line append (2026-08-19, static)
+
+§9.8's `0x0097` bullet joined two facts that do not belong together, and both halves are
+now read out of the bytes by two independent routes, each attacked by a skeptic that
+failed to refute it. **Labelled MEASURED (static) — the confirming loopback run is
+staged as probe `completion_panel` and has NOT run** (harness held by another session);
+until it does, no line here rests on a screen.
+
+**The `:678` switch never reads our message.** It is loaded once, at `0x0052F935`, as
+`[esi+4]` where `esi = s_missionClientData[current_map_id]` — the client's own static
+per-mission table (`ConstMission.cpp`, the accessor `0x005A8580` and the map-id getter
+`0x0084D9C0` are the pair `studies/minimap/FINDINGS.md` already named) — and its valid
+cases are **{2, 4, 5}**. The posted record's four fields are consumed only *downstream*
+of it, at `0x0052FA61+`. So a cold fire asserts on any map whose table entry is outside
+{2,4,5}, whatever the payload: capture `20260819T095219` ran on the default world-1 map
+and could not have passed. Ready-made maps that satisfy it, already in `content/maps.toml`:
+**449** Kamadan (world 4), **194** Kaineng Center (world 2), **474** Domain of Anguish
+(world 5). The `switch variable ''` in the dialog is the assert macro's rendering, not
+evidence that a string was empty — reading it as our string is what sent §9.8 wrong.
+
+**The stash is an `Array<T>`, and `0x0098` is its only writer.** `ctx[0x2c]+0x5C/+0x60/
++0x64` are `{data pointer, capacity, count}` — so §9.8's "third field nobody accounted
+for" is simply the **capacity**, and the array's fourth header word `+0x68` (growth
+chunk) is written by the RTL grower as `[ebx+0]`, an encoding no `--field` scan can see,
+which is why it stayed invisible. `GAME_SMSG 0x0098` (stub `0x0091EBF0` → body
+`0x00812510`) is an **inlined Array push/grow**, element stride **0x20** with four dwords
+written per push, and `codescan --xrefs` finds it the sole caller image-wide. `0x0097`
+reads count and data, posts them, frees the buffer and zeroes the header — so each
+consume re-arms from empty. Field **d0 is a reward TYPE tag**: the consumer reads it at
+`0x0052F084` and compares against 4 for `isSimpleReward`, with assert `:246`
+`!(isSimpleReward && rewardCount > 1)` bounding that case to exactly one element.
+
+**So the completion protocol has a shape no study had.** Not five independent renders but
+a staged sequence: **N × `0x0098` append reward lines, then one `0x0097` consumes them
+with a medal and a coded string**, gated on the map's mission-table class. `0x0098` was
+named in no study and carries no `overrides.json` row; its wire shape
+`[u8, u32, u32, u32]` (`schema/messages.json` opcode 152, 15 B) matches the four fields
+its stub pushes. Medal is bounded by `:611` `msg.medal < CHAR_MISSION_MEDALS` and the
+downstream switch accepts {1,2,3}.
+
+**Corrections owed to the two lanes' own reports, recorded because they were caught by
+the skeptics rather than by the finders:** the element stride is 0x20 and not 16 (three
+independent `shl ,5` sites), `0x00812510` is `0x0098`'s own body with the push *inlined*
+rather than a shared RTL routine, and `GmQuestComplete`'s `:721/:729/:748` sit in a
+*different* function from `:678` — what the five completion messages share is the
+5-entry dispatch table at `0x0052FB48`, not a function body.
 
 #### Reproducing §9
 
