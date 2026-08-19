@@ -1969,6 +1969,47 @@ should not go into `overrides.json` on this evidence.
 
 ---
 
+> ### `0x00CA` FIELD 2 IS A PRICE MULTIPLIER — the formula is `displayed = F9 x 2 x field2`. 2026-08-19, OBSERVED
+>
+> Harness `20260818T234622`. Three arms, **only the second field varied**, items valued
+> 25 / 50 / 100 throughout. Every prediction was on record before the run:
+>
+> | arm | field 2 | predicted | **displayed** |
+> |---|---|---|---|
+> | A | `1.0f` `0x3F800000` | 50 / 100 / 200 (control) | **50 / 100 / 200** |
+> | B | `2.0f` `0x40000000` | 100 / 200 / 400 if a multiplier | **100 / 200 / 400** |
+> | C | `0.5f` `0x3F000000` | 25 / 50 / 100 if a multiplier | **25 / 50 / 100** |
+>
+> **Nine of nine cells exact.** Arm A reproduced the earlier run, so the control holds; arm C
+> collapsed the column onto the **raw `F9` values we sent**, which is the shape change the
+> design called unfakeable.
+>
+> **So both components are now separated and measured:**
+>
+> ```
+> displayed price = F9 x 2 x field2
+> ```
+>
+> a **fixed 2x client markup** AND a **float multiplier on the wire**. At retail's `1.0f`
+> the two collapse to the 2x that the previous run measured — which is exactly why one
+> value could never separate them. `F9` is the item's VALUE; the quoted price is derived.
+>
+> **Three things banked in passing:**
+> 1. **Re-arming works.** `0x00CA` consumes the owner register (`[0x010876CC] = 0`), and
+>    re-sending `0x00C4` + `0x0084` before each arm reopened the shop every time — arms B
+>    and C both drew. The consume-and-clear is per-window, not per-session, so a server can
+>    refresh a shop as often as it likes.
+> 2. **The flags revert is confirmed on screen**: with the content rows' own flags (bit 2
+>    set) all three rows render their **real armour icons** again, not the hourglass
+>    placeholders `_STOCK_FLAGS` produced. Both directions of the bit-2 gate now have a
+>    matching screenshot.
+> 3. `Your funds: 0` in all three arms — the multiplier touches the quote, not the purse.
+>
+> **What is still NOT known:** whether the `2` is a merchant-type constant (a collector,
+> a trader and a merchant might each carry their own) or a global. One NPC, one window
+> type, n = 1 on that axis. And nothing here has pressed **Buy** — every price above is a
+> quote, not a transaction.
+>
 > ### PRICED STOCK RUN — the shop charges **2x** what we send, and bit 2 shows itself on screen. 2026-08-18, OBSERVED
 >
 > Harness `20260818T233955`. Three items declared with **distinct** prices in `F9` — our own

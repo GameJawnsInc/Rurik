@@ -774,6 +774,93 @@ def _merchant_window_steps(agent_id, origin):
     ]
 
 
+def _shop_price_scale_steps(agent_id, origin):
+    """Is `0x00CA`'s second field a PRICE MULTIPLIER, or is the 2x a fixed
+    client markup? The one question the priced-stock run could not answer.
+
+    WHAT IS ALREADY MEASURED (`20260818T233955`): with `F9` = 25 / 50 / 100 the
+    shop quoted **50 / 100 / 200** -- exactly 2x, on three distinct values. The
+    second field carried `0x3F800000` (1.0f) in that run because retail sends
+    1.0f, so a multiplier of 1.0 and a fixed 2x markup predict the SAME numbers
+    and nothing separates them. This varies the field and only the field.
+
+    THE ARMS, and their predictions, on record before the run:
+
+        A  1.0f  0x3F800000   control, must reproduce 50 / 100 / 200
+        B  2.0f  0x40000000   multiplier -> 100 / 200 / 400
+        C  0.5f  0x3F000000   multiplier -> 25 / 50 / 100  (== what we SENT)
+
+    Arm C is the sharp one: if the field scales, C's prices collapse onto the
+    raw `F9` values, which is a shape change no rounding can fake. If all three
+    arms read 50 / 100 / 200, the field is INERT for price and the 2x belongs to
+    the client's own merchant markup -- also a real answer.
+
+    WHY EACH ARM RE-SENDS `0x00C4` AND `0x0084`: `0x00CA` is one of the eight
+    readers that CONSUME the window-owner register and then write
+    `[0x010876CC] = 0` (this document's `0x00C4` section). A second `0x00CA`
+    with the register cleared is a different experiment from the first, so each
+    arm re-arms the owner and restages the id list. If arms B and C draw
+    nothing at all, THAT is the finding -- the register is single-shot and the
+    price question needs a fresh window per value.
+
+    Items are declared ONCE, with the content rows' own flags (bit 2 set): the
+    `_STOCK_FLAGS` override is off because clearing bit 2 makes every row an
+    hourglass placeholder this server never resolves (same run, above).
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    a = _MERCHANT_NPC_AGENT
+    ids = [_DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C]
+    steps = [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(2.0, 0x0020,
+             create_agent(a, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 250, oy, plane,
+                          allegiance=0x706C6179),
+             f"create the shopkeeper: agent {a}", "a Hatcher stands there."),
+        Step(4.0, 0x0161, named_item(_DRAIN_ITEM_A, _stock_item("warrior_legs")),
+             "0x0161: leggings, value 25", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_B, _stock_item("warrior_boots")),
+             "0x0161: boots, value 50", "nothing."),
+        Step(1.0, 0x0161, named_item(_DRAIN_ITEM_C, _stock_item("warrior_gloves")),
+             "0x0161: gauntlets, value 100", "nothing."),
+    ]
+    arms = [("A", 0x3F800000, "1.0f", "50 / 100 / 200 -- the CONTROL; if this "
+             "arm does not reproduce the measured prices, stop and read no "
+             "other arm as a verdict"),
+            ("B", 0x40000000, "2.0f", "100 / 200 / 400 if the field is a "
+             "multiplier; 50 / 100 / 200 if it is inert"),
+            ("C", 0x3F000000, "0.5f", "25 / 50 / 100 if the field is a "
+             "multiplier -- prices collapsing onto the RAW values we sent is "
+             "the unmistakable shape; 50 / 100 / 200 if inert")]
+    for tag, bits, label, expect in arms:
+        steps += [
+            Step(8.0, 0x00C4, [a],
+                 f"ARM {tag}: re-arm 0x00C4 (the owner register is consumed by "
+                 f"each 0x00CA)",
+                 "the character turns to face the NPC -- the control that "
+                 "proves the register was written."),
+            Step(2.0, 0x0084, [ids],
+                 f"ARM {tag}: restage the three ids", "nothing."),
+            Step(2.0, 0x00CA, [1, bits],
+                 f"ARM {tag}: 0x00CA [1, {label}]  (0x{bits:08X})",
+                 f"THE READOUT: expect {expect}. Read the PRICE COLUMN, not "
+                 f"the item names."),
+        ]
+    steps.append(
+        Step(10.0, 0x0000, [],
+             "END: quiet frames so arm C has coverage after it",
+             "compare the three price columns. If B and C never drew a window, "
+             "say so -- that is the single-shot answer, not a null.",
+             sends=False))
+    return steps
+
+
 def _accum_drain_e1_steps(agent_id):
     """`0x00E1` with real ids staged, THREE times -- the arm nobody photographed.
 
@@ -5894,6 +5981,25 @@ PROBES = {
              "an outpost re-run is a different experiment. Arms are 10 s "
              "apart and bodies are +/-400 so marks neither straddle a frame "
              "nor merge into one blob -- both defects of the prior run.",
+    ),
+    "shop_price_scale": lambda a, o: Probe(
+        question="Is 0x00CA's second field a price multiplier, or is the "
+                 "measured 2x a fixed client markup?",
+        predicts="Three arms at 1.0f / 2.0f / 0.5f against items valued "
+                 "25/50/100. If the field scales price: 50/100/200, then "
+                 "100/200/400, then 25/50/100 -- arm C collapsing onto the raw "
+                 "values is a shape change no rounding can fake. If all three "
+                 "read 50/100/200 the field is inert for price and the 2x is "
+                 "the client's own merchant markup. Arm A is the control and "
+                 "must reproduce 20260818T233955's numbers.",
+        steps=_shop_price_scale_steps(a, o),
+        note="Each arm re-sends 0x00C4 and 0x0084 because 0x00CA CONSUMES the "
+             "window-owner register and writes [0x010876CC]=0 -- a second "
+             "0x00CA on a cleared register is a different experiment. If arms "
+             "B and C draw nothing, the register is single-shot per window and "
+             "the price question needs one window per value; that is a result, "
+             "not a null. Items use the content rows' own flags: clearing F8 "
+             "bit 2 makes every row an hourglass this server never resolves.",
     ),
     "merchant_window": lambda a, o: Probe(
         question="Can we author a merchant/collector window on an NPC we "
