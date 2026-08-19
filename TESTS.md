@@ -2060,6 +2060,44 @@ Every one of these, in the order they were written:
   second interact cancels it, and an agent that leaves the world drops it. Floor
   19, measured — it was written as 18 from a count in the author's head and
   corrected against the run. No vault, no client. ~1 s),
+  `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
+  refuse a client-reported position, but it may never **latch**. The old
+  `_adopt_client_position` refused anything more than `900 u` from
+  `state["pos"]` — the value the refusal was preventing from being corrected —
+  so once the model was more than 900 u wrong every true report was also more
+  than 900 u away: run `20260819T113049` refused **50 reports, 36 of them
+  consecutively**, 21% of everything the client said, and only recovered because
+  `0x0047` writes without asking and the player happened to stop. Scored over
+  the **72** refusals the four harness runs actually printed (7 + 11 + 50 + 4,
+  from the servers' own `[map] ignoring a Nu jump` lines and **not** from a
+  replay), asking whether the client's next report is reachable from the point
+  we refused or the one we preferred at 478 u/s — the game's most generous speed,
+  Junundu Tunnel at +66%: **client right 71, guard right 0, undecidable 1.** Two
+  numbers this file deliberately does not use: an earlier replay reported 85
+  refusals and a largest true-but-refused drift of 18,647 u, and both are
+  artifacts — the servers printed 72 and the largest drift in the whole harness
+  tree is 4,116 u. A test pinned to 18,647 would have gone red forever against a
+  number no server ever produced. **§1 is the invariant that shaped the fix**:
+  the budget is `max(900, 580 · dt)`, so it is never *smaller* than the old flat
+  radius, asserted over 20 s of silence in 10 ms steps — a tighter design was
+  drafted, costed at 8 newly-refused true reports across the corpus (all 8 in
+  the one run whose displacements have no established cause) and thrown away.
+  §2 is the headline: twelve presentations of the real 2,844 u jump never refuse
+  more than `CLIENT_POSITION_REJECT_STREAK` in a row. §3 asserts silence widens
+  the budget and that the modal 0.5 s cadence still refuses once, so the guard
+  is loosened rather than deleted. §4 asserts position and plane are **one
+  fact** — the `0x003D` arm used to write the plane unconditionally 28 lines
+  above the position guard, so the server held plane 18 against a point its own
+  navmesh puts on plane 0. §5 asserts a refusal does not refresh `pos_seen`,
+  without which the budget stops growing exactly when the model is most wrong.
+  §6 asserts the telemetry can say `accepted=False` — it was a **literal `True`**
+  emitted from the stop arm only, so the flagship capture's JSONL held 5 of 62
+  reports and none of the four refusals, our own instrumentation failing the
+  "a check that cannot fail is not a check" rule — and that the stop arm now
+  *declares* its unconditionality rather than holding it by omission. §7 replays
+  the capture. Floor **17**, the bare-machine subset, against a green **21**
+  with `authsrv-20260819T114759-c1.jsonl` present; §7 declares `LEDGER.skip`
+  without it. No client. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

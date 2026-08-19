@@ -1986,33 +1986,145 @@ def prewarm_pathmap(map_id):
 
 
 # How far the client's reported position may be from ours before we stop
-# believing it. Reports arrive every ~250-340 ms and run speed is 288 u/s, so a
-# legitimate gap is ~100 units; 900 is deliberately loose because the cost of
-# refusing a real report is the drift this exists to prevent, while the cost of
-# accepting a wrong one is one bad leg that the next report corrects. It is a
-# sanity bound against a garbage decode, not an anti-cheat -- this server is
-# loopback only and the client is the one telling the truth here.
+# believing it -- now a FLOOR under a budget that grows with silence, not a
+# ceiling that can trap us.
+#
+# THE DEFECT THIS REPLACES, measured 2026-08-19 and the reason for every line
+# below. The old rule was a flat 900 u radius measured from `state["pos"]`, and
+# `state["pos"]` is the value the rule was preventing from being corrected. So
+# once the model was more than 900 u wrong, every true report was also more than
+# 900 u away and was refused in its turn: the guard latched. Run 20260819T113049
+# rejected 50 reports, 36 of them consecutively, 21% of everything the client
+# said. The model only ever re-synchronised because 0x0047 (below) writes without
+# asking, and because the player happened to stop walking.
+#
+# AND IT NEVER ONCE EARNED ITS KEEP. Scored over the four harness runs that
+# carry rejections -- 7 + 11 + 50 + 4 = 72 of them, counted from the server's own
+# "[map] ignoring a Nu jump" lines and not from a replay -- by asking whether the
+# client's NEXT report is reachable from the point we refused or from the point
+# we preferred, at 478 u/s (Junundu Tunnel, +66%, the most generous ceiling in
+# the game and far above our 288): client right 71, guard right 0, undecidable 1.
+# Zero saves in 72 firings. Largest true-but-refused drift 4,116 u.
+#
+# WHY THE RADIUS SURVIVES AT ALL, given a 0-for-72 record. Two reasons, both
+# small and both honest. It still refuses a single-frame garbage decode at a cost
+# of one report of latency, which is cheap. And it is where the telemetry hangs:
+# a guard that always capitulates is a measuring instrument, and this one found
+# the teleport. What it may never do again is latch, and the streak below makes
+# that unreachable for any constants.
+#
+# THE FIX IS A STRICT LOOSENING, and that is a deliberate property rather than a
+# side effect. budget = max(RADIUS, RATE * seconds since the last report we
+# believed), so the budget is never smaller than the old 900 and no report that
+# passes today is refused tomorrow. A tightening was designed, costed and thrown
+# away: BASE 120 + RATE * dt would newly reject 8 reports across the corpus that
+# the flat 900 accepts, all eight of them in the one run whose displacements have
+# no established cause. Tightening where the model is least understood is how you
+# turn an open question into a regression.
 CLIENT_POSITION_TRUST_RADIUS = 900.0
+# What two HONEST models can do: our integrator's constant 288.0 (it measured
+# 282.3 u/s effective) plus 292, a ceiling over the client's fastest measured
+# cruise step (291.20 u/s, n=184 forward). Two models running directly apart
+# separate at no more than the sum. Arithmetic over two measured ceilings, with
+# nothing fitted. If a future arc implements the cap-breaking speed skills, this
+# is DEFAULT_RUN_SPEED * 1.66 + 288 = 766, not 580.
+CLIENT_POSITION_TRUST_RATE = 580.0
+# The escape hatch, and the whole safety property: the Nth consecutive refusal
+# is adopted regardless. The 0-for-72 record argues for 1 (never refuse); 2 is
+# the smallest value that still buys the single-frame refusal, and it caps the
+# damage of being wrong at exactly one report. 36 in a row is now unreachable by
+# construction.
+CLIENT_POSITION_REJECT_STREAK = 2
 
 
-def _adopt_client_position(state, reported):
-    """Should we take the client's word for where it is standing?"""
+def _position_verdict(state, reported, now):
+    """Pure: should we take the client's word for where it is standing?
+
+    Returns (accept, reason, jump, budget). No side effects, so the policy can
+    be driven from a capture replay without a socket -- which is what
+    test_position_trust.py does with the four real refusals from run
+    20260819T114743.
+    """
     px, py = state["pos"]
     jump = math.hypot(reported[0] - px, reported[1] - py)
+    # Time since the last report we BELIEVED, not since the last one we heard.
+    # A refusal must not refresh the anchor, or the budget stops growing exactly
+    # when the model is most wrong -- that is the latch wearing a formula.
+    dt = max(0.0, now - state.get("pos_seen", 0.0))
+    budget = max(CLIENT_POSITION_TRUST_RADIUS, CLIENT_POSITION_TRUST_RATE * dt)
+    if jump <= budget:
+        return True, "in-budget", jump, budget
+    if state.get("pos_rejects", 0) + 1 >= CLIENT_POSITION_REJECT_STREAK:
+        return True, "capitulate", jump, budget
+    return False, "reject", jump, budget
+
+
+def _take_client_position(state, reported, plane, rec, source, now=None,
+                          stop=False, on_mesh=None, clipped=None):
+    """The ONE place the player's position is adopted. Returns whether it was.
+
+    Both receive sites route through here. They used to hold different policies
+    -- 0x003D refused a report more than 900 u out, 0x0047 wrote whatever it was
+    handed -- and nothing in the file said so; the second policy existed by
+    omission. In run 20260819T114743 the unguarded site accepted, 1.24 s later
+    and 44 u away, the very coordinates the guarded site had just called
+    impossible. `stop` keeps that asymmetry, because it is measured to be right
+    (ArenaNet echoes the client's stated stopping point back verbatim in 70 of
+    88 move-cancel windows) -- but it is now DECLARED, with a reason string, so
+    it cannot be quietly deleted or quietly duplicated.
+    """
+    if now is None:
+        now = time.time()
+    px, py = state["pos"]
+    if stop:
+        accept, reason = True, "stop-report"
+        jump = math.hypot(reported[0] - px, reported[1] - py)
+        budget = float("inf")
+    else:
+        accept, reason, jump, budget = _position_verdict(state, reported, now)
+    if accept:
+        # POSITION AND PLANE ARE ONE FACT and are adopted together. They used to
+        # be split: the 0x003D arm wrote state["plane"] unconditionally, 28 lines
+        # ABOVE the position guard, so a refused report left the server holding
+        # the client's NEW plane against its OLD position. Measured at t=54.32 in
+        # run 20260819T114743 -- plane became 18 while the position stayed at
+        # (9463, 7946), which our own navmesh puts on plane 0. The click arm then
+        # reads that plane to decide whether it can place the player at all.
+        state["pos"] = reported
+        state["plane"] = plane
+        state["pos_seen"] = now
+        state["pos_rejects"] = 0
+    else:
+        state["pos_rejects"] = state.get("pos_rejects", 0) + 1
+        print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
+              f"position -- ours ({px:.0f}, {py:.0f}), theirs "
+              f"({reported[0]:.0f}, {reported[1]:.0f}) "
+              f"[{state['pos_rejects']} of {CLIENT_POSITION_REJECT_STREAK}, "
+              f"the next one is taken regardless]", flush=True)
     if TRACE_MOVE:
-        # EVERY report, accepted or not. The rejection below already prints,
-        # which is exactly the wrong sampling for a drift bug: it shows the
-        # moment the divergence became too big and nothing about it growing.
+        # EVERY report, accepted or not. The old rejection print was exactly the
+        # wrong sampling for a drift bug: it showed the moment the divergence
+        # became too big and nothing about it growing.
         print(f"[trace] pos ours ({px:.0f}, {py:.0f}) theirs "
               f"({reported[0]:.0f}, {reported[1]:.0f}) drift {jump:.0f}u "
-              f"{'ADOPT' if jump <= CLIENT_POSITION_TRUST_RADIUS else 'REJECT'}"
-              f" dest={state.get('dest')}", flush=True)
-    if jump <= CLIENT_POSITION_TRUST_RADIUS:
-        return True
-    print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
-          f"position -- ours ({px:.0f}, {py:.0f}), theirs "
-          f"({reported[0]:.0f}, {reported[1]:.0f})", flush=True)
-    return False
+              f"budget {budget:.0f}u {reason.upper()} via {source} "
+              f"dest={state.get('dest')}", flush=True)
+    # A CHECK THAT CANNOT FAIL IS NOT A CHECK. This record used to carry a
+    # literal `accepted=True` and it was emitted ONLY from the stop arm, so the
+    # flagship capture's JSONL showed 5 of 62 reports and NONE of the four
+    # refusals -- a reader reconstructing drift from the file alone was missing
+    # every event that mattered. `source` is what lets a consumer keep asking
+    # the old question: test_movement_fidelity.py's floors were calibrated on
+    # stops and it now filters to them.
+    if rec is not None:
+        rec.event("position_report", drift=round(jump, 2), accepted=accept,
+                  reason=reason, source=source,
+                  budget=(None if budget == float("inf") else round(budget, 2)),
+                  streak=state.get("pos_rejects", 0),
+                  reported=list(reported), ours=[px, py], plane=plane,
+                  server_plane=state["plane"], clipped=clipped,
+                  on_mesh=on_mesh)
+    return accept
 
 
 def clip_to_walkable(state, dest):
@@ -6813,11 +6925,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stand, while clicking sends an absolute destination.
                         # That is why click-to-move worked and WASD did not --
                         # we treated this as a pure turn and did nothing.
-                        # values[4] is an ENUM, not a flag: measured values were 1
-                        # and 4, never 0 (analyze_movement.py, 167 samples across
-                        # two sessions). GWLP-R calls the field movementType.
-                        # Testing it for truthiness happens to work because 0
-                        # never appears, but do not read "moving" into it.
+                        # values[4] is an ENUM, not a flag. GWLP-R calls the
+                        # field movementType. Testing it for truthiness happens
+                        # to work because 0 never appears, but do not read
+                        # "moving" into it.
+                        #
+                        # RE-CENSUSED 2026-08-19 over 7,988 records in 119 vault
+                        # captures, 48x the 167 samples this comment used to
+                        # cite: all of 1..8 occur -- 1 Forward 68.8%, 4 Backward
+                        # 19.7%, 3 5.1%, 2 3.2%, 8 1.1%, 7 1.0%, 6 0.7%, 5 0.4%.
+                        # So "measured values were 1 and 4" was stale (922 of
+                        # this run's records are neither), while the operative
+                        # claim survives at the larger n: 0 NEVER appears, and
+                        # neither does 9.
+                        #
+                        # Speed splits with the enum -- forward {1,2,3} 284.96
+                        # u/s, backward {4,5,6} 187.89, side {7,8} ~215 -- and
+                        # the integrator DELIBERATELY ignores that; see the
+                        # measurement note on DEFAULT_RUN_SPEED's use below.
                         #
                         # values[3] is a fixed-magnitude direction -- |v| was
                         # 765-768 in every sample whichever way the player faced.
@@ -6825,14 +6950,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
-                        state["plane"] = plane
+                        # NO `state["plane"] = plane` HERE. It used to sit on
+                        # this line, unconditional, 28 lines above the position
+                        # guard -- so a refused report left us holding the
+                        # client's new plane against its old position. The plane
+                        # now travels with the position into
+                        # _take_client_position and lands or is dropped with it.
                         # BELIEVE SLOT 1. The client reports where it actually is
-                        # in the same packet as where it wants to go, four times
-                        # a second, and MEASURED it advances at 211 units/sec
-                        # over 120 samples -- it is a live position, not a stale
-                        # echo. Read the pair as "I am here, and I want to go
-                        # there"; computing the leg from OUR position was always
-                        # the approximation.
+                        # in the same packet as where it wants to go -- a live
+                        # position, not a stale echo. Read the pair as "I am
+                        # here, and I want to go there"; computing the leg from
+                        # OUR position was always the approximation.
+                        #
+                        # TWO NUMBERS IN THIS COMMENT WERE WRONG and both were
+                        # load-bearing, so they are corrected rather than
+                        # deleted. "Four times a second": the modal report
+                        # interval is 0.50 s -- TWICE a second -- with a 1.80 s
+                        # mode on a straight line and a measured maximum silence
+                        # of 12.87 s. The client emits 0x003D only while moving
+                        # and 0x0047 only on a stop, so a standing player emits
+                        # NOTHING; corpus-wide silences reach 270 s. "It advances
+                        # at 211 units/sec over 120 samples": the client's
+                        # keyboard cruise is 282 u/s (p50, n=51 here; 284.96
+                        # forward over n=184 corpus-wide). 211 is movementType
+                        # 7's number and the click-walk number, generalised into
+                        # a claim about all movement -- and that generalisation
+                        # is what sized the trust radius against a drift that
+                        # does not exist.
                         #
                         # Why this matters more since collision landed: our
                         # integrator stops dead at a wall while the client slides
@@ -6853,9 +6997,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # client moves itself now, which is precisely what makes
                         # its report worth having.
                         reported = tuple(values[1])
-                        if _adopt_client_position(state, reported):
-                            state["pos"] = reported
-                            state["pos_seen"] = time.time()
+                        _take_client_position(state, reported, plane, rec,
+                                              "0x003D")
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -7142,19 +7285,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"client's own pathing", flush=True)
                             continue
                         if TRACE_MOVE:
-                            # THE HYPOTHESIS THIS FLAG EXISTS TO TEST.
-                            # `clip_to_walkable` casts its ray from OUR position,
-                            # not the client's. During a click-walk the client
-                            # reports nothing at all (measured, run
-                            # 20260819T111841) while our integrator runs at
-                            # DEFAULT_RUN_SPEED 288 u/s against a client measured
-                            # at ~197-211, so the two drift apart with nothing to
-                            # correct them -- and a click whose straight line is
-                            # blocked leaves our model standing still entirely.
-                            # If the origin below is far from where the player
-                            # actually is, the point we send is on a ray from
-                            # somewhere they are not, which is a warp with a
-                            # plausible-looking destination.
+                            # THE HYPOTHESIS THIS FLAG EXISTED TO TEST, AND ITS
+                            # ANSWER. The worry was that `clip_to_walkable` casts
+                            # its ray from OUR position, so a diverged model
+                            # would aim the ray from somewhere the player is not
+                            # -- a warp with a plausible-looking destination.
+                            #
+                            # MEASURED 2026-08-19 and REFUTED as a general
+                            # cause: over 102 clicks the ray-origin error is a
+                            # median of 30 u and a 90th percentile of 115 u, and
+                            # only 3 exceed 900 u. The speed half of the story
+                            # is refuted too -- the integrator's effective rate
+                            # is 282.3 u/s (288.0 * 0.05 / 0.0510, from 1,415
+                            # measured tick sends) against a client at 282 u/s
+                            # p50, a 0.1% mismatch, with adopted-report drift a
+                            # median of 11 u and a maximum of 55.7 u. The two
+                            # models do not drift apart.
+                            #
+                            # What DOES open a gap is this line's other half:
+                            # the client reports nothing at all during a
+                            # click-walk (verified four times, silences of 3.5,
+                            # 8.8, 9.5 and 12.9 s, and identical after a click
+                            # we REFUSED -- so it is the client's behaviour, not
+                            # a consequence of our answer). The trace stays,
+                            # because it is now the instrument for that.
                             opx, opy = state["pos"]
                             print(f"[trace] CLICK dest ({dest[0]:.0f}, "
                                   f"{dest[1]:.0f}) clipped from OUR origin "
@@ -7185,14 +7339,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # believed. Echoing the client's figure back pinned it to
                         # the spawn point: it reported "still at spawn" because
                         # we had not moved it, and we confirmed that was correct.
-                        # Believe the client, within a tolerance, and say nothing.
+                        # Believe the client and say nothing. ("Within a
+                        # tolerance" is struck: there is no tolerance here and
+                        # there never was one in the code -- see the note at
+                        # _take_client_position, and the second struck sentence
+                        # below.)
                         #
                         # This is a teleport, and a teleport cancels whatever the
                         # client is animating. Sending one on every stop is the
-                        # rubber-banding on sudden stops and turns: our integrator
-                        # runs at DEFAULT_RUN_SPEED while the client's own walk
-                        # measured ~197 units/sec, so we arrive ahead of it and
-                        # then yank it forward.
+                        # rubber-banding on sudden stops and turns. The old
+                        # rationale for that -- "our integrator runs at
+                        # DEFAULT_RUN_SPEED while the client's own walk measured
+                        # ~197 units/sec, so we arrive ahead of it" -- is
+                        # REFUTED: 282.3 u/s against 282 u/s, and 197 appears
+                        # nowhere in the corpus. The conclusion survives its
+                        # broken premise, because sending a teleport at a client
+                        # that is already right is damage whatever the speeds.
                         #
                         # An earlier attempt at this same change made things far
                         # worse -- the character was pinned at spawn. That version
@@ -7207,8 +7369,6 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         state["walking"], state["heading"] = False, None
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
-                        px, py = state["pos"]
-                        drift = math.hypot(reported[0] - px, reported[1] - py)
                         pm = state.get("pathmap")
                         # A wall makes the two models diverge legitimately. We
                         # stop dead at the clip point; the client SLIDES along
@@ -7218,10 +7378,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # coarse -- correcting it is a snap backwards along the
                         # wall, which is exactly the rubber-banding reported.
                         #
-                        # Believe the client instead, on one condition: that
-                        # where it says it is, is somewhere the navmesh agrees
-                        # you can stand. That keeps this from becoming a blanket
-                        # "trust the client" that would undo the collision fix.
+                        # Believe the client instead. This paragraph used to end
+                        # "on one condition: that where it says it is, is
+                        # somewhere the navmesh agrees you can stand" -- and
+                        # THAT CONDITION HAS NEVER EXISTED IN THE CODE. `on_mesh`
+                        # is computed below and passed to the recorder and has
+                        # never been tested, deliberately, for the reason the
+                        # next paragraph gives. Two superseded sentences sat
+                        # above one policy for weeks, both reading as active; a
+                        # 2,837 u write went through that either of them would
+                        # have blocked. They are struck rather than deleted so
+                        # nobody re-derives them.
                         #
                         # THE SERVER NO LONGER ARGUES. Take the position and the
                         # plane, record the disagreement, send nothing.
@@ -7250,14 +7417,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # grounds for moving the player.
                         on_mesh = (None if pm is None
                                    else pm.walkable(reported[0], reported[1]))
-                        rec.event("position_report", drift=round(drift, 2),
-                                  accepted=True, reported=list(reported),
-                                  ours=[px, py], plane=plane,
-                                  server_plane=state["plane"],
-                                  clipped=was_clipped, on_mesh=on_mesh)
-                        state["pos"] = reported
-                        state["plane"] = plane
-                        state["pos_seen"] = time.time()
+                        # stop=True: this site takes the client's word whatever
+                        # the distance, and now SAYS so (reason "stop-report")
+                        # instead of holding the policy by omission. It is the
+                        # arm that rescued the model from both excursions in run
+                        # 20260819T114743, and the only reason the latch above
+                        # was survivable.
+                        _take_client_position(state, reported, plane, rec,
+                                              "0x0047", stop=True,
+                                              on_mesh=on_mesh,
+                                              clipped=was_clipped)
                         if on_mesh is False:
                             # Worth knowing about, not worth acting on. Every
                             # one of these is a hole in our trapezoids at a spot
