@@ -3489,6 +3489,136 @@ def creature_armor_rating(npc, override=None):
 
 ENEMY_ARMOR_RATING = creature_armor_rating(agents.HATCHER,
                                            _ENEMY.get("armor_rating"))
+
+
+# ---- THE PLAYER'S OWN ARMOUR, which nothing read until 2026-08-20 ----------
+#
+# Five pieces went out carrying `Armor: 25` and `Armor +20 (vs. physical
+# damage)` -- decoded, screen-verified, byte-identical to nine retail sightings
+# each -- and every incoming swing ignored all of it. This closes that.
+#
+# ARMOUR IS PER-LOCATION, NOT A TOTAL, and the wiki is blunt about it:
+# WIKI (GWW, "Armor rating", rev. 2026) -- "Each piece of armor protects only
+# one part of a character: a character with 4 pieces with AR 80 and headgear
+# with AR 40 will take double damage any time they take a hit to the head; they
+# will not have AR 360." Summing our five 25s to 125 would be the single most
+# natural wrong thing to do here, so it is named.
+#
+# THE ODDS ARE PUBLISHED, and they are not uniform. Same page: chest 3/8, legs
+# 2/8, and feet, hands and head 1/8 each -- "Armor costs and bonuses reflect
+# this, with the material costs and insignia bonuses typically tripled for the
+# chest and doubled for the legs", which is the wiki checking its own table
+# against the game's economy.
+HIT_LOCATION_ODDS = (
+    # (content key, weight out of 8)
+    ("warrior_body", 3),      # chest
+    ("warrior_legs", 2),      # legs
+    ("warrior_boots", 1),     # feet
+    ("warrior_gloves", 1),    # hands
+    ("warrior_head", 1),      # head
+)
+# The baseline every quoted damage figure is implicitly AT. WIKI, same page:
+# "Having 60 armor rating is regarded as the baseline, so a spell that reads
+# 'Deals 100 fire damage to target foe' would deal the full 100 damage to a foe
+# with 60 armor but only 50 damage to a foe with 100 armor." So an incoming
+# figure with no armour context is a figure at AR 60, and any other rating
+# scales it by 2^((60-AR)/40) -- which IS the wiki's own damage-multiplier
+# table, and `test_agentlife` checks our arithmetic against every row of it.
+ARMOR_BASELINE = 60.0
+# WIKI (GWW, "Armor calculation" step 2): the Bonus-armour category caps at 25.
+BONUS_ARMOUR_CAP = 25.0
+# NOT MODELLED, and listed so the gap is a decision rather than an oversight:
+# armour PENETRATION (step 3 -- `AR * (1 - pen/100)`, and Lightning Orb's 25%
+# is the worked example), insignia, shields, and every skill-driven armour
+# effect. None of them exists in this server yet.
+#
+# ONE THING ON THAT PAGE IS A THIRD WITNESS FOR SOMETHING WE ALREADY SHIP:
+# it lists CRITICAL HITS under "Special armor" PENALTIES -- i.e. retail models
+# a critical as an armour reduction on the target, which is exactly the shape
+# `studies/isle` measured from 495 damage events (AR-20, since 2^(20/40) is
+# sqrt(2)) and exactly how `swing_damage` implements it. Three independent
+# sources -- the wire, the damage-multiplier table, and this categorisation.
+
+
+def armour_of_piece(item, physical=True):
+    """(rating, vs_physical_bonus) from a piece's own modifier words, or None.
+
+    Identifier 572's argument is the rating and 527's is the "+N vs. <type>"
+    bonus, whose type comes from the companion word -- identifier 4 resolves to
+    the string `vs. physical damage` (studies/itemmods 2). Lazy import and
+    fail-soft, the same shape as weapon_damage_range.
+    """
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "clientscan"))
+        import itemmods                                   # noqa: PLC0415
+    except Exception:                                     # noqa: BLE001
+        return None
+    rating = bonus = None
+    for word in (item or {}).get("modifiers", []):
+        d = itemmods.decode(word)
+        if d["skipped_high"] or d["skipped_bit18"]:
+            continue
+        if d["identifier"] == ARMOR_RATING_MODIFIER:
+            rating = d["arg"]
+        elif d["identifier"] == ARMOR_VS_TYPE_MODIFIER:
+            bonus = d["arg"]
+    if rating is None:
+        return None
+    return (float(rating), float(bonus or 0.0) if physical else 0.0)
+
+
+def player_armour_at(location_key, physical=True):
+    """The player's effective AR at one body location, or None if unarmoured."""
+    if not EQUIP_ARMOUR:
+        return None
+    try:
+        piece = agents.item_template(location_key)
+    except Exception:                                     # noqa: BLE001
+        return None
+    got = armour_of_piece(piece, physical=physical)
+    if got is None:
+        return None
+    rating, bonus = got
+    return rating + bonus_armour(bonus)
+
+
+def bonus_armour(net):
+    """The Bonus-armour category's contribution, WITH its documented cap.
+
+    WIKI (GWW, "Armor calculation", rev. 2026) step 2: "If the net Bonus is 26
+    or above, add 25 armor or the highest flat bonus provided by a single
+    effect (if higher than 25). ... If the net Bonus is 25 or lower, add that
+    value." Our armour's `+20 vs. physical` is 20, so the cap does not bite
+    today and this function is currently the identity -- which is exactly why
+    it is written down now rather than discovered later by a stack of bonuses
+    that silently over-counted.
+
+    AND ONE AMBIGUITY, RECORDED RATHER THAN RESOLVED SILENTLY. The same page
+    puts "Inherent mods" in Bonus armour while GWW's "Basic armor" page prints
+    the Warrior's `Armor +20 (vs. physical damage)` as part of BASIC (Core)
+    armour. Core is uncapped, Bonus is capped at 25 -- so the two readings
+    disagree only above 25, and at our +20 they give the same number. If a
+    second bonus ever lands on a piece, this is the line to settle first.
+    """
+    return float(net) if net <= BONUS_ARMOUR_CAP else float(BONUS_ARMOUR_CAP)
+
+
+def roll_hit_location():
+    """Which piece an incoming attack lands on. WIKI odds, our RNG."""
+    total = sum(w for _k, w in HIT_LOCATION_ODDS)
+    pick = random.randrange(total)
+    for key, weight in HIT_LOCATION_ODDS:
+        if pick < weight:
+            return key
+        pick -= weight
+    return HIT_LOCATION_ODDS[0][0]
+
+
+def armour_multiplier(armour):
+    """How much of a baseline hit lands against `armour`. WIKI's own table."""
+    return 2.0 ** ((ARMOR_BASELINE - float(armour)) / ARMOUR_DIVISOR)
 # Allegiance BY NAME, so a content row can say what a body is without carrying a
 # FourCC. The three values are the client's own constants (agents.py, read out
 # of the image); "hostile" is any unrecognised value, which is why it is the
@@ -3621,6 +3751,12 @@ ARMOUR_DIVISOR = 40.0
 # stands in, and it is a table rather than a constant so the next weapon is a
 # row instead of an edit.
 WEAPON_TYPE_ATTRIBUTE = {15: 19}
+# The two modifier identifiers an armour piece carries. 572's argument is the
+# rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
+# and identifier 4 beside it resolves to `vs. physical damage`. All three were
+# decoded 2026-08-20 and watched on screen (studies/itemmods 2, 5.6).
+ARMOR_RATING_MODIFIER = 572
+ARMOR_VS_TYPE_MODIFIER = 527
 
 # The critical, from the same run and pre-registered before it:
 #   * property 17 REPLACES property 16 -- p16 + p17 = 495 = exactly one event
@@ -5460,12 +5596,40 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # daemon thread and a KeyError here would stop the world for the rest of the
     # session with a traceback nowhere near the cause.
     player_pools(state)
+    # A CORPSE IS NOT SWUNG AT, and this guard was missing until 2026-08-20.
+    # The tick-side caller checks, so nothing on the wire was ever wrong -- but
+    # `land_swing` called directly re-killed the body and re-sent the effects
+    # bit once per swing. It was invisible because the arithmetic hid it: at a
+    # flat ENEMY_HIT_FRACTION the player died on exactly the last of
+    # `ceil(1/fraction)` swings, so there was never a swing left over to expose
+    # it. Applying the player's ARMOUR moved death earlier and three death bits
+    # came out at once. The test that caught it (test_agentlife section 3) was
+    # already there and already right; what changed was that the damage stopped
+    # dividing evenly into the pool.
+    if state.get("player_dead"):
+        return
     # Guard before effect: validate the fraction before the FIRST send, so a
     # refusal leaves no half-swing on the wire (test_guards section 3). The
     # WIRE ORDER below is untouched -- finished then damage is ArenaNet's own,
     # 6 of 6 swings in the Lakeside tape (docstring above); only the
     # validation moved up.
+    # THE PLAYER'S ARMOUR, at the location this swing lands on. Until
+    # 2026-08-20 this line was the whole incoming damage model and the five
+    # armour pieces this server sends were decorative.
+    #
+    # ENEMY_HIT_FRACTION IS THE FIGURE AT AR 60, by definition rather than by
+    # measurement -- it is ours, and the wiki's baseline is what makes "ours"
+    # into a number the armour term can scale. Creature melee is treated as
+    # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
+    # reading, not a measurement, and it is the cheapest thing here for a
+    # capture to overturn.
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    location = None
+    if ARMOUR_TERM:
+        location = roll_hit_location()
+        armour = player_armour_at(location, physical=True)
+        if armour is not None:
+            dealt *= armour_multiplier(armour)
     frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
                             agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -5477,7 +5641,10 @@ def land_swing(send, state, agent_id, agent, conn_id):
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by {agent_id}: "
-          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}"
+          + (f" (struck the {location.replace('warrior_', '')}, "
+             f"AR {player_armour_at(location):.0f})" if location else ""),
+          flush=True)
 
     if state["player_health"] <= 0.0:
         # PROPERTY 16 CANNOT DO THIS PART. It floors at 1 and cannot kill
