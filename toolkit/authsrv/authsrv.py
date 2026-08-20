@@ -31,6 +31,7 @@ import itertools
 import json
 import math
 import os
+import random
 import secrets
 import socket
 import struct
@@ -3483,6 +3484,53 @@ ENEMY_BURROW_HIDDEN = float(_ENEMY.get("burrow_hidden_seconds", 4.0))
 # these are placeholders chosen to make a fight legible to a person watching.
 HIT_FRACTION = 0.15        # of maximum health, so ~7 clicks to kill
 REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
+
+
+# ---- WEAPON DAMAGE, and it is the first number in this block that is NOT ours
+#
+# The paragraph above says "the wiki documents attack rates and weapon damage,
+# and a captured fight would give the real thing". Neither was needed. A weapon
+# carries its own damage range in the item ArenaNet sends, and on 2026-08-20
+# `studies/itemmods` decoded the words: identifier 584, `arg` the MAXIMUM and
+# `arg2` the minimum. Our hammer's 0xA4880503 is 584 arg 5 arg2 3, and the
+# client's own tooltip draws `Blunt Dmg: 3-5` (20260820T125155) -- which is also
+# how the max/min order was settled, because the static read could not.
+#
+# WHAT IS MEASURED AND WHAT IS STILL OURS, because this replaces one invented
+# number with a measured one and not with a damage model:
+#   MEASURED   the range itself -- ArenaNet's own word for our own weapon
+#   OURS       the roll inside it (uniform), and every term Guild Wars puts
+#              around it: no armour reduction, no attribute-rank scaling, no
+#              critical hits. Nothing in this server reads an armour rating
+#              even though it now sends five pieces carrying one.
+#
+# LAZY AND FAIL-SOFT, the same shape as `_build_of_tag` below. `itemmods` lives
+# in clientscan and imports `pinned`, and the server must keep working on a
+# machine with no client and no vault -- so a failure here falls back to
+# HIT_FRACTION, which is what this server did until today.
+def weapon_damage_range(item):
+    """(min, max) health points from an item's own 584 modifier word, or None."""
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "clientscan"))
+        import itemmods                                   # noqa: PLC0415
+    except Exception:                                     # noqa: BLE001
+        return None
+    for word in (item or {}).get("modifiers", []):
+        d = itemmods.decode(word)
+        if d["skipped_high"] or d["skipped_bit18"]:
+            continue
+        if d["identifier"] == itemmods.DAMAGE_RANGE:
+            lo, hi = d["arg2"], d["arg"]
+            return (lo, hi) if lo <= hi else (hi, lo)
+    return None
+
+
+# The equipped weapon's range, read once. None means "no weapon word we can
+# read", and the swing falls back to HIT_FRACTION -- so `--no-weapon` and a
+# bare machine both keep working and neither silently deals zero.
+PLAYER_SWING_DAMAGE = weapon_damage_range(agents.STARTER_HAMMER)
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -4118,7 +4166,18 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     # reasoned: test_guards.py section 1 went red on exactly those three
     # counts against the pre-guard tree. Dormant while HIT_FRACTION is a
     # constant; load-bearing the day step 8 computes it (studies/combat).
-    dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
+    # THE WEAPON'S OWN NUMBER, not a fraction of whatever we are hitting.
+    # A fraction of max health is a strange thing for a hammer to do -- it made
+    # every creature take the same number of swings regardless of how tough it
+    # was -- and it was a placeholder that said so. PLAYER_SWING_DAMAGE is
+    # ArenaNet's range for this weapon; the roll inside it is ours, and so is
+    # the absence of every term Guild Wars puts around it (armour, attribute
+    # rank, criticals). See weapon_damage_range.
+    if EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
+        lo, hi = PLAYER_SWING_DAMAGE
+        dealt = float(random.randint(lo, hi)) + bonus_damage
+    else:
+        dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     frac = _damage_fraction(dealt, agent["max_health"],
                             agents.PROP_DAMAGE,
                             "one swing" if not bonus_damage

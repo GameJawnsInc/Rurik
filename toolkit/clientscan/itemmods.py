@@ -609,6 +609,13 @@ ATTR_NAME_FIELD = 8                             # s_attrib record: name string i
 # (1 `Minor`, 2 `Major`, 3 `Superior`), so ONE number is both the bonus and
 # the rune grade.
 ATTRIBUTE_BONUS = {542: False, 543: True}       # identifier -> stacking?
+# The weapon's damage RANGE, and the order of its two fields was settled on
+# screen rather than in the disassembly: `arg` is the MAXIMUM and `arg2` the
+# minimum. Template 2441 is `%str2% %str1%: %num1%-%num2%` and our hammer's
+# 584 arg 5 arg2 3 drew `Blunt Dmg: 3-5` on a caged client (20260820T125155).
+# 587 is the type line beside it -- arg 0 rendered as `Blunt`.
+DAMAGE_RANGE = 584
+DAMAGE_TYPE = 587
 # `<attribute> +1` with `N% chance while using skills`: the amount is the
 # immediate 1 pushed by the handler, and arg2 is the PERCENTAGE.
 ATTRIBUTE_BONUS_ON_SKILL_USE = 577

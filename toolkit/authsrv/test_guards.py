@@ -60,12 +60,19 @@ def section_hit_enemy():
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
 
-    saved = authsrv.HIT_FRACTION
+    saved = authsrv.PLAYER_SWING_DAMAGE
     # NEGATIVE damage -- a heal riding the damage property. This poison was
     # 1.5 when the section was written red-first; amendment C4 then made
     # overkill VALID (clamp-to-kill, section 9), so 1.5 stopped being an
     # error and the invalid shape here had to become one that still is.
-    authsrv.HIT_FRACTION = -1.5
+    #
+    # AND IT MOVED 2026-08-20, from HIT_FRACTION to PLAYER_SWING_DAMAGE. The
+    # player's swing stopped being a fraction of the target's max health and
+    # became the equipped weapon's own damage range, read out of its 584
+    # modifier word. Poisoning the constant the code no longer reads is a
+    # guard test that cannot fail -- it went green on a tree where the guard
+    # was never reached, which is the exact defect this file exists to catch.
+    authsrv.PLAYER_SWING_DAMAGE = (-150, -150)
     try:
         raised = False
         try:
@@ -86,7 +93,7 @@ def section_hit_enemy():
         check(agent["last_hit"] == 0.0, "and the swing timer is unconsumed",
               "a refused swing must be retryable next tick, not eaten")
     finally:
-        authsrv.HIT_FRACTION = saved
+        authsrv.PLAYER_SWING_DAMAGE = saved
 
     # The control: with the real constant the same call sends the whole
     # swing. A guard that refuses everything would pass every check above.
@@ -96,9 +103,14 @@ def section_hit_enemy():
     ops = [op for op, _, _ in sent]
     check(len(sent) == 3, "control: the in-range path still sends the swing",
           f"{len(sent)} messages: {ops}")
-    check(state["agents"][10]["health"] == 100.0 - 100.0 * authsrv.HIT_FRACTION,
+    lo, hi = authsrv.PLAYER_SWING_DAMAGE
+    left = state["agents"][10]["health"]
+    check(100.0 - hi <= left <= 100.0 - lo,
           "control: and the in-range damage is bookkept",
-          f"health={state['agents'][10]['health']}")
+          f"health={left}, a swing of the hammer's own {lo}-{hi}. A RANGE and "
+          f"not an equality, because the roll inside the weapon's range is "
+          f"random -- pinning it to one number would be pinning our own roll, "
+          f"not ArenaNet's range")
 
 
 def section_skill_press():
@@ -433,14 +445,14 @@ def section_overkill():
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
-    saved = authsrv.HIT_FRACTION
-    authsrv.HIT_FRACTION = 1.5
+    saved = authsrv.PLAYER_SWING_DAMAGE
+    authsrv.PLAYER_SWING_DAMAGE = (150, 150)
     try:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             authsrv.hit_enemy(send, state, 10, 0)
     finally:
-        authsrv.HIT_FRACTION = saved
+        authsrv.PLAYER_SWING_DAMAGE = saved
     agent = state["agents"][10]
     damage_vals = [vals for op, vals, _ in sent
                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
@@ -552,12 +564,18 @@ def section_concurrency():
         damage_bits = {vals[3] for op, vals, _ in sent
                        if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
                        and vals[0] == authsrv.agents.PROP_DAMAGE}
-        expected = authsrv._damage_fraction(
-            1000.0 * authsrv.HIT_FRACTION, 1000.0,
-            authsrv.agents.PROP_DAMAGE, "expected")
-        check(damage_bits <= {expected},
-              "every damage that reached the wire carried the valid fraction",
-              f"distinct wire values: { {hex(b) for b in damage_bits} }")
+        lo, hi = authsrv.PLAYER_SWING_DAMAGE
+        expected = {authsrv._damage_fraction(float(d), 1000.0,
+                                             authsrv.agents.PROP_DAMAGE,
+                                             "expected")
+                    for d in range(lo, hi + 1)}
+        check(damage_bits <= expected,
+              "every damage that reached the wire carried a valid fraction",
+              f"distinct wire values: { {hex(b) for b in damage_bits} } "
+              f"against the {len(expected)} the hammer's {lo}-{hi} range can "
+              f"produce. A SET, since 2026-08-20: the swing rolls inside the "
+              f"weapon's own range rather than taking a fixed fraction of the "
+              f"target, so one expected value would be the wrong shape")
         # The races this section deliberately does NOT assert, measured so a
         # future locking change has a before-number: dead flips and kill
         # statuses per life can exceed 1 while the read-modify-writes are
