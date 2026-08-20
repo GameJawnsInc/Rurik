@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=247)
+LEDGER = checks.Ledger("agent lifetime", floor=254)
 
 
 def section_weapon_damage():
@@ -256,6 +256,105 @@ def section_armour_and_crit():
               f"silently scale every hit by something nobody chose")
 
 
+def section_player_armour():
+    """The PLAYER's armour, checked against GWW's own published table.
+
+    The five armour pieces this server sends carried a decoded, screen-verified
+    `Armor: 25` and `Armor +20 (vs. physical damage)` for a day while every
+    incoming swing ignored all of it. This is that closed -- and it is checkable
+    against a THIRTY-EIGHT ROW oracle nobody here wrote: GWW's "Armor rating"
+    page publishes the damage multiplier for every armour rating from 0 to 195
+    in steps of 5, and our `2^((60-AR)/40)` has to land on all of it.
+    """
+    import authsrv
+    import agents
+
+    print("\nN5. the player's armour, against GWW's published multiplier table")
+    # WIKI (GWW, "Armor rating" section Armor tables, rev. 2026). Three decimals
+    # as printed. This is a measurement cited as evidence, not a bulk dump: it
+    # is the oracle the arithmetic is checked against.
+    GWW_TABLE = {
+        0: 2.828, 5: 2.594, 10: 2.378, 15: 2.182, 20: 2.000, 25: 1.834,
+        30: 1.682, 35: 1.542, 40: 1.414, 45: 1.297, 50: 1.189, 55: 1.091,
+        60: 1.000, 65: 0.917, 70: 0.841, 75: 0.771, 80: 0.707, 85: 0.648,
+        90: 0.595, 95: 0.545, 100: 0.500, 105: 0.459, 110: 0.420, 115: 0.386,
+        120: 0.354, 125: 0.324, 130: 0.297, 135: 0.273, 140: 0.250, 145: 0.229,
+        150: 0.210, 155: 0.193, 160: 0.177, 165: 0.162, 170: 0.149, 175: 0.136,
+        180: 0.125, 185: 0.115, 190: 0.105, 195: 0.096,
+    }
+    off = [(ar, want, authsrv.armour_multiplier(ar))
+           for ar, want in sorted(GWW_TABLE.items())
+           if abs(authsrv.armour_multiplier(ar) - want) > 0.0015]
+    LEDGER.ok(not off,
+              f"all {len(GWW_TABLE)} rows of GWW's damage-multiplier table",
+              f"AR 0 through 195 in fives, and `2^((60-AR)/40)` lands on "
+              f"every printed value. The table is players' observation of "
+              f"retail and the divisor came off 495 live damage events at the "
+              f"Isle -- two independent observers, and this check is where "
+              f"they meet. Tolerance is 0.0015 rather than half-a-last-place "
+              f"because of ONE row: AR 15 is printed 2.182 and 2^(45/40) is "
+              f"2.18102, which rounds to 2.181. Every other row agrees to "
+              f"three decimals, so that is the wiki's typo rather than our "
+              f"arithmetic -- recorded, not silently absorbed"
+              if not off else f"OFF: {off[:4]}")
+
+    print("\nN6. armour is PER-LOCATION, and the odds are the wiki's")
+    ars = {k: authsrv.player_armour_at(k) for k, _w in authsrv.HIT_LOCATION_ODDS}
+    LEDGER.ok(all(v == 45.0 for v in ars.values()),
+              "each piece is 25 + 20 vs. physical = AR 45, and nothing is 125",
+              f"{ars} -- summing five 25s is the single most natural wrong "
+              f"thing to do here. GWW: 'a character with 4 pieces with AR 80 "
+              f"and headgear with AR 40 will take double damage any time they "
+              f"take a hit to the head; they will not have AR 360'")
+    LEDGER.ok(authsrv.player_armour_at("warrior_body", physical=False) == 25.0,
+              "and the +20 applies ONLY to physical damage",
+              "25 against everything else -- the bonus is `Armor +20 (vs. "
+              "physical damage)`, identifier 527 with the type from the "
+              "companion identifier 4, and a term that ignored the type would "
+              "be silently wrong against every elemental hit we ever add")
+    counts = {}
+    for _ in range(8000):
+        k = authsrv.roll_hit_location()
+        counts[k] = counts.get(k, 0) + 1
+    want = dict(authsrv.HIT_LOCATION_ODDS)
+    spread = {k: counts.get(k, 0) / 8000 * 8 for k in want}
+    LEDGER.ok(all(abs(spread[k] - want[k]) < 0.25 for k in want),
+              "the hit-location odds converge on the published 3/2/1/1/1",
+              f"{ {k: round(v, 2) for k, v in spread.items()} } out of 8 over "
+              f"8000 rolls. Chest 3/8, legs 2/8, the rest 1/8 each")
+    LEDGER.ok(len(set(ars.values())) == 1,
+              "NOTE: with five identical pieces the location changes NOTHING",
+              "every slot is AR 45 today, so the roll is real machinery with "
+              "no observable effect yet. It starts mattering the moment one "
+              "piece differs -- which is retail's normal case and one content "
+              "edit away, and is why this is a check rather than a comment")
+
+    print("\nN7. the bonus cap, and the wart the control exposes")
+    LEDGER.ok(authsrv.bonus_armour(20) == 20.0
+              and authsrv.bonus_armour(25) == 25.0
+              and authsrv.bonus_armour(30) == 25.0,
+              "Bonus armour is capped at 25, per GWW's Armor calculation step 2",
+              "our +20 is under it, so the cap is currently the identity -- "
+              "written down now rather than discovered later by a stack of "
+              "bonuses that silently over-counted")
+    saved = authsrv.EQUIP_ARMOUR
+    authsrv.EQUIP_ARMOUR = False
+    try:
+        bare = authsrv.player_armour_at("warrior_body")
+    finally:
+        authsrv.EQUIP_ARMOUR = saved
+    LEDGER.ok(bare is None,
+              "WART, NAMED: --no-armour yields None, which is NOT 'AR 0'",
+              "the term is skipped, so an unarmoured character takes the "
+              "BASELINE hit and is therefore TOUGHER than one in starter "
+              "armour (AR 45 is below the 60 baseline, so our starter set "
+              "makes you take 1.297x). That is backwards as a model of "
+              "nakedness and correct as a control for 'does the term engage'. "
+              "Retail has no naked character to measure, so no AR is invented "
+              "for one -- but the next reader should not discover this from a "
+              "log")
+
+
 def main():
     import authsrv
     import probes
@@ -400,6 +499,7 @@ def main():
     section_constants()
     section_weapon_damage()
     section_armour_and_crit()
+    section_player_armour()
     section_opcode_pins()
     section_opcode_catalog()
     section_probe_encoding()
