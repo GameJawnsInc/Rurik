@@ -1435,10 +1435,22 @@ buff opcodes named (63–68). The `charCtx` container family closes at seven.
    retail's own `0x006F` writes name, and dresses the body. **Those five content rows
    also stopped being UPSTREAM**: ArenaNet sent us these exact model ids nine times
    each across three captures, every fixed field and all three modifier words agreeing
-   (`test_armour.py`, 16 checks). Still uncollected: **`studies/combat`'s weapon
-   damage**, which is **584** — `arg` the MAXIMUM, `arg2` the minimum, read off
-   `Blunt Dmg: 3-5` on screen — with **587** the type. And nothing yet APPLIES an
-   armour rating: no damage term reads it.
+   (`test_armour.py`, 16 checks). **`studies/combat` COLLECTED the same day** (`31c79df`): weapon
+   damage is **584**, `arg` the MAXIMUM and `arg2` the minimum, drawn as
+   `Blunt Dmg: 3-5` by the client itself. `HIT_FRACTION` is retired from the
+   player's swing — it dealt 15% of *the target's* max health, so every creature
+   took the same seven swings however tough it was — and survives only as the
+   no-weapon fallback. F3's "GWCA's `ItemModifier` struct is second-gate territory,
+   §6.1 row first" never came into it: the client's own parser was the shorter route
+   and the better witness, and no upstream was opened. **Both arcs are now
+   collected.**
+
+   **Still absent, and worth one line so it is not read as done:** nothing APPLIES
+   an armour rating — this server sends five pieces carrying one and no damage term
+   reads it — and attribute-rank scaling and criticals are absent too. The range is
+   ArenaNet's; the roll inside it is ours. **And the floating damage numbers over a
+   struck target have not been watched**: making the player swing needs a click on a
+   hostile, which the harness cannot aim, so that one is the owner's run.
 
 ### Merchants — a player can now BUY from a server we wrote (2026-08-19)
 
