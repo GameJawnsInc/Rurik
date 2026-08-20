@@ -66,6 +66,10 @@ from gwpe import PE                                          # noqa: E402
 # need `vault/run/2026-08-13_64fae3b1369b/Gw.exe` -- our patched 38833 copy,
 # which is optional in a way the pristine snapshots are not. That pair declares
 # a skip; the floor stays at the mandatory core, per checks.py's own advice.
+# 2026-08-19: that optional pair is now an optional TRIPLE riding on
+# `vault/run/reskin-roster/Gw.exe` instead (see §5's fallback, which had to be
+# repointed when the 38833 copy became a registered digest). A full vault scores
+# 42; the mandatory core is unchanged, so the floor stays 39.
 LEDGER = checks.Ledger("client build id", floor=39)
 check = checks.adopt(LEDGER)
 
@@ -246,25 +250,44 @@ for b in pinned.BUILDS:
               f"{number} -- this is the check the old code fails: it identified "
               f"this file correctly and then reported the constant")
 
-# THE FALLBACK, and it is the case the registry cannot serve: our PATCHED 38833
-# copy is a real client that `BUILDS` has no hash for (`patched=None`), so
-# `identify()` says "unknown" and only reading the client's own getter answers
-# at all. A tool stamping the pin here is the worst version of the defect --
-# the file is neither the pin nor recorded, and 38797 is pure invention.
-_patched_38833 = os.path.join(vaultpath.vault_root(), "run",
-                              "2026-08-13_64fae3b1369b", "Gw.exe")
-if os.path.isfile(_patched_38833):
-    kind, row, _d = pinned.identify_build(_patched_38833)
-    number, why = BI.of_image(_patched_38833)
+# THE FALLBACK, and it is the case the registry cannot serve: a real client of a
+# build we hold, sitting at a path that is in NO registry row, so `identify()`
+# answers "unknown" and only the client's own getter can say anything at all.
+# `vault/run/reskin-roster/Gw.exe` is that file -- a reskin experiment copy of
+# the pin, 682 differing bytes in 211 runs from the pristine image, which is why
+# `register_patched`'s sanity bound refuses it and why nothing has ever filed it.
+#
+# IT NAMED `vault/run/2026-08-13_64fae3b1369b/Gw.exe` UNTIL 2026-08-19, our
+# patched 38833 copy, on the strength of "`patched` is None for that build". That
+# was true when this section was written on 2026-08-17 and stopped being true two
+# days later, when `pinned.BUILDS` gained a patched digest set and that file's
+# `e06ada3b...` was committed into it: `identify_build` now answers
+# ('patched', 38833) and the section went red against a fixture that had merely
+# become registered. The CASE is unchanged; only the file that still fits it
+# moved, so this is a repoint rather than a recolour.
+#
+# WHAT THIS FILE CANNOT PIN, said out loud: reskin-roster IS build 38797, so the
+# NUMBER cannot separate "read from the image" from "answered with the constant"
+# here -- 38797 is both. The third check is the one that does the separating: the
+# `why` must name the image's own getter and must NOT claim a registry row, which
+# is exactly what an implementation returning `pinned.BUILD` could not say.
+_unregistered = os.path.join(vaultpath.vault_root(), "run",
+                             "reskin-roster", "Gw.exe")
+if os.path.isfile(_unregistered):
+    kind, row, detail = pinned.identify_build(_unregistered)
+    number, why = BI.of_image(_unregistered)
     check(kind == "unknown" and row is None,
-          "our patched 38833 copy is in no registry row",
-          f"{kind}/{row} -- `patched` is None for that build")
-    check(number == 38833,
-          "and of_image still reads 38833, from the image's own build getter",
+          "a real client that is in no registry row identifies as unknown",
+          f"{kind}/{row} -- {detail}")
+    check(number == 38797,
+          "and of_image still answers, because the image carries its own number",
           f"{number} -- {why}")
+    check("build getter" in why and "sha256 matches the registry" not in why,
+          "-- from that getter, and it says so rather than citing a row it has not got",
+          f"{why} -- this is the check a tool answering with pinned.BUILD fails")
 else:
     LEDGER.skip("the unregistered-image fallback",
-                f"{_patched_38833} is not here")
+                f"{_unregistered} is not here")
 
 # Two ways to have no answer. Both must be None rather than the pin: `worldmap`
 # emits `build: None` on such a row on purpose, so a reader can act on it.

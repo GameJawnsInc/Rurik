@@ -1427,7 +1427,14 @@ p50 1,164 u** (n=251) — every "125.9 u / under 150 u" bound in the older recor
 from `171153`, a refuted configuration. **The scoreboard's denominators are not
 comparable** (coverage 31% / 72% / 89%); per observed second the default build is
 the worst on displaced distance. `movesync.py` and `pinned.py` were repaired this
-round. The three shapes left, in evidence order: **match the client's pending
+round, both mutation-pinned: the hard bar grew a **distance arm** (≥ 520 u below the
+0.05 s dt floor, corpus **61 → 64** hard rows over 961 captures), so the three
+configurations now read **7 / 20 / 13** hard jumps and **1.31 / 5.69 / 11.88** per
+minute of span with magnitude p50 **1,969 / 569 / 582 u** — implied velocity is
+demoted to a labelled gate input everywhere — and the pin now carries per-build
+TUPLES of accepted patched digests that the patchers themselves register, so it no
+longer refuses the 38797 we launch and can represent 38833.
+The three shapes left, in evidence order: **match the client's pending
 command** (the only one that prevents a snap), **`0x002C`** (the sole ungated
 both-copies position primitive; `AgTrack::Clear` + double SetPosition), and
 **`0x0027` as a mid-flight re-bake** (reaches both copies AND re-issues the
@@ -1525,8 +1532,11 @@ only, hiding 130 of the capture's 158 position observations; spliced, 0 of 5
 jumps exceed run speed (max implied 243.3 u/s) and positions are bit-identical
 across every client silence. The number had been quoted from above movesync's
 own REFUSING-a-verdict line. The live half of the population is OUR gamesrv
-corpus's **26 unattributed, kinematically impossible steps** (v p50 2,521 u/s,
-max 23,279 u/s, 7 captures, one of them the default build) — see the FINDINGS
+corpus's **26 kinematically impossible steps** (7 captures, one of them the default
+build), since adjudicated as 25 resyncs and one client-side click-move at 2.6x the
+walk budget, and quoted as magnitude and excess over the 288 u/s budget (excess
+p50 671 u, max 3,804 u over the corpus's 43 detections) rather than as the implied
+velocity this line used to carry (v p50 2,521 u/s, max 23,279 u/s) — see the FINDINGS
 corpus-pass section.
 
 **THE FIFTH CANDIDATE IS REFUTED (2026-08-19), and it is the worst of the
@@ -1593,9 +1603,13 @@ grants sit outside any watched interval for this reason. And **retire the 320 u/
 ceiling**: it fires on 19.7% of legitimate retail intervals, because it sits below the
 383.04 u/s boost mode the wire declares literally.
 
-Secondary, still open: 26 of 43 warpscan detections in OUR gamesrv corpus are
-kinematically impossible and unattributed (v p50 2,521 u/s; 15 of 26 sit at
-729–768 u ≈ the `0x003D` heading-vector length — one measurement's lead); the
+Secondary, ~~still open~~ **ADJUDICATED 2026-08-19**: 26 of 43 warpscan detections in
+OUR gamesrv corpus are kinematically impossible, **25 of the 26 are resyncs**, the
+survivor is a client-side click-move at 2.6x the walk budget, and the 729-768 u band
+is our own heading-derived grant leash (n=21, p90 757.5) rather than the `0x003D`
+heading-vector length. Quote them as excess over the 288 u/s budget (p50 671 u,
+max 3,804 u over the 43) and never as the implied velocity this line carried
+(v p50 2,521 u/s); the
 two `0x003D` magnitude constants (765.017539 / 768.000000) stratify by `movementType`
 91.2% vs 22.3% but have no mechanism; and the sync (`+0xE8`) vs async (`+0x14C`) agent
 question decides whether the model we watch is the one the player sees.
@@ -1614,7 +1628,9 @@ never, `0x002B`=1.0 always) — but the CAUSAL step is open: our client backpeda
 whether the wire float steers the AUTHORITATIVE copy needs the handlers or a client
 run. (3) TWO new structural findings: the 300 u scoreboard metric is contaminated
 (retail scores 6.4/min on it with ZERO intervals over 400 u/s; speed-gated our
-configs read 1.3 / 5.4 / 11.9 hard-jumps/min, not 5.7 / 12.8 / 14.6), and the default
+configs read 1.31 / 5.69 / 11.88 hard-jumps/min of span, not 5.7 / 12.8 / 14.6 —
+corrected 2026-08-19 from 1.3 / 5.4 / 11.9 when the bar gained its distance arm,
+n = 7 / 20 / 13), and the default
 build's authoritative copy is mostly PARKED (moving 39.8% of backward intervals,
 mean 114.57 u/s; duty cycle tracks grant rate 0%→98%) — its separation is the client
 walking away from a parked point. (4) The snap trigger (timer vs threshold) has
@@ -1622,8 +1638,13 @@ never been measured and decides whether any slow-the-copy fix can bound FREQUENC
 the five movetap runs already hold the answer. Sixth-candidate VALUES are ready
 (0.66 = `c3f5283f`, 0.75, `0x0027 288.0` at spawn as its own change, re-send at
 report cadence — "edge-triggered" falsified at 72.2% same-family repeats); its
-causal step is NOT. `pinned.py` still blocks the next live run (stale patched hash;
-no 38833 row).
+causal step is NOT. ~~`pinned.py` still blocks the next live run (stale patched hash;
+no 38833 row).~~ **FIXED 2026-08-19**: `Build.patched` is a per-build TUPLE of
+accepted digests — the current patcher's 38797 copy and both 38833 copies committed
+— and both patchers register what they write into
+`vault/client-patched/patched_digests.json`; the loosening is fenced by refusals a
+mutation reddens (`test_pinned.py` 143 checks / floor 130, `test_buildid.py` 42 /
+floor 39).
 
 **Instruments:** `toolkit/clientscan/movetap.py` (client-side arrival time and live
 position; `--selftest` needs no client) and `toolkit/authsrv/warpscan.py` (scores a

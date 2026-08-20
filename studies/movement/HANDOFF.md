@@ -24,8 +24,10 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > 3,648 u unwatched because nothing triggers the check, and the next grant or
 > arrival redeems the whole gap at once.
 >
-> **THE SPEED CANDIDATE IS DEAD FOR THE BUILD WE SHIP:** −3.1% magnitude, **0%
-> frequency** at the fidelity-correct 0.66, measured two independent ways. Do not
+> **THE SPEED CANDIDATE IS DEAD FOR THE BUILD WE SHIP:** **0% frequency** at the
+> fidelity-correct 0.66, measured two independent ways (the ceiling table and the
+> snap-trigger replay agree); the **−3.1% magnitude** is an n=1 measurement and
+> rides along as colour, not as a second witness. Do not
 > build it. `0x0027` at spawn is a measured no-op (the client already holds
 > maxSpeed 288.0 / moveSpeed 1.0 in 4,115/4,115 samples).
 >
@@ -59,12 +61,18 @@ Three more traps that have each cost a run:
 - **`movetap.py` pins build 38797. `session.py --exe` defaults to the NEWEST
   build under `vault/run`, which is 38833.** Always name the exe:
   `--exe "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe"`. Do not reach for
-  `--any-build` without diffing first — on 2026-08-19 the pin refused a legitimately
-  patched 38797 whose only sin was three extra patch sites (`0x508E2`, `0x50905`,
-  `0x3DB4CE`) the pin's `patched` hash predates. **`pinned.py`'s patched hash is
-  stale relative to the current patcher, and 38833 has no patched hash at all.**
-  That is an open defect: the run dirs the pin still accepts (`-c2`, `-probe`) hold
-  the OLDER patch, so the working directory fails and the stale copies pass.
+  `--any-build` without diffing first. **That gate was INVERTED and is now REPAIRED
+  (2026-08-19).** It refused the legitimately patched 38797 we actually launch —
+  three extra patch sites (`0x508E2`, `0x50905`, `0x3DB4CE`) that the single
+  hand-typed `patched` hash predated — while the stale `-c2`/`-probe` copies passed,
+  and 38833 had no patched hash at all. `Build.patched` is now a TUPLE of accepted
+  digests per build: the current patcher's 38797 copy and both 38833 copies are
+  committed in `pinned.BUILDS`, and `make_custom_client.py` and `make_run_dir.py`
+  each call `register_patched()` into `vault/client-patched/patched_digests.json`
+  after their own verification passes. Registration REFUSES a digest equal to any
+  known build's pristine, and under `strict` refuses what it cannot diff against a
+  pristine image at all. `test_pinned.py` (143 checks, floor 130) and
+  `test_buildid.py` (42, floor 39) hold every one of those refusals.
 - **`--game-args` needs the `=` form for a single flag.** `--game-args='--foo'`.
   argparse reads a value starting with `-` as another option unless it contains a
   space, so two flags happen to work and one alone dies.
@@ -167,13 +175,17 @@ that one was a zone transfer); and **`0x0027` at spawn** (a measured no-op — t
 client already holds maxSpeed 288.0 / moveSpeed 1.0 in 4,115/4,115 samples).
 
 ⚠ **"The default build is 5.7/min and is the best configuration this repo has"
-NO LONGER STANDS AS WRITTEN.** The 300 u bar counted ordinary walking; the
-speed-gated rate is ~1.3/min of span. But observation coverage is **31% / 72% /
-89%** across the three configurations, and per *observed* second the ranking
-inverts to 4.19 / 7.48 / 11.27 jumps per min and 137.8 / 69.5 / 101.4 u
-displaced per second — **the default build is the worst on displaced distance
-and the best on frequency-per-span.** It also trades many small warps for few
-enormous ones (magnitude p50 1,969 u vs 549 / 403). Say which denominator you
+NO LONGER STANDS AS WRITTEN.** The 300 u bar counted ordinary walking; on the
+repaired two-arm bar the three configurations read **7 / 20 / 13 hard rows** and
+**1.31 / 5.69 / 11.88 per minute of span**. But observation coverage is
+**31% / 72% / 89%** across them, and per *observed* second the ranking inverts to
+4.19 / 7.48 / 11.27 jumps per min — the 4.19 stands (the default build's count did
+not move), but 7.48 and 11.27 were computed from the PRE-REPAIR 19 and 11 and must
+be re-derived before they are quoted — and 137.8 / 69.5 / 101.4 u displaced per
+second, so **the default build is the worst on displaced distance and the best on
+frequency-per-span.** It also trades many small warps for few enormous ones
+(magnitude p50 **1,969 u vs 569 / 582**, max 3,405 / 768 / 754 u, on the repaired
+bar; the pre-repair pair read 549 / 403). Say which denominator you
 mean, every time; re-derive with the repaired `movesync.py` before comparing
 anything.
 
@@ -227,8 +239,11 @@ more — the point is bracketed from both sides and is not the free variable);
 `20260811T173940` was an instrument artifact (the client walked; pre-2026-08-19
 captures logged only the `0x0047` stop arm, hiding 130 of 158 positions), but
 the impossible-step population in OUR gamesrv corpus is live and larger: **26
-unattributed detections at v p50 2,521 u/s** across 7 captures, one of them the
-default build.
+unattributed detections** across 7 captures, one of them the default build —
+quoted as magnitude and **excess over the 288 u/s budget** (excess p50 671 u,
+max 3,804 u over the corpus's n = 43 detections), never as the implied velocity
+this line used to carry, which §6 retires and the repaired `movesync.py` demotes
+to a labelled gate input.
 
 **That list was then run in full on 2026-08-19** (FINDINGS, "round 3 — the
 mechanism is decoded"). Snap trigger: neither timer nor free-running threshold —
@@ -286,17 +301,29 @@ python toolkit/clientscan/movesync.py --wire-only
 **repaired on 2026-08-19** and now: reads the SPLICED `0x003D`+`0x0047` c2s
 stream (the old source was the `0x0047` stop arm only, which on every pre-fix
 capture hid ~80% of the client's positions); makes a **speed-gated hard-jump
-count the verdict** (implied speed > 400 u/s over dt ≥ 0.05 s, plus a distance
-arm for the sub-50 ms rows the gate would otherwise drop); demotes the 300 u bar
+count the verdict** on TWO ARMS — implied speed > 400 u/s at dt ≥ 0.05 s, and
+**displacement ≥ 520 u BELOW that dt floor**, where a speed is not a measurement.
+The second arm is what this round added, and it is retail-calibrated: retail scores
+ZERO on both (largest sub-floor step 19.15 u over 82 intervals against a 520 u arm,
+27x of headroom; largest step inside 2 s 517.87 u / 1.352 s), while the corpus goes
+**61 → 64 hard rows over 961 captures / 4,582 intervals** — the three restored rows
+being its fastest genuine events, all at ~32 ms. It also demotes the 300 u bar
 to a labelled, refused legacy count; refuses on COVERAGE as well as median
-cadence; and prints no quotable count above its own refusal.
+cadence; prints no quotable RATE above its own refusal — and, the other half of
+that rule, does not let a refusal SUPPRESS a COUNT either: under the
+`MIN_INTERVALS` floor it prints the count, the magnitude and the excess with no
+`/min` anywhere, because only a per-minute number needs a denominator.
 
 ⚠ **The old "anything at or above 5.7/min is worse than shipping nothing" bar is
 RETIRED** — that number counted ordinary walking (retail scores 6.4/min on the
 same rule with zero intervals above 400 u/s). Score on the hard bar, and **state
 the denominator**: rate per minute of span AND per minute of actively-reported
 time, because coverage runs 31-89% across configurations and the ranking inverts
-between them. Quote **magnitude and rate together**, never one alone. For a
+between them. Two different "active time" thresholds are in play and they are
+not interchangeable: the coverage / per-observed-second figures in this file and
+FINDINGS use gaps ≤ 2.0 s, while `movesync.py`'s printed active-time rate uses
+`FREE_SILENCE` = 1.042 s and prints the sweep beside it — say which one a number
+used, every time. Quote **magnitude and rate together**, never one alone. For a
 discontinuity, quote **magnitude and excess over the 288 u/s budget** — never
 implied velocity, which is arithmetic on a denominator the event itself created.
 
@@ -349,7 +376,11 @@ Added 2026-08-19, each paid for in this arc's own rounds:
 - **A COUNT PRINTED ABOVE A REFUSAL IS ALSO REFUSED.** `movesync` correctly said
   "REFUSING a verdict" at a 1.28 s cadence; the "5 unexplained jumps" printed
   above that line became the arc's "largest remaining hole" for a week. The tool
-  now prints no quotable count above its own refusal — but the habit is the fix.
+  now prints no quotable RATE above its own refusal — and the rule has a SECOND
+  half the first repair got backwards: a refusal must not SUPPRESS a count either.
+  The `MIN_INTERVALS` floor used to `return` before the hard section, so a
+  nine-interval capture carrying a 3,000 u step printed a bare tally; a count and a
+  magnitude need no denominator. But the habit is the fix.
 - **THE DENOMINATOR IS PART OF THE MEASUREMENT.** Three configurations were
   ranked on jumps/min for weeks while their observation coverage was 31% / 72% /
   89%. Per observed second the ranking inverts. State span-vs-active every time.

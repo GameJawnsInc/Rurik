@@ -2157,7 +2157,10 @@ in only 5 of them.
 **The corpus half of item 4 is NOT closed and has GROWN.** warpscan (which globs
 `vault/captures/gamesrv` only — the old "12 corpus teleports" phrasing misread as
 retail) now shows **26 unattributed detections that are kinematically impossible**
-(v p50 2,521 u/s, max 23,279 u/s) across 7 of our captures — including 1 in the
+(⚠ implied velocity, RETIRED in the round-3 section below — quote magnitude and
+excess over the 288 u/s budget, excess p50 671 u / max 3,804 u over n = 43
+detections; the numbers this line carried were v p50 2,521 u/s, max 23,279 u/s)
+across 7 of our captures — including 1 in the
 default-build `145717` and 10 in `171153`. 15 of the 26 sit in a tight 729–768 u
 band at dt ≈ 0.30 s — suspiciously the length of the `0x003D` heading vector —
 but that is one measurement's worth of lead, not a hypothesis.
@@ -2222,12 +2225,19 @@ own client reports, run through our 300 u jump detector: **440 "jumps" = 6.4/min
 on span** — nominally worse than our default build's 5.7 — while having **ZERO of
 2,665 intervals above 400 u/s** (max implied speed 388.8 u/s, just over the
 383.04 boost the wire declares). Our builds by the same speed-gated detector:
-7 / 19 / 11 impossible intervals with maxima **6,334.8 / 4,177.3 / 2,671.0 u/s**.
+**7 / 20 / 13** impossible intervals — corrected 2026-08-19 from 7 / 19 / 11 when
+the hard bar gained its distance arm — with magnitudes p50 **1,969 / 569 / 582 u**
+and max **3,405 / 768 / 754 u**. (This line used to quote implied maxima
+6,334.8 / 4,177.3 / 2,671.0 u/s; the restored rows push two of those to 19,046 and
+23,279, which is exactly why the velocity is retired below and magnitude and excess
+are the quotable pair.)
 That is the cleanest retail-vs-us separation in the arc, and it means the 300 u
 bar (movesync's `JUMP_UNITS`, no time normalisation) counts ordinary walking:
 23 of the default build's 31 "jumps" are ≤288 u/s, and 69% of its rate
 denominator carries no reports at all. **Speed-gated, the three configurations
-read ~1.3 / 5.4 / 11.9 hard jumps/min** (against the recorded 5.7 / 12.8 / 14.6;
+read 1.31 / 5.69 / 11.88 hard jumps per minute of span** — repaired 2026-08-19
+with the bar's distance arm, n = 7 / 20 / 13; the pre-repair pass read
+~1.3 / 5.4 / 11.9 (against the recorded 5.7 / 12.8 / 14.6;
 also note 9.1/min reproduces for `171153` where the record says 12.8 — same
 contaminated metric, different denominator — restate both, pick neither). Every
 number a candidate has been scored with inherits this; a sixth candidate scored
@@ -2272,21 +2282,33 @@ not "addition", is the recurring parent.
    cadence from movetap `145939` ⊂ `145717` — the harm has never been measured
    on the configuration being fixed; the 150 u bound quoted everywhere is
    imported from a refuted configuration.
-3. Rebuild the scoreboard speed-gated (and fix movesync: read the spliced
+3. ~~Rebuild the scoreboard speed-gated (and fix movesync: read the spliced
    `0x003D`+`0x0047` stream the way warpscan already does, print the honest bar
    — at 288 u/s a 300 u step is free above 1.042 s of silence — and print the
-   MAX cadence, not only the p50; pin `JUMP_UNITS` with a test).
+   MAX cadence, not only the p50; pin `JUMP_UNITS` with a test).~~ **DONE
+   2026-08-19**, and the repair found a fifth defect the list did not name: a
+   speed-only bar is DISTANCE-BLIND below its own dt floor and was discarding the
+   corpus's three fastest genuine events. The bar now has two arms (speed
+   > 400 u/s at dt ≥ 0.05 s, distance ≥ 520 u below it), 61 → 64 hard rows over
+   961 captures, and every constant is pinned by `test_movesync.py` (102 checks,
+   floor 57).
 4. Static-analyse the client's `0x002B`/`0x0027`/`0x0029` handlers
    (msghandler/codescan) to decide whether a non-1.0 rate steers the sync copy
    — the cheapest unspent instrument; it may retire the client run entirely.
 5. Adjudicate the 26 impossible-step population (item 4's live half).
-6. Fix `pinned.py` before the next live run needs it: the recorded `patched`
+6. ~~Fix `pinned.py` before the next live run needs it: the recorded `patched`
    hash predates the current patcher (three extra sites), 38833 has no patched
    hash at all, so movetap's gate refuses a legitimately patched 38797 and
-   cannot represent 38833. Direction: per-build SETS of accepted patched
-   digests appended by the patcher itself, or structural verification
-   (pristine size + every differing byte inside a registered patch-site
-   allowlist) — not a whole-file hash that goes stale on every patcher change.
+   cannot represent 38833.~~ **DONE 2026-08-19, by the first of the two named
+   directions**: `Build.patched` is a per-build TUPLE of accepted digests (the
+   current patcher's 38797 copy and both 38833 copies committed), and
+   `make_custom_client.py` and `make_run_dir.py` register what they write into
+   `vault/client-patched/patched_digests.json` after their own verification.
+   The loosening is gated in the direction that matters — a digest equal to any
+   known build's pristine is refused with no `--force`, `strict` refuses what it
+   cannot diff against a pristine image, and every registry row is re-validated
+   on read — with each refusal mutation-proven (`test_pinned.py` 143 checks,
+   floor 130; `test_buildid.py` 42, floor 39).
 
 ### Corrections to the record found in passing
 
@@ -2615,3 +2637,34 @@ point at three untried shapes, in order of evidence:
 **Before any of it, fix the denominators** (see the scoreboard warning above) —
 no candidate can be scored against 5.7/min, and per-observed-second the default
 build is not the champion the scoreboard says it is.
+
+### The two instruments were repaired the same round — what the bar reads now
+
+`movesync.py`'s hard bar has **TWO ARMS**: implied speed > 400 u/s at dt ≥ 0.05 s,
+and displacement **≥ 520 u below that dt floor**, where a speed computed over a
+window the event itself created is not a measurement. Corpus-wide that is
+**61 → 64 hard rows over 961 captures / 4,582 intervals**; the three restored rows
+are the corpus's fastest genuine events (740.7 u / 0.0318 s and 582.1 u / 0.0331 s
+in `182652`, 617.0 u / 0.0324 s in `171153`), and the narrow form is deliberate —
+the wide `dist ≥ 520 & dt ≤ 2.0 s` spelling sweeps in four ordinary walking rows at
+284-286 u/s. **520 u is bracketed on both sides by measured data**: retail's largest
+step inside 2 s is 517.87 u / 1.352 s and its largest step below the dt floor is
+19.15 u over 82 intervals, while the smallest walking row the wide form would catch
+is 525.3 u. Retail scores **ZERO on both arms**.
+
+Re-derived on that bar, the three configurations read **7 of 267 / 20 of 468 /
+13 of 197 hard rows**, **1.31 / 5.69 / 11.88 per minute of span**, magnitude p50
+**1,969 / 569 / 582 u** and max **3,405 / 768 / 754 u**; the default build's excess
+over the 288 u/s budget is p50 **1,208 u**, max **3,165 u**. `20260811T173940`
+still reads **0 hard of 157**. **Implied velocity is demoted everywhere to a
+labelled gate input** — magnitude and excess are the pair to quote. Two of the
+default build's 7 hard intervals are themselves longer than the active-time
+threshold, and 5 of the 7 are DEGENERATE for the on-path test (the grant-time
+report IS the pre-jump record), leaving n = 2 on-path 2/2 as the whole
+non-tautological on-path evidence on that capture.
+
+`pinned.py`'s gate is repaired in the same round and in the opposite direction:
+`Build.patched` is a per-build TUPLE of accepted digests, the patchers register
+what they write, and the loosening is fenced by refusals that a mutation reddens
+(a digest equal to any known build's pristine, a strict registration with no
+pristine to diff against, a registry row that fails re-validation on read).
