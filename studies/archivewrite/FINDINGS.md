@@ -2588,11 +2588,106 @@ takes TWO gates to catch them (measured: `looks_compressed` stubbed alone, 1 red
 
 1. **The client oracle for the new shapes** (§17.2): a one-launch run reading a small
    authored row AND a `datalloc`-created row, when a launch is next convenient.
+   **STAGED 2026-08-20 as A9 — §18.** The archive is built, gated and adversarially
+   verified; the deploy and the launch are the owner's.
 2. **The FA1 full-set write-back** (§17.1): the payload must be re-authored; the encoder,
    the write verbs and the budget arithmetic all exist now.
 3. **A5** stays unrun (stored-size ceiling; §5 D), unchanged by this rung.
 4. The renamed-id disagreement in `datalloc` (§17.5), the `_grow_gate` snapshot semantics
    (§17.3), and gap E (accepted, §17.2).
+
+---
+
+## 18. A9 is STAGED — 2026-08-20. The client oracle for §17's shapes, built, gated and adversarially verified; the deploy and the launch are the owner's
+
+**The rung: one loopback launch answers what §17 could not** — does the retail client read
+(a) small rows compressed by us, (b) a row `datalloc` CREATED under a new file id, and
+(c) the one degenerate table shape reachable on a real payload. Script and runbook:
+`vault/research/archivewrite/a9stage.py` + `A9-RUN.md` (gitignored by design, like every
+stage in this arc); staged archive `vault/exports/archivewrite/a9/Gw.a9.dat`, 4.2 GB.
+
+### 18.1 The measurement that designed it, four decisive facts
+
+- **All sixteen proven-read files fit their own reservations under our encoder at the DP
+  dial — including 222949.** §11.6's "12 B over at every dial" was measured on the *flipped*
+  payload; unmodified, ours is 7,644 B — the same size as retail's to the byte, different
+  bytes (crc `0x624BFFA2` vs `0xA1A26950`). C-2's rule held: name the copy
+  (`run/2026-07-29…/Gw.dat.retail` throughout).
+- **The verdict fires at LOAD, not at an animation lottery.** The client's FA8 loop
+  (`0x00794850–0x0079492D`) resolves EVERY link at model load and requires
+  `m_seqCount != 0` per link — so "the hatcher spawned with normal proportions and
+  animated" IS the statement that all fifteen links, including a created row, resolved,
+  decompressed and parsed. 100 % readout coverage; no dependence on which of 242 sequence
+  records the variant picker rolls.
+- **Two of the four target shapes are UNSHIPPABLE on real content, and are recorded, not
+  forced**: the phantom-pair distance and phantom-pair literal tables occur zero times over
+  17 files × 6 dials, 900 random small rows and the 2,500 most compressible rows in the
+  archive. Their client oracle waits for a payload that legitimately produces them.
+- **The all-skip declared-5 distance shape lives in exactly one family** — rows 8295–8306
+  (twelve 56/60 B rows, 6,146 B payloads, static registered content, definitely not
+  scratch). Whether the client reads them at map load is UNRESOLVED — the map-dependency
+  search's null FAILED ITS POSITIVE CONTROL (the same list omits the shell, the body and
+  15018, all demonstrably loaded), so the null is worth nothing and the arm is a
+  zero-cost rider scored "nothing asserted", never the shape oracle.
+
+### 18.2 The edit set (3 rows in place, 3 created, size unchanged, nothing relocated)
+
+**E1, the headline:** file `0x5F0AD` created by `datalloc.alloc` — a 3-stream chain
+mirroring 222949's (head = our encode of its 11,878 B payload, 7,644 B, `expect=`
+declared; mid and tail = the sibling rows' stored bytes verbatim), landing on rows
+[35301 (retail's only spare, reused), 177335, 177336]. Through the Python API — the chain
+has two compression-8 streams and the CLI takes one `--expect` per invocation, a §17.5
+refusal doing its job. **E2, the reader:** the shell's FA8 record 13 retargeted
+222949 → `0x5F0AD` (a 4-byte splice at container offset 29790, exactly 3 bytes differ),
+shell re-encoded in place at 20,060 B — transport witnessed by run 7 on this exact row,
+which is what keeps an E1 failure attributable (H9). Retargeting touches only the hatcher:
+28 other shells link 222949 and keep retail's copy. **E3, the rider:** rows 8295–8306
+re-encoded in place, payloads byte-identical, our bytes carrying the attested all-skip
+declared-5 shape on the wire (traced).
+
+### 18.3 The nine hazards the A8 skeleton did not guard, all gated
+
+H1 MFT slack (the sharp one: the ACTIVE archive shows one client texture session consumed
+ALL nine slack rows and the only spare; the stage leaves 168 B / 7 rows, floor-gated
+post-write with zero margin); H2 identity on both writers (file-id walk, chain walk,
+payload byte-compares); H3 the retarget gated positively (FA8 decode == retail's fifteen
+with index 13 swapped); H4 retarget-squared (size+crc fingerprints — size alone cannot see
+a 3-byte, 0-length edit); H5 the id pinned, never recomputed; H6 crc-sweep counts read
+from the sweep (+3); H7 our chain ascends where retail's descends (recorded in the
+prediction's failure short-list); H8 the shared run directory (deploy refuses without
+`--yes`, probes the file handle, and another session WAS in it at 00:11 on 2026-08-20);
+H9 the E1/E2 joint-failure cell attributed in advance.
+
+### 18.4 The adversarial pass — GREEN, and the artifact is reproducible
+
+The skeptic's decisive result: **a from-scratch rebuild in an isolated vault produced a
+byte-identical 4.2 GB archive** (sha256 `ac3fe9e1…af0caa90`), twice. Its own instruments
+(never the builder's code): the whole-file byte diff resolves to **14 regions, every byte
+owned by exactly the intended rows** plus the alloc's documented structural writes — no
+stray owner anywhere; all pinned constants reproduced; preflight 10/10 / generations 6/6 /
+crc sweep 177,322 (+3, 0 bad) on the stage; five hostile-input gate falsifications all
+refused loudly with the stage byte-unchanged. Three non-blocking findings, two fixed
+same-day (F1: the PRE-write H1 arm was a check that cannot fail — deleted, the binding
+post-write gate stands; F2: rebuild-over-stage recopies 4.2 GB — now in the runbook) and
+one recorded (F3: `--retail` discarding the client's ATEX rows is followed by a green
+launch in two precedents, but "the client recompiles them" stays an inference). One of the
+skeptic's own 59 checks went red and **retail's own row was the control that corrected the
+skeptic**: `dist_lens [(0, 4)]` on an all-skip table is the installed symbol, not a code
+length — both streams carry the identical shape.
+
+### 18.5 The predictions, pre-registered (verbatim in `a9stage.py`'s docstring)
+
+P1 stage gates (all fired green 2026-08-20). P2 the launch: 8/8 checkpoints, hatcher
+spawns with normal proportions and walks/attacks/casts — which by §18.1's load-time fact
+is the statement that the created row resolved; no assert dialog, and **never click the
+dialog** (its default button uploads a crash dump from a patched client to ArenaNet).
+P3 post-launch (`--verify-after`): our 16 rows byte-identical, only scratch churn,
+`entry_count`/`mft_size`/`mft_offset` unmoved. P4 named failures: missing creature /
+white box / error 12 at `0x0079644E` / AV ⇒ the creation path, with H7's chain direction
+on the short list; E3 scores "nothing asserted" whatever happens. **The run is the
+owner's**: deploy with the client closed, `python toolkit/harness/session.py --enemy
+--hold 150 --shots 10`, then `--verify-after`, then `--retail` or leave deployed.
+`A9-RUN.md` is the procedure.
 
 ---
 
