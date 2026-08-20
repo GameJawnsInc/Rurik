@@ -4272,9 +4272,17 @@ def attribute_state(state):
                   "is_primary": bool(r["is_primary"])}
          for k, r in agents.WORLD.rows("attribute").items()})
     row = agents.WORLD.get("player", "attributes")
+    # THE PERSISTED RANKS WIN, and this is the only place that decision is
+    # made. Until 2026-08-20 the spawn burst read `_ps_row["attributes"]` for
+    # 0x003A while this state read the content row for 0x0037's balance -- two
+    # sources that agreed only because nothing had ever written the store.
+    # Persisting a spend is exactly what would have pulled them apart, so the
+    # second source is gone: everything now asks this object.
+    stored = persisted_attribute_row(state)
     st = attribspend.AttributeState(
         rules,
-        dict((int(a), int(r)) for a, r in row["ranks"]),
+        attribspend.seed_ranks(row["ranks"],
+                               (stored or {}).get("attributes")),
         int(row["points_total"]),
         primary=SPAWN_PROFESSION,
         # This server spawns with NO secondary (agent_set_profession's own
@@ -4284,6 +4292,41 @@ def attribute_state(state):
         secondary=0)
     state["attributes"] = st
     return st
+
+
+def persisted_attribute_row(state):
+    """This connection's character row in the store, or None when not persisting.
+
+    Mirrors the kill-accrual path above: `--persist` off, no store open, or no
+    row for this uuid all mean "nothing to persist", and each returns None
+    rather than raising -- a probe rig runs with no store at all.
+    """
+    store = state.get("charstore_game")
+    if not PERSIST or store is None:
+        return None
+    return store.character_by_uuid(state.get("char_uuid", ""))
+
+
+def persist_attributes(state, conn_id):
+    """Write the live ranks back to the store. No-op without --persist.
+
+    The store's schema already carried `attributes` as [id, rank] int pairs and
+    validated them (charstore.py) -- what was missing was anything that WROTE
+    it. Ranks only: the point budget stays a content fact, because nothing in
+    this server changes a character's lifetime total and storing a derived
+    number invites the two to disagree.
+    """
+    row = persisted_attribute_row(state)
+    if row is None:
+        return
+    st = state.get("attributes")
+    if st is None:
+        return
+    row["attributes"] = [[int(a), int(r)] for a, r in sorted(st.ranks.items())]
+    state["charstore_game"].save()
+    print(f"[c{conn_id}] PERSIST: attributes saved -- "
+          + ", ".join(f"{a}={r}" for a, r in sorted(st.ranks.items()))
+          + f", {st.available} of {st.points_total} unspent", flush=True)
 
 
 def send_attribute_reply(send, st, agent_id, sequence, attribute):
@@ -4340,6 +4383,7 @@ def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
         print(f"[c{conn_id}] ATTRIBUTE {verb}: {attribute} {before} -> "
               f"{st.rank_of(attribute)}, {st.available} of {st.points_total} "
               f"point(s) unspent (seq {sequence})", flush=True)
+        persist_attributes(state, conn_id)
     else:
         print(f"[c{conn_id}] ATTRIBUTE {verb} REFUSED: {why} "
               f"(seq {sequence}) -- answering anyway so the client's own "
@@ -4388,6 +4432,7 @@ def handle_attribute_load(values, send, state, conn_id, rec):
              f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank})")
     print(f"[c{conn_id}] ATTRIBUTE_LOAD: {len(pairs)} attribute(s) set, "
           f"{st.available} of {st.points_total} point(s) unspent", flush=True)
+    persist_attributes(state, conn_id)
     rec.event("attribute_load", pairs=[[int(a), int(r)] for a, r in pairs],
               available=st.available)
 
@@ -8904,10 +8949,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # this connection already made must survive a map
                         # change, and attribute_state() seeds itself from the
                         # same content row on first use anyway.
-                        _ranks = (
-                            [tuple(p) for p in _ps_row["attributes"]]
-                            if _ps_row is not None and _ps_row["attributes"]
-                            else sorted(attribute_state(state).ranks.items()))
+                        # ONE source: attribute_state already resolved the
+                        # store-over-content question when it was built.
+                        _ranks = sorted(attribute_state(state).ranks.items())
                         columns = attribute_columns(_ranks)
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, columns],

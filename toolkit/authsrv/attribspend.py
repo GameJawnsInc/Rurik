@@ -70,6 +70,26 @@ class AttributeRules:
         return sum(self.spent_on(r) for r in dict(ranks).values())
 
 
+def seed_ranks(content_ranks, stored_ranks):
+    """Which ranks a session starts from: the store's, when it has any.
+
+    ONE PLACE, ON PURPOSE. Until 2026-08-20 the spawn burst answered this
+    question for `0x003A` by reading the persisted row while the point balance
+    in `0x0037` was computed from the content row -- two sources that agreed
+    only because nothing had ever written the store. Persisting a spend is
+    precisely what pulls them apart, so the precedence lives here, is used by
+    both, and is tested.
+
+    An EMPTY stored list means "this character has never spent", not "this
+    character has no attributes": `charstore.ensure_character` seeds the field
+    to [] and the burst has to fall through to the content defaults, or a
+    fresh character would spawn with no ranks at all.
+    """
+    if stored_ranks:
+        return {int(a): int(r) for a, r in stored_ranks}
+    return {int(a): int(r) for a, r in (content_ranks or [])}
+
+
 class AttributeState:
     """One character's ranks and point budget, with the client's refusals.
 

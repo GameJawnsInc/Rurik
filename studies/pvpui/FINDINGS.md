@@ -3175,3 +3175,50 @@ order is settled a third way, independent of §32.5's static read: **field3 ≤ 
   refusing it would leave a third of the family undone, not because anything confirmed it.
 - **The hero gets the player's budget**, because it is sent the player's default ranks; its
   own attribute state is not modelled, since nothing lets us spend a hero's points.
+
+### 34.5 It PERSISTS — and the second source of truth it exposed (2026-08-20)
+
+§34.4 recorded "the state is per connection and does not persist" as a known limit. It is
+closed, and closing it flushed out a latent bug that had been invisible for exactly as
+long as the feature was missing.
+
+**The bug first, because it is the interesting half.** `charstore.py` has carried an
+`attributes` field — `[id, rank]` int pairs, validated at load — since 2026-08-18, and the
+spawn burst read it for `0x003A` while the balance in `0x0037` was computed from the
+CONTENT row. Two sources for one fact. They agreed on every run ever made, because nothing
+had ever written the store, and **persisting a spend is precisely the thing that pulls
+them apart**: the client would have been told one spread and a balance computed from a
+different one. The fix is not a patch but a deletion — `attribspend.seed_ranks` is now the
+single answer to "which ranks does this session start from", both paths call it, and it is
+tested from both sides.
+
+**The run, three processes:**
+
+| | wire | panel |
+|---|---|---|
+| seed from a store written by an earlier arc | `0x0037 (55 of 200)`, `0x003A 17=9, 19=12` | **55 unused**, Strength 9, Hammer Mastery 12 |
+| click Axe Mastery's **+** | `raise: 18 0 -> 1, 54 of 200`; `PERSIST: attributes saved` | 54 unused, Axe Mastery 1 |
+| **restart the server** | `0x0037 (54 of 200)`, `0x003A 17=9, 18=1, 19=12` | **54 unused**, Axe Mastery **1** |
+
+The third row is the acceptance criterion: a brand-new process, seeded only from
+`vault/state/characters/`, told the client the state the previous process had saved.
+
+That first row is also the sharpest confirmation of the cost table this arc has produced,
+and it came free. The store held `17=9, 19=12` — a spread nobody chose for this test —
+and the server computed **55 unused** from it: `s_attribPoints` cumulative to rank 9 is 48,
+to rank 12 is 97, and 200 − 145 = 55. The panel then priced every chevron to match:
+Strength ▼11 ▲13 (`[9]` and `[10]`), Hammer Mastery ▼20 and **no up arrow** (the rank cap),
+Axe Mastery ▲1 and **no down arrow** (the rank floor). Four independent numbers, none of
+them typed anywhere in this repo.
+
+**What is stored is ranks only.** The point budget stays a content fact: nothing in this
+server changes a character's lifetime total, and storing a derived number invites the two
+to disagree — the same failure this section just removed. `available` is recomputed from
+the ranks on every read, which is why the reloaded character cannot drift from the one that
+saved.
+
+**Schema, same day:** `0x0038 ATTRIBUTE_POINTS_AVAILABLE` and `0x003B
+AGENT_UPDATE_ATTRIBUTE` go **medium → high**. Both now have two lineages — the static read
+of their handlers, and their values rendered on the client's own panel across the caged
+runs above. `0x0036 ATTRIBUTE_SPEND_ACK` deliberately **stays medium**: its mechanism is
+measured, but the word ACK is our summary of what it does and no client string names it.
