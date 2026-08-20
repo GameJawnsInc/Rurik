@@ -5486,4 +5486,51 @@ Every one of these, in the order they were written:
   missing and nothing here reads the real one. Twenty-two sabotages measured,
   and every one of them runs all 133 checks — an earlier pass had three that
   CRASHED the run at checks 46, 51 and 74 and scored 0, 0 and 7, which is why
-  `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133).
+  `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133),
+  `toolkit/harness/test_abrun.py` (A/B DIFFERENTIAL RUNS, THE MECHANICAL HALF —
+  no client, no vault, every fixture built in a tempdir: the gamesrv logs, the
+  capture directories, the manifests, the archives. Section 0 is the log-line
+  contract twice over: each counter must match the server's own format AND each
+  producing print's distinctive fragment must still be present in `authsrv.py`,
+  which is what goes red the day somebody rewords one. Its near misses carry the
+  real double-count hazard — `authsrv.py:7064` echoes every send as `[c3] s2c
+  agent 41 casts skill 1234 (0x0057, 12B)` using the label written one line
+  above the cast print, so a looser pattern counts every cast twice at an
+  entirely plausible number; `WRAPPED` asks the `^`/`$` anchors separately and
+  exists because the anchor sabotage first scored zero. Section 1 holds the
+  ARM-BOUNDARY CENSUS with the defect as its control: by mtime alone the
+  previous arm's log IS the newest one after this arm's deploy, because a stack
+  goes on relaying while it tears down and `capture_error_dialog` waits up to
+  twelve seconds after the client exits, so one teardown line landing during a
+  4.2 GB flip is all it takes; against a census of directory NAMES taken at the
+  deploy, that directory is not bindable at all. Section 2 carries its own
+  positive control — a document written in place and truncated must be REFUSED
+  before any claim that an atomic one survives — then kills `os.replace` between
+  the fsync and the rename and requires the previous verdict to still parse.
+  Section 3 opens a real Win32 handle with share mode 0 (pure ctypes: a
+  byte-range lock still lets `open()` through and would prove nothing about the
+  mechanism an arm's boundary is read from), skip-declared off Windows. Section
+  4 drives a whole arm with a scripted client that writes log lines between
+  polls; section 4b runs one arm three times against one fixture and requires it
+  to read 30 hits when told nothing preceded it, ZERO with the census it takes
+  for itself, and exactly its own 1 when its own capture appears mid-hold —
+  thirty and thirty-one both look like a session, which is why the control is
+  there and not only the fix. Section 5 is the one that matters after a crash: a
+  header-CRC-poked archive must have the launch gate's refusal RECORDED and the
+  arm still reach `finished`. Section 6 asks of every refusal WHEN and not only
+  WHETHER — which client opens the archive is a directory listing and whether
+  the build record is one is a single `json.load`, and both used to be announced
+  only after a whole-file copy had landed on the shared ACTIVE archive, so both
+  are asked through `--run` against a fixture whose ACTIVE and RETAIL carry
+  different bytes and the check is the archive's own checksum afterwards; its
+  timeouts are zero because a defeated refusal does not fail there, it reaches
+  the 900 s wait and hangs the file. Section 7 holds the compare table, its
+  `capture bound` row, and the three exit-1 cases a difference must not be
+  confused with: an unfinished arm, two arms naming one verdict file, two
+  finalised arms that bound one capture. Section 8 is REAL — `test_overlay.py`'s
+  own World and rows_spec, two profiles built over one row, `abrun.run` driven
+  end to end through real deploys — and it exists because the ordering defect it
+  covers was invisible to every fake: two overlay arms owning one row resolved
+  cleanly, played the first to a finished verdict, then hard-refused the second
+  for "neither retail nor 'beta'". Seventeen sabotages measured,
+  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120).
