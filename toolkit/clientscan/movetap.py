@@ -1070,7 +1070,11 @@ def fence_verdict(reach, flips, n, rate):
     # are real. Same simulation: 0.998 and 0.989 for the two skewed fast cases,
     # 0.853 balanced-fast, against 0.037 and 0.050 for 5 s and 2 s dwells.
     pairs = n - 1
-    p_open = (reach.get("test-runs", 0) + reach.get("world1:append", 0)) / n
+    # "Open" is the share where the test would RUN -- `test-runs` alone. world1
+    # is NOT open: world == 1 is the branch on which the caller skips the test
+    # entirely. An earlier draft of this line added it and would have inflated
+    # p, deflating A toward "not aliased" -- the wrong direction for a guard.
+    p_open = reach.get("test-runs", 0) / n
     denom = 2.0 * p_open * (1.0 - p_open)
     alias = (flips / pairs) / denom if (pairs > 0 and denom > 0.0) else None
     if alias is not None and alias >= 0.5:
