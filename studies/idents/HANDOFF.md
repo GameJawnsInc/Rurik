@@ -85,7 +85,19 @@ carries the un-split `R0` and has none of the other three. `R0` was split into `
 updated — so **"R0" in HANDOFF.md and "R0a" in PLAN.md name overlapping but unequal
 things, and a cold session reads whichever it opens first.** That is verbatim the
 failure `CLAUDE.md`'s opening rule was written about, occurring inside the identifier
-system itself. Fixing this one is worth more than any convention.
+system itself.
+
+**CLOSED 2026-08-20, and the fix was neither of the two this file first proposed.**
+`HANDOFF.md` is an explicitly historical document whose own top box says *"Nothing here
+is deleted, so that nobody re-proposes it"*, and it already has a repair pattern: strike
+or annotate in place, pointing at the `PLAN.md` section that measured it. So the table
+was **annotated, not synced and not deleted** — `HANDOFF.md:116`. Two things the
+annotation records that this file had missed: the `R0` split **vindicates** §2's
+headline call (*"R0 is where the capture harness gets built, not R4"* — `R0b` is exactly
+that rung), and the drift's *mechanism* is the duplication itself, so re-syncing the
+rows would only reset the clock. **The lesson generalises to decision 4 below: a
+convention that tells sessions to restate an identifier list anywhere but its home
+manufactures this defect on a timer.**
 
 ### 2.4 A fourth namespace exists only in the git log
 
@@ -128,9 +140,10 @@ Framed, not pre-made. My recommendation is marked where I have one.
    - documentation only, no checker.
    Recommendation: the middle one. A hard gate on 80 documents will produce a red suite
    for reasons nobody wants to fix at 2am.
-6. **Fix §2.3 regardless of the rest.** HANDOFF.md's R table should either be deleted in
-   favour of a pointer to PLAN.md §3, or synced. This is a one-commit fix and does not
-   depend on decisions 1–5.
+6. ~~**Fix §2.3 regardless of the rest.**~~ **DONE 2026-08-20** — annotated in place at
+   `HANDOFF.md:116` per that document's own repair pattern. Neither of the two fixes
+   originally proposed here (delete, or sync) was correct; see §2.3 for why, and carry
+   the reason into decision 4.
 7. **Retire or document §2.4's integer prefix.**
 
 ## 4. The resolver — ship this even if nothing else lands

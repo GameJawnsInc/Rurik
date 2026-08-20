@@ -113,6 +113,30 @@ The naive order is R0→R5. The correct order for this goal front-loads capture.
 | **R4c** | AI + spawns + quests | An area populates and plays like the recording |
 | **R5** | Declarative authoring toolkit | A new zone authored in TOML, hot-reloaded, walked |
 
+> **⚠ THE RUNG NAMES IN THIS TABLE ARE STALE — annotated 2026-08-20. The ordering
+> argument below them is NOT.** Authority for the ladder and for every rung's status is
+> [PLAN.md](PLAN.md) §3, and nowhere else. Read the names here as the 2026-08-04
+> vocabulary rather than the current one:
+>
+> | Here | In `PLAN.md` §3 |
+> |---|---|
+> | **R0** | **Split in two.** **`R0a`** — vault + provenance gate + prior-art mirrors (✅ 2026-08-04, criterion met 2026-08-07). **`R0b`** — **instrumented-client capture of a real live session**, both directions, stamped `origin: live` and byte-replayable (✅ 2026-08-07) |
+> | — | **`R1.5` — tape player.** Added after this was written: a recorded StoC stream replayed at recorded timing walks a real client through Ascalon City (✅ 2026-08-10) |
+> | — | **`R5m` — custom map geometry, end to end.** Added after this was written: a map we authored loads in the retail client and geometry we chose stops the character (✅ 2026-08-11) |
+>
+> **The R0 split VINDICATES this section rather than correcting it.** §2's headline call
+> is *"R0 is where the capture harness gets built, not R4"*, and `R0b` is precisely that
+> rung carrying precisely that deliverable — landed third, on 2026-08-07, four days in.
+> The strategy held; only the vocabulary moved. What is genuinely wrong above is
+> narrower: the `R0` row folds the vault and the live capture into one line, and they
+> are two rungs that landed three days apart against two different servers.
+>
+> **Do not hand-sync this table to §3.** Nothing in this file is deleted or rewritten to
+> match a later measurement — see the box at the top, and the reason: a struck premise
+> that stays visible is what stops it being re-proposed. Duplicating §3's rows here is
+> also the mechanism that produced this drift in the first place, and re-syncing them
+> only resets the clock on it.
+
 **R0 is where the capture harness gets built, not R4.** This is non-obvious and it is the most
 important sequencing call in this document. You will not be able to *use* most of what you capture
 for two years. Capture it anyway. Record broadly and early: every profession's skill bar, every
