@@ -107,38 +107,15 @@ DROPPED_ON_PURPOSE = {
             "GlobalMemoryStatusEx. Every field is about the MACHINE and none is "
             "about the world, and ArenaNet's server sends nothing back. There is "
             "no state here for a game server to hold.",
-    0x000E: "ATTRIBUTE_DECREASE -- NAMED 2026-08-19 by studies/pvpui 32 and "
-            "dropped the same day. The message is fully specified (the reply "
-            "contract is in 32.9, and the arithmetic is s_attribPoints, which "
-            "toolkit/clientscan/attribpoints.py already reads), so what is "
-            "missing is not knowledge but STATE: this server has no mutable "
-            "per-character attribute model at all. Ranks come from a content "
-            "row and the point budget is the constant ATTRIBUTE_POINTS sent "
-            "for BOTH of 0x0037's fields -- which, now that those fields are "
-            "read as (available, total), is itself wrong: we tell the client "
-            "every point is unspent while handing it ranks that should have "
-            "cost some. Arming this means giving the session a real attribute "
-            "state and making the two agree. Do that once, and 0x000E/0x000F "
-            "are the same arm twice with the sign flipped.",
-    0x000F: "ATTRIBUTE_INCREASE -- the mirror of 0x000E and dropped for the "
-            "same missing state; see that row. One warning specific to this "
-            "direction, measured in studies/pvpui 32.9: the client PREDICTS "
-            "the spend locally before sending, and 0x00819270 re-applies every "
-            "still-pending prediction on top of each fresh authoritative "
-            "value. So a half-arm that replies 0x0038/0x003B without the "
-            "0x0036 ACK is WORSE than this drop -- it stacks the client's "
-            "guess on top of the server's own numbers, every time. Arm all "
-            "three of the reply triple or none of them.",
-    0x0010: "ATTRIBUTE_LOAD -- a build template applying a whole attribute "
-            "spread at once, dropped with its two siblings above and with a "
-            "weaker name than theirs (medium: ZERO occurrences in the entire "
-            "vault corpus, so studies/pvpui 32 names it from the static path "
-            "alone). Unlike them it carries no sequence and is not predicted "
-            "client-side, so its arm is the simplest of the three -- set the "
-            "ranks, reply, done. HAZARD if it is ever armed, measured from the "
-            "client's own framer: the sender clamps each array to 0x40 but its "
-            "buffer holds SIXTEEN, so 17 entries corrupt a length prefix and "
-            "32 walk the return address. Never invite more than 16.",
+# 0x000E ATTRIBUTE_DECREASE, 0x000F ATTRIBUTE_INCREASE and 0x0010
+# ATTRIBUTE_LOAD were here for one day. Their reason was "the blocker is not
+# knowledge but STATE: this server has no mutable per-character attribute model
+# at all", and that is exactly what changed -- attribspend.py holds the ranks
+# and the budget, the cost curve comes from the client's own s_attribPoints via
+# content, and all three are ARMED. The warning that row carried is now enforced
+# in code rather than prose: send_attribute_reply always sends the whole triple,
+# including on a refusal, because an unretired prediction gets re-applied on top
+# of every later authoritative value.
 # 0x0012 REQUEST_QUEST_INFO was here, and its reason was "answering it needs a
 # quest table this repo does not have, and inventing quest text is worse than
 # the drop". ARMED 2026-08-15: content/quests.toml is that table, and the text

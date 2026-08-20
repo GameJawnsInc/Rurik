@@ -370,6 +370,63 @@ def describe(img, r) -> str:
     return "\n".join(out)
 
 
+def _build_of(data: bytes):
+    """The build of this exact image, from its own bytes, or None.
+
+    Same rule as `attribtable.build_of` and `skilltable.build_of`: a stamp
+    nothing checks is an unfalsifiable self-declaration, so the number is
+    derived by hashing the image against the registry's PRISTINE hashes, and
+    an unknown image gets None rather than a plausible-looking guess.
+    """
+    import hashlib
+    digest = hashlib.sha256(data).hexdigest()
+    for b in pinned.BUILDS:
+        if digest == b.pristine:
+            return b.number
+    return None
+
+
+def emit_content(costs, build, exe, out_path) -> int:
+    """Write vault/content/attribute_cost.toml -- one row per RANK.
+
+    `client-table` provenance per row: extractor named, build recorded. These
+    are MEASUREMENTS -- twelve integers out of ArenaNet's own table -- which is
+    the permitted side of CLAUDE.md's measurement/expression boundary, and they
+    regenerate from the owner's install by re-running this tool.
+
+    One row per rank rather than one row holding a list, because a row is the
+    unit of provenance in `toolkit/content.py` and "rank 8 costs 9 points" is
+    the fact a server actually asks for. The key is the rank REACHED, which is
+    the sense both client accessors use: 0x0091D5A0 reads s_attribPoints[rank]
+    for the price of the next rank, 0x0091D560 reads [rank-1] for the refund of
+    the one you hold (studies/pvpui/FINDINGS.md 32.4).
+    """
+    lines = [
+        "# GENERATED -- do not hand-edit. "
+        "toolkit/clientscan/attribpoints.py --emit-content",
+        f"# exe: {exe}",
+        f"# build: {build} (derived from the image's own sha256 via "
+        f"clientscan/pinned.py, never typed in)",
+        f"# rows: {len(costs)} -- s_attribPoints ranks 1..{len(costs)}, the "
+        f"cost to REACH each rank.",
+        "# The table's 13th entry is the -1 rank cap sentinel and is not a cost,",
+        "# so it is not emitted; the cap is arrsize-1 = the last row's rank.",
+        "",
+    ]
+    for rank, cost in enumerate(costs, start=1):
+        lines.append(f"[attribute_cost.{rank}]")
+        lines.append(f"points = {cost}")
+        lines.append(f"[attribute_cost.{rank}.provenance]")
+        lines.append('source = "client-table"')
+        lines.append('extractor = "toolkit/clientscan/attribpoints.py"')
+        lines.append(f"build = {build}")
+        lines.append("")
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return len(costs)
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -380,6 +437,9 @@ def main(argv=None) -> int:
                    help="run over every build in pinned.BUILDS -- the "
                         "out-of-sample check that this is structural")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--emit-content", metavar="PATH", default=None,
+                   help="write content rows (TOML) here -- "
+                        "vault/content/attribute_cost.toml is the intended home")
     a = p.parse_args(argv)
 
     targets = []
@@ -409,6 +469,27 @@ def main(argv=None) -> int:
             print(describe(img, r))
             print()
         payload.append({"exe": str(exe), **{k: v for k, v in r.items()}})
+
+    if a.emit_content:
+        if len(targets) != 1:
+            print("REFUSED: --emit-content writes rows stamped with ONE build; "
+                  "run it without --all-builds.", file=sys.stderr)
+            return 2
+        if bad or not payload:
+            print("REFUSED: the table was not located, so there is nothing "
+                  "honest to write.", file=sys.stderr)
+            return 2
+        exe = targets[0][0]
+        build = _build_of(Path(exe).read_bytes())
+        if build is None:
+            print("REFUSED: this exe's sha256 matches no PRISTINE build in "
+                  "clientscan/pinned.py, so no honest `build` stamp exists.",
+                  file=sys.stderr)
+            return 2
+        n = emit_content(payload[0]["costs"], build, exe, a.emit_content)
+        print(f"wrote {a.emit_content}: {n} rank rows, build {build}",
+              file=sys.stderr)
+        return 0
 
     if a.json:
         print(json.dumps(payload, indent=1))

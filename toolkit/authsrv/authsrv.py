@@ -49,7 +49,8 @@ from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import labelrun  # noqa: E402
-import agents  # noqa: E402
+import agents
+import attribspend  # noqa: E402
 import origin  # noqa: E402
 import questdefs  # noqa: E402
 import charstore  # noqa: E402
@@ -1178,6 +1179,14 @@ GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
 GAME_SMSG_CLIENT_PERF_REQUEST = 0x000C
 GAME_SMSG_LATENCY_REPORT = 0x000D
 GAME_CMSG_CLIENT_PERF_REPORT = 0x0009
+# The attribute panel's three senders, all reached ONLY from its own +/- button
+# handlers and the build-template UI -- never from the receive band (pvpui 32.6,
+# proven with a closed call-graph walk and a positive control). 0x000E/0x000F
+# carry [agent, sequence, attribute]; the sequence is the handle of a prediction
+# the client has already drawn on screen.
+GAME_CMSG_ATTRIBUTE_DECREASE = 0x000E
+GAME_CMSG_ATTRIBUTE_INCREASE = 0x000F
+GAME_CMSG_ATTRIBUTE_LOAD = 0x0010
 # One byte of UI-overlay flags, read out of the client rather than guessed
 # (studies/smsg, the s_netGraph section). Handler 0x0084E090 clears 0xFFFFFFF2
 # from the flags word at [TLS+0x44]+0x2A8 and then maps THIS byte onto it:
@@ -1784,6 +1793,15 @@ def accrue_kill_rewards(send, state, conn_id):
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
+# The spend-reply triple, named and read 2026-08-19/20 (studies/pvpui 32). The
+# client PREDICTS a spend locally and waits for these three to retire and then
+# restate it; retail sends all three at one timestamp, 14 of 14 in capture
+# 20260818T132739. SEND THE WHOLE TRIPLE OR NONE OF IT: 0x00819270 re-applies
+# every unretired prediction on top of each fresh authoritative value, so a
+# half-answer stacks the client's guess on our own numbers, every time.
+GAME_SMSG_ATTRIBUTE_SPEND_ACK = 0x0036      # [agent, sequence] -- retire it
+GAME_SMSG_ATTRIBUTE_POINTS_AVAILABLE = 0x0038   # [agent, unspent]
+GAME_SMSG_AGENT_UPDATE_ATTRIBUTE = 0x003B   # [agent, attr, base, effective]
 
 # GmAttributes.h: Attribute_Count. UPSTREAM-ONLY -- the comment is accurate about
 # where 42 comes from, and that source stands alone. The claim this comment used
@@ -1835,15 +1853,28 @@ ATTRIBUTE_RANK_MAX = 12
 # most ten attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the
 # RESKIN arc's problem (custom tables above 16), not combat's.
 ATTRIBUTE_COLUMN_MAX = 16
-# OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
-# [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
-# 20260807T143055 conn :64103 t=0.722 hex 37001f0000000000). The 50 this used to
-# be was UPSTREAM and uncited (GmPlayer.c:125), contradicted by all eight.
-# STATE-CONDITIONAL, not universal: all eight samples are characters in unknown
-# spend state, so what a character with genuinely unspent points gets is open --
-# capture shopping-list item 1, studies/combat/PLAN.md section 3. Whether the two
-# bytes mean used/max or max/used is still CONTESTED, and moot only at zero.
-ATTRIBUTE_POINTS = 0
+# SUPERSEDED 2026-08-20, and the old reading is kept because it was right about
+# its own evidence and wrong about the world. It said: "every 0x0037 ArenaNet
+# sent carries [0, 0] -- 8 of 8 connections", and that the two bytes' meaning
+# was CONTESTED (used/max or max/used). The corpus is now 13 captures and 48
+# sightings, and it says something better:
+#
+#   [0, 0]     x14   characters with no attribute points at all
+#   [1, 5]     x7    [6, 10] x1     -- low level, most of the budget spent
+#   [5, 200]   x22   [41,200] [65,200] [74,200] -- level 20, 200 lifetime
+#
+# The eight [0, 0] samples were simply eight low-level characters. FIELD 3 IS
+# WHAT IS LEFT AND FIELD 4 IS THE LIFETIME TOTAL, settled two ways: 0x0037's
+# creator stores field 3 to attribState+0x434 (the field ArenaNet's own assert
+# calls attribPointsAvail) and field 4 to +0x438, which 0x0039 also writes and
+# studies/unitsetup independently named "total attribute points" from a level-up
+# burst; and field3 <= field4 holds in 48 of 48, which an order swap would break
+# on the first [1, 5]. studies/pvpui/FINDINGS.md 32.5.
+#
+# The constant is gone: the number is per-character state now, computed by
+# attribspend.AttributeState from the ranks and the cost curve, so it moves when
+# the player spends. `attribute_state(state).available` / `.points_total`.
+ATTRIBUTE_POINTS_UNUSED_SEE_ATTRIBSPEND = None
 
 # ---------------------------------------------------------------- skills ----
 # The server owns WHICH and WHEN; the client owns WHAT. A skill's name, icon,
@@ -4124,6 +4155,152 @@ BACKPACK_SLOT_COUNT = 20
 # hammer (1) and the drain items -- an id collision would silently overwrite a
 # declaration rather than error.
 PURCHASED_ITEM_ID_BASE = 5000
+
+
+# ------------------------------------------------------- attribute spending --
+#
+# studies/pvpui/FINDINGS.md 32 for the protocol and studies/review for the gap
+# this closes: "you sat there spending attribute points and the server had
+# nowhere to put them." The rules live in attribspend.py, which is pure; this
+# is the wire half.
+
+
+def attribute_state(state):
+    """This connection's live attribute state, built once and then mutated.
+
+    Seeded from content: ranks and the lifetime budget from the player row,
+    the cost curve and the attribute table from the client-derived tables.
+    Held per CONNECTION rather than per process, because two clients must not
+    share one character's points -- the same reason `backpack` lives in state.
+    """
+    st = state.get("attributes")
+    if st is not None:
+        return st
+    rules = attribspend.AttributeRules(
+        {int(k): int(r["points"])
+         for k, r in agents.WORLD.rows("attribute_cost").items()},
+        {int(k): {"profession": int(r["profession"]),
+                  "is_primary": bool(r["is_primary"])}
+         for k, r in agents.WORLD.rows("attribute").items()})
+    row = agents.WORLD.get("player", "attributes")
+    st = attribspend.AttributeState(
+        rules,
+        dict((int(a), int(r)) for a, r in row["ranks"]),
+        int(row["points_total"]),
+        primary=SPAWN_PROFESSION,
+        # This server spawns with NO secondary (agent_set_profession's own
+        # default), so every spendable attribute belongs to the primary. The
+        # day a secondary exists, pass it here and the is_primary rule starts
+        # refusing the other profession's primary attribute on its own.
+        secondary=0)
+    state["attributes"] = st
+    return st
+
+
+def send_attribute_reply(send, st, agent_id, sequence, attribute):
+    """The fixed triple retail sends for every spend: retire, points, value.
+
+    ALL THREE, ALWAYS, including on a refusal -- and the refusal path is why
+    the ack goes first even when nothing changed. 0x0036 makes the client
+    REVERT its own predicted modifier and drop it; 0x0038 and 0x003B then state
+    what is actually true. Skip the ack and the prediction stays queued, and
+    0x00819270 re-applies it on top of every later authoritative value.
+    """
+    rank = st.rank_of(attribute)
+    send(GAME_SMSG_ATTRIBUTE_SPEND_ACK, [agent_id, sequence],
+         f"ATTRIBUTE_SPEND_ACK(agent {agent_id}, seq {sequence})")
+    send(GAME_SMSG_ATTRIBUTE_POINTS_AVAILABLE, [agent_id, st.available],
+         f"ATTRIBUTE_POINTS_AVAILABLE({st.available} of {st.points_total})")
+    # base and effective. They differ only by an item bonus, which this server
+    # does not model -- so they are equal here, and that is a stated
+    # simplification rather than a reading of the wire: live, attribute 20 ran
+    # (10,11) and (11,12) while 17 and 21 sat at (8,8) and (10,10), so retail
+    # sends them unequal exactly when a rune or weapon is involved.
+    send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE, [agent_id, attribute, rank, rank],
+         f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank})")
+
+
+def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
+    """Answer one GAME_CMSG 0x000F (raise) or 0x000E (lower).
+
+    Wire [agent_id, sequence, attribute] -- 14 bytes, both directions.
+
+    A REFUSAL STILL ANSWERS. The client has already drawn this spend on its own
+    panel, so silence is the one reply that leaves the two of us disagreeing
+    with the client believing itself. Every path here sends the triple; only
+    the values differ.
+    """
+    if len(values) < 4:
+        print(f"[c{conn_id}] ATTRIBUTE refused: malformed request {values[1:]!r}",
+              flush=True)
+        return
+    agent_id, sequence, attribute = values[1], values[2], values[3]
+    st = attribute_state(state)
+    verb = "raise" if raise_it else "lower"
+    if agent_id != PLAYER_AGENT_ID:
+        # The panel only ever spends the local player's points; anything else
+        # is a request about a character this connection does not own.
+        print(f"[c{conn_id}] ATTRIBUTE refused: {verb} for agent {agent_id}, "
+              f"not this connection's player ({PLAYER_AGENT_ID})", flush=True)
+        return
+    before = st.rank_of(attribute)
+    why = (st.refuse_increase(attribute) if raise_it
+           else st.refuse_decrease(attribute))
+    if why is None:
+        (st.increase if raise_it else st.decrease)(attribute)
+        print(f"[c{conn_id}] ATTRIBUTE {verb}: {attribute} {before} -> "
+              f"{st.rank_of(attribute)}, {st.available} of {st.points_total} "
+              f"point(s) unspent (seq {sequence})", flush=True)
+    else:
+        print(f"[c{conn_id}] ATTRIBUTE {verb} REFUSED: {why} "
+              f"(seq {sequence}) -- answering anyway so the client's own "
+              f"prediction is retired", flush=True)
+    send_attribute_reply(send, st, agent_id, sequence, attribute)
+    rec.event("attribute_spend", direction=verb, attribute=attribute,
+              sequence=sequence, rank_before=before, rank_after=st.rank_of(attribute),
+              available=st.available, refused=why)
+
+
+def handle_attribute_load(values, send, state, conn_id, rec):
+    """Answer one GAME_CMSG 0x0010: a build template's whole spread at once.
+
+    NO ACK HERE, and that is not an oversight: 0x0010 carries no sequence and
+    the client does not predict it locally (pvpui 32.7 -- its sender asserts
+    the record exists, discards it, and forwards straight to the framer). So
+    the reply is the authoritative half only, one 0x003B per attribute that
+    moved plus the new balance.
+    """
+    if len(values) < 4:
+        print(f"[c{conn_id}] ATTRIBUTE_LOAD refused: malformed {values[1:]!r}",
+              flush=True)
+        return
+    agent_id, ids, ranks = values[1], values[2], values[3]
+    if not isinstance(ids, (list, tuple)) or not isinstance(ranks, (list, tuple)):
+        print(f"[c{conn_id}] ATTRIBUTE_LOAD refused: expected two arrays, got "
+              f"{type(ids).__name__}/{type(ranks).__name__}", flush=True)
+        return
+    if agent_id != PLAYER_AGENT_ID:
+        print(f"[c{conn_id}] ATTRIBUTE_LOAD refused: agent {agent_id}, not "
+              f"this connection's player ({PLAYER_AGENT_ID})", flush=True)
+        return
+    st = attribute_state(state)
+    pairs = list(zip(ids, ranks))
+    why = st.refuse_load(pairs, ATTRIBUTE_COLUMN_MAX)
+    if why is not None:
+        print(f"[c{conn_id}] ATTRIBUTE_LOAD REFUSED: {why}", flush=True)
+        return
+    touched = sorted(set(st.ranks) | {int(a) for a, _r in pairs})
+    st.load(pairs)
+    send(GAME_SMSG_ATTRIBUTE_POINTS_AVAILABLE, [agent_id, st.available],
+         f"ATTRIBUTE_POINTS_AVAILABLE({st.available} of {st.points_total})")
+    for attribute in touched:
+        rank = st.rank_of(attribute)
+        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE, [agent_id, attribute, rank, rank],
+             f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank})")
+    print(f"[c{conn_id}] ATTRIBUTE_LOAD: {len(pairs)} attribute(s) set, "
+          f"{st.available} of {st.points_total} point(s) unspent", flush=True)
+    rec.event("attribute_load", pairs=[[int(a), int(r)] for a, r in pairs],
+              available=st.available)
 
 
 def handle_item_purchase(values, send, state, conn_id, rec):
@@ -8486,9 +8663,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # with 0xb7 -- this message -- named in the stack trace.
                         # Upstream's SendSkillsAndAttributes sends the points
                         # first and the profession second, in that order.
+                        # (available, total) -- NOT one constant twice. The
+                        # two fields were CONTESTED until 2026-08-19; 0x0037's
+                        # creator writes field 3 to attribState+0x434
+                        # (attribPointsAvail) and field 4 to +0x438, the
+                        # lifetime total (studies/pvpui 32.5). Sending the same
+                        # number for both told the client every point was
+                        # unspent while handing it ranks that had cost some.
+                        _attrst = attribute_state(state)
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                             [PLAYER_AGENT_ID, ATTRIBUTE_POINTS,
-                              ATTRIBUTE_POINTS], "AGENT_ATTRIBUTE_POINTS")
+                             [PLAYER_AGENT_ID, _attrst.available,
+                              _attrst.points_total],
+                             f"AGENT_ATTRIBUTE_POINTS({_attrst.available} "
+                             f"of {_attrst.points_total})")
                         send(GAME_SMSG_AGENT_PROFESSIONS,
                              spawn_profession_values(),
                              f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION})")
@@ -8624,10 +8811,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # show. COLUMN-MAJOR since 2026-08-15 as well, and the
                         # day between the two cost every session a modal
                         # assert box: see attribute_columns.
+                        # From the LIVE state, not the content row: a spend
+                        # this connection already made must survive a map
+                        # change, and attribute_state() seeds itself from the
+                        # same content row on first use anyway.
                         _ranks = (
                             [tuple(p) for p in _ps_row["attributes"]]
                             if _ps_row is not None and _ps_row["attributes"]
-                            else list(agents.PLAYER_ATTRIBUTE_RANKS))
+                            else sorted(attribute_state(state).ranks.items()))
                         columns = attribute_columns(_ranks)
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, columns],
@@ -8890,10 +9081,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # own recorded knowledge re-earning itself.
                             _hprof = (agents.npc_template(HERO_BODY_NPC)
                                       ["profession"] if HERO_BODY else 1)
+                            # The hero gets the same budget as the player,
+                            # because it is sent the player's own default
+                            # ranks two lines below (attribute_columns() with
+                            # no argument) -- and (available, total) must
+                            # AGREE with the ranks that follow or the panel
+                            # shows a build nobody paid for. Its own state is
+                            # not modelled: nothing lets us spend a hero's
+                            # points, so there is no mutable state to hold.
+                            _hattr = attribute_state(state)
                             hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                                 [_haid, ATTRIBUTE_POINTS, ATTRIBUTE_POINTS],
+                                 [_haid, _hattr.available, _hattr.points_total],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
-                                 f"{_haid})")
+                                 f"{_haid}: {_hattr.available} of "
+                                 f"{_hattr.points_total})")
                             hsend(GAME_SMSG_AGENT_PROFESSIONS,
                                  spawn_profession_values(_hprof, _haid),
                                  f"AGENT_PROFESSIONS(hero agent "
@@ -9001,6 +9202,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The load bar reaches 100% without this and stops there.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                    elif opcode == GAME_CMSG_ATTRIBUTE_INCREASE:
+                        handle_attribute_spend(values, send, state, conn_id,
+                                               rec, raise_it=True)
+                    elif opcode == GAME_CMSG_ATTRIBUTE_DECREASE:
+                        handle_attribute_spend(values, send, state, conn_id,
+                                               rec, raise_it=False)
+                    elif opcode == GAME_CMSG_ATTRIBUTE_LOAD:
+                        handle_attribute_load(values, send, state, conn_id, rec)
                     elif opcode == GAME_CMSG_ITEM_PURCHASE:
                         handle_item_purchase(values, send, state,
                                              conn_id, rec)

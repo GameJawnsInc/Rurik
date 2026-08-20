@@ -3070,3 +3070,108 @@ applied:
 **Harness trap, recorded for the next session: `--walk` and `--shots` do not overlap.**
 `--shots` belongs to the hold, which begins only after the walk plan finishes. To watch a
 probe while hovering, read `w*.png`; to watch it without a walk, `hold*.png` is right.
+
+## 34. THE ARMS LANDED — a player can spend attribute points on a server we wrote (2026-08-20)
+
+§32.9 ended with a spec and a gap: the protocol was fully read, and this server still had
+nowhere to put a spend. `studies/review` had flagged that years earlier — *"you sat there
+spending attribute points and the server had nowhere to put them"* — and the blocker was
+never knowledge. It was **state**: ranks came from a content row and never moved, and the
+point budget was one constant sent for both of `0x0037`'s fields.
+
+**It works end to end.** Caged run `20260820T084923`: the operator's client opened its own
+Skills and Attributes panel, clicked the **+** beside Tactics twice, and the panel followed.
+
+| | unused points | Tactics | its arrows |
+|---|---|---|---|
+| before | **27** | 1 | ▼1 ▲2 |
+| after click 1 | **25** | 2 | ▼2 ▲3 |
+| after click 2 | **22** | 3 | ▼3 ▲4 |
+
+Every number is the client's, drawn from what we sent. The wire:
+
+```
+c2s 0x000F ATTRIBUTE_INCREASE  [agent 1, seq 0, attr 21]
+    ATTRIBUTE raise: 21 1 -> 2, 25 of 200 unspent (seq 0)
+s2c 0x0036 ATTRIBUTE_SPEND_ACK(agent 1, seq 0)
+s2c 0x0038 ATTRIBUTE_POINTS_AVAILABLE(25 of 200)
+s2c 0x003B AGENT_UPDATE_ATTRIBUTE(attr 21 = 2)
+```
+
+**And the other direction, run `20260820T085218`:** one click on the same attribute's
+DOWN chevron sent `0x000E`, and the server answered `lower: 21 1 -> 0, 28 of 200
+unspent` -- the rank-1 refund of exactly 1 point, which is `s_attribPoints[1]`. Both
+arms now have a live witness; `0x0010` does not (see 34.4).
+
+### 34.1 Three predictions from the disassembly, confirmed by a player clicking a button
+
+- **The sequence was 0 both times.** §32.2 predicted exactly this and said why: `+0x410`
+  is a LIFO stack the allocator pops from and `+0x420` starts at 0, so one-at-a-time
+  spending recycles sequence 0 forever. That was read out of a constructor and a
+  `dec`/index pair; it is now a thing that happened.
+- **The arrows RE-PRICED themselves after every click** — ▼1▲2 → ▼2▲3 → ▼3▲4. That is
+  `0x00818E40`, the function §32.4 read and nobody had read before, recomputing an
+  attribute's refund and next-rank cost from `s_attribPoints` after each change. The
+  numbers on those chevrons are the client's own arithmetic agreeing with our content
+  table, rank by rank.
+- **Strength shows a ▼20 refund and NO up arrow at all.** `s_attribPoints[12] = -1` is the
+  rank cap, and the client's increase path refuses rank 13 with the same test that refuses
+  an attribute you do not own (§32.4). The panel renders that refusal as a missing button,
+  which is the cheapest possible confirmation and it was visible before a single click.
+
+### 34.2 What was built
+
+- **`toolkit/authsrv/attribspend.py`** — the model, pure and stdlib-only: `AttributeRules`
+  (the cost curve and the 51-row attribute table) and `AttributeState` (ranks, budget,
+  and the client's refusals). No sockets, no content loading, no globals; it is handed the
+  tables and answers questions, which is what makes it testable without a client.
+- **The rules are the client's, and they are loaded rather than typed.** The cost curve
+  comes from `s_attribPoints` via a new `attribpoints.py --emit-content`
+  (`attribute_cost`, one row per rank, `client-table` provenance); the profession and
+  `is_primary` flags come from the `attribute` table `attribtable.py` already emitted.
+- **`content/world.toml` gained `points_total = 200`** on the player row. The number is
+  observed (the level-20 maximum, and `0x0037`'s fourth field in 34 of 48 live sightings);
+  giving it to *this* character is a choice, so the row stays `invented` and says so. The
+  shipped ranks sink 173 of it, which is why the panel opens with 27 to spend.
+- **Three arms**: `0x000F`, `0x000E`, and `0x0010` (a template spread, validated
+  all-or-nothing against the client's own sixteen-entry buffer).
+- **`test_attribspend.py`**, 35 checks, floor 35, one declared skip.
+
+### 34.3 Two rules the code now enforces that prose could not
+
+**A refusal still answers.** Every path sends the whole triple, including the ones that
+change nothing. The client has already drawn the spend on its own panel, so silence is the
+one reply that leaves us disagreeing with the client believing itself — and worse, §32.9's
+measured hazard applies: `0x00819270` re-applies every unretired prediction on top of each
+fresh authoritative value, so a half-answer stacks the client's guess on our own numbers,
+every time. `send_attribute_reply` has no path that skips the ack.
+
+**`0x0037` carries `(available, total)`, not one constant twice.** This is where the change
+paid a debt the arc did not know it had: `authsrv.py` carried a comment saying every live
+`0x0037` is `[0, 0]`, "8 of 8 connections", with the two fields' meaning CONTESTED. That
+was true of the two captures it was written against. The corpus is now **13 captures and 48
+sightings**, and it says something better:
+
+| payload | n | what it is |
+|---|---|---|
+| `[0, 0]` | 14 | characters with no attribute points at all |
+| `[1, 5]`, `[6, 10]` | 8 | low level, most of the budget spent |
+| `[5, 200]`, `[41, 200]`, `[65, 200]`, `[74, 200]` | 26 | level 20, 200 lifetime |
+
+The eight `[0, 0]` samples were eight low-level characters, not a universal. And the field
+order is settled a third way, independent of §32.5's static read: **field3 ≤ field4 in 48 of
+48**, which an order swap would break on the first `[1, 5]`.
+
+### 34.4 What is still not modelled, stated plainly
+
+- **Base and effective are sent equal.** `0x003B`'s two values differ only by an item
+  bonus, which this server does not model — live, attribute 20 ran (10,11) and (11,12)
+  while 17 and 21 sat at (8,8) and (10,10), so retail sends them unequal exactly when a
+  rune or weapon is involved. Equal is a stated simplification, not a reading of the wire.
+- **The state is per connection and does not persist.** A spend survives a map change
+  (the burst now sources ranks from the live state) and dies with the session.
+- **`0x0010` has never been seen on a wire** — zero live occurrences anywhere in the
+  corpus — so its arm is built to a static reading and has no witness. It is armed because
+  refusing it would leave a third of the family undone, not because anything confirmed it.
+- **The hero gets the player's budget**, because it is sent the player's default ranks; its
+  own attribute state is not modelled, since nothing lets us spend a hero's points.
