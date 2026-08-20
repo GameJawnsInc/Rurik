@@ -2858,8 +2858,20 @@ close to the exact byte.
   **3.88–3.90e-03 (n = 5,000 / 5,000 / 5,010)** against **2.06e+01–3.07e+01** for a
   cube-root rival on the same samples, and **every** sample overshoots. **So the
   second conjunct's effective threshold is ~99.6 u of true walkable length**, and
-  the 300.0f gate ~298.8 u — a systematic bias, always in the direction of
-  snapping.
+  the 300.0f gate is likewise biased toward snapping.
+  ⚠ **CORRECTED 2026-08-20: the 300.0f gate's effective cut is 299.332591 u, not
+  "~298.8".** That figure applied the worst-case relative error uniformly; the
+  error is exponent-dependent and the crossing is a **quantisation step**, not a
+  smooth offset. Measured exhaustively over **all 2,560,001 float bit patterns**
+  of `distSq` in [80000, 100000] by reimplementing `0x0046E870`'s nine
+  instructions against the real LUT: the first `distSq` that snaps is exactly
+  **89600.0f** (bits `47AF0000`) = **299.332591 u**. Consequence worth stating
+  plainly: **a true separation of exactly 300.0 u SNAPS** — `approx_sqrt(90000)`
+  returns 300.186584, so `300.0 < result` holds. The same census finds **27
+  under-estimates in 2,560,001 samples** (min rel err −4.47e-08, tie artifacts at
+  bucket edges), so "every sample overshoots" is true of the coarse n = 5,000
+  samples above and *very nearly* true exhaustively — the direction of the bias
+  stands, the absolute "never" does not.
 
 ### The gates upstream, and the three ways the test never runs at all
 
@@ -3039,3 +3051,193 @@ therefore not blind in the replication sense.** The finding survives — two
 skeptics re-derived it in private directories from the image bytes, and this
 session re-read every load-bearing address above independently — but four-way
 agreement should be quoted as fewer than four witnesses on that specific point.
+
+---
+
+## 2026-08-20, round 2 — THE FALLBACK HALF IS DECODED, AND "UNDER 300 u" IS NOT SAFE
+
+Four independent decode lanes (fallback control flow; `0x00709E90` blind; `0x005FEF70` blind; a corpus measurement), then three skeptics re-parsing from raw bytes. **Every address, string and constant below was re-read by this session from the pinned pristine 38797 image**, and the two numbers that changed — the effective gate-1 threshold and the shape of the correction — were re-measured here rather than carried from a lane.
+
+This half runs **only when the 100 u history walk found no match** (`0x00605744 je 0x605753`; a match takes `0x0060574C jmp 0x60582b` clean over everything below). It is where a MISS is adjudicated.
+
+### THE DIRECT ANSWER: is separation under 300 u sufficient to avoid a snap?
+
+**No. OBSERVED.** Separation under the threshold is **necessary but nowhere near sufficient**. Only one of the three gates is a distance test at all. Gate 2 is a *walkable-navmesh* query on the authoritative position and gate 3 is a local obstruction predicate; either can force a snap at *any* separation, including zero. A twin 50 u away on the far side of a wall passes gate 1 and snaps on gate 2. **And the threshold itself is not 300 u — it is 299.3326 u** (below). Every "300 u" in this document and in `PLAN.md` §"Movement" should be read as "the outer bound of one of three gates, guarding one of at least two snap routes, and its real value is 299.33".
+
+### The fallback, as a server author would implement it — OBSERVED
+
+```
+# this = agentMgr + 0x1CC.  16-byte position block { f32 x; f32 y; i32 plane; u32 w }.
+# Records: agentMgr + 0xE8 + world*0x64 = { +0x00 Array.m_data, +0x08 m_count, +0x60 time }.
+# EXACTLY TWO worlds.  WORLD_SYNC == 0 (authoritative), world 1 == async (rendered).
+
+def agtrack_dispatch(this, state, source):            # 0x00605FC0, ret 4 — THE ENTRY
+    assert state.id < this.recordCount                #  Array.h(587)
+    rec = this.records[source.id]                     #  0x1C stride, base this+0x20
+    if not rec.clientControlled: ...                  #  0x00606002 -> gates NEVER run
+    if source.world == 1: return record_history()     #  0x00606013 -> gates NEVER run
+    if agtrack_ok(this, rec, source): return          #  nonzero = NO SNAP, do nothing
+    clear_record(source.id)                           #  0x00605F70
+    record_history(rec, source)                       #  0x00605840 — appends, not a fix
+    for i in range(world[1].m_count):                 #  0x0060604C..0x006060F4  THE SNAP
+        a = world[1].m_data[i]
+        if a is None or (a.flags & 0x10000): continue
+        clear_record(i)                               #  zeroes that agent's 0x1C record
+        resync(this=a, world[0].m_data[i], i != this.focusId)     # 0x006022B0
+
+def agtrack_ok(this, state, source):                  # 0x006055E0, ret 8
+    ... first half: two early-outs, then the 100 u history walk ...
+    if matched: return 1                              # 0x0060574C — NO SNAP
+    # ---------------- FALLBACK HALF, 0x00605753..0x0060583D ----------------
+    ok = 0                                            # 0x00605756 xor edi,edi
+    assert source.id < world[1].m_count               # Array.h(587)
+    twin = world[1].m_data[source.id]
+    assert twin                                       # AgTrack.cpp(519) "asyncPtr"
+    A = position_at(source, world[0].time)            # 0x006057AD — SYNC on SYNC clock
+    B = position_at(twin,   world[1].time)            # 0x006057BA — ASYNC on ASYNC clock
+
+    # GATE 1 — STRAIGHT-LINE separation, compared LINEAR (not squared)
+    d = map_dist(A, B, range=300.0, straightOnly=1)   # 0x00709990, saturates at 301.0
+    if 300.0 < d: return ok                           # 0x006057EA  -> SNAP
+
+    # GATE 2 — WALKABLE navmesh query.  A is arg1 = the START point.
+    pathCount = 0                                     # NOT initialised by the caller
+    find_path(A, B, maxDist=300.0, maxCount=4, &pathCount, &P)    # 0x00709E90
+    if pathCount == 0: return ok                      # 0x0060580D  -> SNAP
+
+    # GATE 3 — can `source` take a first step from A toward P, right now?
+    if not step_is_clear(source, A, P): return ok     # 0x00605820  -> SNAP
+
+    return 1                                          # 0x00605822 — NO SNAP
+```
+
+**All three gates snap on failure; all three must pass to avoid a snap.** `edi` is the sole return accumulator: a mechanical `regs_access()` sweep of `[0x605753, 0x60583E)` returns exactly three writes (`0x00605756 xor`, `0x00605822 mov 1`, `0x00605830 pop`) — **n = 3, and no others**. Two skeptics reproduced that sweep independently. Direction re-confirmed at the sole direct caller (`--xrefs 0x006055E0` = 1 site): `0x00606021 test eax,eax / jne 0x606110` returns doing nothing. **1 = NO SNAP, 0 = SNAP.**
+
+### ★ THE THRESHOLD IS 299.3326 u, NOT 300 — and exactly 300.0 u SNAPS
+
+**OBSERVED, measured in this session, and it corrects this document's own record.** `0x00709990` computes `dx²+dy²` and square-roots it through `0x0046E870`, a nine-instruction table sqrt with **no Newton refinement**: exponent halving `((bits>>24)+0x3F)<<23` plus a 256-entry LUT at `0x0093CAC8` indexed by **byte 2 only** — mantissa bits 15..0 are discarded. I re-implemented those nine instructions exactly and measured:
+
+| quantity | value | n |
+|---|---|---|
+| relative error, distSq ∈ [80000,100000) | **[+4.97e-06, +3.18e-03]**, **0 under-estimates** | 20,000 |
+| `approx_sqrt(90000)` | **300.186584** (true 300.0) | — |
+| last non-snapping distSq | 89599.992188 (`47AEFFFF`) → 299.332581 | binary search over float bit patterns |
+| first snapping distSq | **89600.000000** (`47AF0000`) → 300.186584 | " |
+| **effective threshold, TRUE straight-line separation** | **299.332591 u** — shortfall **0.667409 u** | " |
+| distinct outputs, true separation ∈ [295,305) | **13** (quantisation ≈ **0.866 u** near the boundary) | 20,000 |
+
+**A true separation of exactly 300.0 u takes the `jne` and SNAPS.** The error is one-sided (**0 of 20,000** under-estimates), so the gate fires **early and never late**. The exact predicate is `snap iff distSq >= 89600.0f`.
+
+- **Lane A's "STRICT — exactly 300.0 passes" — REFUTED** (both skeptics, and re-measured here). True of the register comparison, false of the world.
+- **Lane A's "soft boundary at the ~1e-4 relative level" — REFUTED.** Understated ~6× at the boundary and ~39× at worst, and it misses that the bias is one-signed.
+- **⚠ CORRECTION to this document, FINDINGS:2861 ("the 300.0f gate ~298.8 u") and `PLAN.md`:1417.** That figure applied the worst-case 3.9e-3 relative error uniformly. The error is exponent-dependent; at this boundary it is +6.22e-04, and the crossing is a **quantisation step**, not a scaled offset. **299.3326 u, not 298.8 u.** The companion ~99.6 u figure for the 100 u test is derived the same way and should be re-measured before it is quoted again.
+
+### The three gates in detail
+
+**GATE 1 — `0x00709990(A, B, 300.0f, straightOnly=1)`, `0x006057BF`–`0x006057EA`. OBSERVED.**
+With arg4 ≠ 0, `0x00709B3F cmp [ebp+0x14],0 / jne 0x709ae0` always takes the straight branch, so this is a **straight-line 2-D distance in linear world units** — only `.x`/`.y` are differenced; `.plane` merely orders the pair. It **saturates at maxDist+1 = 301.0**, which is provably harmless to the predicate since `min(d,301) > 300 ⟺ d > 300` (this closes Lane D's stated worry that the clamp "needs re-deriving" — it does not). `fcom st(1)` / `test ah,1` (isolates C0) / `jne` fires iff `300.0 < d`. **A twin on a different plane but horizontally close passes this gate** — the zplane is compared but not used as a distance.
+
+The x87 trap does not bite: `0x006057E5 fstp st(1)` overwrites the callee's result with 300.0 **and pops**, so `0x006057FA fstp dword [esp]` passes **300.0f** into gate 2, not the measured distance. **CORROBORATED** — verified by two skeptics via two different routes, and the compiler's own lone `fstp st(0)` at `0x00605829` is only correct at depth exactly 1, a check that could have failed.
+
+**GATE 2 — `0x00709E90(A, B, 300.0f, 4, &pathCount, &P)`, `0x006057EC`–`0x0060580D`. OBSERVED.**
+Six args (`add esp,0x18`). I read the push order directly: the last push is `0x006057FE lea eax,[ebp-0x5c]` = **arg1 = A = the SYNC (authoritative) position**; arg2 = `[ebp-0x80]` = the async twin. It is `MapFindPath` in `P:\Code\Engine\Map\Map.cpp` — the assert six bytes before the entry reads `*pathCount <= maxCount`, Map.cpp(1239), naming both out-params and the integer. This is a **walkable navmesh query over trapezoid cells**, not arithmetic.
+
+- **`4` is `maxCount`, an array capacity** — `shl eax,4` (×16-byte stride) at `0x0072726B`, `sar eax,4` at `0x0072729D`. **CORROBORATED, by a check that could have failed twice**: the two callers pass different values matching their own buffers — AgTrack `4`→`ebp-0x44` (64 B) and ChCliBase `9`→`ebp-0x94` (144 B), both ending exactly at `ebp-0x04`. **n = 2 direct callers** (a floor; `--xrefs` finds direct branches only).
+- **The prediction's "boolean-ish success flag" — REFUTED**, and its own stated refutation condition thereby fired. `out1` is a **mutable count**: `0x00709FDF shl edi,4` uses it as an index and `0x0070A0A1 dec dword ptr [eax]` decrements it. The gate reading survives because the test is an equality against zero.
+- **★ `pathCount == 0` means the START point is off the navmesh — NOT that the destination is unreachable. OBSERVED (Lane B), and it inverts the intuitive story.** All three zero-writes in the reachable chain are conditioned on the start (`0x0072B132` after `0x0072AE40` fails to resolve the start's trapezoid; `0x0072B57E`; `0x00727356`). An **unreachable** destination yields a **non-zero partial path** (`0x0072B4E8` string-pulls to the best node seen) and does **not** snap here. The accepted fast path cannot return 0 (the dedup loop floors at 1), and a zero from the fast path is never reported (`0x00709FD4 test edi,edi / je 0x70a0ae` reroutes into the full A\*). **So gate 2 snaps when the position WE granted is unwalkable.**
+- **Lane B's "written on every path, never left uninitialised" — WEAKENED.** It is an assertion about three untraced callees, and it matters: a mechanical scan of `0x006055E0`–`0x00605840` finds exactly two references to `[ebp-0x60]` — `0x006057F0 lea` and `0x0060580A cmp` — so **the caller never initialises the slot**. The Tier-1 leg (`0x00709F06`) and the Tier-3a leg (`0x00727140`, single `ret`, two-armed store) provably write it. **The Tier-2 alternate-provider leg (`0x00709F44` → `0x00737350` → `0x00737940`) is UNVERIFIED by every lane and every skeptic.** If that path can return without writing, gate 2 reads uninitialised stack and the snap decision is non-deterministic. **This is the one live hole in the decode.**
+- The `300.0f` handed to gate 2 as `maxDist` is **inert on the common path**: `0x00709F45` computes its own budget `sqrt(distSq) + 0.5` (`0x00709FB1 fadd qword [0x945b40]`). `maxDist` is consumed only on the Tier-3b fallback and the provider path. The same constant is a hard threshold at one call site and dead weight at the next.
+
+**GATE 3 — `0x005FEF70(this=source, A, P)`, `0x0060580F`–`0x00605820`. OBSERVED.**
+`__thiscall`, `ret 8`, strict 0/1, **exactly two exits** (`0x005FF51D` → 0, `0x005FF528` → 1) and **exactly one branch to the zero tail** (`0x005FF350 je`) plus the fall-through at `0x005FF51B`. In one line: *"standing at A, can I take a step toward P right now?"* — a candidate-direction test, not a path query.
+
+Two ways to reach zero, both **positive findings of an obstruction**: (a) a neighbour agent inside a 60° forward cone (`fcomp [0x9458BC]` = 0.5f) whose `combinedRadiusSq` already contains A — compared **squared against squared** (`0x005FED20` ends `fmul st(0),st(0)` on both branches; `0x005FF348 fcomp qword [ebp-0x20]`); (b) `timeToEvent < 0.0005f`. The threshold is `0x00A53744`, read raw as **0.0005000000237487257f**; `test ah,5 / jp` gives **return 1 iff `timeToEvent >= 0.0005` OR NaN**, return 0 strictly below — so it is **inclusive** at the boundary and `+inf` ("no obstacle") returns 1.
+
+**The zero is a REJECTION, not an error. CONFIRMED by all three skeptics.** There is no validity early-out, no null check on either pointer; bad state is reported through asserts (AgAgent.cpp 702/716/717/764/773), a separate channel. The two zero-paths are indistinguishable to the caller. Degenerate input fails **safe**: `to == from` produces NaN and returns 1.
+
+ArenaNet's strongest single naming here, read from the image: **`(timeToEvent == (float)HUGE_VAL) || (m_point.position != obstacleCenter)`, `P:\Code\Engine\Agent\AgAgent.cpp`(773)** — one line that names the callee's return, its out-param, the sentinel, and pins `m_point.position` to `agent+0x78`, the exact offset the first half reads.
+
+Gate 3 **discards the magnitude of its second argument** (only `normalize(to-from)` is used), and bounds its terrain search by the agent's **own cached AgMap cell rect** (`agent+0xF0..0xF3`, four signed bytes × `CELL_SIZE` 2048.0), not by anything derived from A — so if A has drifted out of that rect, gate 3 searches the wrong box. **UNVERIFIED** whether that is reachable in practice.
+
+### ★ THE SNAP IS A WHOLE-ROSTER RESEED, not the player's position jumping — OBSERVED
+
+No decode lane found this; two skeptics did, and I disassembled `0x0060603C`–`0x00606100` myself. On a zero return the caller does **not** merely correct `source`:
+
+```
+0x0060606A  a   = world[1].m_data[i]           ; skip null, skip (a.flags & 0x10000)
+0x006060A2  rec = 0 ; rec.next = 0             ; clear that agent's 0x1C record
+0x006060B3  setne bl on  i != this->focusId    ; -> arg2
+0x006060D5  s   = world[0].m_data[i]           ; the SYNC twin
+0x006060E2  call 0x6022B0(this=a, s, flag)     ; authoritative -> rendered
+0x006060F4  jne 0x606051                       ; FOR EVERY AGENT IN WORLD 1
+```
+
+`0x006022B0` dead-reckons the sync agent at the **async** clock into a local ArenaNet names **`syncPoint`** (`syncPoint.position != AGENT_INVALID_POSITION`, AgAgent.cpp(2147)) and `0x00602B20` writes it into the async agent's `+0x78/+0x7c`. **One agent failing the three gates resyncs the entire visible roster.** If this project models the snap as "the player's character teleports", the model is wrong by a factor of the roster.
+
+- **Lane A's "the fall-through runs `call 0x605f70` + `call 0x605840`" — WEAKENED.** True but it stops reading at `0x00606037`, before the loop that is the actual correction.
+- **"`0x00605840` is the correction" — REFUTED.** It is the **history appender** (allocates via `0x00604BB0`, links at `record+0x04`) and it runs on the ordinary path too — for every non-client-controlled agent (`0x0060610B`) and every async agent. Anything treating it as the fix is inverted.
+
+### Naming and layout — CORROBORATED, and two derivations retire
+
+Every string below was read with `img.cstr()` in this session, not transcribed: `state->clientControlled` and `source.GetWorld() == WORLD_SYNC` (AgTrack.cpp 457/458), `asyncPtr` (AgTrack.cpp 519), `index < m_count` (`P:\Code\Base\rtl\Array.h`), `*pathCount <= maxCount` / `maxCount` / `pathCount` (Map.cpp 1239), `timeToEvent >= 0` and the HUGE_VAL line (AgAgent.cpp 764/773), `syncPtr` / `asyncPtr` (`P:\Code\Engine\Agent\AgMsg.cpp` 579/584), `time == context->world[m_world].timerQueue.GetTime()` (AgAgent.cpp 2211). Constants read raw: `0x00946560` = 100.0f, `0x00946564` = 300.0f, `0x00948654` = +inf, `0x00A53744` = 0.0005f.
+
+- **`this = agentMgr + 0x1CC` — OBSERVED, stated not derived.** Lane A spent its two highest-ranked refutation risks on stride arithmetic; the constant is a literal at four call sites (`0x005FCA8E`, `0x0060229B`, `0x00602BB7`, `0x005FDA72`), each applied to `[0x47F660()+8]`. **Both of Lane A's top refutation risks retire.**
+- **The two clocks are genuinely two clocks — CORROBORATED by a check that could have failed.** `[this-0x84]` and `[this-0x20]` differ by exactly `0x64`, the observed record stride, so they are the same field in adjacent records. Independently, `0x005FCFA8` computes `world[0].time - world[1].time`, stores it, and **buckets** it (`cmp eax, 0xffffd8f0` = −10000 ms; `cmp eax, 0x3e8` = +1000 ms). If they were one clock that whole block is constant zero. Two new named desync constants for this project.
+- **The task prompt's framing "a different file means a different subsystem owns that array" — REFUTED.** `Array.h:587` is the container template's inlined `operator[]` bounds check; it names the *type*, not a different owner. The identical assert recurs at `0x005FF04A` on a different array in the same struct.
+- **`0x005FF820` "cached fast path" — WEAKENED.** The control flow is as read, but the branch is **semantic, not an optimisation**: `+0x48` is `m_timeStopMovement` (AgAgent.cpp 978), so past the arrival time it returns the **stored destination exactly**, not an extrapolated overshoot. A server-side reimplementation cannot skip that arm as a cache.
+- **The two asserts here are advisory.** `0x00487BC0` is `ret 4` with no noreturn path — on a bounds violation the client still performs the out-of-bounds read at `0x0060577D` and still dereferences a possibly-null `asyncPtr` at `0x005FF829`.
+- **`+0xC4` — the skeptic's proposed CONTESTED label is REFUTED, and the field is an INTEGER.** One skeptic flagged `0x0060563A cmp dword [ebx+0xc4], 9` as contradicting a "facing = float" reading. `--field 0xC4 --in AgAgent` returns **5 accesses, n = 0 of them floating-point**: `push`, `cmp eax,[ecx+0xc4]`, `mov eax,[edi+0xc4]`, and two integer stores. The one site cited as evidence for float (`0x005FF546`) compares `+0xC4` as an **integer** and applies `fld` to `+0x60` — a *different* field. This is consistent with this document's existing reading (a 4-bit masked enum, dispatcher over 1..8) and **Lane C's float claim is refuted at the exact site it cited**.
+
+### The corpus lane measured a proxy, and the gate cannot free-run — SAY THIS OUT LOUD
+
+**Lane D returned a rigorous measurement, but not of the pair this section is about, and the static reading must not borrow empirical support from it.**
+
+What it measured, **n = 5 movetap × gamesrv pairs, all `origin.origin_of` = `ours`, no pooling across origins**: SYNC is a **direct** cross-process read of `[AGBASE+0xE8]`'s `+0x78`, dead-reckoned by the binary's own formula. **ASYNC is a PROXY** — the client's own c2s self-report spliced from `0x003D`/`0x0047`. `movetap.py` reads the sync array only; **the async array at `[agentMgr+0x14C]` was never read**. So separation is knowable only at report instants, and the "moments the client evaluated the test" is itself approached by proxy (player `0x0029` grants).
+
+Its results, with n: **24 snaps over 623 paired intervals. 0 of 24 began below the gate** (minimum before-separation **342.8 u**, max 3430.0 u) — a check that could have failed, since 21 of the 24 sit at a `dt` whose detector floor is below 300 u. **303 of 327 above-gate intervals (92.7%) produced no snap.** The relation is **non-monotonic**: the 1000–2000 u band is the largest above-gate band by exposure and the quietest (**1 snap in 140**). At 503 grants, separation p50 **120.5 u**, p90 462.5, max 2251.5. A time-shuffle control fires correctly (real P = 1.26e-07; re-paired ±3 s / ±7 s → 0.265 / 0.512 / 0.66 / 0.999).
+
+**But Lane D's "a free-running 300 u gate would have fired at 52.4% of instants" must not be quoted — WEAKENED, and the mechanism is structural.** The gate cannot free-run: it is fenced behind `rec.clientControlled != 0` and `source.world == 0` (`0x00606002`, `0x00606013`), and the mechanism is **one-shot** — `clear_record` zeroes the flag, and only two player-input sites re-arm it. That alone predicts long stretches of large separation with zero snaps and predicts the non-monotonic bins, **with no veto from the 100 u match test**. Lane D's own hypothesis (the 100 u test short-circuiting) is therefore **UNVERIFIED and no longer the leading explanation**.
+
+Two further disclosures the lane made itself: **`20260819T182652`** (2.38 MB, the arc's largest capture) has **no movetap partner** and contributes nothing; and Lane D re-flags that **`20260811T173940` is `ours`, not retail**, which matters because `movesync.py`'s `HARD_JUMP_SPEED = 400.0` / `HARD_JUMP_UNITS = 520.0` cite that corpus as retail-calibrated. Finally, Lane D's cuts used 300.0 u; the client's cut is 299.3326 u. The headline (0/24, min 342.8 u) is unaffected; the percentage figures shift by whatever falls in [299.3326, 300.0).
+
+**Bottom line: the three gates are a pure static decode of one image (build 38797), n = 0 runtime observations. Which gate actually fires in our runs is UNKNOWN.**
+
+### What this means for the fix — per gate, and the honest answer is mostly "no lever"
+
+**GATE 1 — half a lever, and the half we hold is not the half that matters.** Operand A is ours end-to-end: `0x0029`'s handler `0x005FD890` indexes world[0] (`syncPtr`, AgMsg.cpp 579), and the bake `0x005FE950` writes `+0x78/+0x7C`, `+0x48`, `+0xB0/+0xB4`. **Operand B is not.** A capstone sweep of all seventeen AgMsg receive handlers shows **nine** fetch the async twin at `[agentMgr+0x14C]` and act on it (`0x0024`–`0x0028`, `0x002C`–`0x002F`), while **the two movement grants `0x0029` and `0x002A` touch world[0] alone**. That asymmetry *is* why reconciliation exists. Controlling one operand reduces to "grant positions near the client's last self-report", which restates "do not diverge" rather than suppressing anything.
+
+**GATE 2 — NO LEVER, and it is a tripwire pointed at us.** Its failing operand is arg1 = **A = the SYNC position, the point our own `0x0029`/`0x002A` wrote**, tested against a navmesh our server does not have. We can trip it by accident and **cannot avoid tripping it by design without map data**. This is the gate a server-side position check could least reproduce, and the one most likely to be firing in our captures.
+
+**GATE 3 — NO LEVER.** Of its three inputs, `this` and `from` are ours, but `to` is a navmesh product of gate 2, and the predicate sweeps neighbouring agents' predicted positions, radii, team and a visibility bitmap before running a terrain trace. **No message writes `timeToEvent` or its 0.0005 threshold.** Not a lever by any reading.
+
+**And the gates are not the only snap route.** `0x005FCAA0` is a public no-arg ResyncAllAsync (`lea ecx,[ecx+0x1cc]; jmp 0x00605E40`) running the **same per-agent reseed with no gate evaluation at all**, with three callers, two of which fire when the *local* command layer's own path test `0x0070A170` returns 0. **A fix built on the three gates does not close this.** This is a candidate mechanism for Lane D's unexplained snaps 12–59 s after the last grant. **UNVERIFIED.**
+
+**Preventing the snap is probably the wrong goal.** Each gate fires on a condition the client has just established it cannot walk out of. Suppressing the reseed leaves the rendered world permanently offset from the authoritative one — and per the reseed loop, **world-wide rather than cosmetic**.
+
+**The one real lever is `0x002C`, and this document already knows what it costs.** Its handler `0x005FDA50` clears the track record **first** (`0x005FDA78`), then writes the sync twin (`syncPtr`, AgMsg.cpp 579) and the async twin (`asyncPtr`, AgMsg.cpp 584) — so neither follow-up notification reaches a gate, no reseed happens, and both copies land on the same point. **But that is the client's supported primitive for an INTENDED warp, not a snap suppressor**: FINDINGS:2983-2987 already records `authsrv.py:7036-7045` — an earlier build sent five and "three were arrivals, carrying the client 630, 189 and 765 units", removed as "the warp the player described". **Prediction can be switched OFF but not ON**: `0x00605F10` (which sets `clientControlled`) has exactly two callers, both in AgApi reached only from the ChCliBase local-command block, and of **472** distinct receive-handler VAs in the client's dispatch tables **exactly one** lands in `0x0081xxxx`–`0x0082xxxx`, and it is outside that block. (Entry points only, not transitive reachability — a strong negative, not a proof.)
+
+**Nothing here is a fix, and none of it has been run.**
+
+### Claims that DIED this round — do not re-quote
+
+- **"Gate 1 is STRICT; exactly 300.0 u passes"** — **REFUTED.** 300.0 u snaps; the cut is `distSq >= 89600.0f` = **299.332591 u**.
+- **"The sqrt is approximate at the ~1e-4 relative level"** — **REFUTED.** +6.22e-04 at the boundary, +3.18e-03 worst, **one-sided** (0/20,000 under-estimates).
+- **This document's own "the 300.0f gate ~298.8 u" (FINDINGS:2861)** — **REFUTED**, off by 0.53 u; the crossing is a quantisation step, not a scaled offset.
+- **"`out1` is a boolean-ish success flag" (the prediction)** — **REFUTED**; it is a count (`shl edi,4`, `dec [eax]`).
+- **"`pathCount == 0` means the destination is unreachable"** — **REFUTED.** It means the **start** point is off the navmesh; an unreachable destination gives a non-zero partial path.
+- **"`*pathCount` is written on every path" (Lane B)** — **WEAKENED** to an untraced assertion; the caller never initialises `[ebp-0x60]`, and the Tier-2 provider leg is unverified.
+- **"The fall-through corrects `source`" (Lane A)** — **WEAKENED**; it reseeds **every** async agent.
+- **"`0x00605840` is the correction"** — **REFUTED**; it is the history appender and runs on the ordinary path.
+- **"`0x005FF820` has a cached fast path" (Lane A)** — **WEAKENED**; the `+0x48` arm is semantic (returns the stored destination), not a cache.
+- **"A different file means a different subsystem owns that array" (the task's framing)** — **REFUTED**; `Array.h:587` is the container template.
+- **"`+0xC4` is a float, so the `== 9` compare is CONTESTED"** — **REFUTED**; **n = 5** accesses, **0** floating-point, including the site cited as evidence.
+- **"A free-running 300 u gate would have fired at 52.4% of instants" (Lane D)** — **WEAKENED**; the gate cannot free-run.
+- **Lane D's own hypothesis that the 100 u match test is vetoing** — **UNVERIFIED and displaced**; `clientControlled` explains the same data structurally.
+
+### Scorecard against the pre-registered prediction
+
+**All six numbered items CONFIRMED** — twin resolution, the two dead-reckons on separate clocks, and all three gates with the right polarity. **The predicted CONSEQUENCE was right and is now sharper.** Its own stated refutation condition **fired** on item 4 (`out1` is a count, not a boolean-ish flag) and the gate reading survived it. **What it got wrong is a framing it never stated**: it treats the three gates as *the* snap condition. They are the snap condition only for an agent with `clientControlled != 0` in world 0, there is a second gate-free snap route, and the correction is a whole-roster reseed. **And it inherited "300 u", which is wrong by 0.667 u in the snapping direction.**
+
+### Method note
+
+The three skeptics wrote in separate private scratch directories (the collision that cost a blind-replication claim last round did not recur). The gate-1 threshold was measured independently **three times** — two skeptics and this session — reaching 299.3326 u by binary search over float bit patterns and by exhaustive scan. Everything above is build 38797, static, read-only, **n = 1 image, 0 runtime observations**. Nothing was written to the repo or the vault. **The single highest-value next measurement is a breakpoint at `0x0060580D` and `0x00605820` during a live desync**, logging `rec.clientControlled` at `[agentMgr+0x1CC+0x20] + id*0x1C` alongside separation: it says which gate fires, and it can refute the `clientControlled` mechanism outright.

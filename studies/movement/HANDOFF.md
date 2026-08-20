@@ -16,9 +16,15 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > position (`+0x78`) lies within **100.0 u @0x00946560** of the client's recent
 > **history** chain — straight-line AND walkable; ⚠ **NOT our grant, and not a
 > prediction** (decoded 2026-08-20, FINDINGS "the AgTrack match test is
-> decoded" — it retired §4's starred shape 1). Otherwise it compares the
-> **straight-line** distance between the two copies against
-> **300.0f @0x00946564** and resyncs every async agent.
+> decoded" — it retired §4's starred shape 1). Otherwise it runs a FALLBACK of
+> **three gates, and ANY ONE of them snaps** (decoded 2026-08-20, FINDINGS
+> round 2): straight-line separation over **299.33 u** — the `300.0f
+> @0x00946564` is quantised upward by the client's LUT sqrt, so **exactly
+> 300.0 u snaps**; OR a walkable `pathCount == 0`, which reports that the
+> position OUR grant wrote is **off the navmesh**; OR the sync agent unable to
+> take a first step. **"Under 300 u" is therefore NOT safe** — two of the three
+> gates are not distance tests at all. And the snap that follows reseeds
+> **every** async agent, not just the player's.
 >
 > **THE WARP, in one sentence:** we answer a click with `0x0029` (a SYNC-ONLY
 > message), the authoritative copy glides there and PARKS, the player keyboards
@@ -42,9 +48,11 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 >
 > Candidates 1-5 are dead (§2). Candidate 6 (the speed term) is dead above.
 > **Shape 1 — "make the grant match" — is dead too, as of 2026-08-20**: the test
-> it was aiming at never reads our grant (§4 item 1). What remains in §4 is
-> `0x002C`, the `0x0027` re-bake, and one undecoded half of the test itself,
-> which is where the snap is actually decided.
+> it was aiming at never reads our grant (§4 item 1). The whole test is now
+> decoded, both halves, and **none of its gates is a server lever** — the one
+> real lever found is `0x002C`, which clears the tracking record and sets BOTH
+> copies, and which an earlier build already tried and removed as "the warp the
+> player described". Read §4 item 1's NEXT JOB before picking anything up.
 
 ---
 
@@ -124,12 +132,19 @@ copy it predicts. Two objects, two world clocks.
    **history** chain — if so, **no snap**. ⚠ That operand is **not our grant**
    and the chain is **not a prediction**; both were decoded on 2026-08-20 and
    both killed §4's starred shape 1 (FINDINGS, "the AgTrack match test is
-   decoded"). Otherwise it dead-reckons both copies, asks `Map.cpp`'s
-   `0x00709990` for the **straight-line** distance between them
-   (`0x006057C8 push 1` = straightOnly; the *100 u* test is the walkable one,
-   `0x00605C40 push 0`), compares against **300.0f @0x00946564**, and over that
-   resyncs every async agent via `0x006022B0`, a hard SetPosition. **That is the
-   warp.**
+   decoded"). Otherwise it dead-reckons both copies — the SYNC one on the sync
+   clock, the ASYNC one on the async clock — and runs **three gates, any one of
+   which snaps** (FINDINGS 2026-08-20 round 2):
+   **(1)** straight-line separation (`0x00709990` with `0x006057C8 push 1` =
+   straightOnly; the *100 u* test is the walkable one, `0x00605C40 push 0`)
+   compared against **300.0f @0x00946564** — effective cut **299.332591 u**,
+   so exactly 300.0 u snaps; **(2)** `0x00709E90`'s `pathCount == 0`, which
+   means the position our grant wrote is **off the navmesh**; **(3)**
+   `0x005FEF70` returning 0 — the sync agent cannot take a first step toward
+   the path, blocked by terrain or another agent's personal space.
+   Any of the three resyncs **every** async agent via `0x006022B0`, a hard
+   SetPosition — one agent failing the gates reseeds the whole roster.
+   **That is the warp.**
 
 **The harm, on the build we ship** (`20260819T145717` + movetap `145939`,
 n = 251 paired reports): separation **p50 1,164 u, p90 2,163 u, max 3,648 u**;
@@ -289,17 +304,13 @@ survivor is a client-side click-move at 2.6× the walk budget. `pinned.py` and
    client's own endpoint (193/193) and is recorded REFUTED at `authsrv.py:1046` for
    CAUSING warps; the click-only capture held 40 grants at 0.0000 u and still logged
    7 hard jumps up to 3,405 u. **Do not build "make the grant match".**
-   **NEXT JOB — offline, no client run: decode the FALLBACK half
-   `0x00605753`–`0x0060583D`.** A match is *sufficient* for "no snap"; a miss is
-   **not** sufficient for a snap — `0x0060574C` jumps clean over the fallback — so
-   everything past the **300.0f** gate at `0x006057BF` (which is **straight-line**,
-   `push 1`, correcting this arc's own record) is where the snap is actually decided,
-   and both `0x00709E90` and `0x005FEF70` are undecoded. **Second, cheap:** a
-   `movetap` read of the SYNC agent's `+0x78` at grant-bake — it is the only way to
-   put a number on the operand, because it never appears on the wire and no corpus
-   pass can reach it. **Third, to price not to ship:** `0x002B` with `facing = 9`
-   against an armed `+0x48` short-circuits the whole test at `0x00605684`; it costs a
-   character that stops turning and a client that stops reconciling at all.
+⚠ FIRST, A LOCATION CORRECTION: the "next job" sentence is **not** in `HANDOFF.md` §4 (which is "Prior art — what to take, what to ignore" and contains no such sentence). It is **`PLAN.md`:1417**, the closing clause of §"Movement — the AgTrack match test is DECODED and shape 1 is DEAD (2026-08-20)". `grep -rn -i "next job" HANDOFF.md PLAN.md` returns that one line and nothing else. Replace the clause that currently reads:
+
+> "…and the next job is the undecoded fallback half `0x00605753`–`0x0060583D` where a MISS is actually adjudicated (and the 300.0f gate there is STRAIGHT-LINE, correcting FINDINGS:2373)."
+
+with:
+
+> …and the fallback half `0x00605753`–`0x0060583D` is now DECODED (2026-08-20): a miss is adjudicated by **three** gates, all snapping on failure — straight-line separation over **299.3326 u** (not 300; `0x0046E870`'s LUT sqrt is a one-sided over-estimate, so exactly 300.0 u SNAPS, correcting FINDINGS:2861's ~298.8 u), OR a **walkable** navmesh query returning `pathCount == 0`, which means **our granted SYNC position is off the navmesh**, OR `timeToEvent < 0.0005f` on the first step — so **separation under 300 u is NOT sufficient to avoid a snap**, and the snap itself is a reseed of **every** agent in world 1, not the player jumping. **No gate is a server lever**: gate 1's async operand is written by none of the movement messages (9 of 17 AgMsg handlers touch world 1; `0x0029`/`0x002A` do not), gate 2's failing operand is the point we granted tested against a navmesh we lack, and gate 3 reads neighbouring agents and terrain. **The next job is therefore not another decode but a measurement and a costing**: (a) log `rec.clientControlled` at `[agentMgr+0x1CC+0x20]+id*0x1C` alongside separation to find which gate actually fires — the gates are fenced behind `clientControlled != 0` and `world == 0`, which may explain Lane D's 92.7% above-threshold-no-snap on its own; and (b) price `0x002C`, the one real lever (its handler clears the record then writes **both** copies, so no gate runs), against the record that an earlier build sent five and they were removed as "the warp the player described" (`authsrv.py:7036-7045`). Two loose ends: the Tier-2 provider leg `0x00737350`→`0x00737940` is unverified to write `*pathCount`, which the caller never initialises; and `0x005FCAA0` is a second, gate-free snap route fired from local input.
 2. **`0x002C AGENT_UPDATE_POSITION`** — the only catalogued primitive that calls
    `AgTrack::Clear` and then SetPositions BOTH copies, ungated. It is a hard set,
    so it is a teleport by construction; the open question is whether a small,
