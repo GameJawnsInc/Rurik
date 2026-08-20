@@ -39,6 +39,7 @@ import ast
 import json
 import math
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,8 +61,13 @@ import vaultpath  # noqa: E402
 # Setting the floor at 38 would red every machine that is not the owner's;
 # 34 still catches the failure this rule exists for, which is a section
 # quietly evaporating.
+#
+# 2026-08-20: section 11 (the --resync sender) added 35, so 73 with the capture
+# and 69 without. Both numbers are from the run printed on the console, not from
+# a count in anybody's head -- section 10 contributes exactly 4 checks and is
+# the only fixture-bearing one, which is the whole of the arithmetic.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=34)
+                       floor=71)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -488,6 +494,424 @@ def main():
               f"because the old code only recorded stops")
         print(f"     refused {refused} of {len(rows) - 1}, "
               f"longest run {best}")
+
+    print("\n11. --resync ships OFF, and its payload is the CLIENT's own report")
+    # WHAT EARNS THIS SECTION. 0x002C AGENT_UPDATE_POSITION is the only
+    # catalogued primitive whose handler reaches BOTH copies the client keeps
+    # with no gate (0x005FDAE5 on [agentMgr+0xE8], 0x005FDB49 on
+    # [agentMgr+0x14C]) and clears the AgTrack record first (0x005FDA78), so it
+    # is the one lever this arc has left. It is ALSO the message an earlier
+    # build sent and had removed as "the warp the player described" -- because
+    # that build sent OUR INTEGRATOR'S position. The whole difference between a
+    # fix and that regression is which value ends up in the payload, and
+    # `state["pos"]` is one keystroke away from `state["client_pos"]`. Every
+    # check below exists to make that keystroke red.
+    check(authsrv.RESYNC is False,
+          "--resync is off by default",
+          "it is the SEVENTH candidate in this arc and six are dead. A hard "
+          "SetPosition at the player is a teleport by construction; it ships "
+          "off until a watched run scores it")
+    check(authsrv.RESYNC_SEPARATION == 100.0,
+          "the trigger is the CLIENT's own 100.0 u radius, not a number we "
+          "chose",
+          "0x00946560 -- the radius inside which the client's own match test "
+          "0x00605AF0 returns 'no snap' before the fallback half runs. It sits "
+          "3x under gate 1's real cut of 299.332591 u, and that factor is the "
+          "headroom our SYNC model gets to be wrong in")
+    ceiling = 299.332591 / (2 * authsrv.DEFAULT_RUN_SPEED)
+    check(authsrv.RESYNC_MIN_INTERVAL < ceiling,
+          f"and the rate limit sits under its derived ceiling of "
+          f"{ceiling:.4f} s",
+          f"{authsrv.RESYNC_MIN_INTERVAL} -- two copies moving directly apart "
+          f"separate at no more than 2 x 288 u/s, so a limit at or above "
+          f"{ceiling:.4f} s lets a full gate's worth of separation accrue "
+          f"between two fires, which is the sender being structurally late")
+    harm = authsrv.RESYNC_MAX_REPORT_AGE * authsrv.DEFAULT_RUN_SPEED
+    check(abs(harm - 100.0) < 1e-9,
+          "and the staleness bound IS the harm bound: speed x age = 100.0 u",
+          f"{harm!r} -- a SetPosition to the client's last report yanks the "
+          f"RENDERED copy backwards by at most how far the client walked since "
+          f"that report. Choosing the age chooses the harm, and the age is "
+          f"chosen to make the harm the client's own 'close enough' radius. "
+          f"CORROBORATED: for report gaps under 0.100 s the client's own step "
+          f"is p99 28.80 u against a budget of 28.8 (n = 307), and under "
+          f"0.200 s p99 57.60 against 57.6 (n = 685), 73 `ours` captures")
+
+    def armed(client=(1000.0, 0.0), ours=(0.0, 0.0), sync=(0.0, 0.0),
+              at=1000.0, plane=0):
+        """A state with a fresh client report and a seeded, PARKED sync model."""
+        st = {"pos": ours, "plane": plane, "pos_seen": at,
+              "client_pos": client, "client_plane": plane,
+              "client_pos_at": at,
+              "sync_from": sync, "sync_to": None, "sync_at": at}
+        return st
+
+    class Wire:
+        """A send() that also runs the real model hook, like the server's."""
+
+        def __init__(self, state):
+            self.state = state
+            self.sent = []
+
+        def __call__(self, opcode, values, label, quiet=False):
+            authsrv._note_wire_move(self.state, opcode, values, 1000.0)
+            self.sent.append((opcode, values, label))
+
+    # OFF MEANS OFF: not merely "does not send", but does not even evaluate.
+    st = armed()
+    wire, rec = Wire(st), FakeRec()
+    fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+    check(fired is False and wire.sent == [] and rec.events == [],
+          "with the flag off a state that WOULD fire sends nothing and records "
+          "nothing",
+          f"fired={fired} sent={wire.sent} events={len(rec.events)} -- the "
+          f"default build's capture must not grow a resync log it never used")
+
+    saved = authsrv.RESYNC
+    authsrv.RESYNC = True
+    try:
+        # THE HEADLINE: the payload is the CLIENT's figure, and the two are made
+        # to DISAGREE on purpose. state["pos"] is a blend -- the world tick's
+        # integrator writes it too -- so a sender reading it would put our
+        # extrapolation on the wire, which is exactly the removed regression.
+        st = armed(client=(1000.0, 0.0), ours=(1234.0, 567.0))
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is True and len(wire.sent) == 1,
+              "a 1,000 u separation with a fresh report fires exactly one 0x002C",
+              f"fired={fired} sent={wire.sent}")
+        op, values, _label = wire.sent[0]
+        check(op == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION == 0x002C,
+              "on the right opcode", f"0x{op:04x}")
+        check(values[1] == [1000.0, 0.0] and values[1] != list(st["pos"]),
+              "carrying state['client_pos'] and NOT state['pos']",
+              f"{values} against ours {st['pos']} -- the build that sent this "
+              f"message before sent OUR integrator's position, and its five "
+              f"sends carried the client 630, 189 and 765 units. 765 is one "
+              f"heading vector: the integrator had walked the whole leg while "
+              f"the client had not moved at all")
+        check(values[0] == authsrv.PLAYER_AGENT_ID and values[2] == 0,
+              "naming the player's agent, with the plane the report arrived on",
+              f"{values} -- position and plane are one fact (section 4), and "
+              f"this reads the pair the accept path wrote together")
+
+        # REFUSES A PAYLOAD THAT IS NOT CLIENT-SOURCED. A state carrying only
+        # our own blend has no client_pos at all, and the verdict must not fall
+        # back to it.
+        # It carries client_plane and NOT client_pos on purpose: that is the
+        # split section 4 is about, and it leaves the missing client POSITION as
+        # the only thing standing between this state and a send. A fixture
+        # missing three fields would be refused for whichever one is checked
+        # first, which is a weaker proof than it looks.
+        blind = {"pos": (5000.0, 5000.0), "plane": 0, "pos_seen": 1000.0,
+                 "client_plane": 0,
+                 "sync_from": (0.0, 0.0), "sync_to": None, "sync_at": 1000.0}
+        wire, rec = Wire(blind), FakeRec()
+        fired = authsrv._maybe_resync(wire, blind, rec, now=1000.0)
+        verdict = authsrv._resync_verdict(blind, 1000.0)
+        check(fired is False and wire.sent == []
+              and verdict[1] == "no-client-report",
+              "a state with no accepted client report sends NOTHING, however "
+              "far our own model has drifted",
+              f"{verdict} -- 5,000 u of drift and not one byte, because the "
+              f"only position this sender is allowed to say is one the client "
+              f"said first")
+        check(len(rec.of("resync")) == 1
+              and rec.of("resync")[0]["fired"] is False,
+              "and the refusal is in the event log, not just absent from it",
+              f"{rec.of('resync')} -- a resync log holding only its own "
+              f"successes cannot be used to score the flag")
+
+        # REFUSES A STALE PAYLOAD, at the bound and past it.
+        st = armed(at=1000.0)
+        edge = 1000.0 + authsrv.RESYNC_MAX_REPORT_AGE
+        check(authsrv._resync_verdict(st, edge)[0] is True,
+              f"a report exactly {authsrv.RESYNC_MAX_REPORT_AGE * 1000:.0f} ms "
+              f"old still fires -- the bound is inclusive",
+              f"{authsrv._resync_verdict(st, edge)}")
+        past = edge + 1e-6
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=past)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, past)[1] == "stale",
+              "one microsecond past it, nothing goes out",
+              f"{authsrv._resync_verdict(st, past)} -- past the bound the "
+              f"payload has stopped being where the client is, and a stale "
+              f"payload IS the old failure mode")
+        check(authsrv._resync_verdict(st, 999.0)[1] == "stale",
+              "and a report dated in the FUTURE is stale too, not fresh",
+              f"{authsrv._resync_verdict(st, 999.0)} -- `now - at` goes "
+              f"negative under clock skew, and a negative age would sail "
+              f"through an upper-bound-only test")
+
+        # THE RATE LIMIT.
+        st = armed()
+        wire, rec = Wire(st), FakeRec()
+        n = 0
+        t = 1000.0
+        for _i in range(20):
+            st["client_pos_at"] = t          # a fresh report every 100 ms
+            st["sync_from"], st["sync_to"] = (0.0, 0.0), None
+            n += bool(authsrv._maybe_resync(wire, st, rec, now=t))
+            t += 0.1
+        span = 1.9                            # first fire at t0, last at t0+1.9
+        allowed = int(span / authsrv.RESYNC_MIN_INTERVAL) + 1
+        check(n <= allowed,
+              f"twenty consecutive fireable reports over {span:.1f} s produce "
+              f"{n} sends, not 20",
+              f"n={n}, ceiling {allowed} at one per "
+              f"{authsrv.RESYNC_MIN_INTERVAL:.2f} s -- an unlimited sender is "
+              f"a 2 Hz teleport stream at the player")
+        check(n >= 1, "and it does not rate-limit itself down to nothing",
+              f"n={n} -- a limit that never lets anything through would make "
+              f"every check above vacuous")
+
+        # NEVER FIRES ON A REPORT THE TRUST GUARD REFUSED, and this is the
+        # one an adversarial review found reachable at 2,282 u. The payload
+        # advances only on accept, so a refusal FREEZES it while the client
+        # keeps moving -- and the guard refuses exactly when the client claimed
+        # a jump over CLIENT_POSITION_TRUST_RADIUS. Inside the staleness window
+        # every other gate still passes, so without this the server would
+        # hard-SetPosition the player back to their pre-jump point: the
+        # regression the whole design exists to avoid, by a different route.
+        st = armed(client=(0.0, 0.0), sync=(1000.0, 0.0))
+        fire_clean, why_clean = authsrv._resync_verdict(st, 1000.0)[:2]
+        check(fire_clean is True and why_clean == "resync",
+              "CONTROL: the same state with no refusal on record DOES fire",
+              f"{why_clean} -- a check whose control cannot fire is judging "
+              f"nothing, and this one is the whole point of the next check")
+        st["pos_rejects"] = 1
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, 1000.0)[1] == "report-refused",
+              "but one refused report on record blocks it, payload unsent",
+              f"{authsrv._resync_verdict(st, 1000.0)} -- the freshest thing we "
+              f"heard was one we did not believe, so the frozen payload is a "
+              f"pre-jump position and sending it is the old warp")
+
+        # NEVER FIRES WHEN THE TWO COPIES AGREE.
+        st = armed(client=(50.0, 0.0), sync=(0.0, 0.0))
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, 1000.0)[1] == "in-agreement",
+              f"50 u apart is under the {authsrv.RESYNC_SEPARATION:.0f} u "
+              f"trigger and sends nothing",
+              f"{authsrv._resync_verdict(st, 1000.0)} -- correcting a player "
+              f"who is already right is the 'teleporting a player nine units "
+              f"is pure damage' case the 0x0047 arm records")
+
+        # THE SYNC MODEL FAILS CLOSED, and it tracks a glide rather than
+        # assuming the copy is already parked.
+        unseeded = {"pos": (0.0, 0.0), "plane": 0, "pos_seen": 1000.0,
+                    "client_pos": (9000.0, 0.0), "client_plane": 0,
+                    "client_pos_at": 1000.0}
+        check(authsrv._sync_position(unseeded, 1000.0) is None
+              and authsrv._resync_verdict(unseeded, 1000.0)[1]
+              == "no-sync-model",
+              "an unseeded SYNC model produces no separation and no send",
+              f"{authsrv._resync_verdict(unseeded, 1000.0)} -- a fixture that "
+              f"silently resolves to the wrong thing turns every assertion "
+              f"behind it into a no-op; this one raises its hand instead")
+        glide = armed(client=(0.0, 0.0), sync=(0.0, 0.0))
+        authsrv._note_wire_move(glide, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                [authsrv.PLAYER_AGENT_ID, [2880.0, 0.0], 0, 0],
+                                1000.0)
+        half = authsrv._sync_position(glide, 1005.0)
+        check(abs(half[0] - 1440.0) < 1e-6,
+              "and a granted leg is walked at 288 u/s, not teleported to its "
+              "end",
+              f"{half} at t+5 s of a 2,880 u grant -- this is the client's own "
+              f"bake (0x005FE950 velocity = unit(d) * speed, 0x005FFB40 "
+              f"pos = +0x78 + vel * dt). If the model parked instantly, every "
+              f"legitimate click-walk would read as a 2,880 u desync")
+        parked = authsrv._sync_position(glide, 1099.0)
+        check(parked == (2880.0, 0.0),
+              "and it PARKS on the granted point rather than overshooting it",
+              f"{parked} -- 0x005FF820's +0x48 arm returns the stored "
+              f"destination, which is semantic and not a cache")
+        authsrv._note_wire_move(glide, authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                                [authsrv.PLAYER_AGENT_ID, [7.0, 8.0], 0],
+                                1100.0)
+        check(authsrv._sync_position(glide, 1200.0) == (7.0, 8.0),
+              "and a 0x002C we send lands the model on the point it carried",
+              f"{authsrv._sync_position(glide, 1200.0)} -- 0x00602B20 writes "
+              f"+0x68..+0x74 = current on the parked arm, so no destination "
+              f"survives a hard set; a model that kept the old one would think "
+              f"the copy walked away again")
+
+        # THE ENCODED BYTES ARE THE SCHEMA'S. Not "we believe the shape" -- the
+        # real codec, against the real catalog, checked field by field.
+        blob = authsrv.codec.encode(
+            "GAME_SMSG", authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+            [authsrv.PLAYER_AGENT_ID, [1234.5, -678.25], 7])
+        shape = json.load(open(os.path.join(
+            os.path.dirname(os.path.dirname(HERE)), "schema",
+            "messages.json"), encoding="utf-8"))
+        entry = shape["channels"]["GAME_SMSG"]["messages"]["44"]
+        check([f["type"] for f in entry["fields"]]
+              == ["msg_header", "dword", "vec2", "word"],
+              "the catalog's 0x002C is header / agent id / vec2 / plane",
+              f"{[f['type'] for f in entry['fields']]} -- and the client's own "
+              f"handler agrees field for field: [ebx+4] is pushed to "
+              f"AgTrack::Clear at 0x005FDA78, [ebx+8]/[ebx+0xc] become the "
+              f"position block, [ebx+0x10] is its plane word")
+        check(len(blob) == entry["declared_unpack_size"] == 16,
+              f"and the encoder produces the declared {len(blob)} bytes",
+              f"{blob.hex()}")
+        check(blob == bytes.fromhex("2c00") + struct.pack(
+                  "<Iff H", authsrv.PLAYER_AGENT_ID, 1234.5, -678.25, 7),
+              "byte for byte, in that field order",
+              f"{blob.hex()} -- field order is the one thing this project has "
+              f"already got wrong on a movement message, on 0x0029's two plane "
+              f"words, and the client walked players through staircases for it")
+        check(authsrv.codec.name_for("GAME_SMSG", 0x002C)
+              == "AGENT_UPDATE_POSITION",
+              "and the opcode we send is the one the overrides name",
+              f"{authsrv.codec.name_for('GAME_SMSG', 0x002C)}")
+    finally:
+        authsrv.RESYNC = saved
+    check(authsrv.RESYNC is False,
+          "and the section put the flag back the way it found it",
+          f"{authsrv.RESYNC}")
+
+    # A REFUSED REPORT MUST NOT UPDATE THE CLIENT-SOURCED RECORD. This is what
+    # makes "the payload came from an accepted report" true rather than merely
+    # intended: the accept path is the only writer, so a refusal leaves the
+    # sender holding the older -- and ageing -- report.
+    st, rec = fresh(), FakeRec()
+    authsrv._take_client_position(st, JUMPED, JUMPED_PLANE, rec, "0x003D",
+                                  now=1000.5)
+    check("client_pos" not in st,
+          "a REFUSED report leaves no client-sourced position behind",
+          f"{st.get('client_pos')} -- if a refusal wrote it, the resync sender "
+          f"would put a position our own trust guard had just called "
+          f"impossible onto the wire as a teleport")
+    authsrv._take_client_position(st, JUMPED, JUMPED_PLANE, rec, "0x003D",
+                                  now=1001.0)
+    check(st["client_pos"] == JUMPED and st["client_plane"] == JUMPED_PLANE
+          and st["client_pos_at"] == 1001.0,
+          "and an ACCEPTED one writes the position, the plane and the instant "
+          "together",
+          f"{st.get('client_pos')} plane {st.get('client_plane')} at "
+          f"{st.get('client_pos_at')}")
+
+    # THE SOURCE LOCK, and the control that keeps it honest. The behavioural
+    # checks above can only see the value; this sees the EXPRESSION, because
+    # `state["pos"]` and `state["client_pos"]` differ by nine characters and
+    # agree on most reports -- exactly the shape that let the 765x direction
+    # vector live for weeks.
+    writers = []
+    for node in ast.walk(src):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if (isinstance(tgt, ast.Subscript)
+                    and isinstance(tgt.value, ast.Name)
+                    and tgt.value.id == "state"
+                    and isinstance(getattr(tgt, "slice", None), ast.Constant)
+                    and tgt.slice.value == "client_pos"):
+                writers.append(node)
+    check(len(writers) == 1,
+          "exactly one line in the whole file writes state['client_pos']",
+          f"{len(writers)} -- two writers is two policies, and the second one "
+          f"is where an integrator's opinion gets in")
+    resync_sends = []
+    for node in ast.walk(src):
+        if not (isinstance(node, ast.FunctionDef)
+                and node.name == "_maybe_resync"):
+            continue
+        for call in ast.walk(node):
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                    and call.func.id == "send" and len(call.args) >= 2
+                    and isinstance(call.args[1], ast.List)):
+                resync_sends.append((node, call.args[1].elts))
+    check(len(resync_sends) == 1,
+          "and there is exactly one resync send site",
+          f"{len(resync_sends)} -- both receive arms route through the one "
+          f"policy function on purpose; a second send is a second policy")
+
+    def payload_is_verdict_value(elts):
+        """True iff the vec2 slot is `list(payload)` -- the verdict's own value."""
+        if len(elts) < 2:
+            return False
+        node = elts[1]
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "list" and len(node.args) == 1
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "payload")
+
+    check(payload_is_verdict_value(resync_sends[0][1]),
+          "whose vec2 is `list(payload)` -- the value _resync_verdict returned, "
+          "which it takes from state['client_pos'] and from nowhere else",
+          f"{ast.dump(resync_sends[0][1][1])} -- rewrite this to "
+          f"list(state['pos']) and the message becomes the one an earlier "
+          f"build sent and had removed as 'the warp the player described'")
+    block = resync_sends[0][0]
+    grabs_blend = any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos"
+        and not isinstance(getattr(n, "ctx", None), ast.Store)
+        for n in ast.walk(block) if isinstance(n, ast.Subscript))
+    check(grabs_blend is True,
+          "CONTROL: the matcher below is looking at a function that DOES "
+          "mention state['pos']",
+          "it does not, so the next check would pass for the wrong reason -- "
+          "_maybe_resync logs `ours=state['pos']` beside every verdict, which "
+          "is what makes a scorer able to see the two apart")
+    # THE MUTATION THIS LOCKS, handed to the matcher on purpose. The rejecting
+    # branch is the one that never runs against healthy source.
+    bad = ast.parse(
+        "def _maybe_resync(send, state, rec, now=None):\n"
+        "    send(OP, [PLAYER_AGENT_ID, list(state['pos']), plane], 'x')\n")
+    bad_elts = []
+    for call in ast.walk(bad):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id == "send" and len(call.args) >= 2
+                and isinstance(call.args[1], ast.List)):
+            bad_elts = call.args[1].elts
+    check(len(bad_elts) == 3 and not payload_is_verdict_value(bad_elts),
+          "CONTROL: and it still REJECTS the integrator's position when handed "
+          "it",
+          f"{[ast.dump(e) for e in bad_elts]} -- if the matcher stopped "
+          f"recognising list(state['pos']), the lock above would be a no-op")
+
+    # THE FLAG'S OWN BANNER MUST BE PRINTABLE. Found the hard way while writing
+    # this: a U+26A0 warning sign in the --resync startup print raised
+    # UnicodeEncodeError on a default Windows console, because cp1252 has no
+    # code point for it -- so the flag would have killed the very run it exists
+    # to enable, before a single packet went out. The em dashes elsewhere in
+    # authsrv.py survive because cp1252 DOES have those, which is exactly why a
+    # bare "no non-ASCII" rule would be wrong here and the real console encoding
+    # is the thing to test against.
+    def unprintable(node):
+        out = []
+        for n in ast.walk(node):
+            if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                try:
+                    n.value.encode("cp1252")
+                except UnicodeEncodeError:
+                    out.append(n.value[:40])
+        return out
+
+    banner = next((n for n in ast.walk(src)
+                   if isinstance(n, ast.If)
+                   and isinstance(n.test, ast.Attribute)
+                   and n.test.attr == "resync"), None)
+    check(banner is not None and unprintable(banner) == [],
+          "and every string the --resync banner prints survives a cp1252 "
+          "console",
+          f"{None if banner is None else unprintable(banner)} -- print() raises "
+          f"on the first character cp1252 cannot encode, and a flag that kills "
+          f"the server at startup cannot be scored")
+    planted = ast.parse("if a.resync:\n    print('\\u26a0 careful')\n")
+    check(unprintable(planted) != [],
+          "CONTROL: and the same scan still catches a planted U+26A0",
+          f"{unprintable(planted)} -- a scan that finds nothing is "
+          f"indistinguishable from a clean file, which is how the real one "
+          f"got written")
 
     return LEDGER.verdict()
 
