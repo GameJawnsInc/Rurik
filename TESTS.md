@@ -2645,8 +2645,106 @@ Every one of these, in the order they were written:
   including reverting each arm separately, widening to the contaminated form,
   lowering 520 to 400, dropping the plane carry, restoring the early return at
   the interval floor, and silencing the threshold sweep or the reconciliation.
-  Floor **57**, the bare-machine subset, against a green **102** with every
-  capture present; §11-§16 declare `LEDGER.skip` without them. No client. ~3 s),
+  **§17-§20 put movetap's and movesync's OWN `_selftest_*` sections into the
+  suite**, which is where 130 checks written for the gatefire probe on
+  2026-08-20 were not: both modules carry a module-level `--selftest`, and
+  `run_suite.py` discovers `test_*.py` from DISK, so neither was ever invoked by
+  it -- the same defect as a test missing from this file, which the tree has
+  shipped three times (`test_pathmap.py`, `test_skillcast.py`,
+  `test_textrec.py`). §17 wraps movetap's fence sections: the 28 AgTrack and
+  gate-1 displacements re-derived from build 38797's own bytes (each expected
+  encoding BUILT FROM the module constant, so a wrong constant produces bytes
+  that are not at that VA), and the 13 refusal cases that keep a failed read
+  from minting the `0` that means "the fence is shut". §18 wraps movetap's
+  C2/C3/C6/C7/C8/C9 sections -- episodes (7), the flip denominator (8), gate 1's
+  ASYNC twin and 0x005FF820's clamp (26), the two early-outs (11), the
+  vocabulary (7). §19 wraps movesync's C4/C5/C9 -- the three-way jump tally
+  (14), the appender witness (19), the two spellings (6), and `print_fence`'s
+  own report (11). **Those two grew
+  because a review found the new checks pinned the DICT and never the TEXT**,
+  and the text is the artifact `PROBE-GATEFIRE.md` §6 quotes: swapping the
+  printed `reachable` and `fenced` cells, hard-wiring the printed `unread` to 0,
+  printing the unread label breakdown in the fenced row, DELETING the whole
+  three-way table while keeping the tally and its refusal, hard-wiring arm (a)'s
+  `witnessed` to 0, borrowing `judged` for arm (b)'s denominator, and deleting
+  the arm-coverage and PARTIAL lines were **each fully green**. Both printers
+  are now read back out of their own stdout (`read_back_three_way`,
+  `read_back_witness`) and compared cell by cell against the dict behind them, a
+  missing row arriving as an ABSENT KEY rather than a zero; the tally fixture is
+  **2 / 5 / 1** so every permutation of the three cells is visible, and the
+  witness fixture holds `judged` 8 against `reach_pairs` 7 so arm (b) borrowing
+  arm (a)'s denominator cannot pass. Two more of the same family: the refusal
+  bar is now computed by `unread_refuses` from `UNREAD_REFUSE_SHARE` alone
+  (`unread * 4 >= n` was a second copy of the same constant, so setting the
+  named one to 0.90 left the code refusing at 25% while the prose claimed 90%,
+  green both ways -- it is exercised at 0.90 AND at 0.10 so the bar is pinned in
+  both directions), and the sentinel check asserts the three `missing:*` names
+  are DISTINCT, because the subset test alone passed when all three held the
+  same string. **AND THEN THE SAME DEFECT WAS FOUND ONE ALTITUDE HIGHER:** the
+  text was pinned at the FUNCTION while the operator reads the PIPELINE.
+  Deleting the `print_appender_witness(pop, indent, name)` call from
+  `print_fence` -- the only path `movesync.main()` takes -- left `--selftest` at
+  49/49 and this file at 147/147 with the whole of C5 gone from the report, and
+  six more `print_fence` branches judged ZERO rows in the entire suite (the
+  PARTIAL line, the per-label share denominator, the `samples=` stream the
+  production call actually uses, the population REFUSAL, the legacy NOTE's
+  denominator, and `if rc: return rc` making that refusal swallow the tally and
+  the witness beneath it -- the exact substitution C4 exists to undo). The new
+  §19 section drives `print_fence` ITSELF on one fixture that takes the
+  production path and the refusing path together -- `samples=` supplied, `have`
+  6 of `total` 8, unread 2 of 6 over the 25% bar -- with every number distinct
+  from the one a substitution would put in its place (50.0% over `have` against
+  37.5% over `total`, 11 stream samples against 8 paired), the row counts
+  asserted before anything is printed, the three sections asserted IN ORDER by
+  their offsets in the output, and a mirror at `total` 7 with no unread row so
+  neither the refusal nor the PARTIAL line can be a constant. Its thirteen
+  mutations all redden a named check. **Two checks per section,
+  never one**: the section's verdict, and the number of checks it EXECUTED
+  against a floor read off a real green run, because a section whose fixtures
+  stopped matching reports `bad = 0` over nothing at all and the verdict cannot
+  tell that from a pass -- `test_codec.py`'s empty glob, one layer up. Each is
+  then BROKEN on purpose and required to go red: `episodes` returning no runs,
+  `count_flips` pinned at (0, 0), `GATE1_CUT` moved off the float the image
+  holds, `EARLY_OUT_A_MODE` 9 -> 8, `test_would_run` counting `world1:append` as
+  open, `classify_reach` calling every cell fenced, `state_fields` reading
+  nothing, `REACH_ALIASES` emptied to the pre-C9 reader, and
+  `print_appender_witness` silenced to a no-op -- which is the mutation that
+  landed green in the round before this one. **§20 asks BOTH MODULES
+  what sections they define** and requires every one to have been wrapped, with
+  a planted section as its control, so one added tomorrow goes red here instead
+  of being found missing in a week -- the both-directions rule
+  `test_srclint.py` §7 applies to this file. It rules on the set `_wrap` filled
+  as it RAN and not on the floor table, because a name can sit in a table while
+  its call site is deleted, and a coverage check reading the table would then
+  certify a section nobody ran -- the same defect one level up; deleting one
+  `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
+  **65**) so the operator's pre-flight command cannot diverge from the
+  suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
+  green run executes and requires the module to refuse itself. **movesync had no
+  module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
+  each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
+  leans on -- carried none, so deleting section 2's only check took it from 38
+  [PASS] to 37 with `--selftest` and this file both still exiting 0. It declares
+  `SELFTEST_FLOOR = 65` now, measured off a green run (15 + 14 + 19 + 6 + 11),
+  and the four `_selftest_*` sections return `(bad, ran)` so the total is summed
+  from what they executed rather than counted from what they printed. **And the
+  per-section floors were the same half-rule from the other side**: sections 8
+  and 9 declared 8 and 9 while executing 14 and 14, so either could have lost
+  six checks with its OWN floor silent, caught only by the total and by this
+  file's table -- two external nets under a number the section owns. Every
+  `_floor` is now the count its section executes, instrumented rather than
+  counted by hand, and dropping one check from section 8 or 9 reddens that
+  section's own floor line as well as this file's. And it
+  cross-checks every self-reporting section's returned count against the
+  [PASS]/[FAIL] lines it printed, because **the first version of §17 was itself
+  the defect it now guards**: it compared a section's `(bad, ran)` tuple against
+  `0` -- which cannot be true -- and then compared the same tuple with `>`,
+  which raised, so 16 green sections were followed by a TypeError and one check
+  that could never pass. Floor **100**, the bare-machine subset, against a green
+  **150** with every capture present; §11-§16 declare `LEDGER.skip` without
+  them, and so does `movetap._selftest_fence_bytes` (that section's two checks
+  and its one control are the only 3 of §17-§20's 46 that need the vault's
+  client snapshot; the other 43 run on a bare machine). No client. ~2 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

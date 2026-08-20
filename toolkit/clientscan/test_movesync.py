@@ -62,6 +62,36 @@ and the test never asserted, and:
      arm, fastest believable interval 388.80 u/s, and below the dt floor -- the
      only place the distance arm ever fires -- a largest step of 19.15 u. A
      constant justified in a comment is justified nowhere.
+
+AND THEN THE GUARDS ON THE GATEFIRE PROBE WENT INTO A `--selftest` NOBODY RUNS.
+`movetap.py` and `movesync.py` grew 130 checks on 2026-08-20 for changes C1-C9,
+and put every one of them in a module-level `--selftest`. `run_suite.py`
+discovers `test_*.py` FROM DISK; neither module is one. That is the same defect
+as a test missing from TESTS.md, and this repo has shipped it three times
+(`test_pathmap.py`, `test_skillcast.py`, `test_textrec.py`). So:
+
+  17 wraps movetap's fence sections -- the displacements re-derived from build
+     38797's own bytes, and the refusal semantics that keep a failed read from
+     minting the `0` that means "the fence is shut".
+  18 wraps movetap's C2/C3/C6/C7/C8/C9 sections: episodes, the flip
+     denominator, gate 1's ASYNC twin and clamp, the two early-outs, the
+     vocabulary.
+  19 wraps movesync's C4/C5/C9 sections: the three-way jump tally, the appender
+     witness, the two spellings.
+  20 asks BOTH MODULES what sections they define and requires every one to be
+     wrapped above, so a section added tomorrow goes red here rather than being
+     found missing in a week -- the same both-directions rule `test_srclint.py`
+     §7 applies to TESTS.md. It also runs each module's whole `--selftest`, so
+     the operator's own pre-flight command cannot diverge from the suite.
+
+  Every wrapped section gets TWO checks -- its verdict, and the number of checks
+  it EXECUTED against a floor read off a real green run -- because a section
+  whose fixtures stopped matching reports `bad = 0` over nothing at all, and the
+  verdict cannot tell that from a pass. Every one is then BROKEN on purpose and
+  required to go red. That is not ceremony here: §17's first version compared a
+  section's `(bad, ran)` tuple against `0`, which cannot be true, and then
+  compared the same tuple with `>`, which raised -- so 16 green sections were
+  followed by a TypeError and one check that could never pass.
 """
 import contextlib
 import io
@@ -76,20 +106,23 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import checks     # noqa: E402
 import movesync   # noqa: E402
+import movetap    # noqa: E402
 import vaultpath  # noqa: E402
 
-# MEASURED from a real green run: 104 checks with every capture present, 57
-# without (`RURIK_VAULT` pointed at an empty directory) -- and the previous
-# floor was written down from a count in the author's head, which is the same
-# slip test_interact.py records, so this one is read off the run every time it
-# moves. Sections 1-10 are pure logic and take no fixture; 11-16 replay the
-# vault and declare LEDGER.skip when it lacks them. §17 straddles: four of its
-# six checks drive a FAKE memory and run anywhere, and the two that re-derive
-# the AgTrack displacements from build 38797's own bytes need the vault's
-# client snapshot and skip without it. 61 is the bare-machine subset (57 + 4);
-# a full green with the vault present is 110.
+# MEASURED from a real green run on 2026-08-20: 150 checks with every capture
+# present, 100 without (`RURIK_VAULT` pointed at an empty directory, 7 declared
+# skips) -- and the floor before that was written down from a count in the
+# author's head, which is the same slip test_interact.py records, so this one is
+# read off the run every time it moves. Sections 1-10 are pure logic and take no
+# fixture; 11-16 replay the vault and declare LEDGER.skip when it lacks them.
+# §17-§20 wrap movetap's and movesync's own `_selftest_*` sections and straddle:
+# almost all of them drive FAKE memory or synthetic sequences and run anywhere,
+# and only `movetap._selftest_fence_bytes` -- which re-derives the AgTrack and
+# gate-1 displacements from build 38797's own bytes -- needs the vault's client
+# snapshot, so it and its one control skip without it (2 checks). 100 is the
+# bare-machine subset and is the floor.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=61)
+                       floor=100)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -107,6 +140,137 @@ LEGACY_CAPTURE = "authsrv-20260811T173940-c1.jsonl"
 SHORT_DT_CAPTURE = "authsrv-20260819T182652-c1.jsonl"
 
 WALL = "2026-08-19T00:00:00Z"
+
+
+# --------------------------------------------------------------------------
+# THE WRAPPER FOR BOTH MODULES' OWN `_selftest_*` SECTIONS (§17-§20).
+#
+# `movetap.py` and `movesync.py` both grew their instrument on 2026-08-20 and
+# both put the guards in a module-level `--selftest`. `run_suite.py` discovers
+# `test_*.py` FROM DISK, and neither module is one, so those 130 checks ran
+# only when an operator typed the module name. A test nobody runs is not a
+# test: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were each
+# in the tree and out of the suite for days. Every section of both is wrapped
+# and COUNTED below.
+#
+# TWO checks per section, never one. The verdict alone cannot catch a section
+# whose fixtures stopped matching: `_selftest_gate1` with a broken `_gate1_mem`
+# would run zero cases, report `bad = 0` and read as a pass -- which is
+# `test_codec.py`'s glob matching nothing, one layer up. So the number of
+# checks the section EXECUTED is asserted against a floor read off a real green
+# run, and never off a guess.
+#
+# AND THE RETURN SHAPES DO NOT AGREE, which is how the first version of §17
+# broke. movetap's sections return `(bad, ran)` or `(bad, ran, skipped)`;
+# movesync's return a bare `bad` with the count only in what they printed. §17
+# was written when movetap's returned a bare int, and the change to a tuple
+# turned `check(nb == 0, ...)` into a check that could never PASS -- `(0, 28)`
+# is not `0` -- and then `check(nbad > 0, ...)` into a TypeError that killed
+# the whole run at §17 with 16 sections already green behind it. Normalising
+# the shape in one place is half the fix; §20's cross-check of the reported
+# count against the PRINTED one is the other half, because a wrapper that
+# misreads the shape and a section that miscounts are the same defect from two
+# sides.
+# --------------------------------------------------------------------------
+# Measured, per section, from a real green run on 2026-08-20 -- `ran` off the
+# section itself, not off a count in anybody's head. `_selftest_fence_bytes`
+# is the one that can legitimately not run (no pinned client snapshot in the
+# vault); it declares its own size and this file turns that into a LEDGER.skip.
+MOVETAP_SECTIONS = (
+    ("_selftest_fence_bytes", 28),
+    ("_selftest_fence_refuses", 13),
+    ("_selftest_fence_verdict", 7),
+    ("_selftest_episodes", 7),
+    ("_selftest_flip_denominator", 8),
+    ("_selftest_gate1", 26),
+    ("_selftest_early_outs", 11),
+    ("_selftest_naming", 7),
+)
+MOVESYNC_SECTIONS = (
+    ("_selftest_jump_tally", 14),
+    ("_selftest_appender_witness", 19),
+    ("_selftest_spellings", 6),
+    ("_selftest_print_fence", 11),
+)
+# (label, reported ran, printed [PASS]/[FAIL] lines) for every wrapped section
+# that reports its OWN count, filled by `_wrap` and ruled on once in §20. A
+# section whose count had to be taken from its output is not listed, because
+# comparing that count against the output it was derived from is a check that
+# cannot fail.
+SHAPES = []
+# (module, section) for every section `_wrap` ACTUALLY invoked this run. §20
+# rules on this and not on the table above: a name can sit in a table while its
+# call site is commented out, and then the coverage check certifies a section
+# nobody ran -- which is the defect this whole block exists about, one level up.
+WRAPPED = set()
+
+# The floors above, by (module, section). ONE source: they briefly sat at the
+# call sites as well, and two copies of a measured constant is how one of them
+# goes stale with nothing noticing. A `_wrap` for a section the table does not
+# name raises KeyError here rather than defaulting to something permissive.
+_FLOOR = {(movetap.__name__, n): f for n, f in MOVETAP_SECTIONS}
+_FLOOR.update({(movesync.__name__, n): f for n, f in MOVESYNC_SECTIONS})
+
+
+def _run_section(fn):
+    """One section, run quietly. -> (bad, ran, skipped, output, self_reported).
+
+    The two conventions are normalised HERE and nowhere else, so a third one
+    cannot be half-adopted. `ran` for a section that reports no count is taken
+    from what it printed, and `self_reported` says which of the two happened so
+    §20 can cross-check only the sections where the two are independent.
+    """
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        got = fn()
+    out = buf.getvalue()
+    printed = out.count("[PASS]") + out.count("[FAIL]")
+    if isinstance(got, tuple):
+        bad, ran = got[0], got[1]
+        skipped = got[2] if len(got) > 2 else 0
+        return bad, ran, skipped, out, True
+    return got, printed, 0, out, False
+
+
+def _wrap(mod, name, what, why, skip_why=None):
+    """Run one section under this file's ledger. -> its output, or None if skipped.
+
+    Two checks: the section's verdict, and the count it executed against
+    `floor`. A section that passes while having judged nothing is the exact
+    shape `toolkit/checks.py` exists to refuse, and it is not caught by the
+    verdict.
+    """
+    floor = _FLOOR[(mod.__name__, name)]
+    WRAPPED.add((mod.__name__, name))
+    bad, ran, skipped, out, reported = _run_section(getattr(mod, name))
+    label = f"{mod.__name__}.{name}"
+    if skipped:
+        LEDGER.skip(label, skip_why or "the section declared a skip")
+        return None
+    if reported:
+        SHAPES.append((label, ran, out.count("[PASS]") + out.count("[FAIL]")))
+    check(bad == 0, f"{what} ({ran} check(s) in {label})", why)
+    check(ran >= floor,
+          f"...and it executed {ran} of a floor of {floor}",
+          "the floor is read off a real green run: a section whose fixtures "
+          "stop matching reports bad=0 over nothing at all, and the verdict "
+          "cannot tell that from a pass")
+    return out
+
+
+def _control(mod, attr, value, section, what, why):
+    """Break ONE thing a section is about; require that section to go red.
+
+    Restored in a `finally`, because a control that leaks its mutation turns
+    every later check in the run into a measurement of the control.
+    """
+    old = getattr(mod, attr)
+    setattr(mod, attr, value)
+    try:
+        bad = _run_section(getattr(mod, section))[0]
+    finally:
+        setattr(mod, attr, old)
+    check(bad > 0, f"CONTROL: {what} ({bad} failure(s))", why)
 
 
 def write_capture(path, rows):
@@ -1063,7 +1227,7 @@ def main():
               f"the wire rather than quoted from studies/movement/FINDINGS.md")
 
     # ---------------------------------------------------------------------
-    print("\n17. the AgTrack fence: movetap's new field, in the SUITE")
+    print("\n17. the AgTrack fence: movetap's selftest 5-7, in the SUITE")
     # movetap has no test file of its own -- §9 above reads its SOURCE, which
     # cannot catch a wrong NUMBER. The fence constants added on 2026-08-20 are
     # displacements into a live process: reading the wrong dword there does not
@@ -1073,50 +1237,35 @@ def main():
     # than being left in an operator-only `--selftest` nothing in the suite
     # invokes. `movetap.py` imports `keytap`, which is pure ctypes and loads on
     # any Windows box, so this costs no dependency.
-    sys.path.insert(0, HERE)
-    import movetap                                            # noqa: E402
-
-    def quiet(fn):
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            n = fn()
-        return n, buf.getvalue()
-
-    nb, out_b = quiet(movetap._selftest_fence_bytes)
-    if "[SKIP]" in out_b:
-        LEDGER.skip("fence offsets vs the binary",
-                    "this machine has no pinned client snapshot in the vault")
-    else:
-        check(nb == 0,
-              f"every fence displacement re-derives from build 38797's own "
-              f"bytes ({out_b.count('[PASS]')} instruction(s))",
-              "each expected encoding is BUILT FROM the module constant, so a "
-              "wrong constant produces bytes that are not at that VA -- "
-              "comparing a literal against a copy of itself would pass forever")
+    out_b = _wrap(movetap, "_selftest_fence_bytes",
+                  "every fence displacement re-derives from build 38797's own "
+                  "bytes",
+                  "each expected encoding is BUILT FROM the module constant, "
+                  "so a wrong constant produces bytes that are not at that VA "
+                  "-- comparing a literal against a copy of itself would pass "
+                  "forever",
+                  skip_why="this machine has no pinned client snapshot in the "
+                           "vault")
+    if out_b is not None:
         # CONTROL: the derivation must actually bite. Move one constant by one
         # dword and the same section has to go red, or it is decoration.
-        old = movetap.T_STATE_ARRAY
-        movetap.T_STATE_ARRAY = old + 4
-        nbad, _ = quiet(movetap._selftest_fence_bytes)
-        movetap.T_STATE_ARRAY = old
-        check(nbad > 0,
-              f"and a one-dword slip in T_STATE_ARRAY turns it red "
-              f"({nbad} failure(s))",
-              "a check that cannot fail is not a check, and this one guards a "
-              "number whose wrong value reads as a finding")
+        _control(movetap, "T_STATE_ARRAY", movetap.T_STATE_ARRAY + 4,
+                 "_selftest_fence_bytes",
+                 "a one-dword slip in T_STATE_ARRAY turns it red",
+                 "a check that cannot fail is not a check, and this one guards "
+                 "a number whose wrong value reads as a finding")
 
-    nr, out_r = quiet(movetap._selftest_fence_refuses)
-    check(nr == 0,
-          f"and every way of failing to read the fence lands on \"unread:*\" "
-          f"({out_r.count('[PASS]')} case(s))",
+    _wrap(movetap, "_selftest_fence_refuses",
+          "every way of failing to read the fence lands on \"unread:*\"",
           "0 is a REAL answer here -- it means the fence is shut and the snap "
           "test never runs -- so a failed read that returned 0, None or False "
           "would be indistinguishable from the finding")
 
     orig = movetap._fence_blank
     movetap._fence_blank = lambda why: dict(
-        orig(why), fence_state="shut", gate_reach="shut:apply", fence_raw=0)
-    nlie, _ = quiet(movetap._selftest_fence_refuses)
+        orig(why), fence_state="shut", gate_reach=movetap.REACH_FENCED[1],
+        fence_raw=0)
+    nlie = _run_section(movetap._selftest_fence_refuses)[0]
     movetap._fence_blank = orig
     check(nlie > 0,
           f"CONTROL: a failure path rewritten to answer \"shut\" with a raw 0 "
@@ -1127,7 +1276,7 @@ def main():
     orig_f = movetap.agtrack_fence
     movetap.agtrack_fence = lambda read, agbase, aid, blk: orig(  # only refuses
         "stub")
-    nstub, _ = quiet(movetap._selftest_fence_refuses)
+    nstub = _run_section(movetap._selftest_fence_refuses)[0]
     movetap.agtrack_fence = orig_f
     check(nstub > 0,
           f"and CONTROL the other way: a stub that ONLY ever refuses is caught "
@@ -1135,12 +1284,225 @@ def main():
           "otherwise the refusal checks above would be satisfied by a reader "
           "that never populates the field at all")
 
-    nv, out_v = quiet(movetap._selftest_fence_verdict)
-    check(nv == 0,
-          f"and the run-level verdict refuses a bad denominator and an aliased "
-          f"fence ({out_v.count('[PASS]')} case(s))",
+    _wrap(movetap, "_selftest_fence_verdict",
+          "the run-level verdict refuses a bad denominator and an aliased "
+          "fence",
           "a fence flipping near the reader's own rate cannot be polled, and "
           "that refusal is what decides between this route and the hook")
+
+    # ---------------------------------------------------------------------
+    print("\n18. movetap's C2/C3/C6/C7/C8/C9 sections, in the SUITE")
+    # The five sections `movetap.py` grew for the gatefire probe. Each is
+    # wrapped, counted against its own measured floor, and then BROKEN on
+    # purpose: a wrapper that calls a section and ignores what it returns is
+    # indistinguishable from one that guards it, and that is precisely what
+    # §17 was for a day (`(0, 28) == 0` is False, so its first check could not
+    # pass and its second raised).
+    _wrap(movetap, "_selftest_episodes",
+          "C2: the effective n is EPISODES, and a majority-censored median is "
+          "refused",
+          "a run length is what the fence question turns on -- 564 samples "
+          "across 3 transitions is an n of about 4, and this file used to "
+          "print the 564")
+    _control(movetap, "episodes", lambda seq: [], "_selftest_episodes",
+             "an `episodes` that finds no runs at all is caught",
+             "the median refusal, the censoring and the Nyquist bar are all "
+             "statements about runs; a run finder that returns nothing must "
+             "not leave them printing about nothing")
+
+    _wrap(movetap, "_selftest_flip_denominator",
+          "C3: an `unread:` sample breaks the chain instead of scoring two "
+          "transitions",
+          "10% flaky reads over a fence that never moves scored 0.20 "
+          "flips/sample under the old rule -- 40% of the escalation bar, "
+          "manufactured out of the reader's own misses")
+    _control(movetap, "count_flips", lambda seq: (0, 0),
+             "_selftest_flip_denominator",
+             "a `count_flips` that always answers (0, 0) is caught",
+             "an aliasing guard whose numerator is pinned at zero can never "
+             "refuse, which is the failure direction that costs a compiler")
+
+    _wrap(movetap, "_selftest_gate1",
+          "C6: the ASYNC twin, 0x005FF820's clamp, and the band this reader "
+          "refuses",
+          "`below` with the fence open is escalation trigger 2(b), so a read "
+          "that failed and still produced a plausible separation would buy a "
+          "hook nobody needed")
+    _control(movetap, "GATE1_CUT", 400.0, "_selftest_gate1",
+             "moving gate 1's cut off the float the image holds is caught",
+             "300.0 is read back out of 0x00946564 by section 5; this proves "
+             "the classifier actually uses it rather than agreeing with it")
+
+    _wrap(movetap, "_selftest_early_outs",
+          "C7/C8: the two exits above gate 1, and their three-valued sentinel",
+          "`False` is a real answer to \"did this exit fire\" exactly as 0 is "
+          "a real answer to \"is the fence shut\", so an unread block must "
+          "return neither")
+    _control(movetap, "EARLY_OUT_A_MODE", 8, "_selftest_early_outs",
+             "the literal 9 at 0x0060563A is load-bearing",
+             "mode 8 is the top of 0x00602660's own switch and mode 1 is what "
+             "every 0x002B we send carries -- an off-by-one here would fire "
+             "the exit on ordinary traffic")
+
+    _wrap(movetap, "_selftest_naming",
+          "C9: `shut:append` is what 0x00605840 does, and the summary says so "
+          "in the conditional",
+          "the four branch labels go into every stored row permanently, and "
+          "the probe's documented landing grep for the old spelling must "
+          "return 0")
+    _control(movetap, "test_would_run", lambda v: True, "_selftest_naming",
+             "counting `world1:append` as fence-open is caught",
+             "world 1 is the branch on which the caller skips the test "
+             "entirely, so folding it in inflates p and deflates the aliasing "
+             "ratio -- the wrong direction for a guard")
+
+    # ---------------------------------------------------------------------
+    print("\n19. movesync's C4/C5/C9 sections, in the SUITE")
+    # Same argument, the other file. These three were reachable only through
+    # `python toolkit/clientscan/movesync.py --selftest`, which nothing in the
+    # suite runs.
+    _wrap(movesync, "_selftest_jump_tally",
+          "C4: the jump table is a THREE-WAY tally that sums to n, and refuses "
+          "on holes",
+          "a could-not-read used to be swept into the fence-SHUT count in the "
+          "headline -- on the real 20260819T171436 that printed \"0 of 13 "
+          "snap(s) began with the test REACHABLE\" over 13 rows that were "
+          "nothing but missing fields")
+    _control(movesync, "classify_reach", lambda v: "fenced",
+             "_selftest_jump_tally",
+             "a classifier that calls every cell `fenced` is caught",
+             "that IS the pre-C4 defect -- the hole and the real state are "
+             "indistinguishable once they share a bucket")
+
+    _wrap(movesync, "_selftest_appender_witness",
+          "C5: the appender witness is a WRITE observed, and refuses rather "
+          "than printing a zero",
+          "\"0 witnessed\" on a movetap that carries no `state_record` reads "
+          "as \"the appender never ran\", which is a finding minted from a "
+          "missing key")
+    _control(movesync, "state_fields", lambda s: (None, None),
+             "_selftest_appender_witness",
+             "a `state_fields` that reads nothing is caught",
+             "the witness's positive arms are the only observation in this "
+             "lane that is not a state read; a reader that cannot see the "
+             "fields must say so and not score them")
+
+    _wrap(movesync, "_selftest_spellings",
+          "C9: the vault's pre-rename `:apply` rows are READ and printed "
+          "`:append`",
+          "every movetap already on disk carries the old spelling; a consumer "
+          "that silently mismatched would drop a real fenced sample into the "
+          "hole bucket and then refuse on its own drop")
+    _control(movesync, "REACH_ALIASES", {}, "_selftest_spellings",
+             "a reader that knows only the new spelling is caught",
+             "this is the pre-C9 state, and it is the one that fails quietly "
+             "-- the row is not an error, it is just not counted")
+
+    _wrap(movesync, "_selftest_print_fence",
+          "C4+C5 in the REPORT: print_fence prints the tally AND the witness "
+          "below its own population refusal, over the population it names",
+          "the round before this pinned the tally at the DICT while the "
+          "operator reads the TEXT; this one found the text pinned at the "
+          "FUNCTION while the operator reads the PIPELINE -- deleting the "
+          "`print_appender_witness` call from print_fence, the only path "
+          "`main()` takes, was green at 49/49 and 147/147 with the whole of C5 "
+          "gone from the output")
+    _control(movesync, "print_appender_witness", lambda *a, **k: 0,
+             "_selftest_print_fence",
+             "a print_fence whose witness prints NOTHING is caught",
+             "that is the mutation the previous review landed green: the "
+             "witness is C5's only positive observation, and a report that "
+             "silently drops it still ends in a fence share the probe would "
+             "quote")
+
+    # ---------------------------------------------------------------------
+    print("\n20. and NOTHING in either selftest is left out of the suite")
+    # The rule this file is under is that a test nobody runs is not a test.
+    # §17-§19 satisfy it for the sections that exist TODAY; this asks the
+    # MODULE what sections exist, so a section added tomorrow and not wrapped
+    # goes red here instead of being discovered missing in a week. Same shape
+    # as `test_srclint.py` §7, which pairs every test file with a TESTS.md
+    # entry in both directions.
+    #
+    # `WRAPPED` and not the table: the set is filled by `_wrap` as it RUNS, so
+    # a section whose call site is deleted while its table row stays is caught.
+    # The table is checked against the same set for the mirror -- a stale row
+    # is a floor nothing enforces.
+    for mod, table in ((movetap, MOVETAP_SECTIONS),
+                       (movesync, MOVESYNC_SECTIONS)):
+        on_disk = {n for n in dir(mod) if n.startswith("_selftest_")}
+        wrapped = {n for m, n in WRAPPED if m == mod.__name__}
+        tabled = {n for n, _f in table}
+        check(bool(on_disk) and on_disk == wrapped and tabled == on_disk,
+              f"{mod.__name__} defines {len(on_disk)} `_selftest_*` section(s) "
+              f"and this run wrapped all of them",
+              f"never wrapped: {sorted(on_disk - wrapped)}; wrapped but gone "
+              f"from the module: {sorted(wrapped - on_disk)}; floor rows for "
+              f"nothing: {sorted(tabled - on_disk)} -- the set is asserted "
+              f"non-empty first, because 'all zero of them are wrapped' is "
+              f"this repo's own recorded trap")
+        # CONTROL: plant one and require the same computation to name it.
+        setattr(mod, "_selftest_planted_control", lambda: (0, 1))
+        try:
+            planted = sorted({n for n in dir(mod)
+                              if n.startswith("_selftest_")} - wrapped)
+        finally:
+            delattr(mod, "_selftest_planted_control")
+        check(planted == ["_selftest_planted_control"],
+              f"CONTROL: a section added to {mod.__name__} and not wrapped is "
+              f"named ({planted})",
+              "a coverage check that cannot see a new section is a coverage "
+              "check that will pass forever")
+
+    check(bool(SHAPES) and all(r == p for _l, r, p in SHAPES),
+          f"and every self-reporting section's count equals the number of "
+          f"[PASS]/[FAIL] lines it printed ({len(SHAPES)} section(s), "
+          f"{sum(r for _l, r, _p in SHAPES)} checks)",
+          f"disagreements: {[s for s in SHAPES if s[1] != s[2]]} -- a section "
+          f"that returns a count it did not execute, and a wrapper that "
+          f"misreads the return shape, are the same defect from two sides, "
+          f"and the second one is what silently disabled section 17")
+
+    # AND THE OPERATOR'S OWN COMMAND, end to end, floor and all. §17-§19 call
+    # the sections directly and would not notice movetap's own SELFTEST_FLOOR
+    # going stale, or its sections 1-4 -- the source reads -- ceasing to run.
+    rc_mt, out_mt = _run_section(movetap.selftest)[0::3]
+    check(rc_mt == 0,
+          f"`movetap.py --selftest` is green end to end "
+          f"({out_mt.count('[PASS]')} [PASS] against a declared floor of "
+          f"{movetap.SELFTEST_FLOOR}, less {out_mt.count('[SKIP]')} declared "
+          f"skip(s))",
+          "this is the command the probe's step 3 tells the operator to run "
+          "before the client is launched, so the suite must not be able to "
+          "diverge from it")
+    _control(movetap, "SELFTEST_FLOOR", movetap.SELFTEST_FLOOR + 1000,
+             "selftest", "movetap's own floor rule can go red",
+             "a floor nothing has been seen to enforce is a wish; this raises "
+             "it above what a green run executes and requires the module to "
+             "refuse itself")
+
+    rc_ms, out_ms = _run_section(movesync.selftest)[0::3]
+    check(rc_ms == 0,
+          f"and `movesync.py --selftest` is green end to end "
+          f"({out_ms.count('[PASS]')} [PASS] against a declared floor of "
+          f"{movesync.SELFTEST_FLOOR})",
+          "movesync's sections 1-7 are the pre-2026-08-20 guards and are "
+          "wrapped nowhere else in this file")
+    _control(movesync, "SELFTEST_FLOOR", movesync.SELFTEST_FLOOR + 1000,
+             "selftest", "movesync's own floor rule can go red",
+             "sections 8-10 carry a `_floor` each and sections 1-7 carried "
+             "none, so deleting section 2's only check took the module from 38 "
+             "[PASS] to 37 with this file and `--selftest` both still exit 0 -- "
+             "a per-section floor under a total nothing checks is half a rule")
+    # (1, 6) and not a bare 1: the sections return `(bad, ran)` since the floor
+    # landed, and the stub keeps `ran` AT the section's own floor on purpose --
+    # so what reddens the run is the summation of `bad`, which is this control's
+    # whole subject, and not the floor rule the control above already pins.
+    _control(movesync, "_selftest_spellings", lambda: (1, 6), "selftest",
+             "a red section really does redden movesync's whole selftest",
+             "movesync sums a bare `bad` rather than routing through "
+             "`checks.py`, so the summation is the only thing carrying a "
+             "failure out, and it is worth seeing it carry one")
 
     return LEDGER.verdict()
 
