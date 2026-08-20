@@ -51,6 +51,7 @@ sys.path.insert(0, TOOLKIT)
 # drive_client one line before it imports cage and inherited the path that
 # module inserts -- an ordering accident that breaks the day the two swap.
 sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
+sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
@@ -58,6 +59,7 @@ import drive_client as dc  # noqa: E402
 import control  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
+import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 # argtypes are not optional: a HANDLE truncated to a 32-bit int silently
@@ -1336,6 +1338,13 @@ def run_client(a, outdir):
     # A guard that only guards one of two doors is the shape of the defect it is here
     # to prevent -- vault/run held two patched binaries and one was caged.
     print(f"cage: {cage.assert_launch_safe(a.exe, host)['dh']} build, cleared for {host}")
+    # And the archive, for the same reason and by the same rule as the line
+    # above. The client opens `Gw.dat` from its OWN process directory -- there is
+    # no flag for it -- so the archive this launch is really about is the one
+    # beside the exe, and a copy that fails an open-time rule is repaired,
+    # rebuilt or silently emptied rather than refused.
+    client_dat = os.path.join(os.path.dirname(a.exe), "Gw.dat")
+    print(f"archive: {datcheck.assert_archive_safe(client_dat, why='launch')['summary']}")
     log_path = os.path.join(os.path.dirname(a.exe), "Gw.log")
     if os.path.exists(log_path):
         os.remove(log_path)

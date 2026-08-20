@@ -2407,6 +2407,19 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
         state["plane"] = plane
         state["pos_seen"] = now
         state["pos_rejects"] = 0
+        # THE CLIENT-SOURCED RECORD, and it is deliberately NOT state["pos"].
+        # state["pos"] is a BLEND: this line writes it from the client, and the
+        # world tick's integrator writes it too (search "state[\"pos\"] = (px +").
+        # A reader downstream cannot tell the client's own figure from our
+        # extrapolation of it -- and sending the extrapolation is exactly what
+        # the build that shipped 0x002C did ("five AGENT_UPDATE_POSITION went
+        # out and three were arrivals, carrying the client 630, 189 and 765
+        # units... that is the warp the player described"). This triple is
+        # written HERE, on the ACCEPT path, and nowhere else in the file, so a
+        # consumer that reads it is holding something the client said.
+        state["client_pos"] = (float(reported[0]), float(reported[1]))
+        state["client_plane"] = int(plane)
+        state["client_pos_at"] = now
     else:
         state["pos_rejects"] = state.get("pos_rejects", 0) + 1
         print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
@@ -2438,6 +2451,300 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
                   server_plane=state["plane"], clipped=clipped,
                   on_mesh=on_mesh)
     return accept
+
+
+# ---------------------------------------------------------------------------
+# THE RESYNC SENDER -- GAME_SMSG 0x002C AGENT_UPDATE_POSITION.  `--resync`.
+#
+# OFF BY DEFAULT, and switchable on its own. --heading-grant and
+# --client-endpoint are both recorded REFUTED above; this has to be scoreable
+# without either, so it reads its own flag and shares no state with them.
+#
+# WHY IT EXISTS, from the decode (studies/movement/FINDINGS.md, 2026-08-20
+# rounds 1-3; studies/movement/HANDOFF.md SS1). The client keeps TWO copies of
+# the player: SYNC, server-authoritative, at [agentMgr+0xE8], and ASYNC,
+# locally predicted and RENDERED, at [agentMgr+0x14C]. We answer a click with
+# 0x0029, which is SYNC-ONLY: the authoritative copy glides to the granted point
+# and PARKS (93.4 of 177.3 s in the shipped build). The player then keyboards
+# away, and nothing we send afterwards reaches the copy they see -- 0x0025's
+# async arm is gated shut for the client-controlled agent at 0x005FD5D3.
+# Separation grows unwatched (p50 1,164 u, p90 2,163 u, max 3,648 u over n = 251
+# paired reports) because the desync test has no per-frame caller, and the next
+# grant or arrival redeems the whole gap at once: 0x006022B0 hard-copies SYNC
+# onto ASYNC for EVERY agent in world 1.
+#
+# 0x002C IS THE ONE CATALOGUED PRIMITIVE THAT REACHES BOTH COPIES UNGATED.
+# Read out of Gw.exe (pinned pristine 38797) with
+# `python toolkit/clientscan/codescan.py --dis 0x005FDA50 --count 60`, not
+# argued -- handler 0x005FDA50:
+#
+#   0x005FDA6A  push edi(&vec2) / call 0x5fcec0   ; bounds check vs worldDims
+#   0x005FDA78  lea ecx,[esi+0x1cc] / call 0x605f70   ; AgTrack::Clear, FIRST
+#   0x005FDAA2  mov eax,[esi+0xe8]                ; the SYNC array
+#   0x005FDAE5  call 0x602b20(sync, &pos)         ; SetPosition, no gate
+#   0x005FDB09  mov eax,[esi+0x14c]               ; the ASYNC array
+#   0x005FDB49  call 0x602b20(async, &pos)        ; SetPosition, no gate
+#
+# AgTrack::Clear zeroes `clientControlled` (0x00605FA7), and the dispatcher's
+# 0x00606002 skips the whole three-gate desync test when that flag is 0 -- so
+# neither SetPosition can trigger a reseed on the way out (0x00602B20's parked
+# arm does call the dispatcher at 0x00602BBD, and finds the flag already
+# cleared). Both copies land on ONE point, with no snap.
+#
+# WIRE SHAPE, verified rather than taken on trust. schema/messages.json
+# GAME_SMSG 44: msg_header, dword, vec2, word; declared_unpack_size 16, and
+# codec.encode produces exactly 16 B. The handler agrees field for field --
+# [ebx+4] is the agent id (pushed to AgTrack::Clear), [ebx+8]/[ebx+0xc] are the
+# vec2 (copied to the position block at [ebp-0x10]/[ebp-0xc]), [ebx+0x10] is the
+# plane ([ebp-8]). schema/overrides.json names it AGENT_UPDATE_POSITION with
+# name_confidence high.
+#
+# *** AND AN EARLIER BUILD SENT THIS MESSAGE AND IT WAS REMOVED AS "THE WARP". ***
+# The world tick's own comment records it (search this file for "five
+# AGENT_UPDATE_POSITION"): five went out, three were arrivals, "carrying the
+# client 630, 189 and 765 units... our integrator had run the whole leg while
+# the client had not moved at all. That is the warp the player described: not a
+# snap, a WALK."
+#
+# IT SENT OUR INTEGRATOR'S POSITION. This does not, and that is the whole of the
+# difference between the two:
+#
+#     THE PAYLOAD IS THE CLIENT'S OWN LAST ACCEPTED REPORT, NEVER state["pos"].
+#
+# `state["client_pos"]` is written on _take_client_position's ACCEPT path and by
+# nothing else; _resync_verdict refuses outright when it is absent or stale. The
+# same file's own note on why this is now worth having: "The client moves itself
+# now, which is precisely what makes its report worth having."
+#
+# THE DECISION RULE, and it is deliberately three cheap constants rather than a
+# policy object -- change them, re-run, re-score:
+#
+#   fire iff  a client-sourced report exists,
+#         and it is no older than RESYNC_MAX_REPORT_AGE,
+#         and our model of the SYNC copy is seeded,
+#         and modelled SYNC-vs-client separation >= RESYNC_SEPARATION,
+#         and RESYNC_MIN_INTERVAL has passed since the last fire.
+#
+# It is REPORT-DRIVEN, not timer-driven, and that is load-bearing three times
+# over. (a) A timer cannot satisfy the staleness bound: the client's own report
+# cadence measured over the gamesrv corpus is p50 0.451 s (n = 4,678 gaps, 4,751
+# reports, 73 `ours` captures), so a timer firing at an arbitrary instant would
+# hold a payload older than the 0.347 s bound below more than half the time.
+# (b) The client emits 0x003D only while moving and 0x0047 only on a stop, so a
+# stationary player produces no fires at all -- which is what "never fire while
+# the player is stationary" means here, and it is structural rather than a
+# guard. (c) MEASURED, a click-walk sends no position report for up to 12.9 s,
+# so a server-granted click-walk cannot be interrupted by this sender.
+RESYNC = False
+# HOW FAR APART THE TWO COPIES MUST BE BEFORE WE ACT.  100.0 u is the CLIENT'S
+# OWN constant, not ours: 0x00946560, the radius inside which 0x00605AF0 calls
+# the authoritative position a match against the client's history and returns
+# "no snap" before the fallback half is reached. So it is the client's own
+# boundary between "close enough" and "adjudicate", and it sits 3x under gate
+# 1's real cut of 299.332591 u (0x00946564's 300.0f, quantised upward by the
+# client's LUT sqrt at 0x0046E870 -- exactly 300.0 u SNAPS). Three times under
+# is the headroom our own SYNC model gets to be wrong in.
+#
+# HOW OFTEN THAT FIRES, stated BEFORE the run rather than discovered after it.
+# Replaying this exact verdict over the corpus's own client reports and player
+# grants -- 66 `ours` captures, 4,712 s of span, 4,731 reports, with each fire
+# applied to the model so separation regrows from zero -- gives **1,998 fires,
+# 25.4 per minute of span, 42.2% of reports**, at separations p50 183 u, p90
+# 514, p99 1,415, max 4,633. That is what "small and frequent" costs at this
+# threshold, and it is the number to argue with if the run feels wrong: at the
+# measured p50 report gap of 0.451 s a player walking away from a PARKED
+# authoritative copy covers 130 u, so 100 u is crossed by half a second of
+# ordinary walking. RAISING THIS IS THE FIRST DIAL. It is a coarse replay --
+# it does not model the 20 Hz integrator, and the captures were produced by
+# several configurations including two refuted ones -- so treat it as a
+# magnitude, not a score. The score is `movesync.py` on a watched run.
+RESYNC_SEPARATION = 100.0
+# NOT PICKED -- a ceiling with a derivation. Two copies moving directly apart
+# separate at no more than DEFAULT_RUN_SPEED each way, so the shortest time in
+# which separation can grow from zero to gate 1's cut is 299.332591 / 576 =
+# 0.5196 s. A rate limit at or above that lets a full gate's worth of separation
+# accrue between two fires, which is the sender being structurally too late.
+# 0.5 s is the round number under it. Against the measured p50 report gap of
+# 0.451 s it removes roughly half the fires and never more.
+RESYNC_MIN_INTERVAL = 0.5
+# THE STALENESS BOUND, AND IT IS THE HARM BOUND. A SetPosition to the client's
+# last report yanks the RENDERED copy backwards by however far the client has
+# walked since that report -- at most DEFAULT_RUN_SPEED * age. Choosing the age
+# therefore chooses the harm, so the age is chosen to make the harm exactly the
+# client's own 100.0 u "close enough" radius: 100.0 / 288.0 = 0.347222 s.
+#
+# CORROBORATED against the corpus, by a check that could have failed: for report
+# gaps under 0.100 s the client's own step is p99 28.80 u against a budget of
+# 28.8 u, and under 0.200 s it is p99 57.60 u against 57.6 (n = 307 and 685,
+# 73 `ours` captures). The client does not out-walk the speed it is granted, so
+# speed * age is a real ceiling on walking and not just arithmetic. The 1% above
+# it in wider windows are the snaps this flag exists to remove.
+#
+# WHAT THIS BOUND DOES NOT COVER, said out loud: `client_pos_at` is the SERVER'S
+# receive time, so the age measured here excludes the client->server leg and the
+# server->client leg. Both are loopback here and neither is measured. A run over
+# a real network would need this re-derived from an RTT.
+RESYNC_MAX_REPORT_AGE = 100.0 / DEFAULT_RUN_SPEED
+
+
+def _sync_position(state, now):
+    """Where the client's SYNC (authoritative) copy is, by OUR OWN model.
+
+    RECONSTRUCTION, and it is only as good as the grants we hooked. It restates
+    the client's own bake: 0x005FE950 sets velocity = unit(d - p) * maxSpeed *
+    moveSpeed with an arrival tick at +0x48, 0x005FFB40 dead-reckons
+    pos = +0x78 + vel * dt, and 0x005FF820's +0x48 arm returns the STORED
+    destination once that tick has passed (it is semantic, not a cache). Here
+    that is a lerp along the granted leg at DEFAULT_RUN_SPEED, parking on the
+    point -- and the speed is not a free parameter: we send moveSpeed 1.0 in 621
+    of 621 sends and the client already holds maxSpeed 288.0 / moveSpeed 1.0 in
+    4,115 of 4,115 movetap samples.
+
+    Returns None until the model has been SEEDED, which happens where the
+    character is placed. A model that was never seeded must not be allowed to
+    produce a confident separation, so every consumer fails closed on None.
+    """
+    frm = state.get("sync_from")
+    if frm is None:
+        return None
+    to = state.get("sync_to")
+    if to is None:
+        return frm
+    dx, dy = to[0] - frm[0], to[1] - frm[1]
+    dist = math.hypot(dx, dy)
+    if dist <= 0.0:
+        return to
+    gone = DEFAULT_RUN_SPEED * max(0.0, now - state.get("sync_at", now))
+    if gone >= dist:
+        return to
+    return (frm[0] + dx / dist * gone, frm[1] + dy / dist * gone)
+
+
+def _note_wire_move(state, opcode, values, now):
+    """Update the SYNC model from a message we are about to put on the wire.
+
+    Hooked into send() for the same reason the create and item hooks there are:
+    it is the one place that sees every one of them whatever sent it. Three
+    opcodes move the authoritative copy of the PLAYER's agent and no others do
+    (0x0025 and 0x002B do not name a point), so this is the whole surface.
+    """
+    if not values or values[0] != PLAYER_AGENT_ID:
+        return
+    point = values[1] if len(values) > 1 else None
+    if not (isinstance(point, (list, tuple)) and len(point) == 2):
+        return
+    point = (float(point[0]), float(point[1]))
+    if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                  GAME_SMSG_AGENT_UPDATE_DESTINATION):
+        # A grant: the copy starts gliding from wherever the model already has
+        # it. If the model is unseeded it STAYS unseeded -- inventing a start
+        # point here would hand the verdict a confident separation built on a
+        # position nobody measured.
+        state["sync_from"] = _sync_position(state, now)
+        state["sync_to"] = point
+        state["sync_at"] = now
+    elif opcode == GAME_SMSG_AGENT_UPDATE_POSITION:
+        # A hard set: BOTH copies land here and NO OUTSTANDING GRANT SURVIVES
+        # IT. That was the one thing this model needed the binary to confirm,
+        # because 0x00602B20 has two arms and only one of them was decoded:
+        # parked (+0x48 == 0) writes +0x78..+0x84 then +0x68..+0x74 = current,
+        # while ARMED (+0x48 != 0) hands off to the teleport primitive
+        # 0x006020B0 -- which zeroes the velocity (+0xB0/+0xB4 via fldz at
+        # 0x0060210E/0x00602117), rewrites the destination to the new point
+        # (+0x88..+0xA0), and CLEARS THE ARRIVAL TICK at 0x006021E6
+        # `mov dword [ebx+0x48], 0`. Had that store not been there, the copy
+        # would have kept gliding toward the old destination from its new
+        # position and this line would be a lie. It is there.
+        state["sync_from"] = point
+        state["sync_to"] = None
+        state["sync_at"] = now
+
+
+def _resync_verdict(state, now):
+    """Pure: should we hard-set both of the client's copies, and to what?
+
+    Returns (fire, reason, payload, plane, age, separation). No side effects, so
+    the policy is drivable from a capture replay without a socket -- the same
+    property _position_verdict has and for the same reason.
+    """
+    pos = state.get("client_pos")
+    at = state.get("client_pos_at")
+    if pos is None or at is None:
+        # NEVER OUR OWN POSITION. state["pos"] is always present and is the
+        # blend; refusing here is what stops a caller reaching for it.
+        return False, "no-client-report", None, None, None, None
+    age = now - at
+    if age < 0.0 or age > RESYNC_MAX_REPORT_AGE:
+        return False, "stale", None, None, age, None
+    # THE REFUSED-REPORT HOLE, and it re-creates the regression this whole design
+    # is built to avoid, by a route the staleness gate does not cover.
+    # `client_pos` and `client_pos_at` both advance ONLY on the accept path, so a
+    # report the trust guard REFUSES freezes the payload while the client keeps
+    # moving -- and the guard refuses precisely when the client has claimed a jump
+    # over CLIENT_POSITION_TRUST_RADIUS (900 u; the corpus's largest true-but-
+    # refused drift is 4,116 u). For up to RESYNC_MAX_REPORT_AGE after that, `age`
+    # is still small and every other gate still passes, so we would hard-SetPosition
+    # the player back to their PRE-jump point. That is "the warp the player
+    # described" again, arriving through the refusal path instead of through the
+    # integrator. `pos_rejects` is zeroed on accept and incremented on refusal, so
+    # a non-zero value means the freshest thing we heard was one we did not believe.
+    # Refuse the fire and let the next accepted report re-open it.
+    if state.get("pos_rejects", 0) > 0:
+        return False, "report-refused", None, None, age, None
+    plane = state.get("client_plane")
+    if not isinstance(plane, int) or not 0 <= plane <= 0xFFFF:
+        # The field is a u16 on the wire and -1 is not sayable (msgtable type 4
+        # widens rather than sign-extends), so an out-of-range plane is refused
+        # rather than masked into a different surface.
+        return False, "bad-plane", None, plane, age, None
+    sync = _sync_position(state, now)
+    if sync is None:
+        return False, "no-sync-model", None, plane, age, None
+    sep = math.hypot(sync[0] - pos[0], sync[1] - pos[1])
+    if sep < RESYNC_SEPARATION:
+        return False, "in-agreement", None, plane, age, sep
+    last = state.get("resync_at")
+    if last is not None and now - last < RESYNC_MIN_INTERVAL:
+        return False, "rate-limited", None, plane, age, sep
+    return True, "resync", pos, plane, age, sep
+
+
+def _maybe_resync(send, state, rec, now=None):
+    """Send one 0x002C if the policy says so. Returns whether it did.
+
+    Called from BOTH client position arms and from nowhere else, so there is one
+    policy rather than two -- the failure this file has already had twice, once
+    with the trust radius and once with the heading grant granting twice.
+    """
+    if not RESYNC:
+        return False
+    if now is None:
+        now = time.time()
+    fire, reason, payload, plane, age, sep = _resync_verdict(state, now)
+    sync = _sync_position(state, now)
+    if rec is not None:
+        # EVERY evaluation, fired or not. The telemetry defect this file already
+        # paid for was a record emitted from one arm with a literal True in it,
+        # so the JSONL could not show a refusal; a resync log that only holds
+        # its own successes cannot be used to score the flag against the
+        # separation it was supposed to close.
+        rec.event("resync", fired=fire, reason=reason,
+                  age=(None if age is None else round(age, 4)),
+                  separation=(None if sep is None else round(sep, 2)),
+                  payload=(None if payload is None else list(payload)),
+                  plane=plane,
+                  sync=(None if sync is None
+                        else [round(v, 2) for v in sync]),
+                  ours=[round(v, 2) for v in state["pos"]])
+    if not fire:
+        return False
+    state["resync_at"] = now
+    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+         [PLAYER_AGENT_ID, list(payload), plane],
+         f"RESYNC 0x002C at ({payload[0]:.0f},{payload[1]:.0f}) plane {plane} "
+         f"-- the CLIENT's own report, {age * 1000:.0f} ms old, closing a "
+         f"modelled {sep:.0f} u between the authoritative copy and it")
+    return True
 
 
 def clip_to_walkable(state, dest):
@@ -7606,6 +7913,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             if opcode == GAME_SMSG_CREATE_NAMED_ITEM and values:
                 state.setdefault("declared_items", {})[values[0]] = list(
                     values)
+            # WHERE THE AUTHORITATIVE COPY OF THE PLAYER IS GOING, recorded from
+            # the message that sends it there. Same reason as the two hooks
+            # above: the click arm, the heading arm, the endpoint arm, the stop
+            # echo and the click sweep all grant through here, and a model fed
+            # from any one of them would be blind to the other four. Costs
+            # nothing when --resync is off -- _maybe_resync is the only reader.
+            if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                          GAME_SMSG_AGENT_UPDATE_DESTINATION,
+                          GAME_SMSG_AGENT_UPDATE_POSITION):
+                _note_wire_move(state, opcode, values, time.time())
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
@@ -7799,6 +8116,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
             # We placed the character here, so this position is known, not stale.
             state["pos_seen"] = time.time()
+            # SEED THE SYNC MODEL. This is the one instant at which the two
+            # copies the client keeps are known to be in the same place and
+            # known to be here -- we put them here. Everything _sync_position
+            # claims afterwards is this point plus the grants we sent, and
+            # without this line it claims nothing at all (fails closed).
+            state["sync_from"], state["sync_to"] = spawn[1], None
+            state["sync_at"] = state["pos_seen"]
             state["pathmap"] = load_pathmap(spawn[0])
 
             def world_tick():
@@ -8640,6 +8964,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported = tuple(values[1])
                         _take_client_position(state, reported, plane, rec,
                                               "0x003D")
+                        # ONE OF THE TWO CALL SITES, and both route through the
+                        # single policy in _maybe_resync. OFF unless --resync.
+                        # It sits AFTER the take so the payload is the report in
+                        # hand rather than the one before it, and before the
+                        # grant arms below so a fire and a grant in the same
+                        # packet are ordered the way the client will apply them.
+                        _maybe_resync(send, state, rec)
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -9182,6 +9513,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               "0x0047", stop=True,
                                               on_mesh=on_mesh,
                                               clipped=was_clipped)
+                        # THE OTHER CALL SITE, same policy, same function. A
+                        # stop is the cheapest resync there is: the client is
+                        # standing still at the point it just reported, so the
+                        # rendered copy cannot be yanked at all, while the
+                        # authoritative copy may still be mid-glide hundreds of
+                        # units away. This is NOT --stop-echo, which is REFUTED:
+                        # that one sends 0x0029, which ARMS a destination (and
+                        # measured, added a second one). 0x002C arms nothing --
+                        # 0x00602B20 writes destination = current.
+                        _maybe_resync(send, state, rec)
                         if STOP_ECHO:
                             # DISARM the destination the client is still
                             # holding. Zero-distance by construction -- the
@@ -10657,6 +10998,24 @@ def main():
                          "answer a heading, so this is the shape we were "
                          "missing rather than a workaround. Score it with "
                          "toolkit/clientscan/movetap.py.")
+    ap.add_argument("--resync", action="store_true",
+                    help="SEVENTH candidate. Send GAME_SMSG 0x002C "
+                         "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
+                         "accepted position report, when our model of the "
+                         "server-authoritative copy has drifted "
+                         "RESYNC_SEPARATION units from it. It is the only "
+                         "catalogued primitive whose handler reaches BOTH the "
+                         "SYNC array at [agentMgr+0xE8] and the ASYNC array at "
+                         "[agentMgr+0x14C] with no gate, and it calls "
+                         "AgTrack::Clear first, so the three-gate desync test "
+                         "cannot reseed the roster behind it. The trade it is "
+                         "for: a small, frequent, correct correction against a "
+                         "rare 3,648 u one. An earlier build sent five of these "
+                         "carrying OUR INTEGRATOR'S position and they were "
+                         "removed as 'the warp the player described' -- this "
+                         "sends the client's own figure and refuses to send "
+                         "anything else. OFF by default; independent of "
+                         "--heading-grant and --client-endpoint, both REFUTED.")
     ap.add_argument("--stop-echo", action="store_true",
                     help="REFUTED 2026-08-19, kept only so the negative result "
                          "is reproducible -- do not reach for this as a fix. On "
@@ -11162,6 +11521,44 @@ def main():
               "and the conclusion was still wrong, because the prediction "
               "measured the wrong thing: it bounded the SIZE of the teleports "
               "and said nothing about their NUMBER.")
+
+    if a.resync:
+        global RESYNC
+        RESYNC = True
+        print("[map] --resync ON. 0x002C AGENT_UPDATE_POSITION, payload = the "
+              "CLIENT's own last accepted report.")
+        print(f"      RULE      fire when modelled SYNC-vs-client separation "
+              f"reaches {RESYNC_SEPARATION:.0f} u, at most once per "
+              f"{RESYNC_MIN_INTERVAL:.2f} s, only on a report no older than "
+              f"{RESYNC_MAX_REPORT_AGE * 1000:.0f} ms.")
+        print(f"      HARM      a fire yanks the RENDERED copy backwards by at "
+              f"most {DEFAULT_RUN_SPEED * RESYNC_MAX_REPORT_AGE:.0f} u "
+              f"(speed x age), against the hard jumps it replaces: p50 "
+              f"569-1,969 u, max 3,405 u.")
+        print("      EXPECT    ~25 fires per minute of span (42% of the "
+              "client's reports), at separations p50 183 u / p90 514 / max "
+              "4,633 -- replayed over 66 corpus captures, 4,712 s. If the "
+              "console shows far fewer, the SYNC model is not being fed; far "
+              "more is not reachable, the rate limit caps it at 2 Hz.")
+        print("      PREDICTION, stated before the run, in BOTH units because "
+              "the last candidate bounded size while the harm arrived as "
+              "frequency:")
+        print("        SIZE      no client step above 520 u on movesync's hard "
+              "bar. Any single displacement over 520 u REFUTES it.")
+        print("        FREQUENCY hard rows per minute of ACTIVELY-REPORTED time "
+              "fall below the default build's 4.19. Above it REFUTES it.")
+        print("      Score it with:  python toolkit/clientscan/movesync.py "
+              "--wire-only   (state the denominator)")
+        # ASCII, deliberately. A U+26A0 warning sign here CRASHED the server at
+        # startup on a default Windows console: cp1252 has no code point for it
+        # and print() raises UnicodeEncodeError, so the flag would have killed
+        # the very run it exists to enable. The em dashes elsewhere in this file
+        # survive because cp1252 does have those.
+        print("      !! An earlier build sent five of these carrying OUR "
+              "integrator's position and they were removed as 'the warp the "
+              "player described'. If the character WALKS rather than being "
+              "corrected, that regression is back and the payload is the "
+              "first thing to read.")
 
     if a.stop_echo:
         global STOP_ECHO

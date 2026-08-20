@@ -471,7 +471,75 @@ Every one of these, in the order they were written:
   and its identity from X and reported `identified: True` -- MEASURED, 308 of 315
   changed rows naming a file the after-image does not hold -- and the gate is the MFT
   BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
-  the same defect wearing the right name. Floor 75 -> 84),
+  the same defect wearing the right name. Floor 75 -> 84. **§§12-12d added
+  2026-08-20 with `assert_archive_safe`, the launch-side gate, floor 112 ->
+  149.** This is the one part of the file that checks a REFUSAL rather than a
+  verdict, because the two failure modes it stands in front of have no clean
+  error between them and the archive: a header whose CRC does not verify
+  tail-jumps `ArchiveOpen` into ArchiveCreate, which writes a fresh empty
+  archive over 4.2 GB with nothing logged, and one stale payload CRC costs the
+  whole `nextStream` chain the moment repair fires for an unrelated reason. The
+  two rules the gate ADDS to the ten each carry the control that shows the
+  pre-flight blind to them: an archive with a wrong MFT self-crc answers 10 of
+  10 clear and is still rejected by the client's own LoadMft, and an archive
+  whose row was rewritten LEGITIMATELY -- payload and crc agreeing, so every
+  integrity rule is green -- is a different world that only the fingerprints can
+  tell apart. The self-crc is compared against this file's own reading of the
+  rule rather than against `datwrite.mft_self_crc`, so the two can differ.
+  `deep=True` is pinned both ways (one generation refuses, the SAME archive
+  clears without deep, a planted second generation clears it), the identity tier
+  resolves a fingerprint DOCUMENT to its `rows` block and refuses one holding
+  two UNNAMED blocks rather than guessing which side of a profile to match, and
+  a full deep+fingerprinted run is proved to leave the file byte-identical by
+  sha256 -- which is what the LIVE path rests on, since run-live's archive
+  drifts on purpose and the gate may only read it. The three exit codes stay
+  apart through the real CLI, so an unreadable archive is 2 and never 1. **§12d
+  is the section the fix pass rewrote, and it is now about the CENSUS of launch
+  sites rather than a list of them.** It asks FOUR syntax trees whether each
+  calls the gate itself -- `session.run_client`, `drive_client.main`,
+  `livesession.preflight`, `deploy.launch` -- and the fourth is the correction:
+  the first revision named three and left out `drive_client.main`, the
+  standalone operator launcher and the OTHER of the two doors session.py's own
+  quoted comment is about (PLAN.md: "both launch sites (`drive_client.py`,
+  `session.py`) assert it"), so the gate stood in three of four launch paths,
+  which is the two-doors defect wearing the gate's own name. The list is
+  therefore held against a census DERIVED FROM DISK -- every non-test harness
+  file that hands an `exe` to `Popen` -- which reads {drive_client, livesession,
+  session} and is refutable in both directions: it fails against the old
+  three-site list and passes against the new four, so a fifth door cannot appear
+  unlisted. The live site is checked for the ORDER of its call as well as its
+  presence, with its own wrong-way-round control: a running client holds the
+  archive EXCLUSIVELY, so a gate written above the client census answers a
+  left-open live client "could not be read far enough to have findings" --
+  unreadable damage, no action named, on ArenaNet's own 4.2 GB copy -- while the
+  refusal written for exactly that case never runs. The same cause at the three
+  sites with NO census gets the errno its own sentence instead
+  (`LOCKED_REMEDY`), checked three ways: the remedy names the client on a
+  PermissionError, does NOT name it on a parse failure, and end to end the gate
+  names the lock exactly when the platform's own errno is the lock's. The
+  negative control stays: deleting the one line from a COPY of deploy.py flips
+  the check. MEASURED read-only over all EIGHT 4.2 GB archives in the vault:
+  every one clears, 6.0-7.1 s, and re-confirmed at 6.2 s after the fix pass.
+  Floor 112 -> 149. **S12e added the same day, floor 149 -> 168, after a seam
+  probe ran the gate and `overlay --status` against the SAME documents and bytes
+  and found them disagreeing five ways**: the identity tier compared by ROW
+  NUMBER where every line of overlay is file-id addressed, so an archive the
+  client had REARRANGED under the profile -- the exact state `--verify-after`
+  exists to detect -- cleared the gate while overlay refused it; none of the
+  document's three trust checks ran on the gate's side; five doctored shapes
+  escaped as raw exceptions past every `except ArchiveUnsafe`, mislabelled at
+  the CLI as an unreadable ARCHIVE; and a document with `rows` removed fell
+  through to `retail_rows` and cleared a retail archive as "deployed". S12e
+  closes each red-then-green: the identity tier resolves the document's
+  `file_ids` through the archive's own raw table first (a document without them
+  keeps row addressing and the receipt SAYS you are trusting row numbers),
+  overlay-format documents pay overlay's own three refusals through a lazy
+  import of overlay's own primitives -- with an EQUIVALENCE check feeding one
+  document to both readers and requiring identical verdicts, controlled by
+  neutering the verifier and watching four doctorings clear -- every document
+  fault refuses as a fault of the DOCUMENT (exit 1, named), and the side of a
+  profile is an explicit choice (`side=`/`--side`) that refuses ambiguity rather
+  than resolving it by position. Floor 168),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
   2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
   that is the design**: refusing a container whose walk does not close is what
@@ -2484,9 +2552,58 @@ Every one of these, in the order they were written:
   when our model is least entitled to name a destination). Both matchers run only
   against healthy source, so both are branches a typo would silently disable --
   the control hands them source carrying both old defects and requires them to
-  still fire. §10 replays the capture. Floor **34**, the bare-machine subset,
-  against a green **38** with `authsrv-20260819T114759-c1.jsonl` present; §10
-  declares `LEDGER.skip` without it. No client. ~1 s),
+  still fire. §10 replays the capture. **§11 locks `--resync`**, the SEVENTH
+  candidate and the first one aimed at the copy the player actually sees.
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the only catalogued primitive
+  whose handler reaches BOTH of the client's copies with no gate — read out of
+  the pinned pristine 38797 image at `0x005FDA50`: `AgTrack::Clear` first
+  (`0x005FDA78`, which zeroes `clientControlled` and so disarms the three-gate
+  desync test behind it), then `SetPosition` on the SYNC array
+  (`[esi+0xe8]` → `0x005FDAE5`) and on the ASYNC array (`[esi+0x14c]` →
+  `0x005FDB49`). **It is also the message an earlier build sent and had removed
+  as "the warp the player described"** — because that build sent OUR
+  INTEGRATOR'S position, and "five went out and three were arrivals, carrying
+  the client 630, 189 and 765 units"; 765 is exactly one heading vector, i.e.
+  the integrator had walked a whole leg the client never walked. The entire
+  difference between a fix and that regression is which value lands in the
+  payload, and `state["pos"]` is nine characters from `state["client_pos"]`, so
+  most of the section exists to make that keystroke red: the payload is asserted
+  behaviourally against a state where the two DISAGREE, the send site's vec2 is
+  asserted as the syntax-tree node `list(payload)`, and `state["client_pos"]` is
+  asserted to have **exactly one writer in the file** — the accept path. It also
+  asserts the flag ships OFF and that with it off a state that *would* fire
+  sends nothing **and records nothing**; that the three constants carry
+  derivations rather than choices (the trigger is the client's own 100.0 u
+  match radius at `0x00946560`, three times under gate 1's real 299.332591 u
+  cut; the rate limit sits under its derived ceiling of `299.332591 / (2·288)` =
+  0.5197 s, the shortest time in which two copies moving directly apart can
+  accrue a full gate's separation; and `RESYNC_MAX_REPORT_AGE · 288 = 100.0 u`
+  exactly, so **the staleness bound IS the harm bound**); that a payload with no
+  accepted client report behind it is refused with 5,000 u of our own drift on
+  the table; that the age bound is inclusive at the bound, refuses one
+  microsecond past it, and refuses a **negative** age too (clock skew sails
+  through an upper-bound-only test); that twenty fireable reports over 1.9 s
+  produce 4 sends and not 20, **and not 0**; that 50 u apart sends nothing; that
+  the SYNC model fails closed when unseeded, walks a granted leg at 288 u/s
+  rather than teleporting to its end (a model that parked instantly would read
+  every legitimate click-walk as a 2,880 u desync), parks on the point, and
+  follows a `0x002C` we send; and that the encoded bytes are the schema's —
+  `msg_header / dword / vec2 / word`, 16 B declared and 16 B produced, compared
+  **byte for byte** against a hand-packed struct because field order is the one
+  thing this project has already got wrong on a movement message. Two controls:
+  one asserts the function under the matcher really does mention `state["pos"]`
+  (it logs it beside every verdict) so the matcher is not judging an empty
+  set, and one hands the matcher `list(state['pos'])` on purpose and requires it
+  to still reject. It also asserts the flag's own startup banner is printable —
+  a `U+26A0` in it raised `UnicodeEncodeError` on a default Windows console
+  while this was being written, so the flag would have killed the very run it
+  exists to enable before a packet went out; the scan is against **cp1252**
+  rather than ASCII, because the em dashes elsewhere in `authsrv.py` are fine
+  and a blanket rule would be wrong, and its control plants a `U+26A0` and
+  requires the scan to still see it. Floor **69**, the bare-machine subset,
+  against a green **73** with `authsrv-20260819T114759-c1.jsonl` present; §10 is
+  the only fixture-bearing section (4 checks) and declares `LEDGER.skip` without
+  it. No client. ~1 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -2745,6 +2862,119 @@ Every one of these, in the order they were written:
   them, and so does `movetap._selftest_fence_bytes` (that section's two checks
   and its one control are the only 3 of §17-§20's 46 that need the vault's
   client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
+  DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
+  server change nobody has made against captures already on disk. The proposal:
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the one catalogued primitive whose
+  handler (`0x005FDA50`) calls `AgTrack::Clear` FIRST (`0x005FDA78`) and then
+  SetPositions **both** agent arrays with no gate on either arm, so it is the
+  only message that can reach the copy the player actually sees once
+  `0x0025`'s async arm has been gated shut for the client-controlled agent. The
+  scorer reuses `movesync`'s loaders and its repaired two-arm hard bar verbatim
+  -- `load_wire_reports`, `load_grants`, `steps`, `hard_step`, `on_segment`,
+  `denominator`, `per_minute` -- and adds no decoder of its own, because a
+  second reader is a second chance to disagree about what the client said.
+  **A counterfactual has three ways to lie and there is a section for each.**
+  §15 is the load-bearing one: ArenaNet's own traffic scores **0 hard jumps**
+  over 35 usable game connections and 2,739 self-reports, so a rule that fires
+  on retail as often as on our defective build is reading the wire, not the
+  defect -- and it **currently fails for two of the five rules**, which is
+  PINNED rather than tolerated. Rule C (`0x002C` before every player grant)
+  has the best coverage of the four cheap rules, 5 of 7 hard jumps, and fires
+  **4.13x more per minute on retail than on the build we ship**; Rule D
+  (C plus an arrival model on the previous leg) fires 0.816x. Rules A and B
+  separate at 0.024x and 0.026x, and **Rule E -- a forward model of the sync
+  copy -- gets both halves: 7 of 7 covered at 0.228x**. A session that
+  "improves" C without re-running the control turns §15 red, and moving the
+  comparison's reference from the SHIPPED build to our worst capture -- which
+  makes C read as 0.101x and "separating" -- reddens six checks. **§18 is the
+  check that can refute Rule E**, and it is the only claim in this file that is
+  not about this file: a forward model is the "four assumptions stacked under a
+  conclusion" `movesync.py`'s header refuses, so it is paired against
+  `movetap-20260819T145939`, a `ReadProcessMemory` of `[agentMgr+0xE8]` in the
+  session capture `20260819T145717` recorded. The model sits **p50 0.0 u, max
+  67 u from what the client's own memory held over n = 251**, and the separation
+  it computes from grants on the wire reproduces `studies/movement/HANDOFF.md`
+  §1's **1,164 / 2,163 / 3,648 u** exactly, by a path that never opens the
+  movetap file to compute them. That section carries its own positive control,
+  which mutation put there: hard-wiring the residual to 0.0 left it green, so
+  the model is now deliberately halved in speed and the same residual must move
+  (0.0 -> 202 u over the same 251 pairs), and pairing a movetap run from a
+  DIFFERENT session must return None rather than inventing a comfortable row.
+  **§17 prices every threshold in the file**: retail's own two copies, through
+  the same model, sit **p50 83 u, p75 260 u, p90 653 u** apart with zero snaps,
+  so a resync threshold of 100 u sits at ArenaNet's MEDIAN separation while our
+  shipped build sits 13.5x further out. **§19 is the actionable half**: the
+  COOLDOWN is where the coverage goes, not the threshold -- Rule E covers 7/7 at
+  cooldown 0.00 s, 3/7 at 0.50 s and 2/7 at 2.50 s, while the yank stays p50
+  0.08 u at all three, because the payload is always the client's freshest
+  adopted report; and dropping the threshold from 299.33 u to 100 u buys **no**
+  coverage for 31 extra firings. §1-§2 pin `leg_distance` as the SEGMENT
+  distance and prove it is a lower bound on separation against a 201-position
+  sweep of the granted leg, the row count asserted first. §3 gates the arrival
+  model in both directions on a 2,000 u leg (t_park = 6.944 s): 32 firings, none
+  before it. §4 requires Rule B to fire **0 times** on a client walking the leg
+  it was granted and 25 times on one walking perpendicular to it -- without the
+  second half the first passes for a rule that never fires. §5 pins D as a
+  structural SUBSET of C **and** shows D firing once on a leg that did finish,
+  because a subset relation is free for a rule whose gate is `return False`.
+  §6-§7 pin the cooldown's bound on the inter-firing gap and the threshold's
+  monotonicity. §8-§9 are the COST, in the units the harm arrives in: the
+  payload is `state["pos"]`, so **staleness is non-zero only where the
+  position-trust guard REFUSED a report** (3 consecutive refusals leave the
+  payload 216 u = three intervals behind, and the tool names the one-line
+  mitigation beside it), and the self-mint bar is asserted to BE
+  `movesync.HARD_JUMP_UNITS` by identity rather than by value -- a private copy
+  is how a fix ends up scored on a friendlier bar than the defect it replaces.
+  §10 pins coverage to the interval a firing lands in and mutates it in-process
+  by deleting that firing. §11 exercises the refusals: an unknown rule name, a
+  capture with no player grant declaring a NULL **with its reason** instead of a
+  bare 0, and the retail control over ZERO connections REFUSING rather than
+  returning a comfortable zero -- `all([])` is True and this repo has already
+  shipped that control once. §11b pins the sync model's shape before any capture
+  touches it: seeded at the client's first report, still gliding 0.25 s short of
+  a 10.000 s leg (the negative half, so a model that teleports on the first tick
+  cannot pass), PARKED at t=12.0 s and t=14.5 s, and re-aimed by a fresh grant
+  from where the MODEL has it rather than from the client's report -- which is
+  what the client's own bake does, reading the sync agent's `+0x78`.
+  §13 pins the vault replay cell by cell, 15 cells:
+  `20260819T145717` reads 116/85/38/4/213 firings and 3/1/5/2/7 covered of 7 for
+  rules A/B/C/D/E, `171153` 1/7/702/1/66, `182652` 0/3/318/0/40. It also
+  re-measures the
+  census -- **0 x 0x002C sent, every run** -- and pins THE FINDING: all four
+  jumps Rule A cannot reach are missed for `not-parked`, i.e. blocked by the
+  arrival model rather than by a threshold or a cooldown, so **no parameter
+  reaches them**. §14 exists because the prompt this arc was handed called
+  `20260811T173940` a retail capture: `origin.origin_of` says `ours`, build
+  38797, in `captures/gamesrv/`, with 0 player grants and 0 hard jumps -- an
+  internal null, and a consistency check on both halves. It also proves
+  `require_single_origin` refuses a run pooling `ours` with `live`, which each
+  file's own per-file check cannot catch. §16 resolves the retail player agent
+  from that connection's own `0x0037` and corroborates it with the id-free
+  signature the 2026-08-19 corpus pass used, |grant dest - the client's own
+  report|: over the 20 connections with **>= 5 rival agents** the named agent
+  beats the population median every time (margin 1.12x worst, 4.43x median),
+  and the nearest-rival form -- which separates on only 25 of 35, because a
+  henchman a step behind the player looks like the player -- is MEASURED and
+  deliberately not the check. The population floor is declared rather than
+  chosen after seeing which rows pass, and the one connection it excludes is
+  named. **Sixteen mutations were built and run and all sixteen redden**:
+  dropping `leg_distance`'s clamp, removing Rule A's park gate, unbinding the
+  cooldown, swapping the self-mint bar for a private constant, letting the
+  payload ignore whether a report was adopted, picking the retail player by
+  grant volume instead of `0x0037`, deleting the empty-population refusal,
+  making coverage count a jump whenever any firing happened, scoring the null
+  capture as a plain zero, moving the discrimination reference off the shipped
+  build, and six on the model: never parking, teleporting to the destination on
+  the grant, re-aiming from the client's report instead of its own state,
+  running at half speed, comparing the model against ITSELF, and returning a
+  comfortable row where it should return None. **The last two were HOLES the
+  first pass left** -- a residual hard-wired to 0.0 and a refusal path no
+  full-vault run ever reaches -- and both are what the positive controls in §18
+  now exist for. Floor **47**, the bare-machine subset, against a green **98**
+  with the vault present; §13-§14, §15-§17 and §18-§19 declare `LEDGER.skip` in
+  groups without `captures/gamesrv`, `captures/live` and `captures/movetap`.
+  Reads only; sends nothing, and never imports `authsrv.py`. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
@@ -5480,4 +5710,279 @@ Every one of these, in the order they were written:
   vault row overrode it by key everywhere the probe can actually run. The bind
   moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
   reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
-  nothing here can skip, which is the whole claim. <1 s).
+  nothing here can skip, which is the whole claim. <1 s),
+  `toolkit/mapdata/test_datledger.py` (the ROW CENSUS, the counting convention
+  it refuses to choose between, and WHICH VERB FAILED. Correction C-8 records
+  two censuses of "the same" archive disagreeing by 16 comp-8 rows and 20 in the
+  sum, load-bearing on the published "661 of 138,708 rows are unwritable stored"
+  -- and the headline here is NOT the counting: "26 rows censused" is a number
+  an almost-right census also prints. The load-bearing fixture is a PLANTED
+  DISAGREEMENT, one compression-8 row with FLAG_ENTRY_USED clear, which the
+  `entries` convention counts and the `used` convention drops; section 3 asserts
+  BOTH counts, that they differ by exactly the rows the delta names, and that
+  the delta decomposes into `{structural 12, spare 2, comp8 1}` -- the mechanism
+  in miniature. The synthetic archive carries every class at once (fifteen
+  structural rows, two spares with one still named by the file-id table, an
+  armed head, stored rows, real `gwenc` compression-8 streams, an unknown
+  compression code 12, a bit-31 renamed row, the ghost row) and its MFT is
+  deliberately not a block multiple, so row 3's slack is checked against
+  `datalloc.mft_slack` -- two modules, one number, neither importing the
+  other's. **The second thing it exists to do is refuse to bucket a row it does
+  not understand**: the ladder always terminates, so every row lands somewhere
+  and the totals always look tidy, which is the shape of a check that cannot
+  fail. Section 5 pokes each of the six contradictions into a copy's MFT and
+  requires the row to be REPORTED as well as bucketed. **The third is section
+  6b, which is about WHOSE FAULT a failure is**: review found `--reencode 9999`
+  printing the entire census -- headline, classes, slack -- and then reporting
+  "could not census DAT" with exit 2, the code this directory spends on an
+  unreadable archive, a false statement about a file the same run had just
+  finished reading and the sort a script believes. A run has four verbs and only
+  one is the census, so `_phase` makes each name itself and the last-resort
+  handler stop claiming to know; 6b asserts the census RAN and printed, that the
+  refusal names the ROW and not the archive, that a corrupted comp-8 stream is a
+  failure to re-encode THAT ROW, that an unopenable `--json` destination is a
+  failure to WRITE, and -- the control that keeps those three from passing
+  vacuously -- that a genuinely unreadable archive still does say "could not
+  census". The PRE-FIX module, restored verbatim in memory, reddens eight of
+  6b's eleven; the three it does not are exit 2, the census-printed-first
+  premise, and that control. Sabotages are run in memory and counted, never
+  predicted: the anomaly walk stubbed out reddens 9 while printing the SAME
+  class totals; classing on `size == 0` alone -- the pre-2026-08-15 `datplan`
+  rule that called an ARMED head a free slot -- reddens 6; `reservation_for`
+  without block rounding 7; `check_stamp` that never compares 3; `_phase`
+  neutered 4; `reencoded_size` without its row-range refusal 3; the convenience
+  `file_id_table(raw=False)` 1. The first sabotage FOUND a defect in the module:
+  `_by_class` was a comprehension over `CLASSES`, so a class the ladder produced
+  and `CLASSES` omitted vanished from every total while every total still added
+  up -- the same failure the anomaly walk exists to prevent, in the code that
+  reports it. Two test-side helpers exist for the same reason and are worth
+  reading: with a naive `.splitlines()[1]` detail expression the stamp sabotage
+  raised IndexError INSIDE the check's own argument list, killing the section
+  and leaving one unnamed crash as the whole evidence (`line()`,
+  `refused_line()`), and `refusal()` catches only `Refused`, so a bare
+  IndexError where a refusal belongs would have escaped the check written to
+  catch it (`raised()`). Section 3b walks the module's own syntax tree and
+  requires C-8's figures to appear in the docstring citation and in NO other
+  literal, with a control that they are in the docstring so the check cannot
+  pass vacuously on a module that never heard of the correction. **Section 7 is
+  where C-8 comes apart**, on two real archives: `vault/dat_study` under
+  `entries` reproduces the larger census EXACTLY (38,633 = the "38,621+12" whose
+  +12 IS the twelve erased structural rows the USED convention drops, 138,708
+  comp-8, sum 177,341), and the pristine install copy under `used` reproduces
+  the smaller SUM exactly (177,321) with the compression split one row from what
+  was reported -- so the twenty rows are SEVEN of archive difference plus
+  THIRTEEN of convention, and the sixteen comp-8 rows are FIFTEEN of archive
+  difference plus one, and the reconciliation closes. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 84 bare (`RURIK_VAULT` pointed at nothing),
+  95 with a vault, section 7 raising the floor itself as its last act. ~2 s),
+  `toolkit/mapdata/test_refindex.py` (the REVERSE-CLOSURE index -- "who else
+  reads this row?", the question `unitassembly.py`'s forward walk cannot answer
+  and the shared-skeleton hazard (`studies/unitmodels/FINDINGS.md` §3.11, six of
+  seven pairs bit-identical) needs answered before a write. Builds its own
+  archives: the MFT, the ffna type-2 container framing, the reference-list
+  record rule and the FA1 blk2C layout are all re-derived from this file's own
+  byte literals and nothing is constructed by the module under test. **The
+  positive control is section 1 and it is not a formality** -- an FA8 link is
+  planted from two heads onto a third and BOTH must come back kinded before any
+  section reads anything into an absence, because a tool whose every answer is a
+  FLOOR fails by answering EMPTY and an empty answer looks exactly like success.
+  Covers the KIND (A reaches T through FA5, B through FA6), the dedupe (an FA8
+  naming a target twice is ONE referrer), the FA5 null slot naming no file and
+  therefore no reader, an unresolvable target recorded in `index.unresolved`
+  rather than dropped, `m_seqCount` recorded as a fact and NOT applied as the
+  client's link gate (`0x00794917`), the flags-1 companion row that links to the
+  same target and is correctly not walked, and walked-vs-indexed reported
+  separately so two unreadable heads cannot quietly shrink the archive.
+  **Section 3 is the defect this module shipped and it is the reason the graph
+  is keyed by MFT ROW**: a row can carry several file ids -- 38,396 do on
+  `dat_study`, 60.0% of all flags-515 heads and 25,536 rows that are not heads
+  at all -- and edges filed under whichever spelling a reference list happened
+  to use made ONE physical row answer two different things, 558 of 558 times on
+  a 1,500-head sample, one of them the confident empty list. So it asks every
+  spelling of a two-name TEXTURE row (flags-3, not a head, the case a head-only
+  alias map cannot resolve), of a two-name head row, and of a bit-31 rename
+  spelling; checks `canonical_id` normalises a caller's own ids the same way;
+  and cross-checks `who_reads` against `unreferenced_fa1_heads` for the
+  contradiction that defect produced -- no two spellings of any head disagree,
+  and no head the census calls unreached answers with a referrer under any of
+  its names. Skeleton sharing is bit-identity and section 4 does not weaken it
+  -- two heads with identical blk2C bases pair, a third with the SAME node count
+  and different bases does not, a fourth with an extra node does not -- **but
+  the answer now carries the node count, the group size and whether every base
+  in the key is zero**, in the sentence and in `answer.facts`, because on retail
+  572 of the 1,003 FA1-carrying heads in a 1,500-head sample sit in ONE group
+  keyed on a single node at (-0.0,-0.0,-0.0), and a bare count would send an
+  operator off to acknowledge 571 unrelated models; a +0.0 twin is contentless
+  AND in a different group, which pins that "contentless" is a REPORT and not a
+  change to the criterion. **The sabotage** cuts the terminator off the planted
+  FA8 record: the build must land it in `index.problems` at `mdlrefs`' own
+  `G01_terminator` gate, DROP that referrer rather than invent one, still report
+  the intact referrer, and still index the same head's FA5 list -- a refusal
+  scoped to the head instead of the list would look identical on a green run.
+  Also the stamp (size + MFT sha256) refusing a stale index against an archive
+  edited to the SAME size and row count, six doctored-index refusals including a
+  format-version bump and a document with no spelling map, `save` refusing a
+  path inside a checkout and writing nothing, the floor sentence and the
+  skeleton facts surviving a JSON round trip, and the CLI exiting 2 on an
+  unreadable archive and on `--json X --build-json X`. Eleven in-memory
+  sabotages were run and all eleven reddened NAMED checks
+  (19/12/11/8/7/5/5/4/3/2/1); three were hard stops until `first_spot()`,
+  `head()` and `fact()` were made to read defensively, which is why they do. 92
+  checks against a floor of 92, no vault, nothing that can skip. ~0.25 s),
+  `toolkit/mapdata/test_datdelta.py` (CONTENT-ADDRESSED ROW DELTAS -- a staged
+  archive IS its difference from retail, so the 4.2 GB copy can be deleted, and
+  this is the file that says whether it may be. Ten sections against files it
+  writes in a temp directory, with `RURIK_VAULT` pointed at another one so the
+  store guard runs for real rather than being skipped; no vault, no corpus,
+  nothing that can legitimately skip. The span finder is checked against
+  arithmetic done by hand -- 63 B of agreement between two differences merges,
+  64 B splits, a difference across a chunk seam is ONE span -- then
+  capture/apply/prove round-trips byte-identically in BOTH directions, including
+  a staged archive that GREW, where the tail past retail's EOF is one span whose
+  retail side is zero bytes long and reconstituting back TRUNCATES. Section 4 is
+  the long one: an unrelated target, a target that is already the destination, a
+  blob of the wrong LENGTH (five bytes where the span declares six -- it used to
+  be six WRONG bytes, which fired the hash branch and left the length branch
+  with no coverage at all, and disabling that branch alone kept the whole file
+  green), a blob of the right length and the wrong bytes, a missing blob, four
+  doctored manifests -- one the structural check can see and three only the
+  destination sha256 can, because a span shifted within range, a span whose two
+  sides are swapped and an emptied span table are all structurally flawless --
+  and TWO SPANS NAMING ONE BLOB, the dedupe the tool advertises, which is where
+  a table declaring two different lengths for that blob used to walk past the
+  store verification and spin `apply` for ever on a spent file handle. Every one
+  of those checks the TARGET as well as the message, because a refusal that
+  arrives after the write has refused nothing, and the two calls whose broken
+  form is a hang run on a join deadline so the defect lands as a named FAIL
+  instead of a cursor. Section 6 is the store: blobs paid for once across two
+  deltas, a two-manifest store with no `--name` refused rather than guessed, and
+  the same rule on the WRITE side -- capturing over a manifest that describes a
+  different pair refuses naming both hashes, an identical re-capture is
+  idempotent and says so, an explicit `--name` is no licence either, and
+  `--replace` is the only way an overwrite happens (`run/Gw.dat` and
+  `run-live/Gw.dat` both stem to `gw`). The span cap is exercised for real at
+  4,100 genuine spans (266,500 B of fixture); the 256 MiB byte cap is exercised
+  by tightening the constant, which is stated rather than hidden. Section 8
+  builds a real 14 KB archive so the row annotation runs against a table that
+  exists -- a payload span names exactly its row, a span inside the MFT names
+  row 3 and is flagged -- and a file that is not an archive still captures, with
+  the reason in a note. Three sabotages live in the file for guards nothing else
+  can reach: `apply` stubbed out entirely so `prove` must say NOT PROVEN on its
+  own hash, `_verify_blobs` stubbed down to a sha-to-path map so the write loop
+  must refuse a spent blob by itself, and the byte cap tightened. Fourteen more
+  applied by source surgery and reverted, worst 9 red for `_verify_blobs` sizing
+  and hashing nothing; the counts MOVED between sweeps until they were re-taken
+  with `-B`, because several sabotages add exactly ten characters and CPython
+  will reuse the previous same-size source's `.pyc`. Floor 84),
+  `toolkit/mapdata/test_overlay.py` (DECLARATIVE ARCHIVE PROFILES, and the
+  refindex gate is the thing being proved — from BOTH sides, because the gate
+  has two ways to answer emptily and each has its own positive control. Section
+  3 is the first: two heads are planted linking to the edited row and the plan
+  must REFUSE naming both — printing refindex's own floor sentence and blind
+  spots verbatim, plus the exact `acknowledge_shared_with = [...]` line to paste
+  — before any passing case below it is believed, because a bounded query fails
+  by answering EMPTY and an empty answer is the shape that looks like success.
+  The tier is checked from both sides: a real two-node bit-identical rig must be
+  acknowledged, while an all-zero degenerate key (572 retail heads sit in one
+  such group) must print its note, say outright that nothing is required, and
+  refuse nothing. Every id crosses `refindex.canonical_id` on both sides, so the
+  fixture gives row A two plain spellings — 60% of retail heads are multiply
+  named — and a COMPLETE declaration written in the other spelling must PASS
+  while a PARTIAL one in that spelling must still refuse naming only what is
+  missing. Section 3b is the SECOND positive control and it is about the INDEX
+  rather than the archive: a stamped, current, non-partial index still answers
+  EMPTY for a row whose only referrers are heads it could not READ, so A and B
+  keep their real FA8 lists naming C and have their container magic damaged to
+  `ffnX` — the archive proven healthy on all ten rules and every crc, the index
+  proven current with problems 2 and partial False, `who_reads(C)` proven `[]`,
+  and only then is the refusal believed. The blind spot must be declared by
+  COUNT (`accept_unread = N` in `[overlay]`), refused when undeclared, refused
+  when the number has moved in either direction, and NOT waivable for a partial
+  index, which gets no acknowledgement at all whether handed in or saved and
+  named by a manifest. Its sharpest check is the contrast: the same texture edit
+  against the archive whose containers DO read is refused for a real FA5
+  referrer, so the empty answer was the damage and not the truth. Also there: an
+  id the index resolves to no row says so out loud instead of passing silently,
+  a row that is ITSELF unreadable says that its empty co-wearer answer means
+  "not indexed" and never "nobody else wears it", and a file-id table poked in
+  place — which leaves the MFT stamp byte-identical, asserted, and which only
+  `--crc-sweep` can see, also asserted — makes the index and the archive name
+  two different rows for one id and is REFUSED naming both. Section 7 is a
+  sequence with no client in it: `--build`, `--deploy --yes`, `--retail --yes`,
+  `--verify-after` used to end with the post-flight naming a row `--retail` had
+  rewritten seconds earlier as one "the client wrote to", so the section runs
+  that exact sequence and requires a refusal, runs the re-build variant and
+  requires another, requires the two halves of a before-image to describe one
+  deploy (the record carries the snapshot's sha256), requires a hand-edited
+  before-image to be caught by its own digest, and requires the result to NAME
+  the moment it was measured against. Also: manifest refusals (unknown [overlay]
+  key, a name that is not [a-z0-9-]+, active==retail, two edits on one file id,
+  `stored` beside compression 0, C:\gw as EITHER archive); the fit arithmetic in
+  all three cells by hand, including `fit_of(100, 900, 600)`, the only pair of
+  numbers that can tell a donor-sourced grow_to from a payload-sourced one; a
+  file id named by two records refused rather than resolved to whichever sorts
+  first, with the silent `file_id_table` answer measured first as the sabotage
+  premise; `datwrite.declaration_fault` wired, so a compression-8 stream that
+  decodes to bytes other than its declared payload never reaches the archive; a
+  saved index loaded stamp-checked and a stale one refused both when named and
+  when handed in; build staging under the vault, byte-exact on the touched row
+  and untouched everywhere else, refusing a build that changed nothing; a
+  hand-edited build record caught by its own digest; the grow-back run for real
+  against a row shrunk to 100 B with its own 1,024 B standing free, datwrite
+  annexing and the journal recording the whole reservation; the three-valued
+  deploy premise with --yes on both writing verbs and a NEITHER state
+  hard-refused; verify-after detecting a simulated client write on an owned row
+  while reporting the archive itself still healthy; and the CLI's one-verb rule
+  and 0/2 exit codes. Builds its own archives, manifests and payloads in a
+  tempdir with RURIK_VAULT pointed at a temp vault, so there is no corpus to be
+  missing and nothing here reads the real one. Twenty-two sabotages measured,
+  and every one of them runs all 133 checks — an earlier pass had three that
+  CRASHED the run at checks 46, 51 and 74 and scored 0, 0 and 7, which is why
+  `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133),
+  `toolkit/harness/test_abrun.py` (A/B DIFFERENTIAL RUNS, THE MECHANICAL HALF —
+  no client, no vault, every fixture built in a tempdir: the gamesrv logs, the
+  capture directories, the manifests, the archives. Section 0 is the log-line
+  contract twice over: each counter must match the server's own format AND each
+  producing print's distinctive fragment must still be present in `authsrv.py`,
+  which is what goes red the day somebody rewords one. Its near misses carry the
+  real double-count hazard — `authsrv.py:7064` echoes every send as `[c3] s2c
+  agent 41 casts skill 1234 (0x0057, 12B)` using the label written one line
+  above the cast print, so a looser pattern counts every cast twice at an
+  entirely plausible number; `WRAPPED` asks the `^`/`$` anchors separately and
+  exists because the anchor sabotage first scored zero. Section 1 holds the
+  ARM-BOUNDARY CENSUS with the defect as its control: by mtime alone the
+  previous arm's log IS the newest one after this arm's deploy, because a stack
+  goes on relaying while it tears down and `capture_error_dialog` waits up to
+  twelve seconds after the client exits, so one teardown line landing during a
+  4.2 GB flip is all it takes; against a census of directory NAMES taken at the
+  deploy, that directory is not bindable at all. Section 2 carries its own
+  positive control — a document written in place and truncated must be REFUSED
+  before any claim that an atomic one survives — then kills `os.replace` between
+  the fsync and the rename and requires the previous verdict to still parse.
+  Section 3 opens a real Win32 handle with share mode 0 (pure ctypes: a
+  byte-range lock still lets `open()` through and would prove nothing about the
+  mechanism an arm's boundary is read from), skip-declared off Windows. Section
+  4 drives a whole arm with a scripted client that writes log lines between
+  polls; section 4b runs one arm three times against one fixture and requires it
+  to read 30 hits when told nothing preceded it, ZERO with the census it takes
+  for itself, and exactly its own 1 when its own capture appears mid-hold —
+  thirty and thirty-one both look like a session, which is why the control is
+  there and not only the fix. Section 5 is the one that matters after a crash: a
+  header-CRC-poked archive must have the launch gate's refusal RECORDED and the
+  arm still reach `finished`. Section 6 asks of every refusal WHEN and not only
+  WHETHER — which client opens the archive is a directory listing and whether
+  the build record is one is a single `json.load`, and both used to be announced
+  only after a whole-file copy had landed on the shared ACTIVE archive, so both
+  are asked through `--run` against a fixture whose ACTIVE and RETAIL carry
+  different bytes and the check is the archive's own checksum afterwards; its
+  timeouts are zero because a defeated refusal does not fail there, it reaches
+  the 900 s wait and hangs the file. Section 7 holds the compare table, its
+  `capture bound` row, and the three exit-1 cases a difference must not be
+  confused with: an unfinished arm, two arms naming one verdict file, two
+  finalised arms that bound one capture. Section 8 is REAL — `test_overlay.py`'s
+  own World and rows_spec, two profiles built over one row, `abrun.run` driven
+  end to end through real deploys — and it exists because the ordering defect it
+  covers was invisible to every fake: two overlay arms owning one row resolved
+  cleanly, played the first to a finished verdict, then hard-refused the second
+  for "neither retail nor 'beta'". Seventeen sabotages measured,
+  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120).

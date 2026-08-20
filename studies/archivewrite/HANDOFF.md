@@ -111,7 +111,12 @@ script works, and both re-run the full gate sweep on the way in and out.)
 **Seven** staged archives exist under `vault/exports/archivewrite/` (a4, a4run2…a4run6,
 **a4run8** — the A8 one, still built and ready to redeploy), each 4.2 GB and each rebuildable
 from its script. **Delete them when disk matters** — they are outputs, not inputs. 270 GB was
-free on 2026-08-18.
+free on 2026-08-18. **As of 2026-08-20 there is a proof-first way to do that**:
+`python toolkit/mapdata/datdelta.py --capture STAGED --retail RETAIL --out vault/deltas/<name>`
+then `--prove` — the delta reconstitutes the 4.2 GB copy byte-identically on demand (kilobytes
+to low MB each), and only a PROVEN delta licenses the delete. New edit-in-place runs should
+use `toolkit/mapdata/overlay.py` (manifest-driven, journaled, `--status` answers what is
+deployed) rather than growing the `a*stage.py` family.
 
 ---
 
@@ -137,6 +142,11 @@ free on 2026-08-18.
 | `datwrite.Journal`, append + fsync | **§17.4** — 34.1×→1.00× write amplification, torn-tail recovery, still a valid JSON document so all 59 vault journals and every reader keep working | `test_datwrite.py` §12 |
 | `datalloc` fidelity gate (`Stream(expect=)`, `--expect`) | **§17.5** — `declaration_fault` on every stream, mandatory `expect` with `extraBytes 8`, the `alloc(plan=)` bypass closed. C-13 | `test_datalloc.py`, 100→177 |
 | `toolkit/mapdata/test_authorflow.py` | **§17.6** — the six-step end-to-end: author → create new row → revise → grow back → relocate → revert to pristine, comp-8 throughout | 59 checks, 0.5 s |
+| `toolkit/mapdata/datledger.py` | **infra arc, 2026-08-20** — THE row census. Settled C-8 on the real copies (7 rows archive difference + 13 convention); every counting convention reported side by side; per-row slack; `--reencode ROW` for measured comp-8 headroom (never bulk) | `test_datledger.py`, 84 bare / 95 with vault |
+| `toolkit/mapdata/refindex.py` | **infra arc** — the reverse-closure index: "who else reads this row?", keyed by MFT ROW (a row carries multiple id spellings — 38,396 on `dat_study`; resolve callers' ids via `canonical_id`). Every answer is a FLOOR and says so; skeleton sharing by bit-identical blk2C bases, with `contentless` flagged (572 retail heads share one degenerate group). Full real build ~15.5 min, saved index ~10 MB, stamp-checked on load | `test_refindex.py`, 92 |
+| `toolkit/mapdata/datdelta.py` | **infra arc** — a staged archive IS its delta: capture byte-spans vs retail (both directions), reconstitute byte-identically, `--prove` before deleting the 4.2 GB original. Vault-only by construction (retail-row spans are ArenaNet bytes); refuses the wrong generation by whole-file hash | `test_datdelta.py`, 84 |
+| `toolkit/mapdata/overlay.py` | **infra arc** — declarative reversible profiles; the successor to the `a*stage.py` family for edit-in-place runs. Manifest names ACTIVE/RETAIL/edits by FILE ID; `--plan/--build/--deploy/--retail/--status/--verify-after`; every edit through `declaration_fault` + the refindex gate (real co-readers acknowledged per edit; partial index refused; unread heads declared by count); post-flight diffs against the PRE-LAUNCH record | `test_overlay.py`, 133 |
+| `datcheck.assert_archive_safe` | **infra arc** — the launch-side archive gate, the cage's sibling on the other axis: ten open-time rules + the MFT self-crc preflight is blind to + crc sweep (+ generations under `--deep`, + fingerprint identity when a profile is named). Wired at all FOUR launch sites, held there by a disk-derived Popen census; clears all eight real vault archives in 6-7 s | `test_datcheck.py`, 112→149 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`, **`a4stage8.py`**), each with
