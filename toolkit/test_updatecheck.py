@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 86,
-          "and the class-(a) census rides along, at 86",
+    check(len(state["pins"]) == 134,
+          "and the class-(a) census rides along, at 134",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -237,7 +237,16 @@ if exe:
           f"position and target beside it -- every one resolved as an RVA off a "
           f"module base read at RUN TIME rather than as a fixed address, and both "
           f"tools refuse loudly when the fov reads 0.0, which is what a wrong "
-          f"address looks like. Both literals "
+          f"address looks like. 99 on 2026-08-19 (framebus +8, movetap's "
+          f"RVA_TLS_INDEX, pinned.py's two key-tap patch ranges). THIS LITERAL THEN "
+          f"SAT STALE AT 86 WHILE THE CENSUS REACHED 113, because an arc that moved "
+          f"the census updated test_buildpins.py's side and not this one -- which is "
+          f"exactly the disagreement this pair exists to catch, caught late and by "
+          f"the full suite rather than by the arc that caused it. 134 on 2026-08-20: "
+          f"+21 and a 16th file, all of it the gate-fire instrument "
+          f"(clientscan/movetap.py 1 -> 28 for the AgTrack fence record and the "
+          f"ASYNC twin, clientscan/movesync.py 0 -> 7 for the same record's offsets "
+          f"read back out of a capture). Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")
