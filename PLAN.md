@@ -2086,11 +2086,16 @@ store. The buff six are named — `BUFF_SOURCE_ADD`/`_REMOVE`, `BUFF_TARGET_ADD`
 independent builds — with the full event set (`0x10000062/63/55/56/57`). `+0x5BC` is
 GmEffect's per-agent value feed, written by `0x0093` — whose writer **updates every match
 then unconditionally APPENDS** (measured; re-sending state on reconnect appends
-duplicates, first-match-wins readers — a server hazard on record). Still open here, in
-cost order: skillcast §14.4's CONTESTED buff field (probe `buff_type_field`, already
-specced); what `0x0093`'s value dword is; names for `0x36/0x38/0x39/0x3B` (held — no
-client string names them; read the c2s side for a sequence-carrying spend first);
-`+0x438`'s meaning.
+duplicates, first-match-wins readers — a server hazard on record). ~~Still open:
+skillcast §14.4's CONTESTED buff field~~ **ANSWERED same day, by running the probe
+(skillcast §14.7): the field is the ATTRIBUTE RANK the effect's tooltip renders at —
+three arms 0/14/12 drew pixel-identical icons whose tooltip numbers are
+`round(lo+(hi−lo)·rank/15)` on skill 316's own scale windows, nine numbers, zero free
+parameters. GWCA's `attribute_level` confirmed, Headquarter's `effect_type` refuted.
+The run also earned the harness a `hover:FX,FY,SECS` walk verb — a HUD tooltip is now a
+readable surface unattended.** Still open here, in cost order: what `0x0093`'s value
+dword is; names for `0x36/0x38/0x39/0x3B` (held — no client string names them; read the
+c2s side for a sequence-carrying spend first); `+0x438`'s meaning.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

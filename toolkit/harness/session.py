@@ -860,6 +860,10 @@ def parse_walk(text):
         alt:4       -- ALT held shows every nameplate; pair with --shots
         shot:1      take a screenshot NOW, on the plan's own clock
         wait:3      do nothing for 3 seconds
+        hover:0.044,0.054,38   park the cursor over a window-relative point
+                    for 38s, clicking nothing -- a HUD tooltip is the only
+                    readable surface for some state, and this is how a probe
+                    run reads one unattended
 
     -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
 
@@ -878,6 +882,25 @@ def parse_walk(text):
         head = head.lower()
         if not arg:
             raise SystemExit(f"walk step wants an argument: {spec!r}")
+        if head == "hover":
+            # hover:FX,FY,SECONDS -- park the cursor over a window-relative
+            # point, no click. Three numbers because the point matters as much
+            # as the duration, and a fixed HUD element's fractions are the
+            # whole reason the verb is usable unattended.
+            parts = arg.split(",")
+            if len(parts) != 3:
+                raise SystemExit(f"walk step {spec!r}: hover wants FX,FY,SECONDS")
+            try:
+                fx, fy, secs = (float(p) for p in parts)
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: hover wants three numbers")
+            if not (0.0 < fx < 1.0 and 0.0 < fy < 1.0):
+                raise SystemExit(f"walk step {spec!r}: hover fractions must sit "
+                                 f"inside the window, exclusive 0..1")
+            if secs <= 0:
+                raise SystemExit(f"walk step {spec!r} hovers for {secs}s")
+            steps.append(("hover", f"{fx:g},{fy:g}", secs))
+            continue
         try:
             value = float(arg)
         except ValueError:
@@ -903,7 +926,7 @@ def parse_walk(text):
         else:
             raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
                              f"a named key ({', '.join(sorted(dc.NAMED_KEYS))}), "
-                             f"zoom, pitch, yaw, shot or wait")
+                             f"zoom, pitch, yaw, shot, wait or hover")
     return steps
 
 
@@ -995,6 +1018,9 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
         elif kind == "wait":
             time.sleep(value)
             did = value
+        elif kind == "hover":
+            fx, fy = (float(p) for p in key.split(","))
+            did = value if dc.hover(hwnd, proc.pid, fx, fy, value) else 0.0
         else:
             raise SystemExit(f"unknown walk step kind {kind!r}")
         ended = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -1224,6 +1224,22 @@ def section_hold_key():
               "a yaw of zero, a zero-length ALT, a non-number and a "
               "near-miss key name all refuse",
               "'lefty' must not silently become the L key")
+    LEDGER.ok(session.parse_walk("hover:0.044,0.054,38")
+              == [("hover", "0.044,0.054", 38.0)],
+              "the 2026-08-19 hover verb parses: window-relative point plus "
+              "a duration, no click",
+              "a HUD tooltip is the only readable surface for the buff "
+              "family's contested field (skillcast 14.4), and reading one "
+              "unattended needs a cursor park that never presses a button")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("hover:0.5,0.5", "hover:0.5,0.5,0",
+                              "hover:1.5,0.5,3", "hover:0,0.5,3",
+                              "hover:a,0.5,3")),
+              "hover refuses two numbers, a zero duration, fractions on or "
+              "outside the window edge, and a non-number",
+              "a cursor parked at a wrong literal would read as 'no tooltip' "
+              "-- the probe's null result -- so the parse must fail loudly "
+              "instead")
     LEDGER.ok(dc.NAMED_KEYS["alt"] == 0x12 and dc.NAMED_KEYS["left"] == 0x25
               and dc.NAMED_KEYS["right"] == 0x27 and dc.NAMED_KEYS["up"] == 0x26
               and dc.NAMED_KEYS["down"] == 0x28

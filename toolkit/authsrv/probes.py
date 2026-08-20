@@ -5879,8 +5879,16 @@ PROBES = {
                  "stores the field at buff record +0x04 and never reads it in "
                  "ChCliBuff.",
         steps=_buff_type_steps(a),
-        note="The one CONTESTED field name in the effect family. Keep buffId "
-             "small -- GmEffect:3030 bounds it against a UI frame-code range.",
+        note="ANSWERED 2026-08-19 (captures 20260819T232426 and 20260819T233451, "
+             "skillcast FINDINGS 14.7): prediction B, exactly -- the icons are "
+             "pixel-identical across 0/14/12 and the tooltip's numbers are "
+             "round(lo+(hi-lo)*rank/15) of the field (10/57/50 max-Health on "
+             "skill 316's 10..60 window). The field is the ATTRIBUTE RANK the "
+             "effect renders at; GWCA's attribute_level confirmed, Headquarter's "
+             "effect_type refuted. Kept runnable as the effect-tooltip "
+             "calibration; read the tooltip with --walk hover:0.0442,0.0543,38. "
+             "Keep buffId small -- GmEffect:3030 bounds it against a UI "
+             "frame-code range.",
     ),
     "buff_side": lambda a, o: Probe(
         question="Do opcodes 63 and 65 file the same buff under two different "

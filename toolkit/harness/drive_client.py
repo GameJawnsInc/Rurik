@@ -582,6 +582,40 @@ def warn_hands_off(seconds=3.0):
     print()
 
 
+def hover(hwnd, pid, fx, fy, seconds):
+    """Park the cursor over a fractional window position and click NOTHING.
+
+    Exists for tooltips: a Guild Wars HUD element under a resting cursor draws
+    its tooltip, and for some state the tooltip is the ONLY readable surface
+    (an effect icon's scaled numbers -- skillcast 14.4's contested field has no
+    other consumer the static analysis could find). The cursor is nudged one
+    pixel back and forth on a slow rhythm rather than parked dead still,
+    because a tooltip needs mouse-move hit-testing and an element that APPEARS
+    beneath an already-stationary cursor may never receive one.
+
+    Same focus discipline as click(): SetCursorPos is GLOBAL, so every nudge
+    re-verifies the client owns the foreground and the function returns early
+    the moment it does not. No button is ever pressed. Returns True if the
+    cursor was placed at least once.
+    """
+    end = time.time() + max(0.0, seconds)
+    flip = 0
+    moved = False
+    while time.time() < end:
+        if not _own_foreground(hwnd, pid):
+            return moved
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return moved
+        x = int(rect.left + (rect.right - rect.left) * fx) + flip
+        y = int(rect.top + (rect.bottom - rect.top) * fy)
+        user32.SetCursorPos(x, y)
+        moved = True
+        flip = 1 - flip
+        time.sleep(0.4)
+    return moved
+
+
 def click(hwnd, pid, fx, fy):
     """Click at a fractional position inside the client window.
 
