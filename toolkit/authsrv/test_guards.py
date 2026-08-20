@@ -42,7 +42,7 @@ import checks  # noqa: E402
 # it -- a press opens a cycle and lands nothing -- and carries 5 checks where
 # it carried 3, plus section 11's new single-caller check. Nothing here is
 # conditional, so a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("guard contract", floor=40)
+LEDGER = checks.Ledger("guard contract", floor=41)
 check = LEDGER.ok
 
 
@@ -137,7 +137,16 @@ def section_skill_press():
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     agent = _fresh_agent()
     state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
-    press = [0, 42, 7, 10]   # header slot, skill 42, copy 7, target agent 10
+    # SKILL 322 (Power Attack), NOT AN ARBITRARY ID, and it went from 42 to
+    # this on 2026-08-20 when the cast path started dispatching on the skill's
+    # TYPE. Before that, any skill with a target swung the player's hammer --
+    # which is why casting a hex produced `attack_started: player swings at 10`
+    # in a real run. Now only an ATTACK skill (type_code 14) rides a swing, so
+    # a made-up id resolves to nothing and this section's real subject -- that
+    # the damage lands at E5 rather than at the press -- would silently stop
+    # being tested. Power Attack is an attack, has "+ Damage" and is on our own
+    # bar, so the timing claim is exercised against a skill that really swings.
+    press = [0, 322, 7, 10]  # header slot, skill 322, copy 7, target agent 10
 
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
@@ -173,6 +182,26 @@ def section_skill_press():
     check(agent["health"] < 100.0,
           "and only now is the target's health spent",
           f"health={agent['health']}")
+
+    # AND THE CONTROL THE TYPE DISPATCH NOW NEEDS: a NON-attack skill aimed at
+    # the same agent must not swing at it. This is the check that would have
+    # caught the old behaviour, and it could not exist until the fix did.
+    sent.clear()
+    agent2 = _fresh_agent()
+    state2 = {"agents": {10: agent2}, "pos": (0.0, 0.0)}
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_skill_press([0, 135, 7, 10], send, state2, 0,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        state2["pending_casts"][0]["e5_at"] = time.time() - 0.001
+        authsrv.cast_tick(send, state2, 0)
+    starts = [v for op, v, _l in sent
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+              and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+    check(not starts and agent2["health"] == 100.0,
+          "CONTROL: casting a HEX at the same agent swings nothing at it",
+          f"attack_started x{len(starts)}, health={agent2['health']} -- "
+          f"Faintheartedness is a Hex Spell, and until 2026-08-20 it made the "
+          f"player hit the target with a hammer for 5")
 
 
 def _refusing_fraction(authsrv):

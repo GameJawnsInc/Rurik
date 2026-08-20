@@ -157,8 +157,78 @@ EFFECT_TYPES = {
     3: "stance",
     4: "hex",
     6: "enchantment",
+    12: "glyph",
     19: "preparation",
 }
+
+# AND THE TABLE ITSELF CORROBORATES THE LIST, which is why Glyph could be added
+# on 2026-08-20 without waiting for a run. Across the 478 corpus skills in these
+# five types, **every single one has a duration** -- 74 of 76 stances, 9 of 10
+# glyphs, 13 of 14 preparations, 142 of 151 hexes and 194 of 227 enchantments
+# resolve, and the remainder REFUSE on a sentinel or an unwitnessed shape.
+# **Not one resolves to "no duration".** Meanwhile 488 of the 1,333-skill corpus
+# have duration endpoints of 0/0, and none of them is in these five types. If
+# the mapping from type to "this is a timed effect" were wrong, that is exactly
+# where it would show: a type full of skills with nothing to time.
+# `test_effects.py` checks it, and our decoder cannot force it true.
+
+# ONE AT A TIME, PER CHARACTER -- three of the five types say so in the wiki,
+# and two of them say it in text the game itself shows a player.
+#
+#   WIKI (GWW, "Stance", rev. 2020-10-23), quoting Isokeh, Expert Ranger, in
+#   game: "Only one Stance can be active at any time, so if you are under the
+#   effects of a Stance, using a new Stance will replace the previous one."
+#   The article body agrees: "Each character can only have one stance in effect
+#   at a time."
+#
+#   WIKI (GWW, "Preparation", rev. 2020-06-18): "Only one preparation can be
+#   active at a time. Activating another preparation will override the previous
+#   one."
+#
+#   WIKI (GWW, "Glyph", rev. 2024): "If a glyph is cast while another glyph is
+#   already active, the new one replaces the old one."
+#
+# The rule is per TYPE, not per skill -- any stance replaces any stance. Hexes
+# and enchantments carry no such rule and many can be live at once, which is why
+# they are absent here rather than overlooked.
+#
+# THIS IS ALSO THE FIRST ANSWER TO "HOW DOES AN EFFECT GET REPLACED", which was
+# NOT FOUND as of this morning. Re-sending `0x0042` does nothing (measured, both
+# id choices), so a replacement has to be `0x0044` for the old one and `0x0042`
+# for the new -- which is what `strip` + `apply` produce, and what a run can
+# watch: press stance A, press stance B, A's icon must vanish.
+EXCLUSIVE_TYPES = {3, 12, 19}
+
+# THE TEN CONDITIONS, by the skill id the wire carries. MEASURED: `type_code
+# == 8` in the client's own table selects exactly these ten and nothing else,
+# and `studies/isle` R4-2 corroborated 478 and 480 on a rendered client. The
+# names are GWW's, and they are the join key -- a skill's GWW progression
+# variable is called `Bleeding` or `Crippled`, and that label is what says
+# which condition it inflicts.
+#
+# A CONDITION IS NOT AN EFFECT TYPE, which is why 8 is absent from
+# `EFFECT_TYPES` above. Nothing casts a condition: a condition is INFLICTED by
+# another skill, and its duration comes from that skill's progression rather
+# than from its own row. The corpus proves it -- skill 480 has endpoints 3/3
+# and appears on the wire at duration 9.0, which its own row cannot produce.
+# So conditions ride the same `0x0042` and reach it by a different door.
+CONDITION_SKILLS = {
+    478: "Bleeding", 479: "Blind", 480: "Burning", 481: "Crippled",
+    482: "Deep Wound", 483: "Disease", 484: "Poison", 485: "Dazed",
+    486: "Weakness", 2077: "Cracked Armor",
+}
+CONDITION_BY_NAME = {name: sid for sid, name in CONDITION_SKILLS.items()}
+
+
+def condition_id(label):
+    """The condition skill id a GWW progression label names, or None.
+
+    `Bleeding` -> 478. Anything else -> None, including labels that are real
+    progression variables but not conditions (`Health degeneration`,
+    `Duration`, `+ Damage`), so an unmapped label inflicts nothing rather than
+    guessing at the nearest condition.
+    """
+    return CONDITION_BY_NAME.get((label or "").strip())
 
 
 class EffectError(Exception):
@@ -277,7 +347,22 @@ class EffectTable:
 
     # -- the two halves -----------------------------------------------------
 
-    def apply(self, agent_id, skill_id, rank, duration, now):
+    def exclusive_on(self, agent_id, type_code):
+        """Live episodes this agent must lose before gaining one of `type_code`.
+
+        Empty unless the type is one of the three the wiki declares
+        one-at-a-time. The caller sends a `0x0044` for each and then applies --
+        never a silent swap, because a replacement the client is not told about
+        leaves an icon on screen for an effect that is gone.
+        """
+        if int(type_code) not in EXCLUSIVE_TYPES:
+            return []
+        return sorted((ep for ep in self.live.values()
+                       if ep["agent"] == agent_id
+                       and ep["type_code"] == int(type_code)),
+                      key=lambda ep: ep["buff"])
+
+    def apply(self, agent_id, skill_id, rank, duration, now, type_code=0):
         """Open an episode and return it, or REFRESH the one already there.
 
         Refuses a duration of zero or less: a zero-length episode would be
@@ -325,6 +410,7 @@ class EffectTable:
                 f"invent one.")
         buff = self._alloc()
         ep = {"buff": buff, "agent": agent_id, "skill": skill_id,
+              "type_code": int(type_code),
               "rank": int(rank), "duration": float(duration),
               "applied_at": now, "expires_at": now + float(duration),
               "overlapping": any(e["agent"] == agent_id

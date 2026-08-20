@@ -1423,8 +1423,53 @@ def spawn_profession_values(profession=None, agent_id=None):
 # skill does, so the two resolve differently below.
 SCALE_MEANS_DAMAGE = {
     "Holy damage": "standalone",
+    "Fire damage": "standalone",
     "+ Damage": "additive",
 }
+
+# The healing labels, and they are a different DIRECTION rather than a negative
+# damage: they go out on property 55, positive, which the corpus identifies as
+# the health-gain channel (agents.GV_HEALTH_GAIN carries the measurement).
+# GWW's own progression variable names, verbatim: `Heal` on Healing Signet,
+# `Maximum heal` on Reversal of Fortune.
+SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
+
+# A LABEL DOES NOT SAY *WHEN*, and this is the trap that would have shipped
+# without the type column. `Ignite Arrows` has GWW variable `Fire damage` 3..18
+# -- the same label as Flare's -- and it is a PREPARATION: WIKI (GWW,
+# "Preparation", rev. 2020-06-18) "preparations generally alter bow attacks,
+# allowing the fired arrows to cause additional effects". Its fire damage rides
+# the next arrows; Flare's happens on cast. Nothing in the client's table
+# separates them and the label certainly does not.
+#
+# So a skill that OPENS AN EPISODE resolves no damage and no heal at cast: its
+# scale describes what the effect does while it is up. That covers stance, hex,
+# enchantment, glyph and preparation. The known cost of the rule is that a hex
+# which both hexes and hits on cast would lose its hit; none is modelled today,
+# and the day one is, this is the line to revisit -- named here rather than
+# discovered from a wrong number.
+# The one `type_code` that rides a weapon swing. WIKI (GWW, "Attack skill"):
+# attack skills ARE attacks -- they use the equipped weapon, take its damage
+# type and range, and can miss or be blocked. That is why "+ Damage" is a
+# bonus ON a swing and a spell's damage is not. All 199 attacks in the corpus
+# carry target byte 5 (a foe), which is the same column agreeing.
+ATTACK_TYPE_CODE = 14
+
+
+def _is_attack_skill(skill_id):
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return int(row["type_code"]) == ATTACK_TYPE_CODE
+
+
+def _resolves_at_cast(skill_id):
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return True
+    return effects.applies_effect(row) is None
 
 # The rank the ENEMY casts at. OURS -- no capture and no table gives a monster's
 # attribute ranks, and studies/monsterai/FINDINGS.md establishes that a monster's
@@ -1492,9 +1537,35 @@ def skill_damage(skill_id, rank):
     except Exception:                                          # noqa: BLE001
         return None
     mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
-    if mode is None:
+    if mode is None or not _resolves_at_cast(skill_id):
         return None
     return skill_scale_value(skill_id, rank), mode
+
+
+def skill_heal(skill_id, rank):
+    """How much health this skill RESTORES at `rank`, or None.
+
+    The mirror of `skill_damage`, and it is the direction this server never had.
+    Same discipline: the magnitude is the client's own scale endpoints
+    interpolated by the client's own formula, and what the number MEANS is
+    GWW's progression variable name, sourced per skill in
+    `content/world.toml`'s `skill_effect` block.
+
+    "Maximum heal" (Reversal of Fortune) is carried as a plain heal, and that
+    is a KNOWN SIMPLIFICATION rather than a reading: the skill actually heals
+    for the damage it prevents, capped at that number, and this server models
+    no damage prevention to cap. It therefore heals the cap. Named here because
+    the number on screen will be right at the ceiling and wrong below it.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if row.get("scale_means") not in SCALE_MEANS_HEAL:
+        return None
+    if not _resolves_at_cast(skill_id):
+        return None
+    return skill_scale_value(skill_id, rank)
 
 
 def player_rank_for_skill(skill_id):
@@ -4783,7 +4854,8 @@ def attack_tick(send, state, conn_id):
     hit_enemy(send, state, target_id, conn_id)
 
 
-def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
+def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
+              exact=None, swing=True, label="one swing"):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `bonus_damage` is an attack skill's "+ Damage", in health points, added to
@@ -4791,6 +4863,24 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     that is what the plus means: GWW writes Power Attack as "+ Damage 10-40",
     a bonus on the attack it rides rather than a separate hit. Sending two
     property-16 messages would draw two numbers on the screen for one swing.
+
+    `exact` DEALS EXACTLY THAT MUCH and skips the weapon entirely -- no roll,
+    no armour exponent, no critical. That is what a SPELL does, and until
+    2026-08-20 this server had no way to express it on the player's side: a
+    Flare cast at a foe dealt a HAMMER SWING of 5 instead of its own 20 fire
+    damage, because `cast_tick` only ever read the "additive" mode and dropped
+    "standalone" on the floor (run `20260820T185518`, watched).
+
+    `swing` FALSE suppresses `attack_started` and `melee_attack_finished`,
+    which is the other half of the same defect: casting a hex made the player
+    swing a hammer at the target. Those two values name the beginning and end
+    of a SWING (`agents.GV_MELEE_ATTACK_FINISHED`'s comment), and a spell is
+    not one.
+
+    NOT ARMOUR-SCALED, and that is a gap rather than a decision: `studies/isle`
+    4.2 records that skill damage ignores armour here and that fixing it needs
+    a per-skill armour-ignoring flag GWW defines per skill. `exact` inherits
+    that gap unchanged -- it does not add a new one.
     """
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
@@ -4818,7 +4908,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     critical = False
     rank = player_weapon_rank(state) if ARMOUR_TERM else None
     armour = agent.get("armor_rating")
-    if EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
+    if exact is not None:
+        dealt = float(exact) + bonus_damage
+    elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
         critical = random.random() < critical_rate(rank)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
@@ -4834,7 +4926,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
-                            ("one critical" if critical else "one swing")
+                            ("one critical" if critical else label)
                             + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
     agent["last_hit"] = now
 
@@ -4857,9 +4949,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
     # is the agent swinging. Same shape, different roles per value id, which is
     # exactly what GWCA's per-id note was trying to warn about.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
-         f"attack_started: player swings at {target_id}")
+    if swing:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+             f"attack_started: player swings at {target_id}")
 
     agent["health"] = max(0.0, agent["health"] - dealt)
 
@@ -4875,10 +4968,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
          f"to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
-    # attack has a beginning and no end.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
-         "melee_attack_finished")
+    # attack has a beginning and no end. Skipped for a spell, which never
+    # began one.
+    if swing:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+             "melee_attack_finished")
     print(f"[c{conn_id}] hit agent {target_id}: "
           f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
 
@@ -5508,11 +5603,28 @@ def cast_tick(send, state, conn_id):
             # anything cached at press time.
             rank = player_rank_for_skill(cast["skill_id"])
             target = cast.get("target")
-            if target:
-                bonus, found = 0.0, skill_damage(cast["skill_id"], rank)
-                if found and found[1] == "additive":
-                    bonus = float(found[0])
+            # WHAT A CAST DOES TO ITS TARGET DEPENDS ON THE SKILL'S TYPE, and
+            # until 2026-08-20 it depended only on whether a target existed --
+            # so every skill aimed at a hostile swung the player's hammer.
+            # Run `20260820T185518` shows it plainly: casting Faintheartedness,
+            # a HEX SPELL, produced `attack_started: player swings at 10` and
+            # 5 points of hammer damage. And Flare, whose own 20 fire damage is
+            # decoded and sitting right there, dealt the same 5, because only
+            # the "additive" mode was ever read.
+            #
+            # An ATTACK skill rides a weapon swing -- that is what makes it an
+            # attack, and it is where "+ Damage" belongs. Everything else
+            # resolves on its own terms, and a skill with nothing to resolve
+            # does nothing to the target at all.
+            found = skill_damage(cast["skill_id"], rank)
+            if target and _is_attack_skill(cast["skill_id"]):
+                bonus = float(found[0]) if found and found[1] == "additive" \
+                    else 0.0
                 hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
+            elif target and found and found[1] == "standalone":
+                hit_enemy(send, state, target, conn_id, exact=float(found[0]),
+                          swing=False,
+                          label=f"skill {cast['skill_id']}")
             # AND THE EFFECT, at the same instant as the damage and for the
             # same reason: E5 is the cast COMPLETING, so it is when a stance
             # goes on, not when the key was pressed. A skill can do both --
@@ -5521,6 +5633,31 @@ def cast_tick(send, state, conn_id):
             # which is most of them.
             apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
                          rank, target, conn_id)
+            # AND THE HEAL, the other direction the same cast can resolve. A
+            # skill is not restricted to one of the three -- damage, effect,
+            # heal are asked independently and most skills answer None to all
+            # of them. The recipient follows the skill's own target byte, so
+            # Healing Signet (target 0) heals the caster even with a foe
+            # selected, which is what makes it usable mid-fight.
+            # A CONDITION, if the skill inflicts one and the target lives.
+            # After the damage, because an attack skill's condition rides the
+            # hit landing -- and if the hit killed the target, `apply_condition`
+            # would be putting bleeding on a corpse, which the guard below
+            # refuses the same way `land_swing` refuses to re-kill one.
+            inflicted = skill_condition(cast["skill_id"], rank)
+            if inflicted and target:
+                victim = state.get("agents", {}).get(target)
+                if victim and not victim.get("dead"):
+                    apply_condition(send, state, target, inflicted[0],
+                                    inflicted[1], rank, conn_id,
+                                    cast["skill_id"])
+            healed = skill_heal(cast["skill_id"], rank)
+            if healed:
+                row = agents.WORLD.get("skills", str(cast["skill_id"]))
+                heal_agent(send, state,
+                           effects.effect_recipient(row, PLAYER_AGENT_ID,
+                                                    target),
+                           PLAYER_AGENT_ID, healed, conn_id)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -5586,8 +5723,24 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         return None
 
     wearer = effects.effect_recipient(row, caster_id, target_id)
-    ep = effect_table(state).apply(wearer, skill_id, rank, duration,
-                                   time.time())
+    table = effect_table(state)
+    # ONE STANCE, ONE GLYPH, ONE PREPARATION AT A TIME -- the wiki's rule, and
+    # for two of the three it is text the game shows a player. The replacement
+    # goes out as a real `0x0044` before the new `0x0042`, never as a silent
+    # swap: re-sending the apply demonstrably does nothing to the client's
+    # display (measured 2026-08-20 under both a new buff id and the same one),
+    # so an un-announced replacement would leave the old icon on screen for an
+    # effect the server has already dropped.
+    for old_ep in table.exclusive_on(wearer, row["type_code"]):
+        table.close(old_ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [old_ep["agent"], old_ep["buff"]],
+             f"EFFECT_REMOVE(buff {old_ep['buff']}, skill {old_ep['skill']}, "
+             f"REPLACED by {family} {skill_id})")
+        print(f"[c{conn_id}] {family} {skill_id} REPLACES "
+              f"{old_ep['skill']} on agent {wearer} (one {family} at a time)",
+              flush=True)
+    ep = table.apply(wearer, skill_id, rank, duration, time.time(),
+                     type_code=row["type_code"])
     # FIELD 3 IS THE RANK. Not the duration -- 96 of 96 non-condition applies
     # in the live corpus predict the wire's duration from
     # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
@@ -5637,6 +5790,136 @@ def strip_effects(send, state, agent_id, conn_id, why):
         print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
               f"{agent_id}: {why}", flush=True)
     return gone
+
+
+def skill_condition(skill_id, rank):
+    """(condition_skill_id, seconds) this skill inflicts, or None.
+
+    THE JOIN THIS SERVER DID NOT HAVE. `studies/isle` established that a
+    condition's duration comes from the skill that INFLICTED it rather than
+    from the condition's own row -- Burning has endpoints 3/3 and appears on
+    retail's wire at 9.0 seconds. What was missing was the other half: WHICH
+    condition, and from WHERE.
+
+    Both halves are per-skill data we already carry. GWW's progression variable
+    NAMES the condition (`Sever Artery` has exactly one variable and it is
+    called `Bleeding`), and the client's own bonus-scale endpoints carry the
+    seconds -- 5..25 for Sever Artery, in the slot `skill_arguments = 4` says
+    is the enabled one. The wiki picked the label and the bitfield picked the
+    slot, independently.
+
+    Read from `bonus_scale_means` and not from `scale_means`, because that is
+    where both examples put it, and `skill_scale_value` refuses the slot
+    outright if its bit is clear -- so a skill whose bonus slot holds an
+    unrelated constant inflicts nothing rather than a condition lasting
+    whatever happened to be sitting there.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    condition = effects.condition_id(row.get("bonus_scale_means"))
+    if condition is None:
+        return None
+    try:
+        seconds = skill_scale_value(skill_id, rank, "bonus_scale")
+    except ValueError:
+        return None
+    return (condition, float(seconds)) if seconds else None
+
+
+def apply_condition(send, state, target_id, condition_id, seconds, rank,
+                    conn_id, by_skill):
+    """Put a condition on an agent, as an episode on the same effect channel.
+
+    Conditions are not a separate mechanism: retail applies them with the same
+    `0x0042` that carries a hex or a stance, and `bufflog` reads six of them
+    out of the live corpus alongside everything else. What differs is only how
+    the duration was arrived at.
+
+    FIELD 3 STAYS THE RANK, and the corpus cannot refute that here. Its six
+    condition applies all have `field3 == duration` (480 at 3/3.0 and 9/9.0,
+    481 at 13/13.0), which is equally consistent with the rank reading if the
+    applying skill's rank happened to equal the seconds it produced -- and the
+    field has ONE meaning across the message, which the non-conditions settle
+    as the rank (skill 160: field3 15, duration 13.0). So this sends the rank
+    and the ambiguity is recorded rather than resolved by our own emission.
+
+    NOT MODELLED: what the condition DOES. Bleeding is -3 health degeneration
+    (WIKI, GWW "Health degeneration": each pip is 2 health per second), which
+    rides property 44, and no degeneration exists in this server. The icon and
+    its timer are real; the drain is absent, and that is a named gap rather
+    than a silent zero.
+    """
+    if not EFFECTS:
+        return None
+    ep = effect_table(state).apply(target_id, condition_id, rank, seconds,
+                                   time.time(), type_code=8)
+    name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    send(GAME_SMSG_EFFECT_APPLY,
+         [ep["agent"], condition_id, ep["rank"], ep["buff"],
+          _f32(ep["duration"])],
+         f"EFFECT_APPLY({name} on agent {ep['agent']}, buff {ep['buff']}, "
+         f"{ep['duration']:.1f}s, inflicted by skill {by_skill})")
+    print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
+          f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
+          f"{rank})", flush=True)
+    return ep
+
+
+def heal_agent(send, state, target_id, caster_id, amount, conn_id):
+    """Put health BACK, and draw the number. Returns what actually landed.
+
+    THE DIRECTION THIS SERVER NEVER HAD. Until 2026-08-20 the only way health
+    moved up here was `GV_HEALTH`'s setter, which is silent -- it moves the orb
+    and draws nothing, so a heal was indistinguishable from a revive.
+
+    THE CHANNEL IS MEASURED, not chosen. `agents.GV_HEALTH_GAIN` (55) carries
+    the evidence: on `0x00A3` the live corpus has property 16 negative 1,251 of
+    1,251 and property 17 negative 243 of 243, both self-directed 0 of 1,501 --
+    damage always has a distinct attacker and victim and is always a negative
+    delta. Property 55 is POSITIVE 502 of 506 and SELF-DIRECTED 454 of 506. A
+    positive, mostly self-inflicted health delta on the damage channel is a
+    heal.
+
+    THE FRACTION IS OF THE TARGET'S OWN MAXIMUM, the same as damage's
+    (`studies/isle`: "the wire fraction is an integer divided by target max
+    health"). Retail's largest is 0.652, comfortably under the `fraction <=
+    1.0f` assert at CharPool.cpp:84 -- but the clamp below is not decoration,
+    because that assert only fires in the POSITIVE direction and this is the
+    first thing this server has ever sent on it that is not a revive.
+
+    OVERHEAL IS SILENT AND IS NOT AN ERROR. A heal on a full bar lands zero and
+    sends nothing, which is what retail looks like: no green number appears
+    when nothing was restored.
+    """
+    if target_id == PLAYER_AGENT_ID:
+        player_pools(state)
+        before, pool = state["player_health"], float(agents.PLAYER_HEALTH)
+    else:
+        agent = state.get("agents", {}).get(target_id)
+        if not agent or agent.get("dead"):
+            return 0.0
+        before, pool = float(agent["health"]), float(agent["max_health"])
+    landed = min(float(amount), pool - before)
+    if landed <= 0.0:
+        print(f"[c{conn_id}] heal of {amount} on agent {target_id} OVERHEALS "
+              f"({before:.0f}/{pool:.0f}) -- nothing sent", flush=True)
+        return 0.0
+    frac = _fraction(landed / pool, agents.GV_HEALTH_GAIN,
+                     f"a heal on agent {target_id}")
+    if target_id == PLAYER_AGENT_ID:
+        state["player_health"] = before + landed
+    else:
+        state["agents"][target_id]["health"] = before + landed
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH_GAIN, target_id, caster_id, frac],
+         f"heal {landed:.0f} on agent {target_id}")
+    print(f"[c{conn_id}] agent {target_id} healed {landed:.0f}: "
+          f"{before + landed:.0f}/{pool:.0f}"
+          + (" (self)" if target_id == caster_id else f" by {caster_id}"),
+          flush=True)
+    return landed
 
 
 def effect_tick(send, state, conn_id):
@@ -6243,10 +6526,20 @@ def land_skill(send, state, agent_id, agent, conn_id):
     episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
                            PLAYER_AGENT_ID, conn_id)
 
+    # The enemy heals too, and its own bar has one: Restore Condition (276),
+    # whose GWW variable is `Healing` 10..70. It has been on that bar since the
+    # bar existed and has resolved to nothing every session.
+    healed = skill_heal(skill_id, ENEMY_SKILL_RANK)
+    if healed:
+        row = agents.WORLD.get("skills", str(skill_id))
+        heal_agent(send, state,
+                   effects.effect_recipient(row, agent_id, agent_id),
+                   agent_id, healed, conn_id)
+
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
     if damage is None:
         agent["casting"] = None
-        if episode is None:
+        if episode is None and not healed:
             print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
                   f"modelled effect (its scale is not damage -- see "
                   f"content/world.toml skill_effect)", flush=True)

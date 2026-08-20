@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=51)
+LEDGER = checks.Ledger("the effect channel", floor=61)
 
 
 def section_arithmetic():
@@ -118,6 +118,64 @@ def section_arithmetic():
               f"49 skills are shaped like this and not one appears in the 102 "
               f"live applies. Interpolating anyway would be a reading with no "
               f"evidence either way. Got: {got!r}")
+
+
+def section_type_coverage():
+    """Every skill in the five effect types has a duration. None of the rest.
+
+    THE CHECK THAT LICENSED ADDING GLYPH without waiting for a run, and it is
+    refutable by construction: if "this type_code IS a timed effect" were the
+    wrong mapping, the giveaway would be a type full of skills with nothing to
+    time. There is not one.
+    """
+    print("\n1c. does the TABLE agree that these five types are timed effects?")
+    try:
+        import skilltable
+        from pathlib import Path
+        exe, _why = skilltable.find_exe()
+        data = Path(exe).read_bytes()
+        base, count, _score = skilltable.locate_table(data)
+    except Exception as ex:                                    # noqa: BLE001
+        LEDGER.skip("the type-coverage check", f"no pinned client here ({ex})")
+        return
+    rows = [skilltable.parse_record(data, base, i) for i in range(count)]
+    corpus = set(skilltable.player_corpus(rows))
+    rows = [r for r in rows if r["id"] in corpus]
+
+    tally = {}
+    for r in rows:
+        fam = effects.applies_effect(r)
+        if fam is None:
+            continue
+        try:
+            d = effects.resolve_duration(r, 0)
+            key = "resolves" if d else "NO DURATION"
+        except effects.EffectError:
+            key = "refused"
+        tally[key] = tally.get(key, 0) + 1
+
+    n = sum(tally.values())
+    LEDGER.ok(n > 400,
+              f"{n} corpus skills fall in the five effect types",
+              f"{tally} -- stance, hex, enchantment, glyph, preparation")
+    LEDGER.ok(tally.get("NO DURATION", 0) == 0,
+              "and NOT ONE of them resolves to 'no duration'",
+              f"{tally.get('resolves', 0)} resolve and "
+              f"{tally.get('refused', 0)} refuse on a sentinel or an "
+              f"unwitnessed shape. This is what says the type list is the right "
+              f"mapping rather than five codes we liked the look of -- a type "
+              f"that was NOT definitionally a timed effect would be full of "
+              f"skills with nothing to time")
+
+    zeros = [r for r in rows
+             if r["duration0"] == 0 and r["duration15"] == 0]
+    LEDGER.ok(len(zeros) > 400
+              and not any(effects.applies_effect(r) for r in zeros),
+              f"CONTROL: {len(zeros)} corpus skills DO have 0/0 endpoints, and "
+              f"none is an effect type",
+              "so the check above is discriminating. 488 skills have no "
+              "duration at all -- attacks, signets, most spells -- and the "
+              "partition between them and the five types is clean")
 
 
 def section_corpus_oracle():
@@ -407,6 +465,74 @@ def section_table():
               f"OTHER copy is live, which is the honest reading")
 
 
+def section_exclusive():
+    """One stance, one glyph, one preparation -- and hexes stacking as control.
+
+    WIKI, and for two of the three it is text the game itself shows a player:
+      * (GWW, "Stance", rev. 2020-10-23), quoting Isokeh in game: "Only one
+        Stance can be active at any time... using a new Stance will replace the
+        previous one."
+      * (GWW, "Preparation", rev. 2020-06-18): "Only one preparation can be
+        active at a time. Activating another preparation will override the
+        previous one."
+      * (GWW, "Glyph", rev. 2024): "If a glyph is cast while another glyph is
+        already active, the new one replaces the old one."
+
+    This is also the FIRST answer to "how does an effect get replaced", which
+    was NOT FOUND before: re-sending `0x0042` does nothing (measured, both id
+    choices), so a replacement must be a real `0x0044` and then a `0x0042`.
+    """
+    print("\n4c. one stance / glyph / preparation at a time -- the wiki's rule")
+    import authsrv
+
+    t = effects.EffectTable()
+    a = t.apply(1, 346, 0, 8.0, 1000.0, type_code=3)
+    LEDGER.ok([e["skill"] for e in t.exclusive_on(1, 3)] == [346],
+              "a live stance is named as what a NEW stance must replace",
+              "the rule is per TYPE, not per skill -- any stance replaces any "
+              "stance, which is why this asks by type_code and not by id")
+    LEDGER.ok(t.exclusive_on(1, 4) == [] and t.exclusive_on(1, 6) == [],
+              "CONTROL: hexes and enchantments name nothing to replace",
+              "neither type carries a one-at-a-time rule on GWW and many can "
+              "be live at once. A rule applied to all five types would be the "
+              "easy wrong generalisation")
+    b = t.apply(1, 319, 12, 18.0, 1001.0, type_code=3)
+    LEDGER.ok([e["skill"] for e in t.exclusive_on(1, 3)] == [346, 319],
+              "the TABLE does not enforce it -- the caller does, and says so",
+              "both stances are live here because `apply` is a table operation "
+              "and the replacement is a WIRE operation: the old episode has to "
+              "leave under its own 0x0044 or the client keeps drawing it. "
+              "Enforcing it silently in the table would drop the message")
+    LEDGER.ok(t.exclusive_on(2, 3) == [],
+              "and it is per AGENT: another agent's stance is not replaced",
+              "one stance per CHARACTER, in the wiki's words")
+
+    print("\n4d. and the server actually sends the replacement")
+    sent = []
+    send = lambda op, vals, why="": sent.append((op, vals, why))    # noqa: E731
+    state = {}
+    first = authsrv.apply_effect(send, state, authsrv.PLAYER_AGENT_ID, 346, 0,
+                                 None, 0)
+    sent.clear()
+    second = authsrv.apply_effect(send, state, authsrv.PLAYER_AGENT_ID, 319, 12,
+                                  None, 0)
+    ops = [op for op, _v, _w in sent]
+    LEDGER.ok(ops == [effects.OP_EFFECT_REMOVE, effects.OP_EFFECT_APPLY],
+              "casting a second stance sends REMOVE then APPLY, in that order",
+              f"{[hex(o) for o in ops]} -- and the order matters: an apply "
+              f"before the removal would have two stance icons on screen for "
+              f"one frame, and the client discards a second apply anyway")
+    LEDGER.ok(sent[0][1] == [authsrv.PLAYER_AGENT_ID, first["buff"]],
+              "the removal names the OLD episode's buff id",
+              f"{sent[0][1]} against the first episode's buff {first['buff']}")
+    LEDGER.ok(len(authsrv.effect_table(state).live) == 1
+              and authsrv.effect_table(state).on_agent(
+                  authsrv.PLAYER_AGENT_ID)[0]["skill"] == 319,
+              "and exactly one stance is left, the new one",
+              "the server's own table and the client's screen agree, which is "
+              "the whole point of announcing the replacement")
+
+
 def section_wire():
     """Our own emission, through the reader that was written for retail's.
 
@@ -540,9 +666,11 @@ def section_deaths():
 
 def main():
     section_arithmetic()
+    section_type_coverage()
     section_corpus_oracle()
     section_dispatch()
     section_table()
+    section_exclusive()
     section_wire()
     section_deaths()
     return LEDGER.verdict()
