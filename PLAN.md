@@ -1332,6 +1332,57 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 
 ## 8. Immediate next actions
 
+### The authoring stack got its infrastructure (2026-08-20)
+
+Branch `claude/archive-infrastructure`: `5dad657`, `ce573d8`, `6a9d00c`, `bae0e1d`,
+`1c35eae`, `772029e`. Six offline pieces, no client run anywhere in the arc, each
+built by an agent and then attacked by an adversarial skeptic before landing —
+every piece took at least one must-fix and every fix is proven red-then-green.
+
+**THE HEADLINE: the archive write path is now operated through tools, not
+scripts, and no launch happens on an unverified archive.**
+`toolkit/mapdata/overlay.py` replaces the `a*stage.py` family for edit-in-place
+runs — a TOML manifest names ACTIVE/RETAIL and the edits by FILE ID;
+plan/build/deploy/retail/status/verify-after; every edit through
+`declaration_fault` plus the reverse-closure gate; the post-flight diffs
+against the PRE-LAUNCH record. `datcheck.assert_archive_safe` is the cage's
+sibling on the archive axis — ten open-time rules, the MFT self-crc that
+preflight is blind to, a crc sweep, fingerprint identity when a profile is
+named — wired at all FOUR launch sites and held there by a disk-derived Popen
+census, clearing all eight real vault archives in 6–7 s each.
+
+**Four things came out of it that outlive the arc:**
+
+1. **C-8 is SETTLED** (`datledger.py`): the 20-row census disagreement was
+   7 rows of archive difference plus 13 of counting convention, both
+   historical numbers reproduced exactly; the "661 unwritable rows" headline
+   is a `dat_study`/`entries` figure and now says so.
+2. **"Who else reads this row?" is answerable before a write** (`refindex.py`),
+   keyed by MFT row because 3,226 referenced rows on `dat_study` carry more
+   than one file-id spelling. The full index (10.5 MB,
+   `vault/research/refindex/`) reproduced the mdlrefs study's 27 unreferenced
+   FA1-only heads EXACTLY at population — and found the largest "shared
+   skeleton" group is 8,385 heads on an all-zero one-node key, which is why
+   the overlay gate tiers on `contentless` instead of demanding 8,384
+   acknowledgements.
+3. **A staged archive IS its delta** (`datdelta.py`): capture vs retail,
+   reconstitute byte-identically, `--prove` before deleting the 4.2 GB
+   original. The seven staged archives under `vault/exports/archivewrite/`
+   can now be reduced to kilobytes each, with proof.
+4. **A seam probe is worth its agent**: run cold against the finished pieces,
+   it caught the launch gate and `overlay --status` disagreeing about the
+   same bytes five different ways (row-addressed vs file-id-addressed
+   identity, unchecked document trust, raw exceptions past
+   `except ArchiveUnsafe`, a silent `retail_rows` fall-through). All closed
+   the same day, gate and status now proven against one document set.
+
+A/B runs have their mechanical half (`toolkit/harness/abrun.py`): two arms
+through overlay's own verbs, evidence bound to a NAME census of capture
+directories, verdicts written incrementally so a hard kill loses nothing.
+Frame/video measurement stays out by the owner's call. New floors:
+datledger 95, refindex 92, datdelta 84, overlay 133, datcheck 149→168,
+abrun 120.
+
 ### Item modifiers DECODED, and the attribute panel answers our server (2026-08-20)
 
 [studies/itemmods/FINDINGS.md](studies/itemmods/FINDINGS.md) (new) and
