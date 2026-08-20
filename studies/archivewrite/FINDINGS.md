@@ -2593,9 +2593,9 @@ takes TWO gates to catch them (measured: `looks_compressed` stubbed alone, 1 red
    no real payload produces (the phantom pairs) and E3's unwitnessed rider.
 2. **The FA1 full-set write-back** (§17.1): the payload must be re-authored; the encoder,
    the write verbs and the budget arithmetic all exist now.
-   **STAGED 2026-08-20 as A10 — §19.** The U7-era edit turned out to be structurally a
-   null; the re-authored payload retimes the PROVEN clock instead, and the stage is
-   built, blind-re-derived and byte-reproducible. The launch is the owner's.
+   **STAGED 2026-08-20 as A10 — §19. RAN the same day, P1 FIRED — §19.6**: the creature
+   visibly slowed against a baseline clip, so playback timing lives in the linked key
+   clock and is now an authored control surface. The write-back question is CLOSED.
 3. **A5** stays unrun (stored-size ceiling; §5 D), unchanged by this rung.
 4. The renamed-id disagreement in `datalloc` (§17.5), the `_grow_gate` snapshot semantics
    (§17.3), and gap E (accepted, §17.2).
@@ -2830,7 +2830,50 @@ distinct; the numerator is exact); and Design B is NOT uniformly smaller than De
 (66614/73940 +4 B each — encoders are not monotone; a pre-registered prediction refuted
 and kept).
 
-### 19.5 State, and the one operational flag
+### 19.6 A10 RAN — 2026-08-20, ~12:24, owner-driven, and P1 FIRED. Playback timing lives in the linked key clock
+
+**Owner, with a video (`2026-08-20 12-24-37.mkv`): *"normal in control then slowed down
+in the deployed."*** The baseline clip (same provoked walk, pre-deploy archive — retail
+on all 16 rows, verified by `baseline_premise()` at deploy time) shows normal motion; the
+treatment clip shows the creature visibly slowed while server-driven ground movement
+continued — P1's foot-slide shape, between-runs as N6 required. **The finding: playback
+timing LIVES in the linked files' curve clock (`blk2C` channel times + clamp windows),
+and it is now an authored control surface.** U7's shell-retime null is explained, not
+contradicted: it retimed the n3C tag track in the one file of the graph where the clock
+does not live. Cross-recorded in `studies/anim/FINDINGS.md` §6 (ANSWERED block), whose
+rate-argument mechanism stands as mechanism beneath the now-measured control.
+
+**The instrumented record, all green** (capture `20260820T122357`; `--verify-after`):
+preflight 10/10, generations 6/6, crc sweep **exactly retail's 177,319, 0 bad** — the
+launch created no payload rows; rows changed since deploy: **2**, the client's scratch
+rows 8315/8316, `tier0` only the descriptor counter (the client Flushed); **our 15 rows
+byte-identical through that Flush**; MFT numbers unmoved; **N1 re-measured on the ACTIVE
+archive: 237/237 and 242/242 on both rules**, F4 membership and the region gates all at
+their retail pins; **30 logged `walks to` cycles** against N9's ≥3 bar; **no
+`crash-dialog.txt` exists**; the only `error` lines are the documented clean-teardown
+resets. **N2 is retired by the only oracle that could retire it**: the client read and
+played key times to 91,533,328 — 3.09× beyond retail's shipped ceiling — with no assert.
+
+**Honest bounds on the claim.** The magnitude was not frame-measured — the recorded
+strength is "visibly slowed vs baseline", not "×4 measured"; the video can be
+frame-analysed later if the number is ever load-bearing. And the readout is the owner's
+observation plus the between-runs control, exactly as pre-registered — the run design's
+answer to `HANDOFF §6`'s "a retime got hedging" is that THIS retime did not hedge.
+
+**With this, the ladder's capability story closes end to end: authored CONTENT (run 7),
+CREATED rows (A9), authored TIMING (A10) — every one client-proven, every one at
+compression 8, in place.** What remains open in this arc is only §18.1's unshippable
+phantom-pair shapes and E3's unwitnessed rider — both recorded, neither blocking anything.
+
+### 19.5b State after the run
+
+**The A10 archive is LEFT DEPLOYED** (verified clean by the sweep above; the owner has
+not run `--retail`). Note the deployed world's hatcher animates at quarter speed by
+design — restore with `a10stage.py --retail --yes` (client closed) before any session
+that wants normal motion. Both staged archives (a9, a10) remain under
+`vault/exports/archivewrite/`, rebuildable by hash.
+
+### 19.5 State, and the one operational flag — SUPERSEDED by 19.6/19.5b; kept for the pre-launch record
 
 The stage is BUILT and verified; **`--deploy` has not run**. The active run-directory
 archive is currently retail-on-all-16-A10-rows (measured — NOT the A9 stage, despite what

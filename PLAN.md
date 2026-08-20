@@ -2519,7 +2519,22 @@ for the owner rather than a gap in this one.
 
 ### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
 
-**2026-08-20, midday — A10 IS STAGED: the FA1 write-back, re-authored onto the PROVEN
+**2026-08-20, ~12:24 — A10 RAN, owner-driven, P1 FIRED. PLAYBACK TIMING LIVES IN THE
+LINKED KEY CLOCK, AND IT IS NOW AN AUTHORED CONTROL SURFACE.** Study §19.6, and the
+ANSWERED block in `studies/anim/FINDINGS.md` §6. Owner, on video: *"normal in control
+then slowed down in the deployed"* — the between-runs control N6 required, and the
+retime did not hedge where U7's did, because U7 retimed the n3C tag track in the one
+file where the clock does not live. Instrumented record all green: our 15 rows
+byte-identical through the client's Flush, sweep exactly retail's 177,319/0, coupling
+re-measured on the ACTIVE bytes 237/237 + 242/242, 30 walk cycles logged, no crash
+dialog — and **N2 is retired by the client itself, which played key times 3.09× beyond
+retail's shipped ceiling**. Magnitude recorded honestly as "visibly slowed vs baseline"
+(not frame-measured ×4). **The ladder's capability story closes: authored CONTENT
+(run 7), CREATED rows (A9), authored TIMING (A10) — all client-proven at compression 8,
+in place.** The A10 archive is LEFT DEPLOYED — the hatcher animates at quarter speed by
+design until `a10stage.py --retail --yes`.
+
+**2026-08-20, midday — A10 WAS STAGED: the FA1 write-back, re-authored onto the PROVEN
 clock; the launch is the owner's.** Study §19; runbook `vault/research/archivewrite/
 A10-RUN.md`. The U7-era edit (§17.8 item 2's "re-author the payload") turned out to be
 **structurally a null** — it scaled the n3C tag table, while the sampler reads `blk2C`'s

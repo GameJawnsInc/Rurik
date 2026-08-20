@@ -74,13 +74,14 @@ compressed** — §5-B.
 
 ## 2. State of the machine
 
-**DEPLOYED: THE A9 ARCHIVE**, as of 2026-08-20 ~09:35, and it has been LAUNCHED ON and
-verified clean afterwards (`a9stage.py --verify-after`: preflight 10/10, generations 6/6,
-crc sweep 177,322 payloads 0 bad, our 16 rows byte-identical to the deploy, file `0x5F0AD`'s
-chain [35301, 177335, 177336] intact, only the client's scratch rows 8315/8316 moved).
-The owner has not restored retail; `python vault/research/archivewrite/a9stage.py --retail
---yes` does it, with the client closed. Restoring discards the client's post-launch scratch
-churn, as every stage in this arc has.
+**DEPLOYED: THE A10 ARCHIVE**, as of 2026-08-20 ~12:23, LAUNCHED ON the same hour and
+verified clean afterwards (`a10stage.py --verify-after`: preflight 10/10, sweep exactly
+retail's 177,319/0 bad, our 15 rows byte-identical through the client's Flush, coupling
+237/237 + 242/242 on the active bytes, only scratch rows 8315/8316 moved). **The deployed
+world's hatcher animates at quarter speed by design** — restore with
+`python vault/research/archivewrite/a10stage.py --retail --yes` (client closed) before
+any session that wants normal motion. A9 was restored earlier the same day; both staged
+archives remain under `vault/exports/archivewrite/`, rebuildable by hash.
 
 *(Superseded 2026-08-20 — kept for the numbers: end of 2026-08-18 the machine held RETAIL,
 verified — row 11196 at 1,029,564 B / crc `0xf862d5c4`, preflight 10/10, 177,319 payload
@@ -298,14 +299,16 @@ And decoding ArenaNet's **own** row 8295 with an *upstream-faithful* `build_tabl
 `gwdat`'s zero-length repair, long labelled a divergence from both upstreams, is **required
 by ArenaNet's own archive**, so the shipping client must implement something equivalent.
 
-**THE FA1 WRITE-BACK IS STAGED — A10, 2026-08-20, study §19.** The U7-era edit was
-structurally a null (it scaled the n3C tag table; the sampler reads `blk2C` + the clamp
-windows, same clock, both max 22,883,332). The stage retimes the proven clock ×4 across
-15 rows in place — Design B, everything else retail, both measured couplings preserved by
-construction — blind-re-derived 15/15 byte-identical, rebuild hash-reproducible. Both
-launch outcomes are findings for `studies/anim`'s timing question. Runbook:
-`vault/research/archivewrite/A10-RUN.md` (baseline clip FIRST — no within-frame control
-exists). The launch is the owner's.
+**THE FA1 WRITE-BACK RAN AND IS CLOSED — A10, 2026-08-20, study §19 (verdict §19.6).**
+The U7-era edit was structurally a null (it scaled the n3C tag table; the sampler reads
+`blk2C` + the clamp windows, same clock). The stage retimed the proven clock ×4 across
+15 rows in place — blind-re-derived 15/15 byte-identical — and **the owner's launch
+fired P1**: *"normal in control then slowed down in the deployed"*, on video, against a
+baseline clip. **Playback timing lives in the linked key clock and is now an authored
+control surface** (cross-recorded in `studies/anim` §6). The client also played key
+times 3.09× beyond retail's shipped ceiling, retiring N2. Post-launch sweep green, our
+15 rows byte-identical through the client's Flush. **Authored content (run 7), created
+rows (A9), authored timing (A10) — the capability story is closed end to end.**
 
 **~~The one gap to carry into A8, with its fix already named.~~ CLOSED 2026-08-20, §17.2 —
 and the named fix was wrong in two details worth reading (§0 C-11):** retail's attested
