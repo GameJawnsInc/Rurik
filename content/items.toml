@@ -20,6 +20,15 @@ model_id = 1699
 quantity = 1
 enc_name = [0x2455, 0xB7FB, 0xCA41, 0x458F]
 modifiers = [0x24B80000, 0xA4880503]
+# What this item GIVES while equipped: +1 Hammer Mastery (attribute 19).
+#
+# NOT A DECODING OF `modifiers` ABOVE, and the distinction is the whole point.
+# ArenaNet encodes an item's real bonuses in those two dwords, and nobody in
+# this repo has decoded a single one -- studies/character/FINDINGS.md calls it
+# "the largest hole" and it is still open. This field is OUR declaration of
+# what OUR item does, read by the server to compute 0x003B's effective value.
+# The client never sees it and never checks it against the modifier words.
+attribute_bonus = [[19, 1]]
 
 [item.starter_hammer.provenance]
 source = "opentyria"

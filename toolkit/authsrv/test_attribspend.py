@@ -31,12 +31,18 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import attribspend  # noqa: E402
 import content  # noqa: E402
+# The column builder lives on the wire side; section 10 checks the shape it
+# emits against arrays retail actually sent, so it is imported rather than
+# re-implemented here -- a second copy would agree with itself forever.
+import authsrv  # noqa: E402
+authsrv_columns = authsrv.attribute_columns
 
-# 42, from the green run of 2026-08-20 (35 + section 9's seven persistence
+# 49, from the green run of 2026-08-20 (35 + section 9's seven persistence
+# checks + section 10's seven bonus checks)  -- the older note read: (35 + section 9's seven persistence
 # checks) -- set from the run, never guessed. Section
 # 1 is content-shaped and section 5 replays a fixed nine transitions, so the
 # count is exact rather than a floor under a loop whose length can drift.
-LEDGER = checks.Ledger("attribute spend", floor=42)
+LEDGER = checks.Ledger("attribute spend", floor=49)
 
 # The player this server actually spawns: a Warrior with no secondary. Attribute
 # 17 is Strength -- profession 1, and its PRIMARY -- which makes it the one that
@@ -352,6 +358,53 @@ def main():
                   f"stored, so the two can never drift apart")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+    print("\n10. ITEM BONUSES: display only, uncapped, and off the equipped set")
+    # The corpus is the specification here. In 20260818T132739 one character
+    # wore +1 on attribute 20 and spent that attribute from rank 12 down to 7;
+    # the two properties below are what that series proves, and both are easy
+    # to break by treating the bonus as if it were a rank.
+    worn = attribspend.AttributeState(rules, {17: 8, 20: 12, 21: 10}, 200,
+                                      primary=1, bonuses={20: 1})
+    bare = attribspend.AttributeState(rules, {17: 8, 20: 12, 21: 10}, 200,
+                                      primary=1)
+    LEDGER.ok(worn.effective_of(20) == 13 and worn.rank_of(20) == 12,
+              "effective = base + bonus, and the base is untouched",
+              "retail sent exactly this pair -- base 12, effective 13 -- in "
+              "26 of 26 sightings of that character")
+    LEDGER.ok(worn.effective_of(20) > rules.rank_max,
+              "and effective is NOT clamped to the rank cap",
+              f"13 > {rules.rank_max}: clamping would send a number "
+              f"ArenaNet's own server does not send")
+    LEDGER.ok(worn.available == bare.available and worn.spent == bare.spent,
+              "a bonus changes NO part of the point arithmetic",
+              f"{worn.available} unspent either way -- the capture's refunds "
+              f"closed on s_attribPoints[BASE] (20 leaving rank 12, 16 "
+              f"leaving 11), and 'rank 13' has no cost to refund at all")
+    LEDGER.ok(worn.refuse_increase(20) == bare.refuse_increase(20)
+              and worn.refuse_increase(20) is not None,
+              "and it does not change a refusal either",
+              "base 12 is the cap, so both refuse -- if the bonus leaked into "
+              "the rank test, the worn one would refuse for a different "
+              "reason or, worse, allow rank 13")
+    LEDGER.ok(worn.effective_of(17) == 8 and worn.bonus_of(17) == 0,
+              "an attribute with no bonus is unchanged",
+              "17 and 21 stayed equal in every one of those 26 sightings; "
+              "only 20 moved")
+
+    # The wire shape: the third column is where the bonus lands, and getting
+    # it into the second would silently overpay every future spend.
+    cols = authsrv_columns([(17, 8), (20, 12), (21, 10)], {20: 1})
+    LEDGER.ok(cols == [17, 20, 21, 8, 12, 10, 8, 13, 10],
+              "0x003A's three columns put the bonus in the THIRD only",
+              f"{cols} -- and this is byte-for-byte the array retail sent in "
+              f"20260817T231139 and three other captures")
+    LEDGER.ok(authsrv_columns([(17, 8), (20, 12), (21, 10)], None)
+              == [17, 20, 21, 8, 12, 10, 8, 12, 10],
+              "and with no bonuses the two value columns are equal again",
+              "the invariant the builder's docstring describes, preserved for "
+              "every caller that passes nothing")
 
     return LEDGER.verdict()
 

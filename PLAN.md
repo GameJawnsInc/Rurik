@@ -2206,8 +2206,28 @@ pre-existing `17=9, 19=12` priced out to 55 unused and the client drew ▼11▲1
 typed nowhere in this repo. Schema: `0x0038` and `0x003B` go medium -> **high** (static read
 plus rendered effect); `0x0036` stays medium on purpose, since ACK is our word.
 
-Still open here: base and effective are sent EQUAL (no item bonuses modelled); `0x0010`'s arm
-has zero live witnesses anywhere in the corpus and is built to a static reading alone.
+**ITEM BONUSES LANDED (§34.6, same day)** and the corpus specified them: across all 34
+`0x003A` and all 14 `0x003B` in the vault the two value columns differ by **0 or +1 and
+nothing else** over 94 (attribute, sighting) pairs, the +1 belonging to attribute 20 alone
+in 26 of 26 sightings of one character -- whose base slid 12→7 with the bonus riding along
+unchanged. So the bonus is **display-only** (every refund closed on `s_attribPoints[BASE]`;
+counting it would need a cost for 'rank 13', which does not exist) and **uncapped** (retail
+sent effective 13 against a cap of 12). That CONFIRMS the prediction `attribute_columns`
+made against itself in 2026-08-15 -- *"if a capture ever shows the two differing, THIS is
+the line that was wrong"* -- with the reading right and only its "ours wears nothing"
+premise expired. The starter hammer declares `attribute_bonus = [[19, 1]]` and
+`equipped_attribute_bonuses()` sums the worn set, gated on `EQUIP_WEAPON` so `--no-weapon`
+is a real control. **NOT a decoding of ArenaNet's `modifiers` dwords** -- still the
+character arc's largest open hole -- and the content row says so in place. On screen, both
+directions: at the cap the panel drew Hammer Mastery **13 in BLUE** with ▼20 and no up
+arrow; one click of ▼ sent `0x003B attr 19 = 11 +1 = 12` and drew **12 in blue** with
+▼16 ▲20. The client has its own render path for a boosted attribute, and its chevrons price
+off the BASE throughout -- so display-only is something the client renders, not just
+something we honour. test_attribspend §10, floor 42 → 49.
+
+Still open here: `0x0010`'s arm has zero live witnesses anywhere in the corpus and is built
+to a static reading alone; and the `modifiers` dwords remain undecoded, so a bonus is
+declared by us rather than read off the item ArenaNet shipped.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

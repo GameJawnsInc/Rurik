@@ -3222,3 +3222,66 @@ AGENT_UPDATE_ATTRIBUTE` go **medium → high**. Both now have two lineages — t
 of their handlers, and their values rendered on the client's own panel across the caged
 runs above. `0x0036 ATTRIBUTE_SPEND_ACK` deliberately **stays medium**: its mechanism is
 measured, but the word ACK is our summary of what it does and no client string names it.
+
+### 34.6 Item bonuses — base ≠ effective, and the client paints the difference blue (2026-08-20)
+
+§34.4's other stated limit: `0x003B` and `0x003A` carry base *and* effective and we sent
+them equal, because nothing modelled gear. Closed — and the corpus, not a guess, is what
+specified it.
+
+**What retail actually sends.** Across all 34 `0x003A` bulk fills and all 14 `0x003B`
+singles in the vault:
+
+| | |
+|---|---|
+| gap between the two value columns | **0 or +1, and nothing else**, over 94 (attribute, sighting) pairs |
+| which attributes carry it | **attribute 20 only**, in 26 of 26 sightings of one character; 17, 21, 29, 30 never |
+| does it track the base | **no** — that character spent 20 from rank 12 down to 7 and the +1 rode along unchanged |
+
+Two properties follow, and both are traps in the same direction — treating the bonus as if
+it were a rank:
+
+- **It is DISPLAY ONLY.** Every refund in that series closed on `s_attribPoints[BASE]` —
+  20 for leaving rank 12, 16 for leaving 11. Had the bonus counted, leaving would have to
+  price *rank 13*, which has no cost at all.
+- **It is NOT CAPPED.** Retail sent effective **13** against a spend cap of rank 12, 26
+  times. Clamping to `rank_max` would emit a number ArenaNet's own server does not.
+
+**This CONFIRMS a prediction `attribute_columns` made against itself.** Its docstring has
+said since 2026-08-15 that slot 3 is "RECONSTRUCTION and the one thing here to distrust",
+read it as base vs effective-including-bonuses, noted the two are equal for a character
+wearing no runes — and closed: *"If a capture ever shows the two differing, THIS is the
+line that was wrong."* A capture does show them differing, and the reading was **right**;
+what expired is the other half of the sentence, that ours wears nothing.
+
+**Where the bonus comes from.** `content/items.toml`'s starter hammer now declares
+`attribute_bonus = [[19, 1]]`, and `equipped_attribute_bonuses()` sums that over the gear
+the server actually puts on — gated on `EQUIP_WEAPON`, so `--no-weapon` is a real control
+for this feature and collapses the two columns back to equal. The backpack is deliberately
+not consulted: a bought item is declared and placed, not worn.
+
+> **THIS IS NOT A DECODING OF ArenaNet's ITEM MODIFIERS, and the boundary matters.** The
+> real bonus lives in the two `modifiers` dwords each item carries, and nobody in this
+> repo has decoded one — [studies/character](../character/FINDINGS.md) calls it "the
+> largest hole" and it is still open. `attribute_bonus` is OUR declaration of what OUR
+> item does, sitting beside those dwords and making no claim about them. The content row
+> says so in place.
+
+**Measured on screen, caged, both directions.** The persisted character wears the hammer
+and had Hammer Mastery at the rank cap, which reproduces retail's own 12→13 exactly:
+
+| | wire | panel |
+|---|---|---|
+| at the cap | `0x003A … base [9,1,12] effective [9,1,13]` | Hammer Mastery **13 in BLUE**, ▼20, **no up arrow** |
+| click its ▼ | `0x003B attr 19 = 11 +1 = 12`, refund 20 → 74 unspent | **12 in BLUE**, ▼16 ▲20, up arrow back |
+
+**The blue is the find.** The client has a distinct render path for an attribute that is
+above its base — Strength 9 and Axe Mastery 1 stay white in the same frame — which is an
+independent confirmation that column 3 means "effective" and not some second copy of the
+rank. And the chevrons around that blue chip price off the BASE throughout: ▼20 at base
+12, then ▼16 ▲20 at base 11, which are `s_attribPoints[12]`, `[11]` and `[12]`. The
+display-only property is not just something our server honours; it is something the client
+renders.
+
+`test_attribspend.py` §10 adds seven checks, including the exact nine-element column array
+retail sent in `20260817T231139`, byte for byte. Floor 42 → 49.
