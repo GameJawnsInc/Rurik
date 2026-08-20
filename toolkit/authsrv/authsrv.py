@@ -2643,6 +2643,14 @@ def _note_wire_move(state, opcode, values, now):
         state["sync_from"] = _sync_position(state, now)
         state["sync_to"] = point
         state["sync_at"] = now
+        # AND THE RATE LIMIT'S CLOCK, stamped HERE for the same reason this
+        # whole hook lives in send(): the click arm, the heading arm, the
+        # endpoint arm, the stop echo and the click sweep all grant through it,
+        # and a limit fed from the click arm alone would be blind to the other
+        # four. Running --grant-suppress next to --heading-grant would otherwise
+        # rate-limit clicks while a refuted flag re-armed the client twice a
+        # second, which is the reproduction with the label filed off.
+        state["grant_at"] = now
     elif opcode == GAME_SMSG_AGENT_UPDATE_POSITION:
         # A hard set: BOTH copies land here and NO OUTSTANDING GRANT SURVIVES
         # IT. That was the one thing this model needed the binary to confirm,
@@ -2744,6 +2752,276 @@ def _maybe_resync(send, state, rec, now=None):
          f"RESYNC 0x002C at ({payload[0]:.0f},{payload[1]:.0f}) plane {plane} "
          f"-- the CLIENT's own report, {age * 1000:.0f} ms old, closing a "
          f"modelled {sep:.0f} u between the authoritative copy and it")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# GRANT SUPPRESSION -- `--grant-suppress`.  OFF by default.
+#
+# WHAT EARNED IT, three captures taken on the owner's own machine 2026-08-20.
+# These are primary evidence, not a reconstruction:
+#
+#   authsrv-20260820T182554-c1  KEYBOARD ONLY. Three ~8 s W-holds. 283-287 u/s
+#                               in every interval against a full walk of 288,
+#                               three 0x0047 stops, ZERO clicks, ZERO grants,
+#                               and 0.00 hard jumps per minute. The client walks
+#                               correctly on its own prediction with almost no
+#                               server involvement.
+#   authsrv-20260820T182934-c1  FIVE CLICKS AND WE ANSWERED NONE -- stale
+#                               position four times, "not a straight shot" once.
+#                               ZERO grants, ZERO warps. And the character still
+#                               walked to all five clicked points; see the
+#                               "WHAT A PLAYER LOSES" measurement below.
+#   authsrv-20260820T183311-c1  THE REPRODUCTION. The owner held S (backpedal)
+#                               while spam-clicking forward. 196 clicks -> 140
+#                               grants in 44 s, one every 0.13 s, and FIVE hard
+#                               jumps: p50 1,372 u, max 3,010 u, 6.82/min. FOUR
+#                               of the five land 0.10-0.23 s after a grant.
+#
+# THE MECHANISM THOSE NUMBERS FIT, decoded and adversarially checked this week
+# (studies/movement/FINDINGS.md; the same decode the --resync block above
+# rests on). 0x0029 AGENT_MOVE_TO_POINT is SYNC-ONLY: it moves the
+# server-authoritative copy at [agentMgr+0xE8] and CANNOT reach the locally
+# predicted copy the player sees at [agentMgr+0x14C], because 0x0025's async
+# arm is gated shut for the client-controlled agent at 0x005FD5D3. So a grant
+# issued while the player is walking under their OWN keyboard control drives
+# the authoritative copy one way while the rendered copy goes another, and the
+# separation grows invisibly. Each grant ALSO re-evaluates the client's desync
+# test -- the grant bake 0x005FEBEB is one of only THREE callers of
+# 0x00605FC0, all message-driven, never per-frame -- and when straight-line
+# separation exceeds gate 1's 299.332591 u the client hard-copies SYNC onto
+# ASYNC. That is the warp. It is also why the two no-grant captures are clean:
+# with no grants the test is never even evaluated.
+#
+# So the fix is not a better destination. It is SILENCE at the two moments a
+# grant cannot help and can only open a gate.
+# ⚠ WHAT THIS FLAG IS, AND WHAT IT IS NOT. Read before quoting it as the warp fix.
+#
+# IT IS A PALLIATIVE FOR OUR OWN STALE DESTINATIONS, NOT THE MECHANISM FIX, and
+# RETAIL CONTRADICTS ITS PREMISE. ArenaNet sends 2,855 player-directed 0x0029 at a
+# median inter-grant gap of 0.492 s, and 88.5% of them are TRIGGERED BY a 0x003D
+# heading -- retail grants continuously WHILE the player keyboards, and does not
+# warp, because its destination is the client's own proposed endpoint plus 0.5 u.
+# Rule 1 forbids precisely what retail does most. It works (if it works) by making
+# us quiet, not by making us correct. FINDINGS' candidate #1 -- make the grant
+# MATCH the client's outstanding predicted command, the only shape that PREVENTS
+# the snap rather than shrinking it -- remains unbuilt, and "suppress the grant"
+# already sits on HANDOFF's dead-candidate scoreboard.
+#
+# THE TIMING EVIDENCE THAT MOTIVATED THIS IS WORTHLESS, and it is struck here so
+# nobody rebuilds on it. "Four of five hard jumps landed 0.10-0.23 s after a
+# grant" is a restatement of grant DENSITY: in the 2026-08-20 reproduction 140
+# grants span 32.7 s, one every 0.150 s, so 49.2% of the capture's wall clock and
+# 57.1% of its own report instants are ALSO within 0.23 s of a grant. A rotation
+# control -- shifting the jump times against an untouched grant train over 199
+# offsets -- scores a mean 2.39 of 5, and 77 of the 199 rotations equal or beat
+# the real 3 of 5. Fisher p = 0.64 at 0.23 s, p = 0.34 at 0.30 s. Not evidence.
+#
+# WHAT DOES CARRY THE ARGUMENT, both surviving the identical test:
+#   * THE LANDING GEOMETRY -- five sub-unit landings on points we had granted
+#     (p = 3.0e-5). The client lands ON our destination, which is what a resync
+#     onto the authoritative copy looks like and what grant density cannot fake.
+#   * THE REPORTING-CONTROLLED 2x2 -- 5.67 jumps/min while granting against 0.88
+#     while silent, P = 3.4e-10.
+#   * THE DECODE: 0x0029 is SYNC-ONLY, so a grant issued while the player drives
+#     locally CANNOT reach the copy they see and can only create divergence.
+#
+# HONEST PREDICTION FOR THE RE-RUN -- NOT zero. Surviving jumps are 2.7x BIGGER
+# (p50 1,969 u silent vs 735 u granted), so score DISPLACEMENT PER MINUTE, not
+# jumps per minute: the predicted win is 4,874 -> ~1,556 u/min (3.1x), with a
+# hard-row rate landing near 2.5-3.7/min rather than 0.00. This arc has already
+# lost a candidate that bounded SIZE while harm arrived as FREQUENCY; this is the
+# mirror image of that error and the pass criterion must carry both terms.
+#
+# UNMEASURED: the cost of rule 1 in its OWN regime. The n=5 evidence that a
+# refused click still walks the player (cos 0.994-1.000) is all from clicks after
+# a STOP, where rule 1 never fires. What a click does while the keyboard is held
+# and we stay silent has not been observed.
+GRANT_SUPPRESS = False
+# RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
+# on its window alone.
+#
+# The latch is armed by a 0x003D carrying a non-zero movementType and disarmed
+# by 0x0047. That pairing is the client's own behaviour and not an inference:
+# it emits 0x003D only WHILE MOVING and 0x0047 only on a stop, so "is the player
+# keyboarding right now" is answerable from what we last received. 0x0047 is the
+# PRIMARY disarm; this window is the failsafe for a stop we never heard.
+#
+# SIZED FROM THE CORPUS, not from taste. Over 987 `ours` gamesrv captures, the
+# gap between consecutive 0x003D-moving reports with no 0x0047 between them --
+# which is exactly how long the latch must survive unaided -- is n = 3,420,
+# p50 0.500 s, p90 1.801 s, p99 2.737 s, p99.9 7.858 s. There is a real mode at
+# 2.74-2.79 s: 144 gaps exceed 2.00 s, 137 exceed 2.50 s, and only 9 exceed
+# 3.00 s. 3.0 s is the first round number PAST that mode, and it covers 3,411 of
+# 3,420 measured gaps (99.74%). A 2.0 s window would open a hole in 4.2% of
+# them, and a hole is where the reproduction gets back in.
+#
+# WHY GENEROUS IS CHEAP HERE, and this is the asymmetry the whole flag turns on.
+# Over-refusing costs a grant the client did not need (measured at zero, below).
+# Under-refusing costs a warp. So the window errs long, and a negative age --
+# a report dated in the future under clock skew -- counts as ARMED rather than
+# sailing through an upper-bound-only test.
+GRANT_LOCAL_WINDOW = 3.0
+# RULE 2'S FLOOR -- the minimum interval between two grants on the wire.
+#
+# TWO INDEPENDENT DERIVATIONS LAND ON THE SAME NUMBER, which is the only reason
+# it is a round one.
+#
+# (a) RETAIL'S OWN CADENCE. ArenaNet's player inter-grant gap is a median
+#     0.492 s over the 2,855 player-directed 0x0029 in the live corpus (the
+#     figure the heading arm's own comment already cites). The reproduction ran
+#     at 0.13 s -- 3.8x faster than the thing we are imitating.
+# (b) THE SEPARATION CEILING, the same one RESYNC_MIN_INTERVAL is derived
+#     against. Two copies moving directly apart separate at no more than
+#     2 x DEFAULT_RUN_SPEED, so gate 1's cut of 299.332591 u cannot be crossed
+#     in less than 299.332591 / 576 = 0.5196 s. A grant more often than that
+#     cannot be answering a separation that had time to grow; and a deferred
+#     grant held LONGER than that is itself late enough to let a full gate
+#     accrue. 0.5 s is the round number under the ceiling and at retail's median.
+#
+# MEASURED EFFECT on the reproduction, replayed against its own 140 grant
+# timestamps: 38 survive (27.1%), taking 257 grants/min to 70. Rule 1 takes the
+# same run to zero; this is the backstop for the case rule 1 does not cover --
+# a player spam-clicking while NOT keyboarding.
+GRANT_MIN_INTERVAL = 0.5
+# HOW LONG A DEFERRED GRANT MAY WAIT BEFORE IT STOPS BEING THE PLAYER'S CHOICE.
+# A rate-limited click is held, not dropped, or ordinary double-clicking would
+# lose every second click. The hold is due within one GRANT_MIN_INTERVAL by
+# construction, so twice that is a world tick which has missed ten of its 20 Hz
+# intervals -- and at DEFAULT_RUN_SPEED the player has moved up to 288 u from
+# the position the click's collision ray was cast from. Past that the held
+# destination is our guess about somebody else's intention, so it is dropped
+# with a line rather than granted. Expressed as a multiple so the two cannot
+# drift apart.
+GRANT_PENDING_MAX_AGE = 2.0 * GRANT_MIN_INTERVAL
+#
+# WHAT A PLAYER LOSES, VERIFIED RATHER THAN ASSERTED. The tempting answer is
+# "nothing, because 0x0029 never reached the copy they see anyway" -- but that
+# is the decode talking, and the decode is about the client's memory, not about
+# what the owner will notice. So it was measured on the wire, on the capture
+# where the server answered NO click at all (authsrv-20260820T182934-c1, 0
+# grants sent in 114 s):
+#
+#   click t= 15.45  silence  1.18s  moved     90 u  cos = 0.994  closed     90 u
+#   click t= 41.79  silence 16.97s  moved  2,268 u  cos = 1.000  closed  2,267 u
+#   click t= 67.05  silence 13.65s  moved  3,226 u  cos = 1.000  closed  3,224 u
+#   click t= 95.49  silence  9.68s  moved  1,804 u  cos = 1.000  closed  1,803 u
+#   click t=106.07  silence  2.48s  moved    106 u  cos = 1.000  closed    106 u
+#
+# `cos` is between the direction the character actually travelled and the
+# direction of the clicked point from where it started; `closed` is how much
+# nearer to the clicked point it ended up. FIVE OF FIVE walked toward the point
+# the player clicked, with not one byte of 0x0029 behind them, and the long
+# silences are the client's own signature while click-walking -- it reports no
+# position at all, so those legs cannot be anything but its own pathing.
+#
+# So the claim survives contact with the wire: click-to-move is the CLIENT's
+# feature and our grant is not what performs it. What a player loses is the
+# server's opinion of where a click ends -- which, when it disagreed with the
+# client, is the thing that snapped them through a railing (see the click arm's
+# own "THE CLIENT PATHS CLICKS BY ITSELF" note). n = 5, one map, one session:
+# small, and it is the honest number rather than the decode's confidence.
+
+
+def _grant_verdict(state, now):
+    """Pure: may a click grant go on the wire right now, and if not, why?
+
+    Returns (grant, reason, keyboard_age, since_last_grant). No side effects, so
+    the policy is drivable from a capture replay without a socket -- the same
+    property _position_verdict and _resync_verdict have, and for the same
+    reason: an offline scorer has to be able to run THIS decision rather than a
+    paraphrase of it that agrees with it by construction.
+    """
+    at = state.get("kbd_moving_at")
+    last = state.get("grant_at")
+    age = None if at is None else now - at
+    since = None if last is None else now - last
+    if not GRANT_SUPPRESS:
+        return True, "off", age, since
+    # RULE 1. Do not grant while the player is driving locally. `kbd_moving_at`
+    # is written by the 0x003D arm when movementType is non-zero and cleared by
+    # the 0x0047 arm, and by nothing else -- deliberately NOT state["walking"],
+    # which the click arm itself clears, so a single click would have disarmed
+    # the latch and let the other 195 through.
+    #
+    # `age <= WINDOW` rather than `0 <= age <= WINDOW`: a negative age is a
+    # report dated in the future, and it counts as armed. Failing toward silence
+    # is the cheap direction here (see the window's derivation above).
+    if age is not None and age <= GRANT_LOCAL_WINDOW:
+        return False, "locally-moving", age, since
+    # RULE 2. And never faster than retail does it.
+    if since is not None and since < GRANT_MIN_INTERVAL:
+        return False, "rate-limited", age, since
+    return True, "grant", age, since
+
+
+def grant_flush_tick(send, state, conn_id, rec=None, now=None):
+    """Send the newest DEFERRED click grant once the rate limit opens.
+
+    Polled from the world tick rather than given a timer, like every other
+    deferred thing in this file. Returns whether it sent.
+
+    THIS IS THE COALESCING HALF OF RULE 2. A rate-limited click is held rather
+    than dropped -- otherwise every second click of an ordinary double-click
+    would vanish, which is requirement 3 broken on the first day. Only ONE
+    destination is ever held: a fresh click overwrites the pending one, so the
+    NEWEST wins and the superseded one is never sent. That is the difference
+    between rate-limiting and queueing, and queueing would have reproduced the
+    storm one interval later.
+    """
+    if not GRANT_SUPPRESS:
+        return False
+    pending = state.get("grant_pending")
+    if pending is None:
+        return False
+    if now is None:
+        now = time.time()
+    dest = pending["dest"]
+    age = now - pending["at"]
+    if age > GRANT_PENDING_MAX_AGE or age < 0.0:
+        state["grant_pending"] = None
+        print(f"[c{conn_id}] deferred click to ({dest[0]:.0f}, {dest[1]:.0f}) "
+              f"is {age:.2f}s old -- past the {GRANT_PENDING_MAX_AGE:.2f}s hold "
+              f"and no longer the player's choice, dropping it", flush=True)
+        if rec is not None:
+            rec.event("grant_verdict", fired=False, reason="pending-expired",
+                      deferred=True, age=round(age, 3), dest=list(dest))
+        return False
+    grant, why, kage, since = _grant_verdict(state, now)
+    if not grant:
+        if why == "rate-limited":
+            return False            # still inside the floor; keep holding it
+        # The player picked the keyboard back up. Their click is superseded by
+        # their own hands, and granting it now would be the reproduction with a
+        # delay bolted on.
+        state["grant_pending"] = None
+        print(f"[c{conn_id}] deferred click to ({dest[0]:.0f}, {dest[1]:.0f}): "
+              f"the player is driving with the keyboard again -- dropping it "
+              f"rather than granting a destination they have walked away from",
+              flush=True)
+        if rec is not None:
+            rec.event("grant_verdict", fired=False, reason=why, deferred=True,
+                      keyboard_age=(None if kage is None else round(kage, 3)),
+                      age=round(age, 3), dest=list(dest))
+        return False
+    state["grant_pending"] = None
+    state["dest"], state["clipped"] = dest, False
+    if rec is not None:
+        rec.event("grant_verdict", fired=True, reason="deferred-grant",
+                  deferred=True, age=round(age, 3),
+                  since_last=(None if since is None else round(since, 3)),
+                  dest=list(dest))
+    # The same pair the click arm sends, in the same order and for the same
+    # reason -- ArenaNet pairs the rate with the MOVE, not with the spawn.
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+         "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, list(dest), pending["plane_first"],
+          pending["plane_second"]],
+         f"DEFERRED CLICK GRANT ({dest[0]:.0f},{dest[1]:.0f}) plane "
+         f"{pending['plane_second']}->{pending['plane_first']}, held "
+         f"{age * 1000:.0f} ms for the {GRANT_MIN_INTERVAL:.2f}s floor")
     return True
 
 
@@ -8220,6 +8498,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reported arrival, so it should be served on the first
                         # tick after that report rather than one interval later.
                         interact_pending_tick(send, state, conn_id)
+                        # A click held back by the grant floor. Polled here for
+                        # the same reason the interact above is -- the client
+                        # sends NOTHING while click-walking (measured silences
+                        # of 9.7, 13.7 and 17.0 s), so there is no receive arm
+                        # that could carry it, and a timer thread would be a
+                        # second sender racing this one for the send lock.
+                        # No-op with the flag off and with nothing pending.
+                        grant_flush_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -8962,6 +9248,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # client moves itself now, which is precisely what makes
                         # its report worth having.
                         reported = tuple(values[1])
+                        # THE LOCALLY-DRIVING LATCH, armed here and cleared in
+                        # the 0x0047 arm below, and touched in NO third place.
+                        # See _grant_verdict for what reads it and why it is
+                        # deliberately not state["walking"] -- that one is
+                        # cleared by the click arm itself, so one click would
+                        # have disarmed it and let a storm of 195 through.
+                        #
+                        # It is stamped BEFORE the trust guard runs, on purpose.
+                        # The question this answers is "did the client just tell
+                        # us it is moving under the keyboard", and it told us
+                        # that whether or not we believed the coordinates it
+                        # attached -- a refused report is still a report.
+                        state["kbd_moving_at"] = time.time() if moving else None
                         _take_client_position(state, reported, plane, rec,
                                               "0x003D")
                         # ONE OF THE TWO CALL SITES, and both route through the
@@ -9399,6 +9698,67 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[trace] CLICK dest ({dest[0]:.0f}, "
                                   f"{dest[1]:.0f}) clipped from OUR origin "
                                   f"({opx:.0f}, {opy:.0f})", flush=True)
+                        # THE THIRD REFUSAL, and the first one that is about US
+                        # rather than about the geometry. `--grant-suppress`;
+                        # the reasoning, the three captures and both constants
+                        # are at GRANT_SUPPRESS above.
+                        #
+                        # IT IS DELIBERATELY LAST. A click that is also stale or
+                        # also blocked must still report the geometry reason,
+                        # because that is the line the owner reads live and it
+                        # says something about the map; "the player is
+                        # keyboarding" would hide it. With the flag off
+                        # _grant_verdict returns ("off", grant) and this block
+                        # is exactly the pass-through it replaces.
+                        now_g = time.time()
+                        may_grant, why_g, kage, since = _grant_verdict(state,
+                                                                       now_g)
+                        if rec is not None:
+                            # EVERY evaluation, granted or not -- the same rule
+                            # the resync log follows, and for the same reason:
+                            # a log holding only its own successes cannot score
+                            # the flag against the storm it exists to stop.
+                            rec.event("grant_verdict", fired=may_grant,
+                                      reason=why_g, deferred=False,
+                                      keyboard_age=(None if kage is None
+                                                    else round(kage, 3)),
+                                      since_last=(None if since is None
+                                                  else round(since, 3)),
+                                      dest=[float(dest[0]), float(dest[1])])
+                        if not may_grant:
+                            if why_g == "locally-moving":
+                                # DROPPED, not held. Their own hands are already
+                                # moving the character; a destination they
+                                # clicked while walking somewhere else is not
+                                # worth keeping, and the client is pathing to it
+                                # regardless (5 of 5, cos = 0.994-1.000, on the
+                                # capture where we answered nothing).
+                                state["grant_pending"] = None
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): the player is driving "
+                                      f"with the keyboard ({kage:.2f}s since "
+                                      f"their last move report, no stop since) "
+                                      f"-- leaving it to the client's own "
+                                      f"pathing", flush=True)
+                            else:
+                                # HELD, and the newest wins. Overwriting rather
+                                # than appending is the whole of the coalescing:
+                                # 196 clicks leave at most one destination
+                                # outstanding at any instant.
+                                state["grant_pending"] = {
+                                    "dest": (float(dest[0]), float(dest[1])),
+                                    "plane_first": plane_first,
+                                    "plane_second": plane_second,
+                                    "at": now_g}
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): {since:.2f}s since the "
+                                      f"last grant, under the "
+                                      f"{GRANT_MIN_INTERVAL:.2f}s floor -- "
+                                      f"holding the NEWEST destination and "
+                                      f"dropping any older one", flush=True)
+                            continue
+                        # A click we ARE answering supersedes anything held.
+                        state["grant_pending"] = None
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
                         # ArenaNet pairs the rate with the MOVE, not with the
@@ -9453,6 +9813,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported, plane = tuple(values[1]), values[2]
                         state["dest"] = None
                         state["walking"], state["heading"] = False, None
+                        # THE PRIMARY DISARM of the locally-driving latch, and
+                        # the one that does the work: in the 5 ordinary clicks
+                        # of authsrv-20260820T182934-c1 a 0x0047 had arrived
+                        # before every single one, so rule 1 refused 0 of 5
+                        # there while refusing 196 of 196 in the reproduction.
+                        # GRANT_LOCAL_WINDOW never had to decide any of them.
+                        state["kbd_moving_at"] = None
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
                         pm = state.get("pathmap")
@@ -11016,6 +11383,24 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--grant-suppress", action="store_true",
+                    help="EIGHTH candidate, and the first that acts by SAYING "
+                         "LESS. Two refusals on the click grant: (1) never send "
+                         "0x0029 while the player is driving with the keyboard "
+                         "-- the client emits 0x003D only while moving and "
+                         "0x0047 only on a stop, so that state is readable off "
+                         "the wire -- and (2) never send them faster than one "
+                         "per %.2f s, holding the NEWEST superseded destination "
+                         "rather than sending both. 0x0029 is SYNC-ONLY, so a "
+                         "grant issued mid-keyboard drives the authoritative "
+                         "copy away from the rendered one AND re-runs the "
+                         "client's desync test, which is the warp. Scored "
+                         "against run 20260820T183311: 196 clicks -> 140 grants "
+                         "in 44 s and 5 hard jumps, four of them 0.10-0.23 s "
+                         "after a grant. Rule 1 refuses 196 of those 196 and 0 "
+                         "of the 5 ordinary clicks in run 20260820T182934. OFF "
+                         "by default; independent of every other movement flag."
+                         % GRANT_MIN_INTERVAL)
     ap.add_argument("--stop-echo", action="store_true",
                     help="REFUTED 2026-08-19, kept only so the negative result "
                          "is reproducible -- do not reach for this as a fix. On "
@@ -11559,6 +11944,41 @@ def main():
               "player described'. If the character WALKS rather than being "
               "corrected, that regression is back and the payload is the "
               "first thing to read.")
+
+    if a.grant_suppress:
+        global GRANT_SUPPRESS
+        GRANT_SUPPRESS = True
+        print("[map] --grant-suppress ON. Two refusals on the click grant, and "
+              "nothing new goes on the wire.")
+        print(f"      RULE 1    no 0x0029 while the player is keyboarding -- a "
+              f"0x003D with a non-zero movementType arms it, a 0x0047 clears "
+              f"it, and it lapses after {GRANT_LOCAL_WINDOW:.1f}s without one.")
+        print(f"      RULE 2    and never more often than one per "
+              f"{GRANT_MIN_INTERVAL:.2f}s; a click inside the floor is HELD, "
+              f"newest destination only, and dropped unsent after "
+              f"{GRANT_PENDING_MAX_AGE:.2f}s.")
+        print("      WHY       0x0029 is SYNC-ONLY (0x0025's async arm is gated "
+              "shut for the client-controlled agent at 0x005FD5D3), so a grant "
+              "sent mid-keyboard moves the authoritative copy away from the one "
+              "the player sees AND re-runs the desync test that snaps them "
+              "together past 299.332591 u.")
+        print("      COST      measured, not assumed: on the capture where we "
+              "answered NO click at all, 5 of 5 clicks still walked the "
+              "character toward the clicked point (cos 0.994-1.000, closing 90 "
+              "to 3,224 u). Click-to-move is the CLIENT's feature.")
+        print("      PREDICTION, stated before the run, in BOTH units because "
+              "this arc has already had a candidate bound the size while the "
+              "harm arrived as frequency:")
+        print("        FREQUENCY hard rows per minute on movesync's bar fall to "
+              "0.00, matching the two clean captures. ANY hard row within "
+              "0.30 s of a grant REFUTES it.")
+        print("        SIZE      no client displacement above gate 1's "
+              "299.332591 u attributable to a grant.")
+        print("      CONTROL   and this one decides nothing without it: with "
+              "the player NOT keyboarding, clicking must still walk the "
+              "character. If click-to-move is dead the run is void, not a pass.")
+        print("      Score it with:  python toolkit/clientscan/movesync.py "
+              "--wire-only   (state the denominator)")
 
     if a.stop_echo:
         global STOP_ECHO
