@@ -29,7 +29,11 @@ identifiers render nothing in the tooltip, and the two busiest of those in the w
 **633** and **617**. 633 turned out to be the item's **attribute requirement**, read by
 `ItCliApi.cpp` and compared against the character attribute container the pvpui arc
 already owns; 617 is read by **nothing in the client**, on any of the three builds, and
-that negative comes with its own positive control. §4.
+that negative comes with its own positive control. §4. **And the attribute BONUS
+is §5** — identifiers **542** (Non-stacking) and **543** (Stacking), found not by
+reading templates but by asking which handlers resolve an attribute NAME, which is
+also a correction: the fourteen that do were counted as two from an assert list that
+says in its own output that it is a floor.
 
 ---
 
@@ -257,7 +261,131 @@ to read it out of, so anything beyond the shape would be invention:
 Labelled **UNVERIFIED**. The shape is recorded so the next reader starts from data
 rather than from this paragraph.
 
-## 5. The rest of the boundary
+## 5. The attribute BONUS — and a correction to how §4 looked for it
+
+**Written 2026-08-20, hours after §4, and it overturns one of §4's own
+sentences.** §6 of this document said the attribute-bonus identifier was "still
+unfound", on the strength of this reasoning: *exactly two handlers in the walker
+treat their argument as an attribute index, identifiers 1 and 14, and neither is
+a bonus.* The premise was wrong. It came from the two asserts that name
+`attrib < CHAR_ATTRIBS`, and **`asserts.py` prints, in its own output, that its
+module lists are a floor and not a census** — it is short by at least 370 sites
+it can see but cannot read. Taking a floor for a total is what cost a day here.
+
+### 5.1 The right question: who resolves an attribute NAME
+
+`s_attrib` is 51 records of 20 bytes, and the client reads four of its fields
+through four one-line accessors with an identical shape:
+
+```
+lea eax, [esi + esi*4]              ; index * 5
+mov eax, [eax*4 + <base + k>]       ; * 4  -> stride 20, field k
+pop esi ; pop ebp ; ret
+```
+
+Their four displacements are `base+0` (profession), `+8` (name string id),
+`+12` (description) and `+16` (isPrimary), so **the lowest of the four IS the
+table base** and the name accessor is `base+8` — locatable from the shape alone,
+with no build-specific address anywhere. `itemmods.py --attributes` does it, and
+finds the same fourteen identifiers on all three builds at three different table
+addresses:
+
+```
+1, 14, 542, 543, 545, 569, 577, 578, 634, 640, 642, 643, 644, 650
+```
+
+**Fourteen, not two.** OBSERVED.
+
+### 5.2 542 and 543 are the attribute bonus, and they differ by one word
+
+The two handlers are byte-for-byte the same shape:
+
+```
+edi = word & 0xff                       ; arg2
+ebx = (word >> 8) & 0x3ff               ; arg   -> THE ATTRIBUTE
+name = TextApi(GetAttributeNameId(ebx))
+if 1 <= edi <= 3:                       ; a four-entry table, 0xBCAAA8
+    name = Format(2443 "%str2% %str1%", grade[edi], name)
+...
+push 2482 "Non-stacking"                ; 542
+push 2481 "Stacking"                    ; 543
+Format(dest, 2436 "%str1% +%num1%", string -> name, number -> edi)
+```
+
+> **`<Attribute> +N`, with `arg` the attribute and `arg2` the amount — and the
+> same `arg2` indexes `{1: Minor, 2: Major, 3: Superior}`, so one number is both
+> the bonus and the rune grade.** OBSERVED. 543 appends `Stacking`, 542 appends
+> `Non-stacking`, and that is the only difference between them.
+
+Two more in the family are bonuses of a different shape, and neither is what
+§34.6 wants:
+
+| id | line | attribute | amount |
+|---|---|---|---|
+| **577** | `<Attribute> +1` and `N% chance while using skills` (2497) | `arg` | the immediate **1**; `arg2` is the percentage |
+| **644** | `+N` (Stacking) to the attribute named by a **companion 542 word**, or literally 56454 `Item's attribute` when there is none | scanned forward from the current word | `arg2` |
+
+644 is worth its line for a second reason: it walks ahead looking for
+`(word & 0x3ff00000) == 0x21E00000` — **identifier 542** — which is a third,
+independent witness that 542 is the attribute-carrying bonus.
+
+### 5.3 What ArenaNet actually sent us: 26 headpieces
+
+The live corpus holds **26** attribute-bonus words, every one of them identical:
+
+```
+0x21F81401  ->  id 543, attribute 20, +1, stacking
+```
+
+Attribute 20 resolves through `s_attrib` to name id 2118, **`Swordsmanship`**.
+Each of the 26 items carries it alongside `572` (armour rating **80**) and `527`
+(`+20 vs. physical damage`), and all 26 share **one item type field, 16** — one
+of six types that each appear exactly 77 times in the corpus, which is what a
+set of armour slots looks like. A Warrior headpiece with `Swordsmanship +1`. A
+bonus scattered across weapon types would have refuted the reading; it is not.
+
+### 5.4 Composing one, and the three bits that make it not obvious
+
+`itemmods.py --attr-bonus 20,1` builds the word, and the check with no free
+parameter is that **it must equal the dword retail sent**:
+
+```
+identifier 543 << 20 | attribute 20 << 8 | amount 1   =  0x21F01401
+what ArenaNet actually sends                          =  0x21F81401
+```
+
+The difference is **bit 19**. Bits 31, 30 and 19 are the three the walker never
+reads as data — 31-30 only as the `== 3` skip — and across all **5,266** modifier
+words in the corpus they are **constant per identifier: 35 identifiers, zero
+exceptions**. So they are a fixed prefix of the encoding, not a payload, and a
+composer has to carry them. For 543 the prefix is `bits 31-30 = 0, bit 19 = 1`,
+measured on those 26 words.
+
+`attribute_bonus_word()` composes the **stacking** form only, and refuses an
+attribute `>= 51`. The non-stacking twin is deliberately not composable: **no
+capture of ours has ever carried a 542**, so its three prefix bits are unmeasured
+and inventing them is exactly the quiet guess this repo labels. NOT FOUND, and
+bounded — it needs one capture of a rune.
+
+### 5.5 What this does to pvpui §34.6
+
+`content/items.toml`'s starter hammer declares `attribute_bonus = [[19, 1]]`,
+with a comment saying it is **not** a decoding of the item's `modifiers` — and
+it was right: its two words decode to `587` (damage type) and `584 arg 5 arg2 3`
+(a damage range), and there is no bonus among them. Attribute 19 is name id 2116,
+**`Hammer Mastery`**, so the word that would make that declaration real is
+
+```
+attribute_bonus_word(19, 1) = 0x21F81301
+```
+
+That is a one-line change to `modifiers` and it is **not made here**, on purpose:
+543 is the form retail puts on *headpieces*, our item is a hammer, and adding it
+changes what the client draws. It wants a run to confirm the line renders and
+that §34.6's blue effective column still moves — which is a client session, not a
+static read.
+
+## 6. The rest of the boundary
 
 Two limits from the original decode still stand. The `labels`/`templates` split the tool
 reports is **best effort**: several handlers branch or loop before formatting, so a
@@ -274,7 +402,7 @@ It would have been published as "the client renders nothing for 526" while the c
 plainly does. The fix is in `loop_tail()`: a body that calls or pushes an immediate on
 the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21.
 
-## 6. What this unblocks
+## 7. What this unblocks
 
 - **[studies/character](../character/FINDINGS.md)'s armour rating** — the value it wanted is
   identifier 572's argument, and 527's is the "+N vs. damage type" line.
@@ -283,16 +411,15 @@ the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21
 - **[studies/pvpui §34.6](../pvpui/FINDINGS.md)'s `attribute_bonus`** — that field is our own
   declaration of what our item does, deliberately *not* a reading of the modifier words,
   and it was labelled that way because this decode did not exist. It can now be derived
-  instead of declared — **but not from the identifier this list first pointed at, and
-  that is a correction rather than a refinement.** This bullet used to say the bonus was
-  "whichever identifier carries an attribute bonus, and identifier 1's handler is the one
-  that bound-checks its argument against `CHAR_ATTRIBS`". Identifier 1 does bound-check
-  against `CHAR_ATTRIBS`, and it is the **requirement**, not a bonus: its template is
-  string 2473, `Requires %num1% %str1%` (§4.2). Exactly two handlers in the walker treat
-  their argument as an attribute index — identifier 1 and identifier **14**, whose
-  templates are 2483 `while %str1% is below %num1%` and 27726 `while you control %num1%
-  or more minions`, i.e. a conditional, not a bonus either. **So the attribute-bonus
-  identifier is still unfound**, and the honest state of §34.6's field is unchanged.
+  instead of declared, and **§5 found the identifier: 543 (Stacking) and its
+  non-stacking twin 542**, `<Attribute> +N` with `arg` the attribute and `arg2` the
+  amount. This bullet has been wrong twice and both errors are left visible above it in
+  the history: it first named identifier 1 as the bonus (1 is the *requirement*, string
+  2473 `Requires %num1% %str1%`, §4.2), and then said the bonus was "still unfound" on
+  the strength of a two-handler count taken from an assert list that prints its own
+  incompleteness — the real count is fourteen (§5.1). The composed word for the starter
+  hammer's declared `[[19, 1]]` is **`0x21F81301`** (`Hammer Mastery +1`), and §5.5 says
+  why it is not applied here.
 - **A requirement our server can enforce** — the client already does the comparison
   (§4.2), against the same `[charCtx + 0xAC]` attribute store `toolkit/authsrv`'s
   §34 spend path now writes. An item declared with a 633 word will grey out in the
@@ -300,6 +427,11 @@ the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21
 - **Authoring items that read correctly** — a server can now compose a modifier word for a
   stat it wants rather than copying an opaque literal out of a capture.
 
+- **Runes are one capture away** — 542 is the rune form and nothing in our corpus
+  carries one, so its three prefix bits are unmeasured and it is not composable (§5.4).
+  A single capture of a character wearing an attribute rune closes it.
+
 `toolkit/clientscan/itemmods.py` (`--decode`, `--summary`, `--readers`, `--reads`,
-`--emit-content`, `--all-builds`), `test_itemmods.py` (19 checks, floor 19), and
-`vault/content/item_modifiers.toml` (157 rows, `client-table` provenance, ids not words).
+`--attributes`, `--attr-bonus`, `--emit-content`, `--all-builds`), `test_itemmods.py`
+(28 checks, floor 28), and `vault/content/item_modifiers.toml` (157 rows,
+`client-table` provenance, ids not words).

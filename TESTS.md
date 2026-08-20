@@ -3148,8 +3148,8 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
-  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, and who
-  reads a modifier** — 19 checks, floor 19). Every item on the wire carries a list of 32-bit modifier words, and
+  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
+  a modifier, and the attribute bonus** — 28 checks, floor 28). Every item on the wire carries a list of 32-bit modifier words, and
   `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
   rating, damage range and every "+15% while…" line live in them and nobody had
   decoded one. `itemmods.py` reads the format out of the client's own parser —
@@ -3188,9 +3188,29 @@ Every one of these, in the order they were written:
   must be constant per item model while the rank varies, which holds on 63 models
   and 0 exceptions.
 
+  **§8-§10 are the attribute BONUS, and they are here because of how the search
+  for it failed first.** `studies/itemmods` had recorded "exactly two handlers
+  treat their argument as an attribute index" — a count taken from the two
+  asserts naming `attrib < CHAR_ATTRIBS`, from a tool that prints in its own
+  output that its module lists are a FLOOR and not a census. §8 asks the right
+  question instead: which handlers resolve an attribute NAME through
+  `s_attrib`? It locates that accessor **by shape** — four one-line field
+  readers with a stride-20 `lea`, of which the lowest displacement is the table
+  base — so no build-specific address is involved, and the answer is
+  **fourteen**, the same fourteen on all three builds. Two of them render
+  `<attribute> +N`: **543 Stacking** and **542 Non-stacking**.
+
+  §9 is the check with no free parameter: compose 543's word from its four
+  fields and you get `0x21F01401`; ArenaNet sends `0x21F81401`. The difference
+  is **bit 19**, one of three bits the walker never reads and which §10 measures
+  to be constant per identifier across all 5,266 corpus words (35 identifiers,
+  0 exceptions). §10 also replays all **26** attribute-bonus words the corpus
+  holds — every one `Swordsmanship +1` on one item type, all carrying an armour
+  rating — and requires the composer to reproduce each exactly.
+
   The floor was 12 because 14 was declared, 12 executed, and the ledger refused
-  the run — the guard doing its job on the file that documents it. It is 19 now,
-  read off the green run the same way.
+  the run — the guard doing its job on the file that documents it. It went to 19
+  and then to 28, each time read off the green run rather than predicted.
 
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on

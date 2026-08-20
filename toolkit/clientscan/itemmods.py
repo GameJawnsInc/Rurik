@@ -496,6 +496,152 @@ def readers(img: Image):
             "literal": lit, "accessors": par, "asked": asked}
 
 
+# ---------------------------------------------- attribute bonuses ----------
+# WHICH identifier is "+1 to Swordsmanship"? Not one -- a family, and the way
+# to find it is not to read templates but to ask which handlers RESOLVE AN
+# ATTRIBUTE NAME. `s_attrib` is 51 records of 20 bytes, and the client reads
+# four of its fields through four one-line accessors with an identical shape:
+#
+#     lea eax, [esi + esi*4]            ; index * 5
+#     mov eax, [eax*4 + <base + k>]     ; * 4 -> stride 20, field k
+#     pop esi ; pop ebp ; ret
+#
+# Their four displacements are base+0 (profession), +8 (name id), +12
+# (description id) and +16 (isPrimary), so the LOWEST is the table base and
+# base+8 is the name -- which means the name accessor is locatable without
+# knowing the table's address on any particular build. Every handler that
+# calls it renders an attribute's NAME, and that is the family.
+#
+# This is also a CORRECTION. studies/itemmods sec 6 said "exactly two handlers
+# treat their argument as an attribute index, 1 and 14" -- a number taken from
+# the two asserts that name `attrib < CHAR_ATTRIBS`. asserts.py says in its own
+# output that its module lists are a FLOOR and not a census, and this is what
+# that warning costs when it is not heeded: the real number is fourteen.
+
+ATTR_ACCESSOR = bytes.fromhex("8d04b68b0485")   # lea eax,[esi+esi*4]; mov eax,[eax*4+d32]
+ATTR_ACCESSOR_TAIL = bytes.fromhex("5e5dc3")    # pop esi ; pop ebp ; ret
+ATTR_NAME_FIELD = 8                             # s_attrib record: name string id
+
+# The two identifiers whose line is a plain attribute bonus. Same layout --
+# arg is the attribute, arg2 is the amount -- and they differ only in the word
+# the handler appends: string 2481 `Stacking` for 543, 2482 `Non-stacking` for
+# 542. Both also index a four-entry table with arg2 for the grade word
+# (1 `Minor`, 2 `Major`, 3 `Superior`), so ONE number is both the bonus and
+# the rune grade.
+ATTRIBUTE_BONUS = {542: False, 543: True}       # identifier -> stacking?
+# `<attribute> +1` with `N% chance while using skills`: the amount is the
+# immediate 1 pushed by the handler, and arg2 is the PERCENTAGE.
+ATTRIBUTE_BONUS_ON_SKILL_USE = 577
+# `+N` to whichever attribute a companion 542 word names, or the literal
+# string 56454 "Item's attribute" when there is none. Deliberately NOT
+# reported by attribute_bonuses(): it is a second line about an attribute this
+# repo has never seen in a capture, and emitting it would either double-count
+# the 542 word it points at or invent a bonus. Recorded, not guessed.
+ATTRIBUTE_BONUS_ITEMS_OWN = 644
+
+# Bits 31, 30 and 19 are the three the walker never reads as data (31-30 only
+# as the ==3 skip). Across all 5,266 modifier words in the live corpus they
+# are CONSTANT PER IDENTIFIER -- 35 identifiers, zero exceptions -- so they
+# are a fixed prefix of the encoding rather than a payload. For 543 the whole
+# prefix is this, measured on 26 retail words and on nothing else. The same
+# number for 542 is NOT known: no capture of ours has ever carried one.
+STACKING_BONUS_WORD = 0x21F80000
+ATTRIBUTES = 51                                  # CHAR_ATTRIBS
+
+
+def attribute_name_accessor(img: Image):
+    """{'base', 'name_accessor', 'fields'} for `s_attrib`, from the shape.
+
+    Located by the four accessors' own bytes and by the fact that the lowest
+    of their displacements is the table base, so no build-specific address is
+    involved and `--all-builds` is a real out-of-sample check.
+    """
+    raw, size, _sva = img.text()
+    d = img.data
+    found = {}
+    for o in _all(d, ATTR_ACCESSOR, raw, raw + size):
+        if d[o + 10:o + 13] != ATTR_ACCESSOR_TAIL:
+            continue
+        disp = struct.unpack_from("<I", d, o + 6)[0]
+        j = d.rfind(PROLOGUE, o - 0x40, o)
+        if j < 0:
+            continue
+        found[disp] = img.va_of(j)
+    if len(found) < 2:
+        raise NotFound(
+            f"expected the s_attrib field accessors (lea eax,[esi+esi*4]; mov "
+            f"eax,[eax*4+disp]) and found {len(found)}. Refusing rather than "
+            f"reporting an empty attribute family, which would read as 'no "
+            f"identifier carries an attribute bonus'.")
+    base = min(found)
+    if base + ATTR_NAME_FIELD not in found:
+        raise NotFound(f"the name-id accessor (base+{ATTR_NAME_FIELD}) is not "
+                       f"among the {len(found)} found: "
+                       f"{[hex(k - base) for k in sorted(found)]}")
+    return {"base": base, "name_accessor": found[base + ATTR_NAME_FIELD],
+            "fields": {k - base: v for k, v in sorted(found.items())}}
+
+
+def attribute_identifiers(img: Image):
+    """{identifier: handler} for every slot whose handler names an attribute."""
+    at, vocab = vocabulary(img)
+    acc = attribute_name_accessor(img)
+    idx = _call_index(img)
+    sites = [img.va_of(c) for c in idx.get(acc["name_accessor"], [])]
+    handlers = sorted({r["handler"] for r in vocab.values()})
+    out = {}
+    for s in sites:
+        owner = max([h for h in handlers if h <= s], default=None)
+        nxt = min([h for h in handlers if h > s], default=None)
+        if owner is None or (nxt is not None and s >= nxt):
+            continue                        # outside the walker entirely
+        for i, r in vocab.items():
+            if r["handler"] == owner:
+                out[i] = owner
+    return out
+
+
+def attribute_bonuses(words):
+    """Every attribute bonus in one item's modifier list.
+
+    [{identifier, attribute, amount, stacking, on_skill_use_percent}]. Words
+    the parser skips are skipped here for the same reason it skips them.
+    """
+    out = []
+    for w in words:
+        d = decode(w)
+        if d["skipped_high"] or d["skipped_bit18"]:
+            continue
+        i = d["identifier"]
+        if i in ATTRIBUTE_BONUS:
+            out.append({"identifier": i, "attribute": d["arg"],
+                        "amount": d["arg2"], "stacking": ATTRIBUTE_BONUS[i],
+                        "on_skill_use_percent": None})
+        elif i == ATTRIBUTE_BONUS_ON_SKILL_USE:
+            out.append({"identifier": i, "attribute": d["arg"],
+                        "amount": 1, "stacking": None,
+                        "on_skill_use_percent": d["arg2"]})
+    return out
+
+
+def attribute_bonus_word(attribute: int, amount: int) -> int:
+    """The STACKING `<attribute> +N` word, as retail's headpieces encode it.
+
+    Only the stacking form (543) is composable, because the three-bit prefix
+    the encoding needs was measured from ArenaNet's own words and we hold 26
+    of those for 543 and none for 542. Composing a 542 would mean inventing
+    three bits, which is exactly the kind of quiet guess this repo labels.
+    """
+    if not 0 <= attribute < ATTRIBUTES:
+        raise ValueError(f"attribute {attribute} is outside s_attrib "
+                         f"(0..{ATTRIBUTES - 1}); CHAR_ATTRIBS is "
+                         f"{ATTRIBUTES} and the client asserts on it")
+    if not 1 <= amount <= 0xFF:
+        raise ValueError(f"amount {amount} does not fit the 8-bit field; "
+                         f"1..3 also name Minor/Major/Superior")
+    return STACKING_BONUS_WORD | ((attribute & 0x3FF) << 8) | (amount & 0xFF)
+
+
 def print_readers(img: Image, only=None):
     r = readers(img)
     tails = ", ".join(f"{t:#010x}" for t in r["loop_tails"])
@@ -559,6 +705,11 @@ def main(argv=None) -> int:
                          "and the identifiers ItemName renders nothing for")
     ap.add_argument("--reads", metavar="ID", default=None,
                     help="answer --readers for one identifier only")
+    ap.add_argument("--attributes", action="store_true",
+                    help="every identifier whose handler resolves an ATTRIBUTE "
+                         "NAME, and which of them are bonuses")
+    ap.add_argument("--attr-bonus", metavar="ATTR,AMOUNT", default=None,
+                    help="compose the stacking attribute-bonus word, e.g. 20,1")
     ap.add_argument("--all-builds", action="store_true")
     a = ap.parse_args(argv)
 
@@ -582,6 +733,32 @@ def main(argv=None) -> int:
         except NotFound as exc:
             print(f"REFUSED: {exc}", file=sys.stderr)
             rc = 2
+            continue
+
+        if a.attr_bonus:
+            at_, am = (int(x, 0) for x in a.attr_bonus.split(","))
+            w = attribute_bonus_word(at_, am)
+            print(json.dumps({"word": f"{w:#010x}", "decoded": decode(w),
+                              "bonuses": attribute_bonuses([w])}, indent=1))
+            continue
+
+        if a.attributes:
+            fam = attribute_identifiers(img)
+            acc = attribute_name_accessor(img)
+            print(f"s_attrib base {acc['base']:#010x}; name-id accessor "
+                  f"{acc['name_accessor']:#010x} (both located by shape)")
+            _at, voc = vocabulary(img)
+            print(f"{len(fam)} identifier(s) resolve an attribute name:")
+            for i in sorted(fam):
+                role = ("attribute BONUS, "
+                        + ("stacking" if ATTRIBUTE_BONUS[i] else "non-stacking")
+                        if i in ATTRIBUTE_BONUS else
+                        "attribute BONUS, N% chance while using skills"
+                        if i == ATTRIBUTE_BONUS_ON_SKILL_USE else
+                        "bonus to a companion 542's attribute"
+                        if i == ATTRIBUTE_BONUS_ITEMS_OWN else "")
+                print(f"  id {i:>4}  handler {fam[i]:#010x}  "
+                      f"text {voc[i]['text_ids']}" + (f"  <- {role}" if role else ""))
             continue
 
         if a.readers or a.reads is not None:
