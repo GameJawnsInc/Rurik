@@ -7496,6 +7496,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[c{conn_id}] harness interact failed: "
                                   f"{type(exc).__name__}: {exc}", flush=True)
 
+                    try:
+                        foe = control.take_attack()
+                    except OSError:
+                        foe = None
+                    if foe is not None:
+                        print(f"[c{conn_id}] HARNESS ATTACK on agent {foe} -- "
+                              f"driven by the action script, NOT by a client "
+                              f"click. begin_attack is the same call the "
+                              f"ATTACK_AGENT arm makes, so every swing, the "
+                              f"armour term and the damage on the wire are "
+                              f"real; the CLICK is what did not happen.",
+                              flush=True)
+                        try:
+                            begin_attack(send, state, foe, conn_id)
+                        except Exception as exc:      # a probe must not die here
+                            print(f"[c{conn_id}] harness attack failed: "
+                                  f"{type(exc).__name__}: {exc}", flush=True)
+
                     # Anything the world owes on a timer goes here. Bodies get
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.
