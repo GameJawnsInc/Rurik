@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=240)
+LEDGER = checks.Ledger("agent lifetime", floor=247)
 
 
 def section_weapon_damage():
@@ -174,6 +174,36 @@ def section_armour_and_crit():
               f"rank 10 -> {mid:.4f}, between rank 9's {rates[9]} and rank "
               f"11's {rates[11]}; outside the table it CLAMPS rather than "
               f"extrapolating a rate off the end of five points")
+
+    print("\nN3b. creature armour is DERIVED, and it re-derives the wiki")
+    # `AR = 3*level + profession bonus` is WIKI (GWW "Armor rating"). The
+    # bonus table was read off a DIFFERENT page's level-20 maxima (GWW "Basic
+    # armor": Warrior 80, Ranger 70, Monk 60), so feeding the formula level 20
+    # must reproduce that column. It can fail at every row and does not -- and
+    # this is the check that would have caught the picked 60 this replaced.
+    for prof, name, want in ((1, "Warrior", 80.0), (2, "Ranger", 70.0),
+                             (3, "Monk", 60.0), (6, "Elementalist", 60.0),
+                             (9, "Paragon", 80.0)):
+        got = authsrv.creature_armor_rating({"level": 20, "profession": prof})
+        LEDGER.ok(got == want,
+                  f"a level-20 {name} derives to AR {want:g}",
+                  f"got {got} -- 3*20 plus the profession bonus, against the "
+                  f"maximum GWW's Basic armor table publishes for that "
+                  f"profession. Two wiki pages cross-checking each other "
+                  f"through our arithmetic")
+    LEDGER.ok(authsrv.ENEMY_ARMOR_RATING == 3.0,
+              "and our level-1 Monk Hatcher derives to AR 3, not a picked 60",
+              f"{authsrv.ENEMY_ARMOR_RATING} = 3*1 + 0. The 60 that sat here "
+              f"for one commit was level-20 armour on a level-1 creature -- "
+              f"wrong in SHAPE, which is the failure monsterai 3.3 records "
+              f"for reach")
+    LEDGER.ok(authsrv.creature_armor_rating({"level": 1, "profession": 3},
+                                            override=60) == 60.0
+              and authsrv.creature_armor_rating({}) is None,
+              "an override still wins, and a levelless creature yields None",
+              "GWW says many PvE creatures do not follow the formula, so the "
+              "override is the documented escape hatch; None keeps the swing "
+              "falling back rather than inventing an AR")
 
     print("\nN4. 17 replaces 16, and the control turns the whole term off")
     sent = []

@@ -3443,9 +3443,52 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
-# The number the armour term subtracts. See the content row: ours, chosen to
-# sit on the Isle's own measured baseline rather than invented freely.
-ENEMY_ARMOR_RATING = _ENEMY.get("armor_rating")
+
+# ---- CREATURE ARMOUR, derived from the level and profession we already hold --
+#
+# WIKI (GWW, "Armor rating", rev. 2026): "The armor rating for creatures in PvE
+# is dependent on level where the actual armor rating can be typically
+# calculated by (creature AR = 3 * Level + Armor bonus), where armor bonus is
+# profession specific." The same page states the baseline this repo's own
+# measurement already assumes -- "Having 60 armor rating is regarded as the
+# baseline" -- and its damage-multiplier table CORROBORATES the divisor the
+# Isle measured from the opposite direction: AR 0 -> 2.828, AR 20 -> 2.000,
+# AR 60 -> 1.000, AR 100 -> 0.500, which is 2^((60-AR)/40) to three decimals.
+# Wire and wiki agreeing here is two independent observers, not one.
+#
+# THE PROFESSION BONUS IS READ OFF THE WIKI'S OWN MAX-AR COLUMN, not guessed:
+# (GWW, "Basic armor", rev. 2026) gives level-20 maxima of Warrior 80, Ranger
+# 70, Assassin 70, Dervish 70, Paragon 80 and 60 for the rest, and 3*20 = 60,
+# so the bonus is that column minus 60. Warrior's is also visible on our own
+# armour rows as `Armor +20 (vs. physical damage)` -- the wiki says Warrior
+# armour is "25...80" with that bonus, and our five starter pieces decode to
+# exactly 25 and +20 (studies/itemmods). Player observation and ArenaNet's own
+# wire agreeing, from sources sharing no ancestry.
+#
+# THIS REPLACES A PICKED 60. That number sat here for one commit and was
+# level-20 armour on a level-1 creature -- the wrong SHAPE, the same failure
+# studies/monsterai section 3.3 records for reach, where one global number was
+# wrong in kind rather than in value.
+ARMOR_BONUS_BY_PROFESSION = {1: 20, 2: 10, 7: 10, 10: 10, 9: 20}
+
+
+def creature_armor_rating(npc, override=None):
+    """AR for a creature, from its own level and profession. WIKI-sourced.
+
+    `override` wins when a content row declares one, because the same wiki page
+    says many PvE creatures do not follow the formula -- but an override is a
+    measurement about one creature and should say where it came from.
+    """
+    if override is not None:
+        return float(override)
+    if not npc or npc.get("level") is None:
+        return None
+    bonus = ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0)
+    return float(3 * int(npc["level"]) + bonus)
+
+
+ENEMY_ARMOR_RATING = creature_armor_rating(agents.HATCHER,
+                                           _ENEMY.get("armor_rating"))
 # Allegiance BY NAME, so a content row can say what a body is without carrying a
 # FourCC. The three values are the client's own constants (agents.py, read out
 # of the image); "hostile" is any unrecognised value, which is why it is the
