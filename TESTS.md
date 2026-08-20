@@ -3124,7 +3124,17 @@ Every one of these, in the order they were written:
   that an UNRESOLVED code degrades to the caster's own choice rather than to a guess
   about the enum. §4 is the table — ids distinct among LIVE episodes and reused after
   close, which is every property the corpus actually pins; `due` oldest-first; a double
-  close returning None rather than raising; a zero-length episode REFUSED. **§5 runs our
+  close returning None rather than raising; a zero-length episode REFUSED. **§4b pins
+  retail's allocator against a fix of ours that was made and reverted**: a client run
+  showed one icon for four concurrent episodes of one skill, so the table was collapsed
+  to one episode per (agent, skill) — and the corpus then refuted the collapse, holding
+  **15 overlapping re-applications, every one under a NEW buff id** (120→121 at a 0.43 s
+  gap), with the first still closing `expired` on its own duration and same-id repeats
+  only ever occurring after a close. The section carries the client fact that started it
+  too: a repeat `0x0042` for a live (agent, skill) is DISCARDED, measured under a new id
+  and under the same one — the latter a **stated prediction that was refuted** — so how
+  retail refreshes an effect is NOT FOUND, and the real defect is our placeholder AI
+  re-casting a hex the target already has. **§5 runs our
   own emission back through `bufflog`, the reader written for retail's**, and requires
   `expired` with a zero residual — *with a control that closes the same episode early
   and must read `stripped`*, so the check discriminates rather than agreeing with
@@ -3132,7 +3142,7 @@ Every one of these, in the order they were written:
   §6 pins that death STRIPS (per-agent — the enemy's hex survives the player's death)
   and that `--no-effects` is a real control. Needs `vault/captures/live/` and the
   pinned client for §2, which is declared as a skip naming what a green run without it
-  has actually checked; floor 47),
+  has actually checked; floor 51),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture

@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=47)
+LEDGER = checks.Ledger("the effect channel", floor=51)
 
 
 def section_arithmetic():
@@ -368,6 +368,43 @@ def section_table():
               "and a zero-length episode is REFUSED at the table",
               "two messages that cancel out say nothing and force every "
               "reader to special-case them")
+
+    print("\n4b. an OVERLAPPING re-application gets a NEW id -- retail's rule")
+    r = effects.EffectTable()
+    first = r.apply(1, 253, 12, 18.0, 1000.0)
+    again = r.apply(1, 253, 12, 18.0, 1005.0)
+    LEDGER.ok(len(r.live) == 2 and again["buff"] != first["buff"],
+              "a second apply while the first is LIVE allocates a new buff id",
+              f"buffs {first['buff']} and {again['buff']}. This was built the "
+              f"other way for one commit -- collapsed to one episode per "
+              f"(agent, skill) -- on the strength of a run in which the client "
+              f"drew one icon. THE CORPUS REFUTES THE COLLAPSE: retail has 15 "
+              f"overlapping re-applications and every one carries a new id "
+              f"(120->121 at a 0.43 s gap, 110->114 at 0.50 s, 121->120 at "
+              f"0.09 s), with the first still closing `expired` on its own "
+              f"duration")
+    LEDGER.ok(first["expires_at"] == 1018.0 and again["expires_at"] == 1023.0,
+              "and the FIRST keeps its own expiry rather than being extended",
+              f"{first['expires_at']} and {again['expires_at']} -- which is "
+              f"what makes retail's overlapping episodes close as `expired` "
+              f"instead of `stripped`")
+    LEDGER.ok(first["overlapping"] is False and again["overlapping"] is True,
+              "the second is FLAGGED as overlapping, because the client drops it",
+              "MEASURED twice on 2026-08-20: a repeat 0x0042 for a live "
+              "(agent, skill) draws no second icon and does not reset the "
+              "timer -- once under a new buff id, and once under the SAME id, "
+              "which was a stated prediction and was REFUTED. So re-sending "
+              "the apply is not how an effect gets refreshed, and how retail "
+              "refreshes one is NOT FOUND")
+    r.close(first["buff"])
+    later = r.apply(1, 253, 12, 18.0, 1030.0)
+    LEDGER.ok(later["buff"] == first["buff"] and later["overlapping"] is True,
+              "an id is reused only after its episode CLOSED -- also retail's",
+              f"buff {later['buff']} again. Every same-id repeat in the corpus "
+              f"has a gap LONGER than the first episode's duration (51->51 at "
+              f"14.98 s against 13.0 s, five times over); the overlapping ones "
+              f"never reuse. `overlapping` is still true here because the "
+              f"OTHER copy is live, which is the honest reading")
 
 
 def section_wire():

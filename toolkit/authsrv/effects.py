@@ -278,11 +278,44 @@ class EffectTable:
     # -- the two halves -----------------------------------------------------
 
     def apply(self, agent_id, skill_id, rank, duration, now):
-        """Open an episode and return it. The caller sends the `0x0042`.
+        """Open an episode and return it, or REFRESH the one already there.
 
         Refuses a duration of zero or less: a zero-length episode would be
         applied and removed in the same instant, which is a message pair that
         says nothing and a reader that has to special-case it.
+
+        ALWAYS A NEW ID, EVEN FOR A SKILL ALREADY LIVE ON THAT AGENT, and this
+        was tried the other way for one commit on 2026-08-20. The argument for
+        collapsing was strong and both halves of it were wrong:
+
+          * Run `20260820T174731` had the Hatcher re-cast Scourge Sacrifice
+            every ~5 s and the client never drew more than ONE icon, whose bar
+            drained straight through -- so it looked as though the client
+            wanted one episode per (agent, skill).
+          * `buff_id_report`'s peak of 2 concurrent episodes looked like a
+            second witness.
+
+        **THE CORPUS REFUTES IT.** Retail's own traffic holds **15 overlapping
+        re-applications** -- a second `0x0042` for the same (target, skill)
+        while the first is still live -- and **every one carries a NEW buff id**
+        (120->121 at a 0.43 s gap, 110->114 at 0.50 s, 121->120 at 0.09 s),
+        with the first episode still closing `expired` against its own duration.
+        Same-id repeats occur only AFTER the previous one has closed. So
+        ArenaNet's allocator is exactly this one, and collapsing would have made
+        our stream a shape retail never produces.
+
+        WHAT THE RUN ACTUALLY FOUND, then, is not a channel bug: it is that
+        **our placeholder monster AI re-casts a hex the target already has**,
+        which retail's overlaps (all under 0.5 s -- same-instant doubles, not
+        re-casts) give no precedent for. That belongs to `pick_skill`, which
+        says in its own docstring that it is a testing function and not a
+        decision about AI. See `studies/skills/FINDINGS.md` 16.1.
+
+        AND THE CLIENT'S BEHAVIOUR IS NOW A MEASURED FACT worth carrying: a
+        repeat `0x0042` for a live (agent, skill) is DISCARDED -- the icon is
+        not duplicated and the timer is not reset -- whether the buff id is new
+        or the same. Re-sending the apply is therefore not a way to refresh an
+        effect, and how retail refreshes one is NOT FOUND.
         """
         if duration is None or duration <= 0:
             raise EffectError(
@@ -293,7 +326,10 @@ class EffectTable:
         buff = self._alloc()
         ep = {"buff": buff, "agent": agent_id, "skill": skill_id,
               "rank": int(rank), "duration": float(duration),
-              "applied_at": now, "expires_at": now + float(duration)}
+              "applied_at": now, "expires_at": now + float(duration),
+              "overlapping": any(e["agent"] == agent_id
+                                 and e["skill"] == skill_id
+                                 for e in self.live.values())}
         self.live[buff] = ep
         return ep
 

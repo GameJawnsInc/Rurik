@@ -1738,3 +1738,121 @@ fourth time in one week a measured number sat unread beside code using an
 invented one — property 17, the rung-7 damage formula, the item modifiers, and
 this — and all four failed the same way round: measured, written down, not
 wired.
+
+## 16. The client DRAWS them — run `20260820T174731`, and it types them itself
+
+Everything above is offline. This is the client.
+
+**The run.** Loopback, `--enemy --explorable`, the bar's slot 1 swapped to
+**Frenzy 346** with the existing `--skills` flag (no code edit), one scripted
+keypress on slot 1, 18 s of walk plan and a 60 s hold at a frame every 4 s.
+`vault/captures/harness/20260820T174731`, contact sheets `hud-walk-frenzy.png`
+and `hud-hold-hex.png`. **13 applies, 13 removals, zero client asserts, run
+verdict PASS.**
+
+**Both directions worked, and the whole chain is on record for the player's:**
+
+```
+key "1" -> c2s 0x8046 USE_SKILL -> 0x00E4 -> 0x00E5 (cast end)
+        -> 0x0042 EFFECT_APPLY(stance 346 on agent 1, buff 3, 8.0s at rank 0)
+        -> ... 8s ... -> 0x0044 EFFECT_REMOVE(buff 3, expired after 8.0s)
+```
+
+and the enemy's, needing no input at all:
+`0x0042 EFFECT_APPLY(hex 253 on agent 1, buff 1, 18.0s at rank 12)`.
+
+**THE CLIENT TYPES THE EFFECT ITSELF, FROM THE SKILL ID.** We send no colour,
+no category and no art — `0x0042` carries `[target, skill, rank, buff,
+duration]` and nothing else. The client drew Frenzy's own icon under a **GREEN**
+border and Scourge Sacrifice's under a **MAGENTA** one, which are GW's stance
+and hex colours. So the whole `type_code` taxonomy §14 reads out of the table is
+something the client already knows per skill id, and a server that gets the id
+right gets the category, the art and the tooltip for free.
+
+**The timer bar is real and it drains on OUR number.** Frenzy is the row §12 is
+about — `skill_arguments = 0`, endpoints 8/8, the duration bit CLEAR — so the
+strict reading of the bitfield would have refused to send anything. Frames
+`w002` (21:48:04) and `w003` (21:48:08) show its green bar shortening, and by
+`w004` (21:48:11) **the icon is gone**: applied ~21:48:03, an 8-second
+progression bar, gone at 8 seconds. The flat branch is right and the client
+agrees with it on screen.
+
+**Expiry lands inside retail's own band.** Our residuals were **+0.03, +0.05 and
++0.03 s** against the stated duration, on a world tick. The corpus's shoulder is
+83 of 88 closes within 50 ms (`bufflog.EXPIRY_TOLERANCE`), so our lateness is
+inside the spread retail itself produces.
+
+**The death strip is visible.** `hold001` and `hold006` are the two death
+frames: no icons at all, while `hold002`-`hold005` carry the hex with its bar
+draining. Three episodes came off in one `stripped 3 effect(s)` and the client
+took all three without complaint.
+
+### 16.1 The run found a gap, the fix was wrong, and the corpus said so
+
+**What the run showed.** The server opened **four concurrent episodes of skill
+253 on the same agent** — the Hatcher re-casts every ~5 s and nothing stopped it
+— and **the client never drew more than ONE hex icon.** A second run
+(`20260820T175507`, frames every 2 s) pinned the client's side precisely: its
+timer bar drains **monotonically** across three re-applications, from ~85% to
+~28% over 8 seconds of an 18-second duration. **A repeat `0x0042` for a live
+(agent, skill) is DISCARDED — no second icon, no reset.**
+
+**The obvious fix was made and is now reverted.** Collapsing to one episode per
+(agent, skill), refreshing in place, looked well-supported: the client's single
+icon, plus `buff_id_report`'s peak of 2 concurrent episodes. A prediction was
+stated before the run that tested it — *re-sending `0x0042` with the EXISTING
+buff id resets the bar* — and it was **REFUTED**: the bar drained straight
+through three same-id refreshes.
+
+**Then the corpus refuted the collapse itself.** Asked directly whether retail
+ever re-applies a live effect:
+
+> **15 overlapping re-applications** across the live captures — a second
+> `0x0042` for the same (target, skill) while the first is still live — and
+> **every one carries a NEW buff id**: 120→121 at a 0.43 s gap, 110→114 at
+> 0.50 s, 121→120 at 0.09 s. The first episode still closes `expired` against
+> its own duration. Same-id repeats occur **only** after the previous one
+> closed (51→51 at 14.98 s against a 13.0 s duration, five times over).
+
+So ArenaNet's allocator is the plain one we already had, and collapsing would
+have made our stream a shape retail never produces. `test_effects.py` §4b now
+pins retail's rule instead of our fix.
+
+**Which relocates the actual defect, and it is more interesting than a channel
+bug.** Retail's fifteen overlaps are all **under 0.5 s** apart — same-instant
+doubles, an AoE or a party-wide effect touching one target twice — and **not one
+is a re-cast of a live effect.** Ours were five seconds apart. The thing no
+monster in the corpus does is what *our* monster does:
+
+> **our placeholder AI re-casts a hex the target already has.** `pick_skill`
+> asks only whether a slot has recharged.
+
+That is an **AI rule**, not a wire rule, and `pick_skill`'s own docstring
+already says it is "a testing function, not a decision about AI" that "gets
+replaced rather than extended". So it is recorded there and left alone. It also
+lands exactly where `studies/heroes` §5.6 said this arc would end up: *"do not
+use this skill if the target is already affected"* is precisely the sort of
+condition GWW publishes **per skill**, which is R4c's open design question, not
+a line to add to a round-robin selector.
+
+**Left standing, and named:** how retail refreshes an effect at all is **NOT
+FOUND**. Re-sending the apply does nothing (measured, both id choices).
+`0x0044`-then-`0x0042` would certainly work and there is no evidence retail does
+it. The question only becomes live when something in this server needs to extend
+a running effect, and nothing does yet.
+
+**NOT ANSWERED by this run, and named so it is not read as answered:**
+
+1. **Whether an ADRENALINE skill can be pressed at all.** The default bar's two
+   stances (Battle Rage 317, Rush 319) cost 4 adrenaline and nothing tells the
+   client the player has any, so slot 1 was swapped to the 5-energy Frenzy to
+   sidestep it. Whether the client greys an uncharged adrenaline skill and
+   swallows the keypress is untested, and it is the cheapest reason to model
+   adrenaline.
+2. **What the enchantment sentinel means** (§13). Vital Blessing refused on
+   every cycle of this run, loudly, exactly as designed — thirteen log lines
+   naming the gap.
+3. **Whether the effect does anything.** Frenzy's icon appeared; Frenzy's
+   *+33% attack speed and double damage taken* are not modelled, and neither is
+   Scourge Sacrifice's. The channel is the substrate; the per-skill mechanics
+   are the `scale_means` pattern again, one wiki-sourced row at a time.

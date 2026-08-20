@@ -5286,13 +5286,26 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
     # against a duration of 13.0, which is the row that refutes the other
     # reading outright. effects.py's docstring carries the whole check.
+    # AN OVERLAPPING RE-APPLICATION IS FLAGGED AND STILL SENT, because that is
+    # what retail does -- 15 of them in the corpus, every one under a NEW buff
+    # id (effects.EffectTable.apply carries the numbers). The flag is here
+    # because the CLIENT discards it: a repeat 0x0042 for a live (agent, skill)
+    # draws no second icon and does not reset the timer, MEASURED twice on
+    # 2026-08-20 -- once with a new buff id and once with the same one, which
+    # was a stated prediction and was refuted.
+    #
+    # So the message is honest and its effect is nil, and the thing to fix is
+    # upstream: our placeholder AI re-casts a hex the target already has, which
+    # no monster in the corpus does. See pick_skill, which says in its own
+    # docstring that it is not a decision about AI.
+    tag = " (OVERLAPPING -- the client will discard it)" if ep["overlapping"] else ""
     send(GAME_SMSG_EFFECT_APPLY,
          [ep["agent"], skill_id, ep["rank"], ep["buff"],
           _f32(ep["duration"])],
          f"EFFECT_APPLY({family} {skill_id} on agent {ep['agent']}, "
          f"buff {ep['buff']}, {ep['duration']:.1f}s at rank {ep['rank']})")
     print(f"[c{conn_id}] {family} {skill_id} on agent {ep['agent']}: "
-          f"buff {ep['buff']}, {ep['duration']:.1f}s (rank {ep['rank']})",
+          f"buff {ep['buff']}, {ep['duration']:.1f}s (rank {ep['rank']}){tag}",
           flush=True)
     return ep
 
@@ -5835,6 +5848,18 @@ def pick_skill(agent, now):
     Starting the scan AFTER the last slot cast fixes it without any new numbers:
     every ready slot gets a turn before any slot gets a second one. The wrap is
     what makes it a cycle rather than a sweep that stalls at the end.
+
+    ONE MORE THING IT DOES THAT NO REAL MONSTER DOES, found by running it
+    (`studies/skills/FINDINGS.md` 16.1): it re-casts a HEX the target already
+    has. Round robin only asks whether a slot has recharged, so our Hatcher put
+    four overlapping copies of Scourge Sacrifice on the player in one life. The
+    client discards every copy after the first, and retail's own 15 overlapping
+    re-applications are all under 0.5 s apart -- same-instant doubles, not
+    re-casts -- so there is no precedent for it anywhere in the corpus. Not
+    fixed here: "do not cast an effect the target already carries" is an AI
+    RULE, this function is declared above not to be where AI rules go, and GWW
+    publishes that condition per SKILL (studies/heroes 5.6), which is R4c's
+    open design question rather than a line to add here.
 
     STILL NOT MEASURED, and this is the honest part: nothing in this project knows
     how a Guild Wars monster actually chooses. Round robin, least-recently-used
