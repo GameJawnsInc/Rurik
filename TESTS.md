@@ -85,7 +85,14 @@ Every one of these, in the order they were written:
   refuse correctly, with the named VKs asserted against LITERALS; together
   they retire "the harness cannot aim" for everything but a world-anchored
   click (validated live, harness 20260817T151242: zoom, two yaws, an ALT hold
-  and three scripted shots all delivered). The scan code is
+  and three scripted shots all delivered). The 2026-08-19 `hover:FX,FY,SECS`
+  verb (cursor park over a window-relative point, never a click — a HUD
+  tooltip is the only readable surface for some state) parses and refuses in
+  the same section: two numbers, a zero duration, an on-or-off-window
+  fraction and a non-number all fail loudly, because a cursor parked at a
+  wrong literal reads as "no tooltip", which is the probe's null result
+  (validated live, harness 20260819T233451: a 38 s hover delivered all three
+  effect tooltips of the buff_type_field probe). The scan code is
   the one that earned the section — a synthetic keydown with `bScan=0` is
   accepted by a UI reader and silently dropped by the raw input path the client
   reads movement through, so the first version held W for 65 seconds into a

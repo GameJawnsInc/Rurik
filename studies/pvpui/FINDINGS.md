@@ -2595,11 +2595,12 @@ internals are new):
 (`ChCliBuff:235` `!buffTarget->sourceAgent`); `targetAgent` at source-entry `+0x0C` is
 RECONSTRUCTION by symmetry — nothing reads it back in any function read. The embedded
 arrays are sorted by **buffId**: the dup-check `0x0081C7C0` is a binary search on entry
-`+0x08`. The two `+0x04` dwords are skillcast §14.4's CONTESTED field
-(Headquarter `effect_type` vs GWCA `attribute_level`), unchanged, and its
-`buff_type_field` probe is still the settle path — with one correction from the wire
-skeptic: on `0x3F`/`0x41` the contested field rides **wire field 4** (`struct+0x10`);
-field 3 is the skill.
+`+0x08`. The two `+0x04` dwords were skillcast §14.4's CONTESTED field
+(Headquarter `effect_type` vs GWCA `attribute_level`) — **settled the same day by the
+`buff_type_field` probe: it is the ATTRIBUTE RANK the effect's tooltip renders at,
+GWCA confirmed, Headquarter refuted twice over (skillcast §14.7)** — with one correction
+from the wire skeptic: on `0x3F`/`0x41` that field rides **wire field 4**
+(`struct+0x10`); field 3 is the skill.
 
 **The frame-bus event set, new** (skillcast §14 had only `0x10000055`):
 
