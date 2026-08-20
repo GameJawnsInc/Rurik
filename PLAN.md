@@ -2185,7 +2185,35 @@ compression-8 encoder exists. **Authorship that reaches the full animation set n
 encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
 for the owner rather than a gap in this one.
 
-### The archive write-size wall — A1–A4 and A6 are RUN; the encoder's risk is now entirely its matcher (2026-08-18)
+### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
+
+**2026-08-20 — THE AUTHORING HARDENING LANDED, `0802b1f`, study §17, corrections §0 C-11/C-12/C-13.**
+A6–A8 proved the encoder on one big row; what stood between that and *authoring new
+content* was four named gaps, and all four are closed offline: **(1)** every table our
+encoder emits is now a retail-attested SHAPE — `gwentropy.authoring_table`, floors dist ≥ 5
+/ lit ≥ 257, closing §13.5's gaps A, B, the distance half of C, and D, with the A8 anchor
+row **byte-identical** (crc `0xd03ab671` now pinned in the suite) and the lift costing
+**+0 B on 120 real small retail rows**; **(2)** `datwrite.replace(grow_to=)` grows a shrunk
+row back — §14.4's "fatal for a second write" defect, reproduced then fixed, with one
+`_grow_gate` shared with `--restore`, which gained the EOF/MFT/withheld-run refusals by the
+factoring; **(3)** the journal is a durable file — measured **34.1× / 533 MB** write
+amplification on a real run and a torn flush that lost the whole journal, now 1.00×,
+fsync-per-record, torn-tail recovery, all 59 vault journals still parse; **(4)** `datalloc`
+gained the fidelity gate an adversarial verifier proved it lacked — **a corrupted-trailer
+gwenc stream reached disk GREEN through `alloc(confirm=True)`** (528-flip census: 394
+wrong-bytes streams accepted), and `expect=` is now mandatory with `extraBytes 8`, the gate
+running in `alloc()` too because `alloc(plan=)` bypassed `plan_alloc` entirely. The
+capstone is **`test_authorflow.py`**: one synthetic archive, six steps at compression 8 —
+author → create a NEW row under a new file id → revise smaller → grow back → outgrow,
+refuse, relocate → revert to pristine **byte-for-byte** — because this arc's two worst
+defects (C-6, §14.4) were compositional and green in isolation. Floors: gwenc 55→60,
+datwrite 138→199, datalloc 100→177 (TESTS.md had said 98), authorflow 59 new; suite
+affected-set all green, srclint 22/22. **Not consulted: the client** — no retail client has
+read a small-row or datalloc-created output yet; that one-launch check is §17.8's item 1
+and rides the next convenient launch. The skeptic pattern paid for the **fifth**
+consecutive rung (a builder's "proven end to end" was true of framing only), and the
+matcher is priced at ~0.19 MB/s / 82 MB peak — fine for the loop, recorded so nobody
+re-measures it.
 
 **Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
 routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A
