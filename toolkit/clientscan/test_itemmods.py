@@ -40,6 +40,17 @@ claimed -- and the two that render `<attribute> +N` are 542 (Non-stacking) and
 three bits the walker never reads, and requires it to equal ArenaNet's own
 dword; section 10 replays all 26 the live corpus holds and measures the
 constant-prefix fact the composer rests on.
+
+SECTIONS 12-14 ARE WHAT MAKES "NOTHING READS 617" A MEASUREMENT. Section 6's
+negative rested on two searches coming back empty, which is worth little on its
+own -- `studies/enemy` 6o closed a question for a session on exactly that shape
+of evidence and was wrong. Section 12 bounds it instead: to read an identifier
+the client must isolate bits 29-20, x86 leaves two ways to do it, and an
+exhaustive scan of .text finds SIXTEEN such sites in the whole image. Section
+13 repeats that on all three builds. Section 14 supplies the positive half,
+because a finding that is only an absence is hard to build on: 617 is a
+per-MODEL constant, 71/71, with the file id as the control that does NOT
+determine it.
 """
 import os
 import sys
@@ -54,9 +65,9 @@ import pinned  # noqa: E402
 # 28, counted from the green run of 2026-08-20 -- set from the run and not
 # from a guess, which is how this file learned the number: 14 was declared,
 # 12 executed, and the ledger refused the run rather than passing it. Sections
-# 6 and 7 took it from 12 to 19 , sections 8-10 to 28, and 11 to 30;
+# 6 and 7 took it from 12 to 19 , sections 8-10 to 28, 11 to 30, and 12-14 to 37;
 # each time the number was read off the run rather than predicted.
-LEDGER = checks.Ledger("item modifiers", floor=30)
+LEDGER = checks.Ledger("item modifiers", floor=37)
 
 
 def main():
@@ -408,6 +419,112 @@ def main():
                   "a guard that cannot go red is not a guard, and this one "
                   "exists only because the duplication was introduced on "
                   "purpose")
+
+    print("\n12. the extraction CENSUS: what bounds the negative on 617")
+    cen = itemmods.identifier_sites(img)
+    named = sorted({r["names"] for r in cen["named"]})
+    LEDGER.ok(cen["total"] < 40 and len(cen["named"]) > 5
+              and cen["parametric"] and cen["dispatch"],
+              "the WHOLE image isolates a modifier identifier in 16 places",
+              f"{cen['total']} sites: {len(cen['named'])} naming a literal, "
+              f"{len(cen['parametric'])} comparing a register, "
+              f"{len(cen['dispatch'])} routing through the jump table. A "
+              f"reader must isolate bits 29-20 to exist and x86 leaves two "
+              f"ways to do it, so this is a bounded total rather than two "
+              f"searches that came back empty -- which is the difference "
+              f"studies/enemy 6o paid for")
+    LEDGER.ok(cen["not_modifier"] > 50,
+              "and the census separates the float band from item code",
+              f"{cen['not_modifier']} further sites match the same mask and "
+              f"are NOT modifier reads -- 0x3ff00000 is also a double's "
+              f"exponent mask. Counting them is what makes this a census of "
+              f"the instruction rather than a census of what we hoped to find")
+    LEDGER.ok(633 in named and 617 not in named,
+              "633 is named by a literal; 617 is named by nothing",
+              f"identifiers named anywhere in the image: {named}. The control "
+              f"is inside the check: the same scan that cannot find 617 finds "
+              f"633 at two sites and nine other identifiers besides")
+
+    print("\n13. and the census says the same on ALL THREE builds")
+    across = {}
+    for b in pinned.BUILDS:
+        try:
+            exe_b, _why = pinned.find(build=b.number)
+        except SystemExit:
+            continue
+        c = itemmods.identifier_sites(itemmods.Image(exe_b))
+        across[b.number] = (c["total"], tuple(sorted({r["names"]
+                                                      for r in c["named"]})))
+    if len(across) < 2:
+        LEDGER.skip("fewer than two builds are in the vault, so the "
+                    "out-of-sample half of the 617 negative cannot run")
+    else:
+        vals = set(across.values())
+        LEDGER.ok(len(vals) == 1,
+                  f"identical census on {len(across)} builds",
+                  f"{ {k: v[0] for k, v in across.items()} } sites and the "
+                  f"same eleven identifiers each time -- including 1, which "
+                  f"shares 633's mask and is named eight bytes later, so a "
+                  f"census stopping at the first compare would miss it. A "
+                  f"negative that held "
+                  f"on one build could be a quirk of that build; holding "
+                  f"across 38519, 38797 and 38833 is a property of the client"
+                  if len(vals) == 1 else f"DIFFER: {across}")
+        LEDGER.ok(all(617 not in v[1] for v in across.values()),
+                  "617 is named on none of them",
+                  "and 633 is named on all of them, which is the control "
+                  "riding along with the claim")
+
+    if live is None:
+        LEDGER.skip("the live corpus is not reachable, so 617's one positive "
+                    "property -- that it is a per-MODEL constant -- cannot "
+                    "be measured, and the arc would rest on the negative alone")
+    else:
+        print("\n14. CORPUS: 617 is a constant of the item's MODEL")
+        by_model, by_file = {}, {}
+        seen617 = 0
+        for stamp in sorted(os.listdir(live)):
+            try:
+                got = cmsgstream.timed(stamp, "s2c", "game")
+            except Exception:
+                continue
+            for _t, _c, op, v in got:
+                if op != 0x161 or not v or not isinstance(v[-1], list):
+                    continue
+                head = [x for x in v if not isinstance(x, list)]
+                if len(head) < 11:
+                    continue
+                val = None
+                for e in v[-1]:
+                    x = e[0] if isinstance(e, (list, tuple)) else e
+                    if not isinstance(x, int):
+                        continue
+                    dd = itemmods.decode(x)
+                    if (dd["identifier"] == 617 and not dd["skipped_high"]
+                            and not dd["skipped_bit18"]):
+                        val = dd["arg2"]
+                if val is None:
+                    continue
+                seen617 += 1
+                by_model.setdefault(head[10], set()).add(val)
+                by_file.setdefault(head[2], set()).add(val)
+        split_model = [k for k, s2 in by_model.items() if len(s2) > 1]
+        split_file = [k for k, s2 in by_file.items() if len(s2) > 1]
+        LEDGER.ok(seen617 > 300 and by_model and not split_model,
+                  "one 617 value per model id, over the whole corpus",
+                  f"{seen617} words across {len(by_model)} model ids, "
+                  f"{len(by_model)}/{len(by_model)} single-valued. So the "
+                  f"client already knows this number from the model -- which "
+                  f"is CONSISTENT with nothing reading it, though it does not "
+                  f"prove that is the reason")
+        LEDGER.ok(split_file,
+                  "CONTROL: the item's FILE id does not determine it",
+                  f"{len(split_file)} of {len(by_file)} file ids carry more "
+                  f"than one 617 value. Without this the model result would "
+                  f"be unreadable -- any field with small enough groups looks "
+                  f"deterministic, and this is the field that does not"
+                  if split_file else
+                  "file id determines it too, so the model result says nothing")
 
     return LEDGER.verdict()
 

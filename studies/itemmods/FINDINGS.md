@@ -151,8 +151,33 @@ desync, and both are exhaustive rather than sampled:
 | **literal** | `and r32,0x3ff00000` then `cmp r32,<id << 20>` | a reader that knows which one it wants |
 | **parametric** | `shr eax,0x14 ; and eax,0x3ff ; cmp eax,edx` inside a helper that walks `[this+0x10]` to a `0xC0000000` terminator | the identifier arrives at the **call site** as a pushed immediate |
 
+**AND THE MISSING QUANTIFIER, added 2026-08-20: there are SIXTEEN of them.** The two
+forms above are the only ways x86 can isolate bits 29-20, so a scan for their bytes over
+`.text` is not merely exhaustive-in-principle — it produces a *total*, and that total is
+what an absence has to be read against. `--sites` prints it:
+
+```
+16 sites isolate a modifier identifier
+   13  mask-in-place, then a compare against a literal
+    2  shift-then-mask, compared to a REGISTER   (the by-argument accessors)
+    1  shift-then-mask, indexed into the jump table   (the tooltip walker)
+  158  further mask sites that are NOT modifier code
+```
+
+The identifiers named by a literal anywhere in the client are
+`[1, 8, 542, 556, 572, 581, 584, 601, 603, 633, 647]`, and the census is **identical on
+all three builds**. Two details keep it a census rather than a tidy number:
+
+- **The 158 are counted, not filtered.** `0x3ff00000` is also a double's exponent mask
+  and the float band matches it 158 times. Dropping them silently would report item code
+  while claiming to report an instruction.
+- **One mask can name two identifiers, and the first cut of this missed it.**
+  `0x00848004` masks once and compares twice — 633, then identifier **1** eight bytes
+  later as its fallback. Stopping at the first compare is the same defect as reading
+  `asserts.py`'s module list as a census, from the other side.
+
 `toolkit/clientscan/itemmods.py --readers` prints the whole map; `--reads 633` answers
-for one. The parametric helpers are `ItCliApi.cpp`'s pair — one returns
+for one, with the coverage statement attached. The parametric helpers are `ItCliApi.cpp`'s pair — one returns
 `(word>>8)&0x3ff`, the other `word & 0x3ffff` — and their eleven call sites ask for
 
 ```
@@ -242,6 +267,25 @@ same test rather than asserted here: the identical scan reports **two** readers 
 and finds eight more identifiers at the accessors. A search that cannot be shown to find
 anything cannot report an absence — the lesson `studies/enemy` §6o paid for.
 
+**THE THREE ROUTES THAT ARE NOT IMMEDIATES ARE NOW CLOSED TOO** (2026-08-20). A census
+of literal compares still leaves ways to reach an identifier without one, and each was
+checked rather than waved at:
+
+| route | result |
+|---|---|
+| the **by-argument accessors** | 12 direct call sites, asking for `{587, 590, 592, 598, 603, 606, 614, 630, 647, 648}`. Not 617. |
+| **indirectly**, via a vtable or a stored pointer | neither accessor's VA occurs as a data word anywhere — 0 at every alignment, all five sections |
+| a **second dispatch table** | the image holds exactly **one** identifier-indexed jump table; 617's slot in it is the shared loop tail |
+| a mask that keeps **bit 19** | every 617 word in the wild has bit 19 set, so such a reader would compare `0x26980000`. That dword occurs nowhere in `.text`; neither does `0x26900000`. |
+
+And the one place a parse could still hide — **item creation** — does not parse. Walking
+outward from `0x0161`'s handler (`0x00846D70`, `ItCliApi.cpp`), **66 functions** are
+reachable within three call levels and exactly one touches the modifier array:
+`0x00848250`, which asserts the last word is the `0xC0000000` terminator, allocates
+`(count+1)*4` bytes and **`memcpy`s the words in verbatim**. It reads one identifier out
+of them — 647, gated on item type 43 — and interprets nothing else. **The array the
+client stores is the array we sent.**
+
 **Bounded, not universal.** `--readers` prints its own limits and they are the real
 scope of this negative: an identifier reached through a register or a table rather than
 an immediate; a `cmp` scheduled more than 16 bytes after its mask; an accessor whose
@@ -255,11 +299,26 @@ to read it out of, so anything beyond the shape would be invention:
 - **arg2 ∈ {0, 1, 2, 3, 4, 5, 6, 143, 144}**, and 143/144 occur only on items whose
   type field is 5, which also carry a Ranger requirement.
 - It sits at index 1–3 of the modifier list, never 0 (633 takes 0 or 1).
-- It is *nearly* a property of the skin — constant for 29 of 34 item model ids — and it
-  correlates with identifier 587 (the damage-type line) without being a function of it.
+- **It is a property of the item's MODEL, exactly** — `arg2` is single-valued for
+  **71 of 71 `model_id`s** over all 420 words. This line used to read "*nearly* a
+  property of the skin — constant for 29 of 34" and that was the **file id**, which is a
+  different field and is the CONTROL that fails: 5 of its 34 values carry more than one
+  `arg2`. The control is what makes the model result readable at all, because any field
+  with small enough groups looks deterministic. OBSERVED, `test_itemmods.py` §14.
+- Near-misses, recorded so they are not re-run: 633's attribute requirement determines it
+  for 13 of 14 values (attribute 25 splits into 143/144); item type, damage type and
+  damage range each fail outright.
 
 Labelled **UNVERIFIED**. The shape is recorded so the next reader starts from data
 rather than from this paragraph.
+
+**What follows from the model result, labelled.** That the number is redundant with
+`model_id` — which the client already has — is **consistent** with nothing reading it.
+That the redundancy is the *reason* is RECONSTRUCTION and this arc did not test it. The
+reading it most resembles is a server-side classification of the skin that rides along
+on the wire; naming it would need ArenaNet's server, a build we do not hold, or a
+labelled campaign varying one skin at a time. All three are outside what a client read
+can settle, which is why §7 lists this as answered-as-far-as-it-goes rather than open.
 
 ## 5. The attribute BONUS — and a correction to how §4 looked for it
 
@@ -483,6 +542,13 @@ the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21
   A single capture of a character wearing an attribute rune closes it.
 
 `toolkit/clientscan/itemmods.py` (`--decode`, `--summary`, `--readers`, `--reads`,
-`--attributes`, `--attr-bonus`, `--emit-content`, `--all-builds`), `test_itemmods.py`
-(28 checks, floor 28), and `vault/content/item_modifiers.toml` (157 rows,
-`client-table` provenance, ids not words).
+`--sites`, `--attributes`, `--attr-bonus`, `--emit-content`, `--all-builds`),
+`test_itemmods.py` (37 checks, floor 37), and `vault/content/item_modifiers.toml`
+(157 rows, `client-table` provenance, ids not words).
+
+**617 is answered as far as a client read can answer it** (§4.1, §4.3): sixteen sites in
+the whole image can isolate an identifier, the same on three builds, and 617 is named by
+none of them; the four non-immediate routes are closed; item creation `memcpy`s the array
+without interpreting it. Its one positive property is that `arg2` is a per-`model_id`
+constant, 71/71, with the file id as the control that fails. What is left is not a gap in
+the search — it is that **ArenaNet's server is not readable from here.**
