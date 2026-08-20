@@ -31,6 +31,15 @@ search that cannot be shown to find anything is worth nothing, which is the
 lesson `studies/enemy` paid for. Section 7 then takes 570 chances to refute
 what 633 turned out to be: an attribute id and a rank, checked against two
 client tables this file did not extract.
+
+SECTIONS 8-10 ARE THE ATTRIBUTE BONUS, found by a different route: not by
+reading templates but by asking which handlers RESOLVE AN ATTRIBUTE NAME
+through `s_attrib`. Fourteen do -- against the two an assert-derived count
+claimed -- and the two that render `<attribute> +N` are 542 (Non-stacking) and
+543 (Stacking). Section 9 composes 543's word from the four fields plus the
+three bits the walker never reads, and requires it to equal ArenaNet's own
+dword; section 10 replays all 26 the live corpus holds and measures the
+constant-prefix fact the composer rests on.
 """
 import os
 import sys
@@ -42,11 +51,12 @@ import checks  # noqa: E402
 import itemmods  # noqa: E402
 import pinned  # noqa: E402
 
-# 19, counted from the green run of 2026-08-20 -- set from the run and not
+# 28, counted from the green run of 2026-08-20 -- set from the run and not
 # from a guess, which is how this file learned the number: 14 was declared,
 # 12 executed, and the ledger refused the run rather than passing it. Sections
-# 6 and 7 took it from 12 to 19; the number was read off the run again.
-LEDGER = checks.Ledger("item modifiers", floor=19)
+# 6 and 7 took it from 12 to 19 and sections 8-10 to 28; each time the number
+# was read off the run rather than predicted.
+LEDGER = checks.Ledger("item modifiers", floor=28)
 
 
 def main():
@@ -248,6 +258,115 @@ def main():
                   f"requirement looks like and it is not what a coincidence "
                   f"looks like"
                   if not varies else f"MODELS WITH TWO ATTRIBUTES: {varies[:8]}")
+
+    print("\n8. the ATTRIBUTE BONUS: found by who resolves an attribute NAME")
+    acc = itemmods.attribute_name_accessor(img)
+    fam = itemmods.attribute_identifiers(img)
+    LEDGER.ok(sorted(acc["fields"]) == [0, 8, 12, 16],
+              "s_attrib's four field accessors are located by their shape",
+              f"base {acc['base']:#010x}, fields at +0 +8 +12 +16 -- the "
+              f"lowest displacement IS the base, so the name-id accessor "
+              f"(base+8) is found without knowing the table's address on any "
+              f"particular build")
+    LEDGER.ok(len(fam) == 14 and {1, 542, 543, 577} <= set(fam),
+              "and FOURTEEN handlers resolve an attribute name, not two",
+              f"{sorted(fam)}. This is a correction: studies/itemmods said "
+              f"'exactly two handlers treat their argument as an attribute "
+              f"index, 1 and 14', a number taken from the two asserts naming "
+              f"`attrib < CHAR_ATTRIBS` -- and asserts.py says in its own "
+              f"output that its module lists are a FLOOR, not a census")
+    v542 = vocab[542]["text_ids"]
+    v543 = vocab[543]["text_ids"]
+    LEDGER.ok(2482 in v542 and 2481 in v543 and 2436 in v542,
+              "542 and 543 are one line differing by ONE word",
+              f"542 {v542} carries 2482 (Non-stacking), 543 {v543} carries "
+              f"2481 (Stacking), and both format 2436 `%str1% +%num1%` with "
+              f"the attribute NAME as the string and arg2 as the number")
+
+    print("\n9. the composed word is ArenaNet's word, byte for byte")
+    LEDGER.ok(itemmods.attribute_bonus_word(20, 1) == 0x21F81401,
+              "attribute_bonus_word(20, 1) == 0x21F81401",
+              "the exact dword on 26 retail headpieces in the live corpus -- "
+              "identifier 543, attribute 20, +1, AND the three bits the "
+              "walker never reads (31, 30, 19). Compose from the four fields "
+              "alone and you get 0x21F01401, which is not what retail sends")
+    try:
+        itemmods.attribute_bonus_word(itemmods.ATTRIBUTES, 1)
+        refused = False
+    except ValueError:
+        refused = True
+    LEDGER.ok(refused,
+              f"and it REFUSES an attribute outside s_attrib",
+              f"attribute {itemmods.ATTRIBUTES} is CHAR_ATTRIBS itself -- the "
+              f"client asserts on it, so composing one would build a word "
+              f"that trips ItemName:1202 rather than one that renders")
+
+    if live is None:
+        LEDGER.skip("the live corpus is not reachable, so the 26 retail "
+                    "attribute-bonus words cannot be replayed and the "
+                    "constant-prefix measurement the composer rests on cannot "
+                    "be taken")
+    else:
+        print("\n10. CORPUS: 543's real words, and the prefix the composer uses")
+        bonus_words, kinds, with_armour = [], set(), 0
+        prefix = {}
+        exceptions = []
+        for stamp in sorted(os.listdir(live)):
+            try:
+                got = cmsgstream.timed(stamp, "s2c", "game")
+            except Exception:
+                continue
+            for _t, _c, op, v in got:
+                if op != 0x161 or not v or not isinstance(v[-1], list):
+                    continue
+                head = [x for x in v if not isinstance(x, list)]
+                ws = [e[0] if isinstance(e, (list, tuple)) else e
+                      for e in v[-1]]
+                ws = [x for x in ws if isinstance(x, int)]
+                for x in ws:
+                    dd = itemmods.decode(x)
+                    if dd["skipped_high"] or dd["skipped_bit18"]:
+                        continue
+                    key = ((x >> 30) & 3, (x >> 19) & 1)
+                    seen_pfx = prefix.setdefault(dd["identifier"], key)
+                    if seen_pfx != key:
+                        exceptions.append((dd["identifier"], seen_pfx, key))
+                for b in itemmods.attribute_bonuses(ws):
+                    bonus_words.append((b, ws))
+                    if len(head) > 3:
+                        kinds.add(head[3])
+                    if any(itemmods.decode(x)["identifier"] == 572 for x in ws):
+                        with_armour += 1
+        LEDGER.ok(len(bonus_words) == 26
+                  and all(b["identifier"] == 543 and b["stacking"]
+                          and b["attribute"] == 20 and b["amount"] == 1
+                          for b, _ in bonus_words),
+                  "every attribute bonus ArenaNet sent us is 543, attr 20, +1",
+                  f"{len(bonus_words)} of them, and attribute 20 resolves "
+                  f"through s_attrib to a Warrior weapon attribute -- on "
+                  f"items that also carry an armour rating (572) and a "
+                  f"'+20 vs. physical' (527). A headpiece, which is exactly "
+                  f"what a STACKING attribute bonus belongs on")
+        LEDGER.ok(len(kinds) == 1 and with_armour == len(bonus_words),
+                  "and they are all ONE item type, all of them armour",
+                  f"item type field {kinds}, {with_armour}/{len(bonus_words)} "
+                  f"carrying an armour rating -- a bonus scattered across "
+                  f"weapon types would refute the reading")
+        LEDGER.ok(all(itemmods.attribute_bonus_word(b["attribute"],
+                                                    b["amount"]) == w
+                      for b, ws in bonus_words
+                      for w in ws
+                      if itemmods.decode(w)["identifier"] == 543),
+                  "the composer reproduces each of those words exactly",
+                  "26 chances for a wrong prefix or a swapped field to show")
+        LEDGER.ok(not exceptions and len(prefix) > 30,
+                  "bits 31, 30 and 19 are CONSTANT per identifier",
+                  f"{len(prefix)} identifiers over the whole corpus, 0 "
+                  f"exceptions -- which is why they are a fixed prefix of the "
+                  f"encoding and why the composer can carry them. A single "
+                  f"identifier whose prefix varied would mean they are a "
+                  f"payload and the composer is wrong"
+                  if not exceptions else f"VARIES: {exceptions[:6]}")
 
     return LEDGER.verdict()
 

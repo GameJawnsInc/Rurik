@@ -22,12 +22,19 @@ enc_name = [0x2455, 0xB7FB, 0xCA41, 0x458F]
 modifiers = [0x24B80000, 0xA4880503]
 # What this item GIVES while equipped: +1 Hammer Mastery (attribute 19).
 #
-# NOT A DECODING OF `modifiers` ABOVE, and the distinction is the whole point.
-# ArenaNet encodes an item's real bonuses in those two dwords, and nobody in
-# this repo has decoded a single one -- studies/character/FINDINGS.md calls it
-# "the largest hole" and it is still open. This field is OUR declaration of
-# what OUR item does, read by the server to compute 0x003B's effective value.
-# The client never sees it and never checks it against the modifier words.
+# STILL NOT A DECODING OF `modifiers` ABOVE, and that is now a measured fact
+# rather than an admission. The words were decoded on 2026-08-20
+# (studies/itemmods/FINDINGS.md) and this hammer's two are 587 (a damage type)
+# and 584 arg 5 arg2 3 (a damage range) -- there is NO attribute bonus among
+# them, so this field is still OUR declaration of what OUR item does, read by
+# the server to compute 0x003B's effective value, and the client still never
+# checks it against the words.
+#
+# To make it derived instead: the bonus identifier is 543 (`<Attribute> +N`,
+# Stacking) and the word for attribute 19 amount 1 is 0x21F81301 --
+# `python toolkit/clientscan/itemmods.py --attr-bonus 19,1`. NOT applied here:
+# 543 is the form retail puts on HEADPIECES, this is a hammer, and adding it
+# changes what the client draws. It wants a run (studies/itemmods 5.5).
 attribute_bonus = [[19, 1]]
 
 [item.starter_hammer.provenance]
@@ -44,11 +51,13 @@ no licence question; the weakness here is evidential, not legal.
 The client accepting it is the only thing that has been OBSERVED. If it ever refuses,
 the two fields worth watching are file_id and flags.
 
-`modifiers` goes out verbatim because it came from the same table row and nobody in
-this repo has decoded a single one of those words -- armour rating lives in them for
-armour, and whatever a weapon's damage range is, it is in there too. See
-studies/character/FINDINGS.md, "The modifier words: NOT DONE". Do not tune these
-numbers hoping for an effect; nothing here knows what they mean.
+`modifiers` goes out verbatim because it came from the same table row. That used to
+end "and nobody in this repo has decoded a single one of those words"; they were
+decoded on 2026-08-20 and these two read as a damage type (587) and a damage range
+(584, arg 5 arg2 3). Knowing what they mean does not make them OBSERVED -- they are
+still one lineage's hand-written numbers, and the client accepting them is still the
+only thing anyone has watched. See studies/itemmods/FINDINGS.md, and
+`python toolkit/clientscan/itemmods.py --decode 0xA4880503`.
 """
 
 # The other five entries of the same OpenTyria array: the Prophecies warrior's
