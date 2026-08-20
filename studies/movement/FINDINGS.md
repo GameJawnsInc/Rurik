@@ -2304,3 +2304,314 @@ not "addition", is the recurring parent.
 - Guide-level: `codec.decode_one` returns a THREE-tuple `(opcode, values,
   nbytes)`; unpacking two inside a broad `except: continue` silently zeroes a
   census (it did, once, mid-pass, and was caught by a row count).
+
+---
+
+## 2026-08-19, round 3 — THE MECHANISM IS DECODED, AND THE SPEED CANDIDATE IS DEAD
+
+Four measurement lanes (snap trigger, separation budget, the impossible-step
+population, client-handler statics), each adversarially re-derived by an
+independent skeptic who re-parsed from raw bytes with its own reader. **The
+empirical and the static lane converge on one mechanism from opposite
+directions, and neither knew the other's result.** Everything below is what
+survived; refuted headlines are recorded beside their replacements, because
+three of this round's first-pass claims died in verification.
+
+### THE SNAP, named in the binary
+
+Client read: `vault/client/2026-07-29_221c13772c7a/Gw.exe`, build 38797
+**pristine**, sha256 `221c1377…` (the `run/` copy differs in 9 spans, 5 in
+`.text` — a 37-byte cave at VA 0x004514E2 plus an `e9` detour at 0x007DC0CE —
+and no address quoted here lies in any patched span). ArenaNet's own assert
+strings name the structure: `syncPtr` = `[agentMgr+0xE8]`, `asyncPtr` =
+`[agentMgr+0x14C]` (`AgMsg.cpp`); agent `+0x24` = `m_world` (0 = WORLD_SYNC);
+each world carries its own clock at `[agentMgr+0x148 + m_world*0x64]`;
+`+0x48 m_timeStopMovement`, `+0x5C maxSpeed`, `+0x60 moveSpeed`, `+0xC4 facing`,
+`+0xB0/+0xB4` **velocity in u/s**, `+0x78` epoch position, `+0x58` epoch time.
+
+**The snap is `0x006022B0`, and it copies SYNC → ASYNC.** Proven at the call
+site (`edi` = agentMgr+0x1CC, so `[edi-0x80]` = asyncPtr and `[edi-0xE4]` =
+syncPtr): the async agent becomes `this`, the sync agent is pushed as the
+source. The body stops the destination, computes `syncPoint` (the source's
+`+0x88` destination if it has arrived, else a dead-reckon on the DESTINATION's
+world clock), and calls `0x00602B20` — a hard SetPosition. **The predicted copy
+the player sees is dragged onto the authoritative one**, exactly as the arc's
+model said, now with an address.
+
+**THE TRIGGER — and it settles the timer-vs-threshold question by making both
+answers half right.** `0x00605FC0` (subsystem `agentMgr+0x1CC` =
+`AgTrack.cpp`, the client's own prediction tracker) has **exactly 3 callers —
+0x005FEBEB (inside the grant bake), 0x006022A1, 0x00602BBD — all
+message-driven. The desync test is NEVER evaluated per frame.** When it does
+run it calls the compare `0x006055E0`, which:
+1. asks whether one of the client's **outstanding predicted commands MATCHES**
+   the server's grant (per-record test `0x00605AF0`, constant 100.0 @0x00946560)
+   — if so it returns 1 and **nothing snaps**;
+2. otherwise dead-reckons the sync agent on the sync clock and the async agent
+   on the async clock and asks `Map.cpp`'s path query `0x00709990` for the
+   **WALKABLE PATH LENGTH** between them, compared against **300.0f @0x00946564**
+   (`006057BF fld [0x946564]` … `006057EA jne` → over 300 returns 0);
+3. returning 0 drops `0x00605FC0` into the loop (inlined at 0x0060604C) that
+   resyncs **every** async agent onto its sync twin.
+Below 300 two further geometric checks (`0x00709E90`, `0x005FEF70`) can still
+force the snap. A second entry exists with no compare at all: `0x005FCAA0` →
+`jmp 0x00605E40`, callers 0x004E6E82 / 0x00816499 / 0x0081655D. **Not** the
+snap: opcode `0x0023`, whose handler only logs *"Agent %u position out of sync
+with server"*.
+
+**So there IS a 300 u threshold, and it is not free-running.** That is why the
+empirical lane refuted "threshold" and was right to: in the default build the
+client sat **127 intervals / 93.4 s at separation p50 1,522 u, max 3,648 u,
+with ZERO convergences** — because no grant arrived to make anything look. And
+it is why "timer" dies on crossing brackets (default: no convergence across a
+33.8 s separated stretch ⇒ T > 33.8 s; capture 152716: longest inter-convergence
+gap 2.2 s, p50 2.0 s, CV 0.09 ⇒ T ≤ 2.2 s). Empirically the fired events are the
+authoritative copy's **START** and **ARRIVAL** transitions — default build
+exposure-weighted: PARKED 0.00/min over 93.4 s | MOVING-no-transition 1.10/min
+over 54.5 s | START inside 12.52/min over 14.4 s | ARRIVAL inside 15.96/min over
+15.0 s; 7 of 8 convergences sit in the 16.6% of exposure carrying a state change
+(binomial P = 2.4e-5; pooled 16 of 28 in 11.5%, P = 7.1e-9). Arrival lift:
+`+0x48` due within 500 ms of an interval's start converges 11/23 vs 11/393,
+**17.1×**, n = 416 — and the association survives dt-matching (7/11 vs 1/167).
+A grant that re-arms an ALREADY-MOVING copy does **not** snap it (2/33, 15/304,
+4/103 against shuffle base rates of 6-9%) — consistent with the static read,
+where a matching pending command returns 1.
+
+### SPEED IS BAKED AT GRANT TIME — the glide never reads it
+
+- **Q1. `0x002B` writes the SYNC agent ONLY, and is a pure store.** Handler
+  `0x005FD9D0` reaches `[esi+0xe8]` and nothing else; setter `0x00602990` is
+  three asserts then exactly three stores — `or [esi+0x20], 0x80000`,
+  `mov [esi+0xc4], edi` (facing), `fstp [esi+0x60]` (moveSpeed) — and `ret 8`.
+  It touches no tick, no velocity, no position. The `+0x48` writer census in
+  AgAgent returns 4 stores and `0x00602990` is not one of them.
+- **Q2. The dead-reckoner `0x005FFB40` is, in full,
+  `out = [+0x78] + ([+0xB0],[+0xB4]) * ((t - [+0x58]) * 0.001)` plus a
+  world-bounds clamp. `+0x60` and `+0x5C` do not appear.** Speed enters only at
+  the bake in `0x005FE950`: `fld [esi+0x60]` × `fmul [esi+0x5c]` → the arrival
+  tick `+0x48 = +0x58 + trunc(dist*1000/(maxSpeed*moveSpeed))` (clamped ≥ 1) and
+  the velocity `+0xB0/+0xB4 = unit(d) * speed`. The zero-distance branch
+  (dist² ≤ 1.0) snaps to dest, zeroes velocity, sets `+0x48 = now+1`.
+  **⇒ H1-WEAK: a mid-flight `0x002B` changes the number the NEXT grant bakes and
+  nothing about the current leg.** The FINDINGS arrival formula is byte-exact.
+- **Q3. `0x0027` is the lever we have never pulled.** Handler `0x005FD700`
+  applies setter `0x00602910` to the SYNC agent **and then again to the ASYNC
+  agent**. The setter settles (dead-reckons to now, rewrites `+0x78`, sets
+  `+0x58 = now`), stores `+0x5C`, and then — if in-world and the existing target
+  `+0x9C` is valid — **re-issues the outstanding grant** (`0x00602A40` →
+  `0x005FE950`), re-baking velocity and re-arming `+0x48` from the *current*
+  speed product. That is the whole of FINDINGS:1385: `0x0027` re-arms because it
+  replays the grant; `0x002B` is a store.
+- **⚠ THE LEVER LIST, and the gate that kills the obvious fix.** Per-handler
+  census of the 18-row recv table at 0x00A52D70 — SYNC-ONLY: 0x0021, 0x0022,
+  0x0023, **0x0029**, 0x002A, **0x002B**. BOTH copies: 0x0024, 0x0025, 0x0026,
+  **0x0027**, **0x0028**, **0x002C**, 0x002D, 0x002E, 0x002F. The first-pass
+  conclusion — "we only send SYNC-ONLY messages; add a `0x0025` beside each
+  grant" — was **REFUTED twice by the verifier.** (a) It is not a change: we
+  already send 187 × `0x0025` in the 5.80 min default run (32.2/min, 4.7× the
+  grant rate; 411 and 184 in the other two). (b) **`0x0025`'s async arm is GATED
+  and the gate closes on the player**: `0x005FD5CD` skips it when the agent holds
+  a pending AgTrack record, and `0x005FD5D3` (`cmp ebx,[esi+0x1e0]`) skips it
+  when the agent id IS the client-controlled agent — `[mgr+0x1E0]` = AgTrack+0x14,
+  written at 0x00605F45 when the client registers its own local move, cleared
+  only on agent removal. **Once the player has moved locally, a server `0x0025`
+  for their agent writes the sync copy only.** The same gate sits on 0x002D and
+  0x002E; it does **not** exist on 0x0024, 0x0027, 0x0028 or 0x002C, whose async
+  arms are unconditional.
+- **`0x002C` is the clean primitive**: handler `0x005FDA50` calls `0x00605F70`
+  = `AgTrack::Clear(agentId)` (zeroes the pending-record head/tail at
+  0x00605FA7/0x00605FAE) and then `0x00602B20` SetPosition **twice, once per
+  array**, with no `[esi+0x1e0]` gate on either arm.
+
+### THE SEPARATION BUDGET — the copy is not slow, it is OFF
+
+Forward simulator of the authoritative copy driven **only by our wire**
+(0x0029/0x002B/0x0027/0x0028/0x002C), using the binary's own model; calibration
+against movetap `|sim − live|` p50 0.0-13.0 u, max 72.2 u while the copy travels
+3,000-23,000 u (conditioned on the copy actually gliding: p50 21.5, p90 49.7).
+`0x0025` was **excluded because including it made the residual 11× worse**
+(p50 133 → 1,451 u) — an independent confirmation of the async-gate read above.
+
+Default build (movetap 145939 inside gamesrv 145717), coverage 62.4 s of
+179.9 s (34.7%), 712 intervals; growth 6,706 u, shrink −4,877 u, net +1,830 u:
+
+| class | time % | growth u | growth % | mean d(sep)/dt |
+|---|---|---|---|---|
+| AUTH-PARKED / client moving | 49.5 | 3,329 | **49.6** | +36.4 u/s |
+| AUTH-MOVING / client moving | 46.0 | 3,200 | **47.7** | +19.5 u/s |
+| AUTH-MOVING / client still | 1.2 | 177 | 2.6 | +201.3 u/s |
+| AUTH-PARKED / client still | 3.3 | 0 | 0.0 | 0 |
+
+AUTH-PARKED/FORWARD is the single biggest cell (34.6% of growth). **The BACK
+family — the one the 0.66 fix targets — carries only 30.4% of growth and 10% of
+the copy's travel.** The `--heading-grant` contrast is a completely different
+budget: 99.3% of growth is AUTH-MOVING/client-moving, 95.9% of it in BACK.
+Duty cycle, matched: client 95.5% vs copy 47.2%. **⚠ 79% of the default build's
+net accumulation sits in UNCOVERED time** (covered 62.4 s → +1,830 u; uncovered
+101.3 s over 16 gaps → +6,774 u; snaps → −9,692 u), so the table speaks for 21%
+of the run; the identity `sep(last)−sep(first) == covered + uncovered +
+snap-crossing` closes to ±0.000 u in all five runs but is telescoping, i.e. it
+validates bookkeeping, not the model.
+
+Snaps are resyncs on two independent sources (selection by wire speed, outcome
+by client memory): **6/6 collapse in the default build (p50 2,069 → 24.5 u),
+13/13 in `--heading-grant` (537.5 → 19.8 u)**.
+
+### ★ THE CEILING: the speed candidate is dead for the build we ship
+
+| run | jumps/min | mean jump | @dirfactor | @0.66-always | Δ magnitude |
+|---|---|---|---|---|---|
+| DEFAULT (13.0 grants/min) | 2.3 | 1,723 u | 1,670 u | 1,357 u | **−3.1%** |
+| `--heading-grant` (336.7/min) | 12.8 | 589 u | 292 u | 318 u | **−50.5%** |
+
+**Frequency: 0% at any trigger threshold below ~500 u** (−14% at T=500, −17% at
+T=700). Independently, the snap-trigger lane replayed the real 39-grant sequence
+against a copy at 288·k (calibrated: k=1 reproduces the measured 6 STARTs / 33
+re-arms / 5-6 arrivals) and got **11 triggers at k=1 AND at k=0.66 — a 0%
+reduction** — with 7 at k=0.50 (−36%) and 1 at k=0.10 (−91%). **Both lanes agree
+at the fidelity-correct value: 0.66 buys nothing on frequency and ~3% on
+magnitude in the build we ship.** It is correctly aimed only at the high-grant
+arms, which are themselves refuted configurations. The whole wire speed channel's
+ceiling on separation growth: dirfactor 3.7%, a hindsight oracle rate 31.1%, a
+perfect velocity match 50.4% (algebraically the complement of the parked share).
+**`0x0027` at spawn is a NO-OP**: the client already holds `+0x5C` = 288.0 and
+`+0x60` = 1.0 in 4,115/4,115 movetap samples.
+Retail refutes the double-apply worry: retail's predicted copy backpedals at
+p50 189.8 u/s = 0.659 × 288 (n=32) and splitting those steps by the rate
+actually in force gives 189.6 at 0.660 (n=17) and 189.9 at 1.000 (n=10) — **the
+wire rate never reaches the client's own predicted copy**, so sending 0.66 would
+not slow the player. It would also not help them.
+
+### THE DEFAULT BUILD'S OWN HARM, measured at last
+
+Every separation bound the arc has quoted (125.9 u p50, "under 150 u") came from
+171153, a **refuted** configuration. The build we ship reads **separation p50
+1,164 u, p90 2,163 u, max 3,648 u** (n = 251 paired reports of 268 over a 179.9 s
+movetap window); by family fwd 1,265 / 2,260 / 3,648, back 1,276 / 1,731 / 1,851,
+stop-reports 782 / 1,930 / 2,344. Snap cadence 2.67/min, inter-convergence p50
+21.7 s, min 1.8 s, max 41.2 s. **⚠ Do not quote a "9×" multiplier** — a second
+parser over `movetap point` gives 1,516 u, but `point` is the copy's position at
+its last update, stale by up to a whole leg (|live − point| p90 2,205 u, max
+5,217 u), so that is a different quantity, not a corroboration.
+
+**⚠ AND THE SCOREBOARD'S DENOMINATORS ARE NOT COMPARABLE ACROSS CONFIGURATIONS.**
+Time inside report intervals ≤ 2 s is **31.3% / 72.3% / 89.2%** of span for
+default / heading-grant / client-endpoint — the default build is blind for
+220.2 s of its 320.3 s, largest gap 131.8 s. Per *observed* second the ranking
+inverts: 4.19 / 7.48 / 11.27 jumps per min and 137.8 / 69.5 / 101.4 u displaced
+per second, which makes the default build the WORST on displaced distance rather
+than the best. It remains the best on frequency per span. **State which
+denominator you mean, every time.**
+
+### The impossible-step population, adjudicated
+
+25 of 26 are resyncs, but **graded honestly the evidence is 4 strongly
+evidenced, 13 consistent-but-weak, 9 unadjudicated** — the 150 u point-ball
+rescues 18 of them only because that ball fires on 73-85% of ORDINARY landings
+in the two captures supplying 17 of the 26, and on half the movetap-paired rows
+the sync copy is parked ON the granted point, so the "second arm" is the first
+arm again. What is solid: every paired impossible step lands on the
+**authoritative** agent (|landing − auth| p50 8.9-20.2 u, max 93.9 u, against an
+ordinary-landing control that separates), and bit-exact landing on a granted
+destination is 8 of 64 impossible vs 8 of 1,882 ordinary.
+- **`warpscan`'s label regex undercounts player grants badly** — 293 of 740
+  (171153), 134 of 327 (182652), 34 of 131 (152716), 2 labels vs 147 raw
+  (100340). Decode `sent` plain bytes; never trust the label.
+- **STOP QUOTING THE IMPLIED VELOCITY.** "v p50 2,521 / max 23,279 u/s" is
+  arithmetic on a denominator the discontinuity itself created: the three fastest
+  rows are the client emitting an **extra `0x003D` 32-33 ms after its regular
+  283-301 ms report**, immediately on the discontinuity (verified as separate TCP
+  frames — c2s seq 465→466, 50→51, 190→191, each a distinct 26-byte read — so not
+  decode coalescing). The displacement (582-741 u) is real; the velocity is not a
+  quantity. Use **magnitude and excess over the 288 u/s budget** (`d − 288·dt`):
+  corpus 43 detections, excess p50 671 u, max 3,804 u.
+- The 729-768 u band is **our own grant leash**: heading-derived grants cap the
+  step at 767.7 u (n=21, p90 757.5) while click-derived grants in the same corpus
+  do not.
+- **The sole survivor** (20260814T100340 @ t=856.22) is not "a displacement
+  nothing on the wire can explain" — it is a **client-side click-move executed at
+  2.6× the walk budget** (736 u/s over ≥4,100 u), and the client's own clicks in
+  that gap sit 79-158 u from the landing. Re-scope it as a speed anomaly on the
+  client's OWN commanded destination; the decider is a movetap run over a long
+  ungranted click-move.
+
+### Claims that DIED in verification this round — do not re-quote
+
+- **"The client's own stop is not the trigger" (0/31, 0/9, 0/2) was A CHECK THAT
+  CANNOT FAIL.** All 57 in-window `0x0047` messages sit exactly at a
+  report-interval boundary (0 strictly inside, all five runs), and a convergence
+  interval — one in which the client moved hundreds of units — can never END on a
+  stop report. Run in the direction that CAN fail, intervals **beginning** with a
+  cancel converge 4/31 (12.9%) vs 4/219 (1.8%): a **7.1× lift**. Half the default
+  build's convergences follow a client stop. The arc's own §6 trap, fired again.
+- **"A speed term cannot bound frequency" is too strong** — it is categorical
+  where the model is not. True statement: **not at the fidelity-correct 0.66**
+  (0% there; 36% at k=0.5, 91% at k=0.1, where a copy slow enough never goes idle
+  so clicks stop landing on an idle copy).
+- **Two of the five arrival-linked convergences are common cause, not resync**:
+  they land 0.0 u from the last `0x003E` click destination, open with a `0x0047`,
+  and never cross 400 u/s — the copy was granted that click point and the client
+  walked to the same click point. Strictly gated it is 3 of 6 arrivals, not 5 of 6.
+- **movetap is not 50 Hz** — measured wall-clock p50 dt is 76-106 ms, i.e.
+  **9.4-12.9 Hz**; its `now` is the client world clock, stepping in 50 ms quanta
+  and running **1.3% slow** vs wall (−2.363 s over 180 s). Last round's "20 ms
+  intervals" were world-clock deltas. The duty-cycle conclusion survives; the
+  units in the record do not.
+- **A `0x0047` does NOT mean the client is parked** — 16 of 32 "STOP" segments in
+  the default run show the client displacing 5-2,583 u at 184-284 u/s. The
+  proposed coverage extension is refuted; coverage stays gap-limited.
+- **"All 124 non-unit `0x002B` sends are from 2026-08-11" is FALSE** — they span
+  60 captures from 08-11 to 08-19 (55 on 08-11, 16 on 08-19). The
+  no-counterfactual conclusion survives only because the two 08-19 captures sit
+  at 11:29 and 15:48 UTC while the movetap windows are 18:59-21:15 UTC.
+- **The default-build harm magnitudes above are SIMULATED separation, not
+  measured teleport**: measured client displacement at those 7 landings is mean
+  2,136 u / max 3,405 u / 4,985 u per minute, against the simulator's 1,723 /
+  3,430 / 4,022 — 24% low on the arm being headlined.
+- **The −3.1% ceiling is an n=1 measurement wearing a high-confidence label**: of
+  the −375.45 u behind it, one landing contributes −343.22 u and the only other
+  contributes −32.23 u, below the ~70 u noise floor. Its DIRECTION is
+  deterministic (5 of 7 deltas are exactly 0.000000 because the candidate's rate
+  IS 1.0 there); its precise value is not.
+
+### THE MECHANISM, in one paragraph
+
+The player clicks. The client predicts the move locally, registers a pending
+AgTrack command, and walks its own copy. We answer with `0x0029` — a SYNC-ONLY
+message — so the authoritative copy glides to that point and **parks** there
+(parked 93.4 of 177.3 s). The player then keyboards away; `0x0025` is the only
+thing we send afterwards and **its async arm is gated shut for the
+client-controlled agent**, so nothing we send ever reaches the copy the player
+sees. Separation grows unchecked — to 3,648 u — because the desync test is only
+ever evaluated from a grant or an arrival, never per frame. Then the next grant
+or arrival calls `0x00605FC0`; the client's pending command does not match our
+grant; the walkable path between the two copies exceeds **300.0f**; and
+`0x006022B0` hard-SetPositions the player onto the authoritative copy. **That is
+the warp: not a race between two speeds, but a stale destination held by a parked
+copy that nothing we send can correct, redeemed all at once the moment the
+client is finally asked to look.**
+
+### What this hands the seventh candidate
+
+**Not the speed.** The direction factor is real, retail-faithful, and worth
+≈3% of magnitude and 0% of frequency in the build we ship; `0x0027` at spawn is
+a measured no-op. Ship neither as a warp fix. The corpus and the binary now
+point at three untried shapes, in order of evidence:
+1. **MAKE THE GRANT MATCH the client's outstanding predicted command** — the
+   first branch of `0x006055E0` returns "no snap" when it matches, constant 100.0
+   @0x00946560. This is what retail gets for free by answering the client's own
+   click with the client's own point, at one RTT, before the client's record
+   ages out. It is the only shape that prevents the snap rather than shrinking it.
+   Read `0x00605AF0`'s per-record test to learn what "match" actually compares.
+2. **`0x002C AGENT_UPDATE_POSITION`** — the only catalogued primitive that calls
+   `AgTrack::Clear` and SetPositions BOTH copies, ungated. It is a hard set, so it
+   is a teleport by construction; the question is whether a small, frequent,
+   correct one is cheaper than a rare 3,648 u one. We have never sent one (0 of
+   2,024,792).
+3. **`0x0027 AGENT_UPDATE_SPEED_BASE`** — reaches both copies unconditionally and
+   **re-issues the outstanding grant**, so it is the only lever that can re-aim a
+   stale in-flight destination without naming a new point. Worthless as a spawn
+   constant; possibly useful as a mid-flight re-bake.
+**Before any of it, fix the denominators** (see the scoreboard warning above) —
+no candidate can be scored against 5.7/min, and per-observed-second the default
+build is not the champion the scoreboard says it is.

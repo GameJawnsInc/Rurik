@@ -1407,6 +1407,32 @@ node counts.
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
 
+### Movement — ★ MECHANISM DECODED IN THE BINARY; SIX fixes dead; three shapes left (2026-08-19)
+
+**★ READ [studies/movement/HANDOFF.md](studies/movement/HANDOFF.md)'s top box before
+anything else.** The warp is fully traced: the snap is `0x006022B0` copying SYNC →
+ASYNC, reached only from `0x00605FC0` (exactly 3 callers, **all message-driven —
+never per-frame**), whose test `0x006055E0` returns "no snap" if one of the client's
+own pending predicted commands matches our grant (100.0 @0x00946560) and otherwise
+compares the **walkable path length** between the copies against **300.0f
+@0x00946564**. We answer a click with `0x0029` (SYNC-only); the authoritative copy
+glides there and PARKS (93.4 of 177.3 s); the player keyboards away; **nothing we
+send can reach the copy they see** — `0x0025`'s async arm is gated shut for the
+client-controlled agent (`0x005FD5D3`, `[mgr+0x1E0]`); separation grows to 3,648 u
+unwatched; the next grant or arrival redeems it all at once.
+**A SIXTH CANDIDATE IS DEAD:** the `0x002B` direction factor is worth **−3.1%
+magnitude and 0% frequency** on the shipped build (two independent derivations),
+and `0x0027` at spawn is a measured no-op. **The shipped build's real separation is
+p50 1,164 u** (n=251) — every "125.9 u / under 150 u" bound in the older record came
+from `171153`, a refuted configuration. **The scoreboard's denominators are not
+comparable** (coverage 31% / 72% / 89%); per observed second the default build is
+the worst on displaced distance. `movesync.py` and `pinned.py` were repaired this
+round. The three shapes left, in evidence order: **match the client's pending
+command** (the only one that prevents a snap), **`0x002C`** (the sole ungated
+both-copies position primitive; `AgTrack::Clear` + double SetPosition), and
+**`0x0027` as a mid-flight re-bake** (reaches both copies AND re-issues the
+outstanding grant). Everything below this paragraph predates the decode.
+
 ### Movement — latch FIXED; teleport EXPLAINED; FIVE fixes dead and the arc re-aimed (2026-08-19)
 
 **Picking this up cold? Read
