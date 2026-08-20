@@ -2371,8 +2371,14 @@ run it calls the compare `0x006055E0`, which:
    — if so it returns 1 and **nothing snaps**;
 2. otherwise dead-reckons the sync agent on the sync clock and the async agent
    on the async clock and asks `Map.cpp`'s path query `0x00709990` for the
-   **WALKABLE PATH LENGTH** between them, compared against **300.0f @0x00946564**
+   distance between them, compared against **300.0f @0x00946564**
    (`006057BF fld [0x946564]` … `006057EA jne` → over 300 returns 0);
+   ⚠ **CORRECTED 2026-08-20: this gate is STRAIGHT-LINE, not walkable path.**
+   `0x006057C8 push 1` sets `0x00709990`'s `straightOnly` argument, and
+   `0x00709B3F` jumps back to plain `sqrt(dx²+dy²)` on it. The walkable-path
+   conjunct is the *100 u* test at `0x00605C40`, which pushes **0**. This line
+   said WALKABLE for a day; the two thresholds use the same function in
+   opposite modes, which is exactly how it went unnoticed.
 3. returning 0 drops `0x00605FC0` into the loop (inlined at 0x0060604C) that
    resyncs **every** async agent onto its sync twin.
 Below 300 two further geometric checks (`0x00709E90`, `0x005FEF70`) can still
@@ -2668,3 +2674,368 @@ non-tautological on-path evidence on that capture.
 what they write, and the loosening is fenced by refusals that a mutation reddens
 (a digest equal to any known build's pristine, a strict registration with no
 pristine to diff against, a registry row that fails re-validation on read).
+
+---
+
+## 2026-08-20 — THE AgTrack MATCH TEST IS DECODED, AND IT DOES NOT READ OUR GRANT
+
+Four independent decode lanes (the caller `0x006055E0`, the per-record test
+`0x00605AF0`, the two geometry primitives, and a corpus measurement), each then
+attacked by three separate skeptics who re-parsed from raw bytes with their own
+readers. **The mechanics survived almost untouched. The SEMANTICS did not, and
+the shape this arc was reaching for died with them.** Every address below was
+re-read by this session from the pinned pristine 38797 image, not carried from a
+lane's transcription.
+
+### The predicate, as a server author would implement it — OBSERVED
+
+```
+# 16-byte position block: { f32 x; f32 y; i32 plane; u32 w }.  World units.
+# R = 100.0f, the f32 at 0x00946560 (bytes 00 00 c8 42) — read, not inferred.
+
+def agtrack_ok(mgr, state, source):        # 0x006055E0, __thiscall, ret 8
+    assert state.clientControlled          #  AgTrack.cpp(457), on 0x00605601
+    assert source.world == WORLD_SYNC      #  AgTrack.cpp(458), agent+0x24, SYNC == 0
+
+    # --- two early-outs, both meaning "no snap" ---
+    if source.timeStopMovement != 0 and source.facing == 9:   # +0x48, +0xC4
+        return 1                                             # 0x00605634 / 0x0060563A
+    q = copy16(source[0x78:0x88])          # 0x00605643 — NOT our grant. See below.
+    if q.x == +INF and q.y == +INF:        # AGENT_INVALID_POSITION (0x00948654)
+        return 1
+
+    prev      = copy16(state.position)     # state+0x08..+0x14  (the seed vertex)
+    node      = state.history              # state+0x04, head = NEWEST
+    lastMatch = None
+    while node is not None:                                  # 0x00605732 mov esi,[esi+4]
+        if not (prev.x == +INF and prev.y == +INF):          # guard tests PREV only
+            if seg_match(q, node.position, prev, R):         # 0x006056FD
+                lastMatch = node                             # NO break — keeps the LAST
+        prev = copy16(node.position)                         # 0x0060571A
+        node = node.next
+    if lastMatch is not None:
+        lastMatch.next = None              # 0x00605746 — truncate, dropping the OLDER tail
+        return 1                           # -> caller does nothing
+    return fallback_half()                 # 0x00605753..0x0060583D — UNDECODED, can ALSO return 1
+
+def seg_match(q, a, b, r):                 # 0x00605AF0, ret 0x10, 1 direct caller (a floor)
+    if a.x == b.x and a.y == b.y:                    # degenerate-segment guard
+        d2 = (a.x-q.x)**2 + (a.y-q.y)**2             # STRAIGHT LINE, SQUARED
+        return r*r > d2                              # STRICT (>); NO path test on this arm
+    d2, t = closest_pt_on_segment(q, a, b)           # 0x0046DE80 -> |q-c|^2, t clamped [0,1]
+    if not (r*r > d2):                               # STRICT (>), SQUARED, in a register
+        return 0
+    c = b if t >= 0.99 else Pos(a.x + t*(b.x-a.x),   # 0.99f, f64 @0x00A53BF8
+                                a.y + t*(b.y-a.y),
+                                a.plane, 0)          # 4th dword FORCED to 0, 0x00605BD5
+    return map_path_len(q, c, limit=r, straight_only=False) <= r     # 0x00709990
+                                                     # WALKABLE, LINEAR, INCLUSIVE (<=)
+```
+
+**Match = (straight-line perpendicular distance to the segment < 100 u, compared
+SQUARED) AND (walkable path distance to the closest point on it <= 100 u, compared
+LINEAR).** The two conjuncts differ in every axis that can be got wrong: one is
+squared and strict, the other linear and inclusive; one is as-the-crow-flies, the
+other as-the-crow-walks. **CORROBORATED** — the `[ebp-0x20]` slot holding the
+radius is written exactly once (`0x00605B7B fstp qword`), and the squaring at
+`0x00605B87` is `fmul st(0),st(0)` on a register copy that is never written back,
+so the tail really does compare against 100 and not 10,000. Two skeptics
+re-derived that independently; a second write anywhere would have refuted it.
+
+### The two operands — and this is where the arc's framing died
+
+**1. The compared point is NOT our grant. REFUTED (Lanes A and B, and the arc's
+own gloss).** `0x00605643` reads `source+0x78`. Our `0x0029` never writes that
+field: I disassembled `0x00602A40`'s body and the message's 16-byte point goes to
+`+0x88..+0x94` (`0x00602A84`–`0x00602A9F`, the destination) and is mirrored to
+`+0x9C..+0xA8`, with the plane word to `+0x80` (`0x00602A74`) — **n = 0 writes to
+`+0x78`** in that body, from a scan that did find the `lea esi,[ebx+0x78]` at
+`0x00602ADB` in the same range, so it was not blind. What fills `+0x78` instead is
+the client itself: `0x00602AD3` calls the bake `0x005FE950`, which at
+`0x005FE9EA` calls `0x005FF880`, which does `lea edi,[esi+0x78]`, tests
+`[esi+0x48] != 0`, dead-reckons through `0x005FFB40` on the world clock and stores
+back through `edi`. **OBSERVED: q is the SYNC agent's own position, dead-reckoned
+to the client's clock at the instant our message is processed** — a quantity that
+depends on the client's delivery-time `now` and on its own per-agent speed product
+(`+0x5C` × `+0x60`), neither of which we hold server-side.
+
+**2. The chain is `history`, not a prediction list. REFUTED (Lanes A and B's
+"predicted-movement polyline" / "pending predicted waypoints").** ArenaNet names
+it in four asserts read from the image: `historyState->history`,
+`historyPoint->position != AGENT_INVALID_POSITION`,
+`(int)(time - history.time) >= 0`, `!state->history->velocity.x`. Nothing in the
+module says *predicted*, *pending*, or *waypoint*. The allocator stamps
+`node+0x00 = now` at creation (`0x00604DCC mov [eax],ecx` with `ecx` = the clock
+pushed at `0x00605A32`) and the insert is **push-front** — `0x00605A55 mov
+ecx,[esi+4]` / `0x00605A5D mov [edx+4],ecx` / `0x00605A93 mov [esi+4],edx`. **Head
+= newest, `next` runs newest → oldest**, so `lastMatch->next = NULL` discards the
+OLDER tail. That closes the top open question of *both* decode lanes, on bytes
+rather than argument.
+
+### What the polyline actually is — OBSERVED, from the recorder `0x00605840`
+
+No lane found the routine that BUILDS the list; two skeptics did, and I
+re-disassembled it. It is reached from the same dispatcher as the test
+(`0x00605FC0` routes world 1 → record at `0x0060610B`, world 0 → test at
+`0x0060601C`).
+
+- **The seed vertex is the DESTINATION while the agent is moving.**
+  `0x006058D6 mov ecx,[esi+0x48]` / `test ecx,ecx` / `je 0x605909` selects between
+  `agent+0x88..+0x94` (`m_segmentPoint`, the current destination, with
+  `state.time = +0x48` the **arrival tick**) and the agent's position dead-reckoned
+  to now (`state.time = now`). Those land in the state at
+  `0x00605A38`–`0x00605A4D`. **Lane A's "the client's LIVE position is the first
+  vertex" is REFUTED**; one skeptic had only WEAKENED it to "the last recorded
+  sample", and the recorder settles it outright.
+- **Each node holds a LEG-START position.** `0x00605A60`–`0x00605A75` copies
+  `[ebp-0x44..-0x38]`, which was loaded from `agent+0x78..+0x84` at
+  `0x0060584D`–`0x00605873` and then dead-reckoned in place by
+  `0x006058BF call 0x5ff820`.
+
+So the chain, newest first, is **[current destination] → [start of the current
+leg] → [start of the previous leg] → …**. The first segment is the leg being
+walked *now* — the one genuinely forward-looking element in the structure — and
+every segment after it is a chord of ground the client has already covered.
+
+**It is coarse, not a breadcrumb trail.** A node is pushed only when the movement
+command CHANGES (destination, plane, velocity, both speed factors and facing all
+compared at `0x00605945`–`0x006059B4`) or when the head is older than **2500 ms**
+(`0x0060593A cmp eax, 0x9c4`). A single click therefore produces a **one-segment**
+polyline — the narrowest tolerance case, and the one this project most needs to
+reason about. At 288 u/s a forced 2.5 s re-sample chord can span ~720 u.
+
+### Struct layouts — CORROBORATED, by the refutable check
+
+ArenaNet's own field names land on the offsets the code reads, and both strides
+close to the exact byte.
+
+| record | stride | fields |
+|---|---|---|
+| `state` = `stateArray[agentId]`, base `[mgr+0x20]`, count `[mgr+0x28]` | **0x1C = 28** (`lea ecx,[ebx*8]` / `sub ecx,ebx` / `*4` at `0x00605FF9`) | `+0x00 clientControlled`, `+0x04 history`, `+0x08..+0x14 position`, `+0x18 time` |
+| `history node` | **0x2C = 44** (`imul eax,eax,0x2c` at `0x00604BFC` and `0x00604DBD`) | `+0x00 time`, `+0x04 next`, `+0x08..+0x14 position`, `+0x18/+0x1C velocity`, `+0x20/+0x24` speed factors (`agent+0x5C`/`+0x60`), `+0x28 facing` (`agent+0xC4`) |
+
+- **Lane A's "node is ≥0x20 bytes" — WEAKENED.** It is exactly 0x2C, and three
+  fields nobody named are written at `0x00605A7B`/`0x00605A8D`/`0x00605A90`.
+- **Lane A's "state+0x18 is a sample timestamp with a 250 ms freshness window" —
+  WEAKENED.** The 250 ms constant is real (`0x00604F09 cmp eax, 0xfa`, and the
+  client names it: `MathAbs((int)(nearestTime - compareTime)) <= TOLERANCE_TIME`),
+  but `state+0x18` is the **arrival tick** while moving, so the test means "still
+  on this leg, or arrived under 250 ms ago", not "this sample is fresh".
+- The position block's **4th dword (`+0x14` / `agent+0x84`) is UNVERIFIED** — copied
+  verbatim on the `t >= 0.99` arm, forced to 0 on the lerp arm, loaded but unused
+  by `0x00709990` in the decoded portion. The **`+0x10` plane field is OBSERVED**:
+  `0x007099F1 cmp esi,edi` / `jl` compares it as a **signed int**.
+
+### The primitives, and a correction to this document's own record
+
+- **`0x0046DE80`** — `__fastcall(ecx=q, edx=a, [ebp+8]=b, [ebp+0xc]=&t)`, returns
+  the **SQUARED** point-to-segment distance in `st(0)` and writes the clamped
+  parameter `t` through the out-pointer. **OBSERVED**: no `fsqrt` and no `call`
+  anywhere in the 252-byte body, and the tail is two `fmul st(0),st(0)` plus
+  `faddp`. Independently corroborated by instruction-stream emulation against an
+  exact-rational reference: max distance error **1.6 ulp of scene scale (n = 2,000
+  per scale at 1 / 100 / 5,000 / 40,000; n = 8,000 total)**, out-param error
+  **1.93e-06**. Clamp constants read from the image: `0.0 @0x0093CF10`,
+  `1.0 @0x0093C1D0`. Its source file is **NOT FOUND** — zero asserts in a ~3.5 KB
+  unasserted run. Degenerate input (`a == b`) yields NaN, unguarded — which is
+  exactly why the caller's `a == b` branch exists.
+- **`0x00709990`** — `__cdecl(from, to, float range, int straightOnly)`, returns
+  **min(walkable path length, range + 1.0)** in **linear** world units.
+  **CORROBORATED** as a `Map.cpp` routine (no assert inside; the next function
+  asserts at Map.cpp:1195/1197, and the callee `0x00721A30` asserts at
+  PathApi.cpp:698/699). The straight-line shortcut is the exception, not the rule:
+  it needs matching planes **and** `dist² <= 1.0`, or `straightOnly != 0`. The
+  `range+1` saturation is a designed "unreachable" sentinel — passing `r` as both
+  the budget and the threshold makes `result > r` mean exactly "no path".
+- **⚠ CORRECTION to §"THE TRIGGER" above (FINDINGS:2372-2375), which calls the
+  300.0f fallback gate a WALKABLE PATH LENGTH. It is STRAIGHT-LINE.**
+  `0x006057C8 push 1` sets `straightOnly`, and `0x00709B3F cmp [ebp+0x14],0` /
+  `jne 0x709ae0` jumps back to the plain `sqrt(dx²+dy²)` path. The **100 u** test
+  is the walkable one (`0x00605C40 push 0`); the **300 u** gate is not. OBSERVED.
+- **The path length is a slight OVERESTIMATE.** Each leg goes through the
+  table-driven approximate sqrt `0x0046E870`. Three independent emulations against
+  the real 256-entry table at `0x0093CAC8` agree: worst relative error
+  **3.88–3.90e-03 (n = 5,000 / 5,000 / 5,010)** against **2.06e+01–3.07e+01** for a
+  cube-root rival on the same samples, and **every** sample overshoots. **So the
+  second conjunct's effective threshold is ~99.6 u of true walkable length**, and
+  the 300.0f gate ~298.8 u — a systematic bias, always in the direction of
+  snapping.
+
+### The gates upstream, and the three ways the test never runs at all
+
+None of the decode lanes mentioned these, and a server author reading only the
+predicate would assume it always fires.
+
+1. `0x00606002 cmp [eax+ecx*4],0` / `je 0x606103` — if `state->clientControlled`
+   is 0 the match function is **never called**.
+2. `0x00606013 cmp edx,1` / `je 0x60610b` — if the source agent's world is 1
+   (async) control goes straight to the recorder with no test attempted.
+3. `0x006056B8 test esi,esi` / `je 0x605751` — if `state->history` is NULL the loop
+   is never entered and `edi` stays 0.
+
+**And the mechanism is ONE-SHOT.** `AgTrack::Clear` (`0x00605F70`) zeroes
+`clientControlled` **and** `history` (`0x00605FA7`/`0x00605FAE`). The only thing
+that re-arms the flag is `0x00605F10`, called from two player-input sites — and it
+nulls the history again (`0x00605F48` sets the flag, `0x00605F4F` clears the
+head). So after any miss the test is not consulted until the player next steers,
+and then the polyline restarts **one segment long**. Storage is block-recycled
+rather than freed: 256-entry blocks, reclaimed when the block's newest entry is
+older than **5000 ms** (`0x00604C03 cmp ecx, 0x1388`), with the sweep NULLing any
+`next` that points into the reclaimed span. That is the ageing bound on the
+polyline, and it closes both lanes' "is the truncated tail freed?" question.
+
+### The early-outs, and the one lever that is real but unmeasured
+
+`0x00605634`–`0x00605641`: **`+0x48 != 0` AND `facing == 9` returns 1
+unconditionally**, before any geometry runs. `+0xC4 = facing` is **CORROBORATED**
+by ArenaNet's own `!(facing & ~AGENT_FACING_MASK)` at AgAgent.cpp(2368), a 4-bit
+mask; the client's facing dispatcher `0x00602660` switches on `facing-1` over a
+table covering **only 1..8**, sending 9 to a bare epilogue that computes no facing.
+**What `facing == 9` MEANS is NOT FOUND, and I refuse to guess the other eight.**
+
+- **Lane A's "9 is the only value anything in .text checks `+0xC4` against" —
+  WEAKENED.** The immediate-form scan reproduces exactly (**n = 16** sites: 1 real
+  nonzero — `0x0060563A`, against 9 — 13 against 0, 2 against the `0xDDDDDDDD`
+  debug fill), and a skeptic re-ran it wider including SIB bases with the same
+  answer. But it does not cover the register forms: **n = 17 further sites**
+  compare `+0xC4` against a register. "The only IMMEDIATE" is supported; "the only
+  value anything checks" is not.
+- The lever is reachable: `0x002B`'s setter `0x00602990` writes `+0xC4` with no
+  clamp, and 9 passes the client's own mask assert. **Costs, stated because they
+  are not free**: the same setter writes `+0x60 moveSpeed` (so a `0x002B` carrying
+  facing 9 must also carry rate 1.0 to be identity), the character stops turning,
+  and suppressing the test means the client never reconciles at all — divergence
+  accumulates silently instead of being corrected once. **Whether that trade is net
+  better is UNVERIFIED and has NOT been run.**
+
+### The corpus lane returned a rigorous measurement of a DIFFERENT pair
+
+**Say this out loud rather than letting the static reading borrow it.** Lane D
+measured |our granted point − the client's *stated destination*| over **n = 1,107
+player grants in three "ours" captures**: p50 **0.000 u**, p90 0.500, p95 97.9,
+p99 472.0, max 748.7, and **1,053/1,107 = 95.1% within 100 u**. Its procedure
+checks are sound and could have failed (the `client_endpoint` arm reads
+**0.5000 u, max 0.5006, 193/193** against the 0.5 u our source writes; the
+`click_grant` arm reads **0.0000 u, 467/467**), and its shuffled control fires
+correctly (**p50 2,073–2,608 u; 0/40, 11/740, 6/327 within 100 u**). The only
+non-tautological arm — `heading_grant`, **n = 447** — reads p50 0.0, p90 163.1,
+p99 618.5, max 748.7, **393/447 = 88% within 100 u**, with all **73/73** of the
+>1 u tail lying **on** the client's own segment (perpendicular offset max 0.0 u),
+i.e. clipped short along the ray rather than translated off it.
+
+**None of that is evidence about this predicate.** The query point is
+`sync.+0x78`, which never appears on the wire, and the polyline is mostly past
+async positions, which also never appear on the wire. Lane D paired two
+*endpoints*, neither of them an operand of the test. One skeptic marked it
+**REFUTED** as support; another marked it **UNDECIDABLE**, which is the more
+precise verdict — the measurement is fine, it answers a different question.
+Recorded here as: **destination fidelity is OBSERVED and excellent; proximity-
+predicate support is NOT ESTABLISHED, and no corpus pass can establish it.**
+
+Two further disclosures from that lane, both named by the lane itself:
+
+- **A named proxy.** For keyboard movement the client has no fixed destination.
+  `pos + heading` is a ray tip of measured magnitude **765.0–768.0 u** (all four
+  captures) whose same-mode drift is **p50 398.3 u, p90 635.0 u (n = 148)** inside
+  a 0.25 s median window — against the 72 u a 288 u/s walk covers in that time.
+  The "destination" is exactly well-defined only for CLICK movement (`0x003E`).
+- **A corpus correction.** `20260811T173940` is **not** a retail/live comparison —
+  `origin.origin_of` returns `ours`, its origin record names
+  `toolkit/authsrv/authsrv.py`, its peer is `127.0.0.1:55588`, and it contains
+  **zero** player `0x0029`. It is the corpus's zero-grant arm (0 hard jumps of 157
+  intervals), not a live baseline.
+
+**And the hard-jump shares cut against a monotone story.** By grant arm:
+zero-grant **0/157 = 0.0%**; click-only, all 40 grants at 0.0000 u from the
+client's own click, **7/267 = 2.6%** (with jumps of 1,968.9 / 2,016.6 / 3,166.2 /
+3,405.3 u); heading **20/468 = 4.3%**; client-endpoint, 193 grants at 0.5000 u
+from the client's own endpoint, **13/197 = 6.6% — the HIGHEST**. Different
+sessions and different play, so an observation and not a controlled comparison —
+but the capture whose grants match the client's own number to half a unit jumps
+the most.
+
+### Claims that DIED this round — do not re-quote
+
+- **"`0x006055E0` walks the client's PREDICTED-movement polyline / a list of
+  pending predicted waypoints" — REFUTED.** It walks `state->history`: nodes
+  stamped `now` at creation (`0x00604DCC`), pushed on the front (`0x00605A93`),
+  named `history` / `historyState` / `historyPoint` by ArenaNet in four asserts.
+  Exactly one segment — the seed to the head node — looks forward.
+- **"The polyline's first vertex is the client's LIVE position" — REFUTED.**
+  While the agent is moving it is the **destination** (`agent+0x88..+0x94`), with
+  the state's time field holding the **arrival tick**.
+- **"The position you send / the server's reported position is what gets
+  compared" — REFUTED.** `q = source+0x78`, the sync agent's own dead-reckoned
+  position; `0x0029` writes `+0x88..+0x94` and `+0x80` and never `+0x78`
+  (**n = 0** writes in `0x00602A40`'s body).
+- **Lane A's one-sentence rule for a server author** ("the client will not snap if
+  the position you send lands within 100 units of the polyline it has predicted")
+  — **REFUTED on both halves.** It is true only for the `dist² <= 1.0` degenerate
+  branch at `0x005FEA92`, i.e. exactly when the grant is too small to matter.
+- **"Below 300 u, `0x00709E90` / `0x005FEF70` can still force the snap [on a
+  match]" — REFUTED as stated.** `0x0060574C jmp 0x60582b` jumps clean over the
+  entire fallback half. Those two threaten the **no-match** path only.
+- **This document's own "the 300.0f gate is a WALKABLE PATH LENGTH" — REFUTED.**
+  `0x006057C8 push 1` makes it straight-line. The walkable test is the 100 u one.
+- **"A miss means the client snaps" — never established, and it does not follow.**
+  A hit is SUFFICIENT for return 1; the converse needs the fallback half, which is
+  undecoded and can also return 1.
+- **HANDOFF's "`0x002C`: we have never sent one (0 of 2,024,792)" is a corpus
+  census, not a history.** `authsrv.py:7036-7045` records that an earlier build
+  *did* — "five AGENT_UPDATE_POSITION went out and three were arrivals, carrying
+  the client 630, 189 and 765 units" — and that it was removed as "the warp the
+  player described". `0x002C` is untried *in the current corpus*, not untried.
+- **Lane D's own retracted number**: a first staleness pass read p50 1,636–2,115 u
+  by scoring each armed grant against every later client statement; restricted to
+  same-mode continuation it is **p50 398.3 u**. The first figure was a change of
+  mind wearing drift's name.
+- **Three open questions died by being ANSWERED**: list direction (push-front,
+  head = newest), the insert site (`0x00605840`), and the fate of the truncated
+  tail (block-recycled on a 5 s rule, never freed).
+
+### What this means for the fix
+
+**What our server would have to send for the match to succeed: nothing we can
+send.** The predicate reads no field our `0x0029` writes. The grant sets the
+destination (`+0x88..+0x94`) and the plane (`+0x80`); the test reads the position
+(`+0x78`), which the client re-derives itself by dead-reckoning the sync agent on
+its own clock during the bake. The only lever on `q` is indirect and one message
+late — where our *previous* grant will have carried the client's own extrapolation
+by the time the *next* message lands — and computing that needs the client's
+delivery-instant `now` and its own per-agent speed product, which we do not have.
+The correct restatement of the shape is therefore **"keep the server's tracked
+position on the path the client actually walked"**, not "aim the grant at the
+client's destination".
+
+**What stands in the way, from the consequence skeptic, and it is decisive.**
+
+1. **The experiment already ran and failed.** `--heading-grant` put our grants
+   0.5 u from the client's own proposed endpoint (**193/193**) — inside 100 u of
+   the polyline by construction — and `authsrv.py:1046` records it **REFUTED on
+   run `20260819T152716`: it CAUSES warps**, two teleports in six seconds. The
+   click-only capture held 40 grants at **0.0000 u** from the client's own click
+   and still logged **7 hard jumps of up to 3,405 u**. We are already passing the
+   destination-fidelity test; making it easier to pass buys nothing.
+2. **The mechanism is one-shot** (see the gates above), so any strategy built on
+   staying inside the radius gets one mistake, and the second is measured against
+   a one-segment polyline — which predicts exactly the clustering `--heading-grant`
+   produced.
+3. **A miss is not a snap.** The fallback half is where the decision actually
+   lives once the match fails, and it is undecoded.
+4. **The effective threshold is ~99.6 u, not 100**, and biased toward snapping.
+
+**Nothing here is a fix, and none of it has been run.** The one short-circuit that
+does exist — `0x002B` carrying `facing = 9` against an armed `+0x48`, which
+returns 1 before any geometry — buys snap suppression at the cost of a character
+that stops turning and a client that stops reconciling entirely. That is a
+candidate to *price*, not a fix to ship, and it is **UNVERIFIED**.
+
+### Method note
+
+The four decode lanes shared one scratchpad root, and one lane reports a file it
+wrote there was overwritten mid-run by a sibling agent, with content matching the
+check it was about to perform. **Lane agreement on the `0x0046E870` sqrt result is
+therefore not blind in the replication sense.** The finding survives — two
+skeptics re-derived it in private directories from the image bytes, and this
+session re-read every load-bearing address above independently — but four-way
+agreement should be quoted as fewer than four witnesses on that specific point.

@@ -12,9 +12,12 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > SYNC → ASYNC (the rendered copy is dragged onto the authoritative one). It is
 > reached from `0x00605FC0`, which has **exactly 3 callers, all message-driven —
 > the desync test is never evaluated per frame.** The test itself
-> (`0x006055E0`) returns "no snap" when one of the client's own outstanding
-> predicted commands MATCHES our grant (constant 100.0 @0x00946560); otherwise it
-> compares the **walkable path length** between the two copies against
+> (`0x006055E0`) returns "no snap" when the SYNC agent's own dead-reckoned
+> position (`+0x78`) lies within **100.0 u @0x00946560** of the client's recent
+> **history** chain — straight-line AND walkable; ⚠ **NOT our grant, and not a
+> prediction** (decoded 2026-08-20, FINDINGS "the AgTrack match test is
+> decoded" — it retired §4's starred shape 1). Otherwise it compares the
+> **straight-line** distance between the two copies against
 > **300.0f @0x00946564** and resyncs every async agent.
 >
 > **THE WARP, in one sentence:** we answer a click with `0x0029` (a SYNC-ONLY
@@ -38,8 +41,10 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > re-derive before comparing.
 >
 > Candidates 1-5 are dead (§2). Candidate 6 (the speed term) is dead above.
-> **The three shapes worth trying next are in §4** — and the first of them is the
-> only one that PREVENTS a snap rather than shrinking it.
+> **Shape 1 — "make the grant match" — is dead too, as of 2026-08-20**: the test
+> it was aiming at never reads our grant (§4 item 1). What remains in §4 is
+> `0x002C`, the `0x0027` re-bake, and one undecoded half of the test itself,
+> which is where the snap is actually decided.
 
 ---
 
@@ -114,12 +119,17 @@ copy it predicts. Two objects, two world clocks.
    never per-frame.** So separation grows unchecked: the default build sat
    **127 intervals / 93.4 s at p50 1,522 u, max 3,648 u, with zero snaps.**
 4. **Then it is redeemed all at once.** On the next grant or arrival,
-   `0x006055E0` asks first whether one of the client's outstanding predicted
-   commands MATCHES our grant (constant 100.0 @0x00946560) — if so, **no snap**.
-   Otherwise it dead-reckons both copies, asks `Map.cpp`'s `0x00709990` for the
-   **walkable path length** between them, compares against **300.0f
-   @0x00946564**, and over that resyncs every async agent via `0x006022B0`, a
-   hard SetPosition. **That is the warp.**
+   `0x006055E0` asks first whether the SYNC agent's own dead-reckoned position
+   (`+0x78`) lies within 100.0 u @0x00946560 of a segment of the client's
+   **history** chain — if so, **no snap**. ⚠ That operand is **not our grant**
+   and the chain is **not a prediction**; both were decoded on 2026-08-20 and
+   both killed §4's starred shape 1 (FINDINGS, "the AgTrack match test is
+   decoded"). Otherwise it dead-reckons both copies, asks `Map.cpp`'s
+   `0x00709990` for the **straight-line** distance between them
+   (`0x006057C8 push 1` = straightOnly; the *100 u* test is the walkable one,
+   `0x00605C40 push 0`), compares against **300.0f @0x00946564**, and over that
+   resyncs every async agent via `0x006022B0`, a hard SetPosition. **That is the
+   warp.**
 
 **The harm, on the build we ship** (`20260819T145717` + movetap `145939`,
 n = 251 paired reports): separation **p50 1,164 u, p90 2,163 u, max 3,648 u**;
@@ -247,7 +257,8 @@ to a labelled gate input.
 
 **That list was then run in full on 2026-08-19** (FINDINGS, "round 3 — the
 mechanism is decoded"). Snap trigger: neither timer nor free-running threshold —
-message-driven evaluation of a 300 u walkable-path test (§1). Default-build harm:
+message-driven evaluation of a 300 u straight-line test (§1; it was recorded as
+"walkable-path" until 2026-08-20 — the walkable conjunct is the 100 u one). Default-build harm:
 measured at last, p50 1,164 u (§1). Scoreboard: rebuilt, and the denominators
 turned out not to be comparable (§2). Handler statics: **done, and they decided
 the causal question** — speed is baked at grant time, `0x0025` is gated, `0x0027`
@@ -257,19 +268,47 @@ survivor is a client-side click-move at 2.6× the walk budget. `pinned.py` and
 
 ### The three shapes worth trying next, in order of evidence
 
-1. **★ MAKE THE GRANT MATCH THE CLIENT'S OUTSTANDING PREDICTED COMMAND.**
-   `0x006055E0`'s first branch returns "no snap" when one of the client's own
-   pending AgTrack records matches our grant (constant 100.0 @0x00946560). This
-   is the only shape that PREVENTS the snap instead of shrinking it, and it is
-   what retail gets for free by answering the client's own click with the
-   client's own point at one RTT, before the record ages out. **First job: read
-   `0x00605AF0`'s per-record test and learn what "match" actually compares** —
-   point, time, sequence, or all three. Offline, no client run.
+1. **★ ANSWERED 2026-08-20 — and the answer RETIRES this shape.** `0x00605AF0`
+   compares **POINT ONLY**: no time, no sequence, no id. (The whole 145-instruction
+   body holds exactly one integer `cmp` and it is `sub esp, 0x30`; one absolute
+   memory read, and it is the 0.99 constant.) It asks whether a point lies within
+   **100.0f** of a segment — **straight-line perpendicular, compared SQUARED and
+   STRICT**, *and* within 100.0f of **walkable path length**, compared **LINEAR and
+   INCLUSIVE** (~99.6 u effective, because the client's leg sqrt is a table
+   approximation biased high, worst +0.39%, n = 5,000). Full decode with pseudocode:
+   FINDINGS, "the AgTrack match test is decoded".
+   **BUT THE POINT IT TESTS IS NOT OUR GRANT, AND THE LIST IS NOT A PREDICTION.**
+   `0x00605643` reads `source+0x78` — the SYNC agent's own position, dead-reckoned to
+   the client's clock by `0x005FF880` during the grant bake. Our `0x0029` writes
+   `+0x88..+0x94` and `+0x80` and **never `+0x78`** (n = 0 writes in `0x00602A40`'s
+   body). And the chain is ArenaNet's `history`: nodes stamped `now` at creation
+   (`0x00604DCC`), pushed on the FRONT (`0x00605A93`), one per movement-command
+   change with a forced 2.5 s re-sample — so a single click yields a **one-segment**
+   polyline. ⇒ **There is no grant we can send that makes this match by
+   construction**, and the wire already agrees: `--heading-grant` sat 0.5 u from the
+   client's own endpoint (193/193) and is recorded REFUTED at `authsrv.py:1046` for
+   CAUSING warps; the click-only capture held 40 grants at 0.0000 u and still logged
+   7 hard jumps up to 3,405 u. **Do not build "make the grant match".**
+   **NEXT JOB — offline, no client run: decode the FALLBACK half
+   `0x00605753`–`0x0060583D`.** A match is *sufficient* for "no snap"; a miss is
+   **not** sufficient for a snap — `0x0060574C` jumps clean over the fallback — so
+   everything past the **300.0f** gate at `0x006057BF` (which is **straight-line**,
+   `push 1`, correcting this arc's own record) is where the snap is actually decided,
+   and both `0x00709E90` and `0x005FEF70` are undecoded. **Second, cheap:** a
+   `movetap` read of the SYNC agent's `+0x78` at grant-bake — it is the only way to
+   put a number on the operand, because it never appears on the wire and no corpus
+   pass can reach it. **Third, to price not to ship:** `0x002B` with `facing = 9`
+   against an armed `+0x48` short-circuits the whole test at `0x00605684`; it costs a
+   character that stops turning and a client that stops reconciling at all.
 2. **`0x002C AGENT_UPDATE_POSITION`** — the only catalogued primitive that calls
    `AgTrack::Clear` and then SetPositions BOTH copies, ungated. It is a hard set,
    so it is a teleport by construction; the open question is whether a small,
    frequent, correct one is cheaper than a rare 3,648 u one. We have never sent
-   one (0 of 2,024,792). Retail sends 12 corpus-wide, so this is rare-but-real
+   one in THIS corpus (0 of 2,024,792) — ⚠ but that is a census, not a history:
+   `authsrv.py:7036-7045` records an earlier build that **did** send them ("five
+   AGENT_UPDATE_POSITION went out and three were arrivals, carrying the client
+   630, 189 and 765 units"), removed as "the warp the player described". Untried
+   in the current corpus, not untried. Retail sends 12 corpus-wide, so this is rare-but-real
    in ArenaNet's own traffic.
 3. **`0x0027 AGENT_UPDATE_SPEED_BASE` as a mid-flight re-bake** — worthless as a
    spawn constant, but it reaches both copies unconditionally AND re-issues the
