@@ -5897,8 +5897,16 @@ PROBES = {
                  "with the same buffId gives a SECOND, separate indicator "
                  "(the upkeep row). Removing one leaves the other.",
         steps=_buff_side_steps(a),
-        note="SOURCED: BuffState keeps a source list at +0x04 and a target "
-             "list at +0x14, and the client's own log strings are "
+        note="ANSWERED 2026-08-19 (capture 20260819T235007, skillcast FINDINGS "
+             "14.8): every clause held. 65 alone draws the effect icon with NO "
+             "countdown bar (duration 0.0); 63 with the same buffId adds the "
+             "skill's icon to the maintained-enchantment UPKEEP MONITOR above "
+             "the energy bar (~x1120,y880 at the standard window); 64 clears "
+             "the upkeep icon and the effect icon STAYS; 68 clears the effect "
+             "icon. Two records, independent lifecycles, joined by buffId -- "
+             "and the upkeep icon needs no 0x0093, so the +0x5BC table does "
+             "not gate it. SOURCED: BuffState keeps a source list at +0x04 and "
+             "a target list at +0x14, and the client's own log strings are "
              "BuffSourceAdd/BuffSourceRemove for 63/64 and "
              "BuffTargetAdd/ExtendTimed/Remove for 65/66/67/68.",
     ),

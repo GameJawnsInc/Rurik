@@ -989,7 +989,7 @@ Two more probes join the queue, after the six in §11:
 
 | # | Probe | Question | Prediction |
 |---|---|---|---|
-| 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. |
+| 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. **RAN 2026-08-19 — every clause held: §14.8.** |
 | 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. **RAN 2026-08-19 — prediction B, exactly: §14.7.** |
 
 ## 14.6 Re-derived blind on build 38833, joined to the container family, and named (added 2026-08-19)
@@ -1076,6 +1076,43 @@ is the only reader of `+0x10`. And the tooltip footer *"(Attrib: Tactics)"* conf
 The source-entry `+0x04` (opcode 63's same wire slot) shares the descriptor and the
 record offset; its rendering surface (the upkeep row) was not probed, so the rank
 reading extends there as RECONSTRUCTION by symmetry, not as a measurement.
+
+## 14.8 The `buff_side` probe ran: two lists, two UI surfaces, one buffId — every clause of the prediction held (2026-08-19)
+
+**MEASURED, caged loopback, capture `20260819T235007`.** §14.5 row 7 as specced: `0x41`
+BuffTargetAdd (source and target both the player, buffId 4), then `0x3F` BuffSourceAdd
+with the same buffId, then `0x40` SourceRemove, then `0x44` TargetRemove. Read from the
+screenshots by controlled window-diffs — the first naive diff hit the zone-text fade
+("Ascalon City / Outpost" dissolves over the first ~10 s, exactly across the arm
+boundary) and was redone between two post-fade windows, which is the
+aggregate-diffs-hide-artifacts lesson doing its job.
+
+| state | effect slot (top-left) | upkeep monitor (above the energy bar) |
+|---|---|---|
+| `0x41` only | icon, **no countdown bar** | — |
+| + `0x3F` same buffId | unchanged (2,687-px signature stable) | **the skill's icon appears**, framed, ~(1120, 880) |
+| `0x40` | **icon stays** (through two more frames) | **icon goes** |
+| `0x44` | icon goes | — |
+
+> **One buff, filed under two agents, as two records with independent lifecycles —
+> confirmed on the screen.** The TARGET list draws the effects monitor; the SOURCE list
+> draws the **maintained-enchantment upkeep monitor above the energy bar**; removing
+> either leaves the other, and the join key is the buffId.
+
+Three sharpenings that came with it:
+
+- **The upkeep monitor renders from the source list ALONE.** No `0x0093` was sent in
+  this run, so whatever the `+0x5BC` table (pvpui §31.3) feeds GmEffect, the upkeep
+  icon's *presence* is not gated on it — a measured subtraction from that section's
+  RECONSTRUCTION.
+- **The countdown bar under an effect icon is the record's `+0x10` duration reader** —
+  now isolated from both sides: `0x41`'s `fldz`-hardcoded 0.0 draws **no bar** (this
+  run), `0x42`'s 30.0 draws a **depleting bar** (both §14.7 runs), and §14.7 proved the
+  tooltip's "(N seconds.)" ignores `+0x10` entirely. One field, one reader, and it is
+  not the one the tooltip uses.
+- §14.5's "a maintained enchantment costs TWO messages, and dropping it costs two more"
+  is now observed rather than architectural: each message moved exactly one of the two
+  indicators, all four transitions on camera.
 
 ---
 
