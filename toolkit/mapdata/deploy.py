@@ -27,10 +27,12 @@ WHAT IT DOES, in order, refusing rather than continuing at each step:
      now lives.
   4. VERIFY, offline and before any archive is touched: the map round-trips,
      the seed stands on walkable ground, the spawn lands in exactly ONE
-     trapezoid of the mesh we authored, and the whole file fits the row's
-     reservation.
+     trapezoid of the mesh we authored, and the file fits the row's reservation
+     -- judged on the bytes that will actually be STORED, which since
+     2026-08-20 are compressed ones.
   5. INSTALL (`--install`).  Resolve the row BY FILE ID, write the map into the
-     Stripped partner, arm the Bloated head to zero length so the client must
+     Stripped partner as a compression-8 stream (`--stored-install` for the old
+     uncompressed shape), arm the Bloated head to zero length so the client must
      recompile. Journalled; refuses `vault/dat_study` like every other writer.
   6. LAUNCH (`--launch`).  The harness, pointed at the area's own map id --
      which is a thing worth writing down, because a harness PASS means "the
@@ -56,10 +58,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
-from archive import Archive, file_id_table  # noqa: E402
+from archive import (Archive, file_id_table,  # noqa: E402
+                     COMPRESSION_HUFFMAN, COMPRESSION_STORED)
 import content as content_mod  # noqa: E402
 import datcheck  # noqa: E402  -- the launch-side archive gate
 import envchunk  # noqa: E402
+import gwenc  # noqa: E402  -- the compression-8 encoder
 import mapchunks  # noqa: E402
 import mapexport  # noqa: E402
 import mapfile as mfile  # noqa: E402
@@ -346,9 +350,21 @@ def assemble(area, heights, donor, dim, verbose=True):
 
 # --------------------------------------------------------------- verify
 
-def verify(report, area, heights, dim, reservation=None):
-    """Refuse before the archive is touched. Returns a list of finding strings."""
+def verify(report, area, heights, dim, reservation=None, install_size=None,
+           compression=COMPRESSION_STORED):
+    """Refuse before the archive is touched. Returns a list of finding strings.
+
+    `install_size` is the length of the bytes that will actually OCCUPY the row
+    -- the compressed stream, unless `--stored-install`. It defaults to the
+    blob's own length so a caller that has not compressed yet still gets the old
+    preview. `compression` is carried only so the note can NAME which of the two
+    sizes it judged: a preview that says "fits" without saying "fits as what" is
+    the kind of line a later reader assumes the wrong meaning of, and the two
+    numbers differ by 7.7x on a 96x96 map.
+    """
     notes = []
+    size = len(report.blob) if install_size is None else install_size
+    how = "compression 8" if compression == COMPRESSION_HUFFMAN else "stored"
     back = mfile.MapFile.decode(report.blob)
 
     trn = stx.StrippedTerrain.decode(back.find(sb.TERRAIN).payload())
@@ -375,13 +391,19 @@ def verify(report, area, heights, dim, reservation=None):
     # to be fatal because `datwrite` is the only writer that fits in place. The
     # install path relocates instead when it must, so size selects a VERB rather
     # than ending the run.
+    #
+    # AND THE SIZE IT JUDGES IS THE STORED ONE. This used to read len(report.blob)
+    # unconditionally, which was the same number the row would hold; it is not any
+    # more, and a preview computed on the plaintext would disagree with the verb
+    # the install then picks -- exactly the "the plan said one thing and the run
+    # did another" shape the readback below exists to catch after the fact.
     if reservation is None:
-        notes.append(f"{len(report.blob)} B")
-    elif len(report.blob) <= reservation:
-        notes.append(f"{len(report.blob)} B fits the {reservation} B "
+        notes.append(f"{size} B ({how})")
+    elif size <= reservation:
+        notes.append(f"{size} B ({how}) fits the {reservation} B "
                      f"reservation -- replace in place")
     else:
-        notes.append(f"{len(report.blob)} B exceeds the {reservation} B "
+        notes.append(f"{size} B ({how}) exceeds the {reservation} B "
                      f"reservation -- install will RELOCATE the row")
     notes.append(f"{report.generated} B generated, {report.borrowed} B borrowed "
                  f"({100.0 * report.generated / max(1, len(report.blob)):.2f}% ours)")
@@ -389,6 +411,153 @@ def verify(report, area, heights, dim, reservation=None):
 
 
 # -------------------------------------------------------------- install
+
+def install_bytes(blob, stored=False):
+    """The bytes that will actually OCCUPY the row. -> (stream, code, note).
+
+    RETAIL'S OWN STRIPPED PARTNERS ARE COMPRESSION 8. Ours were stored, and that
+    was the deviation rather than the shape -- readable (FINDINGS 35-58 are all
+    on stored partners) but not what the client is shipped. It was also the
+    ceiling: `datwrite --replace` fits a payload into the row's existing
+    whole-block reservation or refuses, so an authored map had to be smaller
+    UNCOMPRESSED than whatever ArenaNet had compressed into the same row. That
+    is what capped every map this toolkit built at 32x32.
+
+    THE GAIN IS MEASURED, EVERY RUN, AND NEVER ASSUMED. It is not a constant of
+    the format: only tag 1 of the terrain chunk is entropy-coded, and the rest of
+    an authored map -- tile indices, the bit field, the two tables, props, path
+    and both deps chunks -- is raw and, on a generated shape, extremely
+    repetitive. MEASURED on `gen_plaza` against build 38797's donors, 2026-08-20:
+
+        32x32   3,941 B -> 1,316 B   (33.4%)
+        64x64  10,654 B -> 2,012 B   (18.9%)
+        96x96  21,786 B -> 2,828 B   (13.0%)
+
+    against map 143's 4,608 B partner reservation -- so 96x96 now REPLACES in
+    place where 32x32 was previously the largest that fit at all. Those are
+    figures for one generator on one donor, which is why the note is printed
+    rather than the numbers being relied upon.
+
+    `gwenc.encode` keeps its `verify=True` default: it round-trips the stream
+    through `gwdat.decompress` and raises before returning if the result is not
+    the input. That is the same "refuse before the archive is touched" the whole
+    command is built on, and the failure it catches is silent -- a stream one
+    word short decodes SHORT rather than raising, and every checksum an archive
+    applies is over the stored bytes.
+    """
+    if stored:
+        return blob, COMPRESSION_STORED, (
+            f"stored install: {len(blob)} B uncompressed, no gwenc -- the shape "
+            f"every map this command installed before 2026-08-20")
+    stream = gwenc.encode(blob)
+    return stream, COMPRESSION_HUFFMAN, (
+        f"compressed install: {len(blob)} B authored -> {len(stream)} B "
+        f"compression 8 ({100.0 * len(stream) / len(blob):.1f}% of stored, "
+        f"{len(blob) - len(stream)} B saved)")
+
+
+def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
+                    reservation, tag):
+    """Put `stream` in the Stripped partner row and PROVE the row holds it.
+
+    `out` is the file already holding `plain`, and `plain` is the payload a
+    READER must get back. That file is the `--expect` both writers demand for a
+    compression-8 write, and it is passed on the stored arm too: for a stored row
+    the bytes ARE the payload, so declaring them is a statement rather than an
+    override -- `datwrite.declaration_fault` consults the decode either way, and
+    C-6 (a green archive holding an unreadable file) is reachable through both.
+
+    REPLACE IF IT FITS, RELOCATE IF IT DOES NOT, and the size that decides is the
+    one the row will HOLD -- `len(stream)`, never `len(plain)`. This comment used
+    to say `datwrite` "writes UNCOMPRESSED and
+    refuses to grow a reservation -- correctly, since its invariant is same row,
+    same offset, same length -- so an authored map only fits where it is smaller
+    than what ArenaNet compressed into that row. That is what capped every map
+    this toolkit built at 32x32." Half of that stands: `replace` still never
+    relocates, and the reservation is still the row's own whole 512-byte blocks.
+    What is gone is the asymmetry -- we compress now too, so the comparison is
+    between like and like.
+
+    NOT GROWN BACK, and this is the case the next change is about. `replace`
+    writes the size field, so a compressed install SHRINKS the row's reservation
+    (map 143's partner: 4,608 B -> 1,536 B after a 1,316 B plaza). The next,
+    larger authored map is then past a ceiling the row's own freed blocks sit
+    behind, and this function relocates rather than growing in place.
+    `datwrite`'s `grow_to` is exactly the flag for it and is deliberately NOT
+    wired here: it is a separate change with its own claimant/EOF/withheld-run
+    gate, and folding it into this one would make a failed install ambiguous
+    between the two.
+
+    Returns the verb that ran: "replace" or "relocate".
+    """
+    here = os.path.dirname(out)
+    if compression == COMPRESSION_STORED:
+        # ONE FILE, deliberately: --data and --expect naming the same bytes is
+        # the whole content of "stored" and keeps this arm byte-for-byte what
+        # the command wrote before --stored-install existed.
+        data_path = out
+    else:
+        data_path = os.path.join(here, f"{tag}.c8.bin")
+        with open(data_path, "wb") as fh:
+            fh.write(stream)
+        print(f"  wrote {data_path}")
+
+    if len(stream) <= reservation:
+        verb = "replace"
+        print(f"  {len(stream)} B fits the {reservation} B reservation "
+              f"-- replacing in place")
+        argv = [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
+                "--replace", str(partner_row), "--data", data_path,
+                "--compression", str(compression), "--expect", out,
+                "--journal", os.path.join(here, f"{tag}_replace.json"),
+                "--verify"]
+    else:
+        verb = "relocate"
+        print(f"  {len(stream)} B does NOT fit the {reservation} B "
+              f"reservation -- RELOCATING the row")
+        # NO --check-overlaps here: it is a READ-ONLY verb that returns
+        # before any move, so passing it got rc 0 with nothing written and
+        # this function reported "installed". datmove runs the overlap
+        # check itself after a real move.
+        argv = [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
+                "--row", str(partner_row), "--data", data_path, "--move",
+                "--confirm", "--compression", str(compression),
+                "--expect", out,
+                "--journal", os.path.join(here, f"{tag}_move.json")]
+    rc = subprocess.run(argv, text=True).returncode
+    if rc != 0:
+        raise Refused(f"the archive writer refused (rc {rc})")
+
+    # AN EXIT CODE IS NOT EVIDENCE. Read the row back and compare. This
+    # exists because rc 0 above once meant "your flags selected a different
+    # verb and nothing happened", and the run went on to arm the head and
+    # print success over an archive that still held ArenaNet's own map.
+    #
+    # `Archive.read` DECOMPRESSES, so this compares what a reader gets back
+    # against what we authored -- which is the check that got stronger rather
+    # than weaker when the row stopped being stored. The compression code is
+    # asked separately, because "the payload is right" and "the row is marked
+    # the way retail marks it" are two claims and a stored write that silently
+    # ignored our flag would pass the first.
+    with Archive(dat) as ar:
+        partner = mapchunks.MapIndex(ar).partner(
+            next(e for e in ar.entries if e.index == head_row))
+        code = partner.compression
+        got = ar.read(partner)
+    if got != plain:
+        raise Refused(
+            f"the row does not hold what we wrote: {len(got)} B back "
+            f"against {len(plain)} B written. The writer returned "
+            f"success and the archive disagrees, so the archive wins")
+    if code != compression:
+        raise Refused(
+            f"the row reads back correctly but is marked compression {code}, "
+            f"not the {compression} this install asked for. The bytes and the "
+            f"code are two declarations and only one of them was checked")
+    print(f"  verified: the row reads back the {len(got)} B we wrote, "
+          f"stored as compression {code} in {partner.size} B")
+    return verb
+
 
 def readback(dat, file_id, staged_blob, area):
     """What the client's compiler actually produced, against what we authored.
@@ -619,6 +788,13 @@ def main(argv=None):
     ap.add_argument("--out", help="write the assembled map here")
     ap.add_argument("--install", action="store_true",
                     help="write the map and arm the re-bloat (needs --dat)")
+    ap.add_argument("--stored-install", action="store_true",
+                    help="write the Stripped partner UNCOMPRESSED, as every run "
+                         "of this command before 2026-08-20 did. The default is "
+                         "compression 8 because that is the shape retail's own "
+                         "Stripped partners have; this is the CONTROL arm for "
+                         "the client run that settles whether the map loader "
+                         "takes ours, and the escape hatch if it does not")
     ap.add_argument("--launch", action="store_true",
                     help="run the harness at the area's own map id")
     ap.add_argument("--serve", action="store_true",
@@ -683,9 +859,19 @@ def main(argv=None):
     # 3. assemble
     report = assemble(area, heights, donor, dim)
 
+    # 3b. compress. Run on EVERY invocation, install or not: the ratio is a
+    # measurement of the map that was just authored, it costs 0.04 s on the
+    # largest area in content/, and it is the number the size preview below and
+    # the verb the install picks are both computed from. A build-only run that
+    # printed the stored size alone would be reporting a number no writer uses.
+    stream, compression, size_note = install_bytes(
+        report.blob, stored=args.stored_install)
+    print(f"  {size_note}")
+
     # 4. verify
     for note in verify(report, area, heights, dim,
-                       reservation=rows[2] if rows else None):
+                       reservation=rows[2] if rows else None,
+                       install_size=len(stream), compression=compression):
         print(f"  {note}")
 
     out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
@@ -702,48 +888,9 @@ def main(argv=None):
         head_row, partner_row, reservation = rows
         print(f"\ninstalling into {dat}: head {head_row}, partner {partner_row}")
         here = os.path.dirname(out)
-        # REPLACE if it fits, RELOCATE if it does not. `datwrite` writes
-        # UNCOMPRESSED and refuses to grow a reservation -- correctly, since its
-        # invariant is same row, same offset, same length -- so an authored map
-        # only fits where it is smaller than what ArenaNet compressed into that
-        # row. That is what capped every map this toolkit built at 32x32; the
-        # terrain codec's own cap is 16,777,216 cells, nowhere near it.
-        if len(report.blob) <= reservation:
-            print(f"  {len(report.blob)} B fits the {reservation} B "
-                  f"reservation -- replacing in place")
-            rc = subprocess.run(
-                [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
-                 "--replace", str(partner_row), "--data", out,
-                 "--journal", os.path.join(here, f"{args.area}_replace.json"),
-                 "--verify"], text=True).returncode
-        else:
-            print(f"  {len(report.blob)} B does NOT fit the {reservation} B "
-                  f"reservation -- RELOCATING the row")
-            # NO --check-overlaps here: it is a READ-ONLY verb that returns
-            # before any move, so passing it got rc 0 with nothing written and
-            # this function reported "installed". datmove runs the overlap
-            # check itself after a real move.
-            rc = subprocess.run(
-                [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
-                 "--row", str(partner_row), "--data", out, "--move", "--confirm",
-                 "--journal", os.path.join(here, f"{args.area}_move.json")],
-                text=True).returncode
-        if rc != 0:
-            raise Refused(f"the archive writer refused (rc {rc})")
-
-        # AN EXIT CODE IS NOT EVIDENCE. Read the row back and compare. This
-        # exists because rc 0 above once meant "your flags selected a different
-        # verb and nothing happened", and the run went on to arm the head and
-        # print success over an archive that still held ArenaNet's own map.
-        with Archive(dat) as ar:
-            got = ar.read(mapchunks.MapIndex(ar).partner(
-                next(e for e in ar.entries if e.index == head_row)))
-        if got != report.blob:
-            raise Refused(
-                f"the row does not hold what we wrote: {len(got)} B back "
-                f"against {len(report.blob)} B written. The writer returned "
-                f"success and the archive disagrees, so the archive wins")
-        print(f"  verified: the row reads back the {len(got)} B we wrote")
+        verb = install_partner(dat, out, report.blob, stream, compression,
+                               head_row, partner_row, reservation, args.area)
+        print(f"  the partner row was written by {verb}")
         # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
         # zero-length head -- rightly, since it cannot record a baseline mesh
         # from a row that has none, and a second arm would overwrite the first

@@ -1788,8 +1788,9 @@ Every one of these, in the order they were written:
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
   a module with its own test -- so this file checks only what is true of the
-  COMPOSITION, and each of its three sections is a defect the first runs of the
-  command actually had. **The two kinds of borrowing are different**: structural
+  COMPOSITION, and each of its sections is either a defect the first runs of the
+  command actually had or, for sections 4-7, a claim about the bytes the row
+  will hold. **The two kinds of borrowing are different**: structural
   constants (Header, Zones) must come from a map shaped like ours, the biome
   (textures, sun, env, sound) from wherever you like, and taking both from
   Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
@@ -1800,8 +1801,37 @@ Every one of these, in the order they were written:
   first version asked whether `main()` contained any `join(dirname(dat), ...)`,
   which it does TWICE because the output path defaults that way, so it returned
   True against a sabotaged source and could not fail. The test now runs that
-  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
-  vault and score 10 against a floor of 14),
+  exact sabotage and requires the answer to flip. **The row holds COMPRESSED
+  bytes now, and the fit is judged on those** (2026-08-20, WORLDMAPS-W1):
+  `install_bytes` runs `gwenc.encode` after `assemble` and prints both sizes and
+  the ratio every run, and `install_partner` threads `--compression 8 --expect
+  <plain>` through BOTH writers -- `datwrite --replace` and `datmove --move` --
+  because compression only RAISES the ceiling and a compressed replace beside a
+  stored relocate would put the deviation back exactly where a bigger map lands.
+  Section 7 runs five real installs against a hand-laid archive holding one map
+  chain whose reservation the FILE chooses, so "compressed fits where stored did
+  not" is a fact about the rule rather than an accident of one retail map: 9,051
+  B of authored 64x64 terrain compresses to 1,148 B, and against a 1,536-byte
+  reservation it REPLACES where the old rule relocated. The other four keep that
+  one honest -- the row is marked 8 and `gwdat` decodes it back to the exact
+  authored blob, the HEAD row is untouched, a map past its reservation even
+  compressed still RELOCATES (compression does not obviate `datmove`),
+  `--stored-install` writes the authored bytes verbatim marked 0 as the control
+  arm, and the SABOTAGE flips one byte of the declared `--expect` payload and
+  requires the writer to refuse with the archive byte-identical afterwards --
+  which is the only refutation that exists, since the entry crc is over the
+  STORED bytes and `datcheck` has no notion of a compression code. The row is
+  read back by a walker written out of `int.from_bytes`, sharing no code with
+  `archive.py`. Section 4 measures the gain per size (20.2% / 12.7% / 9.7% at
+  32/64/96) and bounds it only as "strictly smaller", because a pinned number
+  would go red on an encoder change that was an improvement. Section 5's AST
+  pins MOVED with the dispatch rather than being weakened: `main()` must CALL
+  `install_partner`, `install_partner` must reach both writers, still without
+  `--check-overlaps` and now with `--compression` AND `--expect` in both
+  argument lists. Sections 0-1 and 3-7 need no vault and score 52 against a
+  floor of 56, so the floor still does what it was for -- a vault-less run exits
+  1. (The line this replaces said "score 10 against a floor of 14", stale by two
+  floor changes)),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
