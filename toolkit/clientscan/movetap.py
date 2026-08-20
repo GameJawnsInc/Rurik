@@ -810,8 +810,21 @@ def _selftest_fence_verdict():
          {"shut:apply": 700, "unread:record-unreadable": 300}, 4, 1),
         ("a fence flipping near the sample rate refuses",
          {"shut:apply": 500, "test-runs": 500}, 260, 1),
+        # THE REGRESSION CASE, and it is why the bar changed on 2026-08-20.
+        # A 15 ms open window against a 185 ms shut one at ~10 Hz is about ten
+        # TRUE transitions per second -- nothing a 12 Hz reader can resolve --
+        # and it lands at a 7.5% open share with phi = 0.138. The old
+        # `flips * 4 >= n` bar needed 0.25 and therefore PASSED it, printing
+        # "not aliased" over a number that was pure sampling phase. Simulated
+        # A = 0.998. If this case ever returns 0 again the instrument is lying
+        # in exactly the band H1 lives in.
+        ("a SKEWED fast fence refuses too -- the old bar could not see this",
+         {"shut:apply": 925, "test-runs": 75}, 138, 1),
+        ("a slow fence at the same skewed share still passes",
+         {"shut:apply": 925, "test-runs": 75}, 7, 0),
         ("just under both bars still passes",
-         {"shut:apply": 760, "unread:record-unreadable": 240}, 240, 0),
+         {"shut:apply": 700, "test-runs": 60, "unread:record-unreadable": 240},
+         6, 0),
     ]
     bad = 0
     for what, reach, flips, want in cases:
@@ -1041,17 +1054,46 @@ def fence_verdict(reach, flips, n, rate):
     # that changes on a large share of consecutive samples is changing at or
     # above the reader's own rate, which polling cannot resolve at all -- the
     # counts would then be an artifact of WHEN we happened to look.
-    if n > 1 and flips * 4 >= n:
-        print(f"  REFUSED: {flips} transitions over {n} samples at "
-              f"{rate:.1f} Hz. The fence is changing at or above this reader's "
-              f"own rate, so the shares above are aliased and mean nothing. "
-              f"THIS is the outcome that earns the hook: an int3 at 0x00606002 "
-              f"on the trnblock.c pattern counts every evaluation instead of "
-              f"sampling them (toolkit/clientscan/trnhook/).")
+    # `flips * 4 >= n` was the bar here until 2026-08-20 and it COULD NOT FIRE
+    # where the hypothesis lives. Under full aliasing consecutive samples are
+    # near-independent Bernoulli(p), so E[flips]/pairs -> 2p(1-p), whose maximum
+    # is 0.5 -- a duty cycle outside [14.6%, 85.4%] can never reach a raw 0.25 at
+    # ANY flip rate. Simulated at 10.4 Hz over 45 s with exponential dwells: a
+    # 15 ms open window against a 185 ms shut one is ~10 true transitions/s,
+    # utterly unresolvable, and prints phi = 0.138 -- under the old bar it read
+    # "not aliased" and the run would have reported a 7.5%/92.5% split as fact.
+    # That is the exact shape of H1's own worked example.
+    #
+    # So compare phi against what full aliasing WOULD produce at the observed
+    # duty cycle. A -> 1 means "indistinguishable from independent samples", i.e.
+    # aliased; A -> 0 means the state persists across many samples and the shares
+    # are real. Same simulation: 0.998 and 0.989 for the two skewed fast cases,
+    # 0.853 balanced-fast, against 0.037 and 0.050 for 5 s and 2 s dwells.
+    pairs = n - 1
+    p_open = (reach.get("test-runs", 0) + reach.get("world1:append", 0)) / n
+    denom = 2.0 * p_open * (1.0 - p_open)
+    alias = (flips / pairs) / denom if (pairs > 0 and denom > 0.0) else None
+    if alias is not None and alias >= 0.5:
+        print(f"  REFUSED: {flips} transition(s) over {pairs} usable pair(s) at "
+              f"{rate:.1f} Hz is {alias:.2f} of what INDEPENDENT samples would "
+              f"give at this {100.0 * p_open:.1f}% open share. The fence is "
+              f"changing at or above this reader's own rate, so the shares "
+              f"above are aliased and mean nothing. THIS is the outcome that "
+              f"earns the hook: an int3 at 0x00606002 on the trnblock.c pattern "
+              f"counts every evaluation instead of sampling them "
+              f"(toolkit/clientscan/trnhook/).")
         return 1
-    print(f"  {flips} transition(s) over {n} samples at {rate:.1f} Hz -- the "
-          f"fence changes far below the sample rate, so the shares above are "
-          f"not aliased.")
+    if alias is None:
+        print(f"  {flips} transition(s) over {pairs} usable pair(s) at "
+              f"{rate:.1f} Hz. The fence never changed state, so there is no "
+              f"aliasing ratio to compute -- a single-state run is reported as "
+              f"one, NOT as a resolved measurement.")
+    else:
+        print(f"  {flips} transition(s) over {pairs} usable pair(s) at "
+              f"{rate:.1f} Hz = {alias:.2f} of the independent-sample "
+              f"expectation at a {100.0 * p_open:.1f}% open share -- the fence "
+              f"persists across many samples, so the shares above are not "
+              f"aliased.")
     print("  Pair this file with its gamesrv capture: "
           "python toolkit/clientscan/movesync.py")
     return 0
