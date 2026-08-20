@@ -2593,6 +2593,9 @@ takes TWO gates to catch them (measured: `looks_compressed` stubbed alone, 1 red
    no real payload produces (the phantom pairs) and E3's unwitnessed rider.
 2. **The FA1 full-set write-back** (§17.1): the payload must be re-authored; the encoder,
    the write verbs and the budget arithmetic all exist now.
+   **STAGED 2026-08-20 as A10 — §19.** The U7-era edit turned out to be structurally a
+   null; the re-authored payload retimes the PROVEN clock instead, and the stage is
+   built, blind-re-derived and byte-reproducible. The launch is the owner's.
 3. **A5** stays unrun (stored-size ceiling; §5 D), unchanged by this rung.
 4. The renamed-id disagreement in `datalloc` (§17.5), the `_grow_gate` snapshot semantics
    (§17.3), and gap E (accepted, §17.2).
@@ -2741,6 +2744,103 @@ allocated") is superseded in `datalloc.py`'s docstring and TESTS.md's entry, sco
 `vault/run/2026-07-29_221c13772c7a/` (verified clean by the sweep above; the owner has not
 run `--retail`). `a9stage.py --retail --yes` restores the baseline; the staged copy under
 `vault/exports/archivewrite/a9/` stays rebuildable-by-hash either way.
+
+---
+
+## 19. A10 is STAGED — 2026-08-20. The FA1 write-back, re-authored onto the PROVEN clock; the launch is the owner's
+
+**The rung.** §17.8 item 2 asked for the U7-era "full animation set" write-back — the edit
+`datmove` refused pre-encoder (*"nothing fits… 953,856 B"*), whose payload never persisted.
+Script + runbook: `vault/research/archivewrite/a10stage.py` + `A10-RUN.md`; staged archive
+`vault/exports/archivewrite/a10/Gw.a10.dat`. **15 rows rewritten in place at compression 8,
+nothing allocated, nothing relocated, MFT untouched.**
+
+### 19.1 The U7-era edit was structurally a NULL, and that is the design's first finding
+
+`u7prep_hatcher.py --file-id 15018` would have scaled the **n3C key table** — 471 B of
+1,514,560, 0.031%. That table is not what the sampler reads: **the motion lives in
+`blk2C`'s 76,008 per-node channel key times (304,032 B), and the sequence clamp windows
+ride the SAME clock** — both max at exactly **22,883,332** on 15018, while the n3C table
+maxes at 580,000 and its binding to `start` was already refuted
+(`studies/anim/FINDINGS.md:316-318`, 181/21,535). So U7's shell-retime null was
+over-determined: it retimed a tag track. Also measured at population for the first time:
+**242/242** of the shell's records (and 237/237 of 15018's own — it carries its own FA8
+list) hold their `(start, end, u32_0F, f32_13)` verbatim in the file their selector names.
+Run 3's failure was breaking that one-sided; this design's whole shape is the fix.
+
+### 19.2 The edit — DESIGN B, and how it got that name
+
+**Scale ONLY the proven clock, ×4:** every `blk2C`/`blk48` channel key time in fourteen
+files (222949 dropped — its ×4 fit was +4 B, the knife edge §18.1 already recorded), and
+every sequence record's start/end **iff the file its selector names was retimed** — 234 of
+the shell's 242 (the 2 selector-0 records address the shell's own unscaled curves; the 6
+selector-14 point at untouched 222949), 231 of 15018's 237. **Everything else stays retail
+everywhere**: the n3C table, `u32_0F`, `f32_13`, the n40 sound events, n3E.
+
+Two rounds got it there, and both catches are worth the record:
+- **The build agent caught the ratified spec contradicting itself** (rule vs count on the
+  shell's windows) — and, bigger, that the recon's pinned 15018 number came from a variant
+  scaling only its 110 selector-0 windows, leaving **121 records with retail windows over
+  ×4 curves** in the file that carries the walk: exactly what the coupling invariant
+  forbids. It stopped, measured, adjudicated by the archive, and reproduced the spec's
+  pinned number to the byte as an anchor proving the divergence was the rule, not the
+  encoder.
+- **The first adversarial pass (Design A: n3C/n40/n3E also ×4) was GREEN on everything
+  asked — and its F4 found what the design missed**: `u32_0F` is statistically a clock
+  into the file's own n3C table (12/12 membership on both FA8 carriers, ~0.01% null), so
+  scaling the table while leaving the lookups half-moves a second coupling; and chasing it
+  shows no partial scaling preserves both measured couplings. **Design B moves neither
+  half.** The membership statistic became a gate with a control that drops 12→1 against a
+  ×4 table — Design A's own shipped state, now provably refusable.
+
+### 19.3 The verification — blind re-derivation, with a discriminating control
+
+The skeptic implemented the edit from the ruling prose alone, before reading the builder's
+code: **15/15 staged rows byte-identical to its independent derivation**, with a Design-A
+control alongside that goes RED on 11 of 15 files — the stage provably encodes Design B.
+Also: couplings 242/242 + 237/237 on both match rules with controls that collapse to
+≤9/242; **260,240 channel values compared, 0 changed — only clocks moved**, every ratio
+exactly 4.0 (shell's own 970 channel times and 222949 at 1.0); whole-4.2 GB diff with
+**zero unowned bytes** (the one 4-byte stray resolved to the MFT self-crc the journal
+itself announces); envelope clean on all 349 tables; sweep equal to retail's 177,319/0;
+**two isolated rebuilds hash-identical to the shipped artifact**; ×16 double-apply
+impossible from the code path (the build only ever reads retail, crc-pinned). Fit
+highlights (Design B, measured): 15018 **1,016,720 B** (+12,912 slack), 87333
+**1,148,528 B** (+13,200), the shell **20,092 B** (+388) — full per-row table in
+`A10-RUN.md` §3 and `a10-fingerprints.json`; every row inside its own reservation, every
+reservation exactly the gap to the next row, 0 overshoots.
+
+### 19.4 Predictions, pre-registered (verbatim in the docstring) — BOTH branches are findings
+
+**P1**: with the curve clock and the windows ×4 together, the creature animates at **one
+quarter speed** — the readout cues in shape-likeness order: **foot slide** (server ground
+speed unchanged, cycle ×4), attack swing vs the damage tick, cast vs the server's cast
+lifecycle. **P2**: nothing changes → playback rate does not live in the linked key tables
+or the windows — sharpening `studies/anim`'s open timing question, and NOT dismissible as
+"file not read" (run 7 proved this channel reaches the screen). **P3** ordered failures:
+N2 first (×4 puts 15018 at 915.3 s, 3.09× beyond retail's 296.0 s corpus ceiling — the
+envelope risk, named, not hidden); unscaled n40/n3C events misaligning is cosmetic and not
+the readout; truncate-or-freeze → re-check the coupling gates. **N6**: no within-frame
+control exists (both selector-0 records are empty spans), so the owner records a BASELINE
+clip of the provoked walk before deploying — and **video, not stills**. Corrections banked
+en route: the blast radius is **28 other shells** linking 15018 (30 rows total over the
+retimed set, 252 FA8 carriers as the positive control), not the 7 a row-band scan showed;
+the recon's "34 of 44" membership denominator is not reproducible (34 of 48 by per-file
+distinct; the numerator is exact); and Design B is NOT uniformly smaller than Design A
+(66614/73940 +4 B each — encoders are not monotone; a pre-registered prediction refuted
+and kept).
+
+### 19.5 State, and the one operational flag
+
+The stage is BUILT and verified; **`--deploy` has not run**. The active run-directory
+archive is currently retail-on-all-16-A10-rows (measured — NOT the A9 stage, despite what
+two documents briefly claimed; `baseline_premise()` now measures this at deploy time
+instead of trusting prose). **H8 is live**: a client ran against the shared run directory
+at 11:44 on 2026-08-20 from outside this session — confirm nobody is mid-run before
+deploying. Procedure: baseline clip → `a10stage.py --deploy --yes` (client closed) →
+`python toolkit/harness/session.py --enemy --warn 0 --hold 420 --shots 10 --walk
+"zoom:-12 pitch:300 alt:3 shot:1 wait:4"` → video the walk → `--verify-after` →
+`--retail --yes` or leave deployed. Never click the crash dialog.
 
 ---
 
