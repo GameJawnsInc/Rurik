@@ -2,6 +2,8 @@
 
     python toolkit/clientscan/itemmods.py --summary
     python toolkit/clientscan/itemmods.py --decode 0xA3C81900
+    python toolkit/clientscan/itemmods.py --readers
+    python toolkit/clientscan/itemmods.py --reads 633
     python toolkit/clientscan/itemmods.py --emit-content vault/content/item_modifiers.toml
 
 THE HOLE THIS FILLS. Every item on the wire carries a list of 32-bit modifier
@@ -45,6 +47,15 @@ those ids. It emits the IDS, never the resolved English -- "commit the id,
 resolve the string at run time", the rule `mapbuild.py` already proves -- and
 `--summary` resolves a few through `textrec` for reading, which is measurement
 cited as evidence rather than a bulk dump.
+
+WHO READS WHAT, which is a different question from what renders. `ItemName.cpp`
+is the name and tooltip builder, and 21 of its 157 dispatch slots go to the
+walker's loop tail -- it draws nothing for them, on purpose. Eight of those 21
+are read somewhere else: `ItCliApi.cpp` names 633 with its own `cmp`, and its
+two by-argument accessors are asked for seven more. `--readers` maps all of it
+and prints the bound its own absences carry; `--reads N` answers for one
+identifier. That is how 633 was identified as the item's ATTRIBUTE REQUIREMENT
+(and 617 as read by nothing at all) -- studies/itemmods/FINDINGS.md sec 4.
 
 LOCATED STRUCTURALLY. The dispatch is found by its own instruction bytes, not
 by an address: build-specific VAs are not part of any file format and must not
@@ -288,6 +299,249 @@ def emit_content(vocab, at, build, exe, out_path) -> int:
     return len(vocab)
 
 
+# -------------------------------------------------------------- readers ----
+# `ItemName.cpp` is the NAME AND TOOLTIP builder, not every consumer of a
+# modifier. Twenty-one identifiers dispatch to the walker's own loop tail --
+# it renders nothing for them, deliberately -- and two of those are the
+# busiest in the wild. So "who else reads identifier N" is a real question,
+# and this section answers it exhaustively rather than by inspection.
+#
+# There are exactly two ways the image can name an identifier:
+#
+#   LITERAL   `and r32,0x3ff00000` then `cmp r32,<id << 20>` -- a reader that
+#             knows which one it wants. This is how `ItCliApi.cpp` reads 633
+#             and how `ItemName.cpp` special-cases 8, 542, 556, 572, ...
+#   PARAMETRIC  `shr eax,0x14 ; and eax,0x3ff ; cmp eax,edx` inside a helper
+#             that walks `[this+0x10]` to the 0xC0000000 terminator and takes
+#             the identifier as an ARGUMENT. The identifier then appears at
+#             the CALL SITE as a pushed immediate.
+#
+# Both are found by their own instruction bytes over the whole of .text, so
+# neither can desync, and an identifier absent from both is absent under a
+# stated bound rather than "nowhere" -- which is the distinction
+# studies/enemy lost when it reported a field as having no writer.
+
+# `shr eax,0x14 ; and eax,0x3ff ; cmp eax,edx`
+ACCESSOR = bytes.fromhex("c1e81425ff0300003bc2")
+# the identifier field masked in place: the tail of `and r32,0x3ff00000`
+IDMASK = bytes.fromhex("0000f03f")
+PROLOGUE = bytes.fromhex("558bec")            # push ebp ; mov ebp,esp
+TERMINATOR = 0xC0000000                       # the modifier array's end word
+# How far after the mask the naming `cmp` may be scheduled. Named because it
+# is exactly what an empty answer from `literal_readers` is bounded by.
+CMP_WINDOW = 16
+
+
+def _all(data, pat, lo, hi):
+    out, i = [], data.find(pat, lo, hi)
+    while i >= 0:
+        out.append(i)
+        i = data.find(pat, i + 1, hi)
+    return out
+
+
+def _cmp_imm32(data, off):
+    """The imm32 of a `cmp r32, imm32` at off, or None."""
+    if data[off] == 0x3D:                                  # cmp eax, imm32
+        return struct.unpack_from("<I", data, off + 1)[0]
+    if data[off] == 0x81 and 0xF8 <= data[off + 1] <= 0xFF:  # cmp r32, imm32
+        return struct.unpack_from("<I", data, off + 2)[0]
+    return None
+
+
+def literal_readers(img: Image):
+    """{identifier: [VA of the compare]} -- every site that names ONE id."""
+    raw, size, _sva = img.text()
+    d = img.data
+    starts = [(o, 5) for o in _all(d, bytes([0x25]) + IDMASK, raw, raw + size)]
+    for m in range(0xE0, 0xE8):
+        starts += [(o, 6) for o in
+                   _all(d, bytes([0x81, m]) + IDMASK, raw, raw + size)]
+    out, seen = {}, set()
+    for off, ln in sorted(starts):
+        for step in range(CMP_WINDOW):
+            p = off + ln + step
+            val = _cmp_imm32(d, p)
+            if val is None or val & 0xFFFFF or (val >> 20) > 0x3FF:
+                continue
+            if p in seen:
+                continue
+            seen.add(p)
+            out.setdefault(val >> 20, []).append(img.va_of(p))
+    return out
+
+
+def _call_index(img: Image):
+    """{target VA: [call site file offsets]} for every `call rel32` in .text."""
+    raw, size, _sva = img.text()
+    d = img.data
+    idx, end = {}, raw + size - 5
+    i = d.find(bytes([0xE8]), raw, end)
+    while i >= 0:
+        t = img.va_of(i) + 5 + struct.unpack_from("<i", d, i + 1)[0]
+        idx.setdefault(t, []).append(i)
+        i = d.find(bytes([0xE8]), i + 1, end)
+    return idx
+
+
+def _asked_identifier(img: Image, call_off):
+    """The identifier (and default) a call site pushes, or None.
+
+    Shape: `push <default> ; push <identifier> ; mov ecx,<reg> ; call`. When
+    the immediate is not there the site is reported with its raw bytes rather
+    than dropped, because a caller this cannot read is a hole in the census
+    and must be visible as one.
+    """
+    d = img.data
+    p = call_off
+    if d[p - 2] == 0x8B and 0xC8 <= d[p - 1] <= 0xCF:      # mov ecx, r32
+        p -= 2
+    if d[p - 5] != 0x68:
+        return None
+    ident = struct.unpack_from("<I", d, p - 4)[0]
+    default = None
+    if d[p - 7] == 0x6A:                                   # push imm8
+        default = d[p - 6]
+    elif d[p - 10] == 0x68:                                # push imm32
+        default = struct.unpack_from("<I", d, p - 9)[0]
+    return ident, default
+
+
+def parametric_readers(img: Image):
+    """The by-argument accessors and, per accessor, what each caller asks for.
+
+    [{'entry', 'sites', 'callers': [{'va', 'identifier', 'default'}],
+      'unreadable': [VA]}]
+    """
+    raw, size, _sva = img.text()
+    d = img.data
+    entries = {}
+    for o in _all(d, ACCESSOR, raw, raw + size):
+        j = d.rfind(PROLOGUE, o - 0x40, o)
+        if j < 0:
+            continue
+        entries.setdefault(img.va_of(j), []).append(img.va_of(o))
+    idx = _call_index(img)
+    out = []
+    for entry, sites in sorted(entries.items()):
+        callers, unreadable = [], []
+        for off in idx.get(entry, []):
+            got = _asked_identifier(img, off)
+            if got is None:
+                unreadable.append(img.va_of(off))
+            else:
+                callers.append({"va": img.va_of(off),
+                                "identifier": got[0], "default": got[1]})
+        out.append({"entry": entry, "sites": sites,
+                    "callers": callers, "unreadable": unreadable})
+    return out
+
+
+def loop_tail(img: Image, at, vocab):
+    """The dispatch slots that ARE the walker's loop tail: 'render nothing'.
+
+    Identified structurally: a handler that reaches a backward branch into the
+    few dozen bytes ahead of the dispatch anchor WITHOUT calling anything or
+    pushing an immediate on the way. Both halves matter. Reaching the branch
+    alone is not enough -- the last renderer in the chain FALLS THROUGH into
+    the tail, so on build 38797 identifier 526 (which pushes string 2387 and
+    calls TextApi eight bytes into its body) was reported inert by the first
+    version of this, and would have been published as "the client renders
+    nothing for it" when the client plainly does.
+
+    The scan is byte-level and assumes no instruction boundaries, so a 0xE8 or
+    0x68 appearing inside an operand can disqualify a real tail. That error
+    direction is deliberate: it shows up as "no loop tail found", which is
+    visible, rather than as an identifier silently added to the inert list.
+
+    Returns the list rather than one address so that "more than one qualified"
+    stays visible instead of being silently resolved.
+    """
+    d = img.data
+    anchor = at["anchor_va"]
+    tails = []
+    for h in {r["handler"] for r in vocab.values()}:
+        o = img.off(h)
+        if o is None:
+            continue
+        for step in range(0x60):
+            p = o + step
+            if d[p] in (0xE8, 0x68):          # a call or a pushed immediate:
+                break                          # this body renders something
+            if d[p] == 0x0F and d[p + 1] == 0x85:
+                t = img.va_of(p) + 6 + struct.unpack_from("<i", d, p + 2)[0]
+            elif d[p] == 0x75:
+                t = img.va_of(p) + 2 + struct.unpack_from("<b", d, p + 1)[0]
+            else:
+                continue
+            if anchor - 0x80 <= t < anchor:
+                tails.append(h)
+                break
+    return sorted(set(tails))
+
+
+def readers(img: Image):
+    """Who reads which item-modifier identifier, outside the tooltip walker."""
+    at, vocab = vocabulary(img)
+    tails = loop_tail(img, at, vocab)
+    inert = sorted(i for i, r in vocab.items() if r["handler"] in tails)
+    lit = literal_readers(img)
+    par = parametric_readers(img)
+    asked = {}
+    for acc in par:
+        for c in acc["callers"]:
+            asked.setdefault(c["identifier"], []).append(
+                {"via": acc["entry"], "at": c["va"], "default": c["default"]})
+    return {"anchor": at, "vocab": vocab, "loop_tails": tails, "inert": inert,
+            "literal": lit, "accessors": par, "asked": asked}
+
+
+def print_readers(img: Image, only=None):
+    r = readers(img)
+    tails = ", ".join(f"{t:#010x}" for t in r["loop_tails"])
+    print(f"dispatch anchor {r['anchor']['anchor_va']:#010x}; "
+          f"walker loop tail {tails}")
+    print(f"{len(r['inert'])} of {len(r['vocab'])} identifiers dispatch to the "
+          f"loop tail -- ItemName renders NOTHING for them:")
+    print(f"  {r['inert']}")
+    print("\nby-argument accessors (walk [this+0x10] to the "
+          f"{TERMINATOR:#010x} terminator, identifier from the caller):")
+    for acc in r["accessors"]:
+        print(f"  {acc['entry']:#010x}  compare at "
+              f"{', '.join(hex(s) for s in acc['sites'])}  "
+              f"{len(acc['callers'])} caller(s)"
+              + (f", {len(acc['unreadable'])} UNREADABLE "
+                 f"{[hex(u) for u in acc['unreadable']]}"
+                 if acc["unreadable"] else ""))
+        for c in sorted(acc["callers"], key=lambda x: x["identifier"]):
+            print(f"      id {c['identifier']:>4}  asked at {c['va']:#010x}  "
+                  f"default {c['default']}")
+    want = sorted(set(r["literal"]) | set(r["asked"])) if only is None else only
+    print("\nwho reads which identifier:")
+    for ident in want:
+        rec = r["vocab"].get(ident)
+        rendered = ("INERT (loop tail)" if rec and rec["handler"] in r["loop_tails"]
+                    else f"renders {rec['text_ids']}" if rec else "NOT DISPATCHED")
+        lit = r["literal"].get(ident, [])
+        ask = r["asked"].get(ident, [])
+        print(f"  id {ident:>4}  ItemName: {rendered}")
+        for va in lit:
+            print(f"           named by a literal compare at {va:#010x}")
+        for a in ask:
+            print(f"           asked of accessor {a['via']:#010x} at "
+                  f"{a['at']:#010x} (default {a['default']})")
+        if not lit and not ask:
+            print("           NO reader: named by no literal compare in "
+                  ".text and asked of no accessor")
+    print("\nNOT SEARCHED, and an empty answer above means only this much: an "
+          "identifier reached through a register or a table rather than an "
+          "immediate; a compare scheduled more than "
+          f"{CMP_WINDOW} bytes after its mask; an accessor whose body differs "
+          "from the two byte patterns above; and anything the SERVER does "
+          "with the same word.")
+    return r
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -299,6 +553,12 @@ def main(argv=None) -> int:
                     help="decode one modifier word, e.g. 0xA3C81900")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--emit-content", metavar="PATH", default=None)
+    ap.add_argument("--readers", action="store_true",
+                    help="who reads which identifier OUTSIDE the tooltip "
+                         "walker: literal compares, by-argument accessors, "
+                         "and the identifiers ItemName renders nothing for")
+    ap.add_argument("--reads", metavar="ID", default=None,
+                    help="answer --readers for one identifier only")
     ap.add_argument("--all-builds", action="store_true")
     a = ap.parse_args(argv)
 
@@ -322,6 +582,11 @@ def main(argv=None) -> int:
         except NotFound as exc:
             print(f"REFUSED: {exc}", file=sys.stderr)
             rc = 2
+            continue
+
+        if a.readers or a.reads is not None:
+            only = [int(a.reads, 0)] if a.reads is not None else None
+            print_readers(img, only=only)
             continue
 
         if a.decode:

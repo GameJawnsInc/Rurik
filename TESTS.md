@@ -3148,8 +3148,8 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
-  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode** — 12 checks,
-  floor 12). Every item on the wire carries a list of 32-bit modifier words, and
+  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, and who
+  reads a modifier** — 19 checks, floor 19). Every item on the wire carries a list of 32-bit modifier words, and
   `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
   rating, damage range and every "+15% while…" line live in them and nobody had
   decoded one. `itemmods.py` reads the format out of the client's own parser —
@@ -3171,8 +3171,26 @@ Every one of these, in the order they were written:
   reporting an empty vocabulary — which would read as "this build has no item
   modifiers", the shape of every silent-zero bug in this repo.
 
-  The floor is 12 because 14 was declared, 12 executed, and the ledger refused the
-  run — the guard doing its job on the file that documents it.
+  **§6 and §7 answer a different question: who reads a modifier the tooltip
+  renders NOTHING for.** `ItemName.cpp` sends 21 of its 157 dispatch slots to the
+  walker's loop tail, and the two busiest identifiers in the wild are among them.
+  §6 pins that count at 21 — it was 22 until the detector was fixed, because the
+  last renderer in the chain falls through into the tail, and identifier 526 would
+  have been published as "the client draws nothing for it" while it pushes string
+  2387 and calls TextApi. §6 then reports that **633 is read by two literal
+  compares outside the walker and 617 by nothing at all**, and those two checks
+  sit together on purpose: the positive one is the control that makes the negative
+  worth anything, which is what `studies/enemy` §6o lacked when it reported a
+  field as having no writer. §7 takes **570 chances** to refute what 633 turned
+  out to be — every argument must be a real attribute (`< 51`, from
+  `attribtable.py`) and every second value a reachable rank (`1..12`, from
+  `attribpoints.py`), two tables this file does not extract; and the attribute
+  must be constant per item model while the rank varies, which holds on 63 models
+  and 0 exceptions.
+
+  The floor was 12 because 14 was declared, 12 executed, and the ledger refused
+  the run — the guard doing its job on the file that documents it. It is 19 now,
+  read off the green run the same way.
 
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on
