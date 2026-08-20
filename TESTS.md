@@ -5209,4 +5209,167 @@ Every one of these, in the order they were written:
   vault row overrode it by key everywhere the probe can actually run. The bind
   moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
   reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
-  nothing here can skip, which is the whole claim. <1 s).
+  nothing here can skip, which is the whole claim. <1 s),
+  `toolkit/mapdata/test_datledger.py` (the ROW CENSUS, the counting convention
+  it refuses to choose between, and WHICH VERB FAILED. Correction C-8 records
+  two censuses of "the same" archive disagreeing by 16 comp-8 rows and 20 in the
+  sum, load-bearing on the published "661 of 138,708 rows are unwritable stored"
+  -- and the headline here is NOT the counting: "26 rows censused" is a number
+  an almost-right census also prints. The load-bearing fixture is a PLANTED
+  DISAGREEMENT, one compression-8 row with FLAG_ENTRY_USED clear, which the
+  `entries` convention counts and the `used` convention drops; section 3 asserts
+  BOTH counts, that they differ by exactly the rows the delta names, and that
+  the delta decomposes into `{structural 12, spare 2, comp8 1}` -- the mechanism
+  in miniature. The synthetic archive carries every class at once (fifteen
+  structural rows, two spares with one still named by the file-id table, an
+  armed head, stored rows, real `gwenc` compression-8 streams, an unknown
+  compression code 12, a bit-31 renamed row, the ghost row) and its MFT is
+  deliberately not a block multiple, so row 3's slack is checked against
+  `datalloc.mft_slack` -- two modules, one number, neither importing the
+  other's. **The second thing it exists to do is refuse to bucket a row it does
+  not understand**: the ladder always terminates, so every row lands somewhere
+  and the totals always look tidy, which is the shape of a check that cannot
+  fail. Section 5 pokes each of the six contradictions into a copy's MFT and
+  requires the row to be REPORTED as well as bucketed. **The third is section
+  6b, which is about WHOSE FAULT a failure is**: review found `--reencode 9999`
+  printing the entire census -- headline, classes, slack -- and then reporting
+  "could not census DAT" with exit 2, the code this directory spends on an
+  unreadable archive, a false statement about a file the same run had just
+  finished reading and the sort a script believes. A run has four verbs and only
+  one is the census, so `_phase` makes each name itself and the last-resort
+  handler stop claiming to know; 6b asserts the census RAN and printed, that the
+  refusal names the ROW and not the archive, that a corrupted comp-8 stream is a
+  failure to re-encode THAT ROW, that an unopenable `--json` destination is a
+  failure to WRITE, and -- the control that keeps those three from passing
+  vacuously -- that a genuinely unreadable archive still does say "could not
+  census". The PRE-FIX module, restored verbatim in memory, reddens eight of
+  6b's eleven; the three it does not are exit 2, the census-printed-first
+  premise, and that control. Sabotages are run in memory and counted, never
+  predicted: the anomaly walk stubbed out reddens 9 while printing the SAME
+  class totals; classing on `size == 0` alone -- the pre-2026-08-15 `datplan`
+  rule that called an ARMED head a free slot -- reddens 6; `reservation_for`
+  without block rounding 7; `check_stamp` that never compares 3; `_phase`
+  neutered 4; `reencoded_size` without its row-range refusal 3; the convenience
+  `file_id_table(raw=False)` 1. The first sabotage FOUND a defect in the module:
+  `_by_class` was a comprehension over `CLASSES`, so a class the ladder produced
+  and `CLASSES` omitted vanished from every total while every total still added
+  up -- the same failure the anomaly walk exists to prevent, in the code that
+  reports it. Two test-side helpers exist for the same reason and are worth
+  reading: with a naive `.splitlines()[1]` detail expression the stamp sabotage
+  raised IndexError INSIDE the check's own argument list, killing the section
+  and leaving one unnamed crash as the whole evidence (`line()`,
+  `refused_line()`), and `refusal()` catches only `Refused`, so a bare
+  IndexError where a refusal belongs would have escaped the check written to
+  catch it (`raised()`). Section 3b walks the module's own syntax tree and
+  requires C-8's figures to appear in the docstring citation and in NO other
+  literal, with a control that they are in the docstring so the check cannot
+  pass vacuously on a module that never heard of the correction. **Section 7 is
+  where C-8 comes apart**, on two real archives: `vault/dat_study` under
+  `entries` reproduces the larger census EXACTLY (38,633 = the "38,621+12" whose
+  +12 IS the twelve erased structural rows the USED convention drops, 138,708
+  comp-8, sum 177,341), and the pristine install copy under `used` reproduces
+  the smaller SUM exactly (177,321) with the compression split one row from what
+  was reported -- so the twenty rows are SEVEN of archive difference plus
+  THIRTEEN of convention, and the sixteen comp-8 rows are FIFTEEN of archive
+  difference plus one, and the reconciliation closes. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 84 bare (`RURIK_VAULT` pointed at nothing),
+  95 with a vault, section 7 raising the floor itself as its last act. ~2 s),
+  `toolkit/mapdata/test_refindex.py` (the REVERSE-CLOSURE index -- "who else
+  reads this row?", the question `unitassembly.py`'s forward walk cannot answer
+  and the shared-skeleton hazard (`studies/unitmodels/FINDINGS.md` §3.11, six of
+  seven pairs bit-identical) needs answered before a write. Builds its own
+  archives: the MFT, the ffna type-2 container framing, the reference-list
+  record rule and the FA1 blk2C layout are all re-derived from this file's own
+  byte literals and nothing is constructed by the module under test. **The
+  positive control is section 1 and it is not a formality** -- an FA8 link is
+  planted from two heads onto a third and BOTH must come back kinded before any
+  section reads anything into an absence, because a tool whose every answer is a
+  FLOOR fails by answering EMPTY and an empty answer looks exactly like success.
+  Covers the KIND (A reaches T through FA5, B through FA6), the dedupe (an FA8
+  naming a target twice is ONE referrer), the FA5 null slot naming no file and
+  therefore no reader, an unresolvable target recorded in `index.unresolved`
+  rather than dropped, `m_seqCount` recorded as a fact and NOT applied as the
+  client's link gate (`0x00794917`), the flags-1 companion row that links to the
+  same target and is correctly not walked, and walked-vs-indexed reported
+  separately so two unreadable heads cannot quietly shrink the archive.
+  **Section 3 is the defect this module shipped and it is the reason the graph
+  is keyed by MFT ROW**: a row can carry several file ids -- 38,396 do on
+  `dat_study`, 60.0% of all flags-515 heads and 25,536 rows that are not heads
+  at all -- and edges filed under whichever spelling a reference list happened
+  to use made ONE physical row answer two different things, 558 of 558 times on
+  a 1,500-head sample, one of them the confident empty list. So it asks every
+  spelling of a two-name TEXTURE row (flags-3, not a head, the case a head-only
+  alias map cannot resolve), of a two-name head row, and of a bit-31 rename
+  spelling; checks `canonical_id` normalises a caller's own ids the same way;
+  and cross-checks `who_reads` against `unreferenced_fa1_heads` for the
+  contradiction that defect produced -- no two spellings of any head disagree,
+  and no head the census calls unreached answers with a referrer under any of
+  its names. Skeleton sharing is bit-identity and section 4 does not weaken it
+  -- two heads with identical blk2C bases pair, a third with the SAME node count
+  and different bases does not, a fourth with an extra node does not -- **but
+  the answer now carries the node count, the group size and whether every base
+  in the key is zero**, in the sentence and in `answer.facts`, because on retail
+  572 of the 1,003 FA1-carrying heads in a 1,500-head sample sit in ONE group
+  keyed on a single node at (-0.0,-0.0,-0.0), and a bare count would send an
+  operator off to acknowledge 571 unrelated models; a +0.0 twin is contentless
+  AND in a different group, which pins that "contentless" is a REPORT and not a
+  change to the criterion. **The sabotage** cuts the terminator off the planted
+  FA8 record: the build must land it in `index.problems` at `mdlrefs`' own
+  `G01_terminator` gate, DROP that referrer rather than invent one, still report
+  the intact referrer, and still index the same head's FA5 list -- a refusal
+  scoped to the head instead of the list would look identical on a green run.
+  Also the stamp (size + MFT sha256) refusing a stale index against an archive
+  edited to the SAME size and row count, six doctored-index refusals including a
+  format-version bump and a document with no spelling map, `save` refusing a
+  path inside a checkout and writing nothing, the floor sentence and the
+  skeleton facts surviving a JSON round trip, and the CLI exiting 2 on an
+  unreadable archive and on `--json X --build-json X`. Eleven in-memory
+  sabotages were run and all eleven reddened NAMED checks
+  (19/12/11/8/7/5/5/4/3/2/1); three were hard stops until `first_spot()`,
+  `head()` and `fact()` were made to read defensively, which is why they do. 92
+  checks against a floor of 92, no vault, nothing that can skip. ~0.25 s),
+  `toolkit/mapdata/test_datdelta.py` (CONTENT-ADDRESSED ROW DELTAS -- a staged
+  archive IS its difference from retail, so the 4.2 GB copy can be deleted, and
+  this is the file that says whether it may be. Ten sections against files it
+  writes in a temp directory, with `RURIK_VAULT` pointed at another one so the
+  store guard runs for real rather than being skipped; no vault, no corpus,
+  nothing that can legitimately skip. The span finder is checked against
+  arithmetic done by hand -- 63 B of agreement between two differences merges,
+  64 B splits, a difference across a chunk seam is ONE span -- then
+  capture/apply/prove round-trips byte-identically in BOTH directions, including
+  a staged archive that GREW, where the tail past retail's EOF is one span whose
+  retail side is zero bytes long and reconstituting back TRUNCATES. Section 4 is
+  the long one: an unrelated target, a target that is already the destination, a
+  blob of the wrong LENGTH (five bytes where the span declares six -- it used to
+  be six WRONG bytes, which fired the hash branch and left the length branch
+  with no coverage at all, and disabling that branch alone kept the whole file
+  green), a blob of the right length and the wrong bytes, a missing blob, four
+  doctored manifests -- one the structural check can see and three only the
+  destination sha256 can, because a span shifted within range, a span whose two
+  sides are swapped and an emptied span table are all structurally flawless --
+  and TWO SPANS NAMING ONE BLOB, the dedupe the tool advertises, which is where
+  a table declaring two different lengths for that blob used to walk past the
+  store verification and spin `apply` for ever on a spent file handle. Every one
+  of those checks the TARGET as well as the message, because a refusal that
+  arrives after the write has refused nothing, and the two calls whose broken
+  form is a hang run on a join deadline so the defect lands as a named FAIL
+  instead of a cursor. Section 6 is the store: blobs paid for once across two
+  deltas, a two-manifest store with no `--name` refused rather than guessed, and
+  the same rule on the WRITE side -- capturing over a manifest that describes a
+  different pair refuses naming both hashes, an identical re-capture is
+  idempotent and says so, an explicit `--name` is no licence either, and
+  `--replace` is the only way an overwrite happens (`run/Gw.dat` and
+  `run-live/Gw.dat` both stem to `gw`). The span cap is exercised for real at
+  4,100 genuine spans (266,500 B of fixture); the 256 MiB byte cap is exercised
+  by tightening the constant, which is stated rather than hidden. Section 8
+  builds a real 14 KB archive so the row annotation runs against a table that
+  exists -- a payload span names exactly its row, a span inside the MFT names
+  row 3 and is flagged -- and a file that is not an archive still captures, with
+  the reason in a note. Three sabotages live in the file for guards nothing else
+  can reach: `apply` stubbed out entirely so `prove` must say NOT PROVEN on its
+  own hash, `_verify_blobs` stubbed down to a sha-to-path map so the write loop
+  must refuse a spent blob by itself, and the byte cap tightened. Fourteen more
+  applied by source surgery and reverted, worst 9 red for `_verify_blobs` sizing
+  and hashing nothing; the counts MOVED between sweeps until they were re-taken
+  with `-B`, because several sabotages add exactly ten characters and CPython
+  will reuse the previous same-size source's `.pyc`. Floor 84).
