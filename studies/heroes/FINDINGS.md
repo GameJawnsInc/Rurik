@@ -804,6 +804,15 @@ The record layout is now fully mapped: `+0x000` key (agent id), `+0x004..+0x3FF`
 (`attribPointsAvail`) on `+0x434` — the source's own field names landing on our offsets,
 which is a check the artifact could have refuted.
 
+> **UPDATED 2026-08-19, [pvpui §31.1](../pvpui/FINDINGS.md):** the container is
+> `charCtx[+0x2C]+0xAC` (one of the `0x00F8` despawn sweep's seven), the three anonymous
+> Array headers now have meanings — `+0x400` a PENDING-MODIFIER QUEUE (16-byte,
+> sequence-carrying), `+0x410` processed sequences, `+0x424` the attribute store the
+> setters binary-insert into — and the opcode family is **six, contiguous,
+> `0x0036`–`0x003B`**, not just this pair: `0x0036` dequeues and UNAPPLIES a pending
+> modifier by sequence, `0x0038` sets the points then replays the queue, `0x0039` writes
+> `+0x438` (meaning still NOT FOUND), `0x003B` is the single-attribute form of `0x003A`.
+
 ### 13.2 The gate moved a third time, and then bit
 
 Sending the pair for the hero's agent **does clear the attribState gate** — measured, the

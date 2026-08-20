@@ -2169,12 +2169,14 @@ PET_REMOVE`** `[agent_id]` and **`0x00B4 PET_RENAME`** `[agent_id, string16(32)]
 already added"*. All three are in `schema/overrides.json` at medium confidence —
 static-only, and this repo has never sent or captured one.
 
-Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears **six**
-sibling containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
+Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears ~~six~~
+**SEVEN (corrected §31.3 — a seventh walked inline at `+0x5BC`, missed here)** sibling
+containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
 hero, `+0x6AC` pet, `+0x6BC`, `+0x6F0`), and the last two are wholly unread —
 `PtMinionRoster.cpp` is in the assert surface and is the obvious candidate for one.
 The method that cracked the pet container in one call is the one to repeat: read the
-log format string on the not-found path.
+log format string on the not-found path. *(Settled §30.4/§31: the minion guess was
+refuted, and both "unread" rows were already read in neighbouring studies.)*
 
 
 ### 28.13 The appearance pair IS the content row's `(file_id, model_id)` — §28.1's role names were backwards (2026-08-19)
@@ -2473,15 +2475,221 @@ One payload detail worth keeping for anyone replaying these events: on the ADD e
 
 ### 30.5 Where the family stands
 
+*(Table completed in place 2026-08-19, same day — the two open rows and a seventh the
+sweep walks inline that this section did not know about. Full record: §31.)*
+
 | container | what it is | opcodes | status |
 |---|---|---|---|
-| `+0xAC` | — | — | unread |
-| `+0x508` | — | — | unread |
+| `+0xAC` | per-agent ATTRIBUTES (`attribState`, ChCliAttrib) | `0x0036`..`0x003B` — six, contiguous | read (§31.1) |
+| `+0x508` | per-agent BUFFS (`BuffState`, ChCliBuff) | `0x003F`..`0x0044` — six, contiguous | read (§31.2) |
 | `+0x584` / `+0x594` | hero activation / hero pool | `0x0072`, `0x0074`, `0x0073` | read (§29) |
+| `+0x5BC` | per-agent effect-value list (GmEffect's feed) | `0x0093` | read (§31.3) |
 | `+0x6AC` | pets | `0x00B2`/`B3`/`B4`, mirrored by `0x0062`/`0x0063` | read (§28.12) |
 | `+0x6BC` | per-agent professions | `0x00B7`, `0x00B6` | read (§30.1) |
 | `+0x6F0` | per-agent skill bar (`hotKeyState`) | `0x0064`, `0x0065` | read (§30.2) |
 
-Four of six read, six new opcodes named across today, and the two that remain are the
-cheapest next targets — the method is now routine: start at the remover the despawn sweep
-names, read the log string on the not-found path, then find the sibling branch.
+~~Four of six read, six new opcodes named across today, and the two that remain are the
+cheapest next targets~~ — **all seven are now read (§31), and the closing prediction
+half-missed**: the method was run and worked, but neither remaining container needed new
+reading. Both were already read, in full, in neighbouring studies that this table never
+joined.
+
+## 31. The last two containers — both were ALREADY READ, and the join was the missing work (2026-08-19)
+
+One workflow: five tracers over build 38833, three skeptics re-deriving every load-bearing
+claim from fresh disassembly. Some forty claims; three refuted, four downgraded, the
+structural core confirmed throughout — the refutations are recorded in-line below where
+they changed a reading.
+
+**The headline is not the containers, it is the repo.** `+0xAC` is the `attribState`
+structure [heroes §12.1/§13.1](../heroes/FINDINGS.md) mapped byte-by-byte on 2026-08-16.
+`+0x508` is the `BuffState` structure [skillcast §14](../skillcast/FINDINGS.md) mapped on
+build 38797 — a section whose own prose says *"reached through a sub-object at
+`charContext + 0x508`"*. §30.5 filed both as "unread" while sitting in the same repository
+as both answers. That is the heroes-§13.1 failure — *"the thing was known, in a
+neighbouring study, and not connected"* — twice more, and this time the disconnect was
+cheap only because the re-derivation was: the tracers reproduced skillcast §14's wire
+table field-for-field before anyone noticed §14 existed.
+
+What the session genuinely adds: the joins; the **full ChCliAttrib opcode family** (six,
+where heroes knew two); meanings for heroes §13.1's three anonymous sub-arrays; the
+BuffState record byte-complete with its event set; a **seventh container** the sweep
+walks inline that §28.12 miscounted past; and six earned schema names.
+
+### 31.1 `+0xAC` = `attribState` — and the family is SIX opcodes, not two
+
+**OBSERVED, skeptic-confirmed with a positive control.** The `0x00F8` sweep's `+0xAC`
+remover `0x00819850` (stride `0x43C`, finder `0x00819390(agent, &idx)`) asserts in
+`ChCliAttrib.cpp`, and every path — creator, resolver, finder, remover, dequeuer —
+consumes `charCtx[+0x2C]+0xAC` directly, no re-bias. The §29.1 aggregate trap was tested,
+not assumed: the skeptic first re-read the `+0x584` remover `0x0081D8D0`, which VISIBLY
+commits the trap (`lea ecx,[ebx+0x10]` into a second array mid-function), proving the
+method can see one, then found nothing of the kind in `0x00819850`.
+
+**Six contiguous thunks at `0x0080EA80`–`0x0080EB65`, each `add ecx,0xAC` and nothing
+else, map one-to-one onto opcodes `0x0036`–`0x003B`** (each thunk has exactly one caller
+in the `0x0091D8xx`–`0x0091D97x` handler band; matched against table `0x00bc8f68`; the
+block ends cleanly at `0x0080EB70`, which biases `+0x80C` — a different module):
+
+| opcode | worker | what it does | event |
+|---|---|---|---|
+| `0x0036` | `0x008198D0` | **dequeue + UNAPPLY** the front pending modifier, asserting `ChCliAttrib:295` `mod->sequence == sequence`; reverts via `0x0081A460` (subtracts from `attrib[i]+8/+0xC` and `attribPointsAvail`, floors at 0); appends the sequence to record`+0x410` | — |
+| `0x0037` | `0x008199C0` | the CREATOR (`:313` `!attribState`) — known, heroes §13.1 | — |
+| `0x0038` | `0x00819A30` | sets `attribPointsAvail`, then REPLAYS the queued deltas (`:327`) | `0x1000002E` |
+| `0x0039` | `0x00819AF0` | writes one wire dword to record`+0x438` (`:352`) | `0x1000002F` |
+| `0x003A` | `0x00819C00` | BULK FILL (`:368`): drains the `+0x400` queue, binary-inserts into `+0x424`, mints fresh modifiers via `0x00819270`, calls `0x00819EF0` — known, heroes §13.1 | `0x10000030` per element |
+| `0x003B` | `0x00819B50` | SINGLE-attribute set into `+0x424` (`:409`), calls `0x00819EF0` | `0x10000030` |
+
+**This gives heroes §13.1's three anonymous Array headers their meanings**: `+0x400` is a
+**pending-modifier queue** (16-byte stride, sequence-carrying), `+0x410` collects
+**processed sequences**, `+0x424` is **the attribute store** the setters binary-insert
+into. The sequence/queue/revert shape reads like the server-reject half of a client-side
+attribute-spend prediction (RECONSTRUCTION — the c2s side has not been read; whether a
+c2s spend message carries a matching sequence is the cheapest test). `+0x438`'s meaning
+stays NOT FOUND — `0x0039` exists to write it and nothing read names it.
+
+Two more wire facts. `0x00B7` AGENT_PROFESSIONS reaches attribState exactly as heroes §14
+said from the other side: its handler's worker `0x00813980` writes the `+0x6BC` profession
+store, then biases `+0xAC` and calls the `:435` checker — one opcode, both stores, in that
+order. And the non-wire setter family behind `ChCliAttrib:42/:43/:102` (`0x00818A90` →
+Apply `0x00818780`) is reached through a four-instruction shim at `0x008AB070` with
+**zero direct callers** — vtable-reached from somewhere unread, so "not wired to any
+opcode" is DOWNGRADED to "not directly wired; indirect caller unknown" (the skeptic's
+correction — the tracer's chain was right, the conclusion overreached).
+
+**Names: held.** No log format string names these APIs (this module asserts, it does not
+log), so there is no client-own name to take, and the mechanisms alone would make the
+names inference — the `0x0017` lesson. `0x0037`/`0x003A` keep their working names in
+`authsrv.py`; the other four are recorded here by mechanism and wait for either the c2s
+read or a probe.
+
+### 31.2 `+0x508` = `BuffState` — skillcast §14, joined, re-derived on 38833, and finished
+
+**OBSERVED, and independently re-derived before the collision was noticed.** The tracers
+walked remover → log strings → thunks → handlers → table and reproduced
+[skillcast §14](../skillcast/FINDINGS.md)'s entire result on the second build: opcodes
+**`0x003F`–`0x0044`**, six contiguous, 1:1:1 chains with zero fan-in (every thunk and
+every API body has exactly ONE direct caller), APIs named by the client's own log format
+strings — `BuffSourceAdd`, `BuffSourceRemove`, `BuffTargetAdd` (two overloads, one pooled
+string), `BuffTargetExtendTimed`, `BuffTargetRemove`. 38833 VAs: bodies
+`0x0081CC80`/`0x0081CDF0`/`0x0081CEC0`(sourced)/`0x0081CF70`(timed)/`0x0081D020`/`0x0081D100`;
+thunks `0x0080EEC0`/`EEF0`/`EF10`/`EF40`/`EF70`/`EFA0` — **byte-identical VAs to 38797**;
+handlers `0x0091DA00`..`DAE0`, the whole block shifted +0x60 from 38797, bodies ~+0x50.
+Wire shapes match `schema/messages.json`'s imported descriptors and skillcast §14.3
+field-for-field.
+
+**The record, now byte-complete** (skillcast §14.2 had the two lists; the header
+internals are new):
+
+```
++0x00  agent id (outer sort key -- the array is kept sorted: the insert
+       reuses the finder 0x0064AAE0's out-param index)
++0x04  SOURCE array {ptr, capacity, count, growIncrement}, elements 0x10:
+         {+0x00 skill, +0x04 CONTESTED, +0x08 buffId, +0x0C targetAgent*}
++0x14  TARGET array {ptr, capacity, count, growIncrement}, elements 0x18:
+         {+0x00 skill, +0x04 CONTESTED, +0x08 buffId, +0x0C sourceAgent,
+          +0x10 duration float, +0x14 timestamp from 0x0046B4E0}
+```
+
+`sourceAgent` at target-entry `+0x0C` is named by the client's own assert
+(`ChCliBuff:235` `!buffTarget->sourceAgent`); `targetAgent` at source-entry `+0x0C` is
+RECONSTRUCTION by symmetry — nothing reads it back in any function read. The embedded
+arrays are sorted by **buffId**: the dup-check `0x0081C7C0` is a binary search on entry
+`+0x08`. The two `+0x04` dwords are skillcast §14.4's CONTESTED field
+(Headquarter `effect_type` vs GWCA `attribute_level`), unchanged, and its
+`buff_type_field` probe is still the settle path — with one correction from the wire
+skeptic: on `0x3F`/`0x41` the contested field rides **wire field 4** (`struct+0x10`);
+field 3 is the skill.
+
+**The frame-bus event set, new** (skillcast §14 had only `0x10000055`):
+
+| opcode | event | payload |
+|---|---|---|
+| `0x3F` SourceAdd | `0x10000062` | `{agent, entry*}` |
+| `0x40` SourceRemove | `0x10000063` | `{agent, buffId}` |
+| `0x41`/`0x42` TargetAdd (both) | `0x10000055` | `{agent, entry*}` |
+| `0x43` ExtendTimed | `0x10000056` | `{buffId, wire f2, new duration}` |
+| `0x44` TargetRemove | `0x10000057` | buffId by value |
+
+The two TargetAdd overloads hold skillcast §14's structural split exactly, from the
+bytes: the sourced form (`0x41`) hardcodes duration `0.0f` (`fldz`) and timestamp 0 and
+never calls the clock; the timed form (`0x42`) hardcodes `sourceAgent = 0` and stamps
+`+0x14` from `0x0046B4E0`. `0x43`'s wire field 2 is stored nowhere — it is forwarded ONLY
+into the event payload, a field that exists for the UI and never touches the record.
+
+**Two previously-unread enumerator getters close the loop to the UI**: `0x0081C6A0`
+(walks the source array, stride 16) and `0x0081C6E0` (target, stride 24), thunks
+`0x0080DA60`/`0x0080DA80`, called from four sites in the `0x0052xxxx` GmEffect band and
+from nowhere in the handler band — an independent corroboration of both strides and both
+header offsets from code none of the prior passes had read.
+
+Mechanics worth keeping: the remover `0x0081CBC0`'s gap-closer `0x0081C230` is a
+**per-record deep-copy assignment** (one 0x24 record per iteration), not a memmove, and
+the tail-slot free is ownership-correct — though the tracer's mechanism for WHY was
+refuted (`0x007207B0` skips its free entirely when capacities already match; the
+no-double-free conclusion survives on that different basis, RECONSTRUCTION). `0x007207B0`
+itself is the 16-byte-element instantiation (`shl eax,4` hardcoded), not a generic — the
+24-byte target array reaches `0x00478970` instead.
+
+Completeness, measured: **seven** opcodes touch this container (the six plus the `0x00F8`
+sweep), and every `charCtx+0x508`-forming instruction in the image is accounted for
+(eight `add`-form sites, four `lea`-form). Live corpus (prior counts, not re-measured):
+`0x41` ×4, the other five ×0 — so `0x41`'s field map has retail witnesses and the rest
+are static-plus-two-builds.
+
+**Named in `schema/overrides.json`**: `BUFF_SOURCE_ADD` (0x3F), `BUFF_SOURCE_REMOVE`
+(0x40), `BUFF_TARGET_ADD` (0x41), `BUFF_TARGET_ADD_TIMED` (0x42),
+`BUFF_TARGET_EXTEND_TIMED` (0x43), `BUFF_TARGET_REMOVE` (0x44). The four whose names are
+the client's own strings verbatim file at high (two independent derivations, two builds,
+skeptic-verified); `0x41`/`0x42` file at medium because the client pools one name over
+both overloads and the `_TIMED` split, though measured, is our annotation. ldufr's
+`EFFECT_UPKEEP_*`/`EFFECT_*` names stay recorded as UPSTREAM-directionally-wrong per
+skillcast §14.1.
+
+### 31.3 The sweep clears SEVEN, not six — `+0x5BC` is GmEffect's per-agent value feed
+
+§28.12 said "six sibling containers" and the sweep walks a seventh, inline, between the
+remover calls: `charCtx+0x5BC` is a standard array header (`{ptr +0x5BC, capacity +0x5C0,
+count +0x5C4, allocCtx +0x5C8}` — the skeptic's addition; the sweep's bare
+`+0x5BC`/`+0x5C4` pair is that header, not ad-hoc fields) of **8-byte `{agentId, value}`
+entries**. The sweep removes the FIRST match by swap-with-last and silently no-ops on a
+miss (`Array:951` guards the hit path only — all OBSERVED, re-derived instruction by
+instruction).
+
+Its writer is **opcode `0x0093`** (`[agent_id, dword]`, 10 bytes; single chain
+`0x0091EB5C` → `0x00812060`), and the writer's real semantics are the skeptic's find, not
+the tracer's: the scan **updates EVERY matching entry and then falls through to an
+UNCONDITIONAL append** — there is no else. Repeated `0x0093` sends for one agent append
+duplicates; the getter and the sweep each act on the first match only. So the structure is
+an append-style list with first-match-wins reads, not a keyed table — and that is an
+operational hazard for any server that re-sends state on reconnect. The writer posts frame
+event `0x10000046`.
+
+The consumer side: getter `0x0080E660` (`Find(agentId) -> value-or-0`), three callers in
+GmEffect.cpp — and one of them (`0x005246E0`) carries the identification alone: it guards
+on `GmEffect:3039` `m_agentId` and pushes that exact field as the getter's key. "Per-agent,
+keyed by the field ArenaNet calls `m_agentId`, consumed by GmEffect" is therefore
+OBSERVED; **"upkeep/maintained-effect value" is band-level RECONSTRUCTION** — the
+`CTL_EFFECT_UPKEEP` assert the tracer cited sits ~0x650 bytes and several functions away
+from the caller it was attributed to. That mis-attribution is the `asserts.py --at`
+function-boundary overrun, which this session hit **twice** (it also over-scans past
+BuffSourceAdd/Remove's real ends) — the tool's own floor caveat, now with two more
+sightings. What the value dword IS stays NOT FOUND; `0x0093`'s name is held with it.
+
+### 31.4 What the skeptics changed, and the method note
+
+Three refutations that mattered: the wire tracer's roll-up misplace of the contested
+field (§31.2); the `+0x5BC` writer's "upsert" (§31.3 — it is update-all-then-append);
+and a capacity-grow formula clean-up (`0x004739C0` returns `growIncrement +
+currentCapacity` on one path and DOUBLES the stored growIncrement through the caller's
+pointer as a side effect — recorded here because anyone modelling these arrays will hit
+it). Downgrades: the `0x008AB070` shim (§31.1), `0x007207B0`'s genericity, the
+double-free reasoning, and the ChCliBuff completeness framing (six opcodes → seven
+touchers plus two enumerator APIs).
+
+Method: the "routine method" held — remover → module attribution → log string → sibling
+branch — but the step that actually closed both rows was `asserts.py --at` on the
+remover, which named the MODULE, which named the study that had already done the work.
+**Check the studies index for the module name before tracing anything.** The join is
+cheaper than the re-derivation, and this repo now has three data points saying the join
+is the step that gets skipped.
