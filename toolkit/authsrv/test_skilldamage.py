@@ -178,10 +178,30 @@ def main():
           f"{len(dmg)} damage message(s) -- GWW writes Power Attack as "
           f"'+ Damage', a bonus on the attack it rides; two messages would "
           f"draw two numbers on screen for one swing")
-    base = 1000.0 * authsrv.HIT_FRACTION
-    check(abs(agent["health"] - (1000.0 - base - 34.0)) < 1e-6,
-          f"and the bookkeeping is swing {base:.0f} + bonus 34",
-          f"health {agent['health']}")
+    # RED FROM 2026-08-20 UNTIL THIS LINE CHANGED, and the reason is worth more
+    # than the check. This used to read `base = 1000.0 * authsrv.HIT_FRACTION`
+    # -- a flat 15% of the target's pool, which is what `hit_enemy` dealt when
+    # this test was written. The weapon-damage arc replaced that with the
+    # HAMMER'S OWN 3-5 range read off the item ArenaNet sends, so `HIT_FRACTION`
+    # is now only the fallback for a swing with no weapon, and this check was
+    # pinned to a constant the code it tests no longer reads. THE SAME DEFECT
+    # WAS FOUND AND FIXED IN `test_guards` THE SAME DAY and this copy of it was
+    # missed -- which is the argument for running the whole suite after a change
+    # to a shared damage path, not the tests whose names sound related.
+    #
+    # A RANGE RATHER THAN A NUMBER, because the roll is real: `hit_enemy` draws
+    # randint(3, 5) and nothing here seeds it. Asserting the range is what this
+    # check is actually for -- that the bonus is added to the swing ONCE and
+    # lands in the target's bookkeeping, not that the swing is any particular
+    # number, which section 6 already pins from the other side.
+    lo, hi = authsrv.PLAYER_SWING_DAMAGE
+    dealt = 1000.0 - agent["health"]
+    check(lo + 34.0 <= dealt <= hi + 34.0,
+          f"and the bookkeeping is one swing ({lo}-{hi}) plus the bonus 34",
+          f"health {agent['health']}, so {dealt:.0f} dealt against the "
+          f"{lo + 34:.0f}-{hi + 34:.0f} this path can produce. The weapon's "
+          f"range is the client's own tooltip number (identifier 584); the "
+          f"roll inside it is ours")
 
     return LEDGER.verdict()
 

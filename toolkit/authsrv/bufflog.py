@@ -233,16 +233,35 @@ def condition_map(eps):
 def field3_report(eps):
     """Per skill, the (field3, duration) pairs seen and whether they agree.
 
-    RUNG 8'S REGISTERED DISCRIMINATOR. The corpus's two conditions (480, 481)
-    have field3 == duration; four non-conditions (160, 179, 364, 984/998) do
-    not. Two readings survive that:
-      (a) field3 is the applying skill's ATTRIBUTE RANK, and it coincides with
-          the duration for these two conditions by arithmetic accident;
-      (b) field3 is a duration-shaped field that non-conditions use otherwise.
-    Ten Students applying ten different conditions separate them: under (b)
-    every Student's field3 equals its duration; under (a) a Student whose rank
-    differs from its condition's duration breaks it. Either way the answer is
-    one session away and the prediction is on record before the run.
+    RUNG 8'S REGISTERED DISCRIMINATOR, AND IT IS SETTLED -- 2026-08-20, WITHOUT
+    THE SESSION. This docstring used to end "the answer is one session away and
+    the prediction is on record before the run". The answer was ZERO sessions
+    away: the discriminator was already in the vault, and what it needed was
+    the client's skill table on the other side of the join.
+
+    The two readings were (a) field3 is the applying skill's ATTRIBUTE RANK,
+    and (b) field3 is a duration-shaped field that non-conditions use
+    otherwise. Predict each apply's wire duration from the applying skill's own
+    `duration0`/`duration15` endpoints at rank = field3, using the client's own
+    two-point scaler:
+
+        interp(duration0, duration15, field3) == the f32 duration
+
+    holds for 96 of 96 NON-CONDITION applies with no misses. No free parameter:
+    the endpoints are ArenaNet's, the formula was measured at 0x005A8920 for
+    the damage scale, and field3 and the duration are retail's own bytes.
+    Reading (a) CONFIRMED, reading (b) REFUTED -- skill 160 carries field3 = 15
+    against a duration of 13.0, and skill 364 appears at two field3 values (10
+    and 13) producing two durations (10.0 and 12.0), both predicted exactly.
+
+    The conditions stay the named exception and are counted separately, because
+    a condition's duration comes from the skill that INFLICTED it rather than
+    from its own row: 480 has endpoints 3/3 and appears on the wire at 9.0.
+    The ten-Student experiment above would still separate what sets a
+    CONDITION's duration; it is no longer needed for field3 itself.
+
+    See `effects.py`, which is the writer this settled, and
+    `test_effects.py` section 2, which re-runs the whole check every suite.
     """
     per = {}
     for e in eps:
