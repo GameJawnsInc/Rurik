@@ -926,6 +926,39 @@ not touch. No single crit multiplier fits all ten blocks and no rounding rule re
 is not in the crit rule; it is the same unmet-requirement term §2 gets wrong, and this is
 its sharpest expression.** It stays unexplained and it stays visible.
 
+## 4.1 The critical, drawn by our own client (2026-08-20)
+
+§4 settled what property 17 IS from retail traffic. This is the other direction:
+`toolkit/authsrv` now SENDS it, and the client draws it.
+
+    server                          client
+    s2c damage 5              ->    -5      yellow
+    s2c damage 7              ->    -7      yellow
+    s2c damage 9              ->    -9      yellow
+    s2c CRITICAL 12  (p17)    ->    -12     yellow, identical treatment
+
+> **A critical renders exactly like an ordinary hit.** OBSERVED, capture
+> `20260820T162932`. Same colour, same font, same float — the only difference is
+> the number. So `17 REPLACES 16` (§4) is true of the *rendering* too, and nothing
+> in the client marks a critical as special. Worth recording because the opposite
+> was plausible: a distinct colour or a larger glyph is exactly what a game would
+> do, and if it existed, an implementation that sent 17 without whatever else
+> drives that treatment would look subtly wrong on screen. It does not.
+
+The 12 is the model's own number: rank 7 gives SL 35, the Hatcher's derived AR is
+3, and a critical takes the range MAXIMUM at AR−20 — `5 × 2^((35+17)/40)` = 12.3,
+round 12. The ordinary 5/7/9 are `3..5 × 2^(32/40)`.
+
+**HOW THE PHOTOGRAPH WAS TAKEN, because it matters for reading it.** At rank 7 the
+crit rate is 6.25% and four runs failed to catch one in a frame. The rate was
+therefore bumped to 60% in a LOCAL, UNCOMMITTED edit for one run and reverted
+immediately; `CRITICAL_RATE_BY_RANK` in the tree is the measured five and
+`test_agentlife` §N3 pins it. Nothing else was touched, so the damage VALUES in
+that run are the same ones the unbumped runs produced — the bump changed how often
+a critical happened, never what one was worth.
+
+---
+
 ## 5. The Master of Damage oracle — and the check that could have failed
 
 **Slot 144 at (−2000, 3233), profession 6 Elementalist, level 20, health 590.** GWW's
