@@ -48,16 +48,17 @@ the fidelity gate a skeptic proved it lacked — a corrupted-trailer gwenc strea
 green through `alloc(confirm=True)` before 2026-08-20, and `expect=` is now mandatory with
 `extraBytes 8`. `test_authorflow.py` (59 checks, 0.5 s) walks the whole story on one
 synthetic archive: author → create a NEW row → revise smaller → grow back → outgrow and
-relocate → revert to pristine byte-for-byte. **No client has read the new shapes yet** —
-and that check is now **STAGED as A9 (2026-08-20, study §18)**: staged archive built,
-gated, adversarially verified reproducible to the byte
-(`vault/exports/archivewrite/a9/Gw.a9.dat`), runbook at
-`vault/research/archivewrite/A9-RUN.md`. **The deploy and the launch are the owner's**:
-`python vault/research/archivewrite/a9stage.py --deploy --yes` with the client closed,
-then `python toolkit/harness/session.py --enemy --hold 150 --shots 10`, then
-`a9stage.py --verify-after`, then `--retail --yes` (or leave deployed). One launch answers
-three things at once: a small row we compressed, a `datalloc`-CREATED row resolved through
-the client's own FA8 link walk, and (unscored rider) the attested all-skip table shape.
+relocate → revert to pristine byte-for-byte. ~~No client has read the new shapes yet~~ —
+**A9 STAGED and RAN 2026-08-20, GREEN (study §18, verdict §18.6)**: the retail client,
+owner-driven on loopback, resolved a `datalloc`-CREATED 3-stream chain (new file id
+`0x5F0AD`) through its own FA8 link walk at spawn, decompressed our compression-8 bytes,
+and animated from them (37 walk cycles, 54 attack/cast lines, no crash dialog); the
+created chain came through the client's own Flush byte-intact. Small-row compression is
+client-proven at 20,060 B and 7,644 B stored. **Every layer of new-content authoring is
+now client-proven: encode (A8), edit in place (run 7), grow/relocate (offline §17),
+CREATE (A9).** Still unclaimed, deliberately: E3's rider (no instrument shows the client
+opened rows 8295-8306) and the two phantom-pair shapes (unshippable on real content,
+§18.1). Runbook `vault/research/archivewrite/A9-RUN.md`; staged copy rebuildable by hash.
 
 **What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
 retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted
@@ -73,11 +74,17 @@ compressed** — §5-B.
 
 ## 2. State of the machine
 
-**DEPLOYED: RETAIL.** End of 2026-08-18, **verified rather than assumed** — row 11196 of
-`vault/run/2026-07-29_221c13772c7a/Gw.dat` is back to 1,029,564 B / crc `0xf862d5c4`, five
-key rows are byte-identical to `Gw.dat.retail`, preflight 10/10, 177,319 payload CRCs 0 bad,
-4,198,489,600 B. **Nothing is running**: no client, no server, no background task (`tasklist`
-shows no `Gw.exe`).
+**DEPLOYED: THE A9 ARCHIVE**, as of 2026-08-20 ~09:35, and it has been LAUNCHED ON and
+verified clean afterwards (`a9stage.py --verify-after`: preflight 10/10, generations 6/6,
+crc sweep 177,322 payloads 0 bad, our 16 rows byte-identical to the deploy, file `0x5F0AD`'s
+chain [35301, 177335, 177336] intact, only the client's scratch rows 8315/8316 moved).
+The owner has not restored retail; `python vault/research/archivewrite/a9stage.py --retail
+--yes` does it, with the client closed. Restoring discards the client's post-launch scratch
+churn, as every stage in this arc has.
+
+*(Superseded 2026-08-20 — kept for the numbers: end of 2026-08-18 the machine held RETAIL,
+verified — row 11196 at 1,029,564 B / crc `0xf862d5c4`, preflight 10/10, 177,319 payload
+CRCs 0 bad, 4,198,489,600 B.)*
 
 That line has been wrong before and it is cheap to re-check, so **re-check it**: this file
 claimed "the deployed archive is run 6" for hours after another session had restored the

@@ -2399,7 +2399,29 @@ for the owner rather than a gap in this one.
 
 ### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
 
-**2026-08-20, later — A9 IS STAGED: the client oracle for §17's shapes, one launch, the
+**2026-08-20, ~09:40 — A9 RAN, owner-driven, GREEN on every pre-registered prediction.
+THE RETAIL CLIENT READ A ROW THIS PROJECT CREATED.** Study §18.6. Owner at the keyboard:
+*"Hatcher with normal animations/proportions"* — which, by the measured load-time fact
+(the FA8 loop resolves every link at spawn and requires `m_seqCount != 0`), IS the
+verdict that the `datalloc`-created chain under new file id `0x5F0AD` was resolved,
+decompressed from our compression-8 bytes and parsed as a skeleton, and the retargeted
+20,060 B shell — a small row compressed by us — read on the way. Instrumented half: 37
+`walks to` cycles + 54 attack/cast lines in the gamesrv log, **no crash-dialog.txt**;
+archive after: preflight 10/10, crc sweep 177,322/0 bad, only scratch rows 8315/8316
+moved, **our 16 rows byte-identical and the created chain intact through the client's
+own Flush** — nothing repaired or discarded, MFT numbers unmoved (H1 never fired), and
+the client accepted our ASCENDING chain where retail's all descend (H7 answered). Still
+deliberately unclaimed: E3's rider (no instrument shows the client opened rows
+8295-8306, so the all-skip shape stays without a client witness) and the two
+phantom-pair shapes (unshippable on real content). `report.json` was never written —
+the owner closed the client mid-hold — and the verdict does not rest on it. **The A9
+archive is LEFT DEPLOYED**; `a9stage.py --retail --yes` restores the baseline.
+`datalloc.py`'s "no client has ever read a row this module allocated" caveat had its
+FINDINGS-39 moment and is superseded with scope stated (one chain shape, one build,
+one launch). **With this, every layer of new-content authoring is client-proven:
+encode (A8), edit in place (run 7), grow/relocate (offline, §17), CREATE (A9).**
+
+**2026-08-20, earlier — A9 WAS STAGED: the client oracle for §17's shapes, one launch, the
 owner's to run.** Study §18; procedure `vault/research/archivewrite/A9-RUN.md`. The staged
 archive (`vault/exports/archivewrite/a9/Gw.a9.dat`) carries three independent arms — a
 `datalloc`-CREATED 3-row chain under new file id `0x5F0AD` holding 222949's payload
