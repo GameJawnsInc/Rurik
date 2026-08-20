@@ -1346,6 +1346,33 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
+
+Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
+[studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
+[studies/idents/CONVENTION.md](studies/idents/CONVENTION.md)).
+
+**WORLDMAPS-W1 landed** — `deploy.py --install` writes the Stripped partner
+compression-8 and judges the fit on the COMPRESSED size: 96×96 compresses
+21,786→2,828 B and **replaces in place** inside map 143's 4,608 B reservation,
+where 32×32 was the old ceiling. `--stored-install` is the byte-identical
+control arm. **WORLDMAPS-W3 landed** — `created = true` map rows make
+`--install` ALLOCATE a brand-new two-row chain via datalloc instead of
+displacing rows 71496/71497; `[map.166]`/`[area.frontier]` are the first area
+that takes nobody's row. Both skeptic-verified; floors test_deploy 35→92,
+test_content 39→40, test_contentids 19→20.
+
+**The immediate next actions are the two owner-driven launches**, predictions
+registered, safer order first: **WORLDMAPS-W2**
+(`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` — does the client's re-bloat
+compiler read a partner WE compressed; A8/A9 answered adjacent questions,
+never for a map) and **WORLDMAPS-W4**
+(`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` — does re-bloat fire for a
+head BORN zero-length under a created id; FINDINGS 36 item 4's untested case).
+Known deliberate gap: a compressed install SHRINKS the row, so small→large
+iteration relocates until `grow_to` is wired into the map path — its own
+change, costed separately.
+
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
 [studies/skills §17–§22](studies/skills/FINDINGS.md), [studies/isle B4](studies/isle/FINDINGS.md).

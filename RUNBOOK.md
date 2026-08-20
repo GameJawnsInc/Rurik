@@ -1052,11 +1052,18 @@ holds the twelve-step `RUNSHEET.md` with exact commands and the `PREDICTION.md`
 that was recorded before anything was armed. Four things that run paid for,
 worth having before you start another:
 
-- **The authored stream must be SMALLER than its row's existing reservation.**
-  `datwrite --replace` writes uncompressed and refuses to relocate. This — not
-  the client — is the live constraint on authoring, and it confines the work to
-  maps that shrink until a compressor or a relocation verb exists. It killed the
-  first design of that experiment outright.
+- **The authored stream must be SMALLER than its row's existing reservation** —
+  and as of 2026-08-20 (WORLDMAPS-W1) both halves of the old escape clause are
+  met: the compressor exists (`gwenc`, and `deploy.py --install` now writes the
+  partner compression-8 by default, fit judged on the COMPRESSED size — a 96×96
+  map fits where 32×32 was once the ceiling) and the relocation verb exists
+  (`datmove`, taken automatically when even the compressed stream is too big).
+  What stands: replace still never relocates, the reservation is still whole
+  512-byte blocks, and a compressed install SHRINKS the row, so iterating from a
+  small map to a big one relocates where it used to sit still (`grow_to` is the
+  unwired fix, deliberately its own change). Historical: writing UNCOMPRESSED
+  was what confined authoring to maps that shrink, and it killed the first
+  design of that experiment outright.
 - **`--exe` must be ABSOLUTE.** `session.py` hands it to `Popen` together with
   `cwd=`, and Windows resolves a relative program path against the *new*
   directory. The failure is a bare `FileNotFoundError` naming nothing.

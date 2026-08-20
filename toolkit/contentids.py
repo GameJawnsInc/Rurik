@@ -203,15 +203,51 @@ def content_file_ids(world=None):
     return out
 
 
+def created_map_ids(world=None):
+    """Map ids whose row says the FILE IS OURS TO MAKE (`created = true`).
+
+    ADDED 2026-08-20 with WORLDMAPS-W3. Until then every row in `maps.toml` named
+    a file ArenaNet shipped, so "this archive does not bind the id" could only
+    mean one of two things -- the copy is missing the map, or it is
+    mid-replacement -- and both are fatal to a run that loads it. A created row
+    is a third state: `deploy.py --area <a> --install` ALLOCATES the chain, so
+    before that has run against a given copy the id binds nothing there, on
+    purpose, and after it has the row is an ordinary map row. See `check()`.
+    """
+    world = world or content.load()
+    return {int(k) for k, r in world.rows("map").items() if r.get("created")}
+
+
 def check(client_dat, server_dat=None, world=None):
     """[Finding] for every content map row, plus a list of skip reasons.
 
     `client_dat` is the archive the CLIENT will open -- the one in its run
     directory -- and it is the required argument because it is the one whose
     disagreement is fatal.
+
+    A CREATED ROW THAT NOTHING BINDS IS A SKIP, NOT A FINDING, and that
+    distinction is the one thing this function learned in 2026-08-20's
+    WORLDMAPS-W3. `content/maps.toml [map.166]` names file id 0x5F0B0, which
+    exists in no archive until `deploy.py` allocates it -- so on every other copy
+    the old code produced a FATAL, and with `served=None` (the fail-closed
+    default: tape runs, and any run that names no `--map`) that one row refused
+    EVERY loopback launch in the repo. That is precisely the false positive the
+    `served=` narrowing was added for on 2026-08-15, and this file's own test
+    says what it costs: "one that refuses everything gets deleted the first time
+    it blocks a run."
+
+    IT IS A SKIP RATHER THAN A SILENCE, printed by `preflight` as
+    `[SKIP] content file ids -- ...`, because "nothing disagreed" and "nothing
+    was checked" must not look alike. And the narrowing is only over ABSENCE: the
+    moment the client's archive binds a created id, the row is checked exactly
+    like any other -- same map-flag test, same size+crc identity against the
+    server's copy -- which is the half that matters for the run that finally
+    serves one.
     """
     server_dat = server_dat or DEFAULT_DAT
+    world = world or content.load()
     ids = content_file_ids(world)
+    created = created_map_ids(world)
     findings, skips = [], []
 
     # THE TWO SIDES ASK DIFFERENT QUESTIONS AND THAT ASYMMETRY IS THE FIX.
@@ -240,6 +276,19 @@ def check(client_dat, server_dat=None, world=None):
     for map_id in sorted(ids):
         fid = ids[map_id]
         c_row = c_tab.get(fid)
+        if c_row is None and map_id in created:
+            # THE THIRD STATE. Not "missing" and not "mid-replacement": a file
+            # this project has not made yet in this copy. Nothing to compare, so
+            # nothing is claimed -- and it is said out loud rather than dropped.
+            skips.append(
+                f"map {map_id} (0x{fid:X}) is a CREATED row and nothing binds "
+                f"its id in {client_dat}. That is the state BEFORE `deploy.py "
+                f"--area <area> --install` allocates the chain, not a "
+                f"disagreement between two archives, so it refuses nothing. "
+                f"Once the chain exists here this row is checked like any "
+                f"other -- map flags, then size+crc identity against the "
+                f"server's copy.")
+            continue
         if c_row is None:
             # Name the OTHER spelling if the archive holds it, because that is
             # the difference between "this map is missing" and "this copy has
