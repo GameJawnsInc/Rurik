@@ -15,34 +15,49 @@ answered the one question the writer could not have answered for itself.
   0x0042  [target, skill, field3, buff_id, f32 duration]      apply
   0x0044  [target, buff_id]                                   remove
 
-WHAT FIELD 3 IS. `bufflog.field3_report`'s docstring records two surviving
-readings -- (a) it is the applying skill's ATTRIBUTE RANK, (b) it is a
-duration-shaped field -- and says "the answer is one session away". It was
-ZERO sessions away: the discriminator was already in the vault. Over the whole
-live corpus, 102 applies, the prediction
+WHAT FIELD 3 IS, AND WHOSE FINDING THAT IS. It is the applying skill's
+ATTRIBUTE RANK, and the f32 duration is that skill's duration progression
+evaluated at it. **That was settled on 2026-08-18, two days before this module
+existed** -- `studies/isle/FINDINGS.md`, rung-8 prep section 2, "FIELD 3 IS THE
+APPLIER'S ATTRIBUTE RANK -- settled offline, four ways" -- and settled BETTER
+than by arithmetic alone: it is CORROBORATED against GWW across five values and
+four skills, with the wiki and the wire sharing no author, code or ancestry.
+The cleanest row is skill 160 = Windborne Speed, where GWW's Master of Winds
+page independently supplies BOTH the rank ("15 Air Magic") and the duration
+(13 s at rank 15), and the wire carries exactly those two numbers.
+
+WHAT IS NEW HERE IS NOT THE FINDING. It is that the finding is now (1) checked
+mechanically over the WHOLE corpus rather than five hand-picked rows, and
+(2) READ BY THE SERVER, which is the part that was missing. Over 102 applies:
 
     interp(duration0, duration15, field3) == the f32 duration on the wire
 
 holds for **96 of 96 non-condition applies, with no misses**, where `interp` is
 the client's own two-point scaler (`max(0, round(lo + (hi-lo)*rank/15.0))`,
-0x005A8920) and both endpoints come from the client's own skill table. THE
-CHECK HAS NO FREE PARAMETER: the endpoints are ArenaNet's, field3 and the
-duration are retail's own bytes, and the formula was measured for a different
-field entirely (the damage scale).
+0x005A8920) and both endpoints come from the client's own skill table. No free
+parameter: the endpoints are ArenaNet's, field3 and the duration are retail's
+own bytes, and the formula was measured for a different field entirely (the
+damage scale). Two rows would carry it alone -- skill 364 at TWO field3 values,
+10 -> 10.0 (n=27) and 13 -> 12.0 (n=14) against endpoints 5->13; and skill 160
+at field3 = 15 against a duration of 13.0, which a duration-shaped field cannot
+produce.
 
-Two rows carry it alone:
-  * skill 364 appears at TWO field3 values -- 10 with duration 10.0 (n=27) and
-    13 with duration 12.0 (n=14), against endpoints 5->13. One skill, two
-    ranks, two different durations, both predicted exactly. A duration-shaped
-    field3 cannot produce 13 -> 12.0.
-  * skill 160 carries field3 = 15 with duration 13.0. Reading (b) requires
-    those to be the same number. They are not.
+AND `bufflog.field3_report`'S DOCSTRING SAID OTHERWISE FOR TWO DAYS. It
+registered the question, listed both readings, and ended "the answer is one
+session away and the prediction is on record before the run" -- while the
+answer sat in `studies/isle/FINDINGS.md`. It has been corrected. THIS IS THE
+FOURTH TIME IN ONE WEEK that a measured number sat unread beside code using an
+invented one (property 17, the rung-7 damage formula, the item modifiers, and
+now this), and the first three were all in the SAME direction: the measurement
+was made, written down, and then not wired.
 
-So field3 is the rank, and READING (b) IS REFUTED for non-conditions. The six
-condition applies are the named exception and are NOT counted as support: a
-condition's duration is set by the skill that inflicted it, not by the
-condition row's own endpoints, and 480 proves it -- endpoints 3/3, seen on the
-wire at duration 9.0.
+The six condition applies are counted separately here and are NOT support for
+the rule as this module states it: a condition's duration comes from the skill
+that INFLICTED it, not from the condition row's own endpoints -- 480 has
+endpoints 3/3 and is on the wire at 9.0. (Isle section 2 fits 481 Crippled to
+the rank reading too, using PIN DOWN's 3->15 progression rather than the
+condition row's. Same rule, different join, and this server has no model of
+"which skill inflicted this condition" to make that join with.)
 
 WHAT THE DURATION SLOT HOLDS WHEN THE BIT IS CLEAR, which is the trap this
 module exists to not fall into. `skill_arguments` bit 1 enables the duration

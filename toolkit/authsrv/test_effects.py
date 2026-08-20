@@ -12,10 +12,15 @@ meet, and section 2 is the one that matters:
     tuned to the corpus: the endpoints are ArenaNet's, the formula was measured
     at 0x005A8920 for the DAMAGE scale, and field3 comes off the wire.
 
-    That check is what settles `bufflog.field3_report`'s open question -- (a)
-    field3 is the applying skill's attribute RANK, or (b) it is a
-    duration-shaped field -- which that docstring says is "one session away".
-    It was zero sessions away.
+    THE FINDING IS NOT THIS TEST'S. `studies/isle/FINDINGS.md` rung-8 prep
+    section 2 settled field3 = the applier's attribute rank on 2026-08-18, and
+    CORROBORATED it against GWW across five values and four skills -- a
+    stronger kind of evidence than arithmetic, because the wiki and the wire
+    share no author or ancestry. What this section adds is scale and
+    mechanisation: the whole corpus rather than five hand-checked rows, re-run
+    every suite, guarding the reading the server now depends on.
+    `bufflog.field3_report`'s docstring said the question was still open for
+    two days after it was answered; that is corrected too.
 
 Everything else here guards the two ways this could go wrong quietly: reading a
 duration slot that holds a sentinel, and opening an episode for a skill whose
@@ -190,7 +195,10 @@ def section_corpus_oracle():
               "skill 160 carries field3 = 15 against a duration of 13.0",
               f"{sorted(by_skill.get(160, []))} -- reading (b), 'field3 is a "
               f"duration-shaped field', requires those to be the same number. "
-              f"REFUTED for non-conditions")
+              f"REFUTED for non-conditions. This is the row isle section 2 "
+              f"calls its cleanest: skill 160 is Windborne Speed, and GWW's "
+              f"Master of Winds page supplies BOTH numbers independently -- "
+              f"'15 Air Magic' and 13 s at rank 15")
     LEDGER.ok(len(by_skill.get(364, ())) >= 2,
               "and skill 364 appears at TWO ranks, with two different durations",
               f"{sorted(by_skill.get(364, []))} against endpoints 5->13. One "
@@ -211,7 +219,11 @@ def section_corpus_oracle():
               "not by the condition row's own endpoints -- skill 480 has "
               "endpoints 3/3 and appears on the wire at 9.0. They are excluded "
               "from the count above rather than quietly absorbed into it, and "
-              "this check exists so 'excluded' cannot become 'they agree too'")
+              "this check exists so 'excluded' cannot become 'they agree too'. "
+              "NOT A HOLE IN THE RULE: isle section 2 fits 481 Crippled to the "
+              "same rank reading using PIN DOWN's 3->15 progression. Same rule, "
+              "different join -- and this server has no model of which skill "
+              "inflicted a condition to make that join with")
 
 
 def section_dispatch():

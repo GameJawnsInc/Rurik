@@ -1617,3 +1617,124 @@ mechanic, the client supplied the encoding, and neither alone would have produce
 | What is `pvp_masks[]` for? | still **NOT FOUND**; eight zeros worked throughout |
 | What is `+0x94` for? | still **NOT FOUND**; 86 rows carry it, none tested |
 | Does upstream's message ordering also work? | untested — we sent unlocks before the bar |
+
+---
+
+# OBSERVED, 2026-08-20: the DURATION slot, read because the server had to send one
+
+The effect substrate (`toolkit/authsrv/effects.py`, R4b) needed one number the
+table does not hand over cleanly: **how long does this skill's effect last?**
+§4 answered which values *render green*; this is about which values are *real*,
+which turns out not to be the same question. Three findings and one
+corroboration, all from the
+1,333-skill player corpus plus the 102 `0x0042` applies in the live captures.
+
+## 12. `skill_arguments` bit 1 means the duration SCALES, not that the slot is meaningful
+
+§4 established that a value renders green when its `args` bit is set **and** its
+endpoints differ, and that reading endpoints without the bit invents a
+progression the game never draws — Rush's scale slot holds a constant 25 with
+its bit clear. `authsrv.skill_scale_value` therefore **raises** on a disabled
+set, which is right for the scale.
+
+**It is too strong for the duration, and retail says so.** Skills **984 (Torch
+Enchantment)** and **998 (Torch Hex)** have `skill_arguments = 0` — the duration
+bit CLEAR — endpoints 30/30, and **ArenaNet sent `0x0042` with duration 30.0 for
+both**. A server that honours the bit the strict way cannot reproduce two of
+retail's own applies.
+
+So the bit is about the **progression**, and the slot is about the **value**.
+The two coincide for the scale (a scale with no progression has no meaning of
+its own) and come apart for the duration (a fixed-duration skill still has a
+duration). `effects.resolve_duration` splits them, and every branch it permits
+names a retail witness while every branch it refuses names its zero:
+
+| shape | n (of 1,333) | rule | witness |
+|---|---|---|---|
+| bit SET | 618 | interpolate `lo..hi` at the rank | 160, 364, 348, 814 |
+| bit CLEAR, `lo == hi == 0` | 488 | no duration → `None` | — (nothing to send) |
+| bit CLEAR, `lo == hi`, below the sentinel floor | 148 | the flat value | **984, 998 at 30.0** |
+| bit CLEAR, `lo == hi`, at or above it | 30 | **REFUSE** | none — see §13 |
+| bit CLEAR, `lo != hi` | 49 | **REFUSE** | **none, in 102 applies** |
+
+The last row is the honest one. Forty-nine skills carry two differing endpoints
+with the bit clear and **not one of them appears anywhere in the corpus**, so
+there is no evidence for *either* reading — interpolate anyway, or take one
+endpoint? The module raises rather than returning a plausible number.
+
+## 13. The duration slot carries SENTINELS, and they are an enum in the high word
+
+Of the 666 bit-clear skills with equal endpoints, **30 hold a value that is not a
+second count**:
+
+| value | hex | n | what they mostly are |
+|---|---|---|---|
+| 131,072 | `0x20000` | 22 | Enchantment |
+| 196,608 | `0x30000` | 7 | Enchantment / Signet |
+| 999,999 | — | 1 | Spell |
+
+**24 of the 30 are Enchantments**, which is exactly where a *"maintained until
+removed"* marker belongs — a maintained enchantment has no duration, so its slot
+is free to carry something else. `0x20000` and `0x30000` are 2 and 3 in the high
+word, i.e. an enum, not a magnitude; 999,999 is the other spelling of forever.
+
+**Vital Blessing (289) is one of them, and it is on our own enemy's bar**, so
+this refusal fires in every session this server runs. That is deliberate: the
+alternative is putting **36 hours** on the wire as a duration. What the enum
+*means* is **NOT FOUND** — no source in this repo names it, and the module keys
+on the SHAPE (high word set, floor `0x10000`) rather than on the three observed
+values, because it is the shape that is established.
+
+**A follow-up with a clean answer available:** the client draws "Enchantment
+Spell" and a maintained-enchantment tooltip from *somewhere*. Whatever reads
+`0x20000` is the same kind of anchor `s_attrib`'s accessors were for the item
+modifiers (`studies/itemmods` §2), and it would name the enum rather than leave
+it as a floor.
+
+## 14. `target` (+0x31) is a target-TYPE enum, and the type column corroborates two of its codes
+
+The substrate needs to know whether a stance lands on the caster or on what the
+caster is aiming at. `target` answers it, and the answer is checkable without
+trusting any single skill, because `type_code` is an independent column:
+
+| type | n | target distribution |
+|---|---|---|
+| Attack (14) | 199 | **5 → 199/199** |
+| Stance (3) | 76 | **0 → 75/76** |
+| Glyph (12), Preparation (19), type 16, 20, 21, 24, 26, 27 | 117 | **0 → 117/117** |
+| Hex (4) | 151 | 5 → 140, then 0/1/16 |
+| Enchantment (6) | 227 | 0 → 151, 3 → 52, then 1/4/5/6/14 |
+
+An attack necessarily aims at a foe and a stance necessarily lands on the
+caster, so **0 = self and 5 = the cast's target** is read off the type column
+rather than asserted about any one skill. The one Stance at 5 and the three
+Hexes at 0 are not explained here and are not needed.
+
+**Codes 1, 3, 4, 6, 14 and 16 are UNRESOLVED.** 3 is plainly ally-shaped (52
+Enchantments and Reversal of Fortune 307 carry it) and 4 is *also* ally-shaped
+(Restore Condition 276), which is one distinction too many to guess at — so
+`effects.effect_recipient` reads only 0 and lets everything else fall through to
+what the caster aimed at. Known-wrong-but-bounded, rather than an invented enum.
+
+## 15. And a corroboration of somebody else's finding, at corpus scale
+
+`studies/isle/FINDINGS.md` rung-8 prep §2 settled **`0x0042`'s field 3 = the
+applying skill's attribute RANK** on 2026-08-18, CORROBORATED against GWW across
+five values and four skills. Running the same prediction over the **whole**
+corpus with the client's table on the other side of the join:
+
+> `interp(duration0, duration15, field3)` == the f32 duration on the wire, for
+> **96 of 96 non-condition applies, 0 misses**.
+
+No free parameter — the endpoints are ArenaNet's, the formula was measured at
+`0x005A8920` for the *damage* scale, and field3 and the duration are retail's
+bytes. This is not a new finding; it is that finding mechanised, in
+`test_effects.py` §2, guarding a rule the server now depends on.
+
+**Worth recording because of what it says about the repo rather than the game:**
+`bufflog.field3_report`'s docstring still read *"the answer is one session away"*
+for two days after the answer was written down in another study. That is the
+fourth time in one week a measured number sat unread beside code using an
+invented one — property 17, the rung-7 damage formula, the item modifiers, and
+this — and all four failed the same way round: measured, written down, not
+wired.
