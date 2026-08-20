@@ -959,6 +959,52 @@ a critical happened, never what one was worth.
 
 ---
 
+## 4.2 The INCOMING direction, and the gap the run exposed (2026-08-20)
+
+§4.1 watched our server's damage land on a creature. This is the other way round,
+and it found something the offline tests could not.
+
+**The armour term works.** With the five starter pieces on, `ENEMY_HIT_FRACTION`'s
+baseline 10 becomes **13 a swing** — `10 × 2^((60−45)/40)` = 12.97 — so the player
+dies in **8 swings, not 10**, and the server log names the location each swing rolled:
+
+```
+player hit by 10: 87/100 (struck the boots,  AR 45)
+player hit by 10: 74/100 (struck the legs,   AR 45)
+player hit by 10: 61/100 (struck the body,   AR 45)
+...
+player hit by 10:  0/100 (struck the gloves, AR 45)
+```
+
+On screen: **`-13` in RED** over the player's own health bar, against the **yellow** an
+outgoing hit draws (capture `20260820T170433`). Colour is by direction, not by
+magnitude or by critical — §4.1 established a critical draws the same yellow as an
+ordinary outgoing hit, so the client's only damage-number distinction is who is being
+hit.
+
+> **THE GAP: the enemy almost never auto-attacks, and the path it DOES use ignores
+> armour entirely.** The first attempt at this run produced `player hit by skill 312`
+> three times and **not one melee swing** — the Hatcher's four-slot bar always has
+> something recharged, so `land_swing` (the function the armour term was just wired
+> into) barely runs in a real fight. `skill_damage` has no armour term at all: the
+> player took **46 a hit** through it, unscaled by the AR 45 they are wearing. The
+> melee numbers above were obtained by emptying the enemy's bar in a local,
+> uncommitted edit, reverted immediately.
+
+**That is not a bug to fix blind.** WIKI (GWW, "Armor rating"): armour-respecting
+damage is "all damage from attacks and most spells dealing elemental damage", while
+"a number of skills, especially under the Mesmer, Necromancer, and Monk lines, deal
+damage that ignores armor" — and all bonus damage from attack skills is
+armour-ignoring. So the correct term is **per skill**, not global, and this server has
+no per-skill armour-ignoring flag because it has no skill substrate to hang one on.
+`agents.GV_ARMOR_IGNORING = 55` exists and nothing reads it.
+
+**So it lands where everything else this week landed**: the skill substrate is the
+blocker, and guessing a global answer here would put a wrong number on every skill in
+the game rather than leaving one honest gap.
+
+---
+
 ## 5. The Master of Damage oracle — and the check that could have failed
 
 **Slot 144 at (−2000, 3233), profession 6 Elementalist, level 20, health 590.** GWW's
