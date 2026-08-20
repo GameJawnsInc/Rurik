@@ -47,6 +47,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from vaultpath import vault_path  # noqa: E402
 
 SLOT = os.path.join(vault_path("harness-control"), "interact")
+# A SECOND SLOT, for ORDERING AN ATTACK, added 2026-08-20 for the same reason
+# and with the same caveat. Watching a damage number needs the player to swing,
+# the player swings when the client sends `0x0026 ATTACK_AGENT`, and the client
+# sends that when someone CLICKS A HOSTILE -- a world-anchored click, which is
+# the one thing the paragraph above says this harness cannot do. `interact`
+# could not stand in: its server arm is `_handle_interact`, which is the NPC
+# dialog path and deliberately never begins an attack (0 of 10 distinct 0x0039
+# targets on ArenaNet's wire enter an auto-attack exchange, and authsrv.py's
+# INTERACT_AGENT arm carries that measurement).
+#
+# Separate slot rather than a shared one, because "talk to it" and "hit it" are
+# different orders and a run should not be able to fire one meaning the other.
+ATTACK_SLOT = os.path.join(vault_path("harness-control"), "attack")
 
 
 def _ensure_dir():
@@ -62,6 +75,41 @@ def request_interact(agent_id):
     # Replace rather than write in place: the reader polls, and a half-written
     # file would parse as a different agent id or as nothing.
     os.replace(tmp, SLOT)
+
+
+def request_attack(agent_id):
+    """Driver side: ask the server to ORDER AN ATTACK on `agent_id`.
+
+    Same contract as request_interact and the same honesty requirement: the
+    server runs its own `begin_attack`, exactly what the ATTACK_AGENT arm
+    calls, so everything downstream -- the swing timer, the armour term, the
+    critical, the damage property on the wire, the number the client draws --
+    is real. What did not happen is the CLICK, and with it the client's own
+    decision to send 0x0026. That decision is separately OBSERVED (four of
+    them at our own Hatcher in one labelled run, 2026-08-11).
+    """
+    _ensure_dir()
+    tmp = ATTACK_SLOT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(str(int(agent_id)))
+    os.replace(tmp, ATTACK_SLOT)
+
+
+def take_attack():
+    """Server side: the pending attack target, or None. Read-and-clear."""
+    try:
+        with open(ATTACK_SLOT, encoding="utf-8") as fh:
+            raw = fh.read().strip()
+    except FileNotFoundError:
+        return None
+    try:
+        os.remove(ATTACK_SLOT)
+    except OSError:
+        pass
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def take_interact():
@@ -93,7 +141,8 @@ def clear():
     session's first seconds, which is the kind of ghost that gets blamed on the
     protocol.
     """
-    try:
-        os.remove(SLOT)
-    except OSError:
-        pass
+    for slot in (SLOT, ATTACK_SLOT):
+        try:
+            os.remove(slot)
+        except OSError:
+            pass

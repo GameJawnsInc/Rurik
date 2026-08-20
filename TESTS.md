@@ -2713,8 +2713,176 @@ Every one of these, in the order they were written:
   including reverting each arm separately, widening to the contaminated form,
   lowering 520 to 400, dropping the plane carry, restoring the early return at
   the interval floor, and silencing the threshold sweep or the reconciliation.
-  Floor **57**, the bare-machine subset, against a green **102** with every
-  capture present; §11-§16 declare `LEDGER.skip` without them. No client. ~3 s),
+  **§17-§20 put movetap's and movesync's OWN `_selftest_*` sections into the
+  suite**, which is where 130 checks written for the gatefire probe on
+  2026-08-20 were not: both modules carry a module-level `--selftest`, and
+  `run_suite.py` discovers `test_*.py` from DISK, so neither was ever invoked by
+  it -- the same defect as a test missing from this file, which the tree has
+  shipped three times (`test_pathmap.py`, `test_skillcast.py`,
+  `test_textrec.py`). §17 wraps movetap's fence sections: the 28 AgTrack and
+  gate-1 displacements re-derived from build 38797's own bytes (each expected
+  encoding BUILT FROM the module constant, so a wrong constant produces bytes
+  that are not at that VA), and the 13 refusal cases that keep a failed read
+  from minting the `0` that means "the fence is shut". §18 wraps movetap's
+  C2/C3/C6/C7/C8/C9 sections -- episodes (7), the flip denominator (8), gate 1's
+  ASYNC twin and 0x005FF820's clamp (26), the two early-outs (11), the
+  vocabulary (7). §19 wraps movesync's C4/C5/C9 -- the three-way jump tally
+  (14), the appender witness (19), the two spellings (6), and `print_fence`'s
+  own report (11). **Those two grew
+  because a review found the new checks pinned the DICT and never the TEXT**,
+  and the text is the artifact `PROBE-GATEFIRE.md` §6 quotes: swapping the
+  printed `reachable` and `fenced` cells, hard-wiring the printed `unread` to 0,
+  printing the unread label breakdown in the fenced row, DELETING the whole
+  three-way table while keeping the tally and its refusal, hard-wiring arm (a)'s
+  `witnessed` to 0, borrowing `judged` for arm (b)'s denominator, and deleting
+  the arm-coverage and PARTIAL lines were **each fully green**. Both printers
+  are now read back out of their own stdout (`read_back_three_way`,
+  `read_back_witness`) and compared cell by cell against the dict behind them, a
+  missing row arriving as an ABSENT KEY rather than a zero; the tally fixture is
+  **2 / 5 / 1** so every permutation of the three cells is visible, and the
+  witness fixture holds `judged` 8 against `reach_pairs` 7 so arm (b) borrowing
+  arm (a)'s denominator cannot pass. Two more of the same family: the refusal
+  bar is now computed by `unread_refuses` from `UNREAD_REFUSE_SHARE` alone
+  (`unread * 4 >= n` was a second copy of the same constant, so setting the
+  named one to 0.90 left the code refusing at 25% while the prose claimed 90%,
+  green both ways -- it is exercised at 0.90 AND at 0.10 so the bar is pinned in
+  both directions), and the sentinel check asserts the three `missing:*` names
+  are DISTINCT, because the subset test alone passed when all three held the
+  same string. **AND THEN THE SAME DEFECT WAS FOUND ONE ALTITUDE HIGHER:** the
+  text was pinned at the FUNCTION while the operator reads the PIPELINE.
+  Deleting the `print_appender_witness(pop, indent, name)` call from
+  `print_fence` -- the only path `movesync.main()` takes -- left `--selftest` at
+  49/49 and this file at 147/147 with the whole of C5 gone from the report, and
+  six more `print_fence` branches judged ZERO rows in the entire suite (the
+  PARTIAL line, the per-label share denominator, the `samples=` stream the
+  production call actually uses, the population REFUSAL, the legacy NOTE's
+  denominator, and `if rc: return rc` making that refusal swallow the tally and
+  the witness beneath it -- the exact substitution C4 exists to undo). The new
+  §19 section drives `print_fence` ITSELF on one fixture that takes the
+  production path and the refusing path together -- `samples=` supplied, `have`
+  6 of `total` 8, unread 2 of 6 over the 25% bar -- with every number distinct
+  from the one a substitution would put in its place (50.0% over `have` against
+  37.5% over `total`, 11 stream samples against 8 paired), the row counts
+  asserted before anything is printed, the three sections asserted IN ORDER by
+  their offsets in the output, and a mirror at `total` 7 with no unread row so
+  neither the refusal nor the PARTIAL line can be a constant. Its thirteen
+  mutations all redden a named check. **Two checks per section,
+  never one**: the section's verdict, and the number of checks it EXECUTED
+  against a floor read off a real green run, because a section whose fixtures
+  stopped matching reports `bad = 0` over nothing at all and the verdict cannot
+  tell that from a pass -- `test_codec.py`'s empty glob, one layer up. Each is
+  then BROKEN on purpose and required to go red: `episodes` returning no runs,
+  `count_flips` pinned at (0, 0), `GATE1_CUT` moved off the float the image
+  holds, `EARLY_OUT_A_MODE` 9 -> 8, `test_would_run` counting `world1:append` as
+  open, `classify_reach` calling every cell fenced, `state_fields` reading
+  nothing, `REACH_ALIASES` emptied to the pre-C9 reader, and
+  `print_appender_witness` silenced to a no-op -- which is the mutation that
+  landed green in the round before this one. **§20 asks BOTH MODULES
+  what sections they define** and requires every one to have been wrapped, with
+  a planted section as its control, so one added tomorrow goes red here instead
+  of being found missing in a week -- the both-directions rule
+  `test_srclint.py` §7 applies to this file. It rules on the set `_wrap` filled
+  as it RAN and not on the floor table, because a name can sit in a table while
+  its call site is deleted, and a coverage check reading the table would then
+  certify a section nobody ran -- the same defect one level up; deleting one
+  `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
+  **65**) so the operator's pre-flight command cannot diverge from the
+  suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
+  green run executes and requires the module to refuse itself. **movesync had no
+  module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
+  each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
+  leans on -- carried none, so deleting section 2's only check took it from 38
+  [PASS] to 37 with `--selftest` and this file both still exiting 0. It declares
+  `SELFTEST_FLOOR = 65` now, measured off a green run (15 + 14 + 19 + 6 + 11),
+  and the four `_selftest_*` sections return `(bad, ran)` so the total is summed
+  from what they executed rather than counted from what they printed. **And the
+  per-section floors were the same half-rule from the other side**: sections 8
+  and 9 declared 8 and 9 while executing 14 and 14, so either could have lost
+  six checks with its OWN floor silent, caught only by the total and by this
+  file's table -- two external nets under a number the section owns. Every
+  `_floor` is now the count its section executes, instrumented rather than
+  counted by hand, and dropping one check from section 8 or 9 reddens that
+  section's own floor line as well as this file's. And it
+  cross-checks every self-reporting section's returned count against the
+  [PASS]/[FAIL] lines it printed, because **the first version of §17 was itself
+  the defect it now guards**: it compared a section's `(bad, ran)` tuple against
+  `0` -- which cannot be true -- and then compared the same tuple with `>`,
+  which raised, so 16 green sections were followed by a TypeError and one check
+  that could never pass. Floor **100**, the bare-machine subset, against a green
+  **150** with every capture present; §11-§16 declare `LEDGER.skip` without
+  them, and so does `movetap._selftest_fence_bytes` (that section's two checks
+  and its one control are the only 3 of §17-§20's 46 that need the vault's
+  client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
+  INSTRUMENT, and this is what makes that true.
+  `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
+  `movesync` print during a live run, so a real run can be matched against it.
+  **Those blocks were written before the instrument existed** and had drifted
+  five ways at once by 2026-08-20: an `ALIASING: phi 0.011 ... white 0.409,
+  A = 0.026.` line no code has ever printed, naming a `white` field no code has
+  ever had; a 2-line fence header where the printer emits **3**; an
+  `unread:*  0  0.0%` row that `fence_verdict` **cannot** emit, because it
+  iterates `sorted(reach.items())` and a label with no occurrences is not in the
+  dict -- structurally unprintable, not merely absent; an EPISODES section wrong
+  in nearly every particular (no poll-rate line, no `effective n = ... QUOTE THE
+  EPISODES.` line, ONE Nyquist threshold where the code names two -- DETECT and
+  CHARACTERISE -- and no `a LOWER BOUND -- censored` marker); and a whole
+  APPENDER WITNESS section attributed to `movetap`, which has no such printer
+  (`grep -c appender_witness toolkit/clientscan/movetap.py` = **0**; it is
+  `movesync.print_fence`'s). **Nothing caught any of it for as long as the
+  document existed.** One block carried a RECONSTRUCTION label and the label was
+  read as a licence rather than a debt -- §12 item 10 filed two of the five as
+  accepted residue and undercounted the rest. A label on a shape does not check
+  the shape; a rule nothing checks is a wish. So every one of §6's **15**
+  untagged fenced blocks is now regenerated from the real printers and asserted
+  against the document **byte for byte**. THE FIXTURES LIVE IN EXACTLY ONE PLACE
+  -- `toolkit/clientscan/probedoc_fixtures.py`, 25 registered fixtures --
+  imported both by this test and by whoever regenerates §6
+  (`python toolkit/clientscan/probedoc_fixtures.py --write <dir>`), so the two
+  cannot diverge; that single-source rule is the whole guarantee and splitting it
+  voids the test. §1 pins the BLOCK COUNT before comparing anything, because a
+  block quietly deleted would otherwise just stop being checked. §2 checks §6's
+  own sha256 pin of `movetap.py` and `movesync.py` against the files on disk --
+  the document says a moved hash voids every block below it, which is a claim
+  about the source and therefore checkable, and it is the tripwire for drift in
+  output §6 does NOT quote. §3 pins six printer SIGNATURES by name, including
+  `gate1_verdict(g1, g1why, early_a, point_bad, n)` where `early_a`/`point_bad`
+  are TALLY DICTS -- a caller passing ints raises `AttributeError` at
+  `.get(True, 0)`. §4 asks the SYNTAX TREE (not a grep, which trips on the word
+  "Whitespace" in a comment) whether any printable string literal in either
+  module carries a `white` field, and whether `movetap` has an appender witness
+  at all. §5 is TWO WITNESSES on each block's provenance tier: the document's own
+  prose against the fixture registry. They must agree, so relabelling a block
+  RECONSTRUCTION while a fixture still exists for it is a CONTRADICTION and goes
+  red -- relabelling is not a way out. §6 is ONE loop over all fifteen with a
+  tally asserting each produced exactly one outcome; a doc-marked or
+  registry-marked RECONSTRUCTION is a DECLARED SKIP, never a silent pass, and the
+  two OBSERVED blocks are re-run through `movesync`'s real CLI over the vault
+  captures they name (`movetap-20260819T145939` x `authsrv-20260819T145717-c1`,
+  and `--wire-only` over the second) or skipped where the vault is absent. §7
+  renders every fixture TWICE and requires the two identical, including the 12
+  not quoted in §6, because a fixture that moves between runs is noise and noise
+  is how a bar gets lowered -- and a rotted unquoted fixture is worse than none.
+  **Four sabotages were BUILT AND RUN on scratch copies and all four behave:**
+  (a) one character inside Block 1 (`402` -> `403`) reddens exactly ONE check,
+  naming the block, its document line range and the first differing line with
+  both sides printed; (b) `WOULD` -> `MIGHT` in `fence_verdict`'s header on a
+  scratch `movetap.py` reddens **8** -- the sha256 pin plus all 7 blocks that
+  printer feeds; (c) Block 3 relabelled RECONSTRUCTION in the document alone
+  reddens §5 and turns its content check into a printed `[SKIP]` carried into the
+  verdict's "not measured this run"; (d) BOTH witnesses relabelled is green at 73
+  with 1 declared skip, which is the shape a future block with no output yet
+  takes. **(d) earned its keep by finding a real hole in the first draft of this
+  file**: a `continue` dropped a registry-side RECONSTRUCTION with no check AND
+  no skip -- a block that quietly stopped being covered, this document's original
+  sin reproduced inside its own guard. §6's tally check is the fix. WHAT IT DOES
+  NOT COVER, named rather than implied: only §6's fenced blocks. §3's pre-flight
+  greps (`gate_reach` = 31, `shut:apply` = 0), §5's build lines, §7's failure
+  table and §10's addresses are prose and are NOT pinned. And the FIXTURE numbers
+  are not measurements of the client -- real code over hand-laid input, so what
+  is pinned is the SHAPE the code prints; §6, §11 and §12 say so per block and
+  this test does not upgrade them. Floor **72**, the bare-machine subset, against
+  a green **74** with both captures present. No client, no server. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -4670,6 +4838,50 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
+  same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
+  §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc
+  prefix, a tripwire that only reports GROWTH in the collision count, or documentation
+  and no checker — and the middle one won on the argument that file's own top box makes:
+  eighty study documents predate any convention, a gate over them "will produce a red
+  suite for reasons nobody wants to fix at 2am", and the last time this repo read a rule
+  literally across sixteen documents it rewrote 46 citations and **reverted all 46 the
+  same day**. So `identlint.py` counts and never judges, and the ceiling lives here.
+  **A collision is not a defect to be scrubbed**: 53 of them are the tree's current
+  ruled-on state and a mass rename is refused in advance; the defect is the 54th
+  arriving unnoticed. Baseline **312 defining sites across 31 documents, 152 distinct
+  tokens, 53 colliding** (2026-08-20, after the token pattern widened to admit the
+  convention's own shapes — `GATEFIRE-C3`, and ladder rungs like `R-ISLE`/`R-IDENTS`,
+  which a pre-merge review found the resolver blind to), ceiling **80** — 53 at the same ~1.5x
+  headroom `test_provlint.py` used for 134→200 and 280→420, not a new rule, and raising
+  it when it fires is a normal edit. A "defining site" is only a table row or a heading
+  that OPENS with the token, because §2's census pattern was table-rows-only and this
+  one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
+  references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all
+  outside it, and `identlint.census_limits()` prints that list in the tool's own output
+  so the caveat cannot drift away from the number the way §2.1's own 108 did. **Section 2
+  is the load-bearing one** — nine REFERENCE forms that must not count, because every
+  study doc is built out of citations of other arcs' tokens and a census of mentions
+  measures cross-citation rather than ambiguity; the sharpest case is `studies/idents/`
+  itself, whose census tables are nothing but backticked citations and which must
+  therefore contribute **zero** sites. Section 4 proves BOTH arms rather than asserting
+  the tree is clean today: the comparison goes red one collision above the ceiling, a
+  synthetic rival definer added to the REAL scan moves the count by exactly one, and a
+  second definer in the SAME document does not — one arc numbering its own table C1–C9
+  is a namespace working, not a collision. The control token is chosen at run time (the
+  first plain LETTERS+DIGITS token defined in exactly one document — the shape filter
+  is what guarantees the synthetic definer round-trips the scanner), so the growth arm
+  cannot rot into a mid-run abort the day an arc mints a rival of a hard-coded one. Section 5 is the deliverable:
+  `whichrung.py` resolves `C8` to the documents that define it, asserted by document
+  path and by row CONTENT and never against a pinned line number, since these documents
+  are edited weekly and a pinned line is an assertion that goes red for a reason nobody
+  wants to fix and gets deleted instead. It finds **three** sites where §4's one-liner
+  found two, because that pattern treats the hyphen as a namespace and §2.2 rules that
+  it is not — `archivewrite`'s `C-8` is the third, and §1's ambiguous sentence *"C-8
+  finished"* is the hyphenated spelling, so the extra hit is the fix rather than noise.
+  Stdlib only, no vault, no socket, no client. 28 checks, floor 26 — section 4's two
+  growth arms declare skips in the unreachable no-control-token case, per checks.py's
+  mandatory-core guidance. ~1 s),
   `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
   `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
   after the plan forbade exactly that, and closes the paragraph "The rule was in the

@@ -11,6 +11,21 @@ npc = "hatcher"
 agent_id = 10
 definition = 3
 max_health = 100
+# ARMOUR RATING is DERIVED, not declared -- see creature_armor_rating() in
+# authsrv.py. It was `60` for one commit, chosen because that is the Isle's own
+# Suit baseline, and 60 is level-20 armour on a level-1 creature: the wrong
+# SHAPE, which is exactly the failure studies/monsterai section 3.3 already paid
+# for on reach. WIKI (GWW, "Armor rating", rev. 2026) gives the formula --
+# `creature AR = 3 * Level + armor bonus`, the bonus being profession-specific
+# -- so this row already carries everything needed: the npc's `level` and
+# `profession`. A number derived from two facts we hold beats a third fact
+# invented beside them.
+#
+# Uncomment to OVERRIDE, which the same page says is often right: "Many
+# creatures in PvE do not follow this formula and may be significantly
+# resistant or vulnerable to certain types of damage." An override is a
+# measurement about one creature and should cite where it came from.
+# armor_rating = 60
 # Placed relative to the player's arrival point rather than at an absolute coordinate,
 # because the player's arrival point differs per map and this enemy is meant to be
 # reachable in whichever one is loaded.
