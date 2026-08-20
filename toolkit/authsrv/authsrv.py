@@ -56,6 +56,7 @@ import origin  # noqa: E402
 import questdefs  # noqa: E402
 import chatdefs  # noqa: E402
 import charstore  # noqa: E402
+import effects  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -1947,6 +1948,27 @@ ATTRIBUTE_POINTS_UNUSED_SEE_ATTRIBSPEND = None
 # in the wider corpus. If the bar stays empty, doubt the numbers before the shape.
 GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS = 0x001D   # 29
 GAME_SMSG_SKILLBAR_UPDATE = 0x00DA              # 218
+
+# ---- THE EFFECT CHANNEL, wired 2026-08-20 ---------------------------------
+#
+# `0x0042` opens an episode on an agent and `0x0044` closes it. Everything
+# about the pair -- the field order, what field 3 is, what the duration slot
+# holds and when the removal lands -- is in `effects.py`'s docstring, measured
+# off 102 applies and 88 removals in the live corpus by `bufflog.py`. The two
+# names here are the same constants that module declares, spelled the way the
+# rest of this file spells opcodes.
+#
+# THE DURATION IS AN f32 IN A DWORD SLOT. `schema/messages.json` types it
+# `dword` and the client does `fld` on it, so `_f32` has to reinterpret on the
+# way out. A sender that writes the integer seconds puts ~1.4e-45 on the wire
+# and the client drops the effect on the next frame.
+GAME_SMSG_EFFECT_APPLY = effects.OP_EFFECT_APPLY      # 66
+GAME_SMSG_EFFECT_REMOVE = effects.OP_EFFECT_REMOVE    # 68
+
+# The switch, so a run can isolate the effect channel from everything else the
+# same way --no-armour-term isolates the armour one. ON by default: an effect
+# that only appears behind a flag is an effect nobody watches.
+EFFECTS = True
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
 SKILLBAR_SLOTS = 8
@@ -4865,6 +4887,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
+        # removal landing before apply + duration as `stripped` and names
+        # death as one of its three causes, so leaving them running would put
+        # an episode on the wire that our own reader scores as `open` for the
+        # rest of the session.
+        strip_effects(send, state, target_id, conn_id, "the agent died")
         # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
         # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
         # reward, then the flags byte. Same tick, same agent, all three.
@@ -5478,13 +5506,21 @@ def cast_tick(send, state, conn_id):
             # only WHEN. hit_enemy re-reads the target from state, so a corpse,
             # a removed agent or a revived one is handled there rather than by
             # anything cached at press time.
+            rank = player_rank_for_skill(cast["skill_id"])
             target = cast.get("target")
             if target:
-                bonus, found = 0.0, skill_damage(
-                    cast["skill_id"], player_rank_for_skill(cast["skill_id"]))
+                bonus, found = 0.0, skill_damage(cast["skill_id"], rank)
                 if found and found[1] == "additive":
                     bonus = float(found[0])
                 hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
+            # AND THE EFFECT, at the same instant as the damage and for the
+            # same reason: E5 is the cast COMPLETING, so it is when a stance
+            # goes on, not when the key was pressed. A skill can do both --
+            # nothing here assumes damage and an effect are alternatives --
+            # and `apply_effect` returns None for the skills that do neither,
+            # which is most of them.
+            apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                         rank, target, conn_id)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -5498,6 +5534,135 @@ def cast_tick(send, state, conn_id):
             finished.append(cast)
     for cast in finished:
         pending.remove(cast)
+
+
+def effect_table(state):
+    """This connection's live episodes. Created on first use.
+
+    Lazily rather than at handshake because `state` is built in two places
+    (7252 and 7328) and a table created in one of them would be missing in the
+    other -- the shape of bug that shows up as "effects work in the loopback
+    harness and not in a real session".
+    """
+    table = state.get("effects")
+    if table is None:
+        table = state["effects"] = effects.EffectTable()
+    return table
+
+
+def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
+    """Open an episode for one cast, if the skill is one that opens episodes.
+
+    Returns the episode, or None. THREE ways to get None and they are not the
+    same thing, which is why the log distinguishes them:
+
+      * the skill's type is not one whose definition is a timed effect --
+        Attack, Spell, Shout, Signet, Glyph, Skill. Silent, because that is
+        most of the corpus and most of both our bars.
+      * the skill has no duration at all (both endpoints 0, 488 of 1,333).
+        Also silent.
+      * the duration slot holds a shape with NO RETAIL WITNESS -- a sentinel,
+        or two differing endpoints with the scaling bit clear. LOUD, because
+        that is a gap in what we can read rather than a skill that does
+        nothing, and the two look identical from the outside. Vital Blessing
+        (289), on our own enemy's bar, is one of these.
+    """
+    if not EFFECTS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    family = effects.applies_effect(row)
+    if family is None:
+        return None
+    try:
+        duration = effects.resolve_duration(row, rank)
+    except effects.EffectError as ex:
+        print(f"[c{conn_id}] skill {skill_id} is a {family} and its duration "
+              f"is UNREADABLE, so no effect goes out: {ex}", flush=True)
+        return None
+    if not duration:
+        return None
+
+    wearer = effects.effect_recipient(row, caster_id, target_id)
+    ep = effect_table(state).apply(wearer, skill_id, rank, duration,
+                                   time.time())
+    # FIELD 3 IS THE RANK. Not the duration -- 96 of 96 non-condition applies
+    # in the live corpus predict the wire's duration from
+    # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
+    # against a duration of 13.0, which is the row that refutes the other
+    # reading outright. effects.py's docstring carries the whole check.
+    # AN OVERLAPPING RE-APPLICATION IS FLAGGED AND STILL SENT, because that is
+    # what retail does -- 15 of them in the corpus, every one under a NEW buff
+    # id (effects.EffectTable.apply carries the numbers). The flag is here
+    # because the CLIENT discards it: a repeat 0x0042 for a live (agent, skill)
+    # draws no second icon and does not reset the timer, MEASURED twice on
+    # 2026-08-20 -- once with a new buff id and once with the same one, which
+    # was a stated prediction and was refuted.
+    #
+    # So the message is honest and its effect is nil, and the thing to fix is
+    # upstream: our placeholder AI re-casts a hex the target already has, which
+    # no monster in the corpus does. See pick_skill, which says in its own
+    # docstring that it is not a decision about AI.
+    tag = " (OVERLAPPING -- the client will discard it)" if ep["overlapping"] else ""
+    send(GAME_SMSG_EFFECT_APPLY,
+         [ep["agent"], skill_id, ep["rank"], ep["buff"],
+          _f32(ep["duration"])],
+         f"EFFECT_APPLY({family} {skill_id} on agent {ep['agent']}, "
+         f"buff {ep['buff']}, {ep['duration']:.1f}s at rank {ep['rank']})")
+    print(f"[c{conn_id}] {family} {skill_id} on agent {ep['agent']}: "
+          f"buff {ep['buff']}, {ep['duration']:.1f}s (rank {ep['rank']}){tag}",
+          flush=True)
+    return ep
+
+
+def strip_effects(send, state, agent_id, conn_id, why):
+    """Close every episode on one agent early. Death, mostly.
+
+    A STRIP IS NOT AN EXPIRY and our own reader draws the line: `bufflog`
+    classifies a removal that lands before apply + duration as `stripped` and
+    names death as one of the three causes. Leaving them running would give a
+    corpse a live stance and would leave an episode our own census scores as
+    `open` for the rest of the session.
+    """
+    if not EFFECTS:
+        return []
+    gone = effect_table(state).strip_agent(agent_id)
+    for ep in gone:
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
+             f"STRIPPED: {why})")
+    if gone:
+        print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
+              f"{agent_id}: {why}", flush=True)
+    return gone
+
+
+def effect_tick(send, state, conn_id):
+    """Close every episode whose stated duration has run out.
+
+    Runs on the world tick, and the schedule is the corpus's own: a removal
+    lands at apply + duration, 57 of 88 within 5 ms and 83 of 88 within 50 ms.
+    Our tick interval is the only thing between us and that shoulder -- the
+    episode's `expires_at` is absolute, so a slow tick is late rather than
+    drifting, and lateness is exactly what `bufflog`'s residual measures.
+    """
+    if not EFFECTS:
+        return
+    table = state.get("effects")
+    if not table or not table.live:
+        return
+    now = time.time()
+    for ep in table.due(now):
+        table.close(ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
+             f"expired after {ep['duration']:.1f}s)")
+        print(f"[c{conn_id}] effect {ep['skill']} on agent {ep['agent']} "
+              f"expired (buff {ep['buff']}, "
+              f"{now - ep['applied_at']:.2f}s of {ep['duration']:.1f}s)",
+              flush=True)
 
 
 def revive_due(send, state, conn_id):
@@ -5960,6 +6125,8 @@ def land_swing(send, state, agent_id, agent, conn_id):
         # step has to be the effects bit, exactly as it is for an agent. Our own
         # bookkeeping decides; the fractions only make the bar agree with it.
         state["player_dead"], state["player_died_at"] = True, time.time()
+        strip_effects(send, state, PLAYER_AGENT_ID, conn_id,
+                      "the player died")
         state["attacking"] = None      # a corpse stops swinging back
         send(GAME_SMSG_AGENT_UPDATE_STATUS,
              [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
@@ -5988,6 +6155,18 @@ def pick_skill(agent, now):
     Starting the scan AFTER the last slot cast fixes it without any new numbers:
     every ready slot gets a turn before any slot gets a second one. The wrap is
     what makes it a cycle rather than a sweep that stalls at the end.
+
+    ONE MORE THING IT DOES THAT NO REAL MONSTER DOES, found by running it
+    (`studies/skills/FINDINGS.md` 16.1): it re-casts a HEX the target already
+    has. Round robin only asks whether a slot has recharged, so our Hatcher put
+    four overlapping copies of Scourge Sacrifice on the player in one life. The
+    client discards every copy after the first, and retail's own 15 overlapping
+    re-applications are all under 0.5 s apart -- same-instant doubles, not
+    re-casts -- so there is no precedent for it anywhere in the corpus. Not
+    fixed here: "do not cast an effect the target already carries" is an AI
+    RULE, this function is declared above not to be where AI rules go, and GWW
+    publishes that condition per SKILL (studies/heroes 5.6), which is R4c's
+    open design question rather than a line to add here.
 
     STILL NOT MEASURED, and this is the honest part: nothing in this project knows
     how a Guild Wars monster actually chooses. Round robin, least-recently-used
@@ -6054,12 +6233,23 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # all four hurt the player identically; dealing a heal's magnitude AS
     # damage would be worse, not better. The player still dies to the ordinary
     # swing (land_swing), which is what R4a's criterion ever rested on.
+    # THE EFFECT FIRST, and the order is load-bearing rather than stylistic.
+    # The one skill on this bar that opens an episode is Scourge Sacrifice
+    # (253, a Hex), and it is one of the three the damage exit below turns
+    # away -- so an effect applied after that `return` would never be applied
+    # at all. A hex on the PLAYER is also the most visible thing this channel
+    # can do: the client draws it in the player's own effect bar, where an
+    # effect on a monster is a small icon over a body across the field.
+    episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
+                           PLAYER_AGENT_ID, conn_id)
+
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
     if damage is None:
         agent["casting"] = None
-        print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
-              f"modelled effect (its scale is not damage -- see "
-              f"content/world.toml skill_effect)", flush=True)
+        if episode is None:
+            print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
+                  f"modelled effect (its scale is not damage -- see "
+                  f"content/world.toml skill_effect)", flush=True)
         return
     dealt = float(damage[0])
     # Guard before ANY mutation. This function's damage send was already its
@@ -6079,6 +6269,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
 
     if state["player_health"] <= 0.0:
         state["player_dead"], state["player_died_at"] = True, time.time()
+        strip_effects(send, state, PLAYER_AGENT_ID, conn_id,
+                      "the player died")
         state["attacking"] = None
         send(GAME_SMSG_AGENT_UPDATE_STATUS,
              [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
@@ -8032,6 +8224,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
                         cast_tick(send, state, conn_id)
+                        # Expiries AFTER the casts, so an effect applied on
+                        # this tick is never closed by the same tick that
+                        # opened it -- `due` compares against a `now` taken
+                        # after `apply` wrote `expires_at`, and a zero-length
+                        # episode is refused at the table rather than here.
+                        effect_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -10869,6 +11067,14 @@ def main():
                          "it a swing is 3-5 flat, without it 3-5 is scaled by "
                          "2^((SL-AR)/40) and a critical replaces it "
                          "(studies/isle rung 7).")
+    ap.add_argument("--no-effects", action="store_true",
+                    help="do not open or close effect episodes. The control "
+                         "for the 0x0042/0x0044 channel: with it a stance is "
+                         "a cast that leaves nothing behind and the effect "
+                         "bar stays empty, which is the state this server "
+                         "shipped in until 2026-08-20. Use it to say whether "
+                         "something the client did was THIS channel rather "
+                         "than the cast cycle it rides on.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -11395,6 +11601,12 @@ def main():
         ARMOUR_TERM = False
         print("NO ARMOUR TERM: swings are the weapon's raw range, unscaled, "
               "and no swing can be a critical.")
+
+    if a.no_effects:
+        global EFFECTS
+        EFFECTS = False
+        print("NO EFFECTS: no 0x0042 goes out, so stances, hexes and "
+              "enchantments cast and leave nothing on the target.")
 
     if a.no_armour:
         global EQUIP_ARMOUR

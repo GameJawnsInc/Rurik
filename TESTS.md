@@ -3314,6 +3314,65 @@ Every one of these, in the order they were written:
   assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
   `dword` while the client does `fld`, so the broken reading is reproduced inline and
   required to differ). Needs `vault/captures/live/`; floor 36),
+  `toolkit/authsrv/test_effects.py` (**the effect channel's WRITER**, where
+  `effects.py` meets the reader above. R4b's spine: `0x0042` opens an episode on an
+  agent and `0x0044` closes it, and until 2026-08-20 this server modelled none of it
+  — `authsrv.py` knew `EFFECT_DEAD` and `EFFECT_TRANSITION` and nothing else, so every
+  skill whose scale was not damage resolved to nothing. **§2 is the check the module
+  rests on and it has NO FREE PARAMETER**: for every apply in the live corpus, predict
+  the f32 duration on the wire from the applying skill's own `duration0`/`duration15`
+  endpoints in the CLIENT'S table at rank = field3, using the client's own two-point
+  scaler — **96 of 96 non-condition applies land exactly, 0 miss**. The endpoints are
+  ArenaNet's, the formula was measured at `0x005A8920` for the DAMAGE scale, and
+  field3 and the duration are retail's own bytes, so our decoder cannot force it true.
+  **That settles `bufflog.field3_report`'s registered open question** — (a) field3 is
+  the applying skill's attribute RANK, (b) it is a duration-shaped field — which its
+  docstring said was "one session away". It was ZERO sessions away and the
+  discriminator was already in the vault: skill 160 carries field3 = 15 against a
+  duration of 13.0, and skill 364 appears at two field3 values (10, 13) producing two
+  durations (10.0, 12.0), both predicted. Reading (a) CONFIRMED, (b) REFUTED.
+  Conditions are counted SEPARATELY and a check requires that some of them genuinely
+  break the rule, so "excluded" cannot quietly become "they agree too" — 480 has
+  endpoints 3/3 and appears on the wire at 9.0, because a condition's duration comes
+  from the skill that inflicted it. (The corpus now holds **102** applies; the 97 in
+  the entry above was true when it was written.) **§1 walks the duration rule branch by
+  branch, and every permitted branch names a retail witness while every refused branch
+  names its zero**: bit SET → interpolate (160, 364, 348, 814); bit CLEAR with EQUAL
+  endpoints → the flat value (**984 and 998, which retail sent at duration 30.0 with
+  the bit CLEAR — so the bit means the duration SCALES, and a server honouring it the
+  strict way cannot reproduce two of retail's own applies**); a SENTINEL → refuse
+  (0x20000 ×22, 0x30000 ×7, 999999 ×1, and 24 of the 30 are enchantments, which is
+  where "maintained until removed" belongs — Vital Blessing 289 is one and it is on
+  our own enemy's bar, so this refusal fires every session); DIFFERING endpoints with
+  the bit clear → refuse (49 skills, zero witnesses). **§3's negative is the point**:
+  Desperation Blow carries a real 2-second duration and is an ATTACK, and nothing in
+  the table says what those seconds are, so it opens nothing — the same refusal
+  `SCALE_MEANS_DAMAGE` makes one layer up. A Shout opens nothing either, *even though
+  the corpus's own witnesses include two of them*, because party-wide shouts break the
+  premise that the target byte names the recipient. §3b pins the target byte with the
+  type column as its witness (all 199 Attacks are 5, 75 of 76 Stances are 0) and pins
+  that an UNRESOLVED code degrades to the caster's own choice rather than to a guess
+  about the enum. §4 is the table — ids distinct among LIVE episodes and reused after
+  close, which is every property the corpus actually pins; `due` oldest-first; a double
+  close returning None rather than raising; a zero-length episode REFUSED. **§4b pins
+  retail's allocator against a fix of ours that was made and reverted**: a client run
+  showed one icon for four concurrent episodes of one skill, so the table was collapsed
+  to one episode per (agent, skill) — and the corpus then refuted the collapse, holding
+  **15 overlapping re-applications, every one under a NEW buff id** (120→121 at a 0.43 s
+  gap), with the first still closing `expired` on its own duration and same-id repeats
+  only ever occurring after a close. The section carries the client fact that started it
+  too: a repeat `0x0042` for a live (agent, skill) is DISCARDED, measured under a new id
+  and under the same one — the latter a **stated prediction that was refuted** — so how
+  retail refreshes an effect is NOT FOUND, and the real defect is our placeholder AI
+  re-casting a hex the target already has. **§5 runs our
+  own emission back through `bufflog`, the reader written for retail's**, and requires
+  `expired` with a zero residual — *with a control that closes the same episode early
+  and must read `stripped`*, so the check discriminates rather than agreeing with
+  whatever it is handed. It also pins the float-in-a-dword trap from the writer's side.
+  §6 pins that death STRIPS (per-agent — the enemy's hex survives the player's death)
+  and that `--no-effects` is a real control. Needs `vault/captures/live/` and the
+  pinned client for §2, which is declared as a skip naming what a green run without it
+  has actually checked; floor 51),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
