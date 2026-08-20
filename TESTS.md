@@ -2303,28 +2303,146 @@ Every one of these, in the order they were written:
   together, so a large step exists and the separation across it does not move --
   **that control was written VACUOUS**, its synthetic steps sitting below the
   300 u threshold so `jumps` came back empty and `all([])` passed it having
-  judged nothing; the row count is asserted first now. §4 replays the pair that
-  established the mechanism (`movetap-20260819T171436` + `authsrv-20260819T171153-c1`):
-  183 pairs, 13 resync jumps, separation **587 u -> 22 u, a 96% collapse**, with
-  TWO things that could refute it -- pairing 7 s out of true reproduces only 34%,
-  and the alignment sweep must PEAK at the offset the 8,573 timestamps gave,
-  which was never fitted to maximise the headline. §5 asserts `movetap` now
-  calibrates its floor against measured capability and survives Ctrl+C with a
-  verdict. **§6-§8 are the wire-only half**, which asks the same question of a
+  judged nothing; the row count is asserted first now. **§4-§8 guard the four
+  defects the 2026-08-19 corpus pass found in `movesync.py` itself**, each of
+  which had already put a wrong number into a document, and each guard is
+  mutation-proven to go red when its fix is reverted. §4 PINS the bars as
+  constants: legacy 300 u, run speed 288 u/s, the hard bar's SPEED arm at
+  **400 u/s** (retail's own client intervals top out at 388.80, just over the
+  383.04 boost base its wire declares, so a lower bar would start counting
+  boosted walking), the 0.05 s dt floor, its DISTANCE arm at **520 u**, and
+  `FREE_SILENCE = 300/288 = 1.042 s` as a DERIVED number rather than a chosen
+  one. 520 is BRACKETED ON BOTH SIDES by measured data and the test says so: it
+  sits above retail's largest step inside 2.0 s (**517.87 u / 1.352 s**) and
+  below the smallest of the four ordinary WALKING rows the wide
+  `dist>=520 & dt<=2.0s` form would have swept in (**525.3 u at 285.5 u/s**,
+  `20260814T090541`). §5 is a client walking at 288 u/s with a report every
+  2 s: **the legacy bar flags 11 of 11 steps and the hard bar flags none**, which
+  is how retail scored 6.4/min on the legacy bar with zero intervals above
+  400 u/s -- the row count is asserted first. §6 plants a **900 u / 0.13 s** step
+  and requires exactly one detection on the SPEED arm, then a **700 u / 0.03 s**
+  step and requires one on the DISTANCE arm -- and it no longer carries the dt
+  control it used to, because **the distance arm INVALIDATED that control**: it
+  planted 900 u over 0.01 s and demanded a REFUSAL, which under the repaired bar
+  is a test that the fix does not work. What the dt floor is actually for is a
+  SMALL displacement over a near-zero interval, so the control is now **25 u over
+  0.01 s** (an implied 2,500 u/s, and still not evidence) with the SAME 0.01 s
+  carrying 900 u required to be CAUGHT beside it -- the arm is a distance test,
+  not a dt test. Every fixture's row count is asserted before its verdict. The
+  bar is spelled TWICE and §6 exercises both: `hard_steps` for the wire-only path
+  and `score(min_speed=...)` for the paired one, which carried the identical
+  blindness and which no vault replay would have caught (§11's movetap window
+  happens to exclude the only corpus row that would have shown it).
+  §7 builds a LEGACY-SHAPED capture -- `position_report` rows at the stops only,
+  a full `0x003D` stream between them -- and requires `--wire-only` to read the
+  SPLICED stream `warpscan.load` has read all along: the same walk reads **0
+  jumps spliced and 2 stop-arm-only**, i.e. the source alone decides whether the
+  client "jumped". §8 is the refusal semantics, and its fixture is
+  `20260811T173940` in miniature: dense 0.25 s blocks separated by 5 s silences,
+  so the **MEDIAN gap passes the old 0.5 s cadence gate** while the client walks
+  1,440 u inside each silence. It asserts the coverage refusal fires, that a
+  dense capture does NOT trip it (a gate that always fires is a constant), and --
+  reading the tool's real stdout -- that **every legacy count line sits BELOW its
+  refusal and is marked `refused`**, because the "5 unexplained jumps" hole was
+  minted by quoting a number printed above a REFUSING line. §8 also pins the
+  other half of that rule, which the first pass got backwards: **a refusal must
+  not suppress a COUNT.** The `MIN_INTERVALS` floor used to `return` before the
+  hard section, so a nine-interval capture carrying a 3,000 u impossible step
+  printed a bare tally; only a per-minute number needs intervals, and a count and
+  a magnitude need no denominator at all. The fixture is exactly that capture --
+  **9 intervals, one 3,000 u step** -- and it requires the count, the magnitude
+  and the excess to print while **no `/min` appears anywhere in that output**.
+  (Measured impact today is nil: 10 vault captures sit under the floor and not
+  one carries a hard or a >=300 u step, which is what makes it cheap now and
+  expensive to discover later.) §9 asserts `movetap`
+  now calibrates its floor against measured capability and survives Ctrl+C with a
+  verdict. §10 is the wire-only geometry, which asks the same question of a
   capture with NO movetap and still refuses to reconstruct anything: a resync
   landing point is a *reading* of the authoritative agent (measured at 1.0-59.5 u
   from movetap's, n=13), so the test is three measured positions and a geometry
   question -- does the landing lie on the segment from where the client said it
-  was when we granted, to the point we granted? §7 replays the **DEFAULT-build**
-  capture `authsrv-20260819T145717-c1.jsonl`, the one carrying the corpus's
-  biggest warps: **18 of 30 landings on-path against 0 of 31** for an unrelated
-  grant, perpendicular offset **43.9 u against 744.8 u**, and a median grant age
-  of **5.84 s** at the jump. §8 is the gate that makes those numbers mean
-  something -- the client emits `0x003D` only while moving, so a capture at
-  2.75 s cadence has 57% of its intervals clearing the 300 u jump bar and its
-  control scores as well as its treatment; `--wire-only` declines a verdict above
-  0.5 s. Floor **17**, the bare-machine subset, against a green **28** with every
-  capture present; §4 and §7 declare `LEDGER.skip` without them. No client. ~3 s),
+  was when we granted, to the point we granted? §11 replays the pair that
+  established the mechanism (`movetap-20260819T171436` + `authsrv-20260819T171153-c1`):
+  183 pairs, 13 resync jumps, separation **587 u -> 22 u, a 96% collapse**, with
+  THREE things that could refute it -- pairing 7 s out of true reproduces only
+  34%, the alignment sweep must PEAK at the offset the 8,573 timestamps gave
+  (never fitted to maximise the headline), and **all 13 must survive the new hard
+  bar**, or the collapse would be a claim about a different population than the
+  one the mechanism was established on. **That last equality survives the
+  distance arm by LUCK, and §11 now pins the luck rather than resting on it**:
+  the whole capture gains a row under the repaired bar (19 -> 20, the
+  617.0 u / 0.0324 s step at t=138.687), and it disturbs nothing here only
+  because the movetap window is **[163.361, 220.619]** and 138.687 falls OUTSIDE
+  it -- which is where the operator happened to start the reader, not soundness.
+  §12 replays the **DEFAULT-build** capture
+  `authsrv-20260819T145717-c1.jsonl`, the one carrying the corpus's biggest
+  warps, on the verdict-bearing population: **7 hard jumps, 1.31/min of span and
+  5.66/min of actively-reported time** (both denominators, because 77% of that
+  span carries no reports), magnitude p50 1,969 u and max 3,405 u, EXCESS OVER
+  BUDGET p50 1,208 u and max 3,165 u, 4 of 7 landings on-path against 0 of 7 for
+  an unrelated grant at perp **78.3 u against 1,582.2 u** -- **of which 5 of the
+  7 are DEGENERATE** (the grant-time report IS the pre-jump record, so the
+  landing sits on its own segment by construction), leaving a non-degenerate
+  **n of 2, on-path 2/2**, which is the whole of the non-tautological evidence on
+  this capture. The tool prints that qualifier and the test used to assert
+  nothing about it, so the contaminated 4/7 travelled alone; `hard_degenerate`
+  and the clean subset are both pinned now, and the `cperp_p50 > 5*perp_p50`
+  ratio has a FLOOR on its denominator (`perp_p50 > 1 u`, plus an absolute
+  `cperp_p50 > 500 u`) because on a fully degenerate capture that perp is 0.0 and
+  the ratio would certify the tautology. §12 also pins the three things the
+  adversarial pass found unstated. **The rate's denominator is borrowed**:
+  "actively reported" is the sum of gaps `<= FREE_SILENCE`, the 300/288 constant
+  this file calls never-a-verdict, and the SAME 7 jumps read **14.21/min at a
+  0.30 s threshold, 5.66 at 1.042 s and 3.40 at 5.00 s** -- a 4.2x spread with
+  the numerator untouched, so the threshold and that sweep are asserted present
+  in the real stdout. **2 of those 7 hard intervals are THEMSELVES longer than
+  the threshold** (3.237 s and 1.485 s), i.e. they happened in time the
+  denominator excludes, and the output must RECONCILE it rather than let the rate
+  imply otherwise. And the legacy "of which N are walking" line is now EXHAUSTIVE
+  in the printed text as well as the dict -- **31 = 23 walking + 7 hard + 1 at
+  360.3 u/s that is neither** -- because a partition that does not add up invites
+  the reader to complete it with the other category. `values[2]` (plane) is
+  carried through `load_wire_reports` and flagged: **1 of these 7 straddles a
+  flip**, 6 of the corpus's 64 hard rows do, and it is ANNOTATION not exclusion
+  since planes 0/18/19 share the x/y frame here. The legacy bar is REFUSED on
+  this capture, a refusal the old median gate missed on a p50 of 0.254 s.
+  §13 replays `authsrv-20260811T173940-c1.jsonl`, the capture that
+  minted the hole: 158 spliced positions against **28** `position_report` rows,
+  **5 legacy jumps from the wrong source and 2 from the right one**, and ZERO
+  clearing the hard bar -- the client walked the whole way. **§14-§16 are the
+  distance arm's own replays.** §14 pins the two counts that MOVED, because a
+  guard that only asserts the new bar equals the new bar cannot go red when the
+  arm is reverted: `20260819T182652` reads **13 hard rows where the speed-only
+  bar read 11**, and `20260819T171153` reads **20 where it read 19**. The three
+  restored rows are 740.7 u / 0.0318 s, 617.0 u / 0.0324 s and 582.1 u /
+  0.0331 s -- all ~32 ms, because a resync emits a report either side of the
+  snap, so the old dt refusal was ANTI-correlated with the mechanism it was built
+  to find. Each pair arrives in SEPARATE TCP frames (c2s seq 465->466, 50->51,
+  190->191, each a distinct 26-byte read), so 32 ms is a real client cadence and
+  not decode-loop coalescing. §14 quotes MAGNITUDE and EXCESS OVER BUDGET
+  (740.7 u, excess 731.6 u = 2.57 s of walking at 288 u/s) and NEVER the implied
+  velocity as a headline -- for a discontinuity that 23,279 u/s is a denominator
+  artifact the event itself created, so it is printed labelled as the gate's own
+  input. Its control is the WIDE form: corpus-wide `dist>=520 & dt<=2.0s` adds
+  four ordinary walking rows at 284-286 u/s across ~1.85 s gaps
+  (`20260818T103840` 538.6 u, `20260819T150522` 533.6 u, `20260816T131839`
+  528.5 u, `20260814T090541` 525.3 u) while the narrow form adds exactly the
+  three genuine ones -- **61 -> 64 hard rows over 961 vault captures, 4,582
+  intervals**. §15 pins the count that must NOT move: `20260811T173940` still
+  reads **0 hard of 157**, and its 14 sub-0.05 s intervals top out at 14.1 u.
+  §16 RE-MEASURES THE CALIBRATION rather than inheriting it, decoding the live
+  corpus's own c2s stream through `cmsgstream.timed` (per connection, so no
+  interval is invented across a map load): **2,789 retail self-reports, 2,747
+  intervals, ZERO on either arm**, fastest believable interval **388.80 u/s**,
+  largest step inside 2.0 s **517.87 u / 1.352 s**, and below the dt floor --
+  the only place the distance arm ever fires -- a largest step of **19.15 u over
+  82 intervals**, which is 27x of headroom. A constant justified in a comment is
+  justified nowhere. Nine sabotages were BUILT AND RUN and all nine redden,
+  including reverting each arm separately, widening to the contaminated form,
+  lowering 520 to 400, dropping the plane carry, restoring the early return at
+  the interval floor, and silencing the threshold sweep or the reconciliation.
+  Floor **57**, the bare-machine subset, against a green **102** with every
+  capture present; §11-§16 declare `LEDGER.skip` without them. No client. ~3 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -3074,14 +3192,31 @@ Every one of these, in the order they were written:
   identified as a build that is not the pin. `pinned.identify_build()` now hands
   back the matched row, and `buildid.of_image()` is the one call for a build a
   tool prints or emits: registry sha256 first, the client's own build getter as
-  the fallback that answers for an image `BUILDS` has never seen — our patched
-  38833 copy is exactly that, real and unrecorded, where stamping the pin is
-  pure invention. The checks are written to fail against the old code rather
-  than merely to pass against the new: each non-pinned build must read as
-  ITSELF *and* must not read as 38797, because a label printing both is still
-  the misreport.
-  Needs the vault. Floor 39 (was 29; §5 adds 12, of which 2 need our patched
-  38833 copy and declare a skip), ~8 s),
+  the fallback that answers for an image `BUILDS` has never seen. The checks are
+  written to fail against the old code rather than merely to pass against the
+  new: each non-pinned build must read as ITSELF *and* must not read as 38797,
+  because a label printing both is still the misreport.
+  **§5's fallback fixture MOVED on 2026-08-19 and the section went red on the
+  way**, which is worth recording because the red was correct. It named our
+  patched 38833 copy, `vault/run/2026-08-13_64fae3b1369b/Gw.exe`, on the strength
+  of "`patched` is None for that build" — true when it was written on 2026-08-17,
+  false two days later, when `pinned.BUILDS` gained a patched digest SET and that
+  file's `e06ada3b…` was committed into it. `identify_build` now answers
+  ('patched', 38833) where the section pinned ('unknown', None). The CASE — a real
+  client of a build we hold, sitting in no registry row, where only the image's
+  own getter can answer and stamping the pin is pure invention — is unchanged;
+  only the file that still fits it moved, to `vault/run/reskin-roster/Gw.exe`,
+  the reskin experiment copy that `register_patched`'s sanity bound refuses (682
+  bytes in 211 runs) and that nothing has ever filed. **What that fixture cannot
+  pin is said out loud in the file**: reskin-roster IS 38797, so the NUMBER no
+  longer separates "read from the image" from "answered with the constant" — both
+  are 38797. A third check does the separating instead: the `why` must name the
+  image's own build getter and must NOT claim a registry row, which is exactly
+  what an implementation returning `pinned.BUILD` could not say. Reverting the
+  repoint reddens all three.
+  Needs the vault. Floor 39 (was 29; §5 adds 12, of which 3 ride on
+  `run/reskin-roster/Gw.exe` and declare a skip — 42 on a full vault, 39 on a
+  vault holding only the pristine snapshots, which is the mandatory core), ~8 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
@@ -3426,10 +3561,113 @@ Every one of these, in the order they were written:
   in the wrong order greps identically — with a reversed probe that must be
   rejected and a correct one that must be accepted. `--any-build` is the
   deliberate override, because a gate that makes a tool unusable the day a build
-  ships is one somebody deletes. Without a vault §4 skips and the run scores 43
-  against a floor of **61** (was 55; 38833 adds 6), so it goes red — the 43 was
-  measured with `RURIK_VAULT` pointed at an empty directory, not derived by
-  subtraction. ~2 s),
+  ships is one somebody deletes.
+  **§7 AND §8 ARE THE DIGEST SET, added 2026-08-19, and the gate they cover had
+  gone INVERTED.** "Our patched copy" was ONE hand-typed sha256 of ONE whole
+  file, and a whole-file hash of a patched binary goes stale the moment the
+  patcher changes. It did — the key-tap added three sites (file `0x508E2`,
+  `0x50905`, `0x3DB4CE`) — so the gate REFUSED the freshly patched client at
+  `vault/run/2026-07-29_221c13772c7a/`, the copy we launch and the one
+  `movetap.py`:438 gates, while ACCEPTING the two superseded copies at `-c2/` and
+  `-probe/`; build 38833 had no patched hash at all, so the newest build was
+  unrepresentable, and the only way past either was `--any-build`, which turns a
+  gate off rather than fixing it. `Build.patched` is now a TUPLE of
+  `PatchedCopy(sha256, how)` and **the patcher appends its own digest** into
+  `vault/client-patched/patched_digests.json`, so registration is a step in
+  building the client rather than a chore nobody was ever going to do by hand on
+  patcher-change day. sha256 is still exact — there is simply more than one right
+  answer — which is why this was chosen over a structural allowlist: an allowlist
+  accepts ANY bytes at an allowed site, and the most consequential bytes in the
+  file, the Diffie-Hellman modulus that decides which server a build may be
+  pointed at, sit at one. §4 now asserts both directions against the real files
+  (the current copy passes AND the two stale ones still do, because fixing it by
+  dropping the old digest would have inverted it the other way), and pins the
+  structural evidence the refusal quotes: our patches are 6–9 differing runs from
+  pristine, `run/reskin-roster/` — a real client of the right build — is **211**,
+  and the other build at the same length is **152,735**, which is what tells an
+  operator "ours, unregistered" from "not this build at all". **That third figure
+  read 152,944 until it was re-measured**, and the correction is small but it is
+  the kind this module exists to make: 152,944 is `run/reskin-roster/Gw.exe`
+  against 38833's pristine — an outlier copy against the wrong build — printed as
+  a property of the two BUILDS. Pristine against pristine is 2,613,239 bytes in
+  152,735 runs, §4 now re-measures exactly that pair, and every cross-build pair
+  in the vault falls in 152,735–152,944 (n=9), so nothing resting on it moves —
+  but it is the one number in that refusal that is not computed from the file in
+  hand, and a number a message quotes and nothing re-measures is the same wish as
+  a rule nothing checks. §7 runs the whole
+  registration cycle against a FAKE vault so the real one is never written: the
+  refusal fires on an unregistered right-sized file FIRST, the same file is then
+  registered through `register_patched()` and accepted, and the reason must NAME
+  which source vouched — the reproduced stale-hash configuration, where the
+  build's committed digests do not contain the file and the set does. Its
+  controls are every way the new write path could have widened the gate —
+  registering the pristine image, a wrong size, a file 200 runs out, an unknown
+  build, a CORRUPT registry (which must read as unreadable and refuse, never as
+  empty and silent) — each with a positive half, because a `register_patched`
+  that refuses everything puts the staleness back by another route. §8 asks the
+  SYNTAX TREE whether `make_custom_client.py` and `make_run_dir.py` actually call
+  it, and call it AFTER they write: neither had any such call until this round,
+  and "registers after writing" greps identically to "registers before writing",
+  so the checker is required to reject both a reversed and a call-less patcher.
+  It also pins `build_arg`, which was a live defect the first time `--register`
+  ran: argparse hands back text, so `--build 38797` reached `select()` as the
+  STRING it refuses on purpose, and the CLI answered "no such build in the vault:
+  '38797'" while listing 38797 in the same sentence — the lookup keeps refusing
+  and the coercion sits at the argv boundary.
+  **§9 IS THE ADVERSARIAL PASS OVER §7's OWN CHANGE, the same day and after it**,
+  and every check in it is an attack that SUCCEEDED against the morning's code and
+  was measured before it was fixed. Appending a digest set stopped the gate
+  refusing the client we launch; it also made "register" a verb the gate honours,
+  and there were four ways to say it about the wrong bytes. **10,483,904 bytes of
+  `os.urandom` registered under `strict=True`** and `assert_build` then called them
+  patched, because with no pristine image on disk `diff_against_pristine` answers
+  `(None, None, why)` and the sanity bound read `if nruns is not None and … and
+  strict` — SKIPPED in the one configuration where nothing else can tell a patch
+  from a stranger, and `find()` documents that configuration as supported while
+  `make_run_dir.py` registers on every run. **ArenaNet's own pristine 38833 image
+  filed as our patched 38797**, because only the SELECTED build's pristine was
+  compared and the two builds are the same length; the refusal now covers ANY
+  known build's pristine and has no `--force`, since there is no legitimate
+  reading of the shipped binary as one we made. **A registration whose write
+  FAILED was honoured by the gate for the rest of the process** —
+  `action='refused'`, no file on disk, accepted digests 3 → 4, `assert_build`
+  "patched" — because the row was appended to the list cached in `_registry`
+  before the write was attempted; it is built into a new list now and the cache is
+  dropped on the error path, so the module's stated fail-closed design is what the
+  code does. And **registry rows are validated on read**: a truncated digest, or a
+  row whose `build` and `stamp` name two different builds — which
+  `accepted_patched` matches on EITHER, so one such row vouched under BOTH — is
+  dropped and counted in `why` rather than honoured. Each has a positive half in
+  the same block (the deliberate `strict=False` path, a file that is nobody's
+  pristine, the same call with the write unblocked, a well-formed row), because a
+  `register_patched` that refuses everything puts the staleness back by another
+  route. §8 gained that pass's two CALL-SITE halves: the build handed to
+  `register_patched` must not be one the patcher chose — it was `build=tag`, a
+  regex over the source exe's **filename**, and `CLAUDE.md` says never select a
+  build by filename — so the bytes decide and the tag is a cross-check that must
+  agree or the registration is refused; and `import pinned` must sit inside the
+  same `try/except` as the call, since both patchers call the registration
+  "NON-FATAL, deliberately" in a comment and neither enforced it. Both carry
+  controls in both directions, because `build=tag` and a module-level import grep
+  identically to the right thing. §4's attribution check was rewritten in the same
+  pass: `"committed in pinned.BUILDS" in detail or "vault registry" in detail`
+  cannot fail under its own `what == 'patched'` guard — every patched detail ends
+  `[{acc.source}]` and that source always begins with one of exactly those two —
+  so it now asserts the NAMED source is the list the digest is really in.
+  Without a vault §4 skips and the run scores 109 against a floor of **130**, so
+  it goes red — **and until this pass it did not**. The old floor of 104 was
+  arrived at by subtracting the optional checks off a full vault's total; an empty
+  vault scored 109, five ABOVE it, so the sentence promising a red run described
+  something that never happened (and the same comment said "8 of the 112" for a
+  114-check run). The floor is now MEASURED on a minimal legitimate vault —
+  `client/<stamp>/Gw.exe` for all three builds and nothing else, a machine that
+  snapshotted its install and never patched a client — which scores 130 with 1
+  declared skip. The full vault scores 143; the 13 extra ride on copies a
+  legitimate vault need not hold (`run/<stamp>`, `-c2`, `-probe` and the patched
+  38833 copy at 2 checks each, the two `run-live` copies at 1 each, the patch-bound
+  and reskin measurements at 3 between them). The cross-build distance check above
+  moved it 129 → 130 rather than into the 13, because it needs only the pristine
+  images. ~6 s),
   `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
   the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
   pins, each to a claim that was in circulation: **477 of 477 table entries carry a
@@ -3628,7 +3866,14 @@ Every one of these, in the order they were written:
   filter that drops everything produces a very clean census of zero. The
   instrument excludes itself and says so. `--diff` exits **1 for a changed
   census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
-  draws. No vault, no client, no socket. Floor 40, ~2 s),
+  draws. **68/7 is the founding measurement and not today's**: the census pin is
+  a literal in the test and it is **99 across 14 files** as of 2026-08-19, with
+  1,012 prose citations and 299 test expectations. It had been RED at 86/13 —
+  `framebus.py` 13 → 21, `movetap.py` 0 → 1 (`RVA_TLS_INDEX`, and the 14th file)
+  and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
+  the patched-digest set was added). The docstring's changelog names each, which
+  is the format that makes a moved census a result rather than a surprise. No
+  vault, no client, no socket. Floor 40, ~2 s),
   `toolkit/test_updatecheck.py` (the before/after update commands —
   `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
   expires if nobody runs it in time: an update is not schedulable and half the

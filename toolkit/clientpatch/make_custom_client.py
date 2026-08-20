@@ -389,6 +389,49 @@ def main():
         if patched != 1 or remaining:
             raise SystemExit("Updater patch did not take — this client will stall "
                              "behind the firewall cage. Do not use it caged.")
+    # REGISTER THE DIGEST, and this is a step in building the client rather than
+    # a chore afterwards. `pinned.py` gates every static-analysis tool and
+    # `movetap.py` on "is this a copy of build N that WE made", and it answered
+    # from ONE hand-typed sha256 of ONE patched file -- which goes stale the
+    # moment this file changes. It had: adding the key-tap moved three more sites
+    # (0x508E2, 0x50905, 0x3DB4CE), and from that day the gate REFUSED the client
+    # we launch while accepting two superseded copies in `-c2/` and `-probe/`.
+    # Nothing was ever going to update a source literal by hand on patcher-change
+    # day, so the patcher records its own output here, anchored to the sha256 of
+    # the image it READ rather than to any directory name.
+    #
+    # NON-FATAL, deliberately -- and the import sits INSIDE the same try as the
+    # call, so that word is enforced at the call site rather than asserted in
+    # this comment. The binary above is written and verified; refusing to finish
+    # over a bookkeeping file would be the wrong trade, and a missed registration
+    # fails CLOSED later (the gate refuses, and says how to recover). It is
+    # printed loudly for the same reason. Both halves can fail: `import pinned`
+    # depends on the path insert below, and `register_patched` hashes a 10 MB
+    # file that another process may be holding.
+    what = ("LIVE-CAPTURE build, ArenaNet's DH" if keys is None
+            else "loopback build, OUR DH")
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "clientscan"))
+        import pinned  # noqa: E402
+        _digest, action, reg_note = pinned.register_patched(
+            out, source_sha256=exe_hash, tool="make_custom_client.py",
+            how=(f"{what}, updater "
+                 f"{'ENABLED' if a.no_updater_patch else 'off'}, mutex "
+                 f"{'unpatched' if a.no_mutex_patch else 'patched'}"
+                 f"{', key-tap' if a.key_tap else ''}"))
+    except Exception as exc:                                 # noqa: BLE001
+        action, reg_note = "unavailable", f"{type(exc).__name__}: {exc}"
+    if action in ("added", "already"):
+        print(f"registered : {action} -- {os.path.basename(out)} is now a build "
+              f"pinned.py accepts\n             {reg_note}")
+    else:
+        print(f"\n!! NOT REGISTERED ({action}): {reg_note}")
+        print(f"!! The binary is fine. But pinned.assert_build() will REFUSE it, so")
+        print(f"!! movetap.py, agentprobe.py and itemprobe.py will not read it until")
+        print(f"!! you run:  python toolkit/clientscan/pinned.py --register {out}")
+
     if keys is None:
         print("\nThis is the LIVE-CAPTURE build. It carries ArenaNet's parameters, so it")
         print("cannot key against our server and loopback is not a use for it.")
