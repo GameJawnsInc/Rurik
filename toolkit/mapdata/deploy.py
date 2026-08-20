@@ -29,11 +29,19 @@ WHAT IT DOES, in order, refusing rather than continuing at each step:
      the seed stands on walkable ground, the spawn lands in exactly ONE
      trapezoid of the mesh we authored, and the file fits the row's reservation
      -- judged on the bytes that will actually be STORED, which since
-     2026-08-20 are compressed ones.
+     2026-08-20 are compressed ones. A run WITHOUT `--install` says which row
+     the stream would go into as well, including "none, this id binds nothing
+     and would be created": a dry run whose output cannot tell those apart is
+     one nobody can compare against a prediction.
   5. INSTALL (`--install`).  Resolve the row BY FILE ID, write the map into the
      Stripped partner as a compression-8 stream (`--stored-install` for the old
      uncompressed shape), arm the Bloated head to zero length so the client must
      recompile. Journalled; refuses `vault/dat_study` like every other writer.
+     OR CREATE IT: when the area's map row carries `created = true` and its file
+     id binds nothing, deploy allocates the chain instead of displacing a retail
+     one -- two rows under a new id via `datalloc`, the head born empty. That is
+     WORLDMAPS-W3; whether a retail client compiles a map from a chain it has
+     never seen is WORLDMAPS-W4 and is a client question, not an offline one.
   6. LAUNCH (`--launch`).  The harness, pointed at the area's own map id --
      which is a thing worth writing down, because a harness PASS means "the
      client reached A map", and pointing it at the wrong one produced two runs
@@ -59,8 +67,9 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 from archive import (Archive, file_id_table,  # noqa: E402
-                     COMPRESSION_HUFFMAN, COMPRESSION_STORED)
+                     COMPRESSION_HUFFMAN, COMPRESSION_STORED, FILE_ID_HIGH_BIT)
 import content as content_mod  # noqa: E402
+import datalloc  # noqa: E402  -- the third verb: rows that did not exist
 import datcheck  # noqa: E402  -- the launch-side archive gate
 import envchunk  # noqa: E402
 import gwenc  # noqa: E402  -- the compression-8 encoder
@@ -456,6 +465,34 @@ def install_bytes(blob, stored=False):
         f"{len(blob) - len(stream)} B saved)")
 
 
+def spill_stream(here, tag, stream, compression):
+    """Write the exact bytes the ROW will hold, beside the archive. -> path|None
+
+    `install_partner` HAS to: `datwrite` and `datmove` take `--data FILE` and a
+    compressed stream exists only in memory until something writes it down.
+    `create_chain` does NOT -- it hands `datalloc` the bytes directly -- and that
+    asymmetry is why this is a function rather than four lines inside the writer's
+    arm. It spilled on one path and not the other, so `<area>.c8.bin` existed
+    after an install and not after a create, which is backwards: THE CREATE PATH
+    IS THE ONE WHERE THESE BYTES ARE OTHERWISE UNRECOVERABLE. After an install
+    the row can be read back and decompressed at any time; a created chain that
+    the client then rewrites, deletes or refuses leaves no copy of the stream
+    `gwenc` produced from this run's blob, and a red arm in WORLDMAPS-W4 has to
+    be able to point at exactly what was handed over.
+
+    A STORED WRITE SPILLS NOTHING, on purpose. For compression 0 the stream IS
+    the plain payload, already written to `<area>.bin`; a second identical file
+    beside it is one more thing that can drift out of step with the first.
+    """
+    if compression == COMPRESSION_STORED:
+        return None
+    path = os.path.join(here, f"{tag}.c8.bin")
+    with open(path, "wb") as fh:
+        fh.write(stream)
+    print(f"  wrote {path}")
+    return path
+
+
 def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
                     reservation, tag):
     """Put `stream` in the Stripped partner row and PROVE the row holds it.
@@ -491,16 +528,11 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     Returns the verb that ran: "replace" or "relocate".
     """
     here = os.path.dirname(out)
-    if compression == COMPRESSION_STORED:
-        # ONE FILE, deliberately: --data and --expect naming the same bytes is
-        # the whole content of "stored" and keeps this arm byte-for-byte what
-        # the command wrote before --stored-install existed.
-        data_path = out
-    else:
-        data_path = os.path.join(here, f"{tag}.c8.bin")
-        with open(data_path, "wb") as fh:
-            fh.write(stream)
-        print(f"  wrote {data_path}")
+    # ONE FILE ON THE STORED ARM, deliberately: --data and --expect naming the
+    # same bytes is the whole content of "stored" and keeps that arm byte-for-byte
+    # what the command wrote before --stored-install existed. `spill_stream`
+    # returns None there for exactly that reason.
+    data_path = spill_stream(here, tag, stream, compression) or out
 
     if len(stream) <= reservation:
         verb = "replace"
@@ -527,18 +559,37 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     rc = subprocess.run(argv, text=True).returncode
     if rc != 0:
         raise Refused(f"the archive writer refused (rc {rc})")
+    prove_partner(dat, head_row, plain, compression)
+    return verb
 
-    # AN EXIT CODE IS NOT EVIDENCE. Read the row back and compare. This
-    # exists because rc 0 above once meant "your flags selected a different
-    # verb and nothing happened", and the run went on to arm the head and
-    # print success over an archive that still held ArenaNet's own map.
-    #
-    # `Archive.read` DECOMPRESSES, so this compares what a reader gets back
-    # against what we authored -- which is the check that got stronger rather
-    # than weaker when the row stopped being stored. The compression code is
-    # asked separately, because "the payload is right" and "the row is marked
-    # the way retail marks it" are two claims and a stored write that silently
-    # ignored our flag would pass the first.
+
+def prove_partner(dat, head_row, plain, compression):
+    """Read the Stripped partner back and refuse unless it holds what we wrote.
+
+    AN EXIT CODE IS NOT EVIDENCE. This exists because `rc 0` from a writer once
+    meant "your flags selected a different verb and nothing happened", and the
+    run went on to arm the head and print success over an archive that still
+    held ArenaNet's own map.
+
+    `Archive.read` DECOMPRESSES, so this compares what a reader gets back
+    against what we authored -- which is the check that got stronger rather than
+    weaker when the row stopped being stored. The compression code is asked
+    separately, because "the payload is right" and "the row is marked the way
+    retail marks it" are two claims and a stored write that silently ignored our
+    flag would pass the first.
+
+    SHARED BY BOTH WRITE PATHS, and that is the point of it being a function.
+    `install_partner` puts bytes in a row ArenaNet made; `create_chain` makes the
+    row. They fail differently and they are checked identically -- a created
+    chain that reads back wrong is exactly as unusable as a replaced row that
+    does, and WORLDMAPS-W4's whole question is what a client does with bytes it
+    has never seen under an id nothing has ever named.
+
+    Resolves the partner through `MapIndex`, i.e. through the head's own
+    `nextStream`, rather than through a row index the caller remembers: for a
+    created chain the caller's index came from the allocator's plan, and asking
+    the archive is how a plan that was carried out wrongly gets caught.
+    """
     with Archive(dat) as ar:
         partner = mapchunks.MapIndex(ar).partner(
             next(e for e in ar.entries if e.index == head_row))
@@ -556,7 +607,329 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
             f"code are two declarations and only one of them was checked")
     print(f"  verified: the row reads back the {len(got)} B we wrote, "
           f"stored as compression {code} in {partner.size} B")
-    return verb
+    return partner
+
+
+# --------------------------------------------------------------- create
+#
+# WORLDMAPS-W3. Everything above puts an authored map into a row ArenaNet made,
+# which means every authored area so far has DISPLACED a live retail one -- map
+# 143, file id 0x287D3, and `content/maps.toml` says in its own note that we do
+# not know which area we are sitting on. `datalloc` is the verb that stops
+# needing a victim, and this is deploy learning to call it.
+#
+# WHAT IS NEW HERE IS THE SHAPE, NOT THE MECHANISM. A9 (2026-08-20,
+# studies/archivewrite/FINDINGS.md 18.6) proved the retail client resolves,
+# decompresses and parses a chain `datalloc.alloc` created under a brand-new
+# file id. That chain was a model skeleton with real content on every stream. A
+# MAP is two rows, and its head is EMPTY on purpose -- the zero-length re-bloat
+# trigger -- so a created map chain combines "an id the client has never seen"
+# with "a stream the client must COMPILE rather than read", and no run has ever
+# put those two together. FINDINGS 36 item 4 names it open. That run is
+# WORLDMAPS-W4 and nothing offline can answer it.
+
+MAP_HEAD_FLAGS_U16 = mapchunks.MAP_HEAD_FLAGS_U16          # 259: stream 1, USED|FIRST
+MAP_PARTNER_FLAGS_U16 = mapchunks.MAP_PARTNER_FLAGS_U16    # 1:   stream 0, USED
+
+
+def sibling_of(file_id):
+    """The bit-31 spelling of a plain file id: FcArchive's rename marker."""
+    return file_id | FILE_ID_HIGH_BIT
+
+
+def map_chain(ar, file_id):
+    """The (head, partner) entries `file_id` names, or None if nothing names it.
+
+    THE QUESTION IS ASKED OF THE RAW TABLE, and that is not a detail. The
+    default `file_id_table` registers a bit-31 id under BOTH spellings as a
+    convenience of ours; the client does no such thing and compares 32 bits
+    exactly. Here the answer decides CREATE versus INSTALL -- that is, whether
+    deploy writes into a row that a pending replacement already names, or
+    allocates a fresh one -- so it has to be the client's answer.
+    `archive.py`'s own docstring lists three failures from getting this
+    backwards; this would have been the fourth.
+
+    A BIT-31 SIBLING IS A REFUSAL EITHER WAY, and this is the known gap in the
+    allocator rather than a new rule: `plan_alloc` tests `file_id in raw` and so
+    ACCEPTS a plain id whose renamed spelling is already in the table, while
+    `next_free_file_id` would never suggest it (studies/archivewrite/FINDINGS.md
+    17.5, still open 2026-08-20). Allocating there produces two live
+    registrations -- a rename pending and a fresh plain claim -- that no crc
+    rule and none of `datcheck`'s ten open-time rules counts. `datalloc` is not
+    modified to fix that; the caller refuses to walk into it.
+
+    REFUSES rather than returning None when the id names something that is not a
+    two-row map chain. "Nothing binds this id" and "this id binds somebody
+    else's file" are different states with different remedies, and only the
+    first one may create. The shape is checked positively -- head flags 259, a
+    non-zero `nextStream`, a partner carrying flags 1 -- because
+    `MapIndex.partner` reads `by_row.get(nextStream)` and `nextStream == 0`
+    TERMINATES a chain while row 0 is a real MFT row, so a head with no partner
+    resolves to the file header rather than to None.
+    """
+    raw = file_id_table(ar, raw=True)
+    twin = sibling_of(file_id)
+    if twin in raw:
+        raise Refused(
+            f"file id {file_id:#x} has a bit-31 sibling {twin:#x} bound to row "
+            f"{raw[twin]} in this archive, and this command will not touch "
+            f"either spelling.\n"
+            f"  Bit 31 is not a spelling variant: FcArchive binds "
+            f"`id | 0x80000000` and deletes the plain name when it has REQUESTED "
+            f"A REPLACEMENT, so the sibling is the archive announcing that this "
+            f"row is stale and a new file is on its way (content/maps.toml "
+            f"[map.148] is the whole story).\n"
+            f"  `plan_alloc` would accept the plain id here -- it tests exact "
+            f"membership -- and leave two live registrations that nothing we own "
+            f"counts (studies/archivewrite/FINDINGS.md 17.5). Choose another id "
+            f"with `datalloc.py --next-id`, which skips both spellings.")
+    row = raw.get(file_id)
+    if row is None:
+        return None
+    by_row = {e.index: e for e in ar.entries}
+    head = by_row.get(row)
+    if head is None:
+        raise Refused(f"file id {file_id:#x} names row {row}, which is absent")
+    if not mapchunks.is_map_head(head):
+        raise Refused(
+            f"file id {file_id:#x} already binds row {row} in this archive, and "
+            f"that row is NOT a Bloated map head: alloc.flags "
+            f"0x{mapchunks.alloc_flags(head):02X}, stream "
+            f"{mapchunks.alloc_stream(head)}, {head.size} B, compression "
+            f"{head.compression}.\n"
+            f"  A map head is flags 3 (USED|FIRST_STREAM) on stream 1, the u16 "
+            f"259. What sits here is somebody else's file, and the remedy is a "
+            f"different id rather than a different flag -- overwriting it would "
+            f"make one of two files unreachable, which no rule in datcheck "
+            f"counts.")
+    nxt = mapchunks.next_stream(head)
+    if not nxt:
+        raise Refused(
+            f"file id {file_id:#x} binds row {row}, a map head whose nextStream "
+            f"is 0 -- the chain terminates there, so this file has no Stripped "
+            f"partner to install into.\n"
+            f"  A map is TWO rows and this is one. Nothing here can repair it: "
+            f"`datalloc` creates whole chains and `datwrite` writes rows that "
+            f"exist.")
+    partner = by_row.get(nxt)
+    if partner is None:
+        raise Refused(
+            f"file id {file_id:#x} binds row {row}, whose nextStream names row "
+            f"{nxt}, which is absent from this archive's MFT")
+    if partner.flags != MAP_PARTNER_FLAGS_U16:
+        raise Refused(
+            f"file id {file_id:#x} binds row {row}, chained to row {nxt} with "
+            f"flags 0x{partner.flags:04X} rather than the Stripped partner's "
+            f"0x{MAP_PARTNER_FLAGS_U16:04X} (stream 0, USED).\n"
+            f"  MEASURED corpus-wide, the nextStream link map is a bijection "
+            f"and every Bloated head chains to exactly one stream-0 row. This "
+            f"chain is a shape we have never seen the client produce, so it is "
+            f"named rather than installed into.")
+    return head, partner
+
+
+def resolve_or_create(ar, file_id, created):
+    """(rows, create). `rows` is None exactly when the chain must be CREATED.
+
+    `created` is the maps.toml row's own `created = true` -- an area that asked
+    for a file of its own. It is deliberately NOT inferred from the archive: "the
+    id does not resolve" is also what a WRONG id looks like, and until 2026-08-20
+    that was this command's loudest refusal. A row that does not claim to be
+    created keeps that refusal.
+    """
+    chain = map_chain(ar, file_id)
+    if chain is not None:
+        # IDEMPOTENT BY DESIGN. A created chain that already exists is just a
+        # map row, and re-deploying an area is the normal iterating loop -- the
+        # second run replaces the partner in place and finds the head already
+        # armed. Nothing about a row's origin survives into how it is written.
+        return resolve_rows(ar, file_id), False
+    if not created:
+        raise Refused(
+            f"file id {file_id:#x} does not resolve in this archive, and its "
+            f"maps.toml row does not carry `created = true`.\n"
+            f"  That is the old refusal and it is kept: an id that resolves "
+            f"nowhere is what a WRONG id looks like, and creating one silently "
+            f"would turn a typo into two new MFT rows. If this area is meant to "
+            f"own its file, say so in the row.")
+    return None, True
+
+
+def create_note(file_id, size, bound, created, install):
+    """What this run says about the ROW the stream is going into. -> str|None
+
+    ASKED ON EVERY RUN, INSTALL OR NOT, and that is the whole reason it is a
+    function rather than a line under `if create:`. The decision to allocate is
+    computed only under `--install`, correctly -- deciding costs a refusal and a
+    build-only run must not refuse -- so a build-only run printed the two sizes
+    and stopped, and a dry run against an id NOTHING binds was indistinguishable
+    from a dry run against an id everything binds.
+
+    THAT IS NOT COSMETIC, and it was found the way these things are found: by
+    running the command. WORLDMAPS-W4's step 1 is a build-only run whose output
+    the operator compares against a prediction registered beforehand, and the
+    prediction that matters at that step is that the create branch WILL fire --
+    that the area -> map row -> file id join lands on a row carrying
+    `created = true` whose id binds nothing in this archive. A run that cannot
+    say so leaves a correct dry run reading as a refutation of the join, which is
+    the same defect as a check that cannot fail, from the other side.
+
+    `bound` IS THE RAW TABLE'S ANSWER, or None: the row the CLIENT's own lookup
+    would find (`map_chain`'s docstring has the three failures that come from
+    asking the convenience form instead). It is asked here without the shape
+    checks that can refuse, because a preview that refuses is not a preview --
+    the shape is `map_chain`'s question and it is asked on the install path,
+    where a refusal is the correct outcome.
+
+    Returns None when the id binds something: `verify` has already said what that
+    row's reservation does with these bytes, and two lines about one row is how
+    they drift apart.
+    """
+    if bound is not None:
+        return None
+    if created and install:
+        return (f"no reservation to judge: file id {file_id:#x} binds nothing "
+                f"in this archive, so the {size} B stream will be given a row "
+                f"of its own rather than fitted into one")
+    if created:
+        return (f"no reservation to judge: file id {file_id:#x} binds nothing "
+                f"in this archive, so --install would CREATE the chain rather "
+                f"than fit the {size} B stream into a row")
+    return (f"file id {file_id:#x} binds nothing in this archive and this "
+            f"area's map row does not carry `created = true`, so --install "
+            f"would REFUSE here rather than allocate -- an id that resolves "
+            f"nowhere is also what a WRONG id looks like")
+
+
+def create_streams(plain, stream, compression):
+    """The two rows of a NEW map chain, HEAD FIRST. -> [Stream, Stream].
+
+    Separated from the write so the SHAPE can be inspected without an archive,
+    because the shape is the part with a silent failure mode.
+
+    THE HEAD IS EMPTY, and that emptiness is the whole mechanism. A zero-length
+    Bloated row is the documented re-bloat trigger: the client fails to load the
+    map, logs `Attempting to re-bloat`, compiles the Bloated form from the
+    Stripped partner and writes it back. Everywhere else in this toolkit that
+    state is produced by ARMING a row that had content (`rebloat.arm`); here it
+    is the row's only state ever, which is precisely the case FINDINGS 36 item 4
+    names untested.
+
+    THE HEAD IS FIRST BECAUSE THE FILE ID LANDS ON `streams[0]`, and registering
+    the partner instead is the natural symmetric mistake. It is refused by
+    `plan_alloc`'s shape loop -- but MEASURED corpus-wide the file-id table names
+    349 map heads and zero partners, and no crc rule, no `datcheck` rule and no
+    overlap sweep would notice the swap. So the order is stated here, in one
+    place, rather than at a call site.
+
+    `expect` IS PASSED ON BOTH ARMS. For compression 8 it is mandatory and it is
+    the only refutation that exists after the write (the entry crc is over the
+    STORED bytes, so a stream that decodes to the wrong payload is green
+    everywhere -- FINDINGS C-6). For a stored row the bytes ARE the payload, so
+    passing it is the caller stating that positively, exactly as
+    `install_partner` does.
+    """
+    extra = 8 if compression == COMPRESSION_HUFFMAN else 0
+    return [datalloc.Stream(b"", MAP_HEAD_FLAGS_U16),
+            datalloc.Stream(stream, MAP_PARTNER_FLAGS_U16,
+                            extra_bytes=extra, expect=plain)]
+
+
+def create_chain(dat, file_id, plain, stream, compression, here, tag):
+    """Allocate a map's two rows under an id nothing binds yet. -> (head, partner).
+
+    THE PLAN IS PRINTED AND THEN THROWN AWAY. `alloc(plan=...)` exists and is not
+    used: a handed-in plan skips `plan_alloc` on the write path, and that gate is
+    the whole safety argument (the id is free in the RAW table, exactly one row
+    carries FIRST_STREAM, the MFT grows only into its own last block, placement
+    consumes runs so two rows of one file cannot collide, every nextStream target
+    lands in `[16, count)`). A plan computed a moment earlier is also a placement
+    computed against an archive state that may have moved. So the preview is a
+    preview -- it costs one read and it is what a person approves -- and the
+    write re-plans under its own open.
+
+    NOT ARMED AFTERWARDS, and nothing here calls `rebloat`. The head is BORN
+    armed; `rebloat.arm` refuses a zero-length row anyway, correctly, since it
+    cannot journal a baseline mesh from a row that has none. `main` reaches the
+    same conclusion from the ARCHIVE rather than from this function's word for
+    it, which is the stronger of the two checks and is why it was left in place.
+
+    THE STREAM IS SPILLED even though nothing here needs a file: `datalloc` takes
+    the bytes in memory, unlike the two CLI writers `install_partner` drives. It
+    is written anyway because this is the path where those bytes have no other
+    copy -- see `spill_stream`, and WORLDMAPS-W4's capture list, which names the
+    file. It happens BEFORE the plan so that a chain the allocator refuses still
+    leaves behind the thing that was refused.
+    """
+    spill_stream(here, tag, stream, compression)
+    streams = create_streams(plain, stream, compression)
+    try:
+        with Archive(dat) as ar:
+            preview = datalloc.plan_alloc(ar, streams, file_id)
+    except datalloc.Refused as exc:
+        raise Refused(f"the allocator will not plan this chain:\n  {exc}") from exc
+    preview.show()
+
+    journal = os.path.join(here, f"{tag}_alloc.json")
+    try:
+        plan = datalloc.alloc(dat, streams, file_id, journal, confirm=True)
+    except datalloc.Refused as exc:
+        raise Refused(f"the allocator refused the write:\n  {exc}") from exc
+    head_row, partner_row = plan.rows[0].index, plan.rows[1].index
+
+    # AND THE ARCHIVE IS ASKED WHETHER THE PLAN HAPPENED. Every claim below is
+    # one the allocator could have got wrong in a way nothing else would catch:
+    # the id must name the HEAD (a partner registration passes every checksum),
+    # the head must be zero length (or the client has nothing to re-bloat), the
+    # chain must link head -> partner, and both rows must sit at index >= 16
+    # (LoadMft never recycles a row below that, and the open-time reconcile only
+    # scans from there, so a row underneath is outside every rule we reasoned
+    # about).
+    with Archive(dat) as ar:
+        raw = file_id_table(ar, raw=True)
+        by_row = {e.index: e for e in ar.entries}
+        bound = raw.get(file_id)
+        head = by_row.get(head_row)
+        partner = by_row.get(partner_row)
+        also = sorted(k for k, v in raw.items() if v == partner_row)
+    if bound != head_row:
+        raise Refused(
+            f"the chain was allocated but file id {file_id:#x} resolves to "
+            f"{bound!r}, not to the head row {head_row}. The open-time reconcile "
+            f"DELETES a USED|FIRST_STREAM row no file-id record names")
+    if also:
+        raise Refused(
+            f"the partner row {partner_row} is named by file id(s) "
+            f"{', '.join(hex(a) for a in also)}. Only the head may carry an id: "
+            f"MEASURED, the table names 349 map heads and zero partners")
+    if head is None or partner is None:
+        raise Refused(f"rows {head_row}/{partner_row} are not in the MFT after "
+                      f"the allocation")
+    if head.flags != MAP_HEAD_FLAGS_U16 or partner.flags != MAP_PARTNER_FLAGS_U16:
+        raise Refused(
+            f"the created rows carry flags 0x{head.flags:04X}/"
+            f"0x{partner.flags:04X}, not the map chain's "
+            f"0x{MAP_HEAD_FLAGS_U16:04X}/0x{MAP_PARTNER_FLAGS_U16:04X}")
+    if head.size != 0:
+        raise Refused(
+            f"the created head is {head.size} B, not zero. A map head is armed "
+            f"by being empty, and a non-empty one is a Bloated map the client "
+            f"will load instead of compiling ours")
+    if mapchunks.next_stream(head) != partner_row:
+        raise Refused(
+            f"the created head chains to row {mapchunks.next_stream(head)}, not "
+            f"to its partner {partner_row}")
+    low = [r for r in (head_row, partner_row) if r < datalloc.FIRST_CLAIMABLE_ROW]
+    if low:
+        raise Refused(
+            f"created row(s) {low} sit below FIRST_CLAIMABLE_ROW "
+            f"({datalloc.FIRST_CLAIMABLE_ROW}); rows underneath it are never "
+            f"recycled by LoadMft and the reconcile does not scan them")
+    print(f"  created: head row {head_row} (zero length -- BORN armed, the "
+          f"re-bloat trigger is its only state ever), partner row "
+          f"{partner_row}, file id {file_id:#x} registered on the head")
+    prove_partner(dat, head_row, plain, compression)
+    return head_row, partner_row
 
 
 def readback(dat, file_id, staged_blob, area):
@@ -818,8 +1191,13 @@ def main(argv=None):
     map_id = int(area["map_id"])
     map_row = world.get("map", str(map_id))
     file_id = int(map_row["file_id"])
+    # `created` is a CLAIM THE ROW MAKES, not a fact about any archive: the row
+    # says this area owns its file rather than displacing a retail one. Whether
+    # the file exists yet is the archive's answer and is asked below.
+    created_row = bool(map_row.get("created", False))
     print(f"area {args.area!r}: {area['name']} -- map {map_id}, "
-          f"{dim}x{dim}, file id {file_id:#x}")
+          f"{dim}x{dim}, file id {file_id:#x}"
+          + ("  (created: this area owns its file)" if created_row else ""))
 
     # 1. geometry
     if args.blend:
@@ -854,7 +1232,18 @@ def main(argv=None):
               f"angle {donor.angle_index}, "
               f"env {'yes' if donor.env else 'no'}, "
               f"sound {'yes' if donor.sound else 'no'}")
-        rows = resolve_rows(ar, file_id) if args.install else None
+        # RESOLVE, OR DECIDE TO CREATE. `created = true` on the maps.toml row
+        # plus an id that binds nothing is the one combination that allocates;
+        # everything else either installs into the chain that is there or
+        # refuses naming what sits in the way. See resolve_or_create().
+        #
+        # `bound` IS ASKED ON EVERY RUN and `rows`/`create` only under --install:
+        # deciding costs a refusal, reporting does not, and a build-only run that
+        # cannot say whether the id binds anything is a dry run whose output does
+        # not distinguish the case it was run to preview. See create_note().
+        bound = file_id_table(ar, raw=True).get(file_id)
+        rows, create = ((None, False) if not args.install
+                        else resolve_or_create(ar, file_id, created_row))
 
     # 3. assemble
     report = assemble(area, heights, donor, dim)
@@ -873,6 +1262,9 @@ def main(argv=None):
                        reservation=rows[2] if rows else None,
                        install_size=len(stream), compression=compression):
         print(f"  {note}")
+    row_note = create_note(file_id, len(stream), bound, created_row, args.install)
+    if row_note:
+        print(f"  {row_note}")
 
     out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
     if args.out or args.install:
@@ -885,12 +1277,20 @@ def main(argv=None):
         return 0
 
     if args.install:
-        head_row, partner_row, reservation = rows
-        print(f"\ninstalling into {dat}: head {head_row}, partner {partner_row}")
         here = os.path.dirname(out)
-        verb = install_partner(dat, out, report.blob, stream, compression,
-                               head_row, partner_row, reservation, args.area)
-        print(f"  the partner row was written by {verb}")
+        if create:
+            print(f"\ncreating file id {file_id:#x} in {dat}: nothing binds it, "
+                  f"and this area's map row asked to own its file")
+            head_row, partner_row = create_chain(
+                dat, file_id, report.blob, stream, compression, here, args.area)
+        else:
+            head_row, partner_row, reservation = rows
+            print(f"\ninstalling into {dat}: head {head_row}, "
+                  f"partner {partner_row}")
+            verb = install_partner(dat, out, report.blob, stream, compression,
+                                   head_row, partner_row, reservation,
+                                   args.area)
+            print(f"  the partner row was written by {verb}")
         # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
         # zero-length head -- rightly, since it cannot record a baseline mesh
         # from a row that has none, and a second arm would overwrite the first
@@ -898,6 +1298,11 @@ def main(argv=None):
         # client recompiles on load either way, and this command is meant to be
         # run repeatedly while iterating on a shape. The previous version turned
         # every re-run after an interrupted one into a dead end.
+        #
+        # A CREATED HEAD IS BORN ARMED and lands here already zero length, so
+        # this takes the same branch for the same reason. It is asked of the
+        # ARCHIVE rather than of `create` on purpose: "we just made it empty" is
+        # our word for it, and `head_now.size == 0` is the row's.
         with Archive(dat) as ar:
             head_now = next(e for e in ar.entries if e.index == head_row)
             already = head_now.size == 0

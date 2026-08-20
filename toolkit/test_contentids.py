@@ -61,7 +61,12 @@ import vaultpath                                              # noqa: E402
 # 2026-08-15: +7 for section 5, which is SYNTHETIC -- it fakes `check`'s return
 # and needs no vault at all, so unlike 1b/2/2b it can never skip and belongs in
 # the mandatory core rather than above it. 12 + 7 = 19.
-FLOOR = 19
+#
+# 2026-08-20: +1 in section 0 for the created/retail split (WORLDMAPS-W3), which
+# runs before any archive is opened and so is mandatory core; section 1 gained
+# two more that are NOT (they need a client archive). 19 + 1 = 20, and a healthy
+# run against this vault now executes 31. MEASURED, both numbers.
+FLOOR = 20
 
 LEDGER = checks.Ledger("content file ids vs the archives a run uses",
                        floor=FLOOR)
@@ -118,6 +123,23 @@ def main():
           f"and the two Pre-Searing rows share 0x{PRESEARING_FILE_ID:X}",
           f"{presearing} -- if this moves, the exposure moved with it")
 
+    # CREATED ROWS ARE HELD OUT OF EVERY ARCHIVE-SELECTING SCAN BELOW, and this
+    # is not tidiness -- it is the fixture defect this section nearly shipped.
+    # A created row (WORLDMAPS-W3, 2026-08-20) names a file id that binds nothing
+    # until `deploy.py --install` allocates it, so `any(f not in raw for f in
+    # ids.values())` is TRUE OF EVERY ARCHIVE the moment one exists. Section 2
+    # picks its positive control with exactly that test, and with 0x5F0B0 in the
+    # set it selected the first archive in the list instead of a
+    # mid-replacement one: four checks went red naming Pre-Searing while the
+    # code under test was fine and the FIXTURE had silently resolved to the
+    # wrong archive. The retail ids are the ones an archive can be judged by.
+    created = contentids.created_map_ids()
+    retail_ids = {m: f for m, f in ids.items() if m not in created}
+    check(created and not (created & set(retail_ids)),
+          "the created rows are named and held out of the archive scans -- an "
+          "id nothing binds yet says nothing about which copy is behind",
+          f"created {sorted(created)}, {len(retail_ids)} retail row(s) left")
+
     client = contentids.default_client_dat()
     if client is None:
         LEDGER.skip("everything from section 1 on",
@@ -144,6 +166,31 @@ def main():
     check(all(f.level == "ok" for f in findings),
           "every content row agrees across both archives",
           f"{sum(1 for f in findings if f.level == 'ok')} of {len(findings)}")
+    # AND THE CREATED ROW IS SKIPPED RATHER THAN JUDGED. Not a finding of any
+    # level: there is nothing to compare until `deploy.py` has allocated the
+    # chain in this copy. It reached FATAL before the created state existed,
+    # which -- with `served=None`, the fail-closed default that tape runs and
+    # every un-`--map`ped run take -- refused every loopback launch in the repo
+    # over one row no run touched. That is the 2026-08-15 false positive again.
+    #
+    # GATED ON `findings`, and the gate is not caution -- it is the same
+    # measured hazard the rest of this file has: another session holds these
+    # 4 GB archives open, `check()` returns nothing at all, and the row above
+    # already goes red for exactly that reason. Two MORE reds naming created
+    # rows would send a reader after the wrong thing.
+    if not findings:
+        LEDGER.skip("the created-row split",
+                    "check() returned no findings, so the client archive could "
+                    "not be read this run -- see the check above")
+    else:
+        check(not [f for f in findings if f.map_id in created],
+              "a CREATED row whose id nothing binds yet produces no finding at "
+              "all -- it cannot disagree with an archive it is not in",
+              f"created {sorted(created)}")
+        check(any(str(m) in s for m in created for s in skips),
+              "and it is SKIPPED OUT LOUD, naming the row -- 'nothing "
+              "disagreed' and 'nothing was checked' must not look alike",
+              "; ".join(s[:90] for s in skips) or "no skip recorded")
     # `preflight` must not raise on the good pair -- the guard has to be silent
     # when nothing is wrong, or it will be removed.
     try:
@@ -172,7 +219,7 @@ def main():
         try:
             rawt = file_id_table(ar, raw=True)
             dual = file_id_table(ar)
-            for mid, f in sorted(ids.items()):
+            for mid, f in sorted(retail_ids.items()):
                 if f in dual and f not in rawt:
                     armed_dat, armed_id = cand, f
                     break
@@ -221,7 +268,7 @@ def main():
                 rawt = contentids.file_id_table(ar, raw=True)
         except (OSError, ValueError):
             continue
-        if any(f not in rawt for f in ids.values()):
+        if any(f not in rawt for f in retail_ids.values()):
             live = cand
             break
     if live is None:

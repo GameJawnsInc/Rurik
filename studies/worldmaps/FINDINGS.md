@@ -66,18 +66,51 @@ copy: A = stored control, B = compressed treatment; the scorable claim is the
 client compiles B identically to A (readback row-for-row, navmesh served on
 the unarmed second run). Owner-driven.
 
-## WORLDMAPS-W3 — an authored area under its OWN file id. OPEN
+## WORLDMAPS-W3 — an authored area under its OWN file id. LANDED 2026-08-20
 
-`datalloc --map` creates the two-row chain (armed head flags 259 + partner
-flags 1) under a brand-new file id; the server names the geometry file id on
-GAME_SMSG 0x0195 field 1 (OBSERVED 9/9 live connections,
-`studies/maprows/FINDINGS.md`), so a created id is servable the moment
-`content/maps.toml` names it. Plan: a deploy create branch through the
-datalloc Python API (comp-8 partner via `Stream(..., extra_bytes=8, expect=)`),
-`created = true` map rows, and an `[area.frontier]` row — ending the
-displacement of row 71496.
+**OBSERVED (offline; the client witness is WORLDMAPS-W4's question).**
+`deploy.py --install` now ALLOCATES the map chain when the area's maps.toml
+row carries `created = true` and its file id binds nothing in the target
+archive: `create_streams` builds `[Stream(b"", 259), Stream(gwenc_stream, 1,
+extra_bytes=8, expect=plain)]` and `create_chain` drives
+`datalloc.plan_alloc`/`alloc`, journaled, spilling the compression-8 stream
+BEFORE the plan (a refused allocation still leaves behind the thing that was
+refused). The head is born armed — zero length, the re-bloat trigger — and is
+not armed again. A bound id falls through to the normal install (idempotent);
+a non-map-chain shape, a taken id, or a bit-31 sibling each refuse by name
+(the sibling refusal is the CALLER's because `plan_alloc`'s exact-membership
+gap — archivewrite §17.5 — is still open). `create_note()` answers on EVERY
+run, including build-only dry runs, so "the create branch would fire" is
+previewable without a write.
 
-## WORLDMAPS-W4 — the created chain meets the client. OPEN
+**The content rows, and one ruling.** `content/maps.toml [map.166]`
+(created = true, file id 0x5F0B0, source="invented") and
+`content/areas.toml [area.frontier]` (64×64, donors by file id per the sculpt
+pattern). The spec said the area "may keep map_id 143" — **not implementable**:
+deploy joins area→map row BY map_id, so pointing at 143 resolves the
+displacement row and the create branch could never fire. Ratified: the area
+points at its own [map.166]; the map id remains a cosmetic label exactly as
+[map.143]/[map.144] describe theirs. P1 (the full allocation plan against the
+C2 copy, read-only) was independently re-measured and reproduces byte for
+byte, row indices and MFT arithmetic included.
+
+**A created row is a THIRD content state, and it nearly deleted a guard**:
+`contentids.check` returned FATAL for the unbound created id, which — under
+`served=None`, the fail-closed default — would have refused every loopback
+launch in the repo. It now records an absent created id as a printed SKIP and
+judges it normally the moment an archive binds it; `test_contentids` holds
+created rows out of both archive-selecting scans. Floors: test_deploy 56→92,
+test_content 39→40, test_contentids 19→20.
+
+**Residuals recorded, none blocking** (skeptic notes, fix pass took the two
+must-fixes): the born-armed clause has no check behind it; `created = true`
+beside an id that binds a RETAIL map chain silently returns to displacement
+(the install fall-through is also the displacement path — a row comment names
+it); the create path overwrites an existing `<area>_alloc.json`; contentids'
+created-skip fires before the server side is consulted; two of `map_chain`'s
+four shape refusals are hand-verified but unexercised by the suite.
+
+## WORLDMAPS-W4 — the created chain meets the client. STAGED
 
 Every "client compiles a map" result in the corpus reused a PRE-EXISTING file
 id; `studies/customarea` FINDINGS 36 item 4 names the born-new case untested,
@@ -85,6 +118,9 @@ and `datalloc --map` has zero recorded uses against a client. The open
 survival questions: does re-bloat fire for a head that was BORN zero-length
 under a new id, does the compiled head land and survive Flush (A9's sweep
 pattern), and does the partner stay untouched as it does for retail rows
-(FINDINGS 35 + 39). Predictions will be registered in a RUN note before the
-launch, with `rebloat.classify`'s UNCHANGED ambiguity disambiguated by the
-Gw.log check from the start.
+(FINDINGS 35 + 39). The run sheet — throwaway-copy discipline, predictions
+registered with the UNCHANGED/Gw.log disambiguation built in, and what each
+red arm would mean (not-loaded vs loaded-not-compiled vs compiled-not-served)
+— is `vault/research/worldmaps/WORLDMAPS-W4-RUN.md`. Owner-driven; the safer
+sequencing is WORLDMAPS-W2 first, since the created chain's partner leans on
+the comp-8-partner witness.

@@ -1789,7 +1789,7 @@ Every one of these, in the order they were written:
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
   a module with its own test -- so this file checks only what is true of the
   COMPOSITION, and each of its sections is either a defect the first runs of the
-  command actually had or, for sections 4-7, a claim about the bytes the row
+  command actually had or, for sections 4-8, a claim about the bytes the row
   will hold. **The two kinds of borrowing are different**: structural
   constants (Header, Zones) must come from a map shaped like ours, the biome
   (textures, sun, env, sound) from wherever you like, and taking both from
@@ -1828,10 +1828,78 @@ Every one of these, in the order they were written:
   pins MOVED with the dispatch rather than being weakened: `main()` must CALL
   `install_partner`, `install_partner` must reach both writers, still without
   `--check-overlaps` and now with `--compression` AND `--expect` in both
-  argument lists. Sections 0-1 and 3-7 need no vault and score 52 against a
-  floor of 56, so the floor still does what it was for -- a vault-less run exits
-  1. (The line this replaces said "score 10 against a floor of 14", stale by two
-  floor changes)),
+  argument lists. **Section 8 is the map that displaces nobody** (2026-08-20, WORLDMAPS-W3).
+  Every authored area before it rode map 143 -- MFT rows 71496/71497, a live
+  retail area in the owner's own copy that nothing in this repo can name
+  (FINDINGS 16-P7: there are ZERO provably-dead rows) -- because `datwrite` and
+  `datmove` both start from a row ArenaNet made. `deploy.py --install` now
+  ALLOCATES the chain instead when the area's map row carries `created = true`
+  and its file id binds nothing: `create_streams` builds `[Stream(b"", 259),
+  Stream(gwenc_stream, 1, extra_bytes=8, expect=plain)]` and `create_chain`
+  drives `datalloc.plan_alloc`/`alloc`. What makes this section different from
+  section 7 is that its failures are SILENT -- section 7's are loud (a row holds
+  the wrong bytes, a verb did nothing), while a file id registered on the PARTNER
+  instead of the head passes every crc rule and all ten of `datcheck`'s
+  open-time rules right up until the client's reconcile deletes the head and
+  frees its extent, and a row below `FIRST_CLAIMABLE_ROW` is handed to somebody
+  else at the next launch. So the created rows are read back by this file's own
+  `read_next` and `read_id_pairs`, written out of `int.from_bytes` and sharing no
+  code with `archive.py`: the head is flags 259 and ZERO length with no extent,
+  the partner is flags 1 marked compression 8 and `gwdat`-decodes to the exact
+  authored blob, the head chains to the partner and the partner terminates, the
+  id names the head and NO id names the partner, and both rows sit at index >=
+  16. The fixture's declared row count was raised 6 -> 16 for exactly that last
+  rule: `plan_alloc` refuses a chain linked below 16, so six rows would have
+  failed for a reason about the FIXTURE. Four refusals are driven, each on its
+  own hand-laid archive: an id bound to a non-map-chain shape (flags 3 on stream
+  0) is refused naming the row and its flags; an id whose BIT-31 SIBLING is bound
+  is refused before the allocator sees it, with a control proving the fixture
+  really is the dual-registration shape the default `file_id_table` would hide
+  (`plan_alloc` tests exact membership and would accept it -- that gap is
+  studies/archivewrite FINDINGS 17.5, still open, so the CALLER refuses); an
+  absent id on a row WITHOUT `created = true` keeps the old refusal, because
+  "resolves nowhere" is also what a typo looks like; and a resolving id falls
+  through to the install path, which is then RUN -- a second deploy replaces in
+  place, so a created row is an ordinary row the moment it exists. Two sabotages:
+  one byte of the declared payload flipped is refused through the create path
+  before the plan is even computed, archive byte-identical afterwards; and a
+  chain handed over PARTNER FIRST is refused by the allocator's own shape loop,
+  driven by hand because `deploy` cannot express it, which is the claim. **Two
+  of section 8's checks are about a RUN NOTE rather than about bytes, and they
+  are there because a skeptic ran the command** (2026-08-20): W4's step 1 is a
+  build-only run whose output the operator compares against a prediction
+  registered beforehand, and it printed nothing about the row -- `create` is
+  computed only under `--install` (deciding costs a refusal; a dry run must not
+  refuse) and the create line was printed under that same decision, so a CORRECT
+  dry run against an unbound id was indistinguishable from a broken
+  area -> map row -> file id join, i.e. it read as a refutation. `create_note` now
+  answers on every run and this section drives all four of its states -- the
+  build-only line names the id and says `--install would CREATE`, the `--install`
+  line is unchanged, an unbound id on a row that did NOT ask previews the
+  REFUSAL, and a bound id says nothing because `verify()` already did -- plus an
+  AST pin that `main()` calls it OUTSIDE any `create`/`install` test, with the
+  sabotage that wraps it back up in `if create:` and makes that pin red (the
+  sabotage's search string is newline-anchored: without that it is a substring of
+  its own replacement and produced an IndentationError instead of a clean red).
+  The other pair covers `spill_stream`: `install_partner` HAD to write
+  `<area>.c8.bin` because both CLI writers take `--data FILE`, `create_chain`
+  did not because `datalloc` takes bytes, so the path that needed the file least
+  was the only one producing it -- backwards, since after an install the row is
+  itself a second copy while a created chain the client rewrites or deletes
+  leaves none. The create path now spills before the plan (so a refused
+  allocation still leaves what was refused) and a STORED write still spills
+  nothing. The content round-trip loads `[map.166]` (file id `0x5F0B0`,
+  `created = true`, source `invented`) and `[area.frontier]` (64x64, sculpt's
+  donors by FILE ID) and checks the server's `map_static_config` still builds --
+  and that frontier does NOT ride map 143, because deploy joins area -> map row ->
+  file id and an area pointing at 143 would install into the displacement row and
+  never reach the create branch. Finally main() must CALL both
+  `resolve_or_create` and `create_chain`, asked of the syntax tree with the
+  sabotage that flips it, for section 3's reason. Sections 0-1 and 3-8 need no
+  vault and score 88 against a floor of 92 (both MEASURED, the vault-less one
+  with `RURIK_VAULT` pointed at an empty directory), so the floor still does what
+  it was for -- a vault-less run exits 1. (The line this replaces said "score 10
+  against a floor of 14", stale by two floor changes)),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
@@ -4858,8 +4926,13 @@ Every one of these, in the order they were written:
   no condition-1 claim to break, got no refusal, and reddened naming the gate while the
   gate was fine. It did that within minutes of landing, when a parallel session removed
   `effects.toml` and left `npcs.toml`, whose rows are all `capture`; the honest answer
-  there is the skip it now declares. Floor 39, the MEASURED vault-less score; 40 on an
-  overlay with no extracted-source row, 42 with one),
+  there is the skip it now declares. Floor 40, the MEASURED vault-less score; 41 on an
+  overlay with no extracted-source row, 43 with one. It was 39 until 2026-08-20,
+  when WORLDMAPS-W3's `[map.166]` was NAMED here rather than absorbed into the
+  count -- the migration section pins the exact SET of map ids and its own
+  comment says why ("the table grew" and "a row changed meaning" look identical
+  to a length check), so a created row costs one named check and one line of
+  prose about what makes it a different kind of row),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away
@@ -4907,7 +4980,34 @@ Every one of these, in the order they were written:
   in the repo -- this file's own docstring names that cost ("one that refuses
   everything gets deleted the first time it blocks a run"). §5 is SYNTHETIC, so
   unlike §1b/§2/§2b it can never skip and joins the mandatory core, taking the
-  floor to 19. The check that matters most is the fail-closed one: an EMPTY set
+  floor to 19; 2026-08-20 took it to 20 for the created/retail split, which runs
+  before any archive is opened. **A CREATED content row is a third state and it
+  nearly deleted this guard**: `[map.166]` names a file id that binds nothing
+  until `deploy.py --install` allocates it, so `check()` returned FATAL for every
+  archive and -- with `served=None`, the fail-closed default that tape runs and
+  every un---map-ped run take -- that one row refused EVERY loopback launch in
+  the repo, which is precisely the 2026-08-15 false positive this file's own
+  docstring warns about. `contentids.check` now records an absent created id as a
+  printed SKIP and judges it normally the moment an archive binds it, and this
+  file holds the created rows OUT of both archive-selecting scans: section 2
+  picks its positive control with `any(f not in raw for f in ids.values())`,
+  which is true of EVERY archive once a created id exists, so it silently
+  selected the wrong archive and four checks went red naming Pre-Searing while
+  the code under test was fine -- a fixture resolving to the wrong thing, which
+  is the defect `vaultpath.require_dir()` exists to prevent one level up. The
+  two new section-1 checks are gated on `check()` having returned findings at
+  all, because these are 4 GB files another session may hold open. The check that
+  matters most is the fail-closed one
+
+FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
+- test_deploy floor 56 -> 92 across the two passes. MEASURED green runs 2026-08-20: 92 with the vault, 88 without (RURIK_VAULT pointed at an empty directory, section 2 skips, exit 1 -- which is what the floor is for). Section 8 adds 36 checks in total: 28 from the build pass, 8 from this fix pass (4 on `create_note`'s states, 2 AST pins with a sabotage, 2 on `spill_stream`).
+- test_content floor 39 -> 40; a green run scores 43 with the vault overlay (re-confirmed today).
+- test_contentids floor 19 -> 20; a green run scores 31 with 2 declared skips (re-confirmed today).
+- Fixture change worth naming: test_deploy's hand-laid archive declares 16 rows rather than 6, so an appended chain lands at index >= 16 (FIRST_CLAIMABLE_ROW). Section 7 is unaffected and still green.
+- content/maps.toml [map.166] and content/areas.toml [area.frontier] are the only content rows added; nothing else in content/ moved, and this fix pass did not touch either.
+- New in deploy.py from this pass: `create_note()` (the row line, printed on every run) and `spill_stream()` (shared by both write paths). `install_partner`'s stored/compressed branch became one line through the helper; behaviour on that arm is unchanged.
+- Every vault touch in both passes was READ-ONLY: the C2 copy was read for `plan_alloc`, for the step-1 dry run and for the donors. Nothing was written to any vault archive, no client was launched, and datalloc.py/gwenc.py/datwrite.py/datmove.py were not modified.
+- Tests run this pass: test_deploy (92, green), test_srclint (22, green -- it lints the whole tree, so any source edit is its business), test_content (43) and test_contentids (31/2 skips) to confirm the RUN note's precondition counts. The full suite was NOT run, per the house rule.: an EMPTY set
   must refuse exactly as `None` does, because a caller whose `--map` parse came
   back empty must not thereby clear the whole table. Out-of-scope disagreements
   are demoted and PRINTED, never hidden, and returned with level `fatal`

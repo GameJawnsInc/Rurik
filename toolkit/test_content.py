@@ -42,9 +42,10 @@ import content  # noqa: E402
 #
 # The four checks added 2026-08-13 are the first here to read the REAL `vault/content/`
 # overlay, which is gitignored and machine-local -- so the floor is the VAULT-LESS score:
-# a bare machine declares one skip and scores 39 (MEASURED with RURIK_VAULT pointed at an
-# empty directory), a machine whose overlay carries a row with a source in EXTRACTED
-# scores 42, and one whose overlay has rows but no such row scores 40 and declares the
+# a bare machine declares one skip and scores 40 (MEASURED with RURIK_VAULT pointed at an
+# empty directory, 2026-08-20; it was 39 before map.166's row was named), a machine whose
+# overlay carries a row with a source in EXTRACTED scores 43, and one whose overlay has
+# rows but no such row scores 41 and declares the
 # mutation skip. That last case is not hypothetical and is why the mutation target is
 # chosen by PARSING rather than by grepping for `extractor = "`: an extractor on a row
 # OUTSIDE `EXTRACTED` is inert -- `capture` rows carry the field and nothing validates
@@ -72,7 +73,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=39)
+LEDGER = checks.Ledger("content store", floor=40)
 
 
 def write(dirpath, name, text):
@@ -127,9 +128,9 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 12,
-              "twelve maps load (map.27, the terrain tag-3 capture target, "
-              "landed 2026-08-18)",
+    LEDGER.ok(world.census().get("map", 0) == 13,
+              "thirteen maps load (map.166, WORLDMAPS-W3's created chain, "
+              "landed 2026-08-20)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -195,10 +196,26 @@ def main():
     # authored terrain tag 3 -- reachable, every prior capture having landed on
     # a block where tag 3 is zero throughout. The spawn is the block's centre
     # and lands in exactly 1 trapezoid against 0 in both controls.
-    ADDED = {143, 144, 280, 27}
+    # 166 is WORLDMAPS-W3's created chain (2026-08-20), and it is a different
+    # KIND of row from every other one here: it names a file id -- 0x5F0B0 --
+    # that binds nothing in ANY archive. `deploy.py --area frontier --install`
+    # sees `created = true` beside an unbound id and ALLOCATES the map's two MFT
+    # rows through `datalloc`, registering the id on the head. So unlike 143 and
+    # 144 it displaces no live retail row, and unlike 27 it does not open an
+    # existing one either: until a create has run against a given copy, this row
+    # resolves nowhere and deploy says so. Whether a retail client compiles a map
+    # from a chain born this way is WORLDMAPS-W4 and is not settled.
+    ADDED = {143, 144, 280, 27, 166}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
+    LEDGER.ok(msc.get(166) == (0x5F0B0, (3072.0, 3072.0), 0, False)
+              and world.get("map", "166").get("created") is True,
+              "map 166 is WORLDMAPS-W3's CREATED row: an id nothing binds, "
+              "spawned at the centre of the 64x64 rect it authors, and it says "
+              "`created = true` -- which is the flag that lets deploy allocate "
+              "rather than refuse an id that resolves nowhere",
+              str(msc.get(166)))
     LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
               "map 143 is C2's target row, spawned at the centre of the "
               "DELIVERED map's rect", str(msc.get(143)))
