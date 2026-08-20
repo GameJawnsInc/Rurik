@@ -1593,7 +1593,7 @@ the frame bus — `0x00F4`'s frame `0x10000064` and `0x00F5 TITLE_UPDATE`'s `0x1
 same CtlText panel (`toolkit/clientscan/framebus.py` post/subscribe scan, closing the open lead at
 `studies/character/RUNS.md:203`). That shared-panel technique generalizes to any UPSTREAM display opcode.
 
-**NEXT: the 14 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
+**NEXT: the 13 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
 deliberately OUT of the schema; full ledger and each held-reason at `studies/smsgnames` §4/§5):
 1. **`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL`** — the critic's strongest withheld pair:
    a genuine two-witness MESSAGE identity (fileId SOURCED at `ItCliApi:2410`/`:2505`), held only
@@ -1601,9 +1601,19 @@ deliberately OUT of the schema; full ledger and each held-reason at `studies/sms
    fix `0x0161`'s off-by-one field indices first (critic flagged: name is wire field 12, code[] field 13).
 2. **`0x009A`** — the char-record `+0x30` dword store keyed by agent id that PAIRS with the now-named
    `0x009B AGENT_SET_NAME` at `+0x34` (same `0x38`-stride ChCli record). Read what consumes `+0x30`.
-3. **`0x005D`** — candidate `CHAT_MESSAGE`: an encoded (EncString) wide message appended to the
-   string table at `ctx+4`. Needs the sender/body cross-check against the local-chat surface
-   (`studies/recon` §491).
+3. ~~**`0x005D`** — candidate `CHAT_MESSAGE`: needs the sender/body cross-check~~ **EARNED
+   2026-08-19, and the cross-check ran OFFLINE** — the corpus already held it
+   ([studies/chat/FINDINGS.md](studies/chat/FINDINGS.md)). The whole family landed at once:
+   `0x005D CHAT_MESSAGE_CORE` (body fragments, cap measured 121 = declared−1), `0x005E
+   CHAT_MESSAGE_SERVER` (133/133 words = the subject playerId or 0), `0x005F CHAT_MESSAGE_NPC`
+   (45 sightings, commit tag carries the sender's enc-name), `0x0061 CHAT_MESSAGE_LOCAL`
+   (**47/47 sender playerIds resolve to `0x0059` names**, typed player text verbatim in the
+   bodies — "wtb Axe grip of the paragon" et al.). `0x0060` stays unnamed: zero witnesses.
+   The server now ANSWERS `0x0064 CHAT_SEND` (test_dispatch's oldest recorded drop): All-chat
+   echo + the observed `/bow` reply, everything else refused loudly (`chatdefs.py`,
+   `test_chatdefs.py` — the framing check is byte-identity against ArenaNet's own multi-part
+   advert). Owner's loopback confirmation still worth one run: type `!hello`, predict one All
+   line `<character name>: hello` — verifies our consumer, not the decode.
 4. **`0x0147`/`0x0148`** — the equip-set pair, already asserting `ITEM_PLAYER_EQUIP_SETS`
    (`ItCliInv:375`/`:329`); then the player-record pair `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0` and the
    marker `0x008D`.
