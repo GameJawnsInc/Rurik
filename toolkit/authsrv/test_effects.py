@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=51)
+LEDGER = checks.Ledger("the effect channel", floor=74)
 
 
 def section_arithmetic():
@@ -118,6 +118,64 @@ def section_arithmetic():
               f"49 skills are shaped like this and not one appears in the 102 "
               f"live applies. Interpolating anyway would be a reading with no "
               f"evidence either way. Got: {got!r}")
+
+
+def section_type_coverage():
+    """Every skill in the five effect types has a duration. None of the rest.
+
+    THE CHECK THAT LICENSED ADDING GLYPH without waiting for a run, and it is
+    refutable by construction: if "this type_code IS a timed effect" were the
+    wrong mapping, the giveaway would be a type full of skills with nothing to
+    time. There is not one.
+    """
+    print("\n1c. does the TABLE agree that these five types are timed effects?")
+    try:
+        import skilltable
+        from pathlib import Path
+        exe, _why = skilltable.find_exe()
+        data = Path(exe).read_bytes()
+        base, count, _score = skilltable.locate_table(data)
+    except Exception as ex:                                    # noqa: BLE001
+        LEDGER.skip("the type-coverage check", f"no pinned client here ({ex})")
+        return
+    rows = [skilltable.parse_record(data, base, i) for i in range(count)]
+    corpus = set(skilltable.player_corpus(rows))
+    rows = [r for r in rows if r["id"] in corpus]
+
+    tally = {}
+    for r in rows:
+        fam = effects.applies_effect(r)
+        if fam is None:
+            continue
+        try:
+            d = effects.resolve_duration(r, 0)
+            key = "resolves" if d else "NO DURATION"
+        except effects.EffectError:
+            key = "refused"
+        tally[key] = tally.get(key, 0) + 1
+
+    n = sum(tally.values())
+    LEDGER.ok(n > 400,
+              f"{n} corpus skills fall in the five effect types",
+              f"{tally} -- stance, hex, enchantment, glyph, preparation")
+    LEDGER.ok(tally.get("NO DURATION", 0) == 0,
+              "and NOT ONE of them resolves to 'no duration'",
+              f"{tally.get('resolves', 0)} resolve and "
+              f"{tally.get('refused', 0)} refuse on a sentinel or an "
+              f"unwitnessed shape. This is what says the type list is the right "
+              f"mapping rather than five codes we liked the look of -- a type "
+              f"that was NOT definitionally a timed effect would be full of "
+              f"skills with nothing to time")
+
+    zeros = [r for r in rows
+             if r["duration0"] == 0 and r["duration15"] == 0]
+    LEDGER.ok(len(zeros) > 400
+              and not any(effects.applies_effect(r) for r in zeros),
+              f"CONTROL: {len(zeros)} corpus skills DO have 0/0 endpoints, and "
+              f"none is an effect type",
+              "so the check above is discriminating. 488 skills have no "
+              "duration at all -- attacks, signets, most spells -- and the "
+              "partition between them and the five types is clean")
 
 
 def section_corpus_oracle():
@@ -407,6 +465,208 @@ def section_table():
               f"OTHER copy is live, which is the honest reading")
 
 
+def section_exclusive():
+    """One stance, one glyph, one preparation -- and hexes stacking as control.
+
+    WIKI, and for two of the three it is text the game itself shows a player:
+      * (GWW, "Stance", rev. 2020-10-23), quoting Isokeh in game: "Only one
+        Stance can be active at any time... using a new Stance will replace the
+        previous one."
+      * (GWW, "Preparation", rev. 2020-06-18): "Only one preparation can be
+        active at a time. Activating another preparation will override the
+        previous one."
+      * (GWW, "Glyph", rev. 2024): "If a glyph is cast while another glyph is
+        already active, the new one replaces the old one."
+
+    This is also the FIRST answer to "how does an effect get replaced", which
+    was NOT FOUND before: re-sending `0x0042` does nothing (measured, both id
+    choices), so a replacement must be a real `0x0044` and then a `0x0042`.
+    """
+    print("\n4c. one stance / glyph / preparation at a time -- the wiki's rule")
+    import authsrv
+
+    t = effects.EffectTable()
+    a = t.apply(1, 346, 0, 8.0, 1000.0, type_code=3)
+    LEDGER.ok([e["skill"] for e in t.exclusive_on(1, 3)] == [346],
+              "a live stance is named as what a NEW stance must replace",
+              "the rule is per TYPE, not per skill -- any stance replaces any "
+              "stance, which is why this asks by type_code and not by id")
+    LEDGER.ok(t.exclusive_on(1, 4) == [] and t.exclusive_on(1, 6) == [],
+              "CONTROL: hexes and enchantments name nothing to replace",
+              "neither type carries a one-at-a-time rule on GWW and many can "
+              "be live at once. A rule applied to all five types would be the "
+              "easy wrong generalisation")
+    b = t.apply(1, 319, 12, 18.0, 1001.0, type_code=3)
+    LEDGER.ok([e["skill"] for e in t.exclusive_on(1, 3)] == [346, 319],
+              "the TABLE does not enforce it -- the caller does, and says so",
+              "both stances are live here because `apply` is a table operation "
+              "and the replacement is a WIRE operation: the old episode has to "
+              "leave under its own 0x0044 or the client keeps drawing it. "
+              "Enforcing it silently in the table would drop the message")
+    LEDGER.ok(t.exclusive_on(2, 3) == [],
+              "and it is per AGENT: another agent's stance is not replaced",
+              "one stance per CHARACTER, in the wiki's words")
+
+    print("\n4d. and the server actually sends the replacement")
+    sent = []
+    send = lambda op, vals, why="": sent.append((op, vals, why))    # noqa: E731
+    state = {}
+    first = authsrv.apply_effect(send, state, authsrv.PLAYER_AGENT_ID, 346, 0,
+                                 None, 0)
+    sent.clear()
+    second = authsrv.apply_effect(send, state, authsrv.PLAYER_AGENT_ID, 319, 12,
+                                  None, 0)
+    ops = [op for op, _v, _w in sent]
+    LEDGER.ok(ops == [effects.OP_EFFECT_REMOVE, effects.OP_EFFECT_APPLY],
+              "casting a second stance sends REMOVE then APPLY, in that order",
+              f"{[hex(o) for o in ops]} -- and the order matters: an apply "
+              f"before the removal would have two stance icons on screen for "
+              f"one frame, and the client discards a second apply anyway")
+    LEDGER.ok(sent[0][1] == [authsrv.PLAYER_AGENT_ID, first["buff"]],
+              "the removal names the OLD episode's buff id",
+              f"{sent[0][1]} against the first episode's buff {first['buff']}")
+    LEDGER.ok(len(authsrv.effect_table(state).live) == 1
+              and authsrv.effect_table(state).on_agent(
+                  authsrv.PLAYER_AGENT_ID)[0]["skill"] == 319,
+              "and exactly one stance is left, the new one",
+              "the server's own table and the client's screen agree, which is "
+              "the whole point of announcing the replacement")
+
+
+def section_degeneration():
+    """What a condition DOES: property 44, and the pips are the wiki's.
+
+    `studies/isle` B4 CONFIRMED property 44 as the net health-regeneration
+    rate in max-health fractions per second, quantised at 2/H, riding `0x00A2`
+    -- correcting PLAN.md 3.3, which had it on `0x009F` ("the value census
+    matches 3.3 exactly; the opcode did not"). It left ONE clause unverified:
+    "that one 2 hp/s step equals one HUD pip (needs a screen, not the wire)".
+
+    WIKI (GWW, "Health degeneration"): "each pip represents a loss of two
+    health per second"; Bleeding 3, Burning 7, Disease 4, Poison 4; capped at
+    10 pips.
+    """
+    print("\n4e. degeneration -- what a condition actually does")
+    import authsrv
+
+    LEDGER.ok(effects.CONDITION_PIPS == {478: 3, 480: 7, 483: 4, 484: 4},
+              "four of the ten conditions degenerate, at GWW's own pip counts",
+              "Bleeding 3, Burning 7, Disease 4, Poison 4. The other six do "
+              "other things -- miss chance, movement, maximum health, casting, "
+              "damage, armour -- and giving every condition a pip would be the "
+              "easy wrong generalisation")
+    fake = [{"skill": 478}, {"skill": 480}]
+    LEDGER.ok(effects.pips_from(fake) == 10.0,
+              "and the total CAPS at 10, which is reachable",
+              "Burning alone is 7 and Bleeding takes it past the cap. An "
+              "uncapped sum would out-degenerate retail the moment two "
+              "conditions land together")
+    LEDGER.ok(effects.pips_from([{"skill": 479}, {"skill": 481}]) == 0.0,
+              "CONTROL: Blind and Crippled degenerate nothing",
+              "both are real conditions with real durations and neither costs "
+              "health")
+
+    sent = []
+    send = lambda op, vals, why="": sent.append((op, vals, why))    # noqa: E731
+    state = {"player_health": 100.0, "player_energy": 50.0, "agents": {}}
+    authsrv.effect_table(state).apply(authsrv.PLAYER_AGENT_ID, 478, 3, 9.0,
+                                      1000.0, type_code=8)
+    rate = authsrv.push_regen(send, state, authsrv.PLAYER_AGENT_ID, 0)
+    LEDGER.ok(abs(rate - (-0.06)) < 1e-9,
+              "Bleeding on a 100-health player is -0.06 per second",
+              f"{rate} -- 3 pips x 2 health / 100. The rate is a FRACTION of "
+              f"the pool, which is what B4 measured (prop-42 100 with prop-44 "
+              f"0.02 and 0.04, exact in f32, twice)")
+    LEDGER.ok(len(sent) == 1
+              and sent[0][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+              and sent[0][1][:2] == [agents_gv_regen(), authsrv.PLAYER_AGENT_ID],
+              "and it rides 0x00A2, the NO-TARGET float twin",
+              f"{sent[0][1][:2] if sent else sent} -- PLAN.md 3.3 had these "
+              f"properties on 0x009F and the corpus put them here")
+    before = len(sent)
+    authsrv.push_regen(send, state, authsrv.PLAYER_AGENT_ID, 0)
+    LEDGER.ok(len(sent) == before,
+              "an UNCHANGED rate sends nothing",
+              "the corpus's mid-life property-44s fire when the rate CHANGES; "
+              "streaming it every tick is a message retail does not send")
+
+    print("\n4f0. a condition NEVER STACKS -- the longer duration wins")
+    # WIKI (GWW, "Condition", Notes): "Reapplied conditions will last the
+    # original time period, unless the reapplied duration is greater than the
+    # remaining amount of time." A RUN forced this check: with the enemy's
+    # Sever Artery on a 0 s recharge the player picked up FIVE Bleeding
+    # episodes -- 3 pips, then 6, then 9, then the cap at 10, i.e. TWENTY
+    # health a second (run 20260820T191725).
+    st = {"player_health": 100.0, "player_energy": 50.0, "agents": {}}
+    log = []
+    quiet = lambda op, vals, why="": log.append((op, vals))         # noqa: E731
+    authsrv.apply_condition(quiet, st, authsrv.PLAYER_AGENT_ID, 478, 9.0, 3,
+                            0, 382)
+    n_first = len(log)
+    authsrv.apply_condition(quiet, st, authsrv.PLAYER_AGENT_ID, 478, 5.0, 3,
+                            0, 382)
+    tbl = authsrv.effect_table(st)
+    LEDGER.ok(len(tbl.live) == 1 and len(log) == n_first,
+              "a SHORTER re-application changes nothing and sends nothing",
+              f"{len(tbl.live)} episode(s), {len(log) - n_first} extra "
+              f"message(s) -- 'reapplied conditions will last the original "
+              f"time period'. Nothing about the target changed, so the wire "
+              f"stays quiet")
+    LEDGER.ok(effects.pips_from(tbl.on_agent(authsrv.PLAYER_AGENT_ID)) == 3.0,
+              "and the degeneration stays at ONE Bleeding's three pips",
+              "two Bleedings at six pips is the number the run put on screen, "
+              "and there is no such thing in the game")
+    authsrv.apply_condition(quiet, st, authsrv.PLAYER_AGENT_ID, 478, 21.0, 12,
+                            0, 382)
+    tail = [op for op, _v in log[n_first:]]
+    LEDGER.ok(len(tbl.live) == 1
+              and tail == [effects.OP_EFFECT_REMOVE, effects.OP_EFFECT_APPLY],
+              "a LONGER one EXTENDS it -- as REMOVE then APPLY, still one",
+              f"{[hex(o) for o in tail]}. Not a bare second apply: re-sending "
+              f"the apply alone is discarded by the client, measured twice, so "
+              f"an extension the client can SEE has to close and reopen")
+
+    print("\n4f. and it spends health WITHOUT drawing a number")
+    import time as _time
+    state["degen_at"] = _time.time() - 2.0
+    sent.clear()
+    authsrv.degen_tick(send, state, 0)
+    LEDGER.ok(abs(state["player_health"] - 88.0) < 0.01,
+              "two seconds of Bleeding costs 12 health",
+              f"{state['player_health']:.2f}/100 -- 3 pips x 2 x 2 s")
+    damage = [v for op, v, _w in sent
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(not damage,
+              "and sends NO property-16 damage while doing it",
+              "B4: 'passive ticks are never streamed'. Retail sends the RATE "
+              "once and the client animates the bar, so a tick that also sent "
+              "damage would draw a stream of red numbers retail never draws")
+    LEDGER.ok(not sent,
+              "in fact it sends nothing at all on a steady rate",
+              f"{len(sent)} message(s) -- the whole point of a rate is that "
+              f"the client does the arithmetic")
+
+    print("\n4g. an expiry clears the rate, which is the easy thing to forget")
+    table = authsrv.effect_table(state)
+    for ep in list(table.live.values()):
+        ep["expires_at"] = 0.0
+    sent.clear()
+    authsrv.effect_tick(send, state, 0)
+    regens = [v for op, v, _w in sent
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+              and v[0] == agents_gv_regen()]
+    LEDGER.ok(regens and abs(authsrv._f32_of(regens[-1][2])) < 1e-9,
+              "when the condition runs out the rate goes back to 0",
+              f"{[round(authsrv._f32_of(v[2]), 4) for v in regens]} -- the "
+              f"icon going away and the arrows staying is exactly the bug this "
+              f"catches, and it is invisible from the server side")
+
+
+def agents_gv_regen():
+    import agents
+    return agents.GV_CHANGE_HEALTH_REGEN
+
+
 def section_wire():
     """Our own emission, through the reader that was written for retail's.
 
@@ -540,9 +800,12 @@ def section_deaths():
 
 def main():
     section_arithmetic()
+    section_type_coverage()
     section_corpus_oracle()
     section_dispatch()
     section_table()
+    section_exclusive()
+    section_degeneration()
     section_wire()
     section_deaths()
     return LEDGER.verdict()

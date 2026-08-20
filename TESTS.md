@@ -3344,7 +3344,28 @@ Every one of these, in the order they were written:
   (0x20000 ×22, 0x30000 ×7, 999999 ×1, and 24 of the 30 are enchantments, which is
   where "maintained until removed" belongs — Vital Blessing 289 is one and it is on
   our own enemy's bar, so this refusal fires every session); DIFFERING endpoints with
-  the bit clear → refuse (49 skills, zero witnesses). **§3's negative is the point**:
+  the bit clear → refuse (49 skills, zero witnesses). **§1c is what licensed adding Glyph without waiting for a run**, and it is
+  refutable by construction: across the **478** corpus skills in the five effect
+  types, **not one** resolves to "no duration" — 74 of 76 stances, 9 of 10
+  glyphs, 13 of 14 preparations, 142 of 151 hexes and 194 of 227 enchantments
+  resolve and the rest refuse on a sentinel. If "this type IS a timed effect"
+  were the wrong mapping, the giveaway would be a type full of skills with
+  nothing to time. The control is the other side of the partition: **488**
+  corpus skills DO have 0/0 endpoints and **none** is an effect type.
+  **§§4c–4d are the ONE-AT-A-TIME rule**, which is also the first answer this
+  repo has to "how does an effect get REPLACED" — re-sending `0x0042` does
+  nothing, measured under both id choices, so a replacement has to be a real
+  `0x0044` then a `0x0042`. Three of the five types carry the rule and two say
+  it in text the game shows a player: WIKI (GWW "Stance", quoting Isokeh in
+  game) *"Only one Stance can be active at any time... using a new Stance will
+  replace the previous one"*; (GWW "Preparation") *"Only one preparation can be
+  active at a time"*; (GWW "Glyph") *"the new one replaces the old one"*. It is
+  per TYPE and per AGENT, hexes and enchantments carry no such rule (the
+  control), and the TABLE deliberately does not enforce it — the CALLER does,
+  because the replacement is a wire operation and an episode dropped silently
+  leaves its icon on the client's screen. §4d pins that the server sends REMOVE
+  **then** APPLY, in that order, naming the old episode's buff id.
+  **§3's negative is the point**:
   Desperation Blow carries a real 2-second duration and is an ATTACK, and nothing in
   the table says what those seconds are, so it opens nothing — the same refusal
   `SCALE_MEANS_DAMAGE` makes one layer up. A Shout opens nothing either, *even though
@@ -3372,7 +3393,25 @@ Every one of these, in the order they were written:
   §6 pins that death STRIPS (per-agent — the enemy's hex survives the player's death)
   and that `--no-effects` is a real control. Needs `vault/captures/live/` and the
   pinned client for §2, which is declared as a skip naming what a green run without it
-  has actually checked; floor 51),
+  has actually checked. **§§4e-4g are DEGENERATION**, which is what makes a
+  condition do anything and which closes `studies/isle` B4's one open clause.
+  The pips are GWW's (*"each pip represents a loss of two health per second"*;
+  Bleeding 3, Burning 7, Disease 4, Poison 4, capped at 10) and the other six
+  conditions degenerate nothing -- a fact, not a gap, with Blind and Crippled as
+  the control. Bleeding on a 100-health player is pinned at exactly `-0.06`/s on
+  `0x00A2`, the NO-TARGET float twin (PLAN.md 3.3 had these properties on
+  `0x009F`; the corpus put them here). An UNCHANGED rate must send nothing, a
+  steady tick must send **nothing at all** -- B4's *"passive ticks are never
+  streamed"*, so the server spends health silently and the client animates from
+  the one rate -- and an EXPIRY must push the rate back to zero, which is the
+  half a server forgets: the icon goes and the arrows stay. **§4f0 is the
+  no-stack rule, and a run forced it**: with the enemy's Sever Artery on a 0 s
+  recharge the player picked up FIVE Bleeding episodes, 3 pips then 6 then 9 then
+  the cap at 10 -- twenty health a second. WIKI (GWW "Condition" Notes):
+  *"Reapplied conditions will last the original time period, unless the reapplied
+  duration is greater than the remaining amount of time."* So a shorter
+  re-application is a no-op in the table AND on the wire, and a longer one
+  extends as REMOVE-then-APPLY; floor 74),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
@@ -5478,7 +5517,41 @@ Every one of these, in the order they were written:
   Desperation Blow reads Tactics 1, identical 10→40 tables landing 22 points
   apart, which is precisely what "the server models no attribute ranks" used
   to cost. §7 asserts a `+ Damage` bonus rides the swing as ONE damage
-  message, since two would draw two numbers on screen for one hit),
+  message, since two would draw two numbers on screen for one hit.
+  **§§8–10 are the three directions added 2026-08-20, and each one existed
+  because a client run showed the old behaviour was wrong.**
+  **§8, HEALING** — the direction this server never had. Which property carries
+  it was measured, not chosen: on `0x00A3` the live corpus has property 16
+  negative **1251 of 1251** and 17 negative **243 of 243**, both self-directed
+  **0 of 1501** (damage always has a distinct attacker and victim); property 55
+  is **POSITIVE 502 of 506** and **SELF-DIRECTED 454 of 506**. A positive,
+  mostly self-inflicted health delta on the damage channel is a heal, so GWCA's
+  `armor_ignoring` names the mechanism and not the direction. The section pins
+  that the heal goes out self-directed and positive, that an 88 heal on a 40/100
+  bar lands **60 CLAMPED** (the `fraction <= 1.0f` assert only fires in the
+  positive direction, and this is the first thing this server sends that can
+  reach it), and that a heal on a full bar sends **nothing** — overheal is
+  silent in retail too. Control: Power Attack heals nothing.
+  **§9, A SPELL IS NOT A SWING.** Both halves were wrong until a run showed
+  them: casting Faintheartedness, a HEX, produced `attack_started: player swings
+  at 10` and 5 points of hammer damage, and Flare — whose own 20 fire damage was
+  decoded and sitting there — dealt the same 5, because `cast_tick` read only
+  the `additive` mode and dropped `standalone`. Now the TYPE column dispatches:
+  only `type_code` 14 rides a weapon swing, `exact=` deals the skill's own
+  number with no roll or armour or critical, and `swing=False` suppresses
+  `attack_started`/`melee_attack_finished` — pinned as ONE message going out.
+  **§10, CONDITIONS** — the join `studies/isle` asked for. It had established
+  that a condition's duration comes from the INFLICTING skill (Burning's own
+  endpoints are 3/3 and retail sends it at 9.0); what was missing was which
+  condition and from where. Both are per-skill data already carried: **GWW's
+  progression variable NAMES it** (`Sever Artery` has exactly one variable and
+  it is called `Bleeding`) and **the client's bonus slot carries the seconds**
+  (5..25, with `skill_arguments = 4` naming that slot — the bitfield picked it
+  before the wiki was read). Sever Artery resolves to Bleeding 478 for 9 s at
+  Swordsmanship 3, the apply names the CONDITION's id rather than the skill's,
+  and the controls are the two that a label-blind reading gets wrong:
+  `Health degeneration` is a real variable in a live bonus slot and is not a
+  condition, and an attack with no bonus slot inflicts nothing. Floor 25 → 40),
   `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
@@ -5504,7 +5577,15 @@ Every one of these, in the order they were written:
   constant still sends the full effect burst, because a guard that refuses
   everything would pass every refusal check. Dormant while every fraction is
   a literal constant; load-bearing the day studies/combat step 8 computes
-  them from the client's skill table),
+  them from the client's skill table.
+  **§2's fixture skill changed from a made-up 42 to Power Attack 322 on
+  2026-08-20**, and the reason is the shape of a test quietly dying: the cast
+  path now dispatches on the skill's TYPE, so an id that is not an attack
+  resolves to nothing and this section's actual subject — that the damage lands
+  at E5 rather than at the press — would have stopped being tested while still
+  printing PASS. A CONTROL was added beside it that could not have existed
+  before the fix: casting a HEX at the same agent must swing nothing at it.
+  Floor 40 → 41),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless

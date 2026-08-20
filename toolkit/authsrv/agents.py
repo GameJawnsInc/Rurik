@@ -1218,7 +1218,34 @@ GV_ANIMATION_LOOP = 28
 GV_HEALTH = 34
 GV_CHANGE_HEALTH_REGEN = 44
 GV_ENERGY_GAIN = 52
+# 55 -- AND ITS NAME IS HALF RIGHT, WHICH IS WORSE THAN WRONG. This id was
+# CORROBORATED above on the strength of GWCA naming it and our own bytes
+# agreeing it exists. Nobody ever checked what it CARRIES, and on 2026-08-20
+# the live corpus was asked directly. Two measurements, both from 2,007
+# property events on `0x00A3`:
+#
+#   * SIGN. Property 16 is negative 1,251 of 1,251 and property 17 is negative
+#     243 of 243 -- damage on this channel is a NEGATIVE health delta, which is
+#     the convention `_damage_fraction` already uses. **Property 55 is POSITIVE
+#     502 times and negative 4.** A third damage kind would share the other
+#     two's sign. It does not.
+#   * DIRECTION. 16 and 17 are self-directed (`target == cause`) **0 of 1,501**
+#     times -- damage always has a distinct attacker and victim. **Property 55
+#     is self-directed 454 of 506 times.**
+#
+# A positive, overwhelmingly self-directed health delta on a channel whose
+# other members are damage is a HEAL. So 55 is the health-GAIN direction, and
+# GWCA's `armor_ignoring` names the mechanism rather than the direction: it is
+# the channel for a health change that armour has no say in, which is what a
+# heal is and what "armour-ignoring damage" would also be. The 52 non-self
+# events are heals on somebody else; the 4 negatives are consistent with a
+# SACRIFICE (a Necromancer paying health), and that reading is UNVERIFIED.
+#
+# This is what makes Healing Signet and Reversal of Fortune -- two of R4b's
+# nine exemplars -- reachable at all; before it, this server had no way to make
+# health go up except `GV_HEALTH`'s setter, which draws no number.
 GV_ARMOR_IGNORING = 55
+GV_HEALTH_GAIN = 55        # the same id, read for what it carries
 GV_CASTTIME = 61
 GV_ENERGY_SPENT = 62
 GV_KNOCKED_DOWN = 63
