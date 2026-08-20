@@ -1665,6 +1665,13 @@ slots; we currently send `SET_ACTIVE_WEAPON_SET` and four `WEAPON_SET` with noth
 
 ### The modifier words: NOT DONE
 
+**DECODED 2026-08-20 -- see [studies/itemmods/FINDINGS.md](../itemmods/FINDINGS.md).**
+The format is `{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}`, read out of
+the client's own parser and checked against all 5,266 modifier words in the live
+corpus (100% dispatch to identifiers the client handles). Armour rating is identifier
+**572**'s argument; the `+N vs. damage type` line is **527**. The sentence below stood
+for two weeks and is kept as written.
+
 **Nobody on this pass decoded a single item modifier word, and this is the largest
 remaining hole in the armour picture.** `GmDefaultArmors` ships literal lists —
 `{0xA3C81900, 0x80400000, 0xA0F81400}` for the warrior chest, `{0x24481400}` for the

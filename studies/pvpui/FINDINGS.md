@@ -3266,6 +3266,12 @@ not consulted: a bought item is declared and placed, not worn.
 > largest hole" and it is still open. `attribute_bonus` is OUR declaration of what OUR
 > item does, sitting beside those dwords and making no claim about them. The content row
 > says so in place.
+>
+> **The hole closed the same day, and this row can now be derived rather than declared:**
+> [studies/itemmods](../itemmods/FINDINGS.md) decodes the modifier format and the
+> identifier vocabulary. `attribute_bonus` stays as it is for now -- turning it into a
+> real modifier word needs the identifier that carries an attribute bonus, which is a
+> follow-on with its own experiment, not a rename.
 
 **Measured on screen, caged, both directions.** The persisted character wears the hammer
 and had Hammer Mastery at the rank cap, which reproduces retail's own 12→13 exactly:
