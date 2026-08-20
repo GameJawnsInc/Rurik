@@ -193,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 99,
-      "99 class-(a) occurrences -- the census",
+check(len(live) == 134,
+      "134 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -243,8 +243,8 @@ check(len(live) == 99,
       f"come DOWN, the way is genericvalue.py's -- derive the sites from a table "
       f"the client itself carries instead of naming them."
       f" **86 on 2026-08-18, +4 from two files that did not exist that morning** -- clientscan/fovread.py (3: the field-of-view global at 0x00C078C4 and the camera position and target beside it, 0x00C07860/0x00C0786C) and clientscan/fovaxis.py (1: the same fov global again). These are the CHEAPEST class in the census and the one the mitigation above fits best: both tools resolve every address as an RVA off the module base read at run time, so ASLR is handled rather than assumed, and both refuse loudly when the fov reads 0.0 -- which is what a wrong address looks like. They also earned their keep: the measurement they exist for closed studies/terrain FINDINGS 10-12 (the field of view is 75.000 deg HORIZONTAL, far plane 48000) after a static hunt ended at a runtime VARIABLE with no literal to read."
-      f" **99 on 2026-08-19, +13 across three files, and this check had been sitting RED for two of them** -- clientscan/framebus.py +8 (13 -> 21, the frame-bus reader gaining sites), clientscan/movetap.py +1 (RVA_TLS_INDEX, and the 14th file), and clientscan/pinned.py +4 (8 -> 12: PATCHED_TEXT gained the key-tap's CAVE and JUMP, 0x004514E2..0x00451507 and 0x007DC0CE..0x007DC0D3, when the patched-digest SET was added). The last four are the cheapest kind of all and the one this census should be gladdest to count: they are not addresses a tool computes with, they are the addresses our own patcher WRITES, listed so that patches_touch() can tell a study that its finding landed on our bytes rather than ArenaNet's -- and the two that were missing are exactly why the gate went stale, since patches_touch() answered no for both key-tap sites while the key-tap had been writing .text for days.")
-check(len(files) == 14, "across 14 files", f"{len(files)}: {sorted(files)}")
+      f" **99 on 2026-08-19, +13 across three files, and this check had been sitting RED for two of them** -- clientscan/framebus.py +8 (13 -> 21, the frame-bus reader gaining sites), clientscan/movetap.py +1 (RVA_TLS_INDEX, and the 14th file), and clientscan/pinned.py +4 (8 -> 12: PATCHED_TEXT gained the key-tap's CAVE and JUMP, 0x004514E2..0x00451507 and 0x007DC0CE..0x007DC0D3, when the patched-digest SET was added). **113 by 2026-08-20 and this check sat RED at 99 while it happened**, from an arc this one did not run; then **134 on 2026-08-20, +21 and a 16th file, all of it the gate-fire instrument** -- clientscan/movetap.py 1 -> 28 (the AgTrack fence record and the ASYNC twin: stateArray/count/stride off AGBASE+0x1CC, the world[1] array at +0x14C and its count at +0x154, the agent fields the two early-outs read at +0x48/+0xC4/+0x78, and gate 1's 300.0f) and clientscan/movesync.py 0 -> 7 (the same record's field offsets, read back out of the capture rather than out of the process). This is the census doing its job: the instrument for ONE probe cost a fifth of the repo's whole per-build liability, and every one of those addresses is a number that silently means something else on 38833. movetap.py is now the largest block in the census at 28, displacing msgshape.py's 25. The last four are the cheapest kind of all and the one this census should be gladdest to count: they are not addresses a tool computes with, they are the addresses our own patcher WRITES, listed so that patches_touch() can tell a study that its finding landed on our bytes rather than ArenaNet's -- and the two that were missing are exactly why the gate went stale, since patches_touch() answered no for both key-tap sites while the key-tap had been writing .text for days.")
+check(len(files) == 16, "across 16 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed
 # the two live-memory readers would be reassuring and wrong.
@@ -269,8 +269,8 @@ check(not [r for r in live if r["file"] == "clientscan/genericvalue.py"],
       "genericvalue.py contributes NOTHING to the census (was 27, then 0)",
       "the switches are located through the message tables now; a live constant "
       "reappearing here means something went back to being looked up")
-check(max(collections.Counter(r["file"] for r in live).values()) == 25,
-      "and the largest remaining block is msgshape.py's 25",
+check(max(collections.Counter(r["file"] for r in live).values()) == 28,
+      "and the largest remaining block is movetap.py's 28 (was msgshape.py's 25)",
       str(collections.Counter(r["file"] for r in live).most_common(3)))
 
 cited = [r for r in rows if r["klass"] == BP.CITATION]
