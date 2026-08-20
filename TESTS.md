@@ -1397,9 +1397,14 @@ Every one of these, in the order they were written:
   onto plainly stored bytes. **Twelve sabotages, all twelve red**, counts in the
   floor comment and re-measured after every change; the sharpest is
   `declaration_fault` stubbed to `None`, which reddens 12 checks and puts the
-  corrupted stream back on disk in a green archive. No client, though: **no
+  corrupted stream back on disk in a green archive. ~~No client, though: **no
   client has ever read a row this verb allocated**, which is the same sentence
-  `datmove` carried before FINDINGS 39. Floor 177),
+  `datmove` carried before FINDINGS 39.~~ **That sentence had its FINDINGS-39
+  moment on 2026-08-20 — A9, archivewrite §18.6**: the retail client resolved,
+  decompressed and animated from a 3-stream chain this verb allocated under a
+  new file id, and the chain survived the client's Flush byte-intact. One chain
+  shape, one build, one launch — the suite below is still what proves the verb
+  in general. Floor 177),
   `toolkit/mapdata/test_authorflow.py` (AUTHOR A FILE THAT NEVER EXISTED INTO
   AN ARCHIVE, AT COMPRESSION 8, AND WALK IT BACK. Every verb here has its own
   test and all of them are green; what none of them measures is the SEQUENCE,

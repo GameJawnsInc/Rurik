@@ -2588,8 +2588,9 @@ takes TWO gates to catch them (measured: `looks_compressed` stubbed alone, 1 red
 
 1. **The client oracle for the new shapes** (§17.2): a one-launch run reading a small
    authored row AND a `datalloc`-created row, when a launch is next convenient.
-   **STAGED 2026-08-20 as A9 — §18.** The archive is built, gated and adversarially
-   verified; the deploy and the launch are the owner's.
+   **STAGED 2026-08-20 as A9 — §18. RAN the same morning — §18.6, GREEN**: the client
+   read the created chain and the small rows; still open afterwards are only the shapes
+   no real payload produces (the phantom pairs) and E3's unwitnessed rider.
 2. **The FA1 full-set write-back** (§17.1): the payload must be re-authored; the encoder,
    the write verbs and the budget arithmetic all exist now.
 3. **A5** stays unrun (stored-size ceiling; §5 D), unchanged by this rung.
@@ -2688,6 +2689,58 @@ on the short list; E3 scores "nothing asserted" whatever happens. **The run is t
 owner's**: deploy with the client closed, `python toolkit/harness/session.py --enemy
 --hold 150 --shots 10`, then `--verify-after`, then `--retail` or leave deployed.
 `A9-RUN.md` is the procedure.
+
+### 18.6 A9 RAN — 2026-08-20, ~09:40, owner-driven, and it is GREEN on every pre-registered prediction
+
+**THE RETAIL CLIENT READ A ROW THIS PROJECT CREATED.** Owner at the keyboard, loopback,
+pinned build 38797 (the server's own log shows it re-selecting the matching 38797 keyring):
+deploy → launch → *"Hatcher with normal animations/proportions"* → owner closed the client
+→ `--verify-after`. By §18.1's load-time fact — the FA8 loop resolves EVERY link at model
+load and requires `m_seqCount != 0` — a normal, animating hatcher **is** the statement
+that the `datalloc`-created chain (file `0x5F0AD`, rows 35301/177335/177336, two of the
+three appended to the MFT by us) was resolved by id, decompressed from our compression-8
+bytes, and parsed as a skeleton; and that the retargeted 20,060 B shell — a SMALL row
+compressed by us — was read on the way there.
+
+**P2, the instrumented half** (capture `vault/captures/harness/20260820T094015`): `created
+agent 10 (Hatcher [Collector]) — hostile`, then **37 `walks to` cycles and 54
+attack/cast lines** in the gamesrv log — locomotion, melee and casting, the three classes
+this arc has always used as the bar (run 7 asked for ≥ 3 walk cycles; this run has 37).
+**No `crash-dialog.txt` exists** — the one machine-readable assert channel is absent.
+Honest gap: **`report.json` was never written** because the owner closed the client during
+the hold, so the 8/8 checkpoint table for this run does not exist; the verdict rests on
+the owner's observation, the gamesrv log and the archive sweep, and none of those three
+needed it. The capture's only `error` lines are the documented clean-teardown
+`ConnectionResetError` (session.py:1155's own caveat). The `377` grep hits are the
+logger's `[377]` tag, not file-id mentions — nothing asserted from `Gw.log`, as
+pre-committed.
+
+**P3, the archive — every line green**: preflight 10/10, generations 6/6, crc sweep
+**177,322 payloads 0 bad** (the +3 from our alloc, per H6), size unchanged, `growth:
+None`. Rows changed since deploy: **2 — 8315 and 8316**, the client's own scratch rows,
+relocated exactly as in A8 and `studies/datwrite` §6; `tier0` shows only
+`descriptor_counter` (the client Flushed — which makes the next line the strong one).
+**Our 16 rows are byte-identical to what was deployed, `0x5F0AD` still binds to row
+35301, and the chain [35301, 177335, 177336] is intact** — the created rows SURVIVED the
+client's Flush, so nothing was repaired or discarded. `entry_count`/`mft_size`/
+`mft_offset` unmoved at 177,337 / 4,256,088 / `0xF8FFF000`: **H1's fear did not fire this
+session** (the client wanted no MFT slack), and H7 is answered in passing — **the client
+accepted our ASCENDING chain** where every retail chain descends.
+
+**What this settles, added to §16.2's ledger:** the creation path is client-proven —
+`datalloc` + `gwenc` + the fidelity gate produce rows the retail client loads, for one
+chain shape on one build. Small-row compression is client-proven at 20,060 B and at
+7,644 B stored. **What it deliberately does not settle:** E3 stays scored *nothing
+asserted* — the twelve rider rows came through the launch intact like everything else,
+but no instrument shows the client opened them, so the all-skip declared-5 shape still
+has no client witness, and the two phantom-pair shapes remain unshippable-and-unproven
+(§18.1). The caveat sentence this run retires ("no client has ever read a row this module
+allocated") is superseded in `datalloc.py`'s docstring and TESTS.md's entry, scope stated.
+
+**State of the machine after the run: the A9 archive is LEFT DEPLOYED** in
+`vault/run/2026-07-29_221c13772c7a/` (verified clean by the sweep above; the owner has not
+run `--retail`). `a9stage.py --retail --yes` restores the baseline; the staged copy under
+`vault/exports/archivewrite/a9/` stays rebuildable-by-hash either way.
 
 ---
 

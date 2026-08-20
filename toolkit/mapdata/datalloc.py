@@ -96,14 +96,20 @@ the header directly and `revert()` uses it: the recovery path must survive the
 one state it exists for. Both writes are fsynced, the window is two syscalls
 wide, and everything either side of it is openable and diagnosable.
 
-WHAT THIS DOES NOT ESTABLISH, and it is the same sentence `datmove` carries: **no
-client has ever read a row this module allocated.** Everything below is about the
-archive's own rules -- the three crc rules, 512-byte alignment, whole-block
-reservations, non-overlapping extents, the ten open-time rules `datcheck`
-enforces, and the reconcile pass that deletes undirectoried rows. Whether the
-retail client accepts an MFT row WE appended is exactly the question `datplan`'s
-docstring separates out and declines to answer on paper. It is one caged run
-away and has not been made.
+WHAT THIS DOES NOT ESTABLISH -- SUPERSEDED 2026-08-20, and the supersession is
+the point. This paragraph carried the same sentence `datmove` did before
+FINDINGS 39: "no client has ever read a row this module allocated." **That run
+has now been made -- A9, `studies/archivewrite/FINDINGS.md` section 18.6**: the
+retail client (build 38797, loopback, owner at the keyboard) resolved a
+3-stream chain this module allocated under a new file id (0x5F0AD, rows
+35301/177335/177336, two of the three appended to the MFT), decompressed the
+compression-8 head we encoded, parsed it as a skeleton, and animated from it
+for the whole session; the chain survived the client's own Flush byte-intact.
+Scope travels with the witness: ONE chain shape, one build, one launch. The
+rest of the old caveat stands as written -- everything below is about the
+archive's own rules (three crc rules, alignment, reservations, extents, the
+ten open-time rules, the reconcile pass), which are necessary and now known
+not to be vacuously so.
 """
 
 import argparse
