@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=152)
+LEDGER = checks.Ledger("harness", floor=157)
 check = checks.adopt_named(LEDGER)
 
 
@@ -1231,6 +1231,20 @@ def section_hold_key():
               "a HUD tooltip is the only readable surface for the buff "
               "family's contested field (skillcast 14.4), and reading one "
               "unattended needs a cursor park that never presses a button")
+    LEDGER.ok(session.parse_walk("wait:3 attack:10 wait:55")
+              == [("wait", "", 3.0), ("attack", "10", 0.0),
+                  ("wait", "", 55.0)]
+              and all(refused(session.parse_walk, bad)
+                      for bad in ("attack:", "attack:x")),
+              "the 2026-08-20 attack verb parses, and refuses a non-id",
+              "it is a WALK step as well as an action because actions all "
+              "fire before the walk and the hold, while --shots photographs "
+              "only the walk and the hold -- so an attack ordered from the "
+              "action script can have its entire fight finish unphotographed. "
+              "That is not hypothetical: on 2026-08-20 a critical landed at "
+              "20:11:39 and the first hold frame was stamped 20:13:58, 139 s "
+              "later. As a walk step the fight and its frames overlap by "
+              "construction")
     LEDGER.ok(session.parse_walk("click:0.411,0.561")
               == [("click", "0.411,0.561", 1.0)],
               "the click verb parses: a window-relative point, no duration",

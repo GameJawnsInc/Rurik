@@ -862,6 +862,8 @@ def parse_walk(text):
         wait:3      do nothing for 3 seconds
         click:0.411,0.609      left-click one window-relative point (a panel
                     button; dc.click checks focus first)
+        attack:10   order a swing at agent 10 -- fires INSIDE the shot
+                    window, which the action-script form cannot
         hover:0.044,0.054,38   park the cursor over a window-relative point
                     for 38s, clicking nothing -- a HUD tooltip is the only
                     readable surface for some state, and this is how a probe
@@ -884,6 +886,29 @@ def parse_walk(text):
         head = head.lower()
         if not arg:
             raise SystemExit(f"walk step wants an argument: {spec!r}")
+        if head == "attack":
+            # attack:AGENT_ID -- order a swing at a hostile, mid-plan.
+            #
+            # IT IS A WALK VERB *AND* AN ACTION, and the reason is a trap this
+            # repo has now paid for twice. Actions all fire BEFORE the walk and
+            # the hold, and `--shots` drives its shooter thread across the walk
+            # and the hold only -- so an attack ordered from the action script
+            # can have its whole fight finish before a single frame is taken.
+            # That is exactly what happened on 2026-08-20: the critical landed
+            # at 20:11:39 and the first hold frame was stamped 20:13:58, 139
+            # seconds later, with the numbers on screen the entire time nobody
+            # was photographing. Anchoring frames by TIMESTAMP rather than by
+            # filename is what caught it, which is the lesson already recorded
+            # for a different arc.
+            #
+            # As a walk step it fires INSIDE the shot window, so a fight and
+            # its frames overlap by construction rather than by luck.
+            try:
+                agent_id = int(arg, 0)
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: attack wants an agent id")
+            steps.append(("attack", str(agent_id), 0.0))
+            continue
         if head in ("hover", "click"):
             # hover:FX,FY,SECONDS -- park the cursor over a window-relative
             # point, no click. Three numbers because the point matters as much
@@ -1024,6 +1049,14 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
         elif kind == "wait":
             time.sleep(value)
             did = value
+        elif kind == "attack":
+            # NOT INPUT -- the same mailbox `interact:` uses, and the same
+            # caveat: begin_attack is what the client's own ATTACK_AGENT arm
+            # calls, so every swing, the armour term, the critical and the
+            # number the client draws are real. The CLICK is what did not
+            # happen. See harness/control.py request_attack.
+            control.request_attack(int(key))
+            did = 1.0
         elif kind == "hover":
             fx, fy = (float(p) for p in key.split(","))
             did = value if dc.hover(hwnd, proc.pid, fx, fy, value) else 0.0
@@ -1335,6 +1368,12 @@ def run_client(a, outdir):
                 # gamesrv prints the same caveat when it fires.
                 control.request_interact(int(parts[2]))
                 delivered = True
+            elif kind == "attack":
+                # Same mailbox, different order. See control.request_attack:
+                # the swing, the armour term, the critical and the number the
+                # client draws are all real; the click is not.
+                control.request_attack(int(parts[2]))
+                delivered = True
             elif kind == "click":
                 fx, fy = (float(v) for v in parts[2].split(","))
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
@@ -1543,7 +1582,9 @@ def main():
                          "then backs up for 8s. Steps are W:6 (hold a key), "
                          "zoom:N, pitch:N, yaw:N (drag-turn the view), "
                          "alt:N / left:N (hold a named key -- ALT shows every "
-                         "nameplate), shot:1 (screenshot on the plan's clock) "
+                         "nameplate), shot:1 (screenshot on the plan's clock), "
+                         "attack:10 (order a swing at an agent, mid-plan, so "
+                         "the fight lands inside the --shots window) "
                          "and wait:N. "
                          "Keyboard rather than a click on purpose -- the server "
                          "answers a held key with a DIRECTION and broadcasts no "
