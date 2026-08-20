@@ -3148,6 +3148,37 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
+  `toolkit/authsrv/test_armour.py` (**the armour RATING** — 16 checks, floor 16).
+  `studies/character/FINDINGS.md` §2 asked on 2026-08-06 where an item's armour
+  rating lives and proposed the experiment that would answer it: send the
+  warrior chest and read the rating off the client's own tooltip. It sat open
+  for a fortnight because it was TWO problems wearing one coat — the modifier
+  words were opaque until 2026-08-20, and **this server was not sending the
+  armour at all**, so the character stood in every capture bare-chested and
+  there was nothing to hover. Decoding alone would not have closed it.
+
+  §1 requires all five pieces to carry identifier **572** with argument **25**
+  (the rating) and the chest to carry **527** arg 20 beside identifier **4**,
+  whose only string is 2480 `vs. physical damage` — the pair the client renders
+  as `Armor +20 (vs. physical damage)`. §2 checks the plumbing that had to
+  exist for any of it to be visible: the equipped-bag slots are retail's
+  MEASURED ones (Body 2, Boots 3, Legs 4, Gloves 5, Head 6), the five item ids
+  collide with neither the weapon, the Backpack nor the purchase namespace, and
+  the burst reads the constants rather than repeating slot numbers.
+
+  **§3 is the check worth having and it is not about our code.** These rows came
+  from OpenTyria's hand-written `GmDefaultArmors`, and `content/items.toml` said
+  in place: *"no capture of ours has ever carried these bytes."* Our own vault
+  refutes it — ArenaNet sent `0x0161` declarations for all five of these exact
+  model ids, **nine sightings each across three captures**, and §3 requires every
+  fixed field AND all three modifier words to agree. `dye_colors` is compared as
+  MEMBERSHIP, not equality, because it is what a player dyed that instance and
+  retail shows four values for one model; requiring equality there would report a
+  real agreement as a mismatch. §4 is the control: armour on by default, a
+  `--no-armour` flag that empties the doll, and a check that no piece ships with
+  an empty modifier list — which is the "renders and protects nothing" state the
+  study named.
+
   `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
   a modifier, and the attribute bonus** — 28 checks, floor 28). Every item on the wire carries a list of 32-bit modifier words, and
   `studies/character/FINDINGS.md` called them "the largest hole" three times: armour

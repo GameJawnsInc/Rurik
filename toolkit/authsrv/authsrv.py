@@ -1148,6 +1148,42 @@ EQUIP_WEAPON = True
 # goes on the wire AND the interval the server swings on, deliberately the same
 # constant: two numbers that must match and used to be 1.33 and nothing.
 WEAPON_ATTACK_SPEED = agents.ATTACK_SPEED["hammer"]
+
+# THE FIVE STARTER ARMOUR PIECES, and the equipped-bag slot each takes.
+#
+# WHY THIS EXISTS. studies/character/FINDINGS.md 2 has asked since 2026-08-06
+# where an item's armour RATING lives, and answered its own question with
+# "sending an empty modifier list produces armour that renders and protects
+# nothing, which is a legitimate first milestone but is not the finished job".
+# The rating turned out to live in identifier 572's argument
+# (studies/itemmods/FINDINGS.md 2) -- and this server was not sending the
+# armour at all. The character stood in every capture bare-chested with five
+# empty slots on the paper doll.
+#
+# THE SLOTS ARE MEASURED, NOT CHOSEN. Body 2, Boots 3, Legs 4, Gloves 5,
+# Head 6 -- read off seven 0x006F per-slot writes in retail's own Shing Jea
+# capture (20260817T183756), each preceded by the 0x015E declaring its item, so
+# the item TYPE sits on the wire beside the slot number. That REFUTED the
+# reading two lineages shared: they agree because they make the same
+# assumption, which is one witness counted twice. studies/character 2.
+#
+# THE ITEM IDS ARE OURS. 1 is the weapon, 2 the Backpack, purchases mint from
+# 5000, so 3..7 are free. Only the ids are ours -- every other field of these
+# five rows is ArenaNet's, and now demonstrably so (see the row-for-row check
+# in test_armour.py: 9 retail sightings of each model, every field agreeing).
+EQUIP_ARMOUR = True
+STARTER_ARMOUR = (
+    # (item_id, content key, equipped-bag slot)
+    (3, "warrior_body", 2),
+    (4, "warrior_boots", 3),
+    (5, "warrior_legs", 4),
+    (6, "warrior_gloves", 5),
+    (7, "warrior_head", 6),
+)
+# The 0x006E nine-dword array, filled from STARTER_ARMOUR. Position 0 is the
+# weapon and 1 is the offhand; 7 and 8 are the costume slots retail leaves at
+# zero on all thirty-one players observed in one town.
+VISUAL_EQUIPMENT_SLOTS = 9
 GAME_SMSG_UPDATE_GOLD_STORAGE = 0x0141
 GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
 GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
@@ -7496,6 +7532,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [1, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
                                   EQUIPPED_SLOT_WEAPON],
                                  "ITEM_MOVED_TO_LOCATION(hammer -> equipped 0)")
+                        # THE ARMOUR. Declared and put in the equipped
+                        # bag at the slots retail's own 0x006F writes name.
+                        # CREATE_NAMED_ITEM only declares the bytes;
+                        # ITEM_MOVED_TO_LOCATION is what makes the paper doll
+                        # draw a piece, and 0x006E below is what puts it on
+                        # the BODY. Three messages, three different jobs --
+                        # the distinction studies/character 2 is built on.
+                        if EQUIP_ARMOUR:
+                            for item_id, key, slot in STARTER_ARMOUR:
+                                send(GAME_SMSG_CREATE_NAMED_ITEM,
+                                     agents.named_item(
+                                         item_id, agents.item_template(key)),
+                                     f"CREATE_NAMED_ITEM({key})")
+                                send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                                     [1, item_id, EQUIPPED_BAG_ID, slot],
+                                     f"ITEM_MOVED_TO_LOCATION({key} -> "
+                                     f"equipped {slot})")
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
@@ -9046,11 +9099,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Positions 1..8 are all zero here, so this send never
                         # depended on the dispute; anything that DRESSES a body
                         # must use the measured order above.
-                        if EQUIP_WEAPON:
+                        if EQUIP_WEAPON or EQUIP_ARMOUR:
+                            worn = [0] * VISUAL_EQUIPMENT_SLOTS
+                            if EQUIP_WEAPON:
+                                worn[0] = WEAPON_ITEM_ID
+                            if EQUIP_ARMOUR:
+                                for item_id, _key, slot in STARTER_ARMOUR:
+                                    worn[slot] = item_id
                             send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
-                                 [PLAYER_AGENT_ID, WEAPON_ITEM_ID,
-                                  0, 0, 0, 0, 0, 0, 0, 0],
-                                 "UPDATE_AGENT_VISUAL_EQUIPMENT(weapon)")
+                                 [PLAYER_AGENT_ID] + worn,
+                                 "UPDATE_AGENT_VISUAL_EQUIPMENT("
+                                 + ("weapon" if EQUIP_WEAPON else "")
+                                 + ("+armour" if EQUIP_ARMOUR else "") + ")")
                             # ArenaNet sends this after EVERY 0x006E, 366 of
                             # 366 across both live captures. Zero because we
                             # have never populated a guild id, and 0 is what
@@ -10005,6 +10065,12 @@ def main():
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
                          "assume and what every session before 2026-08-06 was.")
+    ap.add_argument("--no-armour", action="store_true",
+                    help="leave the five armour slots empty. The control for "
+                         "anything that reads an armour RATING off the client: "
+                         "with it the paper doll shows five empty slots and no "
+                         "tooltip can be hovered, which is the state this "
+                         "server shipped in until 2026-08-20.")
     ap.add_argument("--no-weapon", action="store_true",
                     help="Log in with empty weapon slots, as every session before "
                          "2026-08-06 did. Attacking and weapon skills were both "
@@ -10481,6 +10547,12 @@ def main():
         global EQUIP_WEAPON
         EQUIP_WEAPON = False
         print("NO WEAPON: the character's four weapon slots stay empty.")
+
+    if a.no_armour:
+        global EQUIP_ARMOUR
+        EQUIP_ARMOUR = False
+        print("NO ARMOUR: the character wears nothing and the paper doll's "
+              "five armour slots stay empty.")
 
     if a.netgraph is not None:
         global NETGRAPH_FLAGS

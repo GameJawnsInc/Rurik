@@ -77,11 +77,29 @@ only thing anyone has watched. See studies/itemmods/FINDINGS.md, and
 # starting armour. Added 2026-08-17 for the armor_slots probe (which of 0x006E's
 # nine positions is which body slot -- studies/unitsetup/FINDINGS.md 8 Q6, the
 # CONTESTED reading at studies/character/FINDINGS.md "Where every source is
-# silent"). Same source, same honesty: UPSTREAM, one lineage's hand-written
-# table, no capture of ours carries these bytes; OpenTyria is Unlicense, so the
-# weakness is evidential, not legal. The client accepting the HAMMER is the only
-# member of this family ever OBSERVED; if one of these refuses, watch file_id
-# and flags first.
+# silent").
+#
+# THESE FIVE ARE NO LONGER UPSTREAM-ONLY, and the sentence that used to stand
+# here is REFUTED BY OUR OWN VAULT. It read: "one lineage's hand-written table,
+# no capture of ours carries these bytes." On 2026-08-20 somebody checked, and
+# ArenaNet's own server has sent us `0x0161` declarations for **all five of
+# these exact model ids** -- 823, 2440, 355, 1598, 6136 -- nine sightings each across three captures,
+# and every fixed field agrees: file_id, item_type, dye_tint, materials, unk1,
+# flags, value, model_id, quantity, AND the three modifier words. `dye_colors`
+# is the one field that differs and it is MEANT to: it is what a player dyed
+# that instance, and retail shows four values for one model, ours among them.
+#
+# So the label moves from UPSTREAM to CORROBORATED, against a first-party
+# capture rather than a second lineage. What made this possible was luck the
+# rows were not chosen for -- the character whose sessions the vault holds was
+# wearing the same starter set. `toolkit/authsrv/test_armour.py` §3 replays it,
+# so the claim survives without anyone re-running the comparison by hand.
+#
+# The client accepting them is now also OBSERVED, not just the hammer's:
+# `20260820T125155` drew all five on the body and the chest's tooltip read
+# `Armor: 25` / `Armor +20 (vs. physical damage)`. OpenTyria is Unlicense, so
+# there was never a licence question here -- only an evidential one, and it is
+# answered.
 
 [item.warrior_body]
 name = "starter chest (Prophecies warrior)"
@@ -100,7 +118,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_body.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c g_DefWarriorPropheciesPveEquipments entry 1. See the family note above and starter_hammer's."
 
 [item.warrior_legs]
@@ -120,7 +138,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_legs.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 2. See the family note above."
 
 [item.warrior_boots]
@@ -140,7 +158,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_boots.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 3. See the family note above."
 
 [item.warrior_gloves]
@@ -160,7 +178,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_gloves.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 4. See the family note above."
 
 [item.warrior_head]
@@ -180,7 +198,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_head.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 5. See the family note above."
 
 # THE BACKPACK, and it is a real ITEM rather than a bag the server conjures.
