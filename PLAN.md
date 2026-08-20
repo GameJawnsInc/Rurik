@@ -2093,9 +2093,15 @@ three arms 0/14/12 drew pixel-identical icons whose tooltip numbers are
 `round(lo+(hi−lo)·rank/15)` on skill 316's own scale windows, nine numbers, zero free
 parameters. GWCA's `attribute_level` confirmed, Headquarter's `effect_type` refuted.
 The run also earned the harness a `hover:FX,FY,SECS` walk verb — a HUD tooltip is now a
-readable surface unattended.** Still open here, in cost order: what `0x0093`'s value
-dword is; names for `0x36/0x38/0x39/0x3B` (held — no client string names them; read the
-c2s side for a sequence-carrying spend first); `+0x438`'s meaning.
+readable surface unattended. And the `buff_side` probe ran the same night (skillcast
+§14.8): every clause held — `0x3F` alone lights the maintained-enchantment UPKEEP
+MONITOR above the energy bar, `0x40` clears it while the effect icon stands, the
+countdown bar is record `+0x10`'s only visible reader (absent at 0.0, depleting at 30),
+and the upkeep icon needs no `0x0093`, which subtracts the one guessed consumer from the
+`+0x5BC` table.** Still open here, in cost order: what `0x0093`'s value
+dword is (now with "not the upkeep icon's gate" measured); names for
+`0x36/0x38/0x39/0x3B` (held — no client string names them; read the c2s side for a
+sequence-carrying spend first); `+0x438`'s meaning.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

@@ -2672,7 +2672,10 @@ on `GmEffect:3039` `m_agentId` and pushes that exact field as the getter's key. 
 keyed by the field ArenaNet calls `m_agentId`, consumed by GmEffect" is therefore
 OBSERVED; **"upkeep/maintained-effect value" is band-level RECONSTRUCTION** — the
 `CTL_EFFECT_UPKEEP` assert the tracer cited sits ~0x650 bytes and several functions away
-from the caller it was attributed to. That mis-attribution is the `asserts.py --at`
+from the caller it was attributed to. *(Sharpened by the `buff_side` probe the same day,
+skillcast §14.8: the upkeep monitor's icon draws from the SOURCE list alone with no
+`0x0093` sent, so whatever this table feeds GmEffect, it does not gate that icon.)*
+That mis-attribution is the `asserts.py --at`
 function-boundary overrun, which this session hit **twice** (it also over-scans past
 BuffSourceAdd/Remove's real ends) — the tool's own floor caveat, now with two more
 sightings. What the value dword IS stays NOT FOUND; `0x0093`'s name is held with it.
