@@ -280,8 +280,21 @@ def build_of(data: bytes):
 # window (skill_arguments + the four endpoint pairs) is what step 8 will scale
 # damage BY once a rank exists; it is emitted now so the capture run has the
 # endpoints to bind against, but nothing consumes it until then.
+#
+# `type_code` and `target` were added 2026-08-20, for the effect substrate.
+# Without them the server cannot DISPATCH: a stance, a hex and an enchantment
+# are three different things done with the same message, and the id alone does
+# not say which. Both are raw enums ArenaNet never named -- what the server may
+# rely on is only what the table itself corroborates:
+#   * `type_code` -- `studies/presearing/MANIFEST.md` 8 decoded 10 of the 21
+#     player values by Rosetta-stone against skills whose wiki type was known.
+#   * `target` -- 0 is SELF and 5 is the cast's target, and the type column is
+#     the witness: all 199 Attacks are 5, 75 of 76 Stances are 0, and every
+#     Glyph, Preparation and type-16 skill is 0. Codes 1, 3, 4, 6, 14 and 16
+#     are NOT resolved here and nothing reads them.
 CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "energy", "adrenaline", "attribute", "profession",
+                  "type_code", "target",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15")
 

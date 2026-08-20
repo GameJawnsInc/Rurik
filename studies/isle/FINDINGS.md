@@ -144,8 +144,18 @@ starts ~5-6 s after last damage, stepping +1 quantum per ~2 s). The lone negativ
 (−1/90, spawn-time) is a net-degeneration spawn state; passive ticks are never
 streamed, so its zero co-occurring health loss is expected, not damning.
 
-**Still UNVERIFIED**: that one 2 hp/s step equals one HUD pip (needs a screen, not
-the wire), and the H behind the on-create constants. The Isle closes both with zero
+~~**Still UNVERIFIED**: that one 2 hp/s step equals one HUD pip (needs a screen,
+not the wire)~~ — **CONFIRMED 2026-08-20, and not by the Isle**. The effect
+substrate needed degeneration to make a condition do anything, so it sent one:
+Bleeding is **3 pips** by GWW's own table, `-3 × 2 / 100 = -0.06` per second on
+a 100-health player, no free parameter on either side. The client drew
+**exactly three `‹` arrows** on the health bar
+(`vault/captures/harness/20260820T192221`, `hud-degen-three-pips.png`), and its
+own displayed health fell **100 → 86 → 72 → 58 → 44** over frames **2.32 s**
+apart — an implied **6.03 health/s against the 6.00 sent**, three times over.
+So one 2 hp/s quantum is one HUD pip, and property 44 is applied by the client
+as a rate it animates itself. What remains open here is only **the H behind the
+on-create constants**. The Isle closes both with zero
 free parameters: a player at a known-pip Student, same connection streaming H —
 prop 44 must step to (natural − condition) × 2/H at apply time.
 

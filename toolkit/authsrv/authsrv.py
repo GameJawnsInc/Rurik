@@ -56,6 +56,7 @@ import origin  # noqa: E402
 import questdefs  # noqa: E402
 import chatdefs  # noqa: E402
 import charstore  # noqa: E402
+import effects  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -1422,8 +1423,53 @@ def spawn_profession_values(profession=None, agent_id=None):
 # skill does, so the two resolve differently below.
 SCALE_MEANS_DAMAGE = {
     "Holy damage": "standalone",
+    "Fire damage": "standalone",
     "+ Damage": "additive",
 }
+
+# The healing labels, and they are a different DIRECTION rather than a negative
+# damage: they go out on property 55, positive, which the corpus identifies as
+# the health-gain channel (agents.GV_HEALTH_GAIN carries the measurement).
+# GWW's own progression variable names, verbatim: `Heal` on Healing Signet,
+# `Maximum heal` on Reversal of Fortune.
+SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
+
+# A LABEL DOES NOT SAY *WHEN*, and this is the trap that would have shipped
+# without the type column. `Ignite Arrows` has GWW variable `Fire damage` 3..18
+# -- the same label as Flare's -- and it is a PREPARATION: WIKI (GWW,
+# "Preparation", rev. 2020-06-18) "preparations generally alter bow attacks,
+# allowing the fired arrows to cause additional effects". Its fire damage rides
+# the next arrows; Flare's happens on cast. Nothing in the client's table
+# separates them and the label certainly does not.
+#
+# So a skill that OPENS AN EPISODE resolves no damage and no heal at cast: its
+# scale describes what the effect does while it is up. That covers stance, hex,
+# enchantment, glyph and preparation. The known cost of the rule is that a hex
+# which both hexes and hits on cast would lose its hit; none is modelled today,
+# and the day one is, this is the line to revisit -- named here rather than
+# discovered from a wrong number.
+# The one `type_code` that rides a weapon swing. WIKI (GWW, "Attack skill"):
+# attack skills ARE attacks -- they use the equipped weapon, take its damage
+# type and range, and can miss or be blocked. That is why "+ Damage" is a
+# bonus ON a swing and a spell's damage is not. All 199 attacks in the corpus
+# carry target byte 5 (a foe), which is the same column agreeing.
+ATTACK_TYPE_CODE = 14
+
+
+def _is_attack_skill(skill_id):
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return int(row["type_code"]) == ATTACK_TYPE_CODE
+
+
+def _resolves_at_cast(skill_id):
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return True
+    return effects.applies_effect(row) is None
 
 # The rank the ENEMY casts at. OURS -- no capture and no table gives a monster's
 # attribute ranks, and studies/monsterai/FINDINGS.md establishes that a monster's
@@ -1491,9 +1537,35 @@ def skill_damage(skill_id, rank):
     except Exception:                                          # noqa: BLE001
         return None
     mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
-    if mode is None:
+    if mode is None or not _resolves_at_cast(skill_id):
         return None
     return skill_scale_value(skill_id, rank), mode
+
+
+def skill_heal(skill_id, rank):
+    """How much health this skill RESTORES at `rank`, or None.
+
+    The mirror of `skill_damage`, and it is the direction this server never had.
+    Same discipline: the magnitude is the client's own scale endpoints
+    interpolated by the client's own formula, and what the number MEANS is
+    GWW's progression variable name, sourced per skill in
+    `content/world.toml`'s `skill_effect` block.
+
+    "Maximum heal" (Reversal of Fortune) is carried as a plain heal, and that
+    is a KNOWN SIMPLIFICATION rather than a reading: the skill actually heals
+    for the damage it prevents, capped at that number, and this server models
+    no damage prevention to cap. It therefore heals the cap. Named here because
+    the number on screen will be right at the ceiling and wrong below it.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if row.get("scale_means") not in SCALE_MEANS_HEAL:
+        return None
+    if not _resolves_at_cast(skill_id):
+        return None
+    return skill_scale_value(skill_id, rank)
 
 
 def player_rank_for_skill(skill_id):
@@ -1745,6 +1817,13 @@ GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
 # value) but the value is a plain int rather than IEEE bits. GWCA calls this
 # family GenericValueTarget. INFERRED from the shape match; not yet observed.
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
+# The no-target FLOAT twin, and the correction is worth carrying: PLAN.md
+# 3.3 put properties 44, 34 and 43 on `0x009F` and `studies/isle` B4 found
+# them on THIS opcode instead -- "the value census matches 3.3 exactly; the
+# opcode did not". GWCA's four-way split (int/float x target/no-target) is
+# CORROBORATED by the client's own dispatch table: 0x009F and 0x00A0 forward
+# to one handler, 0x00A2 and 0x00A3 to a different one.
+GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT = 0x00A2
 GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # The create-time sibling of 0x00F1, and D2 in the divergence register: 472 messages
 # in the live capture, the highest count of anything ArenaNet sends that we never did.
@@ -1947,6 +2026,27 @@ ATTRIBUTE_POINTS_UNUSED_SEE_ATTRIBSPEND = None
 # in the wider corpus. If the bar stays empty, doubt the numbers before the shape.
 GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS = 0x001D   # 29
 GAME_SMSG_SKILLBAR_UPDATE = 0x00DA              # 218
+
+# ---- THE EFFECT CHANNEL, wired 2026-08-20 ---------------------------------
+#
+# `0x0042` opens an episode on an agent and `0x0044` closes it. Everything
+# about the pair -- the field order, what field 3 is, what the duration slot
+# holds and when the removal lands -- is in `effects.py`'s docstring, measured
+# off 102 applies and 88 removals in the live corpus by `bufflog.py`. The two
+# names here are the same constants that module declares, spelled the way the
+# rest of this file spells opcodes.
+#
+# THE DURATION IS AN f32 IN A DWORD SLOT. `schema/messages.json` types it
+# `dword` and the client does `fld` on it, so `_f32` has to reinterpret on the
+# way out. A sender that writes the integer seconds puts ~1.4e-45 on the wire
+# and the client drops the effect on the next frame.
+GAME_SMSG_EFFECT_APPLY = effects.OP_EFFECT_APPLY      # 66
+GAME_SMSG_EFFECT_REMOVE = effects.OP_EFFECT_REMOVE    # 68
+
+# The switch, so a run can isolate the effect channel from everything else the
+# same way --no-armour-term isolates the armour one. ON by default: an effect
+# that only appears behind a flag is an effect nobody watches.
+EFFECTS = True
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
 SKILLBAR_SLOTS = 8
@@ -2621,6 +2721,14 @@ def _note_wire_move(state, opcode, values, now):
         state["sync_from"] = _sync_position(state, now)
         state["sync_to"] = point
         state["sync_at"] = now
+        # AND THE RATE LIMIT'S CLOCK, stamped HERE for the same reason this
+        # whole hook lives in send(): the click arm, the heading arm, the
+        # endpoint arm, the stop echo and the click sweep all grant through it,
+        # and a limit fed from the click arm alone would be blind to the other
+        # four. Running --grant-suppress next to --heading-grant would otherwise
+        # rate-limit clicks while a refuted flag re-armed the client twice a
+        # second, which is the reproduction with the label filed off.
+        state["grant_at"] = now
     elif opcode == GAME_SMSG_AGENT_UPDATE_POSITION:
         # A hard set: BOTH copies land here and NO OUTSTANDING GRANT SURVIVES
         # IT. That was the one thing this model needed the binary to confirm,
@@ -2722,6 +2830,276 @@ def _maybe_resync(send, state, rec, now=None):
          f"RESYNC 0x002C at ({payload[0]:.0f},{payload[1]:.0f}) plane {plane} "
          f"-- the CLIENT's own report, {age * 1000:.0f} ms old, closing a "
          f"modelled {sep:.0f} u between the authoritative copy and it")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# GRANT SUPPRESSION -- `--grant-suppress`.  OFF by default.
+#
+# WHAT EARNED IT, three captures taken on the owner's own machine 2026-08-20.
+# These are primary evidence, not a reconstruction:
+#
+#   authsrv-20260820T182554-c1  KEYBOARD ONLY. Three ~8 s W-holds. 283-287 u/s
+#                               in every interval against a full walk of 288,
+#                               three 0x0047 stops, ZERO clicks, ZERO grants,
+#                               and 0.00 hard jumps per minute. The client walks
+#                               correctly on its own prediction with almost no
+#                               server involvement.
+#   authsrv-20260820T182934-c1  FIVE CLICKS AND WE ANSWERED NONE -- stale
+#                               position four times, "not a straight shot" once.
+#                               ZERO grants, ZERO warps. And the character still
+#                               walked to all five clicked points; see the
+#                               "WHAT A PLAYER LOSES" measurement below.
+#   authsrv-20260820T183311-c1  THE REPRODUCTION. The owner held S (backpedal)
+#                               while spam-clicking forward. 196 clicks -> 140
+#                               grants in 44 s, one every 0.13 s, and FIVE hard
+#                               jumps: p50 1,372 u, max 3,010 u, 6.82/min. FOUR
+#                               of the five land 0.10-0.23 s after a grant.
+#
+# THE MECHANISM THOSE NUMBERS FIT, decoded and adversarially checked this week
+# (studies/movement/FINDINGS.md; the same decode the --resync block above
+# rests on). 0x0029 AGENT_MOVE_TO_POINT is SYNC-ONLY: it moves the
+# server-authoritative copy at [agentMgr+0xE8] and CANNOT reach the locally
+# predicted copy the player sees at [agentMgr+0x14C], because 0x0025's async
+# arm is gated shut for the client-controlled agent at 0x005FD5D3. So a grant
+# issued while the player is walking under their OWN keyboard control drives
+# the authoritative copy one way while the rendered copy goes another, and the
+# separation grows invisibly. Each grant ALSO re-evaluates the client's desync
+# test -- the grant bake 0x005FEBEB is one of only THREE callers of
+# 0x00605FC0, all message-driven, never per-frame -- and when straight-line
+# separation exceeds gate 1's 299.332591 u the client hard-copies SYNC onto
+# ASYNC. That is the warp. It is also why the two no-grant captures are clean:
+# with no grants the test is never even evaluated.
+#
+# So the fix is not a better destination. It is SILENCE at the two moments a
+# grant cannot help and can only open a gate.
+# ⚠ WHAT THIS FLAG IS, AND WHAT IT IS NOT. Read before quoting it as the warp fix.
+#
+# IT IS A PALLIATIVE FOR OUR OWN STALE DESTINATIONS, NOT THE MECHANISM FIX, and
+# RETAIL CONTRADICTS ITS PREMISE. ArenaNet sends 2,855 player-directed 0x0029 at a
+# median inter-grant gap of 0.492 s, and 88.5% of them are TRIGGERED BY a 0x003D
+# heading -- retail grants continuously WHILE the player keyboards, and does not
+# warp, because its destination is the client's own proposed endpoint plus 0.5 u.
+# Rule 1 forbids precisely what retail does most. It works (if it works) by making
+# us quiet, not by making us correct. FINDINGS' candidate #1 -- make the grant
+# MATCH the client's outstanding predicted command, the only shape that PREVENTS
+# the snap rather than shrinking it -- remains unbuilt, and "suppress the grant"
+# already sits on HANDOFF's dead-candidate scoreboard.
+#
+# THE TIMING EVIDENCE THAT MOTIVATED THIS IS WORTHLESS, and it is struck here so
+# nobody rebuilds on it. "Four of five hard jumps landed 0.10-0.23 s after a
+# grant" is a restatement of grant DENSITY: in the 2026-08-20 reproduction 140
+# grants span 32.7 s, one every 0.150 s, so 49.2% of the capture's wall clock and
+# 57.1% of its own report instants are ALSO within 0.23 s of a grant. A rotation
+# control -- shifting the jump times against an untouched grant train over 199
+# offsets -- scores a mean 2.39 of 5, and 77 of the 199 rotations equal or beat
+# the real 3 of 5. Fisher p = 0.64 at 0.23 s, p = 0.34 at 0.30 s. Not evidence.
+#
+# WHAT DOES CARRY THE ARGUMENT, both surviving the identical test:
+#   * THE LANDING GEOMETRY -- five sub-unit landings on points we had granted
+#     (p = 3.0e-5). The client lands ON our destination, which is what a resync
+#     onto the authoritative copy looks like and what grant density cannot fake.
+#   * THE REPORTING-CONTROLLED 2x2 -- 5.67 jumps/min while granting against 0.88
+#     while silent, P = 3.4e-10.
+#   * THE DECODE: 0x0029 is SYNC-ONLY, so a grant issued while the player drives
+#     locally CANNOT reach the copy they see and can only create divergence.
+#
+# HONEST PREDICTION FOR THE RE-RUN -- NOT zero. Surviving jumps are 2.7x BIGGER
+# (p50 1,969 u silent vs 735 u granted), so score DISPLACEMENT PER MINUTE, not
+# jumps per minute: the predicted win is 4,874 -> ~1,556 u/min (3.1x), with a
+# hard-row rate landing near 2.5-3.7/min rather than 0.00. This arc has already
+# lost a candidate that bounded SIZE while harm arrived as FREQUENCY; this is the
+# mirror image of that error and the pass criterion must carry both terms.
+#
+# UNMEASURED: the cost of rule 1 in its OWN regime. The n=5 evidence that a
+# refused click still walks the player (cos 0.994-1.000) is all from clicks after
+# a STOP, where rule 1 never fires. What a click does while the keyboard is held
+# and we stay silent has not been observed.
+GRANT_SUPPRESS = False
+# RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
+# on its window alone.
+#
+# The latch is armed by a 0x003D carrying a non-zero movementType and disarmed
+# by 0x0047. That pairing is the client's own behaviour and not an inference:
+# it emits 0x003D only WHILE MOVING and 0x0047 only on a stop, so "is the player
+# keyboarding right now" is answerable from what we last received. 0x0047 is the
+# PRIMARY disarm; this window is the failsafe for a stop we never heard.
+#
+# SIZED FROM THE CORPUS, not from taste. Over 987 `ours` gamesrv captures, the
+# gap between consecutive 0x003D-moving reports with no 0x0047 between them --
+# which is exactly how long the latch must survive unaided -- is n = 3,420,
+# p50 0.500 s, p90 1.801 s, p99 2.737 s, p99.9 7.858 s. There is a real mode at
+# 2.74-2.79 s: 144 gaps exceed 2.00 s, 137 exceed 2.50 s, and only 9 exceed
+# 3.00 s. 3.0 s is the first round number PAST that mode, and it covers 3,411 of
+# 3,420 measured gaps (99.74%). A 2.0 s window would open a hole in 4.2% of
+# them, and a hole is where the reproduction gets back in.
+#
+# WHY GENEROUS IS CHEAP HERE, and this is the asymmetry the whole flag turns on.
+# Over-refusing costs a grant the client did not need (measured at zero, below).
+# Under-refusing costs a warp. So the window errs long, and a negative age --
+# a report dated in the future under clock skew -- counts as ARMED rather than
+# sailing through an upper-bound-only test.
+GRANT_LOCAL_WINDOW = 3.0
+# RULE 2'S FLOOR -- the minimum interval between two grants on the wire.
+#
+# TWO INDEPENDENT DERIVATIONS LAND ON THE SAME NUMBER, which is the only reason
+# it is a round one.
+#
+# (a) RETAIL'S OWN CADENCE. ArenaNet's player inter-grant gap is a median
+#     0.492 s over the 2,855 player-directed 0x0029 in the live corpus (the
+#     figure the heading arm's own comment already cites). The reproduction ran
+#     at 0.13 s -- 3.8x faster than the thing we are imitating.
+# (b) THE SEPARATION CEILING, the same one RESYNC_MIN_INTERVAL is derived
+#     against. Two copies moving directly apart separate at no more than
+#     2 x DEFAULT_RUN_SPEED, so gate 1's cut of 299.332591 u cannot be crossed
+#     in less than 299.332591 / 576 = 0.5196 s. A grant more often than that
+#     cannot be answering a separation that had time to grow; and a deferred
+#     grant held LONGER than that is itself late enough to let a full gate
+#     accrue. 0.5 s is the round number under the ceiling and at retail's median.
+#
+# MEASURED EFFECT on the reproduction, replayed against its own 140 grant
+# timestamps: 38 survive (27.1%), taking 257 grants/min to 70. Rule 1 takes the
+# same run to zero; this is the backstop for the case rule 1 does not cover --
+# a player spam-clicking while NOT keyboarding.
+GRANT_MIN_INTERVAL = 0.5
+# HOW LONG A DEFERRED GRANT MAY WAIT BEFORE IT STOPS BEING THE PLAYER'S CHOICE.
+# A rate-limited click is held, not dropped, or ordinary double-clicking would
+# lose every second click. The hold is due within one GRANT_MIN_INTERVAL by
+# construction, so twice that is a world tick which has missed ten of its 20 Hz
+# intervals -- and at DEFAULT_RUN_SPEED the player has moved up to 288 u from
+# the position the click's collision ray was cast from. Past that the held
+# destination is our guess about somebody else's intention, so it is dropped
+# with a line rather than granted. Expressed as a multiple so the two cannot
+# drift apart.
+GRANT_PENDING_MAX_AGE = 2.0 * GRANT_MIN_INTERVAL
+#
+# WHAT A PLAYER LOSES, VERIFIED RATHER THAN ASSERTED. The tempting answer is
+# "nothing, because 0x0029 never reached the copy they see anyway" -- but that
+# is the decode talking, and the decode is about the client's memory, not about
+# what the owner will notice. So it was measured on the wire, on the capture
+# where the server answered NO click at all (authsrv-20260820T182934-c1, 0
+# grants sent in 114 s):
+#
+#   click t= 15.45  silence  1.18s  moved     90 u  cos = 0.994  closed     90 u
+#   click t= 41.79  silence 16.97s  moved  2,268 u  cos = 1.000  closed  2,267 u
+#   click t= 67.05  silence 13.65s  moved  3,226 u  cos = 1.000  closed  3,224 u
+#   click t= 95.49  silence  9.68s  moved  1,804 u  cos = 1.000  closed  1,803 u
+#   click t=106.07  silence  2.48s  moved    106 u  cos = 1.000  closed    106 u
+#
+# `cos` is between the direction the character actually travelled and the
+# direction of the clicked point from where it started; `closed` is how much
+# nearer to the clicked point it ended up. FIVE OF FIVE walked toward the point
+# the player clicked, with not one byte of 0x0029 behind them, and the long
+# silences are the client's own signature while click-walking -- it reports no
+# position at all, so those legs cannot be anything but its own pathing.
+#
+# So the claim survives contact with the wire: click-to-move is the CLIENT's
+# feature and our grant is not what performs it. What a player loses is the
+# server's opinion of where a click ends -- which, when it disagreed with the
+# client, is the thing that snapped them through a railing (see the click arm's
+# own "THE CLIENT PATHS CLICKS BY ITSELF" note). n = 5, one map, one session:
+# small, and it is the honest number rather than the decode's confidence.
+
+
+def _grant_verdict(state, now):
+    """Pure: may a click grant go on the wire right now, and if not, why?
+
+    Returns (grant, reason, keyboard_age, since_last_grant). No side effects, so
+    the policy is drivable from a capture replay without a socket -- the same
+    property _position_verdict and _resync_verdict have, and for the same
+    reason: an offline scorer has to be able to run THIS decision rather than a
+    paraphrase of it that agrees with it by construction.
+    """
+    at = state.get("kbd_moving_at")
+    last = state.get("grant_at")
+    age = None if at is None else now - at
+    since = None if last is None else now - last
+    if not GRANT_SUPPRESS:
+        return True, "off", age, since
+    # RULE 1. Do not grant while the player is driving locally. `kbd_moving_at`
+    # is written by the 0x003D arm when movementType is non-zero and cleared by
+    # the 0x0047 arm, and by nothing else -- deliberately NOT state["walking"],
+    # which the click arm itself clears, so a single click would have disarmed
+    # the latch and let the other 195 through.
+    #
+    # `age <= WINDOW` rather than `0 <= age <= WINDOW`: a negative age is a
+    # report dated in the future, and it counts as armed. Failing toward silence
+    # is the cheap direction here (see the window's derivation above).
+    if age is not None and age <= GRANT_LOCAL_WINDOW:
+        return False, "locally-moving", age, since
+    # RULE 2. And never faster than retail does it.
+    if since is not None and since < GRANT_MIN_INTERVAL:
+        return False, "rate-limited", age, since
+    return True, "grant", age, since
+
+
+def grant_flush_tick(send, state, conn_id, rec=None, now=None):
+    """Send the newest DEFERRED click grant once the rate limit opens.
+
+    Polled from the world tick rather than given a timer, like every other
+    deferred thing in this file. Returns whether it sent.
+
+    THIS IS THE COALESCING HALF OF RULE 2. A rate-limited click is held rather
+    than dropped -- otherwise every second click of an ordinary double-click
+    would vanish, which is requirement 3 broken on the first day. Only ONE
+    destination is ever held: a fresh click overwrites the pending one, so the
+    NEWEST wins and the superseded one is never sent. That is the difference
+    between rate-limiting and queueing, and queueing would have reproduced the
+    storm one interval later.
+    """
+    if not GRANT_SUPPRESS:
+        return False
+    pending = state.get("grant_pending")
+    if pending is None:
+        return False
+    if now is None:
+        now = time.time()
+    dest = pending["dest"]
+    age = now - pending["at"]
+    if age > GRANT_PENDING_MAX_AGE or age < 0.0:
+        state["grant_pending"] = None
+        print(f"[c{conn_id}] deferred click to ({dest[0]:.0f}, {dest[1]:.0f}) "
+              f"is {age:.2f}s old -- past the {GRANT_PENDING_MAX_AGE:.2f}s hold "
+              f"and no longer the player's choice, dropping it", flush=True)
+        if rec is not None:
+            rec.event("grant_verdict", fired=False, reason="pending-expired",
+                      deferred=True, age=round(age, 3), dest=list(dest))
+        return False
+    grant, why, kage, since = _grant_verdict(state, now)
+    if not grant:
+        if why == "rate-limited":
+            return False            # still inside the floor; keep holding it
+        # The player picked the keyboard back up. Their click is superseded by
+        # their own hands, and granting it now would be the reproduction with a
+        # delay bolted on.
+        state["grant_pending"] = None
+        print(f"[c{conn_id}] deferred click to ({dest[0]:.0f}, {dest[1]:.0f}): "
+              f"the player is driving with the keyboard again -- dropping it "
+              f"rather than granting a destination they have walked away from",
+              flush=True)
+        if rec is not None:
+            rec.event("grant_verdict", fired=False, reason=why, deferred=True,
+                      keyboard_age=(None if kage is None else round(kage, 3)),
+                      age=round(age, 3), dest=list(dest))
+        return False
+    state["grant_pending"] = None
+    state["dest"], state["clipped"] = dest, False
+    if rec is not None:
+        rec.event("grant_verdict", fired=True, reason="deferred-grant",
+                  deferred=True, age=round(age, 3),
+                  since_last=(None if since is None else round(since, 3)),
+                  dest=list(dest))
+    # The same pair the click arm sends, in the same order and for the same
+    # reason -- ArenaNet pairs the rate with the MOVE, not with the spawn.
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+         "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, list(dest), pending["plane_first"],
+          pending["plane_second"]],
+         f"DEFERRED CLICK GRANT ({dest[0]:.0f},{dest[1]:.0f}) plane "
+         f"{pending['plane_second']}->{pending['plane_first']}, held "
+         f"{age * 1000:.0f} ms for the {GRANT_MIN_INTERVAL:.2f}s floor")
     return True
 
 
@@ -4761,7 +5139,8 @@ def attack_tick(send, state, conn_id):
     hit_enemy(send, state, target_id, conn_id)
 
 
-def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
+def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
+              exact=None, swing=True, label="one swing"):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `bonus_damage` is an attack skill's "+ Damage", in health points, added to
@@ -4769,6 +5148,24 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     that is what the plus means: GWW writes Power Attack as "+ Damage 10-40",
     a bonus on the attack it rides rather than a separate hit. Sending two
     property-16 messages would draw two numbers on the screen for one swing.
+
+    `exact` DEALS EXACTLY THAT MUCH and skips the weapon entirely -- no roll,
+    no armour exponent, no critical. That is what a SPELL does, and until
+    2026-08-20 this server had no way to express it on the player's side: a
+    Flare cast at a foe dealt a HAMMER SWING of 5 instead of its own 20 fire
+    damage, because `cast_tick` only ever read the "additive" mode and dropped
+    "standalone" on the floor (run `20260820T185518`, watched).
+
+    `swing` FALSE suppresses `attack_started` and `melee_attack_finished`,
+    which is the other half of the same defect: casting a hex made the player
+    swing a hammer at the target. Those two values name the beginning and end
+    of a SWING (`agents.GV_MELEE_ATTACK_FINISHED`'s comment), and a spell is
+    not one.
+
+    NOT ARMOUR-SCALED, and that is a gap rather than a decision: `studies/isle`
+    4.2 records that skill damage ignores armour here and that fixing it needs
+    a per-skill armour-ignoring flag GWW defines per skill. `exact` inherits
+    that gap unchanged -- it does not add a new one.
     """
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
@@ -4796,7 +5193,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     critical = False
     rank = player_weapon_rank(state) if ARMOUR_TERM else None
     armour = agent.get("armor_rating")
-    if EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
+    if exact is not None:
+        dealt = float(exact) + bonus_damage
+    elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
         critical = random.random() < critical_rate(rank)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
@@ -4812,7 +5211,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
-                            ("one critical" if critical else "one swing")
+                            ("one critical" if critical else label)
                             + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
     agent["last_hit"] = now
 
@@ -4835,9 +5234,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
     # is the agent swinging. Same shape, different roles per value id, which is
     # exactly what GWCA's per-id note was trying to warn about.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
-         f"attack_started: player swings at {target_id}")
+    if swing:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+             f"attack_started: player swings at {target_id}")
 
     agent["health"] = max(0.0, agent["health"] - dealt)
 
@@ -4853,10 +5253,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
          f"to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
-    # attack has a beginning and no end.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
-         "melee_attack_finished")
+    # attack has a beginning and no end. Skipped for a spell, which never
+    # began one.
+    if swing:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+             "melee_attack_finished")
     print(f"[c{conn_id}] hit agent {target_id}: "
           f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
 
@@ -4865,6 +5267,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
+        # removal landing before apply + duration as `stripped` and names
+        # death as one of its three causes, so leaving them running would put
+        # an episode on the wire that our own reader scores as `open` for the
+        # rest of the session.
+        strip_effects(send, state, target_id, conn_id, "the agent died")
         # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
         # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
         # reward, then the flags byte. Same tick, same agent, all three.
@@ -5478,13 +5886,63 @@ def cast_tick(send, state, conn_id):
             # only WHEN. hit_enemy re-reads the target from state, so a corpse,
             # a removed agent or a revived one is handled there rather than by
             # anything cached at press time.
+            rank = player_rank_for_skill(cast["skill_id"])
             target = cast.get("target")
-            if target:
-                bonus, found = 0.0, skill_damage(
-                    cast["skill_id"], player_rank_for_skill(cast["skill_id"]))
-                if found and found[1] == "additive":
-                    bonus = float(found[0])
+            # WHAT A CAST DOES TO ITS TARGET DEPENDS ON THE SKILL'S TYPE, and
+            # until 2026-08-20 it depended only on whether a target existed --
+            # so every skill aimed at a hostile swung the player's hammer.
+            # Run `20260820T185518` shows it plainly: casting Faintheartedness,
+            # a HEX SPELL, produced `attack_started: player swings at 10` and
+            # 5 points of hammer damage. And Flare, whose own 20 fire damage is
+            # decoded and sitting right there, dealt the same 5, because only
+            # the "additive" mode was ever read.
+            #
+            # An ATTACK skill rides a weapon swing -- that is what makes it an
+            # attack, and it is where "+ Damage" belongs. Everything else
+            # resolves on its own terms, and a skill with nothing to resolve
+            # does nothing to the target at all.
+            found = skill_damage(cast["skill_id"], rank)
+            if target and _is_attack_skill(cast["skill_id"]):
+                bonus = float(found[0]) if found and found[1] == "additive" \
+                    else 0.0
                 hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
+            elif target and found and found[1] == "standalone":
+                hit_enemy(send, state, target, conn_id, exact=float(found[0]),
+                          swing=False,
+                          label=f"skill {cast['skill_id']}")
+            # AND THE EFFECT, at the same instant as the damage and for the
+            # same reason: E5 is the cast COMPLETING, so it is when a stance
+            # goes on, not when the key was pressed. A skill can do both --
+            # nothing here assumes damage and an effect are alternatives --
+            # and `apply_effect` returns None for the skills that do neither,
+            # which is most of them.
+            apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                         rank, target, conn_id)
+            # AND THE HEAL, the other direction the same cast can resolve. A
+            # skill is not restricted to one of the three -- damage, effect,
+            # heal are asked independently and most skills answer None to all
+            # of them. The recipient follows the skill's own target byte, so
+            # Healing Signet (target 0) heals the caster even with a foe
+            # selected, which is what makes it usable mid-fight.
+            # A CONDITION, if the skill inflicts one and the target lives.
+            # After the damage, because an attack skill's condition rides the
+            # hit landing -- and if the hit killed the target, `apply_condition`
+            # would be putting bleeding on a corpse, which the guard below
+            # refuses the same way `land_swing` refuses to re-kill one.
+            inflicted = skill_condition(cast["skill_id"], rank)
+            if inflicted and target:
+                victim = state.get("agents", {}).get(target)
+                if victim and not victim.get("dead"):
+                    apply_condition(send, state, target, inflicted[0],
+                                    inflicted[1], rank, conn_id,
+                                    cast["skill_id"])
+            healed = skill_heal(cast["skill_id"], rank)
+            if healed:
+                row = agents.WORLD.get("skills", str(cast["skill_id"]))
+                heal_agent(send, state,
+                           effects.effect_recipient(row, PLAYER_AGENT_ID,
+                                                    target),
+                           PLAYER_AGENT_ID, healed, conn_id)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -5498,6 +5956,431 @@ def cast_tick(send, state, conn_id):
             finished.append(cast)
     for cast in finished:
         pending.remove(cast)
+
+
+def effect_table(state):
+    """This connection's live episodes. Created on first use.
+
+    Lazily rather than at handshake because `state` is built in two places
+    (7252 and 7328) and a table created in one of them would be missing in the
+    other -- the shape of bug that shows up as "effects work in the loopback
+    harness and not in a real session".
+    """
+    table = state.get("effects")
+    if table is None:
+        table = state["effects"] = effects.EffectTable()
+    return table
+
+
+def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
+    """Open an episode for one cast, if the skill is one that opens episodes.
+
+    Returns the episode, or None. THREE ways to get None and they are not the
+    same thing, which is why the log distinguishes them:
+
+      * the skill's type is not one whose definition is a timed effect --
+        Attack, Spell, Shout, Signet, Glyph, Skill. Silent, because that is
+        most of the corpus and most of both our bars.
+      * the skill has no duration at all (both endpoints 0, 488 of 1,333).
+        Also silent.
+      * the duration slot holds a shape with NO RETAIL WITNESS -- a sentinel,
+        or two differing endpoints with the scaling bit clear. LOUD, because
+        that is a gap in what we can read rather than a skill that does
+        nothing, and the two look identical from the outside. Vital Blessing
+        (289), on our own enemy's bar, is one of these.
+    """
+    if not EFFECTS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    family = effects.applies_effect(row)
+    if family is None:
+        return None
+    try:
+        duration = effects.resolve_duration(row, rank)
+    except effects.EffectError as ex:
+        print(f"[c{conn_id}] skill {skill_id} is a {family} and its duration "
+              f"is UNREADABLE, so no effect goes out: {ex}", flush=True)
+        return None
+    if not duration:
+        return None
+
+    wearer = effects.effect_recipient(row, caster_id, target_id)
+    table = effect_table(state)
+    # ONE STANCE, ONE GLYPH, ONE PREPARATION AT A TIME -- the wiki's rule, and
+    # for two of the three it is text the game shows a player. The replacement
+    # goes out as a real `0x0044` before the new `0x0042`, never as a silent
+    # swap: re-sending the apply demonstrably does nothing to the client's
+    # display (measured 2026-08-20 under both a new buff id and the same one),
+    # so an un-announced replacement would leave the old icon on screen for an
+    # effect the server has already dropped.
+    for old_ep in table.exclusive_on(wearer, row["type_code"]):
+        table.close(old_ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [old_ep["agent"], old_ep["buff"]],
+             f"EFFECT_REMOVE(buff {old_ep['buff']}, skill {old_ep['skill']}, "
+             f"REPLACED by {family} {skill_id})")
+        print(f"[c{conn_id}] {family} {skill_id} REPLACES "
+              f"{old_ep['skill']} on agent {wearer} (one {family} at a time)",
+              flush=True)
+    ep = table.apply(wearer, skill_id, rank, duration, time.time(),
+                     type_code=row["type_code"])
+    # FIELD 3 IS THE RANK. Not the duration -- 96 of 96 non-condition applies
+    # in the live corpus predict the wire's duration from
+    # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
+    # against a duration of 13.0, which is the row that refutes the other
+    # reading outright. effects.py's docstring carries the whole check.
+    # AN OVERLAPPING RE-APPLICATION IS FLAGGED AND STILL SENT, because that is
+    # what retail does -- 15 of them in the corpus, every one under a NEW buff
+    # id (effects.EffectTable.apply carries the numbers). The flag is here
+    # because the CLIENT discards it: a repeat 0x0042 for a live (agent, skill)
+    # draws no second icon and does not reset the timer, MEASURED twice on
+    # 2026-08-20 -- once with a new buff id and once with the same one, which
+    # was a stated prediction and was refuted.
+    #
+    # So the message is honest and its effect is nil, and the thing to fix is
+    # upstream: our placeholder AI re-casts a hex the target already has, which
+    # no monster in the corpus does. See pick_skill, which says in its own
+    # docstring that it is not a decision about AI.
+    tag = " (OVERLAPPING -- the client will discard it)" if ep["overlapping"] else ""
+    send(GAME_SMSG_EFFECT_APPLY,
+         [ep["agent"], skill_id, ep["rank"], ep["buff"],
+          _f32(ep["duration"])],
+         f"EFFECT_APPLY({family} {skill_id} on agent {ep['agent']}, "
+         f"buff {ep['buff']}, {ep['duration']:.1f}s at rank {ep['rank']})")
+    print(f"[c{conn_id}] {family} {skill_id} on agent {ep['agent']}: "
+          f"buff {ep['buff']}, {ep['duration']:.1f}s (rank {ep['rank']}){tag}",
+          flush=True)
+    return ep
+
+
+def strip_effects(send, state, agent_id, conn_id, why):
+    """Close every episode on one agent early. Death, mostly.
+
+    A STRIP IS NOT AN EXPIRY and our own reader draws the line: `bufflog`
+    classifies a removal that lands before apply + duration as `stripped` and
+    names death as one of the three causes. Leaving them running would give a
+    corpse a live stance and would leave an episode our own census scores as
+    `open` for the rest of the session.
+    """
+    if not EFFECTS:
+        return []
+    gone = effect_table(state).strip_agent(agent_id)
+    for ep in gone:
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
+             f"STRIPPED: {why})")
+    if gone:
+        print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
+              f"{agent_id}: {why}", flush=True)
+        push_regen(send, state, agent_id, conn_id)
+    return gone
+
+
+def skill_condition(skill_id, rank):
+    """(condition_skill_id, seconds) this skill inflicts, or None.
+
+    THE JOIN THIS SERVER DID NOT HAVE. `studies/isle` established that a
+    condition's duration comes from the skill that INFLICTED it rather than
+    from the condition's own row -- Burning has endpoints 3/3 and appears on
+    retail's wire at 9.0 seconds. What was missing was the other half: WHICH
+    condition, and from WHERE.
+
+    Both halves are per-skill data we already carry. GWW's progression variable
+    NAMES the condition (`Sever Artery` has exactly one variable and it is
+    called `Bleeding`), and the client's own bonus-scale endpoints carry the
+    seconds -- 5..25 for Sever Artery, in the slot `skill_arguments = 4` says
+    is the enabled one. The wiki picked the label and the bitfield picked the
+    slot, independently.
+
+    Read from `bonus_scale_means` and not from `scale_means`, because that is
+    where both examples put it, and `skill_scale_value` refuses the slot
+    outright if its bit is clear -- so a skill whose bonus slot holds an
+    unrelated constant inflicts nothing rather than a condition lasting
+    whatever happened to be sitting there.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    condition = effects.condition_id(row.get("bonus_scale_means"))
+    if condition is None:
+        return None
+    try:
+        seconds = skill_scale_value(skill_id, rank, "bonus_scale")
+    except ValueError:
+        return None
+    return (condition, float(seconds)) if seconds else None
+
+
+def apply_condition(send, state, target_id, condition_id, seconds, rank,
+                    conn_id, by_skill):
+    """Put a condition on an agent, as an episode on the same effect channel.
+
+    Conditions are not a separate mechanism: retail applies them with the same
+    `0x0042` that carries a hex or a stance, and `bufflog` reads six of them
+    out of the live corpus alongside everything else. What differs is only how
+    the duration was arrived at.
+
+    FIELD 3 STAYS THE RANK, and the corpus cannot refute that here. Its six
+    condition applies all have `field3 == duration` (480 at 3/3.0 and 9/9.0,
+    481 at 13/13.0), which is equally consistent with the rank reading if the
+    applying skill's rank happened to equal the seconds it produced -- and the
+    field has ONE meaning across the message, which the non-conditions settle
+    as the rank (skill 160: field3 15, duration 13.0). So this sends the rank
+    and the ambiguity is recorded rather than resolved by our own emission.
+
+    NOT MODELLED: what the condition DOES. Bleeding is -3 health degeneration
+    (WIKI, GWW "Health degeneration": each pip is 2 health per second), which
+    rides property 44, and no degeneration exists in this server. The icon and
+    its timer are real; the drain is absent, and that is a named gap rather
+    than a silent zero.
+    """
+    if not EFFECTS:
+        return None
+    name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    table = effect_table(state)
+    now = time.time()
+
+    # A CONDITION NEVER STACKS, and the run is what forced this line.
+    # `20260820T191725` put the enemy's Sever Artery on a 0 s recharge and the
+    # player picked up FIVE separate Bleeding episodes -- 3 pips, then 6, then
+    # 9, then the cap at 10, which is TWENTY health a second and visibly
+    # absurd. Retail does not do that:
+    #
+    #   WIKI (GWW, "Condition", Notes): "Reapplied conditions will last the
+    #   original time period, unless the reapplied duration is greater than the
+    #   remaining amount of time."
+    #
+    # So one instance per (agent, condition), and a re-application is a
+    # comparison rather than an addition. THE SHORTER RE-APPLICATION IS A NO-OP
+    # ON THE WIRE TOO: nothing about the target changed, so nothing is sent.
+    # The longer one goes out as REMOVE-then-APPLY, which is the only
+    # replacement shape this server has that the client actually honours
+    # (re-sending the apply alone is discarded -- measured twice on
+    # 2026-08-20, once under a new buff id and once under the same one).
+    for old_ep in table.on_agent(target_id):
+        if old_ep["skill"] != condition_id:
+            continue
+        remaining = max(0.0, old_ep["expires_at"] - now)
+        if seconds <= remaining:
+            print(f"[c{conn_id}] {name} re-applied to agent {target_id} for "
+                  f"{seconds:.1f}s but {remaining:.1f}s remain -- the longer "
+                  f"stands, nothing sent", flush=True)
+            return old_ep
+        table.close(old_ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
+             f"EFFECT_REMOVE(buff {old_ep['buff']}, {name}, EXTENDED from "
+             f"{remaining:.1f}s to {seconds:.1f}s)")
+        break
+
+    ep = table.apply(target_id, condition_id, rank, seconds, now,
+                     type_code=8)
+    send(GAME_SMSG_EFFECT_APPLY,
+         [ep["agent"], condition_id, ep["rank"], ep["buff"],
+          _f32(ep["duration"])],
+         f"EFFECT_APPLY({name} on agent {ep['agent']}, buff {ep['buff']}, "
+         f"{ep['duration']:.1f}s, inflicted by skill {by_skill})")
+    print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
+          f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
+          f"{rank})", flush=True)
+    # AND THE DEGENERATION IT CARRIES, if it carries any. Sent here rather than
+    # from the tick because the corpus's mid-life property-44s fire when the
+    # RATE CHANGES, and applying a condition is the change.
+    push_regen(send, state, target_id, conn_id)
+    return ep
+
+
+def kill_player(send, state, conn_id, why="took a killing blow"):
+    """Put the player down. ONE place, since 2026-08-20.
+
+    The five lines below were written out twice -- once in `land_swing` and
+    once in `land_skill` -- and the second copy already differed from the first
+    by a comment. Degeneration was going to be a third, which is the point at
+    which a copied sequence becomes a bug waiting for someone to fix two of
+    three sites.
+    """
+    state["player_dead"], state["player_died_at"] = True, time.time()
+    strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
+    state["attacking"] = None          # a corpse stops swinging back
+    send(GAME_SMSG_AGENT_UPDATE_STATUS,
+         [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+
+
+def agent_pool_max(state, agent_id):
+    """Maximum health of one agent, or None if this server does not know it."""
+    if agent_id == PLAYER_AGENT_ID:
+        return float(agents.PLAYER_HEALTH)
+    agent = state.get("agents", {}).get(agent_id)
+    return float(agent["max_health"]) if agent else None
+
+
+def push_regen(send, state, agent_id, conn_id):
+    """Tell the client this agent's NET health-regeneration rate, if it changed.
+
+    PROPERTY 44, CONFIRMED (`studies/isle` B4): the net regen rate in
+    max-health FRACTIONS PER SECOND, quantised at 2/H -- the player carried
+    prop-42 = 100 with prop-44 = 0.02 and 0.04 in two captures, exact in f32,
+    and integrating a mid-life rate ladder predicted a health rise to 0.5%.
+    It rides `0x00A2` [prop, agent, f32], not `0x009F`.
+
+    ONE THING THAT STUDY LEFT UNVERIFIED IS WHAT THIS CLOSES: "that one 2 hp/s
+    step equals one HUD pip (needs a screen, not the wire)". Applying Bleeding
+    -- three pips by GWW's own table -- must move this to exactly
+    -3*2/H, and the HUD must show three arrows. No free parameter on either
+    side.
+
+    SENT ONLY ON CHANGE, which is the corpus's own shape: on-create prop-44s
+    are spawn state and mid-life ones fire when the rate CHANGES. Streaming it
+    every tick would be a message retail does not send.
+    """
+    pool = agent_pool_max(state, agent_id)
+    if pool is None or pool <= 0:
+        return None
+    table = state.get("effects")
+    live = table.on_agent(agent_id) if table else []
+    pips = effects.pips_from(live)
+    rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
+    seen = state.setdefault("regen_rate", {})
+    if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
+        return None
+    seen[agent_id] = rate
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_CHANGE_HEALTH_REGEN, agent_id,
+          _fraction(rate, agents.GV_CHANGE_HEALTH_REGEN,
+                    f"regen on agent {agent_id}")],
+         f"regen {-pips:.0f} pip(s) on agent {agent_id} ({rate:+.5f}/s)")
+    print(f"[c{conn_id}] agent {agent_id} degeneration: {pips:.0f} pip(s), "
+          f"{rate * pool * 1:+.1f} health/s", flush=True)
+    return rate
+
+
+def degen_tick(send, state, conn_id):
+    """Spend health on degeneration. NO damage numbers, and that is measured.
+
+    `studies/isle` B4: "passive ticks are never streamed". Retail sends the
+    RATE once and the client animates the bar itself, so a server that also
+    sent property 16 every tick would draw a stream of red numbers retail never
+    draws. Health stays server-authoritative here (that study's own
+    conclusion), so this spends it and says nothing.
+
+    DEGENERATION CAN KILL, and it goes through the same door a swing does --
+    `kill_player` exists because this is the third caller and the first two had
+    the sequence copied out longhand.
+    """
+    if not EFFECTS:
+        return
+    table = state.get("effects")
+    if not table or not table.live:
+        return
+    now = time.time()
+    last = state.get("degen_at") or now
+    dt = now - last
+    state["degen_at"] = now
+    if dt <= 0:
+        return
+    for agent_id in sorted({ep["agent"] for ep in table.live.values()}):
+        pips = effects.pips_from(table.on_agent(agent_id))
+        if not pips:
+            continue
+        lost = pips * effects.PIP_HEALTH_PER_SECOND * dt
+        if agent_id == PLAYER_AGENT_ID:
+            if state.get("player_dead"):
+                continue
+            player_pools(state)
+            state["player_health"] = max(0.0, state["player_health"] - lost)
+            if state["player_health"] <= 0.0:
+                kill_player(send, state, conn_id, "bled out")
+        else:
+            agent = state.get("agents", {}).get(agent_id)
+            if not agent or agent.get("dead"):
+                continue
+            agent["health"] = max(0.0, agent["health"] - lost)
+
+
+def heal_agent(send, state, target_id, caster_id, amount, conn_id):
+    """Put health BACK, and draw the number. Returns what actually landed.
+
+    THE DIRECTION THIS SERVER NEVER HAD. Until 2026-08-20 the only way health
+    moved up here was `GV_HEALTH`'s setter, which is silent -- it moves the orb
+    and draws nothing, so a heal was indistinguishable from a revive.
+
+    THE CHANNEL IS MEASURED, not chosen. `agents.GV_HEALTH_GAIN` (55) carries
+    the evidence: on `0x00A3` the live corpus has property 16 negative 1,251 of
+    1,251 and property 17 negative 243 of 243, both self-directed 0 of 1,501 --
+    damage always has a distinct attacker and victim and is always a negative
+    delta. Property 55 is POSITIVE 502 of 506 and SELF-DIRECTED 454 of 506. A
+    positive, mostly self-inflicted health delta on the damage channel is a
+    heal.
+
+    THE FRACTION IS OF THE TARGET'S OWN MAXIMUM, the same as damage's
+    (`studies/isle`: "the wire fraction is an integer divided by target max
+    health"). Retail's largest is 0.652, comfortably under the `fraction <=
+    1.0f` assert at CharPool.cpp:84 -- but the clamp below is not decoration,
+    because that assert only fires in the POSITIVE direction and this is the
+    first thing this server has ever sent on it that is not a revive.
+
+    OVERHEAL IS SILENT AND IS NOT AN ERROR. A heal on a full bar lands zero and
+    sends nothing, which is what retail looks like: no green number appears
+    when nothing was restored.
+    """
+    if target_id == PLAYER_AGENT_ID:
+        player_pools(state)
+        before, pool = state["player_health"], float(agents.PLAYER_HEALTH)
+    else:
+        agent = state.get("agents", {}).get(target_id)
+        if not agent or agent.get("dead"):
+            return 0.0
+        before, pool = float(agent["health"]), float(agent["max_health"])
+    landed = min(float(amount), pool - before)
+    if landed <= 0.0:
+        print(f"[c{conn_id}] heal of {amount} on agent {target_id} OVERHEALS "
+              f"({before:.0f}/{pool:.0f}) -- nothing sent", flush=True)
+        return 0.0
+    frac = _fraction(landed / pool, agents.GV_HEALTH_GAIN,
+                     f"a heal on agent {target_id}")
+    if target_id == PLAYER_AGENT_ID:
+        state["player_health"] = before + landed
+    else:
+        state["agents"][target_id]["health"] = before + landed
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH_GAIN, target_id, caster_id, frac],
+         f"heal {landed:.0f} on agent {target_id}")
+    print(f"[c{conn_id}] agent {target_id} healed {landed:.0f}: "
+          f"{before + landed:.0f}/{pool:.0f}"
+          + (" (self)" if target_id == caster_id else f" by {caster_id}"),
+          flush=True)
+    return landed
+
+
+def effect_tick(send, state, conn_id):
+    """Close every episode whose stated duration has run out.
+
+    Runs on the world tick, and the schedule is the corpus's own: a removal
+    lands at apply + duration, 57 of 88 within 5 ms and 83 of 88 within 50 ms.
+    Our tick interval is the only thing between us and that shoulder -- the
+    episode's `expires_at` is absolute, so a slow tick is late rather than
+    drifting, and lateness is exactly what `bufflog`'s residual measures.
+    """
+    if not EFFECTS:
+        return
+    table = state.get("effects")
+    if not table or not table.live:
+        return
+    now = time.time()
+    for ep in table.due(now):
+        table.close(ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
+             f"expired after {ep['duration']:.1f}s)")
+        print(f"[c{conn_id}] effect {ep['skill']} on agent {ep['agent']} "
+              f"expired (buff {ep['buff']}, "
+              f"{now - ep['applied_at']:.2f}s of {ep['duration']:.1f}s)",
+              flush=True)
+        # A condition running out is a rate change too, and it is the one a
+        # server is most likely to forget: the icon goes and the arrows stay.
+        push_regen(send, state, ep["agent"], conn_id)
 
 
 def revive_due(send, state, conn_id):
@@ -5959,10 +6842,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
         # choice of ours -- so damage drives the bar down to a sliver and the last
         # step has to be the effects bit, exactly as it is for an agent. Our own
         # bookkeeping decides; the fractions only make the bar agree with it.
-        state["player_dead"], state["player_died_at"] = True, time.time()
-        state["attacking"] = None      # a corpse stops swinging back
-        send(GAME_SMSG_AGENT_UPDATE_STATUS,
-             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
 
@@ -5988,6 +6868,18 @@ def pick_skill(agent, now):
     Starting the scan AFTER the last slot cast fixes it without any new numbers:
     every ready slot gets a turn before any slot gets a second one. The wrap is
     what makes it a cycle rather than a sweep that stalls at the end.
+
+    ONE MORE THING IT DOES THAT NO REAL MONSTER DOES, found by running it
+    (`studies/skills/FINDINGS.md` 16.1): it re-casts a HEX the target already
+    has. Round robin only asks whether a slot has recharged, so our Hatcher put
+    four overlapping copies of Scourge Sacrifice on the player in one life. The
+    client discards every copy after the first, and retail's own 15 overlapping
+    re-applications are all under 0.5 s apart -- same-instant doubles, not
+    re-casts -- so there is no precedent for it anywhere in the corpus. Not
+    fixed here: "do not cast an effect the target already carries" is an AI
+    RULE, this function is declared above not to be where AI rules go, and GWW
+    publishes that condition per SKILL (studies/heroes 5.6), which is R4c's
+    open design question rather than a line to add here.
 
     STILL NOT MEASURED, and this is the honest part: nothing in this project knows
     how a Guild Wars monster actually chooses. Round robin, least-recently-used
@@ -6054,12 +6946,42 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # all four hurt the player identically; dealing a heal's magnitude AS
     # damage would be worse, not better. The player still dies to the ordinary
     # swing (land_swing), which is what R4a's criterion ever rested on.
+    # THE EFFECT FIRST, and the order is load-bearing rather than stylistic.
+    # The one skill on this bar that opens an episode is Scourge Sacrifice
+    # (253, a Hex), and it is one of the three the damage exit below turns
+    # away -- so an effect applied after that `return` would never be applied
+    # at all. A hex on the PLAYER is also the most visible thing this channel
+    # can do: the client draws it in the player's own effect bar, where an
+    # effect on a monster is a small icon over a body across the field.
+    episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
+                           PLAYER_AGENT_ID, conn_id)
+
+    # A CONDITION FROM THE ENEMY, symmetric with the player's cast. Without
+    # this the only way to see degeneration is on a monster's nameplate, where
+    # the pips are three pixels; with it the player's own HUD shows the arrows,
+    # which is what closes `studies/isle` B4's one UNVERIFIED clause.
+    inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
+    if inflicted and not state.get("player_dead"):
+        apply_condition(send, state, PLAYER_AGENT_ID, inflicted[0],
+                        inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
+
+    # The enemy heals too, and its own bar has one: Restore Condition (276),
+    # whose GWW variable is `Healing` 10..70. It has been on that bar since the
+    # bar existed and has resolved to nothing every session.
+    healed = skill_heal(skill_id, ENEMY_SKILL_RANK)
+    if healed:
+        row = agents.WORLD.get("skills", str(skill_id))
+        heal_agent(send, state,
+                   effects.effect_recipient(row, agent_id, agent_id),
+                   agent_id, healed, conn_id)
+
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
     if damage is None:
         agent["casting"] = None
-        print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
-              f"modelled effect (its scale is not damage -- see "
-              f"content/world.toml skill_effect)", flush=True)
+        if episode is None and not healed and not inflicted:
+            print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
+                  f"modelled effect (its scale is not damage -- see "
+                  f"content/world.toml skill_effect)", flush=True)
         return
     dealt = float(damage[0])
     # Guard before ANY mutation. This function's damage send was already its
@@ -6078,10 +7000,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
 
     if state["player_health"] <= 0.0:
-        state["player_dead"], state["player_died_at"] = True, time.time()
-        state["attacking"] = None
-        send(GAME_SMSG_AGENT_UPDATE_STATUS,
-             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
 
@@ -8028,10 +8947,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reported arrival, so it should be served on the first
                         # tick after that report rather than one interval later.
                         interact_pending_tick(send, state, conn_id)
+                        # A click held back by the grant floor. Polled here for
+                        # the same reason the interact above is -- the client
+                        # sends NOTHING while click-walking (measured silences
+                        # of 9.7, 13.7 and 17.0 s), so there is no receive arm
+                        # that could carry it, and a timer thread would be a
+                        # second sender racing this one for the send lock.
+                        # No-op with the flag off and with nothing pending.
+                        grant_flush_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
                         cast_tick(send, state, conn_id)
+                        # Expiries AFTER the casts, so an effect applied on
+                        # this tick is never closed by the same tick that
+                        # opened it -- `due` compares against a `now` taken
+                        # after `apply` wrote `expires_at`, and a zero-length
+                        # episode is refused at the table rather than here.
+                        effect_tick(send, state, conn_id)
+                        # Degeneration AFTER the expiries, so a condition that
+                        # ran out on this tick does not also charge for it.
+                        degen_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -8764,6 +9700,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # client moves itself now, which is precisely what makes
                         # its report worth having.
                         reported = tuple(values[1])
+                        # THE LOCALLY-DRIVING LATCH, armed here and cleared in
+                        # the 0x0047 arm below, and touched in NO third place.
+                        # See _grant_verdict for what reads it and why it is
+                        # deliberately not state["walking"] -- that one is
+                        # cleared by the click arm itself, so one click would
+                        # have disarmed it and let a storm of 195 through.
+                        #
+                        # It is stamped BEFORE the trust guard runs, on purpose.
+                        # The question this answers is "did the client just tell
+                        # us it is moving under the keyboard", and it told us
+                        # that whether or not we believed the coordinates it
+                        # attached -- a refused report is still a report.
+                        state["kbd_moving_at"] = time.time() if moving else None
                         _take_client_position(state, reported, plane, rec,
                                               "0x003D")
                         # ONE OF THE TWO CALL SITES, and both route through the
@@ -9201,6 +10150,67 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[trace] CLICK dest ({dest[0]:.0f}, "
                                   f"{dest[1]:.0f}) clipped from OUR origin "
                                   f"({opx:.0f}, {opy:.0f})", flush=True)
+                        # THE THIRD REFUSAL, and the first one that is about US
+                        # rather than about the geometry. `--grant-suppress`;
+                        # the reasoning, the three captures and both constants
+                        # are at GRANT_SUPPRESS above.
+                        #
+                        # IT IS DELIBERATELY LAST. A click that is also stale or
+                        # also blocked must still report the geometry reason,
+                        # because that is the line the owner reads live and it
+                        # says something about the map; "the player is
+                        # keyboarding" would hide it. With the flag off
+                        # _grant_verdict returns ("off", grant) and this block
+                        # is exactly the pass-through it replaces.
+                        now_g = time.time()
+                        may_grant, why_g, kage, since = _grant_verdict(state,
+                                                                       now_g)
+                        if rec is not None:
+                            # EVERY evaluation, granted or not -- the same rule
+                            # the resync log follows, and for the same reason:
+                            # a log holding only its own successes cannot score
+                            # the flag against the storm it exists to stop.
+                            rec.event("grant_verdict", fired=may_grant,
+                                      reason=why_g, deferred=False,
+                                      keyboard_age=(None if kage is None
+                                                    else round(kage, 3)),
+                                      since_last=(None if since is None
+                                                  else round(since, 3)),
+                                      dest=[float(dest[0]), float(dest[1])])
+                        if not may_grant:
+                            if why_g == "locally-moving":
+                                # DROPPED, not held. Their own hands are already
+                                # moving the character; a destination they
+                                # clicked while walking somewhere else is not
+                                # worth keeping, and the client is pathing to it
+                                # regardless (5 of 5, cos = 0.994-1.000, on the
+                                # capture where we answered nothing).
+                                state["grant_pending"] = None
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): the player is driving "
+                                      f"with the keyboard ({kage:.2f}s since "
+                                      f"their last move report, no stop since) "
+                                      f"-- leaving it to the client's own "
+                                      f"pathing", flush=True)
+                            else:
+                                # HELD, and the newest wins. Overwriting rather
+                                # than appending is the whole of the coalescing:
+                                # 196 clicks leave at most one destination
+                                # outstanding at any instant.
+                                state["grant_pending"] = {
+                                    "dest": (float(dest[0]), float(dest[1])),
+                                    "plane_first": plane_first,
+                                    "plane_second": plane_second,
+                                    "at": now_g}
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): {since:.2f}s since the "
+                                      f"last grant, under the "
+                                      f"{GRANT_MIN_INTERVAL:.2f}s floor -- "
+                                      f"holding the NEWEST destination and "
+                                      f"dropping any older one", flush=True)
+                            continue
+                        # A click we ARE answering supersedes anything held.
+                        state["grant_pending"] = None
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
                         # ArenaNet pairs the rate with the MOVE, not with the
@@ -9255,6 +10265,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported, plane = tuple(values[1]), values[2]
                         state["dest"] = None
                         state["walking"], state["heading"] = False, None
+                        # THE PRIMARY DISARM of the locally-driving latch, and
+                        # the one that does the work: in the 5 ordinary clicks
+                        # of authsrv-20260820T182934-c1 a 0x0047 had arrived
+                        # before every single one, so rule 1 refused 0 of 5
+                        # there while refusing 196 of 196 in the reproduction.
+                        # GRANT_LOCAL_WINDOW never had to decide any of them.
+                        state["kbd_moving_at"] = None
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
                         pm = state.get("pathmap")
@@ -10818,6 +11835,24 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--grant-suppress", action="store_true",
+                    help="EIGHTH candidate, and the first that acts by SAYING "
+                         "LESS. Two refusals on the click grant: (1) never send "
+                         "0x0029 while the player is driving with the keyboard "
+                         "-- the client emits 0x003D only while moving and "
+                         "0x0047 only on a stop, so that state is readable off "
+                         "the wire -- and (2) never send them faster than one "
+                         "per %.2f s, holding the NEWEST superseded destination "
+                         "rather than sending both. 0x0029 is SYNC-ONLY, so a "
+                         "grant issued mid-keyboard drives the authoritative "
+                         "copy away from the rendered one AND re-runs the "
+                         "client's desync test, which is the warp. Scored "
+                         "against run 20260820T183311: 196 clicks -> 140 grants "
+                         "in 44 s and 5 hard jumps, four of them 0.10-0.23 s "
+                         "after a grant. Rule 1 refuses 196 of those 196 and 0 "
+                         "of the 5 ordinary clicks in run 20260820T182934. OFF "
+                         "by default; independent of every other movement flag."
+                         % GRANT_MIN_INTERVAL)
     ap.add_argument("--stop-echo", action="store_true",
                     help="REFUTED 2026-08-19, kept only so the negative result "
                          "is reproducible -- do not reach for this as a fix. On "
@@ -10869,6 +11904,21 @@ def main():
                          "it a swing is 3-5 flat, without it 3-5 is scaled by "
                          "2^((SL-AR)/40) and a critical replaces it "
                          "(studies/isle rung 7).")
+    ap.add_argument("--enemy-skills", default=None, metavar="IDS",
+                    help="Comma-separated skill ids for the standing hostile's "
+                         "bar, using the client's own activation and recharge "
+                         "for each. The mirror of --skills, and it exists for "
+                         "the same reason: changing what the enemy casts "
+                         "should not need a content edit. Ids must exist in "
+                         "the build being launched.")
+    ap.add_argument("--no-effects", action="store_true",
+                    help="do not open or close effect episodes. The control "
+                         "for the 0x0042/0x0044 channel: with it a stance is "
+                         "a cast that leaves nothing behind and the effect "
+                         "bar stays empty, which is the state this server "
+                         "shipped in until 2026-08-20. Use it to say whether "
+                         "something the client did was THIS channel rather "
+                         "than the cast cycle it rides on.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -11354,6 +12404,41 @@ def main():
               "corrected, that regression is back and the payload is the "
               "first thing to read.")
 
+    if a.grant_suppress:
+        global GRANT_SUPPRESS
+        GRANT_SUPPRESS = True
+        print("[map] --grant-suppress ON. Two refusals on the click grant, and "
+              "nothing new goes on the wire.")
+        print(f"      RULE 1    no 0x0029 while the player is keyboarding -- a "
+              f"0x003D with a non-zero movementType arms it, a 0x0047 clears "
+              f"it, and it lapses after {GRANT_LOCAL_WINDOW:.1f}s without one.")
+        print(f"      RULE 2    and never more often than one per "
+              f"{GRANT_MIN_INTERVAL:.2f}s; a click inside the floor is HELD, "
+              f"newest destination only, and dropped unsent after "
+              f"{GRANT_PENDING_MAX_AGE:.2f}s.")
+        print("      WHY       0x0029 is SYNC-ONLY (0x0025's async arm is gated "
+              "shut for the client-controlled agent at 0x005FD5D3), so a grant "
+              "sent mid-keyboard moves the authoritative copy away from the one "
+              "the player sees AND re-runs the desync test that snaps them "
+              "together past 299.332591 u.")
+        print("      COST      measured, not assumed: on the capture where we "
+              "answered NO click at all, 5 of 5 clicks still walked the "
+              "character toward the clicked point (cos 0.994-1.000, closing 90 "
+              "to 3,224 u). Click-to-move is the CLIENT's feature.")
+        print("      PREDICTION, stated before the run, in BOTH units because "
+              "this arc has already had a candidate bound the size while the "
+              "harm arrived as frequency:")
+        print("        FREQUENCY hard rows per minute on movesync's bar fall to "
+              "0.00, matching the two clean captures. ANY hard row within "
+              "0.30 s of a grant REFUTES it.")
+        print("        SIZE      no client displacement above gate 1's "
+              "299.332591 u attributable to a grant.")
+        print("      CONTROL   and this one decides nothing without it: with "
+              "the player NOT keyboarding, clicking must still walk the "
+              "character. If click-to-move is dead the run is void, not a pass.")
+        print("      Score it with:  python toolkit/clientscan/movesync.py "
+              "--wire-only   (state the denominator)")
+
     if a.stop_echo:
         global STOP_ECHO
         STOP_ECHO = True
@@ -11395,6 +12480,26 @@ def main():
         ARMOUR_TERM = False
         print("NO ARMOUR TERM: swings are the weapon's raw range, unscaled, "
               "and no swing can be a critical.")
+
+    if a.enemy_skills:
+        global ENEMY_SKILLS
+        bar = []
+        for token in a.enemy_skills.split(","):
+            sid = int(token.strip(), 0)
+            # ACTIVATION AND RECHARGE COME FROM THE CLIENT'S TABLE, not from
+            # the command line -- the same rule ENEMY_SKILL_BAR's comment sets
+            # out. What is OURS is the selection; every number is ArenaNet's.
+            act, _after, recharge = skill_timing(sid)
+            bar.append((sid, act, float(recharge)))
+        ENEMY_SKILLS = tuple(bar)
+        print(f"ENEMY BAR: {[row[0] for row in bar]} "
+              f"(activation and recharge from the client's own table)")
+
+    if a.no_effects:
+        global EFFECTS
+        EFFECTS = False
+        print("NO EFFECTS: no 0x0042 goes out, so stances, hexes and "
+              "enchantments cast and leave nothing on the target.")
 
     if a.no_armour:
         global EQUIP_ARMOUR

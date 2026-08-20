@@ -1617,3 +1617,411 @@ mechanic, the client supplied the encoding, and neither alone would have produce
 | What is `pvp_masks[]` for? | still **NOT FOUND**; eight zeros worked throughout |
 | What is `+0x94` for? | still **NOT FOUND**; 86 rows carry it, none tested |
 | Does upstream's message ordering also work? | untested — we sent unlocks before the bar |
+
+---
+
+# OBSERVED, 2026-08-20: the DURATION slot, read because the server had to send one
+
+The effect substrate (`toolkit/authsrv/effects.py`, R4b) needed one number the
+table does not hand over cleanly: **how long does this skill's effect last?**
+§4 answered which values *render green*; this is about which values are *real*,
+which turns out not to be the same question. Three findings and one
+corroboration, all from the
+1,333-skill player corpus plus the 102 `0x0042` applies in the live captures.
+
+## 12. `skill_arguments` bit 1 means the duration SCALES, not that the slot is meaningful
+
+§4 established that a value renders green when its `args` bit is set **and** its
+endpoints differ, and that reading endpoints without the bit invents a
+progression the game never draws — Rush's scale slot holds a constant 25 with
+its bit clear. `authsrv.skill_scale_value` therefore **raises** on a disabled
+set, which is right for the scale.
+
+**It is too strong for the duration, and retail says so.** Skills **984 (Torch
+Enchantment)** and **998 (Torch Hex)** have `skill_arguments = 0` — the duration
+bit CLEAR — endpoints 30/30, and **ArenaNet sent `0x0042` with duration 30.0 for
+both**. A server that honours the bit the strict way cannot reproduce two of
+retail's own applies.
+
+So the bit is about the **progression**, and the slot is about the **value**.
+The two coincide for the scale (a scale with no progression has no meaning of
+its own) and come apart for the duration (a fixed-duration skill still has a
+duration). `effects.resolve_duration` splits them, and every branch it permits
+names a retail witness while every branch it refuses names its zero:
+
+| shape | n (of 1,333) | rule | witness |
+|---|---|---|---|
+| bit SET | 618 | interpolate `lo..hi` at the rank | 160, 364, 348, 814 |
+| bit CLEAR, `lo == hi == 0` | 488 | no duration → `None` | — (nothing to send) |
+| bit CLEAR, `lo == hi`, below the sentinel floor | 148 | the flat value | **984, 998 at 30.0** |
+| bit CLEAR, `lo == hi`, at or above it | 30 | **REFUSE** | none — see §13 |
+| bit CLEAR, `lo != hi` | 49 | **REFUSE** | **none, in 102 applies** |
+
+The last row is the honest one. Forty-nine skills carry two differing endpoints
+with the bit clear and **not one of them appears anywhere in the corpus**, so
+there is no evidence for *either* reading — interpolate anyway, or take one
+endpoint? The module raises rather than returning a plausible number.
+
+## 13. The duration slot carries SENTINELS, and they are an enum in the high word
+
+Of the 666 bit-clear skills with equal endpoints, **30 hold a value that is not a
+second count**:
+
+| value | hex | n | what they mostly are |
+|---|---|---|---|
+| 131,072 | `0x20000` | 22 | Enchantment |
+| 196,608 | `0x30000` | 7 | Enchantment / Signet |
+| 999,999 | — | 1 | Spell |
+
+**24 of the 30 are Enchantments**, which is exactly where a *"maintained until
+removed"* marker belongs — a maintained enchantment has no duration, so its slot
+is free to carry something else. `0x20000` and `0x30000` are 2 and 3 in the high
+word, i.e. an enum, not a magnitude; 999,999 is the other spelling of forever.
+
+**Vital Blessing (289) is one of them, and it is on our own enemy's bar**, so
+this refusal fires in every session this server runs. That is deliberate: the
+alternative is putting **36 hours** on the wire as a duration. What the enum
+*means* is **NOT FOUND** — no source in this repo names it, and the module keys
+on the SHAPE (high word set, floor `0x10000`) rather than on the three observed
+values, because it is the shape that is established.
+
+**A follow-up with a clean answer available:** the client draws "Enchantment
+Spell" and a maintained-enchantment tooltip from *somewhere*. Whatever reads
+`0x20000` is the same kind of anchor `s_attrib`'s accessors were for the item
+modifiers (`studies/itemmods` §2), and it would name the enum rather than leave
+it as a floor.
+
+## 14. `target` (+0x31) is a target-TYPE enum, and the type column corroborates two of its codes
+
+The substrate needs to know whether a stance lands on the caster or on what the
+caster is aiming at. `target` answers it, and the answer is checkable without
+trusting any single skill, because `type_code` is an independent column:
+
+| type | n | target distribution |
+|---|---|---|
+| Attack (14) | 199 | **5 → 199/199** |
+| Stance (3) | 76 | **0 → 75/76** |
+| Glyph (12), Preparation (19), type 16, 20, 21, 24, 26, 27 | 117 | **0 → 117/117** |
+| Hex (4) | 151 | 5 → 140, then 0/1/16 |
+| Enchantment (6) | 227 | 0 → 151, 3 → 52, then 1/4/5/6/14 |
+
+An attack necessarily aims at a foe and a stance necessarily lands on the
+caster, so **0 = self and 5 = the cast's target** is read off the type column
+rather than asserted about any one skill. The one Stance at 5 and the three
+Hexes at 0 are not explained here and are not needed.
+
+**Codes 1, 3, 4, 6, 14 and 16 are UNRESOLVED.** 3 is plainly ally-shaped (52
+Enchantments and Reversal of Fortune 307 carry it) and 4 is *also* ally-shaped
+(Restore Condition 276), which is one distinction too many to guess at — so
+`effects.effect_recipient` reads only 0 and lets everything else fall through to
+what the caster aimed at. Known-wrong-but-bounded, rather than an invented enum.
+
+## 15. And a corroboration of somebody else's finding, at corpus scale
+
+`studies/isle/FINDINGS.md` rung-8 prep §2 settled **`0x0042`'s field 3 = the
+applying skill's attribute RANK** on 2026-08-18, CORROBORATED against GWW across
+five values and four skills. Running the same prediction over the **whole**
+corpus with the client's table on the other side of the join:
+
+> `interp(duration0, duration15, field3)` == the f32 duration on the wire, for
+> **96 of 96 non-condition applies, 0 misses**.
+
+No free parameter — the endpoints are ArenaNet's, the formula was measured at
+`0x005A8920` for the *damage* scale, and field3 and the duration are retail's
+bytes. This is not a new finding; it is that finding mechanised, in
+`test_effects.py` §2, guarding a rule the server now depends on.
+
+**Worth recording because of what it says about the repo rather than the game:**
+`bufflog.field3_report`'s docstring still read *"the answer is one session away"*
+for two days after the answer was written down in another study. That is the
+fourth time in one week a measured number sat unread beside code using an
+invented one — property 17, the rung-7 damage formula, the item modifiers, and
+this — and all four failed the same way round: measured, written down, not
+wired.
+
+## 16. The client DRAWS them — run `20260820T174731`, and it types them itself
+
+Everything above is offline. This is the client.
+
+**The run.** Loopback, `--enemy --explorable`, the bar's slot 1 swapped to
+**Frenzy 346** with the existing `--skills` flag (no code edit), one scripted
+keypress on slot 1, 18 s of walk plan and a 60 s hold at a frame every 4 s.
+`vault/captures/harness/20260820T174731`, contact sheets `hud-walk-frenzy.png`
+and `hud-hold-hex.png`. **13 applies, 13 removals, zero client asserts, run
+verdict PASS.**
+
+**Both directions worked, and the whole chain is on record for the player's:**
+
+```
+key "1" -> c2s 0x8046 USE_SKILL -> 0x00E4 -> 0x00E5 (cast end)
+        -> 0x0042 EFFECT_APPLY(stance 346 on agent 1, buff 3, 8.0s at rank 0)
+        -> ... 8s ... -> 0x0044 EFFECT_REMOVE(buff 3, expired after 8.0s)
+```
+
+and the enemy's, needing no input at all:
+`0x0042 EFFECT_APPLY(hex 253 on agent 1, buff 1, 18.0s at rank 12)`.
+
+**THE CLIENT TYPES THE EFFECT ITSELF, FROM THE SKILL ID.** We send no colour,
+no category and no art — `0x0042` carries `[target, skill, rank, buff,
+duration]` and nothing else. The client drew Frenzy's own icon under a **GREEN**
+border and Scourge Sacrifice's under a **MAGENTA** one, which are GW's stance
+and hex colours. So the whole `type_code` taxonomy §14 reads out of the table is
+something the client already knows per skill id, and a server that gets the id
+right gets the category, the art and the tooltip for free.
+
+**The timer bar is real and it drains on OUR number.** Frenzy is the row §12 is
+about — `skill_arguments = 0`, endpoints 8/8, the duration bit CLEAR — so the
+strict reading of the bitfield would have refused to send anything. Frames
+`w002` (21:48:04) and `w003` (21:48:08) show its green bar shortening, and by
+`w004` (21:48:11) **the icon is gone**: applied ~21:48:03, an 8-second
+progression bar, gone at 8 seconds. The flat branch is right and the client
+agrees with it on screen.
+
+**Expiry lands inside retail's own band.** Our residuals were **+0.03, +0.05 and
++0.03 s** against the stated duration, on a world tick. The corpus's shoulder is
+83 of 88 closes within 50 ms (`bufflog.EXPIRY_TOLERANCE`), so our lateness is
+inside the spread retail itself produces.
+
+**The death strip is visible.** `hold001` and `hold006` are the two death
+frames: no icons at all, while `hold002`-`hold005` carry the hex with its bar
+draining. Three episodes came off in one `stripped 3 effect(s)` and the client
+took all three without complaint.
+
+### 16.1 The run found a gap, the fix was wrong, and the corpus said so
+
+**What the run showed.** The server opened **four concurrent episodes of skill
+253 on the same agent** — the Hatcher re-casts every ~5 s and nothing stopped it
+— and **the client never drew more than ONE hex icon.** A second run
+(`20260820T175507`, frames every 2 s) pinned the client's side precisely: its
+timer bar drains **monotonically** across three re-applications, from ~85% to
+~28% over 8 seconds of an 18-second duration. **A repeat `0x0042` for a live
+(agent, skill) is DISCARDED — no second icon, no reset.**
+
+**The obvious fix was made and is now reverted.** Collapsing to one episode per
+(agent, skill), refreshing in place, looked well-supported: the client's single
+icon, plus `buff_id_report`'s peak of 2 concurrent episodes. A prediction was
+stated before the run that tested it — *re-sending `0x0042` with the EXISTING
+buff id resets the bar* — and it was **REFUTED**: the bar drained straight
+through three same-id refreshes.
+
+**Then the corpus refuted the collapse itself.** Asked directly whether retail
+ever re-applies a live effect:
+
+> **15 overlapping re-applications** across the live captures — a second
+> `0x0042` for the same (target, skill) while the first is still live — and
+> **every one carries a NEW buff id**: 120→121 at a 0.43 s gap, 110→114 at
+> 0.50 s, 121→120 at 0.09 s. The first episode still closes `expired` against
+> its own duration. Same-id repeats occur **only** after the previous one
+> closed (51→51 at 14.98 s against a 13.0 s duration, five times over).
+
+So ArenaNet's allocator is the plain one we already had, and collapsing would
+have made our stream a shape retail never produces. `test_effects.py` §4b now
+pins retail's rule instead of our fix.
+
+**Which relocates the actual defect, and it is more interesting than a channel
+bug.** Retail's fifteen overlaps are all **under 0.5 s** apart — same-instant
+doubles, an AoE or a party-wide effect touching one target twice — and **not one
+is a re-cast of a live effect.** Ours were five seconds apart. The thing no
+monster in the corpus does is what *our* monster does:
+
+> **our placeholder AI re-casts a hex the target already has.** `pick_skill`
+> asks only whether a slot has recharged.
+
+That is an **AI rule**, not a wire rule, and `pick_skill`'s own docstring
+already says it is "a testing function, not a decision about AI" that "gets
+replaced rather than extended". So it is recorded there and left alone. It also
+lands exactly where `studies/heroes` §5.6 said this arc would end up: *"do not
+use this skill if the target is already affected"* is precisely the sort of
+condition GWW publishes **per skill**, which is R4c's open design question, not
+a line to add to a round-robin selector.
+
+**Left standing, and named:** how retail refreshes an effect at all is **NOT
+FOUND**. Re-sending the apply does nothing (measured, both id choices).
+`0x0044`-then-`0x0042` would certainly work and there is no evidence retail does
+it. The question only becomes live when something in this server needs to extend
+a running effect, and nothing does yet.
+
+**NOT ANSWERED by this run, and named so it is not read as answered:**
+
+1. **Whether an ADRENALINE skill can be pressed at all.** The default bar's two
+   stances (Battle Rage 317, Rush 319) cost 4 adrenaline and nothing tells the
+   client the player has any, so slot 1 was swapped to the 5-energy Frenzy to
+   sidestep it. Whether the client greys an uncharged adrenaline skill and
+   swallows the keypress is untested, and it is the cheapest reason to model
+   adrenaline.
+2. **What the enchantment sentinel means** (§13). Vital Blessing refused on
+   every cycle of this run, loudly, exactly as designed — thirteen log lines
+   naming the gap.
+3. **Whether the effect does anything.** Frenzy's icon appeared; Frenzy's
+   *+33% attack speed and double damage taken* are not modelled, and neither is
+   Scourge Sacrifice's. The channel is the substrate; the per-skill mechanics
+   are the `scale_means` pattern again, one wiki-sourced row at a time.
+
+---
+
+# OBSERVED, 2026-08-20 (later): five more families, and three rules the wiki had all along
+
+§16 left the substrate carrying icons with no consequences and five of the nine
+R4b families unreached. This pass closed most of that. Everything below was
+measured before it was built, and three of the five were then watched at a
+client.
+
+## 17. The type list is corroborated by the table, and Glyph joins it
+
+Adding a `type_code` to the effect list is a claim about ArenaNet's taxonomy, so
+it wants a check the table can refuse. Across the **478** corpus skills in the
+five effect types:
+
+| type | n | duration resolves | refuses (sentinel/unwitnessed) | **no duration** |
+|---|---|---|---|---|
+| Stance (3) | 76 | 74 | 2 | **0** |
+| Glyph (12) | 10 | 9 | 1 | **0** |
+| Preparation (19) | 14 | 13 | 1 | **0** |
+| Hex (4) | 151 | 142 | 9 | **0** |
+| Enchantment (6) | 227 | 194 | 33 | **0** |
+
+**Not one of the 478 has nothing to time.** Meanwhile **488** corpus skills DO
+carry 0/0 endpoints — attacks, signets, most spells — and **none** of them is in
+these five types. If "this type IS a timed effect" were the wrong mapping, the
+giveaway would be a type full of skills with no duration, and there is none.
+
+## 18. THREE of the five types are ONE-AT-A-TIME, and two say so in the game's own words
+
+This is the answer to §16.1's open question — *how does an effect get replaced* —
+and it was sitting on GWW the whole time:
+
+> **Stance** (rev. 2020-10-23), quoting **Isokeh, Expert Ranger**, in game:
+> *"Only one Stance can be active at any time, so if you are under the effects
+> of a Stance, using a new Stance will replace the previous one."*
+> **Preparation** (rev. 2020-06-18): *"Only one preparation can be active at a
+> time. Activating another preparation will override the previous one."*
+> **Glyph** (rev. 2024): *"If a glyph is cast while another glyph is already
+> active, the new one replaces the old one."*
+
+The rule is per **TYPE** and per **AGENT** — any stance replaces any stance —
+and hexes and enchantments carry no such rule, which is why they are not in it.
+
+**On the wire a replacement is `0x0044` then `0x0042`.** That is forced rather
+than chosen: §16.1 measured that re-sending the apply alone is discarded by the
+client under either buff id, so a replacement the client can see has to close
+and reopen. **WATCHED** (`20260820T190616`, `hud-stance-swap.png`): Rush's icon
+became Frenzy's **in the same slot, under the same green stance border**, with a
+fresh timer, and there was never a third icon.
+
+## 19. Property 55 is the HEALING channel, and the client's own arithmetic agrees
+
+The server had no way to make health go up that drew anything — `GV_HEALTH` is a
+silent setter. Asked directly, the corpus answers in one pass over 2,007
+property events on `0x00A3`:
+
+| property | negative | positive | self-directed (`target == cause`) |
+|---|---|---|---|
+| 16 (damage) | **1251** | 0 | **0 of 1251** |
+| 17 (critical) | **243** | 0 | **0 of 243** |
+| 55 | 4 | **502** | **454 of 506** |
+
+Damage always has a distinct attacker and victim and is always a negative
+delta — `_damage_fraction` already sent `-frac`, which turns out to be retail's
+convention 1,251 times over. **A positive, overwhelmingly self-inflicted health
+delta on the damage channel is a heal.** GWCA's name `armor_ignoring` therefore
+describes the *mechanism* (a health change armour has no say in) and not the
+*direction*; the four negatives are consistent with a sacrifice and that reading
+is UNVERIFIED.
+
+**CONFIRMED AT THE CLIENT** (`20260820T190917`, `hud-heal-54-to-100.png`). The
+client's own health readout reads **54 → 100 → 54 → 100** across three Healing
+Signet casts, moving by exactly the **46** the server sent each time. The client
+applies property 55 as a health gain and its arithmetic matches ours.
+
+**And it draws no number for it** — a green-text scan over twenty frames
+spanning three heals finds **0–8 saturated green pixels**, the 8 being frames
+taken at the keypress instant before the cast completed. Damage on 16/17 *is*
+drawn. So either retail annotates a heal through some other value id, or the
+client simply does not, and this repo cannot yet say which. **OPEN**, and named
+rather than assumed away.
+
+## 20. A spell is not a swing, and a label does not say *when*
+
+Two defects the tests could not have caught, both found by running it:
+
+- **Casting a HEX made the player swing a hammer.** `cast_tick` dispatched on
+  *"is there a target"*, so Faintheartedness produced
+  `attack_started: player swings at 10` and five points of hammer damage.
+- **Flare dealt that same five** instead of its own 20 fire damage, because
+  only the `additive` mode was ever read and `standalone` fell on the floor.
+
+Both are fixed by dispatching on `type_code`: **only type 14 rides a weapon
+swing** (WIKI, GWW "Attack skill" — attack skills *are* attacks and use the
+equipped weapon; all 199 in the corpus carry target byte 5). A spell deals its
+own number with no roll, no armour exponent and no critical, and sends **one**
+message — no `attack_started`, no `melee_attack_finished`, because it never
+began a swing.
+
+**And the label trap that would have shipped without the type column:** GWW
+gives `Ignite Arrows` the variable **`Fire damage` 3..18** — the same label as
+Flare's. It is a Preparation, and its fire damage rides the *next arrows*.
+Nothing in the client's table separates them. So a skill that opens an episode
+resolves no damage and no heal at cast: its scale describes what the effect does
+while it is up.
+
+## 21. Conditions: the join, and the rule that they never stack
+
+`studies/isle` established that a condition's duration comes from the
+**inflicting** skill (Burning's own endpoints are 3/3 and retail sends it at
+9.0). The missing half was *which* condition and *from where*, and both are
+per-skill data already carried:
+
+> **GWW's progression variable NAMES it** — `Sever Artery` has exactly one
+> variable and it is called `Bleeding` — and **the client's bonus slot carries
+> the seconds**, 5..25, in the slot `skill_arguments = 4` names. **The bitfield
+> picked the slot before the wiki was read.**
+
+Sever Artery at Swordsmanship 3 resolves to **Bleeding (478) for 9 s**, and the
+apply names the *condition's* id rather than the skill's — which is what retail
+carries, since the corpus's six condition applies name 480 and 481 and never the
+skill that caused them.
+
+**Then a run put five Bleedings on the player at once.** With the enemy's Sever
+Artery on a 0 s recharge (`20260820T191725`) the pips went 3 → 6 → 9 → **10, the
+cap** — twenty health a second, and visibly absurd. The rule was on GWW:
+
+> **WIKI (GWW, "Condition" §Notes):** *"Reapplied conditions will last the
+> original time period, unless the reapplied duration is greater than the
+> remaining amount of time."*
+
+So one instance per (agent, condition), and a re-application is a **comparison**,
+not an addition. A shorter one is a no-op on the wire as well as in the table —
+nothing about the target changed. A longer one **extends** it, as `0x0044` then
+`0x0042`, which is the one replacement shape the client honours.
+
+## 22. What a condition DOES — property 44, and one clause of B4 closed
+
+`studies/isle` B4 CONFIRMED property 44 as the net health-regeneration rate in
+max-health fractions per second, quantised at 2/H, riding **`0x00A2`** — itself a
+correction to `PLAN.md` §3.3, which had it on `0x009F` (*"the value census
+matches §3.3 exactly; the opcode did not"*). It left exactly one clause open:
+
+> *"Still UNVERIFIED: that one 2 hp/s step equals one HUD pip (needs a screen,
+> not the wire)."*
+
+The pips are GWW's — *"each pip represents a loss of two health per second"*,
+**Bleeding 3, Burning 7, Disease 4, Poison 4**, capped at 10 — and the other six
+conditions degenerate nothing, which is a fact rather than a gap. So Bleeding on
+a 100-health player must be **exactly** `-3 × 2 / 100 = -0.06` per second, with
+no free parameter on either side.
+
+**CONFIRMED AT THE CLIENT** (`20260820T192221`, `hud-degen-three-pips.png`),
+and it closes B4's clause. The client drew **exactly three `‹` arrows** on the
+health bar, and its own displayed health fell **100 → 86 → 72 → 58 → 44** across
+frames **2.32 s** apart — an implied **6.03 health/s against the 6.00 the server
+sent**, three times over. Three pips asked for, three pips drawn; 0.5%
+agreement on a rate neither side was tuned to.
+
+**Health stays server-authoritative and the ticks are silent**, which is B4's
+own conclusion: *"passive ticks are never streamed"*. The server sends the RATE
+once, on change, and spends the health without a single property-16 message —
+a tick that also sent damage would draw a stream of red numbers retail never
+draws. The client's 6.03 is that animation, done by the client from one number.
+The expiry sends the rate back to zero, which is the half a server is most
+likely to forget: the icon goes and the arrows stay.
+
