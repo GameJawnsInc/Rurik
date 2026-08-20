@@ -83,10 +83,13 @@ import vaultpath  # noqa: E402
 # floor was written down from a count in the author's head, which is the same
 # slip test_interact.py records, so this one is read off the run every time it
 # moves. Sections 1-10 are pure logic and take no fixture; 11-16 replay the
-# vault and declare LEDGER.skip when it lacks them. 57 is the bare-machine
-# subset.
+# vault and declare LEDGER.skip when it lacks them. §17 straddles: four of its
+# six checks drive a FAKE memory and run anywhere, and the two that re-derive
+# the AgTrack displacements from build 38797's own bytes need the vault's
+# client snapshot and skip without it. 61 is the bare-machine subset (57 + 4);
+# a full green with the vault present is 110.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=57)
+                       floor=61)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1058,6 +1061,86 @@ def main():
               if top2 else "no retail interval inside 2.0 s",
               f"this is the number 520 was chosen above, reproduced here from "
               f"the wire rather than quoted from studies/movement/FINDINGS.md")
+
+    # ---------------------------------------------------------------------
+    print("\n17. the AgTrack fence: movetap's new field, in the SUITE")
+    # movetap has no test file of its own -- §9 above reads its SOURCE, which
+    # cannot catch a wrong NUMBER. The fence constants added on 2026-08-20 are
+    # displacements into a live process: reading the wrong dword there does not
+    # error, it returns 0, and 0 is the value that means "the fence is shut".
+    # So the checks that re-derive those constants from the pinned image, and
+    # the ones that prove a failed read cannot mint that 0, are run HERE rather
+    # than being left in an operator-only `--selftest` nothing in the suite
+    # invokes. `movetap.py` imports `keytap`, which is pure ctypes and loads on
+    # any Windows box, so this costs no dependency.
+    sys.path.insert(0, HERE)
+    import movetap                                            # noqa: E402
+
+    def quiet(fn):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            n = fn()
+        return n, buf.getvalue()
+
+    nb, out_b = quiet(movetap._selftest_fence_bytes)
+    if "[SKIP]" in out_b:
+        LEDGER.skip("fence offsets vs the binary",
+                    "this machine has no pinned client snapshot in the vault")
+    else:
+        check(nb == 0,
+              f"every fence displacement re-derives from build 38797's own "
+              f"bytes ({out_b.count('[PASS]')} instruction(s))",
+              "each expected encoding is BUILT FROM the module constant, so a "
+              "wrong constant produces bytes that are not at that VA -- "
+              "comparing a literal against a copy of itself would pass forever")
+        # CONTROL: the derivation must actually bite. Move one constant by one
+        # dword and the same section has to go red, or it is decoration.
+        old = movetap.T_STATE_ARRAY
+        movetap.T_STATE_ARRAY = old + 4
+        nbad, _ = quiet(movetap._selftest_fence_bytes)
+        movetap.T_STATE_ARRAY = old
+        check(nbad > 0,
+              f"and a one-dword slip in T_STATE_ARRAY turns it red "
+              f"({nbad} failure(s))",
+              "a check that cannot fail is not a check, and this one guards a "
+              "number whose wrong value reads as a finding")
+
+    nr, out_r = quiet(movetap._selftest_fence_refuses)
+    check(nr == 0,
+          f"and every way of failing to read the fence lands on \"unread:*\" "
+          f"({out_r.count('[PASS]')} case(s))",
+          "0 is a REAL answer here -- it means the fence is shut and the snap "
+          "test never runs -- so a failed read that returned 0, None or False "
+          "would be indistinguishable from the finding")
+
+    orig = movetap._fence_blank
+    movetap._fence_blank = lambda why: dict(
+        orig(why), fence_state="shut", gate_reach="shut:apply", fence_raw=0)
+    nlie, _ = quiet(movetap._selftest_fence_refuses)
+    movetap._fence_blank = orig
+    check(nlie > 0,
+          f"CONTROL: a failure path rewritten to answer \"shut\" with a raw 0 "
+          f"is caught ({nlie} failure(s))",
+          "this is the exact defect the sentinel design exists to prevent, so "
+          "the check for it must be shown to fire")
+
+    orig_f = movetap.agtrack_fence
+    movetap.agtrack_fence = lambda read, agbase, aid, blk: orig(  # only refuses
+        "stub")
+    nstub, _ = quiet(movetap._selftest_fence_refuses)
+    movetap.agtrack_fence = orig_f
+    check(nstub > 0,
+          f"and CONTROL the other way: a stub that ONLY ever refuses is caught "
+          f"too ({nstub} failure(s))",
+          "otherwise the refusal checks above would be satisfied by a reader "
+          "that never populates the field at all")
+
+    nv, out_v = quiet(movetap._selftest_fence_verdict)
+    check(nv == 0,
+          f"and the run-level verdict refuses a bad denominator and an aliased "
+          f"fence ({out_v.count('[PASS]')} case(s))",
+          "a fence flipping near the reader's own rate cannot be polled, and "
+          "that refusal is what decides between this route and the hook")
 
     return LEDGER.verdict()
 
