@@ -1404,10 +1404,21 @@ buff opcodes named (63–68). The `charCtx` container family closes at seven.
    decode wants a home both can reach. **This pays the day a SECOND bonus-bearing
    item exists** — a headpiece (543 is literally the headpiece form) or a rune (542)
    — which is also when the right home stops being a guess.
-2. **What reads 617?** Not `ItemName`, not `ItCliApi`, and nothing in `.text` names
-   it. It is on 420 real items with `arg` always 0 and `arg2` in {0..6, 143, 144},
-   correlating loosely with the damage type. Candidates the arc did not test: a
-   server-side field the client only echoes, or a consumer reached indirectly.
+2. ~~**What reads 617?**~~ **ANSWERED 2026-08-20 as far as a client read can answer
+   it** (`b8d894a`, studies/itemmods §4.1/§4.3). **Nothing does.** The negative now
+   rests on a bounded total rather than an empty search: to isolate bits 29-20 x86
+   leaves two ways, both fixed byte sequences, and there are **sixteen** such sites
+   in the whole image, naming eleven identifiers between them — the same sixteen on
+   all three builds, with 633 among them and 617 never. The four non-immediate
+   routes are closed (accessor call sites, vtable, a second dispatch table, a mask
+   keeping bit 19), and **item creation `memcpy`s the array verbatim** — 66
+   functions reachable from `0x0161`'s handler, one touches the modifiers, and it
+   interprets one identifier out of them. The positive half: `arg2` is a
+   per-`model_id` constant, **71/71**, with the file id as the control that FAILS —
+   which corrected the study's "29 of 34 item model ids", a file-id result under the
+   model id's name. What remains is not a gap in the search but that **ArenaNet's
+   server is not readable from here**; naming the field would need their server, a
+   build we do not hold, or a campaign varying one skin at a time.
 3. **542 cannot be composed.** Its three-bit prefix has no corpus witness — no
    capture of ours carries one — so `attribute_bonus_word()` ships the stacking form
    only and refuses to invent the other.
