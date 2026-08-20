@@ -2039,9 +2039,22 @@ ranks). One warning if anyone arms it: reply with the **whole** triple or none o
 client re-stacks unacknowledged predictions on top of fresh authoritative values, so a
 half-arm is worse than the drop.
 
-Still open here, in cost order: what `0x0093`'s value dword is (now with "not the upkeep
-icon's gate" measured); giving the server a real attribute state so the three arms can
-land.
+**`0x0093` IS NAMED — §33, the container family's last open field.** Its value dword is a
+**MINION COUNT**, and the client says so in words rather than by position: the reader
+passes it to TextApi as `%num1%` of string 50499 *'You are currently controlling %num1%
+minion[s].'* (or 50498 with the agent's own name as `%str1%`), with two more GmEffect
+readers agreeing — one rendering it as a number, one gating on non-zero. That **refutes**
+§31.3's band-level "upkeep/maintained-effect value" RECONSTRUCTION, and it **narrows**
+§30.4 rather than contradicting it: no message declares which agents ARE minions (the
+roster panel decides that by its own flag test), but this one declares HOW MANY one agent
+has — so that section's heading, "there is no minion message", is corrected in place.
+Filed `AGENT_MINION_COUNT`, **medium** on the `PET_*` precedent: the meaning is measured
+from ArenaNet's own template, but there are **zero witnesses in 114,985 live s2c messages**
+across 13 captures and we have never sent one.
+
+Still open here, in cost order: run the `minion_count` probe (written, prediction stated —
+send 7, the sentence must read seven; send 0, the indicator must vanish) to raise that name
+to high; giving the server a real attribute state so the three c2s arms can land.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

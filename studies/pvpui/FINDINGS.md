@@ -2452,7 +2452,11 @@ own**. Eight dwords end at `+0x43`, so a count above 8 walks over the disabled b
 and the equipment block. The wire descriptor caps it at 8, so a conformant sender cannot
 trip it — ours must respect that cap deliberately rather than by luck.
 
-### 30.4 The minion answer: there is no minion message, and PtMinionRoster is not in this family
+### 30.4 The minion answer: no minion message declares MEMBERSHIP, and PtMinionRoster is not in this family
+
+*(Heading corrected 2026-08-19 by §33. It read "there is no minion message", which was one
+generalisation too far: `0x0093` is a minion message carrying a per-agent COUNT. Everything
+below is about MEMBERSHIP -- which agents ARE minions -- and stands unchanged.)*
 
 The standing guess that `PtMinionRoster.cpp` consumes one of the unread containers is
 **REFUTED by reading its consumer.** Both of its list accessors resolve the TLS root and
@@ -2483,7 +2487,7 @@ sweep walks inline that this section did not know about. Full record: §31.)*
 | `+0xAC` | per-agent ATTRIBUTES (`attribState`, ChCliAttrib) | `0x0036`..`0x003B` — six, contiguous | read (§31.1) |
 | `+0x508` | per-agent BUFFS (`BuffState`, ChCliBuff) | `0x003F`..`0x0044` — six, contiguous | read (§31.2) |
 | `+0x584` / `+0x594` | hero activation / hero pool | `0x0072`, `0x0074`, `0x0073` | read (§29) |
-| `+0x5BC` | per-agent effect-value list (GmEffect's feed) | `0x0093` | read (§31.3) |
+| `+0x5BC` | per-agent MINION COUNT (GmEffect's feed) | `0x0093` | read (§31.3, named §33) |
 | `+0x6AC` | pets | `0x00B2`/`B3`/`B4`, mirrored by `0x0062`/`0x0063` | read (§28.12) |
 | `+0x6BC` | per-agent professions | `0x00B7`, `0x00B6` | read (§30.1) |
 | `+0x6F0` | per-agent skill bar (`hotKeyState`) | `0x0064`, `0x0065` | read (§30.2) |
@@ -2686,7 +2690,10 @@ on `GmEffect:3039` `m_agentId` and pushes that exact field as the getter's key. 
 keyed by the field ArenaNet calls `m_agentId`, consumed by GmEffect" is therefore
 OBSERVED; **"upkeep/maintained-effect value" is band-level RECONSTRUCTION** — the
 `CTL_EFFECT_UPKEEP` assert the tracer cited sits ~0x650 bytes and several functions away
-from the caller it was attributed to. *(Sharpened by the `buff_side` probe the same day,
+from the caller it was attributed to. **REFUTED and replaced 2026-08-19, §33: the value is a
+MINION COUNT**, named by the client's own display template (`'You are currently controlling
+%num1% minion[s].'`) with the value as `%num1%`. Being wary of the band-level guess was
+right — the guess was wrong. *(Sharpened by the `buff_side` probe the same day,
 skillcast §14.8: the upkeep monitor's icon draws from the SOURCE list alone with no
 `0x0093` sent, so whatever this table feeds GmEffect, it does not gate that icon.)*
 That mis-attribution is the `asserts.py --at`
@@ -2918,3 +2925,96 @@ Named in `schema/overrides.json`: c2s `ATTRIBUTE_DECREASE` / `ATTRIBUTE_INCREASE
 and now measured), and s2c `ATTRIBUTE_SPEND_ACK` (0x36), `ATTRIBUTE_POINTS_AVAILABLE`
 (0x38), `ATTRIBUTE_POINTS_TOTAL` (0x39, high — two independent arcs) and
 `AGENT_UPDATE_ATTRIBUTE` (0x3B).
+
+## 33. `0x0093`'s value dword is a MINION COUNT — the client's own sentence says so (2026-08-19)
+
+§31.3 left this as the container family's last open field: `charCtx+0x5BC` holds 8-byte
+`{agentId, value}` entries, `0x0093` writes them, GmEffect reads them, and what the value
+*is* was **NOT FOUND**, with "upkeep/maintained-effect value" recorded as band-level
+RECONSTRUCTION. **That RECONSTRUCTION is REFUTED and the field is now OBSERVED.**
+
+### 33.1 The answer, and how it was reached without guessing
+
+The corpus could not help: **0 of 114,985 s2c messages across 13 live captures** carry
+`0x0093` (one 14th capture has no `wire.jsonl` and could not be read — a floor, not a
+census). So the meaning had to come from the consumer, and the consumer states it in
+words. Caller `0x00521520` reads the value for an agent and hands it to **TextApi**
+(`0x007C9410`) as the numeric parameter of one of two templates, chosen by whether that
+agent is the local player:
+
+```
+value = GetMinionCount(agentId)             ; getter 0x0080E660, Find -> [entry+4] or 0
+if (agentId == LocalAgentId())              ; 0x0080D3E0
+     TextApi(50499, num1 = value)
+else TextApi(50498, num1 = value, str1 = AgentName(agentId))   ; 0x0080D120
+```
+
+Resolved from the owner's own archive, exactly the two ids the code pushes:
+
+```
+50499 (0xC543)  'You are currently controlling %num1% minion[s].'
+50498 (0xC542)  '%str1% is currently controlling %num1% minion[s].'
+```
+
+> **`0x0093` is `[agent_id, u32 minionCount]`: the number of minions that agent is
+> currently controlling.** The value is the template's `%num1%`, and the branch that
+> substitutes `%str1%` passes that same agent's NAME — so both the quantity and its owner
+> are named by ArenaNet's own display text rather than inferred from position.
+
+This is the "commit the id, resolve the string at run time" pattern working as evidence:
+two single resolutions cited for a specific claim, which the provenance gate permits.
+
+### 33.2 The other two consumers agree, and one of them is a numeric display
+
+All three readers of the getter sit in `GmEffect.cpp` and treat the value consistently:
+
+| reader | what it does with the value |
+|---|---|
+| `0x00521520` | renders it as `%num1%` in the two minion sentences above |
+| `0x005244F0` | non-zero -> formats it through TextApi into a UI element and sets frame code **7**; zero -> sets frame code **8** and renders no number |
+| `0x005246E0` | uses it only as a **non-zero gate** (asserting `GmEffect:3039 m_agentId` first), then acts on the AGENT id, not the value |
+
+Two of the three therefore treat "0" as *"this agent controls no minions"* — which is
+also what the getter returns for an agent that is simply absent from the array, making
+absence and zero deliberately indistinguishable.
+
+### 33.3 The wiring, end to end
+
+```
+s2c 0x0093 [agent_id, u32]   handler 0x0091EB50 -> worker 0x00812060
+    -> upserts {agent, value} into the array at charCtx[+0x2C]+0x5BC
+    -> posts frame 0x10000046
+       subscribers: 0x0052349F, 0x005239A5  (both GmEffect)
+    readers: getter 0x0080E660 -> the three consumers above
+    removal: the 0x00F8 despawn sweep clears the agent's entry (§31.3)
+```
+
+A single POST and two SUBSCRIBEs are the only three `push 0x10000046` sites in the image,
+so the event's producer/consumer set is closed.
+
+### 33.4 What this does and does not do to §30.4
+
+§30.4 answered a *membership* question — "which agents ARE minions" — and its body claim
+stands untouched: `PtMinionRoster` reads the PARTY client at `[root+0x4C]`, and a row's
+minion-ness is a monster-definition **flag test the panel performs itself**, with no
+declaration opcode. Nothing here contradicts that.
+
+**But that section's HEADING — "there is no minion message" — is one generalisation too
+far, and it is corrected in place.** There *is* a minion message; it carries a COUNT, not
+a membership, and it feeds the effects monitor rather than the roster panel. Membership
+and cardinality are different facts with different mechanisms, and the heading collapsed
+them. The honest form: *no minion message declares which agents are minions; `0x0093`
+declares how many one agent has.*
+
+### 33.5 Confidence, and the one cheap thing that would raise it
+
+Filed **medium**, and the reason is the same one the `PET_*` rows carry: the meaning is
+measured from the client's own display template, which is about as direct as static
+evidence gets — but the opcode has **zero witnesses in the entire live corpus** and this
+repo has never sent one. Nothing has been observed to *move* on a screen.
+
+The upgrade is one caged send with a distinctive value, and the probe is written
+(`minion_count`, prediction stated first): send `0x0093 [player agent, 7]` and the effects
+monitor must show a minion indicator whose text reads **"You are currently controlling 7
+minion[s]"**; send `0` and it must disappear. A wrong reading fails visibly — if 7 renders
+as anything other than the number seven in that sentence, this section is wrong.
