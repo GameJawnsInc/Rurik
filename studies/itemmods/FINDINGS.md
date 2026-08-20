@@ -81,7 +81,7 @@ vocabulary is recoverable without guessing at any of it:
 | 572 | 2372 `Armor`, 2438 `%str1%: %num1%` | **Armor: 25** |
 | 527 | 2372 `Armor`, 2436 `%str1% +%num1%`, 2476 `vs. %str1% damage` | **Armor +20 (vs. physical damage)** |
 | 580 | 2464 `Holds %num1% items` | **Holds 20 items** |
-| 584 | 2382 `Dmg`, 2441 `%str2% %str1%: %num1%-%num2%` | the damage RANGE |
+| 584 | 2382 `Dmg`, 2441 `%str2% %str1%: %num1%-%num2%` | the damage RANGE — **`arg` is the max, `arg2` the min**, read off `Blunt Dmg: 3-5` on screen (§5.6) |
 | 587 | 2380 `Damage`, 2443 `%str2% %str1%` | the damage TYPE line |
 | 570 | 2376 `Chance`, 2392 `skill recharge`, 2432 `Halves %str1% of spells` | **Halves skill recharge of spells** |
 | 556 / 558 | 2071 `Energy` / 2072 `Energy recovery` | the energy lines |
@@ -379,11 +379,62 @@ it was right: its two words decode to `587` (damage type) and `584 arg 5 arg2 3`
 attribute_bonus_word(19, 1) = 0x21F81301
 ```
 
-That is a one-line change to `modifiers` and it is **not made here**, on purpose:
-543 is the form retail puts on *headpieces*, our item is a hammer, and adding it
-changes what the client draws. It wants a run to confirm the line renders and
-that §34.6's blue effective column still moves — which is a client session, not a
-static read.
+### 5.6 The run: ArenaNet's renderer drew our word
+
+**Applied and run, 2026-08-20, loopback, build 38797.** The hammer's `modifiers`
+became `[0x24B80000, 0xA4880503, 0x21F81301]` — one variable, nothing else touched
+— and the predictions were written down first
+(`vault/captures/harness/20260820T113942`, `…T114403`).
+
+Hovering the equipped weapon:
+
+```
+Starter Hammer
+Blunt Dmg: 3-5
+Hammer Mastery +1 (Stacking)      <- rendered in the client's highlight colour
+Two-handed
+```
+
+> **The client drew `Hammer Mastery +1 (Stacking)` from a dword this repo
+> composed.** OBSERVED. Every field had to be right at once for that line to
+> exist: identifier 543, `arg` = 19 the attribute, `arg2` = 1 the amount, and the
+> **bit-19 prefix** — `0x21F01401`-style composition from the four fields alone
+> would have produced a word for a different identifier. `(Stacking)` is string
+> 2481, exactly what §5.2 read out of 543's handler and the one word that
+> separates it from 542.
+
+**Two more readings confirmed by accident, and neither was the point.** The same
+tooltip renders the item's other two words:
+
+- **`Blunt Dmg: 3-5`** from `584 arg 5 arg2 3` through template 2441
+  `%str2% %str1%: %num1%-%num2%`. So **`arg` is the MAXIMUM and `arg2` the
+  MINIMUM** of a damage range — §2's table said only "the damage RANGE" and could
+  not say which way round. OBSERVED.
+- **`Blunt`** from `587 arg 0`, so damage type 0 is Blunt.
+
+**And the client does NOT double-apply it.** The attribute panel, same build, same
+item:
+
+```
+20     [12] Strength
+11  13 [ 9] Axe Mastery
+ 6   7 [ 7] Hammer Mastery        <- 7, in BLUE
+ 3   4 [ 3] Swordsmanship
+ 1   2 [ 1] Tactics
+```
+
+Base rank 6 (`content/world.toml`) plus the server's one bonus is **7**, not 8. Had
+the client computed effective ranks from equipped gear it would have added the
+modifier word on top of our `0x003A` column and shown 8. It shows 7, so
+[studies/pvpui §34.6](../pvpui/FINDINGS.md)'s model holds: **the panel reads the
+server's effective column and the tooltip reads the item's words, and they are two
+independent paths.** This was worth a run precisely because it could have come out
+the other way.
+
+Two incidental confirmations in that same frame: the chevrons price off the BASE
+(▼6 ▲7 at base 6, which are `s_attribPoints[6]` and `[7]`), and the header reads
+**27 unused points** — 200 lifetime minus the 173 those five ranks cost under
+`attribspend`'s cost model, to the point.
 
 ## 6. The rest of the boundary
 

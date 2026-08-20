@@ -54,9 +54,9 @@ import pinned  # noqa: E402
 # 28, counted from the green run of 2026-08-20 -- set from the run and not
 # from a guess, which is how this file learned the number: 14 was declared,
 # 12 executed, and the ledger refused the run rather than passing it. Sections
-# 6 and 7 took it from 12 to 19 and sections 8-10 to 28; each time the number
-# was read off the run rather than predicted.
-LEDGER = checks.Ledger("item modifiers", floor=28)
+# 6 and 7 took it from 12 to 19 , sections 8-10 to 28, and 11 to 30;
+# each time the number was read off the run rather than predicted.
+LEDGER = checks.Ledger("item modifiers", floor=30)
 
 
 def main():
@@ -367,6 +367,47 @@ def main():
                   f"identifier whose prefix varied would mean they are a "
                   f"payload and the composer is wrong"
                   if not exceptions else f"VARIES: {exceptions[:6]}")
+
+    print("\n11. our own content: the declared bonus and the WORD agree")
+    try:
+        import content as contentmod
+        world = contentmod.load()
+        items = world.rows("item")
+    except Exception as exc:
+        items = None
+        LEDGER.skip(f"content/items.toml is not loadable ({exc}), so the one "
+                    f"guard standing between a declared attribute_bonus and "
+                    f"the modifier word that now says the same thing cannot "
+                    f"run")
+
+    if items is not None:
+        def declared(row):
+            return {(int(a), int(n)) for a, n in row.get("attribute_bonus", [])}
+
+        def encoded(row):
+            return {(b["attribute"], b["amount"])
+                    for b in itemmods.attribute_bonuses(row.get("modifiers", []))
+                    if b["identifier"] in itemmods.ATTRIBUTE_BONUS}
+
+        disagree = [(k, declared(r), encoded(r)) for k, r in items.items()
+                    if declared(r) != encoded(r)]
+        carriers = [k for k, r in items.items() if declared(r) or encoded(r)]
+        LEDGER.ok(carriers and not disagree,
+                  "every item's attribute_bonus matches its modifier words",
+                  f"{len(carriers)} item(s) carry one ({carriers}), 0 "
+                  f"disagreements. Two places now hold the same fact -- the "
+                  f"field drives the server's 0x003B effective column, the "
+                  f"word drives what the CLIENT draws -- and 34.5 of "
+                  f"studies/pvpui is about exactly this shape of bug. This is "
+                  f"the guard that keeps it from being one"
+                  if not disagree else f"DISAGREE: {disagree}")
+        bent = dict(items["starter_hammer"])
+        bent["attribute_bonus"] = [[19, 2]]
+        LEDGER.ok(declared(bent) != encoded(bent),
+                  "CONTROL: bending the declared field to +2 breaks the check",
+                  "a guard that cannot go red is not a guard, and this one "
+                  "exists only because the duplication was introduced on "
+                  "purpose")
 
     return LEDGER.verdict()
 
