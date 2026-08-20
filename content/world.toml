@@ -11,6 +11,20 @@ npc = "hatcher"
 agent_id = 10
 definition = 3
 max_health = 100
+# ARMOUR RATING -- what the damage formula subtracts. OURS, and it has to be a
+# number rather than absent because `2^((SL-AR)/40)` has no meaningful default:
+# leaving it out would silently scale every hit by whatever we picked instead.
+#
+# 60 is chosen because it is the baseline the Isle of the Nameless' own Suits
+# of the Master carry, so our numbers land in the band this repo has actually
+# MEASURED against retail (studies/isle rung 7: AR60 with a 15-22 weapon at
+# rank 13 gives 19..27, and the implementation reproduces that exactly). It is
+# NOT a claim about what a Hatcher has in Guild Wars -- ArenaNet's creature
+# armour is per-creature and nothing here has measured one. A capture of a real
+# fight replaces this, and studies/monsterai section 3.3 is where the same
+# lesson was already paid for on reach: one global number was the wrong SHAPE,
+# not merely the wrong value.
+armor_rating = 60
 # Placed relative to the player's arrival point rather than at an absolute coordinate,
 # because the player's arrival point differs per map and this enemy is meant to be
 # reachable in whichever one is loaded.
