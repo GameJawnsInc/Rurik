@@ -3495,34 +3495,47 @@ def _buff_type_steps(agent_id):
 def _minion_count_steps(agent_id):
     """Is 0x0093's value dword the agent's MINION COUNT?
 
-    studies/pvpui/FINDINGS.md 33 says yes, from the client's own display
-    template: reader 0x00521520 passes the value to TextApi as %num1% of
-    string 50499, 'You are currently controlling %num1% minion[s].' Nothing
-    has ever been observed to move on a screen, because the opcode has ZERO
-    witnesses in 114,985 live s2c messages -- so the reading is static-only
-    and this is what would break it.
+    ANSWERED YES, 2026-08-20 (captures 20260820T081504 and 20260820T082018,
+    studies/pvpui/FINDINGS.md 33.5): 7 drew a minion icon reading 7 with the
+    tooltip 'You are currently controlling 7 minions.', 1 redrew it as
+    '1 minion.' -- template 50499's own [s] plural resolving -- and 0 removed
+    the row. Kept runnable as the calibration for that finding.
 
-    Seven is deliberate: it is not 0, not 1, and not a plausible default, so
-    a sentence reading "7" cannot be a coincidence of some other field.
+    THE BUFF IN STEP 1 IS A DISCRIMINATOR, NOT A PRECONDITION, and the
+    distinction is a correction to this docstring's first version. The bare
+    three-send form works perfectly with no buff at all; a session read the
+    wrong screenshots (hold*.png, which begin AFTER the --walk plan and so
+    after the probe has cleaned up), called it a null, and invented a
+    'the monitor must exist first' mechanism to explain the artifact. What
+    the buff actually buys is the control on step 4: with an icon sent
+    alongside, count 0 must clear the MINION row and leave the buff icon
+    standing, which separates 'the row went' from 'the monitor went'.
+
+    Read w*.png when a --walk is in play. Seven is deliberate: not 0, not 1,
+    not a plausible default, so a sentence reading '7' cannot be a
+    coincidence of some other field.
     """
+    skill = PROBE_BAR_SKILL
     return [
-        Step(2.0, 0x0093, [agent_id, 7],
-             "0x0093: value 7 for the player's own agent",
-             "the effect area above the skill bar, and its tooltip. "
-             "PREDICTION: an indicator appears whose text reads 'You are "
-             "currently controlling 7 minion[s]'. The number SEVEN is the "
-             "whole result -- any other number, or a sentence about "
-             "something other than minions, refutes studies/pvpui 33."),
-        Step(8.0, 0x0093, [agent_id, 1],
-             "0x0093: value 1 -- the singular",
-             "PREDICTION: the same sentence with 1, and the client's own "
-             "'[s]' plural machinery should drop the s. A count that does "
-             "not track this send is the other way this fails."),
-        Step(8.0, 0x0093, [agent_id, 0],
-             "0x0093: value 0",
-             "PREDICTION: the indicator DISAPPEARS. 0x005244F0 picks frame "
-             "code 8 and renders no number when the value is zero, and the "
-             "getter cannot tell 0 from an absent agent."),
+        Step(2.0, 0x0042, [agent_id, skill, 0, 1, _f32(120.0)],
+             "0x0042 first: a buff on our own agent, as the DISCRIMINATOR "
+             "for step 4 (not a precondition -- the bare form works)",
+             "an effect icon appears top-left."),
+        Step(5.0, 0x0093, [agent_id, 7],
+             "0x0093: minion count 7",
+             "OBSERVED 2026-08-20: a minion icon appears to the LEFT of the "
+             "buff icon carrying the number 7, tooltip 'You are currently "
+             "controlling 7 minions.' Any other number refutes pvpui 33."),
+        Step(9.0, 0x0093, [agent_id, 1],
+             "0x0093: minion count 1 -- the singular",
+             "OBSERVED: the same row reading 1, and the tooltip drops the "
+             "s -- 'controlling 1 minion.'"),
+        Step(9.0, 0x0093, [agent_id, 0],
+             "0x0093: minion count 0",
+             "OBSERVED: the minion row disappears and the step-1 buff icon "
+             "STAYS. That contrast is the control."),
+        Step(7.0, 0x0044, [agent_id, 1], "0x0044: drop the buff",
+             "cleanup -- now the effect icon goes too."),
     ]
 
 

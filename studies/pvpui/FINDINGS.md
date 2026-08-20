@@ -2931,7 +2931,8 @@ and now measured), and s2c `ATTRIBUTE_SPEND_ACK` (0x36), `ATTRIBUTE_POINTS_AVAIL
 §31.3 left this as the container family's last open field: `charCtx+0x5BC` holds 8-byte
 `{agentId, value}` entries, `0x0093` writes them, GmEffect reads them, and what the value
 *is* was **NOT FOUND**, with "upkeep/maintained-effect value" recorded as band-level
-RECONSTRUCTION. **That RECONSTRUCTION is REFUTED and the field is now OBSERVED.**
+RECONSTRUCTION. **That RECONSTRUCTION is REFUTED, the field is OBSERVED, and as of 2026-08-20 it is
+CONFIRMED ON A CLIENT (§33.5).**
 
 ### 33.1 The answer, and how it was reached without guessing
 
@@ -3006,15 +3007,66 @@ and cardinality are different facts with different mechanisms, and the heading c
 them. The honest form: *no minion message declares which agents are minions; `0x0093`
 declares how many one agent has.*
 
-### 33.5 Confidence, and the one cheap thing that would raise it
+### 33.5 CONFIRMED ON SCREEN — the client renders the number we send, and the plural with it
 
-Filed **medium**, and the reason is the same one the `PET_*` rows carry: the meaning is
-measured from the client's own display template, which is about as direct as static
-evidence gets — but the opcode has **zero witnesses in the entire live corpus** and this
-repo has never sent one. Nothing has been observed to *move* on a screen.
+**MEASURED 2026-08-20, caged loopback, two runs** (`20260820T081504` bare,
+`20260820T082018` with a buff alongside). Every clause of the prediction held, and the
+readout is the client's own sentence rather than a pixel score:
 
-The upgrade is one caged send with a distinctive value, and the probe is written
-(`minion_count`, prediction stated first): send `0x0093 [player agent, 7]` and the effects
-monitor must show a minion indicator whose text reads **"You are currently controlling 7
-minion[s]"**; send `0` and it must disappear. A wrong reading fails visibly — if 7 renders
-as anything other than the number seven in that sentence, this section is wrong.
+| sent | effects monitor | tooltip |
+|---|---|---|
+| `0x0093 [agent, 7]` | a **minion icon appears**, the number **7** drawn on it | *"You are currently controlling 7 minions."* |
+| `0x0093 [agent, 1]` | same icon, number **1** | *"You are currently controlling 1 minion."* |
+| `0x0093 [agent, 0]` | icon **gone** | — |
+
+**`AGENT_MINION_COUNT` is raised from medium to high.** Three things make this stronger
+than "a number appeared":
+
+- **The number is ours.** 7 was chosen because it is not 0, not 1 and not a plausible
+  default; the client drew exactly 7, then exactly 1 when told 1.
+- **The plural machinery moved with it** — *"7 minions"* against *"1 minion."* That is the
+  `[s]` in template 50499 resolving, which no other field could have driven.
+- **Zero removes the row, and the second run proves the removal is SPECIFIC.** With a buff
+  icon present alongside, `0x0093 [agent, 0]` cleared the minion row and **left the buff
+  icon standing** — so "the row went" is not "the monitor went". That matches the static
+  read exactly: `0x005246E0` fetches the count, returns without creating its child frame
+  when it is 0, and the child-create at `0x00521260` asserts `GmEffect:2985
+  !FrameGetChild(ThisFrame(), effectCode)`.
+
+The icon is a fleshy-creature artwork with the count drawn over it, sitting to the LEFT of
+the buff icons in the same monitor — a sibling row, not a decoration on an existing one.
+
+### 33.6 A method failure worth more than the result: I read the wrong frames and invented a mechanism to explain it
+
+**The first run was called a null, and it was not.** It had already rendered all three
+arms perfectly. `session.py` writes screenshots under **two** names — `w*.png` during the
+`--walk` plan and `hold*.png` during the `--hold` that follows it — and with a 28–36 s
+hover the walk consumes the entire probe schedule, so **every `hold*` frame is taken after
+the probe has finished and cleaned up**. The analysis globbed `hold*`, measured zero
+changed pixels in every HUD region, and reported a clean null.
+
+What makes this worth writing down is what came next: rather than doubting the readout,
+the null got a *mechanism*. A plausible one, built from real disassembly — the minion row
+is a child frame created during a rebuild that walks the agent's buff lists, therefore an
+effects monitor must exist first, therefore a bare `0x0093` has nothing to attach to. A
+second run "confirmed" it by adding a buff and drawing the row. **Both halves were wrong:
+the row needs no buff, and the second run only looked like a fix because it was the first
+one whose frames were read from the right window.** The static reading it was built on is
+still true; the inference stacked on top of it was invention, and it survived because it
+explained an artifact.
+
+Three rules this pays for, all of which already existed in this repo and none of which was
+applied:
+
+- **Anchor frames by timestamp, not by filename glob.** The memory note says exactly this
+  and it was not consulted.
+- **A negative needs a positive control** — and one was *available for free*: the same
+  glob, on the same run, showed no buff icon either in the run that sent a buff. A
+  precondition step that visibly fails to fire is the readout telling you it is broken,
+  and it was read as data instead.
+- **Two failed explanations is the stop-and-study line.** The invented mechanism was the
+  second explanation; the first should have been "check the instrument."
+
+**Harness trap, recorded for the next session: `--walk` and `--shots` do not overlap.**
+`--shots` belongs to the hold, which begins only after the walk plan finishes. To watch a
+probe while hovering, read `w*.png`; to watch it without a walk, `hold*.png` is right.
