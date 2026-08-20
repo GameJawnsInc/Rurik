@@ -1473,7 +1473,7 @@ def player_rank_for_skill(skill_id):
     return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
 
 
-def attribute_columns(ranks=None):
+def attribute_columns(ranks=None, bonuses=None):
     """0x003A's payload: THREE CONTIGUOUS COLUMNS, ids | ranks | ranks.
 
     NOT interleaved triples. This function was `attribute_triples` and emitted
@@ -1526,6 +1526,16 @@ def attribute_columns(ranks=None):
     a character wearing no runes; ours wears none. If a capture ever shows the
     two differing, THIS is the line that was wrong.
 
+    **A CAPTURE DID, AND THE READING WAS RIGHT (2026-08-20).** The corpus holds
+    34 of these messages, and in 26 -- every sighting of one character --
+    column 3 is column 2 PLUS ONE on attribute 20 alone, while 17, 21, 29 and
+    30 stay equal. The gap is 0 or +1 and nothing else across 94 (attribute,
+    sighting) pairs. So SLOT 3 is CONFIRMED as effective-including-bonuses
+    rather than refuted, and the half of that sentence which changed is the
+    other one: ours can wear something now. `bonuses` is how, it defaults to
+    empty, and a caller passing nothing still sends the equal-columns
+    invariant this docstring describes.
+
     Refuses rather than clamping, the same rule `_fraction` follows: every
     bound below is the client's own, and a value outside one is a bug in the
     caller that a clamp would hide.
@@ -1538,7 +1548,7 @@ def attribute_columns(ranks=None):
             f"per column, and AcctTemplate:423 bounds a build template at 16 "
             f"too. More than that needs ceil(N/16) messages, which no real "
             f"character reaches -- primary plus secondary is at most ten.")
-    seen, ids, values = set(), [], []
+    seen, ids, values, effective = set(), [], [], []
     for attrib_id, rank in ranks:
         if not 0 <= attrib_id < CHAR_ATTRIBS:
             raise ValueError(
@@ -1561,11 +1571,15 @@ def attribute_columns(ranks=None):
         seen.add(attrib_id)
         ids.append(attrib_id)
         values.append(rank)
+        # Effective is deliberately NOT bound-checked against
+        # ATTRIBUTE_RANK_MAX: retail sent effective 13 against a spend cap of
+        # 12 in 26 of 26 sightings, so the cap belongs to the base rank alone.
+        effective.append(rank + int((bonuses or {}).get(attrib_id, 0)))
     # The one line the crash was in. Column-major: every id, then every rank,
     # then the third column -- because the client slices ONE flat array at n
     # and 2n, and `+ [a, r, r]` per attribute is the reading that does not
     # survive contact with that.
-    return ids + values + list(values)
+    return ids + values + effective
 
 
 def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
@@ -4195,6 +4209,7 @@ def attribute_state(state):
         attribspend.seed_ranks(row["ranks"],
                                (stored or {}).get("attributes")),
         int(row["points_total"]),
+        bonuses=equipped_attribute_bonuses(),
         primary=SPAWN_PROFESSION,
         # This server spawns with NO secondary (agent_set_profession's own
         # default), so every spendable attribute belongs to the primary. The
@@ -4203,6 +4218,26 @@ def attribute_state(state):
         secondary=0)
     state["attributes"] = st
     return st
+
+
+def equipped_attribute_bonuses():
+    """{attribute: +N} summed over the gear this server actually puts ON.
+
+    ONE PLACE, so a second piece of equipment is one row and one line rather
+    than a search. Today the equipped set is exactly the starter hammer, and
+    it is gated on EQUIP_WEAPON -- which makes `--no-weapon` a real control
+    for this feature rather than only for the attack path: no weapon, no
+    bonus, and 0x003A's two value columns collapse back to equal.
+
+    The BACKPACK is deliberately not consulted. A bought item is declared and
+    placed but not worn, and the client's own reading of these columns is
+    about what the character is WEARING (studies/pvpui 34.6).
+    """
+    bonuses = {}
+    for equipped in ([agents.STARTER_HAMMER] if EQUIP_WEAPON else []):
+        for attribute, amount in equipped.get("attribute_bonus", []):
+            bonuses[int(attribute)] = bonuses.get(int(attribute), 0) + int(amount)
+    return bonuses
 
 
 def persisted_attribute_row(state):
@@ -4259,8 +4294,11 @@ def send_attribute_reply(send, st, agent_id, sequence, attribute):
     # simplification rather than a reading of the wire: live, attribute 20 ran
     # (10,11) and (11,12) while 17 and 21 sat at (8,8) and (10,10), so retail
     # sends them unequal exactly when a rune or weapon is involved.
-    send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE, [agent_id, attribute, rank, rank],
-         f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank})")
+    send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE,
+         [agent_id, attribute, rank, st.effective_of(attribute)],
+         f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank}"
+         + (f" +{st.bonus_of(attribute)} = {st.effective_of(attribute)}"
+            if st.bonus_of(attribute) else "") + ")")
 
 
 def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
@@ -4339,7 +4377,8 @@ def handle_attribute_load(values, send, state, conn_id, rec):
          f"ATTRIBUTE_POINTS_AVAILABLE({st.available} of {st.points_total})")
     for attribute in touched:
         rank = st.rank_of(attribute)
-        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE, [agent_id, attribute, rank, rank],
+        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE,
+             [agent_id, attribute, rank, st.effective_of(attribute)],
              f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {rank})")
     print(f"[c{conn_id}] ATTRIBUTE_LOAD: {len(pairs)} attribute(s) set, "
           f"{st.available} of {st.points_total} point(s) unspent", flush=True)
@@ -8863,7 +8902,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ONE source: attribute_state already resolved the
                         # store-over-content question when it was built.
                         _ranks = sorted(attribute_state(state).ranks.items())
-                        columns = attribute_columns(_ranks)
+                        columns = attribute_columns(
+                            _ranks, attribute_state(state).bonuses)
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, columns],
                              f"AGENT_UPDATE_ATTRIBUTES"

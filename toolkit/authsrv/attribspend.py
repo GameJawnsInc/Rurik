@@ -100,12 +100,15 @@ class AttributeState:
     `handle_item_purchase`: refusals are loud and cost nothing.
     """
 
-    def __init__(self, rules, ranks, points_total, primary, secondary=0):
+    def __init__(self, rules, ranks, points_total, primary, secondary=0,
+                 bonuses=None):
         self.rules = rules
         self.ranks = {int(a): int(r) for a, r in dict(ranks).items()}
         self.points_total = int(points_total)
         self.primary = int(primary)
         self.secondary = int(secondary)
+        # {attribute: +N} from equipped gear. DISPLAY ONLY -- see effective_of.
+        self.bonuses = {int(a): int(b) for a, b in dict(bonuses or {}).items()}
 
     # ---------------------------------------------------------------- state
     @property
@@ -117,7 +120,30 @@ class AttributeState:
         return self.points_total - self.spent
 
     def rank_of(self, attribute):
+        """The BASE rank -- what was paid for, and what everything costs on."""
         return self.ranks.get(int(attribute), 0)
+
+    def bonus_of(self, attribute):
+        return self.bonuses.get(int(attribute), 0)
+
+    def effective_of(self, attribute):
+        """Base plus equipped gear: `0x003B`'s second value, `0x003A`'s third column.
+
+        TWO MEASURED PROPERTIES, both from capture 20260818T132739, and both
+        easy to get wrong in the same direction (by treating the bonus as if
+        it were a rank):
+
+        * IT IS DISPLAY ONLY. The character in that capture wore +1 on
+          attribute 20 and spent its rank from 12 down to 7; every refund
+          closed on `s_attribPoints[BASE]` -- 20 for leaving rank 12, 16 for
+          leaving 11. Had the bonus counted, leaving would have had to price
+          "rank 13", which has no cost at all. So nothing here routes a bonus
+          into `spent`, `available`, or either refusal.
+        * IT IS NOT CAPPED. Retail sent effective 13 against a spend cap of
+          rank 12, in 26 of 26 sightings. Clamping to `rank_max` would produce
+          a number ArenaNet's own server does not send.
+        """
+        return self.rank_of(attribute) + self.bonus_of(attribute)
 
     def owns_profession(self, profession):
         profession = int(profession)
