@@ -1693,8 +1693,11 @@ deliberately OUT of the schema; full ledger and each held-reason at `studies/sms
    The server now ANSWERS `0x0064 CHAT_SEND` (test_dispatch's oldest recorded drop): All-chat
    echo + the observed `/bow` reply, everything else refused loudly (`chatdefs.py`,
    `test_chatdefs.py` — the framing check is byte-identity against ArenaNet's own multi-part
-   advert). Owner's loopback confirmation still worth one run: type `!hello`, predict one All
-   line `<character name>: hello` — verifies our consumer, not the decode.
+   advert). **The loopback confirmation RAN 2026-08-20, all three arms as predicted**
+   (`studies/chat` §10): `!hello` rendered `Test Warrior: hello` off the byte-exact echo,
+   `/bow` rendered its emote line, and the `#test` control rendered NOTHING — which also
+   proves the echo is the only render path (no client-local copy). Chat is DONE as a
+   mechanism; what remains is breadth (other sigils/channels need labelled captures first).
 4. **`0x0147`/`0x0148`** — the equip-set pair, already asserting `ITEM_PLAYER_EQUIP_SETS`
    (`ItCliInv:375`/`:329`); then the player-record pair `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0` and the
    marker `0x008D`.
