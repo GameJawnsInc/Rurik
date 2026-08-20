@@ -517,6 +517,96 @@ def score(pairs, key="live", min_units=JUMP_UNITS, min_speed=None,
     return seps, jumps
 
 
+# --- the fence on 0x006055E0, as read by movetap ----------------------------
+#
+# WHY THIS SECTION EXISTS. The separation statistic below says WHEN the client
+# snaps. It cannot say whether the client's snap TEST was ever consulted: over
+# 623 paired intervals, 0 of 24 snaps began below the test's own 300 u gate and
+# yet 303 of 327 above-threshold intervals did not snap. A gate 92.7% of its
+# population walks past is not deciding anything, and the candidate explanation
+# is that the test is FENCED OFF (`clientControlled`, AgTrack record+0x00) and
+# never evaluated. `movetap` reads that fence per sample as `gate_reach`; this
+# prints it beside the jumps, which is the pairing the question needs.
+#
+# A MOVETAP THAT PREDATES THE FIELD MUST NOT SCORE AS 0%. Every capture in the
+# vault on 2026-08-20 was taken before `gate_reach` existed, so the absent key
+# is the common case and a share computed over it would be a confident lie
+# about a client that was never asked. That is a refusal with a named fix, not
+# a zero.
+FENCE_KEY = "gate_reach"
+
+
+def fence_rows(pairs):
+    """(counts, n_with_field, n_total) over the paired samples' gate_reach."""
+    counts, have = {}, 0
+    for _t, _p, s, _g in pairs:
+        v = s.get(FENCE_KEY)
+        if v is None:
+            continue
+        have += 1
+        counts[v] = counts.get(v, 0) + 1
+    return counts, have, len(pairs)
+
+
+def fence_at_jumps(pairs, jumps):
+    """[(t, step, before_reach, at_reach)] -- the fence either side of a snap.
+
+    `before` is the state at the sample that OPENS the interval, because that
+    is the evaluation the jump came out of; `at` is the state once it landed,
+    and they differ whenever the SNAP branch ran, since the caller calls
+    AgTrack::Clear (0x00605F70) at 0x0060602E on exactly that branch.
+    """
+    by_t = {t: s for t, _p, s, _g in pairs}
+    order = [t for t, _p, _s, _g in pairs]
+    prev = {order[i]: order[i - 1] for i in range(1, len(order))}
+    out = []
+    for row in jumps:
+        t = row[0]
+        s_at = by_t.get(t, {})
+        s_be = by_t.get(prev.get(t), {})
+        out.append((t, row[1], s_be.get(FENCE_KEY), s_at.get(FENCE_KEY)))
+    return out
+
+
+def print_fence(pairs, jumps, indent="   "):
+    """Returns 0 if the fence was actually read, 1 if it refused. Prints either way."""
+    counts, have, total = fence_rows(pairs)
+    print(f"\nTHE FENCE ON THE SNAP TEST (0x006055E0), from movetap's "
+          f"`{FENCE_KEY}`:")
+    if not have:
+        print(f"{indent}REFUSED: none of the {total} paired samples carries "
+              f"`{FENCE_KEY}`. This movetap predates the field -- re-run "
+              f"`python toolkit/clientscan/movetap.py` and pair the new file. "
+              f"Nothing here is a fact about the client, and in particular it "
+              f"is NOT 'the fence was never open'.")
+        return 1
+    if have < total:
+        print(f"{indent}PARTIAL: {have} of {total} paired samples carry the "
+              f"field; the shares below are over {have}, not {total}.")
+    unread = sum(c for k, c in counts.items() if str(k).startswith("unread:"))
+    for k, c in sorted(counts.items(), key=lambda kv: -kv[1]):
+        print(f"{indent}{k:34} {c:6d}  {100.0 * c / have:5.1f}%")
+    if unread * 4 >= have:
+        print(f"{indent}REFUSED: {unread} of {have} could not read the record. "
+              f"No share above is a fact about the client.")
+        return 1
+    rows = fence_at_jumps(pairs, jumps)
+    print(f"{indent}the fence at each hard jump (n={len(rows)}):")
+    if not rows:
+        print(f"{indent}  (no hard jump in this window -- the distribution "
+              f"above is the whole result)")
+        return 0
+    print(f"{indent}  server t     step   fence BEFORE            fence AT")
+    for t, step, be, at in rows:
+        print(f"{indent}  {t:9.3f}  {step:7.1f}   {str(be):22} {str(at)}")
+    tested = sum(1 for _t, _s, be, _a in rows if be == "test-runs")
+    print(f"{indent}  {tested} of {len(rows)} snap(s) began with the test "
+          f"REACHABLE. The rest reached 0x00605840 without any gate being "
+          f"evaluated -- if that count is the large one, the three gates are "
+          f"not what decides our runs and the fence is.")
+    return 0
+
+
 def collapse(jumps):
     if not jumps:
         return None
@@ -1002,6 +1092,53 @@ def selftest():
           f"implied 2,500 u/s -- is still refused "
           f"({len(hard_steps(trows))} of {len(trows)})")
 
+    # --- the fence section: an absent field must REFUSE, never score 0% ------
+    # Every movetap in the vault on 2026-08-20 predates `gate_reach`, so this
+    # is the branch that will actually run first, and a silent 0% would read as
+    # "the fence was never open" -- the finding, minted from a missing key.
+    print("\n7. the fence section refuses a movetap that predates the field")
+    import contextlib
+    import io
+    old = [(1.0, [0.0, 0.0], {"t": 1.0, "live": [0.0, 0.0, 0]}, 0.0),
+           (2.0, [900.0, 0.0], {"t": 2.0, "live": [900.0, 0.0, 0]}, 0.0)]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc_old = print_fence(old, [(2.0, 900.0, 400.0, 20.0, 1.0)])
+    out_old = buf.getvalue()
+    ok = rc_old == 1 and "REFUSED" in out_old and "predates" in out_old
+    bad += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] a movetap with no `{FENCE_KEY}` "
+          f"returns {rc_old} and says so, rather than printing a 0% share")
+
+    new = [(1.0, [0.0, 0.0], {"t": 1.0, "live": [0.0, 0.0, 0],
+                              FENCE_KEY: "shut:apply"}, 0.0),
+           (2.0, [900.0, 0.0], {"t": 2.0, "live": [900.0, 0.0, 0],
+                                FENCE_KEY: "test-runs"}, 0.0)]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc_new = print_fence(new, [(2.0, 900.0, 400.0, 20.0, 1.0)])
+    out_new = buf.getvalue()
+    ok = (rc_new == 0 and "REFUSED" not in out_new
+          and "shut:apply" in out_new and "test-runs" in out_new
+          and "0 of 1 snap(s) began with the test REACHABLE" in out_new)
+    bad += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] and a movetap that HAS the field "
+          f"reports the state either side of the jump -- here the snap began "
+          f"with the fence shut, so no gate was consulted")
+
+    # The mirror: the same fixture with the fence OPEN before the jump must
+    # count it as reachable, or the line above is printing a constant.
+    new2 = [(1.0, [0.0, 0.0], dict(new[0][2], **{FENCE_KEY: "test-runs"}), 0.0),
+            new[1]]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_fence(new2, [(2.0, 900.0, 400.0, 20.0, 1.0)])
+    ok = "1 of 1 snap(s) began with the test REACHABLE" in buf.getvalue()
+    bad += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] flipping the BEFORE state to "
+          f"`test-runs` moves that count to 1 of 1 -- the tally reads the "
+          f"sample and is not a constant")
+
     print("\n" + ("selftest passed" if not bad else f"selftest FAILED ({bad})"))
     return 1 if bad else 0
 
@@ -1118,6 +1255,12 @@ def main():
               f"(collapse {100 * ch[2]:.0f}%)")
     else:
         print("   (none -- no resync in this window)")
+
+    # WAS THE TEST EVEN CONSULTED? Printed before the control because it is not
+    # a claim about the separation statistic -- it is the fence the separation
+    # statistic cannot see, and on a movetap without the field it refuses by
+    # name rather than scoring a zero.
+    print_fence(prs, hard)
 
     # THE CONTROL. Pair every report against a sample from the wrong time. If
     # the collapse survives, it is a fact about the procedure and not about the

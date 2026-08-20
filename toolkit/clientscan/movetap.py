@@ -57,6 +57,68 @@ jump (that names a re-armer, reading B), or the jump lands at a time that is
 neither +0x48 nor any value +0x48 ever held (that means the tick was missed and
 the agent reckoned past its destination, which is a third mechanism).
 
+THE SECOND QUESTION, added 2026-08-20: IS THE SNAP TEST EVEN REACHED?
+----------------------------------------------------------------------------
+The client decides whether to hard-copy the SYNC agent onto the locally
+predicted ASYNC one in 0x006055E0 (return 1 = NO SNAP, 0 = SNAP). Prior
+measurement over 623 paired intervals in 5 movetap x gamesrv pairs: 0 of 24
+snaps began below the 300 u gate, yet 303 of 327 above-threshold intervals
+(92.7%) did NOT snap. A gate that 92.7% of its own population walks past is
+not the thing doing the deciding, so the leading hypothesis is that the test
+is FENCED OFF for long stretches and never evaluated at all.
+
+THE FENCE IS TWO CONDITIONS IN THE CALLER, 0x00605FC0, and both are readable
+from here. Every displacement below was read out of the pinned binary and is
+re-checked against its bytes by `--selftest` section 5:
+
+    00605FCE  mov ebx,[edi+0x10]        agent id            (A_ID)
+    00605FD1  mov edx,[edi+0x24]        world index         (A_WORLD)
+    00605FDA  cmp ebx,[esi+0x28]        id < count          (T_STATE_COUNT)
+    00605FF6  mov eax,[esi+0x20]        the record array    (T_STATE_ARRAY)
+    00605FF9  lea ecx,[ebx*8] / sub ecx,ebx / [eax+ecx*4]   stride 7*4 = 0x1C
+    00606002  cmp dword[record+0x00],0  clientControlled    (S_CONTROLLED)
+    00606009  je  0x00606103            zero -> the test is SKIPPED
+    00606013  cmp edx,1 / je 0x0060610B world 1 -> SKIPPED too
+    0060601C  call 0x006055E0           the test, only here
+
+`esi` is AgTrack, and it is AGBASE + 0x1CC: 0x005FE9CC calls the TLS accessor
+0x0047F660, takes `[eax+8]` (the same AGBASE this file already resolves) and
+0x005FEBE5 adds 0x1CC to it. Two other call sites do the same (0x005FC77E,
+0x00602BB7).
+
+WHAT HAPPENS WHEN THE FENCE IS SHUT IS NOT "NOTHING", and this is the part a
+summary gets wrong. Reading the caller's tail:
+
+    fence open,  world != 1   -> call 0x006055E0; the three gates decide
+    fence open,  world == 1   -> call 0x00605840 unconditionally (no test)
+    fence shut,  world == 0   -> call 0x00605840 unconditionally (no test)
+    fence shut,  world != 0   -> return; nothing happens at all
+
+so `gate_reach` below is a four-valued string, not a boolean.
+
+clientControlled is ONE-SHOT. 0x00605F10 sets record+0x00 to 1 and record+0x04
+to 0 **only when record+0x00 is currently zero** (0x00605F3F/0x00605F43), and
+its two call sites hang off local player input; 0x00605F70 (Clear) zeroes both
+again, and the caller invokes it at 0x0060602E on exactly the SNAP branch.
+
+THE PREDICTION, stated before the run: `fence_state` is "shut" for a majority
+of samples taken while the operator walks under our grants, and the snaps
+movesync finds fall in the "test-runs" minority. That would explain 92.7%
+without any gate doing anything.
+REFUTED IF: `fence_state` reads "test-runs" on essentially every sample -- then
+the fence is not the explanation and the gates are, which contradicts gate 1
+subsuming all 24 snaps. INCONCLUSIVE, AND THE RUN MUST SAY SO, if the state
+flips at a rate approaching the reader's own sample rate: polling at ~12 Hz
+cannot resolve a fence that toggles faster, and that is the one outcome that
+buys the hook route (toolkit/clientscan/trnhook/) its cost. The transition
+count is printed for exactly this reason.
+
+0 IS A MEANINGFUL VALUE HERE -- it means the fence is SHUT -- so a failed read
+must never produce one. `agtrack_fence()` returns a STRING state whose failure
+values live in a different value domain ("unread:<why>") than its two real
+answers ("open"/"shut"), because a `None` or a `0` sentinel is falsy in the
+same way the real answer is and a consumer cannot tell them apart.
+
 READ ONLY, by construction: PROCESS_VM_READ only, via toolkit/harness/keytap.py.
 It never writes, never injects, never launches anything. Start a client with
 `python toolkit/harness/session.py --keep-open` first.
@@ -111,7 +173,32 @@ OFF_SYNC_COUNT = 0xF0      # [AGBASE + 0xF0]               (0x005FD8B2, Array:58
 OFF_WORLD_STRIDE = 0x64    # imul eax,[esi+0x24],0x64      (0x005FF896)
 OFF_WORLD_CLOCK = 0x148    # [AGBASE + world*0x64 + 0x148] (0x005FF89E)
 
+# --- AgTrack, the record that FENCES the snap test at 0x006055E0 -----------
+# `this` = AGBASE + 0x1CC. Read out of build 38797 and re-derived from its own
+# bytes by selftest section 5, which encodes each instruction FROM the constant
+# below rather than comparing two copies of a literal.
+OFF_AGTRACK = 0x1CC        # lea ecx,[edi+0x1cc]           (0x005FC77E)
+T_ARMED_ID = 0x14          # mov [edi+0x14],esi            (0x00605F45)
+T_STATE_ARRAY = 0x20       # mov eax,[esi+0x20]            (0x00605FF6)
+T_STATE_COUNT = 0x28       # cmp ebx,[esi+0x28]            (0x00605FDA)
+STATE_STRIDE = 0x1C        # [ebx*8]-ebx, scaled by 4      (0x00605FF9, 0x006060EB)
+S_CONTROLLED = 0x00        # cmp dword[rec],0              (0x00606002)
+S_HIST_HEAD = 0x04         # the history chain head        (0x00605F4F, 0x006056AF)
+# +0x08..+0x14 is a four-dword point on the chain NODES (0x0060571A..0x0060572F);
+# on the RECORD itself only +0x00 and +0x04 are touched by any code read so far,
+# and +0x18 is UNVERIFIED -- which is why the whole 28 bytes are stored raw
+# rather than named field by field.
+AGTRACK_MAX_AGENTS = 100000   # same sanity bound resolve() uses on the SYNC count
+
+FENCE_OPEN = "open"        # clientControlled != 0 -- 0x006055E0 can be reached
+FENCE_SHUT = "shut"        # clientControlled == 0 -- the test is never evaluated
+
 # --- AgAgent displacements. Stable across 38519/38797/38833. ---------------
+A_ID = 0x10                # the agent id. 0x00605758 uses it to index the
+                           # ASYNC array at AGBASE+0x14C and 0x00605FCE uses it
+                           # to index AgTrack, so it is the id and not a
+                           # look-alike -- and requiring it to equal the id we
+                           # resolved is a check the artifact can refute.
 A_FLAGS = 0x20             # bit 17 IN_WORLD, bit 18 glide-vs-teleport, bit 19 STALE
 A_WORLD = 0x24
 A_STOP = 0x48              # m_timeStopMovement, absolute ms, 0 = not moving
@@ -300,7 +387,101 @@ def resolve(pid, handle, base, verbose=False):
                   "controlled agent -- is the client actually in a map?")
 
 
-def sample(handle, agbase, agent_ptr):
+# The shape every fence read returns, including the ones that read nothing.
+# Every value here is a SENTINEL: the two strings say "not read" in a value
+# domain that cannot collide with "open"/"shut"/"test-runs", and every number
+# is None. A caller that forgets a key gets None, never a plausible zero.
+FENCE_KEYS = ("fence_state", "gate_reach", "fence_raw", "hist_head",
+              "state_record", "agtrack_count", "agtrack_armed",
+              "agent_id_field")
+
+
+def _fence_blank(why):
+    return {"fence_state": "unread:" + why, "gate_reach": "unread:" + why,
+            "fence_raw": None, "hist_head": None, "state_record": None,
+            "agtrack_count": None, "agtrack_armed": None,
+            "agent_id_field": None}
+
+
+def agtrack_fence(read, agbase, aid, agent_block):
+    """Is the snap test at 0x006055E0 REACHED for agent `aid`? Never guesses.
+
+    `read(addr, n) -> bytes|None` so this is drivable from a fake memory in
+    `--selftest`; at run time it is a `keytap.read_handle` closure.
+
+    RETURNS A STRING, and that is the whole design. `clientControlled == 0` is
+    a REAL ANSWER -- it means the fence is shut and the test never runs -- so a
+    failed read that returned 0, or None, or False would be indistinguishable
+    from it to every downstream `if`. The failure values are therefore
+    "unread:<why>", which is truthy, is not equal to "shut", and names what
+    went wrong in the record itself rather than in a log line nobody keeps.
+
+    `gate_reach` is four-valued because the caller's tail is (0x00606009,
+    0x00606013, 0x00606103, 0x0060610B):
+
+        "test-runs"    fence open, world != 1 -- 0x006055E0 decides
+        "world1:apply" fence open, world == 1 -- 0x00605840, no test
+        "shut:apply"   fence shut, world == 0 -- 0x00605840, no test
+        "shut:noop"    fence shut, world != 0 -- the caller returns
+    """
+    if agent_block is None or len(agent_block) < A_WORLD + 4:
+        return _fence_blank("agent-block-short")
+    out = _fence_blank("no-attempt")
+    agent_id = u32(agent_block, A_ID)
+    world = i32(agent_block, A_WORLD)
+    out["agent_id_field"] = agent_id
+    if agent_id != aid:
+        # We resolved `aid` through ChCli and dereferenced the SYNC array with
+        # it; the client indexes AgTrack with the agent's OWN +0x10. If those
+        # disagree we are holding the wrong object, and every field below it
+        # would be a confident number about somebody else.
+        return dict(_fence_blank("agent-id-mismatch"), agent_id_field=agent_id)
+
+    # +0x20, +0x24 and +0x28 in one read -- three cross-process round trips per
+    # poll is the difference between 12 Hz and 10 Hz on this reader.
+    hdr = read(agbase + OFF_AGTRACK + T_STATE_ARRAY, 0x0C)
+    if not hdr or len(hdr) < 0x0C:
+        return dict(_fence_blank("agtrack-header-unreadable"),
+                    agent_id_field=agent_id)
+    array = u32(hdr, 0x00)
+    count = u32(hdr, T_STATE_COUNT - T_STATE_ARRAY)
+    out["agtrack_count"] = count
+    for why, bad in (("state-array-null", not array),
+                     ("state-count-implausible",
+                      not (0 < count < AGTRACK_MAX_AGENTS)),
+                     # ArenaNet's own bound, asserted at 0x00605FDA as
+                     # `index < count` (Array:587). Past it the client would
+                     # fire its own assert, so past it we are not reading
+                     # AgTrack.
+                     ("id-out-of-bounds", aid >= count)):
+        if bad:
+            return dict(_fence_blank(why), agent_id_field=agent_id,
+                        agtrack_count=count)
+
+    # Best effort, and deliberately NOT allowed to void the answer: which agent
+    # the re-armer last touched (0x00605F45). Useful for reading a shut fence,
+    # not load-bearing for it.
+    armed = read(agbase + OFF_AGTRACK + T_ARMED_ID, 4)
+    if armed and len(armed) >= 4:
+        out["agtrack_armed"] = u32(armed)
+
+    rec = read(array + aid * STATE_STRIDE, STATE_STRIDE)
+    if not rec or len(rec) < STATE_STRIDE:
+        return dict(_fence_blank("record-unreadable"), agent_id_field=agent_id,
+                    agtrack_count=count, agtrack_armed=out["agtrack_armed"])
+
+    controlled = u32(rec, S_CONTROLLED)
+    out["state_record"] = rec.hex()      # all 28 bytes: +0x18 is UNVERIFIED and
+    out["fence_raw"] = controlled        # is kept raw rather than given a name
+    out["hist_head"] = u32(rec, S_HIST_HEAD)
+    out["fence_state"] = FENCE_OPEN if controlled else FENCE_SHUT
+    out["gate_reach"] = (("test-runs" if world != 1 else "world1:apply")
+                         if controlled
+                         else ("shut:apply" if world == 0 else "shut:noop"))
+    return out
+
+
+def sample(handle, agbase, agent_ptr, aid=None):
     """One agent snapshot plus the world clock it must be read against."""
     blk = keytap.read_handle(handle, agent_ptr, AGENT_SPAN)
     if not blk or len(blk) < AGENT_SPAN:
@@ -320,8 +501,15 @@ def sample(handle, agbase, agent_ptr):
     # m_point alone is what would have made every ordinary glide look like a
     # teleport -- it only moves when 0x005FF880 runs, which is event-driven.
     dt = (now - updated) * 0.001
+    # THE FENCE. `aid=None` is a caller that did not ask, which is a THIRD
+    # thing again -- not "open", not "shut", not "we tried and failed" -- so it
+    # gets its own reason string rather than being folded into a read error.
+    fence = (agtrack_fence(lambda a, n: keytap.read_handle(handle, a, n),
+                           agbase, aid, blk)
+             if aid is not None else _fence_blank("no-agent-id-passed"))
     return {
         "now": now, "stop": i32(blk, A_STOP), "updated": updated,
+        **fence,
         "flags": flags,
         "in_world": bool(flags & FLAG_IN_WORLD),
         "glide": bool(flags & FLAG_GLIDE),
@@ -380,11 +568,265 @@ def selftest():
     pids = agentprobe.gw_pids()
     print(f"   {'yes, pid(s) ' + str(pids) if pids else 'no Gw.exe running -- '
           'start one with session.py --keep-open to go further'}")
+
+    bad += _selftest_fence_bytes()
+    bad += _selftest_fence_refuses()
+    bad += _selftest_fence_verdict()
+
     print("\nselftest " + ("FAILED" if bad else "passed"))
     return 1 if bad else 0
 
 
-def calibrate(handle, agbase, ptr, reads=40):
+# --------------------------------------------------------------------------
+# 5. THE FENCE OFFSETS, RE-DERIVED FROM ARENANET'S OWN BYTES.
+#
+# Sections 1-3 ask the source about itself, which cannot catch a wrong NUMBER:
+# every constant this file added on 2026-08-20 would pass all three while
+# pointing at the wrong dword, and reading the wrong dword here does not
+# error -- it returns a confident 0, which is the answer that means "the fence
+# is shut". So each instruction below is ENCODED FROM the module constant and
+# then matched against the pinned image. Change `T_STATE_ARRAY` to 0x24 and the
+# expected bytes become `8b 46 24`, which is not what sits at 0x00605FF6, and
+# this section goes red. Comparing a literal to a copy of itself would not.
+#
+# Stdlib only: the patterns are fixed, so no disassembler is needed and the
+# bare-machine rule that governs asserts.py / msgshape.py is respected here too.
+# --------------------------------------------------------------------------
+IMAGE_BASE_PE32 = 0x00400000
+
+
+def _pe_sections(buf):
+    pe = struct.unpack_from("<I", buf, 0x3C)[0]
+    nsec = struct.unpack_from("<H", buf, pe + 6)[0]
+    optsz = struct.unpack_from("<H", buf, pe + 20)[0]
+    imgbase = struct.unpack_from("<I", buf, pe + 24 + 28)[0]
+    tbl = pe + 24 + optsz
+    out = []
+    for i in range(nsec):
+        o = tbl + 40 * i
+        vsz, va, rsz, raw = struct.unpack_from("<IIII", buf, o + 8)
+        out.append((imgbase + va, max(vsz, rsz), raw))
+    return imgbase, out
+
+
+def _bytes_at(buf, secs, va, n):
+    for sva, sz, raw in secs:
+        if sva <= va < sva + sz:
+            return buf[raw + (va - sva): raw + (va - sva) + n]
+    return b""
+
+
+def _modrm_disp(op, modrm_reg_bits, base_reg, disp):
+    """`op /r [base+disp]` the way MSVC emits it: disp8 under 0x80, else disp32."""
+    if disp < 0x80:
+        return bytes([op, 0x40 | modrm_reg_bits | base_reg, disp])
+    return bytes([op, 0x80 | modrm_reg_bits | base_reg]) + struct.pack("<I", disp)
+
+
+def _selftest_fence_bytes():
+    print("\n5. the AgTrack fence offsets, re-derived from the pinned binary")
+    try:
+        path, why = pinned.find()
+    except SystemExit as e:
+        print(f"   [SKIP] {e}")
+        print("   this section proves nothing on a machine with no vault "
+              "snapshot; it is NOT counted as a pass")
+        return 0
+    buf = open(path, "rb").read()
+    imgbase, secs = _pe_sections(buf)
+    if imgbase != IMAGE_BASE_PE32:
+        print(f"   [FAIL] image base 0x{imgbase:08X}, and every VA below is "
+              f"absolute for 0x{IMAGE_BASE_PE32:08X}")
+        return 1
+    print(f"   against {os.path.basename(os.path.dirname(path))}/Gw.exe -- {why}")
+
+    # (constant name, VA, expected bytes BUILT FROM the constant, what it means)
+    ebx, esi, edi, eax = 3, 6, 7, 0
+    cases = [
+        ("A_ID", 0x00605FCE, _modrm_disp(0x8B, ebx << 3, edi, A_ID),
+         "mov ebx,[edi+id] -- the agent id the client indexes AgTrack with"),
+        ("A_WORLD", 0x00605FD1, _modrm_disp(0x8B, 2 << 3, edi, A_WORLD),
+         "mov edx,[edi+world] -- the other half of the fence"),
+        ("T_STATE_COUNT", 0x00605FDA, _modrm_disp(0x3B, ebx << 3, esi,
+                                                  T_STATE_COUNT),
+         "cmp ebx,[esi+count] -- ArenaNet's own id<count bound"),
+        ("T_STATE_ARRAY", 0x00605FF6, _modrm_disp(0x8B, eax << 3, esi,
+                                                  T_STATE_ARRAY),
+         "mov eax,[esi+array] -- the record array"),
+        ("T_ARMED_ID", 0x00605F45, _modrm_disp(0x89, esi << 3, edi, T_ARMED_ID),
+         "mov [edi+armed],esi -- the id the re-armer last touched"),
+        ("S_HIST_HEAD", 0x00605F4F,
+         b"\xc7\x44\x88" + bytes([S_HIST_HEAD]) + b"\x00\x00\x00\x00",
+         "mov dword[record+head],0 -- the chain the re-armer resets"),
+        ("OFF_AGTRACK", 0x005FC77E,
+         b"\x8d\x8f" + struct.pack("<I", OFF_AGTRACK),
+         "lea ecx,[edi+0x1CC] where edi is [ctx+8], i.e. AGBASE"),
+        ("OFF_AGBASE", 0x005FE9D2, _modrm_disp(0x8B, 1 << 3, eax, OFF_AGBASE),
+         "mov ecx,[eax+8] straight out of the TLS accessor 0x0047F660"),
+        # mod=00 IS the proof the field sits at +0x00: any other displacement
+        # would be encoded, and encoding it is what this line does.
+        ("S_CONTROLLED", 0x00606002,
+         (b"\x83\x3c\x88\x00" if S_CONTROLLED == 0
+          else b"\x83\x7c\x88" + bytes([S_CONTROLLED]) + b"\x00"),
+         "cmp dword[array+id*4+ctl],0 -- clientControlled, the fence itself"),
+        ("STATE_STRIDE", 0x006060EB, b"\x83\xc3" + bytes([STATE_STRIDE]),
+         "add ebx,stride -- the caller's own walk of the same array"),
+    ]
+    n = 0
+    for name, va, want, meaning in cases:
+        got = _bytes_at(buf, secs, va, len(want))
+        ok = got == want
+        n += not ok
+        print(f"   [{'PASS' if ok else 'FAIL'}] {name:14} 0x{va:08X} "
+              f"{want.hex():<18} {'' if ok else 'GOT ' + got.hex() + '  '}"
+              f"{meaning}")
+
+    # The stride is a product, not a displacement, so it gets its own arithmetic
+    # check against the two instructions that build it.
+    lea8 = _bytes_at(buf, secs, 0x00605FF9, 7) == b"\x8d\x0c\xdd\x00\x00\x00\x00"
+    sub1 = _bytes_at(buf, secs, 0x00606000, 2) == b"\x2b\xcb"
+    ok = lea8 and sub1 and STATE_STRIDE == (8 - 1) * 4
+    n += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] STATE_STRIDE   0x00605FF9 "
+          f"lea ecx,[ebx*8] then sub ecx,ebx, scaled by 4 in the SIB: "
+          f"(8-1)*4 = {(8 - 1) * 4}, constant says {STATE_STRIDE}")
+    return n
+
+
+# --------------------------------------------------------------------------
+# 6. THE REFUSALS. 0 MEANS "THE FENCE IS SHUT", so every way of failing to read
+# it must land somewhere a consumer cannot confuse with that.
+#
+# Driven off a FAKE memory rather than a client, so it runs on a bare machine
+# and so each failure can actually be provoked -- a null array pointer and an
+# out-of-bounds id do not occur on demand in a live process, which is precisely
+# why they would otherwise never be tested.
+# --------------------------------------------------------------------------
+def _fake_agent(agent_id, world=0):
+    b = bytearray(AGENT_SPAN)
+    struct.pack_into("<I", b, A_ID, agent_id)
+    struct.pack_into("<i", b, A_WORLD, world)
+    return bytes(b)
+
+
+def _selftest_fence_refuses():
+    print("\n6. the fence read REFUSES rather than returning a plausible 0")
+    ARRAY, AG = 0x0A000000, 0x10000000
+
+    def mem(array_ptr, count, record):
+        def read(addr, n):
+            if addr == AG + OFF_AGTRACK + T_STATE_ARRAY and n == 0x0C:
+                return struct.pack("<III", array_ptr, 0, count)
+            if addr == AG + OFF_AGTRACK + T_ARMED_ID and n == 4:
+                return struct.pack("<I", 7)
+            if record is not None and addr == array_ptr + 7 * STATE_STRIDE:
+                return record[:n]
+            return None
+        return read
+
+    open_rec = struct.pack("<II", 1, 0xDEADBEEF) + bytes(STATE_STRIDE - 8)
+    shut_rec = struct.pack("<II", 0, 0) + bytes(STATE_STRIDE - 8)
+    cases = [
+        ("open fence reads open", mem(ARRAY, 64, open_rec), _fake_agent(7),
+         "open", "test-runs", 1),
+        ("shut fence reads shut -- a REAL 0, and it must survive",
+         mem(ARRAY, 64, shut_rec), _fake_agent(7), "shut", "shut:apply", 0),
+        ("world 1 skips the test even with the fence open",
+         mem(ARRAY, 64, open_rec), _fake_agent(7, world=1), "open",
+         "world1:apply", 1),
+        ("shut fence in a non-zero world is a NO-OP, not an apply",
+         mem(ARRAY, 64, shut_rec), _fake_agent(7, world=2), "shut",
+         "shut:noop", 0),
+        ("null record array", mem(0, 64, open_rec), _fake_agent(7),
+         "unread:state-array-null", "unread:state-array-null", None),
+        ("id out of bounds", mem(ARRAY, 3, open_rec), _fake_agent(7),
+         "unread:id-out-of-bounds", "unread:id-out-of-bounds", None),
+        ("record read fails", mem(ARRAY, 64, None), _fake_agent(7),
+         "unread:record-unreadable", "unread:record-unreadable", None),
+        ("AgTrack header read fails", lambda a, n: None, _fake_agent(7),
+         "unread:agtrack-header-unreadable",
+         "unread:agtrack-header-unreadable", None),
+        ("the agent's own id disagrees with the one we resolved",
+         mem(ARRAY, 64, open_rec), _fake_agent(9),
+         "unread:agent-id-mismatch", "unread:agent-id-mismatch", None),
+        ("implausible count", mem(ARRAY, 1 << 30, open_rec), _fake_agent(7),
+         "unread:state-count-implausible",
+         "unread:state-count-implausible", None),
+        ("a short agent block", mem(ARRAY, 64, open_rec), bytes(4),
+         "unread:agent-block-short", "unread:agent-block-short", None),
+    ]
+    n = 0
+    for what, read, blk, want_state, want_reach, want_raw in cases:
+        r = agtrack_fence(read, AG, 7, blk)
+        ok = (r["fence_state"] == want_state and r["gate_reach"] == want_reach
+              and r["fence_raw"] == want_raw
+              and set(r) == set(FENCE_KEYS))
+        n += not ok
+        print(f"   [{'PASS' if ok else 'FAIL'}] {what}\n"
+              f"          -> {r['fence_state']} / {r['gate_reach']} / "
+              f"raw={r['fence_raw']!r}"
+              + ("" if ok else f"   WANTED {want_state} / {want_reach} / "
+                               f"raw={want_raw!r}"))
+
+    # The one that matters most, stated as its own assertion rather than left
+    # implicit in the table: no failure mode may produce the string that means
+    # "shut", and no failure mode may produce a raw 0.
+    fails = [agtrack_fence(read, AG, 7, blk)
+             for what, read, blk, s, g, raw in cases if raw is None]
+    ok = all(f["fence_state"].startswith("unread:") and f["fence_raw"] is None
+             and f["gate_reach"] != "shut:apply" for f in fails)
+    n += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] none of the {len(fails)} failure "
+          f"modes returns \"shut\" or a raw 0 -- 0 is the answer that means the "
+          f"fence is SHUT, so a failed read that produced one would be read as "
+          f"the finding")
+
+    # And the mirror: a healthy read must actually POPULATE the field. A
+    # selftest that only proves the refusals is one a stub returning
+    # "unread:everything" would pass.
+    good = agtrack_fence(mem(ARRAY, 64, open_rec), AG, 7, _fake_agent(7))
+    ok = (good["fence_raw"] == 1 and good["hist_head"] == 0xDEADBEEF
+          and good["state_record"] == open_rec.hex()
+          and good["agtrack_count"] == 64 and good["agtrack_armed"] == 7
+          and good["agent_id_field"] == 7)
+    n += not ok
+    print(f"   [{'PASS' if ok else 'FAIL'}] a healthy read populates every "
+          f"field: raw={good['fence_raw']!r} head={good['hist_head']!r} "
+          f"count={good['agtrack_count']!r} armed={good['agtrack_armed']!r} "
+          f"record={(good['state_record'] or '')[:16]}... "
+          f"-- a stub that only ever refused would fail here")
+    return n
+
+
+def _selftest_fence_verdict():
+    """7. the summary REFUSES a bad denominator and an aliased fence."""
+    print("\n7. the run-level fence verdict can go red")
+    import contextlib
+    import io
+    cases = [
+        ("a clean run passes", {"shut:apply": 800, "test-runs": 200}, 4, 0),
+        ("nothing read at all", {}, 0, 1),
+        ("a quarter of samples unread refuses the shares",
+         {"shut:apply": 700, "unread:record-unreadable": 300}, 4, 1),
+        ("a fence flipping near the sample rate refuses",
+         {"shut:apply": 500, "test-runs": 500}, 260, 1),
+        ("just under both bars still passes",
+         {"shut:apply": 760, "unread:record-unreadable": 240}, 240, 0),
+    ]
+    bad = 0
+    for what, reach, flips, want in cases:
+        n = sum(reach.values())
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = fence_verdict(reach, flips, n or 1, 12.0)
+        ok = got == want
+        bad += not ok
+        print(f"   [{'PASS' if ok else 'FAIL'}] {what}: returned {got}, "
+              f"wanted {want}")
+    return bad
+
+
+def calibrate(handle, agbase, ptr, aid=None, reads=40):
     """How fast can this reader ACTUALLY sample? Measured, before the run.
 
     WHY THIS EXISTS. The floor used to be `seconds * hz * 0.5` -- half the
@@ -402,10 +844,14 @@ def calibrate(handle, agbase, ptr, reads=40):
     it. A run that then samples at half its own demonstrated capability really
     did stall, and that is a finding.
     """
+    # Calibrated WITH the fence read, because the floor it sets is scored
+    # against a loop that does one. Measuring a cheaper sample than the run
+    # performs would set a floor the run cannot meet -- the exact defect this
+    # function was written to fix, from the other side.
     t0 = time.perf_counter()
     got = 0
     for _ in range(reads):
-        if sample(handle, agbase, ptr) is not None:
+        if sample(handle, agbase, ptr, aid) is not None:
             got += 1
     dt = time.perf_counter() - t0
     if dt <= 0 or got == 0:
@@ -447,6 +893,19 @@ def main():
     print("  re-armer), or the jump lands at a time +0x48 never held (the tick was")
     print("  missed and the agent reckoned past its destination).\n")
 
+    print("SECOND PREDICTION, for the fence on the snap test at 0x006055E0:")
+    print("  clientControlled (AgTrack record+0x00) is ZERO for a majority of")
+    print("  samples taken while the operator walks under our grants, so the")
+    print("  test is never evaluated -- which would explain 303 of 327")
+    print("  above-threshold intervals not snapping without any gate acting.")
+    print("REFUTED IF: gate_reach reads \"test-runs\" on essentially every sample.")
+    print("  Then the fence is not the explanation and the gates are, which")
+    print("  contradicts gate 1 subsuming all 24 observed snaps.")
+    print("INCONCLUSIVE IF: the state flips at a rate approaching this reader's")
+    print("  own -- polling cannot resolve that, and the transition count printed")
+    print("  at the end is what says so. That is the outcome, and the only one,")
+    print("  that buys the trnhook route its compiler and its injection.\n")
+
     out_dir = vaultpath.vault_path("captures", "movetap")
     os.makedirs(out_dir, exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%S")
@@ -456,6 +915,8 @@ def main():
     changes = 0
     last = None
     interrupted = False
+    reach = {}                 # gate_reach -> count, every value including unread
+    flips = 0                  # gate_reach transitions -- the aliasing witness
     t_start = time.time()
     t_end = t_start + a.seconds
     period = 1.0 / a.hz
@@ -464,7 +925,7 @@ def main():
             fh.write(json.dumps({"kind": "head", "pid": pid, "exe": path,
                                  "hz": a.hz, "wall": stamp}) + "\n")
             _ctx, agbase, aid, ptr = resolve(pid, handle, base, verbose=True)
-            cap_hz = calibrate(handle, agbase, ptr)
+            cap_hz = calibrate(handle, agbase, ptr, aid)
             target_hz = a.hz if cap_hz is None else min(a.hz, cap_hz)
             if cap_hz is None:
                 print("could not calibrate the reader; floor falls back to the "
@@ -482,7 +943,7 @@ def main():
                 except TapFail:
                     time.sleep(period)
                     continue
-                s = sample(handle, agbase, ptr)
+                s = sample(handle, agbase, ptr, aid)
                 if s is None:
                     time.sleep(period)
                     continue
@@ -491,6 +952,7 @@ def main():
                 s["agent"] = aid
                 fh.write(json.dumps(s) + "\n")
                 n += 1
+                reach[s["gate_reach"]] = reach.get(s["gate_reach"], 0) + 1
                 # Print only what a human needs to see live: the arrival time
                 # changing is the entire experiment.
                 if last is not None and s["stop"] != last["stop"]:
@@ -499,6 +961,16 @@ def main():
                     print(f"  +0x48 {last['stop']} -> {s['stop']} "
                           f"({'due in %.2fs' % (d / 1000.0) if s['stop'] else 'CLEARED'})"
                           f"  target {s['target'][:2]} glide={s['glide']}")
+                # The fence opening or shutting is the second experiment, and
+                # every transition is printed rather than summarised, because
+                # the summary cannot distinguish "it changed twice" from "it
+                # changed on every other sample and we are aliasing".
+                if last is not None and s["gate_reach"] != last["gate_reach"]:
+                    flips += 1
+                    print(f"  fence {last['gate_reach']} -> {s['gate_reach']} "
+                          f"(raw {last['fence_raw']!r} -> {s['fence_raw']!r}, "
+                          f"armed {s['agtrack_armed']!r}) at "
+                          f"t+{time.time() - t_start:.2f}s")
                 last = s
                 time.sleep(period)
     except KeyboardInterrupt:
@@ -540,6 +1012,48 @@ def main():
         return 1
     print(f"  floor {floor} met ({n} samples at half of {target_hz:.1f} Hz "
           f"over {elapsed:.1f}s).")
+    return fence_verdict(reach, flips, n, rate)
+
+
+def fence_verdict(reach, flips, n, rate):
+    """Print what the fence did, and REFUSE a percentage over a bad denominator.
+
+    Separate from main() so `--selftest` can prove it goes red: a summariser
+    that only ever prints is one nobody can tell is working.
+    """
+    print("\nTHE FENCE ON 0x006055E0 (clientControlled, AgTrack record+0x00):")
+    if not reach:
+        print("  no sample carried a gate_reach at all. This run says NOTHING "
+              "about the fence.")
+        return 1
+    unread = sum(c for k, c in reach.items() if k.startswith("unread:"))
+    for k, c in sorted(reach.items(), key=lambda kv: -kv[1]):
+        print(f"  {k:34} {c:6d}  {100.0 * c / n:5.1f}%")
+    # THE DENOMINATOR REFUSAL. A share of "shut" computed over a run that could
+    # not read the record for a third of its samples is a number about the
+    # reader, and this arc has already shipped one of those.
+    if unread * 4 >= n:
+        print(f"  REFUSED: {unread} of {n} samples ({100.0 * unread / n:.0f}%) "
+              f"could not read the record. No share above is a fact about the "
+              f"client. Fix the read before quoting any of them.")
+        return 1
+    # THE ALIASING REFUSAL, and it is the one that decides the route. A fence
+    # that changes on a large share of consecutive samples is changing at or
+    # above the reader's own rate, which polling cannot resolve at all -- the
+    # counts would then be an artifact of WHEN we happened to look.
+    if n > 1 and flips * 4 >= n:
+        print(f"  REFUSED: {flips} transitions over {n} samples at "
+              f"{rate:.1f} Hz. The fence is changing at or above this reader's "
+              f"own rate, so the shares above are aliased and mean nothing. "
+              f"THIS is the outcome that earns the hook: an int3 at 0x00606002 "
+              f"on the trnblock.c pattern counts every evaluation instead of "
+              f"sampling them (toolkit/clientscan/trnhook/).")
+        return 1
+    print(f"  {flips} transition(s) over {n} samples at {rate:.1f} Hz -- the "
+          f"fence changes far below the sample rate, so the shares above are "
+          f"not aliased.")
+    print("  Pair this file with its gamesrv capture: "
+          "python toolkit/clientscan/movesync.py")
     return 0
 
 
