@@ -1231,6 +1231,19 @@ def section_hold_key():
               "a HUD tooltip is the only readable surface for the buff "
               "family's contested field (skillcast 14.4), and reading one "
               "unattended needs a cursor park that never presses a button")
+    LEDGER.ok(session.parse_walk("click:0.411,0.561")
+              == [("click", "0.411,0.561", 1.0)],
+              "the click verb parses: a window-relative point, no duration",
+              "it exists to press a PANEL BUTTON at a fixed fraction -- the "
+              "attribute panel's + arrow -- which is the aiming case the "
+              "harness could not reach; a world target still needs a person")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("click:0.5", "click:0.5,0.5,0.5", "click:1.5,0.5",
+                              "click:0,0.5", "click:a,b")),
+              "click refuses one number, three numbers, and fractions on or "
+              "outside the window edge",
+              "a click at a wrong literal presses whatever happens to be "
+              "there, which is worse than a refusal because it looks like a run")
     LEDGER.ok(all(refused(session.parse_walk, bad)
                   for bad in ("hover:0.5,0.5", "hover:0.5,0.5,0",
                               "hover:1.5,0.5,3", "hover:0,0.5,3",

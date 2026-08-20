@@ -2166,7 +2166,31 @@ the misread was the response — the artifact got a *mechanism* built from real 
 confirm it. Both halves were wrong. A free positive control was sitting in the same frames
 and was read as data instead. Anchor frames by timestamp, not by filename glob.
 
-Still open here: giving the server a real attribute state so the three c2s arms can land.
+**THE ARMS LANDED, 2026-08-20 -- a player can spend attribute points on a server we
+wrote (§34).** `studies/review`'s standing complaint (*"you sat there spending attribute
+points and the server had nowhere to put them"*) is closed. Caged run `20260820T084923`:
+the client's own Skills and Attributes panel went **27 -> 25 -> 22** unused points across
+two clicks on Tactics' **+**, rank 1 -> 2 -> 3, and `20260820T085218` ran the mirror --
+one click DOWN, refund 1, 27 -> 28. Three predictions made from the disassembly held on
+screen: the sequence was **0 both times** (§32.2's LIFO recycling), the arrows **re-priced
+themselves** after every click (`0x00818E40`, §32.4), and Strength at rank 12 shows a ▼20
+refund and **no up arrow at all** (`s_attribPoints[12] = -1`, the cap rendered as a missing
+button).
+
+New: `toolkit/authsrv/attribspend.py` (pure, stdlib-only -- the cost curve and the client's
+three refusal rules), `attribpoints.py --emit-content` feeding a `client-table`
+`attribute_cost` table, `points_total = 200` on the player content row, arms for `0x000F`,
+`0x000E` and `0x0010`, and `test_attribspend.py` (35 checks, floor 35) whose §5 REPLAYS the
+nine real rank transitions from live capture `20260818T132739` and requires this model to
+reproduce ArenaNet's own balances -- no free parameter. `0x0037` now carries **(available,
+total)** instead of one constant twice, which retires a stale comment: its *"every live
+0x0037 is [0,0], 8 of 8"* was true of two captures, and across **13 captures and 48
+sightings** the corpus reads [0,0] x14, [1,5]/[6,10] x8, and [x,200] x26 -- with
+field3 <= field4 in 48 of 48, which is a third, independent settling of the field order.
+
+Still open here: base and effective are sent EQUAL (no item bonuses modelled); the state is
+per-connection and does not persist; `0x0010`'s arm has zero live witnesses anywhere in the
+corpus and is built to a static reading alone.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

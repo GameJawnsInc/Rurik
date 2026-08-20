@@ -2230,6 +2230,32 @@ Every one of these, in the order they were written:
   at exactly the index it asserted at. Without it the ten checks above are ours
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
+  `toolkit/authsrv/test_attribspend.py` (the attribute SPEND model -- the state this
+  server had never had. Until 2026-08-20 ranks came from a content row and never
+  moved, and `studies/review` had years ago flagged the consequence: "you sat there
+  spending attribute points and the server had nowhere to put them." The rules it
+  checks are ArenaNet's, not ours, and the file is built so a copy of somebody
+  else's rules cannot quietly drift into being its own thing. **Nothing is
+  hand-typed**: it loads the same two content tables the server loads -- the cost
+  curve from `s_attribPoints` and the 51-row `s_attrib` table -- and checks them
+  against arithmetic published independently of both. Rank 12 costs **97**, the
+  number the wiki and the client's table agree on; **exactly ten** attributes carry
+  `is_primary`, one per profession, which is the no-free-parameter check that the
+  table was parsed right at all. §5 is the one to read: it REPLAYS the nine real
+  rank transitions in live capture `20260818T132739` -- six up, three down -- and
+  requires this module to reproduce the balances ArenaNet's own server computed
+  (74->65->54->41->25->5 climbing 7->12, and 5->25->41 coming back), which pins the
+  ASYMMETRY that the price is the rank REACHED and the refund is the rank LEFT.
+  The rest covers the client's three refusal rules from the ALLOWED side as well as
+  the refused one -- a Warrior may raise Strength, may not raise Divine Favour even
+  as a secondary Monk, but may raise an ordinary Monk attribute -- so the refusals
+  cannot pass by refusing everything. §7 pins the template spread as all-or-nothing
+  against the client's own SIXTEEN-entry buffer (its framer clamps to 64, which is
+  a latent stack smash we must never invite), and §8 breaks the constructor on
+  purpose: no costs, no attributes, and a GAP in the rank sequence all refuse,
+  because a gap would price a rank at 0 and hand out a free level. Floor 35, one
+  declared skip (no profession-0 attribute exists to fire the first of the client's
+  three refusals). No socket, no client, no vault. ~1 s),
   `toolkit/authsrv/test_purchase.py` (answering the merchant, BOTH directions -- the four
   messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents:
   **pay, mint, place, confirm** -- `0x014F` debit, `0x0161` declare, `0x013E`

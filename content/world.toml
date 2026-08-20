@@ -214,6 +214,7 @@ this skill does not scale."""
 # cannot currently ask.
 [player.attributes]
 ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
+points_total = 200
 
 [player.attributes.provenance]
 source = "invented"
@@ -222,6 +223,17 @@ Ids measured from the client's s_attrib table (attribtable.py, build 38797);
 ranks chosen. Replace the ranks the day a capture shows a real character's --
 capture shopping-list item 1, studies/combat/PLAN.md section 3 -- and the ids
 should survive that, because they are the client's own.
+
+points_total is the character's LIFETIME attribute-point budget, which
+0x0037's fourth field carries and the panel spends down; the third field is
+what is left (studies/pvpui/FINDINGS.md 32.5). The NUMBER 200 is observed
+rather than invented -- it is the level-20 maximum, and 0x0037's fourth field
+reads exactly 200 in 34 of the corpus's 48 sightings, with 0, 5 and 10 on
+lower-level characters -- but GIVING IT TO THIS CHARACTER is a choice, which
+is why the whole row stays `invented`. The ranks above already sink 173 of it
+(97+48+21+6+1), leaving 27 unspent, so the panel opens with points to spend
+and room to refund; change the ranks and that follows automatically, because
+the server computes spent from the cost table rather than storing it.
 """
 
 [player.defaults]
