@@ -55,11 +55,23 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from checks import _say  # noqa: E402  a console that cannot encode must not kill a run
 
-# `R0a`, `R1.5`, `C-13`, `U10`, `Q2b`, `R4c`. One or two capitals, an optional hyphen,
-# up to three digits, an optional `.N`, an optional trailing lowercase letter. Anchored
-# by its callers at the start of a cell or a heading, never searched free in prose --
-# free search cannot tell a definition from a mention and this module refuses to guess.
-TOKEN = r"[A-Z]{1,2}-?\d{1,3}(?:\.\d)?[a-z]?"
+# Three shapes a defining site may open with, anchored by the callers at the start of
+# a cell or a heading, never searched free in prose -- free search cannot tell a
+# definition from a mention and this module refuses to guess.
+#   bare:      `R0a`, `R1.5`, `C-13`, `U10`, `Q2b` -- the grandfathered corpus. One or
+#              two capitals, optional hyphen, digits, optional `.N`, optional trailing
+#              lowercase letter.
+#   prefixed:  `GATEFIRE-C3`, `ITEMMODS-M1`, `PROPS-P1` -- what CONVENTION.md sec 1
+#              mints. The word is 4+ chars and the LOCAL TAIL must carry a digit,
+#              which is what keeps `PROBE-GATEFIRE` (a filename) and
+#              `R4C2-FEASIBILITY` (a title) out of the census.
+#   ladder:    `R-ISLE`, `R-IDENTS` -- PLAN.md sec 3's own namespace, the one
+#              exception that stays bare. Without this arm the resolver could not
+#              answer for the rung this convention itself landed under.
+BARE = r"[A-Z]{1,2}-?\d{1,3}(?:\.\d)?[a-z]?"
+PREFIXED = r"[A-Z][A-Z0-9]{3,}-[A-Z]{0,2}\d{1,3}(?:\.\d)?[a-z]?"
+LADDER = r"R-[A-Z]{2,}"
+TOKEN = rf"(?:{PREFIXED}|{LADDER}|{BARE})"
 
 # Emphasis and strike wrappers a row may carry. `PLAN.md` §3 bolds every rung, and
 # `HANDOFF.md`'s repair pattern strikes a superseded one in place rather than deleting
@@ -250,6 +262,9 @@ def main(argv):
             _say("--root needs a path")
             return 2
         root = os.path.abspath(argv[i + 1])
+        if not os.path.isdir(root):
+            _say(f"{root}: not a directory")  # a typo'd root is a confident zero census
+            return 2
     sites, _coll = report(root)
     if "--tokens" in argv:
         _say("\n\nEVERY TOKEN, EVERY SITE")

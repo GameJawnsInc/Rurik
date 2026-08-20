@@ -48,17 +48,21 @@ import checks  # noqa: E402
 import identlint  # noqa: E402
 import whichrung  # noqa: E402
 
-# 24, from a real green run on 2026-08-20 against this tree. Not a guess and not a
-# target: it is what the five sections below execute end to end. Nothing here is
-# fixture-dependent, so a run producing fewer means a section stopped running.
-LEDGER = checks.Ledger("identlint", floor=24)
+# 26 is the MANDATORY CORE, from a real green run on 2026-08-20 (which executes 28:
+# the core plus section 4's two growth arms, which declare skips in the unreachable
+# case where no single-document control token exists -- per checks.py's own guidance,
+# the floor covers the core and the optional pair declares its shortfall). Nothing
+# here is fixture-dependent, so fewer than 26 means a section stopped running.
+LEDGER = checks.Ledger("identlint", floor=26)
 
 ROOT = os.path.dirname(HERE)
 
 # ---------------------------------------------------------------------------
-# THE BASELINE. Observed 2026-08-20 at `ecfe995`, by `python toolkit/identlint.py`:
+# THE BASELINE. Observed 2026-08-20, immediately after the token pattern widened to
+# admit convention-form and ladder tokens (parent `42062ce`; the widening added
+# exactly two sites, PLAN.md's R-IDENTS and R-ISLE rows), by `python toolkit/identlint.py`:
 #
-#     310 defining site(s) in 31 document(s); 150 distinct token(s);
+#     312 defining site(s) in 31 document(s); 152 distinct token(s);
 #     53 of them collide across documents.
 #
 # The collision number is the one this file is armed on, because it is the defect
@@ -79,7 +83,7 @@ ROOT = os.path.dirname(HERE)
 COLLISION_CEILING = 80
 
 # The other direction. A pattern that rots reports a clean tree, and under a
-# not-growing rule that reads as progress -- so the floor is set BELOW the observed 310
+# not-growing rule that reads as progress -- so the floor is set BELOW the observed 312
 # rather than at it, the same way `test_provlint.py` sets its corpus floor.
 SITE_FLOOR = 250
 DOC_FLOOR = 25
@@ -113,6 +117,22 @@ def main():
     LEDGER.ok([s.token for s in struck] == ["R0", "R5m"],
               "a struck-through and an annotated row both still define",
               f"{[s.token for s in struck]}")
+    # The convention's OWN shapes. Without these three arms the resolver was blind to
+    # every token CONVENTION.md sec 1 mints -- including R-IDENTS, the rung this arc
+    # landed under -- which made its two halves mutually exclusive: a well-formed new
+    # token could not be resolved in one command. Caught in pre-merge review.
+    LEDGER.ok([s.token for s in sites("| **GATEFIRE-C3** | a prefixed step | open |\n")]
+              == ["GATEFIRE-C3"],
+              "a convention-form token in a table row defines",
+              "CONVENTION.md sec 1's own first example")
+    LEDGER.ok([s.token for s in sites("### ITEMMODS-M1 -- the first milestone\n")]
+              == ["ITEMMODS-M1"],
+              "and in a heading",
+              "the word is 4+ chars, the tail carries the digit")
+    LEDGER.ok([s.token for s in sites("| **R-ISLE** | the isle as a range | rungs |\n")]
+              == ["R-ISLE"],
+              "and a hyphen-word LADDER rung defines too",
+              "PLAN.md sec 3's own namespace -- R-ISLE, R-IDENTS")
 
     # ---- 2. AND IT DOES NOT COUNT MENTIONS -------------------------------------
     print("\n2. a document REFERRING to a token is not counted as defining it")
@@ -128,6 +148,7 @@ def main():
         "a link to a rung": "[PLAN.md:348](../../PLAN.md:348) carries R0a and R0b\n",
         "a backticked heading": "### `C8` -- cited in a heading, not defined\n",
         "an indented row": "  | C8 | a defining-shaped row, but indented |\n",
+        "a word-word filename title": "# PROBE-GATEFIRE\n",
     }
     noisy = {k: [s.token for s in got]
              for k, v in mentions.items() if (got := sites(v))}
@@ -171,7 +192,9 @@ def main():
     # unreachable rather than skipped (`SKIP_DIRS` prunes nothing today; it is
     # future-proofing). A check on the skip list would therefore be one that cannot
     # fail -- so the check is on the corpus scope itself, and it goes red the day
-    # the walk widens.
+    # the walk reaches a document that DEFINES a token outside the scope (a nested
+    # checkout's studies/, vault/, a venv). Widening to the four remaining root-level
+    # .md files alone would not fire it: none of them defines a token today.
     stray = sorted(p for p in docs
                    if p not in identlint.ROOT_DOCS
                    and not p.startswith(identlint.STUDY_DIR + "/"))
@@ -274,8 +297,10 @@ def main():
               "which is 1's whole complaint, measured rather than asserted -- and "
               "one more document than 4's literal one-liner could see, because that "
               "pattern treats the hyphen as a namespace and 2.2 says it is not. "
-              "A FOURTH definer appearing is a real event, not a broken test: "
-              "update this count and the three content checks above")
+              "A FOURTH DOCUMENT defining C8 appearing is a real event, not a broken "
+              "test: update this count and the three content checks above. (A fourth "
+              "definer already exists OUTSIDE the pattern -- combat/PLAN.md's bold "
+              "list-lead C8 -- which is what makes the tool's answer a floor.)")
     # The hyphen again, this time end to end: 1's ambiguous sentence writes `C-8`,
     # and a resolver that answered only the unhyphenated spelling would fail on the
     # exact input it was built for.
@@ -287,6 +312,15 @@ def main():
               "a token nothing defines resolves to nothing",
               "whichrung.py reports NOT FOUND and exits 1; the docstring says why "
               "that is not proof of absence")
+    # The arc's own acceptance criterion, clause one, applied to its own token: the
+    # rung this convention landed under must resolve in one command. Before the
+    # pattern widened it did not -- the resolver was blind to the very shape the
+    # convention mints, and the pre-merge review caught it.
+    rid = whichrung.resolve(ROOT, "R-IDENTS")
+    LEDGER.ok(any(s.path == "PLAN.md" and "identifier convention" in s.text
+                  for s in rid),
+              "and R-IDENTS -- this arc's own rung -- resolves to PLAN.md sec 3",
+              f"{[(s.path, s.token) for s in rid]}")
 
     return LEDGER.verdict()
 

@@ -1,9 +1,11 @@
 # Identifier conventions — handoff
 
-**Written 2026-08-20.** Status authority remains `PLAN.md` §3 and §8; this arc has no
-rung there yet and should get one before it lands. This file is what a cold session
-needs to open the arc without re-deriving the census, and — more importantly — what it
-needs in order not to repeat a failure this repo has already paid for once.
+**Written 2026-08-20.** Status authority remains `PLAN.md` §3 and §8 — ~~this arc has
+no rung there yet and should get one before it lands~~ **LANDED 2026-08-20: §3's
+`R-IDENTS` row is the status, and [CONVENTION.md](CONVENTION.md) is the deliverable.**
+This file is what a cold session needs to understand how the arc was opened, and —
+more importantly — what it needs in order not to repeat a failure this repo has
+already paid for once.
 
 > ## ★ READ THIS BOX FIRST — the failure mode of this arc is the CURE, not the disease
 >
@@ -105,6 +107,9 @@ manufactures this defect on a timer.**
 (`git log --format='%s' | grep -E '^[0-9]+:'`). **No document defines it.** A session
 reading "40: the player's swing is the WEAPON's number" cannot resolve `40` anywhere in
 the tree. Decide whether this sequence is retired, documented, or left alone.
+(**ANNOTATED 2026-08-20:** the count was true when written and grew by one — `43:` —
+before the arc landed. [CONVENTION.md](CONVENTION.md) §6 is the ruling: RETIRED, and
+it quotes the reproducing command instead of a count, because the set grows.)
 
 ### 2.5 Prior art that already works — study it before inventing
 
@@ -112,24 +117,33 @@ Citation labels (`GWCA`, `WIKI`, `Py4GW`, `GWLP-R`) are used across 5–7 docume
 with **zero collisions and zero ambiguity**, because the label is a word, not a letter.
 That is a free existence proof for the recommendation in §3.
 
-## 3. The decisions the new session has to make
+## 3. The decisions the new session has to make — **ALL DECIDED 2026-08-20**
 
-Framed, not pre-made. My recommendation is marked where I have one.
+Framed, not pre-made. My recommendation is marked where I have one. **Annotated at the
+landing, per decision 6's own pattern: each ruling below, in place.**
 
 1. **Scope.** Confirm the box at the top: new identifiers only, no migration. *Get the
    owner's yes on this explicitly* — it is the decision that determines whether this arc
-   costs an hour or two days.
+   costs an hour or two days. **DECIDED 2026-08-20 — new identifiers only, per this
+   file's own top box. The owner's explicit yes is NOT yet recorded; both PLAN.md rows
+   carry that note, and it is the refusing, cheap-to-reverse direction.**
 2. **Prefix shape.** Recommendation: **arc-scoped word prefixes**, `GATEFIRE-C3`,
    `AW-A5`, `CUSTOMAREA-D1` — following §2.5's proof rather than inventing. The
    alternative is bare letters plus a mandatory "in the gate-fire arc" in prose, which
-   is what we do now and is what failed.
+   is what we do now and is what failed. **DECIDED 2026-08-20 — word prefixes, but
+   scoped to the DEFINING DOCUMENT rather than the arc, and never two-letter codes
+   (`AW-A5` is out for the reason `AW` fails cold): [CONVENTION.md](CONVENTION.md) §1
+   records why.**
 3. **Kind encoding.** Does the token say what kind of thing it is (`H` hypothesis,
    `C` correction, step numbers bare), or does the *table* say it and the token stay
    dumb? Recommendation: the table says it — a per-document legend row — because
    encoding kind in the token is what produced defect (b) in the first place.
+   **DECIDED 2026-08-20 — as recommended: the legend says it, the token stays dumb.
+   [CONVENTION.md](CONVENTION.md) §1–§2.**
 4. **Where the convention lives.** `CLAUDE.md` is already long and its own §"Where the
    project is" warns against restating things. Recommendation: a short
    `studies/idents/CONVENTION.md`, with one line in `CLAUDE.md` pointing at it.
+   **DECIDED 2026-08-20 — as recommended.**
 5. **Enforcement, and this is the real question.** `CLAUDE.md` says *"a rule nothing
    checks is a wish"* — and it is right; `PLAN.md` §1.1's second gate sat broken for two
    days behind exactly that. But `toolkit/provlint.py` is explicitly *"an accumulation
@@ -139,14 +153,24 @@ Framed, not pre-made. My recommendation is marked where I have one.
    - a tripwire that only reports growth in the collision count;
    - documentation only, no checker.
    Recommendation: the middle one. A hard gate on 80 documents will produce a red suite
-   for reasons nobody wants to fix at 2am.
+   for reasons nobody wants to fix at 2am. **DECIDED 2026-08-20 — the middle one:
+   `toolkit/identlint.py` + `toolkit/test_identlint.py`, ceiling and baseline in the
+   test, provlint's posture.**
 6. ~~**Fix §2.3 regardless of the rest.**~~ **DONE 2026-08-20** — annotated in place at
    `HANDOFF.md:116` per that document's own repair pattern. Neither of the two fixes
    originally proposed here (delete, or sync) was correct; see §2.3 for why, and carry
    the reason into decision 4.
-7. **Retire or document §2.4's integer prefix.**
+7. **Retire or document §2.4's integer prefix.** **DECIDED 2026-08-20 — retired, with
+   its meaning recorded: [CONVENTION.md](CONVENTION.md) §6, which also corrects this
+   file's §2.4 count (a 15th commit, `43:`, landed between census and landing — the
+   set grows until minting stops, so §6 quotes the command rather than a count).**
 
 ## 4. The resolver — ship this even if nothing else lands
+
+(**ANNOTATED 2026-08-20:** shipped — the tool is `toolkit/whichrung.py`, per this
+section's own suggestion, and the live home of the one-liner below and its caveats is
+now [CONVENTION.md](CONVENTION.md) §4. This section is the historical proposal; the
+line-number claims below were true at `9ee3010` and are not maintained.)
 
 This works today and is the cheapest possible mitigation. It matches only *defining*
 rows (a table row beginning with the token) and headings, not every passing mention:
@@ -173,6 +197,10 @@ documents written after it, and there are 80 written before it.
 - **Zero code changed means zero tests** — unless decision 5 produces a checker, in
   which case run `test_srclint.py` and the new test, not the full suite.
 - **Add the PLAN.md §3 row and the §8 next-action** when it lands, in the same commit.
+  (**ANNOTATED 2026-08-20:** done as TWO commits — the landing `f8d63a1`, then the
+  PLAN.md rows — so the §3 row could stamp the real landing hash instead of guessing
+  it. The §3 header's same-commit rule binds the row and its hash, which the split
+  satisfies.)
 
 ## 6. What this handoff does not claim
 
