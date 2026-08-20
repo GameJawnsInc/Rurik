@@ -395,6 +395,94 @@ decides whether reading it further is worth anyone's time. It is not.
 
 ---
 
+## 5.6 What IS documented about the behaviour — measured, not a plan (2026-08-20)
+
+§5.5 says the client holds no hero AI, so the behaviour is ours to author. This
+records what published documentation would give that authoring, and **nothing more**.
+It is deliberately not a plan: see the closing note.
+
+### The architecture, and two independent sources agree on it
+
+> WIKI (GWW, *Foe* §Foe Behavior, rev. 2021-08-29): a monster's skills are limited to
+> a set, and **"The way they use these skills is embedded into the skill itself"** — so
+> monsters carrying the same skill use it the same way.
+
+The Guild Wars Guru archive's *AI guide (How the AI uses skills)*
+([thread 10063197](https://archive.guildwarslegacy.com/thread?id=10063197)) reaches the
+same conclusion independently: skills carry a **native priority** and are individually
+flagged, and the AI does not read the skill bar in order.
+
+> **So AI policy is per-SKILL data, not per-unit logic.** OBSERVED-BY-OTHERS (WIKI +
+> one community source). It is also what makes (GWW, *Henchman*) "heroes and henchmen
+> share the same AI" mechanically sensible, and it predicts that one engine plus one
+> skill-keyed table serves heroes, henchmen and monsters alike.
+
+Two witnesses, and they are genuinely independent — a wiki of player observation and a
+forum guide of doppelganger testing share no author, code or ancestry. That is real
+corroboration, unlike the ldufr/GWCA cluster (§4).
+
+### How much documentation exists, counted rather than estimated
+
+| source | size | last revised |
+|---|---|---|
+| GWW *Hero behavior* | 17,848 B | **2026-08-16** |
+| GWW *Hero behavior/Unexpected behavior* | 12,729 B | 2026-07-14 |
+| GWW *Foe* (§Foe Behavior) | 7,043 B | 2021-08-29 |
+| GWW *Aggro* | 3,577 B | 2020-04-24 |
+| GWW *AI* | 446 B | 2020-10-06 — a stub, no content |
+| `Category:Boss-like foes` | 87 members | the non-standard-AI exception list |
+
+`Category:Hero-vetted skills` is the per-skill layer, and **the headline number is
+smaller than the category size**:
+
+```
+183  skill pages in the category (plus one "List of" page)
+182  carry a  ==Hero Usage==  section   (only Tainted Flesh does not)
+232  documented statements in those sections
+~92  carry an IMPLEMENTABLE condition   ("only against spellcasters", "below 50% energy")
+~90  are qualitative only               ("Heroes will rarely use this skill")
+```
+
+**The 92/90 split is approximate** — it comes from a keyword classifier over the bullet
+text, not a hand read, and is recorded that way rather than as a clean number. The
+correction matters: the category size (184) reads as "184 rules already written down"
+and roughly half of it is a quality judgement no one can code.
+
+### What it does NOT give, and the currency caveat
+
+**No numbers.** No aggro radius in units, no reaction time in milliseconds, no priority
+weights, no tick rate. That is the same gap [monsterai](../monsterai/FINDINGS.md) hit
+from the monster side, and only observation closes it.
+
+**The wiki flags its own staleness.** *Hero behavior* carries two `{{Outdated info}}`
+banners, the newer citing the **2026-06-24** game update, "Updated AI, especially for
+martial heroes and pets". So ArenaNet is still patching this and the page knows it lags.
+The monster-side pages are older still (*Foe* 2021, *Aggro* 2020).
+
+**Label it WIKI, never UPSTREAM.** Every rule here passes the test in the
+`browse-gw-wiki` skill — could a player have seen it from the game window? — which is
+where wiki evidence is strongest. And because the wiki is not a code lineage, this needs
+**no `PLAN.md` §6.1 derivation-register row**; the second gate is about other people's
+*work*, and player observation is not that. Cite page and revision, as §6 does.
+
+### Why this is not a plan, and what would make it one
+
+The rules are conditions over effect state, and **`PLAN.md` R4b says that state does not
+exist yet**: "conditions, hexes, enchantments, energy and adrenaline costs, and effects
+other than damage" are all absent. Of the documented conditions, the ones we could
+evaluate today are the cast lifecycle (we have it), weapon type (decoded 2026-08-20,
+[itemmods](../itemmods/FINDINGS.md)) and health; energy, upkeep, enchantment/hex/
+condition presence and healing are not modelled at all. Armour rating is now *sent* and
+nothing reads it.
+
+And if the per-skill architecture above is right, **the skill substrate's schema is the
+AI's schema** — the usage rule belongs on the skill row beside cost, recharge and
+scaling. Designing the policy table before the skill table exists is designing half the
+skill table blind. So: build the substrate, let the row shape settle, then hang policy
+on it. Owner's call, 2026-08-20, and the reason this section stops here.
+
+---
+
 ## 6. The player-facing layer (WIKI)
 
 Every fact here is WIKI with page and revision; it is what the mechanism has to reproduce.
