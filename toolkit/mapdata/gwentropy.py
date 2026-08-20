@@ -347,7 +347,17 @@ def huffman_lengths(counts):
 
 
 def table_for_counts(counts):
-    """{symbol: count} -> ({symbol: length}, (lens, present, n), note).
+    """{symbol: count} -> ({symbol: length}, (lens, present, n), note). THE MODEL PATH.
+
+    THIS FUNCTION IS NOT ON THE WRITER PATH and must not be changed to bring our
+    emitted tables inside retail's envelope. It is the cheapest legal table for a
+    given alphabet, which is what a COST MODEL wants: `recost()` (§10.1's +8 B
+    headline) and `literal_only()` (§10.4) are recorded study results, and both are
+    computed through `_cost_table` -> here. Moving this moves numbers already written
+    down. The writer path is `authoring_table` below, which is a different question --
+    "what may we emit" rather than "what would the cheapest table cost" -- and the
+    separation is what makes A6's numbers invariant under the envelope policy BY
+    CONSTRUCTION rather than by re-measurement.
 
     The arrays are what `meta_plan` needs and they are NOT always
     `lens_to_arrays(lens)`, because of the format's one genuinely strange table.
@@ -385,6 +395,141 @@ def table_for_counts(counts):
             "a block holds at most 65,536 tokens so the Katona bound caps natural "
             "Huffman depth at 22 -- this should be unreachable")
     return lens, lens_to_arrays(lens), "huffman"
+
+
+# --------------------------------------------------------------------------
+# the WRITER path: only table SHAPES retail's own archive attests
+# --------------------------------------------------------------------------
+
+# Retail's measured floors on `symbol_count`, one per table kind. Neither is a taste.
+#
+# DISTANCE_FLOOR 5 -- census of every comp-8 row in `dat_study/Gw.dat` with stored size
+# <= 2,048 B: 32,831 rows, 32,831 blocks traced, 0 failures. Declared distance counts run
+# 5..30 with min 5; the ten lowest are 5,7,8,9,10,11,12,13,14,15, so 2,3,4 are
+# declared by NO retail row anywhere in that population. The twelve rows that do
+# declare 5 (8295..8306) are one family: `dist_lens = {4: 0}`, all-skip, one symbol.
+#
+# LITERAL_FLOOR 257, and it is 257 rather than the 259 that census measured because A8
+# widened it with better evidence: `studies/archivewrite/FINDINGS.md` §16.2 -- the
+# retail client READ row 11196 as this project compressed it, and its 218 tables declare
+# literal counts 257..285. 257 is therefore attested by the only oracle that matters, and
+# it is the highest floor we may take: 258 would lift the anchor's own minimum table and
+# change the bytes of the one row the client has accepted (§16.1).
+LITERAL_FLOOR = 257
+DISTANCE_FLOOR = 5
+
+
+def _kind_floor(kind):
+    if kind == "lit":
+        return LITERAL_FLOOR
+    if kind == "dist":
+        return DISTANCE_FLOOR
+    raise ValueError(f"table kind {kind!r} is neither 'lit' nor 'dist'")
+
+
+def _phantom_pair(s, declared, optimal):
+    """Symbol `s` gets a REAL 1-bit code, paid for with one adjacent absent symbol.
+
+    The zero-length code is unreachable for any symbol but `declared - 1`
+    (`gwdat.py:265-267` -- the `total == 0` fallback installs that index and no other),
+    and with `declared >= 2` a length of 0 is not assignable at all (`gwdat.py:252`,
+    mirrored by `_admissible` above). So a lone symbol that is not at `declared - 1`
+    can only be transmitted with a length >= 1, and a 1-bit code needs a second symbol
+    or the code space is half empty -- `kraft_defect` would be -1/2 and the caller
+    refuses. The second symbol is a PHANTOM: present in the table, never emitted.
+
+    Which neighbour is cheaper is a meta-coder question, not an obvious one -- it splits
+    an absent run in two and the token widths are not uniform -- so it is MEASURED here
+    rather than guessed, and the tie goes to the lower index so the choice is stable.
+    """
+    best = None
+    for other in (s - 1, s + 1):
+        if other == s or not 0 <= other < declared:
+            continue
+        lens = {s: 1, other: 1}
+        arrays = lens_to_arrays(lens, declared)
+        bits, _plan = meta_plan(*arrays, optimal=optimal)
+        if best is None or bits < best[0]:
+            best = (bits, lens, arrays)
+    if best is None:
+        raise ValueError(f"symbol {s} has no adjacent symbol inside a declared count of "
+                         f"{declared}; a pair cannot be formed")
+    return best[1], best[2], "huffman"
+
+
+def authoring_table(counts, kind, optimal=True):
+    """{symbol: count}, 'lit'|'dist' -> ({symbol: length}, (lens, present, n), note).
+
+    THE WRITER PATH -- `gwmatch._fit_table` calls this and `table_for_counts` above is
+    left alone, so A6's recorded numbers cannot move. THE POLICY: every table our
+    encoder emits must have a SHAPE retail's own archive or the A8 client run attests.
+    `studies/archivewrite/FINDINGS.md` §13.5 lists the five places our encoder left that
+    envelope; this closes A (declared `symbol_count < 2`), B (a zero-length LITERAL
+    table) and the distance half of C (declared 1/2/3), which is everything in the table
+    layer. What it deliberately does not close is E, the meta indices -- `gwenc.py`'s
+    docstring says why.
+
+    The four arms, and what each is attested by:
+
+      * NO symbols (a block with no matches still transmits a distance table). For
+        DISTANCE: all-skip with `symbol_count = 5`, the zero-length symbol landing on
+        index 4 -- bit for bit the shape rows 8295..8306 carry, twelve witnesses. NOT
+        the old `symbol_count = 1`, which no retail row of any size declares. For
+        LITERAL this arm is defensive only (a block always holds tokens) and it takes
+        the phantom pair rather than the all-skip shape, because a zero-length literal
+        table is 0 of 32,831.
+      * ONE symbol `s`, DISTANCE, with `s + 1 >= 5`. The all-skip shape, unchanged:
+        `symbol_count = s+1`, no assignment at all, and `gwdat.py:265-267`'s
+        `total == 0` fallback installs `s` afterwards. This arm was never a gap.
+      * ONE symbol `s`, DISTANCE, with `s + 1 < 5` -- and every LITERAL single-symbol
+        table. The all-skip trick cannot be lifted to the floor: it can only ever
+        install `symbol_count - 1`, so declaring 5 for a symbol at index 1 would decode
+        distance symbol 4 and produce garbage. The symbol gets a real code and a
+        phantom neighbour instead.
+      * TWO OR MORE symbols: ordinary canonical Huffman, with the declared count lifted
+        to the kind's floor. Declaring above the highest present symbol is retail's own
+        norm (285 declared with far fewer present), so the absent tail is described by
+        the meta-coder's skip runs on a path 138,708 rows witness.
+
+    THE NOTE STRING IS LOAD-BEARING and the trap is documented because it has already
+    been sprung: `_fit_table` used to read `note != "huffman"` as the zero-length flag,
+    and a phantom-pair table returning any other note made `retail_arrays` describe an
+    ALL-SKIP table while the writer emitted 1-bit codes -- 9 of 21 payloads died with
+    `backtrack 1 >= produced 1`. `_fit_table` now derives the flag structurally from
+    `present`, and this function asserts the two agree, so neither reading can drift.
+    """
+    floor = _kind_floor(kind)
+    if not counts:
+        if kind == "dist":
+            n = floor
+            out = {n - 1: 0}, ([0] * n, [False] * n, n), "empty-all-skip"
+        else:
+            out = _phantom_pair(0, max(floor, 2), optimal)
+    elif len(counts) == 1:
+        s = next(iter(counts))
+        if kind == "dist" and s + 1 >= floor:
+            n = s + 1
+            out = {s: 0}, ([0] * n, [False] * n, n), "single-all-skip"
+        else:
+            out = _phantom_pair(s, max(floor, s + 1, 2), optimal)
+    else:
+        lens = huffman_lengths(counts)
+        deepest = max(lens.values())
+        if deepest > MAX_LENGTH:
+            raise ValueError(
+                f"code length {deepest} exceeds the format's ceiling of {MAX_LENGTH}; "
+                "a block holds at most 65,536 tokens so the Katona bound caps natural "
+                "Huffman depth at 22 -- this should be unreachable")
+        n = max(max(lens) + 1, floor)
+        out = lens, lens_to_arrays(lens, n), "huffman"
+
+    lens, (_lens_l, pres_l, n), note = out
+    if (note == "huffman") != any(pres_l):
+        raise ValueError(f"note {note!r} disagrees with the present array; one of the "
+                         "two readings of 'is this table zero-length' has drifted")
+    if n < 2 or n < floor:
+        raise ValueError(f"{kind} table declares {n}, under the attested floor {floor}")
+    return lens, (_lens_l, pres_l, n), note
 
 
 def canonical_codes(lens):

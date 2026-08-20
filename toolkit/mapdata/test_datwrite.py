@@ -46,6 +46,7 @@ differently than we do. No derivation-register row is owed for this file.
 
 import ast
 import binascii
+import builtins
 import contextlib
 import io
 import json
@@ -63,6 +64,12 @@ from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
 import datcheck  # noqa: E402
 import datmove  # noqa: E402
+# `datplan` is imported for section 11h's sabotage and nothing else. `datwrite`
+# imports it INSIDE the grow gate rather than at module level -- circularly,
+# datmove imports datwrite -- so the stub has to be installed on the module
+# object itself, which is the same object sys.modules hands the gate.
+import datplan  # noqa: E402
+import gwdat  # noqa: E402
 import gwenc  # noqa: E402
 import checks  # noqa: E402
 # Fixture builders borrowed across the module boundary, and each for a stated
@@ -110,7 +117,18 @@ import test_datmove as tdm  # noqa: E402
 # the raise is section 9d: it stages FINDINGS C-6 deliberately and MEASURES that
 # every rule this project owns stays green over an unreadable file, which is
 # what makes every refusal after it worth having rather than decorative.
-LEDGER = checks.Ledger("dat writer", floor=138)
+#
+# RAISED 138 -> 199 on 2026-08-19 with sections 11 and 12: the grow-back verb and
+# the journal as a durable file. MEASURED from a green run, not projected: 199.
+# Both sections are sabotage-first, because that is the only technique in this
+# arc that has reliably distinguished a check from a comment (FINDINGS 14.3), and
+# two of the four grow-gate conditions cannot be reached on a 4 KB fixture at
+# all without one -- row 3 happens to describe the MFT here, and an archive this
+# small has no container rotation region. 11e's stub is the one that matters
+# most: with the pre-write refusal removed the write LANDS, which is the only
+# way `datmove.overlaps` can ever be made to fire. Sections 11 and 12 add no
+# vault dependency and cost about a second.
+LEDGER = checks.Ledger("dat writer", floor=199)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -1274,7 +1292,12 @@ def section_compressed(tmp):
     # taken from the docstring. A guard against a silent whole-file corruption
     # is only worth what its miss rate is, and the byte-marker version of this
     # missed six of eighteen gwenc outputs -- every one of them a small payload.
-    sizes = (0, 1, 4, 64, 100, 256, 1000, 4000)
+    # 0 is NOT in this list any more, and its absence is checked rather than
+    # assumed: `gwenc.encode(b"")` refuses as of 2026-08-19 (a zero-block stream
+    # is a shape no retail comp-8 row has), so asking for one here would raise
+    # out of the test rather than measure recall. Section 11 covers that refusal
+    # from both sides.
+    sizes = (1, 4, 64, 100, 256, 1000, 4000)
     fails = [n for n in sizes
              if not datwrite.looks_compressed(
                  gwenc.encode(random.Random(n).randbytes(n)))]
@@ -1395,6 +1418,709 @@ def section_c6_guard(tmp):
               "its crc over what was written")
 
 
+def journal_lines(path):
+    """A journal's raw lines. The format is one record per line -- see Journal."""
+    with open(path, "rb") as fh:
+        return fh.read().split(b"\n")
+
+
+def section_growback(tmp):
+    """11. THE GROW-BACK: a row put back into blocks it freed itself.
+
+    `replace()` derived its ceiling from `e.size`, the row's CURRENT size, so
+    after any shrink the row's own freed blocks became unreachable to it. That is
+    the whole of it -- one expression -- and it is fatal for the authoring loop
+    this module exists for, because "iterate the encoder, rewrite the row" means
+    the SECOND write onto a row the first one shrank. Reproduced below on the
+    fixture (1000 B -> 100 B, and a 1000 B payload refused with 1,024 B of the
+    row's own extent standing free and claimed by nobody) and priced on the real
+    archive at 1,025,536 B for row 11196.
+
+    THE FIX IS AN EXPLICIT CEILING, NOT A GREEDY MAXIMUM, and `11c` is where that
+    choice is checked rather than argued: with `grow_to` unset the refusal is
+    unchanged, so every caller in the tree and the vault is on the old path.
+
+    WHAT THE GATE HAS TO SEE is four separate conditions, and `claimants()` --
+    the only one `restore()` had -- is one of them. Each of the four gets its own
+    fixture below, and the two that cannot be reached on this archive without
+    help (the live MFT, because row 3 happens to describe it here; and the
+    container exclusion, because a 4 KB fixture has no rotation region) are
+    reached by SABOTAGE, which is also what proves they are load-bearing.
+    """
+    print("\n11. the grow-back: a row put back into the blocks it freed")
+    dat, _ = fresh(tmp, "grow.dat")
+    off = ROWS[ROW_SHRINK][0]
+    pristine_res = reservation(ROWS[ROW_SHRINK][1])          # 1024
+
+    small = spill(tmp, "g-small.bin", pattern(9, 100))
+    with quiet():
+        code, _ = run_cli("--dat", dat, "--journal", os.path.join(tmp, "g1.json"),
+                          "--replace", str(ROW_SHRINK), "--data", small)
+    _o, size, comp, _c = row_entry_of(dat, ROW_SHRINK)
+    check(code == 0 and size == 100 and reservation(size) == 512,
+          f"setup: the shrink took row {ROW_SHRINK} to {size} B, and its "
+          f"reservation with it -- {pristine_res} -> {reservation(size)} B, with "
+          f"{pristine_res - reservation(size)} B of its own extent now outside "
+          f"what --replace can see")
+
+    # THE CLIENT'S OWN ALLOCATOR IS ENTITLED TO THESE BLOCKS, so put something
+    # there that is neither zero nor ours. It makes the journal's `before` bite
+    # over the annexed range instead of being trivially a field of zeros.
+    with open(dat, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(b"\xEE" * 512)
+    after_shrink = blob(dat)
+
+    with Archive(dat) as ar:
+        free = datwrite.claimants(ar, off + 512, off + pristine_res,
+                                  exclude=ROW_SHRINK)
+    check(not free,
+          f"and [0x{off + 512:X}, 0x{off + pristine_res:X}) is claimed by NOBODY "
+          f"-- the information needed to allow the write was already computable, "
+          f"by a helper in the same file",
+          f"claimants: {free}")
+
+    print("\n11a. REFUSED without grow_to -- and the refusal names the remedy")
+    big = spill(tmp, "g-big.bin", pattern(77, 1000))
+    j2 = os.path.join(tmp, "g2.json")
+    code, out = run_cli("--dat", dat, "--journal", j2,
+                        "--replace", str(ROW_SHRINK), "--data", big)
+    check(code != 0 and blob(dat) == after_shrink and not os.path.exists(j2),
+          "a 1000 B payload onto the shrunk row is still refused by default, "
+          "archive untouched, no journal left -- every existing caller is on "
+          "this path and none of them changes behaviour",
+          f"exit {code}")
+    check("That is a relocation, not a replacement." in out,
+          "the refusal's first sentence is unchanged, because that is the "
+          "sentence readers and greps already know")
+    check("--grow-to 1000" in out and "claimed by NOBODY" in out,
+          "...and because the blocks ARE free, it now names --grow-to rather "
+          "than sending the reader to a free-run list that will never offer "
+          "this row its own extent back")
+
+    print("\n11b. --grow-to writes AUTHORED bytes into the freed blocks")
+    j3 = os.path.join(tmp, "g3.json")
+    code, out = run_cli("--dat", dat, "--journal", j3,
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "1000")
+    check(code == 0, f"the same write with --grow-to 1000 exits 0 (got {code})")
+    _o2, size2, _c2, crc2 = row_entry_of(dat, ROW_SHRINK)
+    body = row_bytes(dat, ROW_SHRINK, 1000)
+    check(size2 == 1000 and body == pattern(77, 1000),
+          f"row {ROW_SHRINK} is {size2} B and holds the AUTHORED payload -- not "
+          f"a donor's, which is the one thing --restore can never do",
+          f"{'identical' if body == pattern(77, 1000) else 'DIFFERENT'}")
+    check(crc2 == binascii.crc32(pattern(77, 1000)),
+          "and its entry crc covers the new stored bytes")
+    tail = blob(dat)[off + 1000:off + pristine_res]
+    check(tail == b"\x00" * (pristine_res - 1000),
+          f"the {pristine_res - 1000} B tail of the GROWN reservation is zeroed "
+          f"-- no fragment of what was in the annexed blocks survives")
+    with Archive(dat) as ar:
+        shared = datmove.overlaps(ar)
+    check(not shared,
+          f"and no two rows share a block after the grow ({len(shared)} pairs) "
+          f"-- the invariant no checksum can see, since each crc covers only "
+          f"its own row's bytes")
+    with quiet():
+        bad = datwrite.verify(dat) + datwrite.check_rows(dat, list(PAYLOAD_ROWS))
+    check(bad == 0, "all three checksum rules hold afterwards")
+    check("annexing [0x%X,0x%X)" % (off + 512, off + pristine_res) in out,
+          "the tool NAMES the annexation and its range as it makes it")
+    check("verified" in out and "read back" in out,
+          "and it read the payload back through the write handle and said so")
+
+    print("\n11c. the journal covers the ANNEXED region, and --revert proves it")
+    doc = json.load(open(j3))
+    at_payload = [ed for ed in doc["edits"] if ed["offset"] == off]
+    check(len(at_payload) == 1 and at_payload[0]["length"] == pristine_res,
+          f"the record at 0x{off:X} spans the whole NEW {pristine_res}-byte "
+          f"reservation, not the {512}-byte one the row had",
+          f"{at_payload[0]['length'] if len(at_payload) == 1 else at_payload} B")
+    check(len(at_payload) == 1
+          and binascii.unhexlify(at_payload[0]["before"])
+          == after_shrink[off:off + pristine_res],
+          "and its `before` holds the annexed blocks' contents exactly, the "
+          "0xEE the allocator's stand-in wrote included")
+    check(len(at_payload) == 1
+          and "annexing" in at_payload[0]["what"],
+          "and the `what` string names the annexation, which --revert prints")
+    code, out = run_cli("--revert", j3)
+    check(code == 0 and blob(dat) == after_shrink,
+          "--revert puts the archive back BYTE FOR BYTE, the annexed region "
+          "included",
+          f"exit {code}, "
+          f"{'identical' if blob(dat) == after_shrink else 'DIFFERS'}")
+
+    print("\n11d. grow_to is a STATEMENT, not a request for more")
+    dat4, _ = fresh(tmp, "grow-over.dat")
+    with quiet():
+        run_cli("--dat", dat4, "--journal", os.path.join(tmp, "g4.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    before4 = blob(dat4)
+    j5 = os.path.join(tmp, "g5.json")
+    # 512, not 600: the ceiling is a RESERVATION, so `--grow-to 600` and
+    # `--grow-to 1000` are the same statement on a 512-byte-block archive and a
+    # check written against 600 would test nothing.
+    code, out = run_cli("--dat", dat4, "--journal", j5,
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "512")
+    check(code != 0 and blob(dat4) == before4 and not os.path.exists(j5),
+          "a payload past the reservation the caller STATED is refused, even "
+          "though the geometry would allow it -- a greedy verb would take it "
+          "and a shrunk NEIGHBOUR would have no way to say the blocks are its",
+          f"exit {code}")
+    check("entitled" in out,
+          "and the refusal says the number is a claim about what the row was "
+          "GIVEN, not a knob to make a write fit")
+    code, _ = run_cli("--dat", dat4, "--grow-to", "1000")
+    check(code == 2,
+          f"--grow-to without --replace exits 2 -- it names no row (got {code})")
+    ap = datwrite.build_parser()
+    check(not datwrite.is_mutating(
+              ap.parse_args(["--dat", dat4, "--verify", "--grow-to", "99"])),
+          "and --grow-to is classified read-only: it writes nothing on its own, "
+          "so it must not construct a Writer that has nothing to do")
+
+    print("\n11e. the gate: CLAIMANTS, and the post-write assertion behind it")
+    dat6, _ = fresh(tmp, "grow-claimed.dat")
+    with quiet():
+        run_cli("--dat", dat6, "--journal", os.path.join(tmp, "g6.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    stolen = off + 512
+    body7 = row_bytes(dat6, ROW_SMALL, ROWS[ROW_SMALL][1])
+    with open(dat6, "r+b") as fh:
+        fh.seek(stolen)
+        fh.write(body7)
+    mft_field(dat6, ROW_SMALL, 0x00, "<Q", stolen)
+    before6 = blob(dat6)
+    j7 = os.path.join(tmp, "g7.json")
+    code, out = run_cli("--dat", dat6, "--journal", j7,
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "1000")
+    check(code != 0 and blob(dat6) == before6 and not os.path.exists(j7),
+          f"a grow into blocks row {ROW_SMALL} now owns is REFUSED BEFORE the "
+          f"write, archive untouched, no journal",
+          f"exit {code}")
+    check("CLAIMED" in out and f"row {ROW_SMALL}" in out and "datmove" in out,
+          f"and the refusal names row {ROW_SMALL} as the claimant and points at "
+          f"datmove.py, rather than saying the archive is full")
+    check("--grow-to" not in out,
+          "...and does NOT offer --grow-to here, because the blocks are not "
+          "this row's to take -- the remedy sentence is chosen by the geometry")
+
+    # SABOTAGE, extending test 7i's established stub to the grow path. With the
+    # pre-write refusal gone the write LANDS, and the only thing left standing
+    # between the archive and two rows sharing blocks is the post-write
+    # `datmove.overlaps` assertion -- which is the whole reason it is there, and
+    # the only way it can ever be made to fire.
+    real_claimants = datwrite.claimants
+    try:
+        datwrite.claimants = lambda ar, lo, hi, exclude: []
+        code, out = run_cli("--dat", dat6, "--journal",
+                            os.path.join(tmp, "g8.json"),
+                            "--replace", str(ROW_SHRINK), "--data", big,
+                            "--grow-to", "1000")
+    finally:
+        datwrite.claimants = real_claimants
+    check(blob(dat6) != before6,
+          "SABOTAGE: with claimants() stubbed to [], the pre-write refusal is "
+          "gone and the grow LANDS -- so 11e is load-bearing and not decorative")
+    check(code != 0 and "GROW VERIFY FAILED" in out
+          and f"rows {ROW_SHRINK} and {ROW_SMALL}" in out,
+          "...and the post-write overlap assertion catches it, naming both "
+          "rows and telling the operator to revert -- a check that could not "
+          "otherwise be made to fire at all",
+          f"exit {code}")
+
+    print("\n11f. the gate: EOF, which claimants cannot see at all")
+    dat9, _ = fresh(tmp, "grow-eof.dat")
+    mft_field(dat9, ROW_SMALL, 0x00, "<Q", FILE_SIZE)
+    before9 = blob(dat9)
+    mid = spill(tmp, "g-mid.bin", pattern(31, 600))
+    j9 = os.path.join(tmp, "g9.json")
+    code, out = run_cli("--dat", dat9, "--journal", j9,
+                        "--replace", str(ROW_SMALL), "--data", mid,
+                        "--grow-to", "600")
+    check(code != 0 and blob(dat9) == before9 and not os.path.exists(j9),
+          "a grow whose rounded reservation runs past EOF is REFUSED before "
+          "the write -- put()'s short-read guard catches it AFTER the decision, "
+          "which is a crash rather than a refusal",
+          f"exit {code}")
+    check("PAST THE END" in out and "4096" in out,
+          "and the refusal names the overhang and the file size, the way "
+          "datalloc._place does; datcheck rule 5 cannot catch this because it "
+          "tests offset + size, not the rounded reservation")
+
+    print("\n11g. the gate: the LIVE MFT, checked independently of row 3")
+    dat10, _ = fresh(tmp, "grow-mft.dat")
+    before10 = blob(dat10)
+    code, out = run_cli("--dat", dat10, "--journal", os.path.join(tmp, "g10.json"),
+                        "--replace", str(ROW_SMALL), "--data", mid,
+                        "--grow-to", "600")
+    check(code != 0 and blob(dat10) == before10,
+          f"CONTROL: growing row {ROW_SMALL} into the table's block is refused "
+          f"on THIS archive by claimants, because row 3 happens to describe the "
+          f"MFT here",
+          f"exit {code}")
+    check("CLAIMED by row 3" in out, "...and says so, naming row 3")
+    # Nothing enforces that row 3 describes the table -- free_runs protects the
+    # MFT with its own bitmap rather than by trusting a row, and the client
+    # relocates the table during ordinary play. Take row 3 out of the picture
+    # and the extent must still be refused, or the protection was incidental.
+    try:
+        datwrite.claimants = lambda ar, lo, hi, exclude: []
+        code, out = run_cli("--dat", dat10, "--journal",
+                            os.path.join(tmp, "g11.json"),
+                            "--replace", str(ROW_SMALL), "--data", mid,
+                            "--grow-to", "600")
+    finally:
+        datwrite.claimants = real_claimants
+    check(code != 0 and blob(dat10) == before10
+          and "LIVE MASTER FILE TABLE" in out,
+          "SABOTAGE: with claimants() stubbed out the extent is STILL refused, "
+          "against the file header's own mft_offset/mft_size -- so the MFT is "
+          "protected by a check of its own and not by row 3 happening to exist",
+          f"exit {code}")
+
+    print("\n11h. the gate: datplan's WITHHELD container runs")
+    # The largest new risk in the whole verb: `replace()` never needed to know
+    # about the client's rotation region because it never allocated. Four bytes
+    # of setup make the freed run carry an MFT generation head -- datplan's own
+    # container_signature, and self-describing, so the entry count at +0x0C says
+    # how far it reaches.
+    dat11, _ = fresh(tmp, "grow-withheld.dat")
+    with quiet():
+        run_cli("--dat", dat11, "--journal", os.path.join(tmp, "g12.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    with open(dat11, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(MFT_MAGIC + b"\x00" * 8 + struct.pack("<I", ENTRY_COUNT))
+    before11 = blob(dat11)
+    with Archive(dat11) as ar:
+        usable, excluded = datplan.classify_runs(ar)
+    check(not usable and len(excluded) == 1
+          and excluded[0].start_block == (off + 512) // BLOCK,
+          f"setup: datplan withholds the freed run at 0x{off + 512:X} -- it "
+          f"carries a master file table generation and reads as free only "
+          f"because no MFT row points at it",
+          f"usable {usable}, excluded {excluded}")
+    j13 = os.path.join(tmp, "g13.json")
+    code, out = run_cli("--dat", dat11, "--journal", j13,
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "1000")
+    check(code != 0 and blob(dat11) == before11 and not os.path.exists(j13),
+          "a grow into a WITHHELD run is refused, archive untouched -- "
+          "'unallocated' counts the client's live container generations as free "
+          "space, 89.6% of the gap measure on this machine's study copy",
+          f"exit {code}")
+    check("WITHHOLDS" in out and "master file table" in out,
+          "and the refusal quotes Exclusion.why(), so the operator sees WHAT "
+          "is in those blocks rather than only that they are off limits")
+
+    real_classify = datplan.classify_runs
+    try:
+        datplan.classify_runs = lambda ar, runs=None: (
+            datplan.free_runs(ar) if runs is None else runs, [])
+        code, out = run_cli("--dat", dat11, "--journal",
+                            os.path.join(tmp, "g14.json"),
+                            "--replace", str(ROW_SHRINK), "--data", big,
+                            "--grow-to", "1000")
+    finally:
+        datplan.classify_runs = real_classify
+    check(code == 0 and blob(dat11) != before11,
+          "SABOTAGE: with classify_runs stubbed to 'everything usable' the same "
+          "grow is ACCEPTED -- so 11h is the check doing the work, and the "
+          "difference between free_runs and classify_runs is the difference "
+          "between writing into a hole and writing into the MFT the client is "
+          "about to rotate back onto",
+          f"exit {code}")
+
+    print("\n11i. restore() inherited the three conditions it never had")
+    # The factoring is the point: restore() has been run on real 4.2 GB copies
+    # with claimants() as its whole gate, so these were live gaps.
+    src = ast.parse(open(datwrite.__file__, encoding="utf-8").read())
+    fns = {n.name: n for n in ast.walk(src) if isinstance(n, ast.FunctionDef)}
+
+    def calls(node):
+        return {c.func.attr for c in ast.walk(node)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)}
+    check("_grow_gate" in calls(fns["restore"])
+          and "_grow_gate" in calls(fns["replace"]),
+          "both verbs call the SAME _grow_gate, on the syntax tree -- one copy, "
+          "the way row_offset delegates to archive.mft_row_offset after the "
+          "planner's private copy printed three wrong addresses for months")
+    check("claimants" not in {c.func.id for c in ast.walk(fns["restore"])
+                              if isinstance(c, ast.Call)
+                              and isinstance(c.func, ast.Name)},
+          "and restore() no longer carries its own claimants() call, so the "
+          "two gates cannot drift apart")
+
+    donor, _ = fresh(tmp, "grow-donor.dat")
+    t12, _ = fresh(tmp, "grow-restore.dat")
+    with quiet():
+        run_cli("--dat", t12, "--journal", os.path.join(tmp, "g15.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    with open(t12, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(MFT_MAGIC + b"\x00" * 8 + struct.pack("<I", ENTRY_COUNT))
+    before12 = blob(t12)
+    code, out = run_cli("--dat", t12, "--journal", os.path.join(tmp, "g16.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code != 0 and "WITHHOLDS" in out and blob(t12) == before12,
+          "--restore into a withheld container run is now REFUSED too, which "
+          "it was not before the gate was shared -- and --restore is the verb "
+          "that has already been used on real 4.2 GB copies")
+
+    print("\n11j. the ZERO-BLOCK stream, refused on the archive side (gap D)")
+    # The encoder refuses to MAKE one as of 2026-08-19. This is the other door:
+    # the guard has to hold whether or not the bytes came from our encoder, and
+    # `gwenc._refuse_zero_block` is stubbed here only to obtain the artifact.
+    raised = None
+    try:
+        gwenc.encode(b"")
+    except Exception as exc:                                  # noqa: BLE001
+        raised = exc
+    check(raised is not None and "NO BLOCKS" in str(raised),
+          "CONTROL: gwenc.encode(b'') refuses -- the encoder-side door")
+    real_zero = gwenc._refuse_zero_block
+    try:
+        gwenc._refuse_zero_block = lambda payload: None
+        zero_block = gwenc.encode(b"")
+    finally:
+        gwenc._refuse_zero_block = real_zero
+    back, declared = gwdat.decompress(zero_block)
+    check(len(zero_block) == 12 and back == b"" and declared == 0
+          and zero_block[3] == datwrite.HUFFMAN_PROLOGUE_BYTE,
+          f"the artifact is real and every OTHER arm agrees with it: {len(zero_block)} B, "
+          f"byte 3 is 0x{zero_block[3]:02X}, it decompresses without raising, "
+          f"and its trailer declares {declared} B against a {len(b'')} B "
+          f"expectation -- so nothing below the new arm could refuse it")
+    fault = datwrite.declaration_fault(zero_block, 8, b"")
+    check(fault is not None and "56 B" in fault,
+          "declaration_fault REFUSES it, naming retail's measured floor -- the "
+          "smallest comp-8 row in dat_study is 56 B and holds a block")
+    check(datwrite.declaration_fault(zero_block, 8, None) is not None,
+          "and a comp-8 write with NO declared payload is still refused for its "
+          "own reason (FINDINGS 14.2 hole 1), which this arm must not displace")
+    msg, intact, jrnl = None, None, None
+    path = os.path.join(tmp, "zeroblock.dat")
+    tdc.build_archive(path)
+    was = blob(path)
+    w = datwrite.Writer(path, path + ".journal.json")
+    try:
+        with quiet():
+            w.replace(tdc.ROW_B, zero_block, compression=8, expect=b"")
+    except SystemExit as exc:
+        msg = str(exc)
+    finally:
+        w.close()
+    intact = blob(path) == was
+    jrnl = os.path.exists(path + ".journal.json")
+    check(msg is not None and intact and not jrnl,
+          "and the verb refuses it end to end, nothing written, no journal",
+          f"{'refused' if msg else 'WENT THROUGH'}, "
+          f"archive {'intact' if intact else 'MODIFIED'}")
+    check(datwrite.looks_compressed(zero_block)
+          and datwrite.declaration_fault(zero_block, 0, zero_block) is not None,
+          "...and the C-6 arm still sees the same bytes as a decodable "
+          "compression-8 stream when they are declared STORED, so the two "
+          "guards cover the two directions rather than one shadowing the other")
+
+
+def section_journal(tmp):
+    """12. The journal as a DURABLE FILE, not only as a revert mechanism.
+
+    Everything above exercises the journal by reverting it. Nothing exercised it
+    as a file that has to survive the crash it exists for, and the three defects
+    that left were all in that half:
+
+      * `flush()` opened `"w"` -- truncate -- and re-serialised the whole
+        document after EVERY record. MEASURED 4.66x on a 5-record replace of this
+        fixture, 5.0x on a 1,029,632 B reservation, and **34.1x / 533 MB** on
+        `vault/research/archivewrite/a4run7-flip.journal`, which is 137x the
+        3.9 MB of archive its 60 records protect. Quadratic in record count.
+      * A torn flush therefore lost the WHOLE journal, not one record, and
+        `revert()` died at `json.load` with an unhandled `JSONDecodeError` --
+        a traceback rather than a diagnosis, on the tool that exists for exactly
+        that moment.
+      * No fsync anywhere. `put()` fsyncs the archive; the record that must
+        precede it did not.
+
+    The format did NOT move -- 59 old journals under `vault/` and
+    `test_datalloc.py`'s prefix replay all read it with a plain `json.load` --
+    so `12d` synthesises an old-format journal in the temp directory and replays
+    it. Synthesised rather than borrowed on purpose: this file never opens the
+    vault (see the module docstring), and that boundary is worth more than the
+    realism.
+    """
+    print("\n12. the journal as a durable file")
+    dat, _ = fresh(tmp, "jr.json.dat")
+    jrnl = os.path.join(tmp, "jr.journal.json")
+    payload = pattern(41, 900)
+
+    real_open = builtins.open
+    real_fsync = os.fsync
+    modes, wrote, synced = [], [0], []
+
+    class Counting:
+        """A file object that reports how many bytes went through it."""
+
+        def __init__(self, fh):
+            self._fh = fh
+
+        def write(self, b):
+            wrote[0] += len(b)
+            return self._fh.write(b)
+
+        def __getattr__(self, name):
+            return getattr(self._fh, name)
+
+        def __enter__(self):
+            self._fh.__enter__()
+            return self
+
+        def __exit__(self, *a):
+            return self._fh.__exit__(*a)
+
+    def spy_open(path, mode="r", *a, **k):
+        fh = real_open(path, mode, *a, **k)
+        try:
+            mine = os.path.abspath(path) == os.path.abspath(jrnl)
+        except Exception:                                     # noqa: BLE001
+            mine = False
+        if not mine:
+            return fh
+        modes.append(mode)
+        return Counting(fh)
+
+    builtins.open = spy_open
+    os.fsync = lambda fd: (synced.append(fd), real_fsync(fd))[1]
+    try:
+        w = datwrite.Writer(dat, jrnl)
+        try:
+            with quiet():
+                w.replace(ROW_SHRINK, payload)
+            jfd = w.journal.fh.fileno()
+            records = len(w.journal.entries)
+        finally:
+            w.close()
+    finally:
+        builtins.open = real_open
+        os.fsync = real_fsync
+
+    final = os.path.getsize(jrnl)
+    check(records == 5,
+          f"a replace of row {ROW_SHRINK} journals 5 records -- payload, size, "
+          f"compression, entry crc, MFT self-crc",
+          f"{records} record(s)")
+
+    print("\n12a. one truncating open, and no rewrite of what is already there")
+    truncating = [m for m in modes if "w" in m or "x" in m]
+    check(len(truncating) == 1,
+          f"the journal path is opened with a truncating mode EXACTLY ONCE "
+          f"across {records} records (it was once per record: {records})",
+          f"modes: {modes}")
+    check(wrote[0] < final * 1.5,
+          f"and cumulative bytes written, {wrote[0]}, is under 1.5x the "
+          f"{final} B final file -- MEASURED {wrote[0] / final:.2f}x, against "
+          f"4.66x on this same fixture before the change",
+          f"{wrote[0]} B written for a {final} B journal")
+
+    print("\n12b. every record is fsynced, and that is what the ordering claims")
+    journal_syncs = sum(1 for fd in synced if fd == jfd)
+    # HONEST LIMIT, stated because this file has a rule about checks that cannot
+    # fail: this proves the CALL was made, not that bytes reached the platter.
+    # Same class of claim as declaration_fault proving agreement with our own
+    # decoder rather than correctness against the client's.
+    check(journal_syncs >= records,
+          f"os.fsync was called on the journal's own descriptor at least once "
+          f"per record ({journal_syncs} for {records}) -- put() fsyncs the "
+          f"archive, and the record that must PRECEDE it now does too",
+          f"{journal_syncs} sync(s) on fd {jfd}, "
+          f"{len(synced)} across all descriptors")
+
+    real_flush = datwrite.Journal.flush
+    try:
+        def no_fsync(self):
+            if self.fh is not None:
+                self.fh.flush()
+        datwrite.Journal.flush = no_fsync
+        synced2, jrnl2 = [], os.path.join(tmp, "jr2.journal.json")
+        os.fsync = lambda fd: (synced2.append(fd), real_fsync(fd))[1]
+        dat2, _ = fresh(tmp, "jr2.dat")
+        w = datwrite.Writer(dat2, jrnl2)
+        try:
+            with quiet():
+                w.replace(ROW_SHRINK, payload)
+            jfd2 = w.journal.fh.fileno()
+        finally:
+            w.close()
+    finally:
+        os.fsync = real_fsync
+        datwrite.Journal.flush = real_flush
+    check(sum(1 for fd in synced2 if fd == jfd2) == 0,
+          "SABOTAGE: with the fsync taken out of Journal.flush the count for "
+          "the journal's descriptor falls to zero -- so 12b is measuring the "
+          "call and not the file object's own buffering")
+
+    print("\n12c. a TORN journal costs the last record, not all of them")
+    dat3, _ = fresh(tmp, "torn.dat")
+    j3 = os.path.join(tmp, "torn.journal.json")
+    with quiet():
+        run_cli("--dat", dat3, "--journal", j3,
+                "--replace", str(ROW_SHRINK), "--data",
+                spill(tmp, "torn.bin", payload))
+    written_state = blob(dat3)
+    full = json.load(open(j3))
+    check(len(full["edits"]) == 5,
+          f"the intact journal reads with a plain json.load and holds "
+          f"{len(full['edits'])} edits -- the format did NOT move, and 59 "
+          f"journals under vault/ plus test_datalloc.py's prefix replay depend "
+          f"on that")
+    lines = journal_lines(j3)
+    check(len(lines) == 5 + 3,
+          f"and it is one record per LINE: {len(lines)} pieces for 5 records -- "
+          f"a header line, five record lines, the closer, and the empty piece "
+          f"after the final newline",
+          f"lines: {[len(x) for x in lines]}")
+
+    raw = blob(j3)
+    # Cut through the MIDDLE of the LAST RECORD line, which is what an
+    # interrupted append actually leaves behind: every earlier record is already
+    # complete and already fsynced. lines[-1] is the empty piece past the final
+    # newline and lines[-2] is the closer, so the last record is lines[-3].
+    starts, pos = [], 0
+    for piece in lines:
+        starts.append(pos)
+        pos += len(piece) + 1
+    cut = starts[-3] + len(lines[-3]) // 2
+    torn = os.path.join(tmp, "torn-mid.journal.json")
+    with open(torn, "wb") as fh:
+        fh.write(raw[:cut])
+    doc, dropped = datwrite.read_journal(torn)
+    check(len(doc["edits"]) == 4 and dropped > 0,
+          f"read_journal recovers the 4 complete records and reports "
+          f"{dropped} dropped byte(s) rather than swallowing them",
+          f"{len(doc['edits'])} recovered, {dropped} B dropped")
+    expect = bytearray(written_state)
+    for ed in reversed(doc["edits"]):
+        expect[ed["offset"]:ed["offset"] + ed["length"]] = \
+            binascii.unhexlify(ed["before"])
+    code, out = run_cli("--revert", torn)
+    check(code != 0 and "INCOMPLETE JOURNAL" in out,
+          f"--revert on it exits NON-ZERO with a named diagnosis -- it raised "
+          f"JSONDecodeError out of revert() before the change",
+          f"exit {code}")
+    check(str(dropped) in out,
+          "and the message names how many bytes it dropped; silence there is "
+          "the same defect as the missing count")
+    check(blob(dat3) == bytes(expect) and blob(dat3) != written_state,
+          "and every COMPLETE record replayed, so the loss is one record and "
+          "not the whole file")
+
+    # 50%, the recon's own cut. It lands inside the FIRST record here, because
+    # the payload record is 1024 B of archive against four 4-byte ones, so
+    # nothing is recoverable -- and that must still be a named refusal.
+    dat4, _ = fresh(tmp, "torn2.dat")
+    j4 = os.path.join(tmp, "torn2.journal.json")
+    with quiet():
+        run_cli("--dat", dat4, "--journal", j4,
+                "--replace", str(ROW_SHRINK), "--data",
+                spill(tmp, "torn2.bin", payload))
+    state4 = blob(dat4)
+    half = os.path.join(tmp, "torn-half.journal.json")
+    raw4 = blob(j4)
+    with open(half, "wb") as fh:
+        fh.write(raw4[:len(raw4) // 2])
+    code, out = run_cli("--revert", half)
+    check(code != 0 and "INCOMPLETE JOURNAL" in out and blob(dat4) == state4,
+          "a journal truncated at 50% -- mid first record -- is a named "
+          "refusal with nothing replayed and nothing written, not a traceback",
+          f"exit {code}")
+    junk = os.path.join(tmp, "junk.journal.json")
+    with open(junk, "wb") as fh:
+        fh.write(b"\x00\xFF" * 64)
+    code, out = run_cli("--revert", junk)
+    check(code != 0 and "REFUSED" in out and "header" in out,
+          "and a file that is not a journal at all is refused by NAME, without "
+          "opening any archive",
+          f"exit {code}")
+
+    print("\n12d. the OLD format still replays, byte for byte")
+    # Synthesised, never borrowed: `json.dump({...}, indent=2)` IS what flush()
+    # wrote until 2026-08-19, so re-serialising a real journal that way produces
+    # exactly the artifact 59 files under vault/ are in. This file never opens
+    # the vault.
+    dat5, _ = fresh(tmp, "oldfmt.dat")
+    j5 = os.path.join(tmp, "oldfmt.journal.json")
+    original5 = blob(dat5)
+    with quiet():
+        run_cli("--dat", dat5, "--journal", j5,
+                "--replace", str(ROW_SHRINK), "--data",
+                spill(tmp, "oldfmt.bin", payload))
+    old = os.path.join(tmp, "synth-old.journal.json")
+    doc5 = json.load(open(j5))
+    with open(old, "w") as fh:
+        json.dump(doc5, fh, indent=2)
+    check(blob(old) != blob(j5) and len(journal_lines(old)) > 7,
+          f"the synthesised old-format journal is a DIFFERENT artifact -- one "
+          f"pretty-printed document over {len(journal_lines(old))} lines, not "
+          f"one record per line",
+          f"{len(blob(old))} B vs {len(blob(j5))} B")
+    code, out = run_cli("--revert", old)
+    check(code == 0 and blob(dat5) == original5,
+          "replaying it puts the archive back BYTE FOR BYTE",
+          f"exit {code}, "
+          f"{'identical' if blob(dat5) == original5 else 'DIFFERS'}")
+
+    # SABOTAGE: drop the intact-document branch. read_journal's FIRST json.loads
+    # is that branch, so making it raise is exactly "the old-format path was
+    # removed" -- and the pretty-printed journal has no line that stands alone.
+    def drop_intact_branch():
+        state = {"n": 0}
+        real_loads = json.loads
+
+        def once(s, *a, **k):
+            state["n"] += 1
+            if state["n"] == 1:
+                raise ValueError("sabotage: the intact-document branch is gone")
+            return real_loads(s, *a, **k)
+        return real_loads, once
+
+    real_loads, once = drop_intact_branch()
+    try:
+        datwrite.json.loads = once
+        code, out = run_cli("--revert", old)
+    finally:
+        datwrite.json.loads = real_loads
+    check(code != 0 and "REFUSED" in out,
+          "SABOTAGE: with that branch removed the old-format journal is "
+          "unreadable -- so 12d is the check keeping 59 vault journals alive")
+
+    # And the other half of what the line-per-record layout bought: the SAME
+    # sabotage over a NEW-format journal is survivable, because every record
+    # stands alone.
+    dat6, _ = fresh(tmp, "newfmt.dat")
+    j6 = os.path.join(tmp, "newfmt.journal.json")
+    original6 = blob(dat6)
+    with quiet():
+        run_cli("--dat", dat6, "--journal", j6,
+                "--replace", str(ROW_SHRINK), "--data",
+                spill(tmp, "newfmt.bin", payload))
+    real_loads, once = drop_intact_branch()
+    try:
+        datwrite.json.loads = once
+        code, out = run_cli("--revert", j6)
+    finally:
+        datwrite.json.loads = real_loads
+    check(code == 0 and blob(dat6) == original6,
+          "CONTROL: the same sabotage over a NEW-format journal reverts byte "
+          "for byte from the line parser alone -- which is the whole of what "
+          "one-record-per-line buys when a write is torn")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
@@ -1405,6 +2131,8 @@ def main():
         section_header_refusal(tmp)
         section_compressed(tmp)
         section_c6_guard(tmp)
+        section_growback(tmp)
+        section_journal(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

@@ -134,6 +134,24 @@ and the caller must pass the one the planner used:
 PREDICTED byte count to the byte, which is the arm that catches the mismatch.
 
 --------------------------------------------------------------------------------
+THE ENVELOPE, AND THE ONE GAP LEFT OPEN ON PURPOSE.
+
+Every table this writer emits is a shape retail's own archive or the A8 client run
+attests -- `gwentropy.authoring_table` is where that is decided and it carries the
+census. `studies/archivewrite/FINDINGS.md` §13.5 named five ways our encoder left
+retail's envelope; four are closed here (A, B, the distance half of C, and D -- see
+`encode`'s refusal of a zero-byte payload). **E is ACCEPTED, not fixed, and this is the
+reason:** we emit a handful of meta indices that sit in the 3-bit-prefix catch-all band,
+160 of whose 256 indices retail was never sampled emitting. The band structure is not a
+choice we make -- `_build_meta_emit` asserts the bands TILE, so every index is reachable
+by exactly one prefix and a "safe" index is not a different mechanism, only a different
+run length. Avoiding them would mean rejecting the meta plan the DP chose and re-planning
+tables around a list of preferred tokens, which distorts the partition DP's own costs
+(the plan cost feeds `_block_cost`, which chooses block boundaries) for no attested
+benefit. A8 read 218 of our tables without complaint. If a future client run ever refuses
+one, the fix is a constrained `meta_plan`, not a change here.
+
+--------------------------------------------------------------------------------
 WHAT THIS MODULE DOES NOT DO, DELIBERATELY.
 
 It has no `datwrite` verb, it opens no archive for writing and it touches no real file.
@@ -286,6 +304,17 @@ def _emit_table(w, lens, declared, zero_len, optimal):
     was installed by `build_table`'s `total == 0` fallback rather than assigned) is the
     one that does not round-trip naively, and both sources reach it the same way.
 
+    WHAT THE ALL-SKIP CASE CANNOT DO, because a caller reaching for it to satisfy a
+    declared-count floor would corrupt the stream silently: the fallback installs
+    `symbol_count - 1` AND NO OTHER INDEX (`gwdat.py:265-267`). So a lone symbol at
+    index `s` can take this shape only by declaring exactly `s + 1`; declaring anything
+    larger decodes to a different symbol, which for a distance table means a different
+    `DISTANCE_BASE` and a payload of garbage. Lifting such a table to a floor therefore
+    costs a real code and a phantom partner -- `gwentropy._phantom_pair` -- and there is
+    no cheaper legal route. `declared > max(lens) + 1` is fine for an ORDINARY table
+    (retail declares 285 with far fewer present on nearly every row); the meta-coder
+    describes the absent tail with skip runs and nothing here needs to know.
+
     Returns the meta_plan's own predicted bit count, so the caller can compare it with
     what the writer actually emitted.
     """
@@ -406,6 +435,31 @@ def finish(w, out_size, tail_word=None, pad_bit=0):
 # the two entry points
 # --------------------------------------------------------------------------
 
+def _refuse_zero_block(payload):
+    """A zero-byte payload has no blocks, and a zero-block row is not this format.
+
+    `gwmatch._Emitter.finish` never appends an empty granule (`gwmatch.py:365-369`) and
+    `plan_partition` returns `[]` for no granules (`gwmatch.py:562-564`), so `encode(b"")`
+    would emit the 8-bit prologue and the epilogue and nothing between them: 12 bytes,
+    which `gwdat.decompress` reads back as `(b"", 0)`. NO RETAIL COMP-8 ROW IS SHAPED
+    THAT WAY -- the smallest in `dat_study/Gw.dat` is 56 B and holds a block -- so it is
+    a stream whose acceptance nothing witnesses, and it is the whole of
+    `studies/archivewrite/FINDINGS.md` §13.5's gap D.
+
+    Refused HERE rather than caught downstream because downstream does not catch it:
+    `datwrite.declaration_fault(encode(b""), 8, expect=b"")` returns None today. Its
+    zero-length guard tests the STORED bytes (12, so it passes) and its mandatory-expect
+    guard tests `expect is None` (`b""` passes), so those bytes can reach an archive.
+    A zero-byte file is STORED, not compressed; that decision belongs to the caller.
+    """
+    if not payload:
+        raise ValueError(
+            "refusing to compress a zero-byte payload: it produces a stream with NO "
+            "BLOCKS (12 B of prologue and epilogue), a shape no retail compression-8 "
+            "row has -- the smallest is 56 B and holds a block. Store a zero-byte "
+            "file uncompressed instead.")
+
+
 def reemit(data, out_size=None, tail_word=None, pad_bit=0, optimal=False):
     """Re-emit an EXISTING stored row from its own trace. -> (bytes, trace, bits).
 
@@ -441,8 +495,11 @@ def encode(payload, quality=MM.DEFAULT_Q, optimal=True, uniform=None, units=None
     after a size.
 
     Round-tripping through `gwdat` proves AGREEMENT WITH OUR DECODER, NOT CORRECTNESS.
+
+    A zero-byte payload is REFUSED -- `_refuse_zero_block` says why.
     """
     payload = bytes(payload)
+    _refuse_zero_block(payload)
     st, cfg = MM.build_stream(payload, q=quality, optimal=optimal, uniform=uniform,
                               units=units)
     data = emit_stream(st, optimal=optimal)
@@ -464,8 +521,11 @@ def encode_report(payload, quality=MM.DEFAULT_Q, optimal=True, uniform=None, uni
     `predicted` is `gwmatch`/`gwentropy`'s cost model; `stored` is `len(bytes)`. Two
     independent computations of one quantity -- a cost model and a byte count -- so a
     disagreement means one of them is wrong. `test_gwenc.py` §4 is that comparison.
+
+    Refuses a zero-byte payload for the same reason `encode` does.
     """
     payload = bytes(payload)
+    _refuse_zero_block(payload)
     st, cfg = MM.build_stream(payload, q=quality, optimal=optimal, uniform=uniform,
                               units=units)
     data = emit_stream(st, optimal=optimal)
