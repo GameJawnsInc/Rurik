@@ -230,12 +230,15 @@ Every one of these, in the order they were written:
   `vault/run/reskin-roster/` on the recorded understanding that their originals
   were "recoverable from the journals' `before` fields", and NO SUCH JOURNAL
   EXISTS anywhere in the vault. A pristine copy cannot go missing that way, and
-  two of them agree byte-for-byte. Three things `--replace` cannot do and each is
-  a check: it writes **compression 0** and there is no compressor here, so an
-  ArenaNet row comes back flattened; it computes the reservation from the row's
-  CURRENT size, so a shrunk row can never grow back (2,068 B reserves 2,560 when
-  the original needs 7,680) even though the blocks were never handed to anyone;
-  and `--overwrite` is same-length only. The donor's WHOLE RESERVATION is copied,
+  two of them agree byte-for-byte. Three things `--replace` could not do when this
+  section was written, and each is a check -- **two of the three have since become
+  verbs and only the third still holds**: it wrote **compression 0** and there was
+  no compressor (superseded 2026-08-18 -- `--compression 8 --expect`, the gwenc
+  arm); it computed the reservation from the row's CURRENT size, so a shrunk row
+  could never grow back (2,068 B reserves 2,560 when the original needs 7,680)
+  even though the blocks were never handed to anyone (superseded 2026-08-19 --
+  `--grow-to`, section 11, which is exactly this refusal becoming a verb);
+  and `--overwrite` is same-length only, which stands. The donor's WHOLE RESERVATION is copied,
   tail included, because a zero-filled tail verifies and still differs from every
   pristine copy. **Identity is by FILE ID, never by row** -- a row index is a fact
   about the copy, so a donor from another build can hold a valid, wrong file at
@@ -332,8 +335,72 @@ Every one of these, in the order they were written:
   but `pattern()` compresses ~12x, so it fitted the reservation and was a second
   copy of the C-6 check wearing a false label — **the fourth recurrence in this
   arc of a check claiming more than the artifact does** (§10.6, §12.7, §13.6). It
-  uses incompressible bytes now. 138 checks against a floor of
-  138, was 136, was 87, was 78, was 66),
+  uses incompressible bytes now.
+  **Sections 11 and 12 (2026-08-19) are the GROW-BACK VERB and the JOURNAL AS A
+  DURABLE FILE, floor 138 -> 199.** `replace()` derived its ceiling from the
+  row's CURRENT size, so after any shrink the row's own freed blocks were
+  unreachable to it -- fatal for this arc's authoring loop, where the second,
+  larger encoder output lands on a row the first write shrank (row 11196 on the
+  real archive loses 1,025,536 B of its own space). `grow_to` is now a
+  keyword-only argument the CALLER states; with it unset NOT ONE new check runs
+  and every caller in the tree and the vault is on the old path, asserted. A
+  greedy geometry-max default is REJECTED in the docstring, because `claimants()`
+  computes each NEIGHBOUR's reservation from that neighbour's current size too,
+  so geometry cannot tell a free block from a shrunk neighbour's wanted-back one.
+  The gate is `Writer._grow_gate`, ONE copy shared with `--restore` (checked on
+  the syntax tree), and it is four conditions where `restore()` had only the
+  first: claimants; an EOF bound (`datcheck` rule 5 tests `offset + size`, not
+  the rounded reservation, and `put()`'s short-read guard fires AFTER the
+  decision); the live MFT, against the file header's own `mft_offset`/`mft_size`
+  and NOT via row 3, which merely happens to describe the table on the copies we
+  have measured; and `datplan.classify_runs`'s WITHHELD container runs, quoting
+  `Exclusion.why()` -- the largest new risk in the verb, since `replace()` never
+  needed to know about the rotation region because it never allocated.
+  `--restore` gained all three by the factoring, which matters because it is the
+  verb already run on real 4.2 GB copies. **Every arm gets its own fixture and
+  its own SABOTAGE**, which is also the only way two of them can be reached on a
+  4 KB archive: with `claimants` stubbed to `[]` the MFT arm still fires (so the
+  protection is a check and not an accident of row 3), with `classify_runs`
+  stubbed to "everything usable" the withheld grow is accepted, and on the
+  claimed-blocks fixture the stub lets the write LAND -- which is the only way
+  the post-write `datmove.overlaps` assertion can ever fire, and it does, naming
+  both rows. The journal record for a grow covers the WHOLE NEW reservation and
+  its `what` names the annexation with the range, so `--revert` restores the
+  annexed region byte-for-byte (checked against 0xEE poked in beforehand, so the
+  `before` field bites on real content rather than zeros). **Section 12 is the
+  half nothing had ever tested: the journal as a FILE that has to survive the
+  crash it exists for.** `flush()` opened `"w"` and re-serialised the whole
+  document after every record with no fsync -- MEASURED 4.66x amplification on a
+  5-record replace of this fixture, 5.0x on a 1,029,632 B reservation, and 34.1x
+  / 533 MB on `a4run7-flip.journal`, 137x the archive bytes its 60 records
+  protect, quadratic in record count -- and because `"w"` truncates first, a torn
+  flush lost the WHOLE journal to an unhandled `JSONDecodeError` out of
+  `revert()`: a traceback rather than a diagnosis, on the tool that exists for
+  exactly that moment. It is now APPEND-ONLY, one record per line, fsynced per
+  record, opened LAZILY so a refusal still leaves no journal behind. **The FORMAT
+  did not move** -- the file is a valid JSON document at every fsync boundary,
+  because 59 old journals under `vault/` and `test_datalloc.py`'s own prefix
+  replay read it with a plain `json.load(fh)["edits"]`; what changed is that the
+  header is written once, records are appended, and only the three-byte closer is
+  rewritten. MEASURED 4.66x -> 1.00x, five truncating opens -> one, zero fsyncs
+  -> one per record, each with a sabotage that drops it back. A journal cut
+  through its last record replays every complete record and reports the dropped
+  byte count; cut at 50% (mid first record) it is a NAMED refusal with nothing
+  written; pure junk is refused without opening any archive. Old-format replay is
+  checked against a journal SYNTHESISED in the temp directory -- this file never
+  opens the vault, and that boundary is worth more than the realism -- and
+  sabotaging the intact-document branch shows it is what keeps those 59 files
+  readable, while the same sabotage over a NEW-format journal still reverts
+  byte-for-byte from the line parser alone. **Section 11j closes FINDINGS gap D
+  from the archive side**: `gwenc` now refuses to MAKE a zero-block stream, and
+  `declaration_fault` refuses to WRITE one, naming retail's measured floor (the
+  smallest comp-8 row is 56 B and holds a block). The artifact is exhibited and
+  every OTHER arm shown to agree with it -- 12 B, prologue byte 0x02,
+  decompresses without raising, trailer declares 0 against a 0-byte expectation
+  -- which is why a new arm was needed; the comp-8-with-no-declared-payload
+  refusal (hole 1) keeps its own separate reason, and the C-6 arm still sees the
+  same bytes as compressed when they are declared STORED. 199 checks against a
+  floor of 199, was 138, was 136, was 87, was 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -1309,8 +1376,66 @@ Every one of these, in the order they were written:
   and re-measured after every change. **Also proven at full scale**: a map pair
   allocated into a 4.2 GB copy of the live 38833 archive, preflight 10 of 10 with
   the orphan count rising by exactly one, then reverted byte-identical by sha256.
-  No client, though: **no client has ever read a row this verb allocated**, which
-  is the same sentence `datmove` carried before FINDINGS 39. Floor 98),
+  **Section 14 is the one a skeptic wrote.** Until 2026-08-20 this verb was the
+  only writer of the three that committed a compression-8 payload with no
+  declaration of what a reader must get back -- the string `declaration_fault`
+  appeared in `datalloc.py` zero times -- and a `gwenc` stream with a corrupted
+  trailer went to disk through `alloc(confirm=True)` and through
+  `--stream FILE:1:8`, `Archive.read()` handing back 8,191 bytes instead of
+  8,192 while `--verify`, preflight 10 of 10 and the overlap sweep were all
+  green. The gate it had decides by DECODING, which refutes FRAMING damage and
+  nothing else: `gwdat.decompress` takes the output size from the TRAILER and
+  uses it as the decode loop's own bound, so over 528 single-byte flips of one
+  real stream **132 were refused, 394 decoded to something else and were
+  accepted, 2 still decoded to the payload**. `expect=` is now MANDATORY with
+  `extraBytes 8` (`--expect FILE` from the CLI, one compressed stream per
+  invocation), every stream is routed through `datwrite.declaration_fault` --
+  which also brings the compression-0 direction, the stored lookalike section 13
+  had recorded as an OPEN GAP, with the `stored_lookalike_ok` hatch its
+  4-in-38,621 need -- and the gate runs in `alloc()` as well as `plan_alloc()`,
+  because `alloc(plan=P)` ran neither and a doctored plan put `extraBytes 8`
+  onto plainly stored bytes. **Twelve sabotages, all twelve red**, counts in the
+  floor comment and re-measured after every change; the sharpest is
+  `declaration_fault` stubbed to `None`, which reddens 12 checks and puts the
+  corrupted stream back on disk in a green archive. No client, though: **no
+  client has ever read a row this verb allocated**, which is the same sentence
+  `datmove` carried before FINDINGS 39. Floor 177),
+  `toolkit/mapdata/test_authorflow.py` (AUTHOR A FILE THAT NEVER EXISTED INTO
+  AN ARCHIVE, AT COMPRESSION 8, AND WALK IT BACK. Every verb here has its own
+  test and all of them are green; what none of them measures is the SEQUENCE,
+  and this arc's history is composition defects -- `replace()` could not grow a
+  row it had shrunk itself (FINDINGS 14.4), and `datmove` marked a relocated
+  compression-8 row stored (C-6) -- both green in isolation on the day. Six
+  steps over ONE archive, `test_datalloc.py`'s 28-block fixture in a temp
+  directory: AUTHOR four revisions through `gwenc.encode` (one of them RLE, the
+  shape that declared a 1-symbol distance table until the envelope work landed,
+  gap A); CREATE via `datalloc.alloc(confirm=True)` with a partner declaring
+  `extraBytes 8` **and the payload a reader must get back**; REVISE smaller in
+  place through the real command line, which frees the second block; GROW back
+  into it with `--grow-to`, the step that was impossible before 2026-08-19 and
+  the one an authoring loop hits on its second iteration; OUTGROW, where
+  `--replace` refuses and picks its remedy sentence FROM THE GEOMETRY -- step 4
+  gets the `--grow-to` branch and step 5 gets the other, which makes the pair a
+  measurement of the choice rather than of one message -- and
+  `datmove.move(compression=8, expect=)` relocates; UNDO, four journals
+  replayed newest first, composing back to the pristine fixture BYTE FOR BYTE
+  with every intermediate state checked too, because a chain that only agreed
+  at the ends could be two errors cancelling. **Every step is checked by
+  DECODE, never by a checksum**: the entry crc covers the STORED bytes, so it
+  moves with the corruption and no checksum in this format can tell a
+  compression-8 row holding the wrong bytes from one holding the right ones.
+  **The sabotage in step 2b is what stops this being a demonstration that the
+  tools ran** -- if every gate were stubbed the six steps would still print six
+  greens, because an archive faithfully hands back whatever the last write put
+  in it. It corrupts the authored stream three ways, and as of 2026-08-20 it
+  takes TWO gates to catch them: a flip inside the Huffman table breaks the
+  framing and `looks_compressed` sees it; a corrupted TRAILER does not break
+  the framing at all, decodes one byte short and agrees with itself about it,
+  so only the decompress-and-compare against `expect=` can see it; and a
+  missing declaration is refused outright. MEASURED: `looks_compressed` stubbed
+  alone leaves 1 red, `declaration_fault` stubbed alone leaves 3, both together
+  leave 4 **and the corrupted stream reaches disk**. Six sabotages in all,
+  counts in the floor comment. Floor 59),
   `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
   carrying bit 31, which `FcArchive` binds when it has requested a replacement
   and deleted the plain name (`archive.py`:486, read out of the client). The
@@ -1485,34 +1610,58 @@ Every one of these, in the order they were written:
   not the SEMANTIC tables, since `LENGTH_BASE` / `DISTANCE_BASE` / the
   `first_four + base + 1` arithmetic are replayed verbatim from the trace — a wrong one
   of those gives a wrong payload and a *bit-identical* stream. **B2, the round trip**
-  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fifteen adversarial
-  synthetics (empty, one byte, all-zeros, a single symbol at index 255, incompressible
-  noise, run-length and short cycles, a match at **exactly** the 32,768 window edge
-  with a check that the edge is genuinely REACHED rather than merely survived, and two
-  `uniform=1`/`uniform=2` partitions so the "a non-final block holds exactly its declared
-  token count" rule is exercised a dozen times) — and it proves **agreement with our own
-  decoder, not correctness**. *(Two of those annotations used to claim which table SHAPE
-  each fixture reached — "a single symbol at index 255 so the literal table takes the
-  all-skip zero-length shape" and "incompressible noise so the distance table is empty".
-  A skeptic measured both FALSE: `all 0xFF` yields an ordinary 3-symbol literal table and
-  its zero-length table is the DISTANCE one, and `incompressible` has 101 matches and no
-  zero-length table at all. The shapes are covered by other fixtures; nothing ASSERTED
-  the mapping, so the comments drifted — the same defect §3's window-edge "genuinely
-  REACHED" assertion exists to prevent, applied to only one of the fixtures that needed
-  it. Corrected in the file.)* **B3, the size closure** (§4) compares the writer's ACTUAL
-  emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in **bits**, because
-  the byte figure is a 32-bit-quantised view and a writer 31 bits off the model still
-  lands on the same stored size. **And B3 has been WATCHED FIRE**, which took finding the
-  right row: `gwmatch` plans its tables with the meta DP and a writer hardcoding retail's
-  greedy emits more bits than the planner charged, but on *most* streams the two agree
-  exactly — 0 bits apart across row 11196's own 218 tables — so a randomly chosen row
-  demonstrates nothing. Row **73015** is pinned because there the wrong flag costs **+9
-  bits**, and the resulting stream **still decodes perfectly**, so B3's comparison is the
-  only thing in the file that sees it. §2 is the arm FINDINGS §12.6 says A7a never had: 328
-  tables our encoder implies, serialized and rebuilt by **`gwdat.build_table` itself**
-  rather than by a model of it, with the decoded lengths diffed against the intended
-  ones. §6 is the breakage set, and **(c) is the one that matters** — flipping the meta
-  plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
+  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fourteen adversarial
+  synthetics (one byte, all-zeros, all-0xFF, incompressible noise, run-length and short
+  cycles, a match at **exactly** the 32,768 window edge with a check that the edge is
+  genuinely REACHED rather than merely survived, and two `uniform=1`/`uniform=2`
+  partitions so the "a non-final block holds exactly its declared token count" rule is
+  exercised a dozen times) — and it proves **agreement with our own decoder, not
+  correctness**. The fifteenth fixture is gone and is now a **refusal check**:
+  `encode(b"")` RAISES as of 2026-08-19, because a zero-block stream (12 B of prologue
+  and epilogue) is a shape no retail comp-8 row has — the smallest is 56 B and holds a
+  block — and `datwrite.declaration_fault` accepts those bytes today, since its
+  zero-length guard tests the STORED bytes rather than the payload. That is FINDINGS
+  §13.5's gap D, closed at the encoder. **B3, the size closure** (§4) compares the
+  writer's ACTUAL emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in
+  **bits**, because the byte figure is a 32-bit-quantised view and a writer 31 bits off
+  the model still lands on the same stored size. **And B3 has been WATCHED FIRE**, which
+  took finding the right row: `gwmatch` plans its tables with the meta DP and a writer
+  hardcoding retail's greedy emits more bits than the planner charged, but on *most*
+  streams the two agree exactly — 0 bits apart across row 11196's own 218 tables — so a
+  randomly chosen row demonstrates nothing. Row **73015** is pinned because there the
+  wrong flag costs **+9 bits**, and the resulting stream **still decodes perfectly**, so
+  B3's comparison is the only thing in the file that sees it. §2 is the arm FINDINGS
+  §12.6 says A7a never had: **984** tables our encoder implies, serialized and rebuilt by
+  **`gwdat.build_table` itself** rather than by a model of it, with the decoded lengths
+  diffed against the intended ones — and it now runs **both** table builders, because
+  they are different functions with different jobs: `gwentropy.table_for_counts` is the
+  MODEL path (`recost`, `literal_only`) and `gwentropy.authoring_table` is the WRITER
+  path, and it is the writer's tables that would reach an archive. **§8, the envelope, is
+  new (2026-08-19)** and it is what keeps that split honest: every table the encoder
+  emits over the whole synthetic corpus must be a SHAPE retail's own archive or the A8
+  client run attests — declared ≥ 2, distance declared ≥ 5 (the minimum over 32,831
+  comp-8 rows ≤ 2,048 B), literal declared ≥ 257 (the minimum of the 218 tables in the
+  row the retail client READ, §16.2 — **not** 258, which would have changed that row's
+  bytes), no zero-length LITERAL table (0 of those 32,831 rows has one), and a
+  zero-length DISTANCE table only ever in the all-skip shape `{declared-1: 0}` that
+  `gwdat.py:265-267`'s `total == 0` fallback can actually install. That closes FINDINGS
+  §13.5's gaps A, B and the distance half of C; **E is accepted rather than fixed** and
+  `gwenc.py`'s docstring carries the reason (the meta bands tile structurally, so
+  avoiding the catch-all-band indices would distort the partition DP's own costs for no
+  attested benefit). §8 has **two** sabotage arms and they prove different things: five
+  planted faults, one per rule, each of which must be NAMED while a clean block must not
+  be — that proves the CHECKER can fail; and the pre-envelope builder restored in memory
+  for one fixture, which must turn the sweep RED (on `b"A"` it names a distance table
+  declared 1, a literal table declared 66 and that literal table being zero-length) —
+  that proves the sweep is WIRED to the encoder and not only to itself. §7 pins the
+  anchor twice over: the emitted size is A7a's modelled **1,011,244 B** to the byte, and
+  since 2026-08-19 the **crc32 of our own encoding, `0xd03ab671`**, is pinned as well,
+  because §16.1's result is about BYTES — the retail client read exactly those, so an
+  encoder change that holds the size while moving a bit has lost the only oracle result
+  the arc has. (The envelope work was landed against that number and did not move it: the
+  anchor's tables declare literal 257–285 and distance 24–30, all already inside the
+  floors.) §6 is the breakage set, and **(c) is the one that matters** — flipping the
+  meta plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
   **valid, smaller, DIFFERENT** stream, which is what makes A6's "retail's table encoder
   is greedy" load-bearing here rather than decorative. §6(d) records the format's most
   dangerous property for a writer, in two halves: dropping the `0x80010008` look-ahead
@@ -1523,11 +1672,13 @@ Every one of these, in the order they were written:
   `len(out) == framing_bytes(consumed)` is asserted inside `gwenc.finish`, which computes
   the length from that very formula — it cannot fail, and the refutable form is §4's.
   There is deliberately **no `datwrite` verb and no archive is opened for writing**; A7b
-  produces bytes in memory. Floor **55** with ZERO headroom, measured green;
-  `--per-band` / `--quick` move how many ROWS §5 re-emits and not how many checks run, so
-  the row count is itself the last check of §5 and `--quick` reddens it on purpose.
-  Without the archive it drops to 28 and goes **RED** — the same verdict its two siblings
-  give, and for the same reason: B1 never ran. ~150 s),
+  produces bytes in memory. Floor **60** with ZERO headroom, measured green 2026-08-19
+  (was 55: §8 adds 4, §7's crc pin adds 1, and §3 held its count because the deleted
+  `empty` fixture became the refusal check that replaced it); `--per-band` / `--quick`
+  move how many ROWS §5 re-emits and not how many checks run, so the row count is itself
+  the last check of §5 and `--quick` reddens it on purpose. Without the archive it drops
+  to 32 and goes **RED** — the same verdict its two siblings give, and for the same
+  reason: B1 never ran. ~110 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of

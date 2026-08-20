@@ -66,7 +66,15 @@ own stream in `test_gwmatch.py` (§12.7). Asked before each verdict line was wri
       a VALID stream that is NOT retail's bytes -- which is what makes A6's "retail's
       table encoder is greedy" load-bearing here rather than decorative.
   §7  the anchor.  RED on the size arm = A7a's 1,011,244 B model number and the writer's
-      real byte count have parted company.
+      real byte count have parted company. RED on the crc arm = the size held and the
+      BYTES moved, which is the sharper failure: §16.1's client run accepted those exact
+      bytes, so a same-size different-stream encoder has lost the only oracle result the
+      arc has.
+  §8  the envelope.  RED = we emitted a table shape neither retail's archive nor the A8
+      run attests -- a declared count under the floor, or a zero-length literal table.
+      Refutable, and the sabotage arm plants one fault per rule and requires each to be
+      NAMED. The rules are measurements, not taste: `gwentropy.authoring_table` carries
+      the census each one comes from.
 
 DELIBERATELY NOT LISTED AS EVIDENCE. `len(out) == gwentropy.framing_bytes(consumed)` is
 asserted inside `gwenc.finish` itself and is bookkeeping, not a check -- `finish` computes
@@ -104,6 +112,16 @@ ANCHOR = 11196
 ANCHOR_STORED = 1029564
 ANCHOR_RESERVATION = 1029632          # TRAILER-INCLUSIVE
 ANCHOR_A7A_PREDICTION = 1011244       # FINDINGS.md §12.1, q8 + DP partition
+
+# The crc32 of OUR OWN encoding of the anchor's payload at q8 + DP -- not the MFT's crc
+# (that one is over RETAIL's stored bytes and is checked separately above). Measured
+# 2026-08-19 in this worktree, and pinned because §16.1's result is about BYTES: the
+# retail client read exactly these, so an encoder change that keeps the size while moving
+# a bit has left the one row an oracle has accepted. The envelope policy of
+# `gwentropy.authoring_table` was landed against this number and did not move it -- the
+# anchor's tables declare literal 257..285 and distance 24..30, all already inside the
+# floors, so every one of them takes the untouched ordinary-Huffman arm.
+ANCHOR_ENCODED_CRC = 0xd03ab671
 
 # Rows carrying the divergent zero-length distance table (`gwdat.py:270-288`), where
 # retail skips every symbol and `build_table`'s `total == 0` fallback installs the
@@ -156,28 +174,37 @@ def synthetic_payloads():
     win_pre = _rand_bytes(64, 101)
     win_mid = _rand_bytes(MM.WINDOW - 64, 102)
     cases = [
-        # the two degenerate lengths. `framing_bytes`'s max(2, ...) floor binds ONLY on
-        # the empty payload, which is the one place the epilogue arithmetic is not the
-        # thing choosing the size.
-        ("empty", b"", {}),
+        # NO EMPTY PAYLOAD. `encode(b"")` is REFUSED (`gwenc._refuse_zero_block`) because
+        # a zero-block stream is a shape no retail comp-8 row has, so the fixture that
+        # used to sit here is now section 3's refusal check instead. The shortest thing
+        # this corpus can carry is one byte.
         ("one byte", b"A", {}),
         ("two bytes", b"AB", {}),
         ("three bytes, min match", b"aaa", {}),
         # all-zeros: one literal then maximum-length matches at distance 1, i.e. every
-        # copy OVERLAPS. The literal table is one symbol AT INDEX 0, which is the
-        # `single-zero-length` table shape.
+        # copy OVERLAPS. Its DISTANCE alphabet is the single symbol 0, the one shape the
+        # all-skip trick cannot express (`gwdat.py:265-267` installs `declared - 1` and
+        # no other index), so it is the fixture that pays the phantom pair's 1 bit per
+        # match: 92 -> 144 B, the largest lift in this corpus.
         ("all zeros 100 KB", b"\x00" * 100000, {}),
-        # CORRECTED 2026-08-18 -- both annotations below claimed coverage the fixtures do
-        # not provide, which is the same defect section 3's window-edge assertion exists
-        # to prevent. Nothing asserted which fixture reached which table shape, so the
-        # comments drifted from the artifact and TESTS.md repeated them. MEASURED:
-        # `all 0xFF` produces an ordinary 3-symbol Huffman LITERAL table declared 285;
-        # the zero-length table it really yields is the DISTANCE table, `single-zero-
-        # length`, declared 1. And `incompressible` has 101 matches and a full 30-symbol
-        # distance table -- it produces NO zero-length table at all. The shapes are still
-        # covered, just not here: `single-all-skip` by "one byte", "three bytes", both
-        # cycles and "granule straddle x1"; `empty` by "one byte", "two bytes", "three
-        # bytes", "4096 tokens exactly" and "granule straddle x1".
+        # WHICH FIXTURE REACHES WHICH TABLE SHAPE, RE-MEASURED 2026-08-19 against
+        # `gwentropy.authoring_table` -- section 8 sweeps these and would go red if the
+        # mapping drifted again (it drifted once, and CORRECTING it by hand is what
+        # 2026-08-18's version of this block did):
+        #   `empty-all-skip` (declared 5, retail rows 8295..8306's own shape) -- "one
+        #      byte", "two bytes", "three bytes", "4096 tokens exactly", "granule
+        #      straddle x1" block 0.
+        #   `single-all-skip` (declared s+1, the untouched arm) -- "7-byte cycle" at
+        #      declared 6 and "granule straddle x1" block 2 at declared 27.
+        #   phantom pair (a real 1-bit code + one absent neighbour) -- the LITERAL table
+        #      of "one byte" and "three bytes", and the DISTANCE table of "all zeros",
+        #      "all 0xFF" and "2-byte cycle".
+        #   ordinary Huffman LIFTED to the literal floor -- "two bytes" (natural 67),
+        #      "4096 tokens exactly" and "granule straddle x1" (natural 256), all -> 257.
+        # `all 0xFF` produces an ordinary 3-symbol Huffman LITERAL table declared 285 --
+        # NOT a zero-length literal table, which is a shape our writer no longer emits at
+        # all (0 of 32,831 small retail rows have one). `incompressible` has 101 matches
+        # and a full 30-symbol distance table, so it reaches no special arm.
         ("all 0xFF 40 KB", b"\xff" * 40000, {}),
         ("incompressible 64 KB", _rand_bytes(65536, 201), {}),
         # run-length and short cycles: dense overlapping matches.
@@ -361,42 +388,55 @@ def section2(check):
     rng = random.Random(SEED + 1)
 
     cases = []
-    # a spread of alphabets and skewnesses, plus the three degenerate shapes that
-    # `table_for_counts` special-cases
+    # a spread of alphabets and skewnesses, plus the degenerate shapes both table
+    # builders special-case
     for trial in range(160):
         n = rng.choice([2, 3, 5, 9, 17, 30, 64, 128, 256, 285])
         used = rng.randrange(2, n + 1)
         syms = rng.sample(range(n), used)
         counts = {s: rng.choice([1, 1, 2, 5, 40, 900, 60000]) for s in syms}
         cases.append(counts)
-    cases.append({})                       # no symbols at all -> the 20-bit table
-    cases.append({0: 7})                   # one symbol at index 0 -> single-zero-length
+    cases.append({})                       # no symbols at all
+    cases.append({0: 7})                   # one symbol at index 0
     cases.append({29: 7})                  # one symbol at index 29 -> single-all-skip
     cases.append({284: 3})                 # one symbol at the top of the lit alphabet
 
+    # BOTH builders, because they are now different functions with different jobs:
+    # `table_for_counts` is the MODEL path (`recost`, `literal_only`) and
+    # `authoring_table` is the WRITER path, and it is the writer's tables that reach an
+    # archive. A shape either one implies must be one `build_table` accepts.
     bad = []
     n_tables = 0
     for optimal in (False, True):
         for counts in cases:
-            lens, (_l, _p, declared), note = G.table_for_counts(counts)
-            zero = note != "huffman"
-            got = _rebuild(lens, declared, zero, optimal)
-            n_tables += 1
-            if got != lens:
-                bad.append((optimal, note, declared, len(counts), got != lens and
-                            "refused" if got is None else "wrong lengths"))
+            builds = [G.table_for_counts(counts)]
+            builds += [G.authoring_table(counts, k, optimal=optimal)
+                       for k in ("lit", "dist")]
+            for lens, (_l, pres, declared), note in builds:
+                got = _rebuild(lens, declared, not any(pres), optimal)
+                n_tables += 1
+                if got != lens:
+                    bad.append((optimal, note, declared, len(counts),
+                                "refused" if got is None else "wrong lengths"))
     check(not bad,
           f"{n_tables} encoder tables serialized and rebuilt by gwdat.build_table",
           f"{len(bad)} failed: {bad[:4]}" if bad else
           "0 refusals, 0 length mismatches")
 
-    # the three shapes named individually, because an aggregate hides which one broke
-    for label, counts in (("empty distance table (symbol_count 1, zero-bit code)", {}),
-                          ("single symbol at index 0", {0: 5}),
-                          ("single symbol at index 29 (the all-skip fallback, "
-                           "gwdat.py:265-268)", {29: 5})):
-        lens, (_l, _p, declared), note = G.table_for_counts(counts)
-        got = _rebuild(lens, declared, note != "huffman", False)
+    # The three writer-path shapes named individually, because an aggregate hides which
+    # one broke. LABELS RE-MEASURED 2026-08-19: the first two no longer declare 1 -- the
+    # envelope policy lifts them to shapes retail attests, and the second cannot use a
+    # zero-bit code at all.
+    for label, counts, kind in (
+            ("empty distance table -> all-skip declared 5, the shape retail rows "
+             "8295..8306 carry", {}, "dist"),
+            ("single distance symbol at index 0 -> a real 1-bit code plus a phantom "
+             "neighbour, declared 5 (the all-skip fallback can only install "
+             "declared - 1, gwdat.py:265-267)", {0: 5}, "dist"),
+            ("single distance symbol at index 29 -> the all-skip fallback unchanged, "
+             "declared 30", {29: 5}, "dist")):
+        lens, (_l, pres, declared), note = G.authoring_table(counts, kind)
+        got = _rebuild(lens, declared, not any(pres), False)
         check(got == lens, f"{label} rebuilds to the intended lengths",
               f"intended {lens}, got {got}")
 
@@ -405,11 +445,11 @@ def section2(check):
     caught = 0
     tried = 0
     for counts in cases[:60]:
-        lens, (_l, _p, declared), note = G.table_for_counts(counts)
+        lens, (_l, pres, declared), note = G.authoring_table(counts, "lit")
         if len(lens) < 3:
             continue
         tried += 1
-        got = _rebuild(lens, declared, note != "huffman", False, widen=0)
+        got = _rebuild(lens, declared, not any(pres), False, widen=0)
         if got != lens:
             caught += 1
     check(tried and caught == tried,
@@ -439,6 +479,21 @@ def section3(check):
         dt = time.perf_counter() - t0
         check(ok, f"round trip: {name}", note + f"  {dt:.1f}s")
         results.append((name, payload, kw, data))
+
+    # The fixture that used to sit at the top of the corpus is now a REFUSAL. A
+    # zero-byte payload tokenizes to no granules, so `build_stream` emits no blocks and
+    # the writer produces 12 B of prologue and epilogue -- a shape no retail comp-8 row
+    # has (the smallest is 56 B and holds a block), and one `datwrite.declaration_fault`
+    # accepts today, so it can reach an archive. A refusal check is its own witness: it
+    # needs no sabotage twin, because the thing it asserts is that a call FAILS.
+    refused = None
+    try:
+        E.encode(b"")
+    except ValueError as exc:
+        refused = str(exc)
+    check(refused is not None and "zero-byte" in refused,
+          "encode(b'') is REFUSED, naming why -- gap D of FINDINGS §13.5",
+          refused.split(":")[0] if refused else "it returned bytes instead")
 
     # The window edge must be REACHED, not merely survived: a matcher that never emits
     # distance 32,768 leaves this section testing nothing about the format's edge.
@@ -709,10 +764,147 @@ def section7(check, ar):
           f"the emitted size is A7a's modelled {ANCHOR_A7A_PREDICTION:,} B TO THE BYTE",
           f"got {r['stored']:,}  ({r['blocks']} blocks, "
           f"{2 * r['blocks']} tables through build_table)")
+    check(r["crc32"] == ANCHOR_ENCODED_CRC,
+          "and they are the SAME BYTES the client accepted -- crc32 pinned, not just "
+          "the size",
+          f"{r['crc32']:#010x} vs the pinned {ANCHOR_ENCODED_CRC:#010x}")
     check(r["stored"] <= ANCHOR_RESERVATION,
           f"and it fits the {ANCHOR_RESERVATION:,} B reservation "
           f"(TRAILER-INCLUSIVE)",
           f"{ANCHOR_RESERVATION - r['stored']:,} B of slack, against retail's 68 B")
+
+
+# --------------------------------------------------------------------------
+# section 8 -- the envelope: only shapes retail's own archive attests
+# --------------------------------------------------------------------------
+
+def envelope_faults(blocks):
+    """Every way a stream's emitted tables leave retail's attested envelope.
+
+    -> list of `(block index, kind, complaint, declared)`; empty is clean. The four
+    rules, each with the population that attests it (`gwentropy.authoring_table` carries
+    the census, `studies/archivewrite/FINDINGS.md` §13.5 the gaps they close):
+
+      * declared >= 2 -- gap A. 0 of 138,708 retail rows declare fewer.
+      * declared >= the kind's floor -- distance 5 (min over 32,831 comp-8 rows of
+        <= 2,048 B), literal 257 (the minimum of the 218 tables in the row the retail
+        client read in A8, §16.2).
+      * no zero-length LITERAL table -- gap B. 0 of those 32,831 rows has one.
+      * a zero-length DISTANCE table must be the ALL-SKIP shape, `{declared - 1: 0}`.
+        That is the only thing `gwdat.py:265-267`'s `total == 0` fallback can install,
+        and it is bit-for-bit what rows 8295..8306 carry. A zero-length table naming any
+        other symbol is a writer and a decoder that disagree.
+
+    This reads the BLOCK FIELDS the writer emits from (`gwenc.py:367-368`), not
+    `authoring_table`'s return value, so a fault between the table BUILDER and the
+    block is in range. It is not a whole-pipeline check: it reads upstream of the
+    bit-packing, and an emission bug below that is caught by the round-trip checks
+    rather than by this sweep.
+    """
+    out = []
+    for b in blocks:
+        for kind, lens, declared, zero in (
+                ("lit", b.lit_lens, b.lit_symbol_count, b.lit_zero),
+                ("dist", b.dist_lens, b.dist_symbol_count, b.dist_zero)):
+            floor = G.LITERAL_FLOOR if kind == "lit" else G.DISTANCE_FLOOR
+            if declared < 2:
+                out.append((b.index, kind, "declared < 2, which no retail row is",
+                            declared))
+            elif declared < floor:
+                out.append((b.index, kind,
+                            f"declared under the attested {kind} floor of {floor}",
+                            declared))
+            if zero and kind != "dist":
+                out.append((b.index, kind,
+                            "a zero-length LITERAL table, 0 of 32,831 retail rows",
+                            declared))
+            elif zero and sorted(lens.items()) != [(declared - 1, 0)]:
+                out.append((b.index, kind,
+                            f"zero-length but not the all-skip shape {{{declared - 1}: "
+                            f"0}} -- {sorted(lens.items())}", declared))
+    return out
+
+
+def _fake_block(index, lit_n, dist_n, lit_zero=False, dist_zero=False,
+                lit_lens=None, dist_lens=None):
+    """A BlockTrace carrying nothing but the six fields `envelope_faults` reads."""
+    b = G.BlockTrace()
+    b.index = index
+    b.lit_symbol_count = lit_n
+    b.dist_symbol_count = dist_n
+    b.lit_zero = lit_zero
+    b.dist_zero = dist_zero
+    b.lit_lens = lit_lens if lit_lens is not None else {0: 1, 1: 1}
+    b.dist_lens = dist_lens if dist_lens is not None else {0: 1, 1: 1}
+    return b
+
+
+def section8(check):
+    print("\n[8] THE ENVELOPE -- every table we emit is a shape retail's archive or the "
+          "A8 client run attests")
+    print("    (closes FINDINGS §13.5 gaps A, B and the distance half of C; E is "
+          "accepted, gwenc's docstring says why)")
+
+    faults = []
+    n_tables = 0
+    n_blocks = 0
+    for name, payload, kw in synthetic_payloads():
+        st, _cfg = MM.build_stream(payload, q=kw.get("quality", MM.DEFAULT_Q),
+                                   uniform=kw.get("uniform"))
+        for f in envelope_faults(st.blocks):
+            faults.append((name,) + f)
+        n_blocks += len(st.blocks)
+        n_tables += 2 * len(st.blocks)
+    check(not faults,
+          f"{n_tables} tables over the whole synthetic corpus are inside the envelope",
+          f"{len(faults)} outside: {faults[:4]}" if faults else
+          f"{n_blocks} blocks, declared lit >= {G.LITERAL_FLOOR}, dist >= "
+          f"{G.DISTANCE_FLOOR}, no zero-length literal table")
+    # `--per-band` cannot shrink this one, but a corpus that stopped building streams
+    # would sweep nothing and pass. The count is the check that refuses that.
+    check(n_tables >= 60,
+          "the sweep really inspected the corpus rather than an empty list",
+          f"{n_tables} tables from {n_blocks} blocks")
+
+    # SABOTAGE. Four planted faults, one per rule, each of which MUST be named -- and a
+    # clean block alongside them, so "flags everything" cannot pass either.
+    planted = [
+        ("declared 1", _fake_block(0, 257, 1)),
+        ("distance declared 3", _fake_block(1, 257, 3)),
+        ("literal declared 200", _fake_block(2, 200, 5)),
+        ("zero-length LITERAL table", _fake_block(3, 257, 5, lit_zero=True,
+                                                  lit_lens={256: 0})),
+        ("zero-length distance table naming the wrong symbol",
+         _fake_block(4, 257, 5, dist_zero=True, dist_lens={2: 0})),
+    ]
+    missed = [label for label, b in planted if not envelope_faults([b])]
+    clean = _fake_block(9, 257, 5)
+    check(not missed and not envelope_faults([clean]),
+          f"SABOTAGE: {len(planted)} planted envelope faults are each flagged, and a "
+          "clean block is not",
+          f"missed {missed}" if missed else
+          f"flagged {len(planted)}/{len(planted)}, clean block 0 faults")
+
+    # SABOTAGE, second arm, and it is the one that matters: the check above proves the
+    # CHECKER can fail when handed a bad block, not that the sweep is WIRED to the real
+    # encoder. So put the pre-envelope builder back -- `table_for_counts`, which is what
+    # `gwmatch._fit_table` called until 2026-08-19 -- for one fixture, in memory, and
+    # require the sweep to name the gaps it reintroduces. `b"A"` reached three at once:
+    # a distance table declared 1 (gap A), a literal table declared 66 (gap C) and
+    # that literal table being zero-length (gap B).
+    real = G.authoring_table
+    try:
+        G.authoring_table = (lambda counts, kind, optimal=True:
+                             G.table_for_counts(counts))
+        st, _cfg = MM.build_stream(b"A")
+        regressed = envelope_faults(st.blocks)
+    finally:
+        G.authoring_table = real
+    kinds = {(f[1], f[2].split(",")[0]) for f in regressed}
+    check(any(f[3] < 2 for f in regressed) and len(kinds) >= 3,
+          "SABOTAGE: with the pre-envelope table builder restored the sweep goes RED, "
+          "so it is measuring the encoder and not only itself",
+          f"{len(regressed)} faults on b'A': {sorted(kinds)}")
 
 
 # --------------------------------------------------------------------------
@@ -728,10 +920,14 @@ def main():
     args = ap.parse_args()
     per_band = args.per_band or (QUICK_PER_BAND if args.quick else PER_BAND)
 
-    # FLOOR 55, set from the real green run of 2026-08-18 in this worktree, ZERO
-    # HEADROOM. Sections 1, 2, 3 and section 4's synthetic arm need no archive and run
-    # 6 + 5 + 16 + 1 = 28; with the archive, section 5 adds 9, section 4's real-row and
-    # sabotage arms 2, section 6 adds 9 and section 7 adds 7.
+    # FLOOR 60, set from the real green run of 2026-08-19 in this worktree, ZERO
+    # HEADROOM. Sections 1, 2, 3, 8 and section 4's synthetic arm need no archive and run
+    # 6 + 5 + 16 + 4 + 1 = 32; with the archive, section 5 adds 9, section 4's real-row
+    # and sabotage arms 2, section 6 adds 9 and section 7 adds 8.
+    #
+    # It was 55 until the envelope work of 2026-08-19: section 8 is new (4), section 7
+    # gained the pinned crc32 of our own anchor bytes (1), and section 3 held its count
+    # because the `empty` fixture became the refusal check that replaced it.
     #
     # ONE floor, not two, so a bare run goes RED rather than green-with-a-skip. That is
     # deliberate and it is the same verdict `test_gwentropy.py` and `test_gwmatch.py`
@@ -746,7 +942,7 @@ def main():
     # reddens it on purpose: a shrunk B1 draw is a weaker run and must not report as a
     # full one.
     have_dat = os.path.exists(args.dat)
-    led = checks.Ledger("gwenc -- the A7b bitstream writer", floor=55)
+    led = checks.Ledger("gwenc -- the A7b bitstream writer", floor=60)
     check = checks.adopt(led)
 
     print(f"A7b bitstream writer. TRAILER-INCLUSIVE bytes; tail word "
@@ -755,6 +951,7 @@ def main():
     section1(check)
     section2(check)
     section3(check)
+    section8(check)
 
     if not have_dat:
         led.skip("sections 4 (real rows), 5, 6 and 7",

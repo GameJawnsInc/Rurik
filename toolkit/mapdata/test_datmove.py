@@ -70,6 +70,22 @@ import checks  # noqa: E402
 # (4), skipping the old-reservation zeroing (1 -- and only that one, which is why
 # it is worth having), dropping the offset write (7) and dropping the entry crc
 # (3).
+#
+# WHERE THE COMPRESSION-8 RELOCATION COVERAGE LIVES, because it is not here and a
+# reader auditing this file alone will conclude it does not exist. Nothing in
+# these 46 checks passes `compression=8` to `datmove.move`; the one check that
+# says "compression" (section 5) is about the DEFAULT path demoting a relocated
+# row to 0, which is a different claim. The comp-8 relocation -- the
+# `datwrite.declaration_fault` wiring, the refusal when the code is left at 0
+# over compressed bytes, the refusal when 8 is declared with no `expect`, the
+# success, and `ar.read(e) == payload` afterwards -- is
+# `test_datwrite.py::section_c6_guard` (its section 10), which imports THIS
+# file's `build_archive` and `ROW_BIG` because a move needs the measured free
+# runs and the planted container generation laid out above. It is over there
+# rather than here because the guard it tests is `datwrite`'s, and it is named
+# here because file-scope is how "the verb has no compressed coverage" gets
+# concluded. The allocation side of the same question is
+# `test_datalloc.py`'s section 13.
 LEDGER = checks.Ledger("dat move", floor=46)
 check = checks.adopt(LEDGER)
 

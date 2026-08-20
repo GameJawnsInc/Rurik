@@ -11,7 +11,27 @@ the file-id table so the client can address it.
     python toolkit/mapdata/datalloc.py --dat COPY --plan --stream head.bin --stream part.bin
     python toolkit/mapdata/datalloc.py --dat COPY --file-id 0x5F100 --map --data stripped.bin --plan
     python toolkit/mapdata/datalloc.py --dat COPY --file-id 0x5F100 --map --data stripped.bin --alloc --confirm
+    python toolkit/mapdata/datalloc.py --dat COPY --file-id 0x5F100 --plan --stream head.bin:259 --stream part.gwenc:1:8 --expect part.raw
     python toolkit/mapdata/datalloc.py --dat COPY --next-id
+
+`FILE:FLAGS:EXTRA` is the only way to allocate a COMPRESSED row, and the third
+field is not a formality: `extraBytes` 8 is what makes the client decompress the
+bytes rather than hand them back, and this module compresses nothing -- the
+payload has to be `gwenc` output already. Everything the gate does about that is
+at `plan_alloc` below.
+
+`--expect FILE` IS MANDATORY WITH EXTRA 8, and the reason is the whole of
+FINDINGS C-6: the entry crc is over the STORED bytes, so a stream that decodes to
+the wrong payload -- or to one byte fewer -- passes both crc rules, all ten of
+`datcheck`'s open-time rules and `datmove.overlaps`, and the archive is green
+while the file is unreadable. The decompress-and-compare is the only refutation
+that exists and it is only available before the write.
+`datmove --compression 8` has required its own `--expect` since 2026-08-18; this
+verb was the last writer of the three without one, and a skeptic drove exactly
+that door on 2026-08-19 -- a gwenc stream with a corrupted trailer allocated
+through `alloc(confirm=True)` AND through this CLI, `Archive.read()` handed back
+8,191 bytes instead of 8,192, and `--verify`, preflight and the overlap sweep
+were all green.
 
 WHY THIS IS NOT `datplan.plan_insert` WITH A WRITER BOLTED ON. The planner
 computes a single row and stops one field short of a usable file, in three ways
@@ -132,14 +152,32 @@ class Stream:
     zero precisely so ArenaNet's own converter rebuilds the Bloated stream from
     the Stripped partner. A zero-length row owns no extent, so it needs no
     placement and takes no free space.
+
+    `expect` IS THE PAYLOAD A READER MUST GET BACK, and it is MANDATORY whenever
+    `extra_bytes` is 8. It is not a second copy of `data`: for a compressed row
+    `data` is the stream and `expect` is what `gwdat.decompress` has to produce
+    from it, and the two being different is the only reason the check has any
+    power. For a stored row the bytes ARE the payload, so `expect` is optional
+    there and passing it is the caller stating that positively -- the same
+    spelling `datmove --compression 0 --expect` has.
+
+    `stored_lookalike_ok` is the C-6 escape hatch and mirrors `datwrite`'s flag of
+    the same name. Declaring 0 over bytes that DECODE as a compression-8 stream is
+    refused, because that is the green-archive-holding-an-unreadable-file state;
+    MEASURED, 4 of 38,621 real stored rows decode anyway, so those four need a way
+    through and this is it. Deliberately awkward, and it prints a line naming C-6
+    when taken.
     """
 
-    __slots__ = ("data", "flags", "extra_bytes")
+    __slots__ = ("data", "flags", "extra_bytes", "expect", "stored_lookalike_ok")
 
-    def __init__(self, data, flags, extra_bytes=0):
+    def __init__(self, data, flags, extra_bytes=0, expect=None,
+                 stored_lookalike_ok=False):
         self.data = bytes(data)
         self.flags = int(flags)
         self.extra_bytes = int(extra_bytes)
+        self.expect = None if expect is None else bytes(expect)
+        self.stored_lookalike_ok = bool(stored_lookalike_ok)
 
     @property
     def alloc_flags(self):
@@ -347,6 +385,82 @@ def _place(usable, block, need_bytes, filesize):
     return offset, reservation, rest
 
 
+def check_declarations(streams, announce=True):
+    """Every stream's DECLARATION checked against its bytes. Raises `Refused`.
+
+    ADDED 2026-08-20, and it closes the last door of FINDINGS C-6 in this trio.
+    `plan_alloc`'s own comp-8 gate decides by DECODING (`looks_compressed`), which
+    refutes FRAMING damage -- a stream that runs out of input -- and nothing else:
+    `gwdat.decompress` takes the output size from the TRAILER and uses it as the
+    decode loop's own bound, so a stream whose trailer was corrupted decodes
+    happily to a different length and one whose middle was flipped decodes happily
+    to different bytes. MEASURED by a skeptic on 2026-08-19 over 528 single-byte
+    flips of one real `gwenc` stream: 132 refused, 394 accepted having decoded to
+    something else, 2 still decoded to the payload. Two of those 394 were driven
+    all the way to disk through `alloc(confirm=True)` and through
+    `--stream FILE:1:8`, and every check this project owns stayed green.
+
+    `datwrite.declaration_fault` is the refutation and it already existed -- this
+    module simply never called it, which is what made the gate a framing check
+    wearing a fidelity check's name. It is called here for EVERY stream, not only
+    the compressed ones, because the compression-0 direction is the other half of
+    C-6: a genuine `gwenc` stream declared `extraBytes 0` allocates a row the
+    client hands back still compressed. `test_datalloc.py` §13 recorded that as an
+    OPEN GAP for a day and this is the guard it named.
+
+    THE FALSE-REFUSAL COST IS MEASURED AND IT IS SMALL: 4 of 38,621 real stored
+    rows in `dat_study` decode as compression 8 and would be refused here, against
+    0 of 1,500 decompressed retail payloads -- the population an authoring caller
+    actually hands us. Those four take `stored_lookalike_ok=True`, the same hatch
+    `datwrite` gives them.
+
+    AN EMPTY STORED STREAM PASSES THROUGH UNCHANGED, deliberately and not by a
+    special case: `declaration_fault(b"", 0, None)` returns None, because
+    `looks_compressed(b"")` is False on the length test. The armed map head --
+    `Stream(b"", 259)`, the re-bloat trigger `deploy.py` depends on -- is
+    therefore untouched. Comp-8 emptiness is NOT special-cased either, in the
+    other direction: `declaration_fault` refuses a zero-BLOCK compression-8 stream
+    (FINDINGS 13.5 gap D, a 12-byte stream that decompresses to nothing), and that
+    refusal has to stay reachable from here.
+
+    `announce` prints the C-6 override line when the hatch is taken, exactly as
+    `datwrite.replace` does. It is off when `alloc` runs the gate over streams
+    `plan_alloc` is about to run it over again, so the line appears once.
+    """
+    for i, s in enumerate(streams):
+        if s.extra_bytes == 8 and s.expect is None:
+            raise Refused(
+                f"stream {i} declares extraBytes 8 and no expected payload came "
+                f"with it.\n"
+                f"  A compression-8 row is the one thing in this archive nothing "
+                f"can check afterwards: the entry crc is over the STORED bytes, "
+                f"so a stream that decodes to the wrong payload -- or to one byte "
+                f"fewer -- passes both crc rules, all ten of datcheck's open-time "
+                f"rules and the overlap sweep, and the archive is green while the "
+                f"file is unreadable. The decompress-and-compare is the ONLY "
+                f"refutation there is and it is only available before the write.\n"
+                f"  `datmove --compression 8` has required --expect since "
+                f"2026-08-18 and this verb was the last writer of the three "
+                f"without one. Pass Stream(..., extra_bytes=8, expect=PAYLOAD), "
+                f"or --expect FILE from the command line.")
+        code = 8 if s.extra_bytes == 8 else 0
+        fault = datwrite.declaration_fault(
+            s.data, code, expect=s.expect,
+            stored_lookalike_ok=s.stored_lookalike_ok)
+        if announce and s.stored_lookalike_ok and code == 0 \
+                and datwrite.looks_compressed(s.data):
+            # An override that leaves no trace is the same defect as no override.
+            print(f"  !! C-6 OVERRIDE TAKEN on stream {i}: these bytes DECODE as "
+                  f"a compression-8 stream and are being allocated as extraBytes "
+                  f"0 anyway. If that is wrong, the archive will be green and the "
+                  f"file unreadable, and nothing we own can detect it afterwards. "
+                  f"FINDINGS C-6.")
+        if fault:
+            raise Refused(
+                f"will not allocate stream {i} as compression {code}.\n"
+                f"  {fault}")
+
+
 def plan_alloc(ar, streams, file_id, classified=None):
     """Where a brand-new file's rows would go. Read-only; raises `Refused`.
 
@@ -452,6 +566,12 @@ def plan_alloc(ar, streams, file_id, classified=None):
                 f"stored payload produces an archive that is wrong only in the "
                 f"client: the row crc still matches, --verify still passes, and "
                 f"no datcheck rule looks at this field.")
+
+    # AND THE DECLARATION AGAINST THE BYTES, which the loop above cannot do: it
+    # decides whether these bytes ARE a stream, never whether they are the RIGHT
+    # one. Runs after the shape loop so a stream that is malformed in both ways is
+    # named by the cheaper, sharper refusal first.
+    check_declarations(streams)
 
     # Rows. Reuse genuinely-spare slots before growing the table -- the slack is
     # the scarcest thing in the archive. `free_rows` now tests the USED flag as
@@ -572,11 +692,51 @@ def alloc(path, streams, file_id, journal_path, confirm=False, plan=None):
     a head whose `nextStream` pointed past the declared count while the loader
     asserts `nextStream < count`. Both were fsynced to disk. Section 11 of
     test_datalloc.py replays every prefix and asserts neither can occur.
+
+    `plan=` USED TO BYPASS EVERY GATE IN `plan_alloc`, and that is why the
+    fidelity check below is run HERE as well rather than only there. Demonstrated
+    2026-08-19: a plan computed over stored streams, `plan.rows[1].extra_bytes`
+    set to 8 by the caller, `alloc(confirm=True, plan=plan)` -- and extraBytes 8
+    went onto disk over plainly stored bytes with `Archive.read()` not even
+    raising. A gate that only runs when the caller declines to pre-compute is
+    advisory, and this verb has no advisory gates. So: the declarations are
+    checked over the STREAMS on every path, and a handed-in plan that disagrees
+    with the streams about `extra_bytes` is refused outright rather than
+    reconciled -- reconciling would mean picking a winner, and the plan is a
+    placement, not a second opinion about the payload.
     """
     datwrite.guard(path)
     datwrite.guard_source(path)
+    given = plan is not None
+    if given:
+        if len(plan.rows) != len(streams):
+            raise Refused(
+                f"the plan handed in describes {len(plan.rows)} row(s) and "
+                f"{len(streams)} stream(s) were given. A plan is carried out "
+                f"row-by-row against the streams it was computed from; a "
+                f"mismatched pair would write one stream's bytes under another "
+                f"row's declaration.")
+        for i, (s, r) in enumerate(zip(streams, plan.rows)):
+            if r.extra_bytes != s.extra_bytes:
+                raise Refused(
+                    f"the plan handed in gives row {r.index} extraBytes "
+                    f"{r.extra_bytes} while stream {i} declares "
+                    f"{s.extra_bytes}.\n"
+                    f"  The fidelity gate runs over the STREAMS, so a plan that "
+                    f"disagrees with them carries a declaration nothing checked "
+                    f"onto disk -- MEASURED 2026-08-19, extraBytes 8 written over "
+                    f"plainly stored bytes exactly this way, green everywhere. "
+                    f"Recompute the plan from these streams.")
     with Archive(path) as probe:
         plan = plan or plan_alloc(probe, streams, file_id)
+    # THE FIDELITY GATE, RUN HERE AND UNCONDITIONALLY. When `plan` was computed
+    # just now this repeats what `plan_alloc` already did, which costs one decode
+    # and is the price of the gate being BINDING on the write path rather than a
+    # property of one route to it. Before --confirm, like `datmove.move`, so a
+    # dry run reports a bad declaration instead of passing and then failing on the
+    # real invocation. After `plan_alloc`, so that a stream which is malformed in
+    # both ways is named by this module's own sharper refusal first.
+    check_declarations(streams, announce=given)
     if not confirm:
         raise Refused("refusing to write without --confirm")
 
@@ -650,33 +810,184 @@ def _read(path):
         return fh.read()
 
 
+def _split_stream_spec(spec):
+    """`FILE[:FLAGS[:EXTRA]]` -> `(path, flags or None, extra or None)`.
+
+    Split from the RIGHT, and only when the tail parses as an integer AND
+    something is left in front of it. An absolute Windows path carries a colon
+    of its own: a bare `rpartition(":")` split `C:\\x\\y.bin` into its drive
+    letter and the rest, then died on `int()` with an unhandled ValueError, so
+    every absolute path was unusable. Two rounds of the same conditional split
+    take EXTRA and then FLAGS, and `C:\\x\\y.bin` still parses as a bare path
+    because `\\x\\y.bin` is not an integer.
+
+    The count of trailing fields is what decides their meaning, so the two older
+    spellings keep their old meaning exactly: no field is the defaults, ONE field
+    is FLAGS (never EXTRA), two are FLAGS then EXTRA.
+
+    WHAT IS LEFT OVER MUST BE A PATH, and that is checked rather than handed to
+    `open()`. Until 2026-08-20 a malformed spec fell through this function whole
+    and died inside `_read` -- `FILE:x:8` and `FILE:1:8:0` on FileNotFoundError,
+    `FILE:` on `OSError [Errno 22]` -- a traceback naming a temp file, in a tool
+    whose every other bad input is a sentence. Nothing allocated, which is what
+    matters, but "the machine is unhappy" is not a diagnosis. The one colon a path
+    may still carry is a DRIVE LETTER's: index 1, one letter in front of it, a
+    separator behind it. `C:\\x\\y.bin` is the shape this whole function exists
+    for and it survives; `a:b` does not, and an NTFS alternate-data-stream path is
+    not a thing this CLI has ever been asked to take.
+    """
+    original = spec
+    fields = []
+    while len(fields) < 2:
+        head, sep, tail = spec.rpartition(":")
+        if not (sep and head):
+            break
+        try:
+            fields.append(int(tail, 0))
+        except ValueError:
+            break
+        spec = head
+    drive = (len(spec) > 2 and spec[0].isalpha() and spec[1] == ":"
+             and spec[2] in "\\/")
+    if ":" in (spec[2:] if drive else spec):
+        raise Refused(
+            f"--stream {original} is not a spec this grammar can read: the path "
+            f"it leaves in front of the trailing field(s) is {spec!r}, and that "
+            f"still carries a colon.\n"
+            f"  The grammar is FILE[:FLAGS[:EXTRA]] and both trailing fields are "
+            f"INTEGERS -- one field is FLAGS and never EXTRA, two are FLAGS then "
+            f"EXTRA. A non-numeric field (`FILE:x:8`), a third one "
+            f"(`FILE:1:8:0`) and an empty one (`FILE:`) all land here rather than "
+            f"being opened as a filename.\n"
+            f"  The only colon a PATH may carry is a drive letter's: one letter, "
+            f"a colon, then a separator, as in C:\\maps\\part.gwenc.")
+    if len(fields) == 2:
+        return spec, fields[1], fields[0]
+    if len(fields) == 1:
+        return spec, fields[0], None
+    return spec, None, None
+
+
 def _streams_from_args(args):
-    """`--map DATA` is the shape this exists for; `--stream` is the general one."""
+    """`--map DATA` is the shape this exists for; `--stream` is the general one.
+
+    `--map` writes STORED rows and has no EXTRA of its own. A map's Stripped
+    partner is compression 8 in retail, so that is a gap rather than a rule --
+    but it is one this CLI cannot close by adding a flag, because the caller
+    would still have to hand in bytes `gwenc` produced. `--stream` is the form
+    that takes them.
+    """
     if args.map:
         if not args.data:
             raise Refused("--map needs --data, the Stripped partner's bytes")
+        # `--map` writes two STORED rows and has no EXTRA of its own, so an
+        # --expect here has nothing to be checked against and is refused rather
+        # than ignored -- see `_check_expect_arity`.
+        _check_expect_arity([0, 0], args)
         head = _read(args.head) if args.head else b""
-        return [Stream(head, MAP_HEAD_FLAGS_U16),
-                Stream(_read(args.data), MAP_PARTNER_FLAGS_U16)]
+        return _attach_expect([Stream(head, MAP_HEAD_FLAGS_U16),
+                               Stream(_read(args.data),
+                                      MAP_PARTNER_FLAGS_U16)], args)
     if not args.stream:
         raise Refused("nothing to allocate: pass --map --data FILE, or "
                       "--stream FILE at least once")
-    out = []
+    specs = []
     for i, spec in enumerate(args.stream):
-        flags = MAP_HEAD_FLAGS_U16 if i == 0 else MAP_PARTNER_FLAGS_U16
-        # `FILE[:FLAGS]` on Windows, where an absolute path carries a colon
-        # too. A bare rpartition split `C:\x\y.bin` into its drive letter
-        # and the rest, then died on int() with an unhandled ValueError -- so
-        # every absolute path was unusable. Split only when the tail parses.
-        head, sep, tail = spec.rpartition(":")
-        if sep and head:
-            try:
-                flags = int(tail, 0)
-                spec = head
-            except ValueError:
-                pass
-        out.append(Stream(_read(spec), flags))
-    return out
+        path, flags, extra = _split_stream_spec(spec)
+        if flags is None:
+            flags = MAP_HEAD_FLAGS_U16 if i == 0 else MAP_PARTNER_FLAGS_U16
+        if extra is None:
+            extra = 0
+        if extra not in (0, 8):
+            # `plan_alloc` holds this same rule and is the binding gate; this is
+            # a better message in front of it, refused before a file is read and
+            # before an archive is opened, and it names the field rather than a
+            # stream index the caller has to count out.
+            raise Refused(
+                f"--stream {spec} declares extraBytes {extra}; only 0 and 8 are "
+                f"accepted.\n"
+                f"  8 is the compressed framing and it is not a label: "
+                f"`plan_alloc` refuses it unless the payload DECODES as a "
+                f"compression-8 stream, so declaring it commits the row to being "
+                f"one. 0 is stored, which is what this module writes unless you "
+                f"compressed the bytes yourself with `gwenc`.\n"
+                f"  Anything else is a declaration nothing has tested. MEASURED "
+                f"on vault/run-live/2026-08-13/Gw.dat, +0x0C takes exactly two "
+                f"values across 177,740 rows -- {{0: 38682, 8: 139058}} -- and no "
+                f"third value has ever been seen written or read.")
+        specs.append((path, flags, extra))
+    # BEFORE A FILE IS OPENED, like the EXTRA rule above it. `--expect` is the
+    # difference between a compressed row that was checked and one that was not,
+    # so getting it wrong should cost a sentence rather than a traceback out of
+    # `_read`.
+    _check_expect_arity([e for _p, _f, e in specs], args)
+    return _attach_expect([Stream(_read(p), f, e) for p, f, e in specs], args)
+
+
+def _check_expect_arity(extras, args):
+    """`--expect` against the EXTRA fields, before anything is read. -> None.
+
+    Three rules and each is a refusal:
+
+      * EXTRA 8 anywhere REQUIRES --expect. `plan_alloc` holds the binding form
+        of this (`check_declarations`); this is the better message in front of it.
+      * --expect with no EXTRA 8 is refused rather than ignored. For a STORED row
+        the bytes ARE the payload, so a stored --expect is a tautology a caller
+        can only have typed by mistake -- and the mistake it most plausibly IS
+        is a forgotten `:8`, which would otherwise allocate a compression-8
+        stream as opaque bytes with the declaration silently dropped.
+      * At most ONE EXTRA 8 per invocation, because there is one --expect and no
+        way to say which stream it belongs to. A chain with two compressed rows
+        is a real shape and the API takes it -- `Stream(..., extra_bytes=8,
+        expect=...)` per row -- so this is a limit on the flag, not on the verb.
+    """
+    comp = [i for i, e in enumerate(extras) if e == 8]
+    if len(comp) > 1:
+        raise Refused(
+            f"streams {', '.join(str(i) for i in comp)} all declare EXTRA 8, and "
+            f"--expect names ONE payload.\n"
+            f"  There is no spelling on this command line that says which "
+            f"compressed stream a given --expect belongs to, and guessing is the "
+            f"one thing a fidelity check may not do. Allocate a chain with more "
+            f"than one compressed row from the API, where every Stream carries "
+            f"its own: `Stream(data, flags, extra_bytes=8, expect=payload)`.")
+    if comp and not args.expect:
+        raise Refused(
+            f"--stream {args.stream[comp[0]]} declares EXTRA 8 and there is no "
+            f"--expect FILE.\n"
+            f"  8 commits the row to being a compression-8 stream, and the entry "
+            f"crc is over the STORED bytes -- so after the write nothing can tell "
+            f"a stream that decodes to the right payload from one that decodes to "
+            f"the wrong bytes, or to one byte fewer. Both crc rules, all ten "
+            f"open-time rules and the overlap sweep pass either way.\n"
+            f"  Pass --expect FILE, the payload a reader must get back. "
+            f"`datmove --compression 8` has required the same since 2026-08-18.")
+    if args.expect and not comp:
+        raise Refused(
+            "--expect FILE was given and no --stream declares EXTRA 8.\n"
+            "  A stored row's bytes ARE its payload, so there is nothing here for "
+            "an expected payload to be checked against. The likeliest reading is "
+            "a missing `:8` on the stream that holds gwenc output -- which would "
+            "have allocated it as opaque bytes -- so this refuses rather than "
+            "ignoring the flag.")
+
+
+def _attach_expect(streams, args):
+    """Hang `--expect` on the compressed stream and `--stored-lookalike-ok` on all.
+
+    `_check_expect_arity` has already established that there is at most one
+    compressed stream and that --expect is present exactly when there is one, so
+    the placement here is not a guess.
+    """
+    if args.expect:
+        want = _read(args.expect)
+        for s in streams:
+            if s.extra_bytes == 8:
+                s.expect = want
+    if args.stored_lookalike_ok:
+        for s in streams:
+            s.stored_lookalike_ok = True
+    return streams
 
 
 def _journal_path(args):
@@ -731,8 +1042,23 @@ def build_parser():
     ap.add_argument("--data", help="with --map, the Stripped partner's bytes")
     ap.add_argument("--head", help="with --map, the Bloated head's bytes; "
                                    "omitted means a zero-length armed head")
-    ap.add_argument("--stream", action="append", metavar="FILE[:FLAGS]",
-                    help="general form: one per row of the chain, in order")
+    ap.add_argument("--stream", action="append", metavar="FILE[:FLAGS[:EXTRA]]",
+                    help="general form: one per row of the chain, in order. "
+                         "EXTRA is alloc.extraBytes -- 0 (stored, the default) "
+                         "or 8 (compression 8, and the bytes must DECODE as "
+                         "one; this module compresses nothing, so pass "
+                         "gwenc output). EXTRA 8 requires --expect.")
+    ap.add_argument("--expect", metavar="FILE",
+                    help="the payload a reader must get back. MANDATORY with a "
+                         "--stream declaring EXTRA 8: the entry crc is over the "
+                         "STORED bytes, so nothing can check a compressed row "
+                         "after the allocation. One compressed stream per "
+                         "invocation; use the API for a chain with more.")
+    ap.add_argument("--stored-lookalike-ok", action="store_true",
+                    help="allocate bytes that DECODE as compression 8 with "
+                         "EXTRA 0 anyway. FINDINGS C-6 override, not a switch: "
+                         "4 of 38,621 real stored rows need it and 0 of 1,500 "
+                         "decompressed payloads do. Prints a line when taken.")
     ap.add_argument("--plan", action="store_true", help="compute and print only")
     ap.add_argument("--alloc", action="store_true", help="write it")
     ap.add_argument("--confirm", action="store_true")
