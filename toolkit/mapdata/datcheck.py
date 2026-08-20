@@ -98,6 +98,30 @@ WHAT THE SNAPSHOT HOLDS (FINDINGS 18.5):
     python toolkit/mapdata/datcheck.py --dat DAT --snapshot before.json
     python toolkit/mapdata/datcheck.py --dat DAT --diff before.json
 
+AND THE LAUNCH GATE, which is the pre-flight with the two rules it never made.
+`assert_archive_safe` is `cage.assert_launch_safe`'s counterpart for the data
+side: the cage decides from a binary's bytes whether it may be aimed at a given
+server, this decides from an archive's bytes whether a client may open it at
+all. It adds the MFT self-crc -- which `preflight()` has never checked, so an
+archive failing its own checksum reports 10 of 10 clear -- and the payload CRC
+sweep, and it refuses rather than reporting, because the failure modes here are
+a silent 4.2 GB rebuild and a whole-chain delete. Every launch site calls it
+itself; see the docstring for why that is not redundancy.
+
+    python toolkit/mapdata/datcheck.py --dat DAT --assert-safe
+    python toolkit/mapdata/datcheck.py --dat DAT --assert-safe --fingerprints F
+    python toolkit/mapdata/datcheck.py --dat DAT --assert-safe --fingerprints F \
+                                       --side retail_rows
+
+An `overlay.py` record holds BOTH sides of a profile, so `--side` says which one
+the archive in front of you is supposed to match (default `rows`, the profile's
+own). A side that is missing or empty REFUSES; it never falls through to the
+other one, because that is how a check written to ask "is my overlay deployed"
+came back clear on an archive carrying none of it. The record's own three trust
+checks -- its digest, its manifest sha and its retail stamp -- are run first, by
+`overlay.py`'s own code, so a record `overlay.py --status` will not open cannot
+clear this gate either.
+
 ROW NUMBERS, AND WHY EVERY ONE PRINTED HERE CARRIES ITS FILE ID. This tool and
 `archive.py` use ONE convention -- the raw MFT index, row 0 the descriptor, 16
 the client's `INDEX_FIRST_FILE` -- and they agree on every row of the archive a
@@ -144,10 +168,20 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import (Archive, ENTRY_SIZE, MFT_MAGIC,  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, MFT_MAGIC, FILE_MAGIC,  # noqa: E402
                      MFT_ROW_OF_ENTRIES_0, row_label,
                      FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW,
                      FIRST_CLAIMABLE_ROW)
+# THE MFT SELF-CRC FORMULA LIVES IN `datwrite.py` AND IS NOT COPIED HERE.
+# `assert_archive_safe` needs it -- the pre-flight has never checked it, which is
+# exactly the hole `datwrite.py:1462-1501` documents (a stale self-crc leaves
+# `--preflight` reporting 10 of 10 while the archive fails its own checksum) --
+# and a second expression of "the table with row 3's own 24 bytes skipped" is how
+# two readers of one field drift apart. Importing the writer opens nothing:
+# `datwrite` only ever opens a file inside `Writer`, and its module chain
+# (`archive`, `gwdat`) is the one this file already has. There is no cycle --
+# `datwrite.py` names this module in prose only.
+import datwrite  # noqa: E402
 
 SNAPSHOT_VERSION = 1
 
@@ -759,6 +793,769 @@ def crc_sweep(path, limit=None):
             "bad": bad, "size_on_disk": size}
 
 
+# -------------------------------------------------------------- launch gate --
+
+class ArchiveUnsafe(SystemExit):
+    """Refusing to hand this archive to a client. Never a warning.
+
+    A `SystemExit`, for the same reason `cage.CageError` is one: the caller of a
+    launch gate is a launch, and a refusal a caller can carry on past is a log
+    line rather than a gate.
+
+    `unreadable` keeps this module's two failure meanings apart at the CLI --
+    "this archive has findings" (exit 1) and "this file could not be read far
+    enough to have findings" (exit 2) -- which is the same separation `main()`
+    already makes for every other verb.
+    """
+
+    def __init__(self, message, unreadable=False):
+        super().__init__(message)
+        self.unreadable = unreadable
+
+
+# WHERE A FINGERPRINT DOCUMENT KEEPS ITS ROWS. MEASURED on
+# `vault/research/archivewrite/a10-fingerprints.json`, whose top level is
+# `stage / scale / built / toolkit / head / mft / rows` -- five provenance fields
+# and one row block, `{"11115": [94508, "0x592E1A6F", 8], ...}`. `overlay.py`
+# writes the same block shape for BOTH sides of a profile, so a document can hold
+# more than one row map. This tool never guesses which one the archive in front
+# of it is supposed to match: it takes the side it was ASKED for, or the default
+# side of a document that names sides, or the only block there is -- and
+# otherwise it names the candidates and refuses.
+#
+# `staged` is here and `rows` is here because they are two spellings of THE SAME
+# side, the profile's own. Two of them in one document is an ambiguity and is
+# refused (see `_fingerprint_side`); it used to be resolved by tuple order, with
+# nothing printed.
+FINGERPRINT_ROW_KEYS = ("rows", "staged")
+
+#: THE SIDES OF AN `overlay.py` RECORD, WHICH ARE NOT CANDIDATES TO CHOOSE
+#: BETWEEN. `rows` is what the profile puts in the archive, `retail_rows` the
+#: baseline it replaced, `staged_rows` (pre-launch record only) what was staged.
+#: A document carrying any of these is answering "which side is deployed", and
+#: the answer must be the side the caller ASKED for -- never whichever block
+#: happened to be the only one left. MEASURED 2026-08-20: deleting `rows` from a
+#: build record left `retail_rows` as the single candidate, and the gate cleared
+#: a pure-RETAIL archive for a caller who had asked whether its overlay was
+#: deployed. That is the exact failure this module's own refusal text names.
+OVERLAY_ROW_KEYS = ("rows", "retail_rows", "staged_rows")
+
+#: Every key `side=` will accept, and the order they are reported in.
+FINGERPRINT_SIDE_KEYS = ("rows", "staged", "retail_rows", "staged_rows")
+
+#: The side taken when a document names sides and the caller named none. It is a
+#: DEFAULT and not a fall-through: if this side is missing or empty the read
+#: refuses, rather than answering out of a different block.
+DEFAULT_SIDE = "rows"
+
+DOCUMENT_REMEDY = (
+    "This is a finding about the DOCUMENT, not about the archive: the archive "
+    "was read and is not what failed. Write the record again with `python "
+    "toolkit/mapdata/overlay.py --build MANIFEST`, or hand assert_archive_safe "
+    "the row mapping itself.")
+
+
+def _is_row_block(obj):
+    """True for a `{row: [size, crc, compression]}` mapping, and only that."""
+    if not isinstance(obj, dict) or not obj:
+        return False
+    for key, val in obj.items():
+        try:
+            int(key)
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(val, (list, tuple)) or len(val) != 3:
+            return False
+    return True
+
+
+def _document_fault(source, reason, remedy=DOCUMENT_REMEDY):
+    """Refuse because of the DOCUMENT. Always raises; never returns.
+
+    `unreadable=False`, deliberately and in every case. The flag separates "this
+    archive has findings" (exit 1) from "this file could not be read far enough
+    to have findings" (exit 2), and a doctored fingerprint document is neither of
+    the second: the archive was read, its ten open-time rules passed, its payload
+    CRCs were recomputed. MEASURED 2026-08-20, before this existed: five doctored
+    shapes -- a crc that is not hex, a size that is a word, a negative row key, a
+    document that is not there, truncated JSON -- left `assert_archive_safe` as
+    raw `ValueError`/`struct.error`/`FileNotFoundError`/`JSONDecodeError`, past
+    every `except ArchiveUnsafe` in the tree, and the CLI's own last-resort
+    handler printed them as "the archive could not be read far enough to have
+    findings" with exit 2. The archive was fine. The document was the finding.
+    """
+    raise ArchiveUnsafe(
+        "REFUSING to read fingerprints from %s\n  %s\n  %s"
+        % (source, reason, remedy), unreadable=False)
+
+
+def _overlay_module():
+    """`overlay`, imported HERE and never at module scope.
+
+    THERE IS A CYCLE AND THIS IS WHICH WAY IT RUNS. `overlay.py:188` imports this
+    module at its own top level, so a module-level `import overlay` here would be
+    an import cycle that fails on whichever of the two is loaded first. A lazy
+    import inside the one function that needs it is the house pattern --
+    `datwrite.py` reaches `datmove` and `datplan` exactly this way -- and it also
+    keeps `overlay`'s dependency chain (`gwenc`, `refindex`, `vaultpath`) off the
+    launch path, which calls this function with no fingerprints and never gets
+    here at all.
+    """
+    import overlay  # noqa: E402,PLC0415  -- see the docstring
+    return overlay
+
+
+def _verify_overlay_record(doc, source):
+    """overlay.py's own three refusals, run by overlay.py's own code. -> a note.
+
+    `None` when the document does not declare itself an overlay record, which is
+    the a10stage document and the bare mapping a caller hands in.
+
+    WHY THIS IS HERE AT ALL. `overlay.load_fingerprints` (overlay.py:670-737)
+    refuses a record three ways before it reads a row out of it: its own digest,
+    the manifest sha, and the RETAIL stamp. MEASURED 2026-08-20: this gate
+    honoured none of them, and `--assert-safe --fingerprints F` CLEARED using a
+    file `overlay.py --status` refuses to open. A tripwire armed on one of two
+    readers is a tripwire on neither.
+
+    WHY IT DOES NOT SIMPLY CALL `load_fingerprints`. That function takes a
+    `Manifest` and reads the record at the CANONICAL path derived from it
+    (`fingerprints_path`, which needs a vault), so handing it a document at an
+    arbitrary path would validate a DIFFERENT file from the one in front of us --
+    which is the whole defect, in the other direction. So the three checks are
+    made here in overlay's order, and every comparison is overlay's own code:
+    `_self_sha` is the digest formula, `load_manifest` reads and shas the
+    manifest, `archive_identity` takes the baseline stamp, `STAMP_FIELDS` says
+    which fields count. Nothing is re-expressed. `test_datcheck.py` §12e feeds one
+    document to BOTH readers and requires the same accept/refuse verdict, because
+    the ordering is the one thing that is written twice.
+    """
+    if not isinstance(doc, dict) or "format" not in doc:
+        return None
+    overlay = _overlay_module()
+    if doc.get("format") != overlay.FORMAT:
+        return None
+    if doc.get("format_version") != overlay.FORMAT_VERSION:
+        _document_fault(
+            source,
+            "it is format_version %r; overlay.py writes %r"
+            % (doc.get("format_version"), overlay.FORMAT_VERSION),
+            "Re-build rather than read across formats: `python "
+            "toolkit/mapdata/overlay.py --build MANIFEST`.")
+    if doc.get("self_sha256") != overlay._self_sha(doc):
+        _document_fault(
+            source,
+            "it does not match its own digest -- something edited this record "
+            "after it was written",
+            "overlay.py calls this an accident tripwire rather than "
+            "cryptography, and refuses to read the record at all; a launch gate "
+            "that clears on a file `overlay.py --status` will not open is the "
+            "worse of the two answers. Write it again: `python "
+            "toolkit/mapdata/overlay.py --build MANIFEST`.")
+    mpath = doc.get("manifest")
+    if not isinstance(mpath, str) or not mpath:
+        _document_fault(source,
+                        "it declares itself an overlay record and names no "
+                        "manifest (`manifest` is %r)" % (mpath,))
+    if not os.path.isfile(mpath):
+        _document_fault(
+            source,
+            "the manifest it was built from is not at %s" % mpath,
+            "Every fingerprint in this record is relative to that manifest and "
+            "to the retail baseline the manifest names, so neither can be "
+            "checked. `overlay.py --status` cannot read it either.")
+    try:
+        manifest = overlay.load_manifest(mpath)
+    except SystemExit as exc:
+        _document_fault(
+            source,
+            "the manifest it names (%s) is not usable: %s"
+            % (mpath, str(exc).splitlines()[0]),
+            "The record is checked against that manifest and against the retail "
+            "archive it names, so a manifest overlay.py refuses is a record "
+            "nothing can verify.")
+    if doc.get("manifest_sha256") != manifest.sha256:
+        _document_fault(
+            source,
+            "it was built from a DIFFERENT manifest -- record %r, on disk %r"
+            % (doc.get("manifest_sha256"), manifest.sha256),
+            "The manifest has changed since this profile was staged, so the "
+            "rows it owns and the payloads it declares may both have moved. "
+            "Write it again: `python toolkit/mapdata/overlay.py --build %s`."
+            % manifest.path)
+    try:
+        with overlay.Archive(manifest.retail) as ar:
+            now = overlay.archive_identity(ar)
+    except (OSError, ValueError, KeyError, SystemExit, struct.error) as exc:
+        _document_fault(
+            source,
+            "the RETAIL baseline it is relative to (%s) could not be read: "
+            "%s: %s" % (manifest.retail, type(exc).__name__, exc),
+            "Every fingerprint in this record is relative to that baseline, so "
+            "'retail on all touched rows' would be answered about an archive "
+            "nobody is holding.")
+    have = doc.get("retail")
+    have = have if isinstance(have, dict) else {}
+    for field in overlay.STAMP_FIELDS:
+        if have.get(field) != now.get(field):
+            _document_fault(
+                source,
+                "it was built against a different RETAIL archive -- %s: the "
+                "record says %r, %s says %r"
+                % (field, have.get(field), manifest.retail, now.get(field)),
+                "Every fingerprint in this record is relative to that baseline, "
+                "so 'retail on all touched rows' would be answered about an "
+                "archive nobody is holding. Write it again: `python "
+                "toolkit/mapdata/overlay.py --build %s`." % manifest.path)
+    return {"format": doc["format"], "overlay": doc.get("overlay"),
+            "manifest": manifest.path, "retail": manifest.retail,
+            "checked": ["self digest", "manifest sha256", "retail stamp"]}
+
+
+def _load_fingerprint_doc(fingerprints):
+    """(the parsed document, a string naming where it came from)."""
+    if isinstance(fingerprints, dict):
+        return fingerprints, "a caller-supplied mapping"
+    if not isinstance(fingerprints, (str, bytes, os.PathLike)):
+        _document_fault("a caller-supplied %s" % type(fingerprints).__name__,
+                        "fingerprints must be a row mapping, a fingerprint "
+                        "document, or a path to one")
+    source = str(fingerprints)
+    try:
+        with open(fingerprints, "r", encoding="utf-8") as fh:
+            return json.load(fh), source
+    except OSError as exc:
+        _document_fault(source, "%s: %s" % (type(exc).__name__, exc))
+    except ValueError as exc:            # json.JSONDecodeError is a ValueError
+        _document_fault(source, "it is not readable JSON: %s: %s"
+                        % (type(exc).__name__, exc))
+
+
+def _shape_of(doc, key):
+    """What `doc[key]` IS, for a refusal that has to say why it is not a block."""
+    if key not in doc:
+        return "ABSENT"
+    val = doc[key]
+    if isinstance(val, dict) and not val:
+        return "an EMPTY object"
+    return ("a %s, not a {row: [size, crc, compression]} block"
+            % type(val).__name__)
+
+
+def _fingerprint_side(doc, source, side=None):
+    """(the row block, a string naming where it came from). Never positional.
+
+    THE RULE, IN ONE SENTENCE: a document that names SIDES is read at the side
+    that was asked for, or at `rows`, and nowhere else.
+    """
+    if _is_row_block(doc):
+        if side is not None:
+            _document_fault(
+                source,
+                "side %r was asked for and this document IS a bare row block, "
+                "with no sides in it" % side,
+                "Drop the side, or hand a document that names one of %s."
+                % ", ".join(repr(k) for k in FINGERPRINT_SIDE_KEYS))
+        return doc, source
+    if not isinstance(doc, dict):
+        _document_fault(source, "its top level is a %s, not an object"
+                        % type(doc).__name__)
+    blocks = sorted(k for k, v in doc.items() if _is_row_block(v))
+    # A SIDE IS A KEY HOLDING A ROW BLOCK, not merely a key with that name.
+    # `overlay.build` writes `"staged": "<path to the staged archive>"` -- a
+    # string -- into the same document, and counting it here would put a file
+    # path in a list of sides in the refusal text.
+    present = [k for k in FINGERPRINT_SIDE_KEYS if _is_row_block(doc.get(k))]
+    if side is not None:
+        if not _is_row_block(doc.get(side)):
+            _document_fault(
+                source,
+                "side %r is %s" % (side, _shape_of(doc, side)),
+                "The row block(s) this document does hold: %s."
+                % (", ".join(repr(k) for k in blocks) or "none at all"))
+        return doc[side], "%s[%r]" % (source, side)
+    if present:
+        same = [k for k in FINGERPRINT_ROW_KEYS if _is_row_block(doc.get(k))]
+        if len(same) > 1:
+            _document_fault(
+                source,
+                "it holds %s, and those are two names for THE SAME side of a "
+                "profile" % " and ".join(repr(k) for k in same),
+                "Which one the archive is supposed to match is a GUESS -- and a "
+                "fingerprint check run against the wrong side of a profile "
+                "passes on the archive it was meant to refuse. Say which: "
+                "assert_archive_safe(..., side=%r) or --side %s."
+                % (same[0], same[0]))
+        chosen = same[0] if (same and DEFAULT_SIDE not in present) else DEFAULT_SIDE
+        if not _is_row_block(doc.get(chosen)):
+            _document_fault(
+                source,
+                "this document names sides (%s) and the %r side is %s"
+                % (", ".join(repr(k) for k in present), chosen,
+                   _shape_of(doc, chosen)),
+                "There is NO fall-through to another side. The caller asked "
+                "whether the %r side is what is deployed, and answering out of "
+                "a different block clears the archive this check exists to "
+                "refuse. Row block(s) actually present: %s. Ask for one by name "
+                "with side=/--side, or write the record again."
+                % (chosen, ", ".join(repr(k) for k in blocks) or "none at all"))
+        return doc[chosen], "%s[%r]" % (source, chosen)
+    if len(blocks) == 1:
+        return doc[blocks[0]], "%s[%r]" % (source, blocks[0])
+    _document_fault(
+        source,
+        "this document holds %d row block(s) %s and none of them is named %s"
+        % (len(blocks), blocks or "",
+           " or ".join(repr(k) for k in FINGERPRINT_SIDE_KEYS)),
+        "Which one the archive is supposed to match is a GUESS -- and a "
+        "fingerprint check run against the wrong side of a profile passes on the "
+        "archive it was meant to refuse. Name the block with side=, or hand "
+        "assert_archive_safe the mapping itself.")
+
+
+def _fingerprint_file_ids(doc, where):
+    """{row: file_id} out of the document's `file_ids` block, or `{}`.
+
+    THE ADDRESSING UNIT, and the reason the identity tier has one. A row number
+    is a position in ONE archive's table; `overlay.deployed_state` re-resolves
+    every file id before it compares a single fingerprint and says why in its own
+    docstring (overlay.py:1399-1403): "the client relocates rows during ordinary
+    play, so a fingerprint compared by row number alone can be comparing two
+    different files." MEASURED 2026-08-20 on one archive with its two file-id
+    records swapped and every row still carrying its own bytes: `overlay.py
+    --status` answered OTHER ("the archive has been rearranged under this
+    profile") and this gate CLEARED it -- while its own refusal text sends the
+    operator to that same authority. `datwrite.check_identity` had the rule
+    already: a row index is a fact about the copy.
+    """
+    raw = doc.get("file_ids") if isinstance(doc, dict) else None
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        _document_fault(where, "its `file_ids` block is a %s, not a mapping of "
+                               "row to file id" % type(raw).__name__)
+    out = {}
+    for key, val in raw.items():
+        try:
+            row, fid = int(key), int(val)
+        except (TypeError, ValueError):
+            _document_fault(where, "its `file_ids` block maps %r -> %r, which is "
+                                   "not row -> file id" % (key, val))
+        if row < 0 or fid < 0:
+            _document_fault(where, "its `file_ids` block maps row %r to file id "
+                                   "%r, and neither may be negative"
+                                   % (key, val))
+        out[row] = fid
+    return out
+
+
+class _Fingerprints:
+    """One fingerprint document, read and checked -- what the identity tier compares.
+
+    `rows` is `{row: (size, crc, compression)}`, `where` names the block it came
+    from, `file_ids` is `{row: file_id}` (possibly empty) and `record` is the
+    overlay note from `_verify_overlay_record` (or None).
+    """
+
+    __slots__ = ("rows", "where", "file_ids", "record")
+
+    def __init__(self, rows, where, file_ids, record):
+        self.rows = rows
+        self.where = where
+        self.file_ids = file_ids
+        self.record = record
+
+
+def _fingerprint_rows(fingerprints, side=None):
+    """Read a fingerprint document. -> `_Fingerprints`. Refuses, never raises raw.
+
+    Accepts the row mapping itself, or a path to a fingerprint document. The crc
+    may be written either way round (`"0x592E1A6F"` as a10stage writes it, a bare
+    lowercase `"58efe7e6"` as overlay writes it, or a plain int) because the file
+    is JSON and every spelling survives a round trip; every other field is an int
+    and is required to be one.
+
+    EVERY FAULT IN THE DOCUMENT COMES OUT AS `ArchiveUnsafe(unreadable=False)`.
+    See `_document_fault` for the five that used to escape raw.
+    """
+    doc, source = _load_fingerprint_doc(fingerprints)
+    record = _verify_overlay_record(doc, source)
+    block, where = _fingerprint_side(doc, source, side)
+    out = {}
+    for key, val in block.items():
+        try:
+            row = int(key)
+            size, crc, comp = val
+            crc = int(crc, 16) if isinstance(crc, str) else int(crc)
+            size, comp = int(size), int(comp)
+        except (TypeError, ValueError) as exc:
+            _document_fault(where,
+                            "row %r's fingerprint %r is not (size, crc, "
+                            "compression): %s: %s"
+                            % (key, val, type(exc).__name__, exc))
+        if row < 0:
+            _document_fault(
+                where,
+                "it fingerprints row %r, and a row number is an index into the "
+                "MFT -- there is no negative one" % key,
+                "Left to run, this reads an empty slice out of the table and "
+                "fails an unpack; it is a fault in the document and is named as "
+                "one. " + DOCUMENT_REMEDY)
+        out[row] = (size, crc & 0xFFFFFFFF, comp)
+    return _Fingerprints(out, where, _fingerprint_file_ids(doc, where), record)
+
+
+def self_crc_state(path, header=None, mft=None):
+    """(stored, computed) for row 3's own crc -- the MFT's self-checksum.
+
+    THE ONE CHECK `preflight()` DOES NOT MAKE, and the one whose absence is
+    written up as a real defect shape rather than a theoretical one: a `Writer`
+    that grows a row without `resync()` computes the self-crc over the stale
+    pre-growth extent, prints a confident `fixed` line, and leaves an archive
+    that fails its own checksum while `--preflight` still answers 10 of 10
+    (`datwrite.py:755-781`). Only `datwrite --verify` has ever looked, and
+    `--verify` is not a thing anyone runs before a launch.
+
+    The formula is `datwrite.mft_self_crc`, imported. See the import comment.
+    """
+    header = header or read_header(path)
+    mft = read_mft(path, header) if mft is None else mft
+    n = row_count(mft)
+    stored = struct.unpack_from(
+        "<I", mft, MFT_SELF_ROW * ENTRY_SIZE + datwrite.ENTRY_CRC)[0]
+    return stored, datwrite.mft_self_crc(mft, n)
+
+
+UNREADABLE_REMEDY = ("The archive could not be read far enough to have findings, "
+                     "which is not permission to open it with a client.")
+
+# THE ONE UNREADABLE CAUSE THAT IS NOT DAMAGE. A running client holds an
+# EXCLUSIVE lock on the archive it was launched from: while `Gw.exe` is up that
+# file cannot be opened even for reading, and Python raises `PermissionError`,
+# not a partial read (RUNBOOK, "The third copy of Gw.dat, and why it exists").
+# Left generic, the refusal above reads as corruption on a 4.2 GB copy and names
+# no action -- so the errno gets the sentence it earns. The launch sites also
+# order themselves around this (livesession.preflight runs its client census
+# BEFORE the gate, so a left-open client hits the refusal written for it), and
+# this line is what covers the sites that have no census to run.
+LOCKED_REMEDY = ("A client already running holds this archive open -- close every "
+                 "Gw.exe and re-run. That is a lock, not damage: only if nothing "
+                 "is running does this reading mean the file itself.")
+
+
+def _unreadable_remedy(exc):
+    """The remedy line for a refusal that could not read the archive at all."""
+    if isinstance(exc, PermissionError):
+        return LOCKED_REMEDY + " " + UNREADABLE_REMEDY
+    return UNREADABLE_REMEDY
+
+
+def assert_archive_safe(dat, fingerprints=None, deep=False, why="launch",
+                        side=None):
+    """Refuse unless this archive is one a client may be handed. Read-only.
+
+    THE INVARIANT, in one sentence: **an archive a client opens must be one the
+    client will not REPAIR.** `cage.assert_launch_safe` decides from a binary's
+    bytes whether it may be aimed at a given server; this decides from an
+    archive's bytes whether it may be opened at all, and it is the same shape of
+    answer -- read the verdict from what is on disk, refuse with a message
+    naming the remedy, and return a dict describing what was cleared so the
+    caller can log what it let through rather than merely that it let something
+    through.
+
+    IT FAILS CLOSED ON EVERYTHING, and unlike the cage there is no cell where
+    that is the wrong default. The cage's stock-at-live cell proceeds through an
+    undeterminable firewall because the risk there is a STALL. Here every
+    uncertainty is on the same side: the client's repair phase 2 walks a bad
+    payload CRC back to its `FLAG_FIRST_STREAM` head and DELETES THE WHOLE
+    CHAIN, and a header whose CRC does not verify tail-jumps `ArchiveOpen` into
+    **ArchiveCreate**, which writes a fresh empty archive over 4.2 GB with no
+    logged error and no recovery path. There is nothing on the other side of the
+    scale to weigh those against, so a suspect archive never meets a client.
+
+    THE TIERS:
+
+      integrity (always)   the file header's magic and its CRC over 0x00..0x0C;
+                           `preflight()`'s ten open-time rules; the MFT self-crc
+                           (`self_crc_state`, the one rule the pre-flight has
+                           never made); and `crc_sweep`, the only tier that can
+                           see a stale payload CRC at all.
+
+                           MEASURED 2026-08-20 over all EIGHT 4.2 GB archives in
+                           the vault -- `dat_study`, five `run/` copies and two
+                           `run-live/` copies: every one CLEARS, in 6.0 to 7.1 s
+                           end to end. Both halves of that matter. The seconds
+                           are what make "run it before every single launch"
+                           affordable, and the eight clears are the positive
+                           control a fail-closed gate needs before it is wired
+                           into a launch path: a gate that reddens on the real
+                           target is not a gate, it is a tool nobody can run,
+                           which is exactly how one of the ten rules below had
+                           to be corrected on 2026-08-13.
+
+      deep=True            adds `generation_checks`: how many older MFT
+                           generations a repair would have to fall back on.
+                           OPT-IN, because it is a second whole-file read and
+                           because one generation is a fact about an archive's
+                           HISTORY -- a freshly cut copy has exactly one and is
+                           perfectly healthy. Run it before an archive is
+                           RISKED, not before every open.
+
+      identity (opt-in)    with `fingerprints`, every named row's (size, crc,
+                           compression) must match. This is what answers "is the
+                           profile I built the profile that is deployed", and it
+                           is NOT run on the live path.
+
+                           ADDRESSED BY FILE ID WHERE THE DOCUMENT HAS ONE. A row
+                           number is a position in one archive's table and the
+                           client relocates rows during ordinary play, so a
+                           document carrying a `file_ids` block has each of those
+                           ids re-resolved against the archive's own table BEFORE
+                           any fingerprint is compared -- the check
+                           `overlay.deployed_state` makes, for the reason its
+                           docstring gives. A document with no `file_ids` is read
+                           by row number and the receipt SAYS SO, in the one line
+                           a caller prints; `datwrite.check_identity` set that
+                           precedent ("You are trusting the row number").
+
+                           AND THE SIDE IS ASKED FOR, NOT GUESSED. An overlay
+                           record holds `rows`, `retail_rows` and sometimes
+                           `staged_rows`; `side=` chooses, `rows` is the default,
+                           and a side that is missing or empty REFUSES rather than
+                           falling through to whichever block is left.
+                           `overlay.load_fingerprints`'s three trust checks --
+                           self digest, manifest sha, retail stamp -- are run
+                           first, by overlay's own code, on any document that
+                           declares itself an overlay record.
+
+    ON THE LIVE PATH THIS VERIFIES AND NEVER MODIFIES, and it takes no
+    fingerprints there: `vault/run-live/`'s archive has its updater LIVE by
+    design and streams new content into itself during a real session, so it
+    legitimately drifts and a fingerprint check against it would refuse the one
+    configuration that works (RUNBOOK, "a live run writes new content into its
+    own Gw.dat"). Nothing in this module opens a file for writing.
+
+    EACH LAUNCH SITE CALLS THIS ITSELF rather than trusting an upstream caller,
+    which is `session.py`'s own rule about the cage and is quoted here because
+    it is the same rule: "A guard that only guards one of two doors is the shape
+    of the defect it is here to prevent -- vault/run held two patched binaries
+    and one was caged." There are FOUR of those doors, not two:
+    `session.run_client`, `drive_client.main`, `livesession.preflight` and
+    `deploy.launch`, and `test_datcheck.py` §12d holds that list against a census
+    of the harness files that hand an exe to `Popen`, because an enumerated list
+    of launch paths is only as good as its own census of them.
+
+    AND A SITE WITH A CLIENT CENSUS RUNS THAT FIRST. A running client holds an
+    EXCLUSIVE lock on the archive it was launched from, so while one is up this
+    function cannot read the file at all and answers `unreadable` -- a true
+    statement that names no action. Where a caller already knows how to say "a
+    client is running, close it" (`livesession.preflight`), that refusal must be
+    reached BEFORE this one; where it does not, `LOCKED_REMEDY` says it here.
+    """
+    path = os.path.abspath(dat)
+
+    def refuse(reason, remedy, unreadable=False):
+        raise ArchiveUnsafe(
+            "REFUSING to %s from %s\n  %s\n  %s" % (why, path, reason, remedy),
+            unreadable=unreadable)
+
+    try:
+        size_on_disk = os.path.getsize(path)
+        header = read_header(path)
+    except (OSError, ValueError, struct.error) as exc:
+        refuse("%s: %s" % (type(exc).__name__, exc),
+               _unreadable_remedy(exc), unreadable=True)
+
+    if header["raw"][:4] != FILE_MAGIC:
+        refuse("the file header's magic is %r, not %r"
+               % (header["raw"][:4], FILE_MAGIC),
+               "ArchiveOpen validates this before anything else; a copy that "
+               "fails it is REBUILT, not rejected.")
+    if header["crc_stored"] != header["crc_computed"]:
+        refuse("the header CRC over 0x00..0x0C is stored 0x%08X, computed 0x%08X"
+               % (header["crc_stored"], header["crc_computed"]),
+               "Validated at 0x0047B6D2 on EVERY open, and the failure route "
+               "tail-jumps to ArchiveCreate (0x004797EC), which overwrites the "
+               "whole archive with a fresh empty one. Restore this copy from its "
+               "donor; do not launch anything at it.")
+
+    try:
+        checks, facts = preflight(path)
+        mft = read_mft(path, header)
+        stored, computed = self_crc_state(path, header, mft)
+        sweep = crc_sweep(path)
+    except (OSError, ValueError, KeyError, struct.error) as exc:
+        refuse("%s: %s" % (type(exc).__name__, exc),
+               _unreadable_remedy(exc), unreadable=True)
+
+    failed = [c for c in checks if not c.ok]
+    if failed:
+        refuse("%d of %d open-time rules FAILED:\n    %s"
+               % (len(failed), len(checks),
+                  "\n    ".join(c.line() for c in failed)),
+               "Every one of these is something the CLIENT does at open, so a "
+               "copy that fails one produces a repair, a silent delete or an "
+               "assert -- never a clean error. "
+               "python toolkit/mapdata/datcheck.py --dat %s --preflight" % path)
+
+    if stored != computed:
+        refuse("the MFT self-crc is stored 0x%08X, computed 0x%08X" % (stored,
+                                                                       computed),
+               "LoadMft checks this and the pre-flight does not, so an archive "
+               "in this state reports 10 of 10 clear and is still rejected by "
+               "the client. It is the shape a grow-without-resync leaves "
+               "(datwrite.py:755-781). Fix it with "
+               "`python toolkit/mapdata/datwrite.py --dat %s --verify` and the "
+               "journal that wrote it." % path)
+
+    if sweep["bad"]:
+        rows = ", ".join(
+            "%s (%s)" % (row_label(i), whyrow) for i, _r, _g, whyrow
+            in sweep["bad"][:6])
+        refuse("%d row(s) whose payload does not match its stored CRC: %s%s"
+               % (len(sweep["bad"]), rows,
+                  " ..." if len(sweep["bad"]) > 6 else ""),
+               "The client's repair phase 2 walks each of these back to its "
+               "FLAG_FIRST_STREAM head and deletes the WHOLE chain -- extents "
+               "freed, rows memset, file-id record dropped -- the moment repair "
+               "fires for any reason at all.")
+
+    gens = None
+    if deep:
+        try:
+            gen_checks, gens = generation_checks(path)
+        except (OSError, ValueError, struct.error) as exc:
+            refuse("the generation scan could not run: %s: %s"
+                   % (type(exc).__name__, exc),
+                   "A deep gate that cannot read the file is not a pass.",
+                   unreadable=True)
+        gen_failed = [c for c in gen_checks if not c.ok]
+        if gen_failed:
+            refuse("the generation census FAILED:\n    %s"
+                   % "\n    ".join(c.line() for c in gen_failed),
+                   "This is an UPPER BOUND -- ScanMft's shape gate only, not "
+                   "LoadMft's full validation -- so a census this thin is worse "
+                   "than it looks. Take a fresh copy from the donor before "
+                   "risking this one, or drop deep=True if history is not what "
+                   "you are gating on.")
+
+    identity = None
+    if fingerprints is not None:
+        # THE DOCUMENT IS READ INSIDE THE REFUSAL BOUNDARY. Everything
+        # `_fingerprint_rows` can find is a fault in the DOCUMENT and comes back
+        # as `ArchiveUnsafe(unreadable=False)`; the bare `Exception` arm is the
+        # net under that promise, because the failure it replaces was five
+        # exception types nobody had enumerated escaping a launch gate past every
+        # `except ArchiveUnsafe` in the tree. A refusal naming the type is the
+        # fail-closed answer; a traceback out of a gate is not an answer at all.
+        try:
+            fp = _fingerprint_rows(fingerprints, side=side)
+        except ArchiveUnsafe:
+            raise
+        except Exception as exc:                                # noqa: BLE001
+            _document_fault(
+                "a caller-supplied mapping" if isinstance(fingerprints, dict)
+                else str(fingerprints),
+                "%s: %s" % (type(exc).__name__, exc))
+        want, where, file_ids = fp.rows, fp.where, fp.file_ids
+        n = row_count(mft)
+
+        # THE FILE IDS FIRST, AND THAT ORDER IS THE POINT. If an id has moved,
+        # that IS the answer -- rather than a fingerprint mismatch reported as if
+        # a payload had changed, or (worse) a clear, which is what a row-number
+        # compare gives on an archive whose two id records were swapped.
+        by_id = sorted(row for row in want if row in file_ids)
+        by_row = sorted(row for row in want if row not in file_ids)
+        if by_id:
+            try:
+                records, _idblob = file_id_records(path, mft, header)
+            except (OSError, ValueError, struct.error) as exc:
+                refuse("the file-id table could not be read, so the rows %s "
+                       "names cannot be resolved by id: %s: %s"
+                       % (where, type(exc).__name__, exc),
+                       _unreadable_remedy(exc), unreadable=True)
+            for row in by_id:
+                fid = file_ids[row]
+                named = sorted({r for f, r in records if f == fid})
+                if named != [row]:
+                    refuse("file id 0x%X named row %d when %s was written and "
+                           "names %s in this archive"
+                           % (fid, row, where, named or "nothing"),
+                           "The archive has been REARRANGED under this profile: "
+                           "a row number is a position in one archive's table "
+                           "and the client relocates rows during ordinary play, "
+                           "so comparing row %d's fingerprint here would be "
+                           "comparing two different files. This is the state "
+                           "`overlay.py --status MANIFEST` calls OTHER; ask it "
+                           "what IS deployed rather than launching at this."
+                           % row)
+
+        for row in sorted(want):
+            size, crc, comp = want[row]
+            if row >= n:
+                refuse("fingerprinted row %d does not exist in this archive "
+                       "(%d rows)" % (row, n),
+                       "The fingerprints in %s were taken from a DIFFERENT "
+                       "archive. Ask which profile is deployed with "
+                       "`overlay.py --status`." % where)
+            got = row_fields(row_bytes(mft, row))
+            have = (got["size"], got["crc"], got["extra_bytes"])
+            if have != (size, crc, comp):
+                refuse("%s does not match its fingerprint:\n"
+                       "    want size %d crc 0x%08X compression %d\n"
+                       "    have size %d crc 0x%08X compression %d"
+                       % (row_label(row), size, crc, comp, *have),
+                       "This archive is not the one %s describes. Ask what IS "
+                       "deployed with `overlay.py --status MANIFEST` rather "
+                       "than launching at it." % where)
+        # WHAT WAS TRUSTED, IN THE ONE LINE A CALLER PRINTS. `check_identity`'s
+        # precedent (datwrite.py:554-588): a check that could not be made says so
+        # rather than implying it passed, because the alternative is a silent
+        # green from a check that never ran.
+        if by_id and not by_row:
+            addressing = "resolved by FILE ID"
+        elif by_row and not by_id:
+            addressing = ("BY ROW NUMBER -- this document carries no file_ids, "
+                          "so you are trusting the row numbers")
+        else:
+            addressing = ("%d by FILE ID, %d TRUSTING ROW NUMBERS"
+                          % (len(by_id), len(by_row)))
+        identity = {"source": where, "rows": len(want),
+                    "addressing": addressing,
+                    "by_file_id": by_id, "by_row_number": by_row,
+                    "record": fp.record}
+
+    cleared = {
+        "dat": path,
+        "why": why,
+        "size_on_disk": size_on_disk,
+        "rows": row_count(mft),
+        "mft_offset": header["mft_offset"],
+        "mft_sha256": hashlib.sha256(mft).hexdigest(),
+        "header_crc": header["crc_stored"],
+        "preflight": [c.name for c in checks],
+        "self_crc": stored,
+        "crc_sweep": {"checked": sweep["checked"], "skipped": sweep["skipped"]},
+        "deep": bool(deep),
+        "generations": None if gens is None else
+                       sum(1 for g in gens if g["shape_ok"]),
+        "identity": identity,
+        "file_id_sha256": facts["file_id_sha256"],
+    }
+    cleared["summary"] = (
+        "%s: %d rows, %d B, %d of %d open-time rules, self-crc 0x%08X, "
+        "%d payload CRC(s) recomputed, MFT sha256 %s%s%s"
+        % (os.path.basename(path), cleared["rows"], size_on_disk,
+           len(checks), len(checks), stored, sweep["checked"],
+           cleared["mft_sha256"][:16],
+           "" if gens is None else
+           ", %d MFT generation(s)" % cleared["generations"],
+           "" if identity is None else
+           ", %d row(s) match %s, %s" % (identity["rows"], identity["source"],
+                                         identity["addressing"])))
+    return cleared
+
+
 # ----------------------------------------------------------------- snapshot --
 
 def scan(path):
@@ -1120,16 +1917,71 @@ def _main(argv=None):
     ap.add_argument("--crc-sweep", action="store_true",
                     help="recompute every USED row's payload CRC from disk. "
                          "Reads the whole file (~3 s for 4.2 GB)")
+    ap.add_argument("--assert-safe", action="store_true",
+                    help="the launch gate: header, the ten open-time rules, the "
+                         "MFT self-crc and every payload CRC, as one verdict")
+    ap.add_argument("--fingerprints", metavar="FILE",
+                    help="with --assert-safe: an overlay fingerprint document; "
+                         "every row it names must still match")
+    ap.add_argument("--side", choices=list(FINGERPRINT_SIDE_KEYS),
+                    help="with --fingerprints: WHICH side of the document the "
+                         "archive is supposed to match. Default 'rows'. A side "
+                         "that is missing or empty refuses; there is no "
+                         "fall-through to another block")
+    ap.add_argument("--deep", action="store_true",
+                    help="with --assert-safe: add the MFT generation census "
+                         "(a second whole-file read)")
     ap.add_argument("--json", metavar="FILE", help="also write the result as JSON")
     args = ap.parse_args(argv)
 
     if not (args.preflight or args.snapshot or args.diff
-            or args.generations or args.crc_sweep):
+            or args.generations or args.crc_sweep or args.assert_safe):
         ap.error("nothing to do: pass --preflight, --snapshot, --diff, "
-                 "--generations or --crc-sweep")
+                 "--generations, --crc-sweep or --assert-safe")
+
+    # AN ARGUMENT THAT DID NOTHING IS A PASS ON THE WRONG ARCHIVE. The check
+    # above covers "nothing to do"; this covers the other shape, and it is the
+    # one an operator reaches by typo. MEASURED 2026-08-20: `--preflight
+    # --fingerprints F` on an archive the document does not describe exited 0
+    # with the identity check never run and nothing said about it. The
+    # dependency was stated in help text only, which is a rule nothing checks.
+    dependent = [name for name, on in (("--fingerprints", args.fingerprints),
+                                       ("--deep", args.deep),
+                                       ("--side", args.side)) if on]
+    if dependent and not args.assert_safe:
+        ap.error("%s only mean(s) anything with --assert-safe, and passing it "
+                 "without would run the check you asked for NOT AT ALL while "
+                 "exiting 0" % ", ".join(dependent))
+    if args.side and not args.fingerprints:
+        ap.error("--side chooses which block of --fingerprints to compare "
+                 "against, so it needs one")
 
     rc = 0
     payload = {}
+
+    # THE GATE ANSWERS FIRST AND ALONE. A refusal returns here rather than
+    # falling through to the other verbs, because printing a row table out of an
+    # archive this tool has just refused to let near a client is how a refusal
+    # gets read as a report.
+    if args.assert_safe:
+        try:
+            cleared = assert_archive_safe(args.dat, fingerprints=args.fingerprints,
+                                          deep=args.deep, why="launch",
+                                          side=args.side)
+        except ArchiveUnsafe as exc:
+            print(str(exc))
+            return 2 if exc.unreadable else 1
+        print("archive gate: %s" % cleared["summary"])
+        print("  %s" % ROW_CONVENTION)
+        print("  cleared: %s" % ", ".join(cleared["preflight"]))
+        payload["assert_safe"] = cleared
+        if not (args.preflight or args.snapshot or args.diff
+                or args.generations or args.crc_sweep):
+            if args.json:
+                with open(args.json, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=1)
+                print("json -> %s" % args.json)
+            return 0
 
     if args.preflight:
         baseline = load_snapshot(args.baseline) if args.baseline else None

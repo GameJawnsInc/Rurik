@@ -58,6 +58,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 from archive import Archive, file_id_table  # noqa: E402
 import content as content_mod  # noqa: E402
+import datcheck  # noqa: E402  -- the launch-side archive gate
 import envchunk  # noqa: E402
 import mapchunks  # noqa: E402
 import mapexport  # noqa: E402
@@ -469,6 +470,13 @@ def launch(exe, session, dat, map_id, hold, area=None):
     env = dict(os.environ)
     env["RURIK_DAT"] = os.path.abspath(dat)
     print(f"  server world: RURIK_DAT={env['RURIK_DAT']}")
+    # The archive gate, run HERE and not left to the harness. session.py's own
+    # rule about the cage applies unchanged: a guard that only guards one of two
+    # doors is the shape of the defect it is here to prevent. This is also the
+    # site with the most to lose -- the archive it is about is one we just WROTE
+    # into, and an armed head or a half-finished replace is exactly the state the
+    # ten open-time rules and the payload CRC sweep exist to name.
+    print(f"  archive: {datcheck.assert_archive_safe(dat, why='serve')['summary']}")
     # --keep-open IS WHAT MAKES --hold MEAN ANYTHING. `session.hold_open` is
     # gated on `keep_open`, which otherwise only the tape chain sets -- so every
     # run of this command before 2026-08-13 asked for 40 s of client time and

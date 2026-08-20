@@ -27,6 +27,35 @@ make that possible: the past-EOF sabotage needs free space at the END of the
 file or it also trips the overlap rule, and the misalignment sabotage needs a
 row with a gap after it or it trips the same.
 
+Section 12 is the LAUNCH GATE, `assert_archive_safe`, and it is the one section
+that checks a REFUSAL rather than a verdict. The two rules it adds to the
+pre-flight are there because each has a control here that shows the pre-flight
+blind to it: an archive with a wrong MFT self-crc answers 10 of 10 clear and is
+still rejected by the client's own LoadMft, and an archive whose row was
+rewritten legitimately (payload and crc agreeing) is clean by every integrity
+rule and is a different world. It also asks the FOUR launch sites' syntax trees
+whether each one calls the gate ITSELF -- session.py's two-doors rule, applied
+to the archive rather than to the binary -- because a gate wired into three of
+four launch paths is the defect it exists to prevent, which is what the first
+revision of that section was: it named three sites and `drive_client.main`, the
+standalone operator launcher and the other of the two doors that comment is
+actually about, was not one of them. So the list is now checked against a census
+of the harness files that hand an exe to `Popen`, and the live site is checked
+for the ORDER of its call as well as its presence -- above the client census,
+the gate answers a held-open archive as unreadable damage instead of as the
+running client it is.
+
+Section 12e is the seam on the far side of the identity tier: `overlay.py` WRITES
+the fingerprint documents this gate READS, and until 2026-08-20 no wired call
+site had ever passed the two together, so nothing had measured whether they agree.
+A probe found five ways they did not -- the gate compared by ROW NUMBER while all
+of overlay is addressed by FILE ID, it honoured none of overlay's three trust
+checks, five doctored shapes escaped as raw exceptions, and a record with its
+`rows` block deleted fell through to `retail_rows` and cleared a retail archive.
+Every check there carries a control that watches the pre-fix code clear the same
+input, and one of them hands ONE document to both readers and requires the same
+verdict, because two readers of one file drifting apart is the defect itself.
+
 Section 4 is a different thing sharing this file: `archive.py`'s new `RURIK_DAT`
 override, which is a lever on the SERVER path. It exists because a running client
 holds an exclusive lock on the archive it launched from, so the two sides can
@@ -38,7 +67,10 @@ never uses it.
     python toolkit/mapdata/test_datcheck.py
 """
 
+import ast
 import binascii
+import glob
+import hashlib
 import importlib
 import json
 import os
@@ -93,7 +125,46 @@ import checks  # noqa: E402
 # the full offset. A `<I` reader truncates, finds the MFT where it always was,
 # and opens the archive reporting success -- so the check is refutable in both
 # directions on a 5.5 KB fixture. MEASURED from a green run: 112.
-LEDGER = checks.Ledger("dat pre-flight and detector", floor=112)
+#
+# RAISED 112 -> 142 on 2026-08-20 with sections 12, 12b, 12c and 12d --
+# `assert_archive_safe`, the launch-side gate. Thirty checks on the same 5.5 KB
+# fixture (no vault, no client, no network), and two of them are the point:
+# §12's CONTROL that a wrong MFT self-crc passes ALL TEN open-time rules, which
+# is why the gate had to add a rule the pre-flight never made, and §12b's
+# CONTROL that an archive with a legitimately-rewritten row is integrity-clean,
+# so nothing above the identity tier could tell the two profiles apart. §12d is
+# structural rather than behavioural because the launch sites need a client to
+# run: it asks each one's syntax tree whether the call is written down in THAT
+# function, with a negative control that deleting the line flips it.
+# MEASURED from a green run: 142.
+#
+# RAISED 142 -> 149 on 2026-08-20 by the fix pass over that section, and all
+# seven are about the gate's SURROUNDINGS rather than the gate: four sites
+# instead of three (`drive_client.main` was missed, and it is the other of the
+# two doors session.py's comment names), a CENSUS check that derives the list of
+# doors from disk so a fifth one cannot appear unlisted, the live site's call
+# ORDER with its own wrong-way-round control, and three on the one unreadable
+# cause that is not damage -- a client already holding the archive open, which
+# raises PermissionError and used to be reported as "could not be read far
+# enough to have findings" with no action named. Still the same 5.5 KB fixture,
+# still no vault and no client: the platform-dependent half of the lock check
+# writes its expectation against the errno the platform actually produced.
+# MEASURED from a green run: 149.
+#
+# RAISED 149 -> 168 on 2026-08-20 with section 12e, the FINGERPRINT DOCUMENT.
+# Nineteen checks on the same 5.5 KB fixture, and SEVEN of them are controls
+# that watch the pre-fix code clear the very input the fix now refuses --
+# `prefix_side` monkeypatched over the resolver, `_verify_overlay_record`
+# neutered, `prefix_parse` raising the raw exceptions that used to escape. That
+# ratio is deliberate: a probe had just shown this gate CLEARING an archive
+# `overlay.py --status` calls unscoreable, and "the gate refuses X" is
+# compatible with the gate having always refused X. One of the nineteen is an
+# EQUIVALENCE check -- one document, read by `overlay.load_fingerprints` and by
+# this gate, required to give the same accept/refuse -- because the two readers
+# agreeing is the only thing that keeps them from drifting again. Still no
+# vault: the section points `RURIK_VAULT` at its own temp directory and puts it
+# back. MEASURED from a green run: 168.
+LEDGER = checks.Ledger("dat pre-flight and detector", floor=168)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -460,6 +531,903 @@ def write_snap(tmp, path, name):
     out = os.path.join(tmp, name)
     datcheck.write_snapshot(path, out)
     return out
+
+
+# ------------------------------------------------------- the launch gate --
+
+ROW_CRC_OFF = 0x14                      # the crc dword inside a 24-byte row
+
+
+def self_crc_of(path):
+    """The MFT self-crc this fixture OUGHT to carry, computed here.
+
+    THE FORMULA IS WRITTEN OUT RATHER THAN IMPORTED. `datwrite.mft_self_crc` is
+    what `assert_archive_safe` uses; asking it would make every check below
+    agree with itself no matter what either side said. This is the rule as
+    `datwrite.py`'s own docstring states it -- CRC-32 over the table with row
+    3's own 24 bytes skipped, because a checksum cannot cover the field it is
+    stored in -- expressed a second time, independently, so the two can differ.
+    """
+    with open(path, "rb") as fh:
+        fh.seek(MFT_OFF)
+        mft = fh.read(MFT_SIZE)
+    acc = binascii.crc32(mft[0:ROW_SELF * ENTRY_SIZE])
+    return binascii.crc32(mft[(ROW_SELF + 1) * ENTRY_SIZE:MFT_SIZE], acc)
+
+
+def seal_self_crc(path):
+    """Give the fixture the MFT self-crc a real archive carries.
+
+    `build_archive` writes 0 into row 3's crc field, which was correct for as
+    long as nothing in this tree read it -- `--preflight` never has. The launch
+    gate does, so the sections below need a fixture that is healthy by that rule
+    too, and one that can then be broken on purpose. Row 3's own bytes are
+    outside the sum, so writing the answer in does not change the answer.
+    """
+    poke(path, MFT_OFF + ROW_SELF * ENTRY_SIZE + ROW_CRC_OFF,
+         struct.pack("<I", self_crc_of(path)))
+    return path
+
+
+def sealed(tmp, name):
+    """A fixture that is healthy by every rule the launch gate applies."""
+    return seal_self_crc(fresh(tmp, name))
+
+
+def reseal_row_crc(path, row):
+    """Recompute one row's payload crc from the bytes now on disk.
+
+    What a legitimate write leaves behind: payload and crc agreeing, so the
+    sweep is green and the archive is nonetheless a DIFFERENT archive. Without
+    this the identity tier could never be reached -- the CRC sweep would refuse
+    first and the fingerprint comparison would go untested.
+    """
+    off, size = ROWS[row][0], ROWS[row][1]
+    with open(path, "r+b") as fh:
+        fh.seek(off)
+        crc = binascii.crc32(fh.read(size))
+        fh.seek(MFT_OFF + row * ENTRY_SIZE + ROW_CRC_OFF)
+        fh.write(struct.pack("<I", crc))
+    return path
+
+
+def fingerprint_block(path, rows):
+    """{row: [size, crc_hex, compression]} -- the a10stage document's shape."""
+    mft = datcheck.read_mft(path)
+    out = {}
+    for row in rows:
+        f = datcheck.row_fields(datcheck.row_bytes(mft, row))
+        out[str(row)] = [f["size"], "0x%08X" % f["crc"], f["extra_bytes"]]
+    return out
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def refused_by_gate(*args, **kw):
+    """(refused, message) for one `assert_archive_safe` call."""
+    try:
+        datcheck.assert_archive_safe(*args, **kw)
+        return False, ""
+    except datcheck.ArchiveUnsafe as exc:
+        return True, str(exc)
+
+
+def cleared_by_gate(*args, **kw):
+    """The gate's receipt, or an empty one and a printed reason.
+
+    NEVER a bare call. A gate that refuses the HEALTHY case has to score as a
+    red check, not as a `SystemExit` that kills the run before
+    `LEDGER.verdict()` -- no banner, no floor, no ledger, which is the one
+    failure `checks.py` cannot see. Same rule as `role_of` above, for the same
+    reason: a broken module must score as WRONG, not as absent.
+    """
+    try:
+        return datcheck.assert_archive_safe(*args, **kw)
+    except datcheck.ArchiveUnsafe as exc:
+        print("   unexpected refusal: %s"
+              % " / ".join(ln.strip() for ln in str(exc).splitlines()[:2]))
+        return {}
+
+
+def gate_calls(source, funcname):
+    """Every `assert_archive_safe(...)` call inside `funcname`, as AST nodes.
+
+    Asked of the syntax tree because the two things that matter are invisible to
+    a grep: that the call is inside THAT function, and which keywords it hands
+    over. A file mentioning the name in a comment greps identically.
+    """
+    fn = next((n for n in ast.walk(ast.parse(source))
+               if isinstance(n, ast.FunctionDef) and n.name == funcname), None)
+    if fn is None:
+        return []
+    out = []
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Call):
+            f = n.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if name == "assert_archive_safe":
+                out.append(n)
+    return out
+
+
+def gate_after_client_census(source):
+    """(gate line, "already running" refusal line) inside `preflight`.
+
+    ORDER, not presence, and it is the one thing about this call site that a
+    presence check cannot see. A running client holds an EXCLUSIVE lock on the
+    archive it launched from, so a gate placed ABOVE the client census answers a
+    left-open client with "could not be read far enough to have findings" --
+    unreadable, no action named -- and buries the purpose-written refusal that
+    says a client is already running and to close it. Both lines are read out of
+    the syntax tree so a comment mentioning either one cannot satisfy this.
+
+    Either line missing comes back as None, which scores as a red check rather
+    than an exception: a site that stopped calling the gate at all must not be
+    reported as a passing order.
+    """
+    tree = ast.parse(source)
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "preflight"), None)
+    if fn is None:
+        return None, None
+    calls = gate_calls(source, "preflight")
+    census = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Raise)
+              and "already running" in (ast.get_source_segment(source, n) or "")]
+    return (calls[0].lineno if calls else None,
+            min(census) if census else None)
+
+
+# A `preflight` with the two in the WRONG order -- the negative control for the
+# check above. Without it "gate line > census line" passes on any file where one
+# of the two is missing, and would go on passing after the gate moved back up.
+WRONG_ORDER_PREFLIGHT = '''
+def preflight(exe, account_label=None):
+    cleared = datcheck.assert_archive_safe(live_dat, why="launch at the live service")
+    running = one_live_client()
+    if running != 0:
+        raise LiveError(f"{running} Gw.exe already running -- close them first")
+'''
+
+
+def open_error(path):
+    """The exception `open(path, "rb")` actually raises here, or None.
+
+    Asked rather than assumed because the answer is the platform's, not ours: a
+    directory standing in for an archive raises `PermissionError` on Windows and
+    `IsADirectoryError` on POSIX, and only the first is the shape a held-open
+    client produces. The check that uses this compares the gate's message
+    against what the platform DID, so it stays refutable on either.
+    """
+    try:
+        with open(path, "rb"):
+            return None
+    except OSError as exc:
+        return exc
+
+
+def section_launch_gate(tmp):
+    """The gate a launch site runs before it hands an archive to a client.
+
+    WHY A GATE AND NOT A REPORT. Everything above answers a question; this
+    refuses. The two failure modes it stands in front of have no clean error
+    between them and the archive: a header whose CRC does not verify tail-jumps
+    `ArchiveOpen` into `ArchiveCreate`, which writes a fresh empty archive over
+    4.2 GB with nothing logged, and a stale payload CRC costs the whole
+    `nextStream` chain the moment the client's repair fires for any reason at
+    all. So the sabotages below are checked for the REFUSAL, not for a verdict
+    string, and each one names the rule it broke.
+    """
+    print("\n12. the launch gate refuses an archive a client would repair")
+
+    good = sealed(tmp, "gate-good.dat")
+    cleared = cleared_by_gate(good)
+    check(len(cleared.get("preflight", [])) == len(ALL_ITEMS)
+          and cleared.get("crc_sweep", {}).get("checked") == len(PAYLOAD_ROWS),
+          "a healthy archive clears, and the receipt says what was measured",
+          f"{len(cleared.get('preflight', []))} rules, "
+          f"{cleared.get('crc_sweep', {}).get('checked')} payload CRC(s)")
+    # The self-crc in the receipt is compared against THIS FILE's own reading of
+    # the rule, not against itself -- see `self_crc_of`.
+    check(cleared.get("rows") == ENTRY_COUNT
+          and cleared.get("self_crc") == self_crc_of(good)
+          and os.path.basename(good) in cleared.get("summary", "")
+          and "self-crc" in cleared.get("summary", ""),
+          "and the one line a caller prints names the archive and its self-crc",
+          cleared.get("summary", "(refused)")[:96])
+
+    # IT VERIFIES AND NEVER MODIFIES, which is the property the LIVE path rests
+    # on -- `vault/run-live`'s archive streams new content into itself during a
+    # real session, and a gate that wrote so much as a flag byte there would be
+    # editing ArenaNet's own copy between a login and a capture.
+    quiet = sealed(tmp, "gate-quiet.dat")
+    fps = fingerprint_block(quiet, (ROW_A, ROW_B, ROW_HEAD))
+    plant_generation(quiet, 0x1000, counter=6)
+    was = sha256_of(quiet)
+    cleared_by_gate(quiet, fingerprints=fps, deep=True)
+    check(sha256_of(quiet) == was,
+          "the whole gate -- deep, fingerprinted -- leaves the file byte-identical",
+          f"sha256 {was[:16]}")
+
+    hdr = sealed(tmp, "gate-hdrcrc.dat")
+    poke(hdr, 0x0C, struct.pack("<I", 0xDEADBEEF))
+    red, msg = refused_by_gate(hdr)
+    check(red and "header CRC" in msg and "ArchiveCreate" in msg,
+          "a bad header CRC is refused, naming the rebuild it causes",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    magic = sealed(tmp, "gate-magic.dat")
+    poke(magic, 0, b"XXXX")
+    red, msg = refused_by_gate(magic)
+    check(red and "magic" in msg, "and so is a file header with the wrong magic",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    # One open-time rule, and the gate must name WHICH -- a refusal that says
+    # only "pre-flight failed" sends the reader back to run the pre-flight.
+    rule = sealed(tmp, "gate-rule.dat")
+    poke_row(rule, ROW_PARTNER, flags=0x0000)
+    red, msg = refused_by_gate(rule)
+    check(red and "no USED-clear row that something points at" in msg,
+          "a broken open-time rule is refused, naming the rule",
+          "named" if red and "USED-clear" in msg else msg[:78])
+
+    # THE SELF-CRC, AND ITS CONTROL. This is the rule `preflight()` has never
+    # made, so the control is the whole point of adding it: the same archive
+    # answers 10 of 10 clear and is still rejected by the client's own LoadMft.
+    selfcrc = sealed(tmp, "gate-selfcrc.dat")
+    poke(selfcrc, MFT_OFF + ROW_SELF * ENTRY_SIZE + ROW_CRC_OFF,
+         struct.pack("<I", 0x1BADC0DE))
+    v = verdicts(selfcrc)
+    check(all(v.values()),
+          "CONTROL: a wrong MFT self-crc passes ALL TEN open-time rules",
+          f"{sum(v.values())} of {len(v)} clear -- which is why the gate adds it")
+    red, msg = refused_by_gate(selfcrc)
+    check(red and "self-crc" in msg,
+          "but the gate refuses it, naming the self-crc",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    stale = sealed(tmp, "gate-payload.dat")
+    poke_row(stale, ROW_A, crc=0xDEADBEEF)
+    seal_self_crc(stale)                      # the table is consistent again
+    red, msg = refused_by_gate(stale)
+    check(red and "stored 0x%08X" % 0xDEADBEEF in msg
+          and f"row {ROW_A}" in msg,
+          "a stale payload CRC is refused, and the row is named not counted",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    # DEEP IS OPT-IN, and the pair below is what says so: one generation is a
+    # fact about an archive's HISTORY, and a fresh cut has exactly one.
+    one = sealed(tmp, "gate-deep-one.dat")
+    red, msg = refused_by_gate(one, deep=True)
+    check(red and "generation" in msg,
+          "deep=True refuses an archive with no fallback generation",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+    check(not refused_by_gate(one)[0],
+          "CONTROL: the SAME archive clears without deep -- the census is the "
+          "thing that refused, not the archive")
+    two = sealed(tmp, "gate-deep-two.dat")
+    plant_generation(two, 0x1000, counter=6)
+    deep = cleared_by_gate(two, deep=True)
+    check(deep.get("generations") == 2,
+          "and a planted older generation clears it, counted in the receipt",
+          f"{deep.get('generations')} candidate(s)")
+
+    print("\n12b. the identity tier: is the profile I built the one deployed?")
+    base = sealed(tmp, "gate-fp-base.dat")
+    want = fingerprint_block(base, (ROW_A, ROW_B, ROW_HEAD))
+    ident = cleared_by_gate(base, fingerprints=want)
+    check(ident.get("identity") and ident["identity"]["rows"] == 3,
+          "an archive matching its own fingerprints clears, and says how many "
+          "rows it matched", f"{ident.get('identity')}")
+
+    # A DIFFERENT ARCHIVE, INTEGRITY-CLEAN. Row A's payload and its crc agree,
+    # so every integrity rule is green; only the fingerprints can tell it apart.
+    other = sealed(tmp, "gate-fp-other.dat")
+    poke(other, ROWS[ROW_A][0], b"\x5A" * 32)
+    reseal_row_crc(other, ROW_A)
+    seal_self_crc(other)
+    check(not refused_by_gate(other)[0],
+          "CONTROL: a DIFFERENT archive is integrity-clean -- nothing above the "
+          "identity tier can see the difference at all")
+    red, msg = refused_by_gate(other, fingerprints=want)
+    check(red and f"row {ROW_A}" in msg and "overlay.py --status" in msg,
+          "but the identity tier names the row and the remedy",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    # The document shape a10stage actually writes: provenance fields beside a
+    # `rows` block. Through a FILE, because that is how a launch site gets one.
+    doc_path = os.path.join(tmp, "gate-fp.json")
+    with open(doc_path, "w", encoding="utf-8") as fh:
+        json.dump({"stage": base, "built": "2026-08-20", "rows": want}, fh)
+    got = cleared_by_gate(base, fingerprints=doc_path)
+    check(got.get("identity") and got["identity"]["rows"] == 3
+          and "rows" in got["identity"]["source"],
+          "a fingerprint DOCUMENT resolves to its row block and is named in the "
+          "receipt", got.get("identity", {}).get("source", "(refused)")[-40:])
+
+    # TWO BLOCKS AND NO NAMED ONE. An overlay document carries both sides of a
+    # profile; picking one by position would pass on the archive it was written
+    # to refuse.
+    ambiguous = os.path.join(tmp, "gate-fp-ambiguous.json")
+    with open(ambiguous, "w", encoding="utf-8") as fh:
+        json.dump({"before": want, "after": fingerprint_block(other, (ROW_A,))},
+                  fh)
+    red, msg = refused_by_gate(base, fingerprints=ambiguous)
+    check(red and "GUESS" in msg and "before" in msg and "after" in msg,
+          "a document holding TWO unnamed row blocks is refused, naming both",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    absent = dict(want)
+    absent[str(ENTRY_COUNT + 5)] = [1, "0x00000000", 0]
+    red, msg = refused_by_gate(base, fingerprints=absent)
+    check(red and "does not exist" in msg,
+          "and a fingerprint naming a row this archive does not have is refused",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    # FAIL CLOSED ON UNREADABLE. Not a pass, and not the same answer as a
+    # finding: the CLI has to keep 1 and 2 apart or a crash reads as a verdict.
+    broken = sealed(tmp, "gate-broken.dat")
+    poke(broken, MFT_OFF, b"XXXX")
+    try:
+        datcheck.assert_archive_safe(broken)
+        unreadable, red = None, False
+    except datcheck.ArchiveUnsafe as exc:
+        unreadable, red = exc.unreadable, True
+    check(red and unreadable is True,
+          "an archive that cannot be read is REFUSED, and says so as unreadable",
+          f"refused={red} unreadable={unreadable}")
+
+    # A LOCK IS NOT DAMAGE, and the refusal has to say which one it is looking
+    # at. A running client holds the archive it launched from exclusively --
+    # Python raises PermissionError, not a partial read (RUNBOOK, "The third copy
+    # of Gw.dat") -- so on the launch sites with no client census of their own,
+    # the ONLY thing standing between "close the game" and "your 4.2 GB archive
+    # is corrupt" is this sentence.
+    check("Gw.exe" in datcheck._unreadable_remedy(
+              PermissionError(13, "Permission denied")),
+          "a refusal that could not read the archive because of a PERMISSION "
+          "error names the running client as the cause")
+    check("Gw.exe" not in datcheck._unreadable_remedy(ValueError("bad magic")),
+          "and a refusal that could not PARSE it does not blame a client that "
+          "may not exist -- the two readings stay apart")
+    # End to end, against a real errno rather than a constructed one: a directory
+    # where the archive should be. What that raises is the platform's business,
+    # so the expectation is written against what it DID raise.
+    standin = os.path.join(tmp, "gate-locked.dat")
+    os.mkdir(standin)
+    red, msg = refused_by_gate(standin, why="launch")
+    check(red and ("Gw.exe" in msg) is isinstance(open_error(standin),
+                                                  PermissionError),
+          "and the live gate refuses an archive it cannot open, naming the lock "
+          "exactly when the errno is the lock's",
+          f"{type(open_error(standin)).__name__}: "
+          f"{'names' if 'Gw.exe' in msg else 'does not name'} the client")
+
+    print("\n12c. the gate through the real CLI")
+    check(cli("--dat", good, "--assert-safe") == 0, "a healthy archive exits 0")
+    check(cli("--dat", hdr, "--assert-safe") == 1,
+          "a finding exits 1", "--assert-safe")
+    check(cli("--dat", broken, "--assert-safe") == 2,
+          "and an unreadable archive exits 2, never 1 -- a crash is not a "
+          "verdict", "--assert-safe")
+    out = run_cli("--dat", good, "--assert-safe").stdout
+    check("archive gate:" in out and datcheck.ROW_CONVENTION in out,
+          "the verb prints its receipt and the row convention above its numbers",
+          out.splitlines()[0][:78] if out else "(no output)")
+    check(cli("--dat", base, "--assert-safe", "--fingerprints", doc_path) == 0
+          and cli("--dat", other, "--assert-safe", "--fingerprints", doc_path) == 1,
+          "--fingerprints clears the archive it describes and refuses the one "
+          "it does not", "exit 0 then 1")
+    check(cli("--dat", one, "--assert-safe", "--deep") == 1
+          and cli("--dat", two, "--assert-safe", "--deep") == 0,
+          "--deep refuses a lone generation and clears a pair", "exit 1 then 0")
+
+    print("\n12d. every launch site runs the gate ITSELF, and in the right order")
+    # session.py's own comment, and it is the reason this is checked per SITE:
+    # "A guard that only guards one of two doors is the shape of the defect it
+    # is here to prevent -- vault/run held two patched binaries and one was
+    # caged." Read by PATH, never imported: session.py pulls in ctypes windows
+    # bindings and livesession.py pulls in the capture backend, and neither has
+    # anything to do with whether the call is written down.
+    # FOUR, not three. `drive_client.main` is the standalone operator launcher
+    # and it is the OTHER of the two doors the comment above is about -- PLAN.md
+    # names the pair outright ("both launch sites (`drive_client.py`,
+    # `session.py`) assert it"). It went unlisted for one revision of this
+    # section, which is the enumerated-sites version of the same defect: a list
+    # of launch paths is only as good as its own census of them.
+    harness = os.path.join(os.path.dirname(HERE), "harness")
+    sites = {
+        "session.run_client": (os.path.join(harness, "session.py"), "run_client"),
+        "drive_client.main": (os.path.join(harness, "drive_client.py"), "main"),
+        "livesession.preflight": (os.path.join(harness, "livesession.py"),
+                                  "preflight"),
+        "deploy.launch": (os.path.join(HERE, "deploy.py"), "launch"),
+    }
+    sources = {}
+    for label, (path, fn) in sites.items():
+        sources[label] = open(path, encoding="utf-8").read()
+        check(len(gate_calls(sources[label], fn)) == 1,
+              f"{label} calls assert_archive_safe itself",
+              f"{len(gate_calls(sources[label], fn))} call(s) in {fn}()")
+
+    # THE LIVE PATH TAKES NO FINGERPRINTS, and that is not an omission. The
+    # live build's updater is LIVE by design and streams new content into its
+    # own Gw.dat during a session, so the archive legitimately drifts -- a
+    # fingerprint check there would refuse the one configuration that works.
+    live_call = gate_calls(sources["livesession.preflight"], "preflight")[0]
+    kwargs = {k.arg for k in live_call.keywords}
+    check("fingerprints" not in kwargs,
+          "and the LIVE site passes no fingerprints -- run-live's archive "
+          "drifts on purpose", f"keywords: {sorted(kwargs)}")
+
+    # AND THE LIVE SITE RUNS IT AFTER ITS CLIENT CENSUS, which is the half of
+    # that site a presence check cannot see. See `gate_after_client_census`.
+    gate_line, census_line = gate_after_client_census(
+        sources["livesession.preflight"])
+    check(gate_line is not None and census_line is not None
+          and gate_line > census_line,
+          "the LIVE site runs the gate BELOW its already-running-client refusal, "
+          "so a held-open archive is diagnosed as a client and not as damage",
+          f"gate at line {gate_line}, census refusal at line {census_line}")
+    # NEGATIVE CONTROL for exactly that ordering: the same two statements the
+    # other way round must come back the other way round.
+    bad_gate, bad_census = gate_after_client_census(WRONG_ORDER_PREFLIGHT)
+    check(bad_gate is not None and bad_census is not None
+          and bad_gate < bad_census,
+          "and a preflight written the other way round reads as the other way "
+          "round, so the order check is measuring the order",
+          f"gate at line {bad_gate}, census refusal at line {bad_census}")
+
+    # THE SITE LIST IS ITSELF A CENSUS, and an enumerated list of launch paths is
+    # only as good as it. Every file in the harness that hands an EXE to Popen is
+    # a door; if one appears that this section does not name, the four checks
+    # above go on passing while the new door stands open -- which is how
+    # `drive_client.main` was missed. Read from disk, both sides.
+    launchers = set()
+    for path in sorted(glob.glob(os.path.join(harness, "*.py"))):
+        if os.path.basename(path).startswith("test_"):
+            continue
+        src = open(path, encoding="utf-8").read()
+        for n in ast.walk(ast.parse(src)):
+            f = getattr(n, "func", None)
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if name != "Popen" or not getattr(n, "args", None):
+                continue
+            first = ast.get_source_segment(src, n.args[0]) or ""
+            if re.search(r"\bexe\b", first):
+                launchers.add(os.path.normcase(path))
+    named = {os.path.normcase(p) for p, _fn in sites.values()}
+    check(launchers and launchers <= named,
+          "and every harness file that hands an exe to Popen is one this "
+          "section already names -- no unlisted fifth door",
+          ", ".join(sorted(os.path.basename(p) for p in launchers))
+          or "(found none, which is itself wrong)")
+
+    # NEGATIVE CONTROL. Without it the checks above pass on any file that
+    # merely mentions the name, and they would go on passing after the call was
+    # deleted from a body they never re-parse.
+    gutted = re.sub(r"[^\n]*assert_archive_safe\([^\n]*\n", "",
+                    sources["deploy.launch"])
+    check(gutted != sources["deploy.launch"]
+          and not gate_calls(gutted, "launch"),
+          "and deleting that one line from a COPY of deploy.py makes the check "
+          "go red, so it is not satisfied by the name appearing somewhere")
+
+
+# ------------------------------------------ the document the gate is handed --
+
+def gate_raised(*args, **kw):
+    """(exception name, `unreadable`, message) for one `assert_archive_safe`.
+
+    CATCHES `BaseException` ON PURPOSE, and that is the whole point of the
+    helper. The defect §12e is pointed at is five exception types leaving a
+    launch gate raw -- `ValueError`, `struct.error`, `FileNotFoundError`,
+    `JSONDecodeError` -- past every `except ArchiveUnsafe` in this tree,
+    including the two helpers above. A helper that only caught `ArchiveUnsafe`
+    would re-create the blind spot inside the test that is here to close it, and
+    the run would die at whatever check came next with no red scored.
+    """
+    try:
+        datcheck.assert_archive_safe(*args, **kw)
+        return "CLEARED", None, ""
+    except datcheck.ArchiveUnsafe as exc:
+        return "ArchiveUnsafe", exc.unreadable, str(exc)
+    except BaseException as exc:                            # noqa: BLE001
+        return type(exc).__name__, None, str(exc)
+
+
+def prefix_side(doc, source, side=None):
+    """`_fingerprint_side` AS IT WAS before 2026-08-20. The negative control.
+
+    A named block by tuple order, else the ONLY unnamed candidate, else refuse.
+    Monkeypatched over the real resolver so the checks below can watch the whole
+    gate -- not a re-expression of it -- clear the documents they now refuse.
+    Without that, "the gate refuses X" is compatible with the gate having always
+    refused X, and the fix would be unmeasured.
+    """
+    if datcheck._is_row_block(doc):
+        return doc, source
+    named = [k for k in ("rows", "staged")
+             if isinstance(doc, dict) and datcheck._is_row_block(doc.get(k))]
+    if named:
+        return doc[named[0]], "%s[%r]" % (source, named[0])
+    cands = sorted(k for k, v in doc.items() if datcheck._is_row_block(v)) \
+        if isinstance(doc, dict) else []
+    if len(cands) == 1:
+        return doc[cands[0]], "%s[%r]" % (source, cands[0])
+    raise datcheck.ArchiveUnsafe("two or more unnamed blocks: %s" % cands)
+
+
+def prefix_parse(block):
+    """The row parse AS IT WAS: `int(crc, 16)`, `int(size)`, and no lower bound."""
+    out = {}
+    for key, (size, crc, comp) in block.items():
+        crc = int(crc, 16) if isinstance(crc, str) else int(crc)
+        out[int(key)] = (int(size), crc & 0xFFFFFFFF, int(comp))
+    return out
+
+
+def raised_by(fn, *a):
+    """The name of whatever `fn` raises, or "(nothing)"."""
+    try:
+        fn(*a)
+        return "(nothing)"
+    except Exception as exc:                                # noqa: BLE001
+        return type(exc).__name__
+
+
+def swap_id_records(path, first=0, second=1):
+    """Swap the ROWS two file-id records name, and leave the archive healthy.
+
+    Every row keeps the bytes it had; only the DIRECTORY changes. That is the
+    state `overlay.deployed_state` exists to catch and the one a row-addressed
+    comparison cannot see at all -- and it is not exotic: a client relocating
+    rows during play is what `--verify-after` is for.
+    """
+    off, size = ROWS[ROW_IDTABLE][0], ROWS[ROW_IDTABLE][1]
+    with open(path, "r+b") as fh:
+        fh.seek(off)
+        table = bytearray(fh.read(size))
+        fid_a, row_a = struct.unpack_from("<II", table, first * 8)
+        fid_b, row_b = struct.unpack_from("<II", table, second * 8)
+        struct.pack_into("<II", table, first * 8, fid_a, row_b)
+        struct.pack_into("<II", table, second * 8, fid_b, row_a)
+        fh.seek(off)
+        fh.write(bytes(table))
+    reseal_row_crc(path, ROW_IDTABLE)
+    return seal_self_crc(path)
+
+
+def deployed_copy(tmp, name):
+    """A sealed fixture with ROW_A rewritten legitimately -- payload and crc agree.
+
+    Stands in for "the overlay is deployed": integrity-clean, and a different
+    archive from the retail copy on exactly the rows a record fingerprints.
+    """
+    path = sealed(tmp, name)
+    poke(path, ROWS[ROW_A][0], b"\x5A" * 40)
+    reseal_row_crc(path, ROW_A)
+    return seal_self_crc(path)
+
+
+def write_doc(path, doc):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    return path
+
+
+def section_gate_documents(tmp):
+    """§12e. The FINGERPRINT DOCUMENT: whose word the identity tier takes.
+
+    §12b showed the identity tier comparing rows. This is the seam on the other
+    side of it -- `overlay.py` WRITES these documents and this gate READS them,
+    and until 2026-08-20 no wired call site had ever passed the two together, so
+    the contract between them had never been measured. A probe measured it and
+    the two disagreed on the same bytes five ways. Each is checked here WITH a
+    control that watches the pre-fix code clear the same input, because a
+    refusal with no such control is compatible with the gate having always
+    refused and would leave the fix unmeasured.
+
+    STILL NO VAULT AND NO CLIENT. `overlay.py` resolves its record paths through
+    `vaultpath`, so this section points `RURIK_VAULT` at its OWN temp directory
+    and puts it back afterwards. The archives are the same 5.5 KB fixture every
+    other section uses.
+    """
+    print("\n12e. the fingerprint document, and whose word the gate takes")
+    was_vault = os.environ.get("RURIK_VAULT")
+    try:
+        _gate_documents(tmp)
+    finally:
+        if was_vault is None:
+            os.environ.pop("RURIK_VAULT", None)
+        else:
+            os.environ["RURIK_VAULT"] = was_vault
+        import vaultpath
+        vaultpath._resolved = None
+
+
+def _gate_documents(tmp):
+    # ---- M1: the ADDRESSING UNIT -------------------------------------------
+    # A plain document (no overlay header) carrying a `file_ids` block, so this
+    # half needs neither overlay.py nor a vault.
+    swapped = sealed(tmp, "doc-swapped.dat")
+    want = fingerprint_block(swapped, (ROW_A, ROW_B))
+    swap_id_records(swapped)
+    ids = {str(ROW_A): ID_RECORDS[0][0], str(ROW_B): ID_RECORDS[1][0]}
+    with_ids = write_doc(os.path.join(tmp, "doc-ids.json"),
+                         {"rows": want, "file_ids": ids})
+    no_ids = write_doc(os.path.join(tmp, "doc-no-ids.json"), {"rows": want})
+
+    v = verdicts(swapped)
+    pre_fix = all(
+        (lambda f: (f["size"], f["crc"], f["extra_bytes"]))(
+            datcheck.row_fields(datcheck.row_bytes(datcheck.read_mft(swapped),
+                                                   int(r))))
+        == (want[r][0], int(want[r][1], 16), want[r][2]) for r in want)
+    check(all(v.values()) and not datcheck.crc_sweep(swapped)["bad"] and pre_fix,
+          "CONTROL: an archive whose two file-id records were SWAPPED passes "
+          "every integrity rule AND every row-number fingerprint -- comparing "
+          "by row number cannot see this state at all",
+          f"{sum(v.values())} of {len(v)} rules, row-addressed compare "
+          f"{'clears' if pre_fix else 'refuses'}")
+
+    red, msg = refused_by_gate(swapped, fingerprints=with_ids)
+    check(red and ("file id 0x%X" % ID_RECORDS[0][0]) in msg
+          and "REARRANGED" in msg and "overlay.py --status" in msg,
+          "but with the document's file_ids the gate REFUSES, naming the id, "
+          "the row it used to name and the rearrangement",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+    got = cleared_by_gate(swapped, fingerprints=no_ids)
+    check(got.get("identity", {}).get("addressing", "").startswith("BY ROW NUMBER")
+          and "trusting the row numbers" in got.get("summary", ""),
+          "and the SAME archive with a document carrying no file_ids clears -- "
+          "which is allowed, and the one line a caller prints says outright "
+          "that it is trusting row numbers",
+          got.get("identity", {}).get("addressing", "(refused)")[:70])
+    ok = cleared_by_gate(sealed(tmp, "doc-ok.dat"), fingerprints=no_ids)
+    check(ok.get("identity", {}).get("addressing") == "BY ROW NUMBER -- this "
+          "document carries no file_ids, so you are trusting the row numbers",
+          "CONTROL: the wording is the receipt's, not a substring of the "
+          "refusal -- an unswapped archive with the same document says it too",
+          ok.get("summary", "(refused)")[-60:])
+
+    # ---- the overlay record, and a vault of its own ------------------------
+    vault = os.path.join(tmp, "e-vault")
+    os.makedirs(vault, exist_ok=True)
+    os.environ["RURIK_VAULT"] = vault
+    import vaultpath
+    vaultpath._resolved = None
+    import overlay
+
+    retail = sealed(tmp, "e-retail.dat")
+    active = deployed_copy(tmp, "e-active.dat")
+    mdir = os.path.join(tmp, "e-overlays")
+    os.makedirs(os.path.join(mdir, "payloads"), exist_ok=True)
+    with open(os.path.join(mdir, "payloads", "p.bin"), "wb") as fh:
+        fh.write(b"a payload a reader must get back")
+    mpath = os.path.join(mdir, "gate.toml")
+    with open(mpath, "w", encoding="utf-8") as fh:
+        fh.write('[overlay]\nname = "gate"\n'
+                 'active = "%s"\nretail = "%s"\n'
+                 '[[edit]]\nfile_id = 0x%X\ncompression = 0\n'
+                 'plain = "payloads/p.bin"\nacknowledge_shared_with = []\n'
+                 % (active.replace("\\", "/"), retail.replace("\\", "/"),
+                    ID_RECORDS[0][0]))
+    man = overlay.load_manifest(mpath)
+    with overlay.Archive(man.retail) as ar:
+        stamp = overlay.archive_identity(ar)
+    base = {"format": overlay.FORMAT,
+            "format_version": overlay.FORMAT_VERSION,
+            "overlay": man.name, "manifest": man.path,
+            "manifest_sha256": man.sha256, "built": "2026-08-20T00:00:00",
+            "staged": overlay.staged_path(man, create=True),
+            "journal": overlay.journal_path(man),
+            "retail": stamp, "staged_identity": stamp,
+            "file_ids": ids,
+            "rows": fingerprint_block(active, (ROW_A, ROW_B)),
+            "retail_rows": fingerprint_block(retail, (ROW_A, ROW_B))}
+    canonical = overlay.fingerprints_path(man)
+    overlay.write_fingerprints(canonical, base)
+
+    def signed(name, mutate):
+        """A doctored record with its digest RECOMPUTED -- one fault at a time."""
+        doc = json.loads(json.dumps(base))
+        mutate(doc)
+        return overlay.write_fingerprints(os.path.join(tmp, name + ".json"), doc)
+
+    check(not refused_by_gate(active, fingerprints=canonical)[0]
+          and refused_by_gate(retail, fingerprints=canonical)[0],
+          "FIXTURE PREMISE: the record clears the archive it describes and "
+          "refuses the retail baseline -- so every refusal below is the "
+          "document and never the rows")
+
+    # ---- M2: the three trust checks overlay makes on the same file ----------
+    variants = [
+        ("self digest", lambda d: d.update({"self_sha256": "0" * 64}), False),
+        ("manifest sha", lambda d: d.update({"manifest_sha256": "0" * 64}), True),
+        ("retail stamp", lambda d: d["retail"].update({"mft_sha256": "0" * 64}),
+         True),
+        ("format_version", lambda d: d.update({"format_version": 99}), True),
+    ]
+    both = []
+    for label, mutate, resign in variants:
+        doc = json.loads(json.dumps(base))
+        mutate(doc)
+        if resign:
+            overlay.write_fingerprints(canonical, doc)
+        else:
+            write_doc(canonical, doc)       # digest left stale ON PURPOSE
+        try:
+            overlay.load_fingerprints(man, why="check", kind="build")
+            ov = "accept"
+        except SystemExit:
+            ov = "refuse"
+        gate = "refuse" if refused_by_gate(active,
+                                           fingerprints=canonical)[0] else "accept"
+        both.append((label, ov, gate))
+    overlay.write_fingerprints(canonical, base)         # put the good one back
+    try:
+        overlay.load_fingerprints(man, why="check", kind="build")
+        pristine = ("accept", "accept" if not refused_by_gate(
+            active, fingerprints=canonical)[0] else "refuse")
+    except SystemExit:
+        pristine = ("refuse", "-")
+    check(all(ov == gate == "refuse" for _l, ov, gate in both)
+          and pristine == ("accept", "accept"),
+          "EQUIVALENCE: one document, two readers -- overlay.load_fingerprints "
+          "and the gate agree accept/refuse on the pristine record and on each "
+          "of the four doctored ones, so the trust checks cannot drift apart",
+          "; ".join(f"{l}: overlay {o} / gate {g}" for l, o, g in both))
+
+    doctored = signed("m2-stamp", lambda d: d["retail"].update(
+        {"mft_sha256": "0" * 64}))
+    red, msg = refused_by_gate(active, fingerprints=doctored)
+    check(red and "RETAIL" in msg and "mft_sha256" in msg,
+          "and the refusal names WHICH of the three failed and what it was "
+          "measured against",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    was = datcheck._verify_overlay_record
+    try:
+        datcheck._verify_overlay_record = lambda doc, source: None
+        pre = [not refused_by_gate(active, fingerprints=signed(
+            "m2-pre-%d" % i, mutate))[0]
+            for i, (_l, mutate, _r) in enumerate(variants[1:])]
+        stale = json.loads(json.dumps(base))
+        stale["self_sha256"] = "0" * 64
+        pre.append(not refused_by_gate(active, fingerprints=write_doc(
+            os.path.join(tmp, "m2-pre-self.json"), stale))[0])
+    finally:
+        datcheck._verify_overlay_record = was
+    check(all(pre),
+          "CONTROL: with the record check removed the gate CLEARS all four -- "
+          "it was reading rows out of a file overlay.py will not open",
+          f"{sum(pre)} of {len(pre)} cleared pre-fix")
+
+    # ---- M3: a doctored SHAPE is a finding about the DOCUMENT ---------------
+    plain = {"rows": fingerprint_block(active, (ROW_A,))}
+
+    def plain_doc(name, mutate):
+        doc = json.loads(json.dumps(plain))
+        mutate(doc)
+        return write_doc(os.path.join(tmp, name + ".json"), doc)
+
+    shapes = [
+        ("crc is not hex",
+         plain_doc("m3-crc", lambda d: d["rows"][str(ROW_A)].__setitem__(
+             1, "not-a-crc"))),
+        ("size is a word",
+         plain_doc("m3-size", lambda d: d["rows"][str(ROW_A)].__setitem__(
+             0, "big"))),
+        ("a negative row key",
+         plain_doc("m3-neg", lambda d: d["rows"].update({"-1": [1, "0", 0]}))),
+        ("the document is not there", os.path.join(tmp, "m3-absent.json")),
+        ("truncated JSON", None),
+    ]
+    torn = os.path.join(tmp, "m3-torn.json")
+    with open(torn, "w", encoding="utf-8") as fh:
+        fh.write('{"rows": {"16": [1, "0", 0],')
+    shapes[-1] = ("truncated JSON", torn)
+
+    outcomes = []
+    for label, path in shapes:
+        kind, unreadable, msg = gate_raised(active, fingerprints=path)
+        outcomes.append((label, kind, unreadable,
+                         os.path.basename(path) in msg))
+    check(all(k == "ArchiveUnsafe" and u is False and named
+              for _l, k, u, named in outcomes),
+          "every doctored document SHAPE refuses as ArchiveUnsafe with "
+          "unreadable=False and the DOCUMENT named -- the archive was read and "
+          "is not what failed",
+          "; ".join(f"{l}: {k} unreadable={u}" for l, k, u, _n in outcomes))
+    controls = [
+        raised_by(prefix_parse, {str(ROW_A): [300, "not-a-crc", 0]}),
+        raised_by(prefix_parse, {str(ROW_A): ["big", "0", 0]}),
+        raised_by(lambda: datcheck.row_fields(
+            datcheck.row_bytes(datcheck.read_mft(active), -1))),
+        raised_by(lambda: open(shapes[3][1], encoding="utf-8")),
+        raised_by(lambda: json.load(open(torn, encoding="utf-8"))),
+    ]
+    check(all(c not in ("(nothing)", "ArchiveUnsafe") for c in controls),
+          "CONTROL: each of the five is a RAW exception in the pre-fix "
+          "expression -- which is what escaped the gate, past every "
+          "`except ArchiveUnsafe` in this tree",
+          ", ".join(controls))
+    rc = run_cli("--dat", active, "--assert-safe", "--fingerprints", shapes[0][1])
+    check(rc.returncode == 1
+          and "could not be read far enough" not in (rc.stdout + rc.stderr),
+          "and at the CLI it is exit 1 with the document named, never exit 2 "
+          "with the ARCHIVE blamed for it",
+          f"exit {rc.returncode}: "
+          f"{(rc.stdout + rc.stderr).strip().splitlines()[0][:60]}")
+
+    # ---- M4: no fall-through to the other side of a profile -----------------
+    gone = signed("m4-gone", lambda d: d.pop("rows"))
+    empty = signed("m4-empty", lambda d: d.update({"rows": {}}))
+    reds = [refused_by_gate(retail, fingerprints=p) for p in (gone, empty)]
+    check(all(r for r, _m in reds)
+          and all("retail_rows" in m and "fall-through" in m for _r, m in reds),
+          "a record whose `rows` side is REMOVED or EMPTY refuses against a "
+          "retail archive, naming the side that is missing and the block it "
+          "did NOT fall through to",
+          reds[0][1].splitlines()[1].strip()[:78] if reds[0][0] else "CLEARED IT")
+    was = datcheck._fingerprint_side
+    try:
+        datcheck._fingerprint_side = prefix_side
+        pre = [cleared_by_gate(retail, fingerprints=p) for p in (gone, empty)]
+    finally:
+        datcheck._fingerprint_side = was
+    check(all(c.get("identity", {}).get("source", "").endswith("['retail_rows']")
+              for c in pre),
+          "CONTROL: the pre-fix resolver CLEARS both against retail, out of "
+          "`retail_rows` -- the caller asked whether its overlay was deployed "
+          "and got a pass on an archive carrying none of it",
+          "; ".join(c.get("identity", {}).get("source", "(refused)")[-14:]
+                    for c in pre))
+    check(not refused_by_gate(retail, fingerprints=canonical,
+                              side="retail_rows")[0]
+          and refused_by_gate(active, fingerprints=canonical,
+                              side="retail_rows")[0],
+          "and side='retail_rows' is how that question is asked DELIBERATELY: "
+          "it clears the baseline and refuses the deployed archive",
+          "clear then refuse")
+
+    # ---- M5: two names for one side is an ambiguity, not a precedence -------
+    ambig = signed("m5-both", lambda d: d.update({"staged": dict(d["rows"])}))
+    red, msg = refused_by_gate(active, fingerprints=ambig)
+    check(red and "'rows'" in msg and "'staged'" in msg and "GUESS" in msg
+          and "side=" in msg,
+          "a record holding BOTH `rows` and `staged` -- two names for the same "
+          "side -- refuses naming both and saying how to choose",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+    try:
+        datcheck._fingerprint_side = prefix_side
+        pre = cleared_by_gate(active, fingerprints=ambig)
+    finally:
+        datcheck._fingerprint_side = was
+    check(pre.get("identity", {}).get("source", "").endswith("['rows']"),
+          "CONTROL: the pre-fix resolver took the first key of a two-tuple, "
+          "silently -- no note, no refusal",
+          pre.get("identity", {}).get("source", "(refused)")[-12:])
+    check(not refused_by_gate(active, fingerprints=ambig, side="rows")[0],
+          "and naming the side resolves it -- the ambiguity is in the QUESTION, "
+          "not in the document")
+
+    # ---- M6: an argument that did nothing is a pass on the wrong archive ----
+    check(cli("--dat", retail, "--preflight", "--fingerprints", canonical) != 0
+          and cli("--dat", retail, "--preflight", "--deep") != 0
+          and cli("--dat", retail, "--preflight", "--side", "rows") != 0,
+          "--fingerprints, --deep and --side without --assert-safe are refused "
+          "as nonsense invocations rather than silently ignored",
+          "three refusals")
+    check(cli("--dat", retail, "--preflight") == 0,
+          "CONTROL: --preflight alone still exits 0, so the check above is "
+          "measuring the dependency and not the verb")
 
 
 # ------------------------------------------------------------------ main --
@@ -966,6 +1934,8 @@ def run(tmp):
     section_crc_sweep(tmp)
     section_growth(tmp)
     section_mft_offset_width(tmp)
+    section_launch_gate(tmp)
+    section_gate_documents(tmp)
 
 
 if __name__ == "__main__":
