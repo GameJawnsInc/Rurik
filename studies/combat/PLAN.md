@@ -216,10 +216,53 @@ with a positive control (amendment C10).
 
 **F3. Armor / mitigation / weapon damage.** No armor property id in any channel
 across 22,524 live messages; PLAN.md:247-249 names armor genuinely server-only.
-Monster armor/HP absolutes: NOT-RECOVERABLE (monsterai precedent). Player weapon
+Monster armor/HP absolutes: NOT-RECOVERABLE (monsterai precedent). ~~Player weapon
 damage lives in item modifier words (UPSTREAM shape, OpenTyria); nobody has decoded
 one (`content/items.toml:27-42` says so) — GWCA's ItemModifier struct is second-gate
-territory (§6.1 row first). The retail damage formula is at best WIKI/RECONSTRUCTION.
+territory (§6.1 row first).~~ The retail damage formula is at best WIKI/RECONSTRUCTION.
+
+> **WEAPON DAMAGE IS MEASURED, 2026-08-20, and the second gate never came into it.**
+> [studies/itemmods](../itemmods/FINDINGS.md) decoded the modifier words out of the
+> client's own parser, so GWCA's `ItemModifier` struct was never opened and needs no
+> §6.1 row — **the shorter route was also the better witness.** A weapon's damage
+> range is **identifier 584**: `arg` the MAXIMUM, `arg2` the minimum. Our hammer's
+> `0xA4880503` is 584 arg 5 arg2 3, and ArenaNet's own renderer draws **`Blunt Dmg:
+> 3-5`** on the item tooltip (`20260820T125155`) — which is also what settled the
+> field order, because the static read gave two numbers and could not say which was
+> which. **587** is the type line beside it; arg 0 rendered as `Blunt`.
+>
+> **`HIT_FRACTION` is retired from the player's swing.** It dealt 15% of *the
+> target's* maximum health — so every creature took the same seven swings however
+> tough it was — and the block it lives in says outright *"every number below is
+> invented ... the wiki documents weapon damage, and a captured fight would give the
+> real thing"*. Neither the wiki nor a captured fight was needed: the weapon carries
+> its own number and we were already sending it. `authsrv.PLAYER_SWING_DAMAGE` reads
+> the equipped weapon's 584 word and a swing rolls inside it; `HIT_FRACTION` survives
+> only as the fallback for an attacker with no readable weapon, which is what
+> `--no-weapon` and a bare machine both need. The creature keeps
+> `ENEMY_HIT_FRACTION`, and that is not a compromise — a Guild Wars creature's damage
+> comes from its type rather than from a weapon it does not carry.
+>
+> **What is measured and what is still ours, stated because this replaces one
+> invented number with a measured one and NOT with a damage model:**
+>
+> | | |
+> |---|---|
+> | the range 3–5 | **MEASURED** — ArenaNet's word for our own weapon, confirmed on screen |
+> | the roll inside it | **OURS**, uniform. Guild Wars' own distribution is unmeasured |
+> | armour reduction | **ABSENT.** This server now sends five armour pieces carrying a rating (`studies/character` §2) and nothing reads one |
+> | attribute-rank scaling | **ABSENT** |
+> | critical hits | **ABSENT** |
+>
+> **What is NOT verified, and it needs an operator.** The floating damage numbers over
+> a struck target have not been watched. Making the player swing needs a click on a
+> hostile — a world-anchored click, which the harness cannot aim
+> (`session.py`'s `interact:` drives the NPC-dialogue arm, not an attack) — so this
+> is the owner's run, not an agent's. What *is* on screen is the range itself, from
+> the tooltip, which is the number the swing is built out of. `test_agentlife.py`
+> §weapon_damage rolls 200 swings and requires every one inside 3–5, and it pins the
+> range to the WORD rather than to a literal so the content row and the damage cannot
+> come apart.
 
 **F4. Per-model reach — `ENEMY_MELEE_RANGE = 150` is refuted from both directions.
 IN-CORPUS:** ~65 / ~599 / ~706 units for three models (`studies/monsterai/FINDINGS.md`

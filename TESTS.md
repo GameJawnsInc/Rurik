@@ -2336,7 +2336,22 @@ Every one of these, in the order they were written:
   the only constant in the set corroborated to the bit. Not a coverage accident
   but a shape: every other section computed its expectation *from* the symbol
   under test, so the symbol was free to move and the test moved with it. **A
-  symbol appearing in a test file is not a check.** The same section reads
+  symbol appearing in a test file is not a check.**
+
+  **And one constant in that registry is now pinned the OTHER way round, on
+  purpose.** As of 2026-08-20 the player's swing is no longer a fraction of the
+  target's maximum health — it is the equipped weapon's own damage range, read
+  out of its **584** modifier word (`arg` the maximum, `arg2` the minimum;
+  ArenaNet's renderer draws `Blunt Dmg: 3-5` for our hammer). That number is
+  MEASURED rather than ours, so pinning it to a literal here would be the same
+  defect from the other side: it would let `content/items.toml` change while the
+  test went on agreeing with a range nobody sends. `section_weapon_damage` pins
+  it to the WORD instead — it re-reads the item and requires the server's
+  constant to match — then rolls **200 swings and requires every one inside
+  3–5**, and requires the roll to actually vary, because a range that always
+  returns its own minimum is a constant wearing a range's clothes.
+  `HIT_FRACTION`'s registry row now says what it is: the fallback for an
+  attacker with no readable weapon, and nothing else. The same section reads
   `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
   which is how `authsrv.py`'s claim that all four bar skills are non-elite was
   found false (276 is elite), the comment having been the only witness.
@@ -4973,7 +4988,18 @@ Every one of these, in the order they were written:
   with a poisoned out-of-range HIT_FRACTION raised only AFTER
   GV_ATTACK_STARTED was on the wire, the target's health was bookkept
   100 → 0 unsent, and the swing timer was eaten — three FAILs, each now a
-  check. Every section carries an in-range CONTROL asserting the real
+  check.
+
+  **The poison MOVED on 2026-08-20 and that is the interesting part.** The
+  player's swing stopped reading `HIT_FRACTION` and started reading the
+  weapon's own damage range, so the section went on poisoning a constant the
+  code no longer consults — and passed, on a tree where the guard was never
+  reached at all. That is precisely the failure this file exists to catch,
+  scored against itself: **a guard test pointed at the wrong symbol is a guard
+  test that cannot fail.** It now poisons `PLAYER_SWING_DAMAGE`, and the
+  in-range control asserts a RANGE rather than an equality, because the roll
+  inside the weapon's range is random and pinning it to one number would be
+  pinning our own roll instead of ArenaNet's range. Every section carries an in-range CONTROL asserting the real
   constant still sends the full effect burst, because a guard that refuses
   everything would pass every refusal check. Dormant while every fraction is
   a literal constant; load-bearing the day studies/combat step 8 computes

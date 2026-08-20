@@ -41,7 +41,71 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=214)
+LEDGER = checks.Ledger("agent lifetime", floor=230)
+
+
+def section_weapon_damage():
+    """The player's swing is the WEAPON's number, and that one is not ours.
+
+    Every other constant in the registry above is invented and says so. This
+    one is read out of the item ArenaNet sends: identifier 584, `arg` the
+    maximum and `arg2` the minimum, and the client's own tooltip drew
+    `Blunt Dmg: 3-5` for our hammer on 20260820T125155 -- which is how the
+    max/min order was settled, because the static read could not.
+
+    So it is pinned DIFFERENTLY from the invented ones. Those are pinned to a
+    literal so they cannot drift silently; this is pinned to the WORD, so that
+    editing the item's modifiers and editing the damage cannot come apart. A
+    literal here would be the same defect the section above exists to prevent,
+    from the other direction: it would let the content row change while the
+    test kept agreeing with a number nobody sends any more.
+    """
+    import authsrv
+    import agents
+
+    print("\nN. weapon damage: the swing is the item's own 584 word")
+    rng = authsrv.weapon_damage_range(agents.STARTER_HAMMER)
+    LEDGER.ok(rng is not None and rng == authsrv.PLAYER_SWING_DAMAGE,
+              "the swing range is READ from the equipped weapon",
+              f"{rng} -- from 0xA4880503, identifier 584 arg 5 arg2 3. Not a "
+              f"constant anyone typed: change the item's modifiers and this "
+              f"moves with them")
+    lo, hi = rng
+    LEDGER.ok(lo <= hi and lo > 0,
+              "and it is ordered min..max, which the SCREEN settled",
+              f"{lo}-{hi}. The disassembly gave two fields and could not say "
+              f"which was which; the tooltip drew `Blunt Dmg: 3-5` against "
+              f"arg 5 arg2 3, so arg is the MAXIMUM")
+    LEDGER.ok(authsrv.weapon_damage_range({"modifiers": []}) is None
+              and authsrv.weapon_damage_range({}) is None,
+              "an item with no damage word yields None, not zero",
+              "zero damage is a swing that lands and does nothing; None is "
+              "the caller falling back to HIT_FRACTION, which is what "
+              "--no-weapon and a bare machine both need")
+
+    sent = []
+    state = {"agents": {10: {"name": "t", "dead": False, "died_at": 0.0,
+                             "health": 1000.0, "max_health": 1000.0,
+                             "last_hit": 0.0}}, "pos": (0.0, 0.0)}
+    dealt = []
+    for _ in range(200):
+        sent.clear()
+        state["agents"][10]["last_hit"] = 0.0
+        state["agents"][10]["health"] = 1000.0
+        authsrv.hit_enemy(lambda op, vals, label="", quiet=False:
+                          sent.append((op, vals, label)), state, 10, 1)
+        dealt.append(1000.0 - state["agents"][10]["health"])
+    LEDGER.ok(dealt and all(lo <= d <= hi for d in dealt),
+              f"200 swings all land inside {lo}-{hi}",
+              f"observed {sorted(set(dealt))} -- absolute health points, not "
+              f"a fraction of whatever is being hit. The old model made every "
+              f"creature take the same number of swings however tough it was")
+    LEDGER.ok(len(set(dealt)) > 1,
+              "and the roll actually varies",
+              f"{len(set(dealt))} distinct values over 200 swings. The roll "
+              f"inside the range is OURS and uniform; Guild Wars' own "
+              f"distribution is unmeasured, as are every term it puts around "
+              f"the range -- armour, attribute rank, criticals")
 
 
 def main():
@@ -186,6 +250,7 @@ def main():
     section_facing()
     section_enemy_skill()
     section_constants()
+    section_weapon_damage()
     section_opcode_pins()
     section_opcode_catalog()
     section_probe_encoding()
@@ -1081,7 +1146,11 @@ def section_constants():
          "from ~65, ~599 and ~706 units, so no single number is right "
          "(studies/monsterai 3.3)"),
         ("ENEMY_HIT_FRACTION", 0.10, "OURS", "damage per swing"),
-        ("HIT_FRACTION", 0.15, "OURS", "the player's own swing"),
+        ("HIT_FRACTION", 0.15, "OURS",
+         "the FALLBACK for a swing with no readable weapon, and nothing more "
+         "since 2026-08-20. The player's swing is the equipped weapon's own "
+         "damage range now -- see PLAYER_SWING_DAMAGE below, which is the "
+         "first number in this block that is not ours"),
         ("REVIVE_AFTER", 8.0, "OURS", "how long an agent stays dead"),
         ("PLAYER_REVIVE_AFTER", 10.0, "OURS",
          "a timer, not a resurrection shrine. n=0 player deaths in the corpus"),
