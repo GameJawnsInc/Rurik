@@ -2594,6 +2594,23 @@ Every one of these, in the order they were written:
   assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
   `dword` while the client does `fld`, so the broken reading is reproduced inline and
   required to differ). Needs `vault/captures/live/`; floor 36),
+  `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
+  decode turned into a consumer. The framing check that matters is run against
+  **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
+  `20260817T183756`, extracts the literal text, re-frames it with `chatdefs.all_chat_body`
+  and requires the result byte-identical to the joined retail body, **fragment
+  boundaries included** — which is also where the cap is pinned at **121 units, not
+  the 122 the field width and OpenTyria both suggest** (121 = declared − 1, charstore's
+  exclusive-cap rule arriving on a second field). The same section re-runs the
+  sender/body cross-check at n=1 (playerId 4 → a `0x0059` name) so the decode the arm
+  rests on cannot silently rot. The dispatch half calls `_handle_chat_send` with a
+  recording send: `!text` must produce CORE fragments then LOCAL `[pid, 3]` **in that
+  order** (the tag commits the buffer, so tag-first renders an empty line), `/bow` must
+  produce the observed `#1687 #13 #pid` on SERVER `[pid, 6]`, and every other command,
+  sigil and the empty string must send NOTHING — six refusal rows, each asserting zero
+  sends, because a refusal that echoed anyway would put invented bytes on a measured
+  channel. Everything the arm can emit round-trips through the real codec. Needs
+  `vault/captures/live/` for the retail section; floor 28 of a 33-check green run),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly

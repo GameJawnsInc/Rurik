@@ -148,11 +148,14 @@ DROPPED_ON_PURPOSE = {
             "character creation, which this server does not implement at all: "
             "it serves one fixed character from content/, and the create flow "
             "has never been driven end to end.",
-    0x0064: "CHAT_SEND (7 loopback) -- REAL MISSING WORK. Field 2 carries the "
-            "typed text verbatim, emotes included, so this is the whole chat and "
-            "emote surface. It needs a GAME_SMSG echo to be worth anything, and "
-            "a handler that stored the text and echoed nothing would look "
-            "implemented while the client showed silence.",
+# 0x0064 CHAT_SEND was here as "REAL MISSING WORK -- it needs a GAME_SMSG echo
+# to be worth anything, and a handler that stored the text and echoed nothing
+# would look implemented while the client showed silence." ARMED 2026-08-19:
+# the echo grammar was decoded OFFLINE from the live corpus (0x005D body
+# fragments at 121 units + 0x0061 [playerId, channel]; the sender/body
+# cross-check is 47/47 against 0x0059 player names) and _handle_chat_send
+# sends exactly that. The row's own warning named the failure mode the arm
+# was built against. studies/chat/FINDINGS.md.
     0x0084: "CHAR_CREATE_SET_EQUIP_COLOR (0 loopback, 70 live) -- character "
             "creation, same as 0x0060.",
 }

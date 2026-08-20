@@ -52,6 +52,7 @@ import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
 import questdefs  # noqa: E402
+import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
@@ -2773,6 +2774,33 @@ GAME_CMSG_TARGET_SELECT = 0x00C1
 #   float so nothing is lost to the reinterpretation.
 GAME_CMSG_ROTATE_PLAYER = 0x0040
 
+# THE CHAT FAMILY -- studies/chat/FINDINGS.md, decoded 2026-08-19 entirely from
+# captures the vault already held, closing PLAN.md 8.3's sender/body ask.
+#
+# 0x0064 arrives with the typed text VERBATIM, channel sigil included
+#   (`!hello` = All chat, `/bow` = a command; studies/cmsg C2/C10), field 1 the
+#   current target's agent id for slash commands and 0 for plain chat. It was
+#   test_dispatch's loudest recorded drop: a client that types into a world
+#   that never echoes shows silence, because the render path is a SERVER ECHO
+#   -- measured on the operator's own ctrl-click callouts, which come back as
+#   0x005D bodies committed by 0x0061 [own playerId, channel] (40 of 47 live
+#   CHAT_MESSAGE_LOCAL sightings ARE the operator's own lines).
+#
+# The reply grammar, exceptionless on 227 live bodies: 0x005D carries the
+#   line's coded string, split at 121 units per fragment (= declared(122) - 1,
+#   measured on both of ArenaNet's own multi-part lines -- NOT the 122 a field
+#   width would suggest); the line renders when a commit tag follows. 0x0061
+#   commits a player line [sender playerId, channel] -- 47/47 live sender ids
+#   resolve in the same connection's 0x0059 table. 0x005E commits a
+#   server-composed line [subject playerId | 0, channel] -- 133/133 resolve as
+#   the player the line is ABOUT (125 self, 1 other: "player G is now level 17!",
+#   7 zero = district broadcasts). 0x005F (agent lines, sender enc-name in the
+#   tag) is not sent here yet: our NPCs have nothing to say.
+GAME_CMSG_CHAT_SEND = 0x0064
+GAME_SMSG_CHAT_MESSAGE_CORE = 0x005D
+GAME_SMSG_CHAT_MESSAGE_SERVER = 0x005E
+GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
+
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
 GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
 # Keyboard movement is answered with a DIRECTION, not a destination.
@@ -3861,6 +3889,67 @@ def ping_tick(send, state, conn_id):
         # eventual 0x000D tells the truth, and count the miss for the operator.
         state["ping_missed"] = state.get("ping_missed", 0) + 1
     send(GAME_SMSG_CLIENT_PERF_REQUEST, [], "CLIENT_PERF_REQUEST", quiet=True)
+
+
+def _handle_chat_send(send, state, conn_id, target_agent, text):
+    """Echo a typed chat line so the client renders it -- GAME_CMSG 0x0064.
+
+    The render path is a SERVER ECHO (studies/chat/FINDINGS.md 3): the client
+    does not print its own typed line, it waits for 0x005D body fragments plus
+    a commit tag, which is why storing the text and answering nothing showed
+    silence for a year. The echo here is byte-shaped from the live wire:
+
+      All chat (`!text`):  0x005D per 121-unit fragment of
+                           [#8, literal-mark] + text + [terminator],
+                           then 0x0061 [PLAYER_NUMBER, channel 3].
+      `/bow`:              the ONE slash command whose reply the corpus holds
+                           (51 ms after the typed send): 0x005D `#1687 #13 #pid`
+                           then 0x005E [pid, channel 6]. The chat line only --
+                           whatever animates the body on retail was not in that
+                           exchange's chat family and is not invented here.
+
+    EVERYTHING ELSE IS REFUSED OUT LOUD. Other slash commands echo nothing
+    (retail never echoes the command text; we hold no other reply). Sigils
+    other than `!` have never been captured -- no labelled run typed guild,
+    team or trade text -- and a trade echo would also need the #68606 wrapper
+    whose context our world cannot produce. A refused line costs the line, not
+    the socket: this returns after printing, exactly like the NPC_SERVICE
+    families that have never appeared on a wire we hold.
+
+    `target_agent` (field 1: the current target for slash commands, 0 for
+    plain chat) is printed for the operator and not stored -- the recorder
+    already writes every arrival with its values, and nothing here reads a
+    chat target back.
+    """
+    kind, rest = chatdefs.parse_send(text)
+    if kind == "all":
+        body = chatdefs.all_chat_body(rest)
+        frags = chatdefs.fragments(body)
+        for i, frag in enumerate(frags):
+            send(GAME_SMSG_CHAT_MESSAGE_CORE, [frag],
+                 f"CHAT_MESSAGE_CORE[{i + 1}/{len(frags)}]")
+        send(GAME_SMSG_CHAT_MESSAGE_LOCAL,
+             [PLAYER_NUMBER, chatdefs.CHANNEL_ALL],
+             f"CHAT_MESSAGE_LOCAL(player {PLAYER_NUMBER}, All)")
+        print(f"[c{conn_id}] chat echo (All): {len(rest)} unit(s) in "
+              f"{len(frags)} fragment(s)", flush=True)
+    elif kind == "command" and rest == "bow":
+        send(GAME_SMSG_CHAT_MESSAGE_CORE,
+             [chatdefs.bow_body(PLAYER_NUMBER)], "CHAT_MESSAGE_CORE[/bow]")
+        send(GAME_SMSG_CHAT_MESSAGE_SERVER,
+             [PLAYER_NUMBER, chatdefs.CHANNEL_EMOTE],
+             f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, Emote)")
+        print(f"[c{conn_id}] /bow -> the observed #1687 emote line "
+              f"(target was agent {target_agent})", flush=True)
+    elif kind == "command":
+        print(f"[c{conn_id}] chat: /{rest.split(' ')[0]} is not answered -- "
+              f"/bow is the only slash-command reply any capture holds "
+              f"(target was agent {target_agent})", flush=True)
+    else:
+        # "sigil" (guild/team/trade/whisper -- never captured) or "empty".
+        print(f"[c{conn_id}] chat: refusing to echo unmeasured sigil "
+              f"{text[:1]!r} -- no labelled run has typed that channel, "
+              f"so its wrapper and tag are unknown", flush=True)
 
 
 def handle_perf_report(values, send, state, conn_id):
@@ -9009,6 +9098,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                          conn_id, rec)
                     elif opcode == GAME_CMSG_CLIENT_PERF_REPORT:
                         handle_perf_report(values, send, state, conn_id)
+                    elif opcode == GAME_CMSG_CHAT_SEND:
+                        # Closes test_dispatch's oldest recorded drop ("the
+                        # whole chat and emote surface"). The echo grammar and
+                        # every refusal are in _handle_chat_send; the reason a
+                        # handler is REQUIRED rather than nice-to-have is that
+                        # the client renders chat from the server's echo, so a
+                        # store-and-say-nothing arm would look implemented
+                        # while the screen stayed silent -- which is what the
+                        # drop's own note predicted in test_dispatch.py.
+                        _handle_chat_send(send, state, conn_id,
+                                          values[1], values[2])
                     else:
                         # D9(a), game half. Sixteen opcodes over fourteen arms
                         # against 194 schema layouts, so this is still the common
