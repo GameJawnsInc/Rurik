@@ -235,8 +235,26 @@ The name table the echo depends on (`0x0059` for playerId 1) is already sent
 every session. Implementation: `toolkit/authsrv/chatdefs.py` + the dispatch arm
 in `authsrv.py`; tests `toolkit/authsrv/test_chatdefs.py` (offline, the framing
 and fragmentation against the captured bytes) and the dispatch coupling in
-`test_dispatch.py`. The on-screen confirmation is staged as a runsheet for the
-owner (type `!hello` at loopback; predict one line reading `<character name>:
-hello` in All chat) — the naming above does **not** wait on it, because the
-cross-check is measured on ArenaNet's own traffic; the run verifies our
-*consumer*, not the decode.
+`test_dispatch.py`. The on-screen confirmation was staged as a runsheet for the
+owner — the naming above did **not** wait on it, because the cross-check is
+measured on ArenaNet's own traffic; the run verifies our *consumer*, not the
+decode.
+
+## 10. The loopback run — CONFIRMED 2026-08-20, all three arms as predicted
+
+Operator-driven, `session.py --keep-open`, predictions on record before launch
+(§9 / PLAN §8.3). Wire record `vault/captures/gamesrv/authsrv-20260820T001020-c1.jsonl`;
+render verdicts are the operator's, per the fixed-position-UI boundary.
+
+| typed | wire (verbatim from the capture) | screen |
+|---|---|---|
+| `!hello` (×2) | `CHAT_SEND [0, '!hello']` → CORE `5d000800` + `0108 0107 h e l l o 0001` + LOCAL `6100 0100 03` — the predicted 8 units and `[1, 3]`, byte-for-byte, both times | **`Test Warrior: hello` rendered** |
+| `/bow` | `CHAT_SEND [0, '/bow']` → CORE `0797 010D 0101` (= `#1687 #13 #1`) + SERVER `5e00 0100 06` (= `[1, 6]`) | **the emote line rendered** (exact wording is template 1687's, ArenaNet's encrypted record — not transcribed) |
+| `#test` | `CHAT_SEND [0, '#test']` arrived at t=59.674 and **nothing was sent after it** | **nothing rendered** — the control that makes the two positives mean something |
+
+Three incidental measurements banked: the client renders **no local copy** of a
+typed line (the `#test` silence proves the echo is the only render path, closing
+§8's last open question); `/bow`'s field 1 was **0 with no target**, the fourth
+sample consistent with the target-agent reading (live: 100 with the Master of
+Damage targeted); and the double `!hello` shows the echo is stateless per send —
+two identical arrivals, two identical echoes, two rendered lines.
