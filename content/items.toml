@@ -19,22 +19,35 @@ value = 0
 model_id = 1699
 quantity = 1
 enc_name = [0x2455, 0xB7FB, 0xCA41, 0x458F]
-modifiers = [0x24B80000, 0xA4880503]
+# 0x24B80000  id 587, a damage TYPE line
+# 0xA4880503  id 584, a damage RANGE, arg 5 arg2 3
+# 0x21F81301  id 543, `Hammer Mastery +1` (Stacking) -- OURS, composed by
+#             `toolkit/clientscan/itemmods.py --attr-bonus 19,1`, and the only
+#             word in this row that is not OpenTyria's. See the note below.
+modifiers = [0x24B80000, 0xA4880503, 0x21F81301]
 # What this item GIVES while equipped: +1 Hammer Mastery (attribute 19).
 #
-# STILL NOT A DECODING OF `modifiers` ABOVE, and that is now a measured fact
-# rather than an admission. The words were decoded on 2026-08-20
-# (studies/itemmods/FINDINGS.md) and this hammer's two are 587 (a damage type)
-# and 584 arg 5 arg2 3 (a damage range) -- there is NO attribute bonus among
-# them, so this field is still OUR declaration of what OUR item does, read by
-# the server to compute 0x003B's effective value, and the client still never
-# checks it against the words.
+# AND NOW THE MODIFIER WORD SAYS IT TOO. OpenTyria's two words carry no
+# attribute bonus -- they decode to 587 (a damage type) and 584 arg 5 arg2 3
+# (a damage range) -- so this field used to be the only place the bonus
+# existed. 2026-08-20 added `0x21F81301` above: identifier 543,
+# `<Attribute> +N` (Stacking), attribute 19, amount 1, composed by
+# `itemmods.py --attr-bonus 19,1` and byte-identical in form to the 26 words
+# retail puts on headpieces (studies/itemmods/FINDINGS.md 5).
 #
-# To make it derived instead: the bonus identifier is 543 (`<Attribute> +N`,
-# Stacking) and the word for attribute 19 amount 1 is 0x21F81301 --
-# `python toolkit/clientscan/itemmods.py --attr-bonus 19,1`. NOT applied here:
-# 543 is the form retail puts on HEADPIECES, this is a hammer, and adding it
-# changes what the client draws. It wants a run (studies/itemmods 5.5).
+# THE TWO ARE NOW ONE FACT WRITTEN TWICE, and that is a real hazard -- 34.5 of
+# studies/pvpui is about exactly this shape of bug. It is deliberate and it is
+# GUARDED, not ignored: `test_itemmods.py` 11 fails if the two ever disagree,
+# and it has a control that proves it can go red.
+#
+# THE RUN SAID WHY BOTH ARE STILL HERE (2026-08-20, capture 20260820T113942).
+# The client drew `Hammer Mastery +1 (Stacking)` on the hammer's tooltip from
+# the WORD -- and the attribute panel showed Hammer Mastery 7 against a base of
+# 6, not 8. So the client reads the word for the TOOLTIP and reads our
+# 0x003A/0x003B columns for the PANEL, and it does not mix them. This field is
+# what the server sums into those columns. Deleting it means teaching
+# equipped_attribute_bonuses() to decode `modifiers` instead, which is a real
+# change to the server path and not a rename.
 attribute_bonus = [[19, 1]]
 
 [item.starter_hammer.provenance]

@@ -3267,11 +3267,26 @@ not consulted: a bought item is declared and placed, not worn.
 > item does, sitting beside those dwords and making no claim about them. The content row
 > says so in place.
 >
-> **The hole closed the same day, and this row can now be derived rather than declared:**
-> [studies/itemmods](../itemmods/FINDINGS.md) decodes the modifier format and the
-> identifier vocabulary. `attribute_bonus` stays as it is for now -- turning it into a
-> real modifier word needs the identifier that carries an attribute bonus, which is a
-> follow-on with its own experiment, not a rename.
+> **The hole closed the same day, the identifier was found the next, and the word is
+> now ON the item.** [studies/itemmods](../itemmods/FINDINGS.md) §5 names the attribute
+> bonus -- **543** (Stacking) and **542** (Non-stacking), `arg` the attribute and `arg2`
+> the amount -- and `content/items.toml`'s hammer now carries `0x21F81301`, composed by
+> `itemmods.py --attr-bonus 19,1`. The client draws it: hovering the equipped hammer
+> reads **`Hammer Mastery +1 (Stacking)`** (itemmods §5.6, capture
+> `20260820T113942`). The boundary paragraph above still stands, because
+> `attribute_bonus` and the word are two records of one fact and only the FIELD drives
+> this section's columns -- `test_itemmods.py` §11 fails if they ever disagree.
+>
+> **AND THE RUN SETTLED THIS SECTION'S OWN OPEN QUESTION.** With the word on the item,
+> the attribute panel shows Hammer Mastery **7** against a base of 6 -- **not 8**. Had
+> the client computed effective ranks from equipped gear it would have added the
+> modifier word on top of our `0x003A` column. It does not. The panel reads the
+> server's effective column and the tooltip reads the item's words, and they are two
+> independent paths: this section's model is confirmed by an experiment that could have
+> refuted it. Same frame, two more confirmations: the chevrons price off the BASE
+> (▼6 ▲7 at base 6 = `s_attribPoints[6]`, `[7]`), and the panel's own header reads
+> **27 unused points**, which is 200 lifetime minus the 173 those five ranks cost under
+> `attribspend`'s model, to the point.
 
 **Measured on screen, caged, both directions.** The persisted character wears the hammer
 and had Hammer Mastery at the rank cap, which reproduces retail's own 12→13 exactly:
