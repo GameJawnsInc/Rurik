@@ -45,6 +45,17 @@ for the ORDER of its call as well as its presence -- above the client census,
 the gate answers a held-open archive as unreadable damage instead of as the
 running client it is.
 
+Section 12e is the seam on the far side of the identity tier: `overlay.py` WRITES
+the fingerprint documents this gate READS, and until 2026-08-20 no wired call
+site had ever passed the two together, so nothing had measured whether they agree.
+A probe found five ways they did not -- the gate compared by ROW NUMBER while all
+of overlay is addressed by FILE ID, it honoured none of overlay's three trust
+checks, five doctored shapes escaped as raw exceptions, and a record with its
+`rows` block deleted fell through to `retail_rows` and cleared a retail archive.
+Every check there carries a control that watches the pre-fix code clear the same
+input, and one of them hands ONE document to both readers and requires the same
+verdict, because two readers of one file drifting apart is the defect itself.
+
 Section 4 is a different thing sharing this file: `archive.py`'s new `RURIK_DAT`
 override, which is a lever on the SERVER path. It exists because a running client
 holds an exclusive lock on the archive it launched from, so the two sides can
@@ -139,7 +150,21 @@ import checks  # noqa: E402
 # still no vault and no client: the platform-dependent half of the lock check
 # writes its expectation against the errno the platform actually produced.
 # MEASURED from a green run: 149.
-LEDGER = checks.Ledger("dat pre-flight and detector", floor=149)
+#
+# RAISED 149 -> 168 on 2026-08-20 with section 12e, the FINGERPRINT DOCUMENT.
+# Nineteen checks on the same 5.5 KB fixture, and SEVEN of them are controls
+# that watch the pre-fix code clear the very input the fix now refuses --
+# `prefix_side` monkeypatched over the resolver, `_verify_overlay_record`
+# neutered, `prefix_parse` raising the raw exceptions that used to escape. That
+# ratio is deliberate: a probe had just shown this gate CLEARING an archive
+# `overlay.py --status` calls unscoreable, and "the gate refuses X" is
+# compatible with the gate having always refused X. One of the nineteen is an
+# EQUIVALENCE check -- one document, read by `overlay.load_fingerprints` and by
+# this gate, required to give the same accept/refuse -- because the two readers
+# agreeing is the only thing that keeps them from drifting again. Still no
+# vault: the section points `RURIK_VAULT` at its own temp directory and puts it
+# back. MEASURED from a green run: 168.
+LEDGER = checks.Ledger("dat pre-flight and detector", floor=168)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -994,6 +1019,417 @@ def section_launch_gate(tmp):
           "go red, so it is not satisfied by the name appearing somewhere")
 
 
+# ------------------------------------------ the document the gate is handed --
+
+def gate_raised(*args, **kw):
+    """(exception name, `unreadable`, message) for one `assert_archive_safe`.
+
+    CATCHES `BaseException` ON PURPOSE, and that is the whole point of the
+    helper. The defect §12e is pointed at is five exception types leaving a
+    launch gate raw -- `ValueError`, `struct.error`, `FileNotFoundError`,
+    `JSONDecodeError` -- past every `except ArchiveUnsafe` in this tree,
+    including the two helpers above. A helper that only caught `ArchiveUnsafe`
+    would re-create the blind spot inside the test that is here to close it, and
+    the run would die at whatever check came next with no red scored.
+    """
+    try:
+        datcheck.assert_archive_safe(*args, **kw)
+        return "CLEARED", None, ""
+    except datcheck.ArchiveUnsafe as exc:
+        return "ArchiveUnsafe", exc.unreadable, str(exc)
+    except BaseException as exc:                            # noqa: BLE001
+        return type(exc).__name__, None, str(exc)
+
+
+def prefix_side(doc, source, side=None):
+    """`_fingerprint_side` AS IT WAS before 2026-08-20. The negative control.
+
+    A named block by tuple order, else the ONLY unnamed candidate, else refuse.
+    Monkeypatched over the real resolver so the checks below can watch the whole
+    gate -- not a re-expression of it -- clear the documents they now refuse.
+    Without that, "the gate refuses X" is compatible with the gate having always
+    refused X, and the fix would be unmeasured.
+    """
+    if datcheck._is_row_block(doc):
+        return doc, source
+    named = [k for k in ("rows", "staged")
+             if isinstance(doc, dict) and datcheck._is_row_block(doc.get(k))]
+    if named:
+        return doc[named[0]], "%s[%r]" % (source, named[0])
+    cands = sorted(k for k, v in doc.items() if datcheck._is_row_block(v)) \
+        if isinstance(doc, dict) else []
+    if len(cands) == 1:
+        return doc[cands[0]], "%s[%r]" % (source, cands[0])
+    raise datcheck.ArchiveUnsafe("two or more unnamed blocks: %s" % cands)
+
+
+def prefix_parse(block):
+    """The row parse AS IT WAS: `int(crc, 16)`, `int(size)`, and no lower bound."""
+    out = {}
+    for key, (size, crc, comp) in block.items():
+        crc = int(crc, 16) if isinstance(crc, str) else int(crc)
+        out[int(key)] = (int(size), crc & 0xFFFFFFFF, int(comp))
+    return out
+
+
+def raised_by(fn, *a):
+    """The name of whatever `fn` raises, or "(nothing)"."""
+    try:
+        fn(*a)
+        return "(nothing)"
+    except Exception as exc:                                # noqa: BLE001
+        return type(exc).__name__
+
+
+def swap_id_records(path, first=0, second=1):
+    """Swap the ROWS two file-id records name, and leave the archive healthy.
+
+    Every row keeps the bytes it had; only the DIRECTORY changes. That is the
+    state `overlay.deployed_state` exists to catch and the one a row-addressed
+    comparison cannot see at all -- and it is not exotic: a client relocating
+    rows during play is what `--verify-after` is for.
+    """
+    off, size = ROWS[ROW_IDTABLE][0], ROWS[ROW_IDTABLE][1]
+    with open(path, "r+b") as fh:
+        fh.seek(off)
+        table = bytearray(fh.read(size))
+        fid_a, row_a = struct.unpack_from("<II", table, first * 8)
+        fid_b, row_b = struct.unpack_from("<II", table, second * 8)
+        struct.pack_into("<II", table, first * 8, fid_a, row_b)
+        struct.pack_into("<II", table, second * 8, fid_b, row_a)
+        fh.seek(off)
+        fh.write(bytes(table))
+    reseal_row_crc(path, ROW_IDTABLE)
+    return seal_self_crc(path)
+
+
+def deployed_copy(tmp, name):
+    """A sealed fixture with ROW_A rewritten legitimately -- payload and crc agree.
+
+    Stands in for "the overlay is deployed": integrity-clean, and a different
+    archive from the retail copy on exactly the rows a record fingerprints.
+    """
+    path = sealed(tmp, name)
+    poke(path, ROWS[ROW_A][0], b"\x5A" * 40)
+    reseal_row_crc(path, ROW_A)
+    return seal_self_crc(path)
+
+
+def write_doc(path, doc):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    return path
+
+
+def section_gate_documents(tmp):
+    """§12e. The FINGERPRINT DOCUMENT: whose word the identity tier takes.
+
+    §12b showed the identity tier comparing rows. This is the seam on the other
+    side of it -- `overlay.py` WRITES these documents and this gate READS them,
+    and until 2026-08-20 no wired call site had ever passed the two together, so
+    the contract between them had never been measured. A probe measured it and
+    the two disagreed on the same bytes five ways. Each is checked here WITH a
+    control that watches the pre-fix code clear the same input, because a
+    refusal with no such control is compatible with the gate having always
+    refused and would leave the fix unmeasured.
+
+    STILL NO VAULT AND NO CLIENT. `overlay.py` resolves its record paths through
+    `vaultpath`, so this section points `RURIK_VAULT` at its OWN temp directory
+    and puts it back afterwards. The archives are the same 5.5 KB fixture every
+    other section uses.
+    """
+    print("\n12e. the fingerprint document, and whose word the gate takes")
+    was_vault = os.environ.get("RURIK_VAULT")
+    try:
+        _gate_documents(tmp)
+    finally:
+        if was_vault is None:
+            os.environ.pop("RURIK_VAULT", None)
+        else:
+            os.environ["RURIK_VAULT"] = was_vault
+        import vaultpath
+        vaultpath._resolved = None
+
+
+def _gate_documents(tmp):
+    # ---- M1: the ADDRESSING UNIT -------------------------------------------
+    # A plain document (no overlay header) carrying a `file_ids` block, so this
+    # half needs neither overlay.py nor a vault.
+    swapped = sealed(tmp, "doc-swapped.dat")
+    want = fingerprint_block(swapped, (ROW_A, ROW_B))
+    swap_id_records(swapped)
+    ids = {str(ROW_A): ID_RECORDS[0][0], str(ROW_B): ID_RECORDS[1][0]}
+    with_ids = write_doc(os.path.join(tmp, "doc-ids.json"),
+                         {"rows": want, "file_ids": ids})
+    no_ids = write_doc(os.path.join(tmp, "doc-no-ids.json"), {"rows": want})
+
+    v = verdicts(swapped)
+    pre_fix = all(
+        (lambda f: (f["size"], f["crc"], f["extra_bytes"]))(
+            datcheck.row_fields(datcheck.row_bytes(datcheck.read_mft(swapped),
+                                                   int(r))))
+        == (want[r][0], int(want[r][1], 16), want[r][2]) for r in want)
+    check(all(v.values()) and not datcheck.crc_sweep(swapped)["bad"] and pre_fix,
+          "CONTROL: an archive whose two file-id records were SWAPPED passes "
+          "every integrity rule AND every row-number fingerprint -- comparing "
+          "by row number cannot see this state at all",
+          f"{sum(v.values())} of {len(v)} rules, row-addressed compare "
+          f"{'clears' if pre_fix else 'refuses'}")
+
+    red, msg = refused_by_gate(swapped, fingerprints=with_ids)
+    check(red and ("file id 0x%X" % ID_RECORDS[0][0]) in msg
+          and "REARRANGED" in msg and "overlay.py --status" in msg,
+          "but with the document's file_ids the gate REFUSES, naming the id, "
+          "the row it used to name and the rearrangement",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+    got = cleared_by_gate(swapped, fingerprints=no_ids)
+    check(got.get("identity", {}).get("addressing", "").startswith("BY ROW NUMBER")
+          and "trusting the row numbers" in got.get("summary", ""),
+          "and the SAME archive with a document carrying no file_ids clears -- "
+          "which is allowed, and the one line a caller prints says outright "
+          "that it is trusting row numbers",
+          got.get("identity", {}).get("addressing", "(refused)")[:70])
+    ok = cleared_by_gate(sealed(tmp, "doc-ok.dat"), fingerprints=no_ids)
+    check(ok.get("identity", {}).get("addressing") == "BY ROW NUMBER -- this "
+          "document carries no file_ids, so you are trusting the row numbers",
+          "CONTROL: the wording is the receipt's, not a substring of the "
+          "refusal -- an unswapped archive with the same document says it too",
+          ok.get("summary", "(refused)")[-60:])
+
+    # ---- the overlay record, and a vault of its own ------------------------
+    vault = os.path.join(tmp, "e-vault")
+    os.makedirs(vault, exist_ok=True)
+    os.environ["RURIK_VAULT"] = vault
+    import vaultpath
+    vaultpath._resolved = None
+    import overlay
+
+    retail = sealed(tmp, "e-retail.dat")
+    active = deployed_copy(tmp, "e-active.dat")
+    mdir = os.path.join(tmp, "e-overlays")
+    os.makedirs(os.path.join(mdir, "payloads"), exist_ok=True)
+    with open(os.path.join(mdir, "payloads", "p.bin"), "wb") as fh:
+        fh.write(b"a payload a reader must get back")
+    mpath = os.path.join(mdir, "gate.toml")
+    with open(mpath, "w", encoding="utf-8") as fh:
+        fh.write('[overlay]\nname = "gate"\n'
+                 'active = "%s"\nretail = "%s"\n'
+                 '[[edit]]\nfile_id = 0x%X\ncompression = 0\n'
+                 'plain = "payloads/p.bin"\nacknowledge_shared_with = []\n'
+                 % (active.replace("\\", "/"), retail.replace("\\", "/"),
+                    ID_RECORDS[0][0]))
+    man = overlay.load_manifest(mpath)
+    with overlay.Archive(man.retail) as ar:
+        stamp = overlay.archive_identity(ar)
+    base = {"format": overlay.FORMAT,
+            "format_version": overlay.FORMAT_VERSION,
+            "overlay": man.name, "manifest": man.path,
+            "manifest_sha256": man.sha256, "built": "2026-08-20T00:00:00",
+            "staged": overlay.staged_path(man, create=True),
+            "journal": overlay.journal_path(man),
+            "retail": stamp, "staged_identity": stamp,
+            "file_ids": ids,
+            "rows": fingerprint_block(active, (ROW_A, ROW_B)),
+            "retail_rows": fingerprint_block(retail, (ROW_A, ROW_B))}
+    canonical = overlay.fingerprints_path(man)
+    overlay.write_fingerprints(canonical, base)
+
+    def signed(name, mutate):
+        """A doctored record with its digest RECOMPUTED -- one fault at a time."""
+        doc = json.loads(json.dumps(base))
+        mutate(doc)
+        return overlay.write_fingerprints(os.path.join(tmp, name + ".json"), doc)
+
+    check(not refused_by_gate(active, fingerprints=canonical)[0]
+          and refused_by_gate(retail, fingerprints=canonical)[0],
+          "FIXTURE PREMISE: the record clears the archive it describes and "
+          "refuses the retail baseline -- so every refusal below is the "
+          "document and never the rows")
+
+    # ---- M2: the three trust checks overlay makes on the same file ----------
+    variants = [
+        ("self digest", lambda d: d.update({"self_sha256": "0" * 64}), False),
+        ("manifest sha", lambda d: d.update({"manifest_sha256": "0" * 64}), True),
+        ("retail stamp", lambda d: d["retail"].update({"mft_sha256": "0" * 64}),
+         True),
+        ("format_version", lambda d: d.update({"format_version": 99}), True),
+    ]
+    both = []
+    for label, mutate, resign in variants:
+        doc = json.loads(json.dumps(base))
+        mutate(doc)
+        if resign:
+            overlay.write_fingerprints(canonical, doc)
+        else:
+            write_doc(canonical, doc)       # digest left stale ON PURPOSE
+        try:
+            overlay.load_fingerprints(man, why="check", kind="build")
+            ov = "accept"
+        except SystemExit:
+            ov = "refuse"
+        gate = "refuse" if refused_by_gate(active,
+                                           fingerprints=canonical)[0] else "accept"
+        both.append((label, ov, gate))
+    overlay.write_fingerprints(canonical, base)         # put the good one back
+    try:
+        overlay.load_fingerprints(man, why="check", kind="build")
+        pristine = ("accept", "accept" if not refused_by_gate(
+            active, fingerprints=canonical)[0] else "refuse")
+    except SystemExit:
+        pristine = ("refuse", "-")
+    check(all(ov == gate == "refuse" for _l, ov, gate in both)
+          and pristine == ("accept", "accept"),
+          "EQUIVALENCE: one document, two readers -- overlay.load_fingerprints "
+          "and the gate agree accept/refuse on the pristine record and on each "
+          "of the four doctored ones, so the trust checks cannot drift apart",
+          "; ".join(f"{l}: overlay {o} / gate {g}" for l, o, g in both))
+
+    doctored = signed("m2-stamp", lambda d: d["retail"].update(
+        {"mft_sha256": "0" * 64}))
+    red, msg = refused_by_gate(active, fingerprints=doctored)
+    check(red and "RETAIL" in msg and "mft_sha256" in msg,
+          "and the refusal names WHICH of the three failed and what it was "
+          "measured against",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+
+    was = datcheck._verify_overlay_record
+    try:
+        datcheck._verify_overlay_record = lambda doc, source: None
+        pre = [not refused_by_gate(active, fingerprints=signed(
+            "m2-pre-%d" % i, mutate))[0]
+            for i, (_l, mutate, _r) in enumerate(variants[1:])]
+        stale = json.loads(json.dumps(base))
+        stale["self_sha256"] = "0" * 64
+        pre.append(not refused_by_gate(active, fingerprints=write_doc(
+            os.path.join(tmp, "m2-pre-self.json"), stale))[0])
+    finally:
+        datcheck._verify_overlay_record = was
+    check(all(pre),
+          "CONTROL: with the record check removed the gate CLEARS all four -- "
+          "it was reading rows out of a file overlay.py will not open",
+          f"{sum(pre)} of {len(pre)} cleared pre-fix")
+
+    # ---- M3: a doctored SHAPE is a finding about the DOCUMENT ---------------
+    plain = {"rows": fingerprint_block(active, (ROW_A,))}
+
+    def plain_doc(name, mutate):
+        doc = json.loads(json.dumps(plain))
+        mutate(doc)
+        return write_doc(os.path.join(tmp, name + ".json"), doc)
+
+    shapes = [
+        ("crc is not hex",
+         plain_doc("m3-crc", lambda d: d["rows"][str(ROW_A)].__setitem__(
+             1, "not-a-crc"))),
+        ("size is a word",
+         plain_doc("m3-size", lambda d: d["rows"][str(ROW_A)].__setitem__(
+             0, "big"))),
+        ("a negative row key",
+         plain_doc("m3-neg", lambda d: d["rows"].update({"-1": [1, "0", 0]}))),
+        ("the document is not there", os.path.join(tmp, "m3-absent.json")),
+        ("truncated JSON", None),
+    ]
+    torn = os.path.join(tmp, "m3-torn.json")
+    with open(torn, "w", encoding="utf-8") as fh:
+        fh.write('{"rows": {"16": [1, "0", 0],')
+    shapes[-1] = ("truncated JSON", torn)
+
+    outcomes = []
+    for label, path in shapes:
+        kind, unreadable, msg = gate_raised(active, fingerprints=path)
+        outcomes.append((label, kind, unreadable,
+                         os.path.basename(path) in msg))
+    check(all(k == "ArchiveUnsafe" and u is False and named
+              for _l, k, u, named in outcomes),
+          "every doctored document SHAPE refuses as ArchiveUnsafe with "
+          "unreadable=False and the DOCUMENT named -- the archive was read and "
+          "is not what failed",
+          "; ".join(f"{l}: {k} unreadable={u}" for l, k, u, _n in outcomes))
+    controls = [
+        raised_by(prefix_parse, {str(ROW_A): [300, "not-a-crc", 0]}),
+        raised_by(prefix_parse, {str(ROW_A): ["big", "0", 0]}),
+        raised_by(lambda: datcheck.row_fields(
+            datcheck.row_bytes(datcheck.read_mft(active), -1))),
+        raised_by(lambda: open(shapes[3][1], encoding="utf-8")),
+        raised_by(lambda: json.load(open(torn, encoding="utf-8"))),
+    ]
+    check(all(c not in ("(nothing)", "ArchiveUnsafe") for c in controls),
+          "CONTROL: each of the five is a RAW exception in the pre-fix "
+          "expression -- which is what escaped the gate, past every "
+          "`except ArchiveUnsafe` in this tree",
+          ", ".join(controls))
+    rc = run_cli("--dat", active, "--assert-safe", "--fingerprints", shapes[0][1])
+    check(rc.returncode == 1
+          and "could not be read far enough" not in (rc.stdout + rc.stderr),
+          "and at the CLI it is exit 1 with the document named, never exit 2 "
+          "with the ARCHIVE blamed for it",
+          f"exit {rc.returncode}: "
+          f"{(rc.stdout + rc.stderr).strip().splitlines()[0][:60]}")
+
+    # ---- M4: no fall-through to the other side of a profile -----------------
+    gone = signed("m4-gone", lambda d: d.pop("rows"))
+    empty = signed("m4-empty", lambda d: d.update({"rows": {}}))
+    reds = [refused_by_gate(retail, fingerprints=p) for p in (gone, empty)]
+    check(all(r for r, _m in reds)
+          and all("retail_rows" in m and "fall-through" in m for _r, m in reds),
+          "a record whose `rows` side is REMOVED or EMPTY refuses against a "
+          "retail archive, naming the side that is missing and the block it "
+          "did NOT fall through to",
+          reds[0][1].splitlines()[1].strip()[:78] if reds[0][0] else "CLEARED IT")
+    was = datcheck._fingerprint_side
+    try:
+        datcheck._fingerprint_side = prefix_side
+        pre = [cleared_by_gate(retail, fingerprints=p) for p in (gone, empty)]
+    finally:
+        datcheck._fingerprint_side = was
+    check(all(c.get("identity", {}).get("source", "").endswith("['retail_rows']")
+              for c in pre),
+          "CONTROL: the pre-fix resolver CLEARS both against retail, out of "
+          "`retail_rows` -- the caller asked whether its overlay was deployed "
+          "and got a pass on an archive carrying none of it",
+          "; ".join(c.get("identity", {}).get("source", "(refused)")[-14:]
+                    for c in pre))
+    check(not refused_by_gate(retail, fingerprints=canonical,
+                              side="retail_rows")[0]
+          and refused_by_gate(active, fingerprints=canonical,
+                              side="retail_rows")[0],
+          "and side='retail_rows' is how that question is asked DELIBERATELY: "
+          "it clears the baseline and refuses the deployed archive",
+          "clear then refuse")
+
+    # ---- M5: two names for one side is an ambiguity, not a precedence -------
+    ambig = signed("m5-both", lambda d: d.update({"staged": dict(d["rows"])}))
+    red, msg = refused_by_gate(active, fingerprints=ambig)
+    check(red and "'rows'" in msg and "'staged'" in msg and "GUESS" in msg
+          and "side=" in msg,
+          "a record holding BOTH `rows` and `staged` -- two names for the same "
+          "side -- refuses naming both and saying how to choose",
+          msg.splitlines()[1].strip()[:78] if red else "CLEARED IT")
+    try:
+        datcheck._fingerprint_side = prefix_side
+        pre = cleared_by_gate(active, fingerprints=ambig)
+    finally:
+        datcheck._fingerprint_side = was
+    check(pre.get("identity", {}).get("source", "").endswith("['rows']"),
+          "CONTROL: the pre-fix resolver took the first key of a two-tuple, "
+          "silently -- no note, no refusal",
+          pre.get("identity", {}).get("source", "(refused)")[-12:])
+    check(not refused_by_gate(active, fingerprints=ambig, side="rows")[0],
+          "and naming the side resolves it -- the ambiguity is in the QUESTION, "
+          "not in the document")
+
+    # ---- M6: an argument that did nothing is a pass on the wrong archive ----
+    check(cli("--dat", retail, "--preflight", "--fingerprints", canonical) != 0
+          and cli("--dat", retail, "--preflight", "--deep") != 0
+          and cli("--dat", retail, "--preflight", "--side", "rows") != 0,
+          "--fingerprints, --deep and --side without --assert-safe are refused "
+          "as nonsense invocations rather than silently ignored",
+          "three refusals")
+    check(cli("--dat", retail, "--preflight") == 0,
+          "CONTROL: --preflight alone still exits 0, so the check above is "
+          "measuring the dependency and not the verb")
+
+
 # ------------------------------------------------------------------ main --
 
 def main():
@@ -1499,6 +1935,7 @@ def run(tmp):
     section_growth(tmp)
     section_mft_offset_width(tmp)
     section_launch_gate(tmp)
+    section_gate_documents(tmp)
 
 
 if __name__ == "__main__":

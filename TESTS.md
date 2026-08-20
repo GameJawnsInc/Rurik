@@ -520,7 +520,26 @@ Every one of these, in the order they were written:
   negative control stays: deleting the one line from a COPY of deploy.py flips
   the check. MEASURED read-only over all EIGHT 4.2 GB archives in the vault:
   every one clears, 6.0-7.1 s, and re-confirmed at 6.2 s after the fix pass.
-  Floor 112 -> 149),
+  Floor 112 -> 149. **S12e added the same day, floor 149 -> 168, after a seam
+  probe ran the gate and `overlay --status` against the SAME documents and bytes
+  and found them disagreeing five ways**: the identity tier compared by ROW
+  NUMBER where every line of overlay is file-id addressed, so an archive the
+  client had REARRANGED under the profile -- the exact state `--verify-after`
+  exists to detect -- cleared the gate while overlay refused it; none of the
+  document's three trust checks ran on the gate's side; five doctored shapes
+  escaped as raw exceptions past every `except ArchiveUnsafe`, mislabelled at
+  the CLI as an unreadable ARCHIVE; and a document with `rows` removed fell
+  through to `retail_rows` and cleared a retail archive as "deployed". S12e
+  closes each red-then-green: the identity tier resolves the document's
+  `file_ids` through the archive's own raw table first (a document without them
+  keeps row addressing and the receipt SAYS you are trusting row numbers),
+  overlay-format documents pay overlay's own three refusals through a lazy
+  import of overlay's own primitives -- with an EQUIVALENCE check feeding one
+  document to both readers and requiring identical verdicts, controlled by
+  neutering the verifier and watching four doctorings clear -- every document
+  fault refuses as a fault of the DOCUMENT (exit 1, named), and the side of a
+  profile is an explicit choice (`side=`/`--side`) that refuses ambiguity rather
+  than resolving it by position. Floor 168),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
   2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
   that is the design**: refusing a container whose walk does not close is what
