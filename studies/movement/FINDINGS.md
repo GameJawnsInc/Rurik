@@ -3241,3 +3241,238 @@ Two further disclosures the lane made itself: **`20260819T182652`** (2.38 MB, th
 ### Method note
 
 The three skeptics wrote in separate private scratch directories (the collision that cost a blind-replication claim last round did not recur). The gate-1 threshold was measured independently **three times** — two skeptics and this session — reaching 299.3326 u by binary search over float bit patterns and by exhaustive scan. Everything above is build 38797, static, read-only, **n = 1 image, 0 runtime observations**. Nothing was written to the repo or the vault. **The single highest-value next measurement is a breakpoint at `0x0060580D` and `0x00605820` during a live desync**, logging `rec.clientControlled` at `[agentMgr+0x1CC+0x20] + id*0x1C` alongside separation: it says which gate fires, and it can refute the `clientControlled` mechanism outright.
+
+---
+
+## 2026-08-20, round 3 — THE TWO OTHER CALLERS, and gate 2 is KNOWLEDGE, NOT A LEVER
+
+`0x00709E90` (gate 2's query) and `0x005FEF70` (gate 3's predicate) each have **exactly two direct callers**. Round 2 decoded the AgTrack side of both. This round decodes the other side of each, to ask what the client uses these functions *for* when it is not judging itself. Three blind decode lanes, then three skeptics re-parsing from raw bytes. **Every address, string, constant and push order below was re-read by this session from the pinned pristine 38797 image**, and the one repo-side measurement was re-run here rather than carried from a lane.
+
+### THE DIRECT ANSWER: does the client plan with the query it is judged by?
+
+**Same function, different question — and that is what makes gate 2 a tripwire rather than a self-consistency check. OBSERVED.** The client's own move planner and the desync gate both call `0x00709E90`, on the same navmesh object (`MapFindPath` resolves it itself at `0x00709E99 call 0x47f660 / mov esi,[eax+0x14]` and uses `[esi+0x74]`, so the two callers are on identical map data by construction). But **they never share a start point.** The planner's start comes from `0x005FC400`, whose `0x005FC42D mov eax,[edi+0x14c]` reads the **ASYNC / world[1]** array — the copy the player sees. Gate 2's `arg1` is the **SYNC** agent's dead-reckoned point (`0x006057AD`, on ebx, which `0x0060561A`'s guard names `source` with the assert `source.GetWorld() == WORLD_SYNC`, AgTrack.cpp:458). **The client never once asks "is there a path from the sync point?"** — that question is put in exactly one place in the image, and it is the gate. So gate 2 is not the client checking its own work; it is the client checking **our** work with its own tool, and the planner's success carries no information about the gate's verdict in either direction.
+
+---
+
+### THE TWO CALLERS
+
+#### `0x0081ADB0` — the local player's move-to-point planner. ChCliBase.cpp. CORROBORATED.
+
+**Extent verified from bytes, not from `func_start`:** `0x0081ADA4` is an int3 run, `0x0081ADB0` is `55 8b ec 81 ec d0 00 00 00` with a /GS cookie load, and `0x0081B1E7` is `c2 04 00` followed by six int3 — a `ret 4` thiscall.
+
+ArenaNet names it. The assert at `0x0081B16D` reads
+
+> `this == context->playerControlledChar` — `P:\Code\Gw\Char\Cli\ChCliBase.cpp` line **248**
+
+and the caller supplies exactly that object: `0x00816510 call 0x47f660 / mov eax,[eax+0x2c] / mov esi,[eax+0x680]`, then `mov ecx,esi`. **Hero, NPC, minimap-preview and cursor-hover readings all die at the call site**, before the assert is even reached.
+
+What it does with the query — `0x0081AF25`–`0x0081AF51`, re-read here:
+
+```
+MapFindPath(&curPos, dest, 10000.0f, maxCount=9, &pathCount(=9), &path[0..8])
+```
+
+The last push is `&[ebp-0xd0]`, so **arg1 = curPos (the start), arg2 = the clicked point (the goal)** — same slot roles as the gate, no inversion. `path[0]` is handed to AgApi `0x005FC7A0` as the immediate move target (that function's own assert, AgApi.cpp:1041, names the argument `targetPoint`), and `path[1..count-1]` are copied into **`m_path` at `this+0x70`**, whose capacity is pinned at **8** by `0x0081B073 cmp ebx,8 / jb` guarding ChCliBase.cpp:239 `index < arrsize(m_path)`. **So the 9 is `arrsize(m_path) + 1` — one immediate step plus eight queued waypoints.** The queue has a live consumer (`0x0081B580` pops `m_path[0]`, feeds AgApi, shifts the array down one 16-byte entry), so this is a real movement plan, not a preview.
+
+**Does anything it writes move an agent? Yes — through the same mutator our own messages use.** `0x005FC7A0` reaches `0x00602A40`, and `0x00602A40` is the single shared agent-move setter: SMSG `0x0029`'s handler reaches it twice (`0x005FD913`, `0x005FD9B4`) on the SYNC array `[agentMgr+0xE8]`; the local planner reaches it once (`0x005FC8F0`) on the ASYNC array `[agentMgr+0x14C]`. **Same code, two world copies — the arc's two-copy model proved at one address.** `--xrefs 0x00602A40` gives **8** direct callers (`0x005FC8F0, 0x005FD913, 0x005FD9B4, 0x00602448, 0x00602984, 0x00604A43, 0x006062D5, 0x00606323`); five are unexamined and are the complete direct-call inventory of "things that can move an agent". New offset from ArenaNet's own name: `0x00602A48 test [ebx+0x20], 0x20000` guards `m_flags & INTERNAL_FLAG_IN_WORLD`, so **agent+0x20 is `m_flags`** and `INTERNAL_FLAG_IN_WORLD == 0x20000`.
+
+**It is input-driven, and the negative was controlled.** Upward direct-call closure from `0x0081ADB0`, depth 7: **19 functions, 32 edges**, entirely in ChCliBase.cpp / ChCliApi.cpp / GmWalk.cpp / GmView.cpp / GmCoreAction.cpp. **0 of 32 edges and 0 of 19 functions lie in the AgMsg receive region `0x005FCF70`–`0x005FDE60`.** Positive control for that null: 27 distinct rel32 targets are called from inside that region, and re-running the identical containment test on three of them fired **3/3** (e.g. `0x0047F660`, 18 of its 1,089 call sites inside the region). The filter was capable of returning non-zero.
+
+**⚠ WHERE THE GRAPH IS INCOMPLETE.** `--xrefs` searches `call`/`jmp rel32` plus every four-byte window at every alignment across all five sections. **It does not search indirect calls through a register or a vtable, or addresses the image computes rather than stores.** For the two nodes nearest the query this is unusually tight — `0x0081ADB0` and `0x008164C0` each report **1 direct reference and 0 stored VAs anywhere in the image**, which excludes a function-pointer table entry *for those two specifically* — but the same cannot be said for the five nodes further up the chain, and no lane disproved an indirect entry there. **"Input-driven" is a strong negative with a controlled filter, not a proof.** It is stated that way here deliberately: the last time this arc leaned on a filtered negative, it needed a positive control before anyone believed it.
+
+**It ends in a send, inside three guards.** `0x008164C0` finishes at `0x00816563 call 0x00920720`, which builds `{u32 0x3E; f32 x; f32 y; i32 plane}`, 16 bytes, and hands it to GcGameCmd → MsgConn. `schema/messages.json`'s `GAME_CMSG_0062` is `msg_header + vec2 + dword`, `declared_unpack_size` **14** = 2+8+4 — an exact independent match (the schema came from OpenTyria; this came from the binary). **The send fires on both the success and the planning-failure legs** (`0x00816539 test eax,eax / jne 0x816562` skips only a local fallback) — ⚠ **but that claim was WEAKENED by a skeptic and the weakening is right**: three earlier guards can suppress it entirely — a map-extents rejection of the picked point (`0x008164CB call 0x70a5c0` + four float compares), a null `playerControlledChar`, and **bit 4** of `[esi+0x10c]`. Note the callee tests a *different* bit of the same word, **bit 8** (`0x0081AEE4 test dword ptr [esi+0x10c], 0x100`). Two distinct bits of one flags word, either of which suppresses a move.
+
+#### `0x00600500` — AgAgent's obstacle-sidestep waypoint computer. AgAgent.cpp. CORROBORATED.
+
+**⚠ `func_start` is wrong here, and this is its second miss in this arc.** It reports `0x00600140`. The real entry is `0x00600500`: `55 8b ec 83 ec 7c` + `a1 40 44 bf 00 / 33 c5 / 89 45 fc`, paired with `0x00600832 xor ecx,ebp / call 0x5ae7a9` and `0x0060083D ret 0x10`; both direct callers (`0x00600ABE`, `0x006018D2`) target `0x00600500`. **The heuristic's actual failure mode is now named: there is NO int3 padding before it** — `0x006004FF` is the previous function's `c3`. Same for `0x00600840`. That is more useful than "wrong a second time": the heuristic is unreliable specifically where the linker packed two functions flush.
+
+Signature, with ArenaNet's own parameter names:
+
+```
+Point __thiscall AgAgent::<sidestep>(Point* ret, Point* point,
+                                      Vec2* obstacleCenter, float combinedRadiusSq)
+```
+
+The naming assert is the refutable kind. A lane derived `[ebp-0x48]` independently as `(dy*(vx-px) - dx*(vy-py)) / len` — the signed perpendicular distance from `obstacleCenter` to the line `point -> m_targetPoint.position` — **before** reading the string; ArenaNet calls it `distFromLine`:
+
+> `MathSqrt(combinedRadiusSq) + 1.0f >= distFromLine` — `P:\Code\Engine\Agent\AgAgent.cpp` line **1261**
+
+and the branch polarity matches exactly (`fcompp / test ah,0x41 / jnp` skips on `<=`). The routine computes **one** waypoint — `point` displaced perpendicular to the agent's velocity by `(combinedRadius + 10.0) − |distFromLine|`, on the side away from the obstacle — validates it, and returns it or `AGENT_INVALID_POSITION`.
+
+**New agent offsets, all from ArenaNet's own names:** `+0x9C/+0xA0 = m_targetPoint.position.x/.y` (AgAgent.cpp:1250, `m_targetPoint.position != AGENT_INVALID_POSITION`); `+0x64` = the avoidance retry counter; `+0x40` = a collision deadline. **`AGENT_INVALID_POSITION = (+INF, +INF)`** — `0x00948654` holds `0x7F800000`, and it is the same sentinel that pads the unused tail of ChCliBase's `m_path` and that GmView screens a failed world-pick against. Also new: `0x00600937` asserts `timeToEvent >= 0` (AgAgent.cpp:1339) on the return of `0x0070A0E0` — **independent confirmation, from a call site this arc had never looked at, that `0x0070A0E0` returns `timeToEvent`**, which round 2 asserted from inside `0x005FEF70` alone.
+
+**PREDICTION2 said this call sits in a candidate-direction loop. REFUTED.** Branch enumeration over `0x00600500`–`0x0060083D`, n=15 (4 backward, 11 forward), re-run by two skeptics: the only true back edge is `0x00600812 jb 0x600804`, the plane-consistency walk over the returned nodes. `0x006005DA` is a shared **error exit** — it loads +INF, stores the sentinel into the return buffer, and `0x006005FF jmp 0x60082b` forward to the epilogue. It has **three** predecessors, one more than the prediction knew about (`0x0060079C` after `0x0070A150`, `0x006007B0` after `0x005FEF70`, and `0x00600806` from inside the plane loop). The retry lives one frame up in `0x00600840` and is **bounded at 6**: `mov ecx,[esi+0x64] / lea eax,[ecx+1] / mov [esi+0x64],eax / cmp ecx,6 / jae`, identical at both call sites (n = 2 of 2). What that loop iterates is **successive collision events**, not directions — each pass re-runs the swept terrain trace and acts only when time-to-impact rounds to **0 ms**.
+
+`0x00600840` itself has **4** direct callers, one of which is `0x00602AEB` — inside the shared mutator `0x00602A40`. So setting a destination, from either world copy, runs avoidance immediately.
+
+---
+
+### THE 4-vs-9 maxCount ASYMMETRY: **INCIDENTAL. REFUTED as a lever, twice, on the bytes.**
+
+PREDICTION2 asked whether a stricter bar for judging than for planning would be a real finding. It would have been. It is not what is there.
+
+- **`*pathCount` is the number of points ACTUALLY EMITTED**, not a status. Both emitters compute it as `(cursor − base) >> 4`: `0x007297B2 mov ecx,[ebx+0x80] / sub ecx,[ebx+0x7c] / sar ecx,4 / mov [eax],ecx`, and the same shape at `0x00727368`. A capacity of 4 therefore yields **4**, never 0.
+- **Overflow is silent and has no failure channel.** `maxCount` becomes an end pointer, `base + maxCount*16` (`shl eax,4 / add eax,ecx`), and the writer refuses to pass it: `0x007265A9 cmp esi,[edx+0x98] / jae 0x726623`, where `0x00726623` is `pop esi / ret` — **void**, no `eax` written. Truncation drops the point; it does not report anything.
+- **A truncated result is not rescued into a zero either.** Map.cpp rejects a short path (`0x0070A028`, `0x0070A035`) and falls to `0x0070A0AE call 0x721a30`, whose result is returned **unvalidated** — `add esp,0x1c` straight into the epilogue at `0x0070A0CE`.
+
+⇒ **A corridor needing five corners gives gate 2 `count = 4`, which is `!= 0`, which is NO SNAP.** Lane A's §5 "real behavioural consequence" — that gate 2 can report zero on a route the planner would have solved — **is REFUTED**, and Lane A had itself flagged the untraced fallback as its weakest link.
+
+⚠ **And Lane C's structural refutation of the same claim was WEAKENED even though its conclusion was right.** "The 4-entry array exactly fills the frame, so 4 is capacity not policy" is circular — the compiler sized the frame *from* the declaration, and Lane A's 9-entry array is equally flush against its own cookie. The conclusion survives on the emitter mechanism above and on nothing else. **Cite the emitter, not the frame arithmetic.**
+
+**Same verdict for the arg3 asymmetry (300.0f at the gate, 10000.0f at the planner), which Lane A raised as "a far bigger lever nobody has been looking at" — REFUTED, three independent ways.** (a) It never reaches the post-coincidence march at all: `0x00709FB1 fadd qword [0x945b40]` substitutes `|to−from| + 0.5`. (b) Where it *is* used — tier 1 and the A* fallback — it is a **remaining-distance budget**, and exhausting it jumps to the emitter's **success** exit; a smaller budget stops earlier and *successfully*. (c) It cannot bind at gate 2 at all: **gate 1 runs first and snaps above 299.332591 u straight-line**, so gate 2 is only ever evaluated when the two copies are within 299.33 u — a 300 u march budget for a goal at most 299.33 u away is never the binding constraint. **This closes Lane A's top open question outright.**
+
+**Taxonomy correction that matters for anyone reading the ladder.** `MapFindPath` is **four** stages, not three, and the last is unvalidated. Tier 0 = coincidence (`0x00709ED7`, squared distance against `1.1920929e-07`, so ≈3.5e-4 u — effectively reachable only by the gate, since the planner already returned at `dist <= 1.0`). Tier 1 = an optional external provider (below). Tier 2 = `0x007219D0`, which receives a **normalized direction and a length**, not the goal — it is a **straight-line march**, and Map.cpp subjects its result to four post-conditions. Tier 3 = `0x00721A30 → 0x0072B0E0`, **the real graph search**, run on any tier-2 rejection and returned raw. `0x00709E90` carries **zero asserts of its own** (n = 0 over `0x00709E90`–`0x0070A0E0`); its Map.cpp attribution comes from its assert-bearing sibling `0x00709D30` and from PathApi/PathFind downstream. ⚠ **Lane A's citation of `0x00709E6C "*pathCount <= maxCount"` (Map.cpp:1239) as *this* function's post-condition is REFUTED** — that address is below `0x00709E90` and belongs to the sibling. The two functions also take **different arities** (`add esp,0x20` vs `add esp,0x1c`), which is why Lane A's slot map and Lane C's looked contradictory and were each correct for their own callee. **Quoting one slot map at the other function is off by one argument.**
+
+---
+
+### `0x005FEF70`: do the two callers treat a zero return the same way? **YES. The arc did NOT over-generalise the predicate. CONFIRMED, n = 2 of 2 direct callers.**
+
+Both sites read 0 as *"that step is not takeable"* and both respond by **throwing away the position under test**:
+
+- gate 3, `0x0060581E test eax,eax / je 0x60582b` → returns with `edi` still 0 → **SNAP**;
+- `0x006007AE test eax,eax / je 0x6005da` → returns **AGENT_INVALID_POSITION**, candidate discarded.
+
+Argument order matches too: at both sites the **last push is the position** (`0x006007A8 push edi`; `0x00605818 push eax` = `&syncPos`), so **arg1 = from, arg2 = to** in both. The round-2 reading — "standing at `from`, can I take a step toward `to` right now?" — survives from a completely independent direction, where `from` is unambiguously the agent's present position and the surrounding machinery is immediate collision resolution at `timeToEvent == 0 ms`.
+
+**Two narrowings, both of which make the arc's claim smaller and therefore better:**
+
+1. **It is never asked whether `to` is legal ground. OBSERVED, n = 2 of 2 sites.** At the avoidance site the candidate has already been certified by `0x0070A150` immediately before — a thunk into `0x00722B90`, which returns 1 only if the point resolves on the navmesh **with no snapping needed** (a bit-identical `fucompp` round-trip) **and** is not inside a path obstacle (PathObstacle.cpp). At gate 3 the `to` is `pathArray[0]`, a navmesh product by construction. **So the predicate is purely about transit, never about destination validity.** Any reading of gate 3 that leans on `0x005FEF70` to mean "the destination is a valid place" is unsupported.
+2. **The two sites apply it at very different scales.** Here `|to − from|` is bounded by roughly `combinedRadius + 10` — tens of units. At gate 3, `pathArray[0]` can be far away. **Whether `0x005FEF70`'s internals are scale-sensitive is UNVERIFIED** — the 60-degree cone and the `timeToEvent < 0.0005f` cut both plausibly are, and no lane read the function end to end with an eye on how `|to − from|` is consumed. If it turns out to be scale-sensitive, "one predicate" becomes "two", and narrowing (1) is the part that survives.
+
+⚠ Cross-caller caution, and it does **not** transfer: at `0x006007ED` the sidestep computer calls the sibling `0x00709D30(point, &delta, 1, maxCount=4, ...)` and treats `pathCount == 0` as **benign** — `0x006007FC je 0x600814` skips the plane loop and **accepts** the candidate. Different function, different arg3 type (integer `1` vs an f32 stored through `fstp dword [esp]`). **It is not a contradiction and must not be quoted as one.** What it does show is that a zero count from this query family is not intrinsically "off the navmesh". Also note `maxCount = 4` appears here too, in the avoidance path — further evidence that **4 is simply what AgAgent asks for.**
+
+---
+
+### WHAT THIS ROUND ACTUALLY SETTLED
+
+**1. The CONTESTED item resolves in the arc's favour, and NARROWER than the arc stated. CONFIRMED.**
+`pathCount == 0` reports that **the START point could not be resolved on the navmesh** — not that the destination is unreachable, and not the general "no complete path" signal Lane A proposed. In the tier that actually decides (`0x0072B0E0`) all three exits are start-conditioned: `0x0072B132` (the start's node lookup returned NULL), `0x0072B57E` (the working start copy was snapped during setup, per a bare 2-D x/y equality test at `0x007297D0`), and `0x0072B170` writes 1. **An unreachable goal yields a non-zero PARTIAL path** — the A* exhausts, takes the best-so-far node and string-pulls to it (`0x0072B4E8`). ⚠ **Lane A's "zero is the general no-complete-path signal, set at `0x00727356`" is REFUTED**: `0x00727356` is inside tier 2, and a tier-2 zero is not the function's answer — `0x00709FD4 test edi,edi / je 0x70a0ae` reroutes it into the full search. **Gate 2 does not test connectivity. It tests whether OUR point resolves at all.**
+
+**2. There is a geometry-free channel from a wire integer to a snap. OBSERVED, and it is the round's strongest result.**
+`0x0072AE4F mov eax,[ebx+8] / cmp eax,[ecx+0x20] / jb / xor eax,eax; ret` — the start point's plane field is **unsigned-range-checked against `staticData->map.Count()`** and the lookup returns NULL on failure, which becomes `*pathCount = 0` at `0x0072B132`. **ArenaNet's name for what `pathmap.py` calls a "plane" is `map`**, corroborated at three sites on the identical `+0x20` displacement, two of them carrying the name verbatim: PathApi.cpp:510 `map < path.staticData->map.Count()` and PathFind.cpp:1719 `m_map < m_path.staticData->map.Count()`. **A start plane index at or above the map's plane count snaps before a single float is touched.** The GOAL is resolved with the *snapping* variant instead, and a failure there does not take the same exit — **start must resolve exactly; goal gets snapped.** That asymmetry is the sharpest available statement of "whose position has to be on the navmesh," and it is a structural claim that could have failed.
+
+Both of our `0x0029` plane fields reach that check: `0x005FF820`'s arrived arm copies `agent+0x88..+0x94` verbatim (so the plane is `agent+0x90` = wire field 3), and the in-flight arm uses `agent+0x80` (= wire field 4) at `0x005FFBD7`. **On the arrived arm the point gate 2 pathfinds FROM is byte-for-byte the destination our `0x0029` wrote.**
+
+⚠ **Lane C's specific value 65535 is UNDECIDABLE and should not be quoted.** `0x00602A6C` reads the plane argument as a full dword and skips the write when it equals **−1**. Our schema types both fields as `word`. **Nobody checked whether the client's unpacker sign-extends or zero-extends.** If it sign-extends, `0xFFFF` arrives as −1 and is the *leave-the-plane-alone* sentinel — the exact opposite of a snap. **State the finding as "any plane index ≥ `map.Count()` and below 0xFFFF" and it is safe either way.**
+
+⚠ **Lane C's "every operand of the failing test is ours" — WEAKENED.** `MapFindPath` also validates the **goal**: `0x0070A03A push ebx / lea eax,[ecx+4] / push [ecx+0x74] / 0x0070A042 call 0x722b90 / test eax,eax / je 0x70a0ae` — the same on-navmesh-and-not-in-obstacle test. So the client's own predicted position is an operand of the accept/reject decision too. And `agent+0x80`'s writer has **eight** callers, one of them inside the local planner's own AgApi path, so that field is not server-exclusive. **All three lanes missed both.**
+
+**3. Tier 1 is `PathEngine.dll`, and that closes round 2's "one live hole in the decode" — conditionally. OBSERVED.**
+Round 2 recorded a WEAKENED note: gate 2 passes an **uninitialised** `pathCount` (only two references to `[ebp-0x60]` in the whole function — `0x006057F0 lea` and `0x0060580A cmp`), and the Tier-1 provider leg was unverified to write it. It is now traced. `0x007372A0` is three instructions: `return ([obj+4] != 0)`. The object is built at `0x00737380`, which does `push 0xa6fedc` = **`"PathEngine.dll"`** → `call [0x939174]` = **`LoadLibraryA`** (confirmed against the import table), bails on NULL, then `push 1 / call [0x939288]` = **`GetProcAddress` by ordinal 1**; the wrapper's own module string is `P:\Code\Engine\Map\PathEngine\PeObject.cpp`. **Tier 1 is optional external middleware, loaded dynamically.** Tiers 0, 2 and 3 write `*pathCount` on every exit. **And `PathEngine.dll` is not present in the owner's install**: the pinned vault snapshot's `MANIFEST.json` records `source_dir = C:\gw` with only `Accounts.json` excluded, and the directory holds no such file. ⚠ **Caveat, stated because it is real:** `LoadLibraryA` also searches system directories and `PATH`, and the snapshot is dated 2026-08-14, so "absent from the install directory" is strong evidence and not proof. **Downgrade the hazard from "live hole" to "inert on this install, contingent on a DLL that is not there."**
+
+**4. `0x0029` field 3/4 — CONFIRMED and CLOSED, but it is the third derivation, not news.**
+`0x005FD890` builds `{x, y, field3}` into a local Point and passes `field4` as `0x00602A40`'s third argument; `0x00602A6C` writes it to `agent+0x80` unless it is −1, and `0x00602A93` writes the Point's plane to `agent+0x90`. So **field 3 = destination plane, field 4 = current plane** — CLICK_SWEEP variant 1 `(dest, cur)` is correct, and variants 3/4/5 (which force a 0) write a wrong `map` index into `agent+0x80`. ⚠ **`studies/smsg/FINDINGS.md`:130-133 already carries this as SOURCED**, and credits `studies/movement/FINDINGS.md` with having it first. **The actionable residue is a stale comment, not an experiment**: `authsrv.py:2838` still says "0x0029's 'planes' is not from the binary and remains UNVERIFIED", and `studies/smsg/FINDINGS.md`:1498 still lists it as debt.
+
+⚠ **Lane C's "our navmesh agreement with the client has never been MEASURED" — REFUTED.** Both measurements are already in the tree, one of them in the docstring of the function Lane C quoted from. `pathmap.plane_at` records **n = 198 client position-and-plane reports, 189 landing inside a trapezoid whose plane index is exactly the plane the client named (95.5%)** — that *is* a measurement of index-space equality — with all 9 failures the known "client says 12, we find 0" bridge-over-ground case in a file with no height. `authsrv.py:8048-8055` records **n = 532: 93.8% clean, 5.5% off our mesh, 0.8% on a plane the client did not name, 0.0% ambiguous.** What is genuinely unmeasured is **our verdict against the client's own path-query verdict**, which needs a client run.
+
+⚠ **Lane C's "our `walkable()` is plane-blind, so we cannot express the client's question" — WEAKENED.** True of `pathmap.walkable()`, false of the server at the site that matters: the click grant arm already computes `here = {t.plane for t in pm_c.containing(...)}` and `placed = here == {cur_plane}`, and refuses the grant when it fails. Where the plane-aware predicate is genuinely absent is the **heading arm**, which goes through `clip_to_walkable` → `pm.walkable` and, per its own docstring, **suspends collision entirely and returns the destination unclipped when our mesh does not cover the player**. That arm is **88.5% of 2,855 player-directed grants**.
+
+**5. A MEASURED defect in our own content — n = 12, re-run in this tree.**
+Every configured spawn was put through its own map's pathmap and asked which planes contain it:
+
+| outcome | n | maps |
+|---|---|---|
+| OK (configured plane is one the geometry names) | **8** | 27, 143, 144, 146, 148, 280, 449, 558 |
+| **PLANE-MISMATCH** (plane in range, wrong set) | **1** | **474** — spawn (0,0), config plane **0**, our geometry says plane **31** and only 31, out of 45 |
+| OFF-MESH (point in no trapezoid on any plane) | **3** | 55, 90, 194 |
+| no mesh available | 0 | — |
+
+Map 474 is the shape that matters: **plane 0 is in range, so `0x0072AE52`'s bounds check passes and the trapezoid lookup then fails on the wrong plane's set → NULL → `*pathCount = 0` → gate 2 snaps.** A server-written, in-range, wrong integer. It also breaks the server's own click guard before any gate is involved — `placed = here == {cur_plane}` is false, so on map 474 the server silently refuses every click until the first accepted client report replaces `state["plane"]`.
+
+**⚠ But read the severity honestly, which the skeptic who found this did not.** All four failures carry spawn `(0.0, 0.0)` — an **unset placeholder**, not authored content. **Every map with a real spawn coordinate passes, 7 of 7.** The fifth placeholder (map 558) passes by accident. So this is a latent data defect in placeholder rows, on maps this project does not currently serve; the maps actually in play (146/148 Pre-Searing, 449 Kamadan, 280 Isle of the Nameless) are all OK. (One discrepancy on the record: the skeptic reported 7 OK across 11 rows; this session's re-run gives 8 OK across all 12. The difference is map 558.)
+
+**6. What our server actually writes, audited. OBSERVED, n = 12 config rows + every emit site.**
+Every plane integer we send is either the literal **0** (all 12 `map_static_config` rows) or an **echo of the client's own number** — `state["plane"]` is assigned in exactly one place (`authsrv.py:2303`) and only inside `if accept:` on an accepted client position report, and the click arm's `dest_plane` is the client's own `values[2]` from CMSG `0x003E`. **So the channel in §2 exists and we do not currently fire it.** ⚠ **Lane C's "a newly-mapped channel to CAUSE a snap with a single out-of-range 16-bit integer" is therefore REFUTED as a consequence claim** — the mechanism is real, the exposure is not. It is a bounds invariant worth asserting, not an explanation for anything observed.
+
+---
+
+### WHAT THIS MEANS FOR THE FIX
+
+**This is knowledge, not a lever. Say it plainly and do not cost a fourth fix against gate 2.**
+
+Three things converge on that, and the third is the one nobody in three lanes said out loud:
+
+1. **Both parameters that differ between the gate and the planner are verdict-neutral.** `maxCount` 4-vs-9 cannot produce a zero (the emitter counts what it wrote and drops silently on overflow); `arg3` 300-vs-10000 is a march budget whose exhaustion jumps to the *success* exit, and gate 1 fences gate 2 inside 299.33 u anyway. **There is nothing here to tune.**
+2. **Every zero-write in the deciding tier is start-conditioned, and the start is ours** — but we only ever write plane 0 or the client's own echo, so we do not trip it on purpose or by accident today.
+3. **★ GATE 2 HAS NEVER BEEN OBSERVED TO FIRE, and gate 1 subsumes every snap this project has measured.** Gate 1 runs first and returns SNAP whenever **straight-line** separation exceeds **299.332591 u**, so gate 2 is reached only below that. The arc's runtime lane measured **24 snaps over 623 paired intervals, with 0 of 24 beginning below the gate and a minimum before-separation of 342.8 u straight-line** (max 3,430.0 u). Every observed snap is explained by gate 1 alone; gates 2 and 3 were never evaluated at any of them. The proxy caveats are real — the async position is approximated from the client's own self-reports, and the before-separation is not the gate's own dead-reckoned instant — but **this is the only runtime evidence that exists and it points away from gate 2.** Three lanes wrote thousands of words about a gate with **n = 0 observed firings**.
+
+**Two corrections to this document's own §"What this means for the fix" (round 2).**
+- "We **cannot avoid tripping it by design without map data**" is **stale**. We have the map data: `toolkit/mapdata/pathmap.py` reads `PATHING_CHUNK = 0x20000008` out of the owner's own `Gw.dat` at run time, the extractor is in this repo, the layout is credited to GuildWarsMapBrowser in `PLAN.md` §6.1's derivation register and `THIRD-PARTY-NOTICES.md`, and nothing is committed. **Provenance is not the blocker on the navmesh route** — scoring it as one would be exactly the over-refusal `CLAUDE.md` warns about.
+- The WEAKENED note on `*pathCount` being written on every path can be **narrowed to "inert on this install"** per §3 above, with its DLL-search caveat carried along.
+
+**What a route would cost, priced rather than recommended** (three items, cheapest first — none of these is a fix for a symptom we have measured):
+
+- **Assert the spawn-plane invariant** — ~20 lines plus a test entry in `TESTS.md`. It reuses `pathmap.containing`, which the click arm already calls, and it would have caught map 474 and the three off-mesh placeholders. **Cheap, defensive, and it closes the only measured defect three lanes and three skeptics produced.** Value is bounded by the fact that no map currently served fails it.
+- **Fix two stale citations** — `authsrv.py:2838` and `studies/smsg/FINDINGS.md`:1498 both still call `0x0029`'s plane fields UNVERIFIED against three independent binary derivations. Minutes.
+- **Make the heading arm plane-aware** — `pathmap.plane_at(x, y, prefer=cur_plane)` already exists and is measured at 189/198. Today the heading arm sends `(plane, plane)`, asserting the destination's plane equals the current one because "we cannot know the destination's plane from a heading". ⚠ **Retail does not do that**: over **n = 987** live `0x0029`, fields 3 and 4 are equal in 973 and **differ in 14 (1.4%)**, and those 14 are the plane transitions. So we deviate from ArenaNet's own shape on exactly the population where it matters, on 88.5% of 2,855 player-directed grants. **Price it with its failure mode stated**: `plane_at` is wrong ~5% of the time and is wrong exactly at bridges and stairs, which is where the two symptoms players actually report live. That makes it a **candidate to price, not a fix to ship** — and it is a candidate for the *symptom*, not for gate 2, which we have no evidence ever fires.
+- **The thing that would actually decide anything is still a runtime measurement, and it has not moved.** A breakpoint at `0x0060580D` and `0x00605820` during a live desync, logging `rec.clientControlled` at `[agentMgr+0x1CC+0x20] + id*0x1C` alongside separation. It says which gate fires, it can refute the `clientControlled` mechanism outright, and after this round it can also settle whether gate 2 is ever reached at all. **Everything above is static: n = 1 image, 0 runtime observations.**
+
+---
+
+### Claims that DIED this round — do not re-quote
+
+- **"The 4-vs-9 maxCount asymmetry is a stricter bar for judging than for planning"** (PREDICTION2) — **REFUTED.** `*pathCount` is the emitted count (`0x007297B2`–`0x007297C3`); overflow drops silently through a void return (`0x00726623`); the fallback returns truncated results unvalidated (`0x0070A0C6`→`0x0070A0CE`).
+- **"Gate 2 can report `pathCount == 0` on a route the client's own planner would happily have solved"** (Lane A §5) — **REFUTED**, same mechanism. Lane A flagged it as its own weakest link and was right to.
+- **"arg3 300.0f vs 10000.0f is a 33× asymmetry and a far bigger lever than 4-vs-9"** (Lane A, open question 1) — **REFUTED** three ways; arg3 is a march budget, exhausting it succeeds, and gate 1 fences gate 2 below 299.33 u so it can never bind.
+- **"Gate 2 is a self-consistency check on the client's own navmesh"** (PREDICTION2's consequence) — **REFUTED.** The planner starts from ASYNC (`0x005FC42D`), the gate from SYNC; the planner is never asked the gate's question.
+- **"`0x006007A9` sits inside a candidate-direction loop; `0x006005DA` is a loop head"** (PREDICTION2) — **REFUTED.** n = 15 branches, one back edge, and it is the plane walk; `0x006005DA` is a shared sentinel exit with three predecessors.
+- **"`pathCount == 0` is the general no-complete-path signal; start-off-navmesh is one way to get there"** (Lane A) — **REFUTED.** That reads a tier-2 zero as the return value; `0x00709FD4` reroutes it into the full search, whose deciding exits are all start-conditioned.
+- **"`0x00709E6C '*pathCount <= maxCount'` (Map.cpp:1239) pins `0x00709E90`'s parameter names"** (Lane A) — **REFUTED.** That address is inside the sibling `0x00709D30`; `0x00709E90` has **n = 0** asserts of its own.
+- **"Our navmesh's agreement with the client's has never been measured"** (Lane C) — **REFUTED.** n = 198 (189 exact plane matches) and n = 532 (93.8% clean) are both already in the tree.
+- **"A single out-of-range 16-bit integer is a channel from our wire bytes to a warp"** (Lane C) — **mechanism CONFIRMED, exposure REFUTED.** Every plane we write is literal 0 or the client's own echo.
+- **"65535 is reachable and snaps unconditionally"** (Lane C) — **UNDECIDABLE.** `0x00602A6C` compares against −1 as a dword and the wire field is a `word`; nobody checked the widening. Quote it as "≥ `map.Count()` and below 0xFFFF".
+- **"Every operand of the failing test is ours"** (Lane C) — **WEAKENED.** `MapFindPath` validates the goal too (`0x0070A042 call 0x722b90`), and `agent+0x80`'s writer has eight callers including one in the local planner's path.
+- **"maxCount 4 is capacity not policy, because the array fills the frame"** (Lane C) — **WEAKENED**; the argument is circular. The conclusion holds on the emitter, not on frame arithmetic.
+- **"The CMSG 0x3E goes out whether or not the local plan succeeded"** (Lane A) — **WEAKENED.** True, but inside three earlier guards: a map-extents rejection of the picked point, a null `playerControlledChar`, and bit 4 of `[esi+0x10c]` (note the callee tests bit **8** of the same word — two different bits).
+- **"Our `walkable()` cannot express the client's plane question"** (Lane C) — **WEAKENED.** The click arm already does; the **heading** arm does not.
+- **"The `0x0029` field 3/4 assignment can now be closed from the binary"** (Lane C) — **CONFIRMED but not new**; `studies/smsg/FINDINGS.md` carries it as SOURCED and this is the third independent derivation. The debt is two stale comments.
+- **This document's round-2 "we cannot avoid tripping gate 2 by design without map data"** — **REFUTED.** `pathmap.py` reads the pathing chunk out of the owner's own `Gw.dat` at run time; the data is not the missing piece.
+- **This document's round-2 "the Tier-2 provider leg is the one live hole in the decode"** — **WEAKENED to inert.** It is `PathEngine.dll`, dynamically loaded, and absent from the owner's install directory (with a `LoadLibrary` search-path caveat).
+
+### Scorecard against the pre-registered prediction
+
+`PREDICTION2.md`, written before the lanes ran.
+
+| Prediction | Verdict |
+|---|---|
+| `0x0081AF51`'s containing function is the client's own movement planner, turning a local move intent into a predicted path | **RIGHT**, and named: ChCliBase.cpp player move-to-point, `this == context->playerControlledChar` |
+| "asks for 9 and iterates them ⇒ consuming a path, not testing proximity" | **RIGHT** |
+| The 9 is a waypoint capacity | **RIGHT**, specifically `arrsize(m_path) + 1` = 1 immediate step + 8 queued |
+| "the client PLANS with the SAME query the desync test JUDGES it with" | **RIGHT at the function level, WRONG as stated** — same subroutine and same navmesh, but different start world copy, different goal, 9 vs 4, 10000.0f vs 300.0f |
+| ⇒ "gate 2 is a self-consistency check on the client's own navmesh" | **WRONG. REFUTED.** The planner never plans from the point the gate tests |
+| Refutation criterion "server-message-driven" | **TESTED, did not fire**, with a 3/3 positive control — and stated with the indirect-call caveat intact |
+| `0x006007A9`'s containing function is an obstacle-avoidance / candidate-direction search | **HALF RIGHT.** It is obstacle avoidance — but a **one-shot** sidestep computer, not a direction search |
+| "`0x006005DA` is a loop head or continue-target" | **WRONG. REFUTED.** Error exit, three predecessors, one back edge in the function and it is elsewhere |
+| ⇒ "a steering loop corroborates the `0x005FEF70` reading" | **RIGHT CONCLUSION, WRONG REASON.** The reading is corroborated — by a bounded 6-attempt retry one frame up, not by a loop at the call site |
+| Refutation criterion "the two callers treat a zero return differently" | **TESTED, did not fire.** Identical polarity, identical meaning, n = 2 of 2 |
+| "whether the 4 vs 9 is a meaningful asymmetry — a stricter bar for judging would be a real finding" | **WRONG.** It is incidental, and so is the 33× arg3 gap |
+
+**And the framing it never stated, which is the round's real correction:** the prediction treats gate 2 as something worth finding a lever in. It is a gate that **gate 1 fences below 299.33 u** and that **has n = 0 observed firings** across the arc's only runtime measurement (24 snaps, 623 paired intervals, minimum before-separation 342.8 u straight-line). The decode is worth having. It is not a fix, and nothing here should be built against.
+
+### Method note
+
+Three decode lanes wrote in **separate, uniquely-named** scratch directories (the collision that cost a check two rounds ago did not recur), then three skeptics re-parsed from raw bytes. This session independently re-read every load-bearing address, string, float constant, push order and branch target above, and re-ran the spawn-plane measurement in this tree rather than accepting it. `func_start` was wrong once more (`0x00600140` for `0x00600500`) and the reason is now recorded rather than the count: **no int3 padding before the function**. Everything static is build 38797, **n = 1 image, 0 runtime observations**; the one repo-side number is **n = 12** configured maps. Nothing was written to the repo or the vault by the lanes or the skeptics.
+
+### Orchestrator's own re-measurement of the spawn precondition (OBSERVED)
+
+The consequence skeptic reported "4 of 12" configured spawns failing the client's
+start-node precondition and named three maps. I re-ran it exhaustively through
+`authsrv.load_pathmap` + `PathingMap.containing`, and the count is **3 of 12, not
+4** — maps **55, 90 and 194** — so the named list was right and the total was
+one high. **All three are literal `(0.0, 0.0)` placeholders**, not surveyed
+spawns that drifted: five maps carry `(0,0)` (55, 90, 194, 474, 558) and two of
+those happen to land inside a trapezoid anyway. So the honest statement is *"five
+maps have no surveyed spawn point and three of them are consequently off-mesh"*,
+which is a content gap, not a navmesh defect.
+
+**But the same run found a defect the audit did not flag, and it is the shape
+this round's decode predicts.** Map **474**'s spawn `(0,0)` resolves to
+**plane 31**, while its static config declares **plane 0**. Every other
+configured map agrees at plane 0 (n = 8 of 9 on-mesh maps). A config plane that
+disagrees with the navmesh's own answer is precisely the input that makes the
+client resolve the wrong plane's trapezoid set at `0x0072AE40` — the
+geometry-free zero this section describes. It is latent today for the same
+reason the rest of the channel is latent (the spawn is a placeholder and the map
+is not in play), and it should be fixed when 474 gets a real spawn rather than
+carried as a surprise.
+
