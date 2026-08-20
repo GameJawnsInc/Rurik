@@ -316,6 +316,85 @@ named visible effect.
 
 ---
 
+## 5.5 Is there any hero/henchman AI in the client? No — and the client says so in one symbol (2026-08-20)
+
+Asked directly, because §4 and §5 answer the *skill bar* and the *wire* and neither
+answers this. [studies/monsterai](../monsterai/FINDINGS.md) settled the same question
+for monsters and its negative is total, but it is a negative about MONSTERS: the wiki
+says (*Henchman*, See also) **"heroes and henchmen share the same AI"** and says nothing
+about hero↔monster, so monsterai's result does not transfer and had to be re-run with
+hero vocabulary.
+
+Two structurally independent routes, both with the control monsterai says every
+confident zero needs.
+
+**Route 1 — the client's own embedded source paths.** 937 of them. **51 match
+hero/companion/AI vocabulary** (`hero`, `hench`, `posse`, `pet`, `commander`, `party`,
+`behav`, `tactic`, `follow`, `formation`, `assist`, `guide`, `minion`, `squad`, `npc`,
+`companion`, `brain`, `think`, `decide`, `steer` — deliberately wider than the thing
+being looked for). Every one of the 51 is in one of four places:
+
+| where | n | what it is |
+|---|---|---|
+| `Gw\Ui\Game\Party\` and siblings | 45 | the party and hero **UI** |
+| `Gw\Char\Cli\ChCliHero.cpp` | 1 | the client-side hero **record** |
+| `Gw\Const\` | 2 | static **tables** (`ConstHero`, `ConstNpcBang`) |
+| `Gw\Party\Cli\Py*.cpp` | 3 | client-side party **state** |
+
+**Not one behaviour module, and no `Srv` half of anything.** The `Cli` suffix is
+ArenaNet's own directory split and the shipped client carries only that side — which is
+monsterai's 0-of-937-under-`Srv` result reproduced from the hero end. Control: the same
+scan finds `GmPosseRoster`, `GmPetCommander`, `PtHero`, `PtHenchman` and `PtFormation`,
+so it is capable of firing.
+
+**Route 2 — the compiled assert corpus.** 19,758 sites. A regex for behaviour vocabulary
+(`behav|tactic|aggress|flee|retreat|threat|steer|brain|think|decide|pathfind|waypoint|patrol|wander|leash|aggro`)
+returns **exactly one hit in the whole image**:
+
+```
+0x0050db1e  GmPetCommander:127   m_aiMode == CHAR_AI_MODE_AGGRESSIVE
+```
+
+`Gw\Ui\Game\GmPetCommander.cpp` — a **UI widget asserting its own button state**. It
+is worth something anyway: it gives ArenaNet's internal enum MEMBER name,
+`CHAR_AI_MODE_AGGRESSIVE`, where §3.2 had only the three display strings.
+
+**And the symbol that settles it.** The same file asserts `m_aiMode < AI_MODE_ICONS`
+beside `sm_buttonImageList` and `sm_highlightImageList`; `GmAgentCommander:150` carries
+`No valid case for switch variable 'm_aiMode'` next to its own two image lists.
+
+> **The client's entire notion of hero AI is an ICON ARRAY.** `AI_MODE_ICONS` is how
+> many pictures the button strip can draw. The `m_aiMode` switch chooses which one; the
+> mode itself is state the server owns. `GmHeroCommander` (6 asserts, not previously
+> listed here) is the same shape one level up — `heroCommanderSlot`, `slotIndex`,
+> `rosterIndex`, `activeHeroes`: slot bookkeeping for a strip of buttons. OBSERVED.
+
+**So: recreate it, and the client constrains almost nothing.** What ships is the
+*interface* to an AI, never an AI — three modes (§3.2), the flag/command surface (§3.1),
+the hero catalogue `s_heroClientData` (§2, extractable and extracted), and the
+client-side records `charHeroData` (§4). What must be authored from scratch is every
+decision: target selection, skill choice, spacing, when a monk heals, what a flag does
+to a hero already in combat.
+
+**What that authoring can be checked against**, and it is more than monsters get:
+
+- **WIKI** (§6) — *Hero behavior* rev 2026-08-10, "no reaction time; their interrupts
+  are never late", and "heroes and henchmen share the same AI", so **one engine serves
+  both** and a henchman is a hero with a fixed build.
+- **Henchman builds are FIXED** (§6), which makes them the cheaper first target: no
+  build editor, no attribute allocation, and §7.1 already calls them buildable now.
+- **Observation.** Unlike a monster, a hero stands in an outpost under the operator's
+  own control and can be given one order at a time. The labelled-behaviour campaign
+  monsterai designed for creatures (its §7) applies here with a much better instrument.
+
+**The boundary, stated so this is not read as more than it is.** This says nothing about
+whether hero AI is *recoverable from the wire* — §5's 22,524-message zero says no party
+was ever formed in our corpus, so that question has never been asked with data. It says
+only that the shipped **client binary** contains no hero decision-making, which is what
+decides whether reading it further is worth anyone's time. It is not.
+
+---
+
 ## 6. The player-facing layer (WIKI)
 
 Every fact here is WIKI with page and revision; it is what the mechanism has to reproduce.
