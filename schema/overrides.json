@@ -1417,6 +1417,42 @@
     "name_confidence": "high",
     "why": "OBSERVED, and it REFUTES the upstream rotation_cos/rotation_sin reading outright: sin^2+cos^2 over the corpus ranges 1.23..4.87 and is never 1. Field 2 is an absolute angle -- 55 finite values, ALL inside [-pi, pi], and the only non-finite values are exactly +inf (4) and -inf (5), the same two .rdata sentinels that named GAME_CMSG 0x0040. Field 3 is a turn rate in rad/s with exactly three distinct values (0.24892, 0.89012, 2.0943952 = 14.26, 51.00, 120.00 deg/s; the last is 2*pi/3 to the bit), per-agent constant in 29 of 31 agents. AgMsg.cpp:629/635 syncPtr/asyncPtr, setter 0x00602cc0 asserting AgAgent.cpp:2438. Keep both fields typed dword -- the values are floats, the marshalling is not, exactly as for ROTATE_PLAYER."
    },
+   "63": {
+    "opcode": 63,
+    "name": "BUFF_SOURCE_ADD",
+    "name_confidence": "high",
+    "why": "The client's OWN function name, derived independently on TWO builds: studies/skillcast/FINDINGS.md 14 (38797) and pvpui 31.2 (38833, blind re-derivation, field-for-field agreement, skeptic-verified). Chain on 38833: RECV table 0x00bc8f68 -> handler 0x0091DA00 -> thunk 0x0080EEC0 (ecx = charCtx[+0x2C]+0x508, the per-agent BuffState container) -> 0x0081CC80, which logs 'BuffSourceAdd (agent %d, skill %d): BuffId exists on agent already' (0x00A955A0). Every link single-caller, zero fan-in. Wire 20 B [agent_id targetAgent, agent_id casterAgent=find-key, u16 skill, u32 CONTESTED (Headquarter effect_type vs GWCA attribute_level, skillcast 14.4), u32 buffId]. Inserts {skill, contested, buffId, targetAgent} into the record's SOURCE array (stride 0x10, sorted by buffId), posts frame event 0x10000062 {agent, entry*}. ldufr's EFFECT_UPKEEP_ADDED is UPSTREAM-directionally-wrong: the UPKEEP/APPLIED pair is really Source/Target, one buff filed under two agents (skillcast 14.1). 0 of 22,524 live -- the source side never fired for a solo operator."
+   },
+   "64": {
+    "opcode": 64,
+    "name": "BUFF_SOURCE_REMOVE",
+    "name_confidence": "high",
+    "why": "The client's OWN function name, two independent builds (skillcast 14 on 38797; pvpui 31.2 on 38833, blind, skeptic-verified). Chain: 0x0091DA30 -> 0x0080EEF0 -> 0x0081CDF0, logging 'BuffSourceRemove (agent %d, buffId %d): No BuffState exists for agent' (0x00A95608) and '...BuffId is not on agent' (0x00A95650) on its two miss paths. Wire 10 B [agent_id casterAgent=find-key, u32 buffId]. Removes the buffId's entry from the SOURCE array by memmove-down (no free), posts frame event 0x10000063 {agent, buffId}. ldufr: EFFECT_UPKEEP_REMOVED, same directional caveat as 0x3F. 0 live occurrences."
+   },
+   "65": {
+    "opcode": 65,
+    "name": "BUFF_TARGET_ADD",
+    "name_confidence": "medium",
+    "why": "The client's name is BuffTargetAdd -- but the client POOLS one name (log string 0x00A95690) over two overloads, and the bare/_TIMED split between this opcode and 0x42 is our structural annotation, hence medium. Chain (38833): 0x0091DA50 -> 0x0080EF10 -> 0x0081CEC0. Wire 20 B [agent_id targetAgent=find-key, agent_id sourceAgent, u16 skill, u32 CONTESTED, u32 buffId]. This is the SOURCED overload: writes sourceAgent to target-entry +0xC (the field the client's own assert names -- ChCliBuff:235 '!buffTarget->sourceAgent'), and hardcodes duration 0.0f (fldz) and timestamp 0 -- neither is on this wire. Inserts into the TARGET array (stride 0x18, sorted by buffId), posts frame event 0x10000055. Two-build agreement (skillcast 14, pvpui 31.2). The ONLY family member with live witnesses: 4 retail arrivals (studies/reconstruction, studies/isle -- example payload [65, 31, 0, 3434, 0, 1] fits this field map). ldufr: EFFECT_UPKEEP_APPLIED."
+   },
+   "66": {
+    "opcode": 66,
+    "name": "BUFF_TARGET_ADD_TIMED",
+    "name_confidence": "medium",
+    "why": "Same pooled client name BuffTargetAdd (log string 0x00A95690, shared with 0x41); the _TIMED suffix is ours, from a measured structural split: this overload carries a duration and no source, 0x41 carries a source and no duration. Chain (38833): 0x0091DA80 -> 0x0080EF40 -> 0x0081CF70. Wire 20 B [agent_id targetAgent=find-key, u16 skill, u32 CONTESTED, u32 buffId, u32 duration -- typed dword in the descriptor but consumed fld/fstp, an IEEE-754 float in SECONDS]. Hardcodes sourceAgent=0 ('mov dword ptr [esi+0xc],0'), stamps entry+0x14 from the clock 0x0046B4E0 -- the client owns the countdown; there is no expire message (skillcast 14.5). Posts frame event 0x10000055. Two-build agreement, skeptic-verified. ldufr: EFFECT_APPLIED. 0 live."
+   },
+   "67": {
+    "opcode": 67,
+    "name": "BUFF_TARGET_EXTEND_TIMED",
+    "name_confidence": "high",
+    "why": "The client's OWN function name, two independent builds (skillcast 14; pvpui 31.2). Chain (38833): 0x0091DAB0 -> 0x0080EF70 -> 0x0081D020, logging 'BuffTargetExtendTimed (agent %d, buffId %d): No BuffState exists for agent' (0x00A956E0) / '...BuffId not found for agent' (0x00A95730). Wire 18 B [agent_id targetAgent=find-key, u32 f2, u32 buffId, u32 new-duration float]. Asserts ChCliBuff:235 '!buffTarget->sourceAgent' before applying -- extending is only legal on a timed (sourceless) buff -- then overwrites entry+0x10 (duration) and restamps entry+0x14 from 0x0046B4E0. f2 is stored NOWHERE: forwarded only into frame event 0x10000056 {buffId, f2, new duration}, a field that exists for the UI. The server never sends time-remaining; it sends this to change the duration (skillcast 14.5). ldufr: EFFECT_RENEWED. 0 live."
+   },
+   "68": {
+    "opcode": 68,
+    "name": "BUFF_TARGET_REMOVE",
+    "name_confidence": "high",
+    "why": "The client's OWN function name, two independent builds (skillcast 14; pvpui 31.2). Chain (38833): 0x0091DAE0 -> 0x0080EFA0 -> 0x0081D100, logging 'BuffTargetRemove (agent %d, buffId %d): No BuffState exists for agent' (0x00A95798) / '...BuffId is not on agent' (0x00A957E0). Wire 10 B [agent_id targetAgent=find-key, u32 buffId]. Removes the buffId's entry from the TARGET array, posts frame event 0x10000057 with the buffId BY VALUE (the only family member whose event payload is not a pointer or pair). Early removal of an effect is this message; expiry is client-local (skillcast 14.5). ldufr: EFFECT_REMOVED. 0 live."
+   },
    "72": {
     "opcode": 72,
     "table": "GAME_SMSG_0072",
@@ -1815,6 +1851,7 @@
    "150": {
     "opcode": 150,
     "name": "MISSION_COMPLETE",
+    "name_confidence": "high",
     "why": "MEASURED end to end 2026-08-19 (studies/quests/FINDINGS.md 9.7 and 9.8). WIRING: stub 0x0091EBA0 calls body 0x008123E0, which posts frame 0x10000158 at 0x00812473 / call 0x00633D70 into the band GmQuestComplete subscribes to (note the SWAP: 0x0096 posts 0x10000158 while 0x0097 posts 0x10000157 -- frame-id order does not follow opcode order). EFFECT, rendered at a caged client (probes completion_gates/completion_rewards): one send with a single flag bit draws the entire 3D mission-complete scene by itself. The assert class in the client's own crash dump is UiMsgQuestCompleteMissionNonMedal, which is the name. Shape [u32 x5], wire 22. Field 1 is completionFlagsGained, a bit mask gated by the client at GmQuestComplete.cpp:729 (msg.completionFlagsGained & (PRIMARY|SECONDARY)): bit0 renders 'Your party completed the mission.', bit1 'Your party completed the bonus goal.'; f1=0 crashes the gate (arm 3), so the gate reads f1 (f2 forwarded, role UNVERIFIED). Fields 3/4/5 are the simple-reward triple (handler builds record {tag 4, f3, f5, f4}, tag 4 = isSimpleReward): [f3,f4,f5] = [111,222,333] rendered 'You have earned 111 experience, 222 gold, and 333 skill points!', so f3=experience, f5=gold (MIDDLE render slot), f4=skill points. This is DISPLAY not GRANT -- the toast reads back what we send, the XP bar does not move. 0 of 22,524 live; the name is measured effect, not a screenshot guess."
    },
    "151": {

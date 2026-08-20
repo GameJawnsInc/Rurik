@@ -1981,8 +1981,25 @@ builder (written by sibling `0x0073`, not permanently stale), `+0x20` is their c
 `d3` is a **packed character-appearance dword** (`s_appearanceSlot`), not an id — which is
 why one field gates both the name and the equipment. **Hazard on record: `0x0073` and
 `0x0074` are mutually destructive**, each zeroing what the other carries.
-Next in this corner: `+0xAC` and `+0x508`, the last two unread, by the now-routine method
-(despawn-sweep remover → log string on the not-found path → sibling branch).
+**THE CONTAINER FAMILY IS CLOSED (§31, 2026-08-19)** — all seven read (the sweep walks a
+SEVENTH inline at `+0x5BC` that §28.12 miscounted past), and the punchline is that neither
+remaining row needed new reading: **`+0xAC` is heroes §12/§13's `attribState` and `+0x508`
+is skillcast §14's `BuffState`** — both fully mapped in neighbouring studies this table
+never joined, the heroes-§13.1 failure twice more. The joins paid immediately:
+ChCliAttrib's opcode family is **six contiguous** (`0x0036`–`0x003B`, we knew two — new:
+`0x36` dequeues and UNAPPLIES a pending attribute modifier by sequence, `0x38` points+
+replay, `0x39` writes a still-unnamed `+0x438`, `0x3B` single-attribute set), and heroes
+§13.1's three anonymous sub-arrays now mean pending-queue / processed-sequences / the
+store. The buff six are named — `BUFF_SOURCE_ADD`/`_REMOVE`, `BUFF_TARGET_ADD`/
+`_ADD_TIMED`/`_EXTEND_TIMED`/`_REMOVE` (0x3F–0x44), the client's own API names, two
+independent builds — with the full event set (`0x10000062/63/55/56/57`). `+0x5BC` is
+GmEffect's per-agent value feed, written by `0x0093` — whose writer **updates every match
+then unconditionally APPENDS** (measured; re-sending state on reconnect appends
+duplicates, first-match-wins readers — a server hazard on record). Still open here, in
+cost order: skillcast §14.4's CONTESTED buff field (probe `buff_type_field`, already
+specced); what `0x0093`'s value dword is; names for `0x36/0x38/0x39/0x3B` (held — no
+client string names them; read the c2s side for a sequence-carrying spend first);
+`+0x438`'s meaning.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

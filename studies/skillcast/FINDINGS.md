@@ -988,6 +988,38 @@ Two more probes join the queue, after the six in §11:
 | 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. |
 | 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. |
 
+## 14.6 Re-derived blind on build 38833, joined to the container family, and named (added 2026-08-19)
+
+The hero/henchmen arc's container sweep re-derived this entire section **independently,
+without knowing it existed** — tracers on build 38833 walked the `0x00F8` despawn sweep's
+`+0x508` remover to the same eight log strings, the same six opcodes, the same two-list
+record, the same field maps, before the collision with this section was noticed. Two
+builds, two blind derivations, field-for-field agreement; full record
+[pvpui §31.2](../pvpui/FINDINGS.md). What that session added on top of §14.2–§14.4:
+
+- **The container is one of SEVEN** the `0x00F8` despawn sweep clears per agent id off
+  `charCtx[+0x2C]` — this section's `+0x508` sits beside attributes (`+0xAC`), heroes
+  (`+0x584`), pets (`+0x6AC`), professions (`+0x6BC`), skill bar (`+0x6F0`) and a
+  GmEffect value list (`+0x5BC`). The despawn path for a buffed agent was §14's unread
+  edge.
+- **The record header internals**: both embedded arrays are `{ptr, capacity, count,
+  growIncrement}`; the outer array is sorted by agent id, the embedded arrays by buffId
+  (the dup-check is a binary search on entry `+0x08`).
+- **The full event set**: `0x3F`→`0x10000062`, `0x40`→`0x10000063`, both TargetAdds→
+  `0x10000055`, `0x43`→`0x10000056`, `0x44`→`0x10000057`. `0x43`'s wire field 2 is
+  stored nowhere — forwarded only into the event payload.
+- **Two enumerator getters** (`0x0081C6A0` source / `0x0081C6E0` target on 38833, thunks
+  `0x0080DA60`/`0x0080DA80`) feed the GmEffect band — independent corroboration of both
+  strides.
+- **38833 VAs**: thunks byte-identical to 38797; handlers +0x60 as a block; bodies ~+0x50.
+- **Named in `schema/overrides.json`**: `BUFF_SOURCE_ADD` / `BUFF_SOURCE_REMOVE` /
+  `BUFF_TARGET_ADD` / `BUFF_TARGET_ADD_TIMED` / `BUFF_TARGET_EXTEND_TIMED` /
+  `BUFF_TARGET_REMOVE` — the client's own names from §14.1, finally filed.
+
+§14.4's CONTESTED field is unchanged and its `buff_type_field` probe is still the settle
+path, with one placement correction: on opcodes 63/65 the contested dword rides wire
+field **4** (`struct+0x10`); field 3 is the skill.
+
 ---
 
 # 15. The agent-property vocabulary — added 2026-08-06
