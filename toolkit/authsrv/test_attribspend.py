@@ -21,7 +21,9 @@ that 1+2+3 is 6.
 Standard library only, no vault, no socket, no client.
 """
 import os
+import shutil
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -30,10 +32,11 @@ import checks  # noqa: E402
 import attribspend  # noqa: E402
 import content  # noqa: E402
 
-# 35, from the green run of 2026-08-20 -- set from the run, never guessed. Section
+# 42, from the green run of 2026-08-20 (35 + section 9's seven persistence
+# checks) -- set from the run, never guessed. Section
 # 1 is content-shaped and section 5 replays a fixed nine transitions, so the
 # count is exact rather than a floor under a loop whose length can drift.
-LEDGER = checks.Ledger("attribute spend", floor=35)
+LEDGER = checks.Ledger("attribute spend", floor=42)
 
 # The player this server actually spawns: a Warrior with no secondary. Attribute
 # 17 is Strength -- profession 1, and its PRIMARY -- which makes it the one that
@@ -284,6 +287,71 @@ def main():
               "a GAP in the cost ranks refuses",
               "ranks {1,3} would price rank 2 at 0 -- a free level, and "
               "exactly the shape a half-written extraction produces")
+
+
+    print("\n9. PERSISTENCE: the seeding rule, and a real store round trip")
+    # The precedence itself. This is the decision that used to live in two
+    # places -- the burst read the store for 0x003A while the balance in 0x0037
+    # came from content -- and they agreed only because nothing ever wrote the
+    # store. seed_ranks is now the single answer, so it is worth pinning from
+    # BOTH sides rather than only the interesting one.
+    content_ranks = [[17, 12], [21, 1]]
+    LEDGER.ok(attribspend.seed_ranks(content_ranks, [[17, 3]]) == {17: 3},
+              "a stored spread WINS over the content defaults",
+              "otherwise a persisted spend is silently discarded at the next "
+              "spawn and the player watches their points come back")
+    LEDGER.ok(attribspend.seed_ranks(content_ranks, []) == {17: 12, 21: 1},
+              "an EMPTY stored list falls through to content",
+              "charstore.ensure_character seeds `attributes` to [], so empty "
+              "means 'never spent' -- reading it as 'no attributes' spawns a "
+              "character with none at all")
+    LEDGER.ok(attribspend.seed_ranks(content_ranks, None) == {17: 12, 21: 1},
+              "and so does a missing row (no --persist at all)",
+              "the probe rigs run with no store; None must not raise")
+    LEDGER.ok(attribspend.seed_ranks([], [["17", "3"]]) == {17: 3},
+              "JSON's strings are normalised to ints on the way in",
+              "a store round trip is JSON, and {'17': '3'} would compare "
+              "unequal to every int key the model uses")
+
+    # The round trip through the REAL store, not a stand-in: charstore already
+    # declared `attributes` as [id, rank] int pairs and validated them, and the
+    # thing that was missing was a writer. This proves the pair survives a save
+    # and a reload, which is the whole point of the feature.
+    import charstore  # noqa: E402
+    tmp = tempfile.mkdtemp(prefix="rurik-attrib-")
+    try:
+        email = "attribspend@test.invalid"
+        store = charstore.Store.open(email, base=tmp)
+        uuid_hex = "0" * 31 + "1"
+        row = store.ensure_character(uuid_hex, "Test")
+        LEDGER.ok(row["attributes"] == [],
+                  "a fresh character row starts with no spend on file",
+                  "the field has existed in the schema since 2026-08-18; what "
+                  "was missing until today was anything that WROTE it")
+        state = attribspend.AttributeState(rules, {17: 12, 21: 1}, 200,
+                                           primary=1)
+        state.increase(21)
+        row["attributes"] = [[a, r] for a, r in sorted(state.ranks.items())]
+        store.save()
+        again = charstore.Store.open(email, base=tmp)
+        back = again.character_by_uuid(uuid_hex)
+        LEDGER.ok(back["attributes"] == [[17, 12], [21, 2]],
+                  "a spend survives save + reload through the real store",
+                  f"read back {back['attributes']!r} -- and it is the store's "
+                  f"own validator that accepted it, so this also proves the "
+                  f"shape the writer emits is the shape the loader admits")
+        reseeded = attribspend.AttributeState(
+            rules, attribspend.seed_ranks([[17, 12], [21, 1]],
+                                          back["attributes"]),
+            200, primary=1)
+        LEDGER.ok(reseeded.rank_of(21) == 2
+                  and reseeded.available == state.available,
+                  "and the reloaded character has the SAME balance it saved",
+                  f"rank {reseeded.rank_of(21)}, {reseeded.available} unspent "
+                  f"-- the balance is recomputed from the ranks rather than "
+                  f"stored, so the two can never drift apart")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
     return LEDGER.verdict()
 

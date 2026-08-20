@@ -2086,9 +2086,22 @@ total)** instead of one constant twice, which retires a stale comment: its *"eve
 sightings** the corpus reads [0,0] x14, [1,5]/[6,10] x8, and [x,200] x26 -- with
 field3 <= field4 in 48 of 48, which is a third, independent settling of the field order.
 
-Still open here: base and effective are sent EQUAL (no item bonuses modelled); the state is
-per-connection and does not persist; `0x0010`'s arm has zero live witnesses anywhere in the
-corpus and is built to a static reading alone.
+**AND IT PERSISTS (§34.5, same day).** Three processes: seed from the store (`55 of 200`,
+`17=9, 19=12`), click Axe Mastery's **+** (`raise: 18 0 -> 1`, saved to disk), **restart** --
+and a brand-new process sends `54 of 200`, `17=9, 18=1, 19=12`, with the panel reading 54
+unused and Axe Mastery 1. Closing this exposed a latent SECOND SOURCE OF TRUTH: the burst
+read the persisted spread for `0x003A` while `0x0037`'s balance came from the content row,
+and they agreed only because nothing had ever written the store -- persisting a spend is
+exactly what pulls them apart. `attribspend.seed_ranks` is now the single answer and is
+tested from both sides. Ranks only are stored; the budget stays a content fact and
+`available` is recomputed, so the two cannot drift. Free corroboration: the store's
+pre-existing `17=9, 19=12` priced out to 55 unused and the client drew ▼11▲13 on Strength,
+▼20-and-no-up on capped Hammer Mastery, ▲1-and-no-down on Axe Mastery at 0 -- four numbers
+typed nowhere in this repo. Schema: `0x0038` and `0x003B` go medium -> **high** (static read
+plus rendered effect); `0x0036` stays medium on purpose, since ACK is our word.
+
+Still open here: base and effective are sent EQUAL (no item bonuses modelled); `0x0010`'s arm
+has zero live witnesses anywhere in the corpus and is built to a static reading alone.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
