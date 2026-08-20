@@ -2745,6 +2745,76 @@ Every one of these, in the order they were written:
   them, and so does `movetap._selftest_fence_bytes` (that section's two checks
   and its one control are the only 3 of §17-§20's 46 that need the vault's
   client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
+  INSTRUMENT, and this is what makes that true.
+  `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
+  `movesync` print during a live run, so a real run can be matched against it.
+  **Those blocks were written before the instrument existed** and had drifted
+  five ways at once by 2026-08-20: an `ALIASING: phi 0.011 ... white 0.409,
+  A = 0.026.` line no code has ever printed, naming a `white` field no code has
+  ever had; a 2-line fence header where the printer emits **3**; an
+  `unread:*  0  0.0%` row that `fence_verdict` **cannot** emit, because it
+  iterates `sorted(reach.items())` and a label with no occurrences is not in the
+  dict -- structurally unprintable, not merely absent; an EPISODES section wrong
+  in nearly every particular (no poll-rate line, no `effective n = ... QUOTE THE
+  EPISODES.` line, ONE Nyquist threshold where the code names two -- DETECT and
+  CHARACTERISE -- and no `a LOWER BOUND -- censored` marker); and a whole
+  APPENDER WITNESS section attributed to `movetap`, which has no such printer
+  (`grep -c appender_witness toolkit/clientscan/movetap.py` = **0**; it is
+  `movesync.print_fence`'s). **Nothing caught any of it for as long as the
+  document existed.** One block carried a RECONSTRUCTION label and the label was
+  read as a licence rather than a debt -- §12 item 10 filed two of the five as
+  accepted residue and undercounted the rest. A label on a shape does not check
+  the shape; a rule nothing checks is a wish. So every one of §6's **15**
+  untagged fenced blocks is now regenerated from the real printers and asserted
+  against the document **byte for byte**. THE FIXTURES LIVE IN EXACTLY ONE PLACE
+  -- `toolkit/clientscan/probedoc_fixtures.py`, 25 registered fixtures --
+  imported both by this test and by whoever regenerates §6
+  (`python toolkit/clientscan/probedoc_fixtures.py --write <dir>`), so the two
+  cannot diverge; that single-source rule is the whole guarantee and splitting it
+  voids the test. §1 pins the BLOCK COUNT before comparing anything, because a
+  block quietly deleted would otherwise just stop being checked. §2 checks §6's
+  own sha256 pin of `movetap.py` and `movesync.py` against the files on disk --
+  the document says a moved hash voids every block below it, which is a claim
+  about the source and therefore checkable, and it is the tripwire for drift in
+  output §6 does NOT quote. §3 pins six printer SIGNATURES by name, including
+  `gate1_verdict(g1, g1why, early_a, point_bad, n)` where `early_a`/`point_bad`
+  are TALLY DICTS -- a caller passing ints raises `AttributeError` at
+  `.get(True, 0)`. §4 asks the SYNTAX TREE (not a grep, which trips on the word
+  "Whitespace" in a comment) whether any printable string literal in either
+  module carries a `white` field, and whether `movetap` has an appender witness
+  at all. §5 is TWO WITNESSES on each block's provenance tier: the document's own
+  prose against the fixture registry. They must agree, so relabelling a block
+  RECONSTRUCTION while a fixture still exists for it is a CONTRADICTION and goes
+  red -- relabelling is not a way out. §6 is ONE loop over all fifteen with a
+  tally asserting each produced exactly one outcome; a doc-marked or
+  registry-marked RECONSTRUCTION is a DECLARED SKIP, never a silent pass, and the
+  two OBSERVED blocks are re-run through `movesync`'s real CLI over the vault
+  captures they name (`movetap-20260819T145939` x `authsrv-20260819T145717-c1`,
+  and `--wire-only` over the second) or skipped where the vault is absent. §7
+  renders every fixture TWICE and requires the two identical, including the 12
+  not quoted in §6, because a fixture that moves between runs is noise and noise
+  is how a bar gets lowered -- and a rotted unquoted fixture is worse than none.
+  **Four sabotages were BUILT AND RUN on scratch copies and all four behave:**
+  (a) one character inside Block 1 (`402` -> `403`) reddens exactly ONE check,
+  naming the block, its document line range and the first differing line with
+  both sides printed; (b) `WOULD` -> `MIGHT` in `fence_verdict`'s header on a
+  scratch `movetap.py` reddens **8** -- the sha256 pin plus all 7 blocks that
+  printer feeds; (c) Block 3 relabelled RECONSTRUCTION in the document alone
+  reddens §5 and turns its content check into a printed `[SKIP]` carried into the
+  verdict's "not measured this run"; (d) BOTH witnesses relabelled is green at 73
+  with 1 declared skip, which is the shape a future block with no output yet
+  takes. **(d) earned its keep by finding a real hole in the first draft of this
+  file**: a `continue` dropped a registry-side RECONSTRUCTION with no check AND
+  no skip -- a block that quietly stopped being covered, this document's original
+  sin reproduced inside its own guard. §6's tally check is the fix. WHAT IT DOES
+  NOT COVER, named rather than implied: only §6's fenced blocks. §3's pre-flight
+  greps (`gate_reach` = 31, `shut:apply` = 0), §5's build lines, §7's failure
+  table and §10's addresses are prose and are NOT pinned. And the FIXTURE numbers
+  are not measurements of the client -- real code over hand-laid input, so what
+  is pinned is the SHAPE the code prints; §6, §11 and §12 say so per block and
+  this test does not upgrade them. Floor **72**, the bare-machine subset, against
+  a green **74** with both captures present. No client, no server. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
