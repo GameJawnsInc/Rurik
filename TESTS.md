@@ -2484,9 +2484,58 @@ Every one of these, in the order they were written:
   when our model is least entitled to name a destination). Both matchers run only
   against healthy source, so both are branches a typo would silently disable --
   the control hands them source carrying both old defects and requires them to
-  still fire. §10 replays the capture. Floor **34**, the bare-machine subset,
-  against a green **38** with `authsrv-20260819T114759-c1.jsonl` present; §10
-  declares `LEDGER.skip` without it. No client. ~1 s),
+  still fire. §10 replays the capture. **§11 locks `--resync`**, the SEVENTH
+  candidate and the first one aimed at the copy the player actually sees.
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the only catalogued primitive
+  whose handler reaches BOTH of the client's copies with no gate — read out of
+  the pinned pristine 38797 image at `0x005FDA50`: `AgTrack::Clear` first
+  (`0x005FDA78`, which zeroes `clientControlled` and so disarms the three-gate
+  desync test behind it), then `SetPosition` on the SYNC array
+  (`[esi+0xe8]` → `0x005FDAE5`) and on the ASYNC array (`[esi+0x14c]` →
+  `0x005FDB49`). **It is also the message an earlier build sent and had removed
+  as "the warp the player described"** — because that build sent OUR
+  INTEGRATOR'S position, and "five went out and three were arrivals, carrying
+  the client 630, 189 and 765 units"; 765 is exactly one heading vector, i.e.
+  the integrator had walked a whole leg the client never walked. The entire
+  difference between a fix and that regression is which value lands in the
+  payload, and `state["pos"]` is nine characters from `state["client_pos"]`, so
+  most of the section exists to make that keystroke red: the payload is asserted
+  behaviourally against a state where the two DISAGREE, the send site's vec2 is
+  asserted as the syntax-tree node `list(payload)`, and `state["client_pos"]` is
+  asserted to have **exactly one writer in the file** — the accept path. It also
+  asserts the flag ships OFF and that with it off a state that *would* fire
+  sends nothing **and records nothing**; that the three constants carry
+  derivations rather than choices (the trigger is the client's own 100.0 u
+  match radius at `0x00946560`, three times under gate 1's real 299.332591 u
+  cut; the rate limit sits under its derived ceiling of `299.332591 / (2·288)` =
+  0.5197 s, the shortest time in which two copies moving directly apart can
+  accrue a full gate's separation; and `RESYNC_MAX_REPORT_AGE · 288 = 100.0 u`
+  exactly, so **the staleness bound IS the harm bound**); that a payload with no
+  accepted client report behind it is refused with 5,000 u of our own drift on
+  the table; that the age bound is inclusive at the bound, refuses one
+  microsecond past it, and refuses a **negative** age too (clock skew sails
+  through an upper-bound-only test); that twenty fireable reports over 1.9 s
+  produce 4 sends and not 20, **and not 0**; that 50 u apart sends nothing; that
+  the SYNC model fails closed when unseeded, walks a granted leg at 288 u/s
+  rather than teleporting to its end (a model that parked instantly would read
+  every legitimate click-walk as a 2,880 u desync), parks on the point, and
+  follows a `0x002C` we send; and that the encoded bytes are the schema's —
+  `msg_header / dword / vec2 / word`, 16 B declared and 16 B produced, compared
+  **byte for byte** against a hand-packed struct because field order is the one
+  thing this project has already got wrong on a movement message. Two controls:
+  one asserts the function under the matcher really does mention `state["pos"]`
+  (it logs it beside every verdict) so the matcher is not judging an empty
+  set, and one hands the matcher `list(state['pos'])` on purpose and requires it
+  to still reject. It also asserts the flag's own startup banner is printable —
+  a `U+26A0` in it raised `UnicodeEncodeError` on a default Windows console
+  while this was being written, so the flag would have killed the very run it
+  exists to enable before a packet went out; the scan is against **cp1252**
+  rather than ASCII, because the em dashes elsewhere in `authsrv.py` are fine
+  and a blanket rule would be wrong, and its control plants a `U+26A0` and
+  requires the scan to still see it. Floor **69**, the bare-machine subset,
+  against a green **73** with `authsrv-20260819T114759-c1.jsonl` present; §10 is
+  the only fixture-bearing section (4 checks) and declares `LEDGER.skip` without
+  it. No client. ~1 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -2745,6 +2794,119 @@ Every one of these, in the order they were written:
   them, and so does `movetap._selftest_fence_bytes` (that section's two checks
   and its one control are the only 3 of §17-§20's 46 that need the vault's
   client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
+  DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
+  server change nobody has made against captures already on disk. The proposal:
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the one catalogued primitive whose
+  handler (`0x005FDA50`) calls `AgTrack::Clear` FIRST (`0x005FDA78`) and then
+  SetPositions **both** agent arrays with no gate on either arm, so it is the
+  only message that can reach the copy the player actually sees once
+  `0x0025`'s async arm has been gated shut for the client-controlled agent. The
+  scorer reuses `movesync`'s loaders and its repaired two-arm hard bar verbatim
+  -- `load_wire_reports`, `load_grants`, `steps`, `hard_step`, `on_segment`,
+  `denominator`, `per_minute` -- and adds no decoder of its own, because a
+  second reader is a second chance to disagree about what the client said.
+  **A counterfactual has three ways to lie and there is a section for each.**
+  §15 is the load-bearing one: ArenaNet's own traffic scores **0 hard jumps**
+  over 35 usable game connections and 2,739 self-reports, so a rule that fires
+  on retail as often as on our defective build is reading the wire, not the
+  defect -- and it **currently fails for two of the five rules**, which is
+  PINNED rather than tolerated. Rule C (`0x002C` before every player grant)
+  has the best coverage of the four cheap rules, 5 of 7 hard jumps, and fires
+  **4.13x more per minute on retail than on the build we ship**; Rule D
+  (C plus an arrival model on the previous leg) fires 0.816x. Rules A and B
+  separate at 0.024x and 0.026x, and **Rule E -- a forward model of the sync
+  copy -- gets both halves: 7 of 7 covered at 0.228x**. A session that
+  "improves" C without re-running the control turns §15 red, and moving the
+  comparison's reference from the SHIPPED build to our worst capture -- which
+  makes C read as 0.101x and "separating" -- reddens six checks. **§18 is the
+  check that can refute Rule E**, and it is the only claim in this file that is
+  not about this file: a forward model is the "four assumptions stacked under a
+  conclusion" `movesync.py`'s header refuses, so it is paired against
+  `movetap-20260819T145939`, a `ReadProcessMemory` of `[agentMgr+0xE8]` in the
+  session capture `20260819T145717` recorded. The model sits **p50 0.0 u, max
+  67 u from what the client's own memory held over n = 251**, and the separation
+  it computes from grants on the wire reproduces `studies/movement/HANDOFF.md`
+  §1's **1,164 / 2,163 / 3,648 u** exactly, by a path that never opens the
+  movetap file to compute them. That section carries its own positive control,
+  which mutation put there: hard-wiring the residual to 0.0 left it green, so
+  the model is now deliberately halved in speed and the same residual must move
+  (0.0 -> 202 u over the same 251 pairs), and pairing a movetap run from a
+  DIFFERENT session must return None rather than inventing a comfortable row.
+  **§17 prices every threshold in the file**: retail's own two copies, through
+  the same model, sit **p50 83 u, p75 260 u, p90 653 u** apart with zero snaps,
+  so a resync threshold of 100 u sits at ArenaNet's MEDIAN separation while our
+  shipped build sits 13.5x further out. **§19 is the actionable half**: the
+  COOLDOWN is where the coverage goes, not the threshold -- Rule E covers 7/7 at
+  cooldown 0.00 s, 3/7 at 0.50 s and 2/7 at 2.50 s, while the yank stays p50
+  0.08 u at all three, because the payload is always the client's freshest
+  adopted report; and dropping the threshold from 299.33 u to 100 u buys **no**
+  coverage for 31 extra firings. §1-§2 pin `leg_distance` as the SEGMENT
+  distance and prove it is a lower bound on separation against a 201-position
+  sweep of the granted leg, the row count asserted first. §3 gates the arrival
+  model in both directions on a 2,000 u leg (t_park = 6.944 s): 32 firings, none
+  before it. §4 requires Rule B to fire **0 times** on a client walking the leg
+  it was granted and 25 times on one walking perpendicular to it -- without the
+  second half the first passes for a rule that never fires. §5 pins D as a
+  structural SUBSET of C **and** shows D firing once on a leg that did finish,
+  because a subset relation is free for a rule whose gate is `return False`.
+  §6-§7 pin the cooldown's bound on the inter-firing gap and the threshold's
+  monotonicity. §8-§9 are the COST, in the units the harm arrives in: the
+  payload is `state["pos"]`, so **staleness is non-zero only where the
+  position-trust guard REFUSED a report** (3 consecutive refusals leave the
+  payload 216 u = three intervals behind, and the tool names the one-line
+  mitigation beside it), and the self-mint bar is asserted to BE
+  `movesync.HARD_JUMP_UNITS` by identity rather than by value -- a private copy
+  is how a fix ends up scored on a friendlier bar than the defect it replaces.
+  §10 pins coverage to the interval a firing lands in and mutates it in-process
+  by deleting that firing. §11 exercises the refusals: an unknown rule name, a
+  capture with no player grant declaring a NULL **with its reason** instead of a
+  bare 0, and the retail control over ZERO connections REFUSING rather than
+  returning a comfortable zero -- `all([])` is True and this repo has already
+  shipped that control once. §11b pins the sync model's shape before any capture
+  touches it: seeded at the client's first report, still gliding 0.25 s short of
+  a 10.000 s leg (the negative half, so a model that teleports on the first tick
+  cannot pass), PARKED at t=12.0 s and t=14.5 s, and re-aimed by a fresh grant
+  from where the MODEL has it rather than from the client's report -- which is
+  what the client's own bake does, reading the sync agent's `+0x78`.
+  §13 pins the vault replay cell by cell, 15 cells:
+  `20260819T145717` reads 116/85/38/4/213 firings and 3/1/5/2/7 covered of 7 for
+  rules A/B/C/D/E, `171153` 1/7/702/1/66, `182652` 0/3/318/0/40. It also
+  re-measures the
+  census -- **0 x 0x002C sent, every run** -- and pins THE FINDING: all four
+  jumps Rule A cannot reach are missed for `not-parked`, i.e. blocked by the
+  arrival model rather than by a threshold or a cooldown, so **no parameter
+  reaches them**. §14 exists because the prompt this arc was handed called
+  `20260811T173940` a retail capture: `origin.origin_of` says `ours`, build
+  38797, in `captures/gamesrv/`, with 0 player grants and 0 hard jumps -- an
+  internal null, and a consistency check on both halves. It also proves
+  `require_single_origin` refuses a run pooling `ours` with `live`, which each
+  file's own per-file check cannot catch. §16 resolves the retail player agent
+  from that connection's own `0x0037` and corroborates it with the id-free
+  signature the 2026-08-19 corpus pass used, |grant dest - the client's own
+  report|: over the 20 connections with **>= 5 rival agents** the named agent
+  beats the population median every time (margin 1.12x worst, 4.43x median),
+  and the nearest-rival form -- which separates on only 25 of 35, because a
+  henchman a step behind the player looks like the player -- is MEASURED and
+  deliberately not the check. The population floor is declared rather than
+  chosen after seeing which rows pass, and the one connection it excludes is
+  named. **Sixteen mutations were built and run and all sixteen redden**:
+  dropping `leg_distance`'s clamp, removing Rule A's park gate, unbinding the
+  cooldown, swapping the self-mint bar for a private constant, letting the
+  payload ignore whether a report was adopted, picking the retail player by
+  grant volume instead of `0x0037`, deleting the empty-population refusal,
+  making coverage count a jump whenever any firing happened, scoring the null
+  capture as a plain zero, moving the discrimination reference off the shipped
+  build, and six on the model: never parking, teleporting to the destination on
+  the grant, re-aiming from the client's report instead of its own state,
+  running at half speed, comparing the model against ITSELF, and returning a
+  comfortable row where it should return None. **The last two were HOLES the
+  first pass left** -- a residual hard-wired to 0.0 and a refusal path no
+  full-vault run ever reaches -- and both are what the positive controls in §18
+  now exist for. Floor **47**, the bare-machine subset, against a green **98**
+  with the vault present; §13-§14, §15-§17 and §18-§19 declare `LEDGER.skip` in
+  groups without `captures/gamesrv`, `captures/live` and `captures/movetap`.
+  Reads only; sends nothing, and never imports `authsrv.py`. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
