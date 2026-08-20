@@ -4770,6 +4770,45 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
+  same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
+  §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc
+  prefix, a tripwire that only reports GROWTH in the collision count, or documentation
+  and no checker — and the middle one won on the argument that file's own top box makes:
+  eighty study documents predate any convention, a gate over them "will produce a red
+  suite for reasons nobody wants to fix at 2am", and the last time this repo read a rule
+  literally across sixteen documents it rewrote 46 citations and **reverted all 46 the
+  same day**. So `identlint.py` counts and never judges, and the ceiling lives here.
+  **A collision is not a defect to be scrubbed**: 53 of them are the tree's current
+  ruled-on state and a mass rename is refused in advance; the defect is the 54th
+  arriving unnoticed. Baseline **310 defining sites across 31 documents, 150 distinct
+  tokens, 53 colliding** (2026-08-20, `ecfe995`), ceiling **80** — 53 at the same ~1.5x
+  headroom `test_provlint.py` used for 134→200 and 280→420, not a new rule, and raising
+  it when it fires is a normal edit. A "defining site" is only a table row or a heading
+  that OPENS with the token, because §2's census pattern was table-rows-only and this
+  one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
+  references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all
+  outside it, and `identlint.census_limits()` prints that list in the tool's own output
+  so the caveat cannot drift away from the number the way §2.1's own 108 did. **Section 2
+  is the load-bearing one** — eight REFERENCE forms that must not count, because every
+  study doc is built out of citations of other arcs' tokens and a census of mentions
+  measures cross-citation rather than ambiguity; the sharpest case is `studies/idents/`
+  itself, whose census tables are nothing but backticked citations and which must
+  therefore contribute **zero** sites. Section 4 proves BOTH arms rather than asserting
+  the tree is clean today: the comparison goes red one collision above the ceiling, a
+  synthetic rival definer added to the REAL scan moves the count by exactly one, and a
+  second definer in the SAME document does not — one arc numbering its own table C1–C9
+  is a namespace working, not a collision. The control token is chosen at run time (the
+  first defined in exactly one document), so the growth arm cannot rot into a mid-run
+  abort the day an arc mints a rival of a hard-coded one. Section 5 is the deliverable:
+  `whichrung.py` resolves `C8` to the documents that define it, asserted by document
+  path and by row CONTENT and never against a pinned line number, since these documents
+  are edited weekly and a pinned line is an assertion that goes red for a reason nobody
+  wants to fix and gets deleted instead. It finds **three** sites where §4's one-liner
+  found two, because that pattern treats the hyphen as a namespace and §2.2 rules that
+  it is not — `archivewrite`'s `C-8` is the third, and §1's ambiguous sentence *"C-8
+  finished"* is the hyphenated spelling, so the extra hit is the fix rather than noise.
+  Stdlib only, no vault, no socket, no client. 24 checks, ~1 s),
   `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
   `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
   after the plan forbade exactly that, and closes the paragraph "The rule was in the
