@@ -2857,6 +2857,32 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
+  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode** — 12 checks,
+  floor 12). Every item on the wire carries a list of 32-bit modifier words, and
+  `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
+  rating, damage range and every "+15% while…" line live in them and nobody had
+  decoded one. `itemmods.py` reads the format out of the client's own parser —
+  `{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}` plus two skip
+  predicates — and dumps the identifier vocabulary by walking each of the 133
+  dispatch handlers for the TEXT IDS it formats its line through.
+
+  **Two checks here can refute the layout and neither has a free parameter, which
+  is the whole reason this file exists.** §2 decodes words whose rendering this
+  repo has already watched on a caged client (`Armor: 25`, `Armor +20 (vs.
+  physical damage)`, a Backpack that holds twenty items) and requires the argument
+  field to equal the number that was on the screen. §4 runs **every modifier word
+  ArenaNet ever sent us** — 5,266 of them across 1,781 item declarations in 13 live
+  captures — and requires every identifier to be one the client actually
+  dispatches: a wrong shift or mask scatters identifiers across the 10-bit space
+  and most miss both jump tables. The observed answer is **5,266/5,266 over 35
+  distinct ids**. §4 declares a SKIP without the vault rather than passing on no
+  data, and §5 blanks the anchor bytes to prove the tool REFUSES instead of
+  reporting an empty vocabulary — which would read as "this build has no item
+  modifiers", the shape of every silent-zero bug in this repo.
+
+  The floor is 12 because 14 was declared, 12 executed, and the ledger refused the
+  run — the guard doing its job on the file that documents it.
+
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on
   `Assertion: level < arrsize(s_attribPoints)` / `CharData.cpp(202)`, and
