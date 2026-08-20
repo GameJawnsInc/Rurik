@@ -20,6 +20,17 @@ has a free parameter:
 Section 4 needs the vault and declares a skip without it, because a corpus
 check that silently passes on no data is the failure `toolkit/checks.py` exists
 to refuse.
+
+SECTIONS 6 AND 7 ARE ABOUT THE OTHER READERS. `ItemName.cpp` is the tooltip
+builder and it renders nothing for 21 of its 157 identifier slots -- including
+633 and 617, two of the three busiest in the wild. Section 6 finds who reads
+them instead, and pairs the answer with its own positive control: the same
+scan that reports NOTHING reads 617 reports two readers for 633 and eight more
+identifiers asked of `ItCliApi`'s by-argument accessors. A negative from a
+search that cannot be shown to find anything is worth nothing, which is the
+lesson `studies/enemy` paid for. Section 7 then takes 570 chances to refute
+what 633 turned out to be: an attribute id and a rank, checked against two
+client tables this file did not extract.
 """
 import os
 import sys
@@ -31,10 +42,11 @@ import checks  # noqa: E402
 import itemmods  # noqa: E402
 import pinned  # noqa: E402
 
-# 12, counted from the green run of 2026-08-20 -- set from the run and not
+# 19, counted from the green run of 2026-08-20 -- set from the run and not
 # from a guess, which is how this file learned the number: 14 was declared,
-# 12 executed, and the ledger refused the run rather than passing it.
-LEDGER = checks.Ledger("item modifiers", floor=12)
+# 12 executed, and the ledger refused the run rather than passing it. Sections
+# 6 and 7 took it from 12 to 19; the number was read off the run again.
+LEDGER = checks.Ledger("item modifiers", floor=19)
 
 
 def main():
@@ -151,6 +163,92 @@ def main():
               "reporting an empty vocabulary would read as 'this build has no "
               "item modifiers', which is the shape of every silent-zero bug "
               "this repo has recorded")
+    print("\n6. WHO READS a modifier the tooltip walker renders nothing for")
+    r = itemmods.readers(img)
+    LEDGER.ok(len(r["loop_tails"]) == 1 and len(r["inert"]) == 21,
+              "one loop tail, and 21 of 157 slots dispatch to it",
+              f"tail {[hex(t) for t in r['loop_tails']]}, {len(r['inert'])} "
+              f"inert identifiers -- the first version of the detector said 22 "
+              f"because the LAST renderer in the chain falls through into the "
+              f"tail, and would have published 'the client renders nothing for "
+              f"526' while 526 pushes string 2387 and calls TextApi")
+    lit633 = r["literal"].get(633, [])
+    LEDGER.ok(len(lit633) == 2 and not r["asked"].get(633),
+              "633 IS read -- by two literal compares outside the walker",
+              f"{[hex(v) for v in lit633]}: ItCliApi's own reader and "
+              f"ItemName's, both `and r32,0x3ff00000; cmp r32,0x27900000`")
+    LEDGER.ok(not r["literal"].get(617) and not r["asked"].get(617),
+              "617 is read by NOTHING, under the bound the tool prints",
+              "no literal compare in .text and no accessor call site asks for "
+              "it. The check above is the positive control that makes this "
+              "negative worth anything: the same scan finds 633 twice and "
+              "eight more identifiers at the accessors")
+    entries = [a["entry"] for a in r["accessors"]]
+    asked = sorted(r["asked"])
+    LEDGER.ok(len(entries) == 2 and asked == [587, 590, 592, 598, 603, 606,
+                                              614, 630, 647, 648],
+              "and the by-argument accessors are found with their callers",
+              f"{[hex(e) for e in entries]} asked for {asked} -- seven of the "
+              f"ten are identifiers ItemName renders nothing for, which is "
+              f"what the loop tail actually means: data for another subsystem")
+
+    print("\n7. CORPUS: 633's payload is an ATTRIBUTE and a RANK, or this fails")
+    if live is None:
+        LEDGER.skip("the live corpus is not reachable, so the 570 chances "
+                    "for 633's payload to fall outside the attribute space "
+                    "cannot be taken")
+    else:
+        import attribtable
+        import attribpoints
+        n_attrs = attribtable.EXPECTED_COUNT
+        cap = len(attribpoints.locate(attribpoints.Image(exe))["costs"])
+        pairs, models = [], {}
+        for stamp in sorted(os.listdir(live)):
+            try:
+                got = cmsgstream.timed(stamp, "s2c", "game")
+            except Exception:
+                continue
+            for _t, _c, op, v in got:
+                if op != 0x161 or not v or not isinstance(v[-1], list):
+                    continue
+                head = [x for x in v if not isinstance(x, list)]
+                for entry in v[-1]:
+                    w = entry[0] if isinstance(entry, (list, tuple)) else entry
+                    if not isinstance(w, int):
+                        continue
+                    dd = itemmods.decode(w)
+                    if dd["identifier"] != 633 or dd["skipped_high"] \
+                            or dd["skipped_bit18"]:
+                        continue
+                    pairs.append((dd["arg"], dd["arg2"]))
+                    if len(head) > 2:
+                        models.setdefault(head[2], set()).add(dd["arg"])
+        bad_a = [a for a, _r in pairs if a >= n_attrs]
+        bad_r = [x for _a, x in pairs if not 1 <= x <= cap]
+        LEDGER.ok(bool(pairs) and not bad_a,
+                  f"every 633 argument is a real attribute (< {n_attrs})",
+                  f"{len(pairs)} words, 0 outside s_attrib. {n_attrs} is "
+                  f"CHAR_ATTRIBS -- the bound ItemName's own asserts name "
+                  f"(`attrib < CHAR_ATTRIBS`) and the exact value ItCliApi's "
+                  f"reader writes as its 'no requirement' default"
+                  if not bad_a else f"OUTSIDE: {sorted(set(bad_a))[:12]}")
+        LEDGER.ok(bool(pairs) and not bad_r,
+                  f"and every 633 second value is a reachable rank (1..{cap})",
+                  f"{len(pairs)} words, 0 outside. {cap} comes from "
+                  f"s_attribPoints via attribpoints.py -- a SEPARATE table, "
+                  f"extracted separately, and 570 chances for the two to "
+                  f"disagree"
+                  if not bad_r else f"OUTSIDE: {sorted(set(bad_r))[:12]}")
+        varies = [m for m, a in models.items() if len(a) > 1]
+        LEDGER.ok(len(models) > 20 and not varies,
+                  "the attribute is a property of the SKIN, not of the roll",
+                  f"{len(models)} distinct item model ids, and not one of them "
+                  f"ever carries two different attributes -- while 38 of them "
+                  f"carry several different ranks. That is what a weapon "
+                  f"requirement looks like and it is not what a coincidence "
+                  f"looks like"
+                  if not varies else f"MODELS WITH TWO ATTRIBUTES: {varies[:8]}")
+
     return LEDGER.verdict()
 
 

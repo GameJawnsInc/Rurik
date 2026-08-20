@@ -24,6 +24,13 @@ line through TextApi with a **string id** this tool extracts. `toolkit/clientsca
 does the whole thing structurally, and `test_itemmods.py` checks it against **5,266 real
 modifier words** ArenaNet sent us.
 
+**Reopened and closed again the same day, one section down.** Twenty-one of the 157
+identifiers render nothing in the tooltip, and the two busiest of those in the wild are
+**633** and **617**. 633 turned out to be the item's **attribute requirement**, read by
+`ItCliApi.cpp` and compared against the character attribute container the pvpui arc
+already owns; 617 is read by **nothing in the client**, on any of the three builds, and
+that negative comes with its own positive control. §4.
+
 ---
 
 ## 1. The format, from the parser rather than from a guess
@@ -108,25 +115,166 @@ rather than of noise.
 each time. It is located by the parser's own instruction bytes, never by a build-specific
 address.
 
-## 4. The boundary — what this does NOT claim
+## 4. Who reads a modifier that the tooltip renders nothing for
 
-**`ItemName.cpp` is the NAME AND TOOLTIP builder, not every consumer of a modifier.** Two
-of the busiest identifiers in the wild — **633 (×570) and 617 (×420)** — dispatch to the
-loop-continue label, i.e. this subsystem renders *nothing* for them, deliberately. They are
-on real retail items and plainly mean something; what reads them is not this function.
-Recorded as a fenced NOT FOUND rather than as a gap, and it is the obvious next thread.
+**Written 2026-08-20, and it replaces this section's own fenced NOT FOUND.** The
+first version of §4 recorded that identifiers **633 (×570)** and **617 (×420)** — two
+of the three busiest in the wild — dispatch to the walker's loop-continue label, said
+"what reads them is not this function", and called it the obvious next thread. It was.
+The thread is pulled here, and the two came apart in opposite directions.
 
-So the honest form of the result: **the DISPLAY vocabulary is decoded** — which is exactly
-what "Armor: 25" is made of — and whether a given modifier also drives combat arithmetic
-elsewhere is a separate question this arc did not ask.
+**First, what the loop tail actually means.** It is not "this identifier is
+meaningless". `ItemName.cpp` is the *name and tooltip* builder, and its dispatch table
+sends **21 of its 157 slots** to the loop tail:
 
-Two more limits worth stating. The `labels`/`templates` split the tool reports is **best
-effort**: several handlers branch or loop before formatting, so a linear walk cannot always
-pair a push with its call. The complete ordered `text_ids` list is what the content rows
-carry and is what `--summary` counts on. And **34 of 157 identifiers extract no text id at
-all** — inert here, by the same boundary as above.
+```
+2, 576, 586, 588, 590, 591, 592, 597, 598, 599, 604,
+605, 612, 614, 616, 617, 618, 630, 633, 647, 648
+```
 
-## 5. What this unblocks
+**Eight of those twenty-one have a reader somewhere else** — 590, 592, 598, 614, 630,
+633, 647 and 648. So the tail reads "this modifier is **data for another subsystem**,
+not a line of tooltip text". OBSERVED, and identical on all three builds (38519,
+38797, 38833) at three different addresses.
+
+### 4.1 The census: exactly two ways the image can name an identifier
+
+Both are found by their own instruction bytes over the whole of `.text`, so neither can
+desync, and both are exhaustive rather than sampled:
+
+| form | shape | who uses it |
+|---|---|---|
+| **literal** | `and r32,0x3ff00000` then `cmp r32,<id << 20>` | a reader that knows which one it wants |
+| **parametric** | `shr eax,0x14 ; and eax,0x3ff ; cmp eax,edx` inside a helper that walks `[this+0x10]` to a `0xC0000000` terminator | the identifier arrives at the **call site** as a pushed immediate |
+
+`toolkit/clientscan/itemmods.py --readers` prints the whole map; `--reads 633` answers
+for one. The parametric helpers are `ItCliApi.cpp`'s pair — one returns
+`(word>>8)&0x3ff`, the other `word & 0x3ffff` — and their eleven call sites ask for
+
+```
+587, 590, 592, 598, 603, 606, 614, 630, 647, 647, 648
+```
+
+**seven of which are identifiers `ItemName` renders nothing for.** That is the claim
+above, in the client's own call sites rather than in an argument.
+
+> **The `0xC0000000` terminator is a second witness for the bit layout.** ItemName's
+> walker skips a word whose bits 31-30 are `3`; these accessors stop on a word that is
+> exactly `0xC0000000`. Two subsystems, one sentinel, and neither was used to derive
+> the other. OBSERVED.
+
+### 4.2 633 is the item's ATTRIBUTE REQUIREMENT, and the whole chain is named
+
+`0x00847FD0`, in **`ItCliApi.cpp`** (`ItCliApi:65 baseItem` sits sixty bytes away):
+
+```
+  *out_attribute = 0x33                 ; 51 = CHAR_ATTRIBS -- "no requirement"
+  *out_rank      = 0
+  for each modifier word:
+      if (word & 0x3ff00000) == 0x27900000:      ; identifier 633 -- WINS
+          *out_attribute = (word >> 8) & 0x3ff
+          *out_rank      =  word       & 0xff
+          return TRUE
+      if (word & 0x3ff00000) == 0x00100000:      ; identifier 1 -- last one wins
+          *out_attribute = (word >> 8) & 0x3ff
+          *out_rank      =  word       & 0xff
+  return FALSE
+```
+
+The default is **51**, which is the exact bound `ItemName`'s own asserts name
+(`ItemName:1202 attrib < CHAR_ATTRIBS`) and the exact row count of `s_attrib`.
+Identifier 1 is the same payload by another name, and 633 overrides it.
+
+**And identifier 1 is the one that still draws a tooltip line, which settles the
+naming in ArenaNet's own words.** Its handler is the one `ItemName:1202` sits inside,
+and the template it formats is string **2473 — `Requires %num1% %str1%`**. That is the
+sentence, and 633 carries the two values it needs.
+
+Its caller at `0x0057A8C0`, in **`PvpItemListEntry.cpp`**, finishes the sentence:
+
+```
+  GetProperty(frame, 0x0a, &agent)
+  GetProperty(frame, 0x56, &item)
+  if (ReadAttributeRequirement(item, &attribute, &rank))
+      usable = ChCliApi_GetAttribute(agent, attribute)->rank >= rank
+```
+
+and `ChCliApi_GetAttribute` is `0x0080D910`, which opens with
+**`ChCliApi:4097 attrib < CHAR_ATTRIBS`** and then reads
+`[[GetLocalPlayerContext() + 0x2C] + 0xAC]` — **the same character attribute container
+the pvpui arc spends §31–§34 on**, and the one our own server now writes. The client
+takes the item's required rank, looks up the player's rank in that attribute, and
+compares. That is an attribute requirement, end to end, in ArenaNet's own module names.
+
+`ItemName.cpp` reads 633 too, at `0x00923890` — **outside** the switch, in the routine
+at `0x009236B0` that assembles the description object, storing rank and attribute into
+`[obj]` and `[obj+4]`. Which is why the slot in the dispatch table is inert: the
+requirement is not one of the "+N" lines, it is its own line, built elsewhere.
+
+**Three checks the corpus could have failed, and 570 chances to do it** (§7 of
+`test_itemmods.py`):
+
+| check | result | why it is not free |
+|---|---|---|
+| every 633 argument is `< 51` | **570/570**, observed range 1..34 | 51 is `CHAR_ATTRIBS`, from `attribtable.py`'s separate extraction |
+| every 633 second value is a reachable rank `1..12` | **570/570**, observed range 1..12 | 12 is the last costed entry of `s_attribPoints`, from `attribpoints.py`'s separate extraction — `[1,2,3,4,5,6,7,9,11,13,16,20,-1]` |
+| the attribute is a property of the **skin**, the rank of the **roll** | **63 item model ids, 0 carry two attributes; 38 carry several ranks** | a coincidence has no reason to split that way |
+
+Resolved through `s_attrib`, the requirements land where they should: model 9528 always
+attribute 21 at ranks 4–10, model 14403 always attribute 20 at ranks 6–11 — Warrior
+weapon attributes on Warrior weapons, Ranger on Ranger, Ritualist on Ritualist, and the
+only primaries ever required are two Warrior rows.
+
+### 4.3 617 is read by NOTHING, and that is the finding
+
+Same scan, opposite answer. Across **all three builds**: no literal compare in `.text`
+in either encoding, no accessor call site that asks for it, no whole-word compare, and
+no identifier table in `.rdata` that contains it (the three `.rdata` hits for the
+integer 617 are neighbours of 615/616/618 in unrelated ascending id runs). 420 items in
+the live corpus carry it and nothing in the client consults it.
+
+**The positive control is what makes that worth anything**, and it is wired into the
+same test rather than asserted here: the identical scan reports **two** readers for 633
+and finds eight more identifiers at the accessors. A search that cannot be shown to find
+anything cannot report an absence — the lesson `studies/enemy` §6o paid for.
+
+**Bounded, not universal.** `--readers` prints its own limits and they are the real
+scope of this negative: an identifier reached through a register or a table rather than
+an immediate; a `cmp` scheduled more than 16 bytes after its mask; an accessor whose
+body differs from the two patterns above; and **anything the server does with the same
+word**, which is invisible from here and is the likeliest home for it.
+
+What 617 *looks* like, measured and deliberately **not named** — there is no client code
+to read it out of, so anything beyond the shape would be invention:
+
+- **arg is 0 on 420 of 420.** Only the 8-bit field carries anything.
+- **arg2 ∈ {0, 1, 2, 3, 4, 5, 6, 143, 144}**, and 143/144 occur only on items whose
+  type field is 5, which also carry a Ranger requirement.
+- It sits at index 1–3 of the modifier list, never 0 (633 takes 0 or 1).
+- It is *nearly* a property of the skin — constant for 29 of 34 item model ids — and it
+  correlates with identifier 587 (the damage-type line) without being a function of it.
+
+Labelled **UNVERIFIED**. The shape is recorded so the next reader starts from data
+rather than from this paragraph.
+
+## 5. The rest of the boundary
+
+Two limits from the original decode still stand. The `labels`/`templates` split the tool
+reports is **best effort**: several handlers branch or loop before formatting, so a
+linear walk cannot always pair a push with its call. The complete ordered `text_ids` list
+is what the content rows carry and what `--summary` counts on. And **34 of 157
+identifiers extract no text id at all** — of which 21 are now explained (the loop tail),
+and eight of those turned out to have readers elsewhere.
+
+One defect worth recording, because it is the same shape as every silent-zero bug in
+this repo. The first version of the loop-tail detector called a handler a tail if it
+branched back to the loop head, and reported **22** inert identifiers. The extra one was
+526, which pushes string 2387, calls TextApi, and then **falls through** into the tail.
+It would have been published as "the client renders nothing for 526" while the client
+plainly does. The fix is in `loop_tail()`: a body that calls or pushes an immediate on
+the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21.
+
+## 6. What this unblocks
 
 - **[studies/character](../character/FINDINGS.md)'s armour rating** — the value it wanted is
   identifier 572's argument, and 527's is the "+N vs. damage type" line.
@@ -135,12 +283,23 @@ all** — inert here, by the same boundary as above.
 - **[studies/pvpui §34.6](../pvpui/FINDINGS.md)'s `attribute_bonus`** — that field is our own
   declaration of what our item does, deliberately *not* a reading of the modifier words,
   and it was labelled that way because this decode did not exist. It can now be derived
-  instead of declared, which is a real follow-on rather than a cleanup: it needs whichever
-  identifier carries an attribute bonus, and identifier 1's handler is the one that
-  bound-checks its argument against `CHAR_ATTRIBS` (51).
+  instead of declared — **but not from the identifier this list first pointed at, and
+  that is a correction rather than a refinement.** This bullet used to say the bonus was
+  "whichever identifier carries an attribute bonus, and identifier 1's handler is the one
+  that bound-checks its argument against `CHAR_ATTRIBS`". Identifier 1 does bound-check
+  against `CHAR_ATTRIBS`, and it is the **requirement**, not a bonus: its template is
+  string 2473, `Requires %num1% %str1%` (§4.2). Exactly two handlers in the walker treat
+  their argument as an attribute index — identifier 1 and identifier **14**, whose
+  templates are 2483 `while %str1% is below %num1%` and 27726 `while you control %num1%
+  or more minions`, i.e. a conditional, not a bonus either. **So the attribute-bonus
+  identifier is still unfound**, and the honest state of §34.6's field is unchanged.
+- **A requirement our server can enforce** — the client already does the comparison
+  (§4.2), against the same `[charCtx + 0xAC]` attribute store `toolkit/authsrv`'s
+  §34 spend path now writes. An item declared with a 633 word will grey out in the
+  client's own UI at the ranks it should, with no server work at all.
 - **Authoring items that read correctly** — a server can now compose a modifier word for a
   stat it wants rather than copying an opaque literal out of a capture.
 
-`toolkit/clientscan/itemmods.py` (`--decode`, `--summary`, `--emit-content`,
-`--all-builds`), `test_itemmods.py` (12 checks, floor 12), and
+`toolkit/clientscan/itemmods.py` (`--decode`, `--summary`, `--readers`, `--reads`,
+`--emit-content`, `--all-builds`), `test_itemmods.py` (19 checks, floor 19), and
 `vault/content/item_modifiers.toml` (157 rows, `client-table` provenance, ids not words).
