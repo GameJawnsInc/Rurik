@@ -3208,9 +3208,42 @@ Every one of these, in the order they were written:
   holds — every one `Swordsmanship +1` on one item type, all carrying an armour
   rating — and requires the composer to reproduce each exactly.
 
+  §11 guards a duplication that was introduced ON PURPOSE. `content/items.toml`'s
+  starter hammer now carries a real 543 word AND a declared `attribute_bonus`,
+  because the run showed they drive different surfaces — the word draws the
+  tooltip, the field feeds the server's `0x003A` effective column. One fact in
+  two places is the shape of bug `studies/pvpui` §34.5 is about, so §11 fails if
+  they ever disagree and has a control that bends the field to +2 to prove it can
+  go red.
+
+  **§12-§14 are what turn "nothing reads 617" from an absence into a
+  measurement.** §6 above reports the negative with a positive control, which is
+  the right shape and still not enough: a search that comes back empty says
+  nothing about whether it had anywhere left to LOOK, and `studies/enemy` §6o
+  closed a question for a whole session on exactly that footing and was false.
+  §12 bounds it. To read an identifier the client must isolate bits 29-20; x86
+  leaves two ways to do that, both fixed byte sequences; an exhaustive scan of
+  `.text` finds **sixteen** such sites in a ten-megabyte image, naming eleven
+  identifiers between them, and 617 is not one. The check also requires the
+  **158** further mask sites that are NOT modifier code to be counted rather than
+  filtered away — `0x3ff00000` is also a double's exponent mask, and a scan that
+  dropped them silently would be reporting item code while claiming to report an
+  instruction. §13 requires the identical census on all three builds, because a
+  negative that holds on one build could be that build's quirk.
+
+  **§14 is the positive half, and its control is the point.** An absence is hard
+  to build on, so the corpus is asked what 617 IS: its `arg2` is single-valued
+  for **71 of 71 `model_id`s** over 420 words. That would be worth nothing alone,
+  because any field with small enough groups looks deterministic — so the second
+  check requires the item's FILE id to FAIL the same test, which it does (5 of 34
+  carry more than one value). The study's earlier "constant for 29 of 34 item
+  model ids" was the file id under the model id's name, and §14 is what corrected
+  it.
+
   The floor was 12 because 14 was declared, 12 executed, and the ledger refused
-  the run — the guard doing its job on the file that documents it. It went to 19
-  and then to 28, each time read off the green run rather than predicted.
+  the run — the guard doing its job on the file that documents it. It went to 19,
+  then 28, then 30, then 37, each time read off the green run rather than
+  predicted.
 
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on

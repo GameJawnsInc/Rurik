@@ -371,6 +371,86 @@ def literal_readers(img: Image):
     return out
 
 
+def identifier_sites(img: Image):
+    """The CENSUS: every site in .text that isolates a modifier identifier.
+
+    WHAT THIS IS FOR, and it is not the same job as `literal_readers`. That
+    function answers "did I find a reader of THIS identifier"; it cannot say
+    whether the search had anywhere left to look, and a negative from a search
+    of unknown coverage is the failure `studies/enemy` §6o paid for -- "no
+    `mov` writes +0xEC anywhere in the image" was false, and the scan that
+    produced it was not lying about its own results.
+
+    To read an identifier at all the client must isolate bits 29-20, and x86
+    leaves exactly two ways: mask the word in place with 0x3ff00000, or shift
+    right by 20 and mask with 0x3ff. Both are fixed byte sequences and this
+    scan is exhaustive over .text, so ANY reader must appear here. That is
+    what "nothing reads 617" rests on -- a bounded total, not two searches
+    that came back empty.
+
+    Returns {"named": [...], "parametric": [...], "not_modifier": N}.
+    `named` are sites whose mask is followed by a compare against an
+    identifier-shaped literal; `parametric` are the by-argument accessors,
+    which compare against a REGISTER; `dispatch` is the tooltip walker's own
+    anchor, which names nothing because it routes every identifier through a
+    jump table; `not_modifier` counts mask sites with no such compare --
+    overwhelmingly the float band, because 0x3ff00000 is also a double's
+    exponent mask, and counting them is what keeps this a census of the
+    instruction rather than a census of item code.
+
+    ONE MASK CAN NAME TWO IDENTIFIERS and the first version of this missed
+    it: 0x00848004 masks once and compares twice -- 633, then identifier 1
+    eight bytes later as its fallback -- so the window is walked to its end
+    and every compare counted, deduped by its own position. A census that
+    stops at the first hit is the same defect as `asserts.py`'s module
+    lists, from the other side.
+
+    MEASURED and identical on all three builds: 13 + 2 + 1 = 16 sites in a
+    ten-megabyte image, naming eleven identifiers between them. 617 is not
+    one of them, and neither is any encoding of it -- an exhaustive scan for
+    the raw bytes of 0x26900000 and 0x26980000 finds none in .text either.
+    """
+    raw, size, _sva = img.text()
+    d = img.data
+    named, parametric, other = [], [], 0
+
+    starts = [(o, 5) for o in _all(d, bytes([0x25]) + IDMASK, raw, raw + size)]
+    for m in range(0xE0, 0xE8):
+        starts += [(o, 6) for o in
+                   _all(d, bytes([0x81, m]) + IDMASK, raw, raw + size)]
+    seen = set()
+    for off, ln in sorted(starts):
+        hits = []
+        for step in range(CMP_WINDOW):
+            p = off + ln + step
+            val = _cmp_imm32(d, p)
+            if val is None or val & 0xFFFFF or (val >> 20) > 0x3FF:
+                continue
+            if p in seen:
+                continue
+            seen.add(p)
+            hits.append(val >> 20)
+        if not hits:
+            other += 1
+        for h in hits:
+            named.append({"va": img.va_of(off), "names": h,
+                          "form": "mask-in-place"})
+
+    for off in _all(d, ACCESSOR, raw, raw + size):
+        parametric.append({"va": img.va_of(off), "names": None,
+                           "form": "shift-then-mask, compared to a register"})
+    # And the walker's own dispatch anchor, which names no identifier because
+    # it routes ALL of them through a jump table. Counted so that the census
+    # is a census: it is the site through which 617 IS reached, and the whole
+    # finding is that the slot it reaches does nothing.
+    dispatch = [{"va": img.va_of(off), "names": None,
+                 "form": "shift-then-mask, indexed into a jump table"}
+                for off in _all(d, DISPATCH, raw, raw + size)]
+    return {"named": named, "parametric": parametric, "dispatch": dispatch,
+            "not_modifier": other,
+            "total": len(named) + len(parametric) + len(dispatch)}
+
+
 def _call_index(img: Image):
     """{target VA: [call site file offsets]} for every `call rel32` in .text."""
     raw, size, _sva = img.text()
@@ -679,12 +759,22 @@ def print_readers(img: Image, only=None):
         if not lit and not ask:
             print("           NO reader: named by no literal compare in "
                   ".text and asked of no accessor")
-    print("\nNOT SEARCHED, and an empty answer above means only this much: an "
-          "identifier reached through a register or a table rather than an "
-          "immediate; a compare scheduled more than "
-          f"{CMP_WINDOW} bytes after its mask; an accessor whose body differs "
-          "from the two byte patterns above; and anything the SERVER does "
-          "with the same word.")
+    c = identifier_sites(img)
+    print(f"\nCOVERAGE: {c['total']} site(s) in the whole image isolate a "
+          f"modifier identifier -- {len(c['named'])} naming a literal, "
+          f"{len(c['parametric'])} comparing a register (the by-argument "
+          f"accessors, whose callers are listed above), and "
+          f"{len(c['dispatch'])} routing every identifier through the jump "
+          f"table. A reader has to isolate bits 29-20 to exist, x86 leaves "
+          f"two ways to do it, and this scan is exhaustive over .text -- so "
+          f"an identifier absent from all {c['total']} is absent from the "
+          f"CLIENT, not merely from two searches that came back empty. "
+          f"({c['not_modifier']} further sites match the same mask and are "
+          f"NOT modifier code: 0x3ff00000 is also a double's exponent mask.)")
+    print("STILL NOT SEARCHED: a compare scheduled more than "
+          f"{CMP_WINDOW} bytes after its mask; an identifier the image "
+          "computes rather than writes down; and anything the SERVER does "
+          "with the same word, which no read of the client can reach.")
     return r
 
 
@@ -705,6 +795,9 @@ def main(argv=None) -> int:
                          "and the identifiers ItemName renders nothing for")
     ap.add_argument("--reads", metavar="ID", default=None,
                     help="answer --readers for one identifier only")
+    ap.add_argument("--sites", action="store_true",
+                    help="the extraction CENSUS: every site in .text that "
+                         "isolates a modifier identifier, and what it names")
     ap.add_argument("--attributes", action="store_true",
                     help="every identifier whose handler resolves an ATTRIBUTE "
                          "NAME, and which of them are bonuses")
@@ -733,6 +826,19 @@ def main(argv=None) -> int:
         except NotFound as exc:
             print(f"REFUSED: {exc}", file=sys.stderr)
             rc = 2
+            continue
+
+        if a.sites:
+            c = identifier_sites(img)
+            print(f"{c['total']} site(s) isolate a modifier identifier "
+                  f"({c['not_modifier']} more match the mask and are float "
+                  f"code, not modifier code)")
+            for r in c["named"] + c["parametric"] + c["dispatch"]:
+                what = (f"names {r['names']}" if r["names"] is not None
+                        else "names nothing")
+                print(f"  {r['va']:#010x}  {r['form']:<46} {what}")
+            print("\nidentifiers named by a literal anywhere in the "
+                  f"image: {sorted({r['names'] for r in c['named']})}")
             continue
 
         if a.attr_bonus:
