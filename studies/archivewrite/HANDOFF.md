@@ -49,7 +49,15 @@ green through `alloc(confirm=True)` before 2026-08-20, and `expect=` is now mand
 `extraBytes 8`. `test_authorflow.py` (59 checks, 0.5 s) walks the whole story on one
 synthetic archive: author → create a NEW row → revise smaller → grow back → outgrow and
 relocate → revert to pristine byte-for-byte. **No client has read the new shapes yet** —
-that one-launch check rides whenever a launch is next convenient (§17.8).
+and that check is now **STAGED as A9 (2026-08-20, study §18)**: staged archive built,
+gated, adversarially verified reproducible to the byte
+(`vault/exports/archivewrite/a9/Gw.a9.dat`), runbook at
+`vault/research/archivewrite/A9-RUN.md`. **The deploy and the launch are the owner's**:
+`python vault/research/archivewrite/a9stage.py --deploy --yes` with the client closed,
+then `python toolkit/harness/session.py --enemy --hold 150 --shots 10`, then
+`a9stage.py --verify-after`, then `--retail --yes` (or leave deployed). One launch answers
+three things at once: a small row we compressed, a `datalloc`-CREATED row resolved through
+the client's own FA8 link walk, and (unscored rider) the attested all-skip table shape.
 
 **What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
 retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted

@@ -2187,6 +2187,24 @@ for the owner rather than a gap in this one.
 
 ### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
 
+**2026-08-20, later — A9 IS STAGED: the client oracle for §17's shapes, one launch, the
+owner's to run.** Study §18; procedure `vault/research/archivewrite/A9-RUN.md`. The staged
+archive (`vault/exports/archivewrite/a9/Gw.a9.dat`) carries three independent arms — a
+`datalloc`-CREATED 3-row chain under new file id `0x5F0AD` holding 222949's payload
+compressed by us, the hatcher shell retargeted 4 bytes so the client's own FA8 link walk
+resolves that row **at spawn** (load-time resolution measured at `0x00794850`: every link,
+`m_seqCount != 0`, so a normal animating hatcher IS the verdict), and twelve byte-identical
+small rows re-encoded in place as an unscored rider carrying the attested all-skip
+declared-5 table. Skeptic-verified GREEN, including a from-scratch **byte-identical 4.2 GB
+rebuild** and a whole-file diff attributing every changed byte to exactly the intended
+rows. Two envelope shapes (both phantom pairs) are UNSHIPPABLE on real content — 0
+occurrences over every dial and the archive's 2,500 most compressible rows — and stay
+recorded, not forced. Deploy: `a9stage.py --deploy --yes`, client closed, run directory
+confirmed free (another session used it at 00:11 on 2026-08-20); launch:
+`python toolkit/harness/session.py --enemy --hold 150 --shots 10`; then
+`a9stage.py --verify-after`; then `--retail --yes` or leave deployed. **Never click the
+client's crash dialog** — its default button uploads a dump to ArenaNet.
+
 **2026-08-20 — THE AUTHORING HARDENING LANDED, `0802b1f`, study §17, corrections §0 C-11/C-12/C-13.**
 A6–A8 proved the encoder on one big row; what stood between that and *authoring new
 content* was four named gaps, and all four are closed offline: **(1)** every table our
