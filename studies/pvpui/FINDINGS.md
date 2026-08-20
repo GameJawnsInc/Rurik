@@ -2548,6 +2548,15 @@ attribute-spend prediction (RECONSTRUCTION — the c2s side has not been read; w
 c2s spend message carries a matching sequence is the cheapest test). `+0x438`'s meaning
 stays NOT FOUND — `0x0039` exists to write it and nothing read names it.
 
+> **BOTH SETTLED THE SAME DAY, §32 — the cheapest test was the right one.** The
+> RECONSTRUCTION is **CONFIRMED**: c2s `0x000E`/`0x000F` carry exactly
+> `[agent, sequence, attribute]`, the client predicts locally before sending, and
+> `0x0036` is the ACK that retires the prediction. Two refinements to this paragraph:
+> `+0x410` is a **LIFO stack of retired sequences the allocator pops from**, not a
+> write-only log, and `+0x420` is its fresh counter. **`+0x438` is the attribute-point
+> TOTAL** (§32.5) — 200 in all 8 live sightings of `0x0037`, and corroborated by
+> `studies/unitsetup`, which named `0x0039` from a level-up burst by a different route.
+
 Two more wire facts. `0x00B7` AGENT_PROFESSIONS reaches attribState exactly as heroes §14
 said from the other side: its handler's worker `0x00813980` writes the `+0x6BC` profession
 store, then biases `+0xAC` and calls the `:435` checker — one opcode, both stores, in that
@@ -2556,6 +2565,11 @@ Apply `0x00818780`) is reached through a four-instruction shim at `0x008AB070` w
 **zero direct callers** — vtable-reached from somewhere unread, so "not wired to any
 opcode" is DOWNGRADED to "not directly wired; indirect caller unknown" (the skeptic's
 correction — the tracer's chain was right, the conclusion overreached).
+*(**Read the same day, §32.6:** `0x008AB070`'s address occurs exactly once in the image,
+in a six-entry function-pointer table immediately after the string
+`P:\Code\Gw\Ui\Game\Attributes\AttribBtns.cpp` — it is the attribute panel's **minus
+button**, and `0x008AB080` the plus. The original "not wired to any opcode" was right
+after all, now with a closed ancestor set and a positive control behind it.)*
 
 **Names: held.** No log format string names these APIs (this module asserts, it does not
 log), so there is no client-own name to take, and the mechanisms alone would make the
@@ -2697,3 +2711,210 @@ remover, which named the MODULE, which named the study that had already done the
 **Check the studies index for the module name before tracing anything.** The join is
 cheaper than the re-derivation, and this repo now has three data points saying the join
 is the step that gets skipped.
+
+## 32. The c2s side of the attribute family — a CLIENT-PREDICTION protocol, and the sequence is its handle (2026-08-19)
+
+§31.1 left `0x0036` read but unexplained: it dequeues a pending modifier and asserts
+`mod->sequence == sequence`, so *something* must mint that sequence, and the section's own
+next action was "read the c2s side for a sequence-carrying spend first." It does, and the
+answer is bigger than the sequence: **the attribute panel is a client-side prediction
+system with server reconciliation**, and this is the first such protocol identified
+anywhere in this repo.
+
+Five tracer reads plus a full skeptic pass on build 38833, then the whole thing found in a
+live retail capture. Four of the eight static claims came back corrected — all recorded
+below where they land, because two of them were mine.
+
+### 32.1 The loop
+
+```
+player clicks + or - on the attribute panel
+  | client, in this order (the order is measured, and it is not the obvious one)
+  |   1. append a 16-byte modifier slot to the pending queue at attribState+0x400
+  |   2. THEN allocate its sequence   (§32.2 -- the slot comes first)
+  |   3. write the modifier {sequence, attribute, rank delta, points delta}
+  |   4. APPLY it locally            0x00818780
+  |   5. recompute the derived costs 0x00818E40   (§32.4)
+  |   6. post frame 0x10000030 {agent, ENTRY POINTER}
+  |   7. send
+  c2s -> 0x000F ATTRIBUTE_INCREASE  [agent, sequence, attribute]   0x00818CE0
+         0x000E ATTRIBUTE_DECREASE  [agent, sequence, attribute]   0x00818A90
+  s2c <- 0x0036  [agent, sequence]                   retire prediction #sequence
+         0x0038  [agent, pointsAvailable]            authoritative
+         0x003B  [agent, attribute, base, effective] authoritative
+```
+
+**The three-message reply is an invariant, not a tendency: 14 of 14** in capture
+`20260818T132739`, every one at the same timestamp on the same connection. The other
+grouping in that corpus is `(0x0037, 0x003A)` — create-then-bulk-fill — **8 of 8**. Those
+two shapes are the entire s2c attribute vocabulary as retail uses it.
+
+`0x0036` is the ACK. Its worker **reverts first, then erases** (a correction to the order
+§31.1 implied), and pushes the retired sequence back onto the stack it came from — the
+client discards its guess precisely because the authoritative `0x0038`/`0x003B` are
+arriving in the same frame.
+
+### 32.2 The sequence is a LIFO stack index, which is why the corpus only ever shows 0
+
+**CORRECTED from §31.1, twice.** `+0x410` is not merely "processed sequences" and not a
+free *list*: it is a **LIFO stack** (`dec count; index` to pop, `store; inc count` to
+push), and `+0x420` is a fresh counter the constructor initialises to **0**. So a player
+spending one point at a time pops nothing, takes fresh sequence 0, and gets it handed
+straight back by the ACK — forever.
+
+The corpus agrees and explains itself: **all 14 spends carry sequence 0**, and the timing
+says why rather than leaving it a coincidence — acks land **25-48 ms** after each send
+while consecutive sends are **128-167 ms** apart, so the queue is never more than one
+deep. **Refutable prediction on record:** click faster than the round trip and sequence 1
+must appear.
+
+### 32.3 The arithmetic — nine transitions, both directions, zero free parameters
+
+The modifier's points delta is `+[record+i*20+0x10]` on the decrease path and
+`-[record+i*20+0x14]` on the increase path, and §32.4 shows both are recomputed from
+`s_attribPoints`. So the wire is fully predicted by a table read out of the same binary:
+
+| direction | series (capture `20260818T132739`) | rule |
+|---|---|---|
+| **increase** `0x0F` | points 74 -> 65 -> 54 -> 41 -> 25 -> 5 while rank climbs 7 -> 12 | spend = cost of the rank REACHED |
+| **decrease** `0x0E` | points 5 -> 25 -> 41 while rank drops 12 -> 10 | refund = cost of the rank LEFT |
+
+`s_attribPoints` = `[1,2,3,4,5,6,7,9,11,13,16,20,-1]` (`attribpoints.py`, sum 97 to rank
+12 — the published figure, corroborated against GWW in
+[heroes §12.4](../heroes/FINDINGS.md)). Nine transitions, every one exact. This is the
+check the house style asks for: it has no fitted parameter and the artifact could have
+refuted it at any of the nine.
+
+`0x003B`'s two values are `base` and `base + item bonus`: attribute 20 ran (10,11),
+(11,12), (12,13) across the series while 17 and 21 stayed (8,8) and (10,10). Cross-checked
+against `0x003A`'s column-major array, whose three parallel runs are **ids, base values,
+effective values** — `[17,20,21, 8,12,10, 8,13,10]` — which is what `authsrv.py`'s
+"measured column-major builder" has been emitting blind.
+
+### 32.4 `0x00818E40`, the piece nobody had read — costs are DERIVED, and it enforces the primary rule
+
+Both setters call it right after applying, and it is the reason `+0x10`/`+0x14` are always
+right: it **recomputes them from the new rank** via two thin readers of `s_attribPoints`
+one dword apart (`s_attribPoints[rank-1]` = the refund for the rank you hold,
+`s_attribPoints[rank]` = the price of the next). Then it prices the attribute **-1 —
+refuse — in three cases**: no profession, a profession this character does not have, or
+*an attribute that is some profession's PRIMARY when that profession is not this
+character's primary*. That last is the game's own "you cannot raise Strength as a
+secondary Warrior" rule, sitting in the client as one flag test.
+
+The flag comes from `s_attrib` (`ConstAttrib.cpp`, 51 x 20 B at `0x00A35740`,
+`{profession, selfIndex, nameStringId, descStringId, isPrimary}`) — and the check with no
+free parameter is that **isPrimary is set on exactly ten rows, one per profession 1..10**:
+attributes 0, 6, 12, 16, 17, 23, 35, 36, 40, 44 — Fast Casting, Soul Reaping, Energy
+Storage, Divine Favor, Strength, Expertise, Critical Strikes, Spawning Power, Leadership,
+Mysticism, in the published attribute-id order. [heroes §14.2](../heroes/FINDINGS.md)
+found the same ten rows from the other end; this is that reading confirmed by its
+consumer.
+
+**`s_attribPoints[12] = -1` is the rank cap**, so at rank 12 the increase path is refused
+by the very same test that refuses an unowned attribute. One sentinel, two rules.
+
+### 32.5 `+0x438` is the attribute-point TOTAL — §31.1's last NOT FOUND, closed by a cross-arc join
+
+Two lines settle it: `0x0037`'s creator writes its 3rd wire field to `+0x434`
+(`attribPointsAvail`) and its **4th to `+0x438`**, and `0x0039`'s worker writes its single
+wire dword to that same `+0x438`. In the live corpus `0x0037`'s 4th field is **200 in all
+8 sightings** — the wiki's level-20 attribute-point maximum, the number
+[heroes §12.4](../heroes/FINDINGS.md) recorded as what `attribPointsAvail` counts down
+from.
+
+And [studies/unitsetup](../unitsetup/FINDINGS.md) named `0x0039` **total attribute points**
+one day earlier, from a level-up burst checked against the wiki's per-level table
+(`0x0039 [agent, 10]` at a level-up to 3) — a completely different route, different
+capture, different arc. Two witnesses that share no method name the same field. **This is
+the third time in two days that a §31 question was answered by a study that already had
+it**, which is now less a coincidence than a finding about how this repo loses work.
+
+### 32.6 Reached only from the UI, proven with a positive control
+
+None of the three senders is reachable from the receive-handler band. The skeptic did not
+take `codescan --xrefs` for this: an independent scanner recovered 26,282 function starts
+from int3 runs, attributed every `E8`/`E9` rel32 to its enclosing function, swept all five
+sections at every alignment for each target's literal bytes, and reverse-BFSed the call
+graph. All three ancestor sets are **closed and tiny**, terminating in two UI modules:
+
+| sender | ancestors | terminal module |
+|---|---|---|
+| `0x00818A90` decrease | `0x0080D8D0` -> `0x008AB070` | `Ui\Game\Attributes\AttribBtns.cpp` |
+| `0x00818CE0` increase | `0x0080D990` -> `0x008AB080` | same, sibling slot |
+| `0x00818DF0` template | `0x0080D9B0` -> `0x0058ACC0` | `Ui\Game\Templates\TemplatesHelpers.cpp` |
+
+**Two corrections to §31.1 here.** The increase thunk is `0x0080D990`, **not** the
+`0x0080D970` this arc has been carrying (that is a different one-argument function). And
+§31.1's `0x008AB070` "vtable-reached from somewhere unread" is now read: its address
+appears **once** in the image, in a **six-entry function-pointer table immediately
+following the string `P:\Code\Gw\Ui\Game\Attributes\AttribBtns.cpp`** — the plus/minus
+button handlers. Not a mystery, a button.
+
+The positive control matters and was run: the same scanner against `0x008198D0` — a
+function independently proven network-reached — finds its caller and walks up to the
+`0x0036` table entry. A negative from a tool that cannot find a known positive is worth
+nothing.
+
+### 32.7 The third sender: `0x0010` is a template apply, and it is NOT predicted
+
+`0x00818DF0` (args: agent, count, attribute-id array, rank array) asserts the record
+exists, **discards it**, and forwards everything to the `0x0010` framer. It appends no
+modifier, calls neither the applier nor `0x00818E40`, and posts no frame — so a template
+apply is **send-only, with no local prediction at all**, unlike every single-point spend.
+Its caller passes a build template's two 12-dword arrays (ids, then ranks) after checking
+`targetPrimaryProf == templateData.profPrimary`.
+
+That also refines a verdict from [heroes §13](../heroes/FINDINGS.md): the template system
+was called "a RED HERRING… the player's save-my-build UI, not a delivery mechanism," on a
+reachability closure containing zero message handlers. Correct about *delivery* — and it
+does reach the wire, outbound, by this path. That closure was over s2c handlers; this is
+c2s.
+
+### 32.8 Two latent defects in the client, recorded because they are load-bearing for a server
+
+- **`0x0010`'s clamp exceeds its buffer.** The framer clamps each count to `0x40` but its
+  stack buffer holds **16** entries per array: `count >= 17` corrupts the second length
+  prefix and `count >= 32` walks the return address. Unreachable today (its only caller
+  passes 12), but **a server must never invite a client to send more than 16** — and our
+  server, if it ever emits attribute templates, inherits that cap as a hard rule.
+- **The decrease path has no bound check.** `0x00818CE0` asserts
+  `attrib < arrsize(attribState->attrib)` (`ChCliAttrib:177`); `0x00818A90` indexes
+  `[record + attrib*20 + 8]` with no check at all, and its thunk does not check either.
+  Latent rather than live — the button handler cannot produce a bad index.
+
+### 32.9 What this gives the server, and what it costs
+
+`studies/review` flagged long ago that **"you sat there spending attribute points and the
+server had nowhere to put them"** — `0x000E`/`0x000F` arriving x9 and unhandled. Our
+server still has no arm for any of the three. It now has a complete spec:
+
+> On `0x000F [agent, seq, attr]`: validate `attr < 51`, that the character owns the
+> attribute's profession and that a primary attribute belongs to the primary profession,
+> and that `pointsAvailable >= s_attribPoints[rank]`. Then reply, in one frame:
+> `0x0036 [agent, seq]`, `0x0038 [agent, pointsAvailable]`,
+> `0x003B [agent, attr, base, base+bonus]`. `0x000E` is the mirror with
+> `s_attribPoints[rank-1]` refunded.
+
+**The client will keep its prediction if the ACK never comes** — the modifier stays queued
+and `0x00819270` *re-applies every pending modifier for an attribute on top of each fresh
+authoritative value* (which is the single strongest piece of evidence that this queue is
+what this section says it is). So a server that sends `0x0038`/`0x003B` without `0x0036`
+does not merely leak a queue entry: it gets the client's guess re-stacked on top of its own
+authority, every time.
+
+### 32.10 Corrections this section owes
+
+Four claims of mine fell to the skeptic and are fixed above rather than quietly dropped:
+the increase thunk address (§32.6), the step order and the `0x10000030` payload — which
+carries the **entry pointer**, not the sequence (§32.1) — the "free list" that is a LIFO
+stack (§32.2), and the send pipeline: `0x00491DE0` is a **nullary getter for the connection
+object**, not a packet builder, so the real shape is `0x007DCF00(conn, len, buf)` and the
+two pushes before the getter belong to *its* call. Also confirmed-with-precision: the
+applier's clamps are **one-sided**, running only when a delta is negative.
+
+Named in `schema/overrides.json`: c2s `ATTRIBUTE_DECREASE` / `ATTRIBUTE_INCREASE` /
+`ATTRIBUTE_LOAD` (0x0E/0x0F/0x10 — upstream's names, previously its weakest evidence tier
+and now measured), and s2c `ATTRIBUTE_SPEND_ACK` (0x36), `ATTRIBUTE_POINTS_AVAILABLE`
+(0x38), `ATTRIBUTE_POINTS_TOTAL` (0x39, high — two independent arcs) and
+`AGENT_UPDATE_ATTRIBUTE` (0x3B).

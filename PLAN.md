@@ -2101,10 +2101,41 @@ readable surface unattended. And the `buff_side` probe ran the same night (skill
 MONITOR above the energy bar, `0x40` clears it while the effect icon stands, the
 countdown bar is record `+0x10`'s only visible reader (absent at 0.0, depleting at 30),
 and the upkeep icon needs no `0x0093`, which subtracts the one guessed consumer from the
-`+0x5BC` table.** Still open here, in cost order: what `0x0093`'s value
-dword is (now with "not the upkeep icon's gate" measured); names for
-`0x36/0x38/0x39/0x3B` (held — no client string names them; read the c2s side for a
-sequence-carrying spend first); `+0x438`'s meaning.
+`+0x5BC` table.**
+
+**THE C2S SIDE IS READ, AND THE ATTRIBUTE PANEL IS A CLIENT-PREDICTION PROTOCOL — §32,
+the first one identified in this repo.** The advice to "read the c2s side for a
+sequence-carrying spend first" was right and it paid: a click **queues** a 16-byte
+modifier at `attribState+0x400`, **applies it locally**, then sends `0x000E`/`0x000F`
+`[agent, sequence, attribute]`; the server answers with the fixed triple
+**`(0x0036` retire-prediction, `0x0038` points, `0x003B` attribute`)` — 14 of 14 in a
+live capture**, against `(0x0037, 0x003A)` create-then-fill 8 of 8. Nine live rank
+transitions price out **exactly** against `s_attribPoints` in both directions with no
+free parameter. Named: c2s `ATTRIBUTE_DECREASE`/`INCREASE`/`LOAD` (upstream's names,
+previously its weakest tier — now the direction assignment is measured and the two
+anonymous dwords are named), s2c `ATTRIBUTE_SPEND_ACK`, `ATTRIBUTE_POINTS_AVAILABLE`,
+`ATTRIBUTE_POINTS_TOTAL` (high — two arcs) and `AGENT_UPDATE_ATTRIBUTE`.
+**`+0x438` is CLOSED**: the attribute-point TOTAL, 200 in all 8 live sightings, and
+`studies/unitsetup` had already named `0x0039` from a level-up burst — the third cross-arc
+join in two days. `0x00818E40` (never read before) shows the rank costs are **derived,
+recomputed per change**, and enforces "you cannot raise a primary attribute of a
+profession that is not your primary" — with `s_attrib`'s isPrimary flag on exactly ten
+rows, one per profession, matching [heroes §14.2](studies/heroes/FINDINGS.md) from the
+other end. Two client defects on record: `0x0010`'s framer clamps to 64 with a 16-entry
+buffer, and the decrease path has no attribute bound check.
+
+**The server still has no arm for any of the three**, and that is now a *recorded* drop
+with a reason rather than a gap (`test_dispatch.py`'s `DROPPED_ON_PURPOSE`): the blocker
+is not knowledge — §32.9 is a complete spec — but **state**, since ranks come from a
+content row and the point budget is a constant sent for both of `0x0037`'s fields, which
+those fields' new meanings make wrong (we claim every point unspent while handing out
+ranks). One warning if anyone arms it: reply with the **whole** triple or none of it — the
+client re-stacks unacknowledged predictions on top of fresh authoritative values, so a
+half-arm is worse than the drop.
+
+Still open here, in cost order: what `0x0093`'s value dword is (now with "not the upkeep
+icon's gate" measured); giving the server a real attribute state so the three arms can
+land.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's

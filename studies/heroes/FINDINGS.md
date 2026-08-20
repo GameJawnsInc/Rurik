@@ -812,6 +812,16 @@ which is a check the artifact could have refuted.
 > `0x0036`–`0x003B`**, not just this pair: `0x0036` dequeues and UNAPPLIES a pending
 > modifier by sequence, `0x0038` sets the points then replays the queue, `0x0039` writes
 > `+0x438` (meaning still NOT FOUND), `0x003B` is the single-attribute form of `0x003A`.
+>
+> **And the c2s half, [pvpui §32](../pvpui/FINDINGS.md), same day:** all of that is one
+> **client-prediction protocol**. The player's click queues a modifier at `+0x400`,
+> applies it locally, and sends `0x000E`/`0x000F` `[agent, sequence, attribute]`; the
+> server answers with the fixed triple `(0x0036 ack, 0x0038 points, 0x003B attribute)` —
+> 14 of 14 in a live capture. `+0x438` is **NO LONGER NOT FOUND**: it is the attribute-
+> point TOTAL (200 in all 8 live `0x0037` sightings — the level-20 cap §12.4 records),
+> which is the same field `0x0039` writes and which `studies/unitsetup` named
+> independently from a level-up burst. §12.4's `s_attribPoints` table is what prices
+> every one of these transitions, exactly, in both directions.
 
 ### 13.2 The gate moved a third time, and then bit
 
