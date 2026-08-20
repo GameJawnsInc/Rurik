@@ -2150,13 +2150,23 @@ readers agreeing — one rendering it as a number, one gating on non-zero. That 
 §30.4 rather than contradicting it: no message declares which agents ARE minions (the
 roster panel decides that by its own flag test), but this one declares HOW MANY one agent
 has — so that section's heading, "there is no minion message", is corrected in place.
-Filed `AGENT_MINION_COUNT`, **medium** on the `PET_*` precedent: the meaning is measured
-from ArenaNet's own template, but there are **zero witnesses in 114,985 live s2c messages**
-across 13 captures and we have never sent one.
+**CONFIRMED ON A CLIENT the same night** (§33.5, captures `20260820T081504` /
+`20260820T082018`): sending 7 drew a minion icon reading **7**, tooltip *'You are currently
+controlling 7 minions.'*; sending 1 redrew it as *'1 minion.'* — the template's own `[s]`
+plural resolving, which nothing else could drive — and sending 0 removed the row while a
+buff icon sent alongside **stayed**, so the removal is specific. `AGENT_MINION_COUNT` is
+**high**. Retail usage is still unobserved (zero live witnesses): the meaning is measured,
+the usage is not.
 
-Still open here, in cost order: run the `minion_count` probe (written, prediction stated —
-send 7, the sentence must read seven; send 0, the indicator must vanish) to raise that name
-to high; giving the server a real attribute state so the three c2s arms can land.
+**And the run produced a method failure worth more than the result — §33.6.** The first
+run was called a null and was not: `--walk` and `--shots` do not overlap, so `hold*.png`
+begins after the probe has cleaned up and `w*.png` is the window that matters. Worse than
+the misread was the response — the artifact got a *mechanism* built from real disassembly
+("the row is a child frame, so a monitor must exist first"), and a second run appeared to
+confirm it. Both halves were wrong. A free positive control was sitting in the same frames
+and was read as data instead. Anchor frames by timestamp, not by filename glob.
+
+Still open here: giving the server a real attribute state so the three c2s arms can land.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
