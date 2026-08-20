@@ -2187,6 +2187,27 @@ for the owner rather than a gap in this one.
 
 ### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
 
+**2026-08-20, midday — A10 IS STAGED: the FA1 write-back, re-authored onto the PROVEN
+clock; the launch is the owner's.** Study §19; runbook `vault/research/archivewrite/
+A10-RUN.md`. The U7-era edit (§17.8 item 2's "re-author the payload") turned out to be
+**structurally a null** — it scaled the n3C tag table, while the sampler reads `blk2C`'s
+76,008 channel times and the clamp windows on the SAME clock (both max exactly
+22,883,332). The staged edit retimes that proven clock **×4 across 15 rows in place**
+(fourteen linked files + the shell's 234 coupled windows; 222949 dropped at +4 B of
+slack; n3C/`u32_0F`/n40 stay retail everywhere after a verifier showed no partial scaling
+preserves both measured couplings — "Design B"). Verified by **blind re-derivation, 15/15
+byte-identical, with a Design-A control red on 11 of 15**; two isolated rebuilds
+hash-identical; whole-4.2 GB diff zero unowned bytes; every row fits its own reservation
+(15018 at 1,016,720 B, +12,912). **Both launch outcomes are findings**: quarter-speed
+animation (foot slide is the shape cue) ⇒ playback timing lives in the linked key
+clock; null ⇒ it does not — sharpening `studies/anim`'s open timing question, and not
+dismissible as "file not read" since run 7 proved the channel renders. Named risk first
+in the failure list: ×4 exits retail's attested time envelope 3.09×. Procedure: baseline
+clip FIRST (no within-frame control exists), then `a10stage.py --deploy --yes`, the
+run-7-style harness line with `--walk`, video, `--verify-after`, `--retail --yes` or
+leave. **H8 is live** — a client ran in the shared run directory at 11:44 on 2026-08-20
+from another session; confirm nobody is mid-run before deploying.
+
 **2026-08-20, ~09:40 — A9 RAN, owner-driven, GREEN on every pre-registered prediction.
 THE RETAIL CLIENT READ A ROW THIS PROJECT CREATED.** Study §18.6. Owner at the keyboard:
 *"Hatcher with normal animations/proportions"* — which, by the measured load-time fact

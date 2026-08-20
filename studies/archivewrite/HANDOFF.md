@@ -298,6 +298,15 @@ And decoding ArenaNet's **own** row 8295 with an *upstream-faithful* `build_tabl
 `gwdat`'s zero-length repair, long labelled a divergence from both upstreams, is **required
 by ArenaNet's own archive**, so the shipping client must implement something equivalent.
 
+**THE FA1 WRITE-BACK IS STAGED — A10, 2026-08-20, study §19.** The U7-era edit was
+structurally a null (it scaled the n3C tag table; the sampler reads `blk2C` + the clamp
+windows, same clock, both max 22,883,332). The stage retimes the proven clock ×4 across
+15 rows in place — Design B, everything else retail, both measured couplings preserved by
+construction — blind-re-derived 15/15 byte-identical, rebuild hash-reproducible. Both
+launch outcomes are findings for `studies/anim`'s timing question. Runbook:
+`vault/research/archivewrite/A10-RUN.md` (baseline clip FIRST — no within-frame control
+exists). The launch is the owner's.
+
 **~~The one gap to carry into A8, with its fix already named.~~ CLOSED 2026-08-20, §17.2 —
 and the named fix was wrong in two details worth reading (§0 C-11):** retail's attested
 degenerate distance table declares **5**, not 2 (twelve witnesses, rows 8295–8306; 2/3/4
