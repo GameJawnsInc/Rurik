@@ -471,7 +471,56 @@ Every one of these, in the order they were written:
   and its identity from X and reported `identified: True` -- MEASURED, 308 of 315
   changed rows naming a file the after-image does not hold -- and the gate is the MFT
   BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
-  the same defect wearing the right name. Floor 75 -> 84),
+  the same defect wearing the right name. Floor 75 -> 84. **§§12-12d added
+  2026-08-20 with `assert_archive_safe`, the launch-side gate, floor 112 ->
+  149.** This is the one part of the file that checks a REFUSAL rather than a
+  verdict, because the two failure modes it stands in front of have no clean
+  error between them and the archive: a header whose CRC does not verify
+  tail-jumps `ArchiveOpen` into ArchiveCreate, which writes a fresh empty
+  archive over 4.2 GB with nothing logged, and one stale payload CRC costs the
+  whole `nextStream` chain the moment repair fires for an unrelated reason. The
+  two rules the gate ADDS to the ten each carry the control that shows the
+  pre-flight blind to them: an archive with a wrong MFT self-crc answers 10 of
+  10 clear and is still rejected by the client's own LoadMft, and an archive
+  whose row was rewritten LEGITIMATELY -- payload and crc agreeing, so every
+  integrity rule is green -- is a different world that only the fingerprints can
+  tell apart. The self-crc is compared against this file's own reading of the
+  rule rather than against `datwrite.mft_self_crc`, so the two can differ.
+  `deep=True` is pinned both ways (one generation refuses, the SAME archive
+  clears without deep, a planted second generation clears it), the identity tier
+  resolves a fingerprint DOCUMENT to its `rows` block and refuses one holding
+  two UNNAMED blocks rather than guessing which side of a profile to match, and
+  a full deep+fingerprinted run is proved to leave the file byte-identical by
+  sha256 -- which is what the LIVE path rests on, since run-live's archive
+  drifts on purpose and the gate may only read it. The three exit codes stay
+  apart through the real CLI, so an unreadable archive is 2 and never 1. **§12d
+  is the section the fix pass rewrote, and it is now about the CENSUS of launch
+  sites rather than a list of them.** It asks FOUR syntax trees whether each
+  calls the gate itself -- `session.run_client`, `drive_client.main`,
+  `livesession.preflight`, `deploy.launch` -- and the fourth is the correction:
+  the first revision named three and left out `drive_client.main`, the
+  standalone operator launcher and the OTHER of the two doors session.py's own
+  quoted comment is about (PLAN.md: "both launch sites (`drive_client.py`,
+  `session.py`) assert it"), so the gate stood in three of four launch paths,
+  which is the two-doors defect wearing the gate's own name. The list is
+  therefore held against a census DERIVED FROM DISK -- every non-test harness
+  file that hands an `exe` to `Popen` -- which reads {drive_client, livesession,
+  session} and is refutable in both directions: it fails against the old
+  three-site list and passes against the new four, so a fifth door cannot appear
+  unlisted. The live site is checked for the ORDER of its call as well as its
+  presence, with its own wrong-way-round control: a running client holds the
+  archive EXCLUSIVELY, so a gate written above the client census answers a
+  left-open live client "could not be read far enough to have findings" --
+  unreadable damage, no action named, on ArenaNet's own 4.2 GB copy -- while the
+  refusal written for exactly that case never runs. The same cause at the three
+  sites with NO census gets the errno its own sentence instead
+  (`LOCKED_REMEDY`), checked three ways: the remedy names the client on a
+  PermissionError, does NOT name it on a parse failure, and end to end the gate
+  names the lock exactly when the platform's own errno is the lock's. The
+  negative control stays: deleting the one line from a COPY of deploy.py flips
+  the check. MEASURED read-only over all EIGHT 4.2 GB archives in the vault:
+  every one clears, 6.0-7.1 s, and re-confirmed at 6.2 s after the fix pass.
+  Floor 112 -> 149),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
   2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
   that is the design**: refusing a container whose walk does not close is what
@@ -5372,4 +5421,69 @@ Every one of these, in the order they were written:
   applied by source surgery and reverted, worst 9 red for `_verify_blobs` sizing
   and hashing nothing; the counts MOVED between sweeps until they were re-taken
   with `-B`, because several sabotages add exactly ten characters and CPython
-  will reuse the previous same-size source's `.pyc`. Floor 84).
+  will reuse the previous same-size source's `.pyc`. Floor 84),
+  `toolkit/mapdata/test_overlay.py` (DECLARATIVE ARCHIVE PROFILES, and the
+  refindex gate is the thing being proved — from BOTH sides, because the gate
+  has two ways to answer emptily and each has its own positive control. Section
+  3 is the first: two heads are planted linking to the edited row and the plan
+  must REFUSE naming both — printing refindex's own floor sentence and blind
+  spots verbatim, plus the exact `acknowledge_shared_with = [...]` line to paste
+  — before any passing case below it is believed, because a bounded query fails
+  by answering EMPTY and an empty answer is the shape that looks like success.
+  The tier is checked from both sides: a real two-node bit-identical rig must be
+  acknowledged, while an all-zero degenerate key (572 retail heads sit in one
+  such group) must print its note, say outright that nothing is required, and
+  refuse nothing. Every id crosses `refindex.canonical_id` on both sides, so the
+  fixture gives row A two plain spellings — 60% of retail heads are multiply
+  named — and a COMPLETE declaration written in the other spelling must PASS
+  while a PARTIAL one in that spelling must still refuse naming only what is
+  missing. Section 3b is the SECOND positive control and it is about the INDEX
+  rather than the archive: a stamped, current, non-partial index still answers
+  EMPTY for a row whose only referrers are heads it could not READ, so A and B
+  keep their real FA8 lists naming C and have their container magic damaged to
+  `ffnX` — the archive proven healthy on all ten rules and every crc, the index
+  proven current with problems 2 and partial False, `who_reads(C)` proven `[]`,
+  and only then is the refusal believed. The blind spot must be declared by
+  COUNT (`accept_unread = N` in `[overlay]`), refused when undeclared, refused
+  when the number has moved in either direction, and NOT waivable for a partial
+  index, which gets no acknowledgement at all whether handed in or saved and
+  named by a manifest. Its sharpest check is the contrast: the same texture edit
+  against the archive whose containers DO read is refused for a real FA5
+  referrer, so the empty answer was the damage and not the truth. Also there: an
+  id the index resolves to no row says so out loud instead of passing silently,
+  a row that is ITSELF unreadable says that its empty co-wearer answer means
+  "not indexed" and never "nobody else wears it", and a file-id table poked in
+  place — which leaves the MFT stamp byte-identical, asserted, and which only
+  `--crc-sweep` can see, also asserted — makes the index and the archive name
+  two different rows for one id and is REFUSED naming both. Section 7 is a
+  sequence with no client in it: `--build`, `--deploy --yes`, `--retail --yes`,
+  `--verify-after` used to end with the post-flight naming a row `--retail` had
+  rewritten seconds earlier as one "the client wrote to", so the section runs
+  that exact sequence and requires a refusal, runs the re-build variant and
+  requires another, requires the two halves of a before-image to describe one
+  deploy (the record carries the snapshot's sha256), requires a hand-edited
+  before-image to be caught by its own digest, and requires the result to NAME
+  the moment it was measured against. Also: manifest refusals (unknown [overlay]
+  key, a name that is not [a-z0-9-]+, active==retail, two edits on one file id,
+  `stored` beside compression 0, C:\gw as EITHER archive); the fit arithmetic in
+  all three cells by hand, including `fit_of(100, 900, 600)`, the only pair of
+  numbers that can tell a donor-sourced grow_to from a payload-sourced one; a
+  file id named by two records refused rather than resolved to whichever sorts
+  first, with the silent `file_id_table` answer measured first as the sabotage
+  premise; `datwrite.declaration_fault` wired, so a compression-8 stream that
+  decodes to bytes other than its declared payload never reaches the archive; a
+  saved index loaded stamp-checked and a stale one refused both when named and
+  when handed in; build staging under the vault, byte-exact on the touched row
+  and untouched everywhere else, refusing a build that changed nothing; a
+  hand-edited build record caught by its own digest; the grow-back run for real
+  against a row shrunk to 100 B with its own 1,024 B standing free, datwrite
+  annexing and the journal recording the whole reservation; the three-valued
+  deploy premise with --yes on both writing verbs and a NEITHER state
+  hard-refused; verify-after detecting a simulated client write on an owned row
+  while reporting the archive itself still healthy; and the CLI's one-verb rule
+  and 0/2 exit codes. Builds its own archives, manifests and payloads in a
+  tempdir with RURIK_VAULT pointed at a temp vault, so there is no corpus to be
+  missing and nothing here reads the real one. Twenty-two sabotages measured,
+  and every one of them runs all 133 checks — an earlier pass had three that
+  CRASHED the run at checks 46, 51 and 74 and scored 0, 0 and 7, which is why
+  `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133).

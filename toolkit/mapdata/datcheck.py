@@ -98,6 +98,19 @@ WHAT THE SNAPSHOT HOLDS (FINDINGS 18.5):
     python toolkit/mapdata/datcheck.py --dat DAT --snapshot before.json
     python toolkit/mapdata/datcheck.py --dat DAT --diff before.json
 
+AND THE LAUNCH GATE, which is the pre-flight with the two rules it never made.
+`assert_archive_safe` is `cage.assert_launch_safe`'s counterpart for the data
+side: the cage decides from a binary's bytes whether it may be aimed at a given
+server, this decides from an archive's bytes whether a client may open it at
+all. It adds the MFT self-crc -- which `preflight()` has never checked, so an
+archive failing its own checksum reports 10 of 10 clear -- and the payload CRC
+sweep, and it refuses rather than reporting, because the failure modes here are
+a silent 4.2 GB rebuild and a whole-chain delete. Every launch site calls it
+itself; see the docstring for why that is not redundancy.
+
+    python toolkit/mapdata/datcheck.py --dat DAT --assert-safe
+    python toolkit/mapdata/datcheck.py --dat DAT --assert-safe --fingerprints F
+
 ROW NUMBERS, AND WHY EVERY ONE PRINTED HERE CARRIES ITS FILE ID. This tool and
 `archive.py` use ONE convention -- the raw MFT index, row 0 the descriptor, 16
 the client's `INDEX_FIRST_FILE` -- and they agree on every row of the archive a
@@ -144,10 +157,20 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import (Archive, ENTRY_SIZE, MFT_MAGIC,  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, MFT_MAGIC, FILE_MAGIC,  # noqa: E402
                      MFT_ROW_OF_ENTRIES_0, row_label,
                      FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW,
                      FIRST_CLAIMABLE_ROW)
+# THE MFT SELF-CRC FORMULA LIVES IN `datwrite.py` AND IS NOT COPIED HERE.
+# `assert_archive_safe` needs it -- the pre-flight has never checked it, which is
+# exactly the hole `datwrite.py:1462-1501` documents (a stale self-crc leaves
+# `--preflight` reporting 10 of 10 while the archive fails its own checksum) --
+# and a second expression of "the table with row 3's own 24 bytes skipped" is how
+# two readers of one field drift apart. Importing the writer opens nothing:
+# `datwrite` only ever opens a file inside `Writer`, and its module chain
+# (`archive`, `gwdat`) is the one this file already has. There is no cycle --
+# `datwrite.py` names this module in prose only.
+import datwrite  # noqa: E402
 
 SNAPSHOT_VERSION = 1
 
@@ -759,6 +782,360 @@ def crc_sweep(path, limit=None):
             "bad": bad, "size_on_disk": size}
 
 
+# -------------------------------------------------------------- launch gate --
+
+class ArchiveUnsafe(SystemExit):
+    """Refusing to hand this archive to a client. Never a warning.
+
+    A `SystemExit`, for the same reason `cage.CageError` is one: the caller of a
+    launch gate is a launch, and a refusal a caller can carry on past is a log
+    line rather than a gate.
+
+    `unreadable` keeps this module's two failure meanings apart at the CLI --
+    "this archive has findings" (exit 1) and "this file could not be read far
+    enough to have findings" (exit 2) -- which is the same separation `main()`
+    already makes for every other verb.
+    """
+
+    def __init__(self, message, unreadable=False):
+        super().__init__(message)
+        self.unreadable = unreadable
+
+
+# WHERE A FINGERPRINT DOCUMENT KEEPS ITS ROWS. MEASURED on
+# `vault/research/archivewrite/a10-fingerprints.json`, whose top level is
+# `stage / scale / built / toolkit / head / mft / rows` -- five provenance fields
+# and one row block, `{"11115": [94508, "0x592E1A6F", 8], ...}`. `overlay.py`
+# writes the same block shape for BOTH sides of a profile, so a document can hold
+# more than one row map. This tool never guesses which one the archive in front
+# of it is supposed to match: it takes a named block, or the only block there is,
+# and otherwise names the candidates and refuses.
+FINGERPRINT_ROW_KEYS = ("rows", "staged")
+
+
+def _is_row_block(obj):
+    """True for a `{row: [size, crc, compression]}` mapping, and only that."""
+    if not isinstance(obj, dict) or not obj:
+        return False
+    for key, val in obj.items():
+        try:
+            int(key)
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(val, (list, tuple)) or len(val) != 3:
+            return False
+    return True
+
+
+def _fingerprint_rows(fingerprints):
+    """(row -> (size, crc, compression), a string naming where it came from).
+
+    Accepts the dict itself, or a path to a fingerprint document. The crc may be
+    written either way round (`"0x592E1A6F"` as a10stage writes it, or a plain
+    int) because the file is JSON and both spellings survive a round trip; every
+    other field is an int and is required to be one.
+    """
+    if isinstance(fingerprints, dict):
+        doc, source = fingerprints, "a caller-supplied mapping"
+    else:
+        with open(fingerprints, "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+        source = str(fingerprints)
+    if _is_row_block(doc):
+        block, where = doc, source
+    else:
+        named = [k for k in FINGERPRINT_ROW_KEYS
+                 if isinstance(doc, dict) and _is_row_block(doc.get(k))]
+        if named:
+            block, where = doc[named[0]], "%s[%r]" % (source, named[0])
+        else:
+            candidates = sorted(k for k, v in doc.items()
+                                if _is_row_block(v)) if isinstance(doc, dict) else []
+            if len(candidates) == 1:
+                block = doc[candidates[0]]
+                where = "%s[%r]" % (source, candidates[0])
+            else:
+                raise ArchiveUnsafe(
+                    "REFUSING to read fingerprints from %s\n"
+                    "  This document holds %d row block(s) %s and none of them is\n"
+                    "  named %s, so which one the archive is supposed to match is a\n"
+                    "  GUESS -- and a fingerprint check run against the wrong side of\n"
+                    "  a profile passes on the archive it was meant to refuse.\n"
+                    "  Name the block, or hand assert_archive_safe the mapping itself."
+                    % (source, len(candidates), candidates or "",
+                       " or ".join(repr(k) for k in FINGERPRINT_ROW_KEYS)))
+    out = {}
+    for key, (size, crc, comp) in block.items():
+        crc = int(crc, 16) if isinstance(crc, str) else int(crc)
+        out[int(key)] = (int(size), crc & 0xFFFFFFFF, int(comp))
+    return out, where
+
+
+def self_crc_state(path, header=None, mft=None):
+    """(stored, computed) for row 3's own crc -- the MFT's self-checksum.
+
+    THE ONE CHECK `preflight()` DOES NOT MAKE, and the one whose absence is
+    written up as a real defect shape rather than a theoretical one: a `Writer`
+    that grows a row without `resync()` computes the self-crc over the stale
+    pre-growth extent, prints a confident `fixed` line, and leaves an archive
+    that fails its own checksum while `--preflight` still answers 10 of 10
+    (`datwrite.py:755-781`). Only `datwrite --verify` has ever looked, and
+    `--verify` is not a thing anyone runs before a launch.
+
+    The formula is `datwrite.mft_self_crc`, imported. See the import comment.
+    """
+    header = header or read_header(path)
+    mft = read_mft(path, header) if mft is None else mft
+    n = row_count(mft)
+    stored = struct.unpack_from(
+        "<I", mft, MFT_SELF_ROW * ENTRY_SIZE + datwrite.ENTRY_CRC)[0]
+    return stored, datwrite.mft_self_crc(mft, n)
+
+
+UNREADABLE_REMEDY = ("The archive could not be read far enough to have findings, "
+                     "which is not permission to open it with a client.")
+
+# THE ONE UNREADABLE CAUSE THAT IS NOT DAMAGE. A running client holds an
+# EXCLUSIVE lock on the archive it was launched from: while `Gw.exe` is up that
+# file cannot be opened even for reading, and Python raises `PermissionError`,
+# not a partial read (RUNBOOK, "The third copy of Gw.dat, and why it exists").
+# Left generic, the refusal above reads as corruption on a 4.2 GB copy and names
+# no action -- so the errno gets the sentence it earns. The launch sites also
+# order themselves around this (livesession.preflight runs its client census
+# BEFORE the gate, so a left-open client hits the refusal written for it), and
+# this line is what covers the sites that have no census to run.
+LOCKED_REMEDY = ("A client already running holds this archive open -- close every "
+                 "Gw.exe and re-run. That is a lock, not damage: only if nothing "
+                 "is running does this reading mean the file itself.")
+
+
+def _unreadable_remedy(exc):
+    """The remedy line for a refusal that could not read the archive at all."""
+    if isinstance(exc, PermissionError):
+        return LOCKED_REMEDY + " " + UNREADABLE_REMEDY
+    return UNREADABLE_REMEDY
+
+
+def assert_archive_safe(dat, fingerprints=None, deep=False, why="launch"):
+    """Refuse unless this archive is one a client may be handed. Read-only.
+
+    THE INVARIANT, in one sentence: **an archive a client opens must be one the
+    client will not REPAIR.** `cage.assert_launch_safe` decides from a binary's
+    bytes whether it may be aimed at a given server; this decides from an
+    archive's bytes whether it may be opened at all, and it is the same shape of
+    answer -- read the verdict from what is on disk, refuse with a message
+    naming the remedy, and return a dict describing what was cleared so the
+    caller can log what it let through rather than merely that it let something
+    through.
+
+    IT FAILS CLOSED ON EVERYTHING, and unlike the cage there is no cell where
+    that is the wrong default. The cage's stock-at-live cell proceeds through an
+    undeterminable firewall because the risk there is a STALL. Here every
+    uncertainty is on the same side: the client's repair phase 2 walks a bad
+    payload CRC back to its `FLAG_FIRST_STREAM` head and DELETES THE WHOLE
+    CHAIN, and a header whose CRC does not verify tail-jumps `ArchiveOpen` into
+    **ArchiveCreate**, which writes a fresh empty archive over 4.2 GB with no
+    logged error and no recovery path. There is nothing on the other side of the
+    scale to weigh those against, so a suspect archive never meets a client.
+
+    THE TIERS:
+
+      integrity (always)   the file header's magic and its CRC over 0x00..0x0C;
+                           `preflight()`'s ten open-time rules; the MFT self-crc
+                           (`self_crc_state`, the one rule the pre-flight has
+                           never made); and `crc_sweep`, the only tier that can
+                           see a stale payload CRC at all.
+
+                           MEASURED 2026-08-20 over all EIGHT 4.2 GB archives in
+                           the vault -- `dat_study`, five `run/` copies and two
+                           `run-live/` copies: every one CLEARS, in 6.0 to 7.1 s
+                           end to end. Both halves of that matter. The seconds
+                           are what make "run it before every single launch"
+                           affordable, and the eight clears are the positive
+                           control a fail-closed gate needs before it is wired
+                           into a launch path: a gate that reddens on the real
+                           target is not a gate, it is a tool nobody can run,
+                           which is exactly how one of the ten rules below had
+                           to be corrected on 2026-08-13.
+
+      deep=True            adds `generation_checks`: how many older MFT
+                           generations a repair would have to fall back on.
+                           OPT-IN, because it is a second whole-file read and
+                           because one generation is a fact about an archive's
+                           HISTORY -- a freshly cut copy has exactly one and is
+                           perfectly healthy. Run it before an archive is
+                           RISKED, not before every open.
+
+      identity (opt-in)    with `fingerprints`, every named row's (size, crc,
+                           compression) must match. This is what answers "is the
+                           profile I built the profile that is deployed", and it
+                           is NOT run on the live path.
+
+    ON THE LIVE PATH THIS VERIFIES AND NEVER MODIFIES, and it takes no
+    fingerprints there: `vault/run-live/`'s archive has its updater LIVE by
+    design and streams new content into itself during a real session, so it
+    legitimately drifts and a fingerprint check against it would refuse the one
+    configuration that works (RUNBOOK, "a live run writes new content into its
+    own Gw.dat"). Nothing in this module opens a file for writing.
+
+    EACH LAUNCH SITE CALLS THIS ITSELF rather than trusting an upstream caller,
+    which is `session.py`'s own rule about the cage and is quoted here because
+    it is the same rule: "A guard that only guards one of two doors is the shape
+    of the defect it is here to prevent -- vault/run held two patched binaries
+    and one was caged." There are FOUR of those doors, not two:
+    `session.run_client`, `drive_client.main`, `livesession.preflight` and
+    `deploy.launch`, and `test_datcheck.py` §12d holds that list against a census
+    of the harness files that hand an exe to `Popen`, because an enumerated list
+    of launch paths is only as good as its own census of them.
+
+    AND A SITE WITH A CLIENT CENSUS RUNS THAT FIRST. A running client holds an
+    EXCLUSIVE lock on the archive it was launched from, so while one is up this
+    function cannot read the file at all and answers `unreadable` -- a true
+    statement that names no action. Where a caller already knows how to say "a
+    client is running, close it" (`livesession.preflight`), that refusal must be
+    reached BEFORE this one; where it does not, `LOCKED_REMEDY` says it here.
+    """
+    path = os.path.abspath(dat)
+
+    def refuse(reason, remedy, unreadable=False):
+        raise ArchiveUnsafe(
+            "REFUSING to %s from %s\n  %s\n  %s" % (why, path, reason, remedy),
+            unreadable=unreadable)
+
+    try:
+        size_on_disk = os.path.getsize(path)
+        header = read_header(path)
+    except (OSError, ValueError, struct.error) as exc:
+        refuse("%s: %s" % (type(exc).__name__, exc),
+               _unreadable_remedy(exc), unreadable=True)
+
+    if header["raw"][:4] != FILE_MAGIC:
+        refuse("the file header's magic is %r, not %r"
+               % (header["raw"][:4], FILE_MAGIC),
+               "ArchiveOpen validates this before anything else; a copy that "
+               "fails it is REBUILT, not rejected.")
+    if header["crc_stored"] != header["crc_computed"]:
+        refuse("the header CRC over 0x00..0x0C is stored 0x%08X, computed 0x%08X"
+               % (header["crc_stored"], header["crc_computed"]),
+               "Validated at 0x0047B6D2 on EVERY open, and the failure route "
+               "tail-jumps to ArchiveCreate (0x004797EC), which overwrites the "
+               "whole archive with a fresh empty one. Restore this copy from its "
+               "donor; do not launch anything at it.")
+
+    try:
+        checks, facts = preflight(path)
+        mft = read_mft(path, header)
+        stored, computed = self_crc_state(path, header, mft)
+        sweep = crc_sweep(path)
+    except (OSError, ValueError, KeyError, struct.error) as exc:
+        refuse("%s: %s" % (type(exc).__name__, exc),
+               _unreadable_remedy(exc), unreadable=True)
+
+    failed = [c for c in checks if not c.ok]
+    if failed:
+        refuse("%d of %d open-time rules FAILED:\n    %s"
+               % (len(failed), len(checks),
+                  "\n    ".join(c.line() for c in failed)),
+               "Every one of these is something the CLIENT does at open, so a "
+               "copy that fails one produces a repair, a silent delete or an "
+               "assert -- never a clean error. "
+               "python toolkit/mapdata/datcheck.py --dat %s --preflight" % path)
+
+    if stored != computed:
+        refuse("the MFT self-crc is stored 0x%08X, computed 0x%08X" % (stored,
+                                                                       computed),
+               "LoadMft checks this and the pre-flight does not, so an archive "
+               "in this state reports 10 of 10 clear and is still rejected by "
+               "the client. It is the shape a grow-without-resync leaves "
+               "(datwrite.py:755-781). Fix it with "
+               "`python toolkit/mapdata/datwrite.py --dat %s --verify` and the "
+               "journal that wrote it." % path)
+
+    if sweep["bad"]:
+        rows = ", ".join(
+            "%s (%s)" % (row_label(i), whyrow) for i, _r, _g, whyrow
+            in sweep["bad"][:6])
+        refuse("%d row(s) whose payload does not match its stored CRC: %s%s"
+               % (len(sweep["bad"]), rows,
+                  " ..." if len(sweep["bad"]) > 6 else ""),
+               "The client's repair phase 2 walks each of these back to its "
+               "FLAG_FIRST_STREAM head and deletes the WHOLE chain -- extents "
+               "freed, rows memset, file-id record dropped -- the moment repair "
+               "fires for any reason at all.")
+
+    gens = None
+    if deep:
+        try:
+            gen_checks, gens = generation_checks(path)
+        except (OSError, ValueError, struct.error) as exc:
+            refuse("the generation scan could not run: %s: %s"
+                   % (type(exc).__name__, exc),
+                   "A deep gate that cannot read the file is not a pass.",
+                   unreadable=True)
+        gen_failed = [c for c in gen_checks if not c.ok]
+        if gen_failed:
+            refuse("the generation census FAILED:\n    %s"
+                   % "\n    ".join(c.line() for c in gen_failed),
+                   "This is an UPPER BOUND -- ScanMft's shape gate only, not "
+                   "LoadMft's full validation -- so a census this thin is worse "
+                   "than it looks. Take a fresh copy from the donor before "
+                   "risking this one, or drop deep=True if history is not what "
+                   "you are gating on.")
+
+    identity = None
+    if fingerprints is not None:
+        want, where = _fingerprint_rows(fingerprints)
+        n = row_count(mft)
+        for row in sorted(want):
+            size, crc, comp = want[row]
+            if row >= n:
+                refuse("fingerprinted row %d does not exist in this archive "
+                       "(%d rows)" % (row, n),
+                       "The fingerprints in %s were taken from a DIFFERENT "
+                       "archive. Ask which profile is deployed with "
+                       "`overlay.py --status`." % where)
+            got = row_fields(row_bytes(mft, row))
+            have = (got["size"], got["crc"], got["extra_bytes"])
+            if have != (size, crc, comp):
+                refuse("%s does not match its fingerprint:\n"
+                       "    want size %d crc 0x%08X compression %d\n"
+                       "    have size %d crc 0x%08X compression %d"
+                       % (row_label(row), size, crc, comp, *have),
+                       "This archive is not the one %s describes. Ask what IS "
+                       "deployed with `overlay.py --status MANIFEST` rather "
+                       "than launching at it." % where)
+        identity = {"source": where, "rows": len(want)}
+
+    cleared = {
+        "dat": path,
+        "why": why,
+        "size_on_disk": size_on_disk,
+        "rows": row_count(mft),
+        "mft_offset": header["mft_offset"],
+        "mft_sha256": hashlib.sha256(mft).hexdigest(),
+        "header_crc": header["crc_stored"],
+        "preflight": [c.name for c in checks],
+        "self_crc": stored,
+        "crc_sweep": {"checked": sweep["checked"], "skipped": sweep["skipped"]},
+        "deep": bool(deep),
+        "generations": None if gens is None else
+                       sum(1 for g in gens if g["shape_ok"]),
+        "identity": identity,
+        "file_id_sha256": facts["file_id_sha256"],
+    }
+    cleared["summary"] = (
+        "%s: %d rows, %d B, %d of %d open-time rules, self-crc 0x%08X, "
+        "%d payload CRC(s) recomputed, MFT sha256 %s%s%s"
+        % (os.path.basename(path), cleared["rows"], size_on_disk,
+           len(checks), len(checks), stored, sweep["checked"],
+           cleared["mft_sha256"][:16],
+           "" if gens is None else
+           ", %d MFT generation(s)" % cleared["generations"],
+           "" if identity is None else
+           ", %d row(s) match %s" % (identity["rows"], identity["source"])))
+    return cleared
+
+
 # ----------------------------------------------------------------- snapshot --
 
 def scan(path):
@@ -1120,16 +1497,48 @@ def _main(argv=None):
     ap.add_argument("--crc-sweep", action="store_true",
                     help="recompute every USED row's payload CRC from disk. "
                          "Reads the whole file (~3 s for 4.2 GB)")
+    ap.add_argument("--assert-safe", action="store_true",
+                    help="the launch gate: header, the ten open-time rules, the "
+                         "MFT self-crc and every payload CRC, as one verdict")
+    ap.add_argument("--fingerprints", metavar="FILE",
+                    help="with --assert-safe: an overlay fingerprint document; "
+                         "every row it names must still match")
+    ap.add_argument("--deep", action="store_true",
+                    help="with --assert-safe: add the MFT generation census "
+                         "(a second whole-file read)")
     ap.add_argument("--json", metavar="FILE", help="also write the result as JSON")
     args = ap.parse_args(argv)
 
     if not (args.preflight or args.snapshot or args.diff
-            or args.generations or args.crc_sweep):
+            or args.generations or args.crc_sweep or args.assert_safe):
         ap.error("nothing to do: pass --preflight, --snapshot, --diff, "
-                 "--generations or --crc-sweep")
+                 "--generations, --crc-sweep or --assert-safe")
 
     rc = 0
     payload = {}
+
+    # THE GATE ANSWERS FIRST AND ALONE. A refusal returns here rather than
+    # falling through to the other verbs, because printing a row table out of an
+    # archive this tool has just refused to let near a client is how a refusal
+    # gets read as a report.
+    if args.assert_safe:
+        try:
+            cleared = assert_archive_safe(args.dat, fingerprints=args.fingerprints,
+                                          deep=args.deep, why="launch")
+        except ArchiveUnsafe as exc:
+            print(str(exc))
+            return 2 if exc.unreadable else 1
+        print("archive gate: %s" % cleared["summary"])
+        print("  %s" % ROW_CONVENTION)
+        print("  cleared: %s" % ", ".join(cleared["preflight"]))
+        payload["assert_safe"] = cleared
+        if not (args.preflight or args.snapshot or args.diff
+                or args.generations or args.crc_sweep):
+            if args.json:
+                with open(args.json, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=1)
+                print("json -> %s" % args.json)
+            return 0
 
     if args.preflight:
         baseline = load_snapshot(args.baseline) if args.baseline else None

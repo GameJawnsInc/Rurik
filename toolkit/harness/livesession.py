@@ -125,6 +125,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientpatch"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 import accounts  # noqa: E402
 import marks  # noqa: E402
 import origin  # noqa: E402
@@ -1151,6 +1152,30 @@ def preflight(account_label, exe, live_host, want_windivert=True):
     if running != 0:
         raise LiveError(f"{running} Gw.exe already running -- a live run is ONE client. "
                         f"Close them first (PLAN §6.1: one client, human cadence).")
+
+    # The archive half of the same gate, run HERE rather than trusted from the
+    # loopback site -- session.py's own rule: a guard that only guards one of two
+    # doors is the shape of the defect it is here to prevent. INTEGRITY ONLY, and
+    # no fingerprints: run-live's updater is LIVE by design and streams new map
+    # content into this very archive during a session, so it drifts on purpose
+    # and a fingerprint check here would refuse the one configuration that works.
+    # It verifies and never modifies -- nothing in datcheck opens a file to write.
+    #
+    # AFTER the client census, and the order is load-bearing rather than tidy. A
+    # running client holds an EXCLUSIVE lock on the archive it was launched from,
+    # so while one is up this file cannot be opened even for reading -- Python
+    # raises PermissionError, not a partial read (RUNBOOK, "The third copy of
+    # Gw.dat, and why it exists"). Written ABOVE the census -- as it was for one
+    # revision -- the gate answers a left-open client with "the archive could not
+    # be read far enough to have findings", which on run-live's 4.2 GB copy of
+    # ArenaNet's own archive reads as corruption and names no action, and the
+    # refusal written for exactly that case never runs. a10stage.swap's own order
+    # is the precedent: probe the client first, read the archive second.
+    # test_datcheck.py §12d checks this order, not just the call.
+    import datcheck                     # toolkit/mapdata, already on sys.path
+    live_dat = os.path.join(os.path.dirname(exe), "Gw.dat")
+    cleared = datcheck.assert_archive_safe(live_dat, why="launch at the live service")
+    print(f"  [ok] archive: {cleared['summary']}", flush=True)
 
     if want_windivert:
         wc._load_windivert()      # raises WinDivertError (a LiveError) if absent/unelevated
