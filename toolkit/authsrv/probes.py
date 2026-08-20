@@ -3492,6 +3492,40 @@ def _buff_type_steps(agent_id):
     ]
 
 
+def _minion_count_steps(agent_id):
+    """Is 0x0093's value dword the agent's MINION COUNT?
+
+    studies/pvpui/FINDINGS.md 33 says yes, from the client's own display
+    template: reader 0x00521520 passes the value to TextApi as %num1% of
+    string 50499, 'You are currently controlling %num1% minion[s].' Nothing
+    has ever been observed to move on a screen, because the opcode has ZERO
+    witnesses in 114,985 live s2c messages -- so the reading is static-only
+    and this is what would break it.
+
+    Seven is deliberate: it is not 0, not 1, and not a plausible default, so
+    a sentence reading "7" cannot be a coincidence of some other field.
+    """
+    return [
+        Step(2.0, 0x0093, [agent_id, 7],
+             "0x0093: value 7 for the player's own agent",
+             "the effect area above the skill bar, and its tooltip. "
+             "PREDICTION: an indicator appears whose text reads 'You are "
+             "currently controlling 7 minion[s]'. The number SEVEN is the "
+             "whole result -- any other number, or a sentence about "
+             "something other than minions, refutes studies/pvpui 33."),
+        Step(8.0, 0x0093, [agent_id, 1],
+             "0x0093: value 1 -- the singular",
+             "PREDICTION: the same sentence with 1, and the client's own "
+             "'[s]' plural machinery should drop the s. A count that does "
+             "not track this send is the other way this fails."),
+        Step(8.0, 0x0093, [agent_id, 0],
+             "0x0093: value 0",
+             "PREDICTION: the indicator DISAPPEARS. 0x005244F0 picks frame "
+             "code 8 and renders no number when the value is zero, and the "
+             "getter cannot tell 0 from an absent agent."),
+    ]
+
+
 def _buff_side_steps(agent_id):
     """Do 63 and 65 file the same buff under two different agents?
 
@@ -5889,6 +5923,20 @@ PROBES = {
              "calibration; read the tooltip with --walk hover:0.0442,0.0543,38. "
              "Keep buffId small -- GmEffect:3030 bounds it against a UI "
              "frame-code range.",
+    ),
+    "minion_count": lambda a, o: Probe(
+        question="Is 0x0093's value dword the number of minions the agent "
+                 "controls?",
+        predicts="Sending 7 makes the effects monitor read 'You are "
+                 "currently controlling 7 minion[s]'; sending 0 makes the "
+                 "indicator vanish. Any other number refutes the reading.",
+        steps=_minion_count_steps(a),
+        note="STATIC-ONLY until this runs: studies/pvpui 33 names the field "
+             "from the client's own template (string 50499, value as "
+             "%num1%), with three GmEffect readers agreeing, but the opcode "
+             "has ZERO occurrences in 114,985 live s2c messages and this "
+             "repo has never sent one. Confirming it raises the "
+             "AGENT_MINION_COUNT name from medium.",
     ),
     "buff_side": lambda a, o: Probe(
         question="Do opcodes 63 and 65 file the same buff under two different "
