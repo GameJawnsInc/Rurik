@@ -125,8 +125,7 @@ landing, per decision 6's own pattern: each ruling below, in place.**
 1. **Scope.** Confirm the box at the top: new identifiers only, no migration. *Get the
    owner's yes on this explicitly* — it is the decision that determines whether this arc
    costs an hour or two days. **DECIDED 2026-08-20 — new identifiers only, per this
-   file's own top box. The owner's explicit yes is NOT yet recorded; both PLAN.md rows
-   carry that note, and it is the refusing, cheap-to-reverse direction.**
+   file's own top box. RATIFIED by the owner the same day: `PLAN.md` §7 Q8.**
 2. **Prefix shape.** Recommendation: **arc-scoped word prefixes**, `GATEFIRE-C3`,
    `AW-A5`, `CUSTOMAREA-D1` — following §2.5's proof rather than inventing. The
    alternative is bare letters plus a mandatory "in the gate-fire arc" in prose, which

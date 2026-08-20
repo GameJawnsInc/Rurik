@@ -12,7 +12,8 @@ authority remains `PLAN.md` §3.
 > in the documents, in the commit messages and in the owner's own memory of what happened.
 > A mass rename was considered and **refused**: it is the exact shape of the 2026-08-12
 > provenance scrub, where 46 citations were rewritten across sixteen documents and all 46
-> were reverted. Read the box at the top of [HANDOFF.md](HANDOFF.md) before proposing one.
+> were reverted. Owner-ratified: `PLAN.md` §7 Q8 (2026-08-20). Read the box at the top of
+> [HANDOFF.md](HANDOFF.md) before proposing one.
 > The convention below helps documents written after it; §4's resolver is what helps with
 > the ones written before it, and it is the half that pays off today.
 
