@@ -3443,6 +3443,9 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
+# The number the armour term subtracts. See the content row: ours, chosen to
+# sit on the Isle's own measured baseline rather than invented freely.
+ENEMY_ARMOR_RATING = _ENEMY.get("armor_rating")
 # Allegiance BY NAME, so a content row can say what a body is without carrying a
 # FourCC. The three values are the client's own constants (agents.py, read out
 # of the image); "hostile" is any unrecognised value, which is why it is the
@@ -3531,6 +3534,137 @@ def weapon_damage_range(item):
 # read", and the swing falls back to HIT_FRACTION -- so `--no-weapon` and a
 # bare machine both keep working and neither silently deals zero.
 PLAYER_SWING_DAMAGE = weapon_damage_range(agents.STARTER_HAMMER)
+
+
+# ---- THE ARMOUR TERM AND THE CRITICAL -------------------------------------
+#
+# Both were MEASURED on retail traffic at the Isle of the Nameless
+# (`studies/isle/FINDINGS.md` "Rung 7, LIVE #2", capture 20260818T132739, 495
+# damage events) and then sat unused for two days while this function rolled a
+# number and sent it straight through. The model, whose band test has ZERO free
+# parameters -- AR60's support fixes the scale, and AR80 -> 13..19 and
+# AR100 -> 9..14 follow exactly:
+#
+#     points = round( roll * mult * 2 ** ((SL - AR) / 40) )
+#     SL = 5 * rank                   for rank <= T
+#        = 5 * T + 2 * (rank - T)     above it,   T = (level + 4) / 2
+#
+# WHAT IS MEASURED AND WHAT IS NOT, because the study states its own scope
+# narrowly -- "for a customized martial weapon, at level 20, against stationary
+# level-20 targets, on one character" -- and this is the wiring, not the claim:
+#
+#   MEASURED  the 2^((SL-AR)/40) form and the divisor. The mean-ratio fit gives
+#             D = 39.5, 95% CI [37.30, 42.00]; the study's sharpest correction
+#             is that this interval must never be quoted bare, so 40 is taken
+#             as the SOURCED value below rather than as our own fit.
+#   WIKI      the threshold T = (level+4)/2 and +2 per rank above it (GWW
+#             "Damage calculation", rev. 2025-08-01 -- which carries its own
+#             {{unofficial}} banner, so wire and wiki agreeing here is
+#             corroboration between two independent observers and NOT
+#             confirmation against a primary source).
+#   OURS      applying any of it at level 1. The Isle measured one level.
+#
+# THE STUDY'S 1.20 IS NOT A UNIVERSAL CONSTANT AND IS DELIBERATELY ABSENT.
+# That character's sword was "Damage +20%, no inscription, customized" and the
+# fit cannot separate the two; our hammer is neither, so `mult` is 1.0. The day
+# a +N% damage modifier is decoded onto an item, that is where it comes from --
+# not from a number copied out of someone else's weapon.
+ARMOUR_TERM = True          # --no-armour-term is the control
+ARMOUR_DIVISOR = 40.0
+# Weapon type -> the attribute it scales on. Hammer (item_type 15) scales on
+# Hammer Mastery (19). RETAIL PUTS THIS ON THE ITEM, in modifier identifier 633
+# `{attribute, rank}` (`studies/itemmods/FINDINGS.md` 5) -- a weapon carrying
+# one should read it from there. Ours carries no 633, so the type mapping
+# stands in, and it is a table rather than a constant so the next weapon is a
+# row instead of an edit.
+WEAPON_TYPE_ATTRIBUTE = {15: 19}
+
+# The critical, from the same run and pre-registered before it:
+#   * property 17 REPLACES property 16 -- p16 + p17 = 495 = exactly one event
+#     per swing, at a 1.330 s median gap in every block;
+#   * a critical deals the weapon range's MAXIMUM. Zero variance, 100 of 100
+#     events, 10 of 10 blocks;
+#   * and the multiplier is an ARMOUR REDUCTION OF 20, expressed once. The
+#     study corrected itself for presenting "x1.414" and "at AR-20" as two
+#     agreeing facts when 2^(20/40) = sqrt(2) makes them one statement, so it
+#     is written here the way it is actually true -- and the multiplier then
+#     falls out of the term above instead of being a second constant that
+#     could drift away from it.
+CRITICAL_ARMOUR_REDUCTION = 20.0
+# Crit RATE by attribute rank, measured on one body at one armour rating.
+# FIVE POINTS AND NOTHING BETWEEN THEM. GWW says crit chance depends on rank
+# and gives no formula this repo has sourced, so none is written: the table is
+# the measurement and `critical_rate` interpolates, which is OURS and says so.
+CRITICAL_RATE_BY_RANK = {8: 0.0625, 9: 0.1569, 11: 0.1860,
+                         12: 0.2368, 13: 0.3429}
+# The rank-8 block is the one the crit multiplier does NOT fit -- it admits
+# c in [1.20530, 1.36600) while the nine met blocks require c >= 1.40866, and
+# the intervals do not touch. That defect belongs to the unmet-requirement
+# term, which `studies/isle` REFUTES at 3.5% and explicitly forbids replacing
+# ("the data cannot say which term is wrong"). So this server models no
+# unmet-requirement penalty at all rather than shipping a guess.
+
+
+def attack_strength(rank, level=20):
+    """SL -- the attacker's damage level, from its weapon attribute rank."""
+    threshold = (level + 4) / 2.0
+    if rank <= threshold:
+        return 5.0 * rank
+    return 5.0 * threshold + 2.0 * (rank - threshold)
+
+
+def critical_rate(rank):
+    """Chance of a critical at `rank`. Measured at 8/9/11/12/13, ours between."""
+    ranks = sorted(CRITICAL_RATE_BY_RANK)
+    if rank <= ranks[0]:
+        return CRITICAL_RATE_BY_RANK[ranks[0]]
+    if rank >= ranks[-1]:
+        return CRITICAL_RATE_BY_RANK[ranks[-1]]
+    lo = max(r for r in ranks if r <= rank)
+    hi = min(r for r in ranks if r >= rank)
+    if lo == hi:
+        return CRITICAL_RATE_BY_RANK[lo]
+    a, b = CRITICAL_RATE_BY_RANK[lo], CRITICAL_RATE_BY_RANK[hi]
+    return a + (b - a) * (rank - lo) / (hi - lo)
+
+
+def swing_damage(rank, armour, damage_range, level=20, critical=False,
+                 mult=1.0, roll=None):
+    """One swing in health points, armour and criticals included.
+
+    A critical takes the range's MAXIMUM and reduces the target's armour by 20;
+    an ordinary swing rolls inside the range at full armour. Returns a float so
+    the caller keeps the same `_damage_fraction` guard it always had.
+    """
+    lo, hi = damage_range
+    if critical:
+        roll = float(hi)
+        armour = armour - CRITICAL_ARMOUR_REDUCTION
+    elif roll is None:
+        roll = float(random.randint(lo, hi))
+    sl = attack_strength(rank, level)
+    return max(0.0, round(roll * mult * 2.0 ** ((sl - armour) / ARMOUR_DIVISOR)))
+
+
+def player_weapon_rank(state):
+    """The player's EFFECTIVE rank in the equipped weapon's attribute.
+
+    Effective, not base: pvpui 34.6 established the item bonus is display-only
+    for POINT ACCOUNTING -- refunds price off the base -- and said nothing
+    about damage, where Guild Wars uses the boosted rank. That reading is OURS
+    and is the one thing here a capture could overturn cheaply.
+
+    Returns None when there is no state to read, so a probe rig with no
+    attribute model falls back rather than asserting.
+    """
+    attribute = WEAPON_TYPE_ATTRIBUTE.get(
+        (agents.STARTER_HAMMER or {}).get("item_type"))
+    if attribute is None:
+        return None
+    try:
+        return attribute_state(state).effective_of(attribute)
+    except Exception:                                     # noqa: BLE001
+        return None
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -4173,15 +4307,27 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     # ArenaNet's range for this weapon; the roll inside it is ours, and so is
     # the absence of every term Guild Wars puts around it (armour, attribute
     # rank, criticals). See weapon_damage_range.
-    if EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
+    critical = False
+    rank = player_weapon_rank(state) if ARMOUR_TERM else None
+    armour = agent.get("armor_rating")
+    if EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
+            and armour is not None:
+        critical = random.random() < critical_rate(rank)
+        dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
+                             critical=critical) + bonus_damage
+    elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
+        # No rank or no armour rating on the target: the weapon's raw range,
+        # which is what this server did between 2026-08-20 and the armour term
+        # landing. Kept as a fallback rather than defaulting the armour to a
+        # number, because a made-up AR would silently scale every hit.
         lo, hi = PLAYER_SWING_DAMAGE
         dealt = float(random.randint(lo, hi)) + bonus_damage
     else:
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
-    frac = _damage_fraction(dealt, agent["max_health"],
-                            agents.PROP_DAMAGE,
-                            "one swing" if not bonus_damage
-                            else f"one swing +{bonus_damage:.0f}")
+    prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
+    frac = _damage_fraction(dealt, agent["max_health"], prop,
+                            ("one critical" if critical else "one swing")
+                            + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
     agent["last_hit"] = now
 
     # A swing is two events, and sending only the second is why the first
@@ -4213,9 +4359,13 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
     # and the value is a FRACTION of the target's maximum health. Both were
     # measured (studies/enemy/PLAN.md 6b, 6f), and the fmul that makes it a
     # fraction is at 0x0081823C in the client.
+    # 17 REPLACES 16 rather than annotating it -- p16 + p17 = 495 = one event
+    # per swing across the whole Isle rung-7 capture. Sending both would draw
+    # two numbers for one hit.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID, frac],
-         f"damage {dealt:.0f} to agent {target_id}")
+         [prop, target_id, PLAYER_AGENT_ID, frac],
+         f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
+         f"to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -6132,6 +6282,7 @@ def spawn_enemy(send, state, origin, conn_id):
     entry = {
         "pos": (x, y), "plane": plane,
         "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
+        "armor_rating": ENEMY_ARMOR_RATING,
         "dead": False,
         "name": agents.HATCHER["name"],
         # What create_agent_world needs to rebuild this agent from the entry alone,
@@ -10124,6 +10275,13 @@ def main():
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
                          "assume and what every session before 2026-08-06 was.")
+    ap.add_argument("--no-armour-term", action="store_true",
+                    help="drop the armour exponent and criticals from the "
+                         "player's swing, leaving the weapon's raw range. The "
+                         "control for anything reading a damage number: with "
+                         "it a swing is 3-5 flat, without it 3-5 is scaled by "
+                         "2^((SL-AR)/40) and a critical replaces it "
+                         "(studies/isle rung 7).")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -10606,6 +10764,12 @@ def main():
         global EQUIP_WEAPON
         EQUIP_WEAPON = False
         print("NO WEAPON: the character's four weapon slots stay empty.")
+
+    if a.no_armour_term:
+        global ARMOUR_TERM
+        ARMOUR_TERM = False
+        print("NO ARMOUR TERM: swings are the weapon's raw range, unscaled, "
+              "and no swing can be a critical.")
 
     if a.no_armour:
         global EQUIP_ARMOUR

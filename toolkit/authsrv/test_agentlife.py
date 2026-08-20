@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=230)
+LEDGER = checks.Ledger("agent lifetime", floor=240)
 
 
 def section_weapon_damage():
@@ -106,6 +106,124 @@ def section_weapon_damage():
               f"inside the range is OURS and uniform; Guild Wars' own "
               f"distribution is unmeasured, as are every term it puts around "
               f"the range -- armour, attribute rank, criticals")
+
+
+def section_armour_and_crit():
+    """The armour term reproduces ArenaNet's OWN measured bands, exactly.
+
+    This is the strongest check in the file and it has no free parameters.
+    `studies/isle` rung 7 published the damage model and, separately, the
+    point-value BANDS a level-20 Warrior with a customized 15-22 sword at
+    Swordsmanship 13 produced against three armour ratings in capture
+    20260818T132739 (495 damage events). Feed our implementation their weapon,
+    their rank and their armour ratings and it must land on their bands --
+    which the model can fail at six endpoints and does not.
+
+    Why that is worth more than a fixture: the bands came off retail traffic,
+    not out of this repo, and nothing here was tuned to them. A wrong divisor,
+    a wrong SL threshold, an off-by-one in the roll or a crit expressed as a
+    second multiplier instead of an armour reduction all move an endpoint.
+    """
+    import authsrv
+    import agents
+
+    print("\nN2. the armour term, against the Isle's measured point bands")
+    SWORD, RANK, MULT = (15, 22), 13, 1.20
+    BANDS = {60: (19, 27), 80: (13, 19), 100: (9, 14)}
+    for ar, (lo, hi) in BANDS.items():
+        # the roll is finer-grained than integer (>= ~40 steps, isle 3), so
+        # sample it finely rather than at the eight integer values
+        got = {authsrv.swing_damage(RANK, ar, SWORD, mult=MULT, roll=r / 8.0)
+               for r in range(SWORD[0] * 8, SWORD[1] * 8 + 1)}
+        LEDGER.ok(min(got) == lo and max(got) == hi,
+                  f"AR{ar}: our band is {int(min(got))}..{int(max(got))}, "
+                  f"retail's was {lo}..{hi}",
+                  f"from `round(roll * 1.20 * 2**((SL-AR)/40))` with SL={
+                      authsrv.attack_strength(RANK):g} at rank {RANK}. Zero "
+                  f"free parameters -- AR60's support fixes the scale and the "
+                  f"other two follow, so this can fail at six endpoints")
+
+    LEDGER.ok(authsrv.swing_damage(RANK, 60, SWORD, mult=MULT,
+                                   critical=True) == 39,
+              "and a critical at AR60/rank13 is 39, not 38",
+              "the crit takes the range MAXIMUM at AR-20. 39 is what `round` "
+              "gives and 38 is what `floor` gives -- studies/isle rules out "
+              "floor on exactly this number, so the rounding rule is pinned "
+              "here rather than assumed")
+
+    print("\nN3. the pieces the band test rests on")
+    LEDGER.ok(authsrv.attack_strength(12) == 60.0
+              and authsrv.attack_strength(13) == 62.0
+              and authsrv.attack_strength(9) == 45.0,
+              "SL is 5*rank to the threshold and +2 a rank above it",
+              "60 at rank 12, 62 at 13, 45 at 9 -- the threshold is "
+              "(level+4)/2 = 12 at level 20, WIKI-sourced and agreeing with "
+              "the wire from the opposite direction")
+    rates = authsrv.CRITICAL_RATE_BY_RANK
+    LEDGER.ok(set(rates) == {8, 9, 11, 12, 13}
+              and abs(rates[13] - 0.3429) < 1e-9,
+              "the crit rate table is the five MEASURED ranks and no more",
+              f"{rates} -- rising monotonically, which is why a damage cap or "
+              f"a fixed bonus is refuted. Rank 10 is absent because it was "
+              f"never observed; critical_rate interpolates and that is OURS")
+    mid = authsrv.critical_rate(10)
+    LEDGER.ok(rates[9] <= mid <= rates[11]
+              and authsrv.critical_rate(2) == rates[8]
+              and authsrv.critical_rate(99) == rates[13],
+              "and interpolation stays inside the measured points",
+              f"rank 10 -> {mid:.4f}, between rank 9's {rates[9]} and rank "
+              f"11's {rates[11]}; outside the table it CLAMPS rather than "
+              f"extrapolating a rate off the end of five points")
+
+    print("\nN4. 17 replaces 16, and the control turns the whole term off")
+    sent = []
+    send = lambda op, v, label="", quiet=False: sent.append((op, v, label))  # noqa: E731
+    state = {"agents": {10: {"name": "t", "dead": False, "died_at": 0.0,
+                             "health": 5000.0, "max_health": 5000.0,
+                             "last_hit": 0.0, "armor_rating": 60}},
+             "pos": (0.0, 0.0)}
+    both = 0
+    for _ in range(300):
+        sent.clear()
+        state["agents"][10]["last_hit"] = 0.0
+        authsrv.hit_enemy(send, state, 10, 1)
+        props = [v[0] for op, v, _ in sent
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+        if agents.PROP_DAMAGE in props and agents.GV_CRITICAL in props:
+            both += 1
+    LEDGER.ok(both == 0,
+              "no swing ever sends property 16 AND property 17",
+              "p16 + p17 = 495 = exactly one event per swing across the whole "
+              "rung-7 capture, so 17 REPLACES 16. Sending both would draw two "
+              "numbers on the client for one hit")
+
+    saved = authsrv.ARMOUR_TERM
+    authsrv.ARMOUR_TERM = False
+    try:
+        seen = set()
+        for _ in range(200):
+            state["agents"][10]["last_hit"] = 0.0
+            state["agents"][10]["health"] = 5000.0
+            authsrv.hit_enemy(send, state, 10, 1)
+            seen.add(5000.0 - state["agents"][10]["health"])
+    finally:
+        authsrv.ARMOUR_TERM = saved
+    lo, hi = authsrv.PLAYER_SWING_DAMAGE
+    LEDGER.ok(seen and min(seen) >= lo and max(seen) <= hi,
+              "CONTROL: --no-armour-term gives the weapon's RAW range back",
+              f"observed {sorted(seen)} inside {lo}-{hi}. A flag that changed "
+              f"nothing would pass every check above without the term ever "
+              f"being wired to the swing")
+
+    state["agents"][10].pop("armor_rating")
+    state["agents"][10]["last_hit"] = 0.0
+    state["agents"][10]["health"] = 5000.0
+    authsrv.hit_enemy(send, state, 10, 1)
+    dealt = 5000.0 - state["agents"][10]["health"]
+    LEDGER.ok(lo <= dealt <= hi,
+              "and a target with NO armour rating falls back, never asserts",
+              f"dealt {dealt} -- defaulting the AR to a number instead would "
+              f"silently scale every hit by something nobody chose")
 
 
 def main():
@@ -251,6 +369,7 @@ def main():
     section_enemy_skill()
     section_constants()
     section_weapon_damage()
+    section_armour_and_crit()
     section_opcode_pins()
     section_opcode_catalog()
     section_probe_encoding()
