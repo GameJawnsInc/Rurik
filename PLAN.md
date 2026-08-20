@@ -1452,6 +1452,33 @@ buff opcodes named (63–68). The `charCtx` container family closes at seven.
    struck target have not been watched**: making the player swing needs a click on a
    hostile, which the harness cannot aim, so that one is the owner's run.
 
+### Identifier conventions — the arc is OPENED, not landed (2026-08-20)
+
+[studies/idents/HANDOFF.md](studies/idents/HANDOFF.md) (new). No rung, no code, nothing
+landed — this entry exists so the handoff is not an orphan document.
+
+**The question that opened it:** a session writes "C-8 finished, C-9 next, before D-1
+can be approached", and the reader cannot tell which document defines `C-8`, what *kind*
+of thing it is, or whether `D-1` exists at all. **OBSERVED (2026-08-20):** 108
+single-letter work-item tokens across 10 documents. `A1`/`A2` are defined in three arcs,
+`C1`–`C3` in two, `P1`–`P4` in two. Worse than the collision, the same letter names
+different *categories* — `C-N` is a corrections ledger in `studies/archivewrite`, build
+steps in `studies/movement`, ladder rungs in `studies/customarea` — so knowing the arc
+still does not tell you what the token is. The census is a floor, not a total; §6 of the
+handoff says why.
+
+**One live defect falls out of it and does not depend on the rest.** §3's R ladder is
+duplicated by `HANDOFF.md`'s own R table, and the two have drifted: §3 carries `R0a`,
+`R0b`, `R5m` and `R1.5`; `HANDOFF.md:107-114` still carries the un-split `R0` and none
+of the other three. Overlapping-but-unequal names for the same rung, in the two
+documents a cold session is most likely to open first — which is the failure the top of
+`CLAUDE.md` and the header of §3 both exist to prevent. One commit fixes it.
+
+**Explicitly out of scope, and the handoff's first box refuses it:** renaming the 108
+existing tokens. That is the shape of the 2026-08-12 provenance scrub — 46 citations
+rewritten across sixteen documents, all 46 reverted once the cure was priced. New
+identifiers and a resolver only.
+
 ### Merchants — a player can now BUY from a server we wrote (2026-08-19)
 
 [studies/newopcodes/FINDINGS.md](studies/newopcodes/FINDINGS.md), the unit-setup arc.
