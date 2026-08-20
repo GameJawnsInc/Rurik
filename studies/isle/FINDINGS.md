@@ -1175,6 +1175,36 @@ From the three Isle captures, merged:
   concrete: **only five Students can attack, so at most five conditions arrive by
   being hit**, and any plan promising a ten-condition map from combat alone is
   over-promising by half.
+- **SLOT ORDER IS NOT POSITION ORDER, and the operator navigates by position.**
+  The line is walked south→north; the slot numbers are not. A rung-8 study sheet
+  built from the slot list alone would send the operator to the wrong bodies, so
+  the mapping is recorded here rather than re-derived per session:
+
+  | # from south | y | slot | model | side |
+  |---|---|---|---|---|
+  | 1 | 1173 | 161 | 130065 | **FOE** |
+  | 2 | 1424 | 160 | 130098 | **FOE** |
+  | 3 | 1680 | 163 | 116661 | **FOE** |
+  | 4 | 1918 | 162 | 158806 | ally |
+  | 5 | 2165 | 157 | 130065 | **FOE** |
+  | 6 | 2422 | 159 | 129922 | ally |
+  | 7 | 2686 | 158 | 116718 | ally |
+  | 8 | 2945 | 156 | 129922 | ally |
+  | 9 | 3193 | 164 | 129922 | ally |
+  | 10 | 3422 | 165 | 130065 | **FOE** |
+
+  So the five foes are positions **1, 2, 3, 5 and 10** — three together at the
+  south end, one past a single ally, then a ~1,250 u walk north to the last.
+  **Four allies sit between foes 5 and 10; the fifth (position 4) sits between
+  foes 3 and 5**, which is the trap in routing the `cracked` step off the walk
+  back south: stopping at foe 5 leaves one ally unvisited.
+- **Corroboration is uneven along the line, and the north end is the thin part.**
+  Slots **156-163 have two independent witnesses** — `20260817T231139` and
+  `20260818T132739` — agreeing on position to the byte and on allegiance. Slots
+  **164 and 165 have one** (`20260817T231139` only); the rung-7 run never went far
+  enough north to bring them into compass range. Position 10, the northernmost
+  foe, is therefore the least-corroborated body on the island's west edge, and its
+  absence on the day would be a **thin observation**, not a navigation error.
 
 ## 5. Degeneration, with the numbers sourced rather than recalled
 
