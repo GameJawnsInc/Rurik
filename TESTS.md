@@ -2600,10 +2600,65 @@ Every one of these, in the order they were written:
   exists to enable before a packet went out; the scan is against **cp1252**
   rather than ASCII, because the em dashes elsewhere in `authsrv.py` are fine
   and a blanket rule would be wrong, and its control plants a `U+26A0` and
-  requires the scan to still see it. Floor **69**, the bare-machine subset,
-  against a green **73** with `authsrv-20260819T114759-c1.jsonl` present; §10 is
-  the only fixture-bearing section (4 checks) and declares `LEDGER.skip` without
-  it. No client. ~1 s),
+  requires the scan to still see it. **§12 locks `--grant-suppress`**, the
+  EIGHTH candidate and the first that acts by sending **less** rather than by
+  sending something better. Three captures of 2026-08-20 earned it: keyboard
+  only (`182554`) is 283-287 u/s every interval with zero clicks, zero grants
+  and **0.00 hard jumps/min**; five clicks the server *refused* (`182934`) is
+  zero grants and zero warps; and the reproduction (`183311`) is the owner
+  holding S while spam-clicking forward — **196 clicks → 140 grants in 44 s**,
+  one every 0.13 s, **five hard jumps** (p50 1,372 u, max 3,010 u, 6.82/min)
+  with four of the five landing 0.10-0.23 s after a grant. `0x0029` is
+  SYNC-ONLY, so a grant sent mid-keyboard drives the authoritative copy away
+  from the rendered one *and* re-runs the desync test that snaps them together
+  past 299.332591 u. The section asserts the flag ships OFF and that with it off
+  a state that would be refused twice over grants anyway, records nothing, and
+  does not even clear a pending it finds; that both constants carry
+  derivations — the 3.0 s locally-driving window is sized off **n = 3,420** gaps
+  between consecutive `0x003D`-moving reports with no `0x0047` between them
+  across **987 `ours` captures** (p50 0.500, p90 1.801, p99 2.737, with a real
+  mode at 2.74-2.79 s: 144 exceed 2.00 s and only **9 exceed 3.00 s**, so 3.0
+  covers 99.74% while 2.0 would open a hole in 4.2%), and the 0.5 s grant floor
+  is fixed by **two independent derivations landing on the same number** —
+  retail's own median player inter-grant gap of 0.492 s over 2,855
+  player-directed `0x0029`, and the same `299.332591 / (2·288)` = 0.5197 s
+  separation ceiling `--resync` uses. Rule 1 is asserted at **both edges**,
+  inclusive at the window, lapsed one microsecond past it, and **armed on a
+  negative age** because clock skew sails through an upper-bound-only test; its
+  control is the cleared latch granting the very same click, without which
+  "refuse everything" passes. Rule 2 is bounded **above and below** (twenty
+  clicks over 1.9 s produce 4 grants, not 20 **and not 0**), driven through the
+  real `_note_wire_move` hook so the clock under test is the server's own — the
+  click arm, the heading arm, the endpoint arm, the stop echo and the click
+  sweep all grant through it, and a limit fed from the click arm alone would be
+  blind to four senders. The deferred half is asserted to send once, be
+  consumed, carry its two plane words in the click arm's order, be **dropped**
+  rather than delayed once the player keyboards again, and expire inclusively at
+  `2 · GRANT_MIN_INTERVAL`. Structurally: `state["kbd_moving_at"]` has **exactly
+  two writers**, one conditional on the client's own `moving` and one flat
+  `None` — deliberately *not* `state["walking"]`, which the click arm itself
+  clears, so keying rule 1 on it would have let the first click of the
+  reproduction disarm the latch and the other 195 straight through; the three
+  geometry reasons survive verbatim and their refusal is strictly **before** the
+  new gate, since those lines say something about the map and are what the owner
+  reads live; the arm has one grant send and it sits after the gate; and
+  `state["grant_pending"]` is a single assigned slot with **zero appends**,
+  which is the whole difference between rate-limiting and deferring the storm by
+  one interval. Its controls are handed the defects on purpose — a latch keyed
+  off `state["walking"]`, and an `elif` chain where body-scoped matching sees 1
+  send while `ast.walk` sees 2 (the real bug this check caught while being
+  written). **§13 is the replay, and it is the treatment and its control from
+  the wire rather than from a fixture we wrote**: `196/196` of the
+  reproduction's clicks refused as locally-moving with **zero** grants
+  surviving, `5/5` of the ordinary capture's clicks **permitted**, and the
+  keyboard-only run carrying no clicks to decide at all. Either half alone
+  proves nothing — a policy that refuses everything passes the first and today's
+  code passes the second — and the section says out loud that it replays rules 1
+  and 2 only, the two geometry refusals running upstream of them and not being
+  modelled. Floor **105**, the bare-machine subset, against a green **113** with
+  every capture present; §10 and §13 are the two fixture-bearing sections
+  (4 checks each) and each declares `LEDGER.skip` without its files. No client.
+  ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -2975,6 +3030,89 @@ Every one of these, in the order they were written:
   with the vault present; §13-§14, §15-§17 and §18-§19 declare `LEDGER.skip` in
   groups without `captures/gamesrv`, `captures/live` and `captures/movetap`.
   Reads only; sends nothing, and never imports `authsrv.py`. No client. ~6 s),
+  `toolkit/clientscan/test_grantsuppress.py` (WHAT WOULD SUPPRESSING THE GRANT
+  HAVE DONE -- the guard on `toolkit/clientscan/grantsuppress.py`, which replays
+  `authsrv.py`'s `GRANT_SUPPRESS` rule against the captures from the owner's own
+  2026-08-20 session BEFORE the reproduction is played again. Where
+  `resyncscore` prices an ADDITIVE fix (send a `0x002C` we never send), this
+  prices the SUBTRACTION, and its spine is a stream neither of the other two
+  loads: the c2s control traffic (`0x003D` with its `movementType`, `0x0047`,
+  `0x003E`) that says whether the player's hands were on the keyboard when we
+  granted. It reuses `movesync`'s loaders and its repaired two-arm hard bar
+  verbatim and defines no bar of its own -- §3 asserts that BY IDENTITY, and by
+  the absence of `hard_step`/`HARD_JUMP_*` from the file's own text, because a
+  private copy is how a fix gets scored on a friendlier bar than the defect.
+  **THE HEADLINE, and its honest half.** On the reproduction
+  `authsrv-20260820T183311-c1` (196 clicks, 140 grants, 44 s, 5 hard jumps at
+  p50 1,372 u / max 3,010 u / 6.82 per minute of span) the keyboard arm
+  suppresses **140 of 140** -- every grant went out while the client was
+  backpedalling under its own control -- and the counterfactual removes **5 of
+  5** hard jumps. On the capture of the build we actually ship,
+  `20260819T145717`, the same rule removes only **2-3 of 7**: 2 plausibly kept
+  because a causal grant survives it, and 2-3 UNATTRIBUTED with no grant in the
+  causal set at all. §14 pins that row as the load-bearing one, because 5-of-5
+  is a statement about that session and not about the build.
+  **§12 IS THE SECTION THAT REFUSES THE COMFORTABLE NUMBER.** "4 of the 5 jumps
+  had a grant inside 0.5 s" is true and very nearly free: grants arrive every
+  0.150 s in that storm, so **83 of the capture's own 132 report instants (63%)
+  also have one**, and the jumps beat their own baseline by 17 points over
+  n = 5. The rotation control -- jump times moved, grant train untouched --
+  still scores **18/27 = 67%**. So on the reproduction the time arm is grant
+  DENSITY and the file says so ABOVE the count. `20260819T145717`, whose
+  baseline is 10%, is where that arm carries information (43% vs 10%, rotations
+  0-2 of 7). **§13 is what does discriminate, and it is the fifth jump**: the
+  one with no grant inside 0.5 s landed **0.000 u -- bit-identical -- on a point
+  granted 5.07 s earlier**, against a control (nearest place the client had
+  already stood) of 1,105 u. It is not unexplained; it is the `+0x48` arrival
+  maturing, which a 0.5 s lookback cannot see by construction, and 2 of the 5
+  landings are bit-exact on a granted point. The counterfactual is therefore
+  printed as a **BRACKET** across two attributions (a 50 u display band, and a
+  parameter-free "closer to a granted point than to anywhere it had already
+  stood") rather than at either alone, and §6 asserts the four buckets --
+  removed / kept / unattributed / **unknown** -- PARTITION on every capture. The
+  fourth exists because `sup_at.get(t, False)` would score a lookup MISS as
+  "the rule keeps it", which reads as a finding when the truth is that the code
+  could not tell. **THE CONTROLS, and the reason there are two kinds.** Tonight's
+  other two captures carry **ZERO grants**, so a suppression share over them is
+  0/0 and §7 pins that the tool REFUSES it by name and returns non-zero rather
+  than printing a comfortable "0 of 0". The control with a denominator is §8:
+  the **five clicks** in `20260820T182934`, of which the rule calls **0**
+  keyboard-driving at every W in the sweep, against 196 of 196 in the
+  reproduction -- the same classifier, the opposite answer. §9 is the mutation
+  that proves it can fail: delete the stop term and 182934 goes 0/5 -> 1/5 at
+  W=1.0 and 0/5 -> 2/5 at the shipped W=3.0, and the stop term keeps 10 of
+  `145717`'s 40 grants. §10 is the classifier's POSITIVE control and it prices
+  the rule's only free parameter against the client's own cadence: a straight
+  keyboard hold in `20260820T182554` reports every **1.80-1.82 s**, so W = 1.0
+  -- `authsrv.py`'s own `fresh` constant, and the number a reviewer reaches for
+  -- leaves **10 of that capture's 15 intra-hold intervals uncovered**, which is
+  grant-shaped leakage in exactly the posture the owner is most likely to try
+  next; at 2.0 and at the shipped 3.0 it is 0 of 15, and the classifier calls
+  87% of that capture's span driving against 56% of the click-only one.
+  **§15 pins the two arms MARGINALLY and mirrors the server's own constants.**
+  Behind the keyboard arm the rate limit removes nothing MORE, which reads as
+  "it does nothing" and would get it deleted; ALONE it takes the reproduction
+  from 140 grants to **38** (102 suppressed) -- independently reproducing the
+  figure `authsrv.py`'s own comment carries. The rate arm is asserted to be a
+  STATE MACHINE and not a pairwise filter (102 vs 134 over the same timestamps,
+  because a suppressed grant does not reset the floor). `GRANT_LOCAL_WINDOW`,
+  `GRANT_MIN_INTERVAL` and `GRANT_SUPPRESS` are read out of `authsrv.py`'s
+  SOURCE TEXT -- never imported, that is a server module -- and pinned against
+  this file's mirrors, so a retune reddens here and whoever retunes re-runs the
+  replay; every number above is a number FOR THOSE VALUES, and the flag is
+  asserted OFF by default so this is a costing of an OPT-IN. The headline is
+  also asserted identical at this file's independently derived W = 2.0, sized
+  from a different corpus filter (74 captures, 4,190 intra-hold gaps, 96.25%
+  at or under 2.00 s) than the server's 3.0. **Nine mutations were built and
+  run and all nine redden**: deleting the stop term, deleting the recency term,
+  letting a missing suppression key score as `kept`, scoring the density null
+  over the jumps instead of the population, attributing by time only, making the
+  rate arm pairwise, drifting either shipped-constant mirror, and turning the
+  0/0 refusal into a plain zero -- with the source sha256 asserted identical
+  before and after. Floor **29**, the bare-machine subset, against a green
+  **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
+  without it. Reads only; sends nothing, and never imports `authsrv.py`. No
+  client. ~7 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
