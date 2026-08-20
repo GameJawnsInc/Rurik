@@ -3393,7 +3393,25 @@ Every one of these, in the order they were written:
   §6 pins that death STRIPS (per-agent — the enemy's hex survives the player's death)
   and that `--no-effects` is a real control. Needs `vault/captures/live/` and the
   pinned client for §2, which is declared as a skip naming what a green run without it
-  has actually checked; floor 61),
+  has actually checked. **§§4e-4g are DEGENERATION**, which is what makes a
+  condition do anything and which closes `studies/isle` B4's one open clause.
+  The pips are GWW's (*"each pip represents a loss of two health per second"*;
+  Bleeding 3, Burning 7, Disease 4, Poison 4, capped at 10) and the other six
+  conditions degenerate nothing -- a fact, not a gap, with Blind and Crippled as
+  the control. Bleeding on a 100-health player is pinned at exactly `-0.06`/s on
+  `0x00A2`, the NO-TARGET float twin (PLAN.md 3.3 had these properties on
+  `0x009F`; the corpus put them here). An UNCHANGED rate must send nothing, a
+  steady tick must send **nothing at all** -- B4's *"passive ticks are never
+  streamed"*, so the server spends health silently and the client animates from
+  the one rate -- and an EXPIRY must push the rate back to zero, which is the
+  half a server forgets: the icon goes and the arrows stay. **§4f0 is the
+  no-stack rule, and a run forced it**: with the enemy's Sever Artery on a 0 s
+  recharge the player picked up FIVE Bleeding episodes, 3 pips then 6 then 9 then
+  the cap at 10 -- twenty health a second. WIKI (GWW "Condition" Notes):
+  *"Reapplied conditions will last the original time period, unless the reapplied
+  duration is greater than the remaining amount of time."* So a shorter
+  re-application is a no-op in the table AND on the wire, and a longer one
+  extends as REMOVE-then-APPLY; floor 74),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture

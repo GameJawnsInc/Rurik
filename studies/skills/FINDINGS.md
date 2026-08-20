@@ -1856,3 +1856,172 @@ a running effect, and nothing does yet.
    *+33% attack speed and double damage taken* are not modelled, and neither is
    Scourge Sacrifice's. The channel is the substrate; the per-skill mechanics
    are the `scale_means` pattern again, one wiki-sourced row at a time.
+
+---
+
+# OBSERVED, 2026-08-20 (later): five more families, and three rules the wiki had all along
+
+§16 left the substrate carrying icons with no consequences and five of the nine
+R4b families unreached. This pass closed most of that. Everything below was
+measured before it was built, and three of the five were then watched at a
+client.
+
+## 17. The type list is corroborated by the table, and Glyph joins it
+
+Adding a `type_code` to the effect list is a claim about ArenaNet's taxonomy, so
+it wants a check the table can refuse. Across the **478** corpus skills in the
+five effect types:
+
+| type | n | duration resolves | refuses (sentinel/unwitnessed) | **no duration** |
+|---|---|---|---|---|
+| Stance (3) | 76 | 74 | 2 | **0** |
+| Glyph (12) | 10 | 9 | 1 | **0** |
+| Preparation (19) | 14 | 13 | 1 | **0** |
+| Hex (4) | 151 | 142 | 9 | **0** |
+| Enchantment (6) | 227 | 194 | 33 | **0** |
+
+**Not one of the 478 has nothing to time.** Meanwhile **488** corpus skills DO
+carry 0/0 endpoints — attacks, signets, most spells — and **none** of them is in
+these five types. If "this type IS a timed effect" were the wrong mapping, the
+giveaway would be a type full of skills with no duration, and there is none.
+
+## 18. THREE of the five types are ONE-AT-A-TIME, and two say so in the game's own words
+
+This is the answer to §16.1's open question — *how does an effect get replaced* —
+and it was sitting on GWW the whole time:
+
+> **Stance** (rev. 2020-10-23), quoting **Isokeh, Expert Ranger**, in game:
+> *"Only one Stance can be active at any time, so if you are under the effects
+> of a Stance, using a new Stance will replace the previous one."*
+> **Preparation** (rev. 2020-06-18): *"Only one preparation can be active at a
+> time. Activating another preparation will override the previous one."*
+> **Glyph** (rev. 2024): *"If a glyph is cast while another glyph is already
+> active, the new one replaces the old one."*
+
+The rule is per **TYPE** and per **AGENT** — any stance replaces any stance —
+and hexes and enchantments carry no such rule, which is why they are not in it.
+
+**On the wire a replacement is `0x0044` then `0x0042`.** That is forced rather
+than chosen: §16.1 measured that re-sending the apply alone is discarded by the
+client under either buff id, so a replacement the client can see has to close
+and reopen. **WATCHED** (`20260820T190616`, `hud-stance-swap.png`): Rush's icon
+became Frenzy's **in the same slot, under the same green stance border**, with a
+fresh timer, and there was never a third icon.
+
+## 19. Property 55 is the HEALING channel, and the client's own arithmetic agrees
+
+The server had no way to make health go up that drew anything — `GV_HEALTH` is a
+silent setter. Asked directly, the corpus answers in one pass over 2,007
+property events on `0x00A3`:
+
+| property | negative | positive | self-directed (`target == cause`) |
+|---|---|---|---|
+| 16 (damage) | **1251** | 0 | **0 of 1251** |
+| 17 (critical) | **243** | 0 | **0 of 243** |
+| 55 | 4 | **502** | **454 of 506** |
+
+Damage always has a distinct attacker and victim and is always a negative
+delta — `_damage_fraction` already sent `-frac`, which turns out to be retail's
+convention 1,251 times over. **A positive, overwhelmingly self-inflicted health
+delta on the damage channel is a heal.** GWCA's name `armor_ignoring` therefore
+describes the *mechanism* (a health change armour has no say in) and not the
+*direction*; the four negatives are consistent with a sacrifice and that reading
+is UNVERIFIED.
+
+**CONFIRMED AT THE CLIENT** (`20260820T190917`, `hud-heal-54-to-100.png`). The
+client's own health readout reads **54 → 100 → 54 → 100** across three Healing
+Signet casts, moving by exactly the **46** the server sent each time. The client
+applies property 55 as a health gain and its arithmetic matches ours.
+
+**And it draws no number for it** — a green-text scan over twenty frames
+spanning three heals finds **0–8 saturated green pixels**, the 8 being frames
+taken at the keypress instant before the cast completed. Damage on 16/17 *is*
+drawn. So either retail annotates a heal through some other value id, or the
+client simply does not, and this repo cannot yet say which. **OPEN**, and named
+rather than assumed away.
+
+## 20. A spell is not a swing, and a label does not say *when*
+
+Two defects the tests could not have caught, both found by running it:
+
+- **Casting a HEX made the player swing a hammer.** `cast_tick` dispatched on
+  *"is there a target"*, so Faintheartedness produced
+  `attack_started: player swings at 10` and five points of hammer damage.
+- **Flare dealt that same five** instead of its own 20 fire damage, because
+  only the `additive` mode was ever read and `standalone` fell on the floor.
+
+Both are fixed by dispatching on `type_code`: **only type 14 rides a weapon
+swing** (WIKI, GWW "Attack skill" — attack skills *are* attacks and use the
+equipped weapon; all 199 in the corpus carry target byte 5). A spell deals its
+own number with no roll, no armour exponent and no critical, and sends **one**
+message — no `attack_started`, no `melee_attack_finished`, because it never
+began a swing.
+
+**And the label trap that would have shipped without the type column:** GWW
+gives `Ignite Arrows` the variable **`Fire damage` 3..18** — the same label as
+Flare's. It is a Preparation, and its fire damage rides the *next arrows*.
+Nothing in the client's table separates them. So a skill that opens an episode
+resolves no damage and no heal at cast: its scale describes what the effect does
+while it is up.
+
+## 21. Conditions: the join, and the rule that they never stack
+
+`studies/isle` established that a condition's duration comes from the
+**inflicting** skill (Burning's own endpoints are 3/3 and retail sends it at
+9.0). The missing half was *which* condition and *from where*, and both are
+per-skill data already carried:
+
+> **GWW's progression variable NAMES it** — `Sever Artery` has exactly one
+> variable and it is called `Bleeding` — and **the client's bonus slot carries
+> the seconds**, 5..25, in the slot `skill_arguments = 4` names. **The bitfield
+> picked the slot before the wiki was read.**
+
+Sever Artery at Swordsmanship 3 resolves to **Bleeding (478) for 9 s**, and the
+apply names the *condition's* id rather than the skill's — which is what retail
+carries, since the corpus's six condition applies name 480 and 481 and never the
+skill that caused them.
+
+**Then a run put five Bleedings on the player at once.** With the enemy's Sever
+Artery on a 0 s recharge (`20260820T191725`) the pips went 3 → 6 → 9 → **10, the
+cap** — twenty health a second, and visibly absurd. The rule was on GWW:
+
+> **WIKI (GWW, "Condition" §Notes):** *"Reapplied conditions will last the
+> original time period, unless the reapplied duration is greater than the
+> remaining amount of time."*
+
+So one instance per (agent, condition), and a re-application is a **comparison**,
+not an addition. A shorter one is a no-op on the wire as well as in the table —
+nothing about the target changed. A longer one **extends** it, as `0x0044` then
+`0x0042`, which is the one replacement shape the client honours.
+
+## 22. What a condition DOES — property 44, and one clause of B4 closed
+
+`studies/isle` B4 CONFIRMED property 44 as the net health-regeneration rate in
+max-health fractions per second, quantised at 2/H, riding **`0x00A2`** — itself a
+correction to `PLAN.md` §3.3, which had it on `0x009F` (*"the value census
+matches §3.3 exactly; the opcode did not"*). It left exactly one clause open:
+
+> *"Still UNVERIFIED: that one 2 hp/s step equals one HUD pip (needs a screen,
+> not the wire)."*
+
+The pips are GWW's — *"each pip represents a loss of two health per second"*,
+**Bleeding 3, Burning 7, Disease 4, Poison 4**, capped at 10 — and the other six
+conditions degenerate nothing, which is a fact rather than a gap. So Bleeding on
+a 100-health player must be **exactly** `-3 × 2 / 100 = -0.06` per second, with
+no free parameter on either side.
+
+**CONFIRMED AT THE CLIENT** (`20260820T192221`, `hud-degen-three-pips.png`),
+and it closes B4's clause. The client drew **exactly three `‹` arrows** on the
+health bar, and its own displayed health fell **100 → 86 → 72 → 58 → 44** across
+frames **2.32 s** apart — an implied **6.03 health/s against the 6.00 the server
+sent**, three times over. Three pips asked for, three pips drawn; 0.5%
+agreement on a rate neither side was tuned to.
+
+**Health stays server-authoritative and the ticks are silent**, which is B4's
+own conclusion: *"passive ticks are never streamed"*. The server sends the RATE
+once, on change, and spends the health without a single property-16 message —
+a tick that also sent damage would draw a stream of red numbers retail never
+draws. The client's 6.03 is that animation, done by the client from one number.
+The expiry sends the rate back to zero, which is the half a server is most
+likely to forget: the icon goes and the arrows stay.
+

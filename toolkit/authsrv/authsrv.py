@@ -1817,6 +1817,13 @@ GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
 # value) but the value is a plain int rather than IEEE bits. GWCA calls this
 # family GenericValueTarget. INFERRED from the shape match; not yet observed.
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
+# The no-target FLOAT twin, and the correction is worth carrying: PLAN.md
+# 3.3 put properties 44, 34 and 43 on `0x009F` and `studies/isle` B4 found
+# them on THIS opcode instead -- "the value census matches 3.3 exactly; the
+# opcode did not". GWCA's four-way split (int/float x target/no-target) is
+# CORROBORATED by the client's own dispatch table: 0x009F and 0x00A0 forward
+# to one handler, 0x00A2 and 0x00A3 to a different one.
+GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT = 0x00A2
 GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # The create-time sibling of 0x00F1, and D2 in the divergence register: 472 messages
 # in the live capture, the highest count of anything ArenaNet sends that we never did.
@@ -5789,6 +5796,7 @@ def strip_effects(send, state, agent_id, conn_id, why):
     if gone:
         print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
               f"{agent_id}: {why}", flush=True)
+        push_regen(send, state, agent_id, conn_id)
     return gone
 
 
@@ -5853,9 +5861,44 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     """
     if not EFFECTS:
         return None
-    ep = effect_table(state).apply(target_id, condition_id, rank, seconds,
-                                   time.time(), type_code=8)
     name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    table = effect_table(state)
+    now = time.time()
+
+    # A CONDITION NEVER STACKS, and the run is what forced this line.
+    # `20260820T191725` put the enemy's Sever Artery on a 0 s recharge and the
+    # player picked up FIVE separate Bleeding episodes -- 3 pips, then 6, then
+    # 9, then the cap at 10, which is TWENTY health a second and visibly
+    # absurd. Retail does not do that:
+    #
+    #   WIKI (GWW, "Condition", Notes): "Reapplied conditions will last the
+    #   original time period, unless the reapplied duration is greater than the
+    #   remaining amount of time."
+    #
+    # So one instance per (agent, condition), and a re-application is a
+    # comparison rather than an addition. THE SHORTER RE-APPLICATION IS A NO-OP
+    # ON THE WIRE TOO: nothing about the target changed, so nothing is sent.
+    # The longer one goes out as REMOVE-then-APPLY, which is the only
+    # replacement shape this server has that the client actually honours
+    # (re-sending the apply alone is discarded -- measured twice on
+    # 2026-08-20, once under a new buff id and once under the same one).
+    for old_ep in table.on_agent(target_id):
+        if old_ep["skill"] != condition_id:
+            continue
+        remaining = max(0.0, old_ep["expires_at"] - now)
+        if seconds <= remaining:
+            print(f"[c{conn_id}] {name} re-applied to agent {target_id} for "
+                  f"{seconds:.1f}s but {remaining:.1f}s remain -- the longer "
+                  f"stands, nothing sent", flush=True)
+            return old_ep
+        table.close(old_ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
+             f"EFFECT_REMOVE(buff {old_ep['buff']}, {name}, EXTENDED from "
+             f"{remaining:.1f}s to {seconds:.1f}s)")
+        break
+
+    ep = table.apply(target_id, condition_id, rank, seconds, now,
+                     type_code=8)
     send(GAME_SMSG_EFFECT_APPLY,
          [ep["agent"], condition_id, ep["rank"], ep["buff"],
           _f32(ep["duration"])],
@@ -5864,7 +5907,118 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
           f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
           f"{rank})", flush=True)
+    # AND THE DEGENERATION IT CARRIES, if it carries any. Sent here rather than
+    # from the tick because the corpus's mid-life property-44s fire when the
+    # RATE CHANGES, and applying a condition is the change.
+    push_regen(send, state, target_id, conn_id)
     return ep
+
+
+def kill_player(send, state, conn_id, why="took a killing blow"):
+    """Put the player down. ONE place, since 2026-08-20.
+
+    The five lines below were written out twice -- once in `land_swing` and
+    once in `land_skill` -- and the second copy already differed from the first
+    by a comment. Degeneration was going to be a third, which is the point at
+    which a copied sequence becomes a bug waiting for someone to fix two of
+    three sites.
+    """
+    state["player_dead"], state["player_died_at"] = True, time.time()
+    strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
+    state["attacking"] = None          # a corpse stops swinging back
+    send(GAME_SMSG_AGENT_UPDATE_STATUS,
+         [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+
+
+def agent_pool_max(state, agent_id):
+    """Maximum health of one agent, or None if this server does not know it."""
+    if agent_id == PLAYER_AGENT_ID:
+        return float(agents.PLAYER_HEALTH)
+    agent = state.get("agents", {}).get(agent_id)
+    return float(agent["max_health"]) if agent else None
+
+
+def push_regen(send, state, agent_id, conn_id):
+    """Tell the client this agent's NET health-regeneration rate, if it changed.
+
+    PROPERTY 44, CONFIRMED (`studies/isle` B4): the net regen rate in
+    max-health FRACTIONS PER SECOND, quantised at 2/H -- the player carried
+    prop-42 = 100 with prop-44 = 0.02 and 0.04 in two captures, exact in f32,
+    and integrating a mid-life rate ladder predicted a health rise to 0.5%.
+    It rides `0x00A2` [prop, agent, f32], not `0x009F`.
+
+    ONE THING THAT STUDY LEFT UNVERIFIED IS WHAT THIS CLOSES: "that one 2 hp/s
+    step equals one HUD pip (needs a screen, not the wire)". Applying Bleeding
+    -- three pips by GWW's own table -- must move this to exactly
+    -3*2/H, and the HUD must show three arrows. No free parameter on either
+    side.
+
+    SENT ONLY ON CHANGE, which is the corpus's own shape: on-create prop-44s
+    are spawn state and mid-life ones fire when the rate CHANGES. Streaming it
+    every tick would be a message retail does not send.
+    """
+    pool = agent_pool_max(state, agent_id)
+    if pool is None or pool <= 0:
+        return None
+    table = state.get("effects")
+    live = table.on_agent(agent_id) if table else []
+    pips = effects.pips_from(live)
+    rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
+    seen = state.setdefault("regen_rate", {})
+    if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
+        return None
+    seen[agent_id] = rate
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_CHANGE_HEALTH_REGEN, agent_id,
+          _fraction(rate, agents.GV_CHANGE_HEALTH_REGEN,
+                    f"regen on agent {agent_id}")],
+         f"regen {-pips:.0f} pip(s) on agent {agent_id} ({rate:+.5f}/s)")
+    print(f"[c{conn_id}] agent {agent_id} degeneration: {pips:.0f} pip(s), "
+          f"{rate * pool * 1:+.1f} health/s", flush=True)
+    return rate
+
+
+def degen_tick(send, state, conn_id):
+    """Spend health on degeneration. NO damage numbers, and that is measured.
+
+    `studies/isle` B4: "passive ticks are never streamed". Retail sends the
+    RATE once and the client animates the bar itself, so a server that also
+    sent property 16 every tick would draw a stream of red numbers retail never
+    draws. Health stays server-authoritative here (that study's own
+    conclusion), so this spends it and says nothing.
+
+    DEGENERATION CAN KILL, and it goes through the same door a swing does --
+    `kill_player` exists because this is the third caller and the first two had
+    the sequence copied out longhand.
+    """
+    if not EFFECTS:
+        return
+    table = state.get("effects")
+    if not table or not table.live:
+        return
+    now = time.time()
+    last = state.get("degen_at") or now
+    dt = now - last
+    state["degen_at"] = now
+    if dt <= 0:
+        return
+    for agent_id in sorted({ep["agent"] for ep in table.live.values()}):
+        pips = effects.pips_from(table.on_agent(agent_id))
+        if not pips:
+            continue
+        lost = pips * effects.PIP_HEALTH_PER_SECOND * dt
+        if agent_id == PLAYER_AGENT_ID:
+            if state.get("player_dead"):
+                continue
+            player_pools(state)
+            state["player_health"] = max(0.0, state["player_health"] - lost)
+            if state["player_health"] <= 0.0:
+                kill_player(send, state, conn_id, "bled out")
+        else:
+            agent = state.get("agents", {}).get(agent_id)
+            if not agent or agent.get("dead"):
+                continue
+            agent["health"] = max(0.0, agent["health"] - lost)
 
 
 def heal_agent(send, state, target_id, caster_id, amount, conn_id):
@@ -5946,6 +6100,9 @@ def effect_tick(send, state, conn_id):
               f"expired (buff {ep['buff']}, "
               f"{now - ep['applied_at']:.2f}s of {ep['duration']:.1f}s)",
               flush=True)
+        # A condition running out is a rate change too, and it is the one a
+        # server is most likely to forget: the icon goes and the arrows stay.
+        push_regen(send, state, ep["agent"], conn_id)
 
 
 def revive_due(send, state, conn_id):
@@ -6407,12 +6564,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
         # choice of ours -- so damage drives the bar down to a sliver and the last
         # step has to be the effects bit, exactly as it is for an agent. Our own
         # bookkeeping decides; the fractions only make the bar agree with it.
-        state["player_dead"], state["player_died_at"] = True, time.time()
-        strip_effects(send, state, PLAYER_AGENT_ID, conn_id,
-                      "the player died")
-        state["attacking"] = None      # a corpse stops swinging back
-        send(GAME_SMSG_AGENT_UPDATE_STATUS,
-             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
 
@@ -6526,6 +6678,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
     episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
                            PLAYER_AGENT_ID, conn_id)
 
+    # A CONDITION FROM THE ENEMY, symmetric with the player's cast. Without
+    # this the only way to see degeneration is on a monster's nameplate, where
+    # the pips are three pixels; with it the player's own HUD shows the arrows,
+    # which is what closes `studies/isle` B4's one UNVERIFIED clause.
+    inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
+    if inflicted and not state.get("player_dead"):
+        apply_condition(send, state, PLAYER_AGENT_ID, inflicted[0],
+                        inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
+
     # The enemy heals too, and its own bar has one: Restore Condition (276),
     # whose GWW variable is `Healing` 10..70. It has been on that bar since the
     # bar existed and has resolved to nothing every session.
@@ -6539,7 +6700,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
     if damage is None:
         agent["casting"] = None
-        if episode is None and not healed:
+        if episode is None and not healed and not inflicted:
             print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
                   f"modelled effect (its scale is not damage -- see "
                   f"content/world.toml skill_effect)", flush=True)
@@ -6561,12 +6722,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
 
     if state["player_health"] <= 0.0:
-        state["player_dead"], state["player_died_at"] = True, time.time()
-        strip_effects(send, state, PLAYER_AGENT_ID, conn_id,
-                      "the player died")
-        state["attacking"] = None
-        send(GAME_SMSG_AGENT_UPDATE_STATUS,
-             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
 
@@ -8523,6 +8679,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after `apply` wrote `expires_at`, and a zero-length
                         # episode is refused at the table rather than here.
                         effect_tick(send, state, conn_id)
+                        # Degeneration AFTER the expiries, so a condition that
+                        # ran out on this tick does not also charge for it.
+                        degen_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -11360,6 +11519,13 @@ def main():
                          "it a swing is 3-5 flat, without it 3-5 is scaled by "
                          "2^((SL-AR)/40) and a critical replaces it "
                          "(studies/isle rung 7).")
+    ap.add_argument("--enemy-skills", default=None, metavar="IDS",
+                    help="Comma-separated skill ids for the standing hostile's "
+                         "bar, using the client's own activation and recharge "
+                         "for each. The mirror of --skills, and it exists for "
+                         "the same reason: changing what the enemy casts "
+                         "should not need a content edit. Ids must exist in "
+                         "the build being launched.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "
@@ -11894,6 +12060,20 @@ def main():
         ARMOUR_TERM = False
         print("NO ARMOUR TERM: swings are the weapon's raw range, unscaled, "
               "and no swing can be a critical.")
+
+    if a.enemy_skills:
+        global ENEMY_SKILLS
+        bar = []
+        for token in a.enemy_skills.split(","):
+            sid = int(token.strip(), 0)
+            # ACTIVATION AND RECHARGE COME FROM THE CLIENT'S TABLE, not from
+            # the command line -- the same rule ENEMY_SKILL_BAR's comment sets
+            # out. What is OURS is the selection; every number is ArenaNet's.
+            act, _after, recharge = skill_timing(sid)
+            bar.append((sid, act, float(recharge)))
+        ENEMY_SKILLS = tuple(bar)
+        print(f"ENEMY BAR: {[row[0] for row in bar]} "
+              f"(activation and recharge from the client's own table)")
 
     if a.no_effects:
         global EFFECTS

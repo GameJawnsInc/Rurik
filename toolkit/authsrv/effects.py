@@ -219,6 +219,32 @@ CONDITION_SKILLS = {
 }
 CONDITION_BY_NAME = {name: sid for sid, name in CONDITION_SKILLS.items()}
 
+# WHAT A CONDITION DOES, for the four that degenerate health. WIKI (GWW,
+# "Health degeneration", fetched 2026-08-18 for `studies/isle` 5): "each pip
+# represents a loss of two health per second", the total is capped at 10 pips,
+# and the per-condition pips are **Bleeding 3, Burning 7, Disease 4, Poison 4**.
+#
+# THE OTHER SIX DEGENERATE NOTHING and their absence here is a fact rather than
+# a gap: Blind, Crippled, Deep Wound, Dazed, Weakness and Cracked Armor do
+# other things (miss chance, movement, maximum health, casting, damage, armour)
+# and none of them is modelled. A dict that gave every condition a pip would be
+# the easy wrong generalisation.
+CONDITION_PIPS = {478: 3, 480: 7, 483: 4, 484: 4}
+PIP_HEALTH_PER_SECOND = 2.0
+MAX_PIPS = 10.0
+
+
+def pips_from(episodes):
+    """Net degeneration pips from a set of live episodes, capped at 10.
+
+    Capped because GWW caps it, and the cap is reachable: Burning alone is 7
+    and Bleeding takes it to 10. A sum without the cap would out-degenerate
+    retail the moment two conditions land together, which is exactly the sort
+    of number that looks principled and is not.
+    """
+    total = sum(CONDITION_PIPS.get(ep["skill"], 0) for ep in episodes)
+    return min(float(total), MAX_PIPS)
+
 
 def condition_id(label):
     """The condition skill id a GWW progression label names, or None.
