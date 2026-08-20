@@ -1425,10 +1425,20 @@ buff opcodes named (63–68). The `charCtx` container family closes at seven.
 4. **34 of 157 identifiers extract no text id at all**, and the `labels`/`templates`
    split is best-effort where a handler branches before formatting. The complete
    ordered `text_ids` list is what the content rows carry.
-5. **Two arcs are unblocked and neither has collected.** `studies/character`'s armour
-   rating is identifier **572**'s argument (527 is the "+N vs. damage type" line), and
-   `studies/combat`'s weapon damage is **584** — whose `arg` is the MAXIMUM and `arg2`
-   the minimum, read off `Blunt Dmg: 3-5` on screen — with **587** the type.
+5. ~~**Two arcs are unblocked and neither has collected.**~~ **`studies/character`
+   COLLECTED 2026-08-20** (`611417b`). Armour rating is identifier **572**'s argument
+   and it is on screen: the chest's tooltip reads `Armor: 25` / `Armor +20 (vs.
+   physical damage)` (`20260820T125155`). The experiment had been open since
+   2026-08-06 because it was **two problems wearing one coat** — the words were opaque
+   *and* this server sent no armour at all, so the character was bare-chested and there
+   was nothing to hover. It now declares the five pieces, places them at the slots
+   retail's own `0x006F` writes name, and dresses the body. **Those five content rows
+   also stopped being UPSTREAM**: ArenaNet sent us these exact model ids nine times
+   each across three captures, every fixed field and all three modifier words agreeing
+   (`test_armour.py`, 16 checks). Still uncollected: **`studies/combat`'s weapon
+   damage**, which is **584** — `arg` the MAXIMUM, `arg2` the minimum, read off
+   `Blunt Dmg: 3-5` on screen — with **587** the type. And nothing yet APPLIES an
+   armour rating: no damage term reads it.
 
 ### Merchants — a player can now BUY from a server we wrote (2026-08-19)
 
