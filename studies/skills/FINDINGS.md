@@ -710,9 +710,9 @@ any reference server**.
 
 | Opcode | Name | Wire shape | Bytes |
 |---|---|---|---|
-| 14 / `0x000E` | `ATTRIBUTE_DECREASE` | agent_id, u32, u32 | 14 |
-| 15 / `0x000F` | `ATTRIBUTE_INCREASE` | agent_id, u32, u32 | 14 |
-| 16 / `0x0010` | `ATTRIBUTE_LOAD` | agent_id, array32[16], array32[16] | 142 decl. |
+| 14 / `0x000E` | `ATTRIBUTE_DECREASE` **✓ CONFIRMED** | agent_id, **sequence**, **attribute** | 14 |
+| 15 / `0x000F` | `ATTRIBUTE_INCREASE` **✓ CONFIRMED** | agent_id, **sequence**, **attribute** | 14 |
+| 16 / `0x0010` | `ATTRIBUTE_LOAD` **✓** | agent_id, **ids[]**, **ranks[]** (16 max, not 64) | 142 decl. |
 | 28 / `0x001C` | `HERO_USE_SKILL` | agent_id, u32, u32, agent_id | 18 |
 | 41 / `0x0029` | `DROP_BUFF` | u32 | 6 |
 | **70 / `0x0046`** | **`USE_SKILL`** | **u32, u32, agent_id, u8** | **15** |
@@ -720,6 +720,17 @@ any reference server**.
 | 93 / `0x005D` | `SKILLBAR_LOAD` | agent_id, array32[8] | 42 decl. |
 | 94 / `0x005E` | `SKILLBAR_SKILL_REPLACE` | agent_id, u32 ×4 | 22 |
 | 109 / `0x006D` | `TOME_UNLOCK_SKILL` | u32, u32 | 10 |
+
+**The first three rows stopped being weak evidence on 2026-08-19** — see
+[pvpui §32](../pvpui/FINDINGS.md). Both names *and* their direction assignment are
+confirmed from the client's own senders (`0x00818A90` decrease, `0x00818CE0` increase,
+each reached only from the attribute panel's own minus/plus button handler in
+`AttribBtns.cpp`), and the two anonymous dwords are now named: a **sequence** and an
+**attribute index**. The sequence is the handle of a client-side PREDICTION the server
+retires with `0x0036`. Nine live rank transitions price out exactly against
+`s_attribPoints`, in both directions, with no free parameter. `ATTRIBUTE_LOAD`'s declared
+142 bytes also hide a client defect: the sender clamps to 64 entries and its buffer holds
+16.
 
 `USE_SKILL`'s four fields are **unnamed in every source we have**. Headquarter
 emits it as `{i32 skill_id, i32 flags, AgentId target, u8}`; apoguita's packet
