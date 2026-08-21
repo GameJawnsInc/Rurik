@@ -298,27 +298,60 @@ could be READ and still goes red when an archive was read and measured nothing
 — verified by driving the readable-but-empty case, which stays red. Floors:
 `test_deploy` 167→203, `test_datwrite` 212, `test_contentids` 29.
 
-## WORLDMAPS-W7 — the region walked. STAGED
+## WORLDMAPS-W7 — the region walked. RAN GREEN 2026-08-21
 
-The question: does the client's compiler build a mesh from an authored map an
-order of magnitude larger than anything it has compiled for us, and does the
-flood fill's connectivity pruning behave the same over ~64× the cells? Nothing
-offline answers it — W6 measured what the map COSTS, not what the client does
-with it.
+**OBSERVED (retail client, build 38797, one map, one launch cycle —
+agent-driven on the owner's go-ahead, mechanical readouts).** The client
+compiled a **256×256** authored map — 65,536 cells, 16× the largest it had ever
+compiled for this project under compression and a created chain together — from
+a two-row chain born under `0x5F0B1`, an id nothing had ever bound. It logged
+`Perf: Map file '0x05f0b1' failed to load.  Attempting to re-bloat.`, built a
+mesh of 60 trapezoids, wrote the head back at **13,584 B** (decoding to 467,132
+B of Bloated map — more than twice the largest head it has ever written for us),
+left the 4,912 B compressed partner byte-untouched, and kept the registration
+through its own Flush. Readback 6/6 including the spawn-in-exactly-one-trapezoid
+check `[map.165]` recorded as owed; the server's own independent load named the
+same 60 (`SERVED-UNPOPULATED` — the third verdict added the same day, because
+the area deliberately carries no spawn rows). The diff names only our two added
+rows plus the client's own scratch rows 8315/8316 relocating, nothing
+UNCLASSIFIED, and `--assert-safe` clears 10/10 with 177,329 payload CRCs.
 
-The sheet is `vault/research/worldmaps/WORLDMAPS-W7-RUN.md`, sized from W6's
-measured ladder re-run for the note (256×256 = 142,374 B authored → 4,912 B
-comp-8 with 8 trees, ten blocks, 65,536/65,536 exact) with its own fresh
-capacity reading, a fresh file id (0x5F0B1), a label (map 165, the
-field-identical sibling of W4's 166), and the full read-only `plan_alloc`.
-**Copy chosen deliberately**: a throwaway from the 38797/C2 line, because W7
-installs exactly ONE created map and that lineage keeps dims as the single
-variable against W4's 64×64 result — the 38833 line's eight-map slack is for
-multi-area work, and a client build must match its archive lineage.
+**The sharpest result is a prediction that could have failed.** While the sheet
+was being written, the client's own 64×64 mesh was measured and revealed a
+**depth cut**: ground at or below a threshold bracketed in (43, 47] stored units
+is absent from the compiled navmesh — 0 of 1,003 cells at +47 and deeper against
+63.6% at +43. Because `gen_plaza`'s dip descends 4 units per cell without limit,
+that predicted roughly HALF a 256×256 rect would be missing: **50.55% surviving,
+cut at Chebyshev ring 20**. **Measured: 50.54%** (33,120 of 65,536 quad centres
+inside the mesh), the mesh beginning at x = 10,464 — grid column 109, ring 20,
+exactly where the model put it. A model built at one size predicted the
+next-but-two to one part in ten thousand. Registering the naive "coverage holds
+at ~88%" would have scored a correct run as a catastrophic scale failure; "the
+boundary does not move" is the form of the claim that cannot be satisfied by
+accident.
 
-**No trapezoid COUNT is predicted**: nothing has measured one at this scale, and
-a predicted count would be a check that cannot fail. The sheet carries both
-procedural fixes the last two runs cost: **cage a fresh run directory** (W4's
-first launch was refused fail-closed — the firewall cage is per-path) and
-**split the invocations so `Gw.log` is banked between the compile run and the
-serve run** (the evidence W2 lost). Owner-driven, on a go-ahead.
+Note the trapezoid COUNT barely moves with size — 55 / 64 / 60 at 32 / 64 / 256
+— which follows from the coverage result rather than contradicting it: half the
+rect is outside the mesh and what remains is dead-flat apron decomposing into a
+few very large trapezoids. Judging on the count alone would have read 60 as a
+regression against the 64×64 map's 64, which is exactly the trap
+`studies/customarea` FINDINGS 38 records.
+
+Full scoring of P1–P10, and the one procedural deviation — step 2 ran as a
+single invocation, so `rebloat.verify` had no before-image and P5 was scored
+from the bytes instead (the head's recorded before-state is size 0, born armed;
+its after-state decodes as a map with trapezoids, which is `classify`'s own
+definition of REBUILT) — are in
+`vault/research/worldmaps/WORLDMAPS-W7-RUN.md` §RESULTS. The throwaway was
+delta-captured (17 spans, **46,033 B** for 4.2 GB, PROVEN byte-identical) and
+deleted.
+
+**Still open, and stated rather than implied**: anything above 256×256 (the
+format allows 16,777,216 cells; this run used 65,536); a created row given MORE
+blocks than it holds (W5's `reserve_bytes`, deliberately not spent here so a red
+result could not be ambiguous between the size and the tail); two created maps
+in one archive (the 38797 lineage has rows for exactly one — the 38833 line is
+where that ladder belongs); and the depth cut's MECHANISM, which has three
+readings — the borrowed environment's water plane, a compiler depth bound, the
+borrowed Zones chunk — and one cheap disambiguating run: the same 64×64 map
+with `environment = false`.

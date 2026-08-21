@@ -1481,11 +1481,16 @@ are closed, including the sharp one where `created = true` beside a bound id
 could silently displace a retail map: the install now proves the chain is ours
 from the archive's own BYTES (the file-id record the alloc journal recorded),
 never from a path, which is the cage's rule on the archive axis.
-**The next launch is WORLDMAPS-W7** -- a 256x256 region walked,
-`vault/research/worldmaps/WORLDMAPS-W7-RUN.md`, predictions registered, no
-trapezoid count predicted, and both procedural fixes the last two runs cost
-built in (cage a fresh run directory; bank Gw.log between the compile and
-serve stages).
+**WORLDMAPS-W7 RAN GREEN 2026-08-21** and the ladder is done: the client
+compiled a 256x256 authored map -- 65,536 cells, 16x the largest it had ever
+compiled for this project -- from a chain born under an id nothing had bound,
+logged the re-bloat line naming 0x05f0b1, wrote back a 13,584 B head (467,132 B
+decoded), left the 4,912 B compressed partner untouched, and the server served
+the 60-trapezoid mesh. **The sharp result is a prediction that could have
+failed**: a depth cut measured on the client's own 64x64 mesh predicted 50.55%
+of the 256x256 rect would survive, cut at Chebyshev ring 20 -- measured 50.54%,
+mesh starting at grid column 109. The throwaway lives on as a PROVEN 46,033 B
+delta. vault/research/worldmaps/WORLDMAPS-W7-RUN.md.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
