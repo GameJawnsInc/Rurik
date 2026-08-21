@@ -10,6 +10,9 @@ invariant's obligations. `REALFIX-C<n>` = the offline harness's calibration gate
 `REALFIX-M<n>` = exposure metrics. `REALFIX-D<n>` = pre-registered predictions,
 numbered by candidate. `REALFIX-H<n>` = harness builds. `REALFIX-L<n>` = live runs.
 `REALFIX-U<n>` = substrate and instrument gaps. `REALFIX-Q<n>` = open questions.
+`REALFIX-E` = the admissible event definition. `REALFIX-X<n>` = L2 protocol cells.
+`REALFIX-W<n>` = L2's measured walk facts. `REALFIX-T<n>` = timing/tooling deltas.
+`REALFIX-I<n>` = instrument changes. `REALFIX-F<n>` = fix candidates.
 Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 ## REALFIX — the buildable spec
@@ -331,3 +334,327 @@ any watched interval and the detector demonstrably misses the corpus's one real 
 teleport. Nothing in the corpus buys this back.
 **Cheapest: not a measurement but a procedure — every future warp run keeps the keyboard
 moving through the whole waiting period. Already folded into REALFIX-L1.**
+
+---
+
+## 6. REALFIX-L2 — protocol and pre-registration (2026-08-21)
+
+**What this design is built on — REALFIX-W1..W5, five facts nobody in L1 measured, each of which changes what a leg *is*. They are the reason the protocol below can bound a cell instead of hoping for one.
+
+| # | OBSERVED (`ours`, both L1 captures) | consequence |
+|---|---|---|
+| **W1** | **Every key-down emits a `0x003D` at the exact previous stop position** — 6 of 6 stops in arm B, 4 of 4 in arm A, `moved 0.0 u`, at the leg's own key-down instant (arm B: stop `t=71.966` → HEAD `t=73.735` = 12:27:45.0 = L3's scripted key-down). | Every leg opens with a **zero-distance grant**, so **separation is 0 at every leg start** — corroborated independently in movetap (`sep 0.0` in every pre-leg sample). Legs are therefore *independent trials*, and the separation at any later instant is a controlled quantity, not a nuisance. |
+| **W2** | **`0x003D` in free travel is DISTANCE-triggered at ~515 u, not time-triggered.** gap 1.80 s ⇒ chord p50 **513.8 u** (n=26 A + 22 B, max 516.7); gap 2.74 s ⇒ chord p50 **513.4 u** (n=11 A + 7 B, max 514.7). Implied speeds **285.4 u/s** (W) and **190.1 u/s** (S). | Under zero lead the copy sits exactly one chord behind, so **separation saturates at ≈515 u regardless of speed**. This is why P2's sep p90 (523.0) *equals* the chord p90 (514.7) — the L1 write-up called that a coincidence of cadence; it is the trigger rule. It also fixes the **test-instant budget**: 1 grant per 515 u of free travel, full stop. |
+| **W3** | **Wall contact collapses the cadence to the 0.50 s floor with chords 30–155 u** (n=57 A, 28 B; implied 100–250 u/s). | **Sustained wall contact is self-protecting under `--zero-lead`**: chord 30–155 u ⇒ separation 30–155 u ⇒ **below the 299.3326 gate-1 cut** ⇒ no snap is reachable. **25 of arm B's 66 grants echoed contact reports and not one of them could have snapped.** ⇒ **L1 never tested candidate B at all.** Candidate B needs a deflection *while* sep > 299.33, which exists only in the **first one or two grants after a fresh contact**, before the cadence rises. Both lanes read the corner-cutting null as a refutation; it is a coverage gap. |
+| **W4** | **yaw is exactly calibrated: 1 drag px = −0.0800° of travel heading.** `yaw:250` → **−20.000°**, `yaw:-250` → **+20.000°**, `yaw:200` → **−16.000°** — both arms, to 3 dp, n=6. Travel heading is **exactly constant within a leg**: max deviation **0.000°** across all 16 L1 legs. Backpedal is heading+180.000°. | The harness can **aim by dead reckoning**. Nothing in this protocol needs a world-anchored click. It also kills candidate B's smooth-curvature route outright: measured |dψ/dt| p90 = 0.007 rad/s against the ~0.444 rad/s a 2.5 s node interval needs to bow 100 u. **The only curvature this grammar can produce is a collision deflection**, which is why every B-cell below is a wall cell. |
+| **W5** | **Spawn facing is NOT reproducible**: −66.355° (A) vs −65.269° (B) from an identical script — **1.086° apart**. Spawn *position* is exact (9826.0, 8077.0 both arms). | The only aiming residual. Over the longest leg here (1,855 u) it is ±35 u against corridor half-widths of 125–165 u. **A yield risk, not an aiming blocker** — and the protocol re-anchors on geometry rather than carrying it. |
+
+**Map facts, from our own navmesh** (`PathingMap.load(113021)`, map 148: 58 planes, 6,120 trapezoids — OBSERVED from the pathing chunk):
+
+- **Plane 18 is a rectangle**: x ∈ [10860.0, 11123.0], y ∈ [4532.0, 5579.0] — **263 u wide, 1,047 u long, 4 trapezoids**. It is the bridge.
+- Its middle band (y 4790–5316) **overlaps plane 0** (bridge over ground); its two end bands do not. This is exactly the case `pathmap.plane_at` is known to get wrong (9 of its 198, all "client says 12, we find 0").
+- **Both L1 arms reported x = 10860.0 and x = 11123.0 EXACTLY**, for many consecutive samples. The parapets pin x to the bit — the protocol uses that as its position anchor.
+- **The client-visible 0↔18 boundaries are y = 5579.0 and y = 4532.0** (OBSERVED mesh edges; RECONSTRUCTION for the exact line, bracketed by the client's own reports at y 5744/5279 and 4630/4326). The client reports **plane 18 continuously across the overlap band** — it does not flip inside it.
+- Approach channels: north apron walkable x ≈ 10875–11125 for y 5579–5700, opening west above y 5700; south apron x ≈ 10850–11150 at y 4400–4530, opening below y 4360. Open plane-0 field: x 10700–12300, y ~2700–4300, with clear straight runs ≥ 3,000 u.
+
+---
+
+### 0. RULE ZERO — the arm-A-twin discrimination rule, applied *before* the protocol
+
+The skeptic proved that **every auxiliary signature both lanes offered also fires in arm A**, which sends zero grants: `clientControlled` 1→0 fires 3×; sync-vs-async plane mismatch fires on 121 of 2,695 samples; `sep > 299.33` fires on 2,695 of 2,695; `gate1 == "above"` on 2,574. So:
+
+> **REALFIX-E, the ONLY admissible event definition.** An **event** is an adjacent-sample step of the **`async_at` (world-1, rendered) track ≥ 150 u**, in a sample pair whose interval is ≤ 0.25 s.
+> Threshold grounds: arm A's rendered track never exceeds **33.4 u** over 2,694 intervals; the smallest observed event is **322.4 u**. 150 u sits 4.5× above the control's maximum and 2.1× below the smallest positive.
+> **`sep`, `gate1`, `fence_raw`, the plane words and the wire hard bar are NOT identifiers and may not be used to call an event.** They are recorded as *covariates* and reported beside every event and every non-event.
+
+Confirmatory covariates, recorded but never decisive: displacement · commanded heading (expect < 0), distance from the contemporaneous `sync_at` (expect < 50 u), `fence_raw` 1→0 in the same sample, `async_ptr`/`async_id`/`async_count`/`async_world` single-valued across the file (the artifact test that must pass before any event is believed), `async_branch` on both sides of the step, and persistence ≥ 10 samples (the torn-read test).
+
+**Wire-side leg deficit** (rendered path length ÷ v·duration) is a *screening* aid only. It cannot identify: arm A's L4 scores 0.13 with zero events (wall), arm B's L2 scores 0.23 with one. The operator is right that a stall identifies nothing.
+
+---
+
+### 1. THE PROTOCOL
+
+#### 1.1 Invocation
+
+```
+python toolkit/harness/session.py --until map --keep-open \
+    --game-args="--explorable --no-enemy[ --zero-lead]" \
+    --walk "<plan>"
+```
+
+`movetap.py` attached **before the client is launched**, not after — arm B lost 23.3 s of wire including plane flip #1 and 7 grants to a late attach. Request a rate the reader can actually meet (`calibrate()` measured ~13 Hz on this machine against a default request of 50): **`--hz 20`**, so the file-level floor is meetable and the per-leg rule below does the real work.
+
+#### 1.2 Leg grammar and its three hard rules
+
+1. **Every leg ≤ 8.0 s, and every leg bounded by a stop.** `walk_legs` already inserts `settle=1.5 s` between steps; the plan adds an explicit `wait:2` before each *measured* leg, so the copy (which needs 515/285.4 = **1.81 s** to converge) is provably co-located at the leg's key-down.
+2. **No yaw inside a measured leg.** Yaw is a discrete step between legs (W4); a leg is one constant heading by construction.
+3. **The shuttle turns around with `S`, not with yaw.** Facing stays fixed at −90.000° for the whole shuttle: `W` runs south at 285.4 u/s, `S` runs north at 190.1 u/s. This removes the 180° turnaround (2,250 drag px) from the critical path entirely.
+
+**Leg-boundary anchoring is free from the wire (REALFIX-T2b).** A key-up emits `0x0047`; the next key-down emits `0x003D` **at the identical position** (W1). That pair is the leg boundary read on the *wire's own clock*, so the harness's whole-second leg stamps stop being load-bearing for leg assignment. ⚠ **Only when a stop was emitted**: arm B produced **6 stops for 8 legs**, arm A **4 for 8** — a character not moving at key-up emits nothing. **Pre-register: a leg with no `0x0047` is FLAGGED, not scored as stop-bounded**, and its boundary falls back to the (now float, see §2) leg stamp.
+
+#### 1.3 The six cells
+
+The 2×2 the brief asks for is `{angled wall-slide, straight} × {plane-crossing, flat open ground}`, plus the perpendicular crossing. Two amendments, both forced by measurement:
+
+- **The deck is 263 u wide.** An *oblique straight* crossing is geometrically impossible — a 40°-off-normal line covers 313 u of y per 263 u of x and hits a parapet before the copy's mismatch window (~515 u of travel) closes. So the straight-crossing cell **is** the perpendicular crossing; there is no second angle to run. The dose axis moves from *angle* to *separation at the rewriting grant*, which W1+W2 make exactly controllable.
+- **The brief's "angled wall-slide on flat open ground" is split.** `X2a` runs the slide **on the deck without crossing** — same location, same wall class, no plane rewrite — which is simultaneously candidate B's clean cell *and* the skeptic's empty confound cell. `X2b` is the brief's literal open-ground version, kept, but its wall geometry is **UNVERIFIED** (our boundary-segment fit disagrees with the raster in the open field) and it is scored from the observed contact, not the intended one.
+
+| id | geometry | plane rewrite | wall deflection | sep at the instant | **A: plane echo** | **B: corner-cutting** | **location confound** |
+|---|---|---|---|---|---|---|---|
+| **REALFIX-X1** | east/west parapet slide **across** the deck, 40° incidence | **yes** | **yes, ~40°** | ~515 u | **WARP** | **WARP** | warp |
+| **REALFIX-X2a** | parapet slide **inside** the deck, never crossing y=5579/4532 | no | **yes, ~40°** | ~515 u | none | **WARP** | warp |
+| **REALFIX-X2b** | open-field oblique slide, plane 0 only | no | **yes, 30–50°** | ~515 u | none | **WARP** | none |
+| **REALFIX-X3** | deck centreline, perpendicular crossing, **hot** | **yes** | no | ~515 u | **WARP** | none | warp |
+| **REALFIX-X4** | open field, straight, no wall, no crossing | no | no | ~515 u | none | none | none |
+| **REALFIX-X5** | crossing with a **stop 230 u past the boundary**, so the rewriting grant lands **below the cut** | **yes** | no | ~230 u | none *(gate 1 passes)* | none | warp |
+| **REALFIX-X6** | on the deck, above cut, **no** rewrite (harvested from X3's own legs) | no | no | ~515 u | none | none | **warp** |
+
+**The crux is X2a vs X3: exactly one of A and B predicts each.** X6 is the cell the skeptic proved was empty in L1 (`in-corridor, above-cut, no plane rewrite`, n = 0) and it is harvested from the *same legs* as X3 — same location, same run, same separation, differing only in whether the grant rewrote the plane word. X5 is not a mechanism cell at all: it is **REALFIX.md:235's own invariant falsifier**, run deliberately for the first time.
+
+#### 1.4 The plan, leg by leg
+
+Facing convention: degrees are `atan2(uy, ux)` of the *travel* direction, as the client reports it in `values[3]`. `yaw:N` changes it by `−0.0800·N` degrees (W4).
+
+**PART 0 — transit (2 legs, both stop-bounded).** From spawn (9826.0, 8077.0) at facing ≈ −65.8° ± 1.1°:
+
+```
+yaw:-30   W:5.0   wait:2   W:4.2   wait:2
+```
+Bearing to the north-apron anchor (10990, 5750) is **−63.425°**; `yaw:-30` = +2.4°. Marched clear on our mesh; ends (11001, 5729), i.e. **within 11 u of the anchor in x**. Two legs rather than one 9.2 s leg keeps rule 1.
+
+**PART 1 — the shuttle (facing −90.000°, ×3 cycles).** `yaw:-330` from the transit bearing puts facing at exactly −90.0°.
+
+```
+[ wait:2  W:6.5  wait:2  S:9.8 ] × 3
+```
+
+Simulated instants (`sim.py`, using W1/W2's report rule and the mesh's plane function):
+
+| leg | reports at (u) | instants produced |
+|---|---|---|
+| `W:6.5` (1,855 u south) | 0, 515, 1030, 1545 | key-down (sep 0, below) · **X6** @ y5234 · **X3** @ y4720 rewrite 0→18 · **X3** @ y4204 rewrite 18→0 |
+| `S:9.8` (1,863 u north) | 0, 515, 1030, 1545 | key-down (sep 309, above, X4) · **X6** @ y4411 · **X6** @ y4925 · **X3** @ y5441 rewrite 0→18 |
+
+**Yield over 3 cycles: 11 × X3 (rewrite, above cut), 9 × X6 (in-corridor, above cut, no rewrite), 3 × X4.** Every X3 and X6 instant lands at sep 514–516 u. Walking cost: **49 s** plus 12 s of waits.
+
+**PART 2 — X5, the cold cell (6 hops around y = 5579).** From the north anchor, facing −90.0°:
+
+```
+[ wait:2  W:0.80  wait:2  S:1.20 ] × 3
+```
+`W:0.80` = 228 u, `S:1.20` = 228 u. Each hop's key-down report sits **228 u** from the previous grant, on the far side of the boundary — a plane rewrite at **sep 228 u, below the 299.3326 cut**, six times. (Simulated key-down sep 228.1–228.3 u.) Walking cost: **6 s**.
+⚠ Margin: 228 u vs a 299.33 cut is 71 u of headroom against a hold-timing error measured at 0.0003–0.0009 s of 25 s. Adequate. Do **not** stretch the hop toward 1.0 s.
+
+**PART 3 — X3 done straight, and X6's matched partner, are already in Part 1.** No extra legs.
+
+**PART 4 — X1 and X2a (the slide cells), facing set by yaw, 3 reps each.**
+
+- **X1**, from (10900, 5750), facing **−50.0°**: crosses y=5579 at 223 u (t=0.78 s), contacts the **east parapet x = 11123.0** at 347 u (t=1.22 s) at a **40° incidence**, then slides south at cos40°·285.4 = **219 u/s** to y=4532. `W:6.0`. Reports at 0, 515, 1030, 1545 → the rewrite lands at 515 u *and* the 40° deflection at 347 u is inside that same interval. **Both mechanisms armed on the same grant.** Positive control: this is the L1 configuration that produced E1/E2 (arm B was pinned at x = 11123.0 immediately before E1).
+- **X2a**, from (10940, 5560) — 19 u inside the deck's north edge — facing **−50.0°**: contacts x = 11123.0 at 285 u, slides 810 u south, **stops before y = 4532**. `W:4.5` (1,284 u). Reports at 0, 515, 1030 → **2 in-slide instants**, both above cut, **no rewrite**. ×3 = 6.
+- Repositioning between reps: `S` back north at the same facing, no yaw.
+
+**PART 5 — X2b (the brief's open-ground slide), 3 reps, marked provisional.** From (11200, 1980) at facing **+10.0°** into the SE wall (fitted bearing +50.2° over y 1900–2150, our mesh): contact at ~592 u, **40° incidence**. `W:6.0`.
+⚠ **This is the one cell our mesh cannot pin.** The boundary-segment fit disagrees with the raster in the open field, and the wall jogs at y≈2200. **X2b is scored from the observed report pattern only**, and if no rep yields a valid contact it is reported **NOT MEASURED**, never as a null.
+
+**PART 6 — X4 (open straight), 3 reps.** From (11400, 3900) facing **+200.0°**, `W:7.0` — 1,998 u, marched clear on our mesh. Plus the 8 X4 instants Parts 0 and 1 already produce.
+
+**Total walking ≈ 145 s per arm, plus ~90 s of waits and yaws — under 5 minutes of plan per session.**
+
+#### 1.5 Cell assignment is from the OBSERVED path, never the intended one
+
+Pre-registered, before the run:
+
+- A rep is **X-wall** iff its report stream shows a **≥ 25° deflection** between consecutive chords, *or* the client reports x = 10860.0 / 11123.0 exactly.
+- A wall rep is a **valid B instant** only if the report gaps through the slide stay **≥ 1.5 s** (⇒ the slide kept speed ⇒ separation stayed at chord scale). **If the gaps collapse to 0.50 s the rep is RECLASSIFIED as hard contact** — a below-cut instant, not a B test (W3). This is the rule that stops L1's mistake repeating.
+- A rep intended as **X3/X6 (no wall)** that reports x = 10860.0 or 11123.0 is **reclassified to X1/X2a**, not discarded.
+- Each instant's `sep` is read from **movetap's own `sep`** (`sync_at` vs `async_at`, both from client memory, **no clock alignment of any kind**), never from `movesync.pair`.
+
+#### 1.6 Arms, and their order
+
+1. **Arm P0 (`--explorable`, no `--zero-lead`) FIRST, same plan.** Not as a mechanism control — it sends 0 grants, never enters `agtrack_dispatch`, and **cannot express the signature**. It is the **geometry calibration**: no snaps means no trajectory divergence, so its report stream is the ground truth for where the walls actually are and which reps landed in which cell. L1 ran this arm last and got nothing from it; run first, it pays for itself.
+2. **Arm P2 (`+ --zero-lead`), same plan.** The treatment.
+3. **Arm F1 (`+ --zero-lead --plane-carry`), same plan** — only if P2 produced ≥ 1 event in X1 or X3. §3.
+
+**Not attempted here, and it stays with the owner**: the round-4 trigger (hold `S` + spam-click, 11.49 hard rows/min under the default build). A held key with simultaneous clicks is not expressible — `walk_legs` runs steps strictly sequentially (`session.py:1029-1030`) — and world-anchored clicking is the owner's side of the boundary. That is REALFIX-L1's second run and is unchanged by this document.
+
+**Nothing else in this protocol needs aiming.** All six cells are harness-scriptable: key holds plus calibrated yaw drags (W4), no world-anchored clicks, no model-appearance verdicts. The single unscriptable quantity is the **absolute spawn facing** (W5, ±1.1°), and §1.5 absorbs it by scoring from observation.
+
+---
+
+### 2. CLOCK ANCHOR
+
+#### 2.1 The whole 1.00 s is on one side, and it is one line
+
+`offset_from_stamps` returns `max(walls), max−min`; measured spread **0.999920 s** (arm A) and **0.999777 s** (arm B). The cause is entirely `authsrv.py:8396`:
+
+```python
+kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())   # truncated to the second
+```
+
+Each row therefore gives `floor(unix) − t = true_offset − frac`, `frac ∈ [0,1)`. **movetap has no such problem** — it stamps `s["t"] = round(time.time(), 4)` (`movetap.py:2795`), full resolution.
+
+> **REALFIX-T1 — the delta.** One line beside it in `Recorder.event`:
+> ```python
+> kw["wall_unix"] = time.time()
+> ```
+> `time.get_clock_info('time')` on this machine reports `GetSystemTimePreciseAsFileTime()`, resolution **1e-07 s** (measured, this box). The offset becomes **per row** — `wall_unix − t` — so `perf_counter`↔system-clock drift over a 200 s run cancels as well, and the file's own residual `max(wall_unix−t) − min(wall_unix−t)` is a printable diagnostic rather than an assumption.
+>
+> **Loader side:** `offset_from_stamps` prefers `wall_unix` when present, falls back to the truncated max-estimator, and **prints which it used and the residual**. Never silently mix (`movesync.py:341`, and both loaders at `:265-272` / `:303-310`).
+
+**REALFIX-T2 — the second clock nobody named.** The harness's leg table is *also* whole-second (`session.py:1027`, `:1077`), worth ±0.5 s = ±143 u on every leg-to-capture mapping in both lanes' analyses. One line each: `"started_unix"`, `"ended_unix"`, `"settled_unix"` = `time.time()` in the `walk_legs` row at `session.py:1079`. Cheap and it removes a systematic that no one had priced.
+
+**REALFIX-T2b** (already free, §1.2): the `0x0047`/`0x003D`-at-the-same-position pair gives the leg boundary on the wire's own clock, for the 6-of-8 legs that emit a stop.
+
+#### 2.2 Expected residual, stated honestly in three parts
+
+After T1 the **clock** error is gone; what remains is **physical** and is not a clock problem:
+
+| term | size | grounds |
+|---|---|---|
+| clock alignment | **< 1 ms (< 0.3 u)** | two adjacent reads inside `event()`; 1e-7 s clock resolution measured |
+| transport, server-send → client-apply | **≤ 6 ms (≤ 1.7 u)** | the capture's own `ping_summary` row: `{"last_ms": 6, "missed": 0}` in `authsrv-20260821T082631-c1.jsonl`, loopback |
+| **movetap sample phase** | **≤ 1/f (50 ms = 14 u at 20 Hz)** | the binding term |
+| **total, one-sided** | **≤ 0.06 s / ≤ 17 u at 20 Hz** | vs **1.00 s / 288 u** today |
+
+**REALFIX-T3:** the residual is now sample-rate-bound, so `--hz 20` is a *requirement* of the clock fix, not a nicety. If the reader sustains only 12 Hz the residual is 0.09 s / 25 u — still 11× better than today, and it must be **printed as the achieved figure**, never assumed.
+
+#### 2.3 The fiducial is a validator, not the anchor — and the skeptic's correction is adopted verbatim
+
+The five `agent+0x80` flip-to-grant lags are +0.018…+0.107 s, spread 0.089 s. **That spread is invariant under the offset** — under `offset=min` the same five lags read +1.018…+1.107 with the identical 0.089 s spread — so it proves nothing about which branch is true. What excludes the min branch is `ping_summary last_ms = 6` plus 0.089 s being one movetap sample interval at 9.5 Hz. **Do not restate ±0.1 s as a "fiducial spread".**
+
+> **REALFIX-T4 — pre-registered validator.** After T1, for every plane-word-changing grant the lag from the wire send to the observed `agent+0x80` flip must be **≥ 0 and ≤ 1/f_tap + 0.05 s**. A negative lag, or one > 0.25 s, means T1 did not take, and **every cross-tab reverts to being scored on the client-memory `+0x80` anchor alone** — which is where HUNT's plane table already sits, correctly.
+
+**And this stands whatever the clock does:** re-anchoring L1's landing 2×2 on a *fitted mean* lag (+0.077 s) instead of per-event moves E3 (own lag +0.018 s) into the wrong cell and degrades the table to [[2,1],[0,27]] with a phantom warp in the no-rewrite/below-cut cell. **Every landing cross-tab in L2 is anchored per-event on the client-memory `+0x80` flip, and the mean-lag sensitivity is printed beside the table.** The event identification itself needs no alignment at all — it is an adjacent-sample difference inside one movetap file.
+
+#### 2.4 Instrument change: REALFIX-I1, the history chain
+
+Both lanes and the skeptic converge on this and it is the only measurement that turns elimination into observation.
+
+> **Delta (~20 lines, `movetap.py`):** follow `state_record+0x04` (`S_HIST_HEAD`, `movetap.py:256`) → `node+0x04` for up to N nodes, emitting each node's `+0x00` time and `+0x08..+0x14` point **including its plane word**, plus **the client's own plane for both copies at every node** (the skeptic's addition — without it grant #37 stays unadjudicable, and #37 is the only case separating "the plane echo *causes* snaps" from "the plane echo *permits* them").
+>
+> **Gate it on `sep > 250 u`.** A full sample is ~20 `ReadProcessMemory` calls; 8 unconditional node reads is ~+40% and would drop 9.5 Hz to ~6.8 Hz — fighting §2.2's residual. The match test only matters where gate 1 could fire, so read the chain only there. **This conditional is a design requirement, not an optimisation.**
+
+Then, at each instant, the match test is *recomputed from the sample*: a node inside 100 u of `q` whose plane differs from `q`'s ⇒ candidate A confirmed at the operand; no node inside 100 u ⇒ candidate B revived; a truncated/cleared chain ⇒ the third reading, currently unpriced.
+
+---
+
+### 3. PER-MECHANISM FIX CANDIDATES — spec'd, NOT built
+
+#### REALFIX-F1 · the plane echo fix — one line and one state slot
+
+**Site:** `authsrv.py:10294-10296`, the zero-lead send's argument list.
+
+```python
+## field 3 = the DESTINATION's plane (the newest report's) -- unchanged.
+## field 4 = the plane the AUTHORITATIVE COPY is standing on, which under zero
+##           lead is the point of the PREVIOUS grant, by construction.
+prev_plane = state.get("zl_last_grant_plane", plane)
+send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+     [PLAYER_AGENT_ID, list(reported), plane, prev_plane], ...)
+state["zl_last_grant_plane"] = plane
+```
+
+**Grounds, and the caveat travels with it.** Retail's field 3 **leads** field 4: of 1,245 differing rows, **939 (75.4%) lead** at delay p25/p50/p75 = **0.26 / 0.64 / 1.28 s**; independently replicated at 80.3% unbounded and **83.6% under a symmetric ±3.0 s window** (n=825), so the asymmetry attack fails. ⚠ **This is measured over retail's whole AGENT population, which is overwhelmingly NPCs; the player-identified version is UNVERIFIED (87% vs 39% under two identification rules).** F1 is a proposal grounded in NPC grants and must be labelled so.
+⚠ **Corpus correction to carry into FINDINGS:3407 and :3790**, which both quote 14 of 987 (1.4%) as retail's rate: read **"1.4% in `20260807T143055`; 12.8% over the live corpus, n = 9,733, per-capture 1.4–30.2%, with `20260817T231139` supplying 51% of the differing rows."**
+
+**The run it changes: REALFIX-L2 Part 1, the X3 instants.**
+- Predicted: grants whose field 4 differs from the SYNC copy's `agent+0x80` go from the run's observed count (predicted 11 in X3, 3 in X1, 6 in X5) to **0**; separation p50/p90 **unchanged within 5%** (F1 touches no position); the **X3 event count goes to 0**.
+- **Falsified if** any X3 event survives F1, **or** if separation p90 moves by more than 5%, **or** if the field-4 mismatch count is not 0.
+
+**Named limit:** F1 under-corrects when the copy is more than one grant interval behind — after a rate-limit refusal (4 of 70 headings in arm B) or a stall. It is a one-interval correction for a one-interval lag; W2 says that is exactly the lag zero-lead produces at free-travel cadence, and nothing more.
+
+**REJECTED variant, and why it matters:** field 4 = `plane_at(copy_estimate)` from our own navmesh. Refused — `plane_at` is 189/198 and **its 9 failures are exactly bridge-over-ground**, which is this map's site; and our mesh is genuinely ambiguous here by measurement ((10990, 5000) → planes [0, 18]; (10990, 4600) → [18] only). Verify the operand, don't compute it from the one tool known to be wrong about it.
+
+#### REALFIX-F2a · corner-cutting mitigation (i) — grant floor keyed to command changes
+
+**Site:** restore the shipped `turned or walking` gate at `authsrv.py:9758` for the zero-lead arm.
+**Rationale under candidate B:** the client pushes a history node on a movement-command change or 2.5 s head age (`0x0060593A`); granting only at command changes puts `q` on a node instead of mid-chord.
+**The run it changes: every leg of REALFIX-L2, and it is priced as expected-to-fail.** W4 measured the commanded heading **exactly constant within a leg — max deviation 0.000° over 16 legs**. A command-change-only floor therefore grants **once per leg**: the key-down report and nothing else. Grants on a `W:6.5` shuttle leg fall **4 → 1**, and separation, instead of saturating at 515 u, grows to the full leg length — **up to 1,855 u**. That is the P0 cost-of-silence regime (p50 4,402 u) returning by a different door.
+⇒ **Do not spend a live arm on F2a.** It is priced here so the ladder does not.
+
+#### REALFIX-F2b · corner-cutting mitigation (ii) — lower `GRANT_MIN_INTERVAL`
+
+**Site:** `authsrv.py:3047` (`GRANT_MIN_INTERVAL = 0.5`) — but the constant is **shared with the click arm**, so the delta must be a heading-arm-scoped floor inside `_heading_grant_ok` (`:3119`), not a move of the module constant.
+**The curve, from the two points REALFIX.md §4's M1 table gives** (OBSERVED, offline, `ours`, P2 counterfactual, match-ON):
+
+| capture | M1 max, floor 0.50 s | M1 max, floor neutralised | Δ | slope |
+|---|---|---|---|---|
+| `20260814T100340` | 4.94 s | 4.55 s | 0.39 s | **0.78 s of lag age per second of floor** |
+| `20260820T182934` | 2.52 s | 2.00 s | 0.52 s | **1.04 s per second of floor** |
+
+A linear read of two points says **0.50 → 0.25 s recovers ~0.20 s and ~0.26 s of M1 max**, moving `100340` from 4.94 to ~4.74 s against D2's 5.0 s trigger, which currently misses by 0.06 s. **Two points support a slope and nothing more; state it that way.**
+**The run it changes: NOT REALFIX-L2.** The floor refused **4 of 70** headings in arm B, and this plan's free-travel reports are 1.80–2.74 s apart (W2), so the floor is inert here. **F2b's regime is the round-4 trigger run** (0.30 s report cadence, where the floor binds), and it should be pre-registered there, not here.
+
+#### REALFIX-F3 · defer the grant on a deflection — **INVENTED HERE, unpriced**
+
+Skip the grant when the newest report's position deviates from the straight extrapolation of the previous two reports by more than `MATCH_RADIUS` (99.919968 u). One predicate; state is the last two reports.
+**The run it changes: the X1 and X2a legs.** Under B it removes the event; under A it does nothing. Cost: one skipped grant per deflection = **+1 chord (~515 u) of separation exactly at contact**, which is the worst moment to add lag if B is *wrong*.
+**Label:** this is not derived from any measurement in the record and has no retail grounding. **Do not build it before X2a returns a positive.**
+
+#### The finding that constrains the whole ladder
+
+At keyboard cadence, **the chord length is set by the client's own 515 u report trigger (W2), not by our grant floor.** We cannot grant more often than reports arrive. So if candidate B fires in X2a, **P2 has no cheap dial** — F2a costs the separation win outright, F2b is inert in this regime, and F3 is invention. That makes X2a the ladder-deciding cell: a positive there sends the arc to P3/§2.2, not to a P2 parameter.
+
+---
+
+### 4. PRE-REGISTERED PREDICTIONS
+
+Written before the run, in counts that can fail. Base rate for a plane-rewriting above-cut grant, from L1: **3 of 4**, Jeffreys 95% CI **[0.284, 0.972]** — n=4, post-hoc, and the interval is wide on purpose. Base rate for an above-cut **non**-rewriting grant, from L1: **0 of 27**, Jeffreys 95% CI **[0.0000, 0.0997]**.
+
+#### 4.1 Primary table
+
+| cell | instants planned | **A: plane echo** predicts | **B: corner-cutting** predicts | **location confound** predicts | **null (P2 is fine)** predicts |
+|---|---|---|---|---|---|
+| **X1** parapet slide + crossing | 3 | **≥ 1 event** (E[2.3] at p=0.75) | **≥ 1** | ≥ 1 | 0 |
+| **X2a** deck slide, no crossing | 6 | **0** | **≥ 2** (E[4.5]) | ≥ 1 | 0 |
+| **X2b** open slide, no crossing | ≤ 3 (provisional) | **0** | **≥ 1** | **0** | 0 |
+| **X3** centreline crossing, hot | 11 | **≥ 6** (E[8.3]) | **0** | ≥ 6 | 0 |
+| **X4** open straight | 11 (3 + 8 from transit/shuttle) | **0** | **0** | **0** | 0 |
+| **X5** crossing, below cut | 6 | **0** | **0** | ≥ 2 | 0 |
+| **X6** on deck, above cut, no rewrite | 9 | **0** | **0** | **≥ 3** | 0 |
+
+#### 4.2 Discriminations, each with the arithmetic that makes it decisive
+
+- **A vs B — the crux.** `X3 ≥ 6 with X2a = 0` ⇒ **A, B refuted**. `X2a ≥ 2 with X3 = 0` ⇒ **B, A refuted**. Both non-zero ⇒ both live, and X2b + X6 arbitrate.
+- **Power on X3's null.** `P(0 events in 11)` = **0.0000** at p=0.75, **0.0005** at p=0.50, **0.0198** at p=0.30 (the CI's lower edge). So **X3 = 0 refutes A at the weakest plausible rate too.**
+- **Power on X2a's null.** `P(0 in 6)` = 0.0002 / 0.0156 / **0.1176** at p = 0.75 / 0.50 / 0.30. ⚠ **A B-rate at the bottom of the band survives an X2a null 12% of the time.** If the session budget allows, **run X2a at 6 reps (12 instants)**: `P(0 in 12 | p=0.30)` = **0.0138**. Recommended; stated up front so it is not a post-hoc rescue.
+- **The confound cell.** **X6 ≥ 1 event ⇒ both named mechanisms are wrong and the driver is location/geometry.** X6 shares its legs, its separation and its position with X3; only the plane rewrite differs. This is the cell that was **empty (n=0) in L1** and it is the single most important addition in this design.
+- **The invariant.** **X5 ≥ 1 event ⇒ REALFIX.md:235 fires** — "a P2-arm snap recorded while movetap shows separation < 299.33 u" — and every policy in that document becomes beside the point. Predicted 0 under both mechanisms. `P(≥1 in 6 | p=0.05)` = 0.265, so a null here is weak evidence and must be labelled as such.
+- **Sanity floor.** **X4 ≥ 1 event ⇒ the run is broken or `--zero-lead` is harmful everywhere**; L1 already gives 0 of 27 above-cut same-plane instants, including 7 consecutive seconds at sep 510–520 u with gate 1 "above" and the fence open (arm B L4).
+- **Arm P0 (geometry control).** Predicted **0 events in every cell** — it sends 0 grants, so `agtrack_dispatch` is never entered. **P0 ≥ 1 event refutes the whole grant-mediated reading of this arc.** ⚠ P0 is a valid control **for geometry only** and is **vacuous for the mechanism**; the causal weight rests entirely on the within-P2 contrast across cells.
+
+#### 4.3 Blind-budget qualification — the licence for every null
+
+L1's nulls were quoted past their budget. These will not be.
+
+1. **Per-leg coverage rule (the operative licence).** A leg is **scorable for a null** only if movetap covered **≥ 95%** of its span **and** no intra-leg sample gap exceeded **0.30 s**. Otherwise the leg is **VOID for a null and still valid for a positive**. (L1's max intra-leg gaps were 0.176 s / 0.215 s, so this is met by a healthy run — but the *file-level* floor `elapsed × hz × 0.5` is too coarse to license a per-cell null, and neither lane said so.)
+2. **The rescue argument must be printed beside every null, not assumed.** "N of M above-cut instants produced no event" carries, in the same sentence: the achieved tap rate, the max intra-leg sample gap, and the sentence *"a persistent 300–470 u displacement cannot hide between samples at this gap"*. Without it, that count is L1's withdrawn "~66 test instants, none snapped" re-entering the record unlabelled — and it is the whole denominator of every ratio in §4.1.
+3. **Attach movetap before the client.** Arm B's 23.3 s pre-attach window swallowed plane flip #1, 7 grants and an 18.0 s freeze whose shape matches E1–E3. Any instant inside a pre-attach window is **UNJUDGED**, never counted as a miss.
+4. **The hard wire bar is reported and is not the endpoint.** Under `--zero-lead` a snap is a **round trip that ends at the client's last reported position** — net wire displacement 0.0 u, three times in L1. ⚠ **Do not restate this as "the bar cannot fire at any cadence or coverage."** Each L1 event opened a **21.64 / 17.25 / 5.51 s report silence beginning at the snap** — that is the blind-budget defect FINDINGS already booked, not a new and worse class — and the three round trips total **4.16 s**, which at the 0.30 s cadence P2's bounds were calibrated on would carry ~14 report instants.
+5. **X2b returns NOT MEASURED, not a null**, if no rep yields a valid contact (§1.5).
+
+#### 4.4 Reporting rules, binding
+
+- **The operator's "angled movement" hypothesis is UNTESTED by L1, not refuted.** Measured |dψ/dt| on the rendered track is p90 = 0.007 rad/s — that walk grammar contains no sustained angled motion at all. X1/X2a/X2b are its first real test.
+- **Do not write "the plane echo is the mechanism."** L1 licenses only: *the plane word is **necessary** in that run (0 of 27 above-cut same-plane landings warped) and **not sufficient** — grant #37 (t=147.877, w4=0 onto a sync copy reading plane 18, sep 511.2 u, fence armed, same 18→0 direction as E1, copy stopped) matched every stated precondition and did not warp.* n in the treatment cell is 4.
+- **Which plane variable is operative is UNDECIDABLE in L1** — three definitions (w4 ≠ sync `+0x80`; w4 ≠ the previous grant's w4; sync plane ≠ async plane) are collinear there and give identical 2×2s. **REALFIX-I1 is what decides it**, and X5 (which breaks the collinearity by holding sep below the cut while the rewrite still happens) is what separates "causes" from "permits".
+- **`clear_record`'s snap-path position is not independent evidence.** `clientControlled` goes 1→0 three times in arm A, which sends zero grants and never enters the dispatcher.
+- **The location confound is now measurable rather than fatal.** In L1, all 4 plane-rewriting landings were inside or within ~250 u of the plane-18 corridor, all 27 above-cut controls were outside it, and the separating cell was empty. X6 fills it at n=9 from the same legs.
+- **Corner-cutting's exceedances do not survive their own caveat**, and L2 inherits that: a node at every wire report already gives **0 exceedances (max 72.4 u)** against the 99.92 u radius; only the thinned 2.5 s-rule proxy exceeds; the report-lateness bound is **v·gap = 285.4 × 1.80 = 514 u at the p50 gap**, larger than any exceedance either lane measured; and the steady-turn sagitta at the client's own 2.5 s node rule is **1.6 u**. **B's only surviving route is a collision deflection**, which is why every B-cell in §1.3 is a wall cell and why W3's reclassification rule is load-bearing.
+
+---
+
+### 5. WHAT LANDS IN THE TREE, IN ORDER
+
+| # | delta | file:line | size | blocks |
+|---|---|---|---|---|
+| 1 | **REALFIX-T1** float wall stamp | `toolkit/authsrv/authsrv.py:8396` | 1 line | everything wire↔tap |
+| 2 | **REALFIX-T1** loader prefers `wall_unix`, prints which and the residual | `toolkit/clientscan/movesync.py:341`, `:265`, `:303` | ~10 lines | — |
+| 3 | **REALFIX-T2** float leg stamps | `toolkit/harness/session.py:1027`, `:1079` | 3 lines | leg assignment |
+| 4 | **REALFIX-I1** history-chain walk, gated on `sep > 250 u`, node plane + both copies' planes | `toolkit/clientscan/movetap.py` (near `S_HIST_HEAD`, `:256`) | ~20 lines | the A-vs-B adjudication |
+| 5 | run **arm P0** with the plan (geometry calibration) | — | ~5 min | cell assignment |
+| 6 | run **arm P2** with the plan | — | ~5 min | the verdict |
+| 7 | **REALFIX-F1** plane carry, only if 5–6 produce X1/X3 events | `toolkit/authsrv/authsrv.py:10294-10296` | 3 lines | the fix A/B |
+
+Items 1–4 are instrument work with no policy content and can land before any client is up. Each needs its `TESTS.md` entry in the same commit (`test_srclint.py` §7 checks both directions), and item 4 needs a `LEDGER` floor set from a real green run.
