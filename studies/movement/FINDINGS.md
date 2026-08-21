@@ -4548,8 +4548,8 @@ the SYNC copy's `agent+0x80` go to 0 … FAILS IF the field-4 mismatch count is 
 
 | | grants | field 4 ≠ the copy's own plane |
 |---|---|---|
-| P2 `--zero-lead` | 88 | **8 (9%)** |
-| F1 `+ --plane-carry` | 93 | **5 (5%)** |
+| P2 `--zero-lead` | 88 | **8 (9%)** ⚠ undercount — strictly-before pairing gives **10**; see the F1b entry |
+| F1 `+ --plane-carry` | 93 | **5 (5%)** ⚠ undercount — strictly-before gives **6** |
 
 **Five is not zero, so the primary falsifier FIRED.** And all five sit **above the
 cut** — the exact combination that produced 3 of 8 events in the control:
@@ -4562,8 +4562,7 @@ t=178.93 (11123,5249) w3=18 w4=18 | copy plane 0 | sep 366
 t=191.66 (10860,4816) w3=18 w4=18 | copy plane 0 | sep 429
 ```
 
-**Every one is the spec's own NAMED LIMIT, biting exactly where it said it
-would**: *"F1 under-corrects when the copy is more than one grant interval
+⚠ **CORRECTED by the F1b offline screen below: THREE of these five are a sub-frame arrival race (F1 sent the right value ~24 ms early), and only `t=178.93` and `t=191.66` are two-interval lags.** As written this read: **the spec's own NAMED LIMIT, biting exactly where it said it would**: *"F1 under-corrects when the copy is more than one grant interval
 behind."* All five send `w4 = 18` because the **previous grant** was already on
 plane 18 — the client had been on the deck for two grants while the copy was
 still back on plane 0. F1 corrects a one-interval lag; these are two-interval
@@ -4607,3 +4606,90 @@ is explained by its own stated limit, and nothing contradicts round 6 or L3.
 2. **Repetition.** Three arms × three runs would put the event comparison on
    n = 9 per arm; at the control's 3-in-8 rate, that is enough for the Fisher
    test to separate a real zero from a lucky one.
+
+## 2026-08-21 — REALFIX-F1b BUILT AND REFUTED AT A DESK: the offline screen kills its prediction, corrects two published numbers, and validates the arrival model
+
+**No client run.** `--arrival-carry` sends field 4 = the plane of the grant the
+copy has **arrived** at, computed from the client's own bake formula
+(`arrival = send + trunc(|dest − copy|·1000/288)`, floored at 1) over the SYNC
+model the server already maintains — no navmesh, no new constant. Its point was
+to close F1's named limit. **It was pre-screened against captures already in the
+vault before any arm was run, and the screen refuted its prediction.**
+`python toolkit/clientscan/grantsim.py --planecarry` is the permanent screen.
+
+### 1. THE COUNTERFACTUAL — what each policy would have sent
+
+Field 4 scored against the plane word movetap **actually read in the sample
+strictly before each grant**, with grants dropped where the counterfactual's own
+divergence contaminates the trace (denominator printed, never hidden):
+
+| policy | `132546` (P2 control) | `143411` (F1 arm) |
+|---|---|---|
+| shipped `--zero-lead` | **10** of 88 | **18** of 36 |
+| F1 `--plane-carry` | 0 of 8 | **6** of 93 |
+| **F1b `--arrival-carry`** | 0 of 8 | **3** of 69 |
+
+**F1b does NOT reach 0, so its pre-registered prediction — the falsifier F1
+failed — would have failed too.** Recorded before a client was ever pointed at
+it, which is the entire reason the screen exists.
+
+**The three survivors are a sub-frame race, not a logic error.** All three land
+**8–35 ms after a modelled arrival the client had not yet performed**
+(`(10950,4720)`, `(10950,4708)`, `(10950,4699)`, all `w3=18 field4=18` against an
+observed plane 0, sep 510–514 u). The client consumes an arrival **on a frame**,
+not on the tick. **F1b's logic does close all of F1's genuine two-interval lags.**
+A ~40 ms guard band closes the rest and is **REFUSED**: `eps` has no derivation
+and would be fitted to the one capture that scores it.
+
+### 2. ⚠ TWO CORRECTIONS TO THIS DOCUMENT'S OWN PUBLISHED NUMBERS
+
+**(a) The field-4 baselines UNDERCOUNT.** FINDINGS's "8 of 88" and "5 of 93"
+paired each grant with the *nearest* movetap sample — which can be one taken
+**after** the grant, reading back the plane word that grant just wrote and
+scoring a genuine rewrite as a match (leads +0.044, +0.043, +0.016 s).
+**Strictly-before pairing gives 10 of 88 and 6 of 93.** The 10 is corroborated
+independently by this document's own L3 table, which counts **10** plane-word
+changes on that capture. Both conventions are kept in the code
+(`FIELD4_PUBLISHED_NEAREST` / `FIELD4_MEASURED`) so the correction cannot be
+silently re-lost. **F1's improvement is 10 → 6, not 8 → 5.**
+
+**(b) "All five of F1's residuals are the spec's NAMED LIMIT" is WRONG.** Written
+in the F1 entry above and merged; the screen shows **three of the five are the
+sub-frame arrival race** (F1 sent the right value ~24 ms early) and **only
+`178.93` and `191.66` are true two-interval lags**. The named limit is real and
+it bit — on two grants, not five.
+
+### 3. What the screen validated on its way past
+
+**The arrival model is falsifiable, and it survives with zero free parameters.**
+`agent+0x80` has two writers: our field 4 at the grant, and the client itself at
+**arrival**. In the F1 capture the word changes 24 times, **17 of them not at a
+grant — and all 17 land on a modelled arrival** (|dt| median 0.070 s, max
+0.135 s at a 9.5 Hz tap; strictly early in 4 of 17, by at most 20 ms). That is a
+prediction of *when the client will move a byte we do not write*, made from the
+bake formula alone, and it lands 17 for 17.
+**Control, and it is asserted rather than passed:** the P2 capture makes **zero**
+client-authored writes, so the model is unfalsifiable there **by construction** —
+the check requires `n == 0` instead of scoring 0-of-0 as a pass.
+
+**The closed simulation is printed BELOW the anchored table and labelled a
+tautology**: F1b returns 0 under it *by construction*, because that simulator
+derives the copy's plane from the same arrival model F1b's policy reads — and it
+**under-counts F1's own residual, 3 against the wire's 6**. Same discipline as
+round 5 §6.5, applied to a number that would have flattered this build.
+
+### 4. Where this leaves the fix
+
+**Nothing here is a live result and F1b's arm has not been run** — deliberately:
+its own screen says the headline it was built to produce is unavailable.
+
+- **The mechanism story is stronger than before this build**, on the arrival
+  model's 17-for-17 and on the corrected baselines.
+- **The fix is no closer to demonstrated.** F1 improves the exposure 10 → 6;
+  F1b would improve it to 3 with the residual explained but not removed; and
+  **F1's own event reduction remains non-significant (Fisher p = 0.196)**. The
+  binding constraint is not the policy any more, it is **n**.
+- **What settles it is repetition, not another flag**: three arms × three runs
+  puts the event comparison on n ≈ 9 per arm, where the control's 3-in-8 rate can
+  actually separate a real zero from a lucky one. **The next client time this arc
+  spends should buy replicates, not a fourth policy.**
