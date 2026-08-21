@@ -3499,7 +3499,8 @@ so it should take the same path.
 retail capture is **38849**; the probe above ran on the loopback client, which was
 **38797** — 52 builds apart. Effect rendering is unlikely to have moved, but
 "unlikely" is not a measurement, and this repo has been wrong about a version
-assumption before.
+assumption before. **CLOSED in §32.7 by rebuilding the loopback client at 38849
+and re-running: identical to three decimals.**
 
 ### 32.6 Closing the build gap meant building a 38849 loopback client, and a guard stopped the first attempt
 
@@ -3552,3 +3553,39 @@ arguments, which enumerates every client under `vault/run` rather than the singl
 hardcoded path that once left one uncaged for a day). **So the 38849 re-run is
 staged and blocked on one elevated command, and the build gap in §32.5 stands
 until it runs.** Everything else about the rebuild is done and verified.
+
+### 32.7 The gap is CLOSED: 38849 behaves identically, so retail players see the ghost
+
+Same probe, same plan, the **38849** loopback client — the exact build the Isle
+capture came from. Run `20260821T180010`, verdict PASS, all seven steps confirmed
+on the wire first.
+
+| measurement | 38797 | **38849** |
+|---|---|---|
+| live-icon windows | 2 | 2 |
+| treatment window | +16.5 .. +23.5 s | **+16.4 .. +23.4 s** |
+| same-state frame noise floor | 0.000 | **0.000** |
+| slot change across the late removal | 6.829 | **6.829** |
+| control patch across the same removal | 0.000 | **0.000** |
+
+**Identical to three decimal places on a different build.** In both, the live icon
+dies ~16 s before the late `0x0044` is sent, and the faded ghost holds until it
+arrives.
+
+**So the chain closes without a live run**, and each link is measured rather than
+assumed: retail's Student application and our probe's are field-for-field the same
+`0x0042` (§32.5); the client cannot tell them apart; and the client's behaviour is
+now measured on retail's own build. **A retail player standing in a Student's ring
+sees a live condition icon for its stated ~10 s and a dead-looking faded one for
+the rest of the stay, while the condition keeps costing health the whole time.**
+The Disease that killed the operator in `20260821T152147` did most of its damage
+behind an icon that had already visually expired.
+
+*Label: OBSERVED for the client behaviour on both builds and for the message-shape
+identity; RECONSTRUCTION for the retail player's experience, since we render our
+own messages and not ArenaNet's.* **The one thing not excluded** is an unidentified
+opcode that refreshes the client's timer — §8.6 found nothing on the effect channel
+in those windows, and no other message is known to touch it, but "we did not find
+one" is weaker than "there is none". A single retail screenshot 20 s into a ring
+would convert the last link from inference to observation, and it is now worth
+exactly that one frame and no more.

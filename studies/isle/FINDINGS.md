@@ -1656,8 +1656,18 @@ then holds a static, heavily faded GHOST of it until the removal lands. So a
 silent extension keeps the server's bookkeeping but not the player's view. Which
 raises the question this section cannot answer and one screenshot can: **for the
 15 late episodes above, was the operator looking at a live icon or a ghost?** The
-Disease that killed them outlasted its 10.0 s duration many times over. Take one
-frame 20 s into a Student's ring on the next Isle trip.
+Disease that killed them outlasted its 10.0 s duration many times over.
+
+**ANSWERED 2026-08-21 without a live run** — [studies/skills §32.7](../skills/FINDINGS.md).
+Retail's Student `0x0042` and our probe's are field-for-field identical (same
+target slot, `field3 0`, same `10.0` f32, condition ids both sides), so the client
+cannot tell them apart; and the probe was re-run on a purpose-built **38849**
+loopback client — this capture's own build — giving results identical to three
+decimals. **A ghost.** The operator saw a live icon for the stated ~10 s and a
+faded, dead-looking one for the rest of each stay, while the condition kept
+costing health. Most of the Disease that killed them landed behind an expired
+icon. One retail frame 20 s into a ring would upgrade the last link from
+inference to observation; nothing else here needs it.
 
 ## 9. Rung 8c, LIVE #5 — the rank ladder: the unmet penalty SCALES, and PINNED is dead (2026-08-21, capture `20260821T163511`)
 
