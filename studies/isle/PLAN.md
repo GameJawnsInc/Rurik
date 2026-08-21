@@ -1139,9 +1139,19 @@ nameplates, not five, because application is by PROXIMITY and allegiance does no
 it; degeneration reproduces GWW's 3/4/4/7 exactly, and survives a max-health change
 (same pips at two different rates). **The rung is NOT closed:** the run was cancelled at
 step 17, so **Leg C never ran and rung 7's unmet-requirement defect stays open**, and
-**482 Deep Wound + 2077 Cracked Armor** — the two northernmost Students — are still
-unwitnessed. Those two remainders are the next run, and it is deliberately short
-(owner's instruction, 2026-08-21: shorter focused runs, steps reviewed before sealing).
+~~**482 Deep Wound + 2077 Cracked Armor** — the two northernmost Students — are still
+unwitnessed.~~ **DONE 2026-08-21, capture `20260821T155022`** (FINDINGS §8): six steps,
+~3 minutes, every prediction met. **482 = Deep Wound is confirmed** — it was the one id
+resting purely on our own elimination arithmetic, and GWW publishes no id for it — and
+property 42 falls **480 → 384**, exactly ×0.8, on both applications, with 2077's whole
+window as an in-capture control where it never moves. **All ten conditions on the Isle
+are now witnessed and joined to their rendered nameplates; the map is closed.** The run
+also caught a divergence from our own server nobody was looking for: retail extends a
+re-applied condition **silently**, emitting nothing, where our effect substrate extends
+by REMOVE-then-APPLY (§8.6). **What remains for rung 8 is Leg C alone** — the rank ladder
+at effective 5/6/7/8, which closes rung 7's unmet-requirement defect, and which is its
+own short run by the same rule (owner's instruction, 2026-08-21: shorter focused runs,
+steps reviewed before sealing).
 
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because

@@ -1513,3 +1513,111 @@ time is 483 = Disease. Three records agree and none derives from the other two.
 4. **60 s per Student is far more than needed** — application is near-immediate on
    entering the ring, and the whole eight-condition sweep took under 5 minutes at 12-39 s
    per body.
+
+---
+
+## 8. Rung 8b, LIVE #4 — the condition map is COMPLETE (2026-08-21, capture `20260821T155022`)
+
+Six steps, ~3 minutes of activity, every prediction met. Seals AGREE,
+`exe_unchanged: true`, `game_mode base`, 3 keys, 6 apply episodes, **`unattributed 0`**.
+The first run written under the owner's 2026-08-21 instruction — short, one action per
+step, predictions sealed in the comment block instead of in the step text the operator
+reads mid-run — and it produced a clean result at a twentieth of the previous plan's
+length.
+
+### 8.1 `482 = Deep Wound`, and the elimination inference held
+
+`0x0042` skill **482**, field3 **0**, duration **10.0**, n=2. This was the one id in the
+table that rested on nothing but our own arithmetic: 478-486 is contiguous, eight were
+witnessed in LIVE #3, 482 was the only gap, and GWW publishes **no id** for Deep Wound —
+checked before the run through the wiki API across all ten conditions, where **only
+Cracked Armor carries an `<!--id:2077-->` comment**. So the wire was the only thing that
+could settle it, and it did.
+
+`0x0042` skill **2077**, field3 0, duration 10.0, n=2 — the registered replication, met.
+
+**All ten conditions on the Isle are now witnessed on retail traffic**, each joined to
+the nameplate the client renders. The map is closed.
+
+### 8.2 Deep Wound moves property 42 by exactly 20%, twice, and returns both times
+
+| wire t | property 42 | what is live |
+|---|---|---|
+| 43.0 | **480** | baseline |
+| 80.4 | **384** | 482 applies (step 2) |
+| 106.1 | **480** | 482 closes |
+| 113.8 → 142.3 | **480, unmoved** | 2077 live (step 3) |
+| 150.7 | **384** | 482 re-applies (step 4) |
+| 163.9 | **480** | 482 closes |
+
+`480 × 0.8 = 384` exactly, on the same millisecond as the apply, on both applications,
+returning to 480 on both closes. WIKI (GWW, "Deep Wound", fetched 2026-08-21): *"your
+maximum Health is reduced by 20%"*. The published **100-health cap** did not bind here
+(20% of 480 is 96) and is recorded in the sealed plan so a larger-health character is not
+read against the wrong rule later.
+
+**And the control ran in the same capture:** across 2077's entire 28.5 s window property
+42 never moved. One condition moves it, the other does not, in one session, on one
+character — which is what makes this a measurement rather than a coincidence.
+
+### 8.3 Cracked Armor is visible ONLY as the `0x0042` itself
+
+No property 42 change, no property 44 change, no other property moving in its window.
+WIKI: *"you have -20 armor (minimum 60)"* — armour only, and armour is not a field we
+read off the wire. The sealed plan registered that if some property HAD moved here it
+would be a candidate armour field and worth more than the id; none did. **NOT FOUND**,
+recorded as a null rather than left as a gap.
+
+### 8.4 Neither condition degenerates — and the player received NO property-44 message at all
+
+Property 44 fires only when the net rate CHANGES (B4). Across this whole capture the
+player (agent 25) is the target of all six episodes and of every property-42 sample, and
+carries **zero** property-44 messages; the 24 in the connection belong to agents 122, 93,
+119 and 123. So the strongest form of the prediction holds: neither Deep Wound nor
+Cracked Armor degenerates, and the server never had a rate change to report.
+
+**One clause of the prediction was NOT met, and it is recorded as a miss.** The sealed
+plan expected Deep Wound's current-health loss to reset the natural regeneration ramp and
+so to produce a fresh `+1 pip / 2.0 s` climb. No such messages arrived. The likely reading
+— **RECONSTRUCTION**, not measured here — is that the reduction is not damage: GWW says
+Deep Wound *"doesn't do any permanent damage in itself"* and that its health loss *"will
+not take effect until it is triggered through gaining or losing health"*. A character who
+never drops below the reduced maximum never engages regeneration, so the rate never
+changes and nothing is sent. Settling it needs a character taking real damage under Deep
+Wound, which is a different run.
+
+### 8.5 Concurrency confirmed on a strafe, because the rings do not overlap
+
+F11 note 1 (operator, 156.7 s): *"can't do 2 at once, so I strafed between them over and
+over to keep retriggering, then left the rings until both conditions wore off."* The
+rings are disjoint, so `both` could not be executed as written — and the strafe answered
+the question anyway. From **150.7 to 163.6 s both conditions are live simultaneously**:
+2077 on buff **117**, 482 on buff **113**, peak concurrency 2. Distinct ids for two
+effects on one target, replicating §7.6. Ids are recycled across episodes — buff 117
+carried 482 at step 2 and 2077 at steps 3 and 4 — so an id identifies an *episode*, never
+a skill and never a target.
+
+### 8.6 On RETAIL, re-application inside the duration is silent — and that DIVERGES from our own server
+
+**About five strafe cycles produced exactly ONE apply of each condition.** The capture
+holds 6 applies and 6 removes total, all six accounted for by the six episodes; there is
+no extra traffic anywhere in step 4's window.
+
+Yet the effects plainly outlasted a single application: step 4's episodes were held
+**13.2 s and 13.5 s** against a stated duration of **10.0 s**, and step 2's ran **25.6 s**
+against the same 10.0. The timer was being extended while the operator was in range, and
+**ArenaNet sent nothing at all to say so.**
+
+That contradicts what this project's own effect substrate does.
+[studies/skills](../skills/FINDINGS.md) concluded from our implementation that a longer
+re-application *"extends as REMOVE-then-APPLY — the only replacement shape the client
+honours"*. Retail does not do that here: no remove/apply pair exists in the window, and
+the client kept rendering the condition regardless. **So our server emits wire traffic
+retail does not**, and the client evidently tolerates a silent extension. Whether the
+client is tracking the timer itself or simply waiting for the `0x0044` is not settled by
+this capture.
+
+*Alternative reading, kept because it is not excluded:* the late `0x0044` might be a
+periodic server-side sweep rather than a refreshed timer, in which case the durations
+are honest and the close is merely coarse. Step 2's 25.6 s against 10.0 s is a wide
+margin for a sweep, which is why the refresh reading is preferred rather than asserted.
