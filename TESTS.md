@@ -3597,6 +3597,112 @@ Every one of these, in the order they were written:
   **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
   without it. Reads only; sends nothing, and never imports `authsrv.py`. No
   client. ~7 s),
+  `toolkit/clientscan/test_grantsim.py` (**WOULD A DIFFERENT GRANT POLICY HAVE
+  SNAPPED -- AND THE ANSWER IS THAT THIS FILE CANNOT TELL YOU, ON PURPOSE.** The
+  guard on `toolkit/clientscan/grantsim.py`, which replays a capture's own c2s
+  `0x003D`/`0x003E`/`0x0047` through each candidate policy, drives a byte-exact
+  rebuild of the client's `0x005FE950` bake, and asks the client's own question
+  at the client's own two caller classes. Where `resyncscore` prices an ADDITIVE
+  fix and `grantsuppress` prices the SUBTRACTION, this prices a SUBSTITUTION.
+  **IT IS NOT A RANKER AND ITS TESTS REFUSE TO LET IT BECOME ONE.** §8 sweeps the
+  match test's PRESENCE alongside its radius over 54 cells, because that is the
+  axis where the ranking inverts: with the match test on, leads 0 u and 86 u
+  score identically on three of four counterfactual captures (0/0, 0/0, 2/2,
+  3/2) and only the already-refuted 766 u lead separates -- **it is worst in 27
+  of 27 cells** -- while with the match test off it **WINS in 27 of 27** (2 vs 10
+  on `20260820T182554`, 21 vs 23 on `182934`, 29 vs 48 on `20260814T100340`).
+  `rank_or_refuse()` therefore returns None on the real substrate and §8 asserts
+  BOTH directions, refusing on an inverting band and still producing an ordering
+  on a synthetic invariant one, so the refusal is a measurement rather than a
+  function that always says no. **THE HEADLINE IS THE CALIBRATION.** §5
+  reproduces the measured hard-jump census on eleven `ours` captures across five
+  configurations -- 60 measured, 69 predicted, 1.15x -- and, the check that
+  separates this from its own first draft, **exactly zero** on the three
+  captures that sent zero grants, where round 5's separation-only scorer
+  predicted 16, 12 and 34 because `20260819T145717`'s real separation is p50
+  1,164 u with 7 jumps in 320 s. §5 asserts a **committed per-capture
+  expected-count vector** rather than a ratio band, because two independent
+  implementations of the same written specification gave 69 and 80 against that
+  60; committing a capture is refused (the vault stays local), so the fixture is
+  split -- a SYNTHETIC minimal capture this file builds carries the structural
+  behaviour and the vector is NUMBERS ONLY, keyed by stamp, and is recorded as
+  **IMPLEMENTATION-PINNED**: it is what this code does, not what the spec
+  entails. **§7 IS WHERE IT ADMITS WHAT IT CANNOT SEE:** deleting the match test
+  takes 69 to 122 (1.77x) and rotating destinations inflates it monotonically
+  (69/73/99/133 at k = 0/1/5/17), but shifting every grant by +0.35 s --
+  destroying causality outright, below the 0.490 s inter-grant median -- scores
+  **60, dead on the measured total**, so the shift null is gated per capture at
+  +3.0 s only (`195137` 8 -> 0 against a measured 8, `182652` 12 -> 5 against 13)
+  and the +0.35 s failure is PRINTED. At matched perturbation scale the file is
+  no more geometry-sensitive than cadence-sensitive -- rotate-1 +5.8% against
+  shift-(-0.35 s) +10.1%, asserted to stay inside one order of each other so the
+  manufactured asymmetry cannot come back. **§6 RUNS THE SERVER'S OWN
+  PREDICATE**, and it is the one place this file breaks its neighbours' rule:
+  `grantsim.py` imports `authsrv.py` (lazily, first use only) rather than
+  mirroring its constants out of the source text, because `_grant_verdict`'s own
+  docstring says it was made side-effect-free so an offline scorer could run the
+  decision rather than a paraphrase that agrees with it by construction.
+  `20260820T195137`'s **199** `grant_verdict` rows (all `off`) and
+  `20260820T195315`'s **154** (**152 `locally-moving` + 2 `grant`**) are
+  reproduced exactly, reason for reason, against the 199 and 2 `0x0029` those
+  captures actually put on the wire, with the replayed `keyboard_age` agreeing
+  numerically to **0.59 ms**; the NEGATIVE CONTROL replays `195315` with the flag
+  the other way round and must reproduce **nothing at all**, 0 of 154. It is
+  labelled **§6 C3 (click-arm)** and the heading arm declares a `LEDGER.skip`
+  naming the missing symbol, because `authsrv.py` has no `_heading_grant_ok`
+  yet -- REALFIX-P2 specifies it as new code -- so P2 and P3 are scored with no
+  rate limit and this file does not call §6 the policy gate. **§3 IS THE
+  CONSTANT NOBODY HAD DERIVED:** the match test's effective threshold is not the
+  `100.0f` the client compares against, because the comparison runs through the
+  table sqrt at `0x0046E870`, so §3 re-reads the 256-dword LUT with a stdlib PE
+  walk and scans **all 2,048,001 float patterns in [9000, 11000]** to put the
+  boundary at `9984.0f` = **99.919968 u** -- with gate 1 as the positive
+  control, the identical scan over a different 2,560,001-pattern window
+  reproducing `89600.0f` = **299.332591 u** and settling that a true separation
+  of exactly **300.0 u SNAPS**. Both module constants are then asserted against
+  their own derivations, because a constant that has drifted from the function
+  that produced it is the defect the section exists for. **§4 GATES ON THE
+  GLIDE-CONDITIONED RESIDUAL**, from the two high-grant movetap pairs only
+  (`152716` p50 20.68 u, `171153` 14.62 u, both max under 61 u against a 99.92 u
+  decision radius), because three of the five pairs are 53-83% parked and their
+  unconditioned p50 of 0.00 measures the parking, not the model -- those three
+  are reported, and their parked fractions asserted against the record.
+  **AND THE INPUT PLAN INVERTS THE OBVIOUS ONE:** the refuted-run captures carry
+  real grants and real snaps and are therefore CALIBRATION substrate, while the
+  COUNTERFACTUAL substrate is the zero-grant set -- because `20260819T182652`,
+  the capture that refuted `--client-endpoint`, yields **3.2 s and 259 u** of
+  client track before its own first teleport contaminates everything after it,
+  and because that zero-grant substrate is fast-running and click-free, which is
+  the regime where every lead candidate is least harmful and where the shipped
+  default survives by sending nothing at all. Every bracket is printed as
+  `[match ON, match OFF]` and never as one arm, which replaces the drafted "skip
+  the match test when chord p90 exceeds the radius" rule that fires on 4 of 4
+  counterfactual and 7 of 11 calibration captures. **AND A MUTATION AUDIT PUT
+  FOUR MORE CHECKS IN**, each pinning something that had been printed rather
+  than asserted: §1(b)'s arrival tick now runs a SECOND leg of 150 u
+  (520.833 ms, so trunc 520 against round 521) with both expectations
+  HARD-CODED, because the old one recomputed `int(200000 / GS.COPY_SPEED)` --
+  the same expression and the same constant it was checking, which left
+  `COPY_RATE = 0.9` green; §2 pins the LEAD SPINE at 0 / 85.919968 / 766 u from
+  what each policy GRANTS, because handing P2 the 766 u lead used to pass all 57
+  checks while §9 printed "the match distance is 0 by IDENTITY" beside it; §3
+  asserts that NO pattern's table sqrt lands exactly on either cut below its
+  boundary (0 and 0, over the 2,048,001- and 2,560,001-pattern windows), which
+  is the fact -- not a theorem -- that lets one `> cut` scan serve gate
+  1's `> 300.0f` and the match test's strict `< 100.0`; and §5(d) pins the 2.0 s
+  ACTIVE-TIME threshold against `movesync.FREE_SILENCE`, 5.27x apart on
+  `20260820T182554`. §9's M1 bound moved from `2 * HISTORY_WINDOW` to
+  `HISTORY_WINDOW`, since `lag_age` cannot legitimately exceed it and the factor
+  of 2 was exactly the room its `lo` bound could be deleted in (4.55 s -> 7.42 s,
+  still green). Floor **19**, the bare-machine subset (§1's ten structural
+  asserts and §2's nine refusals build their own fixtures and read neither vault
+  nor client), RAISED to **61** once the fixture probes answer, because excess
+  over a floor is not an error and a bare floor protected none of the 42 checks
+  only a full machine runs -- deleting C2(a)'s three structural zeros on a
+  vaulted machine used to print ALL CHECKS PASSED and now names the shortfall.
+  §3-§9 declare seven `LEDGER.skip`s without the fixtures and §6's heading arm
+  declares an eighth always. Reads only; sends nothing, writes nothing, and
+  **does** import `authsrv.py` -- deliberately, see §6. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
