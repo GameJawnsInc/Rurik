@@ -4452,6 +4452,8 @@ where that question gets answered.
 
 ### 3. The crux cell resolves: corner-cutting is REFUTED
 
+⚠ **READ THE CORRECTION FIRST — "THE X2a CELL NEVER RAN" below.** X2a did not run (0 of 783 samples in its window are on the deck), so its null is not evidence and this section's X2a leg is WITHDRAWN; corner-cutting remains refuted on the chain measurements.
+
 All three events are on the **shuttle** — constant x ≈ 10,950, y sweeping
 4,113–4,929, i.e. **REALFIX-X3**, the straight perpendicular crossing with no wall
 contact. The wall cells ran and produced nothing: **the late legs (X1's parapet
@@ -4693,3 +4695,65 @@ its own screen says the headline it was built to produce is unavailable.
   puts the event comparison on n ≈ 9 per arm, where the control's 3-in-8 rate can
   actually separate a real zero from a lucky one. **The next client time this arc
   spends should buy replicates, not a fourth policy.**
+
+## 2026-08-21, later — ⚠ THE X2a CELL NEVER RAN: the slide legs walked off the deck, and one leg of the corner-cutting refutation is WITHDRAWN
+
+**Operator-reported and confirmed.** The operator watched the L3 runs and noted
+the character eventually veers off the bridge into a narrow corridor. It does,
+both arms, and the wall cells are the cause.
+
+**What is EXPECTED and worked**: the parapet contact itself. P0's wire shows
+textbook wall-slide at t+160–166 — **x pinned at exactly 11123.0 for eight
+consecutive reports** while y slides 5372 → 4595, speed **218–225 u/s** against
+the 285 u/s free-travel rate, report cadence tightened to **0.50 s**; and again
+at t+171–175 against the west parapet, **x = 10860.0**, 146–149 u/s. That is
+REALFIX-X1 doing exactly what it was built to do, and it is round 4's own
+contact signature reproduced.
+
+**What is NOT expected, and it is a defect in this plan**: the character never
+returns. At t+181 it leaves at 512.9 u per interval, full speed, southeast, and
+does not come back. **The cause is that a slide displaces the character
+PERPENDICULAR to its heading, while the plan's back-out (`S:4` / `S:1.5`)
+reverses along the HEADING.** The perpendicular component is never undone, so
+every rep starts further along the wall, and three X1 reps plus the X2a transit
+accumulate enough drift to leave the deck entirely.
+
+**THE COST, measured**: of the samples in the X2a window (t+195 onward),
+**0 of 782 (P0) and 0 of 783 (P2) are on the deck** (`10860 ≤ x ≤ 11123`,
+`4532 ≤ y ≤ 5579`). **REALFIX-X2a did not run at all.** Its instants were spent
+in open ground southeast of the bridge.
+
+### What this withdraws, and what survives
+
+**WITHDRAWN — the L3 entry's "corner-cutting is REFUTED at the cell built to test
+it".** That sentence rests on X2a returning zero events. X2a returned zero
+*instants of its own condition*, which is not the same thing and is not evidence.
+The cell is **NOT MEASURED**, exactly as `REALFIX.md` §6.1.5's own rule requires
+when the observed path leaves the intended one — the rule was written for this
+and this is the first time it has had to fire.
+
+**SURVIVES, on stronger evidence than X2a ever was.** Corner-cutting is still
+refuted, by two independent measurements that do not involve the wall cells at
+all:
+
+1. **Round 6's chain reconstruction**: a node at every wire report gives **0
+   exceedances** of the 99.92 u radius (max 72.4 u), and at all three of that
+   round's warps the copy-to-polyline distance is **0.0 / 0.0 / 0.0 u**.
+2. **L3's own REALFIX-I1 chain walk**, read from the client's own history nodes:
+   the sync copy is **0.0 u from the nearest chain segment in 698 of 698 scored
+   samples**, so the straight-line conjunct cannot be what fails.
+
+**So the conclusion stands and its X2a leg is amputated.** The distinction
+matters because a reader who takes "the wall cell came back empty" as support
+would be reading a cell that never happened.
+
+### The fix for the next plan
+
+Back out of a wall cell by **retracing the OBSERVED path**, not by reversing the
+heading — or re-anchor with an explicit transit after every slide rep, which the
+X1 legs already do between reps and the X2a legs do not. Cheapest correct form:
+one transit token before **each** slide rep, accepting ~8 s of walking per rep to
+buy a cell that is actually where it says it is. And the general rule this is the
+third instance of: **a plan's later legs are only where the plan says while
+nothing has touched geometry; after any wall contact, position is an observation,
+not a prediction.**
