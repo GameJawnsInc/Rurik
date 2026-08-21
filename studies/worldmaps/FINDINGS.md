@@ -701,3 +701,50 @@ nothing here measures swimming, drowning or how any of it looks, which is a
 visual verdict for the owner. One start line, one heading, and the walk was
 one-way. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W16-RUN.md` §RESULTS.
+
+## WORLDMAPS-W17 — the flags dword's TOP BYTE selects the slope set, 35 -> 45 degrees. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms one byte apart, same session,
+same archive, scored by FINDINGS 48's own ruler).**
+
+`studies/customarea` FINDINGS 48 measured the slope set in force and closed by
+naming what it could not settle: *"whether the mode flag can select the other
+set on some map kind"*, with that flag's source recorded as **NOT FOUND** by
+both FINDINGS 34 and 48. It is found, and the client obeys it.
+
+| | arm A (`0x00000000`) | arm B (`0x02000000`) |
+|---|---|---|
+| top byte / what the client saw | `0x00` -> **1** | `0x02` -> **2** |
+| trapezoids | 7 | **14** |
+| ramp pattern | **`WW...`** | **`WWWW.`** |
+| verdict | cut 35 — set 15/35/30 | **cut 45 — set 10/45/40** |
+
+**Arm A reproduces FINDINGS 48 exactly**, two weeks later with no free
+parameter, so arm B's difference is the flag. **Arm B moved the walkability
+boundary from 35° to 45°**: strips at 36.1–37.6° and 41.5–41.9° flipped to
+walkable, and the 46.5–47.8° strip correctly stayed out.
+
+**This confirms the whole static chain at the client** — the parser at
+`0x0070D920` copying the dword verbatim to `state+0x10`, the top-byte extraction
+at `0x00712681`, seven single-caller hops, and `cmp dword ptr [ebp+8], 2` at
+`0x0072CA1C`. It also settles **which slot the classifier tests**: arm B landed
+on 45, not 40, so the hard cutoff is `+0x94` as read, not `+0x90`.
+
+**The parser's 0→1 normalisation is what made the run work.** Arm A's file byte
+is 0 and the client saw 1. Had the treatment used `0x01000000`, the client would
+have seen 1 in both arms and produced a clean null that looked like a
+refutation. The boundary is 1-vs-2, not 0-vs-nonzero — found before the run.
+
+**Plateau tracks ramp in both arms**, so FINDINGS 48's connectivity-pruning
+result holds under the other threshold set too.
+
+**What it gives the project: authored terrain can be steep to 45° by one content
+field** — cliff paths, canyon walls, steep valley sides. Bit 0 and bits 24..31
+are disjoint fields of one dword, read once, meeting in the same function, so
+the water line and the slope set compose.
+
+**Scope.** Top byte 3+ is unvaried (it crosses the `< 3` test at `0x0070D9DE`).
+Nothing here WALKS a character up a 42° ramp — W16 established that meshed and
+walkable are different questions. The `+0x90` (30→40) companion reading remains
+static rather than measured. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W17-RUN.md` §RESULTS.

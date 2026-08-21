@@ -731,3 +731,93 @@ its twin, which is what removes the need to calibrate the camera: the two arms \
 share a heading, so whatever direction the character actually faces, the arms \
 differ only in what ground is under it. A bearing model would be a free \
 parameter; sharing the plan is not."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W17
+# FINDINGS 48's ramp, twice, differing only in the flags dword's TOP BYTE.
+# The generator is that run's field carried over verbatim (deploy.gen_ramp,
+# verified 1024/1024 samples identical), so these two arms are measured with the
+# same ruler FINDINGS 48 used and are comparable to its result.
+#
+# NO PROPS on either arm. The instrument is the mesh; eight trees would be eight
+# more things that could differ between arms for a reason that is not the flag.
+
+[area.ramp_setA]
+name = "Ramp (slope set A)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# map_flags OMITTED, so 0 -- which is exactly what FINDINGS 48 ran. This arm is
+# a REPRODUCTION and its predicted pattern has no free parameter.
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.ramp_setA.provenance]
+source = "invented"
+verified = """Ours in construction, not in shape: the height field is \
+FINDINGS 48's ramp carried over verbatim from \
+`vault/research/e10e-threshold-2026-08-12/build_ramp.py` into \
+`deploy.gen_ramp`, and the port was accepted on BYTE EQUALITY of the field -- \
+1,024 of 1,024 stored samples identical -- rather than on reading. Five 6-cell \
+strips at design slopes 28.0 / 32.0 / 36.9 / 41.9 / 47.0 degrees bracket every \
+candidate cutoff of BOTH threshold sets the client carries. FINDINGS 48 \
+MEASURED this map at flags 0 and got pattern `WW...`: the 32.0 strip walkable, \
+the 36.9 strip not, which puts the cut in (32.0, 36.1) where 35 is the only \
+candidate. This arm re-runs it unchanged, so a disagreement is a fact about \
+drift between 2026-08-12 and today rather than about the flag."""
+
+[area.ramp_setB]
+name = "Ramp (slope set B)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# THE VARIABLE, and it is the top byte alone: 0x02000000. Bits 0..23 stay clear,
+# so the depth gate this arc spent W11-W16 on is untouched (and the ramp has no
+# submerged ground for it to act on anyway).
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.ramp_setB.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull a lever read out of the client \
+statically and never tested. TRACED 2026-08-21 in the pinned pristine 38797 \
+build, with both positive controls passing first and an adversarial pass that \
+strengthened rather than weakened it: the Map Parameters flags dword is copied \
+VERBATIM to state+0x10 by the parser at 0x0070D920; its TOP BYTE is extracted \
+at 0x00712681-0x0071269C (`mov eax,[ecx+0x10]` / `shr eax,0x18`) and carried \
+through seven hops, each with exactly one caller and no rewrite, to \
+`cmp dword ptr [ebp+8], 2` at 0x0072CA1C. Below 2 loads 15/35/30 degrees as \
+radians (0x0094E3CC = pi/12, 0x00A6F874 = 35 deg, 0x0094E3D8 = pi/6); 2 or \
+above loads 10/45/40 (0x0094DFA0 = pi/18, 0x0094E3E4 = pi/4, 0x00A6F878 = 40 \
+deg). The middle slot is the hard walkability cutoff.
+
+WHY 0x02 AND NOT 0x01: the parser NORMALISES a top byte of 0 to 1 \
+(0x0070D9B2 `cmp cl,1` / 0x0070D9B7 / 0x0070D9BE `or eax,0x1000000`), so a file \
+shipping 0 and a file shipping 1 both arrive at the selector as 1 and choose \
+the SAME set. The boundary is 1-vs-2, not 0-vs-nonzero. 0x02 also keeps the \
+`< 3` test at 0x0070D9DE on the same side as 0x00 does, so bit 5 of the \
+in-memory dword is set in both arms and is not a confound.
+
+WHAT IS NOT VERIFIED, and is the whole point of the run: every word above is \
+STATIC. No map has ever shipped a non-zero top byte, the inverted branch at \
+0x0072CA92 has never been exercised by anything this project built, and \
+studies/customarea FINDINGS 34 and 48 both record the mode flag's source as \
+NOT FOUND. This row is the first time the other slope set is asked for."""

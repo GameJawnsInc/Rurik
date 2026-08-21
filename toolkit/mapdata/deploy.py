@@ -138,7 +138,64 @@ def gen_plaza(dim, base=-13):
     return out
 
 
-GENERATORS = {"flat": gen_flat, "plaza": gen_plaza}
+# FINDINGS 48's ramp, carried over verbatim from the run that measured the
+# slope boundary (`vault/research/e10e-threshold-2026-08-12/build_ramp.py`,
+# 2026-08-12). It is here rather than in the vault because WORLDMAPS-W17 varies
+# the slope SET and needs the same ruler FINDINGS 48 used -- a re-derived ramp
+# would make the two runs incomparable for a reason that has nothing to do with
+# the flag.
+#
+# Five 6-cell strips whose snapped interior slopes bracket every candidate
+# cutoff of BOTH threshold sets (10/45/40 and 15/35/30), so the pattern of which
+# strips compile walkable names the set outright. A flat apron carries the seed
+# and spawn; a flat plateau sits atop each strip -- and the plateau is not
+# decoration: FINDINGS 48's second result is that walkable area is
+# CONNECTIVITY-PRUNED from the flood seed, so a plateau above a too-steep ramp
+# vanishes from the mesh entirely and repeats its ramp's verdict.
+RAMP_APRON_TOP = 14      # gy >= this is flat apron at the base height
+RAMP_TOP = 4             # gy in [RAMP_TOP, RAMP_APRON_TOP) rises northward
+RAMP_STRIPS = (          # (label, dz per 96-unit cell, gx range inclusive)
+    ("28.0 deg", 51, (1, 6)),
+    ("32.0 deg", 60, (7, 12)),
+    ("36.9 deg", 72, (13, 18)),
+    ("41.9 deg", 86, (19, 24)),
+    ("47.0 deg", 103, (25, 30)),
+)
+
+
+def gen_ramp(dim, base=-13):
+    """Five ramps of increasing slope, an apron, and a plateau on each.
+
+    32x32 only. The band rows and the strip columns are tuned to that size --
+    APRON_TOP 14 and RAMP_TOP 4 are cell indices, not fractions -- and silently
+    rescaling them would change the angles, which are the whole measurement.
+    """
+    if dim != 32:
+        raise Refused(
+            f"the ramp field is 32x32 by construction, not {dim}x{dim}: its "
+            f"band rows (apron at gy>=14, ramp over gy 4..13) and its five "
+            f"6-cell strips are cell indices from FINDINGS 48, and rescaling "
+            f"them would move the very angles the map exists to measure")
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            dz = 0
+            for _label, d, (a, b) in RAMP_STRIPS:
+                if a <= gx <= b:
+                    dz = d
+                    break
+            if gy >= RAMP_APRON_TOP:
+                lift = 0                       # the apron, flat, holds the seed
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells         # the plateau atop the strip
+            out[gy * dim + gx] = base - lift   # more negative is HIGHER
+    return out
+
+
+GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp}
 
 
 def heights_from_blend(blend, dim, blender=None, workdir=None):
