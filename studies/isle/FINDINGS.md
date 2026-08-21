@@ -1377,3 +1377,139 @@ Four things, none of which the corpus can supply:
 The plan is sealed at `vault/plans/isle_rung8_effects.txt`, 27 steps, and the
 consumer (`toolkit/authsrv/bufflog.py`, 36 checks) was built and proven on the
 97 existing witnesses before the plan was written — rung 7's discipline, kept.
+
+---
+
+## 7. Rung 8, LIVE #3 — the run (2026-08-21, capture `20260821T152147`)
+
+**Cancelled at step 17 of 27, and three of the four goals are MET anyway.** Seals
+AGREE, `exe_unchanged: true`, `game_mode base`, 3 keys, 2 game connections, 17 apply
+episodes and **`unattributed 0`** — every episode fell inside a mark window. Leg C (the
+rank ladder) never ran, so rung 7's unmet-requirement defect stays open. Operator notes:
+`vault/captures/live/20260821T152147/notes.md`.
+
+**The operator read F9 as "go to the next condition" rather than "advance one plan
+step", and that misreading produced a better dataset than the plan's own design.**
+Steps 10-14 name five FOES and skip the allies; walking every body in line order instead
+returned **eight** conditions. See §7.5.
+
+### 7.1 Skill 999 is OBSERVED, and the pre-registered prediction is met exactly
+
+`0x0042` skill **999**, field3 **0**, duration **10.0**, n=2 — the plan's torch3 line
+predicted *"skill 999, field3 0, duration 10.0 — a shorter duration than the other two,
+which is itself a discriminator"*, and all four clauses hold. The last torch effect that
+had never been captured is captured. With 984 (30.0) and 998 (30.0) replicating from the
+rung-6 run, **all three torch effects are now on retail wire**.
+
+**The two hex torches are NOT distinguishable by name** — the client renders both as
+`Torch of Hexes` (screenshot, F11 note 1), so the plan's *"the one WITHOUT degeneration"*
+was not an instruction anyone could follow. The operator guessed; the guess was right,
+and it is *provable* rather than lucky, because 999 landed inside step 6's window and 998
+inside step 5's. **The duration is the discriminator, not the nameplate** — which is
+exactly what the plan predicted the duration would be good for, arriving a step earlier
+than intended.
+
+### 7.2 The condition map: eight ids, two independent witnesses, joined by walk order
+
+The operator walked the line south-to-north pressing F9 at each body. The captured skill
+ids come out in **exactly the order the client's own nameplates read** in the F11 note-3
+screenshot — 8 for 8, in sequence:
+
+| F9 step | skill | condition | nameplate rendered on screen |
+|---|---|---|---|
+| 10 | 483 | Disease | Student of Disease (southernmost) |
+| 11 | 485 | Dazed | Student of Dazed |
+| 12 | 486 | Weakness | Student of Weakness |
+| 13 | 484 | Poison | Student of Poison |
+| 14 | 479 | Blind | Student of Blind |
+| 15 | 481 | Crippled | Student of Crippled |
+| 16 | 480 | Burning | Student of Burning |
+| 17 | 478 | Bleeding | Student of Bleeding |
+
+**CORROBORATED**, and the two witnesses share no author or ancestry: one is the skill id
+in ArenaNet's `0x0042`, the other is ArenaNet's rendered `enc_name`. This answers what
+§"Rung 6" recorded as unrecoverable — *"which body carries which NAME is NOT recoverable
+from a capture; the enc_name render is the only route"* — by supplying the render and
+joining on walk order. Eight consecutive agreements is not a coincidence available to
+chance.
+
+**Unwitnessed: 482 (Deep Wound) and 2077 (Cracked Armor)** — the two northernmost
+Students, never reached. They are the only conditions on the island still unseen, and
+they are the cheapest thing left on the west edge.
+
+### 7.3 Degeneration in pips — GWW's published table reproduced with no free parameter
+
+Property 44 on `0x00A2`, joined against live effects and the player's own `health_max`:
+
+| skill | condition | measured | GWW |
+|---|---|---|---|
+| 478 | Bleeding | **-3 pips** | 3 |
+| 483 | Disease | **-4 pips** | 4 |
+| 484 | Poison | **-4 pips** | 4 |
+| 480 | Burning | **-7 pips** | 7 |
+| 999 | Torch degen hex | **-1 pip** (-0.0041667 on H=480) | — |
+| 479 | Blind | **0** — the ramp continues through it | not a degen condition |
+
+Four for four against a table fetched before the run. **And the arithmetic survives a
+max-health change, which is a check that could have failed:** Poison reads rate
+`-0.0166667` at H=480 and `-0.0196078` at H=408 — two different rates, **both exactly 4
+pips**. The rate is a fraction of maximum health, as B4 said, and the pip is the
+invariant.
+
+### 7.4 The natural regeneration ramp, and §5.1's warning vindicated on the wire
+
+§5.1 was written before this run: property 44 is a NET rate, so torch3's bare
+`-0.0041667` holds only while natural regeneration is zero, and **the predicted failure
+mode occurred.** At t=299.6 s the rate reads exactly the predicted **-0.0041667** with
+999 live. Forty-nine seconds later it reads **`+0.0000000` with the same effect still
+live** — the ramp had climbed a pip and cancelled it. A reading that asked *"did we see
+-0.0041667?"* would have scored the plan's own headline refutation off an artifact where
+the mechanism worked perfectly.
+
+**B4's "+1 quantum per ~2 s" is now pinned to exactly 2.0 s.** Seven consecutive samples
+at t = 353.6, 355.6, 357.6, 359.6, 361.6, 363.6, 365.6 step +1 pip each, +1 to +7.
+
+**One correction to §5.1's own reading rule, from this data.** §5.1 said to score the
+step as *"down by exactly one pip at apply"*. The observed step at apply is
+**-(natural + condition)**: the ramp stood at +7 when 999 landed and the net went to -1,
+a step of -8. Health loss resets the ramp, and degeneration is health loss — so while a
+degenerating effect is live the natural term sits at 0 and the net equals the condition
+alone. **Score the LEVEL while the effect is live, not the step across the transition**;
+the step is contaminated by whatever the ramp had reached. The pip table in §7.3 is read
+that way.
+
+### 7.5 Ally/foe does not gate condition application, and the five-condition ceiling was about combat
+
+§4 measured 5 allies / 5 foes and concluded *"only five Students can attack, so at most
+five conditions arrive by being hit"*. True, and irrelevant: **the Students apply by
+PROXIMITY, not by attacking** — each stands in a visible ring (screenshot, note 3) and
+the condition arrives on entering it, the same mechanism as the torches. Eight conditions
+came from ten bodies with **no attack made by or against the operator** in Leg B, and the
+foes never attacked at all. The ceiling bounded the wrong mechanism.
+
+### 7.6 Buff ids are per-EFFECT, not per-target
+
+`torch4`'s registered question, answered on a strafe (F11 note 2 — the ring is too wide to
+stand in two at once, but crossing works): skill 998 on buff **121** and skill 999 on buff
+**98** are live on the same target simultaneously. Peak concurrency 2, 8 distinct ids over
+17 episodes, 9 reused. Ids are also reused *across* episodes for the same skill — 999 took
+buff 98 at both step 6 and step 7.
+
+### 7.7 The death penalty is on the wire, and it corroborates a note nobody typed into the capture
+
+`health_max` moves **480 to 408** mid-capture — exactly x0.85, one death penalty — between
+the last 480-scaled sample (t=490.3 s) and the first 408-scaled one (t=676.8 s). F11 note
+4 was pressed at 527 s and reads *"died to diseased, resurrected"*; the effect live at the
+time is 483 = Disease. Three records agree and none derives from the other two.
+
+### 7.8 What the plan got wrong, recorded because the next plan inherits it
+
+1. **`F9` was read as "next condition", not "next step".** The plan's step text is long
+   and prediction-heavy; the operator saw a per-body cadence and used it. Shorter steps
+   with one action each — owner's instruction, 2026-08-21.
+2. **`torch2`/`torch3` were not followable** — both torches render the same name.
+3. **`stud1`-`stud5` named foes** on a mechanism where allegiance does not matter, which
+   would have discarded three of the eight conditions had it been followed.
+4. **60 s per Student is far more than needed** — application is near-immediate on
+   entering the ring, and the whole eight-condition sweep took under 5 minutes at 12-39 s
+   per body.

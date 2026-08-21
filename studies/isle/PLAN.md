@@ -1130,9 +1130,18 @@ clicked** — GWW says each re-applies every ~2 s to anyone standing adjacent, w
 procedural correction the draft plan had wrong. Sealed plan: `vault/plans/isle_rung8_effects.txt`,
 27 steps. Consumer: `toolkit/authsrv/bufflog.py`, 36 checks, proven on the 97 witnesses
 before the plan was written.
-*Exit:* ~~the channel question answered~~ **MET 2026-08-18, offline.** The live exit is now
-skill 999 observed with its property-44 degeneration, and the five foe Students' condition
-ids recorded.
+*Exit:* ~~the channel question answered~~ **MET 2026-08-18, offline.** ~~The live exit is
+now skill 999 observed with its property-44 degeneration, and the five foe Students'
+condition ids recorded.~~ **MET 2026-08-21, capture `20260821T152147`** — see
+FINDINGS "Rung 8, LIVE #3". Skill **999** observed (field3 0, duration 10.0, n=2, all
+four clauses of the prediction); **eight** condition ids mapped to their rendered
+nameplates, not five, because application is by PROXIMITY and allegiance does not gate
+it; degeneration reproduces GWW's 3/4/4/7 exactly, and survives a max-health change
+(same pips at two different rates). **The rung is NOT closed:** the run was cancelled at
+step 17, so **Leg C never ran and rung 7's unmet-requirement defect stays open**, and
+**482 Deep Wound + 2077 Cracked Armor** — the two northernmost Students — are still
+unwitnessed. Those two remainders are the next run, and it is deliberately short
+(owner's instruction, 2026-08-21: shorter focused runs, steps reviewed before sealing).
 
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because
