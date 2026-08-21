@@ -1399,6 +1399,30 @@ Two things measured in passing and worth reusing: the indicator is at
 a refutation — and the HUD repaints on a **1–4 s delay** rather than on the
 packet, so a probe reading it wants ≥5 s between a send and its screenshot.
 
+**AND THE FOLLOW-UP RAN THE SAME DAY** — `--probe morale_store`, harness
+`20260820T224356`, read with `ReadProcessMemory` rather than with eyes
+(RUNS.md §Run 2). **MORALE-Q7 is answered: `0x00EE`'s delta DOES write the
+client's stored morale** — `66 → 53` on a `−13`, `53 → 60` on a `+7`, each
+within one 0.5 s sample — while `0x009C [player, 41]` moved that slot not at
+all. So the two messages are **two stores for one number**: the attribute block
+(absolute and delta, silent, what the Hero window reads) and the per-agent
+morale (absolute, what the corner reads). A server that sends one and not the
+other leaves the other stale; ours sends both.
+
+The block's shape came free and is worth more than the question that produced
+it: our chosen values landed at exactly **`attr_id × 8`** from the experience
+field, each **stored twice, adjacent** — so the wire's `attr_id` is an index
+into that array, and `studies/character/STORAGE.md` §2's value/dupe layout,
+described from GWCA's header and never checked, is now checked against numbers
+of ours. Nobody's offsets were used to find it: the probe holds one field
+constant and the scanner anchors on that.
+
+`toolkit/clientscan/moralestore.py` is the reader (read-only by construction —
+`PROCESS_VM_READ`, never `WRITE`), and it carries the lesson that cost the
+first attempt: **locate on a constant the experiment never changes**, because a
+scan for the value under test can run before the probe sets it and lock onto
+hundreds of coincidences.
+
 ### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:

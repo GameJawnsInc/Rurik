@@ -5916,6 +5916,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   sends, because retail carries 100 there in 43 of 43 sightings and 0 is
   not a legal morale at all. Floor 49, against a green 50/49 across the two
   revive configurations. No vault, no socket, no client),
+  `toolkit/clientscan/test_moralestore.py` (the morale-store scanner, proven
+  against a process this machine controls rather than against the game. It
+  exists because the tool's headline output is a NEGATIVE as often as a
+  positive — "nothing in this window ever changed" is what "the delta is
+  ignored" would look like AND what a scanner that cannot see anything looks
+  like, so the null needs a control before it is evidence. A child process
+  holds a constant at a known address and walks a value through 77 → 88 → 66 →
+  53 beside it; §1 requires the region walk to actually read megabytes and to
+  find the child's own address, §2 requires the watched window to record all
+  four values in order and its NEIGHBOURS to record none, §3 measures the
+  coincidence rate that broke the first MORALE-Q7 attempt (22,304 hits for the
+  value `1` against 4 for the anchor 424242 — which is why the method locates
+  on a constant the experiment never changes), and §4 requires an unmapped
+  address to read as None rather than as zeroes. Floor 8, Windows-only,
+  skips honestly elsewhere. ~10 s),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless

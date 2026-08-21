@@ -73,3 +73,82 @@ does, and now for a measured reason rather than a cautious one.
   started at y=100 and found nothing, which read for several minutes like a
   refutation of both P1 and P2. Screenshot readouts want the frame looked at
   whole before they want a crop.
+
+---
+
+## Run 2 — `--probe morale_store` + a memory read, 2026-08-20, GREEN
+
+**MORALE-Q7: does `0x00EE [attr 10, delta]` write the client's stored morale, or
+is it ignored?** Run 1 established that it draws nothing; that is not the same
+claim, and a screenshot cannot tell a silent write from a no-op.
+
+```bash
+python toolkit/harness/session.py --keep-open --hold 130 --shots 0 --warn 8 \
+    --game-args "--probe morale_store --map 146"
+python toolkit/clientscan/moralestore.py --wait-for-client 150 \
+    --anchor 424242 --span 0x80 --seconds 100 --period 0.5 --tries 120
+```
+
+Harness `20260820T224356`, `RUN VERDICT: PASS`, all eight steps printed in the
+gamesrv log. Full scanner output: `vault/research/morale/MORALE-Q7-RUN.txt`.
+
+**NOBODY'S OFFSETS WERE USED.** The probe walks the attribute store through
+three values only we could have chosen and holds the experience field constant
+at 424242; the scanner finds that constant (2 hits in 271 MB — the two halves of
+one dupe pair) and watches ±0x80 around it. What the block is, is then read off
+our own numbers rather than off a header.
+
+### The answer: it writes, and only the repaint was missing
+
+| probe step | sent | the watched dword |
+|---|---|---|
+| 1 | `0x00E9` field 10 = 77 | 77 |
+| 2 | `0x00E9` field 10 = 88 | **88** |
+| 3 | `0x00E9` field 10 = 66 | **66** |
+| 4 | **`0x00EE [10, −13]`** | **53** — 66 − 13, applied |
+| 5 | `0x009C [player, 41]` | **no change** |
+| 6 | **`0x00EE [10, +7]`** | **60** — 53 + 7, both directions |
+| 7 | `0x00E9` field 10 = 100 | **100** — the control held |
+
+So **MORALE-Q7 is answered: the delta is applied, `+=`, in both directions, and
+within one 0.5 s sample of the packet.** `0x00E9`'s full set is an absolute
+store to the same slot. What `0x00EE` does not do is repaint the corner — that
+is `0x009C`'s, and step 5 proves the two are *different stores*: the per-agent
+message moved the indicator in Run 1 and moves nothing in this block.
+
+Two channels, two stores, one number:
+
+- **`0x00EE` / `0x00E9` → the player's attribute block**, which is what the Hero
+  window reads. Delta and absolute.
+- **`0x009C` → the per-agent morale**, which is what the corner and (by its
+  shape) the party window read. Absolute, and it names an agent because a party
+  member's penalty has to be drawable too.
+
+A server that sends only one of them leaves the other stale. Ours sends both.
+
+### The block's own shape, measured
+
+The dwords that hold our values sit at exactly `attr_id × 8` from the experience
+field, each **stored twice, adjacent**:
+
+```
++0/+4    424242   experience     attr 0    0 × 8 = 0
++72/+76  17       level          attr 9    9 × 8 = 72
++80/+84  morale   morale         attr 10  10 × 8 = 80
++104/+108 13      skill points   attr 13  13 × 8 = 104
+```
+
+**The wire's `attr_id` is literally an index into this array**, and every entry
+is a value/dupe pair — which is the layout `studies/character/STORAGE.md` §2
+described from GWCA's header and could not check. It is checked now, from the
+client's own memory, against numbers we chose: three fields at three predicted
+offsets, and nothing else in ±0x80 moved.
+
+### What went wrong first, and it was ours
+
+The attempt before this one (harness `20260820T223937`, run itself PASS, all
+eight steps landed) measured nothing: the scanner's first scan looked for the
+value under test, ran while the client was still loading, and locked onto ~900
+coincidental `77`s that no later step could rescue. **Locate on a constant the
+experiment never changes, then watch a window around it** — there is no race in
+that shape, and it is what the anchor mode does now.
