@@ -150,6 +150,55 @@ class Refused(Exception):
     """An allocation that will not happen, with the number a person needs."""
 
 
+def _whole_reserve(reserve, data):
+    """A `Stream`'s stated headroom, checked against its payload. -> int
+
+    Separate from `Stream.__init__` only so the three refusals read as one rule
+    rather than as clutter inside a constructor that is otherwise five
+    assignments. 0 means "no budget stated" and is the default; everything else
+    has to be a whole number of bytes that the payload actually fits inside.
+    """
+    if isinstance(reserve, bool):
+        whole = None
+    else:
+        try:
+            whole = int(reserve)
+        except (TypeError, ValueError):
+            whole = None
+    if whole is None or whole != reserve or whole < 0:
+        raise Refused(
+            f"reserve={reserve!r} is not a whole number of bytes.\n"
+            f"  A reservation is counted in bytes and rounded up to whole "
+            f"512-byte blocks by the placement; a fraction, a string or a "
+            f"negative is a number read out of the wrong place rather than a "
+            f"budget. Pass an int, or 0 to state no budget at all.")
+    if not whole:
+        return 0
+    if not data:
+        raise Refused(
+            f"a zero-length stream was given reserve={whole}, and a zero-length "
+            f"row owns NO EXTENT at all.\n"
+            f"  That is not an oversight in the format, it is the map head's "
+            f"whole mechanism: the client fails to load an empty Bloated row, "
+            f"logs `Attempting to re-bloat` and rebuilds it from the Stripped "
+            f"partner. There is no offset here to reserve blocks at, so a "
+            f"budget on this row would be accepted and do nothing.\n"
+            f"  The PARTNER is the row that holds the geometry and the row that "
+            f"grows. Put the budget there.")
+    if whole < len(data):
+        raise Refused(
+            f"reserve={whole} is smaller than the {len(data)} B payload it is "
+            f"supposed to hold.\n"
+            f"  A budget under its own stream is a number read off the wrong "
+            f"row -- the placement takes max(len(data), reserve), so honouring "
+            f"this would silently give the row exactly what the payload needs "
+            f"and report a headroom nobody has. Refused rather than clamped: "
+            f"the caller believes something false about how far this row can "
+            f"grow, and that belief is what decides whether the NEXT install "
+            f"replaces in place or relocates.")
+    return whole
+
+
 class Stream:
     """One row of a new file's chain.
 
@@ -173,17 +222,49 @@ class Stream:
     MEASURED, 4 of 38,621 real stored rows decode anyway, so those four need a way
     through and this is it. Deliberately awkward, and it prints a line naming C-6
     when taken.
+
+    `reserve` IS HEADROOM, AND IT IS THE ONLY FIELD HERE THAT IS NOT ABOUT THE
+    PAYLOAD (WORLDMAPS-W5, 2026-08-20). Until this existed a created row's
+    reservation was exactly `blocks_for(len(data))` -- zero headroom by
+    construction -- so a created chain's SECOND, larger install was already past
+    a ceiling nobody had chosen, and fell through `deploy.resolve_or_create` ->
+    `resolve_rows` -> `install_partner` to a relocation. The archive records no
+    per-row entitlement anywhere (`datwrite.py`'s `_grow_gate`: "A ROW'S TRUE
+    RESERVATION IS NOT RECORDED ANYWHERE ... the bound therefore has to come from
+    GEOMETRY"), so the number has to be STATED by whoever authored the row --
+    `content/areas.toml`'s `reserve_bytes` -- and honoured once, here, at
+    creation.
+
+    IT MOVES EXACTLY ONE NUMBER: the block computation in `plan_alloc`'s
+    placement, which sizes the run this row is given. `size`, `crc`, `expect`,
+    every shape rule and every declaration check stay bound to the REAL payload,
+    because the client reads `size` and knows nothing about our budget. The
+    reserved tail is written as zeroes by `alloc` step 1, the same padding a
+    block-rounded reservation has always carried.
+
+    TWO REFUSALS, both about a caller who has the wrong number:
+
+      * `reserve` ON A ZERO-LENGTH STREAM. An armed map head owns no extent at
+        all -- that is the whole of the re-bloat trigger -- so there is nothing
+        to reserve and a budget here would silently do nothing. The partner is
+        the row that grows.
+      * `reserve` BELOW `len(data)`. A budget under the payload it is supposed
+        to hold is a number read out of the wrong row; honouring it would give
+        the row less than the payload needs, which `max()` would then quietly
+        paper over. Refused rather than clamped.
     """
 
-    __slots__ = ("data", "flags", "extra_bytes", "expect", "stored_lookalike_ok")
+    __slots__ = ("data", "flags", "extra_bytes", "expect", "stored_lookalike_ok",
+                 "reserve")
 
     def __init__(self, data, flags, extra_bytes=0, expect=None,
-                 stored_lookalike_ok=False):
+                 stored_lookalike_ok=False, *, reserve=0):
         self.data = bytes(data)
         self.flags = int(flags)
         self.extra_bytes = int(extra_bytes)
         self.expect = None if expect is None else bytes(expect)
         self.stored_lookalike_ok = bool(stored_lookalike_ok)
+        self.reserve = _whole_reserve(reserve, self.data)
 
     @property
     def alloc_flags(self):
@@ -195,7 +276,16 @@ class Stream:
 
 
 class RowPlan:
-    """Where one appended row goes and every field it will carry."""
+    """Where one appended row goes and every field it will carry.
+
+    `reservation` is what the row is GIVEN and `size` is what it HOLDS, and
+    since WORLDMAPS-W5 those two can differ by more than block rounding: a
+    `Stream` carrying a `reserve` buys blocks the payload does not need yet, so
+    that the next, larger authored map can be written in place instead of
+    relocating. `show()` therefore states the difference outright -- a plan that
+    prints a reservation and leaves the reader to subtract is a plan whose
+    headroom nobody checks against the budget that asked for it.
+    """
 
     __slots__ = ("index", "offset", "size", "reservation", "flags",
                  "extra_bytes", "next_stream", "crc", "reused")
@@ -214,7 +304,8 @@ class RowPlan:
 
     def show(self):
         how = "reused (USED-clear spare)" if self.reused else "appended"
-        where = (f"0x{self.offset:X} +{self.reservation}"
+        where = (f"0x{self.offset:X} +{self.reservation} "
+                 f"({self.reservation - self.size} B of headroom)"
                  if self.size else "no extent (zero length)")
         print(f"  row {self.index} ({how}): {where}, size {self.size}, "
               f"flags 0x{self.flags:04X}, extraBytes {self.extra_bytes}, "
@@ -474,6 +565,10 @@ def plan_alloc(ar, streams, file_id, classified=None):
     the row the file id resolves to; the rest are its continuations, linked by
     `alloc.nextStream`. For a map that is exactly two: an (often zero-length)
     Bloated head and the Stripped partner that holds the geometry.
+
+    A stream's `reserve` reaches exactly one line of this function -- the
+    placement's block computation, in the loop at the bottom. Every gate above
+    that line judges the payload, because the payload is what the client reads.
     """
     block = ar.block_size
     filesize = os.path.getsize(ar.path)
@@ -624,7 +719,15 @@ def plan_alloc(ar, streams, file_id, classified=None):
     rows = []
     for i, s in enumerate(streams):
         if s.data:
-            offset, reservation, pool = _place(pool, block, len(s.data),
+            # THE ONE PLACE `reserve` IS READ. It sizes the run this row is
+            # given and nothing else: `RowPlan.size` below is `len(s.data)`,
+            # the crc is over `s.data`, and every rule above ran against the
+            # real payload. A budget is a statement about how far this row may
+            # grow LATER, and the client -- which reads `size` -- cannot tell
+            # the difference between a reserved tail and the zero padding a
+            # block-rounded reservation has always had.
+            offset, reservation, pool = _place(pool, block,
+                                               max(len(s.data), s.reserve),
                                                filesize)
         else:
             offset, reservation = 0, 0
@@ -733,6 +836,27 @@ def alloc(path, streams, file_id, journal_path, confirm=False, plan=None):
                     f"onto disk -- MEASURED 2026-08-19, extraBytes 8 written over "
                     f"plainly stored bytes exactly this way, green everywhere. "
                     f"Recompute the plan from these streams.")
+            # AND THE SAME DISCIPLINE FOR THE RESERVATION, which is the other
+            # field a handed-in plan can disagree with its streams about. The
+            # write takes `r.reservation` verbatim, so a plan computed before a
+            # `reserve` was set gives the row exactly what the payload needs
+            # while the caller goes on believing it bought headroom -- and
+            # nothing afterwards can tell them apart, because the archive
+            # records no entitlement per row. The reverse (a plan reserving
+            # blocks no stream asked for) is caught by the same equality.
+            want_res = datplan.blocks_for(max(len(s.data), s.reserve),
+                                          plan.block) * plan.block
+            if r.reservation != want_res:
+                raise Refused(
+                    f"the plan handed in reserves {r.reservation} B for row "
+                    f"{r.index} while stream {i} ({len(s.data)} B payload, "
+                    f"reserve {s.reserve}) asks for {want_res} B.\n"
+                    f"  A reservation is the one number in this plan that is "
+                    f"carried out verbatim and can never be re-derived "
+                    f"afterwards: the 24-byte MFT row has no entitlement field, "
+                    f"so a row given less than its budget looks exactly like a "
+                    f"row that was never given one. Recompute the plan from "
+                    f"these streams.")
     with Archive(path) as probe:
         plan = plan or plan_alloc(probe, streams, file_id)
     # THE FIDELITY GATE, RUN HERE AND UNCONDITIONALLY. When `plan` was computed

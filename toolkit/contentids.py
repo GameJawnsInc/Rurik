@@ -243,6 +243,16 @@ def check(client_dat, server_dat=None, world=None):
     like any other -- same map-flag test, same size+crc identity against the
     server's copy -- which is the half that matters for the run that finally
     serves one.
+
+    AND "ABSENCE" MEANS ABSENT FROM BOTH, WHICH IT DID NOT UNTIL 2026-08-20.
+    The skip above was decided from the CLIENT's table alone, before `s_tab` was
+    read at all -- so a chain deployed into the server's archive and not into
+    the client's took the skip and refused nothing, which is precisely the
+    fatal case (the server sends an id the client cannot bind, `Code=007`
+    silent on our side) wearing the benign state's clothes. It is the same
+    defect as this file's original one, from a different direction: a question
+    answered against the wrong half of the pair. The server is now consulted
+    FIRST; a skip needs both sides empty, and one side alone is a finding.
     """
     server_dat = server_dat or DEFAULT_DAT
     world = world or content.load()
@@ -277,17 +287,49 @@ def check(client_dat, server_dat=None, world=None):
         fid = ids[map_id]
         c_row = c_tab.get(fid)
         if c_row is None and map_id in created:
-            # THE THIRD STATE. Not "missing" and not "mid-replacement": a file
-            # this project has not made yet in this copy. Nothing to compare, so
-            # nothing is claimed -- and it is said out loud rather than dropped.
-            skips.append(
-                f"map {map_id} (0x{fid:X}) is a CREATED row and nothing binds "
-                f"its id in {client_dat}. That is the state BEFORE `deploy.py "
-                f"--area <area> --install` allocates the chain, not a "
-                f"disagreement between two archives, so it refuses nothing. "
-                f"Once the chain exists here this row is checked like any "
-                f"other -- map flags, then size+crc identity against the "
-                f"server's copy.")
+            # THE THIRD STATE -- AND THE SERVER IS ASKED FIRST, WHICH IT WAS NOT
+            # UNTIL 2026-08-20. "Not made yet" is a statement about BOTH
+            # archives, and this branch decided it from the client's table
+            # alone: `s_tab` was not read until twenty lines further down, past
+            # a `continue` this row could never come back from. So the one state
+            # that matters most -- the chain allocated into ONE copy and not the
+            # other, which is what a mid-arc deploy leaves behind -- read as the
+            # benign pre-creation case and refused nothing. The server would
+            # send a map id whose file the client cannot open, which is this
+            # module's own fatal case arrived at from the created side.
+            s_row_early = None if s_tab is None else s_tab.get(fid)
+            if s_tab is None:
+                skips.append(
+                    f"map {map_id} (0x{fid:X}) is a CREATED row, nothing binds "
+                    f"its id in {client_dat}, and the SERVER's archive could "
+                    f"not be read -- so whether this is the pre-creation state "
+                    f"or a one-sided deploy is not knowable this run. Nothing "
+                    f"is claimed either way.")
+                continue
+            if s_row_early is None:
+                # NEITHER binds it: a file this project has not made yet in
+                # either copy. Nothing to compare, so nothing is claimed -- and
+                # it is said out loud rather than dropped.
+                skips.append(
+                    f"map {map_id} (0x{fid:X}) is a CREATED row and NEITHER "
+                    f"archive binds its id ({client_dat}, {server_dat}). That "
+                    f"is the state BEFORE `deploy.py --area <area> --install` "
+                    f"allocates the chain, not a disagreement between two "
+                    f"archives, so it refuses nothing. Once the chain exists "
+                    f"here this row is checked like any other -- map flags, "
+                    f"then size+crc identity against the server's copy.")
+                continue
+            findings.append(Finding(
+                "fatal", map_id, fid,
+                f"this CREATED row's chain exists in the SERVER's archive (row "
+                f"{s_row_early}) and NOT in the client's, so this is a real "
+                f"divergence rather than the pre-creation state. The server "
+                f"would send this map id and the client's lookup -- an EXACT "
+                f"32-bit compare with no masking -- would find nothing, so the "
+                f"map cannot load at all. `deploy.py --area <area> --install "
+                f"--dat {client_dat}` allocates the chain in the copy that is "
+                f"behind; the two archives must both hold it or neither. "
+                f"Client archive: {client_dat}"))
             continue
         if c_row is None:
             # Name the OTHER spelling if the archive holds it, because that is

@@ -1467,9 +1467,25 @@ real customer) and deleted. Two sheet lessons recorded: a fresh run directory
 needs its own firewall cage (fail-closed refusal worked as designed), and the
 launch stages were split to keep the compile run's Gw.log from the serve
 sessions.
-Known deliberate gap: a compressed install SHRINKS the row, so small→large
-iteration relocates until `grow_to` is wired into the map path — its own
-change, costed separately.
+**W5-W7 carried it into the authoring LOOP (2026-08-20, `5cac69e`+).** The gap
+W1 recorded is CLOSED: an area declares its own `reserve_bytes` budget,
+creation honours it, and a bigger second install GROWS BACK IN PLACE rather
+than relocating -- scoped to rows we created, because gating on the budget
+alone would have grown ArenaNet's row into blocks it never gave us. W6
+measured the scale ladder nobody had: authored maps compress BETTER the bigger
+they get (32x32 = 32.9% of stored, 256x256 = 3.4%, 142,195 -> 4,820 B, ten
+blocks, every rung round-tripping 100% exact in 0.28 s), so the byte budget
+never binds -- **MFT ROWS bind**, and the 38797 line has room for exactly ONE
+more created map where the 38833 line has eight. The five guards W3 left open
+are closed, including the sharp one where `created = true` beside a bound id
+could silently displace a retail map: the install now proves the chain is ours
+from the archive's own BYTES (the file-id record the alloc journal recorded),
+never from a path, which is the cage's rule on the archive axis.
+**The next launch is WORLDMAPS-W7** -- a 256x256 region walked,
+`vault/research/worldmaps/WORLDMAPS-W7-RUN.md`, predictions registered, no
+trapezoid count predicted, and both procedural fixes the last two runs cost
+built in (cage a fresh run directory; bank Gw.log between the compile and
+serve stages).
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
