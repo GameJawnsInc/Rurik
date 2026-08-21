@@ -73,6 +73,7 @@ documented as inert, because inert is how a fix gets credited with a null it
 never earned.
 """
 import ast
+import inspect
 import json
 import math
 import os
@@ -84,9 +85,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+
 import checks     # noqa: E402
 import authsrv    # noqa: E402
 import vaultpath  # noqa: E402
+# THE OFFLINE SCORER, IMPORTED BY THE TEST AND NEVER BY THE SERVER. Section 16
+# rebuilds the --arrival-carry banner's counterfactual table from
+# `grantsim.FIELD4_SCREEN` so the banner and the scorer cannot drift apart in
+# silence. It has to be this direction: `grantsim` imports `authsrv` (for the
+# shipped arrival model), so `authsrv` importing `grantsim` would be a cycle AND
+# would put a clientscan module on the server path. The tie is therefore made
+# here, on the test side, and `test_grantsim.py` §10 pins FIELD4_SCREEN itself
+# against the live computation. Nothing in grantsim runs at import time -- no
+# vault, no client image -- so this import is bare-machine safe and both floors
+# below move by the same amount.
+import grantsim   # noqa: E402
 
 # MEASURED from a real green run: 24 checks with the capture present, 20
 # without; section 8 (the unit-vector lock) added 8 on 2026-08-19 and
@@ -161,8 +175,33 @@ import vaultpath  # noqa: E402
 # fixture-free, so both floors move by the same 1: 175 bare and 183 vaulted,
 # each read off a real green console run of its own configuration (183 normal,
 # 175 with RURIK_VAULT pointing at a directory that does not exist).
-FLOOR_BARE = 175
-FLOOR_FULL = 183
+#
+# 2026-08-21, REALFIX-F1b: section 16 (--arrival-carry) added 31 and section
+# 14's argv-completeness check was rewritten to read the composition function's
+# own SIGNATURE instead of a literal list of eight names -- adding a ninth
+# parameter turned it red, which is the check working, but "paste the new name
+# in" is the only maintenance it can prompt and a list somebody pastes into is
+# one that eventually gets pasted into wrongly. Same count, no drift. Section
+# 16 is fixture-free like 14 and 15 -- it drives the same lifted receive arm
+# with a third module flag and a FAKE CLOCK, exercises the three pure queue
+# functions directly, reads the syntax tree and the startup banner, and opens
+# nothing -- so the whole 32 lands in BOTH subsets and the 8-check gap between
+# the configurations is unchanged: 207 bare and 215 vaulted. Both read off real
+# green console runs of their own configuration (215 from a normal run, 207
+# with RURIK_VAULT pointing at a directory that does not exist, which also
+# printed its 2 declared skips). Neither is an enumeration.
+#
+# 2026-08-21, AFTER THE F1b MUTATION LANE: one check, and it is the survivor
+# that lane found. Section 16's banner had its seventeen PROSE substrings pinned
+# and the three-row counterfactual TABLE under them free -- deleting the rows,
+# or rewriting the F1b row to the drafted "0 of 69" the offline screen had
+# already refuted, left this file green at 215/215 either way. The new check
+# rebuilds those rows from `grantsim.FIELD4_SCREEN`. It is fixture-free like the
+# rest of 16 (the constant is a module literal; grantsim opens nothing at import),
+# so both floors move by the same 1: 208 bare and 216 vaulted, each read off a
+# real green run of its own configuration.
+FLOOR_BARE = 208
+FLOOR_FULL = 216
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -2192,15 +2231,28 @@ def main():
           f"DECIDES; this tests what main() DOES about it")
     comp_kwargs = sorted(k.arg for k in comp_assign.value.keywords) \
         if comp_assign is not None else []
-    check(comp_kwargs == ["click_sweep", "client_endpoint", "grant_suppress",
-                          "heading_grant", "plane_carry", "resync", "stop_echo",
-                          "zero_lead"],
+    # THE EXPECTED SET IS THE FUNCTION'S OWN SIGNATURE, not a literal, and that
+    # is a 2026-08-21 correction rather than a loosening. This check carried the
+    # eight names spelled out; adding `arrival_carry` to
+    # `zero_lead_composition` for REALFIX-F1b turned it red, which is the check
+    # WORKING -- but the only maintenance it can prompt is "paste the ninth name
+    # in", and a list somebody pastes into is a list that eventually gets pasted
+    # into wrongly. Read off the signature it is asserting about, the check
+    # still goes red on exactly the defect it was built for (a parameter the
+    # call site never fills defaults to False, so its refusal can never fire
+    # from a real command line -- which is how --stop-echo went unrefused) and
+    # can no longer drift. `params` is asserted non-empty so a signature that
+    # lost all its keywords cannot make this vacuously true.
+    comp_params = sorted(
+        inspect.signature(authsrv.zero_lead_composition).parameters)
+    check(bool(comp_params) and comp_kwargs == comp_params,
           "and every flag the function can decide about is actually PASSED to "
           "it from argv",
-          f"{comp_kwargs} -- a parameter the call site never fills defaults to "
-          f"False, so the refusal for it can never fire from a real command "
-          f"line. That is exactly how --stop-echo went unrefused: the function "
-          f"is only as wide as its narrowest caller")
+          f"call site {comp_kwargs} against the signature's {comp_params} -- a "
+          f"parameter the call site never fills defaults to False, so the "
+          f"refusal for it can never fire from a real command line. That is "
+          f"exactly how --stop-echo went unrefused: the function is only as "
+          f"wide as its narrowest caller")
     # THE CONTROL. Both matchers above only ran against healthy source.
     bad_main = ast.parse(
         "def main():\n"
@@ -2868,6 +2920,637 @@ def main():
           f"field4={ast.dump(pc_payload_field4) if pc_payload_field4 else None}"
           f" -- field 3 is the DESTINATION's plane and the destination is the "
           f"newest report, so it must not follow field 4 into the past")
+
+    print("\n16. --arrival-carry (REALFIX-F1b) carries the ARRIVED grant's plane")
+    # WHAT EARNS THIS SECTION: F1's OWN PRIMARY FALSIFIER FIRED. Its
+    # pre-registration -- printed at startup and pinned by section 15 -- was
+    # "grants whose field 4 differs from the SYNC copy's agent+0x80 go to 0".
+    # Run 20260821T143411 came in at 5 of 93 against the P2 control's 8 of 88,
+    # and all five sit above the gate-1 cut, which is the exact combination that
+    # produced 3 of 8 events in the control. Every one is F1's own NAMED LIMIT:
+    # a TWO-interval lag, where the client had been on plane 18 for two grants
+    # while the copy was still on 0, so "the previous grant" was already 18.
+    #
+    # SO F1b CHANGES THE OPERAND, not the field. Field 4 becomes the plane of
+    # the grant the copy has ARRIVED at, computed with the client's own bake
+    # (0x005FE950) over the SYNC model the server already keeps. Three
+    # functions, split PURE / PURE / MUTATING so the offline scorer runs the
+    # shipped decision rather than a paraphrase of it.
+    #
+    # THE CASE THIS SECTION EXISTS FOR is the in-flight supersede. A grant that
+    # lands while a leg is still in flight re-aims the copy mid-leg: it never
+    # reaches the superseded destination, so that plane must never become "the
+    # plane the copy arrived at", and the copy's position at that instant is a
+    # dead reckon along the old leg rather than the old destination. Get that
+    # wrong and F1b invents a NEW way to stamp a plane the copy was never on.
+    check(authsrv.ARRIVAL_CARRY is False,
+          "--arrival-carry is off by default",
+          "REALFIX-F1b is a candidate fix whose own offline pre-screen says it "
+          "leaves 3 residual mismatches, not 0. It is unproven until an F1b arm "
+          "scores it against the F1 and P2 arms REALFIX-L3 measured")
+
+    S = authsrv.DEFAULT_RUN_SPEED
+
+    def ac_state(pos=(0.0, 0.0), at=1000.0):
+        """A SEEDED sync model parked at `pos`, which is what a placed character
+        leaves behind: sync_from set, sync_to None, so _sync_position returns
+        `pos` exactly and the first leg's distance is a real measurement."""
+        return {"sync_from": (float(pos[0]), float(pos[1])), "sync_to": None,
+                "sync_at": at, "ac_queue": [], "ac_arrived": None}
+
+    # ---- the arrival formula IS the client's bake ------------------------
+    st = ac_state()
+    arr, dist = authsrv.arrival_carry_leg(st, 1000.0, (S, 0.0))
+    check(abs(dist - S) < 1e-9 and abs(arr - 1001.0) < 1e-9,
+          f"a leg of exactly {S:.0f} u arrives exactly 1.000 s later",
+          f"dist={dist} arrival=+{arr - 1000.0:.6f}s -- [+0x48] = now + "
+          f"trunc(|d| * 1000 / S) with S = [+0x60] * [+0x5C] = moveSpeed * "
+          f"maxSpeed. Neither term is fitted: we send moveSpeed 1.0 in 621 of "
+          f"621 sends and the client holds 288.0/1.0 in 4,115 of 4,115 movetap "
+          f"samples")
+    # THE TRUNCATION IS A FLOOR TO WHOLE MILLISECONDS AND IT IS THE CLIENT'S.
+    # 100.4 u at 288 u/s is 348.611 ms and the tick is 348, not 349.
+    st = ac_state()
+    arr_t, _d = authsrv.arrival_carry_leg(st, 0.0, (100.4, 0.0))
+    check(abs(arr_t - 0.348) < 1e-9,
+          "and the millisecond tick TRUNCATES rather than rounds",
+          f"{arr_t * 1000:.6f} ms for 100.4 u, against 348.611 exact -- "
+          f"rounding would give 349 and put every arrival up to half a "
+          f"millisecond late. The client floors")
+    # THE ZERO-DISTANCE SHORT-CIRCUIT, and it is measured from the COPY.
+    st = ac_state()
+    arr_z, dz = authsrv.arrival_carry_leg(st, 5.0, (1.0, 0.0))
+    st_far = ac_state()
+    arr_f, _df = authsrv.arrival_carry_leg(st_far, 5.0, (1.001, 0.0))
+    check(abs(arr_z - 5.001) < 1e-9 and dz == 1.0 and arr_f > 5.001,
+          "|d|^2 <= 1.0 takes the short-circuit and arrives in 1 ms; a hair "
+          "further does not",
+          f"1.000 u -> +{(arr_z - 5.0) * 1000:.3f} ms, 1.001 u -> "
+          f"+{(arr_f - 5.0) * 1000:.3f} ms. 0x005FEA92 writes +0x78..+0x84 = D "
+          f"outright and sets the tick to now+1; the compare is against the "
+          f"SYNC COPY's +0x78 and NOT the client's, which is REALFIX-P2's "
+          f"retracted cheapness claim")
+    # THE `max(1, ...)` CLAMP IS UNREACHABLE HERE, AND SAYING SO IS THE CHECK.
+    # A tick of 0 would mean "no destination armed", so the client floors it at
+    # 1 -- but with the short-circuit taking everything at or under 1.0 u, the
+    # shortest leg that can reach the else branch is 1.0+eps u, which is 3.47 ms
+    # and truncates to 3. The clamp is defensive and this is the assertion that
+    # it is: scan the whole reachable domain and find the smallest tick.
+    ticks = set()
+    for milli in range(1001, 3001):
+        stx = ac_state()
+        ax, _dx = authsrv.arrival_carry_leg(stx, 0.0, (milli / 1000.0, 0.0))
+        ticks.add(round(ax * 1000.0))
+    check(min(ticks) == 3,
+          "the millisecond clamp is DEFENSIVE and unreachable: the shortest "
+          "non-short-circuit leg already ticks 3 ms",
+          f"smallest tick over every leg in (1.000, 3.000] u is {min(ticks)} "
+          f"ms -- at {S:.0f} u/s a 1 u leg is {1000.0 / S:.2f} ms, and anything "
+          f"shorter takes the |d|^2 <= 1.0 arm instead. `max(1, ...)` is kept "
+          f"because a 0 tick would mean 'no destination armed', not because any "
+          f"input reaches it")
+    check(authsrv.arrival_carry_leg({"sync_from": None}, 0.0, (1.0, 1.0))
+          == (None, None),
+          "an UNSEEDED sync model answers (None, None) rather than inventing a "
+          "start point",
+          "_sync_position returns None until the character is placed and every "
+          "consumer fails closed on it. An arrival built on a position nobody "
+          "measured would carry a plane nobody measured")
+
+    # ---- the queue: the four cases the spec names ------------------------
+    # (1) THE FIRST GRANT. Empty queue, so the documented default is the
+    # CURRENT plane -- exactly today's payload and exactly F1's default. A 0
+    # here would write a wrong map index into agent+0x80.
+    st = ac_state()
+    f4_first, why_first = authsrv.arrival_carry_field4(st, 1000.0, 7)
+    check(f4_first == 7 and why_first == "first-grant",
+          "(1) FIRST GRANT: with nothing granted yet, field 4 is the CURRENT "
+          "plane",
+          f"{f4_first} why={why_first!r} -- at the first grant of a session the "
+          f"copy is co-located with the player at the spawn point, so there is "
+          f"no lagged copy to be wrong about")
+
+    # (2) A GRANT THAT ARRIVES BEFORE THE NEXT ONE. The ordinary case, and the
+    # one F1 already got right.
+    st = ac_state()
+    a1, _d1 = authsrv.arrival_carry_leg(st, 1000.0, (S, 0.0))       # arrives 1001
+    authsrv._note_wire_move(st, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st, 1000.0, a1, 0, (S, 0.0))
+    f4_mid, why_mid = authsrv.arrival_carry_field4(st, 1000.5, 18)
+    f4_late, why_late = authsrv.arrival_carry_field4(st, 1002.0, 18)
+    check(f4_mid == 18 and why_mid == "in-flight"
+          and f4_late == 0 and why_late == "arrived",
+          "(2) mid-leg the queue has NOTHING arrived and falls back to the "
+          "current plane; past the arrival it carries the granted one",
+          f"t+0.5 -> {f4_mid} ({why_mid}), t+2.0 -> {f4_late} ({why_late}) over "
+          f"a leg that arrives at t+1.000")
+
+    # (3) THE IN-FLIGHT SUPERSEDE, AND IT IS THE WHOLE DIFFERENCE FROM F1.
+    # Grant A at t=1000 to (576,0), arriving t+2.0. Grant B at t=1001, halfway
+    # along. The copy is at (288,0) -- NOT at A's destination -- so B's leg is
+    # measured from there; and A must be DISCARDED, because the copy re-aimed
+    # and will never stand on A's plane.
+    # B is (288, 288). From the DEAD-RECKONED copy at (288, 0) that is exactly
+    # 288 u = 1.000 s; from A's abandoned destination (576, 0) it would be
+    # hypot(288, 288) = 407.29 u = 1.414 s. The two readings are distinguishable
+    # to three decimal places, so "which point did the leg start from" is
+    # answered by the number rather than asserted.
+    B = (S, S)
+    st = ac_state()
+    aA, _dA = authsrv.arrival_carry_leg(st, 1000.0, (2 * S, 0.0))
+    authsrv._note_wire_move(st, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [2 * S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st, 1000.0, aA, 21, (2 * S, 0.0))
+    f4_sup, why_sup = authsrv.arrival_carry_field4(st, 1001.0, 5)
+    aB, dB = authsrv.arrival_carry_leg(st, 1001.0, B)
+    from_abandoned = math.hypot(B[0] - 2 * S, B[1])
+    check(abs(aA - 1002.0) < 1e-9 and f4_sup == 5 and why_sup == "in-flight"
+          and abs(dB - S) < 1e-6,
+          "(3) IN-FLIGHT SUPERSEDE: the superseded grant's plane is NOT "
+          "carried, and the new leg is measured from the DEAD-RECKONED point, "
+          "not from the abandoned destination",
+          f"A armed t+0.0 arriving t+{aA - 1000.0:.3f}; at t+1.0 field 4 = "
+          f"{f4_sup} ({why_sup}), NOT A's 21; B's leg measures {dB:.3f} u from "
+          f"the dead-reckoned ({S:.0f},0) against {from_abandoned:.3f} u it "
+          f"would measure from A's abandoned ({2 * S:.0f},0). Carrying 21 here "
+          f"would stamp a plane the copy never stood on -- a NEW way to write a "
+          f"wrong plane, invented by the fix meant to stop writing wrong planes")
+    authsrv.arrival_carry_advance(st, 1001.0, aB, 5, B)
+    check(len(st["ac_queue"]) == 1 and st["ac_queue"][0][1] == 5
+          and st["ac_arrived"] is None,
+          "and after the supersede the queue holds ONLY the new leg, with A "
+          "gone rather than deferred",
+          f"queue={st['ac_queue']} arrived={st['ac_arrived']} -- left in place, "
+          f"A's arrival time would quietly come due and hand the NEXT grant "
+          f"plane 21. `ac_arrived` stays None because nothing has ever arrived")
+    # THE NEGATIVE CONTROL for (3): the same two grants with B late enough that
+    # A really did arrive. Same code path, opposite answer, and the leg length
+    # says so independently of the plane.
+    st2 = ac_state()
+    aA2, _x = authsrv.arrival_carry_leg(st2, 1000.0, (2 * S, 0.0))
+    authsrv._note_wire_move(st2, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [2 * S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st2, 1000.0, aA2, 21, (2 * S, 0.0))
+    f4_ok, why_ok = authsrv.arrival_carry_field4(st2, 1003.0, 5)
+    _aB2, dB2 = authsrv.arrival_carry_leg(st2, 1003.0, B)
+    # THE DIFFERENCE IS READ OFF THE TWO MEASURED LEGS, not recomputed from the
+    # fixture. It said `from_abandoned - S` -- a constant that never touches
+    # `dB` -- so a mutation collapsing the in-flight leg onto the abandoned
+    # destination left this control printing "differ by 119.3 u" while both
+    # legs actually read 407.294. Check (3) catches that mutation on its own,
+    # so the hole was in the narration; an evidence string that cannot
+    # contradict the run is still the shape this repo books as a defect, and
+    # the separation is now asserted rather than described.
+    check(f4_ok == 21 and why_ok == "arrived"
+          and abs(dB2 - from_abandoned) < 1e-6 and abs(dB2 - dB) > 1e-6,
+          "CONTROL: with the same pair one second later A HAS arrived, so 21 "
+          "IS carried and the leg starts from A's destination",
+          f"{f4_ok} ({why_ok}), leg {dB2:.3f} u against the in-flight case's "
+          f"{dB:.3f} -- the discard is a discard of what is IN FLIGHT, not of "
+          f"everything, and the two legs differ by "
+          f"{dB2 - dB:.1f} u so the start point is measured")
+
+    # (4) A RATE-LIMIT REFUSAL CHANGES NOTHING, and that is enforced by the read
+    # being PURE rather than by the caller remembering to skip it.
+    st3 = ac_state()
+    a3, _y = authsrv.arrival_carry_leg(st3, 1000.0, (2 * S, 0.0))
+    authsrv._note_wire_move(st3, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [2 * S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st3, 1000.0, a3, 21, (2 * S, 0.0))
+    before = (list(st3["ac_queue"]), st3["ac_arrived"])
+    for probe in (1000.5, 1001.0, 1003.0, 1009.0):
+        authsrv.arrival_carry_field4(st3, probe, 99)
+        authsrv.arrival_carry_leg(st3, probe, (99.0, 99.0))
+    check((list(st3["ac_queue"]), st3["ac_arrived"]) == before,
+          "(4) RATE-LIMIT REFUSAL: reading field 4 and the leg mutates NOTHING, "
+          "at four instants including two past the arrival",
+          f"{before} unchanged. A refused report puts no grant on the wire, so "
+          f"the copy is still bound for the point the last GRANT named -- if a "
+          f"refusal could consume the queue or drop the in-flight leg, F1b "
+          f"would mis-answer exactly the stall case that is F1's named limit")
+
+    # (5) A STOP. Under --zero-lead the stop arm sends no 0x0029 at all
+    # (--stop-echo is REFUTED and now refused by zero_lead_composition), so the
+    # queue must survive one untouched: the copy keeps gliding to the granted
+    # point and arrives on schedule whatever the player did.
+    st4 = ac_state()
+    a4, _z = authsrv.arrival_carry_leg(st4, 1000.0, (2 * S, 0.0))
+    authsrv._note_wire_move(st4, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [2 * S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st4, 1000.0, a4, 21, (2 * S, 0.0))
+    _st_stop, w_stop, _r_stop = drive_pc([], carry=False)
+    stop_state = dict(st4)
+    authsrv._note_wire_move(stop_state, authsrv.GAME_CMSG_MOVE_TO_COORD,
+                            [authsrv.PLAYER_AGENT_ID, [0.0, 0.0]], 1000.5)
+    check(stop_state["ac_queue"] == st4["ac_queue"]
+          and authsrv.arrival_carry_field4(st4, 1003.0, 5)[0] == 21,
+          "(5) A STOP leaves the queue alone and the copy still arrives",
+          f"queue {st4['ac_queue']} -- the stop arm sends no grant under "
+          f"--zero-lead, and the authoritative copy is chasing OUR point rather "
+          f"than the player's keys, so it parks on it whatever the player did")
+
+    # (6) A HARD SET (0x002C) KILLS THE LEG, and the binary says it must:
+    # 0x00602B20's armed arm hands off to 0x006020B0, which CLEARS the arrival
+    # tick at 0x006021E6. --resync is ALLOWED beside --arrival-carry, so this
+    # is wired rather than assumed.
+    st5 = ac_state()
+    a5, _q = authsrv.arrival_carry_leg(st5, 1000.0, (2 * S, 0.0))
+    authsrv._note_wire_move(st5, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                            [authsrv.PLAYER_AGENT_ID, [2 * S, 0.0]], 1000.0)
+    authsrv.arrival_carry_advance(st5, 1000.0, a5, 21, (2 * S, 0.0))
+    authsrv._note_wire_move(st5, authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                            [authsrv.PLAYER_AGENT_ID, [10.0, 10.0], 18], 1000.5)
+    check(st5["ac_queue"] == [] and st5["ac_arrived"] == 18
+          and authsrv.arrival_carry_field4(st5, 1009.0, 5) == (18, "arrived"),
+          "(6) a 0x002C HARD SET drops the in-flight leg and takes its OWN "
+          "plane as the reached one",
+          f"queue={st5['ac_queue']} arrived={st5['ac_arrived']} -- the teleport "
+          f"primitive zeroes +0x48, so the outstanding grant never arrives. An "
+          f"entry left here would come due at t+2.0 on a leg the client had "
+          f"already abandoned, which is the stale-arrival defect the supersede "
+          f"discard exists to prevent, arriving by a different door")
+
+    # ---- payload exactness, and the flag-OFF byte identity ---------------
+    # F1b must move field 4 and NOTHING else. `drive_pc` sets ZERO_LEAD and
+    # PLANE_CARRY; ARRIVAL_CARRY needs the same treatment, so it gets its own
+    # driver rather than a widened one -- section 15's checks read `drive_pc`
+    # and must keep meaning what they meant.
+    class FakeClock:
+        """`time`, with `time()` under the test's control and nothing else moved.
+
+        SECTION 15 DID NOT NEED THIS AND SECTION 16 DOES, which is itself the
+        finding: F1's carry is a pure lookup with no clock in it, while F1b's
+        turns on `arrival <= now`. Driven on the real clock the arm's own
+        `now_z = time.time()` advances by whatever the loop happened to take --
+        and a 0.559 u first leg arrives 1 ms later, so two reports issued inside
+        that millisecond score "in flight" and the payload flips. That is a real
+        property of the policy (it is exactly the sub-frame race the offline
+        pre-screen measured) and it must be DRIVEN rather than raced: a test
+        whose expected payload depends on how fast the machine is proves
+        nothing on either outcome.
+
+        Everything except `time()` delegates to the real module, so a `sleep`
+        or a `monotonic` anywhere under `arm` still behaves.
+        """
+
+        def __init__(self, start=1_000_000.0):
+            self.t = start
+
+        def time(self):
+            return self.t
+
+        def __getattr__(self, name):
+            return getattr(time, name)
+
+    def drive_ac(steps, carry, zero_lead=True, step_dt=1.0):
+        st_ = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+               "sync_from": (1000.0, 2000.0), "sync_to": None,
+               "sync_at": 0.0}
+        clock = FakeClock()
+        w_, r_ = Sent(st_), FakeRec()
+        was_zl, was_pc = authsrv.ZERO_LEAD, authsrv.PLANE_CARRY
+        was_ac, was_time = authsrv.ARRIVAL_CARRY, authsrv.time
+        authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = zero_lead, False
+        authsrv.ARRIVAL_CARRY = carry
+        authsrv.time = clock
+        try:
+            for values, may in steps:
+                st_["grant_at"] = clock.t - (10.0 if may else 0.0)
+                w_.now = clock.t
+                arm(values, st_, r_, w_)
+                clock.t += step_dt
+        finally:
+            authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = was_zl, was_pc
+            authsrv.ARRIVAL_CARRY = was_ac
+            authsrv.time = was_time
+        return st_, w_, r_
+
+    # THE STEP IS 2.0 s SO EVERY LEG LANDS. Reports are 400 u apart, which is
+    # 1.389 s of travel, so a 1.0 s step would leave every grant superseding a
+    # leg still in flight -- a real regime, driven three checks below, but the
+    # wrong one to read "does the carry work at all" out of.
+    ac_steps = [(pc_report(1000.5, 7), True), (pc_report(1400.0, 18), True),
+                (pc_report(1800.0, 18), True)]
+    _s_on, w_on, r_on = drive_ac(ac_steps, carry=True, step_dt=2.0)
+    _s_off, w_off, r_off = drive_ac(ac_steps, carry=False, step_dt=2.0)
+    on_pay, off_pay = payloads(w_on), payloads(w_off)
+    check(len(on_pay) == 3 and len(off_pay) == 3
+          and [p[:3] for p in on_pay] == [p[:3] for p in off_pay],
+          "PAYLOAD: with the flag ON, agent id, point and field 3 are "
+          "byte-identical to the flag-OFF run",
+          f"on={[p[:3] for p in on_pay]} off={[p[:3] for p in off_pay]} -- "
+          f"'F1b touches no position' is half of the pre-registered prediction "
+          f"(separation p50/p90 unchanged within 5%), and this is the check "
+          f"that makes it a fact about the code rather than a hope")
+    check([p[3] for p in off_pay] == [7, 18, 18],
+          "CONTROL: with the flag OFF the payload is the pre-F1b build exactly "
+          "-- field 4 = field 3 on every grant",
+          f"{[p[3] for p in off_pay]} -- that is what makes F1b a MODIFIER on "
+          f"this arm rather than a second policy inside it, and it is the "
+          f"property `--arrival-carry` alone would silently have while the run "
+          f"log said 'F1b arm'")
+    check([p[3] for p in on_pay] == [7, 7, 18],
+          "and with it ON the carry LAGS field 3 by exactly one arrived grant",
+          f"{[p[3] for p in on_pay]} against field 3 {[p[2] for p in on_pay]} "
+          f"-- grant 1 defaults to the current plane, grant 2 finds grant 1 "
+          f"arrived (0.559 u away, so the short-circuit put the copy there in "
+          f"1 ms) and carries its 7, grant 3 finds grant 2's 399.5 u leg "
+          f"arrived 1.389 s in and carries its 18")
+    # THE SUPERSEDE REGIME THROUGH THE REAL SEND PATH, and it is where F1b and
+    # F1 give DIFFERENT payloads. At a 1.0 s cadence a 399.5 u leg (1.389 s)
+    # never lands, so grant 3 supersedes grant 2 in flight: F1b holds 7, the
+    # plane the copy actually reached, while F1 would carry grant 2's 18 -- the
+    # value the copy is still 0.4 s short of. That difference is exactly the
+    # two-interval lag F1's five residuals sit in.
+    _s_fast, w_fast, r_fast = drive_ac(ac_steps, carry=True, step_dt=1.0)
+    _s_f1, w_f1, _r_f1 = drive_pc(ac_steps, carry=True)
+    fast_pay = payloads(w_fast)
+    check([p[3] for p in fast_pay] == [7, 7, 7]
+          and [e.get("carry_why") for e in r_fast.of("grant_verdict")]
+          == ["first-grant", "arrived", "superseding"],
+          "SUPERSEDE THROUGH THE SEND PATH: at a cadence where no leg lands, "
+          "F1b holds the plane the copy REACHED and does not follow the client",
+          f"{[p[3] for p in fast_pay]} against field 3 "
+          f"{[p[2] for p in fast_pay]} -- grant 3 arrives 1.0 s into grant 2's "
+          f"1.389 s leg, so grant 2's 18 is DISCARDED unreached. F1 on the same "
+          f"three reports sends {[p[3] for p in payloads(w_f1)]}, carrying an "
+          f"18 the copy is still 0.4 s short of: that is the two-interval lag "
+          f"its five residuals sit in, reproduced here from the shipped arm")
+    ac_rows = r_on.of("grant_verdict")
+    check(len(ac_rows) == 3
+          and all(e.get("carry") == "arrival-carry" for e in ac_rows)
+          and [e.get("carry_why") for e in ac_rows]
+          == ["first-grant", "arrived", "arrived"]
+          and all(e.get("arrival_in") is not None for e in ac_rows),
+          "TELEMETRY: every verdict row NAMES the arm and carries the queue's "
+          "own reason and the arrival it just armed",
+          f"carry={[e.get('carry') for e in ac_rows]} "
+          f"why={[e.get('carry_why') for e in ac_rows]} "
+          f"arrival_in={[e.get('arrival_in') for e in ac_rows]} -- "
+          f"`plane_carry: false` reads identically for the P2 control and for "
+          f"an F1b run, and the gamesrv jsonl header carries NO argv "
+          f"(REALFIX-Q8), so a capture that cannot say which arm produced it "
+          f"costs a later session a behavioural reconstruction")
+    off_rows = r_off.of("grant_verdict")
+    check(len(off_rows) == 3 and all(e.get("carry") == "off" for e in off_rows)
+          and all(e.get("carry_why") is None for e in off_rows)
+          and all(e.get("arrival_in") is None for e in off_rows),
+          "CONTROL: the flag-OFF run says so in the same field, and arms no "
+          "arrival",
+          f"carry={[e.get('carry') for e in off_rows]} "
+          f"arrival_in={[e.get('arrival_in') for e in off_rows]} -- the two "
+          f"arms of the A/B are distinguishable from the rows alone")
+
+    # THE SLOT TRACKS SENDS. A refused report must not advance the queue, and
+    # the observable is the NEXT payload: with the middle report refused, the
+    # third grant still carries what the copy reached.
+    ac_refused = [(pc_report(1000.5, 7), True), (pc_report(1400.0, 18), False),
+                  (pc_report(1800.0, 18), True)]
+    _s_r, w_r, _r_r = drive_ac(ac_refused, carry=True)
+    ref_pay = payloads(w_r)
+    check(len(ref_pay) == 2 and [p[3] for p in ref_pay] == [7, 7],
+          "REFUSAL: a rate-refused report arms no entry, so the next grant "
+          "still carries the last one that actually WENT OUT",
+          f"{[p[3] for p in ref_pay]} from {len(ref_pay)} grants -- the middle "
+          f"report was refused, so the copy is still bound for grant 1's point "
+          f"and 7 is still the plane it reached. This is precisely F1's NAMED "
+          f"LIMIT case (4 of 70 headings refused in REALFIX-L1's arm B), and "
+          f"it is the one F1b has to answer differently")
+
+    # A SEND THAT RAISES MUST NOT ADVANCE THE QUEUE -- the same ordering
+    # section 15 pins for `zl_last_grant_plane`, and the only observable
+    # difference between mutating before the send and after it.
+    ac_dead_state = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+                     "sync_from": (1000.0, 2000.0), "sync_to": None,
+                     "sync_at": 0.0, "ac_queue": [], "ac_arrived": None}
+    dead = PcDeadWire(ac_dead_state, die_on=1)
+    was = (authsrv.ZERO_LEAD, authsrv.PLANE_CARRY, authsrv.ARRIVAL_CARRY)
+    authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = True, False
+    authsrv.ARRIVAL_CARRY = True
+    try:
+        now = time.time()
+        ac_dead_state["grant_at"] = now - 10.0
+        dead.now = now - 10.0
+        try:
+            arm(pc_report(1000.5, 7), ac_dead_state, FakeRec(), dead)
+        except OSError:
+            pass
+    finally:
+        authsrv.ZERO_LEAD, authsrv.PLANE_CARRY, authsrv.ARRIVAL_CARRY = was
+    check(ac_dead_state["ac_queue"] == [] and ac_dead_state["ac_arrived"] is None,
+          "and a send that RAISES leaves the queue exactly as the last grant "
+          "that really went out left it",
+          f"queue={ac_dead_state['ac_queue']} "
+          f"arrived={ac_dead_state['ac_arrived']} -- sendall can raise, and "
+          f"_note_wire_move runs BEFORE the bytes go out while this queue "
+          f"advances after them. Arming an entry for a grant no client ever "
+          f"received would carry its plane forward on the strength of a "
+          f"destination the copy was never sent to")
+
+    # ---- composition: the matrix, both directions ------------------------
+    # EVERY REFUSAL BELOW IS SLICED THROUGH `_shown`, AND THAT IS NOT STYLE.
+    # These read `zero_lead_composition(...)[0]`, which is None when the
+    # composition is ALLOWED -- i.e. exactly when the refusal has been deleted
+    # and the check must fail. Python builds the evidence f-string BEFORE
+    # `check()` runs, so a bare `ac_alone[:60]` raises TypeError on None: the
+    # mutation is still caught by the exit code, but section 16 dies mid-run,
+    # its remaining checks never execute and the ledger's floor is never
+    # evaluated -- a red run that names nothing and declares no skip, which is
+    # the failure both `checks.py` and CLAUDE.md's "a red test names the broken
+    # thing" exist to prevent. Two mutations of the F1b lane landed exactly
+    # here.
+    def _shown(refusal, n):
+        return (refusal or "<ALLOWED -- no refusal returned>")[:n]
+
+    ac_alone = authsrv.zero_lead_composition(arrival_carry=True)[0]
+    ac_both = authsrv.zero_lead_composition(zero_lead=True, plane_carry=True,
+                                            arrival_carry=True)[0]
+    ac_ok = authsrv.zero_lead_composition(zero_lead=True, arrival_carry=True)
+    check(ac_alone and "--arrival-carry requires --zero-lead" in ac_alone
+          and ac_ok == (None, []),
+          "COMPOSITION: --arrival-carry alone is REFUSED; with --zero-lead it "
+          "runs clean",
+          f"alone -> {_shown(ac_alone, 60)!r}...; with --zero-lead -> {ac_ok} -- an "
+          f"inert flag would run a server identical to the shipped default "
+          f"while the operator's log said 'F1b arm', and the null would be "
+          f"published against F1b's prediction. Same refusal --plane-carry "
+          f"already carries, for the same reason")
+    check(ac_both and "TWO POLICIES FOR ONE WIRE FIELD" in ac_both,
+          "and --plane-carry WITH --arrival-carry is refused as two policies "
+          "for one field",
+          f"{_shown(ac_both, 90)!r}... -- whichever the send site read, the other "
+          f"would be inert, and both print their OWN pre-registered prediction "
+          f"at startup, so a server carrying both announces two predictions "
+          f"and can honestly satisfy neither")
+    ac_triple = authsrv.zero_lead_composition(plane_carry=True,
+                                              arrival_carry=True)[0]
+    check(ac_triple and "TWO POLICIES FOR ONE WIRE FIELD" in ac_triple,
+          "CONTROL: with --zero-lead ALSO missing, the two-policies refusal "
+          "still wins over the needs-zero-lead one",
+          f"{_shown(ac_triple, 60)!r}... -- 'you passed two field-4 policies' is the "
+          f"more useful thing to be told when someone passes all three, and "
+          f"the ordering of the two checks is what decides which fires")
+    ac_clash = authsrv.zero_lead_composition(zero_lead=True, arrival_carry=True,
+                                             stop_echo=True)[0]
+    check(ac_clash and "--stop-echo" in ac_clash
+          and "TWO POLICIES" not in ac_clash,
+          "and with --zero-lead on, the refuted-arm refusals still win over "
+          "the F1b pairing",
+          f"{_shown(ac_clash, 70)!r}... -- F1b rides on the zero-lead send site, so a "
+          f"combination that makes that site unattributable is refused for the "
+          f"same reason with or without it")
+    _ref, ac_notes = authsrv.zero_lead_composition(zero_lead=True,
+                                                   arrival_carry=True,
+                                                   resync=True)
+    check(any("INVALIDATES the arrival queue" in n for n in ac_notes),
+          "and --resync ALLOWED beside it says out loud that it invalidates "
+          "the queue",
+          f"{len(ac_notes)} note(s) -- 0x002C clears the arrival tick, so the "
+          f"outstanding grant never arrives; the interaction is wired in "
+          f"_note_wire_move and printed here rather than left to be discovered "
+          f"in a run")
+
+    # ---- the banner: the SCREENED prediction, not the drafted one --------
+    ac_arg = next((n for n in ast.walk(main_fn)
+                   if isinstance(n, ast.If)
+                   and isinstance(n.test, ast.Attribute)
+                   and n.test.attr == "arrival_carry"), None)
+    ac_banner = printed_text(ac_arg)
+    # THE OFFLINE PRE-SCREEN CHANGED THIS PREDICTION AND THE BANNER HAS TO SAY
+    # SO. F1b was drafted predicting the mismatch count reaches 0 -- the
+    # falsifier F1 failed. Replaying it offline against both L3 captures says
+    # 3, not 0. Printing the drafted 0 would be the exact defect section 15
+    # already booked once, a number that cannot be met inside the one artifact
+    # whose job is that the baseline cannot be rationalised after the run.
+    ac_wanted = ("REALFIX-F1b", "ARRIVED",
+                 "F1b DOES NOT REACH ZERO",
+                 "come in at ~3", "NOT at 0",
+                 "sub-frame RACE", "guard band", "REFUSED",
+                 "corrected they are 10 and 6",
+                 "UNCHANGED within 5%", "FAILS IF",
+                 "F1's ZERO WAS NOT SIGNIFICANT", "p = 0.196",
+                 "OVERWHELMINGLY NPCs", "87% and 39%",
+                 "NECESSARY, NOT SUFFICIENT", "grantsim.py --planecarry")
+    ac_missing = [w for w in ac_wanted if w not in ac_banner]
+    check(ac_arg is not None and not ac_missing,
+          "BANNER: it prints the OFFLINE-SCREENED prediction (~3, not 0), the "
+          "refused guard band, the corrected baselines and F1's own "
+          "insignificance",
+          f"missing={ac_missing} from a banner of {len(ac_banner)} chars -- "
+          f"F1b was DRAFTED predicting 0, its own pre-screen says 3, and a "
+          f"banner still claiming 0 would pre-register a number the author "
+          f"already knew could not be met")
+    # AND THE NUMBERS THOSE SEVENTEEN SUBSTRINGS SUMMARISE. The prose above was
+    # pinned and the TABLE under it was not, which a mutation lane proved twice
+    # on 2026-08-21: deleting the three counterfactual rows outright left this
+    # file green at 215/215, and rewriting the F1b row to "0 of 69" -- the
+    # drafted prediction the offline screen had already refuted, printed beside
+    # prose still reading "F1b DOES NOT REACH ZERO" and "come in at ~3" -- left
+    # it green too. A banner that can contradict itself in its own numeric half
+    # is section 15's defect exactly ("REALFIX-L3 observed": a prediction
+    # printed as an observation inside the artifact whose whole job is that the
+    # baseline cannot be rationalised after the run), one section later.
+    #
+    # THE ROWS ARE REBUILT FROM `grantsim.FIELD4_SCREEN`, not restated here, so
+    # the tie is to the scorer rather than to a second literal that could drift
+    # with the first. `authsrv` may not import grantsim (see the import block),
+    # so the banner holds literals and this is what binds them; the constant is
+    # in turn pinned cell-by-cell against the live computation by
+    # `test_grantsim.py` §10, which is the half that makes this one mean
+    # something. Whitespace is collapsed because the banner column-aligns
+    # ("0 of  8") and the alignment is not the claim.
+    ac_flat = " ".join(ac_banner.split())
+    ac_rows = {"shipped-zerolead": "shipped --zero-lead",
+               "F1-planecarry": "F1 --plane-carry",
+               "F1b-arrivalcarry": "F1b --arrival-carry"}
+    ac_want_rows, ac_bad_rows = [], []
+    for _pol, _label in ac_rows.items():
+        _cells = grantsim.FIELD4_SCREEN[_pol]
+        _row = _label + " " + " | ".join(
+            f"{_cells[s][0]} of {_cells[s][1]}"
+            for s, _t, _a in grantsim.FIELD4_PAIRS)
+        ac_want_rows.append(_row)
+        if _row not in ac_flat:
+            ac_bad_rows.append(_row)
+    check(ac_arg is not None and not ac_bad_rows and len(ac_want_rows) == 3,
+          "and the THREE COUNTERFACTUAL ROWS it prints as the evidence for that "
+          "prediction are the offline scorer's own cells, numerator and "
+          "denominator",
+          f"missing={ac_bad_rows} of {ac_want_rows} -- the F1b row is the sharp "
+          f"one: 3 of 69 is the screened result and 0 of 69 is the DRAFTED "
+          f"prediction it refuted, and a banner free to print either could "
+          f"pre-register the number it already knew it would miss")
+    ac_strip = ast.parse("def main():\n    if a.arrival_carry:\n"
+                         "        ARRIVAL_CARRY = True\n")
+    ac_unprinted = ast.parse(
+        "def main():\n    if a.arrival_carry:\n"
+        "        _dead = (\"REALFIX-F1b ARRIVED F1b DOES NOT REACH ZERO "
+        "come in at ~3 NOT at 0 sub-frame RACE guard band REFUSED "
+        "corrected they are 10 and 6 UNCHANGED within 5% FAILS IF "
+        "F1's ZERO WAS NOT SIGNIFICANT p = 0.196 OVERWHELMINGLY NPCs "
+        "87% and 39% NECESSARY, NOT SUFFICIENT grantsim.py --planecarry\")\n")
+    ac_strip_text = printed_text(
+        next(n for n in ast.walk(ac_strip) if isinstance(n, ast.If)))
+    ac_unp_text = printed_text(
+        next(n for n in ast.walk(ac_unprinted) if isinstance(n, ast.If)))
+    check([w for w in ac_wanted if w not in ac_strip_text] == list(ac_wanted)
+          and [w for w in ac_wanted if w not in ac_unp_text] == list(ac_wanted),
+          "CONTROL: the same reader finds NOTHING in a stripped block, and "
+          "nothing in one whose banner is present but never PRINTED",
+          f"stripped {len(ac_strip_text)} chars; present-but-unprinted "
+          f"{len(ac_unp_text)} -- both missing all {len(ac_wanted)}")
+    check(ac_arg is not None and unprintable(ac_arg) == [],
+          "and every string the --arrival-carry banner prints survives a cp1252 "
+          "console",
+          f"{None if ac_arg is None else unprintable(ac_arg)} -- a U+26A0 here "
+          f"raises UnicodeEncodeError on a default Windows console, so the flag "
+          f"would kill the very run it exists to enable")
+
+    # ---- AST: F1b adds no send site and touches no other arm -------------
+    ac_blocks = [n for n in ast.walk(src)
+                 if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                 and n.test.id == "ARRIVAL_CARRY"]
+    ac_sending = [n for n in ac_blocks
+                  if any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                         and c.func.id == "send" for c in ast.walk(n))]
+
+    def ac_names(node):
+        return [n for n in ast.walk(node)
+                if isinstance(n, ast.Name) and n.id == "ARRIVAL_CARRY"]
+
+    check(ac_sending == [] and ac_names(heading_arm_ast)
+          and not ac_names(stop_arm_ast) and not ac_names(click_arm_ast),
+          "STRUCTURE: no `if ARRIVAL_CARRY:` block SENDS, and ARRIVAL_CARRY is "
+          "named in the heading arm and NEITHER other arm",
+          f"{len(ac_blocks)} blocks of which {len(ac_sending)} send; "
+          f"heading={len(ac_names(heading_arm_ast))} "
+          f"stop={len(ac_names(stop_arm_ast))} "
+          f"click={len(ac_names(click_arm_ast))} -- a modifier that grew a send "
+          f"site would be a tenth candidate policy, not F1b. The heading count "
+          f"is the positive control")
+    # AND THE READ IS PURE. `arrival_carry_field4` and `arrival_carry_leg` are
+    # called on EVERY evaluation including refused ones, so an assignment to
+    # `state[...]` inside either would make a refusal consume the queue -- the
+    # defect check (4) drives from the outside, pinned here from the syntax so
+    # it cannot come back through a different caller.
+    ac_pure = []
+    for fname in ("arrival_carry_field4", "arrival_carry_leg"):
+        fn = next(n for n in ast.walk(src) if isinstance(n, ast.FunctionDef)
+                  and n.name == fname)
+        for node in ast.walk(fn):
+            if isinstance(node, (ast.Assign, ast.AugAssign)):
+                targets = (node.targets if isinstance(node, ast.Assign)
+                           else [node.target])
+                for t in targets:
+                    if isinstance(t, ast.Subscript):
+                        ac_pure.append((fname, ast.dump(t)))
+    check(ac_pure == [],
+          "and both READ functions are pure -- neither assigns into `state`",
+          f"{ac_pure} -- they run on every evaluation, fired or refused, so a "
+          f"single `state[...] = ...` in either would let a rate-limit refusal "
+          f"consume the queue and drop the in-flight leg while nothing went on "
+          f"the wire. arrival_carry_advance is the ONE mutation")
 
     return LEDGER.verdict()
 

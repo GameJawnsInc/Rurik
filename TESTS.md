@@ -3413,8 +3413,86 @@ Every one of these, in the order they were written:
   raised inside the check's own arguments, which aborts before
   `LEDGER.verdict()` and leaves the floor unevaluated -- so the telemetry checks
   read those four fields with `.get` and FAIL BY NAME, except the refused row,
-  where `None` is the answer and presence is asserted with `in`. No client.
-  ~2 s),
+  where `None` is the answer and presence is asserted with `in`.
+  **§16 IS `--arrival-carry` (REALFIX-F1b), AND IT EXISTS BECAUSE §15's FLAG
+  FAILED ITS OWN PRIMARY FALSIFIER.** F1's pre-registration — pinned by §15 —
+  was "grants whose field 4 differs from the SYNC copy's `agent+0x80` go to 0";
+  its run (`20260821T143411`) came in at **5 of 93** against the P2 control's 8
+  of 88, every one above the gate-1 cut and every one F1's own **named limit**:
+  a *two*-interval lag, where the client had been on plane 18 for two grants
+  while the copy was still on 0, so "the previous grant" was already 18. F1b
+  changes the operand rather than the field: field 4 becomes the plane of the
+  grant the copy has **ARRIVED** at, computed with the client's own destination
+  bake (`arrival = send time + |dest − copy| / 288 u/s`, truncated to whole ms,
+  with the `|d|² ≤ 1.0` short-circuit arriving at once) over the SYNC model the
+  server already keeps — **no navmesh and no new constant**. The section drives
+  the three pure functions directly and through the lifted receive arm, and its
+  centre is the **in-flight supersede**, which is the whole difference from F1:
+  a grant landing while a leg is still in flight re-aims the copy mid-leg, so
+  that leg's plane must never become "the plane the copy arrived at" *and* the
+  new leg is measured from the **dead-reckoned point**, not from the abandoned
+  destination. Both halves are measured rather than asserted — the discarded
+  case's leg comes out 288.000 u from the dead-reckon against the 407.294 u it
+  would read from the abandoned destination, so "which point did it start from"
+  is answered by a number, with the same pair one second later as the control
+  (A really has arrived, 21 *is* carried, the leg reads 407.294). The other
+  cases: the **first grant** defaults to the current plane (not 0, which would
+  write a wrong map index); an **unseeded** SYNC model answers `(None, None)`
+  rather than inventing a start point; a **rate-limit refusal** mutates nothing,
+  driven at four instants including two past the arrival, and pinned from the
+  syntax too — both *read* functions are asserted to contain no `state[...]`
+  assignment, because they run on every evaluation; a **stop** leaves the queue
+  alone (the copy chases *our* point, not the player's keys); and a **`0x002C`
+  hard set** drops the in-flight leg and takes its own plane, because
+  `0x006020B0` clears the arrival tick at `0x006021E6` and an entry left behind
+  would come due on a leg the client had abandoned. §16 needs a **fake clock**
+  where §15 did not, and that is itself the finding: F1's carry is a pure lookup
+  with no clock in it while F1b's turns on `arrival <= now`, so a test racing
+  the real clock would flip its expected payload on a fast machine. The
+  millisecond clamp is checked as **unreachable** rather than exercised — every
+  leg in (1.000, 3.000] u ticks ≥ 3 ms, because anything shorter takes the
+  short-circuit — which is the honest assertion about defensive code. Payload
+  exactness and the flag-OFF **byte identity** are asserted as in §15, and the
+  supersede is driven a second time through the real send path at a cadence
+  where no leg lands: F1b holds the plane the copy reached (`[7, 7, 7]`) while
+  **F1 on the identical three reports sends an 18 the copy is still 0.4 s short
+  of**, which reproduces the two-interval lag from the shipped arm. Composition
+  is a **three-way** matrix: `--arrival-carry` alone is refused like
+  `--plane-carry`; `--plane-carry` *with* `--arrival-carry` is refused as **two
+  policies for one wire field** (whichever the send site read, the other would
+  be inert, and both print their own pre-registered banner, so a server carrying
+  both announces two predictions and can satisfy neither); that refusal is
+  ordered *before* the needs-`--zero-lead` one, checked; and `--resync` beside
+  it prints the queue-invalidation note. **The banner pins a CHANGED
+  prediction, and that is the point of the whole build.** F1b was drafted
+  predicting the mismatch count reaches 0 — the falsifier F1 failed — and the
+  offline pre-screen (`grantsim --planecarry`, §10 there) says it would reach
+  **3**, so the banner pre-registers ~3, names the sub-frame race, prints the
+  **corrected baselines** (10 and 6, not the published 8 and 5) and prints that
+  F1's own event reduction was **not significant** (Fisher p = 0.196) so nobody
+  reads an F1b null as proof either. §14's argv-completeness check was rewritten
+  in the same commit to read `zero_lead_composition`'s **own signature** instead
+  of a literal list of eight names: adding a ninth turned it red, which is the
+  check working, but the only maintenance a literal can prompt is "paste the new
+  name in". **AND THE TABLE UNDER THAT PROSE IS PINNED TOO, which it was not
+  until a mutation lane deleted it and stayed green.** §16 pinned seventeen
+  banner *substrings* and left the three-row counterfactual table they summarise
+  free: deleting the rows left 215/215, and rewriting the F1b row to the drafted
+  **"0 of 69"** the offline screen had already refuted — beside prose still
+  reading "F1b DOES NOT REACH ZERO" and "come in at ~3" — left 215/215 as well.
+  The rows are now rebuilt from `grantsim.FIELD4_SCREEN`, cell by cell,
+  numerator and denominator, so the banner cannot drift from the scorer; this
+  file imports `grantsim` for that constant and `authsrv` never may (grantsim
+  imports authsrv, and the server path stays dependency-clean), which is why the
+  tie is made on the test side and why §10 there pins the constant itself
+  against the live computation. §16's composition refusals also stopped
+  **crashing** instead of failing: `ac_alone[:60]` was sliced inside an evidence
+  f-string that Python builds *before* `check()` runs, so deleting either
+  refusal raised `TypeError` on `None`, killed the section mid-run and left nine
+  checks and the ledger's floor unevaluated — caught by exit code, naming
+  nothing. Floors **208** bare and **216** vaulted, both re-measured; §16 is
+  fixture-free like §14 and §15, so all 33 of its checks land in both. No
+  client. ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -4165,9 +4243,77 @@ Every one of these, in the order they were written:
   WITHDRAWN** -- measured both ways, the positional zip yields
   `[0.0, 72.0, 144.0]` for P2 against a required `[0.0]`, so it goes RED. The fix
   is right; the near-miss it was said to have caught never happened, and an
-  invented blind spot is worth less than none. Floors **26** bare (§1's ten
-  structural asserts, §2's nine refusals and §6b's seven predicate checks build
-  their own fixtures and read neither vault nor client), RAISED to **68** once the fixture probes
+  invented blind spot is worth less than none. **§10 IS REALFIX-F1b's FIELD-4
+  PRE-SCREEN, A DIFFERENT INSTRUMENT FROM EVERYTHING ABOVE IT** and the guard on
+  `grantsim --planecarry`. Where §1-§9 score whether a policy would have
+  *snapped*, this scores how many grants would have carried a field 4 that
+  disagreed with the plane word the SYNC copy was holding — REALFIX-F1's own
+  pre-registered falsifier, **the one it failed** — replaying three policies
+  (shipped `--zero-lead`, F1 `--plane-carry`, F1b `--arrival-carry`) over the
+  two REALFIX-L3 arms. **THE HEADLINE IT PRODUCES IS A NEGATIVE AND §10 PINS IT
+  AS ONE: F1b does NOT reach 0, it reaches 3 of 69** on the F1 capture against
+  F1's 6 of 93, and all three survivors land **8, 24 and 35 ms** after a
+  modelled arrival the client had not yet acted on — a sub-frame race on
+  `arrival <= now`, not a logic error, and a ~40 ms guard band that would close
+  them is **REFUSED as a fitted parameter** with the refusal itself asserted in
+  the printed report. **THE CALIBRATION GATE IS WHAT MAKES THE TABLE MEAN
+  ANYTHING**: replaying each capture's *own* arm must reproduce its wire field 4
+  on all 88 and all 93 grants and score the pin, which for the F1 arm is a real
+  exercise of the policy since its slot advances only on a SEND and that
+  capture's rate-limit refusals have to leave it alone. That gate also
+  **corrected the published counts**: FINDINGS records 8 of 88 and 5 of 93,
+  measured by pairing each grant with the *nearest* movetap sample — which can
+  be one taken **after** the grant, and a sample after the grant reads the plane
+  word the grant just wrote, scoring a genuine rewrite as a match. Pairing with
+  the last sample strictly *before* gives **10 and 6**, and the 10 is
+  corroborated by FINDINGS's own L3 table, which already reports "plane-word
+  changes 10" beside the 8; §10 asserts **both** numbers so the correction is
+  visible rather than silently applied. **THE ARRIVAL MODEL IS THE FALSIFIABLE
+  HALF**: the SYNC copy's plane word has two writers — field 4 at the grant and
+  field 3 again at **arrival** — and in the F1 capture 17 of the 24 changes are
+  not at a grant and **all 17 land on a modelled arrival**, |dt| median 0.070 s
+  max 0.135 s at a 9.5 Hz tap, with **zero free parameters** (the formula is the
+  client's bake, the speed the 288.0 the client itself holds in 4,115 of 4,115
+  samples). Its **control is a null that is asserted as unfalsifiable**: the P2
+  capture makes **zero** client-authored writes, because under `--zero-lead`
+  field 4 already equals the client's plane so the client never has to correct
+  us — §10 requires `n == 0` there rather than letting a 0-of-0 read as a pass.
+  The counterfactual is **observation-anchored and refuses contaminated
+  grants**: field 4 is compared against the word movetap actually read, and once
+  a counterfactual policy would have sent a different field 4 every later
+  observation is a reading of the wrong history until a client write re-anchors
+  it, so those grants are skipped and the denominator is printed beside every
+  count (3 of 69 and 3 of 3 are not the same claim). **The closed simulation is
+  kept, labelled and checked as a TAUTOLOGY**: it returns 0 for F1b because it
+  derives the plane word from the same arrival model F1b's policy reads, and it
+  **under-counts F1's own residual (3 against the wire's 6)** — §10 asserts both
+  facts and asserts the printer says "BY CONSTRUCTION" and "TAUTOLOGY" out loud,
+  because a model agreeing with itself printed as a headline is the failure this
+  whole file was built against. Two of §10's checks are fixture-free — the three
+  policies driven against a hand-built grant stream, separating on exactly the
+  two-interval lag (`F1 [0,0,18]` vs `F1b [0,0,0]` with grant 2 still in flight)
+  — so the floors move by **different** amounts, which is the case the two-floor
+  split exists for. **§10 ALSO PUBLISHES THE SCREEN AS A CONSTANT AND PINS EVERY
+  CELL OF IT.** `FIELD4_SCREEN` is the 3-policy × 2-capture table the server's
+  `--arrival-carry` banner transcribes, and §10 checks all six cells —
+  denominators included, because 3 of 69 and 3 of 3 are not the same claim —
+  against the live computation, plus fixture-free that its diagonal *is*
+  `FIELD4_MEASURED` and its F1b cell *is* `FIELD4_F1B_EXPECTED`. That is the
+  half that gives `test_position_trust.py` §16's banner tie its meaning; without
+  it the two files would agree about a number neither had measured. **And
+  `FIELD4_PAIR_GAP` was split in two**: it was simultaneously the grant↔tap
+  pairing tolerance and the grant-attribution radius, so neither could move
+  without silently moving the other, and only the attribution role
+  (`FIELD4_ATTRIB_GAP` now) was exercised — every grant's last-strictly-before
+  sample lands within **0.122 s**, so all 88 and all 93 pair identically at
+  0.25 s and at 5.0 s and a 20× widening moved neither the headline nor the
+  pin. The pairing role is now bracketed from both sides by each capture's own
+  cadence (the worst observed lead must fit inside the window; the window must
+  not span three tap intervals), so it is a check the data can refute rather
+  than a constant nothing reads. Floors **30** bare (§1's ten
+  structural asserts, §2's nine refusals, §6b's seven predicate checks and
+  §10's four fixture-free checks build their own fixtures and read neither
+  vault nor client), RAISED to **86** once the fixture probes
   answer, because excess over a floor is not an error and a bare floor protected
   none of the checks only a full machine runs -- deleting C2(a)'s three
   structural zeros on a vaulted machine used to print ALL CHECKS PASSED and now
