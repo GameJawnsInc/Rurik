@@ -1381,9 +1381,73 @@ UNMAPPED message).
 
 **NEXT, in cost order:**
 
-1. **The adrenaline-display opcode.** GWCA's `SkillbarSkill.adrenaline_a`
-   (+0x00) is the store the icon draws from; nobody maps what fills it.
-   Clientscan target: find the writer, walk back to the RECV handler.
+1. ~~**The adrenaline-display opcode.**~~ **CLOSED 2026-08-21, and the entry was
+   wrong about the store as well as the opcode.** The icon draws from the slot's
+   SECOND dword, `adrenaline_b` (**+0x04**) — not `adrenaline_a` (+0x00), which
+   is what this line used to say. The accessor `0x00821050` indexes
+   `container + slot*0x14 + 8` while the charge loop writes
+   `container + slot*0x14 + 4`: two functions, two displacements, one stride.
+   The pair is a **deferred-commit double buffer** — +0x00 accumulates, a
+   deferred task copies it to +0x04, and +0x04 is the only half any accessor
+   exposes. (Py4GW_Reforged reading `adrenaline_a` as the live value is *also*
+   right: a bot wants the accumulator, the screen shows the committed copy.
+   Complementary, not contested.) **Four opcodes fill it**, none of them named
+   by any upstream: **207** `{agent, units}` the charge, **208** `{agent}` clear
+   all, **209** `{agent, skill, copy, units}` an absolute set that retail sends
+   **0** times in 114,985 messages, **210** `{agent, skill, copy}` the spend.
+   Measured: 663/22/0/39 over 49 connections, self-scoped 9 of 9. **Two
+   different landmarks bracket the spend and it is worth naming both, because
+   confusing them is how the sender nearly shipped backwards**: `0x00E4`
+   SKILL_ACTIVATE for the same skill PRECEDES the spend 38 of 38, and the int
+   property naming that skill FOLLOWS it at +1 in the same batch 39 of 39. The
+   property is **50** (`CastAttackSkill`) in all 39 and never 60 — no prop-60
+   names an attack skill anywhere in the corpus — so the energy arc's
+   "spend before the naming property" shape holds here too, against a landmark
+   that arc never had to look at. All of it is pinned
+   by `toolkit/authsrv/test_adrenwire.py`. **Note for the sender:** the fill is
+   drawn only in `MISSION_MAP_GAME` and is torn down elsewhere, so a correct 207
+   sent to a client in an outpost yields a pixel-identical icon — any probe must
+   be in an explorable or a mission.
+
+   **AND THE SERVER NOW SENDS IT (2026-08-21).** `authsrv.py` declares
+   `AGENT_ADRENALINE_GAIN/CLEAR/SET/SPEND` and emits three of the four behind the
+   existing `ENERGY` flag: `0x00CF` on every gain the PLAYER's pools take (a
+   landed weapon hit, damage taken — raw units, and a 0-unit gain sends nothing),
+   `0x00D2` at the use site immediately before the property that names the skill,
+   and `0x00D0` at both clear sites (death, last in the batch; the 25 s timeout,
+   isolated). **209 is declared and never sent** — 0 of 724 — and `test_pools`
+   §11a counts its occurrences in the source to keep it that way. **Enemy pools
+   stay off the wire** (self-scoped 9 of 9). One real behaviour change came with
+   it: `AdrenalinePool` now takes a `recharging` predicate and mirrors the
+   client's own skip of a recharging slot (`0x008219C0`), because 209's absence
+   means nothing could ever resync the two books. `test_pools` floor 82 → 105,
+   green 98 → 121; `test_guards` re-pinned four in-range controls and
+   `test_agentlife` one ordering pin. **Those pins were re-pinned AGAIN before
+   the arc landed, and the correction is the important half:** the first cut
+   appended the gain after the damage, and the corpus puts it BEFORE — the
+   message immediately preceding a `0x00CF` is 159/prop 1
+   (`melee_attack_finished`) 594 times of 663 and the one immediately following
+   is the damage 601 of 663, modal batch `[159/prop1, 207, 163/prop16, 30]`
+   n=425. **This is the second time this arc shipped a burst in an order retail
+   never produces** (the energy debit was the first), and both times tests had
+   already grown up defending it — which is the argument for pinning an order
+   against a census rather than against the sender.
+   **AND THE CLIENT DRAWS IT (2026-08-21, run `20260821T125215`,
+   [studies/skills §27](studies/skills/FINDINGS.md)).** Twelve `0x00CF`s into an
+   explorable, and the three adrenal slots of the default bar fill from the
+   bottom while the five non-adrenal slots stay at **0.0% changed pixels in all
+   seven frames** — an in-frame null control, which is what makes the movement
+   attributable to the message rather than to the fight. The fill is a
+   CONTINUOUS fraction of the raw cost, confirmed on the one mid-charge frame:
+   30/54, 17/54 and 26/54 rows, where quarter-strikes on an 80-unit skill could
+   only land on 31.25/62.5/93.75%. Defy Pain (120) sits visibly lower than the
+   two 80-unit skills on identical grants — `adrenaline_b ÷ skillData.adrenaline`
+   on screen. §25's P7 is inverted under its own rig.
+   **Still unseen, and §27.5 lists them rather than letting the run round up:**
+   210's on-screen reset, the cross-pool tax, 208's wipe, and the outpost
+   map-gate control. The bar's 80/120/80 costs make the tax an unusually sharp
+   next probe — one press should drop the other two rings by a *different*
+   fraction each.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client

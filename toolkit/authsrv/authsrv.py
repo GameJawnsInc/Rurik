@@ -2203,13 +2203,94 @@ EFFECTS = True
 #                           casts carry one
 #   property 52 on 0x00A2   a discrete GAIN. OBSERVED n=1, at a resurrect, 1.0
 #
-# ADRENALINE IS NOT ON THE WIRE AT ALL and that is a finding rather than a gap:
-# no opcode in `schema/messages.json`, none in GWCA's `Opcodes.h`, and GWCA
-# reads the charge out of client MEMORY. So the server tracks the pools
-# authoritatively and sends nothing for them -- which is the only reading that
-# is right whether or not the client animates the icons itself. A client run
-# answers that; nothing here waits on it.
+# ADRENALINE HAS FOUR OPCODES OF ITS OWN, and this paragraph used to say it had
+# none. See the block below.
 GV_ENERGY_REGEN = pools.GV_ENERGY_REGEN            # 43
+
+# ---- THE ADRENALINE FAMILY, wired 2026-08-21 ------------------------------
+#
+# WHAT THIS REPLACES. Until today this file said "ADRENALINE IS NOT ON THE WIRE
+# AT ALL and that is a finding rather than a gap", `pools.py` said the same,
+# and both cited the same two absences: no adrenaline opcode in
+# `schema/messages.json` and none in GWCA's `Opcodes.h`. Both absences are
+# real. The conclusion was still wrong -- the catalog carries all four SHAPES
+# and names none of them (`GAME_SMSG_0207`..`0210`), and NO UPSTREAM ANYWHERE
+# names them: GWCA (gwdevhub__GWToolboxpp `Opcodes.h`), OpenTyria,
+# Headquarter, GWLP-R, Py4GW_Reforged and gw-preservation were all searched
+# and are all NOT FOUND. Absence from every mirror got read as absence from the
+# protocol, which is the same mistake in the same shape as the four days of
+# provenance over-refusal at the top of CLAUDE.md. THE NAMES BELOW ARE OURS
+# and owe no derivation-register row.
+#
+# THE CHAIN, MEASURED by static walk of the pinned build-38797 image. Every
+# link has exactly ONE caller, so there is no branch to have read wrong:
+#
+#   207  RECV table 0x00BC8F68 entry 156 -> descriptor 0x00BC96B8, dispatch
+#        member 0x00BC96C0 -> stub 0x0091F3F0 -> thunk 0x00814500 (`mov
+#        ecx,[eax+0x2c]; add ecx,0x6f0`, the hotKeyState container) -> worker
+#        0x00821980. The worker walks the 8 slots at stride 0x14 and, for each
+#        one that is not recharging (+0x08), not empty (+0x0C) and whose skill
+#        row's `movzx word [row+0x38]` is nonzero, writes
+#        `min(cost, current + units)` to +0x00. `mov [esi],ecx` at 0x008219EA
+#        is THE ONLY arithmetic write to a slot's +0x00 in the whole image.
+#   208  0x0091F410 -> 0x00814520 -> 0x00821B00: both halves of all 8 slots to
+#        zero, UI event 0x10000059 at 0x00821B4D.
+#   209  0x0091F430 -> 0x00814540 -> 0x00821B70: matches ONE slot on (skillId
+#        +0x0C, skillCopy +0x10) and writes the message's units to BOTH halves.
+#   210  0x0091F460 -> 0x00814570 -> 0x00821C00, guarded by ArenaNet's own
+#        `Assertion: skill / ChCliSkill.cpp(463)`. Named slot to 0; every other
+#        occupied slot `cmp esi,0x19 / jbe -> 0 / else add esi,-0x19` on both
+#        halves. 0x19 is 25, which is `pools.STRIKE_UNITS`.
+#
+# ARENANET'S OWN WORDS (SOURCED, `clientscan/asserts.py --grep`):
+# `context->skillAdrenalineUpdateArray.Count()` at ChCliSkill.cpp:84 names the
+# deferred repaint chain adrenaline, and `!(energyCost && skillData.adrenaline)`
+# guards `cmp word [+0x38],0` at BOTH GmCtlSkCard.cpp:409 and
+# GmCtlSkListEntry.cpp:185. That second one is why the send order below cannot
+# go wrong: A SKILL CANNOT CARRY BOTH COSTS, so 0x00D2 and property 62 can
+# never ride the same burst.
+#
+# MEASURED ON RETAIL'S WIRE: 49 GAME_SMSG connections over the 14 live
+# captures, 114,985 messages, zero framing errors. 663 x 207, 22 x 208,
+# 0 x 209, 39 x 210.
+#
+#   * 209 IS A LIVE HANDLER RETAIL NEVER USES -- 0 of 724 -- exactly like
+#     energy property 33, which is 0 of 13,378. So this server declares it and
+#     does not send it. Sending an absolute setter would be the one message
+#     that can hide a divergence rather than expose it.
+#   * SELF-SCOPED, 9 of 9: every connection carrying a 207 names exactly one
+#     agent, and it is that connection's own opcode-218 agent. See the
+#     `agent_adrenaline` comment for why the enemy pools stay off the wire.
+#   * 207's amounts are 25 x631 (one strike per landed weapon hit, OBSERVED)
+#     and 32 sub-25 gains {3:6, 4:12, 5:1, 6:5, 7:1, 8:3, 11:4}. Reading the
+#     second population as GWW's one-unit-per-1%-of-max-health-lost is
+#     INFERRED; nothing joins them to health traffic yet.
+#
+# THE MAP GATE, and it changes how a probe is designed rather than what this
+# file sends: GmSkSlot 0x00542E43 calls MissionCliGetMap and 0x00542E48
+# `cmp eax,1 / jne` -- the adrenaline fill is drawn ONLY in MISSION_MAP_GAME
+# (==1, MsCliApi:251), and in an OUTPOST (==0, QuestLog:261) the overlay is
+# actively torn down. A perfectly correct 207 sent to a client sitting in an
+# outpost yields a pixel-identical icon. Any run that wants to see these must
+# be in an explorable or a mission.
+#
+# AND THE DISPLAY READS THE OTHER HALF. The icon draws from +0x04
+# (adrenaline_b): ChCliApi 0x00816EF0 returns slot +0x04 and has exactly one
+# caller image-wide, GmSkSlot 0x00542E78, which reads the threshold as
+# `movzx word [esi+0x38]` and forwards both to Controls::SkillImage msg 0x59,
+# which DIVIDES them (0x008C6188 `fdiv`) and forwards the fraction as msg 0x56.
+# No /25 and no quarter quantisation -- the bar is a continuous fraction of the
+# RAW cost, which is the other reason the pools are modelled in raw units.
+# +0x00 is the accumulator behind a deferred commit (207 queues the agent into
+# `skillAdrenalineUpdateArray` and task 0x00820DD0 copies a->b); 209 and 210
+# write both halves so they repaint without waiting on the queue.
+#
+# The four take agent_id first, so they take the AGENT_ prefix this file
+# already uses for that shape.
+AGENT_ADRENALINE_GAIN = 0x00CF          # 207 {agent, units}          10 bytes
+AGENT_ADRENALINE_CLEAR = 0x00D0         # 208 {agent}                  6 bytes
+AGENT_ADRENALINE_SET = 0x00D1           # 209 {agent, skill, copy, units}  16 b
+AGENT_ADRENALINE_SPEND = 0x00D2         # 210 {agent, skill, copy}     12 bytes
 
 # THE PLAYER'S PIPS, and this is a number we did not choose so much as EXPLAIN.
 # `agents.PLAYER_FLOAT_43` has been 0.0396 since it was copied out of
@@ -5634,6 +5715,23 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # 17 REPLACES 16 rather than annotating it -- p16 + p17 = 495 = one event
     # per swing across the whole Isle rung-7 capture. Sending both would draw
     # two numbers for one hit.
+    # THE GAIN PRECEDES THE DAMAGE, and that is measured rather than tidy.
+    # Over the 49 live connections the message immediately BEFORE a 0x00CF is
+    # 159/prop 1 (melee_attack_finished) 594 times of 663, and the one
+    # immediately AFTER is 163/prop 16-or-17 (the damage) 601 times of 663 --
+    # modal batch [159/prop1, 207, 163/prop16, 30], n=425, zero counterexamples
+    # to the gain-then-damage adjacency. The first cut of this sender put the
+    # gain last at all three sites; the skeptic pass of 2026-08-21 caught it,
+    # which is the SECOND time this arc has shipped a burst in an order retail
+    # never produces (the energy debit was the first, and two tests had already
+    # begun defending it).
+    #
+    # AND THE PLAYER'S HALF GOES ON THE WIRE while the agent's does not, which
+    # is measured rather than tidy: every one of the 9 corpus connections
+    # carrying a 0x00CF names exactly ONE agent, its own.
+    if ENERGY and swing:
+        player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
+                                conn_id, f"weapon hit on agent {target_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -5660,9 +5758,17 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # ends of a swing), and a spell's damage grants the caster no adrenaline in
     # the game. The damage half is NOT gated: damage taken is damage taken
     # however it arrived.
+    #
+    # THE PLAYER'S HALF GOES ON THE WIRE and the agent's does not, and that is
+    # measured rather than tidy: every one of the 9 corpus connections carrying
+    # a 0x00CF names exactly ONE agent, its own. `player_gains_adrenaline`
+    # carries the rest.
     if ENERGY:
-        if swing:
-            player_adrenaline(state).on_hit_landed(now)
+        # The player's strike went out ABOVE, in retail's own batch position.
+        # THIS half is SILENT, and a later session must not "fix" the
+        # asymmetry: retail is 9 of 9 self-scoped, so a 0x00CF naming an enemy
+        # would be traffic we invented. Same rule, same evidence shape, as
+        # property 62's 0 of 722.
         agent_adrenaline(agent).on_damage_taken(
             dealt / float(agent["max_health"]), now)
 
@@ -5672,13 +5778,14 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
         # AND A CORPSE CARRIES NO CHARGE. WIKI, same page: all adrenaline is
-        # lost upon death. Nothing goes on the wire for it -- adrenaline has no
-        # opcode anywhere (not in `schema/messages.json`, not in GWCA's
-        # `Opcodes.h`; GWCA reads it out of client memory), so this is a
-        # server-side book that the client never sees. The energy pool is left
-        # alone rather than zeroed: the revive path refills it, and no capture
-        # shows what happens to an NPC's energy at death because no capture
-        # shows an NPC's energy at all.
+        # lost upon death. STILL nothing on the wire for it, and the reason
+        # changed on 2026-08-21: it is not that adrenaline has no opcode (it
+        # has four) but that they are SELF-SCOPED, 9 of 9 -- an 0x00D0 naming
+        # an enemy is traffic retail never produces. The player's own death
+        # DOES send one; `kill_player` is where. The energy pool is left alone
+        # rather than zeroed: the revive path refills it, and no capture shows
+        # what happens to an NPC's energy at death because no capture shows an
+        # NPC's energy at all.
         if ENERGY:
             agent_adrenaline(agent).clear()
         # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
@@ -5841,7 +5948,12 @@ def player_adrenaline(state):
     bar = tuple(SKILLBAR)
     pool = state.get("adrenaline")
     if pool is None or state.get("adrenaline_bar") != bar:
-        fresh = pools.AdrenalinePool({sid: skill_cost(sid)[1] for sid in bar})
+        # THE RECHARGE PREDICATE IS THE CLIENT'S OWN SKIP RULE, injected as a
+        # closure so `pools.py` keeps importing nothing from this file. See
+        # `recharging_skills` for what it reads and why the divergence it
+        # closes would otherwise be permanent.
+        fresh = pools.AdrenalinePool({sid: skill_cost(sid)[1] for sid in bar},
+                                     recharging=lambda: recharging_skills(state))
         if "adrenaline" not in state:
             # Same two-thread first touch as `player_energy`: setdefault so
             # racing creators converge on ONE pool.
@@ -5871,8 +5983,44 @@ def agent_energy(agent):
     return pool
 
 
+def recharging_skills(state):
+    """The player's skill ids whose recharge the CLIENT currently has running.
+
+    THE CLIENT SKIPS A RECHARGING SLOT WHEN IT TAKES ADRENALINE. `cmp [esi+8],0
+    / jne` at 0x008219C0 in worker 0x00821980 tests the slot's recharge field
+    BEFORE it looks at the skill id, and it is unambiguous. Our pool granted to
+    everything, so from the first 0x00CF sent while an adrenal skill was
+    recharging the two books would have disagreed -- permanently, because the
+    only message that could resync them is 209 and retail sends it zero times
+    in 724.
+
+    THE WINDOW IS E5 TO E6 AND NOT PRESS TO E6, because the CLIENT is the thing
+    being mirrored and the client learns about the recharge from `0x00E5`
+    (`cast_tick`'s first branch) and forgets it at `0x00E6`. Between the press
+    and E5 the client's slot still reads recharge 0 and would take the units,
+    so this must say the skill is not recharging in that interval even though
+    the server knows a cast is pending.
+
+    Reads `pending_casts`, which the world tick mutates while the connection
+    thread calls this. The list() is the whole synchronisation: entries are
+    appended by one thread and removed by another, and iterating the live list
+    is what raises mid-fight.
+    """
+    now = time.time()
+    return {cast["skill_id"] for cast in list(state.get("pending_casts") or ())
+            if cast.get("e5_sent") and now < cast["e6_at"]}
+
+
 def agent_adrenaline(agent):
-    """One hostile's adrenaline pools, over ITS own bar. Same rebuild rule."""
+    """One hostile's adrenaline pools, over ITS own bar. Same rebuild rule.
+
+    NO `recharging` PREDICATE, and that asymmetry is deliberate rather than an
+    omission. The client's skip rule is mirrored for the PLAYER because the
+    client holds a copy of the player's book that nothing can resync; no client
+    anywhere holds a copy of an enemy's adrenaline, so applying the same rule
+    here would be a claim about retail's SERVER with no referee to check it
+    against. The enemy pool exists to pace our own AI and nothing else.
+    """
     bar = tuple(row[0] for row in (agent.get("skills") or ()))
     pool = agent.get("adrenaline_pool")
     if pool is None or agent.get("adrenaline_bar") != bar:
@@ -5880,6 +6028,36 @@ def agent_adrenaline(agent):
             {sid: skill_cost(sid)[1] for sid in bar})
         agent["adrenaline_bar"] = bar
     return pool
+
+
+def player_gains_adrenaline(send, state, units, now, conn_id, why):
+    """Grant `units` to the player's pools AND tell the client, from one call.
+
+    ONE FUNCTION SO THE TWO BOOKS CANNOT DIVERGE. The client adds the MESSAGE'S
+    number to its own slots (`add eax,[ebp+0xc]` at 0x008219E1), so the value
+    granted here and the value on the wire have to be the same integer; a
+    caller that did `pool.grant(...)` and `send(...)` separately is one edit
+    away from them being two.
+
+    A ZERO-UNIT GAIN SENDS NOTHING and grants nothing. `on_damage_taken`
+    already no-ops on a sub-1% hit -- WIKI is explicit that zero damage "does
+    not count as being in combat" -- and the wire has to match: an 0x00CF with
+    units 0 leaves the client's `something gained` flag (`mov edi,1` at
+    0x008219EC) clear and repaints nothing, so it is a message that does
+    nothing and that retail has no reason to produce.
+
+    A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though -- full pools, a bar
+    with no adrenal skill on it, everything recharging. The client's handler is
+    a no-op in exactly those cases too, so nothing is misdrawn; and it is what
+    keeps the 25-second clock honest, because retail's own clears are MEASURED
+    at 25.00 s after the last 207 ON THE WIRE (15 of 15, spread 42 ms) rather
+    than after the last slot that actually moved.
+    """
+    if not ENERGY or units <= 0:
+        return
+    player_adrenaline(state).grant(units, now)
+    send(AGENT_ADRENALINE_GAIN, [PLAYER_AGENT_ID, int(units)],
+         f"adrenaline +{int(units)} ({why})")
 
 
 _GLYPH_UNREADABLE = set()
@@ -5996,26 +6174,46 @@ def spend_glyph_charge(send, state, ep, conn_id, skill_id):
 
 
 def energy_tick(send, state, conn_id):
-    """Regenerate energy, and expire adrenaline. SILENT, and that is measured.
+    """Regenerate energy silently; expire adrenaline with one 0x00D0.
 
-    Retail sends property 43 ONCE and the client animates the orb from it --
-    52 events across the whole live corpus, every one a create or a change,
-    none of them a stream. So this integrates the server's copy of the same
-    number and puts NOTHING on the wire, exactly as `degen_tick` spends health
-    without drawing a damage number. `send` is in the signature for the tick's
-    uniform shape and for the day a degeneration or a resize needs a message
-    out of here; today it is deliberately unused.
+    THE ENERGY HALF IS SILENT AND THAT IS MEASURED. Retail sends property 43
+    ONCE and the client animates the orb from it -- 52 events across the whole
+    live corpus, every one a create or a change, none of them a stream. So this
+    integrates the server's copy of the same number and puts nothing on the
+    wire for it, exactly as `degen_tick` spends health without drawing a damage
+    number.
 
-    The adrenaline half is the one thing here that can produce output, and only
-    on a real event: WIKI (GWW, "Adrenaline") -- all adrenaline is lost after 25
-    seconds out of combat, and `AdrenalinePool.tick` returns True exactly once,
-    when a bar that had charge is wiped.
+    THE ADRENALINE HALF DOES SEND, since 2026-08-21. `send` was in this
+    signature "for the day a degeneration or a resize needs a message out of
+    here" and marked deliberately unused; the day arrived from the other
+    direction. `AdrenalinePool.tick` returns True exactly once, when a bar that
+    had charge is wiped, and that is the one event this tick puts on the wire.
+
+    NOTHING GOES OUT FOR AN AGENT'S WIPE. Retail's adrenaline traffic is
+    self-scoped 9 of 9 (see the `AGENT_ADRENALINE_*` block), so the loop below
+    stays a log line.
     """
     if not ENERGY:
         return
     now = time.time()
     player_energy(state).tick(now)
     if player_adrenaline(state).tick(now):
+        # THE ONE MESSAGE THIS TICK CAN PRODUCE, and it is the shape retail's
+        # own timeout wipe has: an ISOLATED 0x00D0 with nothing but world ticks
+        # around it. MEASURED, 15 of 15 -- every isolated clear in the live
+        # corpus lands 24.973 to 25.015 s after that agent's own last 207
+        # GAIN, mean 25.00, spread 42 ms. `ADRENALINE_TIMEOUT_S` was WIKI's 25
+        # before anyone had counted one. GAIN ONLY: none of the 15 has a 210
+        # in its window, so whether a spend re-anchors retail's clock is
+        # UNKNOWN and ours does not (`AdrenalinePool.use` says so).
+        #
+        # OURS LANDS WITHIN ONE WORLD TICK OF 25.0 rather than on it, because
+        # `tick` is polled; retail's spread is 42 ms and ours is the tick
+        # period. That is a divergence a capture of our own wire would show,
+        # and it is cheap to name and expensive to remove.
+        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+             f"adrenaline cleared: {pools.ADRENALINE_TIMEOUT_S:.0f}s "
+             f"out of combat")
         print(f"[c{conn_id}] the player's adrenaline is gone: "
               f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
     for agent_id, agent in list(state.get("agents", {}).items()):
@@ -6590,6 +6788,41 @@ def handle_skill_press(values, send, state, conn_id, opcode):
             spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
         if units > 0:
             player_adrenaline(state).use(skill_id)
+            # ---- AND 0x00D2 GOES OUT HERE, WHICH IS MEASURED --------------
+            #
+            # OBSERVED, 39 of 39, and it is as clean as this corpus gets:
+            # every opcode-210 in the 14 live captures is IMMEDIATELY followed
+            # -- next message, identical timestamp, same batch -- by the int
+            # property naming the same skill on the same agent. Zero
+            # exceptions and zero occurrences the other way round. (The
+            # property is 50 in all 39, the attack-skill flavour; these are
+            # warrior sword adrenal skills. This server sends 60 for every
+            # cast, which is a pre-existing divergence and not this one.)
+            #
+            # So the spend PRECEDES the naming property, which is the SAME
+            # answer the energy arc measured for property 62 (45 of 45, same
+            # batch, spend first) -- and here it is measured directly rather
+            # than carried over.
+            #
+            # THE ONE ORDER NOBODY CAN MEASURE IS 0x00D2 AGAINST PROPERTY 62,
+            # and ArenaNet's own assert says nobody has to:
+            # `!(energyCost && skillData.adrenaline)` at GmCtlSkCard.cpp:409
+            # and GmCtlSkListEntry.cpp:185 -- a skill cannot carry both costs,
+            # so `frac` below is always None on this branch and the two spends
+            # can never appear in one burst. The 0x00D2 therefore lands
+            # immediately before the cast animation on our wire too, exactly
+            # where retail puts it.
+            #
+            # THE COPY IS THE CLIENT'S OWN, echoed from the press
+            # (`values[2]`), and is not assumed to be 0. It has to be: the
+            # client's worker matches a slot on (skillId +0x0C, skillCopy
+            # +0x10), and +0x10 is filled from SKILLBAR_UPDATE's second array
+            # -- which this server sends as `SKILLBAR_PVP_MASKS`, eight zeros.
+            # Echoing is what E4/E5/E3/E6 already do with the same field, so a
+            # copy this server could not match would have broken the cast
+            # cycle first.
+            send(AGENT_ADRENALINE_SPEND, [PLAYER_AGENT_ID, skill_id, copy],
+                 f"adrenaline spend: skill {skill_id} (copy {copy})")
             print(f"[c{conn_id}] skill {skill_id} spends {units} adrenaline; "
                   f"every other pool loses a strike", flush=True)
         # Guard before effect: the fraction is validated before the pool is
@@ -7037,8 +7270,6 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["attacking"] = None          # a corpse stops swinging back
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
-    if ENERGY:
-        player_adrenaline(state).clear()    # WIKI: all of it, on death
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
     # tick behind it, same tick. Silent in every map this server ships, because
     # pre-Searing charges nothing -- `map_death_penalty` is where that is
@@ -7060,6 +7291,37 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
              [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(0.0)],
              "energy regeneration stops: the player is dead")
+    # ---- AND THE ADRENALINE, LAST, WHICH IS THE POSITION I CAN DEFEND ------
+    #
+    # WIKI: all adrenaline is lost upon death, and the client has a handler
+    # that does exactly that (0x00821B00 zeroes both halves of all 8 slots).
+    #
+    # THE CORPUS CANNOT RULE ON THIS ONE AND THE CELL IS EMPTY RATHER THAN
+    # ZERO, which is a stronger statement than "we saw no death clear": across
+    # the 14 live captures, NOT ONE of the 9 connections carrying adrenaline
+    # ever witnesses its own agent dying. The two populations never overlap, so
+    # retail's 22 clears being none of them says nothing at all about what a
+    # death batch carries.
+    #
+    # SO THE POSITION IS CHOSEN BY WHAT IT MUST NOT DISTURB. The death bit ->
+    # 0x009C morale -> 0x00EE delta adjacency directly above IS measured, off
+    # ArenaNet's own capture, and `test_morale.py` section 5 pins it by index.
+    # An unmeasured message goes AFTER a measured sequence, never inside it --
+    # the first cut of this change put the clear at index 1 and split that
+    # adjacency, which is a real order retail produced traded for one nobody
+    # has seen. Nothing in the batch above touches a skill slot, so the client
+    # cannot tell the two apart anyway: 0x00D0 zeroes and repaints on its own.
+    #
+    # SENDING IT AT ALL IS SAFE UNDER BOTH READINGS of what the client does
+    # with the death bit. If the client wipes the slots locally, this is an
+    # idempotent no-op. If it does not, and we stayed silent, the player would
+    # stand up from a revive with a full bar and nothing could correct it --
+    # 209 is the resync and retail sends it 0 times in 724. Wrong under one
+    # reading, harmless under the other.
+    if ENERGY:
+        player_adrenaline(state).clear()
+        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+             f"adrenaline cleared: the player died ({why})")
 
 
 def agent_pool_max(state, agent_id):
@@ -7916,6 +8178,26 @@ def land_swing(send, state, agent_id, agent, conn_id):
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
 
+    # THE GAIN PRECEDES THE DAMAGE, and that is measured rather than tidy.
+    # Over the 49 live connections the message immediately BEFORE a 0x00CF is
+    # 159/prop 1 (melee_attack_finished) 594 times of 663, and the one
+    # immediately AFTER is 163/prop 16-or-17 (the damage) 601 times of 663 --
+    # modal batch [159/prop1, 207, 163/prop16, 30], n=425, zero counterexamples
+    # to the gain-then-damage adjacency. The first cut of this sender put the
+    # gain last at all three sites; the skeptic pass of 2026-08-21 caught it,
+    # which is the SECOND time this arc has shipped a burst in an order retail
+    # never produces (the energy debit was the first, and two tests had already
+    # begun defending it).
+    # This site reproduces retail's batch EXACTLY -- MELEE_ATTACK_FINISHED
+    # above, the gain here, the damage below -- because it already sent the
+    # finished marker first.
+    if ENERGY:
+        _now = time.time()
+        agent_adrenaline(agent).on_hit_landed(_now)   # SILENT: self-scoped, 9/9
+        player_gains_adrenaline(
+            send, state,
+            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
@@ -7927,10 +8209,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # of the player's maximum and is taken BEFORE any reduction, which costs
     # nothing to say because this server models no reduction after the armour
     # term above.
-    if ENERGY:
-        agent_adrenaline(agent).on_hit_landed(time.time())
-        player_adrenaline(state).on_damage_taken(
-            dealt / float(agents.PLAYER_HEALTH), time.time())
+
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
           + (f" (struck the {location.replace('warrior_', '')}, "
@@ -8094,16 +8373,21 @@ def land_skill(send, state, agent_id, agent, conn_id):
                             agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
     state["player_health"] = max(0.0, state["player_health"] - dealt)
+    # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
+    # for the caster: that half of the rule says WEAPON hit, and a cast is not
+    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that
+    # reason). Damage taken is damage taken, whatever delivered it -- WIKI puts
+    # the one-unit-per-1% rule on damage and not on attacks.
+    if ENERGY:
+        player_gains_adrenaline(
+            send, state,
+            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
+                                  f"{skill_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
-    # Damage taken is damage taken, whatever delivered it -- WIKI puts the
-    # one-unit-per-1% rule on damage and not on attacks. No strike for the
-    # caster, though: that half of the rule says WEAPON hit, and a cast is not
-    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that reason).
-    if ENERGY:
-        player_adrenaline(state).on_damage_taken(
-            dealt / float(agents.PLAYER_HEALTH), time.time())
+
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}", flush=True)
 
@@ -10126,11 +10410,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
                         # Energy regeneration and the adrenaline timeout, right
-                        # behind health's. Both are SILENT -- retail sends the
-                        # rate once and the client animates the orb from it (52
-                        # events in the corpus, none of them a stream), and
-                        # adrenaline has no opcode at all -- so this tick puts
-                        # nothing on the wire and only logs a real wipe.
+                        # behind health's. The energy half is SILENT -- retail
+                        # sends the rate once and the client animates the orb
+                        # from it, 52 events in the corpus and none of them a
+                        # stream. The adrenaline half emits ONE 0x00D0 on a
+                        # real wipe, which is the shape retail's own timeout
+                        # has: an isolated clear 25.00 s after the last gain,
+                        # 15 of 15.
                         energy_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
@@ -13341,13 +13627,15 @@ def main():
     ap.add_argument("--no-energy", action="store_true",
                     help="do not charge for skills: no energy gate, no "
                          "property-62 spend, no regeneration and no "
-                         "adrenaline. The control for the cost channel, and "
-                         "it restores exactly the behaviour this server "
-                         "shipped with until 2026-08-20 -- every skill free, "
-                         "the orb flat at 25, the enemy casting on its "
-                         "recharge alone. Use it to say whether something a "
-                         "run saw was THIS channel rather than the cast cycle "
-                         "it rides on.")
+                         "adrenaline -- and, since 2026-08-21, none of the "
+                         "four 0x00CF/0x00D0/0x00D2 adrenaline messages. The "
+                         "control for the cost channel, and it restores "
+                         "exactly the behaviour this server shipped with "
+                         "until 2026-08-20 -- every skill free, the orb flat "
+                         "at 25, the skill icons dark, the enemy casting on "
+                         "its recharge alone. Use it to say whether something "
+                         "a run saw was THIS channel rather than the cast "
+                         "cycle it rides on.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -14011,7 +14299,8 @@ def main():
         global ENERGY
         ENERGY = False
         print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
-              "goes out, and no adrenaline is tracked.")
+              "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
+              "and 0x00D2 all stay off the wire).")
 
     if a.no_armour:
         global EQUIP_ARMOUR

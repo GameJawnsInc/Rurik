@@ -1,5 +1,5 @@
-"""The two pools a skill spends: ENERGY, which the wire carries, and ADRENALINE,
-which it does not.
+"""The two pools a skill spends: ENERGY, which rides the generic property
+channel, and ADRENALINE, which has four opcodes of its own.
 
 R4b's other half. `effects.py` models what a skill PUTS ON somebody; this models
 what it COSTS. Until 2026-08-20 the server modelled neither: every skill on the
@@ -97,14 +97,66 @@ a single property 41. What the leading 1 is for is NOT FOUND, nothing here reads
 it, and it is written down because it is a difference between our stream and
 retail's that a client run could be pointed at.
 
-ADRENALINE IS NOT ON THE WIRE AT ALL, and that is a finding rather than a gap.
-`schema/messages.json` has no adrenaline opcode; GWCA's `Opcodes.h` has none;
-GWCA reads `adrenaline_a`/`adrenaline_b` out of client MEMORY, from the
-`SkillbarSkill` struct. So either the client animates the icons itself from the
-combat it can already see, or the charge state is invisible to it. **That is an
-open question a client run answers, and it does not block this module**: the
-server tracks the pools authoritatively and sends nothing for them, which is the
-only reading that is right under either answer.
+ADRENALINE IS ON THE WIRE, AND THE OLD PARAGRAPH HERE SAID IT WAS NOT. Until
+2026-08-21 this docstring read "adrenaline is not on the wire at all, and that
+is a finding rather than a gap", on the grounds that `schema/messages.json` has
+no adrenaline opcode and GWCA's `Opcodes.h` has none. Both halves of that are
+still true and the conclusion was still wrong: the catalog has the four SHAPES
+and names none of them (`GAME_SMSG_0207`..`0210`), and no upstream anywhere
+names them -- GWCA, OpenTyria, Headquarter, GWLP-R, Py4GW_Reforged and
+gw-preservation were all searched and all NOT FOUND. Absence from every mirror
+was read as absence from the protocol. The client settled it:
+
+  * **207 = 0x00CF {agent, units}** -- the CHARGE. MEASURED by static walk of
+    the pinned build-38797 image: RECV table 0x00BC8F68 entry 156 -> stub
+    0x0091F3F0 -> thunk 0x00814500 -> worker 0x00821980, one caller per link.
+    The worker adds the message's `units` to each of the 8 slots, capped at
+    that slot's own cost -- `mov [esi],ecx` at 0x008219EA is THE ONLY
+    arithmetic write to a slot's +0x00 in the whole image.
+  * **208 = 0x00D0 {agent}** -- CLEAR ALL. 0x00821B00 zeroes both halves of
+    all 8 slots.
+  * **209 = 0x00D1 {agent, skill, copy, units}** -- an ABSOLUTE SET, and retail
+    never sends it: 0 occurrences in the live corpus. Same shape as energy
+    property 33, which is also a live handler with zero traffic.
+  * **210 = 0x00D2 {agent, skill, copy}** -- the SPEND. 0x00821C00, guarded by
+    ArenaNet's own `ChCliSkill.cpp:463 'skill'`: the named slot goes to 0 and
+    every other occupied slot loses 25, floored.
+
+ARENANET'S OWN IDENTIFIERS say what this is, so the naming is not ours to
+argue about (SOURCED, `clientscan/asserts.py --grep`):
+`context->skillAdrenalineUpdateArray.Count()` at ChCliSkill.cpp:84 names the
+deferred repaint chain, and `!(energyCost && skillData.adrenaline)` guards
+`cmp word [esi+0x38],0` at BOTH GmCtlSkCard.cpp:409 and
+GmCtlSkListEntry.cpp:185 -- which is what promotes `skilltable.py`'s
+`adrenaline_units` decode from our name for +0x38 to the client's.
+
+That second assert is also load-bearing for the SEND ORDER (see `authsrv.py`):
+it says a skill cannot carry an energy cost AND an adrenaline cost, so the
+0x00D2 spend and the property-62 spend can never ride the same burst.
+
+TWO NUMBERS THE CORPUS MEASURED, and the second one is the good one. Over 49
+GAME_SMSG connections in the 14 live captures, 114,985 messages decoded with
+zero framing errors: 663 x 207, 22 x 208, 0 x 209, 39 x 210.
+
+  * **THE 25-SECOND TIMEOUT IS MEASURED, not just WIKI.** 15 of the 22 clears
+    are isolated -- nothing around them but world ticks -- and every one lands
+    24.973 to 25.015 s after that agent's own last 207 GAIN, mean 25.00,
+    spread 42 ms. (Only the gain: not one of the 15 has a 210 spend anywhere
+    in its window, so the corpus cannot say whether a spend re-anchors
+    retail's clock -- `AdrenalinePool.use` carries that divergence.) Nothing was fitted: the gap is retail's, `ADRENALINE_TIMEOUT_S`
+    was WIKI's, and they agree to a millisecond and a half of the wiki's stated
+    number. The other 7 clears ride the same batch as an `0x00E3` naming skill
+    385, which is Final Thrust, whose own description ends "you lose all your
+    adrenaline" -- a skill-driven wipe this server does not model. **NONE of
+    the 22 is a death**: zero have a status message for that agent within 2 s,
+    so the death wipe is the client HANDLER plus WIKI and is not witnessed.
+  * **SELF-SCOPED, 9 of 9.** Every connection carrying a 207 names exactly one
+    agent id, and it is that connection's own opcode-218 SKILLBAR_UPDATE
+    agent. Adrenaline is the observing player's own, exactly like property 62.
+  * 207's amounts are 25 x631 and 32 sub-25 gains {3:6, 4:12, 5:1, 6:5, 7:1,
+    8:3, 11:4}. The 25s are OBSERVED. Reading the sub-25 population as the
+    one-unit-per-1%-of-max-health-lost rule below is INFERRED -- nothing joins
+    them to health traffic yet.
 
 The rules are GWW's -- WIKI (GWW, "Adrenaline", rev. 2026-07-02):
 
@@ -115,6 +167,30 @@ The rules are GWW's -- WIKI (GWW, "Adrenaline", rev. 2026-07-02):
   * Using an adrenal skill zeroes its own pool and costs every OTHER pool one
     strike, whether or not the skill is interrupted or fails.
   * All adrenaline is lost on death, and after 25 seconds out of combat.
+
+AND ONE RULE GWW DOES NOT STATE, WHICH THE CLIENT DOES: **a slot whose
+RECHARGE is running takes no adrenaline at all.** `cmp [esi+8],0 / jne` at
+0x008219C0 skips the slot before it even looks at the skill id, and it is
+unambiguous. That rule has to be mirrored here, because nothing resyncs the
+two books afterwards: 209 is the absolute setter and retail sends it zero
+times in 724 adrenaline messages, so the client's store and the server's are
+two integrations of the same event stream and a single divergence is
+permanent. `AdrenalinePool(costs, recharging=...)` takes a zero-argument
+callable naming the ids whose recharge is currently running; the default is
+None, which grants to everything and is the pre-2026-08-21 behaviour.
+
+  * THAT ARGUMENT ALSO SAYS RETAIL'S SERVER SKIPS THEM -- INFERRED. If it did
+    not, every recharging adrenal slot would drift by one strike per hit and
+    stay wrong for the rest of the session, with no message able to correct
+    it. What would refute it: a capture where a 207 lands between an 0x00E5
+    and its 0x00E6 for an adrenal skill and the icon fills anyway.
+  * THE COMBAT CLOCK IS MARKED EITHER WAY, and that is what the 25-second
+    measurement above requires: retail's clears sit 25.00 s after the last 207
+    ON THE WIRE, not after the last slot that actually took units. A grant
+    that every slot skipped still went out and still counted as combat.
+  * 210's cross-cost is NOT recharge-gated. 0x00821C00 walks all 8 slots and
+    decrements every occupied one with no recharge test -- the skip lives in
+    207's worker alone, so `use` below is right to be unconditional.
 
 COSTS ARE RAW UNITS, NOT THE NUMBER ON THE ICON. The client's skill table holds
 the raw unit total at +0x38 and the client DISPLAYS `ceil(units/25)`
@@ -189,7 +265,27 @@ STRIKE_UNITS = 25
 # WIKI, same page: "adrenaline is lost ... after 25 seconds of not being in
 # combat". Combat means an attack landing or damage taken; see
 # `AdrenalinePool.on_damage_taken` for the case where nothing counts.
+#
+# AND SINCE 2026-08-21 IT IS ALSO MEASURED, which it was not when it was
+# written: the 15 isolated opcode-208 clears in the live corpus land 24.973 to
+# 25.015 s after their own agent's last 207 GAIN, mean 25.00 -- gain only,
+# because none of the 15 has a spend in its window. The wiki said
+# 25 and retail's wire says 25.00 +/- 0.02, from two sources that could not
+# have been fitted to each other.
 ADRENALINE_TIMEOUT_S = 25.0
+
+# THE FOUR OPCODES, restated here for the same reason 43/52/62 are: this module
+# is what carries the evidence, and `authsrv.py` declares its own
+# `AGENT_ADRENALINE_*` names in the house spelling. `test_pools.py` section 11
+# checks the two copies still agree, exactly as section 5 does for property 43.
+#
+# The names are OURS. No upstream names any of these -- GWCA, OpenTyria,
+# Headquarter, GWLP-R, Py4GW_Reforged and gw-preservation all searched, all NOT
+# FOUND -- so no derivation-register row is owed for them.
+OP_ADRENALINE_GAIN = 0x00CF     # 207 {agent, units}             MEASURED n=663
+OP_ADRENALINE_CLEAR = 0x00D0    # 208 {agent}                    MEASURED n=22
+OP_ADRENALINE_SET = 0x00D1      # 209 {agent, skill, copy, units}    n=0, NEVER
+OP_ADRENALINE_SPEND = 0x00D2    # 210 {agent, skill, copy}       MEASURED n=39
 
 
 class PoolError(Exception):
@@ -373,6 +469,27 @@ class EnergyPool:
         return 1.0
 
 
+def damage_units(fraction_of_max_health):
+    """Adrenaline units granted by taking `fraction_of_max_health` damage.
+
+    WIKI (GWW, "Adrenaline", rev. 2026-07-02): one unit per 1% of MAXIMUM
+    health lost, FLOORED -- so a hit for under 1% grants nothing.
+
+    A MODULE FUNCTION AND NOT A METHOD, because two callers need the same
+    number for two different purposes and neither may compute it its own way:
+    `on_damage_taken` grants it, and `authsrv.py` needs the identical integer
+    to put in opcode 207's `units` field. The client adds THE MESSAGE'S number
+    to its own slots (0x008219E1 `add eax,[ebp+0xc]`), so a wire value that
+    disagreed with the granted value by one unit would put the two books
+    permanently out of step with nothing able to resync them.
+
+    The 1e-9 is arithmetic hygiene, not a game rule: 0.29 * 100 is
+    28.999999999999996 in binary, and flooring that to 28 would lose a unit to
+    the representation rather than to the mechanic.
+    """
+    return int(math.floor(float(fraction_of_max_health) * 100.0 + 1e-9))
+
+
 class AdrenalinePool:
     """Every adrenal skill on one bar, each with its own units, all filling at once.
 
@@ -380,20 +497,30 @@ class AdrenalinePool:
     on the icon -- see the module docstring). Skills with no adrenaline cost are
     dropped at construction, so a bar of eight energy skills makes an inert pool
     rather than eight counters that never matter, and `{}` is legal.
+
+    `recharging` is a ZERO-ARGUMENT CALLABLE returning the skill ids whose
+    recharge is currently running, or None for "nothing is". It is a callable
+    rather than a set because the answer is a function of the clock and this
+    module owns no clock; it is injected rather than imported because the fact
+    lives in `authsrv.py`'s pending-cast list and this module imports nothing
+    from the server -- the same discipline `effects.py` keeps. What it buys is
+    the client's own skip rule at 0x008219C0; see the module docstring for why
+    a divergence there would be permanent.
     """
 
-    def __init__(self, costs):
+    def __init__(self, costs, recharging=None):
         self.costs = {int(sid): int(units) for sid, units in dict(costs).items()
                       if int(units) > 0}
         self.units = dict.fromkeys(self.costs, 0)
+        self.recharging = recharging
         self._last_combat = None
         self._lock = threading.RLock()       # see "TWO THREADS", module top
 
     # -- gaining ------------------------------------------------------------
 
     @_locked
-    def _grant(self, amount, now):
-        """Add `amount` units to every pool, capped, and mark combat. -> newly charged.
+    def grant(self, amount, now):
+        """Add `amount` units to every eligible pool, capped. -> newly charged.
 
         THE CAP IS A RECONSTRUCTION and is labelled as one. GWW states the gain
         and the cost but never says what happens to the surplus; the reason to
@@ -401,12 +528,21 @@ class AdrenalinePool:
         skills' pools in a way that only reads as a fill-to-full if a pool does
         not carry an overcharge. Capping is also the conservative direction: an
         uncapped pool would let a skill fire twice off one long fight, which is
-        a mechanic no source describes.
+        a mechanic no source describes. The client caps too, at the slot's own
+        cost -- `cmp ecx,eax / jb / mov ecx,eax` at 0x008219E4 is
+        `min(cost, current + units)` -- so the two books cap identically.
+
+        A RECHARGING SLOT TAKES NOTHING (the client's rule, 0x008219C0), but
+        the COMBAT CLOCK IS MARKED ANYWAY and before the skip: retail's 25 s
+        clears are measured from the last message on the wire, not from the
+        last slot that moved, and a grant that every slot refused is still a
+        grant that went out.
         """
         self._last_combat = float(now)
+        skip = frozenset(self.recharging() if self.recharging else ())
         newly = []
         for sid, cost in self.costs.items():
-            if self.units[sid] >= cost:
+            if sid in skip or self.units[sid] >= cost:
                 continue
             self.units[sid] = min(cost, self.units[sid] + amount)
             if self.units[sid] >= cost:
@@ -421,7 +557,7 @@ class AdrenalinePool:
         judgement -- a blocked or missed attack is not a hit -- and a multi-hit
         skill calls this once per hit, which is the wiki's own rule for them.
         """
-        return self._grant(STRIKE_UNITS, now)
+        return self.grant(STRIKE_UNITS, now)
 
     @_locked
     def on_damage_taken(self, fraction_of_max_health, now):
@@ -431,16 +567,16 @@ class AdrenalinePool:
         the pool grants nothing, and the wiki is explicit that zero damage "does
         not count as being in combat" either -- so a no-op here must NOT touch
         the timeout clock, or a stream of harmless pings would keep a bar
-        charged forever. That is why this returns before `_grant`.
+        charged forever. That is why this returns before `grant`.
 
-        The 1e-9 is arithmetic hygiene, not a game rule: 0.29 * 100 is
-        28.999999999999996 in binary, and flooring that to 28 would lose a unit
-        to the representation rather than to the mechanic.
+        The floor itself is `damage_units` above, and it is there rather than
+        inline so that the number this grants and the number `authsrv.py` puts
+        in opcode 207 cannot be two different integers.
         """
-        gained = int(math.floor(float(fraction_of_max_health) * 100.0 + 1e-9))
+        gained = damage_units(fraction_of_max_health)
         if gained <= 0:
             return []
-        return self._grant(gained, now)
+        return self.grant(gained, now)
 
     # -- spending -----------------------------------------------------------
 
@@ -461,6 +597,17 @@ class AdrenalinePool:
     def use(self, skill_id):
         """Spend it: own pool to zero, every OTHER pool down one strike.
 
+        THIS DOES NOT RESTART THE 25-SECOND CLOCK, and that is a refusal to
+        guess rather than an oversight. GWW says adrenaline is lost after 25
+        seconds "out of combat" and casting is plainly combat, so restarting it
+        here is the intuitive move -- but the only evidence we have is the 15
+        isolated clears in `tick`, and NONE of them has a spend in its window,
+        so retail could anchor either way and the corpus cannot tell us which.
+        The consequence is small and worth stating: after a spend that leaves
+        another pool charged, our 0x00D0 goes out 25 s after the last HIT, which
+        may be earlier than retail's. Named as a divergence rather than papered
+        over; one capture of a spend followed by 25 quiet seconds settles it.
+
         WIKI, same page, and the second half is the part that gets forgotten:
         the cross-cost applies "whether or not the skill is interrupted or
         fails", so this is called at the moment of USE and not on completion --
@@ -470,6 +617,13 @@ class AdrenalinePool:
         Refuses a skill that is not on this bar's adrenal list, loudly, because
         the alternative is a caller that wires every keypress here and quietly
         drains three pools every time the player casts a spell.
+
+        AND THE CLIENT'S OWN 0x00D2 WORKER IS THIS FUNCTION. 0x00821C00 walks
+        all 8 slots: the one matching (skillId, skillCopy) goes to 0, and every
+        other occupied slot does `cmp esi,0x19 / jbe -> 0 / else add esi,-0x19`
+        -- 0x19 is 25, which is `STRIKE_UNITS`, and the floor at zero is the
+        `jbe`. NO RECHARGE TEST: the skip at 0x008219C0 is in 207's worker
+        alone, so this stays unconditional and the two books agree.
         """
         sid = int(skill_id)
         if sid not in self.costs:
@@ -491,6 +645,10 @@ class AdrenalinePool:
         WIKI: "all adrenaline is lost upon death". Forgetting the clock as well
         is what stops `tick` reporting a timeout wipe for a bar that a death
         already emptied.
+
+        The client's 0x00D0 worker (0x00821B00) zeroes BOTH halves of all 8
+        slots -- accumulator and display copy -- and repaints immediately, so a
+        clear needs no deferred commit behind it.
         """
         for sid in self.units:
             self.units[sid] = 0
@@ -501,9 +659,26 @@ class AdrenalinePool:
         """True exactly once, when 25 s out of combat wipes a bar that had charge.
 
         WIKI: adrenaline decays to nothing after 25 seconds without an attack
-        landing or damage taken. Returns True only when something was actually
-        lost, so the caller can log a real event rather than a heartbeat; the
-        clock is dropped either way, so a second tick returns False.
+        landing or damage taken -- and MEASURED, since 2026-08-21: retail's 15
+        isolated opcode-208 clears sit 24.973 to 25.015 s after their agent's
+        own last **0x00CF gain**. Two sources that could not have been fitted
+        to each other, agreeing to about a millisecond.
+
+        THE ANCHOR IS THE LAST GAIN, AND ONLY THE LAST GAIN, because that is
+        all 15 samples can support: not one of them has a 0x00D2 spend anywhere
+        in its 25-second window, so the corpus is SILENT on whether spending
+        adrenaline restarts retail's clock. This docstring briefly claimed the
+        anchor was "the last 207-or-210" while `use()` below did not touch the
+        clock at all -- the claim and the code shipped in one commit disagreeing,
+        which the skeptic pass caught. The claim was corrected to the samples
+        rather than the behaviour invented to match the claim; see `use()`. Returns True only when something was actually
+        lost, so the caller can log a real event and put one 0x00D0 out rather
+        than a heartbeat; the clock is dropped either way, so a second tick
+        returns False.
+
+        WHAT THIS CANNOT SEE, and it is the reason retail's 22 clears do not
+        all look like this one: Final Thrust (skill 385) wipes the bar as its
+        own effect, which is 7 of the 22, and this server models no such skill.
         """
         if self._last_combat is None:
             return False

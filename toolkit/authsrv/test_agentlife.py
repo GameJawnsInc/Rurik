@@ -592,14 +592,36 @@ def section_swing_back():
     state["agents"][10]["swing_lands_at"] = time.time() - 0.001
     land = _swings(state)
     ops = [op for op, _v, _l in land]
-    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET],
-              "and the landing is MELEE_ATTACK_FINISHED and then the damage",
+    # THE PIN IS THE ADJACENT PAIR AND NOT THE LENGTH OF THE LIST, since
+    # 2026-08-21. The adrenaline family went on the wire that day, so an
+    # enemy's landing hit now also earns the PLAYER a 0x00CF for the damage
+    # taken -- appended AFTER the measured pair, never inserted into it, which
+    # is the property this check should have been asserting all along. An
+    # equality against the whole list said "finished then damage" and meant
+    # "and nothing else ever", which is a claim no capture supports.
+    # THE GAIN SITS BETWEEN THEM, not after. Re-pinned 2026-08-21 the same day
+    # it was written: the first cut appended the 0x00CF, and the corpus puts it
+    # between the attack marker and the damage (601 of 663 by the following
+    # message; modal batch [159/prop1, 207, 163/prop16, 30], n=425). The
+    # measured finished-then-damage pair is preserved either way -- it is the
+    # ADJACENCY that had to give, and it gave in the direction ArenaNet sends.
+    LEDGER.ok((ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                       authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+               or ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                          authsrv.AGENT_ADRENALINE_GAIN,
+                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]),
+              "and the landing is MELEE_ATTACK_FINISHED and then the damage, "
+              "with the optional gain BETWEEN them",
               f"{[hex(o) for o in ops]} -- ArenaNet sends finished BEFORE damage, "
               "adjacent in one payload, 6 of 6 swings checked by byte offset. "
               "hit_enemy sends them the other way round and is left alone: the "
               "claim about how the CONTROLLED agent's landings are marked was "
-              "refuted under review, so there is no verified model to copy")
+              "refuted under review, so there is no verified model to copy. "
+              "The optional MIDDLE message is the player's own adrenaline "
+              "gain, and it is OPTIONAL because a swing that takes under 1% of "
+              "maximum health earns nothing -- the roll is inside the weapon's "
+              "range. Its position is retail's: 601 of 663 corpus gains are "
+              "immediately followed by the damage.")
     sent = sent + land
 
     started = [v for op, v, _l in sent
