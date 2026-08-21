@@ -111,6 +111,12 @@ sound = true         # 0x10000012 + deps: ambient audio
 
 # Props: how many trees to scatter, and the donor model to use. 0 disables.
 trees = 5
+# NO map_flags HERE, DELIBERATELY. WORLDMAPS-W11's water rule cannot touch this
+# area: gen_plaza(32) tops out 31 units down and the rule needs 40, so 0 of its
+# 1,024 cells are affected and the flag would be a no-op. It is also the control
+# map for WORLDMAPS-W2's byte-identity witness, and setting a field that changes
+# nothing about the mesh would still change the partner's bytes and stop that
+# comparison reproducing. Left at 0 on purpose.
 
 [area.plaza.provenance]
 source = "invented"
@@ -148,6 +154,14 @@ sun = true
 environment = true
 sound = true
 trees = 12
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 4,001 of 9,216 cells (43.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # FINDINGS 57's 88 trapezoids for this area was a flags-0, stored-install figure.
 
 [area.vale.provenance]
 source = "invented"
@@ -183,6 +197,14 @@ sun = true
 environment = true
 sound = true
 trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W8/W11 measured this area at flags 0 -- 64 trapezoids, mesh x 1248..6144, 2,582/4,096 = 63.04% -- twice on the probe copy.
 
 [area.sculpt.provenance]
 source = "invented"
@@ -245,6 +267,14 @@ trees = 8
 # three areas that ride map 143 are displacing a retail row and could declare
 # this field to no effect.
 reserve_bytes = 8192
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W4's witness -- 64 trapezoids from a created chain -- was at flags 0.
 
 [area.frontier.provenance]
 source = "invented"
@@ -294,6 +324,14 @@ sun = true
 environment = true
 sound = true
 trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 32,321 of 65,536 cells (49.3%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W7's witness -- 60 trapezoids, 33,120/65,536 = 50.54% coverage -- was at flags 0, and that run's whole coverage model describes the flags-0 world.
 # NO `reserve_bytes`, ON PURPOSE. W5's authoring budget is the obvious next thing
 # to spend here and this row deliberately does not: a created row with a reserved
 # zero tail has never been read by a client, and declaring one would make a red
@@ -446,6 +484,11 @@ the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum 
 contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
 changes nothing about the compiled navmesh, the Zones reading is dead."""
 
+# SUPERSEDED 2026-08-21, kept as the record. This row was WORLDMAPS-W11's
+# registered treatment arm -- `sculpt` plus bit 0 -- and it did its job: the
+# excluded ground returned, 63.04% -> 93.26%. `sculpt` now carries `map_flags`
+# itself, so deploying this row and deploying `sculpt` produce the same map.
+# Kept because the run note cites it by name.
 [area.deeps]
 name = "The Deeps"
 map_id = 143
