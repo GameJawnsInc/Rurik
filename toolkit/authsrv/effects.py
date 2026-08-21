@@ -426,7 +426,26 @@ class EffectTable:
         repeat `0x0042` for a live (agent, skill) is DISCARDED -- the icon is
         not duplicated and the timer is not reset -- whether the buff id is new
         or the same. Re-sending the apply is therefore not a way to refresh an
-        effect, and how retail refreshes one is NOT FOUND.
+        effect.
+
+        ~~and how retail refreshes one is NOT FOUND~~ -- **THE WIRE HALF IS NOW
+        ANSWERED, and it is not a message at all.** `studies/isle/FINDINGS.md`
+        8.6: retail refreshes by sending NOTHING and delaying the `0x0044`.
+        Across two live captures, 15 episodes closed LATE -- +1.25 s to +55.0 s
+        past their own stated duration -- with no `0x0042`, no `0x0044` and no
+        other traffic in the window, while the 7 episodes that were not being
+        refreshed closed within +/-0.042 s of `apply + duration` over three
+        durations and both captures. The precise seven are what rule out a
+        coarse sweep and make the long holds real.
+
+        SO THIS TABLE EMITS A SHAPE RETAIL DOES NOT. `studies/skills` concluded
+        from OUR implementation that a longer re-application "extends as
+        REMOVE-then-APPLY -- the only replacement shape the client honours";
+        ArenaNet does no such thing here. What is NOT settled is the half that
+        decides whether we may copy it: between `apply + duration` and the late
+        removal, is the effect still DRAWN? A wire capture cannot see a screen.
+        `--probe effect_silent_extend` asks exactly that, and until it runs this
+        table keeps the shape it has -- the divergence is recorded, not acted on.
         """
         if duration is None or duration <= 0:
             raise EffectError(
