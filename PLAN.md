@@ -1395,8 +1395,15 @@ UNMAPPED message).
    by any upstream: **207** `{agent, units}` the charge, **208** `{agent}` clear
    all, **209** `{agent, skill, copy, units}` an absolute set that retail sends
    **0** times in 114,985 messages, **210** `{agent, skill, copy}` the spend.
-   Measured: 663/22/0/39 over 49 connections, self-scoped 9 of 9, and the spend
-   leads its own activation by exactly one message 39 of 39. All of it is pinned
+   Measured: 663/22/0/39 over 49 connections, self-scoped 9 of 9. **Two
+   different landmarks bracket the spend and it is worth naming both, because
+   confusing them is how the sender nearly shipped backwards**: `0x00E4`
+   SKILL_ACTIVATE for the same skill PRECEDES the spend 38 of 38, and the int
+   property naming that skill FOLLOWS it at +1 in the same batch 39 of 39. The
+   property is **50** (`CastAttackSkill`) in all 39 and never 60 — no prop-60
+   names an attack skill anywhere in the corpus — so the energy arc's
+   "spend before the naming property" shape holds here too, against a landmark
+   that arc never had to look at. All of it is pinned
    by `toolkit/authsrv/test_adrenwire.py`. **Note for the sender:** the fill is
    drawn only in `MISSION_MAP_GAME` and is torn down elsewhere, so a correct 207
    sent to a client in an outpost yields a pixel-identical icon — any probe must
@@ -1415,11 +1422,32 @@ UNMAPPED message).
    client's own skip of a recharging slot (`0x008219C0`), because 209's absence
    means nothing could ever resync the two books. `test_pools` floor 82 → 105,
    green 98 → 121; `test_guards` re-pinned four in-range controls and
-   `test_agentlife` one ordering pin (both APPEND the new message after the
-   measured sequence rather than inserting into it).
-   **What is still open on this channel:** nobody has yet SEEN a filled icon —
-   the run that closes it must be in an explorable or a mission (the map gate
-   above), and it is the first thing to point a client at.
+   `test_agentlife` one ordering pin. **Those pins were re-pinned AGAIN before
+   the arc landed, and the correction is the important half:** the first cut
+   appended the gain after the damage, and the corpus puts it BEFORE — the
+   message immediately preceding a `0x00CF` is 159/prop 1
+   (`melee_attack_finished`) 594 times of 663 and the one immediately following
+   is the damage 601 of 663, modal batch `[159/prop1, 207, 163/prop16, 30]`
+   n=425. **This is the second time this arc shipped a burst in an order retail
+   never produces** (the energy debit was the first), and both times tests had
+   already grown up defending it — which is the argument for pinning an order
+   against a census rather than against the sender.
+   **AND THE CLIENT DRAWS IT (2026-08-21, run `20260821T125215`,
+   [studies/skills §27](studies/skills/FINDINGS.md)).** Twelve `0x00CF`s into an
+   explorable, and the three adrenal slots of the default bar fill from the
+   bottom while the five non-adrenal slots stay at **0.0% changed pixels in all
+   seven frames** — an in-frame null control, which is what makes the movement
+   attributable to the message rather than to the fight. The fill is a
+   CONTINUOUS fraction of the raw cost, confirmed on the one mid-charge frame:
+   30/54, 17/54 and 26/54 rows, where quarter-strikes on an 80-unit skill could
+   only land on 31.25/62.5/93.75%. Defy Pain (120) sits visibly lower than the
+   two 80-unit skills on identical grants — `adrenaline_b ÷ skillData.adrenaline`
+   on screen. §25's P7 is inverted under its own rig.
+   **Still unseen, and §27.5 lists them rather than letting the run round up:**
+   210's on-screen reset, the cross-pool tax, 208's wipe, and the outpost
+   map-gate control. The bar's 80/120/80 costs make the tax an unusually sharp
+   next probe — one press should drop the other two rings by a *different*
+   fraction each.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client

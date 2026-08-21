@@ -2237,7 +2237,11 @@ reset: `needs 100, has 75` — exactly three post-spend swings' worth. P6
 CONFIRMED.
 
 **P7 REFUTED, and the negative is the finding: the client does NOT charge
-the adrenal icon from observed combat.** At a server-side pool of 100 —
+the adrenal icon from observed combat.** (EXPLAINED in §26 and INVERTED
+in §27: nothing was filling `adrenaline_b` because no `0x00CF` had ever been
+sent. With one, the same rig fills the same slots and the controls stay at
+zero. The refutation stands exactly as written — it was a true statement
+about a client nobody had sent the message to.) At a server-side pool of 100 —
 charged, accepted, spent — Sever's slot rendered pixel-identical to its
 0-unit state (E4 frames w001 vs w002/w003; the gold ring in w004 is press
 feedback, present for refused and accepted presses alike). The dark icon at
@@ -2669,8 +2673,153 @@ counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
    store, its shape matches 210's, and this section deliberately did not name it.
 5. **The `u16`/`u32` width disagreement at `+0x38`** (§26.8) is latent on 38797
    and should be re-measured on 38833 before anyone relies on it staying latent.
-6. **Nothing here has been sent to a client yet.** Every claim in §26 is static
-   plus retail's wire. The confirming run is: explorable map (§26.6), a bar with
-   an adrenal skill, 207 for a partial fill, 210 for the reset-and-tax, 208 for
-   the wipe — with the prediction that the fill is `units/cost` of the ring and
-   not a count of quarters.
+6. ~~**Nothing here has been sent to a client yet.**~~ — **DONE the same day,
+   §27.** The run was made, the prediction it registered (`units/cost`, not a
+   count of quarters) was CONFIRMED, and §26's central claim is no longer static
+   plus wire: a client has now been made to draw this family. The two halves
+   §27 did *not* reach — 210's on-screen reset and 208's wipe — are restated as
+   open there rather than closed here.
+
+## 27. E5 — the flames, on screen
+
+**2026-08-21, run `20260821T125215`, loopback, build 38797, server at
+`98806c0`.** The fifth run of the series §25 opened, and the one that closes
+§25's P7. Predictions were registered before the client launched
+(session scratchpad, `e5-predictions.md`) and before the build workflow that
+produced the sender had reported.
+
+### 27.1 Why this run could be short
+
+E5 is E4 **with one thing changed** — the server now sends `0x00CF` — so E4 is
+its own control and was already collected. That is the whole design: §25 had
+already established that at a server-side pool of 100 the icon rendered
+pixel-identical to its 0-unit state, so any movement here is attributable to
+the message rather than to the fight.
+
+**The instrument is the DEFAULT bar**, which turned out to be better than the
+single-skill rig §26.11 imagined. `[316, 317, 318, 319, 320, 321, 322, 323]`
+carries three adrenal skills whose costs are *not* multiples of 25, and five
+non-adrenal ones:
+
+| slot | id | `adrenaline_units` |
+|---|---|---|
+| 1 | 316 | — (non-adrenal) |
+| **2** | **317** | **80** |
+| **3** | **318** | **120** |
+| **4** | **319** | **80** |
+| 5–8 | 320–323 | — (non-adrenal) |
+
+So slots 1 and 5–8 are an **in-frame null control**: they sit in the same
+screenshot, under the same lighting, through the same fight. This matters more
+than it sounds — `studies/review`'s aggregate-diff lesson is that a
+changed-pixel spike over a whole HUD finds tooltips and toasts, not findings.
+
+### 27.2 What the server sent
+
+Twelve gains, each `0x00CF, 10 B`, each emitted **before** its damage message —
+retail's batch position, fixed the same morning after the skeptic pass caught
+the sender shipping it last:
+
+```
+[c1] attacking agent 10 (Hatcher [Collector])
+[c1] s2c adrenaline +25 (weapon hit on agent 10) (0x00cf, 10B)
+[c1] hit agent 10: 93/100
+[c1] s2c adrenaline +25 (weapon hit on agent 10) (0x00cf, 10B)
+[c1] hit agent 10: 88/100
+      … twelve in all
+```
+
+The first `0x00CF` any client has ever been sent by this server, or by any
+server we have written.
+
+### 27.3 P10 — the flames move. CONFIRMED
+
+Fraction of each slot's pixels differing from the pre-attack baseline
+(`walk2-shot.png`, every pool at 0), threshold 24/765:
+
+| frame | slot 1 | **slot 2** | **slot 3** | **slot 4** | slot 5 | slot 6 | slot 7 | slot 8 |
+|---|---|---|---|---|---|---|---|---|
+| walk4 | 0.0% | **49.2%** | **23.8%** | **40.3%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| walk6 | 0.0% | **89.8%** | **89.0%** | **89.2%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| walk8 … walk16 | 0.0% | **89.8%** | **89.0%** | **89.2%** | 0.0% | 0.0% | 0.0% | 0.0% |
+
+**The five control slots are at exactly 0.0% in all seven frames.** Not "close
+to zero" — zero changed pixels, which is the same pixel-identity standard that
+made §25's negative trustworthy, now producing a positive on the three slots
+next to them. §25's P7 is not merely explained, it is inverted under the
+identical rig.
+
+### 27.4 P11 — a continuous fraction, not quarters. CONFIRMED
+
+The whole-slot percentages above are **not comparable across slots** — they
+depend on the icon art underneath. So the fill was measured the way the client
+draws it: per row, bottom-up, counting rows that moved. On `walk4`, the one
+frame that caught the bar mid-charge:
+
+```
+slot 1 (316, non-adrenal)   0/54 rows =  0.0%   ..................................
+slot 2 (317,  80 units)    30/54 rows = 55.6%   ..##############################++
+slot 3 (318, 120 units)    17/54 rows = 31.5%   ..#################+++............
+slot 4 (319,  80 units)    26/54 rows = 48.1%   ..##########################++++++
+slot 5 (320, non-adrenal)   0/54 rows =  0.0%   ..................................
+```
+
+**The fill rises from the bottom and stops at arbitrary heights.** Quarter-strike
+quantisation on an 80-unit skill could only ever land on 31.25%, 62.5% or
+93.75%; 55.6% and 48.1% are neither. This is the `fdiv` at `0x008C6188`
+rendering — `adrenaline_b ÷ skillData.adrenaline` — and §26.11's registered
+prediction, confirmed.
+
+**And the denominator is the skill's own raw cost, visibly.** Slot 3 costs 120
+where slots 2 and 4 cost 80. All three received identical grants, and slot 3
+sits *lower* than both. A display keyed to strikes rather than to raw units
+could not produce that, and it is the on-screen counterpart of §26.8's census
+finding that 151 skills carry costs that are not multiples of 25.
+
+**HONEST LIMIT, and it is a real one.** Slots 2 and 4 have the *same* cost and
+should therefore show the *same* fill; they read 55.6% and 48.1%. The likeliest
+reading is animation phase — slot 4's boundary is diffuse where slot 2's is
+sharp (six partial rows against two), which is what a fill still in motion looks
+like. But that is a READING of one frame, not a measurement: the run sampled
+every ~5 s against a 1.75 s attack speed, so it never caught two clean
+intermediate states of the same slot. **A denser sample settles it**, and until
+one exists "the two 80-unit skills agree" is UNVERIFIED rather than confirmed.
+
+### 27.5 What E5 did NOT reach
+
+Stated plainly, because a run that answers two of four questions and reports
+four is how §25's own P7 nearly went unnoticed:
+
+- **P12, the spend's on-screen reset (`0x00D2`), is UNTESTED.** The walk landed
+  hits and never pressed the charged skill.
+- **P13, the cross-pool tax, is UNTESTED** for the same reason. This is the half
+  of GWW's on-use rule that no screen has ever shown, and the default bar's
+  three adrenal skills at 80/120/80 are an unusually good instrument for it: one
+  press should drop the other two by exactly one strike each, which at those
+  costs is a *different* fraction of each ring.
+- **P14, the outpost map-gate control, was not run.** §26.6's
+  `MissionCliGetMap() == 1` gate therefore still rests on the disassembly alone.
+- The **25 s wipe (`0x00D0`)** was not observed on screen either.
+
+### 27.6 Two process notes worth keeping
+
+**The first attempt failed for a reason the log stated in its second line.**
+`--no-enemy` is the *harness's* default and the hostile needs `session.py
+--enemy`; the run ordered an attack into an empty world, and `begin_attack`
+returned silently because agent 10 did not exist. The server log said `NO ENEMY:
+the world will contain the player and nothing else.` at line 2 and it was read
+past. The harness's own verdict caught it (`RUN VERDICT RETRACTED`) rather than
+letting eight screenshots of an unchanged bar be scored as a null result — which
+is exactly what that retraction machinery is for, and the second time it has
+paid for itself.
+
+**`git add -A` in a shared worktree swept up another session's work.** Commit
+`98806c0` carries a peer session's `test_spawn_burst.py` repair and ~32 lines of
+`TESTS.md` alongside the adrenaline arc, under a message describing only the
+latter. Nothing was lost and nothing conflicted, but the commit is wrong about
+its own contents. It was left un-split deliberately: `git rebase -i` is
+unavailable in this environment, and by the time it was noticed the peer had
+committed on top, so a rewrite would have rewritten their work too. Recorded
+here and in the following commit's message instead — `git status` before
+`git add -A` is the habit that prevents it.
+
