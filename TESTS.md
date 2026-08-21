@@ -2229,24 +2229,24 @@ Every one of these, in the order they were written:
   compiled chunk existing. They are a different question -- nothing declares
   those optional, so the fix there is an unconditional assertion, and it needs
   its own evidence about what the compiler always emits.
-  Sections 0-1 and 3-12 need no vault and score 214 against a floor of 218 (both
+  Sections 0-1 and 3-13 need no vault and score 225 against a floor of 229 (both
   MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
   directory, which exits 1 naming the 4-check shortfall), so the floor still
   does what it was for. Per section, counted from the log rather than predicted:
   {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
-  10: 36, 11: 10, 12: 5}.
+  10: 36, 11: 10, 12: 5, 13: 11}.
   **Count the log with the subprocess writers' own lines EXCLUDED, and note
   there are THREE producers rather than two**: an unanchored
-  `grep -c "\[PASS\]"` reads 235 where the ledger says 218, because
+  `grep -c "\[PASS\]"` reads 246 where the ledger says 229, because
   `datwrite --verify` prints a `file header crc` line AND an `MFT self-crc` line
   per run (6 runs, 12 lines) and `datmove` prints one `0 overlapping row pair(s)
-  afterwards` per move (5 moves, 5 lines). 235 - 17 = 218; anchoring the grep at
-  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 230 =
-  218 + datwrite's 12. An earlier version of this note said 162 from two
+  afterwards` per move (5 moves, 5 lines). 246 - 17 = 229; anchoring the grep at
+  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 241 =
+  229 + datwrite's 12. An earlier version of this note said 162 from two
   producers and was wrong on both counts, so re-measure these rather than
   adjusting them. Section 11 is the one place a check's DETAIL quotes another
   producer's row, and `verdict_of` strips the marker so both greps still agree:
-  MEASURED, `grep -o` and `grep -c` each read 235.
+  MEASURED, `grep -o` and `grep -c` each read 246.
   **Section 12 (WORLDMAPS-W12, 2026-08-21) is a failure that wore the wrong
   name.** `--install` arms a map's head to zero length so the client must
   recompile it; when the client never runs, the head stays 0 B, and `readback`
@@ -2259,6 +2259,28 @@ Every one of these, in the order they were written:
   them: a head the client DID re-bloat still produces the whole clean readback,
   because a guard that reddens the healthy path would be worse than the
   traceback it replaced, and nothing in the failing arm can tell the difference.
+  **Section 13 (WORLDMAPS-W13 recon, 2026-08-21) is three holes that composed
+  into one failure**: `serve_run` could reach a verdict from ANOTHER SESSION's
+  log, about a DIFFERENT MAP, after a harness that FAILED. `vault/captures/
+  harness/` is shared by every session on the machine and `newest_harness_log`
+  took the newest `gamesrv.log` by MTIME across all of it; `fid` off the navmesh
+  line reached only the note string, so `hits[0]` was read and its map never
+  compared to ours; and `rc` from `launch` likewise lived only in f-strings.
+  None was hypothetical -- MEASURED that day with THREE worktrees driving one
+  harness, 12 of the 14 most recent captures belonged to other trees and one was
+  75 seconds NEWER than this session's last run, so a `--serve` issued right
+  after would have scored off a peer's log. The fix keys on the `source:` line
+  `authsrv` prints, which names the worktree. **The attribution half is tested
+  against REAL FILES, not the `FakeServe` stub** -- a stub cannot get
+  attribution wrong, and the defect is reproduced as a live CONTROL: unfiltered,
+  `newest_harness_log` still returns the foreign log, which is what shows the
+  fix is about attribution rather than ordering. Two further controls keep the
+  healthy path honest: our map's line among a foreign one still PASSes, and the
+  plain case is unchanged. One self-inflicted lesson is recorded in the section:
+  setting `RURIK_VAULT` is not enough, because `vaultpath` memoises the answer
+  in a module global -- the first version leaked the temp vault into section 2
+  and turned it into a declared SKIP, which the floor did NOT catch because the
+  floor had risen enough to hide four missing checks behind eleven new ones.
   (The line this replaces said "score 10 against a floor of 14", stale by two
   floor changes)),
 

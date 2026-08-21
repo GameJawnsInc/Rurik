@@ -140,7 +140,10 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # `grep -c` both read 230, so the occurrence count and the line count agree and
 # either grep gives the same answer.)
 #
-# Was 213 before section 12 (WORLDMAPS-W12: an armed head that was never
+# Was 218 before section 13 (WORLDMAPS-W13 recon: `serve_run` could reach a
+# verdict from another SESSION's log, about another MAP, after a harness that
+# FAILED -- three holes that composed, all three live on 2026-08-21 with three
+# worktrees driving one harness), 213 before section 12 (WORLDMAPS-W12: an armed head that was never
 # re-bloated, which used to leave `readback` raising out of the FFNA decoder
 # about a 0-byte file, plus the control that a re-bloated head still reads
 # back clean), 203 before section 11 (WORLDMAPS-W8: `readback`'s optional-chunk loop,
@@ -156,7 +159,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=218)
+LEDGER = checks.Ledger("test_deploy", floor=229)
 check = checks.adopt(LEDGER)
 
 
@@ -466,8 +469,9 @@ class FakeServe:
     `newest_harness_log` returns the file we just wrote.
     """
 
-    def __init__(self, text):
+    def __init__(self, text, rc=0):
         self.text = text
+        self.rc = rc
 
     def __enter__(self):
         self.dir = tempfile.mkdtemp()
@@ -475,8 +479,12 @@ class FakeServe:
         with open(self.log, "w", encoding="utf-8") as fh:
             fh.write(self.text)
         self.saved = (deploy.launch, deploy.newest_harness_log)
-        deploy.launch = lambda *a, **k: 0
-        deploy.newest_harness_log = lambda after: self.log
+        deploy.launch = lambda *a, **k: self.rc
+        # `source=` is accepted and IGNORED here on purpose: this fixture is
+        # about the decision, and section 13 tests the attribution separately
+        # against real files rather than against a stub that cannot get it
+        # wrong.
+        deploy.newest_harness_log = lambda after, source=None: self.log
         return self
 
     def __exit__(self, *exc):
@@ -484,11 +492,13 @@ class FakeServe:
         return False
 
 
-def serve_verdict(text, area=None, expect_traps=55, expect_rows=None):
-    """The verdict `serve_run` reaches on a canned log."""
-    with FakeServe(text) as f:
-        return deploy.serve_run("exe", "session", "dat", 143, 0, expect_traps,
-                                area=area, expect_rows=expect_rows)[0]
+def serve_verdict(text, area=None, expect_traps=55, expect_rows=None,
+                  file_id=0x287D3, rc=0, note=False):
+    """The verdict `serve_run` reaches on a canned log (or (verdict, note))."""
+    with FakeServe(text, rc=rc) as f:
+        got = deploy.serve_run("exe", "session", "dat", 143, 0, expect_traps,
+                               file_id, area=area, expect_rows=expect_rows)
+    return got if note else got[0]
 
 
 def section6_population():
@@ -2851,6 +2861,136 @@ def section12():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# --------------------------------------------------------------- section 13
+#
+# THREE HOLES THAT COMPOSED INTO ONE FAILURE: `serve_run` could reach a verdict
+# from ANOTHER SESSION'S log, about a DIFFERENT MAP, after a harness that
+# FAILED. None of the three was hypothetical on 2026-08-21 (WORLDMAPS-W13
+# recon), when THREE worktrees were driving this harness at once:
+#
+#   * `vault/captures/harness/` is shared by every session on the machine, and
+#     `newest_harness_log` took the newest `gamesrv.log` by MTIME across the
+#     whole directory. MEASURED that day: of the 14 most recent captures, 12
+#     belonged to other trees, and one of them (20260821T125215) was 75 seconds
+#     NEWER than this session's last run. A `--serve` issued right after would
+#     have scored its verdict off a peer's log.
+#   * `fid` from the navmesh line reached only the note STRING -- `hits[0]` was
+#     read and its map id never compared to ours. The biome donor 0x1B97D is
+#     pre-warmed in every run of this harness, so a foreign line was always
+#     available to match against.
+#   * `rc` from `launch` likewise appeared only inside f-strings, so a harness
+#     that failed outright still scored PASS if a log with a matching count
+#     turned up.
+#
+# The attribution half is tested against REAL FILES rather than a stub, because
+# a stub cannot get attribution wrong and a test that cannot fail is not a
+# test. `authsrv.py` prints `source:  <its own directory>`, which names the
+# worktree; no two worktrees share one.
+
+
+def section13():
+    """serve_run must not score another tree's run, another map, or a failure."""
+    print("\n13. the serve verdict is about THIS run, THIS map, and a harness "
+          "that worked")
+    tmp = tempfile.mkdtemp()
+    try:
+        # (a) log_source reads the line authsrv actually prints.
+        root = os.path.join(tmp, "captures", "harness")
+        mine_src = deploy.harness_source_dir()
+        theirs = os.path.normcase(os.path.abspath(
+            os.path.join(tmp, "elsewhere", "toolkit", "authsrv")))
+
+        def capture(name, src, mtime):
+            d = os.path.join(root, name)
+            os.makedirs(d, exist_ok=True)
+            log = os.path.join(d, "gamesrv.log")
+            with open(log, "w", encoding="utf-8") as fh:
+                fh.write("Rurik AuthSrv\nsource:    %s\n%s\n" % (src, MESH_LINE))
+            os.utime(log, (mtime, mtime))
+            return log
+
+        ours_log = capture("20260101T000100", mine_src, 1000)
+        theirs_log = capture("20260101T000200", theirs, 2000)   # NEWER
+
+        check(deploy.log_source(ours_log) == mine_src,
+              "log_source reads the `source:` line authsrv prints and "
+              "normalises it", deploy.log_source(ours_log))
+        check(deploy.log_source(theirs_log) == theirs,
+              "and reads a foreign one as foreign", deploy.log_source(theirs_log))
+
+        # (b) THE DEFECT, reproduced: newest-by-mtime picks the peer's.
+        # RESTORE THE RESOLVED CACHE, NOT JUST THE ENV VAR. `vaultpath`
+        # memoises the answer in a module global on first call, so putting
+        # RURIK_VAULT back leaves every later caller pointed at this temp
+        # directory. Caught the same day it was written: section 2 turned into
+        # a declared SKIP because it could no longer find vault/dat_study, and
+        # a section that silently stops measuring is exactly what the ledger's
+        # floor exists to catch -- except the floor had risen enough to hide it.
+        saved = os.environ.get("RURIK_VAULT")
+        saved_resolved = vaultpath._resolved
+        os.environ["RURIK_VAULT"] = tmp
+        vaultpath._resolved = None
+        try:
+            unfiltered = deploy.newest_harness_log(0)
+            check(unfiltered == theirs_log,
+                  "CONTROL -- unfiltered, it still returns the NEWEST log, "
+                  "which here is the other tree's. This is the defect, kept "
+                  "runnable so the fix is shown to be about attribution and "
+                  "not about ordering", os.path.basename(os.path.dirname(
+                      unfiltered or "none")))
+
+            filtered = deploy.newest_harness_log(0, source=mine_src)
+            check(filtered == ours_log,
+                  "and filtered by source it returns OURS, skipping the newer "
+                  "foreign one -- the 2026-08-21 three-session case",
+                  os.path.basename(os.path.dirname(filtered or "none")))
+
+            gone = deploy.newest_harness_log(0, source=os.path.normcase(
+                os.path.abspath(os.path.join(tmp, "nobody"))))
+            check(gone is None,
+                  "and a source nothing matches returns None rather than "
+                  "falling back to whatever was newest -- the fallback IS the "
+                  "defect", repr(gone))
+        finally:
+            if saved is None:
+                os.environ.pop("RURIK_VAULT", None)
+            else:
+                os.environ["RURIK_VAULT"] = saved
+            vaultpath._resolved = saved_resolved
+
+        # (c) the harness rc is a verdict, not decoration.
+        v, note = serve_verdict(MESH_LINE, rc=1, note=True)
+        check(v == deploy.SERVE_FAILED and "rc 1" in note,
+              "a harness that returned non-zero is SERVE_FAILED, whatever the "
+              "log says -- it used to score PASS off a matching count", note)
+        check("nothing below was measured" in note,
+              "and the note says the run failed rather than reporting a mesh "
+              "comparison it did not earn", note)
+
+        # (d) the navmesh line must be OUR map.
+        other_map = "[map] navmesh 0x1B97D: 58 planes, 55 trapezoids"
+        v, note = serve_verdict(other_map, note=True)
+        check(v == deploy.SERVE_FAILED,
+              "a navmesh line for a DIFFERENT map is SERVE_FAILED even when "
+              "the trapezoid count matches exactly -- 0x1B97D is the biome "
+              "donor and is pre-warmed in every run of this harness", note)
+        check("0x1B97D" in note and f"{0x287D3:#x}" in note,
+              "and the note names both what we wanted and what it found", note)
+
+        # (e) CONTROL, and it is the half that matters: the healthy path is
+        # untouched. Without this, (c) and (d) are satisfied by a function
+        # that always fails.
+        both = MESH_LINE + "\n" + other_map
+        check(serve_verdict(both) == deploy.SERVE_PASS,
+              "CONTROL: our map's line among a foreign one still PASSes -- the "
+              "selection picks ours out rather than refusing any log that "
+              "mentions another map")
+        check(serve_verdict(MESH_LINE) == deploy.SERVE_PASS,
+              "CONTROL: the plain healthy case is unchanged")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -2900,6 +3040,7 @@ def main():
     section10()
     section11()
     section12()
+    section13()
     section2(area)
     return LEDGER.verdict()
 
