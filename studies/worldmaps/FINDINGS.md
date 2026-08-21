@@ -50,21 +50,32 @@ relocates where it used to sit still. `datwrite --replace grow_to=` is exactly
 the flag for it and is its own change with its own gate; folding it into W1
 would have made a failed install ambiguous between two mechanisms.
 
-## WORLDMAPS-W2 — the first compression-8 MAP row a retail client reads. STAGED
+## WORLDMAPS-W2 — the first compression-8 MAP row a retail client reads. RAN GREEN 2026-08-20
 
-The question no offline check can answer: does the client's re-bloat compiler
-read a partner WE compressed? `gwenc`'s round-trip is through `gwdat`, OUR
-decoder — "it proves agreement with our reader, NOT correctness against the
-client's" (`datwrite.declaration_fault`'s own docstring). A8 answered this for
-a generic row and A9 for a created chain; **no map's Stripped partner has ever
-reached a client carrying bytes we compressed.**
+**OBSERVED (retail client, build 38797, one map, one launch per arm —
+agent-driven on the owner's explicit go-ahead; the readouts are mechanical, so
+the owner-drives boundary did not bite).** Two arms on the C2 copy, control
+first, one flag apart. **The client's re-bloat compiler READ the partner we
+compressed and built the identical map**: arm B's readback matches arm A line
+for line and both reproduce FINDINGS 56 (6,627 B path chunk, 55 trapezoids,
+1024/1024 heights, env/sound verbatim, 5/5 props, spawn in one trapezoid);
+the server's own navmesh line named the same 55 on the unarmed second run,
+both arms. The partner was never touched by the client — after arm B's
+session, still 0x81B5000, still 1,316 B (33.4% of stored), still compression
+8 — and the head came back REBUILT at ArenaNet's own trapezoid count.
+Post-flight: the diff names exactly the two expected rows, `--assert-safe`
+clears everything. Full scoring of P1–P7, artifacts, and two honest caveats
+(the sheet's Gw.log capture is clobbered by the serve run's second client;
+the serve check's population half hit the server's benign no-rows line in
+both arms, orthogonal to compression — since closed on main, `ec5f426`:
+`serve_run` gained a third verdict SERVED-UNPOPULATED, and the suspected
+content drift did not happen, plaza never had a spawn row and FINDINGS 56's
+"5 of 5" is its PROPS readback) are in
+`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS.
 
-The run sheet, predictions P1–P5 registered before anything is armed, exact
-operator commands, and the fallback arm (`--stored-install`) are in
-`vault/research/worldmaps/WORLDMAPS-W2-RUN.md`. Two arms on the C2 archive
-copy: A = stored control, B = compressed treatment; the scorable claim is the
-client compiles B identically to A (readback row-for-row, navmesh served on
-the unarmed second run). Owner-driven.
+**What this closes**: the last place an authored map deviated from retail's
+own shape, and the in-place size cap — 32×32 before, at least 96×96 measured
+now. Scope travels with the witness: one map, one shape, one build.
 
 ## WORLDMAPS-W3 — an authored area under its OWN file id. LANDED 2026-08-20
 
@@ -110,17 +121,33 @@ it); the create path overwrites an existing `<area>_alloc.json`; contentids'
 created-skip fires before the server side is consulted; two of `map_chain`'s
 four shape refusals are hand-verified but unexercised by the suite.
 
-## WORLDMAPS-W4 — the created chain meets the client. STAGED
+## WORLDMAPS-W4 — the created chain meets the client. RAN GREEN 2026-08-20
 
-Every "client compiles a map" result in the corpus reused a PRE-EXISTING file
-id; `studies/customarea` FINDINGS 36 item 4 names the born-new case untested,
-and `datalloc --map` has zero recorded uses against a client. The open
-survival questions: does re-bloat fire for a head that was BORN zero-length
-under a new id, does the compiled head land and survive Flush (A9's sweep
-pattern), and does the partner stay untouched as it does for retail rows
-(FINDINGS 35 + 39). The run sheet — throwaway-copy discipline, predictions
-registered with the UNCHANGED/Gw.log disambiguation built in, and what each
-red arm would mean (not-loaded vs loaded-not-compiled vs compiled-not-served)
-— is `vault/research/worldmaps/WORLDMAPS-W4-RUN.md`. Owner-driven; the safer
-sequencing is WORLDMAPS-W2 first, since the created chain's partner leans on
-the comp-8-partner witness.
+**OBSERVED (retail client, build 38797, one map, one launch cycle —
+agent-driven on the owner's go-ahead, mechanical readouts).** The client
+resolved a map chain born under file id 0x5F0B0 — an id nothing had ever
+bound — logged FINDINGS 35's exact re-bloat line naming it
+(`'0x05f0b0' failed to load.  Attempting to re-bloat.`), compiled our
+terrain from the 2,028 B compression-8 partner, wrote the head back REBUILT
+(0 -> 6,012 B comp 8, relocated, 64 trapezoids over 1 plane), left the
+partner byte-untouched across three sessions, and kept the registration
+through its own Flush — the diff names only our two created rows plus the
+client's scratch rows 8315/8316, nothing UNCLASSIFIED. Readback 6/6 including
+the spawn-in-one-trapezoid check [map.166] recorded as owed; the server's own
+navmesh line named the same 64. All ten predictions scored in
+`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS, which also records
+the run's two lessons: a fresh run directory needs its own firewall CAGE (the
+first launch was refused fail-closed — the cage is per-path; owner ran
+isolate_client.ps1 and the re-run proceeded), and the launch stages were
+split to keep the compile run's Gw.log from the serve sessions (W2's capture
+defect, fixed procedurally). The throwaway was delta-captured (PROVEN,
+`vault/deltas/worldmaps-w4`, 24,736 B) and deleted — datdelta's first real
+customer.
+
+**What this closes**: FINDINGS 36 item 4 (the born-armed, never-bound case);
+A9's witness extends from "a created chain is READ" to "a created chain is
+COMPILED"; and displacement is retired — the next authored area does not
+have to take rows 71496/71497 hostage. Still unestablished, per the sheet:
+survival across a client patch, more than one created map per archive (the
+C2-lineage MFT slack is exactly one chain), a second created chain in one
+session.

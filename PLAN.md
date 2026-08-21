@@ -1377,10 +1377,19 @@ test_deploy floor 92→112, twenty checks, eight sabotages. And the suspected
 content drift **did not happen**: plaza has never had a spawn row in any commit,
 and FINDINGS 56's "5 of 5" is its PROPS readback, not bodies.
 
-**The immediate next action is the remaining owner-driven launch**, prediction
-registered: **WORLDMAPS-W4**
-(`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` — does re-bloat fire for a
-head BORN zero-length under a created id; FINDINGS 36 item 4's untested case).
+**WORLDMAPS-W4 RAN 2026-08-20 and is GREEN too** —
+`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS. The client resolved a
+map chain born under an id nothing had ever bound (0x5F0B0), logged the re-bloat
+line naming it, compiled our terrain from the created compression-8 partner (64
+trapezoids, readback 6/6 including the owed spawn-in-one-trapezoid check), left
+the partner byte-untouched and kept the registration through Flush — FINDINGS 36
+item 4 closed, A9's witness extended from READ to COMPILED, and displacement
+retired: the next authored area need not take rows 71496/71497 hostage. The
+throwaway was delta-captured (PROVEN, 24,736 B for 4.2 GB — datdelta's first
+real customer) and deleted. Two sheet lessons recorded: a fresh run directory
+needs its own firewall cage (fail-closed refusal worked as designed), and the
+launch stages were split to keep the compile run's Gw.log from the serve
+sessions.
 Known deliberate gap: a compressed install SHRINKS the row, so small→large
 iteration relocates until `grow_to` is wired into the map path — its own
 change, costed separately.
