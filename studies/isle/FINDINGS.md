@@ -1623,10 +1623,31 @@ retail does not**, and the client evidently tolerates a silent extension. Whethe
 client is tracking the timer itself or simply waiting for the `0x0044` is not settled by
 this capture.
 
-*Alternative reading, kept because it is not excluded:* the late `0x0044` might be a
+~~*Alternative reading, kept because it is not excluded:* the late `0x0044` might be a
 periodic server-side sweep rather than a refreshed timer, in which case the durations
-are honest and the close is merely coarse. Step 2's 25.6 s against 10.0 s is a wide
-margin for a sweep, which is why the refresh reading is preferred rather than asserted.
+are honest and the close is merely coarse.~~
+
+**THE ALTERNATIVE READING IS NOW REFUTED, offline, from the captures already in hand
+(2026-08-21).** It said the late `0x0044` *"might be a periodic server-side sweep rather
+than a refreshed timer, in which case the durations are honest and the close is merely
+coarse."* Scored across both runs' effect connections, the twenty-two episodes carrying
+a duration split with **no overlap at all**:
+
+| close residual | n | states |
+|---|---|---|
+| within **±0.042 s** of `apply + duration` | **7** | all `expired` |
+| **late**, +1.25 s to +55.0 s | **15** | all `stripped` |
+
+**A sweep cannot land seven closes inside 42 milliseconds.** The exact seven span three
+different durations (10.0, 13.0, 30.0) and both captures, and they include skill 998 at
+30.0 s and skill 999 at 10.0 s — the same torch effects that run long in the other
+column. So the closing mechanism is precise, the stated durations are honest, and the
+long-held episodes really were being **extended while the operator stood in range, with
+nothing on the wire to say so.**
+
+The residual is then a measurement rather than an error: it is how long the operator
+remained in range after the first application. The torch that held longest, skill 483 at
+`+55.0` against a 5.0 s duration, is a fifty-five-second stand.
 
 ## 9. Rung 8c, LIVE #5 — the rank ladder: the unmet penalty SCALES, and PINNED is dead (2026-08-21, capture `20260821T163511`)
 
