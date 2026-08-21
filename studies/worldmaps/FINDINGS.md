@@ -464,3 +464,49 @@ only reading no experiment has contradicted.
 **The archive survived both**: `--assert-safe` green after each, 10 of 10 rules,
 177,318 payload CRCs. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W9-RUN.md` §RESULTS.
+
+## WORLDMAPS-W11 — the lever works, and the bound is a WATER LINE. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one variable against a control measured
+twice on the same copy).** `map_flags = 1` on the area row — bit 0 of the Map
+Parameters flags dword, top byte untouched — and the excluded ground came back:
+
+| | control (flags 0) | treatment (flags 1) |
+|---|---|---|
+| trapezoids | 64 | **99** |
+| mesh x | 1248 .. 6144 | **0 .. 6144** |
+| coverage | 2,582/4,096 = 63.04% | **3,820/4,096 = 93.26%** |
+
+**WORLDMAPS-W10's static chain is confirmed at the client**: the 40.0 constant
+at `0x0094DE30`, the all-three-corners test at `0x0072D3ED`, the gate at
+`0x0072D3C6`, and the identification of state+0x10 as the flags dword. And the
+rule predicts the boundary TO THE COLUMN — column 12's quad has corners 47 and
+43 (both past 40, excluded), column 13's has 43 and 39 (one shallower, kept),
+and 13 is exactly where the control mesh started.
+
+**WHAT THE NUMBER IS.** Watching the run, the owner reported: *"i was floating
+over the water there instead of standing ankle-deep in it like usual."*
+**40.0 is a WATER LINE.** Values increase downward in these maps (the apron at
+-13 is dry, the dip descends to +229), so "all three corners >= 40.0" means "this
+triangle is more than 40 units under water". The shallows are walkable — which
+is why the mesh stopped at the last quad with a corner above the line — and with
+bit 0 set the submerged floor is meshed too.
+
+**This vindicates W8's intuition while leaving its refutation intact, and the
+distinction is the point.** W8 proved the borrowed environment chunk does not
+carry the cut (byte-identical meshes with it deleted). True, and the water
+reading was still right about WHAT: the water line is a **compiler constant**,
+not map content. The env chunk renders water; `0x0094DE30` decides what water
+does to the navmesh. No experiment varying map CONTENT could have found it —
+which is also why W9's Zones swap was doomed.
+
+**What it gives the project**: authored maps can now have walkable underwater
+terrain — lake beds, sunken ruins, a canyon floor below the waterline — via one
+content field. And it retires a silent tax: every authored map built here has
+been losing its deep ground to a rule nobody knew existed.
+
+**Scope**: one map, one shape, one build, one launch. What bit 0 does BESIDES
+ungating this rule is unmeasured. The 276 cells still outside the mesh are
+attributed to slope by their scatter across all 64 columns, not by a separate
+measurement. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W11-RUN.md` §RESULTS.
