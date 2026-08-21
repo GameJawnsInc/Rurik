@@ -24,7 +24,12 @@ strong for what a player can see, weak for internals.
 `vault/captures/live/20260817T183756`, connection
 `10.0.0.210:52294->54.80.22.158:80`, 1,381 messages, framed to
 `consumed == total`, `err = None`. The player is agent 27, level 2, and dies at
-**t = 78.813** — one tick, ten messages, six of them about the death:
+**t = 78.813** — one tick, twelve messages, seven of them the death. The two
+that open the tick are the killing blow itself (`0x00A7`, then `0x00A3`
+property 16 — damage — from agent 37); the three not in the table below are a
+`WORLD_SIMULATION_TICK`, a `0x002D [27]`, and `0x009F [8, 27, 1]`, which is the
+aftercast `disabled` toggle rather than anything to do with dying — it fires 192
+times for this player across the corpus and toggles back to 0 at the revive:
 
 | t | opcode | payload | reading |
 |---|---|---|---|
