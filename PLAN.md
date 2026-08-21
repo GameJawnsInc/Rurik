@@ -1799,6 +1799,31 @@ stands on it (W13), bit 0 touches only the Path chunk (W14), bodies are placed o
 it (W15), and a character walks out onto it (W16). `studies/worldmaps/FINDINGS.md`
 W13/W14, W15 and W16, `vault/research/worldmaps/WORLDMAPS-W13-RUN.md`,
 `...-W15-RUN.md`, `...-W16-RUN.md`.
+
+**WORLDMAPS-W17 THEN FOUND A SECOND LEVER IN THE SAME 41-BYTE CHUNK.**
+`studies/customarea` FINDINGS 48 measured the slope set in force (15/35/30,
+boundary 35) and closed by naming what it could not settle -- "whether the mode
+flag can select the other set on some map kind" -- with that flag's source
+recorded NOT FOUND by both FINDINGS 34 and 48. It is the **TOP BYTE** of the
+same Map Parameters flags dword, traced statically through seven single-caller
+hops to `cmp dword ptr [ebp+8], 2` at `0x0072CA1C`, and the client obeys it:
+arm A (`0x00000000`) reproduced FINDINGS 48's `WW...` exactly, arm B
+(`0x02000000`) produced **`WWWW.`** -- **the walkability boundary moved from 35
+to 45 degrees**, 7 trapezoids to 14. It also settles which slot the classifier
+tests (`+0x94`, since the answer was 45 and not 40).
+
+**The parser's 0-to-1 normalisation is what made it work**: a file byte of 0
+arrives as 1, so `0x01000000` would have produced a clean null in both arms and
+looked like a refutation. Found before the run, not after. A corollary is that
+**W11-W16 were never at risk** -- 0 and 1 select the same set, so every bit-0
+experiment did vary exactly one thing.
+
+**Authored terrain can now be steep to 45 degrees by one content field**, and
+the two levers compose: bit 0 is the depth gate, bits 24..31 the slope selector,
+disjoint fields of one dword read once. Untested: top byte 3+ (it crosses the
+`< 3` test), and whether a character can WALK a 42-degree ramp -- W16 established
+that meshed and walkable are different questions.
+`vault/research/worldmaps/WORLDMAPS-W17-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
