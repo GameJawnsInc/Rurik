@@ -57,6 +57,33 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > real lever found is `0x002C`, which clears the tracking record and sets BOTH
 > copies, and which an earlier build already tried and removed as "the warp the
 > player described". Read §4 item 1's NEXT JOB before picking anything up.
+>
+> ## ★★ THE WARP IS REPRODUCIBLE ON DEMAND (2026-08-20) — START HERE
+>
+> **HOLD S AND SPAM-CLICK FORWARD.** That is the trigger, it takes 45 seconds,
+> and it is the thing this arc lacked all week. Holding a movement key keeps the
+> client's `0x003D` flowing, which defeats the click arm's staleness guard, so
+> every click is granted; 196 clicks became 140 grants and 5 hard jumps.
+> **The control is equally cheap: click and then keyboard**, and the guard
+> refuses every click (2.1 s was already too stale), no grant goes out, and the
+> desync test is never evaluated. **Zero grants, zero warps, twice.**
+>
+> **WARPS APPEAR ONLY WHERE WE GRANT, AND SCALE WITH HOW MUCH WE GRANT.**
+> `--grant-suppress` (off by default) refuses the click grant while the player
+> is keyboarding. Measured A/B, same operator, same play, 100 s apart:
+> **199 grants → 2, hard rows 11.49 → 1.39/min, displacement 9,687 → 903 u/min**
+> (8.3× and 10.7×). It beat its own pre-registered prediction of 3.1×.
+>
+> ⚠ **IT IS A PALLIATIVE, NOT THE FIX, and read this before quoting it.** Retail
+> grants CONTINUOUSLY while the player keyboards — 88.5% of 2,855 live player
+> grants answer a `0x003D`, median gap 0.492 s — and does not warp, because its
+> destination is the client's own endpoint. We stopped warping by going silent,
+> which costs us an authoritative position that `state["pos"]` consumers
+> (aggro radius, `clip_to_walkable`, interact range) still need.
+> ⚠ **And the timing evidence that motivated it is REFUTED** — "4 of 5 jumps
+> followed a grant" is grant density (rotation control 2.39/5, Fisher p = 0.64).
+> What carries it is the landing geometry (p = 3.0e-5), the reporting-controlled
+> 2×2 (P = 3.4e-10) and the decode. FINDINGS, "round 4".
 
 ---
 
