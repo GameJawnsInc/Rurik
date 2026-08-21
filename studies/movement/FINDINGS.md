@@ -3939,3 +3939,86 @@ WEAKENED with the caveat carried inline: T1 (a null reproduces it); T3's 11.7× 
 New OBSERVED: the nine-capture membership; retail's message ordering, stop shape, `0x0025` echo, `0x0027` census; D2's four properties and H-STALE's refutation; the two caller classes and their xref graphs; the `≤ 1.0 u` short-circuit's non-dispatch; the roster-wide history wipe; the re-arm's no-op-when-armed; five calibration pairs with glide-conditioned residuals; the substrate inversion; the caller-aware proxy's eleven-capture calibration and its nulls; the lead sweep; `|D(86) − next report|`.
 
 ---
+
+## 2026-08-21 — REALFIX-L1 FIRST RUN: the keyboard arm holds the invariant, and the control starves itself
+
+**OBSERVED, `ours`.** Two sessions, one machine, ~9 minutes apart, **scripted input
+identical to the leg** — the first A/B in this arc where the two arms ran the same
+input by construction rather than by an operator's best effort:
+`session.py --until map --keep-open --walk "W:25 yaw:250 W:25 S:20 yaw:-250 W:25
+S:20 W:25 yaw:200 S:15 W:25" --game-args="--explorable[ --zero-lead]"`, ~195 s of
+continuous keyboard with two backpedal legs, `movetap` attached both arms. The
+operator's one intervention was a mid-run observation that the map's obstacles put
+the walk into walls — which the numbers below confirm and the design absorbs: both
+arms ground the same walls (interval speed p50 182.4 vs 188.1 u/s, sub-100 u/s
+share 16% vs 19%, chord p90 514.5 vs 514.7 u — matched to a few percent).
+
+| arm | capture | grants | hard rows | hard /min active | sep p50 / p90 / max |
+|---|---|---|---|---|---|
+| A `--explorable` (P0 control) | `20260821T081744` | **0** (0 clicks sent) | **0** | 0.00 | **4,402 / 6,287 / 6,811 u** (n=63) |
+| B `+ --zero-lead` (P2) | `20260821T082631` | **66** fired, 4 `heading-rate` refused | **0** | 0.00 | **267 / 523 / 531 u** (n=68) |
+
+**The flag worked end to end, on all three witnesses.** The gamesrv argv carries
+`--explorable --zero-lead --no-enemy`; the capture holds 66 `grant_verdict` rows
+with `arm="zero-lead"` (66 fired / 4 rate-refused of 70 headings — the 0.5 s floor
+is nearly inert at keyboard cadence, as designed); and `movetap` watched the client
+re-arm `+0x48` **81 times** in arm B against **0 changes** in arm A, targets
+marching along the walked path. (One display gap for the record: the startup
+prediction banner goes to gamesrv stdout, which `session.py` does not echo outside
+`--serve` — verify the flag from the capture's own verdict rows, not the harness
+transcript.)
+
+### Adjudication against the pre-registration, both directions
+
+**P2's harm bounds are MET at zero.** ≤ 1.0 hard rows/min active: **0.00**. ≤ 40 u
+per active second: **0.0**. Sixty-six grants meant ~66 class-A test instants — the
+desync test *evaluated* at every one, fence transitions visible in movetap — and
+none snapped. Under the decoded invariant this is the predicted outcome, now
+OBSERVED at a real client rather than proved by the offline tautology (round 5
+§6.5).
+
+**P2's separation bounds are MISSED AS WRITTEN, by the mechanism the record itself
+names.** p50 267.5 vs the ≤ 150 bound; p90 523.0 vs ≤ 520. The bound was
+calibrated on a ~0.3 s report cadence; this walk's keyboard cadence is **1.8 s**
+(gap p50 1.80 s on arm B), and a copy chasing 1.8-s-stale points at run speed lags
+by exactly the report **chord** — and the separations sit at chord scale (sep p90
+523 vs chord p90 514.7). That is the *benign* pre-registered failure signature
+("frequent small displacements at the report-chord scale"), and the hard-row
+falsifier (p50 > 520 u refutes lag-on-polyline) **cannot fire because there are no
+hard rows at all.** ⚠ Both arms' separation figures also carry a systematic the
+prediction did not budget: `offset_from_stamps` resolves the movetap↔wire clock to
+a 1.00 s spread, worth up to ~288 u on any single pairing. The **16× arm contrast
+dwarfs it; the absolute P2 bounds do not** — so the p50/p90 misses are recorded as
+UNDECIDABLE-leaning-miss, to be settled by a run with a finer offset anchor, not
+argued away.
+
+**P0's prediction FAILED, and the failure is a design contradiction worth more
+than a pass.** The control was predicted at 3–6 hard rows/min active (bracketing
+the measured 4.19) — it produced **zero grants and zero hard rows**, because L1's
+own protocol is click-free and the default build's only grant arm is the click.
+The 4.19 figure came from a capture with 40 click grants. **A click-free protocol
+starves the default build into the zero-grant regime, where round 5 §4 already
+measured 0 jumps of 435 intervals** — the pre-registration reused a number outside
+its trigger context, this arc's signature failure, caught by its own control arm.
+What the control *did* measure is the cost of silence: **the authoritative copy
+parked 4,402 u (p50) from where the client actually was, max 6,811 u** — the
+AUTH-PARKED budget of round 3, now with a movetap trace under a known input
+script. Arm B pulled that to 267 u: **a 16× reduction in how wrong our
+authoritative position is**, which is the quantity `state["pos"]`'s consumers
+(aggro, interact, clip) actually read.
+
+### What this run does not settle, and the one that would
+
+No warps were removed because the substrate had none to remove — the instrument
+prices harm added, never harm removed, and L1's keyboard regime adds none under
+either arm. **The decisive regime is round 4's trigger — hold S and spam-click —
+which is 11.49 hard rows/min under the default build.** That input cannot be
+scripted by the walk grammar (a held key and simultaneous clicks), and clicking
+at world targets is the operator's side of the boundary anyway: **REALFIX-L1's
+second run is the owner reproducing round 4's trigger with `--zero-lead` on,**
+prediction unchanged from the flag's startup banner. Two further residues: the
+long report silences against walls (14–27 s, five per arm) are the blind-budget
+regime and went unprobed; and movetap stalled to 12.2 / 9.5 Hz against its own
+floors on both arms (background load; positives valid, nulls void — do not read
+the arm-A "0 `+0x48` changes" as exhaustive, though with 0 grants there was
+nothing to re-arm).
