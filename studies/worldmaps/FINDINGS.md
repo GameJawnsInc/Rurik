@@ -7,11 +7,13 @@ authored area overwrites a live retail map's rows, currently 71496/71497 via
 map 143). W1-W4 did that and are landed, the even ones client-proven; W5-W7
 carry it forward into the authoring LOOP (headroom, scale, and a walked
 region). Client launches are staged A9/A10 style with predictions registered
-first.
+first. W8-W9 are the arc's first PROBE rungs -- authored maps used as an
+instrument to ask the client questions rather than to deliver content -- and
+their subject is WORLDMAPS-W7's depth cut.
 
 **Identifiers.** `WORLDMAPS-W<n>` = rungs of this arc's ladder, defined in this
 document. Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md);
-never bare `W1`–`W7`, which collide with `studies/profession` among others.
+never bare `W1`–`W9`, which collide with `studies/profession` among others.
 
 Labels per [studies/character/FINDINGS.md](../character/FINDINGS.md).
 
@@ -418,3 +420,47 @@ Zones chunk. The Zones reading is the cheaper next test and nothing has ever
 varied it — every authored area in this project carries the same 32x32
 template's copy. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W8-RUN.md` §RESULTS.
+
+## WORLDMAPS-W9 — the Zones swap is IMPOSSIBLE, and that is the finding. 2026-08-21
+
+**OBSERVED (retail client, build 38797, two arms).** The last cheap reading for
+WORLDMAPS-W7's depth cut was the borrowed 34-byte Zones chunk — the one thing no
+authored area had ever varied. It cannot be varied by a donor swap: **a foreign
+zone table breaks the client's map compiler.**
+
+Measured first, so the swap would have been a clean single variable: across all
+349 map heads the HEADER chunk has **one** distinct payload archive-wide
+(`2411873903000000`, 349/349) while ZONES has **308** — so `constants_file_id`
+selects the Zones chunk alone. Ours is the minimal 34-byte form, shared by 25
+maps; real maps carry zone material definitions with `.ini` paths and float
+arrays up to 15,870 B.
+
+Both arms died inside the re-bloat compile — `Gw.log`'s last line in each is
+`Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.`, with the
+server already through `INSTANCE_LOAD_FINISH`:
+
+| arm | Zones | outcome |
+|---|---|---|
+| Coastal Gate (466× ours) | 15,870 B | **CRASH**, `c0000005`, write to `0x1acff000` |
+| Sparring Basics (60× ours) | 2,030 B | **HANG** at Loading 100%, 98% of a core, 1.19 GB flat |
+
+**What it establishes.** The compile path CONSUMES the Zones chunk — which
+beside WORLDMAPS-W8 is a sharp contrast: deleting the environment chunk changed
+the compiled mesh not by one byte, while swapping the zone table kills the
+compiler. And a zone table is COUPLED to its map: two foreign ones from opposite
+ends of the size range, both fatal. **The coupling is not identified.**
+
+**What it does not establish**: anything about the depth cut, since no mesh was
+produced. And it REFUTED a piece of the design's own reasoning — I registered
+that richer-than-referenced was the safe direction; both arms went richer and
+both were fatal.
+
+**Where this leaves the depth cut.** A donor swap is exhausted as a method. The
+next rung must author a MODIFIED version of our own 34-byte table (vary one
+field, keep the shape), which needs that layout read first — nothing in this
+repo has done it. Reading 2, a depth bound in the compiler itself, is now the
+only reading no experiment has contradicted.
+
+**The archive survived both**: `--assert-safe` green after each, 10 of 10 rules,
+177,318 payload CRCs. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W9-RUN.md` §RESULTS.

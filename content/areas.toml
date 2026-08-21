@@ -366,3 +366,82 @@ borrowed 34-byte Zones chunk. This row is `sculpt` with `environment = false` \
 and nothing else changed, so the two meshes differ by the ENV chunk alone. If \
 the left third of the mesh returns, the water reading is confirmed; if the mesh \
 is unchanged, the water reading is refuted and the other two survive."""
+
+[area.rills]
+name = "The Rills"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `shoals`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x85DE   # <- THE VARIABLE. Coastal Gate's partner (row
+                             # 32681) carries a 15,870 B Zones against the
+                             # 34 B our template donor ships -- the largest
+                             # contrast in the archive.
+constants_row = 32680        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.rills.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
+contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
+changes nothing about the compiled navmesh, the Zones reading is dead."""
+
+[area.brooks]
+name = "The Brooks"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `shoals`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x28F32   # <- THE VARIABLE. Sparring Basics' partner (row
+                             # 71586) carries a 2,030 B Zones against the
+                             # 34 B our template donor ships -- the SMALLEST
+                             # rich zone table in the archive, after a 15,870 B
+                             # one CRASHED the client (WORLDMAPS-W9 arm 1).
+constants_row = 71585        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.brooks.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
+contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
+changes nothing about the compiled navmesh, the Zones reading is dead."""
