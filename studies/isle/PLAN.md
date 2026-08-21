@@ -1148,10 +1148,22 @@ window as an in-capture control where it never moves. **All ten conditions on th
 are now witnessed and joined to their rendered nameplates; the map is closed.** The run
 also caught a divergence from our own server nobody was looking for: retail extends a
 re-applied condition **silently**, emitting nothing, where our effect substrate extends
-by REMOVE-then-APPLY (§8.6). **What remains for rung 8 is Leg C alone** — the rank ladder
-at effective 5/6/7/8, which closes rung 7's unmet-requirement defect, and which is its
-own short run by the same rule (owner's instruction, 2026-08-21: shorter focused runs,
-steps reviewed before sealing).
+by REMOVE-then-APPLY (§8.6). ~~**What remains for rung 8 is Leg C alone**~~ — **LEG C RAN 2026-08-21, capture
+`20260821T163511`, and RUNG 8 IS DONE.** See FINDINGS §9. **The unmet-weapon-requirement
+penalty SCALES with attribute rank**; PINNED is refuted by the distributions rather than
+by a fit — rank 5 produced **eleven 3s** PINNED cannot reach at all (its floor is 4.108),
+and rank 8's twenty 6s against zero at ranks 5/6/7 puts PINNED's own prediction of one
+shared distribution at `5.5 × 10⁻¹⁰`. Means land within **1.1%** at all four ranks; the
+r8 control reproduces rung 7's 5.067 at **+0.5%** on the same body (slot 152), on a
+different day. The divisor is **3.098 [3.073, 3.133]**, which newly **excludes 10/3** —
+§2 had left it admissible. **§4's crit disjointness is REPRODUCED** (rank 8 implies
+`c = 1.3277`, inside rung 7's rank-8 interval and outside the met-block one) and stays
+unexplained; n = 2..6 on integer crits means no crit rule may be published off it.
+One cheap gap: every block was requirement-UNMET, so the divisor rests on the formula's
+met branch rather than an in-run reference — add one effective-13 block next time,
+~80 s. Recomputing the predictions before sealing caught a **rank-6 band error** in the
+old draft (4..5, actually 3..5) that would have read an ordinary result as a refutation
+of both models.
 
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because

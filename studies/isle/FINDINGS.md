@@ -1627,3 +1627,118 @@ this capture.
 periodic server-side sweep rather than a refreshed timer, in which case the durations
 are honest and the close is merely coarse. Step 2's 25.6 s against 10.0 s is a wide
 margin for a sweep, which is why the refresh reading is preferred rather than asserted.
+
+## 9. Rung 8c, LIVE #5 — the rank ladder: the unmet penalty SCALES, and PINNED is dead (2026-08-21, capture `20260821T163511`)
+
+**Rung 7's one open defect is now half closed, and the half that closed is the one
+`FINDINGS` §9 called "the highest-value next measurement".** Four unmet ranks on one
+Temple trip, 235 property-16 events and 16 property-17, every block against **npc slot
+152 at (−5915, 2079)** — the same body rung 7 used, which is what makes r8 a control
+rather than a new measurement. Seals AGREE, `exe_unchanged: true`, `game_mode base`.
+
+### 9.1 The result, and the band test carried it
+
+The two readings under test, both anchored to rung 7's measured r8 = 5.067 so that
+neither got a free parameter the other did not: **SCALES** (the penalty is a divisor on
+the rank-appropriate damage, so damage still climbs with rank) against **PINNED** (the
+penalty fixes the strike level, so damage is identical at every unmet rank).
+
+| rank | n | band | mean | SCALES | err | PINNED | err |
+|---|---|---|---|---|---|---|---|
+| 5 | 58 | 3..5 | 3.864 | 3.91 | **−1.1%** | 5.07 | −23.7% |
+| 6 | 54 | 4..5 | 4.296 | 4.26 | **+0.8%** | 5.07 | −15.2% |
+| 7 | 58 | 4..5 | 4.637 | 4.65 | **−0.2%** | 5.07 | −8.5% |
+| 8 | 65 | 4..6 | 5.093 | 5.07 | **+0.5%** | 5.07 | +0.5% |
+
+**But the means are the weaker half. The distributions settle it outright**, and they do
+it with no fitted quantity at all:
+
+| rank | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|
+| 5 | **11** | 44 | 3 | 0 |
+| 6 | 0 | 38 | 16 | 0 |
+| 7 | 0 | 21 | 37 | 0 |
+| 8 | 0 | 14 | 31 | **20** |
+
+**PINNED predicts these four rows are the SAME row.** They are not, and the two ends
+each kill it independently:
+
+- **Rank 5 produced eleven 3s in 58 swings.** PINNED's floor is `15 × 0.27389 = 4.108`;
+  reaching 3 needs a roll below 12.78, under the weapon's stated minimum of 15. Not
+  improbable under PINNED — **impossible**.
+- **Rank 8 produced twenty 6s (30.8%); ranks 5, 6 and 7 produced none.** Under PINNED
+  the rate is the same at every rank, so rank 5's zero-from-58 has probability
+  `0.692^58 = 5.5 × 10⁻¹⁰`.
+
+*Label: OBSERVED.* **The unmet-weapon-requirement penalty SCALES with attribute rank.**
+
+### 9.2 The divisor: 10/3 is now excluded too
+
+Per block, `D = met(rank) / observed` with `met(rank) = 18.5 × 1.20 × 2^((5·rank−60)/40)`:
+
+| rank | met | observed | D |
+|---|---|---|---|
+| 5 | 12.1046 | 3.864 | 3.1327 |
+| 6 | 13.2002 | 4.296 | 3.0727 |
+| 7 | 14.3949 | 4.637 | 3.1045 |
+| 8 | 15.6978 | 5.093 | 3.0823 |
+
+**Mean D = 3.098, spread 3.073..3.133.** §2 had left the divisor in `(3.106, 3.394]`
+holding SL=40, and recorded that *"3 is excluded, 10/3 is not"*. **10/3 = 3.333 is now
+excluded as well** — it sits 6.4% above the highest of four independent per-block
+estimates whose own spread is 1.9%. 3 remains excluded, just outside the other end.
+
+**This does NOT name the mechanism**, and the distinction §2 drew still stands: a
+divisor of 3.098 on the rank-appropriate damage and some other pairing of divisor with
+strike-level drop can produce the same four numbers. What the ladder establishes is the
+**rank dependence**, not the parameterisation.
+
+### 9.3 The crit disjointness REPRODUCED — on a different day, and now at rank 5
+
+Read at H = 480, the four property-17 blocks are **6 / 7 / 8 / 8** points at ranks
+5/6/7/8, each with zero variance (n = 2/6/3/5), which is §4's single-valued-per-block
+law holding again. Against the range maximum each rank admits:
+
+| rank | crit | ordinary max | implied c |
+|---|---|---|---|
+| 5 | 6 | 4.646 | 1.2913 |
+| 6 | 7 | 5.067 | 1.3815 |
+| 7 | 8 | 5.526 | 1.4478 |
+| 8 | 8 | 6.026 | **1.3277** |
+
+Rung 7's met blocks require `c ≥ 1.40866`; its rank-8 block admitted
+`c ∈ [1.20530, 1.36600)`. **Rank 8 here lands at 1.3277 — inside rung 7's rank-8
+interval and outside the met-block one, reproducing the disjointness on a different day
+with a different attribute path to the same rank.** So §4's defect is not an artifact of
+that session.
+
+**It is reproduced, NOT pinned, and the reason is arithmetic rather than modesty.** The
+crits are integers between 6 and 8 at n = 2..6, so one rounding step is 6–8% of the
+value, and the implied `c` column spans 1.29..1.45 without any model changing. **No crit
+rule may be published off these four numbers.** What they do establish is that the
+anomaly survives replication, which is what §4 could not say.
+
+### 9.4 What this run could not do, and it is one cheap fix
+
+**Every block in this run is requirement-UNMET**, so the capture contains no internal
+met-requirement reference and `damagepass`'s own `divisor` field came back `None` — the
+ratio it fits needs a met block, and rung 7 supplied one only because r9 happened to sit
+beside r8. **The `met(rank)` column in §9.2 is therefore the FORMULA's**, validated
+across seven distinct (AR, rank) conditions in §2 but not re-measured here. One extra
+block at effective 13 on the same Suit, in the same connection, would make the divisor
+internally determined and cost about eighty seconds. It belongs in the next ladder.
+
+### 9.5 The draft error the recomputation caught, recorded because it nearly shipped
+
+The Leg C draft carried in `isle_rung8_effects.txt` stated the rank-6 SCALES band as
+**4..5**. Recomputing before sealing gave **3..5**: the low end is `15 × 0.230299 =
+3.455`, which rounds to 3. An observed 3 at rank 6 would have read as a refutation of
+*both* models when it is ordinary SCALES.
+
+The same pass showed **rank 6's low end discriminates nothing anyway** — 3.455 against
+the 3.5 boundary is a 1.3% margin, the same trap §2 named when a rank-11 block *"passed
+on luck"* at 0.037%. So the sealed plan carried an explicit **do not score a rank-6
+three**, and rank 6 in fact produced none. The step that mattered was rank 5, where both
+directions are decisive by 14.8% and 15.5%, and that is where the eleven 3s landed.
+**Predictions recomputed rather than copied is what turned a leg with one usable block
+into one with a decisive block and three corroborating ones.**
