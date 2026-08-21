@@ -1496,7 +1496,26 @@ UNMAPPED message).
    range of **zero**. So only partially filled skills warn, which is GWW's
    sentence read strictly. Corroborated by the owner watching it live.
    **This channel is now closed on the screen side** — charge, spend,
-   cross-pool tax, wipe, map gate and the blink warning all observed. What remains static-only is
+   cross-pool tax, wipe, map gate and the blink warning all observed.
+   **AND THE TWO STATIC ITEMS ARE CLOSED TOO (2026-08-21, §26.12–26.13).**
+   **231** is the recharge family's *indefinite* case — it drops the pool and
+   writes the never-sentinel, and its adrenaline zeroing is **not special**:
+   229 runs a byte-identical sequence while 230 and 232 leave the pool alone,
+   so the rule is "when unavailability BEGINS, the pool is dropped" (WIKI
+   corroborates both halves). Its name is deliberately **not promoted** —
+   one wire witness is below the two-witness bar, and `SKILL_DISABLED` would
+   collide with the real per-slot disabled bitmask at `+0xA4` that opcodes
+   100/101 write and 231 never touches. **209** is "nothing on retail",
+   now EARNED: heroes are absent from the corpus (control green — henchmen
+   appear 21 times and got zero skill state), the resync story lost its
+   mechanism when GWW's own rule turned out to be the client's rule, and the
+   corpus contains **no reconnect at all** (all 48 skillbar pushes arrive
+   0.22–0.90 s into their connection). **The store has SIX writers, not five**
+   — §26.3 corrected; 229 was hidden by that section's own stated bound, since
+   it asks which sites COMPUTE a value and a constant zero computes nothing.
+   Sideways find: `moralescan.py` identified the observer by the first
+   `0x0059` and was **wrong on 20 of 44 connections**; corrected to the
+   self-scoped property 41, with the morale census numbers unchanged. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
 2. **What answers a refused press.** Ours is silence and the client visibly

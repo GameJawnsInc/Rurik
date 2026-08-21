@@ -2404,7 +2404,17 @@ outside it. Naming the bound is deliberate — `studies/enemy/PLAN.md` §6o once
 scope-limited search as a global absence and closed a question for a session
 with a false sentence.
 
-**A FIFTH writer exists, and it is not one of these four.** Opcode **231**
+**A FIFTH AND A SIXTH writer exist, and neither is one of these four.**
+*(Corrected 2026-08-21: this said FIFTH. Opcode **229** `0x00E5`
+SKILL_RECHARGE is a sixth — worker `0x00822B90`, reached via stub
+`0x0091F690` and thunk `0x00814920`, whose matched-slot body zeroes both
+halves at `0x00822C00`/`0x00822C06` in a sequence **byte-identical** to
+231's before writing the recharge timestamp at `0x00822C41`. It was missed
+here because this section's bounded search asked which sites COMPUTE a
+value into `+0x00`, and a constant zero computes nothing. The bound was
+stated honestly and still hid a writer — worth keeping as the example.)*
+
+**And the fifth:** Opcode **231**
 (`0x00E7`, `[agent_id, u16, u32]`, 12 B — the same shape as 210) reaches worker
 `0x00822D10` via stub `0x0091F6E0` and thunk `0x00814980`, matches one slot, and
 zeroes **both** adrenaline halves (`0x00822D7C`, `0x00822D82`) before setting the
@@ -2677,12 +2687,40 @@ counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
    made a correct hypothesis look 0-for-31), and the no-grant BOUNDARY moving
    from 1% to 0.5% is an extrapolation, since the corpus's smallest sample is
    2.5%.
-3. **What is 209 for?** Zero live witnesses. A resynchronisation after a
-   reconnect and a hero/henchman bar push are both plausible and neither is
-   evidenced. If the answer is "nothing on retail", say so — energy property 33
-   is the precedent for an implemented-and-unused handler.
-4. **Opcode 231 needs its own pass** (§26.3). It is the fifth writer of this
-   store, its shape matches 210's, and this section deliberately did not name it.
+3. ~~**What is 209 for?**~~ — **ANSWERED 2026-08-21: "nothing on retail" is
+   now EARNED rather than assumed, and both named candidates died.** Verified
+   CONFIRMED by an adversarial pass.
+   **The hero/henchman push is REFUTED twice over.** Structurally: the worker
+   has no hero-specific machinery its siblings lack — the record lookup
+   `0x00820F10` is a plain binary search keyed on agent id with no comparison
+   against the local player, so 207/208/210 would already serve a hero
+   unchanged. And empirically: **heroes are absent from the corpus**
+   (`0x01C2` PARTY_HERO_ADD = 0 of 114,985) — with a green positive control,
+   since the identical scan finds `0x01BF` PARTY_HENCHMAN_ADD **21 times over 7
+   connections**. Better still, those henchmen are the decisive datum:
+   **companions demonstrably existed and retail pushed them no skill state at
+   all** — zero 218/207/208/209/210/229/230/231 naming any of them.
+   **The resync-after-drift story lost its mechanism.** It rested on 207's
+   recharge skip (`0x008219C0`) being a client-side quirk the server might not
+   share. It is not a quirk: GWW states *"recharging skills cannot rebuild
+   adrenaline"*, so it is a GAME rule both sides implement and no drift arises
+   from it.
+   **What survives is narrower and unfalsified**: an absolute restore into a
+   session whose state the server cannot derive from deltas — a reconnect or
+   mid-instance resume. **And the corpus is silent on it for a MEASURED reason
+   rather than a hopeful one:** all 48 skillbar pushes arrive 0.22–0.90 s into
+   their connection, so every one of the 49 connections is a fresh instance
+   entry and the corpus **contains no reconnect at all**. The one experiment
+   that would settle it is named in §26.12.
+   **Method note worth more than the answer**: "is this agent the observer" was
+   checked with two independent routes — `0x017D` INSTANCE_LOAD_PLAYER_NAME and
+   `0x0199` INSTANCE_LOAD_INFO's player number, each mapped through `0x0059`'s
+   `(player_number, agent_id)` — agreeing on 40 of 40 resolvable connections
+   and disagreeing on 0. The obvious shortcut fails hard: taking the FIRST
+   `0x0059` as self is wrong on 20 of 44 connections, because `0x0059` is
+   broadcast for every player in the instance. `toolkit/authsrv/moralescan.py`
+   shipped that shortcut and was corrected the same day (§26.13).
+4. ~~**Opcode 231 needs its own pass**~~ — **DONE 2026-08-21, §26.12.**
 5. ~~**The `u16`/`u32` width disagreement at `+0x38`**~~ — **MEASURED on both
    builds 2026-08-21: still latent.** The high word is zero in **all 3,443
    rows on 38797 AND on 38833**, which also carry the same 151 nonzero costs
@@ -3222,4 +3260,142 @@ anyone sampled fast enough to see it. **P23 CONFIRMED.**
 Worth stating plainly because the opposite was equally possible: had the
 warning ridden its own opcode, this channel would have been incomplete and
 nothing in §§25–30 would have revealed it.
+
+## 26.12 Opcode 231 — the recharge family's *indefinite* case
+
+**Settled 2026-08-21** (§26.11 item 4), static plus corpus, verified CONFIRMED
+by an adversarial re-derivation. §26.3 declined to name it on one handler read;
+this is the evidence it asked for.
+
+**The chain, each link with exactly one way in** (`codescan --xrefs`): RECV
+table `0x00BC8F68` → stub `0x0091F6E0` (0 direct calls, 1 data word at
+`0x00BC97E0`) → thunk `0x00814980` → worker `0x00822D10`. So the only path into
+this worker is opcode 231 arriving off the wire; no client-side code disables a
+skill through this door. Shape `[agent_id, u16 skillId, u32 skillCopy]`, 12 B,
+from `msgshape.py` — **CORROBORATED by a lineage with no shared ancestry**,
+gw-preservation's `network-log-explorer` typing `0x00e7` as the identical triple.
+
+**What it does**, MEASURED with bytes:
+
+```
+00822D79  8b4604              mov eax,[esi+4]      ; SAVE the old adrenaline_b
+00822D7C  c70600000000        mov [esi],0          ; adrenaline_a = 0
+00822D82  c7460400000000      mov [esi+4],0        ; adrenaline_b = 0
+00822D89  85c0 / 7419         test eax,eax / je    ; repaint only if there WAS any
+00822D99  push 0x10000059     ;  the adrenaline repaint, payload {agent}
+00822DA9  fld  [0x948654]     ;  +INFINITY (bytes 00 00 80 7f)
+00822DC3  c74608ffffffff      mov [esi+8],0xFFFFFFFF   ; recharge = NEVER
+00822DBB  push 0x1000005d     ;  {agent, skillId, skillCopy, +inf, +inf}
+```
+
+**CORRECTION to [studies/skillcast](../skillcast/FINDINGS.md) §5**, which reads
+*"adrenaline_a = 0; if (adrenaline_b) fire 0x10000059; adrenaline_b = 0"*. The
+image saves the old `adrenaline_b` **first** and zeroes **both** halves before
+testing the saved value. The guard is on the previous adrenaline, and that
+detail is what makes the next paragraph decidable.
+
+### The zeroing is PURPOSEFUL — and NOT special to 231
+
+The four recharge-family workers read side by side settle §26.3's question:
+
+| opcode | what it means | touches adrenaline? |
+|---|---|---|
+| **229** `0x00E5` SKILL_RECHARGE | unavailability BEGINS, timed | **zeroes both halves** — `0x00822C00`/`0x00822C06`, a sequence **byte-identical** to 231's |
+| **230** `0x00E6` SKILL_RECHARGED | unavailability ENDS | **no** — its entire matched body is `mov [ecx+8],0` |
+| **231** `0x00E7` | unavailability BEGINS, indefinite | **zeroes both halves** |
+| **232** `0x00E8` | describes a partial recharge | **no** |
+
+**The rule is "when unavailability begins, the pool is dropped"**, and it is
+229's rule as much as 231's — so any model treating adrenaline-clearing as a
+property of *disabling* is wrong. **WIKI corroborates from outside the binary**:
+GWW's Adrenaline page says *"Disabled skills also lose all their adrenaline
+while recharging skills cannot rebuild adrenaline"* — both halves, matching both
+workers.
+
+### The name is NOT being promoted, and that is the finding
+
+`studies/skillcast` §5 proposed **SKILL_DISABLED** (explicitly INFERRED). It is
+defensible in meaning and **collides with a physically different channel**: the
+client keeps a per-slot *disabled* bitmask at `HotKeyState+0xA4` (GWCA's
+`Skillbar.disabled`), written by opcodes **100/101** (`bts`/`btr` at
+`0x00822085`/`0x0082208A`; GWCA names them HERO_SKILL_STATUS /
+HERO_SKILL_STATUS_BITMAP) and read by accessor `0x00816F40` — and **231 never
+touches it**. "Disabled" also fails to separate 231 from 229, since GWW uses the
+word for Dervish avatars being *"disabled for 45 seconds"*, which is a TIMED
+disable and therefore 229's job.
+
+`SKILL_RECHARGE_INDEFINITE` is proposed instead — it sits in the existing
+register beside SKILL_RECHARGE/SKILL_RECHARGED, names the field 231 actually
+writes, and carries the discriminating fact. **It stays INFERRED and out of
+`schema/overrides.json`**: witness 1 (the handler) is strong, witness 2 (the
+wire) is n=1, and that is below `studies/smsgnames`' two-witness bar. **No
+ArenaNet string names this message** — the worker contains zero asserts and
+pushes zero string pointers, and the positive control is green (the identical
+grep finds `adrenalin`, `hotKeyState` and ChCliSkill's own asserts). No upstream
+names it either: absent from the maintained GWCA, Headquarter, OpenTyria and
+the network-log-explorer name map.
+
+### The single wire witness
+
+**Exactly one `0x00E7` in 114,985 live messages** — capture `20260817T231139`,
+t=105.145, naming **skill 2**, which `textrec.py` resolves through the client's
+own string table to **"Resurrection Signet"**. After it, skill 2 appears in no
+message of any kind for the remaining **116 seconds** of the tape. That is
+retail's one-use-per-morale-boost rule, and a signet that cannot come back until
+a condition the server controls is exactly what an *indefinite* recharge is for.
+
+**One honest wrinkle, flagged rather than smoothed:** the cast began
+(`0x00E4`) at t=99.646 and the `0x00E7` landed at t=105.145 — 5.499 s, against
+skill 2's own table activation of 3.0 s. A co-firing `0x00E3` supports "at cast
+end", but the interval does not match the table and nothing here explains the
+difference.
+
+### Open
+
+- **Does 231 make a skill uncastable, or only paint the slot?** The DISPLAY path
+  is proved end to end — `GmSkSlot 0x00543181` calls the recharge accessor,
+  recognises `INT_MAX`, and loads the same `+inf` constant, skipping the sweep
+  arithmetic. The INPUT gate is untraced.
+- **What re-enables it.** WIKI says a morale boost; which opcode carries that is
+  unknown, and the observed connection never re-armed skill 2.
+- **Opcode 232 has ZERO occurrences too** — a second fully-implemented,
+  never-observed handler in this same family, alongside 209 and energy property
+  33. Three now, which starts to look like a pattern rather than three accidents.
+
+## 26.13 A tool defect found sideways: "which agent is me"
+
+Recorded here because the adrenaline pass found it and in
+[studies/morale](../morale/FINDINGS.md) because that is whose tool it is.
+
+Establishing that no adrenaline message ever names a non-observer needed a
+sound answer to *which agent is the observer*. The obvious shortcut —
+**take the first `0x0059` and call its agent id ours** — is wrong, because
+`0x0059` is `AGENT_CREATE_PLAYER` and the server broadcasts one for **every**
+player in the instance: 16 to 56 of them in a busy outpost. The first is
+whoever the server happened to send first.
+
+`toolkit/authsrv/moralescan.py` shipped exactly that shortcut, with a comment
+asserting *"field 2 is the receiving player's own agent id"*. **MEASURED against
+the self-scoped anchor: the two rules agree on 24 connections and DISAGREE on
+20 of 44** — 45% wrong — e.g. naming agent 16 where the observer is 767.
+
+**The sound anchor is property 41 (MAX ENERGY)**, which §23 measured as
+self-scoped across 97 sightings; an independent route (`0x0199`'s player number
+mapped through `0x0059`'s pairs) agrees with it wherever both resolve, 40 of 40.
+`moralescan.py` now uses property 41 and **does not fall back** to the old rule
+— a connection with no property 41 leaves the flag unset, which is the honest
+answer, where guessing would restore the 45%.
+
+**Nothing published was wrong**, and that is worth stating precisely rather than
+implying either more or less: `studies/morale`'s census claims count VALUES
+across all agents ("the only non-zero `0x00EE` is −15", "the only `0x009C` that
+is not 100 is 85") and never consult the flag. Re-running the census after the
+fix reproduces both numbers exactly — 40 sightings, 83 sightings, same two
+departures. So this is a **latent** defect corrected before it was relied on,
+not a result being withdrawn.
+
+The general shape is one this repo keeps meeting: a fixture that silently
+resolves to the wrong thing turns every assertion behind it into a no-op, and
+the defence is an anchor the artifact can refute rather than a plausible-looking
+first element.
 

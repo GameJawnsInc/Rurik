@@ -264,6 +264,19 @@ in the content.
   idiom, a switch rather than a lie in the content.
 - `toolkit/authsrv/moralescan.py` — the corpus census, because "the only −15 in
   fourteen captures" is a claim that decays the moment a fifteenth is taken.
+  **CORRECTED 2026-08-21, by the adrenaline arc, and the census claims are
+  UNAFFECTED.** This scanner identified the receiving player by taking the
+  FIRST `0x0059` and calling its agent ours, with a comment asserting that is
+  what field 2 means. `0x0059` is `AGENT_CREATE_PLAYER`, broadcast for **every**
+  player in the instance (16–56 in a busy outpost), so the first one is whoever
+  the server sent first: MEASURED, **wrong on 20 of 44 connections**. It now
+  anchors on property 41 (MAX ENERGY), which
+  [studies/skills](../skills/FINDINGS.md) §23 measured as self-scoped over 97
+  sightings, and it does not fall back — no property 41 leaves the flag unset.
+  **The two census numbers above are unchanged** (40 `0x00EE` attr-10 sightings
+  with only the −15 non-zero; 83 `0x009C` with only the 85), because they count
+  values across all agents and never consulted the `mine` flag. A latent defect
+  fixed before it was relied on. Full account: `studies/skills` §26.13.
 
 Test: `toolkit/authsrv/test_morale.py`, catalogued in
 [TESTS.md](../../TESTS.md).
