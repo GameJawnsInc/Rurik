@@ -1417,6 +1417,26 @@ described from GWCA's header and never checked, is now checked against numbers
 of ours. Nobody's offsets were used to find it: the probe holds one field
 constant and the scanner anchors on that.
 
+**AND THE GRACE WINDOW IS IN, but not yet watched.** GWW's exception list
+carries one more rule a player actually notices — *"Dying shortly after
+resurrection (5 seconds in PvP, 14 in PvE)"* never incurs a penalty — which is
+what stops a party being wiped repeatedly from spiralling to the floor in under
+a minute. It is now `[player.morale].resurrection_grace = 14`,
+`morale.death_is_free`, and the second of the two gates in `death_penalty_due`,
+with `test_morale.py` §9 pinning both ends of the boundary, requiring the FIRST
+death of a session never to be free, and controlling on the revive path
+stamping the window itself. Floor 60, green 61.
+
+**OWED: a real death with the penalty armed** — an enemy killing the player,
+the corner reading −15%, the bars at 85/22, and a second death inside the
+window costing nothing (`--enemy --death-penalty --enemy-hit 0.35`; at the
+default hit fraction a death takes ~17 s, so a second one can never land inside
+a 14 s window). The first attempt was lost to a parallel session's
+`session.py --replace` stopping this session's live webgate and authsrv — the
+client answered `Code=058` and nothing about morale was measured. Worth fixing
+at the source: `--replace` refuses anything that is not python, and should also
+refuse a python listener whose argv resolves to a DIFFERENT worktree.
+
 `toolkit/clientscan/moralestore.py` is the reader (read-only by construction —
 `PROCESS_VM_READ`, never `WRITE`), and it carries the lesson that cost the
 first attempt: **locate on a constant the experiment never changes**, because a
