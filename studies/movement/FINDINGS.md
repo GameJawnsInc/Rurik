@@ -3939,3 +3939,292 @@ WEAKENED with the caveat carried inline: T1 (a null reproduces it); T3's 11.7× 
 New OBSERVED: the nine-capture membership; retail's message ordering, stop shape, `0x0025` echo, `0x0027` census; D2's four properties and H-STALE's refutation; the two caller classes and their xref graphs; the `≤ 1.0 u` short-circuit's non-dispatch; the roster-wide history wipe; the re-arm's no-op-when-armed; five calibration pairs with glide-conditioned residuals; the substrate inversion; the caller-aware proxy's eleven-capture calibration and its nulls; the lead sweep; `|D(86) − next report|`.
 
 ---
+
+## 2026-08-21 — REALFIX-L1 FIRST RUN: the keyboard arm holds the invariant, and the control starves itself
+
+**OBSERVED, `ours`.** Two sessions, one machine, ~9 minutes apart, **scripted input
+identical to the leg** — the first A/B in this arc where the two arms ran the same
+input by construction rather than by an operator's best effort:
+`session.py --until map --keep-open --walk "W:25 yaw:250 W:25 S:20 yaw:-250 W:25
+S:20 W:25 yaw:200 S:15 W:25" --game-args="--explorable[ --zero-lead]"`, ~195 s of
+continuous keyboard with two backpedal legs, `movetap` attached both arms. The
+operator's one intervention was a mid-run observation that the map's obstacles put
+the walk into walls — which the numbers below confirm and the design absorbs: both
+arms ground the same walls (interval speed p50 182.4 vs 188.1 u/s, sub-100 u/s
+share 16% vs 19%, chord p90 514.5 vs 514.7 u — matched to a few percent).
+
+| arm | capture | grants | hard rows | hard /min active | sep p50 / p90 / max |
+|---|---|---|---|---|---|
+| A `--explorable` (P0 control) | `20260821T081744` | **0** (0 clicks sent) | **0** | 0.00 | **4,402 / 6,287 / 6,811 u** (n=63) |
+| B `+ --zero-lead` (P2) | `20260821T082631` | **66** fired, 4 `heading-rate` refused | **0** | 0.00 | **267 / 523 / 531 u** (n=68) |
+
+**The flag worked end to end, on all three witnesses.** The gamesrv argv carries
+`--explorable --zero-lead --no-enemy`; the capture holds 66 `grant_verdict` rows
+with `arm="zero-lead"` (66 fired / 4 rate-refused of 70 headings — the 0.5 s floor
+is nearly inert at keyboard cadence, as designed); and `movetap` watched the client
+re-arm `+0x48` **81 times** in arm B against **0 changes** in arm A, targets
+marching along the walked path. (One display gap for the record: the startup
+prediction banner goes to gamesrv stdout, which `session.py` does not echo outside
+`--serve` — verify the flag from the capture's own verdict rows, not the harness
+transcript.)
+
+### Adjudication against the pre-registration, both directions
+
+**P2's harm bounds are MET at zero.** ≤ 1.0 hard rows/min active: **0.00**. ≤ 40 u
+per active second: **0.0**. Sixty-six grants meant ~66 class-A test instants — the
+desync test *evaluated* at every one, fence transitions visible in movetap — and
+none snapped. Under the decoded invariant this is the predicted outcome, now
+OBSERVED at a real client rather than proved by the offline tautology (round 5
+§6.5).
+
+**P2's separation bounds are MISSED AS WRITTEN, by the mechanism the record itself
+names.** p50 267.5 vs the ≤ 150 bound; p90 523.0 vs ≤ 520. The bound was
+calibrated on a ~0.3 s report cadence; this walk's keyboard cadence is **1.8 s**
+(gap p50 1.80 s on arm B), and a copy chasing 1.8-s-stale points at run speed lags
+by exactly the report **chord** — and the separations sit at chord scale (sep p90
+523 vs chord p90 514.7). That is the *benign* pre-registered failure signature
+("frequent small displacements at the report-chord scale"), and the hard-row
+falsifier (p50 > 520 u refutes lag-on-polyline) **cannot fire because there are no
+hard rows at all.** ⚠ Both arms' separation figures also carry a systematic the
+prediction did not budget: `offset_from_stamps` resolves the movetap↔wire clock to
+a 1.00 s spread, worth up to ~288 u on any single pairing. The **16× arm contrast
+dwarfs it; the absolute P2 bounds do not** — so the p50/p90 misses are recorded as
+UNDECIDABLE-leaning-miss, to be settled by a run with a finer offset anchor, not
+argued away.
+
+**P0's prediction FAILED, and the failure is a design contradiction worth more
+than a pass.** The control was predicted at 3–6 hard rows/min active (bracketing
+the measured 4.19) — it produced **zero grants and zero hard rows**, because L1's
+own protocol is click-free and the default build's only grant arm is the click.
+The 4.19 figure came from a capture with 40 click grants. **A click-free protocol
+starves the default build into the zero-grant regime, where round 5 §4 already
+measured 0 jumps of 435 intervals** — the pre-registration reused a number outside
+its trigger context, this arc's signature failure, caught by its own control arm.
+What the control *did* measure is the cost of silence: **the authoritative copy
+parked 4,402 u (p50) from where the client actually was, max 6,811 u** — the
+AUTH-PARKED budget of round 3, now with a movetap trace under a known input
+script. Arm B pulled that to 267 u: **a 16× reduction in how wrong our
+authoritative position is**, which is the quantity `state["pos"]`'s consumers
+(aggro, interact, clip) actually read.
+
+### What this run does not settle, and the one that would
+
+No warps were removed because the substrate had none to remove — the instrument
+prices harm added, never harm removed, and L1's keyboard regime adds none under
+either arm. **The decisive regime is round 4's trigger — hold S and spam-click —
+which is 11.49 hard rows/min under the default build.** That input cannot be
+scripted by the walk grammar (a held key and simultaneous clicks), and clicking
+at world targets is the operator's side of the boundary anyway: **REALFIX-L1's
+second run is the owner reproducing round 4's trigger with `--zero-lead` on,**
+prediction unchanged from the flag's startup banner. Two further residues: the
+long report silences against walls (14–27 s, five per arm) are the blind-budget
+regime and went unprobed; and movetap stalled to 12.2 / 9.5 Hz against its own
+floors on both arms (background load; positives valid, nulls void — do not read
+the arm-A "0 `+0x48` changes" as exhaustive, though with 0 grants there was
+nothing to re-arm).
+
+## 2026-08-21, later — L1 FIRST RUN IS VOID AS A P2 VERDICT: the operator saw arm B warp, and the design cannot rule on it
+
+**OPERATOR-REFUTED, same day.** The section above reported arm B at 0 hard rows and
+called P2's harm bounds "MET at zero." **The operator watched arm B bug out near
+the map's bridge.** The instrument did not see it, and the run's design is why —
+three defects, all mine:
+
+1. **The negative was quoted past its blind budget.** Arm B was inside a report
+   interval ≤ 2 s for only 32% of its span; the hard bar cannot see inside a
+   silence, and round 5's own instrument note orders every negative qualified by
+   exactly this. "0 hard rows" was a claim about 63 observed seconds wearing the
+   costume of a claim about the run.
+2. **Geometry stalls and desync stalls are indistinguishable in this trace.** The
+   scripted walk plowed into obstacles and the walkmesh's end in BOTH arms, so a
+   stuck-and-silent stretch in arm B (where the bug lives, per the operator) has
+   an innocent twin in arm A. The "matched collision substrate" table in the
+   section above measured that the two arms stalled EQUALLY — which is precisely
+   why it cannot say WHY either one stalled. A control that shares the confound
+   is not a control.
+3. **The 16× separation contrast survives; nothing else does.** Copy-parked-at-
+   4,402 u vs copy-at-267 u is read off continuous movetap tracks and does not
+   depend on catching any event. Every per-event claim from this run — including
+   "~66 test instants, none snapped" — is WITHDRAWN as unverifiable.
+
+**The operator's hypothesis, registered before analysis: ANGLED MOVEMENT LOSES
+SYNC, and the failure was near the bridge.** Two candidate mechanisms fit the
+decoded record, both UNVERIFIED:
+
+- **The plane echo.** Both arms cross plane 0 ↔ 18 six times (OBSERVED, the
+  report stream's own `values[2]`; the plane-18 stretches are the bridge, and arm
+  B's 21.6 s silence sits inside one). Retail's `0x0029` carries
+  `(dest_plane, cur_plane)` and they DIFFER at transitions (14 of 987);
+  `--zero-lead` echoes the single reported plane into BOTH fields. A wrong plane
+  in `agent+0x80` is gate 2's own operand, and the walkable-100 match conjunct
+  runs on the navmesh the plane names.
+- **Node-chain corner-cutting.** History nodes push on a movement-command change
+  or a 2.5 s head age (`0x0060593A`); a steady angled slide changes no command,
+  so the polyline is chords of ~2.5 s of curved travel — and the match's
+  straight-line-to-segment test is STRICT at ~100 u. A copy correctly lagging ON
+  the real path can sit > 100 u from a chord that cuts the bridge approach's
+  corner, fail the match, and hand a 300–500 u lag to gate 1.
+
+Analysis of both captures against both candidates is running; REALFIX-L2 gets
+designed from its result, with the confound controlled — legs bounded by stops,
+no leg long enough to go silent, open-ground control legs, and the bridge crossed
+deliberately. Until then the only L1 claims that stand are the separation
+contrast and the flag's mechanical operation (66 grants, telemetry, 81 client-
+memory re-arms).
+
+## 2026-08-21, round 6 — THE BRIDGE EVENT IS FOUND: three rendered-copy resyncs, every one at a plane-rewriting grant, and the instrument was reading the wrong copy
+
+Two analysis lanes, one adversarial skeptic, one design lane; no client run, no repo
+write until this section. **The operator's report is confirmed and located**: arm B
+warped three times, all on the plane-18 corridor (the bridge), and the reason no
+instrument saw it is that every L1 number was computed on the copy the operator
+cannot see.
+
+### 1. The instrument correction
+
+**OBSERVED.** `movetap` records BOTH copies and always has: `sync_at` (world 0,
+authoritative — what `movesync.sep` and every L1 figure read) and `async_at`
+(world 1, rendered — what the operator watches). Nobody read `async_at`. On it:
+
+| | arm A (0 grants) | arm B (66 grants) |
+|---|---|---|
+| rendered-track steps | 2,694, max **33.4 u** | 2,041 |
+| steps > 100 u at > 1.5× run speed | **0** | **3** — 387.1 / 468.2 / 322.4 u |
+
+The skeptic reproduced L1's own headline separations through `movesync` before
+accepting this, so the disagreement is in what was read, not in a loader. **The
+16× separation contrast survives as what it always was** — the authoritative
+copy's error, the quantity `state["pos"]` consumers read — **and it says nothing
+about what the player sees.** L1's write-up treated it as if it did.
+
+**REALFIX-E, the only admissible event definition from here on** (adopted from the
+design lane after the skeptic refuted every alternative): an adjacent-sample step
+of the `async_at` track ≥ 150 u within a ≤ 0.25 s sample pair. Grounds: the
+control's maximum is 33.4 u, the smallest positive is 322.4 u; 150 sits 4.5×
+above one and 2.1× below the other. **`sep`, `gate1`, `fence_raw`, the plane
+words and the wire hard bar are NOT identifiers** — the skeptic ran each against
+arm A and every one fires there too (fence clears ×3, plane mismatch on 121
+samples, sep-above-cut on 2,695 of 2,695). They are covariates.
+
+### 2. The three events
+
+**OBSERVED, arm B (`movetap-20260821T082702`, 9.5 Hz — below floor; positives
+valid).** Artifact tests pass on all three: `async_ptr`/`id`/`count`/`world`
+single-valued across the file, `async_branch` "integrated" on both sides,
+persistence ≥ 10 samples.
+
+| | E1 | E2 | E3 |
+|---|---|---|---|
+| UTC (movetap's own clock — no wire alignment needed) | 12:27:21.72 | 12:27:47.89 | 12:28:50.11 |
+| leg | L3 `W:25` | L4 `S:20` | L7 `S:20` |
+| grant plane word | 18 → **0** | 0 → **18** | 0 → **18** |
+| magnitude / dt | 387.1 u / 0.117 s | 468.2 u / 0.098 s | 322.4 u / 0.111 s |
+| displacement · commanded heading | **−387.0 u** | **−468.2 u** | **−322.2 u** |
+| lands vs contemporaneous SYNC copy | 15.6 u | 16.7 u | 27.6 u |
+| client's own `sep` (memory, no alignment) | 431.5 → 15.6 | 513.7 → 16.7 | 378.8 → 27.7 |
+| `clientControlled` same sample | 1 → 0 | 1 → 0 | 1 → 0 |
+
+Backward, onto the lagged authoritative copy, at the bridge: the operator's warp,
+three times. After each event the rendered copy re-walks the granted leg back to
+the client's last reported position — **a round trip with net wire displacement
+0.0 u**, which is why the hard bar stayed silent. ⚠ Stated with the skeptic's
+correction: this is the **already-booked blind-budget defect**, not a new class —
+each event opens a 21.6 / 17.3 / 5.5 s report silence *starting at the snap*, and
+at the 0.30 s cadence P2's bounds were calibrated on, the 4.16 s of round trips
+would have carried ~14 report instants. And after each event the character goes
+**dead**: freezes of 21.9 / 19.4 / 6.1 s begin 1.50 / 1.66 / 1.20 s after the
+snap (the rendered copy travels 337–468 u in between), with motion resuming only
+at the next scripted key-down. ~47 s of a 198 s walk. That the fence clear is
+what disables keyboard drive is **UNVERIFIED**; the freeze is OBSERVED.
+
+### 3. What is established, exactly — and no more
+
+**The plane word is NECESSARY in this run and NOT SUFFICIENT.** Among the 31
+movetap-covered grants landing with gate 1 already failing (sep > 299.33 u):
+plane-changed 3 warp / 1 not; plane-unchanged **0 warp / 27 not** (Fisher
+two-sided **p = 0.00089**). Anchoring is per-event on the client-memory
+`agent+0x80` flip — the wire pairs with each flip 5-of-5 inside one sample —
+and the table is **alignment-sensitive by construction**: re-anchoring on a
+fitted mean lag (+0.077 s) moves E3 into the wrong cell and fabricates a phantom
+warp. The mean-lag variant is printed to show the sensitivity, never used.
+
+- **The hole: grant #37** (t = 147.877, w4 = 0 onto a sync copy reading plane 18,
+  sep 511.2 u, fence armed, same 18→0 direction as E1) matched every stated
+  precondition and **did not warp**. The mechanism as stated over-predicts one in
+  four (treatment n = 4).
+- **The location confound is real and its separating cell was EMPTY in this run**:
+  all 4 plane-rewriting landings sit in or within ~250 u of the plane-18 corridor;
+  all 27 controls sit outside it. "In-corridor, above-cut, no rewrite" had n = 0.
+  REALFIX-X6 fills it at n = 9 in L2.
+- **Which plane variable is operative is UNDECIDABLE here** — three definitions
+  (w4 ≠ sync `+0x80`; w4 ≠ previous grant's w4; sync plane ≠ async plane) are
+  collinear in this run and give identical tables. REALFIX-I1 (the history-chain
+  walk in movetap) decides it, and X5 separates "causes" from "permits".
+- **The wire-to-warp chain, RECONSTRUCTION from OBSERVED pieces and the leading
+  reading:** `0x0029` field 4 → `0x00602A6C` → `agent+0x80` → `q`'s plane in the
+  16-byte copy at `0x00605643` → the match's **walkable conjunct**
+  (`0x00605C40`/`0x00709990`, start unresolved at `0x0072AE4F`) → no match →
+  gate 1 at 379–495 u → whole-roster reseed. The registered candidate named
+  gate 2; the data implicates **the match conjunct** — gate 2 is refuted as the
+  site (in arm A it is reached 0 times; in arm B the echoed plane is always one
+  our mesh puts the granted point on — correct for the point, stale for the copy).
+  **The failure in one sentence: `--zero-lead` stamps the CLIENT's current plane
+  onto a copy standing ~1.8 s and ~500 u behind, so the plane belongs to a
+  different point** — observed-context-is-part-of-the-claim, in wire form.
+- **First runtime evidence the match test fires at all**: 27 of 27 above-cut
+  same-plane landings did not snap, so the 100 u match was protecting at every
+  one (round 2's displaced "the match is short-circuiting" is revived). ⚠ This is
+  a **null from a below-floor instrument** and carries its rescue argument in the
+  same sentence: max intra-leg sample gap 0.215 s (B) / 0.176 s (A), so a
+  persistent 300–470 u displacement cannot hide between samples.
+- **`clear_record`'s snap-path position is NOT independent evidence** —
+  `clientControlled` drops 1→0 three times in arm A, which sends zero grants.
+- **Arm A's null carries its coverage**: movetap covered 113.3 s of its 199 s
+  walk (57%), missing the first four legs and two plane flips — and arm A cannot
+  express the signature at all (0 grants ⇒ the dispatcher is never entered), so
+  the causal weight is entirely on the within-arm-B contrast.
+
+**CORNER-CUTTING is REFUTED at the events, in the strong form.** A chain node at
+every wire report gives **0 exceedances** of the 99.92 u radius (max 72.4 u); the
+tapped `hist_head` chain agrees (max 70.2 u); only the thinned 2.5 s-rule proxy
+exceeds, its over-estimate bound is v·gap = **514 u at the p50 gap** — larger than
+anything it "found" — and the steady-turn sagitta at the client's own node rule
+is 1.6 u. At the three warps the distance is 0.0 / 0.0 / 0.0 u. Its only
+surviving route is a **collision deflection**, which is what REALFIX-X2a tests.
+
+**"Angled movement" is UNTESTED, not refuted.** The L1 walk's rendered-track
+|dψ/dt| p90 is 0.007 rad/s — the grammar contained no sustained angled motion.
+X1/X2a/X2b are its first real test.
+
+### 4. Retail corrections and the walk facts
+
+- **Corpus correction, carry everywhere:** the "14 of 987 (1.4%)" differing-plane
+  rate at `FINDINGS:3407`/`:3790` is ONE capture's rate. Over the live corpus:
+  **1,245 of 9,733 (12.8%), per-capture 1.4%–30.2%, with `20260817T231139`
+  supplying 51% of the differing rows.**
+- **Retail's field order** (agent-internal, so identification-free): dest_plane
+  **leads** — the agent's cur_plane becomes it afterwards in 939 of 1,245 (75.4%,
+  delay p50 0.64 s; 83.6% under a symmetric ±3 s window). ⚠ Measured over the
+  whole agent population, overwhelmingly NPCs; the player-identified version is
+  UNVERIFIED (87% vs 39% under two identification rules). REALFIX-F1 is grounded
+  in NPC grants and labelled so.
+- **REALFIX-W1/W2, the walk facts that redesign L2** (full set in REALFIX.md §6):
+  every key-down emits a `0x003D` at the exact previous stop position (10 of 10),
+  so every leg opens at separation 0 and legs are independent trials; and free-
+  travel reports are **DISTANCE-triggered at ~515 u** (chord p50 513–514 u at
+  both 1.80 s and 2.74 s gaps), so under zero-lead separation saturates at one
+  chord and the copy's lag is set by the client's own report trigger, not by our
+  grant floor — **at keyboard cadence P2 has no cheap cadence dial.**
+
+### 5. Where the arc goes
+
+REALFIX-L2 (REALFIX.md §6): six cells, X2a-vs-X3 as the mechanism crux, X6
+filling the empty confound cell, X5 running the invariant's own falsifier
+deliberately at sep 228 u, instruments first (T1 float wall stamp kills the 1.00 s
+offset spread; T2 float leg stamps; I1 the chain walk gated on sep > 250 u), arm
+P0 as geometry calibration, then P2, then **REALFIX-F1** (field 4 = the plane
+that arrived with the point the copy stands on — one line, one state slot) only
+if X1/X3 produce events. The round-4 trigger run stays with the owner and is
+unchanged. Pre-registered predictions with their power arithmetic are in the
+protocol; the ladder-deciding cell is X2a — a positive there sends the arc to
+P3/§2.2, because W2 means no grant-side parameter can shorten the chord.
