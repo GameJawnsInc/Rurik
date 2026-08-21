@@ -363,6 +363,12 @@ def assemble(area, heights, donor, dim, verbose=True):
         if verbose:
             print(f"  props: {len(props)} at {cells}")
 
+    # The area may state the Map Parameters flags dword. Absent, it is 0 --
+    # which is what every area before WORLDMAPS-W11 shipped. See
+    # stripbuild.build's own note: bit 0 gates the navmesh depth bound, and the
+    # top byte selects the slope set, so a row setting one must not disturb the
+    # other.
+    kw["map_flags"] = int(area.get("map_flags", 0) or 0)
     return sb.build(dim, dim, heights, seed, **kw)
 
 

@@ -1578,10 +1578,32 @@ coverage agreements -- those are worthless, since at 32x32 the rule is inert yet
 a per-quad model still over-predicts by 11.23 points -- but a two-sided bracket
 at [39, 43), the fact that 40.0 is the ONLY float constant in that window across
 the 275-function reachable subtree, and a partial intermediate bucket that kills
-every per-cell rival. **The rule is GATED by bit 0 of the Map Parameters flags
-dword, and that is the next experiment**: our maps ship flags = 0, so if that
-bit disables the depth rule, setting it brings the deep ground back -- one flag,
-one launch, and it can fail cleanly.
+every per-cell rival. **The rule is GATED by bit 0 of the Map Parameters flags dword -- and
+WORLDMAPS-W11 PULLED THAT LEVER THE SAME DAY AND IT WORKS.** `map_flags = 1` on
+the area row, one bit in a 41-byte chunk, against a control measured twice on
+the same copy: coverage 63.04% -> 93.26%, the mesh reaching column 0 instead of
+13, trapezoids 64 -> 99. W10's whole static chain is confirmed at the client,
+and the rule predicts the boundary TO THE COLUMN (col 12's quad corners 47/43,
+both past 40, excluded; col 13's 43/39, one shallower, kept -- and 13 is exactly
+where the control mesh started).
+
+**AND THE OWNER'S EYES NAMED THE CONSTANT: 40.0 IS A WATER LINE.** Watching the
+run: *"i was floating over the water there instead of standing ankle-deep in it
+like usual."* Values increase downward in these maps, so "all three corners >=
+40.0" means "entirely more than 40 units under water" -- the shallows are
+walkable, which is why the mesh stopped at the last quad with a corner above the
+line. **This vindicates WORLDMAPS-W8's intuition while leaving its refutation
+intact, and that distinction is the finding**: the water line is a COMPILER
+CONSTANT, not map content. The environment chunk renders water; `0x0094DE30`
+decides what water does to the navmesh -- so no experiment varying map content
+could ever have found it, which is why W9's Zones swap was doomed as well.
+
+**What it gives the project**: one content field and authored maps can have
+walkable underwater terrain -- lake beds, sunken ruins, a canyon floor below the
+waterline. It also retires a silent tax, since every authored map built here has
+been losing its deep ground to a rule nobody knew was there. Scope is one map,
+one shape, one build, one launch; what bit 0 does BESIDES ungating the rule is
+unmeasured.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
