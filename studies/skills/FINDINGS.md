@@ -3029,3 +3029,77 @@ have now had their headline numbers moved by a threshold choice — §27.4's
 "anomaly" (a metric artifact), §28.4's precision (withdrawn), and this frame
 (a false positive) — while every *qualitative* claim has survived untouched.
 
+## 30. E8 — the outpost gate, and the overlay that is torn down
+
+**2026-08-21, runs `20260821T140826` (outpost) and `20260821T141108`
+(explorable), loopback, build 38797, server at `12ef6b1`.** The last
+screen-side item on this channel, and the only NEGATIVE in the series.
+Predictions in `e8-predictions.md`.
+
+### 30.1 The confound, named first and defeated
+
+§26.6's claim is read off `0x00542E43` alone: the fill is drawn only when
+`MissionCliGetMap() == MISSION_MAP_GAME`. Testing it means sending a correct
+`0x00CF` to a client standing in a town — and there is a specific, known reason
+the run could produce a worthless null: **an outpost forbids attacking**
+(§25/E5). No attack, no hit, no gain, and "the ring did not fill" would be a
+statement about the attack rule rather than the display gate.
+
+**It did not fire, and the reason is structural.** The harness's `attack:10`
+does not click — it calls `begin_attack` SERVER-side, the same entry the
+`ATTACK_AGENT` arm uses, and our server does not consult the map type. So the
+outpost arm put **9 gains on the wire, exactly as the explorable arm did**, and
+that precondition was checked before a single pixel was measured.
+
+### 30.2 The A/B
+
+Same map (148), same bar, same walk, same nine gains. One flag differs:
+
+| arm | slot | fill@10 | fill@25 | mean RGB before | mean RGB after |
+|---|---|---|---|---|---|
+| **A outpost** | 2 (317) | **0.0%** | **0.0%** | (197,122,48) | **(197,122,48)** |
+| **A outpost** | 3 (318) | **0.0%** | **0.0%** | (154,111,52) | **(154,111,52)** |
+| **A outpost** | 4 (319) | **0.0%** | **0.0%** | (137,85,33) | **(137,85,33)** |
+| B explorable | 2 (317) | 100.0% | 100.0% | (103,64,27) | (220,143,58) |
+| B explorable | 3 (318) | 100.0% | 100.0% | (82,59,29) | (177,134,63) |
+| B explorable | 4 (319) | 100.0% | 100.0% | (72,46,20) | (158,102,40) |
+
+**P19 CONFIRMED.** In the outpost the three rings do not move — and not merely
+"below threshold": the mean colour of every adrenal slot is **byte-identical
+before and after nine gains**. **P20 CONFIRMED**: the same rig, one flag
+changed, fills all three. Non-adrenal controls sit at 0.0% in both arms.
+
+### 30.3 The overlay is torn down, not merely unfilled — and the colours say so
+
+The result is better than the null it was designed to produce. Compare the two
+arms' *starting* states: an uncharged adrenal icon in an EXPLORABLE is **dark**
+(103,64,27), while the same icon in an OUTPOST is **bright** (197,122,48) —
+brighter than the explorable's fully-charged state is dark. So the outpost is
+not showing an empty ring; it is showing **no ring at all**.
+
+That is exactly what `0x00542E43`'s `jne` path does, and this is its first
+confirmation from outside the disassembly: the branch sends msg `0x59` with a
+NULL payload, `GmCtlSkImage` substitutes `{0,0}` and **destroys the overlay**
+(`call 0x631220`). Three distinct on-screen states, all now observed:
+
+| state | slot 2 mean RGB | what it is |
+|---|---|---|
+| outpost, any adrenaline | (197,122,48) | no overlay — the plain icon |
+| explorable, 0 units | (103,64,27) | overlay present, ring empty |
+| explorable, full | (220,143,58) | overlay present, ring full |
+
+The darkening a player reads as "not ready yet" is therefore **part of the
+adrenaline overlay**, not a property of the icon — which also retires, from the
+other direction, §25's early guess that slot darkening might be an
+affordability grey. It is neither affordability nor the selection border: it is
+the empty state of a ring that only exists where the ring is drawn.
+
+### 30.4 What this closes, and the one thing it does not
+
+Every screen-side claim about this channel is now observed: the charge (§27),
+the spend and the cross-pool tax (§28), the wipe (§29), and the map gate here.
+**What is still static-only** is the *reason* for the gate — nothing observed
+says why ArenaNet tears the overlay down in towns rather than leaving a stale
+ring, and the disassembly does not say either. Not worth a probe; worth not
+claiming.
+
