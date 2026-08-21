@@ -2169,12 +2169,14 @@ PET_REMOVE`** `[agent_id]` and **`0x00B4 PET_RENAME`** `[agent_id, string16(32)]
 already added"*. All three are in `schema/overrides.json` at medium confidence —
 static-only, and this repo has never sent or captured one.
 
-Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears **six**
-sibling containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
+Frontier, recorded rather than chased: the despawn sweep `0x00F8` clears ~~six~~
+**SEVEN (corrected §31.3 — a seventh walked inline at `+0x5BC`, missed here)** sibling
+containers off the same context with one agent id (`+0xAC`, `+0x508`, `+0x584`
 hero, `+0x6AC` pet, `+0x6BC`, `+0x6F0`), and the last two are wholly unread —
 `PtMinionRoster.cpp` is in the assert surface and is the obvious candidate for one.
 The method that cracked the pet container in one call is the one to repeat: read the
-log format string on the not-found path.
+log format string on the not-found path. *(Settled §30.4/§31: the minion guess was
+refuted, and both "unread" rows were already read in neighbouring studies.)*
 
 
 ### 28.13 The appearance pair IS the content row's `(file_id, model_id)` — §28.1's role names were backwards (2026-08-19)
@@ -2450,7 +2452,11 @@ own**. Eight dwords end at `+0x43`, so a count above 8 walks over the disabled b
 and the equipment block. The wire descriptor caps it at 8, so a conformant sender cannot
 trip it — ours must respect that cap deliberately rather than by luck.
 
-### 30.4 The minion answer: there is no minion message, and PtMinionRoster is not in this family
+### 30.4 The minion answer: no minion message declares MEMBERSHIP, and PtMinionRoster is not in this family
+
+*(Heading corrected 2026-08-19 by §33. It read "there is no minion message", which was one
+generalisation too far: `0x0093` is a minion message carrying a per-agent COUNT. Everything
+below is about MEMBERSHIP -- which agents ARE minions -- and stands unchanged.)*
 
 The standing guess that `PtMinionRoster.cpp` consumes one of the unread containers is
 **REFUTED by reading its consumer.** Both of its list accessors resolve the TLS root and
@@ -2473,15 +2479,830 @@ One payload detail worth keeping for anyone replaying these events: on the ADD e
 
 ### 30.5 Where the family stands
 
+*(Table completed in place 2026-08-19, same day — the two open rows and a seventh the
+sweep walks inline that this section did not know about. Full record: §31.)*
+
 | container | what it is | opcodes | status |
 |---|---|---|---|
-| `+0xAC` | — | — | unread |
-| `+0x508` | — | — | unread |
+| `+0xAC` | per-agent ATTRIBUTES (`attribState`, ChCliAttrib) | `0x0036`..`0x003B` — six, contiguous | read (§31.1) |
+| `+0x508` | per-agent BUFFS (`BuffState`, ChCliBuff) | `0x003F`..`0x0044` — six, contiguous | read (§31.2) |
 | `+0x584` / `+0x594` | hero activation / hero pool | `0x0072`, `0x0074`, `0x0073` | read (§29) |
+| `+0x5BC` | per-agent MINION COUNT (GmEffect's feed) | `0x0093` | read (§31.3, named §33) |
 | `+0x6AC` | pets | `0x00B2`/`B3`/`B4`, mirrored by `0x0062`/`0x0063` | read (§28.12) |
 | `+0x6BC` | per-agent professions | `0x00B7`, `0x00B6` | read (§30.1) |
 | `+0x6F0` | per-agent skill bar (`hotKeyState`) | `0x0064`, `0x0065` | read (§30.2) |
 
-Four of six read, six new opcodes named across today, and the two that remain are the
-cheapest next targets — the method is now routine: start at the remover the despawn sweep
-names, read the log string on the not-found path, then find the sibling branch.
+~~Four of six read, six new opcodes named across today, and the two that remain are the
+cheapest next targets~~ — **all seven are now read (§31), and the closing prediction
+half-missed**: the method was run and worked, but neither remaining container needed new
+reading. Both were already read, in full, in neighbouring studies that this table never
+joined.
+
+## 31. The last two containers — both were ALREADY READ, and the join was the missing work (2026-08-19)
+
+One workflow: five tracers over build 38833, three skeptics re-deriving every load-bearing
+claim from fresh disassembly. Some forty claims; three refuted, four downgraded, the
+structural core confirmed throughout — the refutations are recorded in-line below where
+they changed a reading.
+
+**The headline is not the containers, it is the repo.** `+0xAC` is the `attribState`
+structure [heroes §12.1/§13.1](../heroes/FINDINGS.md) mapped byte-by-byte on 2026-08-16.
+`+0x508` is the `BuffState` structure [skillcast §14](../skillcast/FINDINGS.md) mapped on
+build 38797 — a section whose own prose says *"reached through a sub-object at
+`charContext + 0x508`"*. §30.5 filed both as "unread" while sitting in the same repository
+as both answers. That is the heroes-§13.1 failure — *"the thing was known, in a
+neighbouring study, and not connected"* — twice more, and this time the disconnect was
+cheap only because the re-derivation was: the tracers reproduced skillcast §14's wire
+table field-for-field before anyone noticed §14 existed.
+
+What the session genuinely adds: the joins; the **full ChCliAttrib opcode family** (six,
+where heroes knew two); meanings for heroes §13.1's three anonymous sub-arrays; the
+BuffState record byte-complete with its event set; a **seventh container** the sweep
+walks inline that §28.12 miscounted past; and six earned schema names.
+
+### 31.1 `+0xAC` = `attribState` — and the family is SIX opcodes, not two
+
+**OBSERVED, skeptic-confirmed with a positive control.** The `0x00F8` sweep's `+0xAC`
+remover `0x00819850` (stride `0x43C`, finder `0x00819390(agent, &idx)`) asserts in
+`ChCliAttrib.cpp`, and every path — creator, resolver, finder, remover, dequeuer —
+consumes `charCtx[+0x2C]+0xAC` directly, no re-bias. The §29.1 aggregate trap was tested,
+not assumed: the skeptic first re-read the `+0x584` remover `0x0081D8D0`, which VISIBLY
+commits the trap (`lea ecx,[ebx+0x10]` into a second array mid-function), proving the
+method can see one, then found nothing of the kind in `0x00819850`.
+
+**Six contiguous thunks at `0x0080EA80`–`0x0080EB65`, each `add ecx,0xAC` and nothing
+else, map one-to-one onto opcodes `0x0036`–`0x003B`** (each thunk has exactly one caller
+in the `0x0091D8xx`–`0x0091D97x` handler band; matched against table `0x00bc8f68`; the
+block ends cleanly at `0x0080EB70`, which biases `+0x80C` — a different module):
+
+| opcode | worker | what it does | event |
+|---|---|---|---|
+| `0x0036` | `0x008198D0` | **dequeue + UNAPPLY** the front pending modifier, asserting `ChCliAttrib:295` `mod->sequence == sequence`; reverts via `0x0081A460` (subtracts from `attrib[i]+8/+0xC` and `attribPointsAvail`, floors at 0); appends the sequence to record`+0x410` | — |
+| `0x0037` | `0x008199C0` | the CREATOR (`:313` `!attribState`) — known, heroes §13.1 | — |
+| `0x0038` | `0x00819A30` | sets `attribPointsAvail`, then REPLAYS the queued deltas (`:327`) | `0x1000002E` |
+| `0x0039` | `0x00819AF0` | writes one wire dword to record`+0x438` (`:352`) | `0x1000002F` |
+| `0x003A` | `0x00819C00` | BULK FILL (`:368`): drains the `+0x400` queue, binary-inserts into `+0x424`, mints fresh modifiers via `0x00819270`, calls `0x00819EF0` — known, heroes §13.1 | `0x10000030` per element |
+| `0x003B` | `0x00819B50` | SINGLE-attribute set into `+0x424` (`:409`), calls `0x00819EF0` | `0x10000030` |
+
+**This gives heroes §13.1's three anonymous Array headers their meanings**: `+0x400` is a
+**pending-modifier queue** (16-byte stride, sequence-carrying), `+0x410` collects
+**processed sequences**, `+0x424` is **the attribute store** the setters binary-insert
+into. The sequence/queue/revert shape reads like the server-reject half of a client-side
+attribute-spend prediction (RECONSTRUCTION — the c2s side has not been read; whether a
+c2s spend message carries a matching sequence is the cheapest test). `+0x438`'s meaning
+stays NOT FOUND — `0x0039` exists to write it and nothing read names it.
+
+> **BOTH SETTLED THE SAME DAY, §32 — the cheapest test was the right one.** The
+> RECONSTRUCTION is **CONFIRMED**: c2s `0x000E`/`0x000F` carry exactly
+> `[agent, sequence, attribute]`, the client predicts locally before sending, and
+> `0x0036` is the ACK that retires the prediction. Two refinements to this paragraph:
+> `+0x410` is a **LIFO stack of retired sequences the allocator pops from**, not a
+> write-only log, and `+0x420` is its fresh counter. **`+0x438` is the attribute-point
+> TOTAL** (§32.5) — 200 in all 8 live sightings of `0x0037`, and corroborated by
+> `studies/unitsetup`, which named `0x0039` from a level-up burst by a different route.
+
+Two more wire facts. `0x00B7` AGENT_PROFESSIONS reaches attribState exactly as heroes §14
+said from the other side: its handler's worker `0x00813980` writes the `+0x6BC` profession
+store, then biases `+0xAC` and calls the `:435` checker — one opcode, both stores, in that
+order. And the non-wire setter family behind `ChCliAttrib:42/:43/:102` (`0x00818A90` →
+Apply `0x00818780`) is reached through a four-instruction shim at `0x008AB070` with
+**zero direct callers** — vtable-reached from somewhere unread, so "not wired to any
+opcode" is DOWNGRADED to "not directly wired; indirect caller unknown" (the skeptic's
+correction — the tracer's chain was right, the conclusion overreached).
+*(**Read the same day, §32.6:** `0x008AB070`'s address occurs exactly once in the image,
+in a six-entry function-pointer table immediately after the string
+`P:\Code\Gw\Ui\Game\Attributes\AttribBtns.cpp` — it is the attribute panel's **minus
+button**, and `0x008AB080` the plus. The original "not wired to any opcode" was right
+after all, now with a closed ancestor set and a positive control behind it.)*
+
+**Names: held.** No log format string names these APIs (this module asserts, it does not
+log), so there is no client-own name to take, and the mechanisms alone would make the
+names inference — the `0x0017` lesson. `0x0037`/`0x003A` keep their working names in
+`authsrv.py`; the other four are recorded here by mechanism and wait for either the c2s
+read or a probe.
+
+### 31.2 `+0x508` = `BuffState` — skillcast §14, joined, re-derived on 38833, and finished
+
+**OBSERVED, and independently re-derived before the collision was noticed.** The tracers
+walked remover → log strings → thunks → handlers → table and reproduced
+[skillcast §14](../skillcast/FINDINGS.md)'s entire result on the second build: opcodes
+**`0x003F`–`0x0044`**, six contiguous, 1:1:1 chains with zero fan-in (every thunk and
+every API body has exactly ONE direct caller), APIs named by the client's own log format
+strings — `BuffSourceAdd`, `BuffSourceRemove`, `BuffTargetAdd` (two overloads, one pooled
+string), `BuffTargetExtendTimed`, `BuffTargetRemove`. 38833 VAs: bodies
+`0x0081CC80`/`0x0081CDF0`/`0x0081CEC0`(sourced)/`0x0081CF70`(timed)/`0x0081D020`/`0x0081D100`;
+thunks `0x0080EEC0`/`EEF0`/`EF10`/`EF40`/`EF70`/`EFA0` — **byte-identical VAs to 38797**;
+handlers `0x0091DA00`..`DAE0`, the whole block shifted +0x60 from 38797, bodies ~+0x50.
+Wire shapes match `schema/messages.json`'s imported descriptors and skillcast §14.3
+field-for-field.
+
+**The record, now byte-complete** (skillcast §14.2 had the two lists; the header
+internals are new):
+
+```
++0x00  agent id (outer sort key -- the array is kept sorted: the insert
+       reuses the finder 0x0064AAE0's out-param index)
++0x04  SOURCE array {ptr, capacity, count, growIncrement}, elements 0x10:
+         {+0x00 skill, +0x04 CONTESTED, +0x08 buffId, +0x0C targetAgent*}
++0x14  TARGET array {ptr, capacity, count, growIncrement}, elements 0x18:
+         {+0x00 skill, +0x04 CONTESTED, +0x08 buffId, +0x0C sourceAgent,
+          +0x10 duration float, +0x14 timestamp from 0x0046B4E0}
+```
+
+`sourceAgent` at target-entry `+0x0C` is named by the client's own assert
+(`ChCliBuff:235` `!buffTarget->sourceAgent`); `targetAgent` at source-entry `+0x0C` is
+RECONSTRUCTION by symmetry — nothing reads it back in any function read. The embedded
+arrays are sorted by **buffId**: the dup-check `0x0081C7C0` is a binary search on entry
+`+0x08`. The two `+0x04` dwords were skillcast §14.4's CONTESTED field
+(Headquarter `effect_type` vs GWCA `attribute_level`) — **settled the same day by the
+`buff_type_field` probe: it is the ATTRIBUTE RANK the effect's tooltip renders at,
+GWCA confirmed, Headquarter refuted twice over (skillcast §14.7)** — with one correction
+from the wire skeptic: on `0x3F`/`0x41` that field rides **wire field 4**
+(`struct+0x10`); field 3 is the skill.
+
+**The frame-bus event set, new** (skillcast §14 had only `0x10000055`):
+
+| opcode | event | payload |
+|---|---|---|
+| `0x3F` SourceAdd | `0x10000062` | `{agent, entry*}` |
+| `0x40` SourceRemove | `0x10000063` | `{agent, buffId}` |
+| `0x41`/`0x42` TargetAdd (both) | `0x10000055` | `{agent, entry*}` |
+| `0x43` ExtendTimed | `0x10000056` | `{buffId, wire f2, new duration}` |
+| `0x44` TargetRemove | `0x10000057` | buffId by value |
+
+The two TargetAdd overloads hold skillcast §14's structural split exactly, from the
+bytes: the sourced form (`0x41`) hardcodes duration `0.0f` (`fldz`) and timestamp 0 and
+never calls the clock; the timed form (`0x42`) hardcodes `sourceAgent = 0` and stamps
+`+0x14` from `0x0046B4E0`. `0x43`'s wire field 2 is stored nowhere — it is forwarded ONLY
+into the event payload, a field that exists for the UI and never touches the record.
+
+**Two previously-unread enumerator getters close the loop to the UI**: `0x0081C6A0`
+(walks the source array, stride 16) and `0x0081C6E0` (target, stride 24), thunks
+`0x0080DA60`/`0x0080DA80`, called from four sites in the `0x0052xxxx` GmEffect band and
+from nowhere in the handler band — an independent corroboration of both strides and both
+header offsets from code none of the prior passes had read.
+
+Mechanics worth keeping: the remover `0x0081CBC0`'s gap-closer `0x0081C230` is a
+**per-record deep-copy assignment** (one 0x24 record per iteration), not a memmove, and
+the tail-slot free is ownership-correct — though the tracer's mechanism for WHY was
+refuted (`0x007207B0` skips its free entirely when capacities already match; the
+no-double-free conclusion survives on that different basis, RECONSTRUCTION). `0x007207B0`
+itself is the 16-byte-element instantiation (`shl eax,4` hardcoded), not a generic — the
+24-byte target array reaches `0x00478970` instead.
+
+Completeness, measured: **seven** opcodes touch this container (the six plus the `0x00F8`
+sweep), and every `charCtx+0x508`-forming instruction in the image is accounted for
+(eight `add`-form sites, four `lea`-form). Live corpus (prior counts, not re-measured):
+`0x41` ×4, the other five ×0 — so `0x41`'s field map has retail witnesses and the rest
+are static-plus-two-builds.
+
+**Named in `schema/overrides.json`**: `BUFF_SOURCE_ADD` (0x3F), `BUFF_SOURCE_REMOVE`
+(0x40), `BUFF_TARGET_ADD` (0x41), `BUFF_TARGET_ADD_TIMED` (0x42),
+`BUFF_TARGET_EXTEND_TIMED` (0x43), `BUFF_TARGET_REMOVE` (0x44). The four whose names are
+the client's own strings verbatim file at high (two independent derivations, two builds,
+skeptic-verified); `0x41`/`0x42` file at medium because the client pools one name over
+both overloads and the `_TIMED` split, though measured, is our annotation. ldufr's
+`EFFECT_UPKEEP_*`/`EFFECT_*` names stay recorded as UPSTREAM-directionally-wrong per
+skillcast §14.1.
+
+### 31.3 The sweep clears SEVEN, not six — `+0x5BC` is GmEffect's per-agent value feed
+
+§28.12 said "six sibling containers" and the sweep walks a seventh, inline, between the
+remover calls: `charCtx+0x5BC` is a standard array header (`{ptr +0x5BC, capacity +0x5C0,
+count +0x5C4, allocCtx +0x5C8}` — the skeptic's addition; the sweep's bare
+`+0x5BC`/`+0x5C4` pair is that header, not ad-hoc fields) of **8-byte `{agentId, value}`
+entries**. The sweep removes the FIRST match by swap-with-last and silently no-ops on a
+miss (`Array:951` guards the hit path only — all OBSERVED, re-derived instruction by
+instruction).
+
+Its writer is **opcode `0x0093`** (`[agent_id, dword]`, 10 bytes; single chain
+`0x0091EB5C` → `0x00812060`), and the writer's real semantics are the skeptic's find, not
+the tracer's: the scan **updates EVERY matching entry and then falls through to an
+UNCONDITIONAL append** — there is no else. Repeated `0x0093` sends for one agent append
+duplicates; the getter and the sweep each act on the first match only. So the structure is
+an append-style list with first-match-wins reads, not a keyed table — and that is an
+operational hazard for any server that re-sends state on reconnect. The writer posts frame
+event `0x10000046`.
+
+The consumer side: getter `0x0080E660` (`Find(agentId) -> value-or-0`), three callers in
+GmEffect.cpp — and one of them (`0x005246E0`) carries the identification alone: it guards
+on `GmEffect:3039` `m_agentId` and pushes that exact field as the getter's key. "Per-agent,
+keyed by the field ArenaNet calls `m_agentId`, consumed by GmEffect" is therefore
+OBSERVED; **"upkeep/maintained-effect value" is band-level RECONSTRUCTION** — the
+`CTL_EFFECT_UPKEEP` assert the tracer cited sits ~0x650 bytes and several functions away
+from the caller it was attributed to. **REFUTED and replaced 2026-08-19, §33: the value is a
+MINION COUNT**, named by the client's own display template (`'You are currently controlling
+%num1% minion[s].'`) with the value as `%num1%`. Being wary of the band-level guess was
+right — the guess was wrong. *(Sharpened by the `buff_side` probe the same day,
+skillcast §14.8: the upkeep monitor's icon draws from the SOURCE list alone with no
+`0x0093` sent, so whatever this table feeds GmEffect, it does not gate that icon.)*
+That mis-attribution is the `asserts.py --at`
+function-boundary overrun, which this session hit **twice** (it also over-scans past
+BuffSourceAdd/Remove's real ends) — the tool's own floor caveat, now with two more
+sightings. What the value dword IS stays NOT FOUND; `0x0093`'s name is held with it.
+
+### 31.4 What the skeptics changed, and the method note
+
+Three refutations that mattered: the wire tracer's roll-up misplace of the contested
+field (§31.2); the `+0x5BC` writer's "upsert" (§31.3 — it is update-all-then-append);
+and a capacity-grow formula clean-up (`0x004739C0` returns `growIncrement +
+currentCapacity` on one path and DOUBLES the stored growIncrement through the caller's
+pointer as a side effect — recorded here because anyone modelling these arrays will hit
+it). Downgrades: the `0x008AB070` shim (§31.1), `0x007207B0`'s genericity, the
+double-free reasoning, and the ChCliBuff completeness framing (six opcodes → seven
+touchers plus two enumerator APIs).
+
+Method: the "routine method" held — remover → module attribution → log string → sibling
+branch — but the step that actually closed both rows was `asserts.py --at` on the
+remover, which named the MODULE, which named the study that had already done the work.
+**Check the studies index for the module name before tracing anything.** The join is
+cheaper than the re-derivation, and this repo now has three data points saying the join
+is the step that gets skipped.
+
+## 32. The c2s side of the attribute family — a CLIENT-PREDICTION protocol, and the sequence is its handle (2026-08-19)
+
+§31.1 left `0x0036` read but unexplained: it dequeues a pending modifier and asserts
+`mod->sequence == sequence`, so *something* must mint that sequence, and the section's own
+next action was "read the c2s side for a sequence-carrying spend first." It does, and the
+answer is bigger than the sequence: **the attribute panel is a client-side prediction
+system with server reconciliation**, and this is the first such protocol identified
+anywhere in this repo.
+
+Five tracer reads plus a full skeptic pass on build 38833, then the whole thing found in a
+live retail capture. Four of the eight static claims came back corrected — all recorded
+below where they land, because two of them were mine.
+
+### 32.1 The loop
+
+```
+player clicks + or - on the attribute panel
+  | client, in this order (the order is measured, and it is not the obvious one)
+  |   1. append a 16-byte modifier slot to the pending queue at attribState+0x400
+  |   2. THEN allocate its sequence   (§32.2 -- the slot comes first)
+  |   3. write the modifier {sequence, attribute, rank delta, points delta}
+  |   4. APPLY it locally            0x00818780
+  |   5. recompute the derived costs 0x00818E40   (§32.4)
+  |   6. post frame 0x10000030 {agent, ENTRY POINTER}
+  |   7. send
+  c2s -> 0x000F ATTRIBUTE_INCREASE  [agent, sequence, attribute]   0x00818CE0
+         0x000E ATTRIBUTE_DECREASE  [agent, sequence, attribute]   0x00818A90
+  s2c <- 0x0036  [agent, sequence]                   retire prediction #sequence
+         0x0038  [agent, pointsAvailable]            authoritative
+         0x003B  [agent, attribute, base, effective] authoritative
+```
+
+**The three-message reply is an invariant, not a tendency: 14 of 14** in capture
+`20260818T132739`, every one at the same timestamp on the same connection. The other
+grouping in that corpus is `(0x0037, 0x003A)` — create-then-bulk-fill — **8 of 8**. Those
+two shapes are the entire s2c attribute vocabulary as retail uses it.
+
+`0x0036` is the ACK. Its worker **reverts first, then erases** (a correction to the order
+§31.1 implied), and pushes the retired sequence back onto the stack it came from — the
+client discards its guess precisely because the authoritative `0x0038`/`0x003B` are
+arriving in the same frame.
+
+### 32.2 The sequence is a LIFO stack index, which is why the corpus only ever shows 0
+
+**CORRECTED from §31.1, twice.** `+0x410` is not merely "processed sequences" and not a
+free *list*: it is a **LIFO stack** (`dec count; index` to pop, `store; inc count` to
+push), and `+0x420` is a fresh counter the constructor initialises to **0**. So a player
+spending one point at a time pops nothing, takes fresh sequence 0, and gets it handed
+straight back by the ACK — forever.
+
+The corpus agrees and explains itself: **all 14 spends carry sequence 0**, and the timing
+says why rather than leaving it a coincidence — acks land **25-48 ms** after each send
+while consecutive sends are **128-167 ms** apart, so the queue is never more than one
+deep. **Refutable prediction on record:** click faster than the round trip and sequence 1
+must appear.
+
+### 32.3 The arithmetic — nine transitions, both directions, zero free parameters
+
+The modifier's points delta is `+[record+i*20+0x10]` on the decrease path and
+`-[record+i*20+0x14]` on the increase path, and §32.4 shows both are recomputed from
+`s_attribPoints`. So the wire is fully predicted by a table read out of the same binary:
+
+| direction | series (capture `20260818T132739`) | rule |
+|---|---|---|
+| **increase** `0x0F` | points 74 -> 65 -> 54 -> 41 -> 25 -> 5 while rank climbs 7 -> 12 | spend = cost of the rank REACHED |
+| **decrease** `0x0E` | points 5 -> 25 -> 41 while rank drops 12 -> 10 | refund = cost of the rank LEFT |
+
+`s_attribPoints` = `[1,2,3,4,5,6,7,9,11,13,16,20,-1]` (`attribpoints.py`, sum 97 to rank
+12 — the published figure, corroborated against GWW in
+[heroes §12.4](../heroes/FINDINGS.md)). Nine transitions, every one exact. This is the
+check the house style asks for: it has no fitted parameter and the artifact could have
+refuted it at any of the nine.
+
+`0x003B`'s two values are `base` and `base + item bonus`: attribute 20 ran (10,11),
+(11,12), (12,13) across the series while 17 and 21 stayed (8,8) and (10,10). Cross-checked
+against `0x003A`'s column-major array, whose three parallel runs are **ids, base values,
+effective values** — `[17,20,21, 8,12,10, 8,13,10]` — which is what `authsrv.py`'s
+"measured column-major builder" has been emitting blind.
+
+### 32.4 `0x00818E40`, the piece nobody had read — costs are DERIVED, and it enforces the primary rule
+
+Both setters call it right after applying, and it is the reason `+0x10`/`+0x14` are always
+right: it **recomputes them from the new rank** via two thin readers of `s_attribPoints`
+one dword apart (`s_attribPoints[rank-1]` = the refund for the rank you hold,
+`s_attribPoints[rank]` = the price of the next). Then it prices the attribute **-1 —
+refuse — in three cases**: no profession, a profession this character does not have, or
+*an attribute that is some profession's PRIMARY when that profession is not this
+character's primary*. That last is the game's own "you cannot raise Strength as a
+secondary Warrior" rule, sitting in the client as one flag test.
+
+The flag comes from `s_attrib` (`ConstAttrib.cpp`, 51 x 20 B at `0x00A35740`,
+`{profession, selfIndex, nameStringId, descStringId, isPrimary}`) — and the check with no
+free parameter is that **isPrimary is set on exactly ten rows, one per profession 1..10**:
+attributes 0, 6, 12, 16, 17, 23, 35, 36, 40, 44 — Fast Casting, Soul Reaping, Energy
+Storage, Divine Favor, Strength, Expertise, Critical Strikes, Spawning Power, Leadership,
+Mysticism, in the published attribute-id order. [heroes §14.2](../heroes/FINDINGS.md)
+found the same ten rows from the other end; this is that reading confirmed by its
+consumer.
+
+**`s_attribPoints[12] = -1` is the rank cap**, so at rank 12 the increase path is refused
+by the very same test that refuses an unowned attribute. One sentinel, two rules.
+
+### 32.5 `+0x438` is the attribute-point TOTAL — §31.1's last NOT FOUND, closed by a cross-arc join
+
+Two lines settle it: `0x0037`'s creator writes its 3rd wire field to `+0x434`
+(`attribPointsAvail`) and its **4th to `+0x438`**, and `0x0039`'s worker writes its single
+wire dword to that same `+0x438`. In the live corpus `0x0037`'s 4th field is **200 in all
+8 sightings** — the wiki's level-20 attribute-point maximum, the number
+[heroes §12.4](../heroes/FINDINGS.md) recorded as what `attribPointsAvail` counts down
+from.
+
+And [studies/unitsetup](../unitsetup/FINDINGS.md) named `0x0039` **total attribute points**
+one day earlier, from a level-up burst checked against the wiki's per-level table
+(`0x0039 [agent, 10]` at a level-up to 3) — a completely different route, different
+capture, different arc. Two witnesses that share no method name the same field. **This is
+the third time in two days that a §31 question was answered by a study that already had
+it**, which is now less a coincidence than a finding about how this repo loses work.
+
+### 32.6 Reached only from the UI, proven with a positive control
+
+None of the three senders is reachable from the receive-handler band. The skeptic did not
+take `codescan --xrefs` for this: an independent scanner recovered 26,282 function starts
+from int3 runs, attributed every `E8`/`E9` rel32 to its enclosing function, swept all five
+sections at every alignment for each target's literal bytes, and reverse-BFSed the call
+graph. All three ancestor sets are **closed and tiny**, terminating in two UI modules:
+
+| sender | ancestors | terminal module |
+|---|---|---|
+| `0x00818A90` decrease | `0x0080D8D0` -> `0x008AB070` | `Ui\Game\Attributes\AttribBtns.cpp` |
+| `0x00818CE0` increase | `0x0080D990` -> `0x008AB080` | same, sibling slot |
+| `0x00818DF0` template | `0x0080D9B0` -> `0x0058ACC0` | `Ui\Game\Templates\TemplatesHelpers.cpp` |
+
+**Two corrections to §31.1 here.** The increase thunk is `0x0080D990`, **not** the
+`0x0080D970` this arc has been carrying (that is a different one-argument function). And
+§31.1's `0x008AB070` "vtable-reached from somewhere unread" is now read: its address
+appears **once** in the image, in a **six-entry function-pointer table immediately
+following the string `P:\Code\Gw\Ui\Game\Attributes\AttribBtns.cpp`** — the plus/minus
+button handlers. Not a mystery, a button.
+
+The positive control matters and was run: the same scanner against `0x008198D0` — a
+function independently proven network-reached — finds its caller and walks up to the
+`0x0036` table entry. A negative from a tool that cannot find a known positive is worth
+nothing.
+
+### 32.7 The third sender: `0x0010` is a template apply, and it is NOT predicted
+
+`0x00818DF0` (args: agent, count, attribute-id array, rank array) asserts the record
+exists, **discards it**, and forwards everything to the `0x0010` framer. It appends no
+modifier, calls neither the applier nor `0x00818E40`, and posts no frame — so a template
+apply is **send-only, with no local prediction at all**, unlike every single-point spend.
+Its caller passes a build template's two 12-dword arrays (ids, then ranks) after checking
+`targetPrimaryProf == templateData.profPrimary`.
+
+That also refines a verdict from [heroes §13](../heroes/FINDINGS.md): the template system
+was called "a RED HERRING… the player's save-my-build UI, not a delivery mechanism," on a
+reachability closure containing zero message handlers. Correct about *delivery* — and it
+does reach the wire, outbound, by this path. That closure was over s2c handlers; this is
+c2s.
+
+### 32.8 Two latent defects in the client, recorded because they are load-bearing for a server
+
+- **`0x0010`'s clamp exceeds its buffer.** The framer clamps each count to `0x40` but its
+  stack buffer holds **16** entries per array: `count >= 17` corrupts the second length
+  prefix and `count >= 32` walks the return address. Unreachable today (its only caller
+  passes 12), but **a server must never invite a client to send more than 16** — and our
+  server, if it ever emits attribute templates, inherits that cap as a hard rule.
+- **The decrease path has no bound check.** `0x00818CE0` asserts
+  `attrib < arrsize(attribState->attrib)` (`ChCliAttrib:177`); `0x00818A90` indexes
+  `[record + attrib*20 + 8]` with no check at all, and its thunk does not check either.
+  Latent rather than live — the button handler cannot produce a bad index.
+
+### 32.9 What this gives the server, and what it costs
+
+`studies/review` flagged long ago that **"you sat there spending attribute points and the
+server had nowhere to put them"** — `0x000E`/`0x000F` arriving x9 and unhandled. Our
+server still has no arm for any of the three. It now has a complete spec:
+
+> On `0x000F [agent, seq, attr]`: validate `attr < 51`, that the character owns the
+> attribute's profession and that a primary attribute belongs to the primary profession,
+> and that `pointsAvailable >= s_attribPoints[rank]`. Then reply, in one frame:
+> `0x0036 [agent, seq]`, `0x0038 [agent, pointsAvailable]`,
+> `0x003B [agent, attr, base, base+bonus]`. `0x000E` is the mirror with
+> `s_attribPoints[rank-1]` refunded.
+
+**The client will keep its prediction if the ACK never comes** — the modifier stays queued
+and `0x00819270` *re-applies every pending modifier for an attribute on top of each fresh
+authoritative value* (which is the single strongest piece of evidence that this queue is
+what this section says it is). So a server that sends `0x0038`/`0x003B` without `0x0036`
+does not merely leak a queue entry: it gets the client's guess re-stacked on top of its own
+authority, every time.
+
+### 32.10 Corrections this section owes
+
+Four claims of mine fell to the skeptic and are fixed above rather than quietly dropped:
+the increase thunk address (§32.6), the step order and the `0x10000030` payload — which
+carries the **entry pointer**, not the sequence (§32.1) — the "free list" that is a LIFO
+stack (§32.2), and the send pipeline: `0x00491DE0` is a **nullary getter for the connection
+object**, not a packet builder, so the real shape is `0x007DCF00(conn, len, buf)` and the
+two pushes before the getter belong to *its* call. Also confirmed-with-precision: the
+applier's clamps are **one-sided**, running only when a delta is negative.
+
+Named in `schema/overrides.json`: c2s `ATTRIBUTE_DECREASE` / `ATTRIBUTE_INCREASE` /
+`ATTRIBUTE_LOAD` (0x0E/0x0F/0x10 — upstream's names, previously its weakest evidence tier
+and now measured), and s2c `ATTRIBUTE_SPEND_ACK` (0x36), `ATTRIBUTE_POINTS_AVAILABLE`
+(0x38), `ATTRIBUTE_POINTS_TOTAL` (0x39, high — two independent arcs) and
+`AGENT_UPDATE_ATTRIBUTE` (0x3B).
+
+## 33. `0x0093`'s value dword is a MINION COUNT — the client's own sentence says so (2026-08-19)
+
+§31.3 left this as the container family's last open field: `charCtx+0x5BC` holds 8-byte
+`{agentId, value}` entries, `0x0093` writes them, GmEffect reads them, and what the value
+*is* was **NOT FOUND**, with "upkeep/maintained-effect value" recorded as band-level
+RECONSTRUCTION. **That RECONSTRUCTION is REFUTED, the field is OBSERVED, and as of 2026-08-20 it is
+CONFIRMED ON A CLIENT (§33.5).**
+
+### 33.1 The answer, and how it was reached without guessing
+
+The corpus could not help: **0 of 114,985 s2c messages across 13 live captures** carry
+`0x0093` (one 14th capture has no `wire.jsonl` and could not be read — a floor, not a
+census). So the meaning had to come from the consumer, and the consumer states it in
+words. Caller `0x00521520` reads the value for an agent and hands it to **TextApi**
+(`0x007C9410`) as the numeric parameter of one of two templates, chosen by whether that
+agent is the local player:
+
+```
+value = GetMinionCount(agentId)             ; getter 0x0080E660, Find -> [entry+4] or 0
+if (agentId == LocalAgentId())              ; 0x0080D3E0
+     TextApi(50499, num1 = value)
+else TextApi(50498, num1 = value, str1 = AgentName(agentId))   ; 0x0080D120
+```
+
+Resolved from the owner's own archive, exactly the two ids the code pushes:
+
+```
+50499 (0xC543)  'You are currently controlling %num1% minion[s].'
+50498 (0xC542)  '%str1% is currently controlling %num1% minion[s].'
+```
+
+> **`0x0093` is `[agent_id, u32 minionCount]`: the number of minions that agent is
+> currently controlling.** The value is the template's `%num1%`, and the branch that
+> substitutes `%str1%` passes that same agent's NAME — so both the quantity and its owner
+> are named by ArenaNet's own display text rather than inferred from position.
+
+This is the "commit the id, resolve the string at run time" pattern working as evidence:
+two single resolutions cited for a specific claim, which the provenance gate permits.
+
+### 33.2 The other two consumers agree, and one of them is a numeric display
+
+All three readers of the getter sit in `GmEffect.cpp` and treat the value consistently:
+
+| reader | what it does with the value |
+|---|---|
+| `0x00521520` | renders it as `%num1%` in the two minion sentences above |
+| `0x005244F0` | non-zero -> formats it through TextApi into a UI element and sets frame code **7**; zero -> sets frame code **8** and renders no number |
+| `0x005246E0` | uses it only as a **non-zero gate** (asserting `GmEffect:3039 m_agentId` first), then acts on the AGENT id, not the value |
+
+Two of the three therefore treat "0" as *"this agent controls no minions"* — which is
+also what the getter returns for an agent that is simply absent from the array, making
+absence and zero deliberately indistinguishable.
+
+### 33.3 The wiring, end to end
+
+```
+s2c 0x0093 [agent_id, u32]   handler 0x0091EB50 -> worker 0x00812060
+    -> upserts {agent, value} into the array at charCtx[+0x2C]+0x5BC
+    -> posts frame 0x10000046
+       subscribers: 0x0052349F, 0x005239A5  (both GmEffect)
+    readers: getter 0x0080E660 -> the three consumers above
+    removal: the 0x00F8 despawn sweep clears the agent's entry (§31.3)
+```
+
+A single POST and two SUBSCRIBEs are the only three `push 0x10000046` sites in the image,
+so the event's producer/consumer set is closed.
+
+### 33.4 What this does and does not do to §30.4
+
+§30.4 answered a *membership* question — "which agents ARE minions" — and its body claim
+stands untouched: `PtMinionRoster` reads the PARTY client at `[root+0x4C]`, and a row's
+minion-ness is a monster-definition **flag test the panel performs itself**, with no
+declaration opcode. Nothing here contradicts that.
+
+**But that section's HEADING — "there is no minion message" — is one generalisation too
+far, and it is corrected in place.** There *is* a minion message; it carries a COUNT, not
+a membership, and it feeds the effects monitor rather than the roster panel. Membership
+and cardinality are different facts with different mechanisms, and the heading collapsed
+them. The honest form: *no minion message declares which agents are minions; `0x0093`
+declares how many one agent has.*
+
+### 33.5 CONFIRMED ON SCREEN — the client renders the number we send, and the plural with it
+
+**MEASURED 2026-08-20, caged loopback, two runs** (`20260820T081504` bare,
+`20260820T082018` with a buff alongside). Every clause of the prediction held, and the
+readout is the client's own sentence rather than a pixel score:
+
+| sent | effects monitor | tooltip |
+|---|---|---|
+| `0x0093 [agent, 7]` | a **minion icon appears**, the number **7** drawn on it | *"You are currently controlling 7 minions."* |
+| `0x0093 [agent, 1]` | same icon, number **1** | *"You are currently controlling 1 minion."* |
+| `0x0093 [agent, 0]` | icon **gone** | — |
+
+**`AGENT_MINION_COUNT` is raised from medium to high.** Three things make this stronger
+than "a number appeared":
+
+- **The number is ours.** 7 was chosen because it is not 0, not 1 and not a plausible
+  default; the client drew exactly 7, then exactly 1 when told 1.
+- **The plural machinery moved with it** — *"7 minions"* against *"1 minion."* That is the
+  `[s]` in template 50499 resolving, which no other field could have driven.
+- **Zero removes the row, and the second run proves the removal is SPECIFIC.** With a buff
+  icon present alongside, `0x0093 [agent, 0]` cleared the minion row and **left the buff
+  icon standing** — so "the row went" is not "the monitor went". That matches the static
+  read exactly: `0x005246E0` fetches the count, returns without creating its child frame
+  when it is 0, and the child-create at `0x00521260` asserts `GmEffect:2985
+  !FrameGetChild(ThisFrame(), effectCode)`.
+
+The icon is a fleshy-creature artwork with the count drawn over it, sitting to the LEFT of
+the buff icons in the same monitor — a sibling row, not a decoration on an existing one.
+
+### 33.6 A method failure worth more than the result: I read the wrong frames and invented a mechanism to explain it
+
+**The first run was called a null, and it was not.** It had already rendered all three
+arms perfectly. `session.py` writes screenshots under **two** names — `w*.png` during the
+`--walk` plan and `hold*.png` during the `--hold` that follows it — and with a 28–36 s
+hover the walk consumes the entire probe schedule, so **every `hold*` frame is taken after
+the probe has finished and cleaned up**. The analysis globbed `hold*`, measured zero
+changed pixels in every HUD region, and reported a clean null.
+
+What makes this worth writing down is what came next: rather than doubting the readout,
+the null got a *mechanism*. A plausible one, built from real disassembly — the minion row
+is a child frame created during a rebuild that walks the agent's buff lists, therefore an
+effects monitor must exist first, therefore a bare `0x0093` has nothing to attach to. A
+second run "confirmed" it by adding a buff and drawing the row. **Both halves were wrong:
+the row needs no buff, and the second run only looked like a fix because it was the first
+one whose frames were read from the right window.** The static reading it was built on is
+still true; the inference stacked on top of it was invention, and it survived because it
+explained an artifact.
+
+Three rules this pays for, all of which already existed in this repo and none of which was
+applied:
+
+- **Anchor frames by timestamp, not by filename glob.** The memory note says exactly this
+  and it was not consulted.
+- **A negative needs a positive control** — and one was *available for free*: the same
+  glob, on the same run, showed no buff icon either in the run that sent a buff. A
+  precondition step that visibly fails to fire is the readout telling you it is broken,
+  and it was read as data instead.
+- **Two failed explanations is the stop-and-study line.** The invented mechanism was the
+  second explanation; the first should have been "check the instrument."
+
+**Harness trap, recorded for the next session: `--walk` and `--shots` do not overlap.**
+`--shots` belongs to the hold, which begins only after the walk plan finishes. To watch a
+probe while hovering, read `w*.png`; to watch it without a walk, `hold*.png` is right.
+
+## 34. THE ARMS LANDED — a player can spend attribute points on a server we wrote (2026-08-20)
+
+§32.9 ended with a spec and a gap: the protocol was fully read, and this server still had
+nowhere to put a spend. `studies/review` had flagged that years earlier — *"you sat there
+spending attribute points and the server had nowhere to put them"* — and the blocker was
+never knowledge. It was **state**: ranks came from a content row and never moved, and the
+point budget was one constant sent for both of `0x0037`'s fields.
+
+**It works end to end.** Caged run `20260820T084923`: the operator's client opened its own
+Skills and Attributes panel, clicked the **+** beside Tactics twice, and the panel followed.
+
+| | unused points | Tactics | its arrows |
+|---|---|---|---|
+| before | **27** | 1 | ▼1 ▲2 |
+| after click 1 | **25** | 2 | ▼2 ▲3 |
+| after click 2 | **22** | 3 | ▼3 ▲4 |
+
+Every number is the client's, drawn from what we sent. The wire:
+
+```
+c2s 0x000F ATTRIBUTE_INCREASE  [agent 1, seq 0, attr 21]
+    ATTRIBUTE raise: 21 1 -> 2, 25 of 200 unspent (seq 0)
+s2c 0x0036 ATTRIBUTE_SPEND_ACK(agent 1, seq 0)
+s2c 0x0038 ATTRIBUTE_POINTS_AVAILABLE(25 of 200)
+s2c 0x003B AGENT_UPDATE_ATTRIBUTE(attr 21 = 2)
+```
+
+**And the other direction, run `20260820T085218`:** one click on the same attribute's
+DOWN chevron sent `0x000E`, and the server answered `lower: 21 1 -> 0, 28 of 200
+unspent` -- the rank-1 refund of exactly 1 point, which is `s_attribPoints[1]`. Both
+arms now have a live witness; `0x0010` does not (see 34.4).
+
+### 34.1 Three predictions from the disassembly, confirmed by a player clicking a button
+
+- **The sequence was 0 both times.** §32.2 predicted exactly this and said why: `+0x410`
+  is a LIFO stack the allocator pops from and `+0x420` starts at 0, so one-at-a-time
+  spending recycles sequence 0 forever. That was read out of a constructor and a
+  `dec`/index pair; it is now a thing that happened.
+- **The arrows RE-PRICED themselves after every click** — ▼1▲2 → ▼2▲3 → ▼3▲4. That is
+  `0x00818E40`, the function §32.4 read and nobody had read before, recomputing an
+  attribute's refund and next-rank cost from `s_attribPoints` after each change. The
+  numbers on those chevrons are the client's own arithmetic agreeing with our content
+  table, rank by rank.
+- **Strength shows a ▼20 refund and NO up arrow at all.** `s_attribPoints[12] = -1` is the
+  rank cap, and the client's increase path refuses rank 13 with the same test that refuses
+  an attribute you do not own (§32.4). The panel renders that refusal as a missing button,
+  which is the cheapest possible confirmation and it was visible before a single click.
+
+### 34.2 What was built
+
+- **`toolkit/authsrv/attribspend.py`** — the model, pure and stdlib-only: `AttributeRules`
+  (the cost curve and the 51-row attribute table) and `AttributeState` (ranks, budget,
+  and the client's refusals). No sockets, no content loading, no globals; it is handed the
+  tables and answers questions, which is what makes it testable without a client.
+- **The rules are the client's, and they are loaded rather than typed.** The cost curve
+  comes from `s_attribPoints` via a new `attribpoints.py --emit-content`
+  (`attribute_cost`, one row per rank, `client-table` provenance); the profession and
+  `is_primary` flags come from the `attribute` table `attribtable.py` already emitted.
+- **`content/world.toml` gained `points_total = 200`** on the player row. The number is
+  observed (the level-20 maximum, and `0x0037`'s fourth field in 34 of 48 live sightings);
+  giving it to *this* character is a choice, so the row stays `invented` and says so. The
+  shipped ranks sink 173 of it, which is why the panel opens with 27 to spend.
+- **Three arms**: `0x000F`, `0x000E`, and `0x0010` (a template spread, validated
+  all-or-nothing against the client's own sixteen-entry buffer).
+- **`test_attribspend.py`**, 35 checks, floor 35, one declared skip.
+
+### 34.3 Two rules the code now enforces that prose could not
+
+**A refusal still answers.** Every path sends the whole triple, including the ones that
+change nothing. The client has already drawn the spend on its own panel, so silence is the
+one reply that leaves us disagreeing with the client believing itself — and worse, §32.9's
+measured hazard applies: `0x00819270` re-applies every unretired prediction on top of each
+fresh authoritative value, so a half-answer stacks the client's guess on our own numbers,
+every time. `send_attribute_reply` has no path that skips the ack.
+
+**`0x0037` carries `(available, total)`, not one constant twice.** This is where the change
+paid a debt the arc did not know it had: `authsrv.py` carried a comment saying every live
+`0x0037` is `[0, 0]`, "8 of 8 connections", with the two fields' meaning CONTESTED. That
+was true of the two captures it was written against. The corpus is now **13 captures and 48
+sightings**, and it says something better:
+
+| payload | n | what it is |
+|---|---|---|
+| `[0, 0]` | 14 | characters with no attribute points at all |
+| `[1, 5]`, `[6, 10]` | 8 | low level, most of the budget spent |
+| `[5, 200]`, `[41, 200]`, `[65, 200]`, `[74, 200]` | 26 | level 20, 200 lifetime |
+
+The eight `[0, 0]` samples were eight low-level characters, not a universal. And the field
+order is settled a third way, independent of §32.5's static read: **field3 ≤ field4 in 48 of
+48**, which an order swap would break on the first `[1, 5]`.
+
+### 34.4 What is still not modelled, stated plainly
+
+- **Base and effective are sent equal.** `0x003B`'s two values differ only by an item
+  bonus, which this server does not model — live, attribute 20 ran (10,11) and (11,12)
+  while 17 and 21 sat at (8,8) and (10,10), so retail sends them unequal exactly when a
+  rune or weapon is involved. Equal is a stated simplification, not a reading of the wire.
+- **The state is per connection and does not persist.** A spend survives a map change
+  (the burst now sources ranks from the live state) and dies with the session.
+- **`0x0010` has never been seen on a wire** — zero live occurrences anywhere in the
+  corpus — so its arm is built to a static reading and has no witness. It is armed because
+  refusing it would leave a third of the family undone, not because anything confirmed it.
+- **The hero gets the player's budget**, because it is sent the player's default ranks; its
+  own attribute state is not modelled, since nothing lets us spend a hero's points.
+
+### 34.5 It PERSISTS — and the second source of truth it exposed (2026-08-20)
+
+§34.4 recorded "the state is per connection and does not persist" as a known limit. It is
+closed, and closing it flushed out a latent bug that had been invisible for exactly as
+long as the feature was missing.
+
+**The bug first, because it is the interesting half.** `charstore.py` has carried an
+`attributes` field — `[id, rank]` int pairs, validated at load — since 2026-08-18, and the
+spawn burst read it for `0x003A` while the balance in `0x0037` was computed from the
+CONTENT row. Two sources for one fact. They agreed on every run ever made, because nothing
+had ever written the store, and **persisting a spend is precisely the thing that pulls
+them apart**: the client would have been told one spread and a balance computed from a
+different one. The fix is not a patch but a deletion — `attribspend.seed_ranks` is now the
+single answer to "which ranks does this session start from", both paths call it, and it is
+tested from both sides.
+
+**The run, three processes:**
+
+| | wire | panel |
+|---|---|---|
+| seed from a store written by an earlier arc | `0x0037 (55 of 200)`, `0x003A 17=9, 19=12` | **55 unused**, Strength 9, Hammer Mastery 12 |
+| click Axe Mastery's **+** | `raise: 18 0 -> 1, 54 of 200`; `PERSIST: attributes saved` | 54 unused, Axe Mastery 1 |
+| **restart the server** | `0x0037 (54 of 200)`, `0x003A 17=9, 18=1, 19=12` | **54 unused**, Axe Mastery **1** |
+
+The third row is the acceptance criterion: a brand-new process, seeded only from
+`vault/state/characters/`, told the client the state the previous process had saved.
+
+That first row is also the sharpest confirmation of the cost table this arc has produced,
+and it came free. The store held `17=9, 19=12` — a spread nobody chose for this test —
+and the server computed **55 unused** from it: `s_attribPoints` cumulative to rank 9 is 48,
+to rank 12 is 97, and 200 − 145 = 55. The panel then priced every chevron to match:
+Strength ▼11 ▲13 (`[9]` and `[10]`), Hammer Mastery ▼20 and **no up arrow** (the rank cap),
+Axe Mastery ▲1 and **no down arrow** (the rank floor). Four independent numbers, none of
+them typed anywhere in this repo.
+
+**What is stored is ranks only.** The point budget stays a content fact: nothing in this
+server changes a character's lifetime total, and storing a derived number invites the two
+to disagree — the same failure this section just removed. `available` is recomputed from
+the ranks on every read, which is why the reloaded character cannot drift from the one that
+saved.
+
+**Schema, same day:** `0x0038 ATTRIBUTE_POINTS_AVAILABLE` and `0x003B
+AGENT_UPDATE_ATTRIBUTE` go **medium → high**. Both now have two lineages — the static read
+of their handlers, and their values rendered on the client's own panel across the caged
+runs above. `0x0036 ATTRIBUTE_SPEND_ACK` deliberately **stays medium**: its mechanism is
+measured, but the word ACK is our summary of what it does and no client string names it.
+
+### 34.6 Item bonuses — base ≠ effective, and the client paints the difference blue (2026-08-20)
+
+§34.4's other stated limit: `0x003B` and `0x003A` carry base *and* effective and we sent
+them equal, because nothing modelled gear. Closed — and the corpus, not a guess, is what
+specified it.
+
+**What retail actually sends.** Across all 34 `0x003A` bulk fills and all 14 `0x003B`
+singles in the vault:
+
+| | |
+|---|---|
+| gap between the two value columns | **0 or +1, and nothing else**, over 94 (attribute, sighting) pairs |
+| which attributes carry it | **attribute 20 only**, in 26 of 26 sightings of one character; 17, 21, 29, 30 never |
+| does it track the base | **no** — that character spent 20 from rank 12 down to 7 and the +1 rode along unchanged |
+
+Two properties follow, and both are traps in the same direction — treating the bonus as if
+it were a rank:
+
+- **It is DISPLAY ONLY.** Every refund in that series closed on `s_attribPoints[BASE]` —
+  20 for leaving rank 12, 16 for leaving 11. Had the bonus counted, leaving would have to
+  price *rank 13*, which has no cost at all.
+- **It is NOT CAPPED.** Retail sent effective **13** against a spend cap of rank 12, 26
+  times. Clamping to `rank_max` would emit a number ArenaNet's own server does not.
+
+**This CONFIRMS a prediction `attribute_columns` made against itself.** Its docstring has
+said since 2026-08-15 that slot 3 is "RECONSTRUCTION and the one thing here to distrust",
+read it as base vs effective-including-bonuses, noted the two are equal for a character
+wearing no runes — and closed: *"If a capture ever shows the two differing, THIS is the
+line that was wrong."* A capture does show them differing, and the reading was **right**;
+what expired is the other half of the sentence, that ours wears nothing.
+
+**Where the bonus comes from.** `content/items.toml`'s starter hammer now declares
+`attribute_bonus = [[19, 1]]`, and `equipped_attribute_bonuses()` sums that over the gear
+the server actually puts on — gated on `EQUIP_WEAPON`, so `--no-weapon` is a real control
+for this feature and collapses the two columns back to equal. The backpack is deliberately
+not consulted: a bought item is declared and placed, not worn.
+
+> **THIS IS NOT A DECODING OF ArenaNet's ITEM MODIFIERS, and the boundary matters.** The
+> real bonus lives in the two `modifiers` dwords each item carries, and nobody in this
+> repo has decoded one — [studies/character](../character/FINDINGS.md) calls it "the
+> largest hole" and it is still open. `attribute_bonus` is OUR declaration of what OUR
+> item does, sitting beside those dwords and making no claim about them. The content row
+> says so in place.
+>
+> **The hole closed the same day, the identifier was found the next, and the word is
+> now ON the item.** [studies/itemmods](../itemmods/FINDINGS.md) §5 names the attribute
+> bonus -- **543** (Stacking) and **542** (Non-stacking), `arg` the attribute and `arg2`
+> the amount -- and `content/items.toml`'s hammer now carries `0x21F81301`, composed by
+> `itemmods.py --attr-bonus 19,1`. The client draws it: hovering the equipped hammer
+> reads **`Hammer Mastery +1 (Stacking)`** (itemmods §5.6, capture
+> `20260820T113942`). The boundary paragraph above still stands, because
+> `attribute_bonus` and the word are two records of one fact and only the FIELD drives
+> this section's columns -- `test_itemmods.py` §11 fails if they ever disagree.
+>
+> **AND THE RUN SETTLED THIS SECTION'S OWN OPEN QUESTION.** With the word on the item,
+> the attribute panel shows Hammer Mastery **7** against a base of 6 -- **not 8**. Had
+> the client computed effective ranks from equipped gear it would have added the
+> modifier word on top of our `0x003A` column. It does not. The panel reads the
+> server's effective column and the tooltip reads the item's words, and they are two
+> independent paths: this section's model is confirmed by an experiment that could have
+> refuted it. Same frame, two more confirmations: the chevrons price off the BASE
+> (▼6 ▲7 at base 6 = `s_attribPoints[6]`, `[7]`), and the panel's own header reads
+> **27 unused points**, which is 200 lifetime minus the 173 those five ranks cost under
+> `attribspend`'s model, to the point.
+
+**Measured on screen, caged, both directions.** The persisted character wears the hammer
+and had Hammer Mastery at the rank cap, which reproduces retail's own 12→13 exactly:
+
+| | wire | panel |
+|---|---|---|
+| at the cap | `0x003A … base [9,1,12] effective [9,1,13]` | Hammer Mastery **13 in BLUE**, ▼20, **no up arrow** |
+| click its ▼ | `0x003B attr 19 = 11 +1 = 12`, refund 20 → 74 unspent | **12 in BLUE**, ▼16 ▲20, up arrow back |
+
+**The blue is the find.** The client has a distinct render path for an attribute that is
+above its base — Strength 9 and Axe Mastery 1 stay white in the same frame — which is an
+independent confirmation that column 3 means "effective" and not some second copy of the
+rank. And the chevrons around that blue chip price off the BASE throughout: ▼20 at base
+12, then ▼16 ▲20 at base 11, which are `s_attribPoints[12]`, `[11]` and `[12]`. The
+display-only property is not just something our server honours; it is something the client
+renders.
+
+`test_attribspend.py` §10 adds seven checks, including the exact nine-element column array
+retail sent in `20260817T231139`, byte for byte. Floor 42 → 49.

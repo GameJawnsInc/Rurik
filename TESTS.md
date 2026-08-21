@@ -85,7 +85,14 @@ Every one of these, in the order they were written:
   refuse correctly, with the named VKs asserted against LITERALS; together
   they retire "the harness cannot aim" for everything but a world-anchored
   click (validated live, harness 20260817T151242: zoom, two yaws, an ALT hold
-  and three scripted shots all delivered). The scan code is
+  and three scripted shots all delivered). The 2026-08-19 `hover:FX,FY,SECS`
+  verb (cursor park over a window-relative point, never a click — a HUD
+  tooltip is the only readable surface for some state) parses and refuses in
+  the same section: two numbers, a zero duration, an on-or-off-window
+  fraction and a non-number all fail loudly, because a cursor parked at a
+  wrong literal reads as "no tooltip", which is the probe's null result
+  (validated live, harness 20260819T233451: a 38 s hover delivered all three
+  effect tooltips of the buff_type_field probe). The scan code is
   the one that earned the section — a synthetic keydown with `bScan=0` is
   accepted by a UI reader and silently dropped by the raw input path the client
   reads movement through, so the first version held W for 65 seconds into a
@@ -230,12 +237,15 @@ Every one of these, in the order they were written:
   `vault/run/reskin-roster/` on the recorded understanding that their originals
   were "recoverable from the journals' `before` fields", and NO SUCH JOURNAL
   EXISTS anywhere in the vault. A pristine copy cannot go missing that way, and
-  two of them agree byte-for-byte. Three things `--replace` cannot do and each is
-  a check: it writes **compression 0** and there is no compressor here, so an
-  ArenaNet row comes back flattened; it computes the reservation from the row's
-  CURRENT size, so a shrunk row can never grow back (2,068 B reserves 2,560 when
-  the original needs 7,680) even though the blocks were never handed to anyone;
-  and `--overwrite` is same-length only. The donor's WHOLE RESERVATION is copied,
+  two of them agree byte-for-byte. Three things `--replace` could not do when this
+  section was written, and each is a check -- **two of the three have since become
+  verbs and only the third still holds**: it wrote **compression 0** and there was
+  no compressor (superseded 2026-08-18 -- `--compression 8 --expect`, the gwenc
+  arm); it computed the reservation from the row's CURRENT size, so a shrunk row
+  could never grow back (2,068 B reserves 2,560 when the original needs 7,680)
+  even though the blocks were never handed to anyone (superseded 2026-08-19 --
+  `--grow-to`, section 11, which is exactly this refusal becoming a verb);
+  and `--overwrite` is same-length only, which stands. The donor's WHOLE RESERVATION is copied,
   tail included, because a zero-filled tail verifies and still differs from every
   pristine copy. **Identity is by FILE ID, never by row** -- a row index is a fact
   about the copy, so a donor from another build can hold a valid, wrong file at
@@ -332,8 +342,72 @@ Every one of these, in the order they were written:
   but `pattern()` compresses ~12x, so it fitted the reservation and was a second
   copy of the C-6 check wearing a false label — **the fourth recurrence in this
   arc of a check claiming more than the artifact does** (§10.6, §12.7, §13.6). It
-  uses incompressible bytes now. 138 checks against a floor of
-  138, was 136, was 87, was 78, was 66),
+  uses incompressible bytes now.
+  **Sections 11 and 12 (2026-08-19) are the GROW-BACK VERB and the JOURNAL AS A
+  DURABLE FILE, floor 138 -> 199.** `replace()` derived its ceiling from the
+  row's CURRENT size, so after any shrink the row's own freed blocks were
+  unreachable to it -- fatal for this arc's authoring loop, where the second,
+  larger encoder output lands on a row the first write shrank (row 11196 on the
+  real archive loses 1,025,536 B of its own space). `grow_to` is now a
+  keyword-only argument the CALLER states; with it unset NOT ONE new check runs
+  and every caller in the tree and the vault is on the old path, asserted. A
+  greedy geometry-max default is REJECTED in the docstring, because `claimants()`
+  computes each NEIGHBOUR's reservation from that neighbour's current size too,
+  so geometry cannot tell a free block from a shrunk neighbour's wanted-back one.
+  The gate is `Writer._grow_gate`, ONE copy shared with `--restore` (checked on
+  the syntax tree), and it is four conditions where `restore()` had only the
+  first: claimants; an EOF bound (`datcheck` rule 5 tests `offset + size`, not
+  the rounded reservation, and `put()`'s short-read guard fires AFTER the
+  decision); the live MFT, against the file header's own `mft_offset`/`mft_size`
+  and NOT via row 3, which merely happens to describe the table on the copies we
+  have measured; and `datplan.classify_runs`'s WITHHELD container runs, quoting
+  `Exclusion.why()` -- the largest new risk in the verb, since `replace()` never
+  needed to know about the rotation region because it never allocated.
+  `--restore` gained all three by the factoring, which matters because it is the
+  verb already run on real 4.2 GB copies. **Every arm gets its own fixture and
+  its own SABOTAGE**, which is also the only way two of them can be reached on a
+  4 KB archive: with `claimants` stubbed to `[]` the MFT arm still fires (so the
+  protection is a check and not an accident of row 3), with `classify_runs`
+  stubbed to "everything usable" the withheld grow is accepted, and on the
+  claimed-blocks fixture the stub lets the write LAND -- which is the only way
+  the post-write `datmove.overlaps` assertion can ever fire, and it does, naming
+  both rows. The journal record for a grow covers the WHOLE NEW reservation and
+  its `what` names the annexation with the range, so `--revert` restores the
+  annexed region byte-for-byte (checked against 0xEE poked in beforehand, so the
+  `before` field bites on real content rather than zeros). **Section 12 is the
+  half nothing had ever tested: the journal as a FILE that has to survive the
+  crash it exists for.** `flush()` opened `"w"` and re-serialised the whole
+  document after every record with no fsync -- MEASURED 4.66x amplification on a
+  5-record replace of this fixture, 5.0x on a 1,029,632 B reservation, and 34.1x
+  / 533 MB on `a4run7-flip.journal`, 137x the archive bytes its 60 records
+  protect, quadratic in record count -- and because `"w"` truncates first, a torn
+  flush lost the WHOLE journal to an unhandled `JSONDecodeError` out of
+  `revert()`: a traceback rather than a diagnosis, on the tool that exists for
+  exactly that moment. It is now APPEND-ONLY, one record per line, fsynced per
+  record, opened LAZILY so a refusal still leaves no journal behind. **The FORMAT
+  did not move** -- the file is a valid JSON document at every fsync boundary,
+  because 59 old journals under `vault/` and `test_datalloc.py`'s own prefix
+  replay read it with a plain `json.load(fh)["edits"]`; what changed is that the
+  header is written once, records are appended, and only the three-byte closer is
+  rewritten. MEASURED 4.66x -> 1.00x, five truncating opens -> one, zero fsyncs
+  -> one per record, each with a sabotage that drops it back. A journal cut
+  through its last record replays every complete record and reports the dropped
+  byte count; cut at 50% (mid first record) it is a NAMED refusal with nothing
+  written; pure junk is refused without opening any archive. Old-format replay is
+  checked against a journal SYNTHESISED in the temp directory -- this file never
+  opens the vault, and that boundary is worth more than the realism -- and
+  sabotaging the intact-document branch shows it is what keeps those 59 files
+  readable, while the same sabotage over a NEW-format journal still reverts
+  byte-for-byte from the line parser alone. **Section 11j closes FINDINGS gap D
+  from the archive side**: `gwenc` now refuses to MAKE a zero-block stream, and
+  `declaration_fault` refuses to WRITE one, naming retail's measured floor (the
+  smallest comp-8 row is 56 B and holds a block). The artifact is exhibited and
+  every OTHER arm shown to agree with it -- 12 B, prologue byte 0x02,
+  decompresses without raising, trailer declares 0 against a 0-byte expectation
+  -- which is why a new arm was needed; the comp-8-with-no-declared-payload
+  refusal (hole 1) keeps its own separate reason, and the C-6 arm still sees the
+  same bytes as compressed when they are declared STORED. 199 checks against a
+  floor of 199, was 138, was 136, was 87, was 78, was 66),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -397,7 +471,75 @@ Every one of these, in the order they were written:
   and its identity from X and reported `identified: True` -- MEASURED, 308 of 315
   changed rows naming a file the after-image does not hold -- and the gate is the MFT
   BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
-  the same defect wearing the right name. Floor 75 -> 84),
+  the same defect wearing the right name. Floor 75 -> 84. **§§12-12d added
+  2026-08-20 with `assert_archive_safe`, the launch-side gate, floor 112 ->
+  149.** This is the one part of the file that checks a REFUSAL rather than a
+  verdict, because the two failure modes it stands in front of have no clean
+  error between them and the archive: a header whose CRC does not verify
+  tail-jumps `ArchiveOpen` into ArchiveCreate, which writes a fresh empty
+  archive over 4.2 GB with nothing logged, and one stale payload CRC costs the
+  whole `nextStream` chain the moment repair fires for an unrelated reason. The
+  two rules the gate ADDS to the ten each carry the control that shows the
+  pre-flight blind to them: an archive with a wrong MFT self-crc answers 10 of
+  10 clear and is still rejected by the client's own LoadMft, and an archive
+  whose row was rewritten LEGITIMATELY -- payload and crc agreeing, so every
+  integrity rule is green -- is a different world that only the fingerprints can
+  tell apart. The self-crc is compared against this file's own reading of the
+  rule rather than against `datwrite.mft_self_crc`, so the two can differ.
+  `deep=True` is pinned both ways (one generation refuses, the SAME archive
+  clears without deep, a planted second generation clears it), the identity tier
+  resolves a fingerprint DOCUMENT to its `rows` block and refuses one holding
+  two UNNAMED blocks rather than guessing which side of a profile to match, and
+  a full deep+fingerprinted run is proved to leave the file byte-identical by
+  sha256 -- which is what the LIVE path rests on, since run-live's archive
+  drifts on purpose and the gate may only read it. The three exit codes stay
+  apart through the real CLI, so an unreadable archive is 2 and never 1. **§12d
+  is the section the fix pass rewrote, and it is now about the CENSUS of launch
+  sites rather than a list of them.** It asks FOUR syntax trees whether each
+  calls the gate itself -- `session.run_client`, `drive_client.main`,
+  `livesession.preflight`, `deploy.launch` -- and the fourth is the correction:
+  the first revision named three and left out `drive_client.main`, the
+  standalone operator launcher and the OTHER of the two doors session.py's own
+  quoted comment is about (PLAN.md: "both launch sites (`drive_client.py`,
+  `session.py`) assert it"), so the gate stood in three of four launch paths,
+  which is the two-doors defect wearing the gate's own name. The list is
+  therefore held against a census DERIVED FROM DISK -- every non-test harness
+  file that hands an `exe` to `Popen` -- which reads {drive_client, livesession,
+  session} and is refutable in both directions: it fails against the old
+  three-site list and passes against the new four, so a fifth door cannot appear
+  unlisted. The live site is checked for the ORDER of its call as well as its
+  presence, with its own wrong-way-round control: a running client holds the
+  archive EXCLUSIVELY, so a gate written above the client census answers a
+  left-open live client "could not be read far enough to have findings" --
+  unreadable damage, no action named, on ArenaNet's own 4.2 GB copy -- while the
+  refusal written for exactly that case never runs. The same cause at the three
+  sites with NO census gets the errno its own sentence instead
+  (`LOCKED_REMEDY`), checked three ways: the remedy names the client on a
+  PermissionError, does NOT name it on a parse failure, and end to end the gate
+  names the lock exactly when the platform's own errno is the lock's. The
+  negative control stays: deleting the one line from a COPY of deploy.py flips
+  the check. MEASURED read-only over all EIGHT 4.2 GB archives in the vault:
+  every one clears, 6.0-7.1 s, and re-confirmed at 6.2 s after the fix pass.
+  Floor 112 -> 149. **S12e added the same day, floor 149 -> 168, after a seam
+  probe ran the gate and `overlay --status` against the SAME documents and bytes
+  and found them disagreeing five ways**: the identity tier compared by ROW
+  NUMBER where every line of overlay is file-id addressed, so an archive the
+  client had REARRANGED under the profile -- the exact state `--verify-after`
+  exists to detect -- cleared the gate while overlay refused it; none of the
+  document's three trust checks ran on the gate's side; five doctored shapes
+  escaped as raw exceptions past every `except ArchiveUnsafe`, mislabelled at
+  the CLI as an unreadable ARCHIVE; and a document with `rows` removed fell
+  through to `retail_rows` and cleared a retail archive as "deployed". S12e
+  closes each red-then-green: the identity tier resolves the document's
+  `file_ids` through the archive's own raw table first (a document without them
+  keeps row addressing and the receipt SAYS you are trusting row numbers),
+  overlay-format documents pay overlay's own three refusals through a lazy
+  import of overlay's own primitives -- with an EQUIVALENCE check feeding one
+  document to both readers and requiring identical verdicts, controlled by
+  neutering the verifier and watching four doctorings clear -- every document
+  fault refuses as a fault of the DOCUMENT (exit 1, named), and the side of a
+  profile is an explicit choice (`side=`/`--side`) that refuses ambiguity rather
+  than resolving it by position. Floor 168),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
   2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
   that is the design**: refusing a container whose walk does not close is what
@@ -1309,8 +1451,71 @@ Every one of these, in the order they were written:
   and re-measured after every change. **Also proven at full scale**: a map pair
   allocated into a 4.2 GB copy of the live 38833 archive, preflight 10 of 10 with
   the orphan count rising by exactly one, then reverted byte-identical by sha256.
-  No client, though: **no client has ever read a row this verb allocated**, which
-  is the same sentence `datmove` carried before FINDINGS 39. Floor 98),
+  **Section 14 is the one a skeptic wrote.** Until 2026-08-20 this verb was the
+  only writer of the three that committed a compression-8 payload with no
+  declaration of what a reader must get back -- the string `declaration_fault`
+  appeared in `datalloc.py` zero times -- and a `gwenc` stream with a corrupted
+  trailer went to disk through `alloc(confirm=True)` and through
+  `--stream FILE:1:8`, `Archive.read()` handing back 8,191 bytes instead of
+  8,192 while `--verify`, preflight 10 of 10 and the overlap sweep were all
+  green. The gate it had decides by DECODING, which refutes FRAMING damage and
+  nothing else: `gwdat.decompress` takes the output size from the TRAILER and
+  uses it as the decode loop's own bound, so over 528 single-byte flips of one
+  real stream **132 were refused, 394 decoded to something else and were
+  accepted, 2 still decoded to the payload**. `expect=` is now MANDATORY with
+  `extraBytes 8` (`--expect FILE` from the CLI, one compressed stream per
+  invocation), every stream is routed through `datwrite.declaration_fault` --
+  which also brings the compression-0 direction, the stored lookalike section 13
+  had recorded as an OPEN GAP, with the `stored_lookalike_ok` hatch its
+  4-in-38,621 need -- and the gate runs in `alloc()` as well as `plan_alloc()`,
+  because `alloc(plan=P)` ran neither and a doctored plan put `extraBytes 8`
+  onto plainly stored bytes. **Twelve sabotages, all twelve red**, counts in the
+  floor comment and re-measured after every change; the sharpest is
+  `declaration_fault` stubbed to `None`, which reddens 12 checks and puts the
+  corrupted stream back on disk in a green archive. ~~No client, though: **no
+  client has ever read a row this verb allocated**, which is the same sentence
+  `datmove` carried before FINDINGS 39.~~ **That sentence had its FINDINGS-39
+  moment on 2026-08-20 — A9, archivewrite §18.6**: the retail client resolved,
+  decompressed and animated from a 3-stream chain this verb allocated under a
+  new file id, and the chain survived the client's Flush byte-intact. One chain
+  shape, one build, one launch — the suite below is still what proves the verb
+  in general. Floor 177),
+  `toolkit/mapdata/test_authorflow.py` (AUTHOR A FILE THAT NEVER EXISTED INTO
+  AN ARCHIVE, AT COMPRESSION 8, AND WALK IT BACK. Every verb here has its own
+  test and all of them are green; what none of them measures is the SEQUENCE,
+  and this arc's history is composition defects -- `replace()` could not grow a
+  row it had shrunk itself (FINDINGS 14.4), and `datmove` marked a relocated
+  compression-8 row stored (C-6) -- both green in isolation on the day. Six
+  steps over ONE archive, `test_datalloc.py`'s 28-block fixture in a temp
+  directory: AUTHOR four revisions through `gwenc.encode` (one of them RLE, the
+  shape that declared a 1-symbol distance table until the envelope work landed,
+  gap A); CREATE via `datalloc.alloc(confirm=True)` with a partner declaring
+  `extraBytes 8` **and the payload a reader must get back**; REVISE smaller in
+  place through the real command line, which frees the second block; GROW back
+  into it with `--grow-to`, the step that was impossible before 2026-08-19 and
+  the one an authoring loop hits on its second iteration; OUTGROW, where
+  `--replace` refuses and picks its remedy sentence FROM THE GEOMETRY -- step 4
+  gets the `--grow-to` branch and step 5 gets the other, which makes the pair a
+  measurement of the choice rather than of one message -- and
+  `datmove.move(compression=8, expect=)` relocates; UNDO, four journals
+  replayed newest first, composing back to the pristine fixture BYTE FOR BYTE
+  with every intermediate state checked too, because a chain that only agreed
+  at the ends could be two errors cancelling. **Every step is checked by
+  DECODE, never by a checksum**: the entry crc covers the STORED bytes, so it
+  moves with the corruption and no checksum in this format can tell a
+  compression-8 row holding the wrong bytes from one holding the right ones.
+  **The sabotage in step 2b is what stops this being a demonstration that the
+  tools ran** -- if every gate were stubbed the six steps would still print six
+  greens, because an archive faithfully hands back whatever the last write put
+  in it. It corrupts the authored stream three ways, and as of 2026-08-20 it
+  takes TWO gates to catch them: a flip inside the Huffman table breaks the
+  framing and `looks_compressed` sees it; a corrupted TRAILER does not break
+  the framing at all, decodes one byte short and agrees with itself about it,
+  so only the decompress-and-compare against `expect=` can see it; and a
+  missing declaration is refused outright. MEASURED: `looks_compressed` stubbed
+  alone leaves 1 red, `declaration_fault` stubbed alone leaves 3, both together
+  leave 4 **and the corrupted stream reaches disk**. Six sabotages in all,
+  counts in the floor comment. Floor 59),
   `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
   carrying bit 31, which `FcArchive` binds when it has requested a replacement
   and deleted the plain name (`archive.py`:486, read out of the client). The
@@ -1485,34 +1690,58 @@ Every one of these, in the order they were written:
   not the SEMANTIC tables, since `LENGTH_BASE` / `DISTANCE_BASE` / the
   `first_four + base + 1` arithmetic are replayed verbatim from the trace — a wrong one
   of those gives a wrong payload and a *bit-identical* stream. **B2, the round trip**
-  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fifteen adversarial
-  synthetics (empty, one byte, all-zeros, a single symbol at index 255, incompressible
-  noise, run-length and short cycles, a match at **exactly** the 32,768 window edge
-  with a check that the edge is genuinely REACHED rather than merely survived, and two
-  `uniform=1`/`uniform=2` partitions so the "a non-final block holds exactly its declared
-  token count" rule is exercised a dozen times) — and it proves **agreement with our own
-  decoder, not correctness**. *(Two of those annotations used to claim which table SHAPE
-  each fixture reached — "a single symbol at index 255 so the literal table takes the
-  all-skip zero-length shape" and "incompressible noise so the distance table is empty".
-  A skeptic measured both FALSE: `all 0xFF` yields an ordinary 3-symbol literal table and
-  its zero-length table is the DISTANCE one, and `incompressible` has 101 matches and no
-  zero-length table at all. The shapes are covered by other fixtures; nothing ASSERTED
-  the mapping, so the comments drifted — the same defect §3's window-edge "genuinely
-  REACHED" assertion exists to prevent, applied to only one of the fixtures that needed
-  it. Corrected in the file.)* **B3, the size closure** (§4) compares the writer's ACTUAL
-  emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in **bits**, because
-  the byte figure is a 32-bit-quantised view and a writer 31 bits off the model still
-  lands on the same stored size. **And B3 has been WATCHED FIRE**, which took finding the
-  right row: `gwmatch` plans its tables with the meta DP and a writer hardcoding retail's
-  greedy emits more bits than the planner charged, but on *most* streams the two agree
-  exactly — 0 bits apart across row 11196's own 218 tables — so a randomly chosen row
-  demonstrates nothing. Row **73015** is pinned because there the wrong flag costs **+9
-  bits**, and the resulting stream **still decodes perfectly**, so B3's comparison is the
-  only thing in the file that sees it. §2 is the arm FINDINGS §12.6 says A7a never had: 328
-  tables our encoder implies, serialized and rebuilt by **`gwdat.build_table` itself**
-  rather than by a model of it, with the decoded lengths diffed against the intended
-  ones. §6 is the breakage set, and **(c) is the one that matters** — flipping the meta
-  plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
+  (§3, §7) is `gwdat.decompress(encode(p)) == p` over real rows and fourteen adversarial
+  synthetics (one byte, all-zeros, all-0xFF, incompressible noise, run-length and short
+  cycles, a match at **exactly** the 32,768 window edge with a check that the edge is
+  genuinely REACHED rather than merely survived, and two `uniform=1`/`uniform=2`
+  partitions so the "a non-final block holds exactly its declared token count" rule is
+  exercised a dozen times) — and it proves **agreement with our own decoder, not
+  correctness**. The fifteenth fixture is gone and is now a **refusal check**:
+  `encode(b"")` RAISES as of 2026-08-19, because a zero-block stream (12 B of prologue
+  and epilogue) is a shape no retail comp-8 row has — the smallest is 56 B and holds a
+  block — and `datwrite.declaration_fault` accepts those bytes today, since its
+  zero-length guard tests the STORED bytes rather than the payload. That is FINDINGS
+  §13.5's gap D, closed at the encoder. **B3, the size closure** (§4) compares the
+  writer's ACTUAL emitted bit count against `gwmatch`/`gwentropy`'s PREDICTED one — in
+  **bits**, because the byte figure is a 32-bit-quantised view and a writer 31 bits off
+  the model still lands on the same stored size. **And B3 has been WATCHED FIRE**, which
+  took finding the right row: `gwmatch` plans its tables with the meta DP and a writer
+  hardcoding retail's greedy emits more bits than the planner charged, but on *most*
+  streams the two agree exactly — 0 bits apart across row 11196's own 218 tables — so a
+  randomly chosen row demonstrates nothing. Row **73015** is pinned because there the
+  wrong flag costs **+9 bits**, and the resulting stream **still decodes perfectly**, so
+  B3's comparison is the only thing in the file that sees it. §2 is the arm FINDINGS
+  §12.6 says A7a never had: **984** tables our encoder implies, serialized and rebuilt by
+  **`gwdat.build_table` itself** rather than by a model of it, with the decoded lengths
+  diffed against the intended ones — and it now runs **both** table builders, because
+  they are different functions with different jobs: `gwentropy.table_for_counts` is the
+  MODEL path (`recost`, `literal_only`) and `gwentropy.authoring_table` is the WRITER
+  path, and it is the writer's tables that would reach an archive. **§8, the envelope, is
+  new (2026-08-19)** and it is what keeps that split honest: every table the encoder
+  emits over the whole synthetic corpus must be a SHAPE retail's own archive or the A8
+  client run attests — declared ≥ 2, distance declared ≥ 5 (the minimum over 32,831
+  comp-8 rows ≤ 2,048 B), literal declared ≥ 257 (the minimum of the 218 tables in the
+  row the retail client READ, §16.2 — **not** 258, which would have changed that row's
+  bytes), no zero-length LITERAL table (0 of those 32,831 rows has one), and a
+  zero-length DISTANCE table only ever in the all-skip shape `{declared-1: 0}` that
+  `gwdat.py:265-267`'s `total == 0` fallback can actually install. That closes FINDINGS
+  §13.5's gaps A, B and the distance half of C; **E is accepted rather than fixed** and
+  `gwenc.py`'s docstring carries the reason (the meta bands tile structurally, so
+  avoiding the catch-all-band indices would distort the partition DP's own costs for no
+  attested benefit). §8 has **two** sabotage arms and they prove different things: five
+  planted faults, one per rule, each of which must be NAMED while a clean block must not
+  be — that proves the CHECKER can fail; and the pre-envelope builder restored in memory
+  for one fixture, which must turn the sweep RED (on `b"A"` it names a distance table
+  declared 1, a literal table declared 66 and that literal table being zero-length) —
+  that proves the sweep is WIRED to the encoder and not only to itself. §7 pins the
+  anchor twice over: the emitted size is A7a's modelled **1,011,244 B** to the byte, and
+  since 2026-08-19 the **crc32 of our own encoding, `0xd03ab671`**, is pinned as well,
+  because §16.1's result is about BYTES — the retail client read exactly those, so an
+  encoder change that holds the size while moving a bit has lost the only oracle result
+  the arc has. (The envelope work was landed against that number and did not move it: the
+  anchor's tables declare literal 257–285 and distance 24–30, all already inside the
+  floors.) §6 is the breakage set, and **(c) is the one that matters** — flipping the
+  meta plan from retail's longest-run greedy to our optimal DP on row 150875 produces a
   **valid, smaller, DIFFERENT** stream, which is what makes A6's "retail's table encoder
   is greedy" load-bearing here rather than decorative. §6(d) records the format's most
   dangerous property for a writer, in two halves: dropping the `0x80010008` look-ahead
@@ -1523,11 +1752,13 @@ Every one of these, in the order they were written:
   `len(out) == framing_bytes(consumed)` is asserted inside `gwenc.finish`, which computes
   the length from that very formula — it cannot fail, and the refutable form is §4's.
   There is deliberately **no `datwrite` verb and no archive is opened for writing**; A7b
-  produces bytes in memory. Floor **55** with ZERO headroom, measured green;
-  `--per-band` / `--quick` move how many ROWS §5 re-emits and not how many checks run, so
-  the row count is itself the last check of §5 and `--quick` reddens it on purpose.
-  Without the archive it drops to 28 and goes **RED** — the same verdict its two siblings
-  give, and for the same reason: B1 never ran. ~150 s),
+  produces bytes in memory. Floor **60** with ZERO headroom, measured green 2026-08-19
+  (was 55: §8 adds 4, §7's crc pin adds 1, and §3 held its count because the deleted
+  `empty` fixture became the refusal check that replaced it); `--per-band` / `--quick`
+  move how many ROWS §5 re-emits and not how many checks run, so the row count is itself
+  the last check of §5 and `--quick` reddens it on purpose. Without the archive it drops
+  to 32 and goes **RED** — the same verdict its two siblings give, and for the same
+  reason: B1 never ran. ~110 s),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
   its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
@@ -1557,8 +1788,9 @@ Every one of these, in the order they were written:
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
   a module with its own test -- so this file checks only what is true of the
-  COMPOSITION, and each of its three sections is a defect the first runs of the
-  command actually had. **The two kinds of borrowing are different**: structural
+  COMPOSITION, and each of its sections is either a defect the first runs of the
+  command actually had or, for sections 4-8, a claim about the bytes the row
+  will hold. **The two kinds of borrowing are different**: structural
   constants (Header, Zones) must come from a map shaped like ours, the biome
   (textures, sun, env, sound) from wherever you like, and taking both from
   Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
@@ -1569,8 +1801,141 @@ Every one of these, in the order they were written:
   first version asked whether `main()` contained any `join(dirname(dat), ...)`,
   which it does TWICE because the output path defaults that way, so it returned
   True against a sabotaged source and could not fail. The test now runs that
-  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
-  vault and score 10 against a floor of 14),
+  exact sabotage and requires the answer to flip. **The row holds COMPRESSED
+  bytes now, and the fit is judged on those** (2026-08-20, WORLDMAPS-W1):
+  `install_bytes` runs `gwenc.encode` after `assemble` and prints both sizes and
+  the ratio every run, and `install_partner` threads `--compression 8 --expect
+  <plain>` through BOTH writers -- `datwrite --replace` and `datmove --move` --
+  because compression only RAISES the ceiling and a compressed replace beside a
+  stored relocate would put the deviation back exactly where a bigger map lands.
+  Section 7 runs five real installs against a hand-laid archive holding one map
+  chain whose reservation the FILE chooses, so "compressed fits where stored did
+  not" is a fact about the rule rather than an accident of one retail map: 9,051
+  B of authored 64x64 terrain compresses to 1,148 B, and against a 1,536-byte
+  reservation it REPLACES where the old rule relocated. The other four keep that
+  one honest -- the row is marked 8 and `gwdat` decodes it back to the exact
+  authored blob, the HEAD row is untouched, a map past its reservation even
+  compressed still RELOCATES (compression does not obviate `datmove`),
+  `--stored-install` writes the authored bytes verbatim marked 0 as the control
+  arm, and the SABOTAGE flips one byte of the declared `--expect` payload and
+  requires the writer to refuse with the archive byte-identical afterwards --
+  which is the only refutation that exists, since the entry crc is over the
+  STORED bytes and `datcheck` has no notion of a compression code. The row is
+  read back by a walker written out of `int.from_bytes`, sharing no code with
+  `archive.py`. Section 4 measures the gain per size (20.2% / 12.7% / 9.7% at
+  32/64/96) and bounds it only as "strictly smaller", because a pinned number
+  would go red on an encoder change that was an improvement. Section 5's AST
+  pins MOVED with the dispatch rather than being weakened: `main()` must CALL
+  `install_partner`, `install_partner` must reach both writers, still without
+  `--check-overlaps` and now with `--compression` AND `--expect` in both
+  argument lists. **Section 8 is the map that displaces nobody** (2026-08-20, WORLDMAPS-W3).
+  Every authored area before it rode map 143 -- MFT rows 71496/71497, a live
+  retail area in the owner's own copy that nothing in this repo can name
+  (FINDINGS 16-P7: there are ZERO provably-dead rows) -- because `datwrite` and
+  `datmove` both start from a row ArenaNet made. `deploy.py --install` now
+  ALLOCATES the chain instead when the area's map row carries `created = true`
+  and its file id binds nothing: `create_streams` builds `[Stream(b"", 259),
+  Stream(gwenc_stream, 1, extra_bytes=8, expect=plain)]` and `create_chain`
+  drives `datalloc.plan_alloc`/`alloc`. What makes this section different from
+  section 7 is that its failures are SILENT -- section 7's are loud (a row holds
+  the wrong bytes, a verb did nothing), while a file id registered on the PARTNER
+  instead of the head passes every crc rule and all ten of `datcheck`'s
+  open-time rules right up until the client's reconcile deletes the head and
+  frees its extent, and a row below `FIRST_CLAIMABLE_ROW` is handed to somebody
+  else at the next launch. So the created rows are read back by this file's own
+  `read_next` and `read_id_pairs`, written out of `int.from_bytes` and sharing no
+  code with `archive.py`: the head is flags 259 and ZERO length with no extent,
+  the partner is flags 1 marked compression 8 and `gwdat`-decodes to the exact
+  authored blob, the head chains to the partner and the partner terminates, the
+  id names the head and NO id names the partner, and both rows sit at index >=
+  16. The fixture's declared row count was raised 6 -> 16 for exactly that last
+  rule: `plan_alloc` refuses a chain linked below 16, so six rows would have
+  failed for a reason about the FIXTURE. Four refusals are driven, each on its
+  own hand-laid archive: an id bound to a non-map-chain shape (flags 3 on stream
+  0) is refused naming the row and its flags; an id whose BIT-31 SIBLING is bound
+  is refused before the allocator sees it, with a control proving the fixture
+  really is the dual-registration shape the default `file_id_table` would hide
+  (`plan_alloc` tests exact membership and would accept it -- that gap is
+  studies/archivewrite FINDINGS 17.5, still open, so the CALLER refuses); an
+  absent id on a row WITHOUT `created = true` keeps the old refusal, because
+  "resolves nowhere" is also what a typo looks like; and a resolving id falls
+  through to the install path, which is then RUN -- a second deploy replaces in
+  place, so a created row is an ordinary row the moment it exists. Two sabotages:
+  one byte of the declared payload flipped is refused through the create path
+  before the plan is even computed, archive byte-identical afterwards; and a
+  chain handed over PARTNER FIRST is refused by the allocator's own shape loop,
+  driven by hand because `deploy` cannot express it, which is the claim. **Two
+  of section 8's checks are about a RUN NOTE rather than about bytes, and they
+  are there because a skeptic ran the command** (2026-08-20): W4's step 1 is a
+  build-only run whose output the operator compares against a prediction
+  registered beforehand, and it printed nothing about the row -- `create` is
+  computed only under `--install` (deciding costs a refusal; a dry run must not
+  refuse) and the create line was printed under that same decision, so a CORRECT
+  dry run against an unbound id was indistinguishable from a broken
+  area -> map row -> file id join, i.e. it read as a refutation. `create_note` now
+  answers on every run and this section drives all four of its states -- the
+  build-only line names the id and says `--install would CREATE`, the `--install`
+  line is unchanged, an unbound id on a row that did NOT ask previews the
+  REFUSAL, and a bound id says nothing because `verify()` already did -- plus an
+  AST pin that `main()` calls it OUTSIDE any `create`/`install` test, with the
+  sabotage that wraps it back up in `if create:` and makes that pin red (the
+  sabotage's search string is newline-anchored: without that it is a substring of
+  its own replacement and produced an IndentationError instead of a clean red).
+  The other pair covers `spill_stream`: `install_partner` HAD to write
+  `<area>.c8.bin` because both CLI writers take `--data FILE`, `create_chain`
+  did not because `datalloc` takes bytes, so the path that needed the file least
+  was the only one producing it -- backwards, since after an install the row is
+  itself a second copy while a created chain the client rewrites or deletes
+  leaves none. The create path now spills before the plan (so a refused
+  allocation still leaves what was refused) and a STORED write still spills
+  nothing. The content round-trip loads `[map.166]` (file id `0x5F0B0`,
+  `created = true`, source `invented`) and `[area.frontier]` (64x64, sculpt's
+  donors by FILE ID) and checks the server's `map_static_config` still builds --
+  and that frontier does NOT ride map 143, because deploy joins area -> map row ->
+  file id and an area pointing at 143 would install into the displacement row and
+  never reach the create branch. Finally main() must CALL both
+  `resolve_or_create` and `create_chain`, asked of the syntax tree with the
+  sabotage that flips it, for section 3's reason. **Section 6b is the serve
+  verdict, and it exists because a correct run was reported as a failure**
+  (2026-08-20, WORLDMAPS-W2). `spawn_population` has TWO legitimate exits --
+  `area 'X': N of M placed` and `area 'X': no population rows; the world is the
+  player and the geometry` -- and `PLACED_RE` matched only the first, so the
+  second fell through to the arm written for a server that CRASHED mid-placement
+  and printed "the server never got as far as placing bodies". BOTH arms of W2
+  hit it: each had served the mesh correctly (55 trapezoids, the server's own
+  count against the archive's), and each exited 1 saying "the client walked on
+  our map and the server did not", which was false. The finding survived only
+  because a human read the gamesrv log and overrode the transcript. `serve_run`
+  now returns one of three VERDICTS -- `SERVE_PASS`, `SERVE_UNPOPULATED`,
+  `SERVE_FAILED` -- and `main()` returns 1 from exactly one branch, which tests
+  `SERVE_FAILED`. The load-bearing claim is the ORDERING and it gets its own
+  checks: an empty area may downgrade a PASS to SERVED-UNPOPULATED and may NEVER
+  lift a FAILED, driven with the real pair (ArenaNet's 27-trapezoid build of map
+  143 against our 55) from both sides, plus the no-`--area` case where the mesh
+  is the entire verdict. `serve_run`'s decision is pure -- read a log, choose a
+  verdict -- so it is tested BEHAVIOURALLY on canned logs with `launch` and
+  `newest_harness_log` stubbed, rather than on the syntax tree: the two clients
+  and the 45-second hold are the only reason it was ever untestable. The regexes
+  are checked DISJOINT in both directions (they share the `area 'X':` prefix,
+  which is how one swallowed the other's line), and `UNPOPULATED_RE` is matched
+  against the line `authsrv` ACTUALLY BUILDS -- reconstructed from its syntax
+  tree by `render_fstring`, not against a copy pasted into the test -- because
+  the pattern hard-codes eleven words of another module's prose and a reword
+  would otherwise break it silently. The other half is a SECOND READER:
+  `spawn_row_count` mirrors `area_population`'s two predicates (the row names
+  the area, the row is enabled) and `serve_run` refuses when it disagrees with
+  the server, in either direction. Without it SERVED-UNPOPULATED would be a
+  verdict that cannot fail -- the server says "nothing here", we write it down,
+  green -- and a population that genuinely went missing would read as a clean
+  run. Its own suppression is deliberate and narrow: under `--repo-content-only`
+  deploy's world is narrowed and the server's is not, so the count is not
+  claimed at all rather than compared against a world it does not describe. All
+  twenty of this section's checks were driven RED by eight sabotages, including
+  the original defect restored and the authsrv reword. Sections 0-1 and 3-8 need
+  no vault and score 108 against a floor of 112 (both MEASURED, the vault-less
+  one with `RURIK_VAULT` pointed at an empty directory), so the floor still does
+  what it was for -- a vault-less run exits 1. (The line this replaces said
+  "score 10 against a floor of 14", stale by two floor changes)),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
@@ -2072,6 +2437,32 @@ Every one of these, in the order they were written:
   at exactly the index it asserted at. Without it the ten checks above are ours
   agreeing with ourselves and would pass on any self-consistent layout. Floor
   34 -> 38. No socket, no client. ~1 s),
+  `toolkit/authsrv/test_attribspend.py` (the attribute SPEND model -- the state this
+  server had never had. Until 2026-08-20 ranks came from a content row and never
+  moved, and `studies/review` had years ago flagged the consequence: "you sat there
+  spending attribute points and the server had nowhere to put them." The rules it
+  checks are ArenaNet's, not ours, and the file is built so a copy of somebody
+  else's rules cannot quietly drift into being its own thing. **Nothing is
+  hand-typed**: it loads the same two content tables the server loads -- the cost
+  curve from `s_attribPoints` and the 51-row `s_attrib` table -- and checks them
+  against arithmetic published independently of both. Rank 12 costs **97**, the
+  number the wiki and the client's table agree on; **exactly ten** attributes carry
+  `is_primary`, one per profession, which is the no-free-parameter check that the
+  table was parsed right at all. §5 is the one to read: it REPLAYS the nine real
+  rank transitions in live capture `20260818T132739` -- six up, three down -- and
+  requires this module to reproduce the balances ArenaNet's own server computed
+  (74->65->54->41->25->5 climbing 7->12, and 5->25->41 coming back), which pins the
+  ASYMMETRY that the price is the rank REACHED and the refund is the rank LEFT.
+  The rest covers the client's three refusal rules from the ALLOWED side as well as
+  the refused one -- a Warrior may raise Strength, may not raise Divine Favour even
+  as a secondary Monk, but may raise an ordinary Monk attribute -- so the refusals
+  cannot pass by refusing everything. §7 pins the template spread as all-or-nothing
+  against the client's own SIXTEEN-entry buffer (its framer clamps to 64, which is
+  a latent stack smash we must never invite), and §8 breaks the constructor on
+  purpose: no costs, no attributes, and a GAP in the rank sequence all refuse,
+  because a gap would price a rank at 0 and hand out a free level. Floor 35, one
+  declared skip (no profession-0 attribute exists to fire the first of the client's
+  three refusals). No socket, no client, no vault. ~1 s),
   `toolkit/authsrv/test_purchase.py` (answering the merchant, BOTH directions -- the four
   messages, in ArenaNet's order. It pins the SEQUENCE and not just the contents:
   **pay, mint, place, confirm** -- `0x014F` debit, `0x0161` declare, `0x013E`
@@ -2147,7 +2538,22 @@ Every one of these, in the order they were written:
   the only constant in the set corroborated to the bit. Not a coverage accident
   but a shape: every other section computed its expectation *from* the symbol
   under test, so the symbol was free to move and the test moved with it. **A
-  symbol appearing in a test file is not a check.** The same section reads
+  symbol appearing in a test file is not a check.**
+
+  **And one constant in that registry is now pinned the OTHER way round, on
+  purpose.** As of 2026-08-20 the player's swing is no longer a fraction of the
+  target's maximum health — it is the equipped weapon's own damage range, read
+  out of its **584** modifier word (`arg` the maximum, `arg2` the minimum;
+  ArenaNet's renderer draws `Blunt Dmg: 3-5` for our hammer). That number is
+  MEASURED rather than ours, so pinning it to a literal here would be the same
+  defect from the other side: it would let `content/items.toml` change while the
+  test went on agreeing with a range nobody sends. `section_weapon_damage` pins
+  it to the WORD instead — it re-reads the item and requires the server's
+  constant to match — then rolls **200 swings and requires every one inside
+  3–5**, and requires the roll to actually vary, because a range that always
+  returns its own minimum is a constant wearing a range's clothes.
+  `HIT_FRACTION`'s registry row now says what it is: the fallback for an
+  attacker with no readable weapon, and nothing else. The same section reads
   `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
   which is how `authsrv.py`'s claim that all four bar skills are non-elite was
   found false (276 is elite), the comment having been the only witness.
@@ -2280,9 +2686,113 @@ Every one of these, in the order they were written:
   when our model is least entitled to name a destination). Both matchers run only
   against healthy source, so both are branches a typo would silently disable --
   the control hands them source carrying both old defects and requires them to
-  still fire. §10 replays the capture. Floor **34**, the bare-machine subset,
-  against a green **38** with `authsrv-20260819T114759-c1.jsonl` present; §10
-  declares `LEDGER.skip` without it. No client. ~1 s),
+  still fire. §10 replays the capture. **§11 locks `--resync`**, the SEVENTH
+  candidate and the first one aimed at the copy the player actually sees.
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the only catalogued primitive
+  whose handler reaches BOTH of the client's copies with no gate — read out of
+  the pinned pristine 38797 image at `0x005FDA50`: `AgTrack::Clear` first
+  (`0x005FDA78`, which zeroes `clientControlled` and so disarms the three-gate
+  desync test behind it), then `SetPosition` on the SYNC array
+  (`[esi+0xe8]` → `0x005FDAE5`) and on the ASYNC array (`[esi+0x14c]` →
+  `0x005FDB49`). **It is also the message an earlier build sent and had removed
+  as "the warp the player described"** — because that build sent OUR
+  INTEGRATOR'S position, and "five went out and three were arrivals, carrying
+  the client 630, 189 and 765 units"; 765 is exactly one heading vector, i.e.
+  the integrator had walked a whole leg the client never walked. The entire
+  difference between a fix and that regression is which value lands in the
+  payload, and `state["pos"]` is nine characters from `state["client_pos"]`, so
+  most of the section exists to make that keystroke red: the payload is asserted
+  behaviourally against a state where the two DISAGREE, the send site's vec2 is
+  asserted as the syntax-tree node `list(payload)`, and `state["client_pos"]` is
+  asserted to have **exactly one writer in the file** — the accept path. It also
+  asserts the flag ships OFF and that with it off a state that *would* fire
+  sends nothing **and records nothing**; that the three constants carry
+  derivations rather than choices (the trigger is the client's own 100.0 u
+  match radius at `0x00946560`, three times under gate 1's real 299.332591 u
+  cut; the rate limit sits under its derived ceiling of `299.332591 / (2·288)` =
+  0.5197 s, the shortest time in which two copies moving directly apart can
+  accrue a full gate's separation; and `RESYNC_MAX_REPORT_AGE · 288 = 100.0 u`
+  exactly, so **the staleness bound IS the harm bound**); that a payload with no
+  accepted client report behind it is refused with 5,000 u of our own drift on
+  the table; that the age bound is inclusive at the bound, refuses one
+  microsecond past it, and refuses a **negative** age too (clock skew sails
+  through an upper-bound-only test); that twenty fireable reports over 1.9 s
+  produce 4 sends and not 20, **and not 0**; that 50 u apart sends nothing; that
+  the SYNC model fails closed when unseeded, walks a granted leg at 288 u/s
+  rather than teleporting to its end (a model that parked instantly would read
+  every legitimate click-walk as a 2,880 u desync), parks on the point, and
+  follows a `0x002C` we send; and that the encoded bytes are the schema's —
+  `msg_header / dword / vec2 / word`, 16 B declared and 16 B produced, compared
+  **byte for byte** against a hand-packed struct because field order is the one
+  thing this project has already got wrong on a movement message. Two controls:
+  one asserts the function under the matcher really does mention `state["pos"]`
+  (it logs it beside every verdict) so the matcher is not judging an empty
+  set, and one hands the matcher `list(state['pos'])` on purpose and requires it
+  to still reject. It also asserts the flag's own startup banner is printable —
+  a `U+26A0` in it raised `UnicodeEncodeError` on a default Windows console
+  while this was being written, so the flag would have killed the very run it
+  exists to enable before a packet went out; the scan is against **cp1252**
+  rather than ASCII, because the em dashes elsewhere in `authsrv.py` are fine
+  and a blanket rule would be wrong, and its control plants a `U+26A0` and
+  requires the scan to still see it. **§12 locks `--grant-suppress`**, the
+  EIGHTH candidate and the first that acts by sending **less** rather than by
+  sending something better. Three captures of 2026-08-20 earned it: keyboard
+  only (`182554`) is 283-287 u/s every interval with zero clicks, zero grants
+  and **0.00 hard jumps/min**; five clicks the server *refused* (`182934`) is
+  zero grants and zero warps; and the reproduction (`183311`) is the owner
+  holding S while spam-clicking forward — **196 clicks → 140 grants in 44 s**,
+  one every 0.13 s, **five hard jumps** (p50 1,372 u, max 3,010 u, 6.82/min)
+  with four of the five landing 0.10-0.23 s after a grant. `0x0029` is
+  SYNC-ONLY, so a grant sent mid-keyboard drives the authoritative copy away
+  from the rendered one *and* re-runs the desync test that snaps them together
+  past 299.332591 u. The section asserts the flag ships OFF and that with it off
+  a state that would be refused twice over grants anyway, records nothing, and
+  does not even clear a pending it finds; that both constants carry
+  derivations — the 3.0 s locally-driving window is sized off **n = 3,420** gaps
+  between consecutive `0x003D`-moving reports with no `0x0047` between them
+  across **987 `ours` captures** (p50 0.500, p90 1.801, p99 2.737, with a real
+  mode at 2.74-2.79 s: 144 exceed 2.00 s and only **9 exceed 3.00 s**, so 3.0
+  covers 99.74% while 2.0 would open a hole in 4.2%), and the 0.5 s grant floor
+  is fixed by **two independent derivations landing on the same number** —
+  retail's own median player inter-grant gap of 0.492 s over 2,855
+  player-directed `0x0029`, and the same `299.332591 / (2·288)` = 0.5197 s
+  separation ceiling `--resync` uses. Rule 1 is asserted at **both edges**,
+  inclusive at the window, lapsed one microsecond past it, and **armed on a
+  negative age** because clock skew sails through an upper-bound-only test; its
+  control is the cleared latch granting the very same click, without which
+  "refuse everything" passes. Rule 2 is bounded **above and below** (twenty
+  clicks over 1.9 s produce 4 grants, not 20 **and not 0**), driven through the
+  real `_note_wire_move` hook so the clock under test is the server's own — the
+  click arm, the heading arm, the endpoint arm, the stop echo and the click
+  sweep all grant through it, and a limit fed from the click arm alone would be
+  blind to four senders. The deferred half is asserted to send once, be
+  consumed, carry its two plane words in the click arm's order, be **dropped**
+  rather than delayed once the player keyboards again, and expire inclusively at
+  `2 · GRANT_MIN_INTERVAL`. Structurally: `state["kbd_moving_at"]` has **exactly
+  two writers**, one conditional on the client's own `moving` and one flat
+  `None` — deliberately *not* `state["walking"]`, which the click arm itself
+  clears, so keying rule 1 on it would have let the first click of the
+  reproduction disarm the latch and the other 195 straight through; the three
+  geometry reasons survive verbatim and their refusal is strictly **before** the
+  new gate, since those lines say something about the map and are what the owner
+  reads live; the arm has one grant send and it sits after the gate; and
+  `state["grant_pending"]` is a single assigned slot with **zero appends**,
+  which is the whole difference between rate-limiting and deferring the storm by
+  one interval. Its controls are handed the defects on purpose — a latch keyed
+  off `state["walking"]`, and an `elif` chain where body-scoped matching sees 1
+  send while `ast.walk` sees 2 (the real bug this check caught while being
+  written). **§13 is the replay, and it is the treatment and its control from
+  the wire rather than from a fixture we wrote**: `196/196` of the
+  reproduction's clicks refused as locally-moving with **zero** grants
+  surviving, `5/5` of the ordinary capture's clicks **permitted**, and the
+  keyboard-only run carrying no clicks to decide at all. Either half alone
+  proves nothing — a policy that refuses everything passes the first and today's
+  code passes the second — and the section says out loud that it replays rules 1
+  and 2 only, the two geometry refusals running upstream of them and not being
+  modelled. Floor **105**, the bare-machine subset, against a green **113** with
+  every capture present; §10 and §13 are the two fixture-bearing sections
+  (4 checks each) and each declares `LEDGER.skip` without its files. No client.
+  ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -2303,28 +2813,510 @@ Every one of these, in the order they were written:
   together, so a large step exists and the separation across it does not move --
   **that control was written VACUOUS**, its synthetic steps sitting below the
   300 u threshold so `jumps` came back empty and `all([])` passed it having
-  judged nothing; the row count is asserted first now. §4 replays the pair that
-  established the mechanism (`movetap-20260819T171436` + `authsrv-20260819T171153-c1`):
-  183 pairs, 13 resync jumps, separation **587 u -> 22 u, a 96% collapse**, with
-  TWO things that could refute it -- pairing 7 s out of true reproduces only 34%,
-  and the alignment sweep must PEAK at the offset the 8,573 timestamps gave,
-  which was never fitted to maximise the headline. §5 asserts `movetap` now
-  calibrates its floor against measured capability and survives Ctrl+C with a
-  verdict. **§6-§8 are the wire-only half**, which asks the same question of a
+  judged nothing; the row count is asserted first now. **§4-§8 guard the four
+  defects the 2026-08-19 corpus pass found in `movesync.py` itself**, each of
+  which had already put a wrong number into a document, and each guard is
+  mutation-proven to go red when its fix is reverted. §4 PINS the bars as
+  constants: legacy 300 u, run speed 288 u/s, the hard bar's SPEED arm at
+  **400 u/s** (retail's own client intervals top out at 388.80, just over the
+  383.04 boost base its wire declares, so a lower bar would start counting
+  boosted walking), the 0.05 s dt floor, its DISTANCE arm at **520 u**, and
+  `FREE_SILENCE = 300/288 = 1.042 s` as a DERIVED number rather than a chosen
+  one. 520 is BRACKETED ON BOTH SIDES by measured data and the test says so: it
+  sits above retail's largest step inside 2.0 s (**517.87 u / 1.352 s**) and
+  below the smallest of the four ordinary WALKING rows the wide
+  `dist>=520 & dt<=2.0s` form would have swept in (**525.3 u at 285.5 u/s**,
+  `20260814T090541`). §5 is a client walking at 288 u/s with a report every
+  2 s: **the legacy bar flags 11 of 11 steps and the hard bar flags none**, which
+  is how retail scored 6.4/min on the legacy bar with zero intervals above
+  400 u/s -- the row count is asserted first. §6 plants a **900 u / 0.13 s** step
+  and requires exactly one detection on the SPEED arm, then a **700 u / 0.03 s**
+  step and requires one on the DISTANCE arm -- and it no longer carries the dt
+  control it used to, because **the distance arm INVALIDATED that control**: it
+  planted 900 u over 0.01 s and demanded a REFUSAL, which under the repaired bar
+  is a test that the fix does not work. What the dt floor is actually for is a
+  SMALL displacement over a near-zero interval, so the control is now **25 u over
+  0.01 s** (an implied 2,500 u/s, and still not evidence) with the SAME 0.01 s
+  carrying 900 u required to be CAUGHT beside it -- the arm is a distance test,
+  not a dt test. Every fixture's row count is asserted before its verdict. The
+  bar is spelled TWICE and §6 exercises both: `hard_steps` for the wire-only path
+  and `score(min_speed=...)` for the paired one, which carried the identical
+  blindness and which no vault replay would have caught (§11's movetap window
+  happens to exclude the only corpus row that would have shown it).
+  §7 builds a LEGACY-SHAPED capture -- `position_report` rows at the stops only,
+  a full `0x003D` stream between them -- and requires `--wire-only` to read the
+  SPLICED stream `warpscan.load` has read all along: the same walk reads **0
+  jumps spliced and 2 stop-arm-only**, i.e. the source alone decides whether the
+  client "jumped". §8 is the refusal semantics, and its fixture is
+  `20260811T173940` in miniature: dense 0.25 s blocks separated by 5 s silences,
+  so the **MEDIAN gap passes the old 0.5 s cadence gate** while the client walks
+  1,440 u inside each silence. It asserts the coverage refusal fires, that a
+  dense capture does NOT trip it (a gate that always fires is a constant), and --
+  reading the tool's real stdout -- that **every legacy count line sits BELOW its
+  refusal and is marked `refused`**, because the "5 unexplained jumps" hole was
+  minted by quoting a number printed above a REFUSING line. §8 also pins the
+  other half of that rule, which the first pass got backwards: **a refusal must
+  not suppress a COUNT.** The `MIN_INTERVALS` floor used to `return` before the
+  hard section, so a nine-interval capture carrying a 3,000 u impossible step
+  printed a bare tally; only a per-minute number needs intervals, and a count and
+  a magnitude need no denominator at all. The fixture is exactly that capture --
+  **9 intervals, one 3,000 u step** -- and it requires the count, the magnitude
+  and the excess to print while **no `/min` appears anywhere in that output**.
+  (Measured impact today is nil: 10 vault captures sit under the floor and not
+  one carries a hard or a >=300 u step, which is what makes it cheap now and
+  expensive to discover later.) §9 asserts `movetap`
+  now calibrates its floor against measured capability and survives Ctrl+C with a
+  verdict. §10 is the wire-only geometry, which asks the same question of a
   capture with NO movetap and still refuses to reconstruct anything: a resync
   landing point is a *reading* of the authoritative agent (measured at 1.0-59.5 u
   from movetap's, n=13), so the test is three measured positions and a geometry
   question -- does the landing lie on the segment from where the client said it
-  was when we granted, to the point we granted? §7 replays the **DEFAULT-build**
-  capture `authsrv-20260819T145717-c1.jsonl`, the one carrying the corpus's
-  biggest warps: **18 of 30 landings on-path against 0 of 31** for an unrelated
-  grant, perpendicular offset **43.9 u against 744.8 u**, and a median grant age
-  of **5.84 s** at the jump. §8 is the gate that makes those numbers mean
-  something -- the client emits `0x003D` only while moving, so a capture at
-  2.75 s cadence has 57% of its intervals clearing the 300 u jump bar and its
-  control scores as well as its treatment; `--wire-only` declines a verdict above
-  0.5 s. Floor **17**, the bare-machine subset, against a green **28** with every
-  capture present; §4 and §7 declare `LEDGER.skip` without them. No client. ~3 s),
+  was when we granted, to the point we granted? §11 replays the pair that
+  established the mechanism (`movetap-20260819T171436` + `authsrv-20260819T171153-c1`):
+  183 pairs, 13 resync jumps, separation **587 u -> 22 u, a 96% collapse**, with
+  THREE things that could refute it -- pairing 7 s out of true reproduces only
+  34%, the alignment sweep must PEAK at the offset the 8,573 timestamps gave
+  (never fitted to maximise the headline), and **all 13 must survive the new hard
+  bar**, or the collapse would be a claim about a different population than the
+  one the mechanism was established on. **That last equality survives the
+  distance arm by LUCK, and §11 now pins the luck rather than resting on it**:
+  the whole capture gains a row under the repaired bar (19 -> 20, the
+  617.0 u / 0.0324 s step at t=138.687), and it disturbs nothing here only
+  because the movetap window is **[163.361, 220.619]** and 138.687 falls OUTSIDE
+  it -- which is where the operator happened to start the reader, not soundness.
+  §12 replays the **DEFAULT-build** capture
+  `authsrv-20260819T145717-c1.jsonl`, the one carrying the corpus's biggest
+  warps, on the verdict-bearing population: **7 hard jumps, 1.31/min of span and
+  5.66/min of actively-reported time** (both denominators, because 77% of that
+  span carries no reports), magnitude p50 1,969 u and max 3,405 u, EXCESS OVER
+  BUDGET p50 1,208 u and max 3,165 u, 4 of 7 landings on-path against 0 of 7 for
+  an unrelated grant at perp **78.3 u against 1,582.2 u** -- **of which 5 of the
+  7 are DEGENERATE** (the grant-time report IS the pre-jump record, so the
+  landing sits on its own segment by construction), leaving a non-degenerate
+  **n of 2, on-path 2/2**, which is the whole of the non-tautological evidence on
+  this capture. The tool prints that qualifier and the test used to assert
+  nothing about it, so the contaminated 4/7 travelled alone; `hard_degenerate`
+  and the clean subset are both pinned now, and the `cperp_p50 > 5*perp_p50`
+  ratio has a FLOOR on its denominator (`perp_p50 > 1 u`, plus an absolute
+  `cperp_p50 > 500 u`) because on a fully degenerate capture that perp is 0.0 and
+  the ratio would certify the tautology. §12 also pins the three things the
+  adversarial pass found unstated. **The rate's denominator is borrowed**:
+  "actively reported" is the sum of gaps `<= FREE_SILENCE`, the 300/288 constant
+  this file calls never-a-verdict, and the SAME 7 jumps read **14.21/min at a
+  0.30 s threshold, 5.66 at 1.042 s and 3.40 at 5.00 s** -- a 4.2x spread with
+  the numerator untouched, so the threshold and that sweep are asserted present
+  in the real stdout. **2 of those 7 hard intervals are THEMSELVES longer than
+  the threshold** (3.237 s and 1.485 s), i.e. they happened in time the
+  denominator excludes, and the output must RECONCILE it rather than let the rate
+  imply otherwise. And the legacy "of which N are walking" line is now EXHAUSTIVE
+  in the printed text as well as the dict -- **31 = 23 walking + 7 hard + 1 at
+  360.3 u/s that is neither** -- because a partition that does not add up invites
+  the reader to complete it with the other category. `values[2]` (plane) is
+  carried through `load_wire_reports` and flagged: **1 of these 7 straddles a
+  flip**, 6 of the corpus's 64 hard rows do, and it is ANNOTATION not exclusion
+  since planes 0/18/19 share the x/y frame here. The legacy bar is REFUSED on
+  this capture, a refusal the old median gate missed on a p50 of 0.254 s.
+  §13 replays `authsrv-20260811T173940-c1.jsonl`, the capture that
+  minted the hole: 158 spliced positions against **28** `position_report` rows,
+  **5 legacy jumps from the wrong source and 2 from the right one**, and ZERO
+  clearing the hard bar -- the client walked the whole way. **§14-§16 are the
+  distance arm's own replays.** §14 pins the two counts that MOVED, because a
+  guard that only asserts the new bar equals the new bar cannot go red when the
+  arm is reverted: `20260819T182652` reads **13 hard rows where the speed-only
+  bar read 11**, and `20260819T171153` reads **20 where it read 19**. The three
+  restored rows are 740.7 u / 0.0318 s, 617.0 u / 0.0324 s and 582.1 u /
+  0.0331 s -- all ~32 ms, because a resync emits a report either side of the
+  snap, so the old dt refusal was ANTI-correlated with the mechanism it was built
+  to find. Each pair arrives in SEPARATE TCP frames (c2s seq 465->466, 50->51,
+  190->191, each a distinct 26-byte read), so 32 ms is a real client cadence and
+  not decode-loop coalescing. §14 quotes MAGNITUDE and EXCESS OVER BUDGET
+  (740.7 u, excess 731.6 u = 2.57 s of walking at 288 u/s) and NEVER the implied
+  velocity as a headline -- for a discontinuity that 23,279 u/s is a denominator
+  artifact the event itself created, so it is printed labelled as the gate's own
+  input. Its control is the WIDE form: corpus-wide `dist>=520 & dt<=2.0s` adds
+  four ordinary walking rows at 284-286 u/s across ~1.85 s gaps
+  (`20260818T103840` 538.6 u, `20260819T150522` 533.6 u, `20260816T131839`
+  528.5 u, `20260814T090541` 525.3 u) while the narrow form adds exactly the
+  three genuine ones -- **61 -> 64 hard rows over 961 vault captures, 4,582
+  intervals**. §15 pins the count that must NOT move: `20260811T173940` still
+  reads **0 hard of 157**, and its 14 sub-0.05 s intervals top out at 14.1 u.
+  §16 RE-MEASURES THE CALIBRATION rather than inheriting it, decoding the live
+  corpus's own c2s stream through `cmsgstream.timed` (per connection, so no
+  interval is invented across a map load): **2,789 retail self-reports, 2,747
+  intervals, ZERO on either arm**, fastest believable interval **388.80 u/s**,
+  largest step inside 2.0 s **517.87 u / 1.352 s**, and below the dt floor --
+  the only place the distance arm ever fires -- a largest step of **19.15 u over
+  82 intervals**, which is 27x of headroom. A constant justified in a comment is
+  justified nowhere. Nine sabotages were BUILT AND RUN and all nine redden,
+  including reverting each arm separately, widening to the contaminated form,
+  lowering 520 to 400, dropping the plane carry, restoring the early return at
+  the interval floor, and silencing the threshold sweep or the reconciliation.
+  **§17-§20 put movetap's and movesync's OWN `_selftest_*` sections into the
+  suite**, which is where 130 checks written for the gatefire probe on
+  2026-08-20 were not: both modules carry a module-level `--selftest`, and
+  `run_suite.py` discovers `test_*.py` from DISK, so neither was ever invoked by
+  it -- the same defect as a test missing from this file, which the tree has
+  shipped three times (`test_pathmap.py`, `test_skillcast.py`,
+  `test_textrec.py`). §17 wraps movetap's fence sections: the 28 AgTrack and
+  gate-1 displacements re-derived from build 38797's own bytes (each expected
+  encoding BUILT FROM the module constant, so a wrong constant produces bytes
+  that are not at that VA), and the 13 refusal cases that keep a failed read
+  from minting the `0` that means "the fence is shut". §18 wraps movetap's
+  C2/C3/C6/C7/C8/C9 sections -- episodes (7), the flip denominator (8), gate 1's
+  ASYNC twin and 0x005FF820's clamp (26), the two early-outs (11), the
+  vocabulary (7). §19 wraps movesync's C4/C5/C9 -- the three-way jump tally
+  (14), the appender witness (19), the two spellings (6), and `print_fence`'s
+  own report (11). **Those two grew
+  because a review found the new checks pinned the DICT and never the TEXT**,
+  and the text is the artifact `PROBE-GATEFIRE.md` §6 quotes: swapping the
+  printed `reachable` and `fenced` cells, hard-wiring the printed `unread` to 0,
+  printing the unread label breakdown in the fenced row, DELETING the whole
+  three-way table while keeping the tally and its refusal, hard-wiring arm (a)'s
+  `witnessed` to 0, borrowing `judged` for arm (b)'s denominator, and deleting
+  the arm-coverage and PARTIAL lines were **each fully green**. Both printers
+  are now read back out of their own stdout (`read_back_three_way`,
+  `read_back_witness`) and compared cell by cell against the dict behind them, a
+  missing row arriving as an ABSENT KEY rather than a zero; the tally fixture is
+  **2 / 5 / 1** so every permutation of the three cells is visible, and the
+  witness fixture holds `judged` 8 against `reach_pairs` 7 so arm (b) borrowing
+  arm (a)'s denominator cannot pass. Two more of the same family: the refusal
+  bar is now computed by `unread_refuses` from `UNREAD_REFUSE_SHARE` alone
+  (`unread * 4 >= n` was a second copy of the same constant, so setting the
+  named one to 0.90 left the code refusing at 25% while the prose claimed 90%,
+  green both ways -- it is exercised at 0.90 AND at 0.10 so the bar is pinned in
+  both directions), and the sentinel check asserts the three `missing:*` names
+  are DISTINCT, because the subset test alone passed when all three held the
+  same string. **AND THEN THE SAME DEFECT WAS FOUND ONE ALTITUDE HIGHER:** the
+  text was pinned at the FUNCTION while the operator reads the PIPELINE.
+  Deleting the `print_appender_witness(pop, indent, name)` call from
+  `print_fence` -- the only path `movesync.main()` takes -- left `--selftest` at
+  49/49 and this file at 147/147 with the whole of C5 gone from the report, and
+  six more `print_fence` branches judged ZERO rows in the entire suite (the
+  PARTIAL line, the per-label share denominator, the `samples=` stream the
+  production call actually uses, the population REFUSAL, the legacy NOTE's
+  denominator, and `if rc: return rc` making that refusal swallow the tally and
+  the witness beneath it -- the exact substitution C4 exists to undo). The new
+  §19 section drives `print_fence` ITSELF on one fixture that takes the
+  production path and the refusing path together -- `samples=` supplied, `have`
+  6 of `total` 8, unread 2 of 6 over the 25% bar -- with every number distinct
+  from the one a substitution would put in its place (50.0% over `have` against
+  37.5% over `total`, 11 stream samples against 8 paired), the row counts
+  asserted before anything is printed, the three sections asserted IN ORDER by
+  their offsets in the output, and a mirror at `total` 7 with no unread row so
+  neither the refusal nor the PARTIAL line can be a constant. Its thirteen
+  mutations all redden a named check. **Two checks per section,
+  never one**: the section's verdict, and the number of checks it EXECUTED
+  against a floor read off a real green run, because a section whose fixtures
+  stopped matching reports `bad = 0` over nothing at all and the verdict cannot
+  tell that from a pass -- `test_codec.py`'s empty glob, one layer up. Each is
+  then BROKEN on purpose and required to go red: `episodes` returning no runs,
+  `count_flips` pinned at (0, 0), `GATE1_CUT` moved off the float the image
+  holds, `EARLY_OUT_A_MODE` 9 -> 8, `test_would_run` counting `world1:append` as
+  open, `classify_reach` calling every cell fenced, `state_fields` reading
+  nothing, `REACH_ALIASES` emptied to the pre-C9 reader, and
+  `print_appender_witness` silenced to a no-op -- which is the mutation that
+  landed green in the round before this one. **§20 asks BOTH MODULES
+  what sections they define** and requires every one to have been wrapped, with
+  a planted section as its control, so one added tomorrow goes red here instead
+  of being found missing in a week -- the both-directions rule
+  `test_srclint.py` §7 applies to this file. It rules on the set `_wrap` filled
+  as it RAN and not on the floor table, because a name can sit in a table while
+  its call site is deleted, and a coverage check reading the table would then
+  certify a section nobody ran -- the same defect one level up; deleting one
+  `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
+  **65**) so the operator's pre-flight command cannot diverge from the
+  suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
+  green run executes and requires the module to refuse itself. **movesync had no
+  module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
+  each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
+  leans on -- carried none, so deleting section 2's only check took it from 38
+  [PASS] to 37 with `--selftest` and this file both still exiting 0. It declares
+  `SELFTEST_FLOOR = 65` now, measured off a green run (15 + 14 + 19 + 6 + 11),
+  and the four `_selftest_*` sections return `(bad, ran)` so the total is summed
+  from what they executed rather than counted from what they printed. **And the
+  per-section floors were the same half-rule from the other side**: sections 8
+  and 9 declared 8 and 9 while executing 14 and 14, so either could have lost
+  six checks with its OWN floor silent, caught only by the total and by this
+  file's table -- two external nets under a number the section owns. Every
+  `_floor` is now the count its section executes, instrumented rather than
+  counted by hand, and dropping one check from section 8 or 9 reddens that
+  section's own floor line as well as this file's. And it
+  cross-checks every self-reporting section's returned count against the
+  [PASS]/[FAIL] lines it printed, because **the first version of §17 was itself
+  the defect it now guards**: it compared a section's `(bad, ran)` tuple against
+  `0` -- which cannot be true -- and then compared the same tuple with `>`,
+  which raised, so 16 green sections were followed by a TypeError and one check
+  that could never pass. Floor **100**, the bare-machine subset, against a green
+  **150** with every capture present; §11-§16 declare `LEDGER.skip` without
+  them, and so does `movetap._selftest_fence_bytes` (that section's two checks
+  and its one control are the only 3 of §17-§20's 46 that need the vault's
+  client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
+  DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
+  server change nobody has made against captures already on disk. The proposal:
+  `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the one catalogued primitive whose
+  handler (`0x005FDA50`) calls `AgTrack::Clear` FIRST (`0x005FDA78`) and then
+  SetPositions **both** agent arrays with no gate on either arm, so it is the
+  only message that can reach the copy the player actually sees once
+  `0x0025`'s async arm has been gated shut for the client-controlled agent. The
+  scorer reuses `movesync`'s loaders and its repaired two-arm hard bar verbatim
+  -- `load_wire_reports`, `load_grants`, `steps`, `hard_step`, `on_segment`,
+  `denominator`, `per_minute` -- and adds no decoder of its own, because a
+  second reader is a second chance to disagree about what the client said.
+  **A counterfactual has three ways to lie and there is a section for each.**
+  §15 is the load-bearing one: ArenaNet's own traffic scores **0 hard jumps**
+  over 35 usable game connections and 2,739 self-reports, so a rule that fires
+  on retail as often as on our defective build is reading the wire, not the
+  defect -- and it **currently fails for two of the five rules**, which is
+  PINNED rather than tolerated. Rule C (`0x002C` before every player grant)
+  has the best coverage of the four cheap rules, 5 of 7 hard jumps, and fires
+  **4.13x more per minute on retail than on the build we ship**; Rule D
+  (C plus an arrival model on the previous leg) fires 0.816x. Rules A and B
+  separate at 0.024x and 0.026x, and **Rule E -- a forward model of the sync
+  copy -- gets both halves: 7 of 7 covered at 0.228x**. A session that
+  "improves" C without re-running the control turns §15 red, and moving the
+  comparison's reference from the SHIPPED build to our worst capture -- which
+  makes C read as 0.101x and "separating" -- reddens six checks. **§18 is the
+  check that can refute Rule E**, and it is the only claim in this file that is
+  not about this file: a forward model is the "four assumptions stacked under a
+  conclusion" `movesync.py`'s header refuses, so it is paired against
+  `movetap-20260819T145939`, a `ReadProcessMemory` of `[agentMgr+0xE8]` in the
+  session capture `20260819T145717` recorded. The model sits **p50 0.0 u, max
+  67 u from what the client's own memory held over n = 251**, and the separation
+  it computes from grants on the wire reproduces `studies/movement/HANDOFF.md`
+  §1's **1,164 / 2,163 / 3,648 u** exactly, by a path that never opens the
+  movetap file to compute them. That section carries its own positive control,
+  which mutation put there: hard-wiring the residual to 0.0 left it green, so
+  the model is now deliberately halved in speed and the same residual must move
+  (0.0 -> 202 u over the same 251 pairs), and pairing a movetap run from a
+  DIFFERENT session must return None rather than inventing a comfortable row.
+  **§17 prices every threshold in the file**: retail's own two copies, through
+  the same model, sit **p50 83 u, p75 260 u, p90 653 u** apart with zero snaps,
+  so a resync threshold of 100 u sits at ArenaNet's MEDIAN separation while our
+  shipped build sits 13.5x further out. **§19 is the actionable half**: the
+  COOLDOWN is where the coverage goes, not the threshold -- Rule E covers 7/7 at
+  cooldown 0.00 s, 3/7 at 0.50 s and 2/7 at 2.50 s, while the yank stays p50
+  0.08 u at all three, because the payload is always the client's freshest
+  adopted report; and dropping the threshold from 299.33 u to 100 u buys **no**
+  coverage for 31 extra firings. §1-§2 pin `leg_distance` as the SEGMENT
+  distance and prove it is a lower bound on separation against a 201-position
+  sweep of the granted leg, the row count asserted first. §3 gates the arrival
+  model in both directions on a 2,000 u leg (t_park = 6.944 s): 32 firings, none
+  before it. §4 requires Rule B to fire **0 times** on a client walking the leg
+  it was granted and 25 times on one walking perpendicular to it -- without the
+  second half the first passes for a rule that never fires. §5 pins D as a
+  structural SUBSET of C **and** shows D firing once on a leg that did finish,
+  because a subset relation is free for a rule whose gate is `return False`.
+  §6-§7 pin the cooldown's bound on the inter-firing gap and the threshold's
+  monotonicity. §8-§9 are the COST, in the units the harm arrives in: the
+  payload is `state["pos"]`, so **staleness is non-zero only where the
+  position-trust guard REFUSED a report** (3 consecutive refusals leave the
+  payload 216 u = three intervals behind, and the tool names the one-line
+  mitigation beside it), and the self-mint bar is asserted to BE
+  `movesync.HARD_JUMP_UNITS` by identity rather than by value -- a private copy
+  is how a fix ends up scored on a friendlier bar than the defect it replaces.
+  §10 pins coverage to the interval a firing lands in and mutates it in-process
+  by deleting that firing. §11 exercises the refusals: an unknown rule name, a
+  capture with no player grant declaring a NULL **with its reason** instead of a
+  bare 0, and the retail control over ZERO connections REFUSING rather than
+  returning a comfortable zero -- `all([])` is True and this repo has already
+  shipped that control once. §11b pins the sync model's shape before any capture
+  touches it: seeded at the client's first report, still gliding 0.25 s short of
+  a 10.000 s leg (the negative half, so a model that teleports on the first tick
+  cannot pass), PARKED at t=12.0 s and t=14.5 s, and re-aimed by a fresh grant
+  from where the MODEL has it rather than from the client's report -- which is
+  what the client's own bake does, reading the sync agent's `+0x78`.
+  §13 pins the vault replay cell by cell, 15 cells:
+  `20260819T145717` reads 116/85/38/4/213 firings and 3/1/5/2/7 covered of 7 for
+  rules A/B/C/D/E, `171153` 1/7/702/1/66, `182652` 0/3/318/0/40. It also
+  re-measures the
+  census -- **0 x 0x002C sent, every run** -- and pins THE FINDING: all four
+  jumps Rule A cannot reach are missed for `not-parked`, i.e. blocked by the
+  arrival model rather than by a threshold or a cooldown, so **no parameter
+  reaches them**. §14 exists because the prompt this arc was handed called
+  `20260811T173940` a retail capture: `origin.origin_of` says `ours`, build
+  38797, in `captures/gamesrv/`, with 0 player grants and 0 hard jumps -- an
+  internal null, and a consistency check on both halves. It also proves
+  `require_single_origin` refuses a run pooling `ours` with `live`, which each
+  file's own per-file check cannot catch. §16 resolves the retail player agent
+  from that connection's own `0x0037` and corroborates it with the id-free
+  signature the 2026-08-19 corpus pass used, |grant dest - the client's own
+  report|: over the 20 connections with **>= 5 rival agents** the named agent
+  beats the population median every time (margin 1.12x worst, 4.43x median),
+  and the nearest-rival form -- which separates on only 25 of 35, because a
+  henchman a step behind the player looks like the player -- is MEASURED and
+  deliberately not the check. The population floor is declared rather than
+  chosen after seeing which rows pass, and the one connection it excludes is
+  named. **Sixteen mutations were built and run and all sixteen redden**:
+  dropping `leg_distance`'s clamp, removing Rule A's park gate, unbinding the
+  cooldown, swapping the self-mint bar for a private constant, letting the
+  payload ignore whether a report was adopted, picking the retail player by
+  grant volume instead of `0x0037`, deleting the empty-population refusal,
+  making coverage count a jump whenever any firing happened, scoring the null
+  capture as a plain zero, moving the discrimination reference off the shipped
+  build, and six on the model: never parking, teleporting to the destination on
+  the grant, re-aiming from the client's report instead of its own state,
+  running at half speed, comparing the model against ITSELF, and returning a
+  comfortable row where it should return None. **The last two were HOLES the
+  first pass left** -- a residual hard-wired to 0.0 and a refusal path no
+  full-vault run ever reaches -- and both are what the positive controls in §18
+  now exist for. Floor **47**, the bare-machine subset, against a green **98**
+  with the vault present; §13-§14, §15-§17 and §18-§19 declare `LEDGER.skip` in
+  groups without `captures/gamesrv`, `captures/live` and `captures/movetap`.
+  Reads only; sends nothing, and never imports `authsrv.py`. No client. ~6 s),
+  `toolkit/clientscan/test_grantsuppress.py` (WHAT WOULD SUPPRESSING THE GRANT
+  HAVE DONE -- the guard on `toolkit/clientscan/grantsuppress.py`, which replays
+  `authsrv.py`'s `GRANT_SUPPRESS` rule against the captures from the owner's own
+  2026-08-20 session BEFORE the reproduction is played again. Where
+  `resyncscore` prices an ADDITIVE fix (send a `0x002C` we never send), this
+  prices the SUBTRACTION, and its spine is a stream neither of the other two
+  loads: the c2s control traffic (`0x003D` with its `movementType`, `0x0047`,
+  `0x003E`) that says whether the player's hands were on the keyboard when we
+  granted. It reuses `movesync`'s loaders and its repaired two-arm hard bar
+  verbatim and defines no bar of its own -- §3 asserts that BY IDENTITY, and by
+  the absence of `hard_step`/`HARD_JUMP_*` from the file's own text, because a
+  private copy is how a fix gets scored on a friendlier bar than the defect.
+  **THE HEADLINE, and its honest half.** On the reproduction
+  `authsrv-20260820T183311-c1` (196 clicks, 140 grants, 44 s, 5 hard jumps at
+  p50 1,372 u / max 3,010 u / 6.82 per minute of span) the keyboard arm
+  suppresses **140 of 140** -- every grant went out while the client was
+  backpedalling under its own control -- and the counterfactual removes **5 of
+  5** hard jumps. On the capture of the build we actually ship,
+  `20260819T145717`, the same rule removes only **2-3 of 7**: 2 plausibly kept
+  because a causal grant survives it, and 2-3 UNATTRIBUTED with no grant in the
+  causal set at all. §14 pins that row as the load-bearing one, because 5-of-5
+  is a statement about that session and not about the build.
+  **§12 IS THE SECTION THAT REFUSES THE COMFORTABLE NUMBER.** "4 of the 5 jumps
+  had a grant inside 0.5 s" is true and very nearly free: grants arrive every
+  0.150 s in that storm, so **83 of the capture's own 132 report instants (63%)
+  also have one**, and the jumps beat their own baseline by 17 points over
+  n = 5. The rotation control -- jump times moved, grant train untouched --
+  still scores **18/27 = 67%**. So on the reproduction the time arm is grant
+  DENSITY and the file says so ABOVE the count. `20260819T145717`, whose
+  baseline is 10%, is where that arm carries information (43% vs 10%, rotations
+  0-2 of 7). **§13 is what does discriminate, and it is the fifth jump**: the
+  one with no grant inside 0.5 s landed **0.000 u -- bit-identical -- on a point
+  granted 5.07 s earlier**, against a control (nearest place the client had
+  already stood) of 1,105 u. It is not unexplained; it is the `+0x48` arrival
+  maturing, which a 0.5 s lookback cannot see by construction, and 2 of the 5
+  landings are bit-exact on a granted point. The counterfactual is therefore
+  printed as a **BRACKET** across two attributions (a 50 u display band, and a
+  parameter-free "closer to a granted point than to anywhere it had already
+  stood") rather than at either alone, and §6 asserts the four buckets --
+  removed / kept / unattributed / **unknown** -- PARTITION on every capture. The
+  fourth exists because `sup_at.get(t, False)` would score a lookup MISS as
+  "the rule keeps it", which reads as a finding when the truth is that the code
+  could not tell. **THE CONTROLS, and the reason there are two kinds.** Tonight's
+  other two captures carry **ZERO grants**, so a suppression share over them is
+  0/0 and §7 pins that the tool REFUSES it by name and returns non-zero rather
+  than printing a comfortable "0 of 0". The control with a denominator is §8:
+  the **five clicks** in `20260820T182934`, of which the rule calls **0**
+  keyboard-driving at every W in the sweep, against 196 of 196 in the
+  reproduction -- the same classifier, the opposite answer. §9 is the mutation
+  that proves it can fail: delete the stop term and 182934 goes 0/5 -> 1/5 at
+  W=1.0 and 0/5 -> 2/5 at the shipped W=3.0, and the stop term keeps 10 of
+  `145717`'s 40 grants. §10 is the classifier's POSITIVE control and it prices
+  the rule's only free parameter against the client's own cadence: a straight
+  keyboard hold in `20260820T182554` reports every **1.80-1.82 s**, so W = 1.0
+  -- `authsrv.py`'s own `fresh` constant, and the number a reviewer reaches for
+  -- leaves **10 of that capture's 15 intra-hold intervals uncovered**, which is
+  grant-shaped leakage in exactly the posture the owner is most likely to try
+  next; at 2.0 and at the shipped 3.0 it is 0 of 15, and the classifier calls
+  87% of that capture's span driving against 56% of the click-only one.
+  **§15 pins the two arms MARGINALLY and mirrors the server's own constants.**
+  Behind the keyboard arm the rate limit removes nothing MORE, which reads as
+  "it does nothing" and would get it deleted; ALONE it takes the reproduction
+  from 140 grants to **38** (102 suppressed) -- independently reproducing the
+  figure `authsrv.py`'s own comment carries. The rate arm is asserted to be a
+  STATE MACHINE and not a pairwise filter (102 vs 134 over the same timestamps,
+  because a suppressed grant does not reset the floor). `GRANT_LOCAL_WINDOW`,
+  `GRANT_MIN_INTERVAL` and `GRANT_SUPPRESS` are read out of `authsrv.py`'s
+  SOURCE TEXT -- never imported, that is a server module -- and pinned against
+  this file's mirrors, so a retune reddens here and whoever retunes re-runs the
+  replay; every number above is a number FOR THOSE VALUES, and the flag is
+  asserted OFF by default so this is a costing of an OPT-IN. The headline is
+  also asserted identical at this file's independently derived W = 2.0, sized
+  from a different corpus filter (74 captures, 4,190 intra-hold gaps, 96.25%
+  at or under 2.00 s) than the server's 3.0. **Nine mutations were built and
+  run and all nine redden**: deleting the stop term, deleting the recency term,
+  letting a missing suppression key score as `kept`, scoring the density null
+  over the jumps instead of the population, attributing by time only, making the
+  rate arm pairwise, drifting either shipped-constant mirror, and turning the
+  0/0 refusal into a plain zero -- with the source sha256 asserted identical
+  before and after. Floor **29**, the bare-machine subset, against a green
+  **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
+  without it. Reads only; sends nothing, and never imports `authsrv.py`. No
+  client. ~7 s),
+  `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
+  INSTRUMENT, and this is what makes that true.
+  `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
+  `movesync` print during a live run, so a real run can be matched against it.
+  **Those blocks were written before the instrument existed** and had drifted
+  five ways at once by 2026-08-20: an `ALIASING: phi 0.011 ... white 0.409,
+  A = 0.026.` line no code has ever printed, naming a `white` field no code has
+  ever had; a 2-line fence header where the printer emits **3**; an
+  `unread:*  0  0.0%` row that `fence_verdict` **cannot** emit, because it
+  iterates `sorted(reach.items())` and a label with no occurrences is not in the
+  dict -- structurally unprintable, not merely absent; an EPISODES section wrong
+  in nearly every particular (no poll-rate line, no `effective n = ... QUOTE THE
+  EPISODES.` line, ONE Nyquist threshold where the code names two -- DETECT and
+  CHARACTERISE -- and no `a LOWER BOUND -- censored` marker); and a whole
+  APPENDER WITNESS section attributed to `movetap`, which has no such printer
+  (`grep -c appender_witness toolkit/clientscan/movetap.py` = **0**; it is
+  `movesync.print_fence`'s). **Nothing caught any of it for as long as the
+  document existed.** One block carried a RECONSTRUCTION label and the label was
+  read as a licence rather than a debt -- §12 item 10 filed two of the five as
+  accepted residue and undercounted the rest. A label on a shape does not check
+  the shape; a rule nothing checks is a wish. So every one of §6's **15**
+  untagged fenced blocks is now regenerated from the real printers and asserted
+  against the document **byte for byte**. THE FIXTURES LIVE IN EXACTLY ONE PLACE
+  -- `toolkit/clientscan/probedoc_fixtures.py`, 25 registered fixtures --
+  imported both by this test and by whoever regenerates §6
+  (`python toolkit/clientscan/probedoc_fixtures.py --write <dir>`), so the two
+  cannot diverge; that single-source rule is the whole guarantee and splitting it
+  voids the test. §1 pins the BLOCK COUNT before comparing anything, because a
+  block quietly deleted would otherwise just stop being checked. §2 checks §6's
+  own sha256 pin of `movetap.py` and `movesync.py` against the files on disk --
+  the document says a moved hash voids every block below it, which is a claim
+  about the source and therefore checkable, and it is the tripwire for drift in
+  output §6 does NOT quote. §3 pins six printer SIGNATURES by name, including
+  `gate1_verdict(g1, g1why, early_a, point_bad, n)` where `early_a`/`point_bad`
+  are TALLY DICTS -- a caller passing ints raises `AttributeError` at
+  `.get(True, 0)`. §4 asks the SYNTAX TREE (not a grep, which trips on the word
+  "Whitespace" in a comment) whether any printable string literal in either
+  module carries a `white` field, and whether `movetap` has an appender witness
+  at all. §5 is TWO WITNESSES on each block's provenance tier: the document's own
+  prose against the fixture registry. They must agree, so relabelling a block
+  RECONSTRUCTION while a fixture still exists for it is a CONTRADICTION and goes
+  red -- relabelling is not a way out. §6 is ONE loop over all fifteen with a
+  tally asserting each produced exactly one outcome; a doc-marked or
+  registry-marked RECONSTRUCTION is a DECLARED SKIP, never a silent pass, and the
+  two OBSERVED blocks are re-run through `movesync`'s real CLI over the vault
+  captures they name (`movetap-20260819T145939` x `authsrv-20260819T145717-c1`,
+  and `--wire-only` over the second) or skipped where the vault is absent. §7
+  renders every fixture TWICE and requires the two identical, including the 12
+  not quoted in §6, because a fixture that moves between runs is noise and noise
+  is how a bar gets lowered -- and a rotted unquoted fixture is worse than none.
+  **Four sabotages were BUILT AND RUN on scratch copies and all four behave:**
+  (a) one character inside Block 1 (`402` -> `403`) reddens exactly ONE check,
+  naming the block, its document line range and the first differing line with
+  both sides printed; (b) `WOULD` -> `MIGHT` in `fence_verdict`'s header on a
+  scratch `movetap.py` reddens **8** -- the sha256 pin plus all 7 blocks that
+  printer feeds; (c) Block 3 relabelled RECONSTRUCTION in the document alone
+  reddens §5 and turns its content check into a printed `[SKIP]` carried into the
+  verdict's "not measured this run"; (d) BOTH witnesses relabelled is green at 73
+  with 1 declared skip, which is the shape a future block with no output yet
+  takes. **(d) earned its keep by finding a real hole in the first draft of this
+  file**: a `continue` dropped a registry-side RECONSTRUCTION with no check AND
+  no skip -- a block that quietly stopped being covered, this document's original
+  sin reproduced inside its own guard. §6's tally check is the fix. WHAT IT DOES
+  NOT COVER, named rather than implied: only §6's fenced blocks. §3's pre-flight
+  greps (`gate_reach` = 31, `shut:apply` = 0), §5's build lines, §7's failure
+  table and §10's addresses are prose and are NOT pinned. And the FIXTURE numbers
+  are not measurements of the client -- real code over hand-laid input, so what
+  is pinned is the SHAPE the code prints; §6, §11 and §12 say so per block and
+  this test does not upgrade them. Floor **72**, the bare-machine subset, against
+  a green **74** with both captures present. No client, no server. ~1 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -2594,6 +3586,121 @@ Every one of these, in the order they were written:
   assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
   `dword` while the client does `fld`, so the broken reading is reproduced inline and
   required to differ). Needs `vault/captures/live/`; floor 36),
+  `toolkit/authsrv/test_effects.py` (**the effect channel's WRITER**, where
+  `effects.py` meets the reader above. R4b's spine: `0x0042` opens an episode on an
+  agent and `0x0044` closes it, and until 2026-08-20 this server modelled none of it
+  — `authsrv.py` knew `EFFECT_DEAD` and `EFFECT_TRANSITION` and nothing else, so every
+  skill whose scale was not damage resolved to nothing. **§2 is the check the module
+  rests on and it has NO FREE PARAMETER**: for every apply in the live corpus, predict
+  the f32 duration on the wire from the applying skill's own `duration0`/`duration15`
+  endpoints in the CLIENT'S table at rank = field3, using the client's own two-point
+  scaler — **96 of 96 non-condition applies land exactly, 0 miss**. The endpoints are
+  ArenaNet's, the formula was measured at `0x005A8920` for the DAMAGE scale, and
+  field3 and the duration are retail's own bytes, so our decoder cannot force it true.
+  **That settles `bufflog.field3_report`'s registered open question** — (a) field3 is
+  the applying skill's attribute RANK, (b) it is a duration-shaped field — which its
+  docstring said was "one session away". It was ZERO sessions away and the
+  discriminator was already in the vault: skill 160 carries field3 = 15 against a
+  duration of 13.0, and skill 364 appears at two field3 values (10, 13) producing two
+  durations (10.0, 12.0), both predicted. Reading (a) CONFIRMED, (b) REFUTED.
+  Conditions are counted SEPARATELY and a check requires that some of them genuinely
+  break the rule, so "excluded" cannot quietly become "they agree too" — 480 has
+  endpoints 3/3 and appears on the wire at 9.0, because a condition's duration comes
+  from the skill that inflicted it. (The corpus now holds **102** applies; the 97 in
+  the entry above was true when it was written.) **§1 walks the duration rule branch by
+  branch, and every permitted branch names a retail witness while every refused branch
+  names its zero**: bit SET → interpolate (160, 364, 348, 814); bit CLEAR with EQUAL
+  endpoints → the flat value (**984 and 998, which retail sent at duration 30.0 with
+  the bit CLEAR — so the bit means the duration SCALES, and a server honouring it the
+  strict way cannot reproduce two of retail's own applies**); a SENTINEL → refuse
+  (0x20000 ×22, 0x30000 ×7, 999999 ×1, and 24 of the 30 are enchantments, which is
+  where "maintained until removed" belongs — Vital Blessing 289 is one and it is on
+  our own enemy's bar, so this refusal fires every session); DIFFERING endpoints with
+  the bit clear → refuse (49 skills, zero witnesses). **§1c is what licensed adding Glyph without waiting for a run**, and it is
+  refutable by construction: across the **478** corpus skills in the five effect
+  types, **not one** resolves to "no duration" — 74 of 76 stances, 9 of 10
+  glyphs, 13 of 14 preparations, 142 of 151 hexes and 194 of 227 enchantments
+  resolve and the rest refuse on a sentinel. If "this type IS a timed effect"
+  were the wrong mapping, the giveaway would be a type full of skills with
+  nothing to time. The control is the other side of the partition: **488**
+  corpus skills DO have 0/0 endpoints and **none** is an effect type.
+  **§§4c–4d are the ONE-AT-A-TIME rule**, which is also the first answer this
+  repo has to "how does an effect get REPLACED" — re-sending `0x0042` does
+  nothing, measured under both id choices, so a replacement has to be a real
+  `0x0044` then a `0x0042`. Three of the five types carry the rule and two say
+  it in text the game shows a player: WIKI (GWW "Stance", quoting Isokeh in
+  game) *"Only one Stance can be active at any time... using a new Stance will
+  replace the previous one"*; (GWW "Preparation") *"Only one preparation can be
+  active at a time"*; (GWW "Glyph") *"the new one replaces the old one"*. It is
+  per TYPE and per AGENT, hexes and enchantments carry no such rule (the
+  control), and the TABLE deliberately does not enforce it — the CALLER does,
+  because the replacement is a wire operation and an episode dropped silently
+  leaves its icon on the client's screen. §4d pins that the server sends REMOVE
+  **then** APPLY, in that order, naming the old episode's buff id.
+  **§3's negative is the point**:
+  Desperation Blow carries a real 2-second duration and is an ATTACK, and nothing in
+  the table says what those seconds are, so it opens nothing — the same refusal
+  `SCALE_MEANS_DAMAGE` makes one layer up. A Shout opens nothing either, *even though
+  the corpus's own witnesses include two of them*, because party-wide shouts break the
+  premise that the target byte names the recipient. §3b pins the target byte with the
+  type column as its witness (all 199 Attacks are 5, 75 of 76 Stances are 0) and pins
+  that an UNRESOLVED code degrades to the caster's own choice rather than to a guess
+  about the enum. §4 is the table — ids distinct among LIVE episodes and reused after
+  close, which is every property the corpus actually pins; `due` oldest-first; a double
+  close returning None rather than raising; a zero-length episode REFUSED. **§4b pins
+  retail's allocator against a fix of ours that was made and reverted**: a client run
+  showed one icon for four concurrent episodes of one skill, so the table was collapsed
+  to one episode per (agent, skill) — and the corpus then refuted the collapse, holding
+  **15 overlapping re-applications, every one under a NEW buff id** (120→121 at a 0.43 s
+  gap), with the first still closing `expired` on its own duration and same-id repeats
+  only ever occurring after a close. The section carries the client fact that started it
+  too: a repeat `0x0042` for a live (agent, skill) is DISCARDED, measured under a new id
+  and under the same one — the latter a **stated prediction that was refuted** — so how
+  retail refreshes an effect is NOT FOUND, and the real defect is our placeholder AI
+  re-casting a hex the target already has. **§5 runs our
+  own emission back through `bufflog`, the reader written for retail's**, and requires
+  `expired` with a zero residual — *with a control that closes the same episode early
+  and must read `stripped`*, so the check discriminates rather than agreeing with
+  whatever it is handed. It also pins the float-in-a-dword trap from the writer's side.
+  §6 pins that death STRIPS (per-agent — the enemy's hex survives the player's death)
+  and that `--no-effects` is a real control. Needs `vault/captures/live/` and the
+  pinned client for §2, which is declared as a skip naming what a green run without it
+  has actually checked. **§§4e-4g are DEGENERATION**, which is what makes a
+  condition do anything and which closes `studies/isle` B4's one open clause.
+  The pips are GWW's (*"each pip represents a loss of two health per second"*;
+  Bleeding 3, Burning 7, Disease 4, Poison 4, capped at 10) and the other six
+  conditions degenerate nothing -- a fact, not a gap, with Blind and Crippled as
+  the control. Bleeding on a 100-health player is pinned at exactly `-0.06`/s on
+  `0x00A2`, the NO-TARGET float twin (PLAN.md 3.3 had these properties on
+  `0x009F`; the corpus put them here). An UNCHANGED rate must send nothing, a
+  steady tick must send **nothing at all** -- B4's *"passive ticks are never
+  streamed"*, so the server spends health silently and the client animates from
+  the one rate -- and an EXPIRY must push the rate back to zero, which is the
+  half a server forgets: the icon goes and the arrows stay. **§4f0 is the
+  no-stack rule, and a run forced it**: with the enemy's Sever Artery on a 0 s
+  recharge the player picked up FIVE Bleeding episodes, 3 pips then 6 then 9 then
+  the cap at 10 -- twenty health a second. WIKI (GWW "Condition" Notes):
+  *"Reapplied conditions will last the original time period, unless the reapplied
+  duration is greater than the remaining amount of time."* So a shorter
+  re-application is a no-op in the table AND on the wire, and a longer one
+  extends as REMOVE-then-APPLY; floor 74),
+  `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
+  decode turned into a consumer. The framing check that matters is run against
+  **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
+  `20260817T183756`, extracts the literal text, re-frames it with `chatdefs.all_chat_body`
+  and requires the result byte-identical to the joined retail body, **fragment
+  boundaries included** — which is also where the cap is pinned at **121 units, not
+  the 122 the field width and OpenTyria both suggest** (121 = declared − 1, charstore's
+  exclusive-cap rule arriving on a second field). The same section re-runs the
+  sender/body cross-check at n=1 (playerId 4 → a `0x0059` name) so the decode the arm
+  rests on cannot silently rot. The dispatch half calls `_handle_chat_send` with a
+  recording send: `!text` must produce CORE fragments then LOCAL `[pid, 3]` **in that
+  order** (the tag commits the buffer, so tag-first renders an empty line), `/bow` must
+  produce the observed `#1687 #13 #pid` on SERVER `[pid, 6]`, and every other command,
+  sigil and the empty string must send NOTHING — six refusal rows, each asserting zero
+  sends, because a refusal that echoed anyway would put invented bytes on a measured
+  channel. Everything the arm can emit round-trips through the real codec. Needs
+  `vault/captures/live/` for the retail section; floor 28 of a 33-check green run),
   `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
   captures the test builds out of dicts -- no vault for the scoring half, no socket, no
   client, because a scoring defect is not a property of any one capture. It is mostly
@@ -2824,6 +3931,134 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
+  `toolkit/authsrv/test_armour.py` (**the armour RATING** — 16 checks, floor 16).
+  `studies/character/FINDINGS.md` §2 asked on 2026-08-06 where an item's armour
+  rating lives and proposed the experiment that would answer it: send the
+  warrior chest and read the rating off the client's own tooltip. It sat open
+  for a fortnight because it was TWO problems wearing one coat — the modifier
+  words were opaque until 2026-08-20, and **this server was not sending the
+  armour at all**, so the character stood in every capture bare-chested and
+  there was nothing to hover. Decoding alone would not have closed it.
+
+  §1 requires all five pieces to carry identifier **572** with argument **25**
+  (the rating) and the chest to carry **527** arg 20 beside identifier **4**,
+  whose only string is 2480 `vs. physical damage` — the pair the client renders
+  as `Armor +20 (vs. physical damage)`. §2 checks the plumbing that had to
+  exist for any of it to be visible: the equipped-bag slots are retail's
+  MEASURED ones (Body 2, Boots 3, Legs 4, Gloves 5, Head 6), the five item ids
+  collide with neither the weapon, the Backpack nor the purchase namespace, and
+  the burst reads the constants rather than repeating slot numbers.
+
+  **§3 is the check worth having and it is not about our code.** These rows came
+  from OpenTyria's hand-written `GmDefaultArmors`, and `content/items.toml` said
+  in place: *"no capture of ours has ever carried these bytes."* Our own vault
+  refutes it — ArenaNet sent `0x0161` declarations for all five of these exact
+  model ids, **nine sightings each across three captures**, and §3 requires every
+  fixed field AND all three modifier words to agree. `dye_colors` is compared as
+  MEMBERSHIP, not equality, because it is what a player dyed that instance and
+  retail shows four values for one model; requiring equality there would report a
+  real agreement as a mismatch. §4 is the control: armour on by default, a
+  `--no-armour` flag that empties the doll, and a check that no piece ships with
+  an empty modifier list — which is the "renders and protects nothing" state the
+  study named.
+
+  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
+  a modifier, and the attribute bonus** — 28 checks, floor 28). Every item on the wire carries a list of 32-bit modifier words, and
+  `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
+  rating, damage range and every "+15% while…" line live in them and nobody had
+  decoded one. `itemmods.py` reads the format out of the client's own parser —
+  `{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}` plus two skip
+  predicates — and dumps the identifier vocabulary by walking each of the 133
+  dispatch handlers for the TEXT IDS it formats its line through.
+
+  **Two checks here can refute the layout and neither has a free parameter, which
+  is the whole reason this file exists.** §2 decodes words whose rendering this
+  repo has already watched on a caged client (`Armor: 25`, `Armor +20 (vs.
+  physical damage)`, a Backpack that holds twenty items) and requires the argument
+  field to equal the number that was on the screen. §4 runs **every modifier word
+  ArenaNet ever sent us** — 5,266 of them across 1,781 item declarations in 13 live
+  captures — and requires every identifier to be one the client actually
+  dispatches: a wrong shift or mask scatters identifiers across the 10-bit space
+  and most miss both jump tables. The observed answer is **5,266/5,266 over 35
+  distinct ids**. §4 declares a SKIP without the vault rather than passing on no
+  data, and §5 blanks the anchor bytes to prove the tool REFUSES instead of
+  reporting an empty vocabulary — which would read as "this build has no item
+  modifiers", the shape of every silent-zero bug in this repo.
+
+  **§6 and §7 answer a different question: who reads a modifier the tooltip
+  renders NOTHING for.** `ItemName.cpp` sends 21 of its 157 dispatch slots to the
+  walker's loop tail, and the two busiest identifiers in the wild are among them.
+  §6 pins that count at 21 — it was 22 until the detector was fixed, because the
+  last renderer in the chain falls through into the tail, and identifier 526 would
+  have been published as "the client draws nothing for it" while it pushes string
+  2387 and calls TextApi. §6 then reports that **633 is read by two literal
+  compares outside the walker and 617 by nothing at all**, and those two checks
+  sit together on purpose: the positive one is the control that makes the negative
+  worth anything, which is what `studies/enemy` §6o lacked when it reported a
+  field as having no writer. §7 takes **570 chances** to refute what 633 turned
+  out to be — every argument must be a real attribute (`< 51`, from
+  `attribtable.py`) and every second value a reachable rank (`1..12`, from
+  `attribpoints.py`), two tables this file does not extract; and the attribute
+  must be constant per item model while the rank varies, which holds on 63 models
+  and 0 exceptions.
+
+  **§8-§10 are the attribute BONUS, and they are here because of how the search
+  for it failed first.** `studies/itemmods` had recorded "exactly two handlers
+  treat their argument as an attribute index" — a count taken from the two
+  asserts naming `attrib < CHAR_ATTRIBS`, from a tool that prints in its own
+  output that its module lists are a FLOOR and not a census. §8 asks the right
+  question instead: which handlers resolve an attribute NAME through
+  `s_attrib`? It locates that accessor **by shape** — four one-line field
+  readers with a stride-20 `lea`, of which the lowest displacement is the table
+  base — so no build-specific address is involved, and the answer is
+  **fourteen**, the same fourteen on all three builds. Two of them render
+  `<attribute> +N`: **543 Stacking** and **542 Non-stacking**.
+
+  §9 is the check with no free parameter: compose 543's word from its four
+  fields and you get `0x21F01401`; ArenaNet sends `0x21F81401`. The difference
+  is **bit 19**, one of three bits the walker never reads and which §10 measures
+  to be constant per identifier across all 5,266 corpus words (35 identifiers,
+  0 exceptions). §10 also replays all **26** attribute-bonus words the corpus
+  holds — every one `Swordsmanship +1` on one item type, all carrying an armour
+  rating — and requires the composer to reproduce each exactly.
+
+  §11 guards a duplication that was introduced ON PURPOSE. `content/items.toml`'s
+  starter hammer now carries a real 543 word AND a declared `attribute_bonus`,
+  because the run showed they drive different surfaces — the word draws the
+  tooltip, the field feeds the server's `0x003A` effective column. One fact in
+  two places is the shape of bug `studies/pvpui` §34.5 is about, so §11 fails if
+  they ever disagree and has a control that bends the field to +2 to prove it can
+  go red.
+
+  **§12-§14 are what turn "nothing reads 617" from an absence into a
+  measurement.** §6 above reports the negative with a positive control, which is
+  the right shape and still not enough: a search that comes back empty says
+  nothing about whether it had anywhere left to LOOK, and `studies/enemy` §6o
+  closed a question for a whole session on exactly that footing and was false.
+  §12 bounds it. To read an identifier the client must isolate bits 29-20; x86
+  leaves two ways to do that, both fixed byte sequences; an exhaustive scan of
+  `.text` finds **sixteen** such sites in a ten-megabyte image, naming eleven
+  identifiers between them, and 617 is not one. The check also requires the
+  **158** further mask sites that are NOT modifier code to be counted rather than
+  filtered away — `0x3ff00000` is also a double's exponent mask, and a scan that
+  dropped them silently would be reporting item code while claiming to report an
+  instruction. §13 requires the identical census on all three builds, because a
+  negative that holds on one build could be that build's quirk.
+
+  **§14 is the positive half, and its control is the point.** An absence is hard
+  to build on, so the corpus is asked what 617 IS: its `arg2` is single-valued
+  for **71 of 71 `model_id`s** over 420 words. That would be worth nothing alone,
+  because any field with small enough groups looks deterministic — so the second
+  check requires the item's FILE id to FAIL the same test, which it does (5 of 34
+  carry more than one value). The study's earlier "constant for 29 of 34 item
+  model ids" was the file id under the model id's name, and §14 is what corrected
+  it.
+
+  The floor was 12 because 14 was declared, 12 executed, and the ledger refused
+  the run — the guard doing its job on the file that documents it. It went to 19,
+  then 28, then 30, then 37, each time read off the green run rather than
+  predicted.
+
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on
   `Assertion: level < arrsize(s_attribPoints)` / `CharData.cpp(202)`, and
@@ -3057,14 +4292,31 @@ Every one of these, in the order they were written:
   identified as a build that is not the pin. `pinned.identify_build()` now hands
   back the matched row, and `buildid.of_image()` is the one call for a build a
   tool prints or emits: registry sha256 first, the client's own build getter as
-  the fallback that answers for an image `BUILDS` has never seen — our patched
-  38833 copy is exactly that, real and unrecorded, where stamping the pin is
-  pure invention. The checks are written to fail against the old code rather
-  than merely to pass against the new: each non-pinned build must read as
-  ITSELF *and* must not read as 38797, because a label printing both is still
-  the misreport.
-  Needs the vault. Floor 39 (was 29; §5 adds 12, of which 2 need our patched
-  38833 copy and declare a skip), ~8 s),
+  the fallback that answers for an image `BUILDS` has never seen. The checks are
+  written to fail against the old code rather than merely to pass against the
+  new: each non-pinned build must read as ITSELF *and* must not read as 38797,
+  because a label printing both is still the misreport.
+  **§5's fallback fixture MOVED on 2026-08-19 and the section went red on the
+  way**, which is worth recording because the red was correct. It named our
+  patched 38833 copy, `vault/run/2026-08-13_64fae3b1369b/Gw.exe`, on the strength
+  of "`patched` is None for that build" — true when it was written on 2026-08-17,
+  false two days later, when `pinned.BUILDS` gained a patched digest SET and that
+  file's `e06ada3b…` was committed into it. `identify_build` now answers
+  ('patched', 38833) where the section pinned ('unknown', None). The CASE — a real
+  client of a build we hold, sitting in no registry row, where only the image's
+  own getter can answer and stamping the pin is pure invention — is unchanged;
+  only the file that still fits it moved, to `vault/run/reskin-roster/Gw.exe`,
+  the reskin experiment copy that `register_patched`'s sanity bound refuses (682
+  bytes in 211 runs) and that nothing has ever filed. **What that fixture cannot
+  pin is said out loud in the file**: reskin-roster IS 38797, so the NUMBER no
+  longer separates "read from the image" from "answered with the constant" — both
+  are 38797. A third check does the separating instead: the `why` must name the
+  image's own build getter and must NOT claim a registry row, which is exactly
+  what an implementation returning `pinned.BUILD` could not say. Reverting the
+  repoint reddens all three.
+  Needs the vault. Floor 39 (was 29; §5 adds 12, of which 3 ride on
+  `run/reskin-roster/Gw.exe` and declare a skip — 42 on a full vault, 39 on a
+  vault holding only the pristine snapshots, which is the mandatory core), ~8 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
@@ -3409,10 +4661,113 @@ Every one of these, in the order they were written:
   in the wrong order greps identically — with a reversed probe that must be
   rejected and a correct one that must be accepted. `--any-build` is the
   deliberate override, because a gate that makes a tool unusable the day a build
-  ships is one somebody deletes. Without a vault §4 skips and the run scores 43
-  against a floor of **61** (was 55; 38833 adds 6), so it goes red — the 43 was
-  measured with `RURIK_VAULT` pointed at an empty directory, not derived by
-  subtraction. ~2 s),
+  ships is one somebody deletes.
+  **§7 AND §8 ARE THE DIGEST SET, added 2026-08-19, and the gate they cover had
+  gone INVERTED.** "Our patched copy" was ONE hand-typed sha256 of ONE whole
+  file, and a whole-file hash of a patched binary goes stale the moment the
+  patcher changes. It did — the key-tap added three sites (file `0x508E2`,
+  `0x50905`, `0x3DB4CE`) — so the gate REFUSED the freshly patched client at
+  `vault/run/2026-07-29_221c13772c7a/`, the copy we launch and the one
+  `movetap.py`:438 gates, while ACCEPTING the two superseded copies at `-c2/` and
+  `-probe/`; build 38833 had no patched hash at all, so the newest build was
+  unrepresentable, and the only way past either was `--any-build`, which turns a
+  gate off rather than fixing it. `Build.patched` is now a TUPLE of
+  `PatchedCopy(sha256, how)` and **the patcher appends its own digest** into
+  `vault/client-patched/patched_digests.json`, so registration is a step in
+  building the client rather than a chore nobody was ever going to do by hand on
+  patcher-change day. sha256 is still exact — there is simply more than one right
+  answer — which is why this was chosen over a structural allowlist: an allowlist
+  accepts ANY bytes at an allowed site, and the most consequential bytes in the
+  file, the Diffie-Hellman modulus that decides which server a build may be
+  pointed at, sit at one. §4 now asserts both directions against the real files
+  (the current copy passes AND the two stale ones still do, because fixing it by
+  dropping the old digest would have inverted it the other way), and pins the
+  structural evidence the refusal quotes: our patches are 6–9 differing runs from
+  pristine, `run/reskin-roster/` — a real client of the right build — is **211**,
+  and the other build at the same length is **152,735**, which is what tells an
+  operator "ours, unregistered" from "not this build at all". **That third figure
+  read 152,944 until it was re-measured**, and the correction is small but it is
+  the kind this module exists to make: 152,944 is `run/reskin-roster/Gw.exe`
+  against 38833's pristine — an outlier copy against the wrong build — printed as
+  a property of the two BUILDS. Pristine against pristine is 2,613,239 bytes in
+  152,735 runs, §4 now re-measures exactly that pair, and every cross-build pair
+  in the vault falls in 152,735–152,944 (n=9), so nothing resting on it moves —
+  but it is the one number in that refusal that is not computed from the file in
+  hand, and a number a message quotes and nothing re-measures is the same wish as
+  a rule nothing checks. §7 runs the whole
+  registration cycle against a FAKE vault so the real one is never written: the
+  refusal fires on an unregistered right-sized file FIRST, the same file is then
+  registered through `register_patched()` and accepted, and the reason must NAME
+  which source vouched — the reproduced stale-hash configuration, where the
+  build's committed digests do not contain the file and the set does. Its
+  controls are every way the new write path could have widened the gate —
+  registering the pristine image, a wrong size, a file 200 runs out, an unknown
+  build, a CORRUPT registry (which must read as unreadable and refuse, never as
+  empty and silent) — each with a positive half, because a `register_patched`
+  that refuses everything puts the staleness back by another route. §8 asks the
+  SYNTAX TREE whether `make_custom_client.py` and `make_run_dir.py` actually call
+  it, and call it AFTER they write: neither had any such call until this round,
+  and "registers after writing" greps identically to "registers before writing",
+  so the checker is required to reject both a reversed and a call-less patcher.
+  It also pins `build_arg`, which was a live defect the first time `--register`
+  ran: argparse hands back text, so `--build 38797` reached `select()` as the
+  STRING it refuses on purpose, and the CLI answered "no such build in the vault:
+  '38797'" while listing 38797 in the same sentence — the lookup keeps refusing
+  and the coercion sits at the argv boundary.
+  **§9 IS THE ADVERSARIAL PASS OVER §7's OWN CHANGE, the same day and after it**,
+  and every check in it is an attack that SUCCEEDED against the morning's code and
+  was measured before it was fixed. Appending a digest set stopped the gate
+  refusing the client we launch; it also made "register" a verb the gate honours,
+  and there were four ways to say it about the wrong bytes. **10,483,904 bytes of
+  `os.urandom` registered under `strict=True`** and `assert_build` then called them
+  patched, because with no pristine image on disk `diff_against_pristine` answers
+  `(None, None, why)` and the sanity bound read `if nruns is not None and … and
+  strict` — SKIPPED in the one configuration where nothing else can tell a patch
+  from a stranger, and `find()` documents that configuration as supported while
+  `make_run_dir.py` registers on every run. **ArenaNet's own pristine 38833 image
+  filed as our patched 38797**, because only the SELECTED build's pristine was
+  compared and the two builds are the same length; the refusal now covers ANY
+  known build's pristine and has no `--force`, since there is no legitimate
+  reading of the shipped binary as one we made. **A registration whose write
+  FAILED was honoured by the gate for the rest of the process** —
+  `action='refused'`, no file on disk, accepted digests 3 → 4, `assert_build`
+  "patched" — because the row was appended to the list cached in `_registry`
+  before the write was attempted; it is built into a new list now and the cache is
+  dropped on the error path, so the module's stated fail-closed design is what the
+  code does. And **registry rows are validated on read**: a truncated digest, or a
+  row whose `build` and `stamp` name two different builds — which
+  `accepted_patched` matches on EITHER, so one such row vouched under BOTH — is
+  dropped and counted in `why` rather than honoured. Each has a positive half in
+  the same block (the deliberate `strict=False` path, a file that is nobody's
+  pristine, the same call with the write unblocked, a well-formed row), because a
+  `register_patched` that refuses everything puts the staleness back by another
+  route. §8 gained that pass's two CALL-SITE halves: the build handed to
+  `register_patched` must not be one the patcher chose — it was `build=tag`, a
+  regex over the source exe's **filename**, and `CLAUDE.md` says never select a
+  build by filename — so the bytes decide and the tag is a cross-check that must
+  agree or the registration is refused; and `import pinned` must sit inside the
+  same `try/except` as the call, since both patchers call the registration
+  "NON-FATAL, deliberately" in a comment and neither enforced it. Both carry
+  controls in both directions, because `build=tag` and a module-level import grep
+  identically to the right thing. §4's attribution check was rewritten in the same
+  pass: `"committed in pinned.BUILDS" in detail or "vault registry" in detail`
+  cannot fail under its own `what == 'patched'` guard — every patched detail ends
+  `[{acc.source}]` and that source always begins with one of exactly those two —
+  so it now asserts the NAMED source is the list the digest is really in.
+  Without a vault §4 skips and the run scores 109 against a floor of **130**, so
+  it goes red — **and until this pass it did not**. The old floor of 104 was
+  arrived at by subtracting the optional checks off a full vault's total; an empty
+  vault scored 109, five ABOVE it, so the sentence promising a red run described
+  something that never happened (and the same comment said "8 of the 112" for a
+  114-check run). The floor is now MEASURED on a minimal legitimate vault —
+  `client/<stamp>/Gw.exe` for all three builds and nothing else, a machine that
+  snapshotted its install and never patched a client — which scores 130 with 1
+  declared skip. The full vault scores 143; the 13 extra ride on copies a
+  legitimate vault need not hold (`run/<stamp>`, `-c2`, `-probe` and the patched
+  38833 copy at 2 checks each, the two `run-live` copies at 1 each, the patch-bound
+  and reskin measurements at 3 between them). The cross-build distance check above
+  moved it 129 → 130 rather than into the 13, because it needs only the pristine
+  images. ~6 s),
   `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
   the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
   pins, each to a claim that was in circulation: **477 of 477 table entries carry a
@@ -3611,7 +4966,14 @@ Every one of these, in the order they were written:
   filter that drops everything produces a very clean census of zero. The
   instrument excludes itself and says so. `--diff` exits **1 for a changed
   census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
-  draws. No vault, no client, no socket. Floor 40, ~2 s),
+  draws. **68/7 is the founding measurement and not today's**: the census pin is
+  a literal in the test and it is **99 across 14 files** as of 2026-08-19, with
+  1,012 prose citations and 299 test expectations. It had been RED at 86/13 —
+  `framebus.py` 13 → 21, `movetap.py` 0 → 1 (`RVA_TLS_INDEX`, and the 14th file)
+  and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
+  the patched-digest set was added). The docstring's changelog names each, which
+  is the format that makes a moved census a result rather than a surprise. No
+  vault, no client, no socket. Floor 40, ~2 s),
   `toolkit/test_updatecheck.py` (the before/after update commands —
   `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
   expires if nobody runs it in time: an update is not schedulable and half the
@@ -3836,8 +5198,13 @@ Every one of these, in the order they were written:
   no condition-1 claim to break, got no refusal, and reddened naming the gate while the
   gate was fine. It did that within minutes of landing, when a parallel session removed
   `effects.toml` and left `npcs.toml`, whose rows are all `capture`; the honest answer
-  there is the skip it now declares. Floor 39, the MEASURED vault-less score; 40 on an
-  overlay with no extracted-source row, 42 with one),
+  there is the skip it now declares. Floor 40, the MEASURED vault-less score; 41 on an
+  overlay with no extracted-source row, 43 with one. It was 39 until 2026-08-20,
+  when WORLDMAPS-W3's `[map.166]` was NAMED here rather than absorbed into the
+  count -- the migration section pins the exact SET of map ids and its own
+  comment says why ("the table grew" and "a row changed meaning" look identical
+  to a length check), so a created row costs one named check and one line of
+  prose about what makes it a different kind of row),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away
@@ -3885,7 +5252,34 @@ Every one of these, in the order they were written:
   in the repo -- this file's own docstring names that cost ("one that refuses
   everything gets deleted the first time it blocks a run"). §5 is SYNTHETIC, so
   unlike §1b/§2/§2b it can never skip and joins the mandatory core, taking the
-  floor to 19. The check that matters most is the fail-closed one: an EMPTY set
+  floor to 19; 2026-08-20 took it to 20 for the created/retail split, which runs
+  before any archive is opened. **A CREATED content row is a third state and it
+  nearly deleted this guard**: `[map.166]` names a file id that binds nothing
+  until `deploy.py --install` allocates it, so `check()` returned FATAL for every
+  archive and -- with `served=None`, the fail-closed default that tape runs and
+  every un---map-ped run take -- that one row refused EVERY loopback launch in
+  the repo, which is precisely the 2026-08-15 false positive this file's own
+  docstring warns about. `contentids.check` now records an absent created id as a
+  printed SKIP and judges it normally the moment an archive binds it, and this
+  file holds the created rows OUT of both archive-selecting scans: section 2
+  picks its positive control with `any(f not in raw for f in ids.values())`,
+  which is true of EVERY archive once a created id exists, so it silently
+  selected the wrong archive and four checks went red naming Pre-Searing while
+  the code under test was fine -- a fixture resolving to the wrong thing, which
+  is the defect `vaultpath.require_dir()` exists to prevent one level up. The
+  two new section-1 checks are gated on `check()` having returned findings at
+  all, because these are 4 GB files another session may hold open. The check that
+  matters most is the fail-closed one
+
+FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
+- test_deploy floor 56 -> 92 across the two passes. MEASURED green runs 2026-08-20: 92 with the vault, 88 without (RURIK_VAULT pointed at an empty directory, section 2 skips, exit 1 -- which is what the floor is for). Section 8 adds 36 checks in total: 28 from the build pass, 8 from this fix pass (4 on `create_note`'s states, 2 AST pins with a sabotage, 2 on `spill_stream`).
+- test_content floor 39 -> 40; a green run scores 43 with the vault overlay (re-confirmed today).
+- test_contentids floor 19 -> 20; a green run scores 31 with 2 declared skips (re-confirmed today).
+- Fixture change worth naming: test_deploy's hand-laid archive declares 16 rows rather than 6, so an appended chain lands at index >= 16 (FIRST_CLAIMABLE_ROW). Section 7 is unaffected and still green.
+- content/maps.toml [map.166] and content/areas.toml [area.frontier] are the only content rows added; nothing else in content/ moved, and this fix pass did not touch either.
+- New in deploy.py from this pass: `create_note()` (the row line, printed on every run) and `spill_stream()` (shared by both write paths). `install_partner`'s stored/compressed branch became one line through the helper; behaviour on that arm is unchanged.
+- Every vault touch in both passes was READ-ONLY: the C2 copy was read for `plan_alloc`, for the step-1 dry run and for the donors. Nothing was written to any vault archive, no client was launched, and datalloc.py/gwenc.py/datwrite.py/datmove.py were not modified.
+- Tests run this pass: test_deploy (92, green), test_srclint (22, green -- it lints the whole tree, so any source edit is its business), test_content (43) and test_contentids (31/2 skips) to confirm the RUN note's precondition counts. The full suite was NOT run, per the house rule.: an EMPTY set
   must refuse exactly as `None` does, because a caller whose `--map` parse came
   back empty must not thereby clear the whole table. Out-of-scope disagreements
   are demoted and PRINTED, never hidden, and returned with level `fatal`
@@ -4008,6 +5402,50 @@ Every one of these, in the order they were written:
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
+  same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
+  §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc
+  prefix, a tripwire that only reports GROWTH in the collision count, or documentation
+  and no checker — and the middle one won on the argument that file's own top box makes:
+  eighty study documents predate any convention, a gate over them "will produce a red
+  suite for reasons nobody wants to fix at 2am", and the last time this repo read a rule
+  literally across sixteen documents it rewrote 46 citations and **reverted all 46 the
+  same day**. So `identlint.py` counts and never judges, and the ceiling lives here.
+  **A collision is not a defect to be scrubbed**: 53 of them are the tree's current
+  ruled-on state and a mass rename is refused in advance; the defect is the 54th
+  arriving unnoticed. Baseline **312 defining sites across 31 documents, 152 distinct
+  tokens, 53 colliding** (2026-08-20, after the token pattern widened to admit the
+  convention's own shapes — `GATEFIRE-C3`, and ladder rungs like `R-ISLE`/`R-IDENTS`,
+  which a pre-merge review found the resolver blind to), ceiling **80** — 53 at the same ~1.5x
+  headroom `test_provlint.py` used for 134→200 and 280→420, not a new rule, and raising
+  it when it fires is a normal edit. A "defining site" is only a table row or a heading
+  that OPENS with the token, because §2's census pattern was table-rows-only and this
+  one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
+  references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all
+  outside it, and `identlint.census_limits()` prints that list in the tool's own output
+  so the caveat cannot drift away from the number the way §2.1's own 108 did. **Section 2
+  is the load-bearing one** — nine REFERENCE forms that must not count, because every
+  study doc is built out of citations of other arcs' tokens and a census of mentions
+  measures cross-citation rather than ambiguity; the sharpest case is `studies/idents/`
+  itself, whose census tables are nothing but backticked citations and which must
+  therefore contribute **zero** sites. Section 4 proves BOTH arms rather than asserting
+  the tree is clean today: the comparison goes red one collision above the ceiling, a
+  synthetic rival definer added to the REAL scan moves the count by exactly one, and a
+  second definer in the SAME document does not — one arc numbering its own table C1–C9
+  is a namespace working, not a collision. The control token is chosen at run time (the
+  first plain LETTERS+DIGITS token defined in exactly one document — the shape filter
+  is what guarantees the synthetic definer round-trips the scanner), so the growth arm
+  cannot rot into a mid-run abort the day an arc mints a rival of a hard-coded one. Section 5 is the deliverable:
+  `whichrung.py` resolves `C8` to the documents that define it, asserted by document
+  path and by row CONTENT and never against a pinned line number, since these documents
+  are edited weekly and a pinned line is an assertion that goes red for a reason nobody
+  wants to fix and gets deleted instead. It finds **three** sites where §4's one-liner
+  found two, because that pattern treats the hyphen as a namespace and §2.2 rules that
+  it is not — `archivewrite`'s `C-8` is the third, and §1's ambiguous sentence *"C-8
+  finished"* is the hyphenated spelling, so the extra hit is the fix rather than noise.
+  Stdlib only, no vault, no socket, no client. 28 checks, floor 26 — section 4's two
+  growth arms declare skips in the unreachable no-control-token case, per checks.py's
+  mandatory-core guidance. ~1 s),
   `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
   `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
   after the plan forbade exactly that, and closes the paragraph "The rule was in the
@@ -4383,7 +5821,41 @@ Every one of these, in the order they were written:
   Desperation Blow reads Tactics 1, identical 10→40 tables landing 22 points
   apart, which is precisely what "the server models no attribute ranks" used
   to cost. §7 asserts a `+ Damage` bonus rides the swing as ONE damage
-  message, since two would draw two numbers on screen for one hit),
+  message, since two would draw two numbers on screen for one hit.
+  **§§8–10 are the three directions added 2026-08-20, and each one existed
+  because a client run showed the old behaviour was wrong.**
+  **§8, HEALING** — the direction this server never had. Which property carries
+  it was measured, not chosen: on `0x00A3` the live corpus has property 16
+  negative **1251 of 1251** and 17 negative **243 of 243**, both self-directed
+  **0 of 1501** (damage always has a distinct attacker and victim); property 55
+  is **POSITIVE 502 of 506** and **SELF-DIRECTED 454 of 506**. A positive,
+  mostly self-inflicted health delta on the damage channel is a heal, so GWCA's
+  `armor_ignoring` names the mechanism and not the direction. The section pins
+  that the heal goes out self-directed and positive, that an 88 heal on a 40/100
+  bar lands **60 CLAMPED** (the `fraction <= 1.0f` assert only fires in the
+  positive direction, and this is the first thing this server sends that can
+  reach it), and that a heal on a full bar sends **nothing** — overheal is
+  silent in retail too. Control: Power Attack heals nothing.
+  **§9, A SPELL IS NOT A SWING.** Both halves were wrong until a run showed
+  them: casting Faintheartedness, a HEX, produced `attack_started: player swings
+  at 10` and 5 points of hammer damage, and Flare — whose own 20 fire damage was
+  decoded and sitting there — dealt the same 5, because `cast_tick` read only
+  the `additive` mode and dropped `standalone`. Now the TYPE column dispatches:
+  only `type_code` 14 rides a weapon swing, `exact=` deals the skill's own
+  number with no roll or armour or critical, and `swing=False` suppresses
+  `attack_started`/`melee_attack_finished` — pinned as ONE message going out.
+  **§10, CONDITIONS** — the join `studies/isle` asked for. It had established
+  that a condition's duration comes from the INFLICTING skill (Burning's own
+  endpoints are 3/3 and retail sends it at 9.0); what was missing was which
+  condition and from where. Both are per-skill data already carried: **GWW's
+  progression variable NAMES it** (`Sever Artery` has exactly one variable and
+  it is called `Bleeding`) and **the client's bonus slot carries the seconds**
+  (5..25, with `skill_arguments = 4` naming that slot — the bitfield picked it
+  before the wiki was read). Sever Artery resolves to Bleeding 478 for 9 s at
+  Swordsmanship 3, the apply names the CONDITION's id rather than the skill's,
+  and the controls are the two that a label-blind reading gets wrong:
+  `Health degeneration` is a real variable in a live bonus slot and is not a
+  condition, and an attack with no bonus slot inflicts nothing. Floor 25 → 40),
   `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
@@ -4394,11 +5866,30 @@ Every one of these, in the order they were written:
   with a poisoned out-of-range HIT_FRACTION raised only AFTER
   GV_ATTACK_STARTED was on the wire, the target's health was bookkept
   100 → 0 unsent, and the swing timer was eaten — three FAILs, each now a
-  check. Every section carries an in-range CONTROL asserting the real
+  check.
+
+  **The poison MOVED on 2026-08-20 and that is the interesting part.** The
+  player's swing stopped reading `HIT_FRACTION` and started reading the
+  weapon's own damage range, so the section went on poisoning a constant the
+  code no longer consults — and passed, on a tree where the guard was never
+  reached at all. That is precisely the failure this file exists to catch,
+  scored against itself: **a guard test pointed at the wrong symbol is a guard
+  test that cannot fail.** It now poisons `PLAYER_SWING_DAMAGE`, and the
+  in-range control asserts a RANGE rather than an equality, because the roll
+  inside the weapon's range is random and pinning it to one number would be
+  pinning our own roll instead of ArenaNet's range. Every section carries an in-range CONTROL asserting the real
   constant still sends the full effect burst, because a guard that refuses
   everything would pass every refusal check. Dormant while every fraction is
   a literal constant; load-bearing the day studies/combat step 8 computes
-  them from the client's skill table),
+  them from the client's skill table.
+  **§2's fixture skill changed from a made-up 42 to Power Attack 322 on
+  2026-08-20**, and the reason is the shape of a test quietly dying: the cast
+  path now dispatches on the skill's TYPE, so an id that is not an attack
+  resolves to nothing and this section's actual subject — that the damage lands
+  at E5 rather than at the press — would have stopped being tested while still
+  printing PASS. A CONTROL was added beside it that could not have existed
+  before the fix: casting a HEX at the same agent must swing nothing at it.
+  Floor 40 → 41),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless
@@ -4604,4 +6095,279 @@ Every one of these, in the order they were written:
   vault row overrode it by key everywhere the probe can actually run. The bind
   moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
   reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
-  nothing here can skip, which is the whole claim. <1 s).
+  nothing here can skip, which is the whole claim. <1 s),
+  `toolkit/mapdata/test_datledger.py` (the ROW CENSUS, the counting convention
+  it refuses to choose between, and WHICH VERB FAILED. Correction C-8 records
+  two censuses of "the same" archive disagreeing by 16 comp-8 rows and 20 in the
+  sum, load-bearing on the published "661 of 138,708 rows are unwritable stored"
+  -- and the headline here is NOT the counting: "26 rows censused" is a number
+  an almost-right census also prints. The load-bearing fixture is a PLANTED
+  DISAGREEMENT, one compression-8 row with FLAG_ENTRY_USED clear, which the
+  `entries` convention counts and the `used` convention drops; section 3 asserts
+  BOTH counts, that they differ by exactly the rows the delta names, and that
+  the delta decomposes into `{structural 12, spare 2, comp8 1}` -- the mechanism
+  in miniature. The synthetic archive carries every class at once (fifteen
+  structural rows, two spares with one still named by the file-id table, an
+  armed head, stored rows, real `gwenc` compression-8 streams, an unknown
+  compression code 12, a bit-31 renamed row, the ghost row) and its MFT is
+  deliberately not a block multiple, so row 3's slack is checked against
+  `datalloc.mft_slack` -- two modules, one number, neither importing the
+  other's. **The second thing it exists to do is refuse to bucket a row it does
+  not understand**: the ladder always terminates, so every row lands somewhere
+  and the totals always look tidy, which is the shape of a check that cannot
+  fail. Section 5 pokes each of the six contradictions into a copy's MFT and
+  requires the row to be REPORTED as well as bucketed. **The third is section
+  6b, which is about WHOSE FAULT a failure is**: review found `--reencode 9999`
+  printing the entire census -- headline, classes, slack -- and then reporting
+  "could not census DAT" with exit 2, the code this directory spends on an
+  unreadable archive, a false statement about a file the same run had just
+  finished reading and the sort a script believes. A run has four verbs and only
+  one is the census, so `_phase` makes each name itself and the last-resort
+  handler stop claiming to know; 6b asserts the census RAN and printed, that the
+  refusal names the ROW and not the archive, that a corrupted comp-8 stream is a
+  failure to re-encode THAT ROW, that an unopenable `--json` destination is a
+  failure to WRITE, and -- the control that keeps those three from passing
+  vacuously -- that a genuinely unreadable archive still does say "could not
+  census". The PRE-FIX module, restored verbatim in memory, reddens eight of
+  6b's eleven; the three it does not are exit 2, the census-printed-first
+  premise, and that control. Sabotages are run in memory and counted, never
+  predicted: the anomaly walk stubbed out reddens 9 while printing the SAME
+  class totals; classing on `size == 0` alone -- the pre-2026-08-15 `datplan`
+  rule that called an ARMED head a free slot -- reddens 6; `reservation_for`
+  without block rounding 7; `check_stamp` that never compares 3; `_phase`
+  neutered 4; `reencoded_size` without its row-range refusal 3; the convenience
+  `file_id_table(raw=False)` 1. The first sabotage FOUND a defect in the module:
+  `_by_class` was a comprehension over `CLASSES`, so a class the ladder produced
+  and `CLASSES` omitted vanished from every total while every total still added
+  up -- the same failure the anomaly walk exists to prevent, in the code that
+  reports it. Two test-side helpers exist for the same reason and are worth
+  reading: with a naive `.splitlines()[1]` detail expression the stamp sabotage
+  raised IndexError INSIDE the check's own argument list, killing the section
+  and leaving one unnamed crash as the whole evidence (`line()`,
+  `refused_line()`), and `refusal()` catches only `Refused`, so a bare
+  IndexError where a refusal belongs would have escaped the check written to
+  catch it (`raised()`). Section 3b walks the module's own syntax tree and
+  requires C-8's figures to appear in the docstring citation and in NO other
+  literal, with a control that they are in the docstring so the check cannot
+  pass vacuously on a module that never heard of the correction. **Section 7 is
+  where C-8 comes apart**, on two real archives: `vault/dat_study` under
+  `entries` reproduces the larger census EXACTLY (38,633 = the "38,621+12" whose
+  +12 IS the twelve erased structural rows the USED convention drops, 138,708
+  comp-8, sum 177,341), and the pristine install copy under `used` reproduces
+  the smaller SUM exactly (177,321) with the compression split one row from what
+  was reported -- so the twenty rows are SEVEN of archive difference plus
+  THIRTEEN of convention, and the sixteen comp-8 rows are FIFTEEN of archive
+  difference plus one, and the reconciliation closes. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 84 bare (`RURIK_VAULT` pointed at nothing),
+  95 with a vault, section 7 raising the floor itself as its last act. ~2 s),
+  `toolkit/mapdata/test_refindex.py` (the REVERSE-CLOSURE index -- "who else
+  reads this row?", the question `unitassembly.py`'s forward walk cannot answer
+  and the shared-skeleton hazard (`studies/unitmodels/FINDINGS.md` §3.11, six of
+  seven pairs bit-identical) needs answered before a write. Builds its own
+  archives: the MFT, the ffna type-2 container framing, the reference-list
+  record rule and the FA1 blk2C layout are all re-derived from this file's own
+  byte literals and nothing is constructed by the module under test. **The
+  positive control is section 1 and it is not a formality** -- an FA8 link is
+  planted from two heads onto a third and BOTH must come back kinded before any
+  section reads anything into an absence, because a tool whose every answer is a
+  FLOOR fails by answering EMPTY and an empty answer looks exactly like success.
+  Covers the KIND (A reaches T through FA5, B through FA6), the dedupe (an FA8
+  naming a target twice is ONE referrer), the FA5 null slot naming no file and
+  therefore no reader, an unresolvable target recorded in `index.unresolved`
+  rather than dropped, `m_seqCount` recorded as a fact and NOT applied as the
+  client's link gate (`0x00794917`), the flags-1 companion row that links to the
+  same target and is correctly not walked, and walked-vs-indexed reported
+  separately so two unreadable heads cannot quietly shrink the archive.
+  **Section 3 is the defect this module shipped and it is the reason the graph
+  is keyed by MFT ROW**: a row can carry several file ids -- 38,396 do on
+  `dat_study`, 60.0% of all flags-515 heads and 25,536 rows that are not heads
+  at all -- and edges filed under whichever spelling a reference list happened
+  to use made ONE physical row answer two different things, 558 of 558 times on
+  a 1,500-head sample, one of them the confident empty list. So it asks every
+  spelling of a two-name TEXTURE row (flags-3, not a head, the case a head-only
+  alias map cannot resolve), of a two-name head row, and of a bit-31 rename
+  spelling; checks `canonical_id` normalises a caller's own ids the same way;
+  and cross-checks `who_reads` against `unreferenced_fa1_heads` for the
+  contradiction that defect produced -- no two spellings of any head disagree,
+  and no head the census calls unreached answers with a referrer under any of
+  its names. Skeleton sharing is bit-identity and section 4 does not weaken it
+  -- two heads with identical blk2C bases pair, a third with the SAME node count
+  and different bases does not, a fourth with an extra node does not -- **but
+  the answer now carries the node count, the group size and whether every base
+  in the key is zero**, in the sentence and in `answer.facts`, because on retail
+  572 of the 1,003 FA1-carrying heads in a 1,500-head sample sit in ONE group
+  keyed on a single node at (-0.0,-0.0,-0.0), and a bare count would send an
+  operator off to acknowledge 571 unrelated models; a +0.0 twin is contentless
+  AND in a different group, which pins that "contentless" is a REPORT and not a
+  change to the criterion. **The sabotage** cuts the terminator off the planted
+  FA8 record: the build must land it in `index.problems` at `mdlrefs`' own
+  `G01_terminator` gate, DROP that referrer rather than invent one, still report
+  the intact referrer, and still index the same head's FA5 list -- a refusal
+  scoped to the head instead of the list would look identical on a green run.
+  Also the stamp (size + MFT sha256) refusing a stale index against an archive
+  edited to the SAME size and row count, six doctored-index refusals including a
+  format-version bump and a document with no spelling map, `save` refusing a
+  path inside a checkout and writing nothing, the floor sentence and the
+  skeleton facts surviving a JSON round trip, and the CLI exiting 2 on an
+  unreadable archive and on `--json X --build-json X`. Eleven in-memory
+  sabotages were run and all eleven reddened NAMED checks
+  (19/12/11/8/7/5/5/4/3/2/1); three were hard stops until `first_spot()`,
+  `head()` and `fact()` were made to read defensively, which is why they do. 92
+  checks against a floor of 92, no vault, nothing that can skip. ~0.25 s),
+  `toolkit/mapdata/test_datdelta.py` (CONTENT-ADDRESSED ROW DELTAS -- a staged
+  archive IS its difference from retail, so the 4.2 GB copy can be deleted, and
+  this is the file that says whether it may be. Ten sections against files it
+  writes in a temp directory, with `RURIK_VAULT` pointed at another one so the
+  store guard runs for real rather than being skipped; no vault, no corpus,
+  nothing that can legitimately skip. The span finder is checked against
+  arithmetic done by hand -- 63 B of agreement between two differences merges,
+  64 B splits, a difference across a chunk seam is ONE span -- then
+  capture/apply/prove round-trips byte-identically in BOTH directions, including
+  a staged archive that GREW, where the tail past retail's EOF is one span whose
+  retail side is zero bytes long and reconstituting back TRUNCATES. Section 4 is
+  the long one: an unrelated target, a target that is already the destination, a
+  blob of the wrong LENGTH (five bytes where the span declares six -- it used to
+  be six WRONG bytes, which fired the hash branch and left the length branch
+  with no coverage at all, and disabling that branch alone kept the whole file
+  green), a blob of the right length and the wrong bytes, a missing blob, four
+  doctored manifests -- one the structural check can see and three only the
+  destination sha256 can, because a span shifted within range, a span whose two
+  sides are swapped and an emptied span table are all structurally flawless --
+  and TWO SPANS NAMING ONE BLOB, the dedupe the tool advertises, which is where
+  a table declaring two different lengths for that blob used to walk past the
+  store verification and spin `apply` for ever on a spent file handle. Every one
+  of those checks the TARGET as well as the message, because a refusal that
+  arrives after the write has refused nothing, and the two calls whose broken
+  form is a hang run on a join deadline so the defect lands as a named FAIL
+  instead of a cursor. Section 6 is the store: blobs paid for once across two
+  deltas, a two-manifest store with no `--name` refused rather than guessed, and
+  the same rule on the WRITE side -- capturing over a manifest that describes a
+  different pair refuses naming both hashes, an identical re-capture is
+  idempotent and says so, an explicit `--name` is no licence either, and
+  `--replace` is the only way an overwrite happens (`run/Gw.dat` and
+  `run-live/Gw.dat` both stem to `gw`). The span cap is exercised for real at
+  4,100 genuine spans (266,500 B of fixture); the 256 MiB byte cap is exercised
+  by tightening the constant, which is stated rather than hidden. Section 8
+  builds a real 14 KB archive so the row annotation runs against a table that
+  exists -- a payload span names exactly its row, a span inside the MFT names
+  row 3 and is flagged -- and a file that is not an archive still captures, with
+  the reason in a note. Three sabotages live in the file for guards nothing else
+  can reach: `apply` stubbed out entirely so `prove` must say NOT PROVEN on its
+  own hash, `_verify_blobs` stubbed down to a sha-to-path map so the write loop
+  must refuse a spent blob by itself, and the byte cap tightened. Fourteen more
+  applied by source surgery and reverted, worst 9 red for `_verify_blobs` sizing
+  and hashing nothing; the counts MOVED between sweeps until they were re-taken
+  with `-B`, because several sabotages add exactly ten characters and CPython
+  will reuse the previous same-size source's `.pyc`. Floor 84),
+  `toolkit/mapdata/test_overlay.py` (DECLARATIVE ARCHIVE PROFILES, and the
+  refindex gate is the thing being proved — from BOTH sides, because the gate
+  has two ways to answer emptily and each has its own positive control. Section
+  3 is the first: two heads are planted linking to the edited row and the plan
+  must REFUSE naming both — printing refindex's own floor sentence and blind
+  spots verbatim, plus the exact `acknowledge_shared_with = [...]` line to paste
+  — before any passing case below it is believed, because a bounded query fails
+  by answering EMPTY and an empty answer is the shape that looks like success.
+  The tier is checked from both sides: a real two-node bit-identical rig must be
+  acknowledged, while an all-zero degenerate key (572 retail heads sit in one
+  such group) must print its note, say outright that nothing is required, and
+  refuse nothing. Every id crosses `refindex.canonical_id` on both sides, so the
+  fixture gives row A two plain spellings — 60% of retail heads are multiply
+  named — and a COMPLETE declaration written in the other spelling must PASS
+  while a PARTIAL one in that spelling must still refuse naming only what is
+  missing. Section 3b is the SECOND positive control and it is about the INDEX
+  rather than the archive: a stamped, current, non-partial index still answers
+  EMPTY for a row whose only referrers are heads it could not READ, so A and B
+  keep their real FA8 lists naming C and have their container magic damaged to
+  `ffnX` — the archive proven healthy on all ten rules and every crc, the index
+  proven current with problems 2 and partial False, `who_reads(C)` proven `[]`,
+  and only then is the refusal believed. The blind spot must be declared by
+  COUNT (`accept_unread = N` in `[overlay]`), refused when undeclared, refused
+  when the number has moved in either direction, and NOT waivable for a partial
+  index, which gets no acknowledgement at all whether handed in or saved and
+  named by a manifest. Its sharpest check is the contrast: the same texture edit
+  against the archive whose containers DO read is refused for a real FA5
+  referrer, so the empty answer was the damage and not the truth. Also there: an
+  id the index resolves to no row says so out loud instead of passing silently,
+  a row that is ITSELF unreadable says that its empty co-wearer answer means
+  "not indexed" and never "nobody else wears it", and a file-id table poked in
+  place — which leaves the MFT stamp byte-identical, asserted, and which only
+  `--crc-sweep` can see, also asserted — makes the index and the archive name
+  two different rows for one id and is REFUSED naming both. Section 7 is a
+  sequence with no client in it: `--build`, `--deploy --yes`, `--retail --yes`,
+  `--verify-after` used to end with the post-flight naming a row `--retail` had
+  rewritten seconds earlier as one "the client wrote to", so the section runs
+  that exact sequence and requires a refusal, runs the re-build variant and
+  requires another, requires the two halves of a before-image to describe one
+  deploy (the record carries the snapshot's sha256), requires a hand-edited
+  before-image to be caught by its own digest, and requires the result to NAME
+  the moment it was measured against. Also: manifest refusals (unknown [overlay]
+  key, a name that is not [a-z0-9-]+, active==retail, two edits on one file id,
+  `stored` beside compression 0, C:\gw as EITHER archive); the fit arithmetic in
+  all three cells by hand, including `fit_of(100, 900, 600)`, the only pair of
+  numbers that can tell a donor-sourced grow_to from a payload-sourced one; a
+  file id named by two records refused rather than resolved to whichever sorts
+  first, with the silent `file_id_table` answer measured first as the sabotage
+  premise; `datwrite.declaration_fault` wired, so a compression-8 stream that
+  decodes to bytes other than its declared payload never reaches the archive; a
+  saved index loaded stamp-checked and a stale one refused both when named and
+  when handed in; build staging under the vault, byte-exact on the touched row
+  and untouched everywhere else, refusing a build that changed nothing; a
+  hand-edited build record caught by its own digest; the grow-back run for real
+  against a row shrunk to 100 B with its own 1,024 B standing free, datwrite
+  annexing and the journal recording the whole reservation; the three-valued
+  deploy premise with --yes on both writing verbs and a NEITHER state
+  hard-refused; verify-after detecting a simulated client write on an owned row
+  while reporting the archive itself still healthy; and the CLI's one-verb rule
+  and 0/2 exit codes. Builds its own archives, manifests and payloads in a
+  tempdir with RURIK_VAULT pointed at a temp vault, so there is no corpus to be
+  missing and nothing here reads the real one. Twenty-two sabotages measured,
+  and every one of them runs all 133 checks — an earlier pass had three that
+  CRASHED the run at checks 46, 51 and 74 and scored 0, 0 and 7, which is why
+  `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133),
+  `toolkit/harness/test_abrun.py` (A/B DIFFERENTIAL RUNS, THE MECHANICAL HALF —
+  no client, no vault, every fixture built in a tempdir: the gamesrv logs, the
+  capture directories, the manifests, the archives. Section 0 is the log-line
+  contract twice over: each counter must match the server's own format AND each
+  producing print's distinctive fragment must still be present in `authsrv.py`,
+  which is what goes red the day somebody rewords one. Its near misses carry the
+  real double-count hazard — `authsrv.py:7064` echoes every send as `[c3] s2c
+  agent 41 casts skill 1234 (0x0057, 12B)` using the label written one line
+  above the cast print, so a looser pattern counts every cast twice at an
+  entirely plausible number; `WRAPPED` asks the `^`/`$` anchors separately and
+  exists because the anchor sabotage first scored zero. Section 1 holds the
+  ARM-BOUNDARY CENSUS with the defect as its control: by mtime alone the
+  previous arm's log IS the newest one after this arm's deploy, because a stack
+  goes on relaying while it tears down and `capture_error_dialog` waits up to
+  twelve seconds after the client exits, so one teardown line landing during a
+  4.2 GB flip is all it takes; against a census of directory NAMES taken at the
+  deploy, that directory is not bindable at all. Section 2 carries its own
+  positive control — a document written in place and truncated must be REFUSED
+  before any claim that an atomic one survives — then kills `os.replace` between
+  the fsync and the rename and requires the previous verdict to still parse.
+  Section 3 opens a real Win32 handle with share mode 0 (pure ctypes: a
+  byte-range lock still lets `open()` through and would prove nothing about the
+  mechanism an arm's boundary is read from), skip-declared off Windows. Section
+  4 drives a whole arm with a scripted client that writes log lines between
+  polls; section 4b runs one arm three times against one fixture and requires it
+  to read 30 hits when told nothing preceded it, ZERO with the census it takes
+  for itself, and exactly its own 1 when its own capture appears mid-hold —
+  thirty and thirty-one both look like a session, which is why the control is
+  there and not only the fix. Section 5 is the one that matters after a crash: a
+  header-CRC-poked archive must have the launch gate's refusal RECORDED and the
+  arm still reach `finished`. Section 6 asks of every refusal WHEN and not only
+  WHETHER — which client opens the archive is a directory listing and whether
+  the build record is one is a single `json.load`, and both used to be announced
+  only after a whole-file copy had landed on the shared ACTIVE archive, so both
+  are asked through `--run` against a fixture whose ACTIVE and RETAIL carry
+  different bytes and the check is the archive's own checksum afterwards; its
+  timeouts are zero because a defeated refusal does not fail there, it reaches
+  the 900 s wait and hangs the file. Section 7 holds the compare table, its
+  `capture bound` row, and the three exit-1 cases a difference must not be
+  confused with: an unfinished arm, two arms naming one verdict file, two
+  finalised arms that bound one capture. Section 8 is REAL — `test_overlay.py`'s
+  own World and rows_spec, two profiles built over one row, `abrun.run` driven
+  end to end through real deploys — and it exists because the ordering defect it
+  covers was invisible to every fake: two overlay arms owning one row resolved
+  cleanly, played the first to a finished verdict, then hard-refused the second
+  for "neither retail nor 'beta'". Seventeen sabotages measured,
+  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120).

@@ -188,6 +188,68 @@ def main():
     os.chmod(tgt, stat.S_IREAD)
     print(f"  Gw.exe            copied ({os.path.getsize(tgt)/1e6:.1f} MB), read-only")
 
+    # Registered HERE as well as in make_custom_client.py, and the duplication is
+    # the point: this is the only thing that creates `vault/run/<stamp>/Gw.exe`,
+    # which is the exact path `pinned.find()` hands back and the exact path a
+    # running client reports through `keytap.module_info`. Hooking only the
+    # earlier stage would leave a run directory assembled from a hand-supplied
+    # `--patched` exe unregistered. A copy has the source's digest, so the usual
+    # case is `already` and costs one hash.
+    #
+    # THE BUILD COMES FROM THE BYTES, and `tag` may only DISAGREE, loudly. This
+    # passed `build=tag` until 2026-08-19 -- and `tag` is a regex over the source
+    # exe's FILENAME (see above), while `register_patched` prefers an explicit
+    # build over both the source hash and its own inference. `CLAUDE.md`'s rule
+    # is "never select a build by filename", and this file already carries the
+    # reason in its own header: picking the source by name is what would have
+    # assembled a stock-DH client into vault/run/. The same mistake through the
+    # registry is quieter -- 38797 and 38833 are the SAME LENGTH, so a mis-named
+    # source would have been filed under the wrong build with every size check
+    # passing. So `infer_build` (hash and structural distance) decides, the
+    # filename is a cross-check, and a disagreement refuses the registration
+    # rather than picking one.
+    #
+    # NON-FATAL, deliberately, and the import is INSIDE the same try as the call
+    # so that sentence is enforced here rather than asserted in prose: the run
+    # directory is already assembled and verified, and an unregistered copy is
+    # not dangerous, it is refused later by a gate that says how to recover.
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "clientscan"))
+        import pinned  # noqa: E402
+        named = pinned.known_build(tag)
+        inferred, iwhy = pinned.infer_build(tgt)
+        if named is not None and inferred is not None and named is not inferred:
+            digest, action, note = None, "refused", (
+                f"the source exe is NAMED {tag} -- build {pinned.name_of(named)} "
+                f"-- but its bytes are build {pinned.name_of(inferred)} ({iwhy}). "
+                f"A build is never selected by filename here. Rename the source, "
+                f"or register it by hand once you know which it is.")
+        else:
+            if named is None:
+                agrees = (f"the filename tag {tag} names no build we hold, so "
+                          f"the bytes decided alone")
+            elif inferred is None:
+                agrees = (f"the filename tag {tag} was NOT corroborated -- the "
+                          f"bytes named no build ({iwhy})")
+            else:
+                agrees = f"the filename tag {tag} agrees with the bytes"
+            digest, action, note = pinned.register_patched(
+                tgt, build=None, tool="make_run_dir.py",
+                how=(f"{kind} parameters -- {detail}; assembled into "
+                     f"vault/{dest_name}/; {agrees}"))
+    except Exception as exc:                                 # noqa: BLE001
+        digest, action, note = None, "unavailable", f"{type(exc).__name__}: {exc}"
+    if action in ("added", "already"):
+        print(f"  registered        {action}: pinned.py accepts this copy "
+              f"({digest[:16] if digest else '?'}...)")
+    else:
+        print(f"\n!! NOT REGISTERED ({action}): {note}")
+        print(f"!! The run directory is fine, but pinned.assert_build() will REFUSE")
+        print(f"!! this exe. Recover with:")
+        print(f"!!   python toolkit/clientscan/pinned.py --register {tgt}")
+
     for name in SUPPORT:
         src = os.path.join(SRC, name)
         dst = os.path.join(dest, name)

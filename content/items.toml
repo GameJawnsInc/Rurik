@@ -19,7 +19,36 @@ value = 0
 model_id = 1699
 quantity = 1
 enc_name = [0x2455, 0xB7FB, 0xCA41, 0x458F]
-modifiers = [0x24B80000, 0xA4880503]
+# 0x24B80000  id 587, a damage TYPE line
+# 0xA4880503  id 584, a damage RANGE, arg 5 arg2 3
+# 0x21F81301  id 543, `Hammer Mastery +1` (Stacking) -- OURS, composed by
+#             `toolkit/clientscan/itemmods.py --attr-bonus 19,1`, and the only
+#             word in this row that is not OpenTyria's. See the note below.
+modifiers = [0x24B80000, 0xA4880503, 0x21F81301]
+# What this item GIVES while equipped: +1 Hammer Mastery (attribute 19).
+#
+# AND NOW THE MODIFIER WORD SAYS IT TOO. OpenTyria's two words carry no
+# attribute bonus -- they decode to 587 (a damage type) and 584 arg 5 arg2 3
+# (a damage range) -- so this field used to be the only place the bonus
+# existed. 2026-08-20 added `0x21F81301` above: identifier 543,
+# `<Attribute> +N` (Stacking), attribute 19, amount 1, composed by
+# `itemmods.py --attr-bonus 19,1` and byte-identical in form to the 26 words
+# retail puts on headpieces (studies/itemmods/FINDINGS.md 5).
+#
+# THE TWO ARE NOW ONE FACT WRITTEN TWICE, and that is a real hazard -- 34.5 of
+# studies/pvpui is about exactly this shape of bug. It is deliberate and it is
+# GUARDED, not ignored: `test_itemmods.py` 11 fails if the two ever disagree,
+# and it has a control that proves it can go red.
+#
+# THE RUN SAID WHY BOTH ARE STILL HERE (2026-08-20, capture 20260820T113942).
+# The client drew `Hammer Mastery +1 (Stacking)` on the hammer's tooltip from
+# the WORD -- and the attribute panel showed Hammer Mastery 7 against a base of
+# 6, not 8. So the client reads the word for the TOOLTIP and reads our
+# 0x003A/0x003B columns for the PANEL, and it does not mix them. This field is
+# what the server sums into those columns. Deleting it means teaching
+# equipped_attribute_bonuses() to decode `modifiers` instead, which is a real
+# change to the server path and not a rename.
+attribute_bonus = [[19, 1]]
 
 [item.starter_hammer.provenance]
 source = "opentyria"
@@ -35,22 +64,42 @@ no licence question; the weakness here is evidential, not legal.
 The client accepting it is the only thing that has been OBSERVED. If it ever refuses,
 the two fields worth watching are file_id and flags.
 
-`modifiers` goes out verbatim because it came from the same table row and nobody in
-this repo has decoded a single one of those words -- armour rating lives in them for
-armour, and whatever a weapon's damage range is, it is in there too. See
-studies/character/FINDINGS.md, "The modifier words: NOT DONE". Do not tune these
-numbers hoping for an effect; nothing here knows what they mean.
+`modifiers` goes out verbatim because it came from the same table row. That used to
+end "and nobody in this repo has decoded a single one of those words"; they were
+decoded on 2026-08-20 and these two read as a damage type (587) and a damage range
+(584, arg 5 arg2 3). Knowing what they mean does not make them OBSERVED -- they are
+still one lineage's hand-written numbers, and the client accepting them is still the
+only thing anyone has watched. See studies/itemmods/FINDINGS.md, and
+`python toolkit/clientscan/itemmods.py --decode 0xA4880503`.
 """
 
 # The other five entries of the same OpenTyria array: the Prophecies warrior's
 # starting armour. Added 2026-08-17 for the armor_slots probe (which of 0x006E's
 # nine positions is which body slot -- studies/unitsetup/FINDINGS.md 8 Q6, the
 # CONTESTED reading at studies/character/FINDINGS.md "Where every source is
-# silent"). Same source, same honesty: UPSTREAM, one lineage's hand-written
-# table, no capture of ours carries these bytes; OpenTyria is Unlicense, so the
-# weakness is evidential, not legal. The client accepting the HAMMER is the only
-# member of this family ever OBSERVED; if one of these refuses, watch file_id
-# and flags first.
+# silent").
+#
+# THESE FIVE ARE NO LONGER UPSTREAM-ONLY, and the sentence that used to stand
+# here is REFUTED BY OUR OWN VAULT. It read: "one lineage's hand-written table,
+# no capture of ours carries these bytes." On 2026-08-20 somebody checked, and
+# ArenaNet's own server has sent us `0x0161` declarations for **all five of
+# these exact model ids** -- 823, 2440, 355, 1598, 6136 -- nine sightings each across three captures,
+# and every fixed field agrees: file_id, item_type, dye_tint, materials, unk1,
+# flags, value, model_id, quantity, AND the three modifier words. `dye_colors`
+# is the one field that differs and it is MEANT to: it is what a player dyed
+# that instance, and retail shows four values for one model, ours among them.
+#
+# So the label moves from UPSTREAM to CORROBORATED, against a first-party
+# capture rather than a second lineage. What made this possible was luck the
+# rows were not chosen for -- the character whose sessions the vault holds was
+# wearing the same starter set. `toolkit/authsrv/test_armour.py` §3 replays it,
+# so the claim survives without anyone re-running the comparison by hand.
+#
+# The client accepting them is now also OBSERVED, not just the hammer's:
+# `20260820T125155` drew all five on the body and the chest's tooltip read
+# `Armor: 25` / `Armor +20 (vs. physical damage)`. OpenTyria is Unlicense, so
+# there was never a licence question here -- only an evidential one, and it is
+# answered.
 
 [item.warrior_body]
 name = "starter chest (Prophecies warrior)"
@@ -69,7 +118,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_body.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c g_DefWarriorPropheciesPveEquipments entry 1. See the family note above and starter_hammer's."
 
 [item.warrior_legs]
@@ -89,7 +138,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_legs.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 2. See the family note above."
 
 [item.warrior_boots]
@@ -109,7 +158,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_boots.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 3. See the family note above."
 
 [item.warrior_gloves]
@@ -129,7 +178,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_gloves.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 4. See the family note above."
 
 [item.warrior_head]
@@ -149,7 +198,7 @@ modifiers = [0xA3C81900, 0x80400000, 0xA0F81400]
 
 [item.warrior_head.provenance]
 source = "opentyria"
-verified = ""
+verified = "three live captures (20260807T133758, 20260807T143055, 20260810T235916), nine sightings of this model: every fixed field and all three modifier words identical (test_armour.py 3). Rendered on a caged client 20260820T125155"
 note = "Verbatim from GmDefaultArmors.c entry 5. See the family note above."
 
 # THE BACKPACK, and it is a real ITEM rather than a bag the server conjures.

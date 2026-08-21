@@ -48,12 +48,18 @@ sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
 # `pinned` for what we are pinned TO, `buildid` for what a file actually IS.
 # Both are stdlib-only, so this does not put a dependency on the launch path.
 sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
+# And `mapdata/` for `datcheck`, the archive half of the launch gate. Same
+# reasoning as the `clientpatch/` line above, and stdlib-only for the same
+# reason: this module is the one that launches a client, so anything it imports
+# has to load on a bare machine or the launcher stops loading at all.
+sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import buildid  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
 import pinned  # noqa: E402
+import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
 # The live-capture build is staged apart so isolate_client.ps1's bare sweep, which
@@ -582,6 +588,40 @@ def warn_hands_off(seconds=3.0):
     print()
 
 
+def hover(hwnd, pid, fx, fy, seconds):
+    """Park the cursor over a fractional window position and click NOTHING.
+
+    Exists for tooltips: a Guild Wars HUD element under a resting cursor draws
+    its tooltip, and for some state the tooltip is the ONLY readable surface
+    (an effect icon's scaled numbers -- skillcast 14.4's contested field has no
+    other consumer the static analysis could find). The cursor is nudged one
+    pixel back and forth on a slow rhythm rather than parked dead still,
+    because a tooltip needs mouse-move hit-testing and an element that APPEARS
+    beneath an already-stationary cursor may never receive one.
+
+    Same focus discipline as click(): SetCursorPos is GLOBAL, so every nudge
+    re-verifies the client owns the foreground and the function returns early
+    the moment it does not. No button is ever pressed. Returns True if the
+    cursor was placed at least once.
+    """
+    end = time.time() + max(0.0, seconds)
+    flip = 0
+    moved = False
+    while time.time() < end:
+        if not _own_foreground(hwnd, pid):
+            return moved
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return moved
+        x = int(rect.left + (rect.right - rect.left) * fx) + flip
+        y = int(rect.top + (rect.bottom - rect.top) * fy)
+        user32.SetCursorPos(x, y)
+        moved = True
+        flip = 1 - flip
+        time.sleep(0.4)
+    return moved
+
+
 def click(hwnd, pid, fx, fy):
     """Click at a fractional position inside the client window.
 
@@ -1033,6 +1073,17 @@ def main():
     # aimed -- and one copy sat uncaged for a day passing exactly those two checks.
     # See toolkit/clientpatch/cage.py.
     print(f"cage: {cage.assert_launch_safe(a.exe, host)['dh']} build, cleared for {host}")
+    # And the archive, by the same rule as the line above and at THIS door too.
+    # `session.py` states the rule -- "a guard that only guards one of two doors
+    # is the shape of the defect it is here to prevent" -- and the two doors it
+    # names are `session.py` and this file (PLAN.md: "both launch sites
+    # (`drive_client.py`, `session.py`) assert it"). The client opens `Gw.dat`
+    # from its OWN process directory; there is no flag for it, so the archive
+    # this launch is really about is the one beside the exe, and a copy that
+    # fails an open-time rule is repaired, rebuilt or silently emptied rather
+    # than refused.
+    client_dat = os.path.join(os.path.dirname(a.exe), "Gw.dat")
+    print(f"archive: {datcheck.assert_archive_safe(client_dat, why='launch')['summary']}")
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     outdir = os.path.join(a.outdir, stamp)

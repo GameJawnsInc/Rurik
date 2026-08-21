@@ -36,6 +36,30 @@ on the critical path for shape authoring" was true and remains true; what A7a/A7
 that the encoder **exists, and the retail client reads its output** — which turns the
 unwritable files writable and takes run 7 from 12 of 15 links to 14 of 15.
 
+**2026-08-19/20: the encoder stack was hardened from a proof into AUTHORING infrastructure —
+study §17, and §0's C-11/C-12/C-13 are its corrections.** Four named gaps between "proven on
+one big row" and "authors new content" are closed, all offline: every table the encoder
+emits is now a retail-attested SHAPE (gap A and siblings — floors dist ≥ 5 / lit ≥ 257, the
+A8 anchor byte-identical with its crc `0xd03ab671` pinned, +0 B on 120 real small rows);
+`replace(grow_to=)` grows a shrunk row back (the authoring loop's second iteration was
+impossible before — §14.4); the journal is a durable file (34.1× write amplification → 1.00×,
+fsync per record, torn-tail recovery, 59 old vault journals still parse); and `datalloc` has
+the fidelity gate a skeptic proved it lacked — a corrupted-trailer gwenc stream REACHED DISK
+green through `alloc(confirm=True)` before 2026-08-20, and `expect=` is now mandatory with
+`extraBytes 8`. `test_authorflow.py` (59 checks, 0.5 s) walks the whole story on one
+synthetic archive: author → create a NEW row → revise smaller → grow back → outgrow and
+relocate → revert to pristine byte-for-byte. ~~No client has read the new shapes yet~~ —
+**A9 STAGED and RAN 2026-08-20, GREEN (study §18, verdict §18.6)**: the retail client,
+owner-driven on loopback, resolved a `datalloc`-CREATED 3-stream chain (new file id
+`0x5F0AD`) through its own FA8 link walk at spawn, decompressed our compression-8 bytes,
+and animated from them (37 walk cycles, 54 attack/cast lines, no crash dialog); the
+created chain came through the client's own Flush byte-intact. Small-row compression is
+client-proven at 20,060 B and 7,644 B stored. **Every layer of new-content authoring is
+now client-proven: encode (A8), edit in place (run 7), grow/relocate (offline §17),
+CREATE (A9).** Still unclaimed, deliberately: E3's rider (no instrument shows the client
+opened rows 8295-8306) and the two phantom-pair shapes (unshippable on real content,
+§18.1). Runbook `vault/research/archivewrite/A9-RUN.md`; staged copy rebuildable by hash.
+
 **What is PROVEN read-only, 2026-08-18 (A6, §10):** our Huffman + meta layer re-costs
 retail's own token stream to **+8 B on 1,029,564**; retail's stored row can be **re-emitted
 byte-identically** (428 rows, CRC-matched); **ArenaNet's table encoder is longest-run
@@ -50,11 +74,18 @@ compressed** — §5-B.
 
 ## 2. State of the machine
 
-**DEPLOYED: RETAIL.** End of 2026-08-18, **verified rather than assumed** — row 11196 of
-`vault/run/2026-07-29_221c13772c7a/Gw.dat` is back to 1,029,564 B / crc `0xf862d5c4`, five
-key rows are byte-identical to `Gw.dat.retail`, preflight 10/10, 177,319 payload CRCs 0 bad,
-4,198,489,600 B. **Nothing is running**: no client, no server, no background task (`tasklist`
-shows no `Gw.exe`).
+**DEPLOYED: THE A10 ARCHIVE**, as of 2026-08-20 ~12:23, LAUNCHED ON the same hour and
+verified clean afterwards (`a10stage.py --verify-after`: preflight 10/10, sweep exactly
+retail's 177,319/0 bad, our 15 rows byte-identical through the client's Flush, coupling
+237/237 + 242/242 on the active bytes, only scratch rows 8315/8316 moved). **The deployed
+world's hatcher animates at quarter speed by design** — restore with
+`python vault/research/archivewrite/a10stage.py --retail --yes` (client closed) before
+any session that wants normal motion. A9 was restored earlier the same day; both staged
+archives remain under `vault/exports/archivewrite/`, rebuildable by hash.
+
+*(Superseded 2026-08-20 — kept for the numbers: end of 2026-08-18 the machine held RETAIL,
+verified — row 11196 at 1,029,564 B / crc `0xf862d5c4`, preflight 10/10, 177,319 payload
+CRCs 0 bad, 4,198,489,600 B.)*
 
 That line has been wrong before and it is cheap to re-check, so **re-check it**: this file
 claimed "the deployed archive is run 6" for hours after another session had restored the
@@ -80,7 +111,12 @@ script works, and both re-run the full gate sweep on the way in and out.)
 **Seven** staged archives exist under `vault/exports/archivewrite/` (a4, a4run2…a4run6,
 **a4run8** — the A8 one, still built and ready to redeploy), each 4.2 GB and each rebuildable
 from its script. **Delete them when disk matters** — they are outputs, not inputs. 270 GB was
-free on 2026-08-18.
+free on 2026-08-18. **As of 2026-08-20 there is a proof-first way to do that**:
+`python toolkit/mapdata/datdelta.py --capture STAGED --retail RETAIL --out vault/deltas/<name>`
+then `--prove` — the delta reconstitutes the 4.2 GB copy byte-identically on demand (kilobytes
+to low MB each), and only a PROVEN delta licenses the delete. New edit-in-place runs should
+use `toolkit/mapdata/overlay.py` (manifest-driven, journaled, `--status` answers what is
+deployed) rather than growing the `a*stage.py` family.
 
 ---
 
@@ -97,10 +133,20 @@ free on 2026-08-18.
 | `datplan` extent projection | a generation's declared extent crosses run boundaries | `test_datplan.py` §9 |
 | `toolkit/mapdata/gwentropy.py` | **A6** — recovers retail's own token stream and re-costs it; no bitstream writer | `test_gwentropy.py`, 91 |
 | `toolkit/mapdata/gwmatch.py` | **A7a** — size-only LZ77 + an exact block-partition DP, costed through `gwentropy`; still no bitstream | `test_gwmatch.py`, 62 |
-| `toolkit/mapdata/gwenc.py` | **A7b** — the bitstream writer. Re-emits retail byte-identically; encodes our own | `test_gwenc.py`, 55 |
+| `toolkit/mapdata/gwenc.py` | **A7b** — the bitstream writer. Re-emits retail byte-identically; encodes our own. `encode(b"")` refuses (gap D) | `test_gwenc.py`, 55→60 |
 | `datwrite.replace(..., compression=, expect=)` | writes compression 8 **and decompresses to verify before committing**; `declaration_fault` is shared with `datmove` | `test_datwrite.py`, 87→138 |
 | `datmove.move(..., compression=, expect=)` | the safe relocation verb for compressed rows that **C-6 said did not exist** | `test_datmove.py`, 46 |
 | `datalloc` comp-8 gate | decodes instead of matching a two-byte marker — the row **creation** path | `test_datalloc.py`, 98→100 |
+| `gwentropy.authoring_table` | **§17.2** — the writer-path table builder: every emitted shape retail-attested (dist ≥ 5, lit ≥ 257, phantom pairs for the shapes `gwdat`'s fallback cannot lift). `table_for_counts` untouched, so A6's numbers are invariant by construction | `test_gwenc.py` §8, floor 60 |
+| `datwrite.replace(..., grow_to=)` + `Writer._grow_gate` | **§17.3** — the grow-back verb §14.4 said was missing; one gate shared with `restore()`, which gained the EOF/MFT/withheld-run conditions by the factoring | `test_datwrite.py`, 138→199 |
+| `datwrite.Journal`, append + fsync | **§17.4** — 34.1×→1.00× write amplification, torn-tail recovery, still a valid JSON document so all 59 vault journals and every reader keep working | `test_datwrite.py` §12 |
+| `datalloc` fidelity gate (`Stream(expect=)`, `--expect`) | **§17.5** — `declaration_fault` on every stream, mandatory `expect` with `extraBytes 8`, the `alloc(plan=)` bypass closed. C-13 | `test_datalloc.py`, 100→177 |
+| `toolkit/mapdata/test_authorflow.py` | **§17.6** — the six-step end-to-end: author → create new row → revise → grow back → relocate → revert to pristine, comp-8 throughout | 59 checks, 0.5 s |
+| `toolkit/mapdata/datledger.py` | **infra arc, 2026-08-20** — THE row census. Settled C-8 on the real copies (7 rows archive difference + 13 convention); every counting convention reported side by side; per-row slack; `--reencode ROW` for measured comp-8 headroom (never bulk) | `test_datledger.py`, 84 bare / 95 with vault |
+| `toolkit/mapdata/refindex.py` | **infra arc** — the reverse-closure index: "who else reads this row?", keyed by MFT ROW (a row carries multiple id spellings — 38,396 on `dat_study`; resolve callers' ids via `canonical_id`). Every answer is a FLOOR and says so; skeleton sharing by bit-identical blk2C bases, with `contentless` flagged (572 retail heads share one degenerate group). Full real build ~15.5 min, saved index ~10 MB, stamp-checked on load | `test_refindex.py`, 92 |
+| `toolkit/mapdata/datdelta.py` | **infra arc** — a staged archive IS its delta: capture byte-spans vs retail (both directions), reconstitute byte-identically, `--prove` before deleting the 4.2 GB original. Vault-only by construction (retail-row spans are ArenaNet bytes); refuses the wrong generation by whole-file hash | `test_datdelta.py`, 84 |
+| `toolkit/mapdata/overlay.py` | **infra arc** — declarative reversible profiles; the successor to the `a*stage.py` family for edit-in-place runs. Manifest names ACTIVE/RETAIL/edits by FILE ID; `--plan/--build/--deploy/--retail/--status/--verify-after`; every edit through `declaration_fault` + the refindex gate (real co-readers acknowledged per edit; partial index refused; unread heads declared by count); post-flight diffs against the PRE-LAUNCH record | `test_overlay.py`, 133 |
+| `datcheck.assert_archive_safe` | **infra arc** — the launch-side archive gate, the cage's sibling on the other axis: ten open-time rules + the MFT self-crc preflight is blind to + crc sweep (+ generations under `--deep`, + fingerprint identity when a profile is named). Wired at all FOUR launch sites, held there by a disk-derived Popen census; clears all eight real vault archives in 6-7 s | `test_datcheck.py`, 112→149 |
 
 Floors: datcheck 84→112, datwrite 78→87, datplan 38→44. Run scripts live in
 `vault/research/archivewrite/` (`a4stage.py` … `a4stage6.py`, **`a4stage8.py`**), each with
@@ -263,11 +309,25 @@ And decoding ArenaNet's **own** row 8295 with an *upstream-faithful* `build_tabl
 `gwdat`'s zero-length repair, long labelled a divergence from both upstreams, is **required
 by ArenaNet's own archive**, so the shipping client must implement something equivalent.
 
-**The one gap to carry into A8, with its fix already named.** Our encoder emits declared
-`symbol_count == 1` on 3.4% of tables; retail does so **0 times in 138,708 first blocks**, so
-byte-identical re-emission structurally cannot cover it and its correctness rests only on our
-own decoder. **If the client refuses it, the fix is a two-symbol distance table inside
-retail's attested envelope, costing a few bits — a size question, not a design one.**
+**THE FA1 WRITE-BACK RAN AND IS CLOSED — A10, 2026-08-20, study §19 (verdict §19.6).**
+The U7-era edit was structurally a null (it scaled the n3C tag table; the sampler reads
+`blk2C` + the clamp windows, same clock). The stage retimed the proven clock ×4 across
+15 rows in place — blind-re-derived 15/15 byte-identical — and **the owner's launch
+fired P1**: *"normal in control then slowed down in the deployed"*, on video, against a
+baseline clip. **Playback timing lives in the linked key clock and is now an authored
+control surface** (cross-recorded in `studies/anim` §6). The client also played key
+times 3.09× beyond retail's shipped ceiling, retiring N2. Post-launch sweep green, our
+15 rows byte-identical through the client's Flush. **Authored content (run 7), created
+rows (A9), authored timing (A10) — the capability story is closed end to end.**
+
+**~~The one gap to carry into A8, with its fix already named.~~ CLOSED 2026-08-20, §17.2 —
+and the named fix was wrong in two details worth reading (§0 C-11):** retail's attested
+degenerate distance table declares **5**, not 2 (twelve witnesses, rows 8295–8306; 2/3/4
+declared by no retail row), and the single-symbol-at-index-0 route cannot use the
+zero-length code at all (`gwdat`'s fallback installs symbol `n−1` only), so it takes a
+phantom pair at 1 bit per match. Our encoder no longer emits declared < 2 anywhere —
+`test_gwenc` §8 sweeps the envelope every run — and the cost on 120 real small retail rows
+is **+0 B**. What remains is only the client oracle for small rows (§17.8).
 
 **THE WRITE PATH IS BUILT TOO — 2026-08-18, §14.** `datwrite.replace(..., compression=8,
 expect=payload)` writes a compressed row and **decompresses to verify before committing**,

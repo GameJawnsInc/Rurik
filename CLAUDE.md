@@ -276,6 +276,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 - Research lives in `studies/<arc>/` as `FINDINGS.md` or `PLAN.md`, labelled per
   above, and outlives the session that produced it. Fan recon out to Sonnet agents;
   keep judgement calls on Opus/Fable.
+- **New identifiers in study docs take a registered word prefix** (`GATEFIRE-C3`, not
+  `C3`) — [studies/idents/CONVENTION.md](studies/idents/CONVENTION.md), which also
+  carries the resolver for the old bare ones. New tokens only: every existing token is
+  grandfathered and a mass rename is refused there.
 
 ## Layout
 

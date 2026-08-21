@@ -107,6 +107,15 @@ DROPPED_ON_PURPOSE = {
             "GlobalMemoryStatusEx. Every field is about the MACHINE and none is "
             "about the world, and ArenaNet's server sends nothing back. There is "
             "no state here for a game server to hold.",
+# 0x000E ATTRIBUTE_DECREASE, 0x000F ATTRIBUTE_INCREASE and 0x0010
+# ATTRIBUTE_LOAD were here for one day. Their reason was "the blocker is not
+# knowledge but STATE: this server has no mutable per-character attribute model
+# at all", and that is exactly what changed -- attribspend.py holds the ranks
+# and the budget, the cost curve comes from the client's own s_attribPoints via
+# content, and all three are ARMED. The warning that row carried is now enforced
+# in code rather than prose: send_attribute_reply always sends the whole triple,
+# including on a refusal, because an unretired prediction gets re-applied on top
+# of every later authoritative value.
 # 0x0012 REQUEST_QUEST_INFO was here, and its reason was "answering it needs a
 # quest table this repo does not have, and inventing quest text is worse than
 # the drop". ARMED 2026-08-15: content/quests.toml is that table, and the text
@@ -148,11 +157,14 @@ DROPPED_ON_PURPOSE = {
             "character creation, which this server does not implement at all: "
             "it serves one fixed character from content/, and the create flow "
             "has never been driven end to end.",
-    0x0064: "CHAT_SEND (7 loopback) -- REAL MISSING WORK. Field 2 carries the "
-            "typed text verbatim, emotes included, so this is the whole chat and "
-            "emote surface. It needs a GAME_SMSG echo to be worth anything, and "
-            "a handler that stored the text and echoed nothing would look "
-            "implemented while the client showed silence.",
+# 0x0064 CHAT_SEND was here as "REAL MISSING WORK -- it needs a GAME_SMSG echo
+# to be worth anything, and a handler that stored the text and echoed nothing
+# would look implemented while the client showed silence." ARMED 2026-08-19:
+# the echo grammar was decoded OFFLINE from the live corpus (0x005D body
+# fragments at 121 units + 0x0061 [playerId, channel]; the sender/body
+# cross-check is 47/47 against 0x0059 player names) and _handle_chat_send
+# sends exactly that. The row's own warning named the failure mode the arm
+# was built against. studies/chat/FINDINGS.md.
     0x0084: "CHAR_CREATE_SET_EQUIP_COLOR (0 loopback, 70 live) -- character "
             "creation, same as 0x0060.",
 }

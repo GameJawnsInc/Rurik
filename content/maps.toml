@@ -346,6 +346,90 @@ instance family (flag bit 17); the PvP twin 784 shares the footprint and is NOT
 this row on purpose -- skills convert and the Flux applies there.
 """
 
+[map.166]
+name = "Frontier (a created chain -- WORLDMAPS-W3)"
+file_id = 0x5F0B0
+created = true
+spawn_x = 3072.0
+spawn_y = 3072.0
+plane = 0
+explorable = false
+
+[map.166.provenance]
+source = "invented"
+verified = """OURS, and more literally than any other row in this file: it names a \
+file that does not exist in ANY archive. `deploy.py --area frontier --install` sees \
+`created = true` beside an id that binds nothing and ALLOCATES the map's two rows -- a \
+zero-length Bloated head plus a compression-8 Stripped partner -- through \
+`datalloc.plan_alloc`/`alloc`, registering 0x5F0B0 on the head and only the head. \
+Nothing is displaced, which is the entire point of the row.
+
+THE ID WAS CHOSEN AGAINST ONE ARCHIVE GENERATION AND THE ROW SAYS WHICH, per the \
+[map.148] correction below: `datalloc.next_free_file_id(ar, 0x5F0B0)` returned 0x5F0B0 \
+on 2026-08-20 against `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` -- entry_count \
+177,342, 171,023 file-id records, highest plain id 0x5F0AC -- and neither 0x5F0B0 nor \
+its bit-31 sibling 0x8005F0B0 appears in that copy's raw table. The lowest free id there \
+is actually 0x5F0AD and it was NOT taken: that is the id A9's created chain carries on \
+the 38797 lineage (studies/archivewrite/FINDINGS.md 18.6), and two different created \
+chains sharing one spelling across two archives is a name collision waiting for the \
+session that reads them together. `deploy.py` re-checks the id against whichever archive \
+it is installing into and refuses if anything -- including a bit-31 sibling -- binds it.
+
+VERIFIED OFFLINE, 2026-08-20, before any client saw it: `deploy.py --area frontier` \
+against that copy assembles 10,714 B of authored map (64x64; 4,096/4,096 samples \
+round-trip exactly after the lattice snap; 9,843 B generated, 770 B borrowed, 91.87% \
+ours) and compresses it to 2,028 B of compression-8 stream, 18.9% of stored. The seed \
+(3072, 3072) measures 0.0 degrees -- the plaza generator's centre apron is dead flat -- \
+so it is inside the walkable band by the widest margin the shape allows, and \
+`stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client would build \
+no navmesh for.
+
+WHAT IS NOT VERIFIED HERE, and every other non-placeholder row in this file can say it: \
+the spawn-in-EXACTLY-ONE-trapezoid test. That test runs against the mesh the CLIENT \
+compiles, in `deploy.readback()`, and no client has compiled this map -- the authored \
+Stripped path chunk is the compiler's INPUT (27 B, one boundary point) and carries no \
+mesh to test against. The spawn is the 64x64 rect's centre, which is where `area.sculpt` \
+puts its own seed for the reason recorded there. WORLDMAPS-W4 is the run that settles it."""
+note = """
+THIS ROW IS TRUE OF NO ARCHIVE UNTIL A CREATE HAS RUN, and that is a different kind of
+conditional from [map.143]'s. Map 143 points at DIFFERENT CONTENT depending on which
+copy is open, because it overwrites a live retail row. This one points at NOTHING
+until `deploy.py --area frontier --install` has run against a given copy; afterwards it
+points at a file that exists in that copy alone. Against a pristine archive it does not
+resolve, and `deploy.py` says so rather than guessing -- an id that binds nowhere is
+also what a typo looks like, so the create only fires because THIS ROW asked for it.
+
+WHY IT EXISTS. Every authored area before it rides map 143 = MFT rows 71496/71497, a
+live retail area in the owner's own copy that we cannot name (FINDINGS 16-P7: there are
+ZERO provably-dead rows in the archive). Displacement was never the goal, it was the
+only verb available -- `datwrite` and `datmove` both start from a row ArenaNet made.
+`datalloc` is the third verb and this is the first map to use it.
+
+THE MAP ID IS A LABEL AND IT IS COSMETIC, exactly as it is for [map.143] and [map.144].
+166 is a real entry in the client's own area table (`toolkit/clientscan/areatable.py`
+against the vaulted build-38797 client, corroborated by both of its independent
+locators): type 10 like Ascalon Academy's row, campaign 1, continent 1, region 7, and
+its name resolves at run time from name_id 10474 -- the id is committed here and the
+string is not, per CLAUDE.md's names-and-authored-text rule. The client will print that
+name over OUR terrain. That is not a claim about the content, and the area table names
+no map file, so nothing joins the label to the file id except this row.
+
+MFT SLACK IS THE BINDING CONSTRAINT, AND IT IS TIGHT. A map chain is two rows and the
+MFT may grow only into the slack in its own last 512-byte block. MEASURED on the C2 copy
+2026-08-20: 48 bytes = EXACTLY 2 rows, with 0 reusable USED-clear spares. So that copy
+can take this chain and no other; a second created map there is refused by
+`datalloc.plan_alloc`, correctly, and the remedy is a fresh copy rather than a
+workaround. The 38833 archives have 424 bytes = 17 rows = eight authored maps.
+
+WHAT IS STILL OPEN. No client has ever read a created MAP chain. A9 proved the retail
+client resolves, decompresses and parses a chain `datalloc` created under a new file id,
+but that chain was a model skeleton with real content on every stream -- never the
+empty-head shape whose whole mechanism is that the client must COMPILE the map from the
+partner. FINDINGS 36 item 4 names the case untested. WORLDMAPS-W4 is that run and the
+run sheet is `vault/research/worldmaps/WORLDMAPS-W4-RUN.md`; until it comes back, this
+row is an offline artifact and says so.
+"""
+
 [map.27]
 name = "Terrain tag-3 capture target (map 27 slot)"
 file_id = 0xB5FF

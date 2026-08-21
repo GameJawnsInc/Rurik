@@ -144,8 +144,18 @@ starts ~5-6 s after last damage, stepping +1 quantum per ~2 s). The lone negativ
 (−1/90, spawn-time) is a net-degeneration spawn state; passive ticks are never
 streamed, so its zero co-occurring health loss is expected, not damning.
 
-**Still UNVERIFIED**: that one 2 hp/s step equals one HUD pip (needs a screen, not
-the wire), and the H behind the on-create constants. The Isle closes both with zero
+~~**Still UNVERIFIED**: that one 2 hp/s step equals one HUD pip (needs a screen,
+not the wire)~~ — **CONFIRMED 2026-08-20, and not by the Isle**. The effect
+substrate needed degeneration to make a condition do anything, so it sent one:
+Bleeding is **3 pips** by GWW's own table, `-3 × 2 / 100 = -0.06` per second on
+a 100-health player, no free parameter on either side. The client drew
+**exactly three `‹` arrows** on the health bar
+(`vault/captures/harness/20260820T192221`, `hud-degen-three-pips.png`), and its
+own displayed health fell **100 → 86 → 72 → 58 → 44** over frames **2.32 s**
+apart — an implied **6.03 health/s against the 6.00 sent**, three times over.
+So one 2 hp/s quantum is one HUD pip, and property 44 is applied by the client
+as a rate it animates itself. What remains open here is only **the H behind the
+on-create constants**. The Isle closes both with zero
 free parameters: a player at a known-pip Student, same connection streaming H —
 prop 44 must step to (natural − condition) × 2/H at apply time.
 
@@ -925,6 +935,85 @@ not touch. No single crit multiplier fits all ten blocks and no rounding rule re
 — `floor` fixes rank 8 and breaks AR60/r13 (38 vs 39) and rank 9 (28 vs 29). **The defect
 is not in the crit rule; it is the same unmet-requirement term §2 gets wrong, and this is
 its sharpest expression.** It stays unexplained and it stays visible.
+
+## 4.1 The critical, drawn by our own client (2026-08-20)
+
+§4 settled what property 17 IS from retail traffic. This is the other direction:
+`toolkit/authsrv` now SENDS it, and the client draws it.
+
+    server                          client
+    s2c damage 5              ->    -5      yellow
+    s2c damage 7              ->    -7      yellow
+    s2c damage 9              ->    -9      yellow
+    s2c CRITICAL 12  (p17)    ->    -12     yellow, identical treatment
+
+> **A critical renders exactly like an ordinary hit.** OBSERVED, capture
+> `20260820T162932`. Same colour, same font, same float — the only difference is
+> the number. So `17 REPLACES 16` (§4) is true of the *rendering* too, and nothing
+> in the client marks a critical as special. Worth recording because the opposite
+> was plausible: a distinct colour or a larger glyph is exactly what a game would
+> do, and if it existed, an implementation that sent 17 without whatever else
+> drives that treatment would look subtly wrong on screen. It does not.
+
+The 12 is the model's own number: rank 7 gives SL 35, the Hatcher's derived AR is
+3, and a critical takes the range MAXIMUM at AR−20 — `5 × 2^((35+17)/40)` = 12.3,
+round 12. The ordinary 5/7/9 are `3..5 × 2^(32/40)`.
+
+**HOW THE PHOTOGRAPH WAS TAKEN, because it matters for reading it.** At rank 7 the
+crit rate is 6.25% and four runs failed to catch one in a frame. The rate was
+therefore bumped to 60% in a LOCAL, UNCOMMITTED edit for one run and reverted
+immediately; `CRITICAL_RATE_BY_RANK` in the tree is the measured five and
+`test_agentlife` §N3 pins it. Nothing else was touched, so the damage VALUES in
+that run are the same ones the unbumped runs produced — the bump changed how often
+a critical happened, never what one was worth.
+
+---
+
+## 4.2 The INCOMING direction, and the gap the run exposed (2026-08-20)
+
+§4.1 watched our server's damage land on a creature. This is the other way round,
+and it found something the offline tests could not.
+
+**The armour term works.** With the five starter pieces on, `ENEMY_HIT_FRACTION`'s
+baseline 10 becomes **13 a swing** — `10 × 2^((60−45)/40)` = 12.97 — so the player
+dies in **8 swings, not 10**, and the server log names the location each swing rolled:
+
+```
+player hit by 10: 87/100 (struck the boots,  AR 45)
+player hit by 10: 74/100 (struck the legs,   AR 45)
+player hit by 10: 61/100 (struck the body,   AR 45)
+...
+player hit by 10:  0/100 (struck the gloves, AR 45)
+```
+
+On screen: **`-13` in RED** over the player's own health bar, against the **yellow** an
+outgoing hit draws (capture `20260820T170433`). Colour is by direction, not by
+magnitude or by critical — §4.1 established a critical draws the same yellow as an
+ordinary outgoing hit, so the client's only damage-number distinction is who is being
+hit.
+
+> **THE GAP: the enemy almost never auto-attacks, and the path it DOES use ignores
+> armour entirely.** The first attempt at this run produced `player hit by skill 312`
+> three times and **not one melee swing** — the Hatcher's four-slot bar always has
+> something recharged, so `land_swing` (the function the armour term was just wired
+> into) barely runs in a real fight. `skill_damage` has no armour term at all: the
+> player took **46 a hit** through it, unscaled by the AR 45 they are wearing. The
+> melee numbers above were obtained by emptying the enemy's bar in a local,
+> uncommitted edit, reverted immediately.
+
+**That is not a bug to fix blind.** WIKI (GWW, "Armor rating"): armour-respecting
+damage is "all damage from attacks and most spells dealing elemental damage", while
+"a number of skills, especially under the Mesmer, Necromancer, and Monk lines, deal
+damage that ignores armor" — and all bonus damage from attack skills is
+armour-ignoring. So the correct term is **per skill**, not global, and this server has
+no per-skill armour-ignoring flag because it has no skill substrate to hang one on.
+`agents.GV_ARMOR_IGNORING = 55` exists and nothing reads it.
+
+**So it lands where everything else this week landed**: the skill substrate is the
+blocker, and guessing a global answer here would put a wrong number on every skill in
+the game rather than leaving one honest gap.
+
+---
 
 ## 5. The Master of Damage oracle — and the check that could have failed
 

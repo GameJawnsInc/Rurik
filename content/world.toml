@@ -11,6 +11,21 @@ npc = "hatcher"
 agent_id = 10
 definition = 3
 max_health = 100
+# ARMOUR RATING is DERIVED, not declared -- see creature_armor_rating() in
+# authsrv.py. It was `60` for one commit, chosen because that is the Isle's own
+# Suit baseline, and 60 is level-20 armour on a level-1 creature: the wrong
+# SHAPE, which is exactly the failure studies/monsterai section 3.3 already paid
+# for on reach. WIKI (GWW, "Armor rating", rev. 2026) gives the formula --
+# `creature AR = 3 * Level + armor bonus`, the bonus being profession-specific
+# -- so this row already carries everything needed: the npc's `level` and
+# `profession`. A number derived from two facts we hold beats a third fact
+# invented beside them.
+#
+# Uncomment to OVERRIDE, which the same page says is often right: "Many
+# creatures in PvE do not follow this formula and may be significantly
+# resistant or vulnerable to certain types of damage." An override is a
+# measurement about one creature and should cite where it came from.
+# armor_rating = 60
 # Placed relative to the player's arrival point rather than at an absolute coordinate,
 # because the player's arrival point differs per map and this enemy is meant to be
 # reachable in whichever one is loaded.
@@ -85,6 +100,112 @@ the cycle is testable without it.
 # `toolkit/authsrv/authsrv.py` models only the labels it names in
 # SCALE_MEANS_DAMAGE. Everything else lands as "no modelled effect" and says so
 # in the log rather than being quietly treated as damage.
+
+# ---------------------------------------------------------------------------
+# R4b'S NINE EXEMPLARS, added 2026-08-20.
+#
+# PLAN.md 3.2 grades R4b as "n of 9": one named skill id per `type_code` family
+# Pre-Searing reaches. These are the rows that let the server resolve them. All
+# eight progressions below were read from GWW in one pass on 2026-08-20 and
+# **all eight agree with the client's own endpoints**, which is worth stating as
+# a number because two of them agree in a way that could not be luck:
+#
+#   * Sever Artery -- GWW gives ONE variable, `Bleeding` 5..25, and the client
+#     carries 5..25 in the BONUS slot with `skill_arguments = 4` (bonus only).
+#     The bitfield said which slot before the wiki was read.
+#   * Faintheartedness -- GWW gives TWO, `Duration` 3..16 and `Health
+#     degeneration` 0..3, and the client carries 3..16 in the duration slot and
+#     0..3 in the bonus slot with `skill_arguments = 5` (duration | bonus). Two
+#     variables, two enabled bits, two matching pairs, and the SCALE slot's 50
+#     sits there with its bit clear -- the "you attack 50% slower" from the
+#     description, which is not a progression.
+#
+# That is the wiki and the client agreeing on WHICH SLOT as well as on the
+# numbers, from sources that share no author or ancestry.
+
+[skill_effect.194]
+scale_means = "Fire damage"
+[skill_effect.194.provenance]
+source = "wiki"
+page = 'GWW, "Flare", {{Skill progression}}, rev. as fetched 2026-08-20'
+verified = """Client scale 20->65, args = 2 (scale). Wiki var1 `Fire damage`
+20->65. The bonus slot holds 1800 with its bit CLEAR -- another Rush-shaped
+constant, and the reason the bitfield is honoured rather than the endpoints
+read."""
+
+[skill_effect.1]
+scale_means = "Heal"
+[skill_effect.1.provenance]
+source = "wiki"
+page = 'GWW, "Healing Signet", {{Skill progression}}, rev. 2026-04-01'
+verified = """Client scale 82->172, args = 2. Wiki var1 `Heal` 82->172. Goes out
+on property 55 positive -- the health-GAIN direction, measured from the corpus
+(agents.GV_HEALTH_GAIN), not a negative damage."""
+
+[skill_effect.307]
+scale_means = "Maximum heal"
+[skill_effect.307.provenance]
+source = "wiki"
+page = 'GWW, "Reversal of Fortune", {{Skill progression}}, rev. 2023-05-02'
+verified = """Client scale 15->80, args = 2. Wiki var1 `Maximum heal` 15->80.
+KNOWN SIMPLIFICATION, carried in skill_heal's docstring: the skill heals for the
+damage it prevents, capped at this number, and this server models no damage
+prevention -- so it heals the cap. Right at the ceiling, wrong below it."""
+
+[skill_effect.135]
+scale_means = "none"
+bonus_scale_means = "Health degeneration"
+[skill_effect.135.provenance]
+source = "wiki"
+page = 'GWW, "Faintheartedness", {{Skill progression}}, rev. 2024-05-16'
+verified = """args = 5 (duration | bonus). Wiki gives exactly two variables and
+the client carries exactly those two slots: `Duration` 3->16 in duration0/15 and
+`Health degeneration` 0->3 in bonus_scale0/15. The scale slot's 50 has its bit
+CLEAR and is the "attack 50% slower" from the description. Degeneration is not
+modelled -- the row records what the number IS, not that we send it."""
+
+[skill_effect.431]
+scale_means = "Fire damage"
+[skill_effect.431.provenance]
+source = "wiki"
+page = 'GWW, "Ignite Arrows", {{Skill progression}}, rev. 2024-12-05'
+verified = """Client scale 3->18, args = 2. Wiki var1 `Fire damage` 3->18 -- the
+SAME LABEL as Flare's, and it does not mean the same thing. This is a
+Preparation: WIKI (GWW, "Preparation") "preparations generally alter bow
+attacks, allowing the fired arrows to cause additional effects", so the fire
+damage rides the next arrows rather than landing on cast. The server refuses to
+resolve damage for any episode-opening skill for exactly this reason."""
+
+[skill_effect.200]
+scale_means = "Energy"
+[skill_effect.200.provenance]
+source = "wiki"
+page = 'GWW, "Glyph of Lesser Energy", {{Skill progression}}, rev. 2024-02-27'
+verified = """Client scale 10->18, args = 0 -- BOTH endpoints present with the
+bit clear, and the wiki lists the progression, so this is one of the rows where
+the two disagree about whether it scales. Not resolved here: the server sends
+the 15 s glyph episode and models no energy, so nothing reads this number yet.
+Recorded so the disagreement is on file rather than discovered later."""
+
+[skill_effect.382]
+bonus_scale_means = "Bleeding"
+[skill_effect.382.provenance]
+source = "wiki"
+page = 'GWW, "Sever Artery", {{Skill progression}}, rev. 2023-02-24'
+verified = """args = 4 (bonus only), bonus 5->25, scale 0->0. Wiki gives one
+variable, `Bleeding` 5->25. The bitfield picked the slot before the wiki was
+read. Costs 4 adrenaline, which this server does not model."""
+
+[skill_effect.346]
+scale_means = "none"
+[skill_effect.346.provenance]
+source = "wiki"
+page = 'GWW, "Frenzy", rev. 2023-02-17'
+verified = """NO {{Skill progression}} template on the page, and the client
+agrees: args = 0. The scale slot's 33 is the "attack 33% faster" of the
+description and the duration slot's flat 8 is the real duration -- which is the
+row that shows the duration bit means SCALES rather than MEANINGFUL, since the
+server sends 8 s and the client draws an 8 s bar."""
 
 [skill_effect.312]
 scale_means = "Holy damage"
@@ -214,6 +335,7 @@ this skill does not scale."""
 # cannot currently ask.
 [player.attributes]
 ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
+points_total = 200
 
 [player.attributes.provenance]
 source = "invented"
@@ -222,6 +344,17 @@ Ids measured from the client's s_attrib table (attribtable.py, build 38797);
 ranks chosen. Replace the ranks the day a capture shows a real character's --
 capture shopping-list item 1, studies/combat/PLAN.md section 3 -- and the ids
 should survive that, because they are the client's own.
+
+points_total is the character's LIFETIME attribute-point budget, which
+0x0037's fourth field carries and the panel spends down; the third field is
+what is left (studies/pvpui/FINDINGS.md 32.5). The NUMBER 200 is observed
+rather than invented -- it is the level-20 maximum, and 0x0037's fourth field
+reads exactly 200 in 34 of the corpus's 48 sightings, with 0, 5 and 10 on
+lower-level characters -- but GIVING IT TO THIS CHARACTER is a choice, which
+is why the whole row stays `invented`. The ranks above already sink 173 of it
+(97+48+21+6+1), leaving 27 unspent, so the panel opens with points to spend
+and room to refund; change the ranks and that follows automatically, because
+the server computes spent from the cost table rather than storing it.
 """
 
 [player.defaults]

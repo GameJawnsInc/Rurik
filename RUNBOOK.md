@@ -414,6 +414,10 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 | `REFUSING to launch … carries OUR Diffie-Hellman parameters` | A DH-patched client was aimed at a non-loopback host | Correct — that is the account-ending case. Use the `--no-dh-patch` build under `vault/run-live` |
 | `REFUSING to launch … carries ArenaNet's Diffie-Hellman parameters, not ours` | The live-capture build was aimed at loopback | Use the copy under `vault/run`; the live build cannot key against our server |
 | `REFUSING to launch … no Gw.dat, so staging did not finish` | `make_run_dir.py` could not copy the 4 GB source | Close every `Gw.exe` (a running one holds it open exclusively) and re-run `make_run_dir.py` |
+| `REFUSING to launch from …Gw.dat` naming an open-time rule | The ARCHIVE gate, not the cage — `datcheck.assert_archive_safe`, wired beside `cage.assert_launch_safe` at all four launch sites 2026-08-20. The launch is the irreversible step: a bad header tail-jumps into ArchiveCreate (a fresh empty archive over 4.2 GB, nothing logged), and repair DISCARDS any chain whose payload CRC mismatches | The refusal names the rule and the remedy; stopping here is the point. `python toolkit/mapdata/datcheck.py --dat … --assert-safe` reproduces it standalone |
+| Archive gate says `PermissionError … A client already running holds this archive open` | A lock, not damage | Close every `Gw.exe` and re-run. Only if nothing is running does "unreadable" mean the file itself |
+| Archive gate says `MFT self-crc is stored X, computed Y` | A grow-without-resync (`datwrite.py:755-781`): `--preflight` still answers 10/10 clear, and the client's own LoadMft would still reject it | Revert the write from its journal, or restore the overlay/retail copy — do not launch |
+| Archive gate says `row(s) whose payload does not match its stored CRC` | Launching would let repair delete those whole `nextStream` chains | `datcheck --crc-sweep` names the rows; restore via the write's journal, `overlay.py --retail`, or `datdelta.py --apply` |
 | `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&`. Nothing launched; the flags are fine |
 | `Could not bind … Another AuthSrv is almost certainly still running` | Working as intended | `netstat -ano \| findstr :6112`, stop the old one. Note a healthy stack shows TWO 6112 listeners — auth on `127.0.0.1`, game on `127.0.0.3`; the stale one is at the host you are trying to bind. This replaced a silent-shadowing bug that cost two sessions |
 | `Code=058`, nothing in terminal 2 | Client never reached us | Both flags present? Launched the **run-dir** copy, not `C:\gw\Gw.exe`? |
@@ -1048,11 +1052,18 @@ holds the twelve-step `RUNSHEET.md` with exact commands and the `PREDICTION.md`
 that was recorded before anything was armed. Four things that run paid for,
 worth having before you start another:
 
-- **The authored stream must be SMALLER than its row's existing reservation.**
-  `datwrite --replace` writes uncompressed and refuses to relocate. This — not
-  the client — is the live constraint on authoring, and it confines the work to
-  maps that shrink until a compressor or a relocation verb exists. It killed the
-  first design of that experiment outright.
+- **The authored stream must be SMALLER than its row's existing reservation** —
+  and as of 2026-08-20 (WORLDMAPS-W1) both halves of the old escape clause are
+  met: the compressor exists (`gwenc`, and `deploy.py --install` now writes the
+  partner compression-8 by default, fit judged on the COMPRESSED size — a 96×96
+  map fits where 32×32 was once the ceiling) and the relocation verb exists
+  (`datmove`, taken automatically when even the compressed stream is too big).
+  What stands: replace still never relocates, the reservation is still whole
+  512-byte blocks, and a compressed install SHRINKS the row, so iterating from a
+  small map to a big one relocates where it used to sit still (`grow_to` is the
+  unwired fix, deliberately its own change). Historical: writing UNCOMPRESSED
+  was what confined authoring to maps that shrink, and it killed the first
+  design of that experiment outright.
 - **`--exe` must be ABSOLUTE.** `session.py` hands it to `Popen` together with
   `cwd=`, and Windows resolves a relative program path against the *new*
   directory. The failure is a bare `FileNotFoundError` naming nothing.

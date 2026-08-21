@@ -34,11 +34,22 @@ smaller than the old flat 900 -- section 1 asserts that as an invariant, because
 a tightening was designed, costed at 8 newly-refused true reports, and thrown
 away. On top of it, the Nth consecutive refusal is adopted regardless, which is
 what makes 36-in-a-row unreachable for any constants. Section 2 is the headline.
+
+THE FILE HAS SINCE BECOME THE HOME OF THE MOVEMENT FLAGS, because they all turn
+on the same two values and the same two receive arms: sections 7 to 9 and 11
+lock the shapes of --stop-echo, --client-endpoint and --resync, and sections 12
+and 13 lock --grant-suppress -- the eighth candidate, and the first that acts by
+sending LESS rather than by sending something better. Section 13 replays the
+three captures of 2026-08-20 through the policy itself: the reproduction's 196
+clicks must all be refused and the ordinary capture's 5 must all be permitted,
+because either half alone is passed by a policy that is simply wrong in one
+direction.
 """
 import ast
 import json
 import math
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,8 +71,22 @@ import vaultpath  # noqa: E402
 # Setting the floor at 38 would red every machine that is not the owner's;
 # 34 still catches the failure this rule exists for, which is a section
 # quietly evaporating.
+#
+# 2026-08-20: section 11 (the --resync sender) added 35, so 73 with the capture
+# and 69 without. Both numbers are from the run printed on the console, not from
+# a count in anybody's head -- section 10 contributes exactly 4 checks and is
+# the only fixture-bearing one, which is the whole of the arithmetic.
+#
+# 2026-08-20, later: section 12 (--grant-suppress) and section 13 (its replay of
+# that evening's three captures) took it to 113 with every fixture present and
+# 105 without. There are now TWO fixture-bearing sections contributing 4 checks
+# each -- section 10's single 20260819 capture and section 13's three 20260820
+# ones -- so the floor is 113 - 8. Both figures are read off a real green
+# console run, and the floor is the BARE-MACHINE subset for the reason the
+# paragraph above gives: setting it at 113 would red every machine that is not
+# the owner's, while 105 still catches a section quietly evaporating.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=34)
+                       floor=105)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -488,6 +513,938 @@ def main():
               f"because the old code only recorded stops")
         print(f"     refused {refused} of {len(rows) - 1}, "
               f"longest run {best}")
+
+    print("\n11. --resync ships OFF, and its payload is the CLIENT's own report")
+    # WHAT EARNS THIS SECTION. 0x002C AGENT_UPDATE_POSITION is the only
+    # catalogued primitive whose handler reaches BOTH copies the client keeps
+    # with no gate (0x005FDAE5 on [agentMgr+0xE8], 0x005FDB49 on
+    # [agentMgr+0x14C]) and clears the AgTrack record first (0x005FDA78), so it
+    # is the one lever this arc has left. It is ALSO the message an earlier
+    # build sent and had removed as "the warp the player described" -- because
+    # that build sent OUR INTEGRATOR'S position. The whole difference between a
+    # fix and that regression is which value ends up in the payload, and
+    # `state["pos"]` is one keystroke away from `state["client_pos"]`. Every
+    # check below exists to make that keystroke red.
+    check(authsrv.RESYNC is False,
+          "--resync is off by default",
+          "it is the SEVENTH candidate in this arc and six are dead. A hard "
+          "SetPosition at the player is a teleport by construction; it ships "
+          "off until a watched run scores it")
+    check(authsrv.RESYNC_SEPARATION == 100.0,
+          "the trigger is the CLIENT's own 100.0 u radius, not a number we "
+          "chose",
+          "0x00946560 -- the radius inside which the client's own match test "
+          "0x00605AF0 returns 'no snap' before the fallback half runs. It sits "
+          "3x under gate 1's real cut of 299.332591 u, and that factor is the "
+          "headroom our SYNC model gets to be wrong in")
+    ceiling = 299.332591 / (2 * authsrv.DEFAULT_RUN_SPEED)
+    check(authsrv.RESYNC_MIN_INTERVAL < ceiling,
+          f"and the rate limit sits under its derived ceiling of "
+          f"{ceiling:.4f} s",
+          f"{authsrv.RESYNC_MIN_INTERVAL} -- two copies moving directly apart "
+          f"separate at no more than 2 x 288 u/s, so a limit at or above "
+          f"{ceiling:.4f} s lets a full gate's worth of separation accrue "
+          f"between two fires, which is the sender being structurally late")
+    harm = authsrv.RESYNC_MAX_REPORT_AGE * authsrv.DEFAULT_RUN_SPEED
+    check(abs(harm - 100.0) < 1e-9,
+          "and the staleness bound IS the harm bound: speed x age = 100.0 u",
+          f"{harm!r} -- a SetPosition to the client's last report yanks the "
+          f"RENDERED copy backwards by at most how far the client walked since "
+          f"that report. Choosing the age chooses the harm, and the age is "
+          f"chosen to make the harm the client's own 'close enough' radius. "
+          f"CORROBORATED: for report gaps under 0.100 s the client's own step "
+          f"is p99 28.80 u against a budget of 28.8 (n = 307), and under "
+          f"0.200 s p99 57.60 against 57.6 (n = 685), 73 `ours` captures")
+
+    def armed(client=(1000.0, 0.0), ours=(0.0, 0.0), sync=(0.0, 0.0),
+              at=1000.0, plane=0):
+        """A state with a fresh client report and a seeded, PARKED sync model."""
+        st = {"pos": ours, "plane": plane, "pos_seen": at,
+              "client_pos": client, "client_plane": plane,
+              "client_pos_at": at,
+              "sync_from": sync, "sync_to": None, "sync_at": at}
+        return st
+
+    class Wire:
+        """A send() that also runs the real model hook, like the server's."""
+
+        def __init__(self, state):
+            self.state = state
+            self.sent = []
+
+        def __call__(self, opcode, values, label, quiet=False):
+            authsrv._note_wire_move(self.state, opcode, values, 1000.0)
+            self.sent.append((opcode, values, label))
+
+    # OFF MEANS OFF: not merely "does not send", but does not even evaluate.
+    st = armed()
+    wire, rec = Wire(st), FakeRec()
+    fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+    check(fired is False and wire.sent == [] and rec.events == [],
+          "with the flag off a state that WOULD fire sends nothing and records "
+          "nothing",
+          f"fired={fired} sent={wire.sent} events={len(rec.events)} -- the "
+          f"default build's capture must not grow a resync log it never used")
+
+    saved = authsrv.RESYNC
+    authsrv.RESYNC = True
+    try:
+        # THE HEADLINE: the payload is the CLIENT's figure, and the two are made
+        # to DISAGREE on purpose. state["pos"] is a blend -- the world tick's
+        # integrator writes it too -- so a sender reading it would put our
+        # extrapolation on the wire, which is exactly the removed regression.
+        st = armed(client=(1000.0, 0.0), ours=(1234.0, 567.0))
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is True and len(wire.sent) == 1,
+              "a 1,000 u separation with a fresh report fires exactly one 0x002C",
+              f"fired={fired} sent={wire.sent}")
+        op, values, _label = wire.sent[0]
+        check(op == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION == 0x002C,
+              "on the right opcode", f"0x{op:04x}")
+        check(values[1] == [1000.0, 0.0] and values[1] != list(st["pos"]),
+              "carrying state['client_pos'] and NOT state['pos']",
+              f"{values} against ours {st['pos']} -- the build that sent this "
+              f"message before sent OUR integrator's position, and its five "
+              f"sends carried the client 630, 189 and 765 units. 765 is one "
+              f"heading vector: the integrator had walked the whole leg while "
+              f"the client had not moved at all")
+        check(values[0] == authsrv.PLAYER_AGENT_ID and values[2] == 0,
+              "naming the player's agent, with the plane the report arrived on",
+              f"{values} -- position and plane are one fact (section 4), and "
+              f"this reads the pair the accept path wrote together")
+
+        # REFUSES A PAYLOAD THAT IS NOT CLIENT-SOURCED. A state carrying only
+        # our own blend has no client_pos at all, and the verdict must not fall
+        # back to it.
+        # It carries client_plane and NOT client_pos on purpose: that is the
+        # split section 4 is about, and it leaves the missing client POSITION as
+        # the only thing standing between this state and a send. A fixture
+        # missing three fields would be refused for whichever one is checked
+        # first, which is a weaker proof than it looks.
+        blind = {"pos": (5000.0, 5000.0), "plane": 0, "pos_seen": 1000.0,
+                 "client_plane": 0,
+                 "sync_from": (0.0, 0.0), "sync_to": None, "sync_at": 1000.0}
+        wire, rec = Wire(blind), FakeRec()
+        fired = authsrv._maybe_resync(wire, blind, rec, now=1000.0)
+        verdict = authsrv._resync_verdict(blind, 1000.0)
+        check(fired is False and wire.sent == []
+              and verdict[1] == "no-client-report",
+              "a state with no accepted client report sends NOTHING, however "
+              "far our own model has drifted",
+              f"{verdict} -- 5,000 u of drift and not one byte, because the "
+              f"only position this sender is allowed to say is one the client "
+              f"said first")
+        check(len(rec.of("resync")) == 1
+              and rec.of("resync")[0]["fired"] is False,
+              "and the refusal is in the event log, not just absent from it",
+              f"{rec.of('resync')} -- a resync log holding only its own "
+              f"successes cannot be used to score the flag")
+
+        # REFUSES A STALE PAYLOAD, at the bound and past it.
+        st = armed(at=1000.0)
+        edge = 1000.0 + authsrv.RESYNC_MAX_REPORT_AGE
+        check(authsrv._resync_verdict(st, edge)[0] is True,
+              f"a report exactly {authsrv.RESYNC_MAX_REPORT_AGE * 1000:.0f} ms "
+              f"old still fires -- the bound is inclusive",
+              f"{authsrv._resync_verdict(st, edge)}")
+        past = edge + 1e-6
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=past)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, past)[1] == "stale",
+              "one microsecond past it, nothing goes out",
+              f"{authsrv._resync_verdict(st, past)} -- past the bound the "
+              f"payload has stopped being where the client is, and a stale "
+              f"payload IS the old failure mode")
+        check(authsrv._resync_verdict(st, 999.0)[1] == "stale",
+              "and a report dated in the FUTURE is stale too, not fresh",
+              f"{authsrv._resync_verdict(st, 999.0)} -- `now - at` goes "
+              f"negative under clock skew, and a negative age would sail "
+              f"through an upper-bound-only test")
+
+        # THE RATE LIMIT.
+        st = armed()
+        wire, rec = Wire(st), FakeRec()
+        n = 0
+        t = 1000.0
+        for _i in range(20):
+            st["client_pos_at"] = t          # a fresh report every 100 ms
+            st["sync_from"], st["sync_to"] = (0.0, 0.0), None
+            n += bool(authsrv._maybe_resync(wire, st, rec, now=t))
+            t += 0.1
+        span = 1.9                            # first fire at t0, last at t0+1.9
+        allowed = int(span / authsrv.RESYNC_MIN_INTERVAL) + 1
+        check(n <= allowed,
+              f"twenty consecutive fireable reports over {span:.1f} s produce "
+              f"{n} sends, not 20",
+              f"n={n}, ceiling {allowed} at one per "
+              f"{authsrv.RESYNC_MIN_INTERVAL:.2f} s -- an unlimited sender is "
+              f"a 2 Hz teleport stream at the player")
+        check(n >= 1, "and it does not rate-limit itself down to nothing",
+              f"n={n} -- a limit that never lets anything through would make "
+              f"every check above vacuous")
+
+        # NEVER FIRES ON A REPORT THE TRUST GUARD REFUSED, and this is the
+        # one an adversarial review found reachable at 2,282 u. The payload
+        # advances only on accept, so a refusal FREEZES it while the client
+        # keeps moving -- and the guard refuses exactly when the client claimed
+        # a jump over CLIENT_POSITION_TRUST_RADIUS. Inside the staleness window
+        # every other gate still passes, so without this the server would
+        # hard-SetPosition the player back to their pre-jump point: the
+        # regression the whole design exists to avoid, by a different route.
+        st = armed(client=(0.0, 0.0), sync=(1000.0, 0.0))
+        fire_clean, why_clean = authsrv._resync_verdict(st, 1000.0)[:2]
+        check(fire_clean is True and why_clean == "resync",
+              "CONTROL: the same state with no refusal on record DOES fire",
+              f"{why_clean} -- a check whose control cannot fire is judging "
+              f"nothing, and this one is the whole point of the next check")
+        st["pos_rejects"] = 1
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, 1000.0)[1] == "report-refused",
+              "but one refused report on record blocks it, payload unsent",
+              f"{authsrv._resync_verdict(st, 1000.0)} -- the freshest thing we "
+              f"heard was one we did not believe, so the frozen payload is a "
+              f"pre-jump position and sending it is the old warp")
+
+        # NEVER FIRES WHEN THE TWO COPIES AGREE.
+        st = armed(client=(50.0, 0.0), sync=(0.0, 0.0))
+        wire, rec = Wire(st), FakeRec()
+        fired = authsrv._maybe_resync(wire, st, rec, now=1000.0)
+        check(fired is False and wire.sent == []
+              and authsrv._resync_verdict(st, 1000.0)[1] == "in-agreement",
+              f"50 u apart is under the {authsrv.RESYNC_SEPARATION:.0f} u "
+              f"trigger and sends nothing",
+              f"{authsrv._resync_verdict(st, 1000.0)} -- correcting a player "
+              f"who is already right is the 'teleporting a player nine units "
+              f"is pure damage' case the 0x0047 arm records")
+
+        # THE SYNC MODEL FAILS CLOSED, and it tracks a glide rather than
+        # assuming the copy is already parked.
+        unseeded = {"pos": (0.0, 0.0), "plane": 0, "pos_seen": 1000.0,
+                    "client_pos": (9000.0, 0.0), "client_plane": 0,
+                    "client_pos_at": 1000.0}
+        check(authsrv._sync_position(unseeded, 1000.0) is None
+              and authsrv._resync_verdict(unseeded, 1000.0)[1]
+              == "no-sync-model",
+              "an unseeded SYNC model produces no separation and no send",
+              f"{authsrv._resync_verdict(unseeded, 1000.0)} -- a fixture that "
+              f"silently resolves to the wrong thing turns every assertion "
+              f"behind it into a no-op; this one raises its hand instead")
+        glide = armed(client=(0.0, 0.0), sync=(0.0, 0.0))
+        authsrv._note_wire_move(glide, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                [authsrv.PLAYER_AGENT_ID, [2880.0, 0.0], 0, 0],
+                                1000.0)
+        half = authsrv._sync_position(glide, 1005.0)
+        check(abs(half[0] - 1440.0) < 1e-6,
+              "and a granted leg is walked at 288 u/s, not teleported to its "
+              "end",
+              f"{half} at t+5 s of a 2,880 u grant -- this is the client's own "
+              f"bake (0x005FE950 velocity = unit(d) * speed, 0x005FFB40 "
+              f"pos = +0x78 + vel * dt). If the model parked instantly, every "
+              f"legitimate click-walk would read as a 2,880 u desync")
+        parked = authsrv._sync_position(glide, 1099.0)
+        check(parked == (2880.0, 0.0),
+              "and it PARKS on the granted point rather than overshooting it",
+              f"{parked} -- 0x005FF820's +0x48 arm returns the stored "
+              f"destination, which is semantic and not a cache")
+        authsrv._note_wire_move(glide, authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                                [authsrv.PLAYER_AGENT_ID, [7.0, 8.0], 0],
+                                1100.0)
+        check(authsrv._sync_position(glide, 1200.0) == (7.0, 8.0),
+              "and a 0x002C we send lands the model on the point it carried",
+              f"{authsrv._sync_position(glide, 1200.0)} -- 0x00602B20 writes "
+              f"+0x68..+0x74 = current on the parked arm, so no destination "
+              f"survives a hard set; a model that kept the old one would think "
+              f"the copy walked away again")
+
+        # THE ENCODED BYTES ARE THE SCHEMA'S. Not "we believe the shape" -- the
+        # real codec, against the real catalog, checked field by field.
+        blob = authsrv.codec.encode(
+            "GAME_SMSG", authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+            [authsrv.PLAYER_AGENT_ID, [1234.5, -678.25], 7])
+        shape = json.load(open(os.path.join(
+            os.path.dirname(os.path.dirname(HERE)), "schema",
+            "messages.json"), encoding="utf-8"))
+        entry = shape["channels"]["GAME_SMSG"]["messages"]["44"]
+        check([f["type"] for f in entry["fields"]]
+              == ["msg_header", "dword", "vec2", "word"],
+              "the catalog's 0x002C is header / agent id / vec2 / plane",
+              f"{[f['type'] for f in entry['fields']]} -- and the client's own "
+              f"handler agrees field for field: [ebx+4] is pushed to "
+              f"AgTrack::Clear at 0x005FDA78, [ebx+8]/[ebx+0xc] become the "
+              f"position block, [ebx+0x10] is its plane word")
+        check(len(blob) == entry["declared_unpack_size"] == 16,
+              f"and the encoder produces the declared {len(blob)} bytes",
+              f"{blob.hex()}")
+        check(blob == bytes.fromhex("2c00") + struct.pack(
+                  "<Iff H", authsrv.PLAYER_AGENT_ID, 1234.5, -678.25, 7),
+              "byte for byte, in that field order",
+              f"{blob.hex()} -- field order is the one thing this project has "
+              f"already got wrong on a movement message, on 0x0029's two plane "
+              f"words, and the client walked players through staircases for it")
+        check(authsrv.codec.name_for("GAME_SMSG", 0x002C)
+              == "AGENT_UPDATE_POSITION",
+              "and the opcode we send is the one the overrides name",
+              f"{authsrv.codec.name_for('GAME_SMSG', 0x002C)}")
+    finally:
+        authsrv.RESYNC = saved
+    check(authsrv.RESYNC is False,
+          "and the section put the flag back the way it found it",
+          f"{authsrv.RESYNC}")
+
+    # A REFUSED REPORT MUST NOT UPDATE THE CLIENT-SOURCED RECORD. This is what
+    # makes "the payload came from an accepted report" true rather than merely
+    # intended: the accept path is the only writer, so a refusal leaves the
+    # sender holding the older -- and ageing -- report.
+    st, rec = fresh(), FakeRec()
+    authsrv._take_client_position(st, JUMPED, JUMPED_PLANE, rec, "0x003D",
+                                  now=1000.5)
+    check("client_pos" not in st,
+          "a REFUSED report leaves no client-sourced position behind",
+          f"{st.get('client_pos')} -- if a refusal wrote it, the resync sender "
+          f"would put a position our own trust guard had just called "
+          f"impossible onto the wire as a teleport")
+    authsrv._take_client_position(st, JUMPED, JUMPED_PLANE, rec, "0x003D",
+                                  now=1001.0)
+    check(st["client_pos"] == JUMPED and st["client_plane"] == JUMPED_PLANE
+          and st["client_pos_at"] == 1001.0,
+          "and an ACCEPTED one writes the position, the plane and the instant "
+          "together",
+          f"{st.get('client_pos')} plane {st.get('client_plane')} at "
+          f"{st.get('client_pos_at')}")
+
+    # THE SOURCE LOCK, and the control that keeps it honest. The behavioural
+    # checks above can only see the value; this sees the EXPRESSION, because
+    # `state["pos"]` and `state["client_pos"]` differ by nine characters and
+    # agree on most reports -- exactly the shape that let the 765x direction
+    # vector live for weeks.
+    writers = []
+    for node in ast.walk(src):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if (isinstance(tgt, ast.Subscript)
+                    and isinstance(tgt.value, ast.Name)
+                    and tgt.value.id == "state"
+                    and isinstance(getattr(tgt, "slice", None), ast.Constant)
+                    and tgt.slice.value == "client_pos"):
+                writers.append(node)
+    check(len(writers) == 1,
+          "exactly one line in the whole file writes state['client_pos']",
+          f"{len(writers)} -- two writers is two policies, and the second one "
+          f"is where an integrator's opinion gets in")
+    resync_sends = []
+    for node in ast.walk(src):
+        if not (isinstance(node, ast.FunctionDef)
+                and node.name == "_maybe_resync"):
+            continue
+        for call in ast.walk(node):
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                    and call.func.id == "send" and len(call.args) >= 2
+                    and isinstance(call.args[1], ast.List)):
+                resync_sends.append((node, call.args[1].elts))
+    check(len(resync_sends) == 1,
+          "and there is exactly one resync send site",
+          f"{len(resync_sends)} -- both receive arms route through the one "
+          f"policy function on purpose; a second send is a second policy")
+
+    def payload_is_verdict_value(elts):
+        """True iff the vec2 slot is `list(payload)` -- the verdict's own value."""
+        if len(elts) < 2:
+            return False
+        node = elts[1]
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "list" and len(node.args) == 1
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "payload")
+
+    check(payload_is_verdict_value(resync_sends[0][1]),
+          "whose vec2 is `list(payload)` -- the value _resync_verdict returned, "
+          "which it takes from state['client_pos'] and from nowhere else",
+          f"{ast.dump(resync_sends[0][1][1])} -- rewrite this to "
+          f"list(state['pos']) and the message becomes the one an earlier "
+          f"build sent and had removed as 'the warp the player described'")
+    block = resync_sends[0][0]
+    grabs_blend = any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos"
+        and not isinstance(getattr(n, "ctx", None), ast.Store)
+        for n in ast.walk(block) if isinstance(n, ast.Subscript))
+    check(grabs_blend is True,
+          "CONTROL: the matcher below is looking at a function that DOES "
+          "mention state['pos']",
+          "it does not, so the next check would pass for the wrong reason -- "
+          "_maybe_resync logs `ours=state['pos']` beside every verdict, which "
+          "is what makes a scorer able to see the two apart")
+    # THE MUTATION THIS LOCKS, handed to the matcher on purpose. The rejecting
+    # branch is the one that never runs against healthy source.
+    bad = ast.parse(
+        "def _maybe_resync(send, state, rec, now=None):\n"
+        "    send(OP, [PLAYER_AGENT_ID, list(state['pos']), plane], 'x')\n")
+    bad_elts = []
+    for call in ast.walk(bad):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id == "send" and len(call.args) >= 2
+                and isinstance(call.args[1], ast.List)):
+            bad_elts = call.args[1].elts
+    check(len(bad_elts) == 3 and not payload_is_verdict_value(bad_elts),
+          "CONTROL: and it still REJECTS the integrator's position when handed "
+          "it",
+          f"{[ast.dump(e) for e in bad_elts]} -- if the matcher stopped "
+          f"recognising list(state['pos']), the lock above would be a no-op")
+
+    # THE FLAG'S OWN BANNER MUST BE PRINTABLE. Found the hard way while writing
+    # this: a U+26A0 warning sign in the --resync startup print raised
+    # UnicodeEncodeError on a default Windows console, because cp1252 has no
+    # code point for it -- so the flag would have killed the very run it exists
+    # to enable, before a single packet went out. The em dashes elsewhere in
+    # authsrv.py survive because cp1252 DOES have those, which is exactly why a
+    # bare "no non-ASCII" rule would be wrong here and the real console encoding
+    # is the thing to test against.
+    def unprintable(node):
+        out = []
+        for n in ast.walk(node):
+            if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                try:
+                    n.value.encode("cp1252")
+                except UnicodeEncodeError:
+                    out.append(n.value[:40])
+        return out
+
+    banner = next((n for n in ast.walk(src)
+                   if isinstance(n, ast.If)
+                   and isinstance(n.test, ast.Attribute)
+                   and n.test.attr == "resync"), None)
+    check(banner is not None and unprintable(banner) == [],
+          "and every string the --resync banner prints survives a cp1252 "
+          "console",
+          f"{None if banner is None else unprintable(banner)} -- print() raises "
+          f"on the first character cp1252 cannot encode, and a flag that kills "
+          f"the server at startup cannot be scored")
+    planted = ast.parse("if a.resync:\n    print('\\u26a0 careful')\n")
+    check(unprintable(planted) != [],
+          "CONTROL: and the same scan still catches a planted U+26A0",
+          f"{unprintable(planted)} -- a scan that finds nothing is "
+          f"indistinguishable from a clean file, which is how the real one "
+          f"got written")
+
+    print("\n12. --grant-suppress ships OFF, and it acts by SAYING LESS")
+    # WHAT EARNS THIS SECTION. Three captures from 2026-08-20 on the owner's own
+    # machine. Keyboard only (182554): 283-287 u/s every interval, zero clicks,
+    # zero grants, 0.00 hard jumps/min. Five clicks the server REFUSED (182934):
+    # zero grants, zero warps. And the reproduction (183311): the owner held S
+    # while spam-clicking forward, 196 clicks -> 140 grants in 44 s, one every
+    # 0.13 s, five hard jumps (p50 1,372 u, max 3,010 u, 6.82/min) with four of
+    # the five landing 0.10-0.23 s after a grant.
+    #
+    # 0x0029 is SYNC-ONLY, so a grant sent while the player keyboards drives the
+    # authoritative copy away from the rendered one and re-runs the desync test
+    # that snaps them together past 299.332591 u. Every check here exists to
+    # keep one of the two refusals from being quietly loosened back out.
+    check(authsrv.GRANT_SUPPRESS is False,
+          "--grant-suppress is off by default",
+          "it is the EIGHTH candidate in this arc and seven are dead. It is "
+          "unproven until one watched run scores it against 183311")
+    check(authsrv.GRANT_LOCAL_WINDOW == 3.0,
+          "the locally-driving window is 3.0 s, sized from the corpus",
+          f"{authsrv.GRANT_LOCAL_WINDOW} -- over 987 `ours` gamesrv captures "
+          f"the gap between consecutive 0x003D-moving reports with no 0x0047 "
+          f"between them is n = 3,420, p50 0.500 s, p90 1.801, p99 2.737, "
+          f"p99.9 7.858. There is a real mode at 2.74-2.79 s: 144 gaps exceed "
+          f"2.00 s and only 9 exceed 3.00 s, so 3.0 is the first round number "
+          f"PAST the mode and covers 99.74% of them. A 2.0 s window opens a "
+          f"hole in 4.2%, and a hole is where the reproduction gets back in")
+    ceiling = 299.332591 / (2 * authsrv.DEFAULT_RUN_SPEED)
+    check(authsrv.GRANT_MIN_INTERVAL < ceiling,
+          f"the grant floor sits under the same derived ceiling --resync uses, "
+          f"{ceiling:.4f} s",
+          f"{authsrv.GRANT_MIN_INTERVAL} -- a click HELD longer than the "
+          f"shortest time two copies can accrue a full gate's separation is "
+          f"itself late enough to open one")
+    check(authsrv.GRANT_MIN_INTERVAL >= 0.492,
+          "and it is no faster than retail's own median player inter-grant gap "
+          "of 0.492 s",
+          f"{authsrv.GRANT_MIN_INTERVAL} -- measured over the 2,855 "
+          f"player-directed 0x0029 in the live corpus, the figure the heading "
+          f"arm's comment already cites. The reproduction ran at 0.13 s, 3.8x "
+          f"faster than the thing we are imitating. Two independent "
+          f"derivations landing on 0.5 is the only reason it is a round number")
+    check(authsrv.GRANT_PENDING_MAX_AGE == 2.0 * authsrv.GRANT_MIN_INTERVAL,
+          "and the hold expiry is expressed as a multiple of the floor, so the "
+          "two cannot drift apart",
+          f"{authsrv.GRANT_PENDING_MAX_AGE} -- a deferred grant is due within "
+          f"one floor by construction; twice that is a world tick that has "
+          f"missed ten of its 20 Hz intervals, by which point the player has "
+          f"moved up to 288 u from where the click's ray was cast")
+
+    def clicking(kbd=None, last=None, pending=None):
+        """A state the click arm would be evaluating a grant in."""
+        st = {"pos": (0.0, 0.0), "plane": 0, "pos_seen": 1000.0}
+        if kbd is not None:
+            st["kbd_moving_at"] = kbd
+        if last is not None:
+            st["grant_at"] = last
+        if pending is not None:
+            st["grant_pending"] = pending
+        return st
+
+    class Wire:
+        """A send() that runs the real send-side hook, like the server's."""
+
+        def __init__(self, state, now=1000.0):
+            self.state, self.now, self.sent = state, now, []
+
+        def __call__(self, opcode, values, label, quiet=False):
+            authsrv._note_wire_move(self.state, opcode, values, self.now)
+            self.sent.append((opcode, values, label))
+
+    # OFF MEANS OFF: a state that would be refused twice over still grants, and
+    # the deferred sender does not even look at its own pending.
+    st = clicking(kbd=1000.0, last=1000.0,
+                  pending={"dest": (5.0, 6.0), "plane_first": 0,
+                           "plane_second": 0, "at": 1000.0})
+    grant, why, _a, _s = authsrv._grant_verdict(st, 1000.0)
+    wire, rec = Wire(st), FakeRec()
+    flushed = authsrv.grant_flush_tick(wire, st, 1, rec, now=1000.0)
+    check(grant is True and why == "off" and flushed is False
+          and wire.sent == [] and rec.events == [],
+          "with the flag off a state that WOULD be refused grants anyway, and "
+          "the deferred sender is inert",
+          f"verdict={why} flushed={flushed} sent={wire.sent} -- the default "
+          f"build must behave exactly as it did, and must not grow a "
+          f"grant_verdict log it never used")
+    check(st.get("grant_pending") is not None,
+          "and it does not even clear the pending it found",
+          f"{st.get('grant_pending')} -- an off flag that mutates state is a "
+          f"flag that is partly on")
+
+    saved = authsrv.GRANT_SUPPRESS
+    authsrv.GRANT_SUPPRESS = True
+    try:
+        # RULE 1, at both edges. The bound is inclusive at the window and a
+        # NEGATIVE age counts as armed -- clock skew sails straight through an
+        # upper-bound-only test, and here failing toward silence is the cheap
+        # direction because over-refusing costs a grant the client did not need.
+        st = clicking(kbd=1000.0)
+        grant, why, age, _s = authsrv._grant_verdict(st, 1000.0)
+        check(grant is False and why == "locally-moving",
+              "a move report this instant refuses the grant outright",
+              f"{why} at age {age} -- this is the reproduction: 196 clicks "
+              f"arrived with the latch armed and 140 were answered")
+        edge = 1000.0 + authsrv.GRANT_LOCAL_WINDOW
+        check(authsrv._grant_verdict(st, edge)[1] == "locally-moving",
+              f"a report exactly {authsrv.GRANT_LOCAL_WINDOW:.1f}s old still "
+              f"refuses -- the bound is inclusive",
+              f"{authsrv._grant_verdict(st, edge)}")
+        past = edge + 1e-6
+        check(authsrv._grant_verdict(st, past)[0] is True
+              and authsrv._grant_verdict(st, past)[1] == "grant",
+              "one microsecond past it, the latch has lapsed and the click is "
+              "answered",
+              f"{authsrv._grant_verdict(st, past)} -- the window is a failsafe "
+              f"for a stop we never heard, not a mute button")
+        future = clicking(kbd=1001.0)
+        check(authsrv._grant_verdict(future, 1000.0)[1] == "locally-moving",
+              "and a report dated in the FUTURE counts as armed, not as lapsed",
+              f"{authsrv._grant_verdict(future, 1000.0)} -- `now - at` goes "
+              f"negative under clock skew, and a negative age would sail "
+              f"through an upper-bound-only test into the storm")
+
+        # PERMITS WHEN STOPPED. This is the control for rule 1, and without it
+        # every check above is satisfied by a policy that refuses everything.
+        stopped = clicking(kbd=None)
+        grant, why, _a, _s = authsrv._grant_verdict(stopped, 1000.0)
+        check(grant is True and why == "grant",
+              "CONTROL: with the latch cleared -- which is what 0x0047 does -- "
+              "the very same click is answered",
+              f"{why} -- rule 1 refuses 0 of the 5 ordinary clicks in run "
+              f"20260820T182934. CORRECTED 2026-08-20: a 0x0047 had arrived "
+              f"before FOUR of them, not all five -- click 2 at t=41.79 s had "
+              f"no stop before it and a latch age of 8.93 s, so "
+              f"GRANT_LOCAL_WINDOW IS load-bearing for 1 of 5 and a window "
+              f"under 8.93 s would refuse it. A rule that refuses everything "
+              f"is not a rule")
+
+        # RULE 2, BOUNDED ABOVE AND BELOW, driven through the REAL send-side
+        # hook so the bookkeeping under test is the server's own rather than a
+        # paraphrase written for the test.
+        st = clicking()
+        wire = Wire(st)
+        n, t = 0, 1000.0
+        for _i in range(20):
+            wire.now = t
+            if authsrv._grant_verdict(st, t)[0]:
+                n += 1
+                wire(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+                     [authsrv.PLAYER_AGENT_ID, [float(n), 0.0], 0, 0], "x")
+            t += 0.1
+        span = 1.9
+        allowed = int(span / authsrv.GRANT_MIN_INTERVAL) + 1
+        check(n <= allowed,
+              f"twenty clicks over {span:.1f} s produce {n} grants, not 20",
+              f"n={n}, ceiling {allowed} at one per "
+              f"{authsrv.GRANT_MIN_INTERVAL:.2f} s -- the reproduction ran at "
+              f"one per 0.13 s, 257 a minute, and each one re-armed an arrival "
+              f"tick AND re-ran the desync test")
+        check(n >= 1,
+              "and it does not rate-limit itself down to nothing",
+              f"n={n} -- a limit that lets nothing through makes every check "
+              f"above vacuous, and would break click-to-move for a player who "
+              f"is not keyboarding at all")
+        check(st.get("grant_at") is not None,
+              "and the clock it limits against is stamped by the send-side "
+              "hook, so EVERY grant counts",
+              f"{st.get('grant_at')} -- the click arm, the heading arm, the "
+              f"endpoint arm, the stop echo and the click sweep all grant "
+              f"through _note_wire_move; a limit fed from the click arm alone "
+              f"would be blind to the other four")
+
+        # THE DEFERRED SENDER. One pending, one send, and the pending is gone.
+        st = clicking(pending={"dest": (1234.0, -567.0), "plane_first": 3,
+                               "plane_second": 4, "at": 1000.0})
+        wire, rec = Wire(st, now=1000.2), FakeRec()
+        flushed = authsrv.grant_flush_tick(wire, st, 1, rec, now=1000.2)
+        moves = [s for s in wire.sent
+                 if s[0] == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]
+        check(flushed is True and len(moves) == 1
+              and moves[0][1][1] == [1234.0, -567.0],
+              "a held click goes out once the floor opens, carrying the "
+              "destination it held",
+              f"flushed={flushed} sent={wire.sent}")
+        check(st.get("grant_pending") is None
+              and authsrv.grant_flush_tick(wire, st, 1, rec, now=1000.3)
+              is False,
+              "and it is consumed -- the next tick sends nothing",
+              f"{st.get('grant_pending')} -- a pending that survived its own "
+              f"send is a 20 Hz grant stream, which is the reproduction with "
+              f"our name on it")
+        check(len(moves[0][1]) == 4 and moves[0][1][2] == 3
+              and moves[0][1][3] == 4,
+              "with the two plane words in the order the click arm computed "
+              "them",
+              f"{moves[0][1]} -- destination plane FIRST, current plane "
+              f"SECOND. This project has already sent them the wrong way "
+              f"round and walked players through staircases for it")
+
+        # THE LATCH BEATS THE HOLD. A player who picks the keyboard back up has
+        # superseded their own click, and granting it late is the reproduction
+        # with a delay bolted on.
+        st = clicking(kbd=1000.1,
+                      pending={"dest": (9.0, 9.0), "plane_first": 0,
+                               "plane_second": 0, "at": 1000.0})
+        wire, rec = Wire(st, now=1000.2), FakeRec()
+        flushed = authsrv.grant_flush_tick(wire, st, 1, rec, now=1000.2)
+        check(flushed is False and wire.sent == []
+              and st.get("grant_pending") is None,
+              "a held click is DROPPED, not delayed, once the player starts "
+              "keyboarding",
+              f"flushed={flushed} pending={st.get('grant_pending')} sent="
+              f"{wire.sent}")
+        check(len(rec.of("grant_verdict")) == 1
+              and rec.of("grant_verdict")[0]["fired"] is False,
+              "and the drop is in the event log, not merely absent from it",
+              f"{rec.of('grant_verdict')} -- a grant log holding only its own "
+              f"successes cannot score the flag against the storm")
+
+        # AND THE HOLD EXPIRES. Bounded on BOTH sides so neither half is
+        # vacuous: just under the age it still goes, just over it does not.
+        young = clicking(pending={"dest": (1.0, 2.0), "plane_first": 0,
+                                  "plane_second": 0, "at": 1000.0})
+        wire = Wire(young, now=1000.0 + authsrv.GRANT_PENDING_MAX_AGE)
+        check(authsrv.grant_flush_tick(
+                  wire, young, 1, None,
+                  now=1000.0 + authsrv.GRANT_PENDING_MAX_AGE) is True,
+              f"a hold exactly {authsrv.GRANT_PENDING_MAX_AGE:.2f}s old still "
+              f"goes out -- the bound is inclusive",
+              f"sent={wire.sent}")
+        old = clicking(pending={"dest": (1.0, 2.0), "plane_first": 0,
+                                "plane_second": 0, "at": 1000.0})
+        wire, rec = Wire(old), FakeRec()
+        flushed = authsrv.grant_flush_tick(
+            wire, old, 1, rec, now=1000.0 + authsrv.GRANT_PENDING_MAX_AGE + 1e-6)
+        check(flushed is False and wire.sent == []
+              and old.get("grant_pending") is None
+              and rec.of("grant_verdict")[0]["reason"] == "pending-expired",
+              "one microsecond past it, the hold is dropped unsent",
+              f"flushed={flushed} {rec.of('grant_verdict')} -- past that the "
+              f"destination is our guess about somebody else's intention")
+    finally:
+        authsrv.GRANT_SUPPRESS = saved
+    check(authsrv.GRANT_SUPPRESS is False,
+          "and the section put the flag back the way it found it",
+          f"{authsrv.GRANT_SUPPRESS}")
+
+    # THE LATCH HAS EXACTLY TWO WRITERS, and they are the two receive arms.
+    # state["walking"] is nine characters away and is cleared BY THE CLICK ARM
+    # ITSELF -- so keying rule 1 on it would have let the first click of the
+    # reproduction disarm the latch and the other 195 straight through. This is
+    # the same shape as state["pos"] vs state["client_pos"] in section 11.
+    latch = []
+    for node in ast.walk(src):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if (isinstance(tgt, ast.Subscript)
+                    and isinstance(tgt.value, ast.Name)
+                    and tgt.value.id == "state"
+                    and isinstance(getattr(tgt, "slice", None), ast.Constant)
+                    and tgt.slice.value == "kbd_moving_at"):
+                latch.append(node)
+    check(len(latch) == 2,
+          "exactly two lines in the file write state['kbd_moving_at']",
+          f"{len(latch)} -- one arms it on a moving 0x003D, one clears it on a "
+          f"0x0047, and a third writer is a third policy")
+    arms = [n for n in latch if isinstance(n.value, ast.IfExp)]
+    clears = [n for n in latch
+              if isinstance(n.value, ast.Constant) and n.value.value is None]
+    check(len(arms) == 1 and len(clears) == 1,
+          "one arms it CONDITIONALLY on `moving`, the other clears it flat",
+          f"armers={len(arms)} clearers={len(clears)}")
+    check(arms and isinstance(arms[0].value.test, ast.Name)
+          and arms[0].value.test.id == "moving",
+          "and the condition is the client's own movementType, not our "
+          "state['walking']",
+          f"{ast.dump(arms[0].value.test) if arms else None} -- 0x003D is "
+          f"emitted only WHILE MOVING, which is what makes the latch readable "
+          f"off the wire at all; state['walking'] is cleared by the click arm "
+          f"and one click would have disarmed the whole rule")
+    # THE CONTROL. Both matchers only ever run against healthy source, so both
+    # are branches a typo would silently disable.
+    bad = ast.parse("state['walking'] = True if moving else None\n"
+                    "state['kbd_moving_at'] = state['walking']\n")
+    bad_latch, bad_arms = [], []
+    for node in ast.walk(bad):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if (isinstance(tgt, ast.Subscript)
+                    and isinstance(tgt.value, ast.Name)
+                    and tgt.value.id == "state"
+                    and isinstance(getattr(tgt, "slice", None), ast.Constant)
+                    and tgt.slice.value == "kbd_moving_at"):
+                bad_latch.append(node)
+                if isinstance(node.value, ast.IfExp):
+                    bad_arms.append(node)
+    check(len(bad_latch) == 1 and bad_arms == [],
+          "CONTROL: the same matchers still SEE a latch keyed off "
+          "state['walking'] when handed one",
+          f"found={len(bad_latch)} conditional={len(bad_arms)} -- if either "
+          f"stopped matching, the three checks above would pass for the wrong "
+          f"reason")
+
+    # THE ORDER OF THE THREE REFUSALS. The two geometry refusals must still fire
+    # and must still fire FIRST: they say something about the map, and they are
+    # the lines the owner reads live. "The player is keyboarding" printed in
+    # their place hides a stale position behind a policy decision.
+    arm = next((n for n in ast.walk(src)
+                if isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                and isinstance(n.test.left, ast.Name)
+                and n.test.left.id == "opcode"
+                and isinstance(n.test.comparators[0], ast.Name)
+                and n.test.comparators[0].id == "GAME_CMSG_MOVE_TO_COORD"),
+               None)
+    check(arm is not None, "the click arm is where the matcher expects it",
+          "GAME_CMSG_MOVE_TO_COORD's elif was not found; every check below "
+          "would be judging an empty set")
+    # ITS BODY ONLY, never ast.walk(arm). An `elif` is an `If` living in the
+    # PREVIOUS `If`'s orelse, so walking this node reaches every arm below it in
+    # the chain -- which is how the send count below first read 2 and found the
+    # 0x0047 arm's stop echo. A matcher whose scope is wrong is a matcher
+    # judging somebody else's code.
+    inside = [n for stmt in arm.body for n in ast.walk(stmt)] if arm else []
+    why_strings = sorted(
+        n.value for n in inside
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        and ("straight shot" in n.value or "last saw the player" in n.value
+             or "cannot place them" in n.value))
+    check(len(why_strings) == 3,
+          "and all three geometry reasons survive verbatim in it",
+          f"{why_strings} -- 'not a straight shot', 'we last saw the player "
+          f"Ns ago' and 'cannot place them'. The gamesrv log of run "
+          f"20260820T182934 shows the first two doing the whole job on five "
+          f"clicks; a refusal that stops naming itself is a refusal nobody can "
+          f"audit from the console")
+    blocked_if = next((n for n in inside
+                       if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                       and n.test.id == "blocked"), None)
+    verdict_call = next((n for n in inside
+                         if isinstance(n, ast.Call)
+                         and isinstance(n.func, ast.Name)
+                         and n.func.id == "_grant_verdict"), None)
+    check(blocked_if is not None and verdict_call is not None
+          and blocked_if.lineno < verdict_call.lineno,
+          "and the geometry refusal is strictly BEFORE the suppression gate",
+          f"blocked at line {getattr(blocked_if, 'lineno', None)}, "
+          f"_grant_verdict at {getattr(verdict_call, 'lineno', None)} -- "
+          f"reversed, a click that is both stale and mid-keyboard would report "
+          f"the policy instead of the map")
+    arm_moves = [c for c in inside
+                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                 and c.func.id == "send" and len(c.args) >= 2
+                 and isinstance(c.args[0], ast.Name)
+                 and c.args[0].id == "GAME_SMSG_AGENT_MOVE_TO_POINT"]
+    check(len(arm_moves) == 1 and verdict_call is not None
+          and arm_moves[0].lineno > verdict_call.lineno,
+          "and the arm's ONE grant send sits after the gate, not beside it",
+          f"{len(arm_moves)} send(s), at line "
+          f"{arm_moves[0].lineno if arm_moves else None} -- a second send site "
+          f"is a second policy, which is how the heading arm ended up granting "
+          f"twice per report")
+    # THE CONTROL for the scoping fix above: the matcher must still find a send
+    # that IS in the arm, and must NOT find one that is merely below it in the
+    # elif chain. Handed both on purpose.
+    bad = ast.parse(
+        "if opcode == GAME_CMSG_MOVE_TO_COORD:\n"
+        "    send(GAME_SMSG_AGENT_MOVE_TO_POINT, [a, b, c, d], 'in')\n"
+        "elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:\n"
+        "    send(GAME_SMSG_AGENT_MOVE_TO_POINT, [a, b, c, d], 'below')\n")
+    bad_arm = next(n for n in ast.walk(bad)
+                   if isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                   and n.test.comparators[0].id == "GAME_CMSG_MOVE_TO_COORD")
+    scoped = [c for stmt in bad_arm.body for c in ast.walk(stmt)
+              if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+              and c.func.id == "send"]
+    unscoped = [c for c in ast.walk(bad_arm)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                and c.func.id == "send"]
+    check(len(scoped) == 1 and len(unscoped) == 2,
+          "CONTROL: body-scoped matching sees 1 send where ast.walk sees 2",
+          f"scoped={len(scoped)} walked={len(unscoped)} -- if these agreed, "
+          f"the check above would be counting the arms below it and would go "
+          f"red for a send nobody added to the click arm")
+    # THE PENDING IS A SINGLE SLOT, NEVER A QUEUE. Coalescing is the whole
+    # difference between rate-limiting and deferring the storm by one interval:
+    # 196 clicks must leave at most ONE destination outstanding.
+    holds = []
+    for node in ast.walk(src):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if (isinstance(tgt, ast.Subscript)
+                    and isinstance(tgt.value, ast.Name)
+                    and tgt.value.id == "state"
+                    and isinstance(getattr(tgt, "slice", None), ast.Constant)
+                    and tgt.slice.value == "grant_pending"):
+                holds.append(node)
+    dicts = [n for n in holds if isinstance(n.value, ast.Dict)]
+    appends = [c for c in ast.walk(src)
+               if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+               and c.func.attr == "append"
+               and isinstance(c.func.value, ast.Subscript)
+               and isinstance(getattr(c.func.value, "slice", None), ast.Constant)
+               and c.func.value.slice.value == "grant_pending"]
+    check(len(dicts) == 1 and appends == [] and len(holds) >= 4,
+          "state['grant_pending'] is assigned a single destination and never "
+          "appended to",
+          f"{len(dicts)} hold(s), {len(appends)} append(s), {len(holds)} "
+          f"writers -- a list here would send all 196 of the reproduction's "
+          f"clicks half a second later instead of 140 of them now")
+
+    # THE FLAG'S BANNER MUST BE PRINTABLE, same reason as --resync's.
+    banner = next((n for n in ast.walk(src)
+                   if isinstance(n, ast.If)
+                   and isinstance(n.test, ast.Attribute)
+                   and n.test.attr == "grant_suppress"), None)
+    check(banner is not None and unprintable(banner) == [],
+          "and every string the --grant-suppress banner prints survives a "
+          "cp1252 console",
+          f"{None if banner is None else unprintable(banner)} -- a flag that "
+          f"kills the server at startup cannot be scored")
+
+    print("\n13. replay: tonight's three captures against the policy itself")
+    # THE TREATMENT AND ITS CONTROL, from the wire rather than from a fixture we
+    # wrote. The reproduction's clicks must be refused; the ordinary capture's
+    # clicks must be permitted. Either half alone proves nothing -- a policy
+    # that refuses everything passes the first, and today's code passes the
+    # second.
+    #
+    # SCOPE, said out loud: this replays rules 1 and 2 ONLY. The two geometry
+    # refusals run upstream of them in the arm and are not modelled here, which
+    # is why the ordinary capture's five clicks read as "permitted" even though
+    # the real server refused all five on stale position and collision.
+    REPRO = "authsrv-20260820T183311-c1.jsonl"
+    ORDINARY = "authsrv-20260820T182934-c1.jsonl"
+    KEYBOARD = "authsrv-20260820T182554-c1.jsonl"
+
+    def replay(name):
+        """(clicks, refused_by_rule_1, granted, headings, stops) or None."""
+        path = os.path.join(vaultpath.vault_path("captures", "gamesrv"), name)
+        if not os.path.exists(path):
+            return None
+        ev = []
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    o = json.loads(line)
+                except ValueError:
+                    continue
+                if o.get("kind") == "decoded" and o.get("opcode") in (61, 62, 71):
+                    ev.append((o["t"], o["opcode"], o.get("values")))
+        ev.sort(key=lambda r: r[0])
+        st, clicks, local, granted, heads, stops = {}, 0, 0, 0, 0, 0
+        was = authsrv.GRANT_SUPPRESS
+        authsrv.GRANT_SUPPRESS = True
+        try:
+            for t, op, v in ev:
+                if op == 61:
+                    heads += 1
+                    moving = v[4] if v and len(v) > 4 else 0
+                    st["kbd_moving_at"] = t if moving else None
+                elif op == 71:
+                    stops += 1
+                    st["kbd_moving_at"] = None
+                else:
+                    clicks += 1
+                    ok, why, _a, _s = authsrv._grant_verdict(st, t)
+                    local += (why == "locally-moving")
+                    if ok:
+                        granted += 1
+                        st["grant_at"] = t
+        finally:
+            authsrv.GRANT_SUPPRESS = was
+        return clicks, local, granted, heads, stops
+
+    repro, ordinary, keyboard = replay(REPRO), replay(ORDINARY), replay(KEYBOARD)
+    if repro is None or ordinary is None or keyboard is None:
+        LEDGER.skip("capture replay of the 2026-08-20 runs",
+                    "one of the three captures is not in this vault; section "
+                    "12's policy checks are fixture-free and still ran")
+    else:
+        n, local, granted, heads, stops = repro
+        check(n >= 190 and heads >= 120,
+              f"the reproduction still carries its {n} clicks and {heads} "
+              f"move reports",
+              f"196 clicks, 128 headings and {stops} stops when this was "
+              f"written -- the owner held S while spam-clicking forward")
+        check(local == n and granted == 0,
+              f"rule 1 refuses ALL {n} of them, and not one grant survives",
+              f"{local} refused as locally-moving, {granted} granted -- the "
+              f"server that produced this capture answered 140 of them, a "
+              f"grant every 0.13 s, and four of its five hard jumps landed "
+              f"0.10-0.23 s after one")
+        n, local, granted, heads, stops = ordinary
+        check(n >= 5 and granted == n and local == 0,
+              f"CONTROL: and it refuses NONE of the {n} ordinary clicks, "
+              f"granting all {granted}",
+              f"{local} refused, {granted} granted over {heads} headings and "
+              f"{stops} stops -- a 0x0047 had arrived before FOUR of the five "
+              f"(click 2 at t=41.79 s had none; the 3.0 s window decides that "
+              f"one). This is the check that stops 'refuse everything' from "
+              f"passing the one above, and it judges real rows rather than an "
+              f"empty set")
+        n, local, granted, heads, stops = keyboard
+        check(n == 0 and heads >= 15 and stops >= 3,
+              f"and the keyboard-only run has no clicks at all to decide "
+              f"({heads} reports, {stops} stops)",
+              f"clicks={n} -- it is in here as the shape of a clean run: "
+              f"283-287 u/s every interval, zero grants, 0.00 hard jumps per "
+              f"minute. Nothing the flag does can touch it")
+        print(f"     repro {repro[1]}/{repro[0]} refused, "
+              f"ordinary {ordinary[2]}/{ordinary[0]} granted")
 
     return LEDGER.verdict()
 

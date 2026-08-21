@@ -11,19 +11,27 @@ SAFETY, because this one can destroy 4 GB of somebody's game:
   - It refuses any path under C:\\gw. That install is the owner's and is
     read-only to this project, permanently.
   - Every byte it changes is journalled with its previous value before the
-    write, so --revert restores the exact prior state without re-copying the
-    archive. A 4.2 GB re-cut per arm is otherwise the only way back. A
-    --replace journals its row's WHOLE block reservation, not just the bytes it
-    puts there, because a shrinking replace frees blocks the client is free to
-    take -- see Writer.replace().
+    write, and the record is FSYNCED before the archive is touched, so --revert
+    restores the exact prior state without re-copying the archive. A 4.2 GB
+    re-cut per arm is otherwise the only way back. A --replace journals its
+    row's WHOLE block reservation, not just the bytes it puts there, because a
+    shrinking replace frees blocks the client is free to take -- see
+    Writer.replace(). The journal is APPEND-ONLY, one record per line, and a
+    torn write costs the last record rather than the whole file -- see Journal
+    and read_journal(), which reads what a pre-2026-08-19 run wrote too.
   - --verify re-checks all three checksum rules and is the thing to run before
     and after every arm. test_datcrc.py asserts the same rules against the
     corpus; this checks one archive right now.
-  - Nothing here relocates, resizes, or allocates. Same length, same offset,
-    same row. Both of the other two verbs are separate tools that build on this
-    one's `Writer` and `Journal`: `datmove.py` relocates a row, and since
-    2026-08-15 `datalloc.py` creates rows that did not exist and registers them
-    in the file-id table. This sentence used to end "a much later problem",
+  - Nothing here relocates. Same offset, same row -- and since 2026-08-19
+    `--replace --grow-to N` will also grow a row back INTO ITS OWN freed blocks,
+    which is a resize but never a move and never an allocation of anybody else's
+    space: the caller states the reservation the row is entitled to, and the
+    grow is refused unless the blocks clear claimants, EOF, the live MFT and
+    datplan's withheld container runs. Both of the other two verbs are separate
+    tools that build on this one's `Writer` and `Journal`: `datmove.py`
+    relocates a row, and since 2026-08-15 `datalloc.py` creates rows that did
+    not exist and registers them in the file-id table. This sentence used to
+    end "a much later problem",
     which stayed true for nine days after it stopped being true of the project.
     Neither of them grows the FILE, which remains unsupported and, because the
     journal has no way to express a truncation, unrevertible if it were.
@@ -44,6 +52,8 @@ THE THREE CHECKSUM RULES, all MEASURED (see test_datcrc.py):
     python toolkit/mapdata/datwrite.py --dat DAT --verify --replace 12345 --data new.bin
     python toolkit/mapdata/datwrite.py --dat DAT --replace 12345 --data gwenc.bin \
         --compression 8 --expect payload.bin
+    python toolkit/mapdata/datwrite.py --dat DAT --replace 12345 --data bigger.bin \
+        --grow-to 1029564
     python toolkit/mapdata/datwrite.py --dat DAT --revert journal.json
 
 test_datwrite.py exercises all of the above against a small archive it builds
@@ -213,8 +223,17 @@ COMPRESSION_CODES = (COMPRESSION_STORED, COMPRESSION_HUFFMAN)
 # "are these bytes RETAIL-SHAPED compressed data" and the WRONG test for "did our
 # own encoder make this". The two directions below use different tests for that
 # reason, and each uses the tightest one that does not fire on its own legitimate
-# population. `datalloc.py:432` still uses the two-byte form as a comp-8 GATE and
-# will refuse legitimate gwenc output; that is recorded, not fixed here.
+# population.
+#
+# THIS COMMENT USED TO END "`datalloc.py:432` still uses the two-byte form as a
+# comp-8 GATE and will refuse legitimate gwenc output; that is recorded, not fixed
+# here." BOTH SENTENCES WERE FALSE, and the second outlived the first: `datalloc`
+# stopped using the marker on 2026-08-18 and decides by DECODING through
+# `looks_compressed` (`datalloc.py:560`), so it refuses no legitimate gwenc output
+# and there is nothing left to fix. As of 2026-08-20 it also runs
+# `declaration_fault` over every stream it is handed (`datalloc.check_declarations`)
+# -- the framing test and the fidelity test, in that order, which is the same pair
+# `replace()` runs below.
 HUFFMAN_PROLOGUE_BYTE = 0x02
 HUFFMAN_RETAIL_MARKER = b"\x01\x02"
 
@@ -336,6 +355,9 @@ def declaration_fault(data, compression, expect, stored_lookalike_ok=False):
 
       * `compression=8` with `data[3] != 0x02` is refused. 258,708-row witness,
         and it does not fire on any of nineteen measured `gwenc` outputs.
+      * `compression=8` declaring a ZERO-BYTE payload is refused, whether the
+        stream is empty or merely decompresses to nothing. See the two arms
+        below; this is FINDINGS gap D from the archive side.
       * `compression=0` with bytes that DECODE as a compression-8 stream is
         refused, naming compression 8. This is the arm that catches C-6. It
         decides by decoding rather than by a byte marker, because the marker
@@ -365,6 +387,30 @@ def declaration_fault(data, compression, expect, stored_lookalike_ok=False):
                     "has no notion of a compression code at all. The "
                     "decompress-and-compare below is the ONLY refutation "
                     "available, and it is only available before the write.")
+        if not bytes(expect):
+            # GAP D, THE ARCHIVE-SIDE DOOR. The arm above refuses an EMPTY
+            # stream; this refuses a stream whose PAYLOAD is empty, which is a
+            # different shape and reaches the archive by a different route.
+            # `gwenc.encode(b"")` emits a well-formed 12-byte compression-8
+            # stream today: byte 3 is 0x02, it decompresses without raising, its
+            # trailer declares 0 B, and 0 == len(b"") -- so every arm below
+            # agrees and the write is accepted. The row then reads back as
+            # nothing at all, which is indistinguishable from an unreadable row
+            # and green on all three checksum rules.
+            #
+            # The floor is measured, not argued: retail's smallest compression-8
+            # row is 56 B and it holds a whole block. A zero-block comp-8 stream
+            # is a shape nothing in the corpus witnesses. The encoder is being
+            # taught to refuse it too; this is the door on the writer's side, so
+            # neither one is the only thing standing between the archive and it.
+            return ("a compression-8 write declaring a ZERO-BYTE payload is a "
+                    "shape nothing in the corpus witnesses -- retail's smallest "
+                    "comp-8 row is 56 B and holds a whole block, and a stream "
+                    "that decompresses to nothing would leave the row reading "
+                    "back as nothing while every checksum rule stayed green.\n"
+                    "  `replace(row, b\"\")` is the documented re-bloat trigger "
+                    "and means STORED; a zero-block compressed stream is not a "
+                    "second spelling of it.")
         if len(data) < 4 or data[3] != HUFFMAN_PROLOGUE_BYTE:
             got = data[3] if len(data) > 3 else None
             return (f"these bytes are not shaped like a compression-8 stream: "
@@ -567,10 +613,13 @@ def read_mft(ar):
     return bytearray(ar.fh.read(ar.mft_size))
 
 
+JOURNAL_CLOSER = b"]}\n"
+
+
 class Journal:
     """Every byte this run changes, with what was there before it.
 
-    Written to disk BEFORE the archive is touched and flushed after each write,
+    Written to disk BEFORE the archive is touched and FSYNCED after each write,
     so an interrupted run still leaves a usable way back.
 
     It records the MFT's offset too, and that is not bookkeeping. Edits are
@@ -582,6 +631,52 @@ class Journal:
     bytes into whatever now occupies dead space and report success. Silent, and
     the archive would still verify, because the row it meant to fix was never
     touched. Hence the guard in revert().
+
+    APPEND-ONLY, ONE RECORD PER LINE, FSYNCED PER RECORD. Until 2026-08-19 this
+    class opened the file `"w"` and re-serialised the WHOLE document after every
+    record, with no fsync at all. Three costs, all measured rather than argued:
+
+      * **Write amplification.** A 5-record replace of a 1,029,632 B reservation
+        wrote 20,595,001 B to produce a 4,119,275 B journal (5.0x). On the
+        largest real artifact, `vault/research/archivewrite/a4run7-flip.journal`,
+        60 edits wrote ~533,180,912 B to produce 15,624,042 B -- **34.1x, and
+        137x the 3,903,668 B of archive the records actually protect.** It is
+        quadratic in record count, so it gets worse exactly where it matters.
+      * **A torn flush lost the WHOLE journal, not one record.** `"w"` truncates
+        first, so a crash mid-write left invalid JSON and `revert()` died at
+        `json.load` with an unhandled `JSONDecodeError` -- a traceback, not a
+        diagnosis, on the one tool that exists for the one moment it is needed.
+        That is the same class of failure `mft_offset_of` was written for.
+      * **No fsync.** `put()` fsyncs the ARCHIVE; the journal that must precede
+        it did not, so the stated ordering guarantee above was not enforced
+        against the OS cache. On a power loss the archive edit could be durable
+        while the record describing it was not.
+
+    THE FORMAT DID NOT MOVE, and that is deliberate: 59 old-format journals sit
+    under `vault/` and `test_datalloc.py`'s prefix replay reads one with a plain
+    `json.load(fh)["edits"]`. So the file is still a single JSON object with
+    `dat`, `mft_offset` and `edits`, and it is a VALID JSON DOCUMENT at every
+    fsync boundary -- what changed is how the bytes get there. The header line is
+    written once, each record is APPENDED as its own line, and the three-byte
+    closer `]}\\n` is rewritten in place behind it. Cumulative bytes are
+    final-size + 3 per record instead of N x final-size: MEASURED 4.66x -> 1.00x
+    on a 5-record replace of the test fixture.
+
+    One record per LINE is the other half, and it is what makes a torn write cost
+    one record instead of all of them: `read_journal()` falls back to parsing
+    line by line when the closer is missing, drops the incomplete tail with a
+    printed byte count, and replays everything before it.
+
+    Opened LAZILY, on the first record. A refusal that writes nothing must leave
+    no journal behind -- `test_datwrite.py` section 5 asserts exactly that -- and
+    an empty file on disk is a worse lie than no file.
+
+    FUTURE WORK, deliberately not done here: chunking a large payload `put()`
+    into <=1 MB records would bound peak memory and bound torn-write loss (the
+    records replay newest-first over disjoint ranges, so revert is unaffected).
+    It touches neither the amplification nor the fsync, so it is not part of this
+    change. Nor is a binary sidecar for `before`/`after`, which would remove the
+    measured 4.00x hex cost and change the format for 59 files and two readers.
     """
 
     def __init__(self, path, dat, mft_offset):
@@ -589,21 +684,50 @@ class Journal:
         self.dat = dat
         self.mft_offset = mft_offset
         self.entries = []
+        self.fh = None
+        self._tail = 0          # where JOURNAL_CLOSER currently begins
+
+    def _open(self):
+        """The ONE truncating open. Everything after it seeks and appends."""
+        head = ('{"dat": %s, "mft_offset": %d, "edits": [\n'
+                % (json.dumps(self.dat), self.mft_offset)).encode("utf-8")
+        self.fh = open(self.path, "w+b")
+        self.fh.write(head + JOURNAL_CLOSER)
+        self._tail = len(head)
+        self.flush()
 
     def record(self, offset, before, after, what):
-        self.entries.append({
+        rec = {
             "offset": offset,
             "length": len(before),
             "before": binascii.hexlify(bytes(before)).decode(),
             "after": binascii.hexlify(bytes(after)).decode(),
             "what": what,
-        })
+        }
+        if self.fh is None:
+            self._open()
+        # A leading comma on every record but the first, and a newline after
+        # each, so the document stays valid JSON AND every record is one line.
+        chunk = ((b"," if self.entries else b"")
+                 + json.dumps(rec).encode("utf-8") + b"\n")
+        self.fh.seek(self._tail)
+        self.fh.write(chunk + JOURNAL_CLOSER)
+        self._tail += len(chunk)
+        self.entries.append(rec)
         self.flush()
 
     def flush(self):
-        with open(self.path, "w") as fh:
-            json.dump({"dat": self.dat, "mft_offset": self.mft_offset,
-                       "edits": self.entries}, fh, indent=2)
+        """To the platter, not to the page cache. The ordering claim needs it."""
+        if self.fh is None:
+            return
+        self.fh.flush()
+        os.fsync(self.fh.fileno())
+
+    def close(self):
+        if self.fh is not None:
+            self.flush()
+            self.fh.close()
+            self.fh = None
 
 
 class Writer:
@@ -626,6 +750,7 @@ class Writer:
     def close(self):
         self.fh.close()
         self.ar.close()
+        self.journal.close()
 
     def resync(self, why):
         """Re-parse the archive header. Call after any STRUCTURAL change.
@@ -737,8 +862,114 @@ class Writer:
         self.put(row_offset(self.ar, row) + ENTRY_CRC,
                  struct.pack("<I", value), f"MFT row {row} crc")
 
+    def _grow_gate(self, row, e, cur_res, want_res):
+        """Every condition an IN-PLACE GROW must clear, before the first put().
+
+        Shared by `replace(grow_to=...)` and `restore()`, and factored rather
+        than copied because this module has already paid for the alternative:
+        `row_offset` delegates to `archive.mft_row_offset` because the planner
+        carried its own expression with a `- 1` in it and printed three wrong
+        addresses for months. `restore()` held the only copy of this gate until
+        2026-08-19, and it was the only working grow path in the file.
+
+        A ROW'S TRUE RESERVATION IS NOT RECORDED ANYWHERE. The 24-byte MFT row is
+        `offset u64 / size u32 / extraBytes u16 / flags u16 / nextStream u32 /
+        crc u32` (`datalloc.py:127-132`, ArenaNet's own field names) -- there is
+        no allocation-length field, so once a shrink lands, "what this row was
+        given" survives only in a donor archive, in a journal's `before`, or in
+        the caller's head. The bound therefore has to come from GEOMETRY, and
+        `claimants()` is only the first of four conditions:
+
+          1. no OTHER live row's reservation intersects the annexed range
+             (`claimants`, which already uses reservations rather than sizes);
+          2. the grown extent lies wholly inside EOF -- `datalloc._place` refuses
+             the same overhang at `datalloc.py:374-380`, and `datcheck` rule 5
+             will not catch it because it tests `offset + size`, not the rounded
+             reservation. `put()`'s short-read guard catches it AFTER the
+             decision, which is a crash rather than a refusal;
+          3. the grown extent does not overlap the LIVE MFT, checked against the
+             header's own `mft_offset`/`mft_size` and NOT via row 3. On
+             `dat_study` row 3's offset and size happen to equal the MFT's, so
+             `claimants` sees it -- but nothing enforces that, the client
+             relocates the table during play, and `datplan.free_runs` protects
+             it with an explicit bitmap rather than by trusting a row;
+          4. no annexed block falls inside a `datplan.classify_runs` exclusion --
+             the container/MFT-shadow rotation region. This is NEW CAPABILITY
+             rather than preserved capability, and it is the single largest new
+             risk in the grow verb: `replace()` never needed it because it never
+             allocated. `datmove.py:22-28` states in one paragraph why this must
+             consult `classify_runs` and not `free_runs`: "unallocated" counts
+             the client's live container generations as free space, 89.6% of the
+             gap measure on this machine's study copy.
+
+        `datplan` is imported HERE rather than at module level, and that is the
+        same decision `reservation_for`'s docstring records: this module is the
+        one that must keep working when the rest of the tree does not, and
+        `datmove` imports `datwrite`, so a module-level import would also be
+        circular. Only the grow path pays for it.
+
+        A KNOWN LIMIT, stated rather than engineered around: all four conditions
+        read `self.ar`, the snapshot taken in `__init__`, so a Writer that has
+        already written in this run judges the grow against the pre-run table.
+        Every caller here runs the gate before its own first `put()`, and
+        `claimants` has always had the same property.
+        """
+        block = self.ar.block_size
+        lo, hi = e.offset + cur_res, e.offset + want_res
+
+        taken = claimants(self.ar, lo, hi, exclude=row)
+        if taken:
+            raise SystemExit(
+                f"row {row} needs to grow from {cur_res} to {want_res} B in "
+                f"place, and [0x{lo:X}, 0x{hi:X}) is CLAIMED by "
+                + ", ".join(f"row {i} (0x{o:X}..0x{h:X})"
+                            for o, h, i in taken) + ".\n"
+                f"  The blocks this row freed have been taken since. That is "
+                f"a relocation, not an in-place restore -- use datmove.py, "
+                f"which finds a free run and rewrites the offset.")
+
+        filesize = os.path.getsize(self.path)
+        if hi > filesize:
+            raise SystemExit(
+                f"row {row} would grow to [0x{e.offset:X}, 0x{hi:X}), which "
+                f"runs {hi - filesize} B PAST THE END of a {filesize} B "
+                f"archive.\n"
+                f"  Nothing here grows the file: the journal has no way to "
+                f"express a truncation, so a growth that failed could not be "
+                f"undone. datcheck's rule 5 would not catch this either -- it "
+                f"tests offset + size, not the rounded reservation.")
+
+        mlo, mhi = self.ar.mft_offset, self.ar.mft_offset + self.ar.mft_size
+        if lo < mhi and mlo < hi:
+            raise SystemExit(
+                f"row {row} would grow into the LIVE MASTER FILE TABLE: "
+                f"[0x{lo:X}, 0x{hi:X}) overlaps [0x{mlo:X}, 0x{mhi:X}).\n"
+                f"  Checked against the file header's own mft_offset/mft_size, "
+                f"not against row 3 -- row 3 describes the table on the copies "
+                f"we have measured, but nothing enforces that and the client "
+                f"relocates the table during ordinary play.")
+
+        import datplan
+        _usable, excluded = datplan.classify_runs(self.ar)
+        for ex in excluded:
+            xlo = ex.start_block * block
+            xhi = xlo + ex.blocks * block
+            if lo < xhi and xlo < hi:
+                raise SystemExit(
+                    f"row {row} would grow into blocks datplan WITHHOLDS: "
+                    f"[0x{lo:X}, 0x{hi:X}) overlaps the free run at "
+                    f"[0x{xlo:X}, 0x{xhi:X}), which carries "
+                    + ex.why() + ".\n"
+                    f"  Those blocks read as unallocated because no MFT row "
+                    f"points at them, and they are not free: they are a "
+                    f"container generation the client is about to rotate back "
+                    f"onto. A run is withheld WHOLE, never carved around.")
+
+        print(f"  reclaiming [0x{lo:X}, 0x{hi:X}) = {hi - lo} B, "
+              f"0 other rows claim it")
+
     def replace(self, row, new, *, compression=COMPRESSION_STORED, expect=None,
-                stored_lookalike_ok=False):
+                stored_lookalike_ok=False, grow_to=None):
         """Put different bytes, of a different length, in an existing row.
 
         THE COMPRESSION CODE IS AN ARGUMENT, and its default reproduces this
@@ -775,6 +1006,48 @@ class Writer:
         a byte of anyone else's data. Anything that does not fit is a
         relocation, which is a different and much more dangerous operation, and
         this refuses it rather than half-doing it.
+
+        `grow_to` IS THE GROW-BACK, and it exists because the sentence above used
+        to be enforced against the row's CURRENT size, which is not a statement
+        about how much space the row may use. After any shrink the row's own
+        freed blocks became unreachable to this verb: REPRODUCED on the test
+        fixture (row 4, 1000 B -> 100 B, and the original 1000 B refused as "a
+        relocation" with 1,024 B of the row's own extent standing free and
+        claimed by nobody), and priced on the real archive (row 11196 shrunk to
+        4 KB loses 1,025,536 B of its own space). That is fatal for the authoring
+        loop this arc is about -- iterate the encoder, rewrite the row -- because
+        the second, larger output onto a row the first write shrank is exactly
+        the case. `restore()` is a grow today and can only ever write a DONOR's
+        bytes (`Writer.restore(self, row, donor, confirm)` takes no payload), so
+        it is an undo, not a workaround.
+
+          * `grow_to=None`, the default, is byte-for-byte the old behaviour and
+            every caller in the tree and the vault is on it. When the payload
+            fits the current reservation NO new check runs at all.
+          * `grow_to=N` is the caller STATING the reservation it believes the
+            row is entitled to. The ceiling becomes
+            `reservation_for(max(e.size, N), block)` and the grow must then clear
+            `_grow_gate` -- claimants, EOF, the live MFT, and datplan's withheld
+            container runs.
+
+        A GREEDY "TAKE EVERYTHING GEOMETRY ALLOWS" DEFAULT IS REJECTED, and the
+        argument is one line: `claimants()` computes each NEIGHBOUR's reservation
+        from that neighbour's current size too, so a shrunk neighbour's claim is
+        under-computed by exactly the same defect. Geometry cannot distinguish a
+        free block from a shrunk neighbour's freed-but-wanted-back block. A verb
+        whose default silently annexes free space is an allocator wearing
+        `replace()`'s name; `grow_to` makes the annexation something a caller
+        said out loud. `read_donor` already produces the number
+        (`DonorRow.size`), and a caller holding its own journal has it in the
+        `before` length.
+
+        THE ONE HAZARD OF A GROW, stated rather than engineered around, exactly
+        as `restore()` states it: the payload write covers the whole new
+        reservation and lands BEFORE the size field moves, so an interrupted run
+        leaves the row's size describing the old length over the new bytes.
+        `datmove` avoids this by writing to a new location first; an in-place
+        grow has nowhere else to put them. The journal is the way back and it is
+        written, and fsynced, before the first byte.
 
         Writes four things: the payload, the size field, the compression field
         and the crc. Getting three of four right looks exactly like a malformed
@@ -818,13 +1091,51 @@ class Writer:
         new = bytes(new)
         e = self.ar.row(row)
         block = self.ar.block_size
-        reserved = -(-e.size // block) * block
-        if len(new) > reserved:
-            raise SystemExit(
-                f"row {row} reserves {reserved} bytes ({e.size} used, "
-                f"{block}-byte blocks) and the new payload is {len(new)}. "
-                f"That is a relocation, not a replacement. Pick a row with a "
-                f"bigger reservation -- datplan.py --free lists them.")
+        # `reservation_for`, not a fourth inline copy of its expression. The
+        # value is identical; what changes is that this verb now spells the
+        # concept through the module's single definition of it.
+        cur_res = reservation_for(e.size, block)
+        want_res = reservation_for(len(new), block)
+        reserved, annexed = cur_res, 0
+        if want_res > cur_res:
+            if grow_to is None:
+                # THE REFUSAL NAMES THE REMEDY THAT FITS THE CASE. "Pick a row
+                # with a bigger reservation" is advice for an authoring caller
+                # who has outgrown a PRISTINE row. For a grow-back the blocks are
+                # right there, claimed by nobody, and a free-run list will not
+                # contain them as a candidate for this row -- so the reader is
+                # sent somewhere that cannot help. Which sentence follows is
+                # decided by the geometry, not by a guess.
+                free = not claimants(self.ar, e.offset + cur_res,
+                                     e.offset + want_res, exclude=row)
+                remedy = (
+                    f"Those blocks are claimed by NOBODY: if this row was "
+                    f"shrunk and you are putting its own space back, say so "
+                    f"with grow_to={len(new)} (--grow-to {len(new)}), which "
+                    f"runs the full grow gate -- claimants, EOF, the live MFT "
+                    f"and datplan's withheld container runs."
+                    if free else
+                    "Pick a row with a bigger reservation -- datplan.py --free "
+                    "lists them.")
+                raise SystemExit(
+                    f"row {row} reserves {cur_res} bytes ({e.size} used, "
+                    f"{block}-byte blocks) and the new payload is {len(new)}. "
+                    f"That is a relocation, not a replacement. " + remedy)
+            # max(e.size, grow_to): a stated entitlement BELOW what the row
+            # already holds is not a shrink request, it is a caller reading the
+            # wrong number, and the ceiling must not fall under the row's own
+            # current reservation just because it was passed one.
+            stated = reservation_for(max(e.size, grow_to), block)
+            if want_res > stated:
+                raise SystemExit(
+                    f"row {row} was declared entitled to {grow_to} B "
+                    f"(reservation {stated}) and the new payload is "
+                    f"{len(new)} B (reservation {want_res}). A grow_to is a "
+                    f"statement about what this row was GIVEN, not a request "
+                    f"for more; raise it only from a donor's size or a "
+                    f"journal's `before` length, never to make a write fit.")
+            self._grow_gate(row, e, cur_res, want_res)
+            reserved, annexed = want_res, want_res - cur_res
         # BEFORE THE FIRST put(). Every refusal in here has to land while the
         # archive is still untouched and no journal exists, because after the
         # write there is nothing left that can tell the difference -- see
@@ -849,7 +1160,16 @@ class Writer:
             print(f"  verified before writing: {len(new)} B decompress to the "
                   f"{len(bytes(expect))} B declared (our decoder; only the "
                   f"client can settle the rest)")
-        self.put(e.offset, image, f"row {row} reservation ({reserved} B)")
+        # THE `what` STRING NAMES THE ANNEXATION AND ITS RANGE. `before` and
+        # `after` already describe the whole NEW reservation, which is what lets
+        # --revert put the annexed region back and what makes revert's "the
+        # client wrote here" detector cover it rather than stopping at the old
+        # reservation. `what` is free text and revert() prints it, so no journal
+        # schema moves -- 59 existing journals under vault/ parse on these keys.
+        what = (f"row {row} reservation ({reserved} B)" if not annexed else
+                f"row {row} reservation ({cur_res} -> {want_res} B, annexing "
+                f"[0x{e.offset + cur_res:X},0x{e.offset + want_res:X}))")
+        self.put(e.offset, image, what)
         self.put(row_offset(self.ar, row) + ENTRY_SIZE_OFF,
                  struct.pack("<I", len(new)),
                  f"MFT row {row} size {e.size} -> {len(new)}")
@@ -860,6 +1180,39 @@ class Writer:
                      f"{compression}")
         self.set_entry_crc(row, binascii.crc32(new))
         self.fix_mft_self_crc()
+
+        if annexed:
+            # TWO POST-WRITE ASSERTIONS THE ARTIFACT CAN REFUTE, and both are on
+            # the grow path only because a grow is the first thing this verb can
+            # do that CREATES an overlap. `datalloc.py:1127-1134` says it in as
+            # many words: datmove runs `overlaps` after every move and no other
+            # writer runs it at all.
+            self.resync(f"row {row} grew {cur_res} -> {want_res} B")
+            import datmove
+            bad = datmove.overlaps(self.ar)
+            if bad:
+                raise SystemExit(
+                    f"GROW VERIFY FAILED on row {row}: two rows now share "
+                    f"blocks -- "
+                    + ", ".join(f"rows {a} and {b} at 0x{o:X}"
+                                for a, b, o in bad) + ".\n"
+                    f"  No checksum can see this: each crc covers only its own "
+                    f"row's bytes. Revert with the journal and do not use this "
+                    f"archive.")
+            # Read back through the WRITE handle, never through self.ar -- the
+            # Archive's buffered read-only handle can answer a seek from a
+            # pre-write window. Same trap read_mft() documents, same discipline
+            # restore() follows.
+            self.fh.seek(e.offset)
+            got = self.fh.read(len(new))
+            if got != new:
+                raise SystemExit(
+                    f"GROW VERIFY FAILED on row {row}: the {len(new)} B on disk "
+                    f"are not the payload that was written. Revert with the "
+                    f"journal and do not use this archive.")
+            print(f"  verified: {len(new)} B read back sha256 "
+                  f"{hashlib.sha256(got).hexdigest()[:16]}, {annexed} B "
+                  f"annexed, no two rows share a block")
 
     def restore(self, row, donor, confirm=False):
         """Put a row back to what a DONOR archive says it should hold.
@@ -875,13 +1228,22 @@ class Writer:
             compression 8, and there is no compressor here. This copies the
             donor's STORED bytes verbatim, so the codec is never involved and
             the compression field is restored rather than flattened.
-          * `--replace` computes the reservation from the row's CURRENT size, so
-            a row that was shrunk can never be grown back -- 2,068 B gives it
-            2,560 B of reservation when its original needs 7,680. The blocks were
-            never handed to anyone, but `--replace` cannot see that. This
-            computes the reservation from the DONOR and checks the difference is
-            genuinely unclaimed.
+          * `--replace` writes bytes a CALLER hands it and this writes a DONOR's,
+            which is the difference that survives 2026-08-19. `--replace` used to
+            compute its reservation from the row's CURRENT size, so a shrunk row
+            could never be grown back by that path either -- 2,068 B gives it
+            2,560 B of reservation when its original needs 7,680; it now takes
+            `grow_to`, states the entitlement, and runs the SAME gate this does.
+            What it still cannot do is know what the original was, which is what
+            a donor archive is for.
           * `--overwrite` is same-length only.
+
+        THE GROW GATE IS NOW SHARED, `Writer._grow_gate`, and this verb GAINED
+        three conditions by the factoring: an EOF bound, a live-MFT check made
+        against the file header rather than against row 3, and `classify_runs`'s
+        withheld container runs. This gate was `claimants()` alone from the day
+        it was written, and `restore()` is the verb that has already been run on
+        real 4.2 GB copies -- so those were live gaps, not hypothetical ones.
 
         AND WHY A JOURNAL IS NOT ENOUGH, which is why the donor is an archive and
         not a `--data` file. `--revert` is the documented way back and it stops
@@ -922,21 +1284,8 @@ class Writer:
                   f"crc 0x{donor.crc:08X}) -- nothing to do")
             return False
 
-        grow = new_res - old_res
-        if grow > 0:
-            lo, hi = e.offset + old_res, e.offset + new_res
-            taken = claimants(self.ar, lo, hi, exclude=row)
-            if taken:
-                raise SystemExit(
-                    f"row {row} needs to grow from {old_res} to {new_res} B in "
-                    f"place, and [0x{lo:X}, 0x{hi:X}) is CLAIMED by "
-                    + ", ".join(f"row {i} (0x{o:X}..0x{h:X})"
-                                for o, h, i in taken) + ".\n"
-                    f"  The blocks this row freed have been taken since. That is "
-                    f"a relocation, not an in-place restore -- use datmove.py, "
-                    f"which finds a free run and rewrites the offset.")
-            print(f"  reclaiming [0x{lo:X}, 0x{hi:X}) = {grow} B, "
-                  f"0 other rows claim it")
+        if new_res > old_res:
+            self._grow_gate(row, e, old_res, new_res)
 
         if not confirm:
             raise SystemExit(
@@ -1190,16 +1539,113 @@ def check_rows(path, rows):
     return bad
 
 
+def read_journal(path):
+    """Parse a journal, INTACT or TORN. -> (doc, bytes dropped from the tail).
+
+    TWO FORMATS, and the second is a superset of the first. A journal written
+    before 2026-08-19 is one pretty-printed JSON object; one written after is the
+    same object with the records laid out one per line and appended in place.
+    Both are valid JSON, so the intact path is one `json.loads` and 59 old
+    journals under `vault/` -- plus `test_datalloc.py`'s prefix replay, which
+    reads a journal with a plain `json.load(fh)["edits"]` -- keep working
+    unchanged. That compatibility is not optional: those files are the A8 and
+    run-7 evidence and nothing regenerates them.
+
+    THE RECOVERY PATH is what the format change bought. `Journal` never rewrites
+    a record once written, so a torn write can only damage the LAST line and the
+    three-byte closer behind it. When the document does not parse, this reads the
+    header line, then every record line, and stops at the first that does not --
+    reporting how many bytes it dropped rather than swallowing them, because a
+    silent partial revert is the same defect as a silent partial write. Before
+    the change the whole journal was lost to an unhandled `JSONDecodeError` out
+    of `revert()`: a traceback, not a diagnosis, on the one tool that exists for
+    the one moment it is needed. Same class as `mft_offset_of`.
+
+    A file whose header line does not parse is REFUSED BY NAME, not by
+    traceback. An old-format journal torn mid-document is in that class -- its
+    records span many lines and none of them stands alone -- which is a property
+    of the format it was written in and not something this can recover.
+    """
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    if not raw.strip():
+        raise SystemExit(
+            f"REFUSED: {path} is empty ({len(raw)} bytes). There is nothing to "
+            f"replay, and an empty journal is not the same statement as a "
+            f"journal with no edits -- a Writer opens the file lazily, on its "
+            f"first record, so a zero-byte one means the write never got that "
+            f"far or the file was truncated to nothing.")
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        doc = None
+    if isinstance(doc, dict) and "edits" in doc:
+        return doc, 0
+    if doc is not None:
+        raise SystemExit(
+            f"REFUSED: {path} parses as JSON but is not a journal -- it has no "
+            f"`edits` key. Refusing to guess what it is.")
+
+    pieces = raw.split(b"\n")
+    head, edits, dropped, pos = None, [], 0, 0
+    for i, line in enumerate(pieces):
+        start = pos
+        pos += len(line) + (1 if i < len(pieces) - 1 else 0)
+        s = line.strip()
+        if i == 0:
+            # The header line ends with an open `[`; close it to parse it alone.
+            try:
+                head = json.loads((s + b"]}").decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                head = None
+            if not isinstance(head, dict) or "edits" not in head:
+                raise SystemExit(
+                    f"REFUSED: {path} is neither an intact JSON document nor a "
+                    f"recoverable append-only journal -- its first line does "
+                    f"not parse as a journal header.\n"
+                    f"  Nothing has been written and no archive was opened. If "
+                    f"this is an old-format journal that was torn mid-write, "
+                    f"its records span several lines each and none of them "
+                    f"stands alone; there is nothing here to replay.")
+            continue
+        if not s or s == JOURNAL_CLOSER.strip():
+            continue
+        if s.startswith(b","):
+            s = s[1:]
+        try:
+            rec = json.loads(s.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            rec = None
+        if not isinstance(rec, dict) or "offset" not in rec:
+            dropped = len(raw) - start
+            break
+        edits.append(rec)
+    head["edits"] = edits
+    return head, dropped
+
+
 def revert(journal_path, force=False):
-    """Undo every edit in a journal, newest first."""
-    with open(journal_path) as fh:
-        doc = json.load(fh)
+    """Undo every edit in a journal, newest first.
+
+    Returns 0 on a complete replay and NON-ZERO when the journal was torn and
+    only part of it could be read. Both are printed; neither is a traceback.
+    """
+    doc, dropped = read_journal(journal_path)
     path = doc["dat"]
     guard(path)
     edits = doc["edits"]
+    if dropped:
+        print(f"INCOMPLETE JOURNAL: {journal_path} ends in a record that was "
+              f"never finished -- {dropped} byte(s) at the tail could not be "
+              f"parsed and are being DROPPED.\n"
+              f"  {len(edits)} complete record(s) before it WILL be replayed. "
+              f"The run that wrote this was interrupted mid-record, so the "
+              f"archive edit that record describes may or may not have landed; "
+              f"--verify afterwards and compare against a donor. This exit code "
+              f"is non-zero to say the revert is PARTIAL by construction.")
     if not edits:
         print("journal is empty; nothing to revert")
-        return 0
+        return 1 if dropped else 0
 
     # See Journal's docstring: the client moves the MFT, and a stale MFT edit
     # replayed at its old address is a silent no-op that still verifies.
@@ -1248,7 +1694,7 @@ def revert(journal_path, force=False):
         fh.flush()
         os.fsync(fh.fileno())
     print(f"{restored} range(s) restored")
-    return 0
+    return 1 if dropped else 0
 
 
 # Every flag that WRITES, named in one place. --verify short-circuits and returns
@@ -1269,9 +1715,16 @@ MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc",
 
 # The rest: reads, or arguments to something else. Listed only so the drift check
 # can tell "deliberately read-only" from "somebody forgot".
+#
+# `grow_to` is HERE and not above, for the same reason `compression` and `expect`
+# are: it writes nothing on its own, it is an argument to `--replace`, and
+# `--grow-to` without `--replace` is an ap.error() in main() before anything
+# opens. Putting it in MUTATING_DESTS would make `--verify --grow-to N` construct
+# a Writer that has nothing to do -- the mirror of the defect the tuple above was
+# written for, not another instance of it.
 READONLY_DESTS = ("help", "dat", "journal", "verify", "check_rows", "data",
                   "revert", "force", "from_dat", "confirm", "compression",
-                  "expect", "stored_lookalike_ok")
+                  "expect", "stored_lookalike_ok", "grow_to")
 
 
 def is_mutating(args):
@@ -1321,6 +1774,16 @@ def build_parser():
                          "with (default 0, stored). 8 requires --expect and the "
                          "bytes are decompressed and compared against it before "
                          "anything is written.")
+    ap.add_argument("--grow-to", type=int, metavar="BYTES", default=None,
+                    help="with --replace, the reservation you STATE this row is "
+                         "entitled to -- the size it had before something shrank "
+                         "it. Without it a payload past the row's current "
+                         "reservation is refused as a relocation, which is why "
+                         "a row could never be grown back into its own freed "
+                         "blocks. Take the number from a donor archive's size or "
+                         "a journal's `before` length; the grow still has to "
+                         "clear claimants, EOF, the live MFT and datplan's "
+                         "withheld container runs.")
     ap.add_argument("--expect", metavar="FILE",
                     help="with --replace, the payload a reader must get back. "
                          "MANDATORY for --compression 8; for a stored write it "
@@ -1376,6 +1839,10 @@ def main():
     if args.replace is None and (args.expect
                                  or args.compression != COMPRESSION_STORED):
         ap.error("--compression and --expect are only meaningful with --replace")
+    if args.replace is None and args.grow_to is not None:
+        ap.error("--grow-to is only meaningful with --replace: it states the "
+                 "reservation ONE row is entitled to, and --replace is what "
+                 "names that row.")
     if args.compression == COMPRESSION_HUFFMAN and not args.expect:
         ap.error("--compression 8 needs --expect FILE: the payload a reader "
                  "must get back. Nothing can check a compressed row after the "
@@ -1461,7 +1928,8 @@ def main():
                     want = fh.read()
             w.replace(args.replace, payload,
                       compression=args.compression, expect=want,
-                      stored_lookalike_ok=args.stored_lookalike_ok)
+                      stored_lookalike_ok=args.stored_lookalike_ok,
+                      grow_to=args.grow_to)
 
         if args.restore is not None:
             row = args.restore

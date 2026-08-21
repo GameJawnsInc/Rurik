@@ -29,18 +29,34 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
-from archive import Archive, ENTRY_SIZE  # noqa: E402
+# `file_id_table` is the ONE thing this file borrows from `archive` beyond the
+# opener: section 13 has to ask "can the CLIENT address the new id", and that is
+# `raw=True` specifically -- the convenience default registers a second, masked
+# spelling of every bit-31 id and has answered the wrong question three times
+# (archive.py's own docstring lists them). The independent readers below still
+# unpack the table by hand, so both witnesses are present.
+from archive import Archive, ENTRY_SIZE, file_id_table  # noqa: E402
 import datalloc  # noqa: E402
 import datcheck  # noqa: E402
 import datmove  # noqa: E402
 import datplan  # noqa: E402
 import datwrite  # noqa: E402
+import gwdat  # noqa: E402
 import gwenc  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: 98, MEASURED from a green run on 2026-08-15, not guessed. Every section
+# FLOOR: 177, MEASURED from a green run on 2026-08-20, not guessed. Every section
 # builds its own fixture, so there is no corpus to be missing, no vault to
-# resolve, and nothing that can legitimately skip.
+# resolve, and nothing that can legitimately skip. Per section, counted from the
+# log rather than predicted: {1: 6, 2: 5, 3: 11, 4: 23, 5: 25, 6: 3, 7: 4, 8: 3,
+# 9: 7, 10: 2, 11: 5, 12: 23, 13: 29, 14: 31}.
+#
+# THIS NUMBER HAS BEEN WRONG IN THIS COMMENT BEFORE. It read "FLOOR: 98" while
+# the `floor=` below said 100, from 2026-08-15 until 2026-08-19 -- a stale figure
+# in the one place a reader checks first, in the file whose whole subject is
+# writers that agree with themselves. Re-measure both together or neither. (It
+# was wrong again on 2026-08-19, from the other side: `TESTS.md` was left saying
+# 98 while this comment and `floor=` both said 142.)
 #
 # SABOTAGES, applied one at a time to the modules under test and then reverted.
 # Eight were tried and all eight went red. These are the counts OBSERVED, not
@@ -83,7 +99,52 @@ import checks  # noqa: E402
 # caught only because the fixture plants a container generation where a best fit
 # will reach it. On the real archive the withheld runs are 13 MB and the usable
 # ones are small, so the same mistake would be caught by luck.
-LEDGER = checks.Ledger("dat alloc", floor=100)
+#
+# FOUR MORE, run 2026-08-19 against sections 12 and 13 -- the CLI's third field
+# and the end-to-end compressed allocation. Same method: monkeypatched in memory,
+# suite run, reds counted, patch reverted. Nothing on disk was edited.
+#
+#   `datwrite.looks_compressed` always True (the gate stops gating)  11 red
+#   the plan's extraBytes zeroed between plan_alloc and the write     5 red
+#   the CLI stops refusing an EXTRA the corpus never held             3 red
+#   the pre-2026-08-19 splitter: FILE:FLAGS only, no EXTRA            1 red,
+#                                                                    then a
+#                                                                    hard stop
+#
+# The splitter one is the reading worth keeping. Restored, it hands `_read` the
+# path with `:1` still glued to the end and dies on FileNotFoundError, so the
+# checks BEHIND that line never run -- which is why section 12 now checks
+# `_split_stream_spec` on its own, before anything opens a file. That check is
+# the one red; the hard stop three lines later is loud but nameless, and a test
+# that only crashes has told you the machine is unhappy rather than what broke.
+#
+# SEVEN MORE, run 2026-08-20 against section 14 -- the fidelity gate. Same
+# method: monkeypatched in memory, whole suite run, `[FAIL]` lines counted, patch
+# reverted. Nothing on disk was edited.
+#
+#   `datwrite.declaration_fault` always None (the gate stops gating)   12 red
+#   `check_declarations` skipped from `plan_alloc` only                 5 red
+#   `check_declarations` skipped from `alloc` only                      2 red
+#   the mandatory-expect arm dropped (comp-8 with no expect passes)     2 red
+#   the plan/stream extraBytes agreement loop deleted from `alloc`
+#     (by source surgery, so what is measured is the check's absence
+#     and not a reimplementation)                                       2 red
+#   `_check_expect_arity` a no-op (the CLI stops enforcing --expect)     3 red
+#   the pre-2026-08-20 splitter, which opens a malformed spec as a path  3 red
+#
+# Two readings worth keeping. The first sabotage is the one section 14 exists
+# for, and its 12 reds are the measure of how much of this file was resting on a
+# function `datalloc` called ZERO times until 2026-08-20 -- the skeptic's
+# sentence, and the count that says it was not a stylistic complaint.
+#
+# The 5/2 SPLIT is the plan= bypass, stated as a number. The gate lives in two
+# places on purpose: `plan_alloc` refuses the planning path and `alloc` refuses
+# the writing path, and `alloc(..., plan=P)` runs only the second. Skipping
+# either one alone still leaves reds, which is what "binding rather than
+# advisory" has to mean -- before this arc `alloc(plan=P)` ran NEITHER, and a
+# doctored plan put extraBytes 8 onto plainly stored bytes with every rule in
+# this project green.
+LEDGER = checks.Ledger("dat alloc", floor=177)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -286,6 +347,41 @@ def refusal(fn, *a, **kw):
     return None
 
 
+def run_cli(argv):
+    """`datalloc._main(argv)` with both streams captured. -> (rc, out, err).
+
+    `_main` catches `Refused` itself and prints it to STDERR before returning 1,
+    so a test that only redirects stdout reads a refusal as silence.
+    """
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = datalloc._main(argv)
+    return rc, out.getvalue(), err.getvalue()
+
+
+def comp_payload(n=6144):
+    """Bytes a compression-8 stream genuinely has to work for.
+
+    Long exact repeats, so the match coder has something to find, interleaved
+    with an LCG's output, so the literal coder is not idle either. A payload of
+    one repeated byte would compress beautifully and prove nothing: section 13
+    is about a stream carrying a real Huffman table over BOTH alphabets, which
+    is the shape `gwdat.decompress` has to walk to give the payload back.
+
+    Deterministic by construction -- no `random` seed to drift -- so a failure
+    here is reproducible from the file alone.
+    """
+    out = bytearray()
+    motif = bytes((i * 7 + 3) % 251 for i in range(64))
+    seed = 0x9E3779B9
+    while len(out) < n:
+        out += motif * 8                       # matches: one 64 B motif, eight times
+        for _ in range(48):                    # literals: nothing can match these
+            seed = (seed * 1103515245 + 12345) & 0xFFFFFFFF
+            out.append((seed >> 16) & 0xFF)
+    return bytes(out[:n])
+
+
 # --------------------------------------------------------------- 1. fixture
 
 def section_fixture(tmp):
@@ -460,9 +556,12 @@ def section_refusals(tmp):
               f"gwenc.encode(b'tiny') is {len(real)} B, data[2]="
               f"0x{real[2]:02X}")
         check(refusal(datalloc.plan_alloc, ar,
-                      [datalloc.Stream(real, 259, extra_bytes=8)],
+                      [datalloc.Stream(real, 259, extra_bytes=8,
+                                       expect=b"tiny")],
                       0x3000) is None,
-              "...and that real stream is ACCEPTED as extraBytes 8")
+              "...and that real stream is ACCEPTED as extraBytes 8, WITH the "
+              "payload it must decode to", "expect= is mandatory as of "
+              "2026-08-20; section 14 owns that rule")
 
         # Growth past the MFT's own last block.
         many = [datalloc.Stream(b"", 259)] + [
@@ -846,6 +945,7 @@ def section_cli(tmp):
         pass
     a = A()
     a.map, a.data, a.head, a.stream = True, data, None, None
+    a.expect, a.stored_lookalike_ok = None, False
     got = datalloc._streams_from_args(a)
     check(len(got) == 2 and got[0].flags == 259 and got[1].flags == 1,
           "--map builds a head/partner pair")
@@ -859,6 +959,88 @@ def section_cli(tmp):
     a.stream = [data + ":0x0103"]
     got = datalloc._streams_from_args(a)
     check(got[0].flags == 0x0103, "and FILE:FLAGS still overrides the flags")
+    check(got[0].extra_bytes == 0,
+          "ONE trailing field is FLAGS and never EXTRA -- the older spelling "
+          "keeps its old meaning", "extraBytes defaults to 0, stored")
+
+    # FILE:FLAGS:EXTRA, the third field. Until 2026-08-19 there was no CLI path
+    # to a compressed row at all: `extra_bytes` was reachable only by importing
+    # the module and building `Stream` by hand, which is why the comp-8 gate had
+    # never been crossed from a command line.
+    #
+    # The splitter is checked on its own FIRST, and that ordering is measured
+    # rather than tidy: the pre-2026-08-19 splitter, put back as a sabotage,
+    # hands `_read` the path with `:1` still glued on and dies on a
+    # FileNotFoundError -- a hard stop naming a temp file, with no check red at
+    # all. `_split_stream_spec` touches no filesystem, so it fails as three
+    # named checks instead.
+    check(datalloc._split_stream_spec(data + ":1:8") == (data, 1, 8),
+          "_split_stream_spec: two trailing fields are FLAGS then EXTRA")
+    check(datalloc._split_stream_spec(data + ":259") == (data, 259, None),
+          "one trailing field is FLAGS, and EXTRA stays unset")
+    check(datalloc._split_stream_spec(data) == (data, None, None),
+          "and an absolute path with no trailing field is left whole",
+          "its drive-letter colon is not a field separator")
+
+    a.stream = [data + ":1:8"]
+    a.expect = spill(tmp, "cli_arity.raw", b"whatever a reader must get back")
+    got = datalloc._streams_from_args(a)
+    check(got[0].flags == 1 and got[0].extra_bytes == 8,
+          "FILE:FLAGS:EXTRA sets both fields", f"{got[0].flags} / "
+          f"{got[0].extra_bytes}")
+    check(got[0].data == pattern(31, 900),
+          "and the path in front of them is still read whole",
+          "the absolute path's own colon survives two rounds of splitting")
+    check(got[0].expect == b"whatever a reader must get back",
+          "and --expect lands on the COMPRESSED stream, which is the only one "
+          "there is anything to check", "section 14 owns what it is checked for")
+    a.expect = None
+    a.stream = [data]
+    check(datalloc._streams_from_args(a)[0].extra_bytes == 0,
+          "a bare FILE is stored, as it always was")
+
+    for bad in (4, 1, 16):
+        a.stream = [f"{data}:1:{bad}"]
+        m = refusal(datalloc._streams_from_args, a)
+        check(m and "only 0 and 8" in m and "38682" in m,
+              f"EXTRA {bad} is refused at parse time, naming the histogram",
+              "{0: 38682, 8: 139058} over 177,740 live rows")
+    a.stream = [f"{data}:1:0"]
+    check(refusal(datalloc._streams_from_args, a) is None,
+          "and an explicit EXTRA 0 is accepted -- the rule is the value, not "
+          "the arity")
+
+    # Three specs that used to fall through this function whole and die inside
+    # `_read` -- FileNotFoundError on the first two, `OSError [Errno 22]` on the
+    # third. Nothing allocated, which is what mattered, but a traceback naming a
+    # temp file is not a diagnosis in a tool whose every other bad input is a
+    # sentence.
+    for bad_spec, why_bad in ((data + ":x:8", "a non-numeric FLAGS field"),
+                              (data + ":1:8:0", "a THIRD trailing field"),
+                              (data + ":", "an empty trailing field")):
+        m = refusal(datalloc._split_stream_spec, bad_spec)
+        check(m and "FILE[:FLAGS[:EXTRA]]" in m and "drive letter" in m,
+              f"a malformed spec is REFUSED naming the grammar, not opened as a "
+              f"filename: {why_bad}",
+              (m or "-- it did not refuse").splitlines()[0][:72])
+
+    # The comp-8 gate, reached from a command line rather than from an import.
+    cli_head = spill(tmp, "cli_head.bin", b"")
+    raw = comp_payload()
+    cli_raw = spill(tmp, "cli_part.raw", raw)
+    cli_part = spill(tmp, "cli_part.gwenc", gwenc.encode(raw))
+    argv = ["--dat", path, "--file-id", "0x3000", "--plan",
+            "--expect", cli_raw,
+            "--stream", cli_head + ":259", "--stream", cli_part + ":1:8"]
+    rc, out, err = run_cli(argv)
+    check(rc == 0 and "extraBytes 8" in out,
+          "--plan over a real gwenc stream file: accepted, and the plan says "
+          "extraBytes 8 out loud", f"rc {rc}")
+    stored = spill(tmp, "cli_stored.bin", pattern(41, 900))
+    rc, out, err = run_cli(argv[:-1] + [stored + ":1:8"])
+    check(rc == 1 and "does not DECODE" in err,
+          "CONTROL: the same command over a STORED file is refused by the "
+          "decode gate, from the CLI", f"rc {rc}")
 
     # --next-id must never hand back an id plan_alloc refuses.
     with Archive(path) as ar:
@@ -880,6 +1062,555 @@ def section_cli(tmp):
               f"0x{n2:X}")
 
 
+# ------------------------------- 13. a NEW row that is REALLY compression 8
+
+def section_compressed(tmp):
+    """A brand-new row carrying a real `gwenc` stream, allocated and read back.
+
+    Section 5 writes a map and re-derives every field of it, but its partner is
+    STORED -- `Stream`'s `extra_bytes` defaults to 0 -- so until this section the
+    only payload ever pushed through `alloc(confirm=True)` was one the archive
+    treats as opaque bytes. The comp-8 gate at `datalloc.py:560` was exercised by
+    `plan_alloc` alone (section 4), which is the DRY RUN: nothing had allocated a
+    compressed row and then asked the archive to hand the payload back.
+
+    NOTHING HERE PINS A SIZE OR A TABLE SHAPE, deliberately. `gwenc`'s framing is
+    under active work, and a byte count of its output would be a test of the
+    encoder's current tuning wearing this module's name -- green until somebody
+    improves the compressor, then red for a reason that has nothing to do with
+    allocation. What is asserted is IDENTITY (`Archive.read()` returns the exact
+    bytes that went in), STRUCTURE (the row records extraBytes 8; its crc is over
+    the STORED bytes and not the payload) and the fixture's one real constraint
+    (the stream fits the largest run `classify_runs` will hand over).
+
+    THE SABOTAGE IS AT THE BOTTOM and it is the point of the section as much as
+    the success is: one byte of the stream flipped, and the gate must refuse on
+    THIS path -- `plan_alloc` inside `alloc`, before a Writer exists -- rather
+    than only in section 4's unit checks over hand-typed bytes.
+    """
+    print("\n13. a brand-new row carrying a real compression-8 stream")
+    path, _ = fresh(tmp, "comp.dat")
+    before = blob(path)
+    raw = comp_payload()
+    stream = gwenc.encode(raw)
+    rep = gwenc.encode_report(raw, verify=False)
+
+    check(rep["matches"] > 0 and rep["literals"] > 0,
+          "the payload exercises BOTH halves of the stream, matches and literals",
+          f"{len(raw)} B -> {len(stream)} B, {rep['matches']} match token(s), "
+          f"{rep['literals']} literal token(s), {rep['blocks']} block(s)")
+    check(len(stream) < len(raw),
+          "the stream is genuinely smaller than what it encodes",
+          f"{100 * len(stream) // len(raw)}% of the payload")
+    check(datwrite.looks_compressed(stream),
+          "and datwrite's decode gate agrees these bytes ARE compression 8")
+    check(len(stream) <= LARGEST_USABLE,
+          "it fits the largest run classify_runs will hand over -- the fixture's "
+          "one real constraint on this payload",
+          f"{len(stream)} B into {LARGEST_USABLE} B; a stream that outgrew this "
+          f"would be refused by _place, not by the gate")
+
+    # A map's own shape: an armed zero-length head chained to the partner that
+    # holds the bytes. The head is stored and takes no extent; the partner is the
+    # compressed one, which is the split retail uses.
+    streams = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+               datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16,
+                               extra_bytes=8, expect=raw)]
+    journal = os.path.join(tmp, "comp.journal.json")
+    with quiet() as printed:
+        plan = datalloc.alloc(path, streams, 0x3000, journal, confirm=True)
+        plan.show()
+    hi, pi = plan.head.index, plan.rows[1].index
+    check("extraBytes 8" in printed.getvalue(),
+          "the plan it carried out prints the declaration a reader has to check",
+          f"rows {hi} (head) and {pi} (partner)")
+
+    rows = read_rows(path)
+    check(rows[pi][2] == 8,
+          "the MFT row records extraBytes 8, re-derived from the raw bytes",
+          f"row {pi}, +0x0C = {rows[pi][2]}")
+    check(rows[hi][2] == 0 and rows[hi][1] == 0,
+          "and the zero-length head beside it is untouched at extraBytes 0",
+          "a head is not compressed because its partner is")
+    check(payload_of(path, pi) == stream,
+          "the bytes on disk are the STREAM, byte for byte -- this module "
+          "compresses nothing and stores what it is handed", f"{len(stream)} B")
+    check(rows[pi][5] == binascii.crc32(stream)
+          and rows[pi][5] != binascii.crc32(raw),
+          "the entry crc is over the STORED bytes and not the payload",
+          "the archive checksums what it holds; the payload never touches disk")
+    check(rows[pi][0] % BLOCK == 0
+          and plan.rows[1].reservation % BLOCK == 0,
+          "the reservation is whole aligned blocks, as for any other row",
+          f"0x{rows[pi][0]:X} +{plan.rows[1].reservation}")
+
+    with Archive(path) as ar:
+        e = ar.row(pi)
+        check(e.compression == 8 and e.compressed,
+              "Archive -- which knows nothing of datalloc -- calls the new row "
+              "compressed", f"compression {e.compression}")
+        got = ar.read(e)
+        check(got == raw,
+              "and Archive.read() decodes it back to the EXACT payload",
+              f"{len(got)} B out of a {len(raw)} B input")
+        check(ar.raw(e) == stream,
+              "while .raw() still hands back the compressed bytes -- the two "
+              "readers disagree, which is what compression 8 MEANS")
+        ids = file_id_table(ar, raw=True)
+        check(ids.get(0x3000) == hi,
+              "the file-id table resolves the new id to the HEAD in the RAW "
+              "table -- the form the CLIENT can address",
+              f"0x3000 -> row {ids.get(0x3000)}")
+    check((0x3000, hi) in read_ids(path),
+          "and the same pair is there in the table's own bytes, unpacked by hand",
+          "two witnesses, one of which imports nothing")
+
+    check(mft_self_ok(path),
+          "the MFT self-crc is right for the grown table")
+    check(datcheck_clear(path),
+          "datcheck --preflight is 10 of 10 after a COMPRESSED allocation")
+    with quiet():
+        bad_crc = datwrite.verify(path)
+    check(bad_crc == 0, "datwrite --verify: both crc rules hold", f"{bad_crc} bad")
+    with Archive(path) as ar:
+        check(datmove.overlaps(ar) == [], "no two rows share storage")
+    check(len(blob(path)) == len(before),
+          "and the file did not change length", f"{len(before)} B")
+
+    with quiet():
+        rc = datwrite.revert(journal)
+    check(rc == 0 and blob(path) == before,
+          "the journal reverts the whole allocation BYTE FOR BYTE",
+          f"{len(before)} B compared")
+    check(datcheck_clear(path), "and the archive is clear again afterwards")
+
+    # ----------------------------------------------------------- the sabotage
+    #
+    # One byte of the stream, flipped, and the allocation must not happen. This
+    # is the check that says the gate is on THIS path: section 4 refuses
+    # `b"abcdefgh"`, bytes no encoder made, so it can only prove the predicate.
+    # Here the bytes came out of `gwenc` and were accepted twenty lines above.
+    corrupt = bytearray(stream)
+    corrupt[6] ^= 0xFF
+    corrupt = bytes(corrupt)
+    survived = [i for i in range(16)
+                if datwrite.looks_compressed(
+                    stream[:i] + bytes([stream[i] ^ 0xFF]) + stream[i + 1:])]
+    check(survived == [],
+          "every single-byte flip in the stream's first 16 bytes is refused -- "
+          "that region is the Huffman table and nothing decodes without it",
+          "16 of 16, and 16 of 16 at each of five payload sizes when measured "
+          "2026-08-19")
+
+    fresh_path, _ = fresh(tmp, "sabotage.dat")
+    untouched = blob(fresh_path)
+    bad_streams = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                   datalloc.Stream(corrupt, datalloc.MAP_PARTNER_FLAGS_U16,
+                                   extra_bytes=8)]
+    with Archive(fresh_path) as ar:
+        m = refusal(datalloc.plan_alloc, ar, bad_streams, 0x3000)
+    check(m and "does not DECODE" in m and "extraBytes 8" in m,
+          "plan_alloc REFUSES the corrupted stream, naming the decode",
+          (m or "-- it did not refuse").splitlines()[0][:72])
+    bad_journal = os.path.join(tmp, "sabotage.journal.json")
+    m = refusal(datalloc.alloc, fresh_path, bad_streams, 0x3000, bad_journal,
+                confirm=True)
+    check(m and "does not DECODE" in m,
+          "and so does alloc --confirm, which is the call that would write")
+    check(blob(fresh_path) == untouched and not os.path.exists(bad_journal),
+          "the archive is byte-identical and no journal was even opened",
+          "alloc plans before it constructs a Writer")
+
+    # WHERE THE GATE IS, stated because the answer is not "on the bytes". It is
+    # on the DECLARATION: the same corrupted bytes offered as extraBytes 0 are
+    # accepted, because a stored row is bytes and these are bytes.
+    ok_streams = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                  datalloc.Stream(corrupt, datalloc.MAP_PARTNER_FLAGS_U16)]
+    with Archive(fresh_path) as ar:
+        check(refusal(datalloc.plan_alloc, ar, ok_streams, 0x3000) is None,
+              "the gate is on the DECLARATION: the same bytes as extraBytes 0 "
+              "are accepted", "declaring stored is a claim about the row, not "
+              "about the bytes")
+        # AND THE OTHER DIRECTION WAS AN OPEN GAP UNTIL 2026-08-20, recorded here
+        # rather than in prose nobody greps: a GENUINE gwenc stream declared 0
+        # allocated cleanly and the client handed the compressed bytes back to
+        # whatever asked for the file. The comment then said "if this check ever
+        # goes red because that guard landed here, the guard is the improvement
+        # and this check is the thing to rewrite". It landed, and this is the
+        # rewrite -- section 14 owns the rule and its escape hatch.
+        m = refusal(datalloc.plan_alloc, ar,
+                    [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                     datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16)],
+                    0x3000)
+        check(m and "C-6" in m,
+              "GAP CLOSED: a real compressed stream declared extraBytes 0 is now "
+              "refused as a stored lookalike, naming C-6",
+              (m or "-- it did not refuse").splitlines()[0][:72])
+
+    # HOW STRONG THE GATE IS, measured rather than assumed. It refutes FRAMING
+    # damage, not content damage: `gwdat.decompress` takes the output size from
+    # the trailer and uses it as the loop's own bound, so a stream that still
+    # terminates normally passes whatever it decoded to. Sampled every 4th byte
+    # to keep the section under a second.
+    refused = decoded_wrong = 0
+    for i in range(0, len(stream), 4):
+        flip = stream[:i] + bytes([stream[i] ^ 0xFF]) + stream[i + 1:]
+        if not datwrite.looks_compressed(flip):
+            refused += 1
+            continue
+        try:
+            back, _declared = gwdat.decompress(flip)
+        except Exception:                                    # noqa: BLE001
+            continue
+        decoded_wrong += back != raw
+    check(refused > 0 and decoded_wrong > 0,
+          "and THIS gate is a FRAMING check, not a fidelity one: some flips run "
+          "out of input and are caught, others decode to the wrong bytes and "
+          "are not -- which is why section 14 exists",
+          f"{refused} refused, {decoded_wrong} decoded to something else, of "
+          f"{len(range(0, len(stream), 4))} sampled flips")
+
+
+# ------------------------------------------ 14. the fidelity gate, and expect=
+
+def silent_flip(stream, raw, limit=240):
+    """A single-byte flip the FRAMING gate cannot see. -> (bytes, index).
+
+    The shape section 13's sweep counts in bulk and this section needs one of:
+    the flipped stream still passes `looks_compressed`, still decodes without
+    raising, still declares EXACTLY `len(raw)` -- and gives back different bytes.
+    Nothing about the archive can refute that afterwards, because the entry crc is
+    over the stored bytes and moves with the corruption.
+
+    Searched rather than hard-coded, because a hard-coded index would be a fact
+    about one build of `gwenc` wearing this module's name. `(None, None)` if the
+    first `limit` positions hold no such flip, and the caller checks for it -- if
+    that ever happens the interesting thing is that it happened.
+    """
+    for i in range(min(limit, len(stream))):
+        flip = stream[:i] + bytes([stream[i] ^ 0xFF]) + stream[i + 1:]
+        if not datwrite.looks_compressed(flip):
+            continue
+        try:
+            back, declared = gwdat.decompress(flip)
+        except Exception:                                        # noqa: BLE001
+            continue
+        if declared == len(raw) and back != raw:
+            return flip, i
+    return None, None
+
+
+def short_trailer(stream):
+    """The declared output size, minus one. The whole corruption.
+
+    `gwdat.decompress` reads the payload length from the LAST u32 word
+    (`gwdat.py:349-350`) and then uses it as the decode loop's own termination
+    bound (`gwdat.py:356`), so `declared == len(back)` -- the second half of
+    `looks_compressed` -- is TRUE BY CONSTRUCTION here: the stream decodes one
+    byte short and cheerfully agrees with itself about it. `looks_compressed`
+    says yes and the archive gets a row holding a payload nobody asked for.
+    """
+    at = (len(stream) // 4) * 4 - 4
+    declared = struct.unpack_from("<I", stream, at)[0]
+    return stream[:at] + struct.pack("<I", declared - 1) + stream[at + 4:]
+
+
+def section_fidelity(tmp):
+    """The DECLARATION checked against the bytes, which framing cannot do.
+
+    WHY THIS SECTION EXISTS, in one sentence a skeptic wrote on 2026-08-19: a
+    `gwenc` stream whose trailer is corrupted was NOT refused -- `alloc(confirm=
+    True)` and `--stream FILE:1:8` both wrote it, `Archive.read()` handed back
+    8,191 bytes instead of 8,192, and `--verify`, `datcheck --preflight` and the
+    overlap sweep were all green -- while `datwrite.declaration_fault` refused the
+    identical bytes and `datmove --compression 8` had made `--expect` mandatory
+    the day before. `datalloc` was the only writer of the three that committed a
+    compression-8 payload with no declaration of what a reader must get back, and
+    the string `declaration_fault` appeared in it zero times.
+
+    The five shapes below are that skeptic's own repros, plus the two directions
+    section 13 could only record. THE SABOTAGE AT THE BOTTOM is what makes them
+    checks rather than descriptions: with `declaration_fault` stubbed to return
+    None the trailer-corrupted stream allocates again, and the archive hands back
+    the wrong payload with every rule this project owns still green.
+    """
+    print("\n14. the declaration checked against the bytes")
+    raw = comp_payload()
+    stream = gwenc.encode(raw)
+
+    # (i) THE TRAILER. Decodes SHORT, and the framing gate cannot see it.
+    short = short_trailer(stream)
+    check(datwrite.looks_compressed(short),
+          "the FRAMING gate still calls a trailer-corrupted stream compression 8 "
+          "-- it decodes, and it agrees with its own trailer about the length",
+          f"declared {gwdat.decompress(short)[1]} B against a {len(raw)} B "
+          f"payload")
+
+    path, _ = fresh(tmp, "fid_short.dat")
+    untouched = blob(path)
+    journal = os.path.join(tmp, "fid_short.journal.json")
+    bad = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+           datalloc.Stream(short, datalloc.MAP_PARTNER_FLAGS_U16,
+                           extra_bytes=8, expect=raw)]
+    with Archive(path) as ar:
+        m = refusal(datalloc.plan_alloc, ar, bad, 0x3000)
+    check(m and "trailer declares" in m and str(len(raw) - 1) in m
+          and str(len(raw)) in m,
+          "plan_alloc REFUSES it, naming the trailer and BOTH lengths",
+          (m or "-- it did not refuse").splitlines()[-1][:72])
+    m = refusal(datalloc.alloc, path, bad, 0x3000, journal, confirm=True)
+    check(m and "trailer declares" in m,
+          "and so does alloc --confirm, which is the call that wrote it before")
+    check(blob(path) == untouched and not os.path.exists(journal),
+          "archive byte-identical, no journal opened",
+          f"{len(untouched)} B compared")
+
+    # ...and from the command line, which is the door this arc opened.
+    cli_dat, _ = fresh(tmp, "fid_cli.dat")
+    cli_before = blob(cli_dat)
+    head_f = spill(tmp, "fid_head.bin", b"")
+    short_f = spill(tmp, "fid_short.gwenc", short)
+    raw_f = spill(tmp, "fid_payload.raw", raw)
+    good_f = spill(tmp, "fid_good.gwenc", stream)
+    cli_journal = os.path.join(tmp, "fid_cli.journal.json")
+    rc, out, err = run_cli(["--dat", cli_dat, "--file-id", "0x3000", "--alloc",
+                            "--confirm", "--journal", cli_journal,
+                            "--expect", raw_f, "--stream", head_f + ":259",
+                            "--stream", short_f + ":1:8"])
+    check(rc == 1 and "trailer declares" in err,
+          "the CLI refuses it too -- `--stream FILE:1:8 --alloc --confirm` "
+          "returned rc 0 and wrote row 23 before this landed", f"rc {rc}")
+    check(blob(cli_dat) == cli_before and not os.path.exists(cli_journal),
+          "and that archive is untouched with no journal either")
+
+    # (ii) THE HARDER SHAPE: same declared length, different content.
+    flip, at = silent_flip(stream, raw)
+    check(flip is not None,
+          "a single-byte flip exists that decodes to the RIGHT LENGTH and the "
+          "WRONG BYTES -- the corruption no length check can see",
+          f"byte {at}" if flip else "none found in the first 240 bytes")
+    if flip is not None:
+        check(datwrite.looks_compressed(flip),
+              "the framing gate calls it compression 8 as well",
+              f"{len(gwdat.decompress(flip)[0])} B out, not the payload")
+        fpath, _ = fresh(tmp, "fid_flip.dat")
+        fbefore = blob(fpath)
+        fstreams = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                    datalloc.Stream(flip, datalloc.MAP_PARTNER_FLAGS_U16,
+                                    extra_bytes=8, expect=raw)]
+        m = refusal(datalloc.alloc, fpath, fstreams, 0x3000,
+                    os.path.join(tmp, "fid_flip.journal.json"), confirm=True)
+        check(m and "NOT the expected payload" in m and "first difference" in m,
+              "and it is REFUSED, naming the first byte that differs -- the only "
+              "refutation there is, and only available before the write",
+              (m or "-- it did not refuse").splitlines()[-1][:72])
+        check(blob(fpath) == fbefore, "archive byte-identical")
+
+    # (iii) NO expect AT ALL. The rule datmove has had since 2026-08-18.
+    npath, _ = fresh(tmp, "fid_noexpect.dat")
+    nstreams = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16,
+                                extra_bytes=8)]
+    with Archive(npath) as ar:
+        m = refusal(datalloc.plan_alloc, ar, nstreams, 0x3000)
+    check(m and "no expected payload" in m and "datmove" in m,
+          "extraBytes 8 with no expect= is refused, naming datmove's precedent",
+          (m or "-- it did not refuse").splitlines()[0][:72])
+    m = refusal(datalloc.alloc, npath, nstreams, 0x3000,
+                os.path.join(tmp, "fid_noexpect.journal.json"), confirm=True)
+    check(m and "no expected payload" in m,
+          "and alloc --confirm refuses the same way -- the declaration is "
+          "mandatory on the write path, not advisory on the planning one")
+
+    # (iv) THE PLAN= BYPASS. A plan is a placement, not a second opinion.
+    ppath, _ = fresh(tmp, "fid_plan.dat")
+    pbefore = blob(ppath)
+    stored = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+              datalloc.Stream(pattern(19, 900), datalloc.MAP_PARTNER_FLAGS_U16)]
+    with Archive(ppath) as ar:
+        doctored = datalloc.plan_alloc(ar, stored, 0x3000)
+    doctored.rows[1].extra_bytes = 8            # what the caller can reach
+    m = refusal(datalloc.alloc, ppath, stored, 0x3000,
+                os.path.join(tmp, "fid_plan.journal.json"), confirm=True,
+                plan=doctored)
+    check(m and "extraBytes 8 while stream 1 declares 0" in m,
+          "a doctored plan that disagrees with its streams about extraBytes is "
+          "REFUSED -- alloc(plan=P) wrote 8 over plainly stored bytes before "
+          "this, with Archive.read() not even raising",
+          (m or "-- it did not refuse").splitlines()[0][:72])
+    check(blob(ppath) == pbefore, "archive byte-identical")
+
+    # ...and the fidelity gate runs on the plan= path too, not only the shape
+    # check above it. Same plan, a stream whose bytes were swapped for corrupted
+    # ones after it was computed. Its own fixture, because a sabotage that lets
+    # the doctored write land registers 0x3000 in `ppath` and everything after it
+    # would refuse on the id rather than on the thing being measured.
+    p2, _ = fresh(tmp, "fid_plan2.dat")
+    p2before = blob(p2)
+    with Archive(p2) as ar:
+        good_plan = datalloc.plan_alloc(
+            ar, [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                 datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16,
+                                 extra_bytes=8, expect=raw)], 0x3000)
+    m = refusal(datalloc.alloc, p2,
+                [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                 datalloc.Stream(short, datalloc.MAP_PARTNER_FLAGS_U16,
+                                 extra_bytes=8, expect=raw)],
+                0x3000, os.path.join(tmp, "fid_plan2.journal.json"),
+                confirm=True, plan=good_plan)
+    check(m and "trailer declares" in m,
+          "and a handed-in plan does NOT skip the decode-and-compare -- the gate "
+          "is binding on the write path, not a property of one route to it")
+    check(blob(p2) == p2before, "that archive is byte-identical too")
+
+    # (v) THE OTHER DIRECTION: C-6, and the hatch its 4-in-38,621 need.
+    lpath, _ = fresh(tmp, "fid_lookalike.dat")
+    look = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+            datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16)]
+    with Archive(lpath) as ar:
+        m = refusal(datalloc.plan_alloc, ar, look, 0x3000)
+    check(m and "C-6" in m and "compression 0" in m,
+          "a REAL gwenc stream declared extraBytes 0 is refused as a stored "
+          "lookalike, naming C-6 -- section 13 recorded this as an OPEN GAP",
+          (m or "-- it did not refuse").splitlines()[0][:72])
+    hatch = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+             datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16,
+                             stored_lookalike_ok=True)]
+    with Archive(lpath) as ar:
+        # NOT through `refusal()` here: it swallows stdout into its own buffer,
+        # and the override LINE is half of what this pair is checking.
+        with quiet() as printed:
+            try:
+                datalloc.plan_alloc(ar, hatch, 0x3000)
+                hatch_msg = None
+            except datalloc.Refused as exc:
+                hatch_msg = str(exc)
+        check(hatch_msg is None,
+              "and stored_lookalike_ok=True lets it through -- MEASURED, 4 of "
+              "38,621 real stored rows decode as compression 8 and would be "
+              "refused for it",
+              hatch_msg.splitlines()[0][:72] if hatch_msg else
+              "against 0 of 1,500 decompressed retail payloads")
+        check("C-6 OVERRIDE TAKEN" in printed.getvalue(),
+              "the hatch prints a line naming C-6 when taken, as datwrite's does "
+              "-- an override that leaves no trace is the same defect as no "
+              "override",
+              printed.getvalue().strip().splitlines()[0][:72]
+              if printed.getvalue().strip() else "(silent)")
+        check(refusal(datalloc.plan_alloc, ar,
+                      [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                       datalloc.Stream(pattern(23, 700),
+                                       datalloc.MAP_PARTNER_FLAGS_U16)],
+                      0x3000) is None,
+              "CONTROL: ordinary stored bytes need no hatch -- the rule fires on "
+              "the DECODE, not on the declaration alone")
+
+    # The armed head, which must survive all of this untouched.
+    apath, _ = fresh(tmp, "fid_armed.dat")
+    ajournal = os.path.join(tmp, "fid_armed.journal.json")
+    with quiet():
+        aplan = datalloc.alloc(apath, map_streams(pattern(29, 1200)), 0x3000,
+                               ajournal, confirm=True)
+    check(read_rows(apath)[aplan.head.index][1] == 0,
+          "the ARMED ZERO-LENGTH HEAD still allocates -- declaration_fault(b\"\", "
+          "0, None) is None, so deploy.py's re-bloat trigger needed no special "
+          "case", "an empty stored stream is not a compressed one")
+
+    # (vi) AND THE HAPPY PATH, end to end, with the declaration.
+    hpath, _ = fresh(tmp, "fid_happy.dat")
+    hjournal = os.path.join(tmp, "fid_happy.journal.json")
+    good = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+            datalloc.Stream(stream, datalloc.MAP_PARTNER_FLAGS_U16,
+                            extra_bytes=8, expect=raw)]
+    with quiet():
+        hplan = datalloc.alloc(hpath, good, 0x3000, hjournal, confirm=True)
+    with Archive(hpath) as ar:
+        got = ar.read(ar.row(hplan.rows[1].index))
+    check(got == raw and read_rows(hpath)[hplan.rows[1].index][2] == 8,
+          "a stream that IS its declaration allocates and reads back exactly -- "
+          "the gate refuses wrong payloads, never right ones",
+          f"{len(got)} B back, +0x0C = 8")
+    check(datcheck_clear(hpath), "datcheck --preflight is 10 of 10 afterwards")
+
+    # ...and the same thing from the command line, with --expect.
+    hcli, _ = fresh(tmp, "fid_happy_cli.dat")
+    hcli_journal = os.path.join(tmp, "fid_happy_cli.journal.json")
+    rc, out, err = run_cli(["--dat", hcli, "--file-id", "0x3000", "--alloc",
+                            "--confirm", "--journal", hcli_journal,
+                            "--expect", raw_f, "--stream", head_f + ":259",
+                            "--stream", good_f + ":1:8"])
+    check(rc == 0 and "extraBytes 8" in out,
+          "and the CLI does it with --expect, self-check green", f"rc {rc}")
+    with Archive(hcli) as ar:
+        rows = [e.index for e in ar.entries if e.compression == 8 and e.size]
+        cli_got = ar.read(ar.row(rows[-1])) if rows else b""
+    check(cli_got == raw,
+          "the row the CLI wrote decodes back to the payload --expect named",
+          f"{len(cli_got)} B")
+
+    # THE CLI's THREE ARITY RULES, each refused before a file is opened.
+    rc, out, err = run_cli(["--dat", hcli, "--file-id", "0x3001", "--plan",
+                            "--stream", head_f + ":259",
+                            "--stream", good_f + ":1:8"])
+    check(rc == 1 and "no --expect" in err and "datmove" in err,
+          "EXTRA 8 with no --expect: refused from the command line, naming "
+          "datmove's precedent", f"rc {rc}")
+    rc, out, err = run_cli(["--dat", hcli, "--file-id", "0x3001", "--plan",
+                            "--expect", raw_f,
+                            "--stream", head_f + ":259",
+                            "--stream", good_f + ":1:0"])
+    check(rc == 1 and "no --stream declares EXTRA 8" in err,
+          "--expect with nothing to check it against: refused rather than "
+          "ignored -- the likeliest reading is a missing `:8`", f"rc {rc}")
+    rc, out, err = run_cli(["--dat", hcli, "--file-id", "0x3001", "--plan",
+                            "--expect", raw_f, "--stream", good_f + ":259:8",
+                            "--stream", good_f + ":1:8"])
+    check(rc == 1 and "--expect names ONE payload" in err,
+          "two compressed streams and one --expect: refused, naming the API for "
+          "the general case", f"rc {rc}")
+
+    # ------------------------------------------------------------ the sabotage
+    #
+    # `datwrite.declaration_fault` stubbed to return None -- the exact state this
+    # module was in until 2026-08-20, when it called the function zero times --
+    # and the trailer-corrupted stream must then reach disk. In memory, one
+    # archive, restored in a `finally`. If this ever stops writing the row, the
+    # gate has moved somewhere else and the checks above have stopped measuring
+    # what they say they measure.
+    spath, _ = fresh(tmp, "fid_sabotage.dat")
+    sjournal = os.path.join(tmp, "fid_sabotage.journal.json")
+    real_fault = datwrite.declaration_fault
+    try:
+        datwrite.declaration_fault = lambda *a, **kw: None
+        with quiet():
+            splan = datalloc.alloc(spath, bad, 0x3000, sjournal, confirm=True)
+        with Archive(spath) as ar:
+            sgot = ar.read(ar.row(splan.rows[1].index))
+            sbad_crc = 0
+        with quiet():
+            sbad_crc = datwrite.verify(spath)
+    finally:
+        datwrite.declaration_fault = real_fault
+    check(len(sgot) == len(raw) - 1 and sgot != raw,
+          "SABOTAGE: with declaration_fault stubbed out the corrupted stream "
+          "allocates and the archive hands back the WRONG payload -- so the gate "
+          "is what refuses it, not the framing check and not luck",
+          f"{len(sgot)} B back where the payload is {len(raw)} B")
+    check(sbad_crc == 0 and datcheck_clear(spath),
+          "and that archive is GREEN: both crc rules and all ten open-time rules "
+          "pass over a row nobody can read", "which is FINDINGS C-6 exactly")
+    # And the gate is LIVE again, asked rather than asserted: the same bytes that
+    # just allocated are refused once more. A `finally` that restored the wrong
+    # thing would leave every check after this one measuring the stub.
+    rpath, _ = fresh(tmp, "fid_restored.dat")
+    m = refusal(datalloc.alloc, rpath, bad, 0x3000,
+                os.path.join(tmp, "fid_restored.journal.json"), confirm=True)
+    check(m and "trailer declares" in m,
+          "the stub is gone and the refusal is back -- checked by re-running the "
+          "sabotage's own input, not by comparing a function object",
+          (m or "-- it did not refuse").splitlines()[-1][:72])
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         section_fixture(tmp)
@@ -894,6 +1625,8 @@ def main():
         section_next_id(tmp)
         section_order(tmp)
         section_cli(tmp)
+        section_compressed(tmp)
+        section_fidelity(tmp)
     return LEDGER.verdict()
 
 

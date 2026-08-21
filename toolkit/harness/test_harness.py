@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=152)
+LEDGER = checks.Ledger("harness", floor=157)
 check = checks.adopt_named(LEDGER)
 
 
@@ -1224,6 +1224,49 @@ def section_hold_key():
               "a yaw of zero, a zero-length ALT, a non-number and a "
               "near-miss key name all refuse",
               "'lefty' must not silently become the L key")
+    LEDGER.ok(session.parse_walk("hover:0.044,0.054,38")
+              == [("hover", "0.044,0.054", 38.0)],
+              "the 2026-08-19 hover verb parses: window-relative point plus "
+              "a duration, no click",
+              "a HUD tooltip is the only readable surface for the buff "
+              "family's contested field (skillcast 14.4), and reading one "
+              "unattended needs a cursor park that never presses a button")
+    LEDGER.ok(session.parse_walk("wait:3 attack:10 wait:55")
+              == [("wait", "", 3.0), ("attack", "10", 0.0),
+                  ("wait", "", 55.0)]
+              and all(refused(session.parse_walk, bad)
+                      for bad in ("attack:", "attack:x")),
+              "the 2026-08-20 attack verb parses, and refuses a non-id",
+              "it is a WALK step as well as an action because actions all "
+              "fire before the walk and the hold, while --shots photographs "
+              "only the walk and the hold -- so an attack ordered from the "
+              "action script can have its entire fight finish unphotographed. "
+              "That is not hypothetical: on 2026-08-20 a critical landed at "
+              "20:11:39 and the first hold frame was stamped 20:13:58, 139 s "
+              "later. As a walk step the fight and its frames overlap by "
+              "construction")
+    LEDGER.ok(session.parse_walk("click:0.411,0.561")
+              == [("click", "0.411,0.561", 1.0)],
+              "the click verb parses: a window-relative point, no duration",
+              "it exists to press a PANEL BUTTON at a fixed fraction -- the "
+              "attribute panel's + arrow -- which is the aiming case the "
+              "harness could not reach; a world target still needs a person")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("click:0.5", "click:0.5,0.5,0.5", "click:1.5,0.5",
+                              "click:0,0.5", "click:a,b")),
+              "click refuses one number, three numbers, and fractions on or "
+              "outside the window edge",
+              "a click at a wrong literal presses whatever happens to be "
+              "there, which is worse than a refusal because it looks like a run")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("hover:0.5,0.5", "hover:0.5,0.5,0",
+                              "hover:1.5,0.5,3", "hover:0,0.5,3",
+                              "hover:a,0.5,3")),
+              "hover refuses two numbers, a zero duration, fractions on or "
+              "outside the window edge, and a non-number",
+              "a cursor parked at a wrong literal would read as 'no tooltip' "
+              "-- the probe's null result -- so the parse must fail loudly "
+              "instead")
     LEDGER.ok(dc.NAMED_KEYS["alt"] == 0x12 and dc.NAMED_KEYS["left"] == 0x25
               and dc.NAMED_KEYS["right"] == 0x27 and dc.NAMED_KEYS["up"] == 0x26
               and dc.NAMED_KEYS["down"] == 0x28

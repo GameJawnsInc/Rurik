@@ -493,25 +493,40 @@ def tokenize(payload, q=DEFAULT_Q):
 # costing -- gwentropy's model, unmodified
 # --------------------------------------------------------------------------
 
-def _fit_table(counts, optimal=True):
-    """Occurrence counts -> (bits, {symbol: length}, symbol_count, is_zero_length).
+def _fit_table(counts, kind, optimal=True):
+    """Occurrence counts + 'lit'/'dist' -> (bits, {sym: length}, symbol_count, is_zero).
 
-    This is `gwentropy.table_for_counts` + `kraft_defect` + `meta_plan`, composed from
+    This is `gwentropy.authoring_table` + `kraft_defect` + `meta_plan`, composed from
     the public functions so that the cost this module reports and the cost A6 validated
     are computed by the same code.
+
+    THE KIND IS NOT DECORATION. `authoring_table` is the WRITER-path table builder and
+    its floors differ per kind (distance 5, literal 257 -- `gwentropy.py`'s own
+    docstring carries the census and the A8 witness). `table_for_counts`, which this
+    used to call, stays the MODEL-path builder feeding `recost()` and `literal_only()`;
+    that split is why the envelope policy cannot move A6's recorded numbers.
+
+    `is_zero` is derived from `present` and NOT from the note string. A zero-length
+    table is exactly an all-skip description -- nothing assigned, `gwdat.py:265-267`
+    installing `symbol_count - 1` afterwards -- so `not any(present)` IS the property,
+    while the note is a label that a new arm can spell wrong. It was spelled wrong once:
+    a phantom-pair table under a non-"huffman" note made `gwentropy.retail_arrays`
+    describe an all-skip table while the writer emitted 1-bit codes, and 9 of 21
+    payloads failed decoding with `backtrack 1 >= produced 1`.
     """
-    lens, (lens_l, pres_l, count), note = G.table_for_counts(counts)
+    lens, (lens_l, pres_l, count), _note = G.authoring_table(counts, kind,
+                                                              optimal=optimal)
     defect = G.kraft_defect(lens)
     if defect != 0:
         raise ValueError(f"our own table is not a complete prefix code (defect {defect})")
     bits, _plan = G.meta_plan(lens_l, pres_l, count, optimal=optimal)
-    return bits, lens, count, note != "huffman"
+    return bits, lens, count, not any(pres_l)
 
 
 def _block_cost(lit_counts, dist_counts, extra_bits, optimal=True):
     """Total bits one block of these tokens costs: both tables + size field + codes."""
-    lit_bits, lit_lens, lit_n, lit_zero = _fit_table(lit_counts, optimal)
-    dist_bits, dist_lens, dist_n, dist_zero = _fit_table(dist_counts, optimal)
+    lit_bits, lit_lens, lit_n, lit_zero = _fit_table(lit_counts, "lit", optimal)
+    dist_bits, dist_lens, dist_n, dist_zero = _fit_table(dist_counts, "dist", optimal)
     tok = (sum(lit_lens[s] * c for s, c in lit_counts.items())
            + sum(dist_lens[s] * c for s, c in dist_counts.items()))
     total = lit_bits + dist_bits + 4 + tok + extra_bits

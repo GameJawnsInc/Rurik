@@ -3492,6 +3492,53 @@ def _buff_type_steps(agent_id):
     ]
 
 
+def _minion_count_steps(agent_id):
+    """Is 0x0093's value dword the agent's MINION COUNT?
+
+    ANSWERED YES, 2026-08-20 (captures 20260820T081504 and 20260820T082018,
+    studies/pvpui/FINDINGS.md 33.5): 7 drew a minion icon reading 7 with the
+    tooltip 'You are currently controlling 7 minions.', 1 redrew it as
+    '1 minion.' -- template 50499's own [s] plural resolving -- and 0 removed
+    the row. Kept runnable as the calibration for that finding.
+
+    THE BUFF IN STEP 1 IS A DISCRIMINATOR, NOT A PRECONDITION, and the
+    distinction is a correction to this docstring's first version. The bare
+    three-send form works perfectly with no buff at all; a session read the
+    wrong screenshots (hold*.png, which begin AFTER the --walk plan and so
+    after the probe has cleaned up), called it a null, and invented a
+    'the monitor must exist first' mechanism to explain the artifact. What
+    the buff actually buys is the control on step 4: with an icon sent
+    alongside, count 0 must clear the MINION row and leave the buff icon
+    standing, which separates 'the row went' from 'the monitor went'.
+
+    Read w*.png when a --walk is in play. Seven is deliberate: not 0, not 1,
+    not a plausible default, so a sentence reading '7' cannot be a
+    coincidence of some other field.
+    """
+    skill = PROBE_BAR_SKILL
+    return [
+        Step(2.0, 0x0042, [agent_id, skill, 0, 1, _f32(120.0)],
+             "0x0042 first: a buff on our own agent, as the DISCRIMINATOR "
+             "for step 4 (not a precondition -- the bare form works)",
+             "an effect icon appears top-left."),
+        Step(5.0, 0x0093, [agent_id, 7],
+             "0x0093: minion count 7",
+             "OBSERVED 2026-08-20: a minion icon appears to the LEFT of the "
+             "buff icon carrying the number 7, tooltip 'You are currently "
+             "controlling 7 minions.' Any other number refutes pvpui 33."),
+        Step(9.0, 0x0093, [agent_id, 1],
+             "0x0093: minion count 1 -- the singular",
+             "OBSERVED: the same row reading 1, and the tooltip drops the "
+             "s -- 'controlling 1 minion.'"),
+        Step(9.0, 0x0093, [agent_id, 0],
+             "0x0093: minion count 0",
+             "OBSERVED: the minion row disappears and the step-1 buff icon "
+             "STAYS. That contrast is the control."),
+        Step(7.0, 0x0044, [agent_id, 1], "0x0044: drop the buff",
+             "cleanup -- now the effect icon goes too."),
+    ]
+
+
 def _buff_side_steps(agent_id):
     """Do 63 and 65 file the same buff under two different agents?
 
@@ -5879,8 +5926,30 @@ PROBES = {
                  "stores the field at buff record +0x04 and never reads it in "
                  "ChCliBuff.",
         steps=_buff_type_steps(a),
-        note="The one CONTESTED field name in the effect family. Keep buffId "
-             "small -- GmEffect:3030 bounds it against a UI frame-code range.",
+        note="ANSWERED 2026-08-19 (captures 20260819T232426 and 20260819T233451, "
+             "skillcast FINDINGS 14.7): prediction B, exactly -- the icons are "
+             "pixel-identical across 0/14/12 and the tooltip's numbers are "
+             "round(lo+(hi-lo)*rank/15) of the field (10/57/50 max-Health on "
+             "skill 316's 10..60 window). The field is the ATTRIBUTE RANK the "
+             "effect renders at; GWCA's attribute_level confirmed, Headquarter's "
+             "effect_type refuted. Kept runnable as the effect-tooltip "
+             "calibration; read the tooltip with --walk hover:0.0442,0.0543,38. "
+             "Keep buffId small -- GmEffect:3030 bounds it against a UI "
+             "frame-code range.",
+    ),
+    "minion_count": lambda a, o: Probe(
+        question="Is 0x0093's value dword the number of minions the agent "
+                 "controls?",
+        predicts="Sending 7 makes the effects monitor read 'You are "
+                 "currently controlling 7 minion[s]'; sending 0 makes the "
+                 "indicator vanish. Any other number refutes the reading.",
+        steps=_minion_count_steps(a),
+        note="STATIC-ONLY until this runs: studies/pvpui 33 names the field "
+             "from the client's own template (string 50499, value as "
+             "%num1%), with three GmEffect readers agreeing, but the opcode "
+             "has ZERO occurrences in 114,985 live s2c messages and this "
+             "repo has never sent one. Confirming it raises the "
+             "AGENT_MINION_COUNT name from medium.",
     ),
     "buff_side": lambda a, o: Probe(
         question="Do opcodes 63 and 65 file the same buff under two different "
@@ -5889,8 +5958,16 @@ PROBES = {
                  "with the same buffId gives a SECOND, separate indicator "
                  "(the upkeep row). Removing one leaves the other.",
         steps=_buff_side_steps(a),
-        note="SOURCED: BuffState keeps a source list at +0x04 and a target "
-             "list at +0x14, and the client's own log strings are "
+        note="ANSWERED 2026-08-19 (capture 20260819T235007, skillcast FINDINGS "
+             "14.8): every clause held. 65 alone draws the effect icon with NO "
+             "countdown bar (duration 0.0); 63 with the same buffId adds the "
+             "skill's icon to the maintained-enchantment UPKEEP MONITOR above "
+             "the energy bar (~x1120,y880 at the standard window); 64 clears "
+             "the upkeep icon and the effect icon STAYS; 68 clears the effect "
+             "icon. Two records, independent lifecycles, joined by buffId -- "
+             "and the upkeep icon needs no 0x0093, so the +0x5BC table does "
+             "not gate it. SOURCED: BuffState keeps a source list at +0x04 and "
+             "a target list at +0x14, and the client's own log strings are "
              "BuffSourceAdd/BuffSourceRemove for 63/64 and "
              "BuffTargetAdd/ExtendTimed/Remove for 65/66/67/68.",
     ),

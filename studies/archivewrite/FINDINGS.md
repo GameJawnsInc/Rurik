@@ -48,12 +48,15 @@ The house rule is that corrections go where they cannot be missed.
 | **C-2** | `U7-RUN.md`: largest usable run 953,856 B | That is `dat_study`'s figure. The archive U7 actually deployed into (`run/2026-08-13_64fae3b1369b`) has a largest usable run of **285,184 B**. Any capacity claim must name its copy. **OBSERVED** (Route B scout, uncontested) |
 | **C-3** | Route E scout: "9,593 B of in-place headroom under zlib -9" | **9,589 B.** The DAT framing appends a 4-byte uncompressed-size trailer (`gwdat.py:349-350`), which the scout's zlib figure omitted. **OBSERVED (mine):** zlib -9 raw/-15/memLevel 8 → 1,020,039 B, +4 = 1,020,043 against a 1,029,632 B reservation. |
 | **C-4** | Route A scout: "the true ratio of the 1.5 MB payload is unmeasured; bracket ×0.11–×0.77" | It was measured — that morning, in the scout's own scratchpad. True value **×0.6803** under the scout's own encoder, which produces **1,030,604 B: 972 B OVER the reservation**. The optimistic half of the bracket came from a synthetic. **OBSERVED** (Route A skeptic; I did not re-run the prototype, so this is CORROBORATED for me) |
-| **C-5** | `datalloc.py:53-56`: growth past EOF is "unrevertible in principle" | **Wrong as stated.** Record the pre-growth size in the journal and `os.truncate` on revert; a scout ran it on a synthetic fixture and it restored to 10-of-10 clear. The docstring describes the current JSON schema, not a property of archives. It should be amended to say *why we still refuse* (concurrency and the u32 ceiling, §4.4), not that we cannot. **OBSERVED** (Route B scout) |
+| **C-5** | `datalloc.py:73-76` (was :53-56): growth past EOF is "unrevertible in principle" | **Wrong as stated.** Record the pre-growth size in the journal and `os.truncate` on revert; a scout ran it on a synthetic fixture and it restored to 10-of-10 clear. The docstring describes the current JSON schema, not a property of archives. It should be amended to say *why we still refuse* (concurrency and the u32 ceiling, §4.4), not that we cannot. **OBSERVED** (Route B scout) |
 | **C-6** | `datmove` is the relocation verb | `datmove.move()` writes **compression → 0 unconditionally** (`toolkit/mapdata/datmove.py:222-224`) and re-CRCs over the bytes it was handed. Relocating any compression-8 row with it produces a **green archive holding an unreadable file** — the entry CRC is over stored bytes, which are unchanged, so all three checksum rules and all ten open-time rules still pass. **OBSERVED (mine, source read; confirmed by two skeptics independently).** This is the single sharpest trap in the stack and it is live today. |
 | **C-7** | — | `archive.py:322` reads the header `mftOffset` as **`<I`**; `datcheck.py:223` and `datwrite.py:101` read it as **`<Q`**. Two of three readers say u64 and the outlier is the one every tool imports. Latent (all 14 vault archives have the high dword zero) and ~93 MB of file growth away from firing silently on the 38833 line. **OBSERVED (mine, all three lines read).** |
 | **C-9** | §2.5: *"the population supporting 'the client reads a large stored row' is EMPTY, not thin"* — retail's largest ordinary stored content row is 19,292 B and our one precedent is U7's 29,802 B | **STALE, and by our own hand.** The retail census still reproduces exactly (0 of 38,621 stored rows above 19,292 B, excluding the structural rows). But `datmove` writes compression 0 unconditionally, so **run 5 shipped ELEVEN stored rows above 19,292 B — the largest 765,378 B (file 117797) — and it was deployed and launched by the owner with no assert** (§9.3i/j). The honest framing is now **11× beyond the largest PROVEN-READ stored row and 0.5× the largest DEPLOYED-WITHOUT-CRASH one**, not "the population is empty". This materially de-risks **A5**, whose whole premise was that empty population. **OBSERVED** (run-7 skeptics, two independently, 2026-08-18) |
-| **C-8** | — | Two row censuses disagree by 16: 138,708 comp-8 rows (Route E) vs 138,692 (Route C skeptic), against 38,621+12 vs 38,629 comp-0. The sums are 177,341 and 177,321 — `len(entries)` versus live rows. `archive.py:413-431` warns about exactly this and names the study it already corrupted. **Unresolved bookkeeping**, and it is load-bearing for the "661 rows" headline. |
+| **C-8** | — | Two row censuses disagree by 16: 138,708 comp-8 rows (Route E) vs 138,692 (Route C skeptic), against 38,621+12 vs 38,629 comp-0. The sums are 177,341 and 177,321 — `len(entries)` versus live rows. `archive.py:413-431` warns about exactly this and names the study it already corrupted. **SETTLED 2026-08-20, decomposed by `toolkit/mapdata/datledger.py` (`test_datledger.py` §7, measured on the real archives): the 20-row sum disagreement is 7 rows of ARCHIVE difference plus 13 of counting CONVENTION.** The two copies genuinely differ — `dat_study` has 177,342 raw rows, the pristine install copy 177,335 — and `dat_study` under the `entries` convention reproduces Route E **exactly** (138,708 comp-8, sum 177,341, and comp-0's "+12" IS the twelve erased structural rows the USED convention drops), while the install copy under `used` reproduces Route C's sum 177,321 **exactly** — consistent with the two routes having censused different copies under different conventions. 15 of the 16 disputed comp-8 rows are archive difference (study 138,708 vs install 138,693), not counting. Neither real archive carries a single row whose fields contradict its class. **Consequence for the "661 rows" headline: it is a `dat_study`/`entries` figure and must be quoted with its copy and convention named.** **OBSERVED** (datledger build + skeptic, 2026-08-20) |
 | **C-10** | §9.3g: *"the node bases are **bone lengths**"*, and §11.4's positive-control geometry — node 62 at world z −805.3, a "whole-creature extent of 805" — accumulated down the parent chain | **Both wrong, and the second reproduced the first rather than catching it.** `blk2C` bases are **ABSOLUTE MODEL-SPACE REST POSITIONS**, not parent-relative offsets. **ArenaNet's own mesh is the referee**: file 116703's bounding box is **72.6 units** across, the absolute reading seats all 86 joints **inside the skin** (joint→nearest-vertex median **1.40 u**, max 5.67), and the accumulated reading puts them **532 u away** (median). A forward-kinematics model taking the offset as `base[i] − base[parent[i]]` reproduces every stored rest position to **0.000000** with identity rotations — a check that can fail, and the accumulating model fails it. The *consequence* §9.3g drew is untouched (scaling bases still explodes the skeleton, and run 6 fired), but every distance in §11.4 is ~11× too large and the real numbers are **better**: head ×3 moves the cluster **1.98× the creature's entire extent**, not 0.67×. **OBSERVED (mine, 2026-08-18); the refutation came from a run-7 skeptic and I reproduced it against the mesh.** |
+| **C-11** | §16.2: gap A "comes from *tiny and degenerate* payloads"; §13.5: the fix is "a two-symbol distance table inside retail's attested envelope … a size question, not a design one" | **Three corrections, all measured (§17.2).** (1) Payload size is incidental — the trigger is *any block with no matches, or with only distance-1 matches*, and `test_gwenc`'s own **50 KB** `granule straddle x1` fixture emitted a declared-1 table on every run. (2) A two-symbol distance table is **not attested at 2**: retail's declared-distance floor is **5** over all 32,831 comp-8 rows ≤ 2,048 B, its twelve zero-length distance tables (rows 8295–8306) all declare exactly 5, and **no retail row anywhere declares a distance count of 2, 3 or 4**. (3) "A size question" is true for the empty-table route only; the single-symbol-at-index-0 route **cannot** use the zero-length code at n ≥ 2 (`gwdat.py`'s `total == 0` fallback installs symbol `n−1` and no other index) and costs **1 bit per match** in that block — bounded ≈ 0.05 % because the matcher takes maximum-length matches. **OBSERVED** (gap-A recon, 2026-08-19; fix landed §17.2) |
+| **C-12** | §13.5 gap D, recorded as an encoder curiosity (`encode(b"")` → 12 B) | **It reached the archive layer.** `datwrite.declaration_fault(gwenc.encode(b""), 8, expect=b"")` returned `None` — the zero-length guard tested the STORED bytes (12, not 0) and the mandatory-`expect` guard tested `is None`, which `b""` passes — so a zero-block comp-8 row could be written into an archive. Retail's smallest comp-8 row is 56 B and holds a block. Closed both sides 2026-08-19/20: `gwenc.encode(b"")` raises, and `declaration_fault` refuses a stream that decompresses to nothing (§17.2, §17.4). **OBSERVED** (gap-A recon; fix in `test_datwrite` §11j) |
+| **C-13** | §14.2 hole 3 "fixed": `datalloc`'s comp-8 gate now DECODES instead of matching a two-byte marker — read as the creation path being safe | **The gate refutes FRAMING damage and nothing else, and the fidelity direction reached disk.** `declaration_fault` appeared in `datalloc.py` **zero** times; a `gwenc` stream with a corrupted trailer went to disk through `alloc(confirm=True)` and through `--stream FILE:1:8`, `Archive.read()` handing back 8,191 B instead of 8,192 while `--verify`, preflight 10/10 and the overlap sweep stayed green. Over 528 single-byte flips of one real stream: **132 refused, 394 decoded to the wrong bytes and were ACCEPTED, 2 benign**. Also: `alloc(plan=P)` ran no gate at all, and a doctored plan wrote `extraBytes 8` over plainly stored bytes. **OBSERVED (adversarial verifier, 2026-08-20; closed the same day, §17.5** — `expect=` mandatory with `extraBytes 8`, the gate in `alloc()` as well as `plan_alloc()`, twelve sabotages red**)** |
 
 ---
 
@@ -100,7 +103,7 @@ The scout's robustness argument — *"all 8 deflate configurations tried fit in 
 - Breakdown of the 661: **352 ffna type 3 (maps), 103 ffna type 2 (model containers — 15018 is one), 31 ATEX, ~140 MPEG audio, 4 DDS, 3 MZ**, remainder unclassified.
 - Of the 103 stuck model containers, **79 carry an FA1 animation chunk**: min 957,258, median 1,395,009, max 2,946,637, total 115,113,511 B. **The arc-relevant blocked set is 79 files.**
 
-**Caveat, and the scout named it:** the 661 figure rests on the trailing declared-size u32 for 138,692 of the rows, and `gwdat.py`'s own docstring warns the decoder terminates *at* that value — so "produced == declared" is forced, not checked. 16 rows were validated against real decodes (16/16) and both anchors additionally close their ffna chunk walks to the exact byte. See also correction **C-8**: the denominator itself is disputed by 16 rows.
+**Caveat, and the scout named it:** the 661 figure rests on the trailing declared-size u32 for 138,692 of the rows, and `gwdat.py`'s own docstring warns the decoder terminates *at* that value — so "produced == declared" is forced, not checked. 16 rows were validated against real decodes (16/16) and both anchors additionally close their ffna chunk walks to the exact byte. See also correction **C-8**, now settled: the 16-row denominator dispute decomposed into 15 rows of archive difference plus 1 of convention — this is a `dat_study`/`entries` figure.
 
 ### 1.4 The 953,856 B ceiling is a policy number, not a capacity number
 
@@ -287,7 +290,7 @@ The proof that this is the scout's gap and not a different simulation: **re-runn
 
 *(Minor scout facts corrected by the skeptic, none load-bearing: 6 rows are flags 0x203 plus row 30049 at 0x003, not 7 at 0x203; the set is 6 head+partner pairs, 1 orphaned middle link and 1 singleton, not a clean 7+7; row 11196 carries **two** file ids in the raw table, 379789 and 15018. Also verified safe: the MFT is **not** in ascending offset order by row index (14,711 inversions), so the client sorts at open and relocation is order-agnostic; and `next_stream` is a row index (all 44,690 nonzero values in 1..entry_count), so relocation cannot break a chain.)*
 
-*(Incidental, verified: `datcheck.row_fields` (`datcheck.py:260-265`) names entry+0x0C `extra_bytes` while `datmove`/`archive.py` call it `compression`; `datalloc.py:109-111` documents both spellings. Measured across all live rows the field takes only {0, 8} — **it is compression.** Harmless today, but a live naming disagreement inside one module set.)*
+*(Incidental, verified: `datcheck.row_fields` (`datcheck.py:260-265`) names entry+0x0C `extra_bytes` while `datmove`/`archive.py` call it `compression`; `datalloc.py:129-131` documents both spellings. Measured across all live rows the field takes only {0, 8} — **it is compression.** Harmless today, but a live naming disagreement inside one module set.)*
 
 ---
 
@@ -308,7 +311,7 @@ Rung shape follows [studies/unitmodels/PLAN.md](../unitmodels/PLAN.md): each run
 | **A7** | **`toolkit/mapdata/gwenc.py` + `test_gwenc.py` + the `datwrite` compression-8 arm.** Build the matcher **size-only first** (hash chain, min match 3, 32 KB window, lazy matching) against A6's accountant — no bitstream writer, no round trip — then the writer. Copy the constant stream header (lead bits 0, `first_four = 2`, 4000/4000). Alphabet 0..29. **`PLAN.md` §6.1 register row BEFORE the module exists**, plus THIRD-PARTY-NOTICES. `datwrite` gains a verb that writes `len(new)`, **keeps compression 8**, and CRCs the stored bytes (`restore`/donor path proves every mechanic, `datwrite.py:610-614`). | Hard bar, **CORRECTED 2026-08-18 — this row said `≤ 1,029,628 B` and that is the trailer-EXCLUSIVE figure from §1.1, while every A7a/A7b number is trailer-inclusive. The third recurrence of correction C-3's double-count, and this is the row a cold session reads AS the criterion.** The bar is **≤ 1,029,632 B trailer-inclusive** AND `gwdat.decompress` returns the original bytes. Met: 1,011,244 B, §12–§13. The falsifiable headline in the test is *our compressed size vs ArenaNet's stored size on N real rows*, which can go red. Round-trip over a strided corpus sample. `checks.Ledger` floor from a real green run; TESTS.md in the same commit. **Note the acceptance bar is a RATIO target, not a correctness target** — the success/failure boundary is inside deflate's own tuning range (§1.2), and a level-1-quality matcher misses by 122 KB. | 2–3 sessions |
 | **A8** | **SUMMIT: a row THIS PROJECT COMPRESSED, read by the retail client.** Deploy the compression-8 in-place write of 15018 into the loopback build's archive; owner-driven caged run against our server per RUNBOOK. | The client loads the map with the modified archive, does not trip a `MdlLoad`/`MdlSeq`/`MdlAnim` assert (the assert vocabulary is the failure oracle — a crash names its line), and the authored animation is **measured**, not eyeballed. **Kill/keep:** if it fails, the run records **which gate fired** — that failure is itself the result. | 1 run |
 
-**Summit: A8.** What it would prove is the thing nothing else in this stack can: **that our encoder's output is a stream ArenaNet's decompressor accepts, not merely one ours does.** Every route above stops at the same sentence — `datmove.py:62-68`, `datalloc.py:79-86` and `gwdat.py:81-84` each carry a version of it. `datcheck.py` contains **zero** references to compression codes, so no invariant we own can refute a conforming-but-wrong bitstream. **The client is the only oracle, and A8 is the only rung that consults it.**
+**Summit: A8.** What it would prove is the thing nothing else in this stack can: **that our encoder's output is a stream ArenaNet's decompressor accepts, not merely one ours does.** Every route above stops at the same sentence — `datmove.py:62-68`, `datalloc.py:99-106` and `gwdat.py:81-84` each carry a version of it. `datcheck.py` contains **zero** references to compression codes, so no invariant we own can refute a conforming-but-wrong bitstream. **The client is the only oracle, and A8 is the only rung that consults it.**
 
 **A5 is the second summit and it is cheaper.** If A5 says the client happily reads a 1.5 MB stored row past EOF, then A6–A8 are optional infrastructure rather than the arc's critical path, and the honest deliverable becomes "we can write anything, at the cost of a permanently inflated archive."
 
@@ -2151,7 +2154,8 @@ plaintext move — what all six `a4stage*.py` scripts and `deploy.py`'s subproce
 succeeds unchanged.**
 
 **The recon's proposed guard was measurably wrong and was replaced.** It suggested the
-two-byte marker `data[2:4] == b"\x01\x02"` that `datalloc.py:432` already used, on a
+two-byte marker `data[2:4] == b"\x01\x02"` that `datalloc.py:432` (historical; the
+decode gate sits at `datalloc.py:560` as of 2026-08-20, and checks fidelity too — §17.5) already used, on a
 6,000/6,000-vs-0/6,000 split. Measured against real `gwenc` output the marker **misses 41 of
 92 streams** — every payload under ~200 B. `looks_compressed()` decides by **decoding**:
 recall **600/600** on real comp-8 rows and **92/92** on `gwenc` streams, with **4 false
@@ -2165,7 +2169,7 @@ so it is not a practical tax on any authoring caller.
 |---|---|---|
 | **1** | The C-6 arm was gated on **`expect is None`**, and `expect == data` is trivially true for *any* bytes | `datwrite.py --replace N --data s.bin --compression 0 --expect s.bin` with genuine `gwenc` output. **Exit 0, preflight 10 of 10, sweep 0 bad, and a log line indistinguishable from an ordinary stored replace.** |
 | **2** | **`--overwrite` never reached `declaration_fault`** and never touches the compression field | Make a row legitimately compression 8, then overwrite its stored bytes with same-length plaintext. Accepted; `verify` 0 failures; **`Archive.read()` returns ZERO BYTES with no exception.** C-6's mirror. |
-| **3** | **`datalloc.py:432`** gated compression 8 on the marker alone, never decoding — and this is the row **CREATION** path, the one A8 will use | `b"ab\x01\x02efgh"` passes. Worse, `test_datalloc.py` **asserted that acceptance as correct**, pinning the defect. And in the other direction it *refused* real `gwenc` output from small payloads. |
+| **3** | **`datalloc.py:432`** (historical; now `:560`, decoding + fidelity, §17.5) gated compression 8 on the marker alone, never decoding — and this is the row **CREATION** path, the one A8 will use | `b"ab\x01\x02efgh"` passes. Worse, `test_datalloc.py` **asserted that acceptance as correct**, pinning the defect. And in the other direction it *refused* real `gwenc` output from small payloads. |
 | **4** | The `toobig` check was **labelled** "a compressed payload past the reservation (still a relocation)" and was not testing that | `pattern(3, 40000)` compresses ~12× to 484 B against a 512 B reservation, so it never reached the relocation guard — it was a second copy of the C-6 check wearing a false label, proven by disabling *only* the C-6 arm and watching this line go red. **"A compressed payload too big for its reservation is refused" was UNTESTED.** |
 
 **Fixes.** (1) The arm now consults the decode whether or not `expect` was given; the override
@@ -2382,6 +2386,504 @@ the 16-bit band. This run exercised one large, ordinary payload, not the envelop
 `vault/run/2026-07-29_221c13772c7a/Gw.dat` **is the A8 archive and is left deployed**, verified
 clean after the launch. `a4stage8.py --retail` restores the baseline. The run directory is
 shared with other sessions; another restored it to retail at 21:34 the same evening.
+
+---
+
+## 17. The authoring hardening — 2026-08-19/20. From "the encoder is proven on one big row" to "the toolkit authors new content"
+
+**What this rung is.** A6–A8 proved the encoder on ONE large, ordinary payload — row 11196,
+re-read by the retail client — and run 7 proved content edits in place. What none of that
+covered is what authoring actually does: **small files, new rows, second revisions, and the
+undo path** — and every one of those had a named, unproven branch. Five recon agents mapped
+the gaps (2026-08-19), three builders closed them, three adversarial verifiers attacked the
+builds (one REFUTED a builder — §17.5 — and the refutation was closed the same day), and a
+sixth agent built the end-to-end flow test. All offline, on synthetic fixtures; no client run.
+
+### 17.1 The recon corrections that re-shaped the work
+
+The load-bearing ones are C-11/C-12/C-13 in §0. Also measured en route, and worth keeping:
+the matcher runs at **~0.19 MB/s** of payload in pure Python (row 11196's 1.44 MB in 7.6 s,
+peak working set 82 MB, 80 % of the time in `gwmatch`'s `longest()` match-extension loop) —
+fine for the authoring loop, recorded so nobody re-derives it; and the U7-era "write the
+full 237-sequence animation set back" payload **never persisted** — `datmove`'s refusal
+fired before any journal opened, so re-running that question means re-authoring the payload
+(`vault/research/unitwrite/2026-08-17-u7/u7prep_hatcher.py --file-id 15018`), now against an
+encoder that exists.
+
+### 17.2 The envelope — gaps A, B, the distance half of C, and D, closed at the writer
+
+**Design: the policy lives in a NEW writer-path function**, `gwentropy.authoring_table
+(counts, kind)`, called by `gwmatch._fit_table` with `kind` ∈ {lit, dist}.
+`table_for_counts` is UNTOUCHED — it feeds `recost()` (§10.1's +8 B) and `literal_only()`
+(§10.4), so those recorded numbers are invariant **by construction**, not by re-measurement.
+
+**The floors, each carrying its census:** distance declared ≥ **5** (the minimum over all
+32,831 comp-8 rows ≤ 2,048 B in `dat_study`; 2/3/4 are declared by no retail row anywhere);
+literal declared ≥ **257** (the minimum of the 218 tables in the row the client READ, §16.2
+— deliberately **not** 258, which would have moved that row's bytes). The empty distance
+table becomes the all-skip shape declared 5 — bit-for-bit retail rows 8295–8306. A single
+symbol at index 0 becomes a **phantom pair** ({s: 1, neighbour: 1}, note `"huffman"`),
+because `gwdat`'s `total == 0` fallback can only install symbol `n−1` — declaring 5 for a
+lone symbol at index 1 would decode symbol 4 and garbage the payload, which is why the
+task's literal spec ("lift declared to 5") could not be taken literally, and why the
+all-skip LITERAL shape (0 of 32,831 rows) is also gone. `gwenc.encode(b"")` now raises
+(gap D, the encoder side). Gap E — meta indices in the 16-bit band — is **accepted, not
+fixed**, with the reason in `gwenc.py`'s docstring: the bands tile structurally, and
+avoiding them would distort the partition DP for no attested benefit.
+
+**The acceptance criterion, measured three ways: the A8 anchor did not move.** Row 11196
+encodes to the same 1,011,244 B with crc32 **`0xd03ab671`** — §15.2's own recorded staged-row
+crc, i.e. the bytes the retail client read. A verifier reconstructed the PRE-change policy in
+memory and compared whole `bytes` objects: identical; the anchor's 218 tables declare lit
+257–285 / dist 24–30, so none enters a lifted arm. The crc is now **pinned in `test_gwenc`
+§7** so byte drift (not merely size drift) goes red. And `recost()` on retail rows is
+unmoved — 900-row sample, zero blocks whose counts reach a patched arm.
+
+**Cost of the lift: zero where it matters.** 120 real small retail rows re-encoded:
+**120 unchanged, +0 B total.** Real payloads with one match already declare ≥ 257 naturally.
+The whole cost lands on degenerate synthetics (+156 B over the 14-fixture corpus, worst case
+RLE at 92→144 B) — the shapes that were the gap. **A verifier fuzzed 118 encodes / 336
+tables read back OFF THE WIRE** (traced from emitted bytes, not from the planner): zero
+escapes, every payload round-tripping, lit 257–285, dist 5–30, zero-length tables only ever
+the attested all-skip distance shape. `test_gwenc` §8 is the standing envelope sweep, with
+two sabotage arms (planted faults must be NAMED; the pre-envelope builder restored in
+memory must turn the sweep red). Floor 55 → **60**.
+
+**What the envelope does NOT prove: the client.** Every shape our encoder now emits is
+attested in retail's archive or in the A8 row — but no retail client has read OUR output on
+a small payload or a new row. That is a one-launch question of A8's shape, whenever a
+launch is next convenient; until then anyone compressing small files rides attested shapes
+plus our decoder, which is a materially better position than gap A's, not a proof.
+
+### 17.3 The grow-back verb — `replace(grow_to=)`, and `restore()` upgraded by the factoring
+
+**The defect (§14.4, now reproduced and priced):** `datwrite.py:821` derived the ceiling
+from `e.size`, the row's CURRENT size — an inline fourth copy of `reservation_for()`. Shrink
+row 4 of the fixture to 100 B and its own 1,024 B extent caps at 512: the original payload
+is refused as "a relocation" with the freed blocks claimed by NOBODY (`claimants()` == []).
+On the real archive, row 11196 shrunk once would lose **1,025,536 B of its own space** — and
+the authoring loop's second iteration IS a write onto a row the first one shrank. The MFT
+records `size`, never a reservation, so the original allocation is unrecoverable from the
+archive; the bound has to come from geometry plus the caller.
+
+**Design: an explicit ceiling, never a greedy annex.** `grow_to=` is a keyword-only
+statement of the row's entitlement; with it unset, NOT ONE new check runs (asserted, and
+every caller in tree and vault is on that path). Greedy geometry-max is rejected in the
+docstring because `claimants()` computes each NEIGHBOUR's reservation from its current size
+too — geometry cannot tell a free block from a shrunk neighbour's wanted-back one. The gate
+is **`Writer._grow_gate`, one copy shared with `restore()`** (checked on the syntax tree),
+four conditions where `restore()` had one: claimants; an EOF bound (refused BEFORE the
+write — `datcheck` rule 5 tests `offset + size`, not the rounded reservation); the live MFT
+against the header's own `mft_offset`/`mft_size`, independent of row 3 (proven by sabotage:
+claimants stubbed to [], the MFT arm still fires); and `datplan.classify_runs`' withheld
+container runs, quoting `Exclusion.why()` — the largest new risk, since `replace()` never
+allocated before. **`restore()` gained conditions 2–4 by the factoring** — and it is the
+verb already used on real 4.2 GB copies; a `--restore` into a withheld run was accepted
+before and is refused now. The journal record covers the WHOLE new reservation and names
+the annexation; post-write, the grow path runs `datmove.overlaps()` and reads the payload
+back through the raw handle. The refusal now picks its remedy FROM the geometry: blocks
+free → names `--grow-to`; blocks claimed → the old sentence.
+
+**The verifier's strongest result is about the shape of the residual risk.** The recon's
+"grow past a shrunk live neighbour" construction is **geometrically impossible** — a grow
+runs upward from the row's own offset and must cross the neighbour's head, which claimants
+sees at full reservation. The only reachable form is a ZERO-SIZE neighbour (`replace(row,
+b"")` — rebloat's own arm), which every allocator in the stack treats as owning no extent;
+a stated `grow_to` can then annex the armed head's former blocks. Measured: **fully
+revertible** (the journal covers the annexed range), and the follow-on rebloat refuses
+loudly rather than silently. Recorded as the design's stated tradeoff, not a defect. Also
+recorded: `_grow_gate` judges against the `Writer.__init__` snapshot, like `claimants()`
+always has — stated in the docstring. An interrupted grow was killed at **every** put()
+boundary and restored byte-identically each time, annexed region included.
+
+### 17.4 The journal — from a liability to a durable file
+
+**Measured first (§14.4 understated it):** hex encoding is 4.00×; `flush()` truncated and
+re-serialised the whole document per record — **4.66× write amplification** on a 5-record
+fixture replace, **34.1× / 533 MB** on the real `a4run7-flip.journal` (137× the archive
+bytes its 60 records protect, quadratic in record count); no fsync anywhere, while `put()`
+fsyncs the archive it is supposed to precede; and a torn flush lost the WHOLE journal — an
+unhandled `JSONDecodeError` out of `revert()`, a traceback on the one tool that exists for
+that moment.
+
+**The fix, and one deliberate deviation from the spec.** Append-only, one record per line,
+`os.fsync` per record, opened LAZILY so a refusal still leaves no journal. The spec said
+headerless JSONL; the builder kept the file **a valid JSON document at every fsync
+boundary** (header once, records appended, only the 3-byte closer rewritten) because
+`test_datalloc.py`'s prefix replay reads journals with a plain `json.load(fh)["edits"]` and
+59 real journals sit under `vault/` — every reader keeps working with zero migration. Every
+measurable goal held anyway: **4.66× → 1.00×**, five truncating opens → one, zero fsyncs →
+one per record, each with a sabotage that drops it back. A journal cut mid-record replays
+every complete record and REPORTS the dropped byte count; cut mid-header it is a named
+refusal; pure junk is refused without opening an archive. A verifier drove **4,743
+truncation offsets** without escaping a traceback or losing a durable record. Old-format
+replay is checked against a SYNTHESISED journal — the test never opens the vault.
+`test_datwrite` floor 138 → **199**.
+
+### 17.5 The creation path — the skeptic's RED, and the fidelity gate it bought
+
+§14.2's hole-3 fix made `datalloc`'s gate DECODE — and that reading was itself the trap
+(C-13): decoding refutes **framing** damage only. The stream's trailer is the decode loop's
+own bound, so a corrupted trailer "agrees with itself" — over 528 single-byte flips of one
+real stream, 394 decoded to the wrong bytes and were ACCEPTED; a corrupted-trailer stream
+went to disk through `alloc(confirm=True)` AND the CLI, green everywhere. `datmove` and
+`replace()` both refuse the identical bytes; `declaration_fault`'s docstring had already
+said the quiet part ("for compression 8 the expected payload is MANDATORY") and `datalloc`
+never called it.
+
+**Closed 2026-08-20, `datmove`'s shape:** `Stream` carries `expect=` (mandatory with
+`extraBytes 8`) and `stored_lookalike_ok=`; every stream routes through
+`datwrite.declaration_fault` — which also brings the compression-0 direction, the stored
+lookalike §13 had recorded as an OPEN GAP (hatch cost: 4 in 38,621 real stored rows). The
+gate runs in **`alloc()` as well as `plan_alloc()`**, because `alloc(plan=P)` ran neither
+and a doctored plan had written `extraBytes 8` over plainly stored bytes; a plan whose
+`extra_bytes` disagree with its streams is refused outright. CLI: `--expect FILE`, one
+compressed stream per invocation, malformed `--stream` specs refused by grammar instead of
+falling through to a file open. Twelve sabotages, all twelve red; the sharpest —
+`declaration_fault` stubbed to `None` — puts the corrupted stream back on disk in a green
+archive, which is the defect exhibited rather than described. `test_datalloc` floor 142
+(was 98 at HEAD) → **177**.
+
+**Also new on this path:** the end-to-end comp-8 allocation itself — until this rung nothing
+had ever pushed `alloc(..., confirm=True)` with a real `gwenc` stream and read it back —
+and the CLI form `--stream FILE[:FLAGS[:EXTRA]]`. Pre-existing and left open, recorded:
+`plan_alloc` accepts a plain id whose bit-31 renamed spelling exists while
+`next_free_file_id` skips it (the dual-registration family, worth its own look before
+anyone allocates near a renamed id).
+
+### 17.6 The flow test — `test_authorflow.py`, the sequence nothing else measures
+
+Every verb has its own green suite; this arc's two worst defects (C-6, §14.4) were both
+**compositional** — green in isolation on the day. So: one synthetic archive, six steps at
+compression 8 throughout — AUTHOR (four revisions of an invented file, one of them gap A's
+own RLE shape, with both table builders called on the same counts so the old declared-1 and
+the new declared-5 sit in one check), CREATE (a new file id, head + partner, `expect=`
+declared), REVISE smaller through the real CLI, GROW back with `--grow-to` (the step that
+was impossible before this rung), OUTGROW (refused, with the remedy sentence CHOSEN by
+geometry — step 4 gets the `--grow-to` branch, step 5 the other) and relocate via
+`datmove.move(compression=8, expect=)`, then UNDO — four journals replayed newest first,
+**composing back to the pristine fixture byte-for-byte with every intermediate state
+checked**, the file id unregistered again. Every step is checked by DECODE, never by a
+checksum, because no checksum in this format can tell a comp-8 row holding the wrong
+payload from the right one. Step 2b corrupts the authored stream three ways and it now
+takes TWO gates to catch them (measured: `looks_compressed` stubbed alone, 1 red;
+`declaration_fault` alone, 3; both, 4 — and the corrupted stream reaches disk). Floor
+**59**, half a second, no vault, no client.
+
+### 17.7 Process notes, for the next rung
+
+- **The skeptic pattern paid for the fifth consecutive rung** (§14.3 counted four): a
+  builder's "proven end to end" was true of framing and the happy path, and the
+  fidelity direction reached disk. Sabotage — break one arm, count which checks go red —
+  again found what review prose did not.
+- **Concurrent builders on disjoint files worked, with one seam**: `test_datwrite`'s new
+  §11j names `gwenc._refuse_zero_block`, so `datwrite`+`gwenc` had to land in one commit —
+  cross-file coupling through a test is the thing to look for when splitting work.
+- Line-citation drift is real cost: ~15 citations into `datalloc.py`/`gwenc.py`/`gwmatch.py`
+  moved and were re-resolved against the final tree. Nothing enforces these
+  (`test_srclint` has no citation checker); they were repaired by hand because they are
+  the repo's audit mechanism, not because anything went red.
+
+### 17.8 What is still open, all named elsewhere but collected here
+
+1. **The client oracle for the new shapes** (§17.2): a one-launch run reading a small
+   authored row AND a `datalloc`-created row, when a launch is next convenient.
+   **STAGED 2026-08-20 as A9 — §18. RAN the same morning — §18.6, GREEN**: the client
+   read the created chain and the small rows; still open afterwards are only the shapes
+   no real payload produces (the phantom pairs) and E3's unwitnessed rider.
+2. **The FA1 full-set write-back** (§17.1): the payload must be re-authored; the encoder,
+   the write verbs and the budget arithmetic all exist now.
+   **STAGED 2026-08-20 as A10 — §19. RAN the same day, P1 FIRED — §19.6**: the creature
+   visibly slowed against a baseline clip, so playback timing lives in the linked key
+   clock and is now an authored control surface. The write-back question is CLOSED.
+3. **A5** stays unrun (stored-size ceiling; §5 D), unchanged by this rung.
+4. The renamed-id disagreement in `datalloc` (§17.5), the `_grow_gate` snapshot semantics
+   (§17.3), and gap E (accepted, §17.2).
+
+---
+
+## 18. A9 is STAGED — 2026-08-20. The client oracle for §17's shapes, built, gated and adversarially verified; the deploy and the launch are the owner's
+
+**The rung: one loopback launch answers what §17 could not** — does the retail client read
+(a) small rows compressed by us, (b) a row `datalloc` CREATED under a new file id, and
+(c) the one degenerate table shape reachable on a real payload. Script and runbook:
+`vault/research/archivewrite/a9stage.py` + `A9-RUN.md` (gitignored by design, like every
+stage in this arc); staged archive `vault/exports/archivewrite/a9/Gw.a9.dat`, 4.2 GB.
+
+### 18.1 The measurement that designed it, four decisive facts
+
+- **All sixteen proven-read files fit their own reservations under our encoder at the DP
+  dial — including 222949.** §11.6's "12 B over at every dial" was measured on the *flipped*
+  payload; unmodified, ours is 7,644 B — the same size as retail's to the byte, different
+  bytes (crc `0x624BFFA2` vs `0xA1A26950`). C-2's rule held: name the copy
+  (`run/2026-07-29…/Gw.dat.retail` throughout).
+- **The verdict fires at LOAD, not at an animation lottery.** The client's FA8 loop
+  (`0x00794850–0x0079492D`) resolves EVERY link at model load and requires
+  `m_seqCount != 0` per link — so "the hatcher spawned with normal proportions and
+  animated" IS the statement that all fifteen links, including a created row, resolved,
+  decompressed and parsed. 100 % readout coverage; no dependence on which of 242 sequence
+  records the variant picker rolls.
+- **Two of the four target shapes are UNSHIPPABLE on real content, and are recorded, not
+  forced**: the phantom-pair distance and phantom-pair literal tables occur zero times over
+  17 files × 6 dials, 900 random small rows and the 2,500 most compressible rows in the
+  archive. Their client oracle waits for a payload that legitimately produces them.
+- **The all-skip declared-5 distance shape lives in exactly one family** — rows 8295–8306
+  (twelve 56/60 B rows, 6,146 B payloads, static registered content, definitely not
+  scratch). Whether the client reads them at map load is UNRESOLVED — the map-dependency
+  search's null FAILED ITS POSITIVE CONTROL (the same list omits the shell, the body and
+  15018, all demonstrably loaded), so the null is worth nothing and the arm is a
+  zero-cost rider scored "nothing asserted", never the shape oracle.
+
+### 18.2 The edit set (3 rows in place, 3 created, size unchanged, nothing relocated)
+
+**E1, the headline:** file `0x5F0AD` created by `datalloc.alloc` — a 3-stream chain
+mirroring 222949's (head = our encode of its 11,878 B payload, 7,644 B, `expect=`
+declared; mid and tail = the sibling rows' stored bytes verbatim), landing on rows
+[35301 (retail's only spare, reused), 177335, 177336]. Through the Python API — the chain
+has two compression-8 streams and the CLI takes one `--expect` per invocation, a §17.5
+refusal doing its job. **E2, the reader:** the shell's FA8 record 13 retargeted
+222949 → `0x5F0AD` (a 4-byte splice at container offset 29790, exactly 3 bytes differ),
+shell re-encoded in place at 20,060 B — transport witnessed by run 7 on this exact row,
+which is what keeps an E1 failure attributable (H9). Retargeting touches only the hatcher:
+28 other shells link 222949 and keep retail's copy. **E3, the rider:** rows 8295–8306
+re-encoded in place, payloads byte-identical, our bytes carrying the attested all-skip
+declared-5 shape on the wire (traced).
+
+### 18.3 The nine hazards the A8 skeleton did not guard, all gated
+
+H1 MFT slack (the sharp one: the ACTIVE archive shows one client texture session consumed
+ALL nine slack rows and the only spare; the stage leaves 168 B / 7 rows, floor-gated
+post-write with zero margin); H2 identity on both writers (file-id walk, chain walk,
+payload byte-compares); H3 the retarget gated positively (FA8 decode == retail's fifteen
+with index 13 swapped); H4 retarget-squared (size+crc fingerprints — size alone cannot see
+a 3-byte, 0-length edit); H5 the id pinned, never recomputed; H6 crc-sweep counts read
+from the sweep (+3); H7 our chain ascends where retail's descends (recorded in the
+prediction's failure short-list); H8 the shared run directory (deploy refuses without
+`--yes`, probes the file handle, and another session WAS in it at 00:11 on 2026-08-20);
+H9 the E1/E2 joint-failure cell attributed in advance.
+
+### 18.4 The adversarial pass — GREEN, and the artifact is reproducible
+
+The skeptic's decisive result: **a from-scratch rebuild in an isolated vault produced a
+byte-identical 4.2 GB archive** (sha256 `ac3fe9e1…af0caa90`), twice. Its own instruments
+(never the builder's code): the whole-file byte diff resolves to **14 regions, every byte
+owned by exactly the intended rows** plus the alloc's documented structural writes — no
+stray owner anywhere; all pinned constants reproduced; preflight 10/10 / generations 6/6 /
+crc sweep 177,322 (+3, 0 bad) on the stage; five hostile-input gate falsifications all
+refused loudly with the stage byte-unchanged. Three non-blocking findings, two fixed
+same-day (F1: the PRE-write H1 arm was a check that cannot fail — deleted, the binding
+post-write gate stands; F2: rebuild-over-stage recopies 4.2 GB — now in the runbook) and
+one recorded (F3: `--retail` discarding the client's ATEX rows is followed by a green
+launch in two precedents, but "the client recompiles them" stays an inference). One of the
+skeptic's own 59 checks went red and **retail's own row was the control that corrected the
+skeptic**: `dist_lens [(0, 4)]` on an all-skip table is the installed symbol, not a code
+length — both streams carry the identical shape.
+
+### 18.5 The predictions, pre-registered (verbatim in `a9stage.py`'s docstring)
+
+P1 stage gates (all fired green 2026-08-20). P2 the launch: 8/8 checkpoints, hatcher
+spawns with normal proportions and walks/attacks/casts — which by §18.1's load-time fact
+is the statement that the created row resolved; no assert dialog, and **never click the
+dialog** (its default button uploads a crash dump from a patched client to ArenaNet).
+P3 post-launch (`--verify-after`): our 16 rows byte-identical, only scratch churn,
+`entry_count`/`mft_size`/`mft_offset` unmoved. P4 named failures: missing creature /
+white box / error 12 at `0x0079644E` / AV ⇒ the creation path, with H7's chain direction
+on the short list; E3 scores "nothing asserted" whatever happens. **The run is the
+owner's**: deploy with the client closed, `python toolkit/harness/session.py --enemy
+--hold 150 --shots 10`, then `--verify-after`, then `--retail` or leave deployed.
+`A9-RUN.md` is the procedure.
+
+### 18.6 A9 RAN — 2026-08-20, ~09:40, owner-driven, and it is GREEN on every pre-registered prediction
+
+**THE RETAIL CLIENT READ A ROW THIS PROJECT CREATED.** Owner at the keyboard, loopback,
+pinned build 38797 (the server's own log shows it re-selecting the matching 38797 keyring):
+deploy → launch → *"Hatcher with normal animations/proportions"* → owner closed the client
+→ `--verify-after`. By §18.1's load-time fact — the FA8 loop resolves EVERY link at model
+load and requires `m_seqCount != 0` — a normal, animating hatcher **is** the statement
+that the `datalloc`-created chain (file `0x5F0AD`, rows 35301/177335/177336, two of the
+three appended to the MFT by us) was resolved by id, decompressed from our compression-8
+bytes, and parsed as a skeleton; and that the retargeted 20,060 B shell — a SMALL row
+compressed by us — was read on the way there.
+
+**P2, the instrumented half** (capture `vault/captures/harness/20260820T094015`): `created
+agent 10 (Hatcher [Collector]) — hostile`, then **37 `walks to` cycles and 54
+attack/cast lines** in the gamesrv log — locomotion, melee and casting, the three classes
+this arc has always used as the bar (run 7 asked for ≥ 3 walk cycles; this run has 37).
+**No `crash-dialog.txt` exists** — the one machine-readable assert channel is absent.
+Honest gap: **`report.json` was never written** because the owner closed the client during
+the hold, so the 8/8 checkpoint table for this run does not exist; the verdict rests on
+the owner's observation, the gamesrv log and the archive sweep, and none of those three
+needed it. The capture's only `error` lines are the documented clean-teardown
+`ConnectionResetError` (session.py:1155's own caveat). The `377` grep hits are the
+logger's `[377]` tag, not file-id mentions — nothing asserted from `Gw.log`, as
+pre-committed.
+
+**P3, the archive — every line green**: preflight 10/10, generations 6/6, crc sweep
+**177,322 payloads 0 bad** (the +3 from our alloc, per H6), size unchanged, `growth:
+None`. Rows changed since deploy: **2 — 8315 and 8316**, the client's own scratch rows,
+relocated exactly as in A8 and `studies/datwrite` §6; `tier0` shows only
+`descriptor_counter` (the client Flushed — which makes the next line the strong one).
+**Our 16 rows are byte-identical to what was deployed, `0x5F0AD` still binds to row
+35301, and the chain [35301, 177335, 177336] is intact** — the created rows SURVIVED the
+client's Flush, so nothing was repaired or discarded. `entry_count`/`mft_size`/
+`mft_offset` unmoved at 177,337 / 4,256,088 / `0xF8FFF000`: **H1's fear did not fire this
+session** (the client wanted no MFT slack), and H7 is answered in passing — **the client
+accepted our ASCENDING chain** where every retail chain descends.
+
+**What this settles, added to §16.2's ledger:** the creation path is client-proven —
+`datalloc` + `gwenc` + the fidelity gate produce rows the retail client loads, for one
+chain shape on one build. Small-row compression is client-proven at 20,060 B and at
+7,644 B stored. **What it deliberately does not settle:** E3 stays scored *nothing
+asserted* — the twelve rider rows came through the launch intact like everything else,
+but no instrument shows the client opened them, so the all-skip declared-5 shape still
+has no client witness, and the two phantom-pair shapes remain unshippable-and-unproven
+(§18.1). The caveat sentence this run retires ("no client has ever read a row this module
+allocated") is superseded in `datalloc.py`'s docstring and TESTS.md's entry, scope stated.
+
+**State of the machine after the run: the A9 archive is LEFT DEPLOYED** in
+`vault/run/2026-07-29_221c13772c7a/` (verified clean by the sweep above; the owner has not
+run `--retail`). `a9stage.py --retail --yes` restores the baseline; the staged copy under
+`vault/exports/archivewrite/a9/` stays rebuildable-by-hash either way.
+
+---
+
+## 19. A10 is STAGED — 2026-08-20. The FA1 write-back, re-authored onto the PROVEN clock; the launch is the owner's
+
+**The rung.** §17.8 item 2 asked for the U7-era "full animation set" write-back — the edit
+`datmove` refused pre-encoder (*"nothing fits… 953,856 B"*), whose payload never persisted.
+Script + runbook: `vault/research/archivewrite/a10stage.py` + `A10-RUN.md`; staged archive
+`vault/exports/archivewrite/a10/Gw.a10.dat`. **15 rows rewritten in place at compression 8,
+nothing allocated, nothing relocated, MFT untouched.**
+
+### 19.1 The U7-era edit was structurally a NULL, and that is the design's first finding
+
+`u7prep_hatcher.py --file-id 15018` would have scaled the **n3C key table** — 471 B of
+1,514,560, 0.031%. That table is not what the sampler reads: **the motion lives in
+`blk2C`'s 76,008 per-node channel key times (304,032 B), and the sequence clamp windows
+ride the SAME clock** — both max at exactly **22,883,332** on 15018, while the n3C table
+maxes at 580,000 and its binding to `start` was already refuted
+(`studies/anim/FINDINGS.md:316-318`, 181/21,535). So U7's shell-retime null was
+over-determined: it retimed a tag track. Also measured at population for the first time:
+**242/242** of the shell's records (and 237/237 of 15018's own — it carries its own FA8
+list) hold their `(start, end, u32_0F, f32_13)` verbatim in the file their selector names.
+Run 3's failure was breaking that one-sided; this design's whole shape is the fix.
+
+### 19.2 The edit — DESIGN B, and how it got that name
+
+**Scale ONLY the proven clock, ×4:** every `blk2C`/`blk48` channel key time in fourteen
+files (222949 dropped — its ×4 fit was +4 B, the knife edge §18.1 already recorded), and
+every sequence record's start/end **iff the file its selector names was retimed** — 234 of
+the shell's 242 (the 2 selector-0 records address the shell's own unscaled curves; the 6
+selector-14 point at untouched 222949), 231 of 15018's 237. **Everything else stays retail
+everywhere**: the n3C table, `u32_0F`, `f32_13`, the n40 sound events, n3E.
+
+Two rounds got it there, and both catches are worth the record:
+- **The build agent caught the ratified spec contradicting itself** (rule vs count on the
+  shell's windows) — and, bigger, that the recon's pinned 15018 number came from a variant
+  scaling only its 110 selector-0 windows, leaving **121 records with retail windows over
+  ×4 curves** in the file that carries the walk: exactly what the coupling invariant
+  forbids. It stopped, measured, adjudicated by the archive, and reproduced the spec's
+  pinned number to the byte as an anchor proving the divergence was the rule, not the
+  encoder.
+- **The first adversarial pass (Design A: n3C/n40/n3E also ×4) was GREEN on everything
+  asked — and its F4 found what the design missed**: `u32_0F` is statistically a clock
+  into the file's own n3C table (12/12 membership on both FA8 carriers, ~0.01% null), so
+  scaling the table while leaving the lookups half-moves a second coupling; and chasing it
+  shows no partial scaling preserves both measured couplings. **Design B moves neither
+  half.** The membership statistic became a gate with a control that drops 12→1 against a
+  ×4 table — Design A's own shipped state, now provably refusable.
+
+### 19.3 The verification — blind re-derivation, with a discriminating control
+
+The skeptic implemented the edit from the ruling prose alone, before reading the builder's
+code: **15/15 staged rows byte-identical to its independent derivation**, with a Design-A
+control alongside that goes RED on 11 of 15 files — the stage provably encodes Design B.
+Also: couplings 242/242 + 237/237 on both match rules with controls that collapse to
+≤9/242; **260,240 channel values compared, 0 changed — only clocks moved**, every ratio
+exactly 4.0 (shell's own 970 channel times and 222949 at 1.0); whole-4.2 GB diff with
+**zero unowned bytes** (the one 4-byte stray resolved to the MFT self-crc the journal
+itself announces); envelope clean on all 349 tables; sweep equal to retail's 177,319/0;
+**two isolated rebuilds hash-identical to the shipped artifact**; ×16 double-apply
+impossible from the code path (the build only ever reads retail, crc-pinned). Fit
+highlights (Design B, measured): 15018 **1,016,720 B** (+12,912 slack), 87333
+**1,148,528 B** (+13,200), the shell **20,092 B** (+388) — full per-row table in
+`A10-RUN.md` §3 and `a10-fingerprints.json`; every row inside its own reservation, every
+reservation exactly the gap to the next row, 0 overshoots.
+
+### 19.4 Predictions, pre-registered (verbatim in the docstring) — BOTH branches are findings
+
+**P1**: with the curve clock and the windows ×4 together, the creature animates at **one
+quarter speed** — the readout cues in shape-likeness order: **foot slide** (server ground
+speed unchanged, cycle ×4), attack swing vs the damage tick, cast vs the server's cast
+lifecycle. **P2**: nothing changes → playback rate does not live in the linked key tables
+or the windows — sharpening `studies/anim`'s open timing question, and NOT dismissible as
+"file not read" (run 7 proved this channel reaches the screen). **P3** ordered failures:
+N2 first (×4 puts 15018 at 915.3 s, 3.09× beyond retail's 296.0 s corpus ceiling — the
+envelope risk, named, not hidden); unscaled n40/n3C events misaligning is cosmetic and not
+the readout; truncate-or-freeze → re-check the coupling gates. **N6**: no within-frame
+control exists (both selector-0 records are empty spans), so the owner records a BASELINE
+clip of the provoked walk before deploying — and **video, not stills**. Corrections banked
+en route: the blast radius is **28 other shells** linking 15018 (30 rows total over the
+retimed set, 252 FA8 carriers as the positive control), not the 7 a row-band scan showed;
+the recon's "34 of 44" membership denominator is not reproducible (34 of 48 by per-file
+distinct; the numerator is exact); and Design B is NOT uniformly smaller than Design A
+(66614/73940 +4 B each — encoders are not monotone; a pre-registered prediction refuted
+and kept).
+
+### 19.6 A10 RAN — 2026-08-20, ~12:24, owner-driven, and P1 FIRED. Playback timing lives in the linked key clock
+
+**Owner, with a video (`2026-08-20 12-24-37.mkv`): *"normal in control then slowed down
+in the deployed."*** The baseline clip (same provoked walk, pre-deploy archive — retail
+on all 16 rows, verified by `baseline_premise()` at deploy time) shows normal motion; the
+treatment clip shows the creature visibly slowed while server-driven ground movement
+continued — P1's foot-slide shape, between-runs as N6 required. **The finding: playback
+timing LIVES in the linked files' curve clock (`blk2C` channel times + clamp windows),
+and it is now an authored control surface.** U7's shell-retime null is explained, not
+contradicted: it retimed the n3C tag track in the one file of the graph where the clock
+does not live. Cross-recorded in `studies/anim/FINDINGS.md` §6 (ANSWERED block), whose
+rate-argument mechanism stands as mechanism beneath the now-measured control.
+
+**The instrumented record, all green** (capture `20260820T122357`; `--verify-after`):
+preflight 10/10, generations 6/6, crc sweep **exactly retail's 177,319, 0 bad** — the
+launch created no payload rows; rows changed since deploy: **2**, the client's scratch
+rows 8315/8316, `tier0` only the descriptor counter (the client Flushed); **our 15 rows
+byte-identical through that Flush**; MFT numbers unmoved; **N1 re-measured on the ACTIVE
+archive: 237/237 and 242/242 on both rules**, F4 membership and the region gates all at
+their retail pins; **30 logged `walks to` cycles** against N9's ≥3 bar; **no
+`crash-dialog.txt` exists**; the only `error` lines are the documented clean-teardown
+resets. **N2 is retired by the only oracle that could retire it**: the client read and
+played key times to 91,533,328 — 3.09× beyond retail's shipped ceiling — with no assert.
+
+**Honest bounds on the claim.** The magnitude was not frame-measured — the recorded
+strength is "visibly slowed vs baseline", not "×4 measured"; the video can be
+frame-analysed later if the number is ever load-bearing. And the readout is the owner's
+observation plus the between-runs control, exactly as pre-registered — the run design's
+answer to `HANDOFF §6`'s "a retime got hedging" is that THIS retime did not hedge.
+
+**With this, the ladder's capability story closes end to end: authored CONTENT (run 7),
+CREATED rows (A9), authored TIMING (A10) — every one client-proven, every one at
+compression 8, in place.** What remains open in this arc is only §18.1's unshippable
+phantom-pair shapes and E3's unwitnessed rider — both recorded, neither blocking anything.
+
+### 19.5b State after the run
+
+**The A10 archive is LEFT DEPLOYED** (verified clean by the sweep above; the owner has
+not run `--retail`). Note the deployed world's hatcher animates at quarter speed by
+design — restore with `a10stage.py --retail --yes` (client closed) before any session
+that wants normal motion. Both staged archives (a9, a10) remain under
+`vault/exports/archivewrite/`, rebuildable by hash.
+
+### 19.5 State, and the one operational flag — SUPERSEDED by 19.6/19.5b; kept for the pre-launch record
+
+The stage is BUILT and verified; **`--deploy` has not run**. The active run-directory
+archive is currently retail-on-all-16-A10-rows (measured — NOT the A9 stage, despite what
+two documents briefly claimed; `baseline_premise()` now measures this at deploy time
+instead of trusting prose). **H8 is live**: a client ran against the shared run directory
+at 11:44 on 2026-08-20 from outside this session — confirm nobody is mid-run before
+deploying. Procedure: baseline clip → `a10stage.py --deploy --yes` (client closed) →
+`python toolkit/harness/session.py --enemy --warn 0 --hold 420 --shots 10 --walk
+"zoom:-12 pitch:300 alt:3 shot:1 wait:4"` → video the walk → `--verify-after` →
+`--retail --yes` or leave deployed. Never click the crash dialog.
 
 ---
 

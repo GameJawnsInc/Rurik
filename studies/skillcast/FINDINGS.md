@@ -942,7 +942,11 @@ frame-code ranges. A server that hands out large buff ids will assert in the
 client the moment the effect UI touches one, so **buff ids are a small dense
 space the server must allocate carefully**, not an arbitrary handle.
 
-## 14.4 The one field the binary would not name — CONTESTED
+## 14.4 The one field the binary would not name — ~~CONTESTED~~ RESOLVED §14.7
+
+*(2026-08-19: the probe this section asked for ran — the field is the attribute RANK the
+effect renders at. GWCA's `attribute_level` confirmed, Headquarter's `effect_type`
+refuted. The static analysis below stands as the record of why a probe was needed.)*
 
 Record `+0x04`, from field 4 of opcodes 63 and 65 and field 3 of opcode 66.
 `studies/skills` has it as Headquarter's `effect_type` — codes 0 = condition or
@@ -985,8 +989,130 @@ Two more probes join the queue, after the six in §11:
 
 | # | Probe | Question | Prediction |
 |---|---|---|---|
-| 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. |
-| 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. |
+| 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. **RAN 2026-08-19 — every clause held: §14.8.** |
+| 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. **RAN 2026-08-19 — prediction B, exactly: §14.7.** |
+
+## 14.6 Re-derived blind on build 38833, joined to the container family, and named (added 2026-08-19)
+
+The hero/henchmen arc's container sweep re-derived this entire section **independently,
+without knowing it existed** — tracers on build 38833 walked the `0x00F8` despawn sweep's
+`+0x508` remover to the same eight log strings, the same six opcodes, the same two-list
+record, the same field maps, before the collision with this section was noticed. Two
+builds, two blind derivations, field-for-field agreement; full record
+[pvpui §31.2](../pvpui/FINDINGS.md). What that session added on top of §14.2–§14.4:
+
+- **The container is one of SEVEN** the `0x00F8` despawn sweep clears per agent id off
+  `charCtx[+0x2C]` — this section's `+0x508` sits beside attributes (`+0xAC`), heroes
+  (`+0x584`), pets (`+0x6AC`), professions (`+0x6BC`), skill bar (`+0x6F0`) and a
+  GmEffect value list (`+0x5BC`). The despawn path for a buffed agent was §14's unread
+  edge.
+- **The record header internals**: both embedded arrays are `{ptr, capacity, count,
+  growIncrement}`; the outer array is sorted by agent id, the embedded arrays by buffId
+  (the dup-check is a binary search on entry `+0x08`).
+- **The full event set**: `0x3F`→`0x10000062`, `0x40`→`0x10000063`, both TargetAdds→
+  `0x10000055`, `0x43`→`0x10000056`, `0x44`→`0x10000057`. `0x43`'s wire field 2 is
+  stored nowhere — forwarded only into the event payload.
+- **Two enumerator getters** (`0x0081C6A0` source / `0x0081C6E0` target on 38833, thunks
+  `0x0080DA60`/`0x0080DA80`) feed the GmEffect band — independent corroboration of both
+  strides.
+- **38833 VAs**: thunks byte-identical to 38797; handlers +0x60 as a block; bodies ~+0x50.
+- **Named in `schema/overrides.json`**: `BUFF_SOURCE_ADD` / `BUFF_SOURCE_REMOVE` /
+  `BUFF_TARGET_ADD` / `BUFF_TARGET_ADD_TIMED` / `BUFF_TARGET_EXTEND_TIMED` /
+  `BUFF_TARGET_REMOVE` — the client's own names from §14.1, finally filed.
+
+~~§14.4's CONTESTED field is unchanged and its `buff_type_field` probe is still the settle
+path~~ — **the probe ran the same day and settled it: §14.7** — with one placement
+correction: on opcodes 63/65 the contested dword rides wire field **4** (`struct+0x10`);
+field 3 is the skill.
+
+## 14.7 The probe ran: the field is an ATTRIBUTE RANK — GWCA confirmed, Headquarter refuted (2026-08-19)
+
+**MEASURED, caged loopback, two runs, captures `20260819T232426` and `20260819T233451`.**
+The `buff_type_field` probe as specced in §14.5 row 8: three `0x0042` arms carrying the
+same skill (316 — which the tooltip revealed as *"To the Limit!"*, a Warrior Tactics
+shout) with the contested field at 0, then 14, then **12 — deliberately not one of
+Headquarter's four codes, and deliberately out of order** so the values could not be
+confounded with the monotone buffId (1, 2, 3) or with time. Each arm removed by `0x0044`
+before the next.
+
+**Run 1 killed `effect_type` on the icon surface.** Pixel-diff over the effect-monitor
+slot: arm-vs-arm differences of 1–4 px (the icon's own sparkle animation — equal to the
+within-arm frame-to-frame floor) against 2,687 px for icon-present-vs-absent. The three
+arms render **identically** — same icon, same slot, same border — and the out-of-enum 12
+misbehaves in no way. A four-value kind enum that changes nothing visible about the kind
+is refuted on the only surface Headquarter's reading predicts.
+
+**Run 2 read the tooltip, and the tooltip is the confirmation.** A new harness verb
+(`--walk "hover:0.0442,0.0543,38"` — cursor parked on the slot, wiggled for hit-testing,
+never a click) held the effect tooltip open through all three arms:
+
+| arm | field sent | tooltip: duration / max Health / adrenaline cap | `round(lo+(hi−lo)·r/15)` at r |
+|---|---|---|---|
+| 1 | **0** | (10 seconds.) / +10 / 1 | 10 / 10 / 1 |
+| 2 | **14** | (19 seconds.) / +57 / 6 | 19.33→19 / 56.67→57 / 5.67→6 |
+| 3 | **12** | (18 seconds.) / +50 / 5 | 18 / 50 / 5 |
+
+Nine numbers, three independent scale windows out of skill 316's own table row
+(`duration 10..20`, `scale 10..60`, `bonus 1..6`, read by `skilltable.py` from the same
+binary), every one landing exactly on the client's own interpolation formula — the
+`0x005A8920` formula the combat arc measured, divisor 15.0 — applied to the WIRE value.
+The dip from 57 to 50 between arms 2 and 3 is the discriminator doing its work: buffId
+rose monotonically while the numbers tracked the field.
+
+> **The field is the ATTRIBUTE RANK the effect renders at.** GWCA's `attribute_level`
+> is CONFIRMED as the concept; Headquarter's `effect_type` is REFUTED twice over. Scope,
+> stated precisely: what is measured is the effect TOOLTIP's scaled numbers being
+> computed from this field. Nothing was measured about gameplay state — the player's
+> health bar read 100 in every frame, so the +57 was display, exactly like every other
+> field in this family.
+
+Two sharpenings that came free. **The tooltip's "(N seconds.)" is the description
+scaler, not the record's duration**: the wire carried `duration = 30.0` in every arm and
+the tooltip said 10/19/18 — so the record's `+0x10` float and the description's duration
+number are two different things, and the icon's countdown (not observed to expiry here)
+is the only reader of `+0x10`. And the tooltip footer *"(Attrib: Tactics)"* confirms
+`s_attrib` row 21 = Tactics from the player-facing side.
+
+The source-entry `+0x04` (opcode 63's same wire slot) shares the descriptor and the
+record offset; its rendering surface (the upkeep row) was not probed, so the rank
+reading extends there as RECONSTRUCTION by symmetry, not as a measurement.
+
+## 14.8 The `buff_side` probe ran: two lists, two UI surfaces, one buffId — every clause of the prediction held (2026-08-19)
+
+**MEASURED, caged loopback, capture `20260819T235007`.** §14.5 row 7 as specced: `0x41`
+BuffTargetAdd (source and target both the player, buffId 4), then `0x3F` BuffSourceAdd
+with the same buffId, then `0x40` SourceRemove, then `0x44` TargetRemove. Read from the
+screenshots by controlled window-diffs — the first naive diff hit the zone-text fade
+("Ascalon City / Outpost" dissolves over the first ~10 s, exactly across the arm
+boundary) and was redone between two post-fade windows, which is the
+aggregate-diffs-hide-artifacts lesson doing its job.
+
+| state | effect slot (top-left) | upkeep monitor (above the energy bar) |
+|---|---|---|
+| `0x41` only | icon, **no countdown bar** | — |
+| + `0x3F` same buffId | unchanged (2,687-px signature stable) | **the skill's icon appears**, framed, ~(1120, 880) |
+| `0x40` | **icon stays** (through two more frames) | **icon goes** |
+| `0x44` | icon goes | — |
+
+> **One buff, filed under two agents, as two records with independent lifecycles —
+> confirmed on the screen.** The TARGET list draws the effects monitor; the SOURCE list
+> draws the **maintained-enchantment upkeep monitor above the energy bar**; removing
+> either leaves the other, and the join key is the buffId.
+
+Three sharpenings that came with it:
+
+- **The upkeep monitor renders from the source list ALONE.** No `0x0093` was sent in
+  this run, so whatever the `+0x5BC` table (pvpui §31.3) feeds GmEffect, the upkeep
+  icon's *presence* is not gated on it — a measured subtraction from that section's
+  RECONSTRUCTION.
+- **The countdown bar under an effect icon is the record's `+0x10` duration reader** —
+  now isolated from both sides: `0x41`'s `fldz`-hardcoded 0.0 draws **no bar** (this
+  run), `0x42`'s 30.0 draws a **depleting bar** (both §14.7 runs), and §14.7 proved the
+  tooltip's "(N seconds.)" ignores `+0x10` entirely. One field, one reader, and it is
+  not the one the tooltip uses.
+- §14.5's "a maintained enchantment costs TWO messages, and dropping it costs two more"
+  is now observed rather than architectural: each message moved exactly one of the two
+  indicators, all four transitions on camera.
 
 ---
 

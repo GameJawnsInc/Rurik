@@ -413,6 +413,23 @@ same layout the runtime does.
 
 ## 6. What stays unnamed, refuted, or open
 
+**ANSWERED 2026-08-20, from another arc — PLAYBACK TIMING LIVES IN THE LINKED FILES'
+CURVE CLOCK, and it is AUTHORABLE.** `studies/archivewrite/FINDINGS.md` §19 (rung A10),
+owner-driven, on video: with every `blk2C` channel key time and every sequence clamp
+window in the hatcher's link graph scaled **×4** (and nothing else — the n3C table,
+`u32_0F`, n40 all retail), the creature's animations visibly SLOWED while server-driven
+ground speed did not; the retail-baseline control clip from the same provoked walk was
+normal. **OBSERVED (owner, 2026-08-20 12:24; capture `20260820T122357`, 30 logged walk
+cycles, no assert).** This settles what U7's shell-retime null could not: that null
+retimed the SHELL's n3C table — a tag track (this study's own §refutation of the
+`u32@+0x05` binding, 181/21,535) — while the real clock sat in the then-unwritable
+linked files. The rate-ARGUMENT mechanism at `0x007786A6` (§2) stands unrefuted as
+mechanism; what is now measured is that the key clock is a real authored control
+surface on top of it. Bonus envelope fact: the client played key times to **91,533,328
+(915.3 s), 3.09× beyond the shipped corpus ceiling** of 29,600,003. The exact ×4 ratio
+was not frame-measured — "visibly slowed vs baseline" is the recorded strength; the
+owner's video (`2026-08-20 12-24-37.mkv`) can upgrade it if anyone needs the number.
+
 * **REFUTED and corrected**: "blk2C payloads are (w0+w4) 16-byte groups +
   w2 20-byte groups" as a record shape — the strides are byte-identical
   but the shape is times-prefix SoA per section. The 2026-08-16 quaternion

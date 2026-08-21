@@ -41,7 +41,318 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=214)
+LEDGER = checks.Ledger("agent lifetime", floor=254)
+
+
+def section_weapon_damage():
+    """The player's swing is the WEAPON's number, and that one is not ours.
+
+    Every other constant in the registry above is invented and says so. This
+    one is read out of the item ArenaNet sends: identifier 584, `arg` the
+    maximum and `arg2` the minimum, and the client's own tooltip drew
+    `Blunt Dmg: 3-5` for our hammer on 20260820T125155 -- which is how the
+    max/min order was settled, because the static read could not.
+
+    So it is pinned DIFFERENTLY from the invented ones. Those are pinned to a
+    literal so they cannot drift silently; this is pinned to the WORD, so that
+    editing the item's modifiers and editing the damage cannot come apart. A
+    literal here would be the same defect the section above exists to prevent,
+    from the other direction: it would let the content row change while the
+    test kept agreeing with a number nobody sends any more.
+    """
+    import authsrv
+    import agents
+
+    print("\nN. weapon damage: the swing is the item's own 584 word")
+    rng = authsrv.weapon_damage_range(agents.STARTER_HAMMER)
+    LEDGER.ok(rng is not None and rng == authsrv.PLAYER_SWING_DAMAGE,
+              "the swing range is READ from the equipped weapon",
+              f"{rng} -- from 0xA4880503, identifier 584 arg 5 arg2 3. Not a "
+              f"constant anyone typed: change the item's modifiers and this "
+              f"moves with them")
+    lo, hi = rng
+    LEDGER.ok(lo <= hi and lo > 0,
+              "and it is ordered min..max, which the SCREEN settled",
+              f"{lo}-{hi}. The disassembly gave two fields and could not say "
+              f"which was which; the tooltip drew `Blunt Dmg: 3-5` against "
+              f"arg 5 arg2 3, so arg is the MAXIMUM")
+    LEDGER.ok(authsrv.weapon_damage_range({"modifiers": []}) is None
+              and authsrv.weapon_damage_range({}) is None,
+              "an item with no damage word yields None, not zero",
+              "zero damage is a swing that lands and does nothing; None is "
+              "the caller falling back to HIT_FRACTION, which is what "
+              "--no-weapon and a bare machine both need")
+
+    sent = []
+    state = {"agents": {10: {"name": "t", "dead": False, "died_at": 0.0,
+                             "health": 1000.0, "max_health": 1000.0,
+                             "last_hit": 0.0}}, "pos": (0.0, 0.0)}
+    dealt = []
+    for _ in range(200):
+        sent.clear()
+        state["agents"][10]["last_hit"] = 0.0
+        state["agents"][10]["health"] = 1000.0
+        authsrv.hit_enemy(lambda op, vals, label="", quiet=False:
+                          sent.append((op, vals, label)), state, 10, 1)
+        dealt.append(1000.0 - state["agents"][10]["health"])
+    LEDGER.ok(dealt and all(lo <= d <= hi for d in dealt),
+              f"200 swings all land inside {lo}-{hi}",
+              f"observed {sorted(set(dealt))} -- absolute health points, not "
+              f"a fraction of whatever is being hit. The old model made every "
+              f"creature take the same number of swings however tough it was")
+    LEDGER.ok(len(set(dealt)) > 1,
+              "and the roll actually varies",
+              f"{len(set(dealt))} distinct values over 200 swings. The roll "
+              f"inside the range is OURS and uniform; Guild Wars' own "
+              f"distribution is unmeasured, as are every term it puts around "
+              f"the range -- armour, attribute rank, criticals")
+
+
+def section_armour_and_crit():
+    """The armour term reproduces ArenaNet's OWN measured bands, exactly.
+
+    This is the strongest check in the file and it has no free parameters.
+    `studies/isle` rung 7 published the damage model and, separately, the
+    point-value BANDS a level-20 Warrior with a customized 15-22 sword at
+    Swordsmanship 13 produced against three armour ratings in capture
+    20260818T132739 (495 damage events). Feed our implementation their weapon,
+    their rank and their armour ratings and it must land on their bands --
+    which the model can fail at six endpoints and does not.
+
+    Why that is worth more than a fixture: the bands came off retail traffic,
+    not out of this repo, and nothing here was tuned to them. A wrong divisor,
+    a wrong SL threshold, an off-by-one in the roll or a crit expressed as a
+    second multiplier instead of an armour reduction all move an endpoint.
+    """
+    import authsrv
+    import agents
+
+    print("\nN2. the armour term, against the Isle's measured point bands")
+    SWORD, RANK, MULT = (15, 22), 13, 1.20
+    BANDS = {60: (19, 27), 80: (13, 19), 100: (9, 14)}
+    for ar, (lo, hi) in BANDS.items():
+        # the roll is finer-grained than integer (>= ~40 steps, isle 3), so
+        # sample it finely rather than at the eight integer values
+        got = {authsrv.swing_damage(RANK, ar, SWORD, mult=MULT, roll=r / 8.0)
+               for r in range(SWORD[0] * 8, SWORD[1] * 8 + 1)}
+        LEDGER.ok(min(got) == lo and max(got) == hi,
+                  f"AR{ar}: our band is {int(min(got))}..{int(max(got))}, "
+                  f"retail's was {lo}..{hi}",
+                  f"from `round(roll * 1.20 * 2**((SL-AR)/40))` with SL={
+                      authsrv.attack_strength(RANK):g} at rank {RANK}. Zero "
+                  f"free parameters -- AR60's support fixes the scale and the "
+                  f"other two follow, so this can fail at six endpoints")
+
+    LEDGER.ok(authsrv.swing_damage(RANK, 60, SWORD, mult=MULT,
+                                   critical=True) == 39,
+              "and a critical at AR60/rank13 is 39, not 38",
+              "the crit takes the range MAXIMUM at AR-20. 39 is what `round` "
+              "gives and 38 is what `floor` gives -- studies/isle rules out "
+              "floor on exactly this number, so the rounding rule is pinned "
+              "here rather than assumed")
+
+    print("\nN3. the pieces the band test rests on")
+    LEDGER.ok(authsrv.attack_strength(12) == 60.0
+              and authsrv.attack_strength(13) == 62.0
+              and authsrv.attack_strength(9) == 45.0,
+              "SL is 5*rank to the threshold and +2 a rank above it",
+              "60 at rank 12, 62 at 13, 45 at 9 -- the threshold is "
+              "(level+4)/2 = 12 at level 20, WIKI-sourced and agreeing with "
+              "the wire from the opposite direction")
+    rates = authsrv.CRITICAL_RATE_BY_RANK
+    LEDGER.ok(set(rates) == {8, 9, 11, 12, 13}
+              and abs(rates[13] - 0.3429) < 1e-9,
+              "the crit rate table is the five MEASURED ranks and no more",
+              f"{rates} -- rising monotonically, which is why a damage cap or "
+              f"a fixed bonus is refuted. Rank 10 is absent because it was "
+              f"never observed; critical_rate interpolates and that is OURS")
+    mid = authsrv.critical_rate(10)
+    LEDGER.ok(rates[9] <= mid <= rates[11]
+              and authsrv.critical_rate(2) == rates[8]
+              and authsrv.critical_rate(99) == rates[13],
+              "and interpolation stays inside the measured points",
+              f"rank 10 -> {mid:.4f}, between rank 9's {rates[9]} and rank "
+              f"11's {rates[11]}; outside the table it CLAMPS rather than "
+              f"extrapolating a rate off the end of five points")
+
+    print("\nN3b. creature armour is DERIVED, and it re-derives the wiki")
+    # `AR = 3*level + profession bonus` is WIKI (GWW "Armor rating"). The
+    # bonus table was read off a DIFFERENT page's level-20 maxima (GWW "Basic
+    # armor": Warrior 80, Ranger 70, Monk 60), so feeding the formula level 20
+    # must reproduce that column. It can fail at every row and does not -- and
+    # this is the check that would have caught the picked 60 this replaced.
+    for prof, name, want in ((1, "Warrior", 80.0), (2, "Ranger", 70.0),
+                             (3, "Monk", 60.0), (6, "Elementalist", 60.0),
+                             (9, "Paragon", 80.0)):
+        got = authsrv.creature_armor_rating({"level": 20, "profession": prof})
+        LEDGER.ok(got == want,
+                  f"a level-20 {name} derives to AR {want:g}",
+                  f"got {got} -- 3*20 plus the profession bonus, against the "
+                  f"maximum GWW's Basic armor table publishes for that "
+                  f"profession. Two wiki pages cross-checking each other "
+                  f"through our arithmetic")
+    LEDGER.ok(authsrv.ENEMY_ARMOR_RATING == 3.0,
+              "and our level-1 Monk Hatcher derives to AR 3, not a picked 60",
+              f"{authsrv.ENEMY_ARMOR_RATING} = 3*1 + 0. The 60 that sat here "
+              f"for one commit was level-20 armour on a level-1 creature -- "
+              f"wrong in SHAPE, which is the failure monsterai 3.3 records "
+              f"for reach")
+    LEDGER.ok(authsrv.creature_armor_rating({"level": 1, "profession": 3},
+                                            override=60) == 60.0
+              and authsrv.creature_armor_rating({}) is None,
+              "an override still wins, and a levelless creature yields None",
+              "GWW says many PvE creatures do not follow the formula, so the "
+              "override is the documented escape hatch; None keeps the swing "
+              "falling back rather than inventing an AR")
+
+    print("\nN4. 17 replaces 16, and the control turns the whole term off")
+    sent = []
+    send = lambda op, v, label="", quiet=False: sent.append((op, v, label))  # noqa: E731
+    state = {"agents": {10: {"name": "t", "dead": False, "died_at": 0.0,
+                             "health": 5000.0, "max_health": 5000.0,
+                             "last_hit": 0.0, "armor_rating": 60}},
+             "pos": (0.0, 0.0)}
+    both = 0
+    for _ in range(300):
+        sent.clear()
+        state["agents"][10]["last_hit"] = 0.0
+        authsrv.hit_enemy(send, state, 10, 1)
+        props = [v[0] for op, v, _ in sent
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+        if agents.PROP_DAMAGE in props and agents.GV_CRITICAL in props:
+            both += 1
+    LEDGER.ok(both == 0,
+              "no swing ever sends property 16 AND property 17",
+              "p16 + p17 = 495 = exactly one event per swing across the whole "
+              "rung-7 capture, so 17 REPLACES 16. Sending both would draw two "
+              "numbers on the client for one hit")
+
+    saved = authsrv.ARMOUR_TERM
+    authsrv.ARMOUR_TERM = False
+    try:
+        seen = set()
+        for _ in range(200):
+            state["agents"][10]["last_hit"] = 0.0
+            state["agents"][10]["health"] = 5000.0
+            authsrv.hit_enemy(send, state, 10, 1)
+            seen.add(5000.0 - state["agents"][10]["health"])
+    finally:
+        authsrv.ARMOUR_TERM = saved
+    lo, hi = authsrv.PLAYER_SWING_DAMAGE
+    LEDGER.ok(seen and min(seen) >= lo and max(seen) <= hi,
+              "CONTROL: --no-armour-term gives the weapon's RAW range back",
+              f"observed {sorted(seen)} inside {lo}-{hi}. A flag that changed "
+              f"nothing would pass every check above without the term ever "
+              f"being wired to the swing")
+
+    state["agents"][10].pop("armor_rating")
+    state["agents"][10]["last_hit"] = 0.0
+    state["agents"][10]["health"] = 5000.0
+    authsrv.hit_enemy(send, state, 10, 1)
+    dealt = 5000.0 - state["agents"][10]["health"]
+    LEDGER.ok(lo <= dealt <= hi,
+              "and a target with NO armour rating falls back, never asserts",
+              f"dealt {dealt} -- defaulting the AR to a number instead would "
+              f"silently scale every hit by something nobody chose")
+
+
+def section_player_armour():
+    """The PLAYER's armour, checked against GWW's own published table.
+
+    The five armour pieces this server sends carried a decoded, screen-verified
+    `Armor: 25` and `Armor +20 (vs. physical damage)` for a day while every
+    incoming swing ignored all of it. This is that closed -- and it is checkable
+    against a THIRTY-EIGHT ROW oracle nobody here wrote: GWW's "Armor rating"
+    page publishes the damage multiplier for every armour rating from 0 to 195
+    in steps of 5, and our `2^((60-AR)/40)` has to land on all of it.
+    """
+    import authsrv
+    import agents
+
+    print("\nN5. the player's armour, against GWW's published multiplier table")
+    # WIKI (GWW, "Armor rating" section Armor tables, rev. 2026). Three decimals
+    # as printed. This is a measurement cited as evidence, not a bulk dump: it
+    # is the oracle the arithmetic is checked against.
+    GWW_TABLE = {
+        0: 2.828, 5: 2.594, 10: 2.378, 15: 2.182, 20: 2.000, 25: 1.834,
+        30: 1.682, 35: 1.542, 40: 1.414, 45: 1.297, 50: 1.189, 55: 1.091,
+        60: 1.000, 65: 0.917, 70: 0.841, 75: 0.771, 80: 0.707, 85: 0.648,
+        90: 0.595, 95: 0.545, 100: 0.500, 105: 0.459, 110: 0.420, 115: 0.386,
+        120: 0.354, 125: 0.324, 130: 0.297, 135: 0.273, 140: 0.250, 145: 0.229,
+        150: 0.210, 155: 0.193, 160: 0.177, 165: 0.162, 170: 0.149, 175: 0.136,
+        180: 0.125, 185: 0.115, 190: 0.105, 195: 0.096,
+    }
+    off = [(ar, want, authsrv.armour_multiplier(ar))
+           for ar, want in sorted(GWW_TABLE.items())
+           if abs(authsrv.armour_multiplier(ar) - want) > 0.0015]
+    LEDGER.ok(not off,
+              f"all {len(GWW_TABLE)} rows of GWW's damage-multiplier table",
+              f"AR 0 through 195 in fives, and `2^((60-AR)/40)` lands on "
+              f"every printed value. The table is players' observation of "
+              f"retail and the divisor came off 495 live damage events at the "
+              f"Isle -- two independent observers, and this check is where "
+              f"they meet. Tolerance is 0.0015 rather than half-a-last-place "
+              f"because of ONE row: AR 15 is printed 2.182 and 2^(45/40) is "
+              f"2.18102, which rounds to 2.181. Every other row agrees to "
+              f"three decimals, so that is the wiki's typo rather than our "
+              f"arithmetic -- recorded, not silently absorbed"
+              if not off else f"OFF: {off[:4]}")
+
+    print("\nN6. armour is PER-LOCATION, and the odds are the wiki's")
+    ars = {k: authsrv.player_armour_at(k) for k, _w in authsrv.HIT_LOCATION_ODDS}
+    LEDGER.ok(all(v == 45.0 for v in ars.values()),
+              "each piece is 25 + 20 vs. physical = AR 45, and nothing is 125",
+              f"{ars} -- summing five 25s is the single most natural wrong "
+              f"thing to do here. GWW: 'a character with 4 pieces with AR 80 "
+              f"and headgear with AR 40 will take double damage any time they "
+              f"take a hit to the head; they will not have AR 360'")
+    LEDGER.ok(authsrv.player_armour_at("warrior_body", physical=False) == 25.0,
+              "and the +20 applies ONLY to physical damage",
+              "25 against everything else -- the bonus is `Armor +20 (vs. "
+              "physical damage)`, identifier 527 with the type from the "
+              "companion identifier 4, and a term that ignored the type would "
+              "be silently wrong against every elemental hit we ever add")
+    counts = {}
+    for _ in range(8000):
+        k = authsrv.roll_hit_location()
+        counts[k] = counts.get(k, 0) + 1
+    want = dict(authsrv.HIT_LOCATION_ODDS)
+    spread = {k: counts.get(k, 0) / 8000 * 8 for k in want}
+    LEDGER.ok(all(abs(spread[k] - want[k]) < 0.25 for k in want),
+              "the hit-location odds converge on the published 3/2/1/1/1",
+              f"{ {k: round(v, 2) for k, v in spread.items()} } out of 8 over "
+              f"8000 rolls. Chest 3/8, legs 2/8, the rest 1/8 each")
+    LEDGER.ok(len(set(ars.values())) == 1,
+              "NOTE: with five identical pieces the location changes NOTHING",
+              "every slot is AR 45 today, so the roll is real machinery with "
+              "no observable effect yet. It starts mattering the moment one "
+              "piece differs -- which is retail's normal case and one content "
+              "edit away, and is why this is a check rather than a comment")
+
+    print("\nN7. the bonus cap, and the wart the control exposes")
+    LEDGER.ok(authsrv.bonus_armour(20) == 20.0
+              and authsrv.bonus_armour(25) == 25.0
+              and authsrv.bonus_armour(30) == 25.0,
+              "Bonus armour is capped at 25, per GWW's Armor calculation step 2",
+              "our +20 is under it, so the cap is currently the identity -- "
+              "written down now rather than discovered later by a stack of "
+              "bonuses that silently over-counted")
+    saved = authsrv.EQUIP_ARMOUR
+    authsrv.EQUIP_ARMOUR = False
+    try:
+        bare = authsrv.player_armour_at("warrior_body")
+    finally:
+        authsrv.EQUIP_ARMOUR = saved
+    LEDGER.ok(bare is None,
+              "WART, NAMED: --no-armour yields None, which is NOT 'AR 0'",
+              "the term is skipped, so an unarmoured character takes the "
+              "BASELINE hit and is therefore TOUGHER than one in starter "
+              "armour (AR 45 is below the 60 baseline, so our starter set "
+              "makes you take 1.297x). That is backwards as a model of "
+              "nakedness and correct as a control for 'does the term engage'. "
+              "Retail has no naked character to measure, so no AR is invented "
+              "for one -- but the next reader should not discover this from a "
+              "log")
 
 
 def main():
@@ -186,6 +497,9 @@ def main():
     section_facing()
     section_enemy_skill()
     section_constants()
+    section_weapon_damage()
+    section_armour_and_crit()
+    section_player_armour()
     section_opcode_pins()
     section_opcode_catalog()
     section_probe_encoding()
@@ -1081,7 +1395,11 @@ def section_constants():
          "from ~65, ~599 and ~706 units, so no single number is right "
          "(studies/monsterai 3.3)"),
         ("ENEMY_HIT_FRACTION", 0.10, "OURS", "damage per swing"),
-        ("HIT_FRACTION", 0.15, "OURS", "the player's own swing"),
+        ("HIT_FRACTION", 0.15, "OURS",
+         "the FALLBACK for a swing with no readable weapon, and nothing more "
+         "since 2026-08-20. The player's swing is the equipped weapon's own "
+         "damage range now -- see PLAYER_SWING_DAMAGE below, which is the "
+         "first number in this block that is not ours"),
         ("REVIVE_AFTER", 8.0, "OURS", "how long an agent stays dead"),
         ("PLAYER_REVIVE_AFTER", 10.0, "OURS",
          "a timer, not a resurrection shrine. n=0 player deaths in the corpus"),

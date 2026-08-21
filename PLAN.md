@@ -348,14 +348,15 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04**, criterion met **2026-08-07**, `4ffa82a` (`toolkit/authsrv/replay.py`). Gate proven both directions, client pinned and hash-verified, prior art mirrored — and the `.raw` now decrypts back to the logged plaintext, 329 real captures reproduced exactly, all-or-nothing across 375. The stated criterion finally rests on the stated fact. See §3.1. |
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
-| **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
-| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. **2026-08-15, the combat arc ([studies/combat/PLAN.md](studies/combat/PLAN.md)):** the kill window is now ArenaNet's three messages rather than one — `0x00F1` death, `0x00EE [0, 26]` reward, `0x0026` flags 8, same tick, the reward byte-identical to the capture — and the richer-looking `0x00EE` PAIR is deliberately REFUSED, because 6 of its 7 sightings fire far from any death inside a `0x009C`-marked broadcast burst (§13). The guard contract was rebuilt red-first so a refused value costs the value and not the socket or the world tick, and **overkill now clamps to a kill instead of silently no-opping** — a bug caught before it could ship, since damage rides the wire as a fraction of max health and a decoded skill exceeding a weak target's pool would have been refused outright. The server also models attribute ranks at last: `0x003A` carries real ranks, so `2 * rank` is no longer 0 (see R4b). **And for one day that message killed the client on every spawn** — `0x003A` is COLUMN-MAJOR (`ids | ranks | ranks`, the handler slices one flat array at `n` and `2n`) and it was sent as interleaved `(id, rank, rank)` triples, which puts attribute ids in the rank column and asserts `level < arrsize(s_attribPoints)` at `CharData.cpp:202`. Fixed 2026-08-15, `studies/combat/PLAN.md` §14, diagnosed statically from the dump's own stack. `arrsize` was a number nobody had read and the one recorded was wrong — `consttable.py` had 14 x 4, it is 13 x 4, corrected with a new structural locator (`clientscan/attribpoints.py`). **CURE VERIFIED the same day** (§14g): caged loopback run, 1,716 messages, last at t=78.2 s, no assert — the payload the client used to die on now goes out at t=0.85 s and it runs on for another seventy-seven seconds. **And L6's attributability criterion is MET on the same run**: `--probe attributes` drove all three steps and the panel followed, with the ranks against the right names (see R4b). Note that two earlier instrumented runs were reported healthy while the crash box was on screen — the assert dialog is modal INSIDE the client, so liveness polling cannot see it, and the run above is watched with `crashwatch.ps1` instead. |
-| **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started, and the combat arc moved it a long way (2026-08-15, `studies/combat/PLAN.md`).** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. ~~No skill resolves an effect.~~ **Skills now resolve damage from the client's own numbers**: the whole `s_skill` scaling window `+0x44..+0x68` is decoded, and damage is the skill's scale endpoints interpolated by the CLIENT's own formula (`0x005A8920`: `max(0, round(lo + (hi−lo)·rank/15.0))`, divisor a literal 15.0 verified by a stdlib read, no upper clamp so ranks above 15 extrapolate). `ENEMY_SKILL_FRACTION = 0.25` — a flat quarter of the player's maximum for every skill, admitted invention — is **gone**. The cast lifecycle is on the wire as ArenaNet sends it (`0x00E4→0x00E5→0x00E3→0x00E6`, with the QUEUE LAW: a press during aftercast schedules from the aftercast's end, which refutes the naive press+activation model by +0.64 s/+0.57 s). **The limit is now semantic, not numeric, and it is a real finding**: the client's table gives a magnitude and never says what it MEANS — `scale0/15` is `+ Damage` on Power Attack and `Healing` on Restore Condition, and `type_code` cannot discriminate. Three of the four skills on our own enemy's bar are a heal, a hex and an enchantment, so meaning is GWW-sourced per skill and unmodelled skills resolve to **None, not 0**. Still absent: conditions, hexes, enchantments, energy and adrenaline costs, and effects other than damage. **2026-08-15, L6's attributability criterion is MET** — `--probe attributes` ran caged and the attribute panel followed all three steps with the ranks against the right names, so the ranks `2 * rank` reads are the ranks the player is shown. That also closes the one gap static analysis could not (`studies/combat/PLAN.md` §8b: whether the panel control binds the local agent at runtime) and confirms §8a's slot reading positionally, since step 3 reverses the rank column while holding the id column's order. The same run is what verified the `0x003A` crash fix — see R4a. **2026-08-15, the cast lifecycle is PLAYED AT A CLIENT** (`studies/combat/PLAN.md` §15, retiring §7's blocker): `0x00E4→0x00E5→0x00E3→0x00E6` had been offline-tested against six live cycles and never rendered. Four complete cycles now, accepted without asserting, max 36 ms against the declared recharge; a repeat press after `E6` gives a full second cycle; and recharge is **per-skill with concurrent timers** — slot 6's 8 s overlaps slot 7's 3 s cycles and each `E6` names its own skill. Operator-confirmed rendered: **both slots swept, slot 6 clearly longer than slot 7**, which is what shows the client honours the message's DURATION rather than flashing an icon. Still absent from this: the cast ANIMATION, which was not watched and is the unrun `cast_anim` probe's question (opcode 228 vs agent property 60), not this acceptance's. |
-| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. **2026-08-15 — the PARTY half of this rung is now scoped, and it is the recoverable half** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md)): heroes and henchmen are the mirror image of monster AI, because a hero is a thing the CLIENT renders, commands and stores. The two party-add messages are shaped from the client's own descriptor tables and traced store-by-store — `0x01BF` PARTY_HENCHMAN_ADD `[u16,u16,string16(20),u8,u8]` (CORROBORATES GWCA independently) and `0x01C2` PARTY_HERO_ADD `[u16,u16,u16,u8,u8]` (**CORRECTS** OpenTyria's "a `uint8` level"); `0x0074`'s upstream `{hero_id,level,primary,secondary}` is **REFUTED** at 20 fields / 127 bytes. The catalogue is located and closed: **`s_heroClientData` = 40 rows × 24 B at `0x00A35E08`**, `HEROES`=40, `HERO_UNUSED`=0, per-player cap **7** (three independent sites) — and the rival 48×12 reading was a misattribution to the **adjacent title table**, settled by reading the client's own assert strings. Extraction is ruled **permitted** under the MEASUREMENT branch. The honest negatives: hero **skill-bar delivery is NOT FOUND** on any wire shape, and the **c2s** direction (stance, flag placement, hiring) is NOT FOUND at every point looked. **The wire cannot teach this** — 0 of 22,524 decoded live GAME_SMSG messages carry opcode 114/116/447/450, because every live session is solo; the only vault appearances are 92 `PROBE[smsgsweep]` sends. A henchman authorship route is **buildable now** (one new message on top of the existing `party_build()`), with acceptance criterion R4c-H in §8. **2026-08-16 — R4c-H IS MET, caged loopback, four arms** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §10): control **1** roster row, treatment **2**, the second reading **`Mo1 Hatcher [Collector]`** — archive-resolved name, Monk, level 1 — from one `0x01BF`. Three results beyond the criterion. **(a)** The row draws with **NO world body** (so `PtRoster:602`'s agentId lookup is not a precondition) but draws EMPTY: `Lvl 255 ...`. **(b) A discriminator arm overturns the upstream reading** — with the wire deliberately carrying a *different* name, profession 6 and level 20 while the body kept Hatcher/Monk/1, the row rendered **the BODY's values in every field**, proven from the captured plaintext. So `0x01BF`'s name string and its two trailing bytes do **not** drive the roster row: the message binds a roster SLOT to an `agent_id` and the client reads the rest from that agent. GWCA/OpenTyria's `profession`/`level` names are **not confirmed**, and the body arm alone *looked* like a confirmation because it was a confound. **(c)** Unpredicted: the **compass flag widget appears** (one group flag + three numbered + clear) from one `0x01BF` even with no body, corroborating the wiki's four-control description and §3.1's index-0 reading from the screen. Henchman authoring is done as a mechanism. **2026-08-16, same day — THE HERO ARM RAN TOO, five arms, closing two of §7.2's three blockers** (§11). **(1) `0x01C2`'s word order is settled BY CONSTRUCTION**: the body was created at agent **200**, deliberately outside the 1..39 hero-index range, so a word carrying it cannot be a legal hero index — and the row renders only in the arm where **msg+0xc (→ entry+0x0) holds the agent id and msg+8 (→ entry+0x4) the hero index**. That yields a structural fact too: **entry+0x0 is the agent id in `0x01BF` AND `0x01C2`** — same storage slot, different wire order, so §1.2's refuted "by analogy" reasoning reached the right offset for the wrong reason. **(2)** The hero row renders `Mo1 Hatcher [Collecto…]` **plus a numbered commander-slot button** the henchman row lacks (`GmHeroCommander`'s per-slot UI), and its text again comes from the AGENT — three arms, two message families, one rule. **(3) `0x0074` MERCENARY_INFO is what creates the `charHeroData` record**, by a single-variable pair: with it the trailing `0x0072` diagnostic asserts `attribState` (`ChCliAttrib.cpp:156`), without it `charHeroData` (`ChCliHero.cpp:199`). Every static route had this NOT FOUND; one arm settled it. **The gate did not vanish, it MOVED** — onto §4's sharpest negative, hero **attributes**, which the client now names itself. **(4) That shaped hypothesis — `0x0074`'s two 5-dword groups as the attribute block — was TESTED AND REFUTED the same day** (§12), with the prediction on record before the run. An arm carrying ten dwords of `12` (the rank cap), the third-copy flag set (a branch never previously exercised) and the leading bytes loaded produced a **byte-identical** `attribState` assert. Reading the assert instead of guessing gives the real shape: `attribState` is a **separate `0x43c`-stride record, binary-searched by a key at +0**, holding **`attrib[51]` of 20 bytes each** (`ChCliAttrib:177` `cmp 0x33`; index math `20*i+4`) — 1020 bytes, against a 40-byte chunk in a different structure. New measurements banked: **51 attributes**, **rank cap 12** (`AcctTemplate:441`). **The live lead is now the TEMPLATE system** — `AcctTemplate:422/423/440` and `TemplatesCode:168`/`TemplatesHelpers:368` bound a struct carrying `attribCount` + `attrib[]` + `attribValue[]`, which *is* a build, and is §4's "packed template blob" candidate with named asserts to find it by. **(5) 2026-08-16, third pass — the template lead was a RED HERRING and the real mechanism was already in our tree** (§13). `AccountTemplateDataSkill` (140 B: profPrimary, profSecondary, attribCount, attrib[12], attribValue[12], skill[8]) is **account-local** — the base64 saved-build feature — and a reachability closure from it contains **zero message handlers**. What actually creates an attribState record is **`GAME_SMSG 0x0037`** (`[agent_id,u8,u8]`, handler `0x0091d8c0` → thunk `0x0080EAA0` → creator `0x008199C0`, whose own guard is `ChCliAttrib:313` `!attribState`), and **`0x003A`** (`[agent_id, array32[48]]`) fills `attrib[]`. **Both are keyed by AGENT id, which is why a hero can have attributes at all — and both have been in `authsrv.py` since the combat arc**, sent to the player's agent every session. Two refuted hypotheses were spent hunting a message already in the tree: the §3 failure in miniature. Sending the pair for a hero **does clear the attribState gate** — but the client then dies on **`profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`, bound 11**, with or without the `0x0072` diagnostic, so it REGRESSES an otherwise-working hero and the flag ships OFF. Two more fixes tried and refuted there: `0x0074`'s `b2`/`b3` (upstream's "primary/secondary" — a second failure to confirm those names) and matching the body's profession to the attribute set. **(6) 2026-08-16, fourth pass — READING THOSE THREE CALLERS CLOSED IT. THE HERO IS AUTHORED** (§14). All three sit in one function, `0x00819EF0`, which takes the attribState record, reads **its agent id**, and looks that agent's primary/secondary up in **`ctx[0x2c]+0x6BC`** — the array `studies/profession/RUNS.md` already knew is written only by **`0x00B7`**, which we had only ever sent for the player. **There are TWO profession stores**: `0x00A6` writes the agent's own bytes (what the roster label reads — why the row already said `Mo1`), `0x00B7` writes `+0x6BC` (what the attribute code reads). Conflating them cost an afternoon. With `0x00B7` sent for the hero, gate 3 cleared and the assert moved to `attribState ChCliAttrib.cpp(435)` — whose fix `authsrv.py`'s own comment already recorded: **points first, profession second**. **Four gates, all cleared:** `charHeroData`→`0x0074`; `attribState:156`→`0x0037`; `ConstChar:1296`→`0x00B7` for the hero's agent; `attribState:435`→ordering `0x0037`→`0x00B7`→`0x003A`. The `0x0072` diagnostic that ASSERTED on 2026-08-12 now **completes silently**. **The payoff is a name**: with the record incomplete the row read `Mo1 Hatcher [Collector]` (the body's name); complete, the same row reads **`Mo1 Norgu`** — `s_heroClientData` row 1. The client SWITCHES name sources once the hero record is satisfied, which measures §0's central claim that a hero resolves its identity through the static table. Also read in passing: **`s_attrib` = 51 rows × 20 B at `0x00A35740`** (profession, self-index, two string ids, an is-primary flag set on exactly ten rows), and attributes 26-28/45-50 carry profession 11 — the PvE title tracks, out of range by design. **(7) 2026-08-16, fifth pass — THE SKILL BAR, and §4's negative was a SCOPING ERROR** (§15). `0x00DA` SKILLBAR_UPDATE is `[agent_id, array32[8], array32[8], u8]` — RECV, **agent-keyed, eight slots** — and this server has been sending it **for the player every session**. §4 searched `0x0074`/`0x01BF`/`0x01C2` and the SEND-direction shapes and concluded "no skill-bar field anywhere"; the answer was outside that space. **Fourth time this arc that the mechanism was already in the tree** (after `0x0037`, `0x003A`, `0x00B7`) — every piece of a hero turned out to be an existing agent-keyed message we only ever addressed to the player. Sent to the hero it is accepted, 75 B, no assert. **HONEST LIMIT: that is delivery, not display** — the hero panel is opened by clicking the commander-slot button and that click CRASHES, so nobody has seen eight icons. **`0x0072` is not a diagnostic, it is HeroActivate**: its four fields are the client's own format string `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, matching the descriptor exactly. Measured, two runs differing only in it — without: the row reads `Mo1 Hatcher [Collector]` (the BODY's name) and flag 1 is greyed; **with: `Mo1 Norgu` and flag 1 goes GREEN**. So `0x0072` promotes a labelled body into a hero, switching the roster label to `s_heroClientData` and binding the `GmHeroCommander` slot. **`aiMode` is field 4, so the Fight/Guard/Avoid stance IS server-settable** — a partial answer to §3.3's oldest open question. **(8) 2026-08-16, sixth pass — `inventoryId` REFUTED as that suspect, twice** (§16). Naming the assert should have come first: the click crash is **`commander` / `GmView.cpp(5890)`**, not any of the eight inventory asserts (`asserts.py` cannot read line 5890 — one of its 371 blind sites, its answers being floors). And `inventoryId = 1` changes nothing: accepted with no assert on the activation path, and the **identical** crash on the click. The field is **inert on every reachable path** and its meaning stays NOT FOUND. **The real cause is now read statically**: commander objects live in a container at `ctx+0x20`, `heroCommanderSlot[7]` at `+0x30` holds **keys into it**, `0x00524C40` is a **get-or-create**, and `0x00524DB0` — the one the click uses — **does not create**, it looks up and asserts. Our hero has no entry. The creator's other caller sits in a loop over the `activeHeroes` stack buffer built by scanning the party's agents (`GmHeroCommander:214`). **Precise next step, desk work only:** does that scan skip our hero, or register it under a key different from the one `GmView:5890` looks up? **(9) 2026-08-16, seventh pass — THE DESK WORK, and it refuted its own prediction** (§17). The whole commander path is now read out of the binary: the iterator `0x008563B0` walks `[ctx+0x4c]`→my-party→`+0x24` with **stride 0x18 — exactly `0x01C2`'s entry size**, so it walks the entries we append; the scan `0x00524E00` filters `[edi+4]` against a widely-used "my id" accessor and takes **`[edi+8]` as the commander key**, which is where `0x01C2`'s `msg+0x10` lands — and we had been sending **0** there. Prediction: put the hero id in `msg+0x10` and the panel click stops asserting. **REFUTED** — identical `commander`/`GmView(5890)`, with no regression (`Mo1 Norgu`, slot bound, flag green), so the change is kept as better-founded but is RECONSTRUCTION, not a fix. **What it eliminates is the value**: the scan has exactly ONE caller, `0x004E5D85`, inside a GmView **event** handler, so the leading explanation is no longer "wrong key" but **"the scan never runs"** — the commander container is filled by a client-side UI event, not by the wire. **Also a self-correction (§17.3): §11.1's "msg+8 is the hero index" is WITHDRAWN.** H1/H2 only showed `msg+8` accepts 1 and rejects 200, and in this rig `PLAYER_NUMBER`, `PLAYER_AGENT_ID` and the hero index are **all 1** — hero index, owner player and owner agent are indistinguishable, and the scan's filter actively suggests *owner*. `msg+0xc` = agent id still stands. **(10) 2026-08-16 — ran that rig: hero index 2, and the confound broke** (§18). With `msg+8`=1, `msg+0xc`=200, `msg+0x10`=2 all distinct, the row rendered **`Mo1 Goren`** — hero 2's own name. So **`msg+8` is definitively NOT the hero index** (it carried 1 while the hero was 2), settling by experiment what §17.3 could only doubt; what it *is* stays UNVERIFIED, narrowed to owner-player-number vs owner-agent-id, which are both 1 here. **And `s_heroClientData` row 2 = `Goren` is now confirmed FROM THE SCREEN**, independently of the recon's `textrec.py` resolution — rows 1 and 2 both verified from two unrelated directions, so the catalogue reading is solid. Remaining confound: `0x0074`, `0x01C2`'s `msg+0x10` and `0x0072` all carried 2, so which message supplies the identity is undetermined; **(11) 2026-08-16 — ran that split too, and `0x01C2` carries NO hero identity at all** (§19). Prediction on record first: row 3's name id 36274 resolves to **Tahlkora**, so Tahlkora would mean the identity rides `msg+0x10` and Goren would mean it rides `0x0074`/`0x0072`. With `0x0074`/`0x0072` on hero **2** and `msg+0x10` on **3**, the row read **`Mo1 Goren`** — the client ignored the party-add message's hero id completely, with no crash and no change. So the hero's identity arrives **entirely on the data-cache family**, and `0x01C2`'s five fields are a party id, an owner-ish word (UNVERIFIED), the agent id and two bytes. That is stronger than §0's original "a hero carries no NAME": it carries no identity. **`msg+0x10` is now inert on everything observable** — §17.1 read it as the commander key from the scan's `[edi+8]`, §17.2's hero-id value did not fix the panel click, and a deliberately WRONG value here changes nothing; consistent with §17.2's leading explanation that the scan never runs. Its role stays RECONSTRUCTION. **(12) 2026-08-16 — split those too, and the question was malformed** (§20). Three outcomes named first; the run gave the third. With `0x0074` creating a record for hero **2** and `0x0072` activating hero **3**, the client produced `charHeroData` / `ChCliHero.cpp(199)` — the **identical** assert §11.3 got by omitting `0x0074` altogether. So **`0x0074`'s field 1 is the record KEY and `0x0072`'s field 1 is a SELECTOR into the same namespace**, and a mismatched selector is indistinguishable from the record never existing. Neither message "supplies" the identity: `0x0074` creates a keyed record that carries it and `0x0072` activates that record under the same key. It also re-confirms §11.3 from a new direction — that section removed `0x0074` to prove it creates the record; this keeps it and mismatches the key, a different manipulation reaching the same gate. **The family now reads: identity is the data-cache record's; `0x01C2` only binds a roster slot to an agent id.** **(13) 2026-08-16 — `msg+8` IDENTIFIED: it is the OWNER PLAYER NUMBER** (§21). `--player-number 2` finally separates `PLAYER_NUMBER` from `PLAYER_AGENT_ID`, and two arms differing only in `msg+8` are **exact mirrors**: `msg+8`=2 (player number) renders the row but leaves the commander slot unbound; `msg+8`=1 (agent id) binds flag 1 but shows **no row**. The roster row appears exactly when `msg+8` equals the declared player number — consistent with the original rig and with H1's rejection of 200 — so the field is now positively identified, closing the thread §11.1 opened wrongly, §17.3 withdrew and §18 refuted. **The mirror is the unexpected half**: both consumers read `entry+4` yet compare it against DIFFERENT "my id" values — the roster UI against our declared player number, the `GmHeroCommander` scan against `ctx[0x44][0x2ac]`, which stayed 1. RECONSTRUCTION: `--player-number` changes only what we SEND, not what the client believes about itself, so it desynchronises the two; in the default rig both are 1 and everything agrees, which is why the hero worked. Whether `ctx[0x44][0x2ac]` is the agent id or a client-side player number is still undecidable here (both are 1) and needs the CLIENT's value moved, not ours. Practical: do not use `--player-number` outside this experiment — it makes the roster row and the commander binding mutually exclusive. **(14) 2026-08-16 — found what writes it, desk work only** (§22): `ctx[0x44]` is the MISSION subsystem (accessor `0x0084DD70` sits in **MsCliApi**), `--field 0x2AC --writes` gives eleven stores of which two in that range are real, both copy **field 1** of a message struct, and neither has a call xref — each VA sits in one aligned `.rdata` word, i.e. a dispatch entry. `msgshape --all` resolves them: **`0x0199` INSTANCE_LOAD_INFO** (handler `0x0084EF00`) and `0x01A4` (handler `0x0084F230`, never sent by us). **So `ctx[0x44][0x2ac]` is `0x0199`'s field 1 — the player's agent id, which this server has sent at every instance load since the beginning.** That explains §21's mirror exactly: the roster UI filters on the player number while the commander scan filters on `0x0199` field 1, and `--player-number 2` moved one and left the other at 1. In the default rig both are 1, both filters see 1, and the hero binds. **Trap removed:** that field was a literal `1` at the send site rather than `PLAYER_AGENT_ID` — harmless today, but it demonstrably feeds a filter three subsystems away, so it now uses the constant. The confirming arm (move both together) was NOT run and the reason is recorded: it means moving `PLAYER_AGENT_ID` itself, which touches the spawn path and deserves its own arm. **(15) 2026-08-16 — A FULL AUTHORED PARTY OF FIVE** (§23): player + heroes **Norgu, Goren, Tahlkora** in commander slots **1/2/3** + the **Hatcher** henchman, one roster, one run. `--hero` takes a list and `hero_slots()` owns the agent-id/definition arithmetic in one place. Four things measured that n=1 could not: the `heroCommanderSlot[7]` array **assigns sequentially and independently** (three separate numbered buttons); each hero **resolves its own identity** from its own `0x0074` record, so §20's keyed-record model holds past one; heroes and henchmen **coexist and the client distinguishes them visually** — the henchman row has NO numbered button, which is §3.1's reconstruction and the wiki's "three individual flags plus one all" now visible rather than inferred; and **`s_heroClientData` row 3 = `Tahlkora` confirmed from the screen**, so rows 1/2/3 are each verified from two unrelated directions (archive resolution and the client's own rendering). Guards mirror the client's bounds: >7 heroes refused (`cmp 7` at PtPlayer:332 and GmHeroCommander:214), duplicate hero ids refused (one record per key),  **(16) 2026-08-17 — THE COMMANDER QUESTION IS MEASURED, and the arc's last wall is down** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §33). §26.4/§27.2/§32 all stopped on one sentence — *does `0x008590CA` execute, and it needs a breakpoint or code cave*. Built as `toolkit/clientscan/commandertrap.py`: a debugger in pure `ctypes` setting EXECUTE breakpoints in **DR0..DR3**, which are per-thread processor state, so **nothing is written into the client** — no `int3` over an instruction, no code cave, no injection (carve-out 3 permits a compiler; this did not need one). Every site's bytes are re-verified against the RUNNING process before arming, because the pin is 38797 and these are 38833 addresses and §24 already crossed those once. **Three arms, control firing in all three.** Default rig (party-cache HIT): `worker=1 raise=0` — §26.2's gate OBSERVED doing what the disassembly said, predicted in writing beforehand. `--hero-bust-cache` (cache MISS): `worker=1 raise=1 case93=0` — **the event IS raised and its handler never runs**, and the image's own byte map + jump table make that unambiguous (`0x1000011E` → case 93 → `0x004E5DE1`, the ONLY event routing there). Bulk path: `bulkraise=1 bulk=0 create=0` — `0x00524C40` **never executes**, confirming §27's `count=0` by a code trace rather than a memory read, two unrelated instruments agreeing. **The corrected shape: the missing piece is a SUBSCRIPTION, not a trigger.** Every earlier fix (`inventoryId` §16, `msg+0x10` §19, the cache gate §26) aimed at making the client RAISE the event; §26's arm actually succeeded at that and the panel still asserts. **So `0x01C2` cannot bind a commander and no wire field will change it** — the hero as authored (row, name, level, profession, attributes, skill bar, lit flag) is complete for everything the wire governs. Also confirmed from the frozen client: §25.1's push-order decode against the live stack, and §26.1's `ecx`-holds-the-entry claim. **Four tool defects, three caught by the tool's own control before it ever read the client** (§33.8) — a 64-bit debugger receives `STATUS_WX86_SINGLE_STEP` (`0x4000001E`) not `0x80000004` from a WOW64 target, so v1 reported NO HITS and would have published the right headline from a dead instrument; `EFLAGS.RF` does not survive `ContinueDebugEvent`, so one instruction trapped 32 times in 4ms and read as "executed 32 times"; state was captured after the read handle closed, so a whole run's fields came back `None` and that run was DISCARDED rather than published; and the module list is not ready the instant a process exists. **The control had a hole too**: it stopped at the first hit, proving a breakpoint FIRES while saying nothing about whether the target RESUMES — and the untested half was the broken one. **(17) 2026-08-17 — (16)'s wall is DOWN, and its closing sentence is SUPERSEDED** ([studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md), the PvP-UI arc, `4bab982`+). (16) ended *"`0x01C2` cannot bind a commander and no wire field will change it"* — the subscription reading was right and the conclusion drawn from it was wrong, because the missing piece was **timing**, not a field. Measured: our `0x01B2` raises `0x10000114` at instance load and **GmView subscribes to that event 53 milliseconds later**; its GmView case is the only caller of the commander-model rebuild, nothing raises it again, so the model is built once over an empty container and never rebuilt. **`--party-mine-late SECONDS`** (new, opt-in, off by default) re-sends `0x01B2` after the load — a second send is a second raise, because the handler raises on both branches — and `0x00524C40`, the function (16) proved never executes, **ran for the first time in this project**: commander container `count=0 → count=1`, `heroCommanderSlot[0] = 0x1`. A wire message binds a commander after all; it just has to arrive when someone is listening. **Then three owner clicks on the party-window hero button walked the assert forward four times**, and the whole `GmView` case for `0x100001A4` now passes: `commander` (5890) → `heroData` (5897, with `--hero-roster-id 200`) → `heroData->agentId` (5898) → out of `GmView` entirely. That last hop was this lineage's recurring failure again — `heroData->agentId` has exactly one writer, opcode **`0x0072` HeroActivate**, and `HERO_ACTIVATE = False`: **a message the tree already implemented, behind an opt-in flag no run of the arc had switched on**, the fifth such (after `0x0037`, `0x003A`, `0x00B7`, `0x00DA`). The click now stops at **`inventory` / `ItCliApi.cpp(488)`**, a general 22-caller equip-slot helper — **the hero has no per-owner container in the item client's table at `[globals+0x40]+0xD4`**. Cross-checked against §8's `0x006D` item line the same day and it is NOT that: item RECORDS already exist (375/375 of retail's non-zero `0x006D` ids are `0x015E`-family declarations), the missing piece is the owner's container, and our `0x013F`/`0x013E` bag family has only ever been addressed to the local player. Corrections this arc owes, all in its study: the harness does NOT default to 38833 (`drive_client.py:87` selects by build, :167 excludes it — pass `--exe` **and** `RURIK_DAT`); `0x01D9` writes `+0x58`, a different field, not the container pointer; and **every `PyCliParty` worker takes `this = object + 4`**, so field `+0x54` is spelled `0x50` and a displacement-anchored scan returns a confident zero — now a fourth documented blind spot in `codescan.py`'s footer. |
-| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
+| **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. **Movement FIDELITY is a separate question and it moved on 2026-08-19** (`a57960e`, `studies/movement/HANDOFF.md` §8): the warp is decoded in the binary — the snap is `0x006022B0` copying SYNC→ASYNC, reached only from `0x00605FC0`'s three message-driven callers, whose test is now decoded in BOTH halves (2026-08-20): a 100 u match against the client's own history chain — which never reads our grant — and failing that a fallback of **three gates, any one of which snaps** (straight-line separation over **299.33 u**, so exactly 300.0 u snaps; a walkable `pathCount == 0` meaning our granted position is off the navmesh; or the sync agent unable to take a first step). It is never evaluated per frame, and the snap reseeds **every** async agent. "Under 300 u is safe" is FALSE, and the 300.0f was recorded as walkable-path until 2026-08-20 when it is straight-line. Six candidate fixes are dead, **seven as of 2026-08-20**, and **no gate of the test is a server lever** — the only lever found is `0x002C`, already tried and removed by an earlier build. Both of the arc's instruments were repaired and mutation-pinned the same day: `movesync.py`'s hard bar now has TWO ARMS (implied speed > 400 u/s at dt ≥ 0.05 s, displacement ≥ 520 u below that floor), which takes the corpus from 61 to 64 hard rows over 961 captures and makes the three configurations read **7 of 267 / 20 of 468 / 13 of 197** hard jumps, **1.31 / 5.69 / 11.88 per minute of span**, magnitude p50 **1,969 / 569 / 582 u** — retail scores ZERO on both arms, and implied velocity is demoted everywhere to a labelled gate input, so magnitude and excess over the 288 u/s budget are the quotable pair. `pinned.py` now carries per-build TUPLES of accepted patched digests that the patchers themselves register, so the gate no longer refuses the 38797 we launch and can represent 38833. Tests: `test_movesync.py` 104 (floor 57), `test_pinned.py` 143 (floor 130), `test_buildid.py` 42, `test_buildpins.py` 40, `test_srclint.py` 22. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. **2026-08-15, the combat arc ([studies/combat/PLAN.md](studies/combat/PLAN.md)):** the kill window is now ArenaNet's three messages rather than one — `0x00F1` death, `0x00EE [0, 26]` reward, `0x0026` flags 8, same tick, the reward byte-identical to the capture — and the richer-looking `0x00EE` PAIR is deliberately REFUSED, because 6 of its 7 sightings fire far from any death inside a `0x009C`-marked broadcast burst (§13). The guard contract was rebuilt red-first so a refused value costs the value and not the socket or the world tick, and **overkill now clamps to a kill instead of silently no-opping** — a bug caught before it could ship, since damage rides the wire as a fraction of max health and a decoded skill exceeding a weak target's pool would have been refused outright. The server also models attribute ranks at last: `0x003A` carries real ranks, so `2 * rank` is no longer 0 (see R4b). **And for one day that message killed the client on every spawn** — `0x003A` is COLUMN-MAJOR (`ids | ranks | ranks`, the handler slices one flat array at `n` and `2n`) and it was sent as interleaved `(id, rank, rank)` triples, which puts attribute ids in the rank column and asserts `level < arrsize(s_attribPoints)` at `CharData.cpp:202`. Fixed 2026-08-15, `studies/combat/PLAN.md` §14, diagnosed statically from the dump's own stack. `arrsize` was a number nobody had read and the one recorded was wrong — `consttable.py` had 14 x 4, it is 13 x 4, corrected with a new structural locator (`clientscan/attribpoints.py`). **CURE VERIFIED the same day** (§14g): caged loopback run, 1,716 messages, last at t=78.2 s, no assert — the payload the client used to die on now goes out at t=0.85 s and it runs on for another seventy-seven seconds. **And L6's attributability criterion is MET on the same run**: `--probe attributes` drove all three steps and the panel followed, with the ranks against the right names (see R4b). Note that two earlier instrumented runs were reported healthy while the crash box was on screen — the assert dialog is modal INSIDE the client, so liveness polling cannot see it, and the run above is watched with `crashwatch.ps1` instead. **AND THE DAMAGE IS NO LONGER OURS, 2026-08-20** (`abd9910`, `2b57034`, `2173584`): a swing was 15% of the target's max health — so every creature took the same seven swings however tough it was — and is now the equipped weapon's own range (identifier 584) scaled by `2^((SL−AR)/40)`, with criticals as an armour reduction of 20. The model is `studies/isle` rung 7's, read off 495 live damage events, and the implementation reproduces that capture's own point bands at **all six endpoints** with zero free parameters. Creature AR is DERIVED from level and profession (WIKI), after a picked 60 turned out to be level-20 armour on a level-1 creature — the wrong SHAPE, which is `studies/monsterai` §3.3's lesson for reach paid a second time. On screen and matching the wire swing for swing (`20260820T162204`, `…T162932`). ~~**Still absent: nothing reads the PLAYER's armour**~~ — **read as of `962408a`**: incoming damage scales by `2^((60−AR)/40)` at a hit location on GWW's published 3/2/1/1/1 odds, checked against that page's own 40-row multiplier table, and the player takes 13 a swing instead of 10. It also exposed a corpse being re-killed, which a flat damage fraction had hidden by dividing evenly into the pool. **What IS still absent is sharper than what was written here**: `skill_damage` ignores armour entirely, and the enemy almost never auto-attacks — its four-slot bar is always recharged — so the armoured path barely runs in a real fight while the unarmoured one does all the damage (isle §4.2). That waits on a per-skill armour-ignoring flag, i.e. on R4b. Also still absent: no unmet-requirement term, which `studies/isle` refutes and forbids replacing. |
+| **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started, and the combat arc moved it a long way (2026-08-15, `studies/combat/PLAN.md`).** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. ~~No skill resolves an effect.~~ **Skills now resolve damage from the client's own numbers**: the whole `s_skill` scaling window `+0x44..+0x68` is decoded, and damage is the skill's scale endpoints interpolated by the CLIENT's own formula (`0x005A8920`: `max(0, round(lo + (hi−lo)·rank/15.0))`, divisor a literal 15.0 verified by a stdlib read, no upper clamp so ranks above 15 extrapolate). `ENEMY_SKILL_FRACTION = 0.25` — a flat quarter of the player's maximum for every skill, admitted invention — is **gone**. The cast lifecycle is on the wire as ArenaNet sends it (`0x00E4→0x00E5→0x00E3→0x00E6`, with the QUEUE LAW: a press during aftercast schedules from the aftercast's end, which refutes the naive press+activation model by +0.64 s/+0.57 s). **The limit is now semantic, not numeric, and it is a real finding**: the client's table gives a magnitude and never says what it MEANS — `scale0/15` is `+ Damage` on Power Attack and `Healing` on Restore Condition, and `type_code` cannot discriminate. Three of the four skills on our own enemy's bar are a heal, a hex and an enchantment, so meaning is GWW-sourced per skill and unmodelled skills resolve to **None, not 0**. ~~Still absent: conditions, hexes, enchantments, energy and adrenaline costs, and effects other than damage.~~ **Hexes and enchantments came off that list 2026-08-20 — see the effect substrate below in this same row.** Conditions, energy, adrenaline and every non-damage MECHANIC are still absent. **2026-08-15, L6's attributability criterion is MET** — `--probe attributes` ran caged and the attribute panel followed all three steps with the ranks against the right names, so the ranks `2 * rank` reads are the ranks the player is shown. That also closes the one gap static analysis could not (`studies/combat/PLAN.md` §8b: whether the panel control binds the local agent at runtime) and confirms §8a's slot reading positionally, since step 3 reverses the rank column while holding the id column's order. The same run is what verified the `0x003A` crash fix — see R4a. **2026-08-15, the cast lifecycle is PLAYED AT A CLIENT** (`studies/combat/PLAN.md` §15, retiring §7's blocker): `0x00E4→0x00E5→0x00E3→0x00E6` had been offline-tested against six live cycles and never rendered. Four complete cycles now, accepted without asserting, max 36 ms against the declared recharge; a repeat press after `E6` gives a full second cycle; and recharge is **per-skill with concurrent timers** — slot 6's 8 s overlaps slot 7's 3 s cycles and each `E6` names its own skill. Operator-confirmed rendered: **both slots swept, slot 6 clearly longer than slot 7**, which is what shows the client honours the message's DURATION rather than flashing an icon. Still absent from this: the cast ANIMATION, which was not watched and is the unrun `cast_anim` probe's question (opcode 228 vs agent property 60), not this acceptance's. **THE SUBSTRATE'S SPINE LANDED 2026-08-20** (`25f96d1`, `bc4a125`, [studies/skills §12–§16](studies/skills/FINDINGS.md)): the effect channel `0x0042`/`0x0044` is wired, and the CLIENT DRAWS IT — a keypress runs `USE_SKILL` → the cast cycle → an apply at cast end → a removal at the stated duration, and the enemy's hex lands on the player unprompted. The client types the effect itself from the skill id alone (green stance border, magenta hex border, each skill's own art), expiry residuals are `+0.03..0.05 s` against retail's own 50 ms shoulder, and death strips per agent. **SCORING IT NEEDS AN OWNER RULING, so both readings are given rather than one number chosen.** §3.2 says R4b is met when an exemplar *"resolves its effect correctly against the client's own state"*. On **"the episode resolves"** — applied, typed, timed, expired, on screen — **n = 8 of 9**, every family except Skill (Charm Animal 411, whose effect is a PET: no table data at all, `skill_arguments = 0`, genuinely outside this rung). On **"the MECHANIC resolves"** — the skill actually doing what its text says — **n = 3 of 9**: Spell (Flare's 20 fire damage), Signet (Healing Signet's 88 heal, the client's own health readout moving 54→100 by exactly the 46 sent) and Attack (Sever Artery's Bleeding, **three degeneration arrows drawn on the health bar** and the client's displayed health falling at 6.03/s against the 6.00 sent). The other five apply a correctly typed, correctly timed effect whose consequence is unmodelled — attack speed, movement speed, damage negation, energy cost, arrow damage — and each is a per-skill wiki row on machinery that now exists. **The honest report is 8 of 9 partial, 3 of 9 complete, 1 of 9 untouched**, and the wording points at the first count while the second is what makes the engine real. **THIS RUNG IS ALSO THE BLOCKER FOR THREE OTHER ARCS, which is new as of 2026-08-20 and is the reason to raise its priority.** (1) **Hero AI** — the client holds none of it (R4c), the rules are conditions over effect state, and if AI policy is per-SKILL data as two independent sources say, then *the skill substrate's schema IS the AI's schema*; designing the policy table first is designing half the skill table blind ([studies/heroes §5.6](studies/heroes/FINDINGS.md)). (2) **Armour on skill damage** — `skill_damage` ignores armour, and the enemy's always-recharged bar means that unarmoured path does nearly all the damage in a real fight; the fix needs a per-skill armour-ignoring flag, because GWW makes it a per-skill property and a global answer would be wrong on every skill ([studies/isle §4.2](studies/isle/FINDINGS.md)). (3) **Its own listed gaps** — ~~hexes, enchantments~~ **both now resolve as episodes**; still conditions (which need the inflicting-skill join this server has no model of), energy and adrenaline. `agents.GV_ARMOR_IGNORING = 55` already exists and nothing reads it. Three arcs arriving at the same wall from different directions in one week is the signal; each was individually cheap to defer and collectively they are not. |
+| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. **2026-08-15 — the PARTY half of this rung is now scoped, and it is the recoverable half** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md)): heroes and henchmen are the mirror image of monster AI, because a hero is a thing the CLIENT renders, commands and stores. The two party-add messages are shaped from the client's own descriptor tables and traced store-by-store — `0x01BF` PARTY_HENCHMAN_ADD `[u16,u16,string16(20),u8,u8]` (CORROBORATES GWCA independently) and `0x01C2` PARTY_HERO_ADD `[u16,u16,u16,u8,u8]` (**CORRECTS** OpenTyria's "a `uint8` level"); `0x0074`'s upstream `{hero_id,level,primary,secondary}` is **REFUTED** at 20 fields / 127 bytes. The catalogue is located and closed: **`s_heroClientData` = 40 rows × 24 B at `0x00A35E08`**, `HEROES`=40, `HERO_UNUSED`=0, per-player cap **7** (three independent sites) — and the rival 48×12 reading was a misattribution to the **adjacent title table**, settled by reading the client's own assert strings. Extraction is ruled **permitted** under the MEASUREMENT branch. The honest negatives: hero **skill-bar delivery is NOT FOUND** on any wire shape, and the **c2s** direction (stance, flag placement, hiring) is NOT FOUND at every point looked. **The wire cannot teach this** — 0 of 22,524 decoded live GAME_SMSG messages carry opcode 114/116/447/450, because every live session is solo; the only vault appearances are 92 `PROBE[smsgsweep]` sends. A henchman authorship route is **buildable now** (one new message on top of the existing `party_build()`), with acceptance criterion R4c-H in §8. **2026-08-16 — R4c-H IS MET, caged loopback, four arms** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §10): control **1** roster row, treatment **2**, the second reading **`Mo1 Hatcher [Collector]`** — archive-resolved name, Monk, level 1 — from one `0x01BF`. Three results beyond the criterion. **(a)** The row draws with **NO world body** (so `PtRoster:602`'s agentId lookup is not a precondition) but draws EMPTY: `Lvl 255 ...`. **(b) A discriminator arm overturns the upstream reading** — with the wire deliberately carrying a *different* name, profession 6 and level 20 while the body kept Hatcher/Monk/1, the row rendered **the BODY's values in every field**, proven from the captured plaintext. So `0x01BF`'s name string and its two trailing bytes do **not** drive the roster row: the message binds a roster SLOT to an `agent_id` and the client reads the rest from that agent. GWCA/OpenTyria's `profession`/`level` names are **not confirmed**, and the body arm alone *looked* like a confirmation because it was a confound. **(c)** Unpredicted: the **compass flag widget appears** (one group flag + three numbered + clear) from one `0x01BF` even with no body, corroborating the wiki's four-control description and §3.1's index-0 reading from the screen. Henchman authoring is done as a mechanism. **2026-08-16, same day — THE HERO ARM RAN TOO, five arms, closing two of §7.2's three blockers** (§11). **(1) `0x01C2`'s word order is settled BY CONSTRUCTION**: the body was created at agent **200**, deliberately outside the 1..39 hero-index range, so a word carrying it cannot be a legal hero index — and the row renders only in the arm where **msg+0xc (→ entry+0x0) holds the agent id and msg+8 (→ entry+0x4) the hero index**. That yields a structural fact too: **entry+0x0 is the agent id in `0x01BF` AND `0x01C2`** — same storage slot, different wire order, so §1.2's refuted "by analogy" reasoning reached the right offset for the wrong reason. **(2)** The hero row renders `Mo1 Hatcher [Collecto…]` **plus a numbered commander-slot button** the henchman row lacks (`GmHeroCommander`'s per-slot UI), and its text again comes from the AGENT — three arms, two message families, one rule. **(3) `0x0074` MERCENARY_INFO is what creates the `charHeroData` record**, by a single-variable pair: with it the trailing `0x0072` diagnostic asserts `attribState` (`ChCliAttrib.cpp:156`), without it `charHeroData` (`ChCliHero.cpp:199`). Every static route had this NOT FOUND; one arm settled it. **The gate did not vanish, it MOVED** — onto §4's sharpest negative, hero **attributes**, which the client now names itself. **(4) That shaped hypothesis — `0x0074`'s two 5-dword groups as the attribute block — was TESTED AND REFUTED the same day** (§12), with the prediction on record before the run. An arm carrying ten dwords of `12` (the rank cap), the third-copy flag set (a branch never previously exercised) and the leading bytes loaded produced a **byte-identical** `attribState` assert. Reading the assert instead of guessing gives the real shape: `attribState` is a **separate `0x43c`-stride record, binary-searched by a key at +0**, holding **`attrib[51]` of 20 bytes each** (`ChCliAttrib:177` `cmp 0x33`; index math `20*i+4`) — 1020 bytes, against a 40-byte chunk in a different structure. New measurements banked: **51 attributes**, **rank cap 12** (`AcctTemplate:441`). **The live lead is now the TEMPLATE system** — `AcctTemplate:422/423/440` and `TemplatesCode:168`/`TemplatesHelpers:368` bound a struct carrying `attribCount` + `attrib[]` + `attribValue[]`, which *is* a build, and is §4's "packed template blob" candidate with named asserts to find it by. **(5) 2026-08-16, third pass — the template lead was a RED HERRING and the real mechanism was already in our tree** (§13). `AccountTemplateDataSkill` (140 B: profPrimary, profSecondary, attribCount, attrib[12], attribValue[12], skill[8]) is **account-local** — the base64 saved-build feature — and a reachability closure from it contains **zero message handlers**. What actually creates an attribState record is **`GAME_SMSG 0x0037`** (`[agent_id,u8,u8]`, handler `0x0091d8c0` → thunk `0x0080EAA0` → creator `0x008199C0`, whose own guard is `ChCliAttrib:313` `!attribState`), and **`0x003A`** (`[agent_id, array32[48]]`) fills `attrib[]`. **Both are keyed by AGENT id, which is why a hero can have attributes at all — and both have been in `authsrv.py` since the combat arc**, sent to the player's agent every session. Two refuted hypotheses were spent hunting a message already in the tree: the §3 failure in miniature. Sending the pair for a hero **does clear the attribState gate** — but the client then dies on **`profession < arrsize(s_profChapter)`, `ConstChar.cpp(1296)`, bound 11**, with or without the `0x0072` diagnostic, so it REGRESSES an otherwise-working hero and the flag ships OFF. Two more fixes tried and refuted there: `0x0074`'s `b2`/`b3` (upstream's "primary/secondary" — a second failure to confirm those names) and matching the body's profession to the attribute set. **(6) 2026-08-16, fourth pass — READING THOSE THREE CALLERS CLOSED IT. THE HERO IS AUTHORED** (§14). All three sit in one function, `0x00819EF0`, which takes the attribState record, reads **its agent id**, and looks that agent's primary/secondary up in **`ctx[0x2c]+0x6BC`** — the array `studies/profession/RUNS.md` already knew is written only by **`0x00B7`**, which we had only ever sent for the player. **There are TWO profession stores**: `0x00A6` writes the agent's own bytes (what the roster label reads — why the row already said `Mo1`), `0x00B7` writes `+0x6BC` (what the attribute code reads). Conflating them cost an afternoon. With `0x00B7` sent for the hero, gate 3 cleared and the assert moved to `attribState ChCliAttrib.cpp(435)` — whose fix `authsrv.py`'s own comment already recorded: **points first, profession second**. **Four gates, all cleared:** `charHeroData`→`0x0074`; `attribState:156`→`0x0037`; `ConstChar:1296`→`0x00B7` for the hero's agent; `attribState:435`→ordering `0x0037`→`0x00B7`→`0x003A`. The `0x0072` diagnostic that ASSERTED on 2026-08-12 now **completes silently**. **The payoff is a name**: with the record incomplete the row read `Mo1 Hatcher [Collector]` (the body's name); complete, the same row reads **`Mo1 Norgu`** — `s_heroClientData` row 1. The client SWITCHES name sources once the hero record is satisfied, which measures §0's central claim that a hero resolves its identity through the static table. Also read in passing: **`s_attrib` = 51 rows × 20 B at `0x00A35740`** (profession, self-index, two string ids, an is-primary flag set on exactly ten rows), and attributes 26-28/45-50 carry profession 11 — the PvE title tracks, out of range by design. **(7) 2026-08-16, fifth pass — THE SKILL BAR, and §4's negative was a SCOPING ERROR** (§15). `0x00DA` SKILLBAR_UPDATE is `[agent_id, array32[8], array32[8], u8]` — RECV, **agent-keyed, eight slots** — and this server has been sending it **for the player every session**. §4 searched `0x0074`/`0x01BF`/`0x01C2` and the SEND-direction shapes and concluded "no skill-bar field anywhere"; the answer was outside that space. **Fourth time this arc that the mechanism was already in the tree** (after `0x0037`, `0x003A`, `0x00B7`) — every piece of a hero turned out to be an existing agent-keyed message we only ever addressed to the player. Sent to the hero it is accepted, 75 B, no assert. **HONEST LIMIT: that is delivery, not display** — the hero panel is opened by clicking the commander-slot button and that click CRASHES, so nobody has seen eight icons. **`0x0072` is not a diagnostic, it is HeroActivate**: its four fields are the client's own format string `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, matching the descriptor exactly. Measured, two runs differing only in it — without: the row reads `Mo1 Hatcher [Collector]` (the BODY's name) and flag 1 is greyed; **with: `Mo1 Norgu` and flag 1 goes GREEN**. So `0x0072` promotes a labelled body into a hero, switching the roster label to `s_heroClientData` and binding the `GmHeroCommander` slot. **`aiMode` is field 4, so the Fight/Guard/Avoid stance IS server-settable** — a partial answer to §3.3's oldest open question. **(8) 2026-08-16, sixth pass — `inventoryId` REFUTED as that suspect, twice** (§16). Naming the assert should have come first: the click crash is **`commander` / `GmView.cpp(5890)`**, not any of the eight inventory asserts (`asserts.py` cannot read line 5890 — one of its 371 blind sites, its answers being floors). And `inventoryId = 1` changes nothing: accepted with no assert on the activation path, and the **identical** crash on the click. The field is **inert on every reachable path** and its meaning stays NOT FOUND. **The real cause is now read statically**: commander objects live in a container at `ctx+0x20`, `heroCommanderSlot[7]` at `+0x30` holds **keys into it**, `0x00524C40` is a **get-or-create**, and `0x00524DB0` — the one the click uses — **does not create**, it looks up and asserts. Our hero has no entry. The creator's other caller sits in a loop over the `activeHeroes` stack buffer built by scanning the party's agents (`GmHeroCommander:214`). **Precise next step, desk work only:** does that scan skip our hero, or register it under a key different from the one `GmView:5890` looks up? **(9) 2026-08-16, seventh pass — THE DESK WORK, and it refuted its own prediction** (§17). The whole commander path is now read out of the binary: the iterator `0x008563B0` walks `[ctx+0x4c]`→my-party→`+0x24` with **stride 0x18 — exactly `0x01C2`'s entry size**, so it walks the entries we append; the scan `0x00524E00` filters `[edi+4]` against a widely-used "my id" accessor and takes **`[edi+8]` as the commander key**, which is where `0x01C2`'s `msg+0x10` lands — and we had been sending **0** there. Prediction: put the hero id in `msg+0x10` and the panel click stops asserting. **REFUTED** — identical `commander`/`GmView(5890)`, with no regression (`Mo1 Norgu`, slot bound, flag green), so the change is kept as better-founded but is RECONSTRUCTION, not a fix. **What it eliminates is the value**: the scan has exactly ONE caller, `0x004E5D85`, inside a GmView **event** handler, so the leading explanation is no longer "wrong key" but **"the scan never runs"** — the commander container is filled by a client-side UI event, not by the wire. **Also a self-correction (§17.3): §11.1's "msg+8 is the hero index" is WITHDRAWN.** H1/H2 only showed `msg+8` accepts 1 and rejects 200, and in this rig `PLAYER_NUMBER`, `PLAYER_AGENT_ID` and the hero index are **all 1** — hero index, owner player and owner agent are indistinguishable, and the scan's filter actively suggests *owner*. `msg+0xc` = agent id still stands. **(10) 2026-08-16 — ran that rig: hero index 2, and the confound broke** (§18). With `msg+8`=1, `msg+0xc`=200, `msg+0x10`=2 all distinct, the row rendered **`Mo1 Goren`** — hero 2's own name. So **`msg+8` is definitively NOT the hero index** (it carried 1 while the hero was 2), settling by experiment what §17.3 could only doubt; what it *is* stays UNVERIFIED, narrowed to owner-player-number vs owner-agent-id, which are both 1 here. **And `s_heroClientData` row 2 = `Goren` is now confirmed FROM THE SCREEN**, independently of the recon's `textrec.py` resolution — rows 1 and 2 both verified from two unrelated directions, so the catalogue reading is solid. Remaining confound: `0x0074`, `0x01C2`'s `msg+0x10` and `0x0072` all carried 2, so which message supplies the identity is undetermined; **(11) 2026-08-16 — ran that split too, and `0x01C2` carries NO hero identity at all** (§19). Prediction on record first: row 3's name id 36274 resolves to **Tahlkora**, so Tahlkora would mean the identity rides `msg+0x10` and Goren would mean it rides `0x0074`/`0x0072`. With `0x0074`/`0x0072` on hero **2** and `msg+0x10` on **3**, the row read **`Mo1 Goren`** — the client ignored the party-add message's hero id completely, with no crash and no change. So the hero's identity arrives **entirely on the data-cache family**, and `0x01C2`'s five fields are a party id, an owner-ish word (UNVERIFIED), the agent id and two bytes. That is stronger than §0's original "a hero carries no NAME": it carries no identity. **`msg+0x10` is now inert on everything observable** — §17.1 read it as the commander key from the scan's `[edi+8]`, §17.2's hero-id value did not fix the panel click, and a deliberately WRONG value here changes nothing; consistent with §17.2's leading explanation that the scan never runs. Its role stays RECONSTRUCTION. **(12) 2026-08-16 — split those too, and the question was malformed** (§20). Three outcomes named first; the run gave the third. With `0x0074` creating a record for hero **2** and `0x0072` activating hero **3**, the client produced `charHeroData` / `ChCliHero.cpp(199)` — the **identical** assert §11.3 got by omitting `0x0074` altogether. So **`0x0074`'s field 1 is the record KEY and `0x0072`'s field 1 is a SELECTOR into the same namespace**, and a mismatched selector is indistinguishable from the record never existing. Neither message "supplies" the identity: `0x0074` creates a keyed record that carries it and `0x0072` activates that record under the same key. It also re-confirms §11.3 from a new direction — that section removed `0x0074` to prove it creates the record; this keeps it and mismatches the key, a different manipulation reaching the same gate. **The family now reads: identity is the data-cache record's; `0x01C2` only binds a roster slot to an agent id.** **(13) 2026-08-16 — `msg+8` IDENTIFIED: it is the OWNER PLAYER NUMBER** (§21). `--player-number 2` finally separates `PLAYER_NUMBER` from `PLAYER_AGENT_ID`, and two arms differing only in `msg+8` are **exact mirrors**: `msg+8`=2 (player number) renders the row but leaves the commander slot unbound; `msg+8`=1 (agent id) binds flag 1 but shows **no row**. The roster row appears exactly when `msg+8` equals the declared player number — consistent with the original rig and with H1's rejection of 200 — so the field is now positively identified, closing the thread §11.1 opened wrongly, §17.3 withdrew and §18 refuted. **The mirror is the unexpected half**: both consumers read `entry+4` yet compare it against DIFFERENT "my id" values — the roster UI against our declared player number, the `GmHeroCommander` scan against `ctx[0x44][0x2ac]`, which stayed 1. RECONSTRUCTION: `--player-number` changes only what we SEND, not what the client believes about itself, so it desynchronises the two; in the default rig both are 1 and everything agrees, which is why the hero worked. Whether `ctx[0x44][0x2ac]` is the agent id or a client-side player number is still undecidable here (both are 1) and needs the CLIENT's value moved, not ours. Practical: do not use `--player-number` outside this experiment — it makes the roster row and the commander binding mutually exclusive. **(14) 2026-08-16 — found what writes it, desk work only** (§22): `ctx[0x44]` is the MISSION subsystem (accessor `0x0084DD70` sits in **MsCliApi**), `--field 0x2AC --writes` gives eleven stores of which two in that range are real, both copy **field 1** of a message struct, and neither has a call xref — each VA sits in one aligned `.rdata` word, i.e. a dispatch entry. `msgshape --all` resolves them: **`0x0199` INSTANCE_LOAD_INFO** (handler `0x0084EF00`) and `0x01A4` (handler `0x0084F230`, never sent by us). **So `ctx[0x44][0x2ac]` is `0x0199`'s field 1 — the player's agent id, which this server has sent at every instance load since the beginning.** That explains §21's mirror exactly: the roster UI filters on the player number while the commander scan filters on `0x0199` field 1, and `--player-number 2` moved one and left the other at 1. In the default rig both are 1, both filters see 1, and the hero binds. **Trap removed:** that field was a literal `1` at the send site rather than `PLAYER_AGENT_ID` — harmless today, but it demonstrably feeds a filter three subsystems away, so it now uses the constant. The confirming arm (move both together) was NOT run and the reason is recorded: it means moving `PLAYER_AGENT_ID` itself, which touches the spawn path and deserves its own arm. **(15) 2026-08-16 — A FULL AUTHORED PARTY OF FIVE** (§23): player + heroes **Norgu, Goren, Tahlkora** in commander slots **1/2/3** + the **Hatcher** henchman, one roster, one run. `--hero` takes a list and `hero_slots()` owns the agent-id/definition arithmetic in one place. Four things measured that n=1 could not: the `heroCommanderSlot[7]` array **assigns sequentially and independently** (three separate numbered buttons); each hero **resolves its own identity** from its own `0x0074` record, so §20's keyed-record model holds past one; heroes and henchmen **coexist and the client distinguishes them visually** — the henchman row has NO numbered button, which is §3.1's reconstruction and the wiki's "three individual flags plus one all" now visible rather than inferred; and **`s_heroClientData` row 3 = `Tahlkora` confirmed from the screen**, so rows 1/2/3 are each verified from two unrelated directions (archive resolution and the client's own rendering). Guards mirror the client's bounds: >7 heroes refused (`cmp 7` at PtPlayer:332 and GmHeroCommander:214), duplicate hero ids refused (one record per key),  **(16) 2026-08-17 — THE COMMANDER QUESTION IS MEASURED, and the arc's last wall is down** ([studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §33). §26.4/§27.2/§32 all stopped on one sentence — *does `0x008590CA` execute, and it needs a breakpoint or code cave*. Built as `toolkit/clientscan/commandertrap.py`: a debugger in pure `ctypes` setting EXECUTE breakpoints in **DR0..DR3**, which are per-thread processor state, so **nothing is written into the client** — no `int3` over an instruction, no code cave, no injection (carve-out 3 permits a compiler; this did not need one). Every site's bytes are re-verified against the RUNNING process before arming, because the pin is 38797 and these are 38833 addresses and §24 already crossed those once. **Three arms, control firing in all three.** Default rig (party-cache HIT): `worker=1 raise=0` — §26.2's gate OBSERVED doing what the disassembly said, predicted in writing beforehand. `--hero-bust-cache` (cache MISS): `worker=1 raise=1 case93=0` — **the event IS raised and its handler never runs**, and the image's own byte map + jump table make that unambiguous (`0x1000011E` → case 93 → `0x004E5DE1`, the ONLY event routing there). Bulk path: `bulkraise=1 bulk=0 create=0` — `0x00524C40` **never executes**, confirming §27's `count=0` by a code trace rather than a memory read, two unrelated instruments agreeing. **The corrected shape: the missing piece is a SUBSCRIPTION, not a trigger.** Every earlier fix (`inventoryId` §16, `msg+0x10` §19, the cache gate §26) aimed at making the client RAISE the event; §26's arm actually succeeded at that and the panel still asserts. **So `0x01C2` cannot bind a commander and no wire field will change it** — the hero as authored (row, name, level, profession, attributes, skill bar, lit flag) is complete for everything the wire governs. Also confirmed from the frozen client: §25.1's push-order decode against the live stack, and §26.1's `ecx`-holds-the-entry claim. **Four tool defects, three caught by the tool's own control before it ever read the client** (§33.8) — a 64-bit debugger receives `STATUS_WX86_SINGLE_STEP` (`0x4000001E`) not `0x80000004` from a WOW64 target, so v1 reported NO HITS and would have published the right headline from a dead instrument; `EFLAGS.RF` does not survive `ContinueDebugEvent`, so one instruction trapped 32 times in 4ms and read as "executed 32 times"; state was captured after the read handle closed, so a whole run's fields came back `None` and that run was DISCARDED rather than published; and the module list is not ready the instant a process exists. **The control had a hole too**: it stopped at the first hit, proving a breakpoint FIRES while saying nothing about whether the target RESUMES — and the untested half was the broken one. **(17) 2026-08-17 — (16)'s wall is DOWN, and its closing sentence is SUPERSEDED** ([studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md), the PvP-UI arc, `4bab982`+). (16) ended *"`0x01C2` cannot bind a commander and no wire field will change it"* — the subscription reading was right and the conclusion drawn from it was wrong, because the missing piece was **timing**, not a field. Measured: our `0x01B2` raises `0x10000114` at instance load and **GmView subscribes to that event 53 milliseconds later**; its GmView case is the only caller of the commander-model rebuild, nothing raises it again, so the model is built once over an empty container and never rebuilt. **`--party-mine-late SECONDS`** (new, opt-in, off by default) re-sends `0x01B2` after the load — a second send is a second raise, because the handler raises on both branches — and `0x00524C40`, the function (16) proved never executes, **ran for the first time in this project**: commander container `count=0 → count=1`, `heroCommanderSlot[0] = 0x1`. A wire message binds a commander after all; it just has to arrive when someone is listening. **Then three owner clicks on the party-window hero button walked the assert forward four times**, and the whole `GmView` case for `0x100001A4` now passes: `commander` (5890) → `heroData` (5897, with `--hero-roster-id 200`) → `heroData->agentId` (5898) → out of `GmView` entirely. That last hop was this lineage's recurring failure again — `heroData->agentId` has exactly one writer, opcode **`0x0072` HeroActivate**, and `HERO_ACTIVATE = False`: **a message the tree already implemented, behind an opt-in flag no run of the arc had switched on**, the fifth such (after `0x0037`, `0x003A`, `0x00B7`, `0x00DA`). The click now stops at **`inventory` / `ItCliApi.cpp(488)`**, a general 22-caller equip-slot helper — **the hero has no per-owner container in the item client's table at `[globals+0x40]+0xD4`**. Cross-checked against §8's `0x006D` item line the same day and it is NOT that: item RECORDS already exist (375/375 of retail's non-zero `0x006D` ids are `0x015E`-family declarations), the missing piece is the owner's container, and our `0x013F`/`0x013E` bag family has only ever been addressed to the local player. Corrections this arc owes, all in its study: the harness does NOT default to 38833 (`drive_client.py:87` selects by build, :167 excludes it — pass `--exe` **and** `RURIK_DAT`); `0x01D9` writes `+0x58`, a different field, not the container pointer; and **every `PyCliParty` worker takes `this = object + 4`**, so field `+0x54` is spelled `0x50` and a displacement-anchored scan returns a confident zero — now a fourth documented blind spot in `codescan.py`'s footer. **AND THE HERO HALF IS SETTLED THE SAME WAY THE MONSTER HALF WAS, 2026-08-20** (`7df1dce`, `d037bc5`, [studies/heroes §5.5](studies/heroes/FINDINGS.md)): the shipped client holds **no hero AI at all**. 51 of 937 embedded source paths match hero/companion vocabulary and every one is UI, a client-side `Cli` record or a `Const` table; a behaviour-vocabulary regex over 19,758 asserts returns **exactly one hit**, and it is a widget asserting its own button state next to `m_aiMode < AI_MODE_ICONS`. The client's whole notion of hero AI is how many pictures the button strip can draw. This did NOT follow from `studies/monsterai` — GWW says heroes and henchmen share an AI and says nothing about hero↔monster — so it was re-run with hero vocabulary and its own control. **So this rung is authoring, not recovery**, and §5.6 counts what the authoring can be checked against: ~92 implementable per-skill rules, not the 184 the category size implies. Deliberately unplanned further — the rules are conditions over effect state R4b does not model, and the skill substrate's schema is likely the AI's schema. |
+| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. **And the ITEM half stopped being opaque on 2026-08-20** (`3cdb0c8`…`2f15b41`, [studies/itemmods](studies/itemmods/FINDINGS.md)): every item's stats live in 32-bit modifier words that `content/items.toml` could only copy verbatim out of a capture — armour rating, damage range and every "+N" line among them, which `studies/character` called "the largest hole" in three places. The format is now read out of the client's own parser — `{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}` over 157 identifier slots, each one's meaning recoverable because every handler formats through TextApi — validated on **5,266/5,266** real modifier words and located structurally on all three builds. **A word we composed has been rendered by the retail client**: `0x21F81301` on the starter hammer drew `Hammer Mastery +1 (Stacking)`, so authoring an item's stats is now writing a number rather than finding one. The trap: bits 31, 30 and 19 are a fixed per-identifier prefix and must be COPIED, not computed. |
 | **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against the props chunk through the test's own walker — the terrain path never reads it) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). **Since 2026-08-13 the interchange carries PROPS** (format_version 2): every placement from BOTH streams cross-checked at export through `corresponds()`, model indices resolved to file ids with MFT (size, crc) identity, **the rotation composition measured** — z first, then x, then y, per-axis signs (−, +, −), 3,545/3,545 multi-axis records on a 12-map probe, closing what `props.py` had open — and Blender places every placement as a measured proxy (footprint prism or radius cylinder; placements only, NO ArenaNet model geometry, which nothing in this tree decodes). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **And since 2026-08-12 the OTHER delivery route is open: the client's own map compiler builds from a Stripped stream we supply** — §35 it compiles at all and reproduces ArenaNet's bytes, §36 it compiles the stream WE write rather than anything cached, and **§38 it floods terrain we AUTHORED**: the rebuilt navmesh stops at world x = 1152.0, the cell boundary we chose, with walkable area in the steep strip falling from a measured 37.3% to 0. **Portals and multiple planes are DONE as of 2026-08-12** (FINDINGS §31, closing §8 item 10(b)) — ~~this row listed them under "What is NOT done"~~ for six days after they landed, which is exactly the staleness the top of this section is about. A portal WE authored joins two planes: `portalprop` (`plane_map [0, 0]`, **18 of 18 gates**) walked **65 s with no crash**, the bounding box opening from (0, 64)..(2048, 3072) to (0, 0)..(3072, 3072), and the client reported **plane 1 on 19 of 49** reports with **17 past x = 2048** — where the no-portal arm was pinned at x = 2048.0 and reported plane 0 on 76 of 76. The props chunk that makes plane 1 legal (6,585 B, plus 89 B of model dependencies) is **carried from row 33086 at run time and never stored**, the `mapbuild` FINDINGS 14 pattern. **The control is what makes the green arm mean anything**: `portalpropbad` (`plane_map [0, 67]`, one past `propCount`) crashed on `Assertion: index < m_count, Array.h(587)` with **`edi = 0x43 = 67`**, the value we wrote into tag 12, arriving in the register the disassembly said holds the index. The diagnosis predicted the register contents and not merely a crash. A prop index only has to be IN RANGE; prop 0 of row 33086's 67 is somewhere else entirely in the world and the client did not care. **Residuals, named in §31.4 and carried as live next-actions at §8 items 10(h) and 10(i)**: what plane 1 looks like **underfoot is untested** — nothing measured the character's z, our terrain is flat, and the prop carrying plane 1 is elsewhere in the world, so it may be walking on nothing (the interesting version of the rung is a plane whose prop IS its surface); and **one prop index was tried, not the space** (`[0, 0]` works, `[0, 67]` crashes, nothing between). **What is NOT done**: authored art (textures are borrowed retail file ids) and elevation — a height field that is not flat, walked, is still open as §8 item 10(c). That is the TERRAIN side; §31.4's untested-underfoot residual is the neighbouring question on a PROP-MOUNTED PLANE, tracked separately as 10(h), and neither answers the other; only the terrain of §38's map is ours (props, zones and collision are ArenaNet's); and the delivery path is still `datwrite` into a copied archive — which now bounds authoring to maps that SHRINK, since it writes uncompressed and will not relocate (§8.10 e9). |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10**, `fbedcfb` — **and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
+| **R-IDENTS** | **An identifier convention for new tokens, and a resolver for the old ones** | A token met in prose resolves to its defining document in one command, and a new namespace is minted with a registered word prefix | ✅ **2026-08-20**, arc landed `f8d63a1`. The arc: [studies/idents/CONVENTION.md](studies/idents/CONVENTION.md) (the rule, and the only place it is written) + [studies/idents/HANDOFF.md](studies/idents/HANDOFF.md) (the census and the three defects — cross-arc collision, kind collision, and the same letter twice in one document). **The headline is a refusal**: a mass renumber of the existing tokens was costed and rejected as the exact shape of the 2026-08-12 provenance scrub, so nothing is migrated and every historical `C-6`, `R0a`, `H1` keeps its name. **Scope note:** the no-migration scope is owner-ratified — §7 Q8, CLOSED 2026-08-20. What landed instead: new tokens take a registered word prefix (`GATEFIRE-C3`) whose word names the *defining document* and is declared in a legend line in that document — the kind of thing a token is lives in the legend, never in the letter, because encoding kind in the letter is what produced the collisions in the first place; a resolver that works on the 80 documents written *before* the convention AND on the tokens it mints (`python toolkit/whichrung.py C-8`, plus the raw grep one-liner in CONVENTION.md §4, which is hyphen-literal and returns two of `C8`'s three row-or-heading defining sites and one of `C-8`'s — the tool returns all three and names the ambiguity, and a fourth definer, a bold list-lead in `studies/combat/PLAN.md`, sits outside both patterns, which is why every count is a floor); and an accumulation tripwire, `toolkit/identlint.py` + `test_identlint.py`, explicitly **not** a hard gate — provlint's posture, for provlint's reason. Two side findings: the R-ladder drift between `PLAN.md` §3 and `HANDOFF.md` was closed by **annotating in place**, not syncing (`HANDOFF.md:116`) — re-syncing two copies only resets the clock, and the `R0`→`R0a`/`R0b` split turned out to *vindicate* that document's own headline call; and the bare-integer commit-subject prefix (`29:`→…, defined by no document — no count is pinned, it grew by one between census and landing) is **retired** with its meaning recorded rather than rewritten. Census counts are floors: the widened re-run found several times HANDOFF §2.1's 108 defining sites, and quoting any number bare is refused — ask the tool. |
 
 | **R-ISLE** | **The Isle of the Nameless as a calibration range** | Rungs per [studies/isle/PLAN.md](studies/isle/PLAN.md): reader, route, offline bench, loopback probes, plumbing, then the live sessions | 🔶 **rungs 1-5 DONE 2026-08-16/17**, landed `f17cd49`. The arc: [studies/isle/HANDOFF.md](studies/isle/HANDOFF.md) (**start here cold** — the traps, not the status) + [studies/isle/PLAN.md](studies/isle/PLAN.md) (the north-star doc: instruments, skeptic-attacked designs, the ladder) + [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) (rung 3's eight offline answers; rung 4's four operator-confirmed probe results). Headlines: the AoE radii are static (`s_skill +0x6C`: adjacent 156 / nearby 240 / in-the-area 312, +10-16 bounding-radius hypothesis for the Isle markers to test); the Master of Damage's chat numbers are extractable AND rendered ("is now level 17!" on our own client — 0x5D needs its 0x5E tag); the enc_name → nameplate route is PROVEN (station 1470 = the Ascalon City outfitter, operator-read); conditions map 478=Bleeding..486=Weakness (+2077) with degen server-owned; the three damage kinds separate on the client bar (16/17 debit, 18 notifies); `agentroster.py` reads any capture into cross-session-stable stations; `map.280` is in content with the 0x0195 prediction pre-registered; a PvP-only character reaches 280 (owner-confirmed, GWW-corroborated — the ONE PvE area they may enter). **rung 6 is DONE 2026-08-17/18** across two live captures — `20260817T231139` (the island west and centre; 15/15 connections after the manifest-writeback fix) and `20260818T094648` (the east line, 5/5). Both `game_mode base`, `exe_unchanged: true`, seals AGREE. Results: `0x0195` field 1 = **165811 six times**, and it is a TERRAIN-FILE id shared with map 248, not a per-map id — the whole message is now decoded in [studies/mapload/FINDINGS.md](studies/mapload/FINDINGS.md) (7 fields, 30 loads, both builds; settles `studies/tape` §1.2, corrects a `0x0084EE83` misattribution in `studies/enemy`, and moved `map.280`'s spawn to retail's arrival position); field 2 is the arrival position, byte-identical across all Isle loads; **7 of 10 pre-registered missing definition indices** were found in the unwalked east (130, 139, 146 still unseen); the east holds the **skill-bar foe Masters with their pets and spirits** — level-0 model-less bodies with churning agent ids beside a level-20 owner, matching three separate pre-run wiki claims on profession, level and summon structure at once; the **Students** came out 10 bodies over 10 consecutive slots split exactly 5 ally / 5 foe; and the range ladder is closed (10 rungs, byte-identical across visits, ±12.4 u). Which body carries which NAME is NOT recoverable from a capture — the `enc_name` render is the only route, and a claim identifying one was withdrawn under adversarial review. **RUNG 7 IS DONE 2026-08-18** — capture `20260818T132739`, 9/9 decrypted, seals agree, 495 damage events, then five independent agents (one blind re-derivation, one wiki sourcing, two adversarial, one on the chat oracle) sent at the results. **The armour exponent B9 called NOT REACHED is now reached, and the whole outbound damage formula with it**: `points = round(roll × 1.20 × 2^((SL − AR)/40))` with SL = 5·rank to 12 then +2 per rank, pinned by a **band test with zero free parameters** (AR60's support fixes the scale; AR80 → 13..19 and AR100 → 9..14 follow exactly). The mean-ratio fit gives D = 39.5, 95% CI **[37.30, 42.00]** — containing 40 at −0.8σ/−0.1σ, and it must never be quoted bare, which is the review's sharpest correction. **`GV_CRITICAL = 17` is CONFIRMED**, ending a CONTESTED row: 10/10 blocks zero-variance over 100 events, one multiplier fitting nine blocks inside a 0.83% window containing √2, p16+p17 = one event per swing (so 17 REPLACES 16), and crit rate rising monotonically 6%→34% with attribute rank. **The Master of Damage oracle worked**: its announced total 1496 equals our independently summed integer points exactly and *selects* H=590 out of the fraction grid's `{590k}` family — a check that could have failed. **Gate 1's attribute channel is measured at last** (`0x0037 [agent, unspent, 200]`, `0x003A` column-major base|effective ranks, `0x003B` per-change, `0x0038` the debit): the +1 rune bonus is visible on the wire, damage uses the EFFECTIVE rank, and the point budget closes two unrelated ways to cum(12) = 97. **Four claims were corrected or refuted by the review and all are recorded**: the unmet-requirement `/3` is REFUTED at 3.5% with no replacement permitted (the rank-8 crit is a disjointness, not a rounding miss — the one open defect); the rank-kink ratio is statistically worthless (95% CI [−17, 24]) and is replaced by ratios of means at −0.8σ/+0.3σ; "continuous roll" is downgraded to "≥ ~40 steps"; and the 1496 line is an end-of-combat auto-report, not the `/bow` response (`/bow` is 4.46 s later). Full record: [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 7, LIVE #2". **Rung 8 PREP DONE the same day, and its exit criterion was MET OFFLINE** ([studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 8 prep"): the design expected a refutation because `0x0042` had zero ArenaNet witnesses, and the corpus in fact holds **97 applies + 88 removals**, with `0x0044` closing `0x0042` at apply+duration to the millisecond. **Field 3 is the applier's ATTRIBUTE RANK** — confirmed on four skills against GWW progressions (Windborne Speed at the Master of Winds' 15 Air Magic → 13 s; `"Charge!"` at the operator's own Tactics 10 → 10 s; Pin Down's Crippled at rank 13 → 13 s; the environment torches at rank 0 → fixed 30 s) — so the two conditions where it equals the duration were arithmetic accident. **Hexes and enchantments, §3.3's "largest single miss … no instrument at all", were already captured and merely unidentified**: skill **984 = Torch Enchantment** and **998 = Torch Hex**, 30 s each, matching GWW's effect ids exactly. And the repo's **first cure** is on record — `"Charge!"` stripping Crippled in the same millisecond, its 33% speed boost visible as 288 × 1.33 on `0x0027`. Consumer built first again: `toolkit/authsrv/bufflog.py` (36 checks) reads episodes as EXPIRED / STRIPPED / OPEN and refuses to attribute an effect outside a mark window, since `0x0042` carries no source agent. **The live session is staged** (`vault/plans/isle_rung8_effects.txt`, 27 steps) for the four things the corpus cannot give: skill **999** (the degeneration torch, never captured), the five foe Students' condition ids, degeneration in pips against GWW's 3/4/4/7, and the rank ladder that closes rung 7's open defect. Prep detail: the consumer `toolkit/authsrv/damagepass.py` built and proven on retail bytes first — the rung-6 detour's PvP arenas turn out to hold the vault's largest damage corpus (641 p16 + 119 p17), which measured the attack-skill confound (10 of 11 arena p17 groups nonzero-variance) and recovered 480 = level-20 base health from a fraction grid; the bench geometry is recovered (Suits 152/153/154/152 in a row, the 60-pair predicted at its ends; MoD prof-6 candidates 144/145); the sealed-plan draft with every prediction pre-registered (including both weapon-type branches for the rank sweep) is staged at `vault/plans/isle_rung7_damage.txt`; and the blocking behavioural-cap question was ruled same-day — **§7 Q7, the cap is STRUCK** — so **the run itself is next and is the operator's**: RUNBOOK live procedure + `--minutes 45 --mode base --plan vault/plans/isle_rung7_damage.txt`. Bonus banked en route: the no-combat east run's one combat episode (operator hit by slot 137's Pin Down) shows **condition application arriving on `0x0042` on retail traffic** (481 Crippled, 13.0f duration-like arg, move speed halved server-side) — rung 8's Torches-first channel question observed once, early. Residuals riding the next loopback pass: the varint send, the overhead channel, skill 2077's render, the energy probe. |
 
@@ -583,7 +584,7 @@ Both are now graded against an enumerated content surface:
   player-skill `type_code` families, and R4b is met when at least one named skill id in
   each resolves its effect correctly *against the client's own state* — not against our
   server agreeing with itself. The manifest names an exemplar per family (Frenzy 346,
-  Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 0.** Nine and not 21
+  Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 8 of 9 on the episode reading and 3 of 9 on the mechanic reading, 2026-08-20 — and which of those the criterion means is an OWNER RULING this rung now needs.** Eight of the nine families apply, render, time and expire at the client; three of them (Spell, Signet, Attack) also do what the skill says, and the ninth is Charm Animal, whose effect is a pet. §3's R4b row carries both numbers, the per-family table and the argument. Nine and not 21
   because the other twelve codes have no Pre-Searing content to test against; grading
   against 21 would grade v1 against non-v1 content.
 - **R4c — split, because the two halves are reached by different instruments and reporting
@@ -1328,9 +1329,608 @@ afterwards) are statistics, not behaviour, and stand. This unblocked the rung-7 
 (`vault/plans/isle_rung7_damage.txt`), which was header-blocked on this ruling per
 `studies/isle/PLAN.md` §6's cross-cutting question.
 
+**Q8. Does the identifier convention's scope stay "new tokens only" — no migration of
+the existing corpus?** ✅ **CLOSED 2026-08-20, by the owner: YES, new identifiers
+only.** This ratifies the ruling `studies/idents/HANDOFF.md`'s top box made and the
+arc adopted at landing (§3's `R-IDENTS` row): nothing is migrated, every existing
+token (`C-6`, `R0a`, `H1`, …) keeps its name in the documents, the commit messages and
+the owner's own memory, and a mass rename is refused as the exact shape of the
+2026-08-12 provenance scrub — 46 rewrites, all reverted, the record Q3 carries. The
+handoff's decision 1 asked for this yes explicitly because it is the decision that
+priced the arc at an hour rather than two days; the arc landed on the refusing,
+cheap-to-reverse direction, and both PLAN rows carried a "not yet recorded" note until
+this row closed it. [studies/idents/CONVENTION.md](studies/idents/CONVENTION.md) is
+the convention; reversing this ruling is the two-day migration it declines.
+
 ---
 
 ## 8. Immediate next actions
+
+### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
+
+Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
+[studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
+[studies/idents/CONVENTION.md](studies/idents/CONVENTION.md)).
+
+**WORLDMAPS-W1 landed** — `deploy.py --install` writes the Stripped partner
+compression-8 and judges the fit on the COMPRESSED size: 96×96 compresses
+21,786→2,828 B and **replaces in place** inside map 143's 4,608 B reservation,
+where 32×32 was the old ceiling. `--stored-install` is the byte-identical
+control arm. **WORLDMAPS-W3 landed** — `created = true` map rows make
+`--install` ALLOCATE a brand-new two-row chain via datalloc instead of
+displacing rows 71496/71497; `[map.166]`/`[area.frontier]` are the first area
+that takes nobody's row. Both skeptic-verified; floors test_deploy 35→112,
+test_content 39→40, test_contentids 19→20.
+
+**WORLDMAPS-W2 RAN 2026-08-20 and is GREEN** —
+`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` RESULTS. The retail client's
+re-bloat compiler READ the partner we compressed and built the identical map
+(3,941 B → 1,316 B comp 8, replace in place; readback identical to the stored
+arm line for line). The last place an authored map deviated from retail's own
+shape is closed. Its **two flagged follow-ups are both closed** (`ec5f426`,
+[studies/customarea §61](studies/customarea/FINDINGS.md)): `serve_run` scored
+the server's legitimate no-rows line as a serve FAILURE and now returns a third
+verdict, `SERVED-UNPOPULATED`, with the navmesh half still load-bearing (an
+empty area may downgrade a PASS, never lift a FAILED) and a second reader that
+refuses when our content and the server disagree about what lives in an area —
+test_deploy floor 92→112, twenty checks, eight sabotages. And the suspected
+content drift **did not happen**: plaza has never had a spawn row in any commit,
+and FINDINGS 56's "5 of 5" is its PROPS readback, not bodies.
+
+**WORLDMAPS-W4 RAN 2026-08-20 and is GREEN too** —
+`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS. The client resolved a
+map chain born under an id nothing had ever bound (0x5F0B0), logged the re-bloat
+line naming it, compiled our terrain from the created compression-8 partner (64
+trapezoids, readback 6/6 including the owed spawn-in-one-trapezoid check), left
+the partner byte-untouched and kept the registration through Flush — FINDINGS 36
+item 4 closed, A9's witness extended from READ to COMPILED, and displacement
+retired: the next authored area need not take rows 71496/71497 hostage. The
+throwaway was delta-captured (PROVEN, 24,736 B for 4.2 GB — datdelta's first
+real customer) and deleted. Two sheet lessons recorded: a fresh run directory
+needs its own firewall cage (fail-closed refusal worked as designed), and the
+launch stages were split to keep the compile run's Gw.log from the serve
+sessions.
+Known deliberate gap: a compressed install SHRINKS the row, so small→large
+iteration relocates until `grow_to` is wired into the map path — its own
+change, costed separately.
+
+### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
+
+[studies/skills §17–§22](studies/skills/FINDINGS.md), [studies/isle B4](studies/isle/FINDINGS.md).
+Landed `6326ec7`, `d3eb81d`, on top of the substrate entry below.
+
+**The entry below built the channel; this one made it do things.** Five pieces,
+each measured before it was built and three of them then watched at a client.
+
+**THE TALLY, per §3.2's nine families**, with the exemplar the manifest names:
+
+| family | exemplar | effect | MECHANIC | watched |
+|---|---|---|---|---|
+| Stance (3) | Frenzy 346 | 8 s | ✗ +33% attack speed | ✓ icon, timer, expiry, **replacement** |
+| Hex (4) | Faintheartedness 135 | 3 s on the foe | ✗ | ✓ applied |
+| Spell (5) | Flare 194 | — | ✓ **20 fire damage** | ✓ dealt exactly 20 |
+| Enchantment (6) | Reversal of Fortune 307 | 8 s | ✗ damage negation | ✓ applied |
+| Signet (7) | Healing Signet 1 | — | ✓ **heals 88** | ✓ client health **54→100** |
+| Skill (10) | Charm Animal 411 | ✗ | ✗ a pet | ✗ |
+| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ no energy model | ✓ applied |
+| Attack (14) | Sever Artery 382 | Bleeding 9 s | ✓ **3 pips of degeneration** | ✓ **three arrows on screen** |
+| Preparation (19) | Ignite Arrows 431 | 24 s | ✗ fire damage on arrows | ✓ applied |
+
+**8 of 9 resolve something at the client; 3 of 9 resolve their MECHANIC.** The
+one that resolves nothing is Charm Animal, whose effect is a pet — no table data
+at all, `skill_arguments = 0`, and genuinely out of this rung's scope.
+
+**Three rules the wiki had all along, and one of them answers an open question.**
+§16.1 left *"how does an effect get replaced"* as NOT FOUND. GWW answers it for
+three of the five effect types, and two of those say it in text the game shows a
+player — Isokeh, Expert Ranger: *"Only one Stance can be active at any time…
+using a new Stance will replace the previous one"*; Preparation *"Only one
+preparation can be active at a time"*; Glyph *"the new one replaces the old
+one"*. It is per TYPE and per AGENT, hexes and enchantments carry no such rule,
+and on the wire it is `0x0044` then `0x0042` — forced rather than chosen, since
+re-sending the apply alone is discarded. **WATCHED**: Rush's icon became
+Frenzy's in the same slot under the same green border, never a third icon.
+
+**Healing exists, and the channel was measured rather than picked.** Over 2,007
+property events on `0x00A3`: property 16 is negative **1251 of 1251** and 17
+negative **243 of 243**, both self-directed **0 of 1501** — damage always has a
+distinct attacker and victim. Property 55 is **positive 502 of 506** and
+**self-directed 454 of 506**. So 55 is the health-GAIN direction and GWCA's
+`armor_ignoring` names the mechanism, not the direction. **CONFIRMED**: the
+client's own health readout goes 54 → 100 → 54 → 100, moving by exactly the 46
+sent. It draws **no green number**, though — 0–8 saturated green pixels across
+twenty frames spanning three heals — so the client applies a heal and does not
+annotate it. OPEN, and named.
+
+**Conditions have their join, and then their rule.** The duration comes from the
+INFLICTING skill (isle); *which* condition comes from GWW's progression variable
+name, and the seconds from the client's bonus slot — **the bitfield picked the
+slot before the wiki was read**. Then a run put FIVE Bleedings on the player,
+3 pips → 6 → 9 → the cap at 10, twenty health a second. GWW: *"Reapplied
+conditions will last the original time period, unless the reapplied duration is
+greater than the remaining amount of time."* One instance per pair; shorter is a
+no-op on the wire as well as in the table.
+
+**AND `studies/isle` B4'S LAST OPEN CLAUSE IS CLOSED, by accident.** B4 confirmed
+property 44 as the net regen rate quantised at 2/H and left *"that one 2 hp/s
+step equals one HUD pip (needs a screen, not the wire)"* unverified. Degeneration
+needed exactly that number: Bleeding is 3 pips by GWW's table, `-3×2/100` on a
+100-health player. The client drew **exactly three arrows**, and its own
+displayed health fell 100 → 86 → 72 → 58 → 44 across frames **2.32 s** apart —
+**6.03 health/s against the 6.00 sent**, three times over, with no free parameter
+on either side.
+
+**Two defects only a run could find**, both now fixed and both with a control:
+casting a HEX made the player swing a hammer (`cast_tick` dispatched on *"is
+there a target"*), and Flare dealt that same hammer swing instead of its own
+decoded 20, because only the `additive` damage mode was ever read. Dispatch is
+on `type_code` now — only type 14 rides a swing.
+
+**NEXT, in cost order:**
+
+1. **Energy and adrenaline**, which is now the single biggest missing system: it
+   gates casting, it is the whole point of Glyph of Lesser Energy, and the
+   default bar's two stances cost adrenaline so a run has to swap them out to
+   press one. Whether the client greys an uncharged adrenaline skill and
+   swallows the keypress is still untested.
+2. **The five unmodelled mechanics** — attack speed (Frenzy, Rush), movement
+   speed (Rush), damage negation (Reversal of Fortune), energy cost reduction
+   (glyphs), and bonus damage on arrows (preparations). Each is a per-skill wiki
+   row on machinery that now exists.
+3. **Does the client draw anything for a heal?** Property 55 is applied and
+   unannotated. Worth one probe.
+4. **The enemy AI now heals itself to full every few seconds**, because Restore
+   Condition finally resolves. Same class as the hex spam: `pick_skill` is a
+   round robin that asks only whether a slot recharged, and this makes the
+   fight unwinnable. It is an AI rule, and `pick_skill` says in its own
+   docstring that it is not where AI rules go.
+5. **`type_code` 16 is on our own bar and is named nowhere** (Defy Pain 318,
+   with a real 20 s duration). Eleven of the 21 player type codes are unnamed;
+   this is the one that costs us something today.
+
+### The EFFECT SUBSTRATE exists — R4b's spine, and the client draws it (2026-08-20)
+
+[studies/skills §12–§16](studies/skills/FINDINGS.md). Landed `25f96d1`, `68af4c4`,
+`bc4a125`. New: `toolkit/authsrv/effects.py`, `test_effects.py` (floor 51).
+
+**Until today this server modelled no effects at all** — `authsrv.py` knew
+`EFFECT_DEAD` and `EFFECT_TRANSITION` and nothing else, so every skill whose scale was
+not damage resolved to nothing. Stances, hexes, enchantments and preparations now open
+an episode on an agent (`0x0042`) and close it when its duration runs out (`0x0044`).
+
+**IT WORKS AT THE CLIENT, BOTH DIRECTIONS**, runs `20260820T174731` and
+`20260820T175507`. A keypress runs the whole chain — `0x8046 USE_SKILL` → the
+four-opcode cast cycle → `0x0042` at cast end → `0x0044` eight seconds later — and the
+enemy's hex lands on the player with no input at all. 13 applies, 13 removals, zero
+client asserts, expiry residuals `+0.03/+0.05/+0.03 s` against retail's own
+83-of-88-within-50 ms shoulder. Death STRIPS, per agent, and the icons vanish on film.
+
+**THE CLIENT TYPES THE EFFECT ITSELF.** We send `[target, skill, rank, buff, duration]`
+and nothing else; the client drew Frenzy under a **GREEN stance** border and Scourge
+Sacrifice under a **MAGENTA hex** one, each with its own art. So the whole `type_code`
+taxonomy is something the client already knows per id — getting the id right buys the
+category, the art and the tooltip for free.
+
+**The duration rule needed a size term, and retail is what forced it.**
+`skill_arguments` bit 1 enables the duration set, and `skill_scale_value` refuses a
+disabled set — correct for the SCALE, where Rush's slot holds a constant 25. But retail
+sent duration 30.0 for skills **984 and 998 with that bit CLEAR**, so the bit means the
+duration *scales*, not that the slot is meaningful. Every branch `resolve_duration`
+permits now names a retail witness and every branch it refuses names its zero — the two
+refusals being a **sentinel** (`0x20000` ×22, `0x30000` ×7, 999999 ×1, and 24 of the 30
+are enchantments, which is where "maintained until removed" belongs) and **two differing
+endpoints with the bit clear** (49 skills, not one of them in the 102 live applies).
+Vital Blessing is a sentinel row and it is on our own enemy's bar, so that refusal fires
+loudly every session rather than putting 36 hours on the wire.
+
+**Which skills open an episode is a refusal too.** Desperation Blow carries a real 2 s
+and is an ATTACK; nothing in the table says what those seconds are. Only the four types
+whose GWW definition *is* a timed effect qualify — Stance, Hex, Enchantment,
+Preparation — and everything else waits for a per-skill row, **including Shout**, whose
+two corpus witnesses say a shout *can* open an episode and not what any other shout
+does.
+
+**The field3 finding is NOT this arc's, and that is now written in three files.**
+`studies/isle` rung-8 prep §2 settled `field3` = the applier's attribute rank on
+**2026-08-18** and CORROBORATED it against GWW. What this arc added is scale (96 of 96
+non-condition applies over the whole corpus, no free parameter, re-run every suite) and
+the fact that **the server finally reads it**. `bufflog.field3_report`'s own docstring
+said the question was still open for two days after another study answered it —
+**the fourth time in one week** a measured number sat unread beside code using an
+invented one.
+
+**AND ONE FIX WAS MADE, PREDICTED, REFUTED AND REVERTED, which is the part worth
+reading.** The Hatcher re-casts its hex every ~5 s and the client drew ONE icon whose
+bar drained straight through, so the table was collapsed to one episode per
+(agent, skill) with a stated prediction: re-sending `0x0042` under the EXISTING buff id
+resets the bar. **Refuted** — it drains through three same-id refreshes. **Then the
+corpus refuted the collapse itself**: retail holds **15 overlapping re-applications and
+every one carries a NEW buff id**, the first still closing `expired` on its own
+duration, with same-id repeats only ever after a close. Our original allocator was
+ArenaNet's. Reverted; `test_effects` §4b pins retail's rule instead of our fix.
+
+That relocates the defect somewhere more interesting. Retail's overlaps are all under
+**0.5 s** — same-instant doubles, never a re-cast — and ours were five seconds apart.
+What no monster in the corpus does is what *our* monster does: **`pick_skill` re-casts a
+hex the target already has.** That is an AI rule, `pick_skill` says in its own docstring
+that it is not where AI rules go, and GWW publishes that condition **per skill** — which
+is precisely where [studies/heroes §5.6](studies/heroes/FINDINGS.md) predicted this arc
+would land.
+
+**NEXT, in cost order:**
+
+1. **The effects do nothing yet.** Frenzy's icon appears; its *+33% attack speed and
+   double damage taken* are not modelled, and neither is any other. This is the
+   `scale_means` pattern again — one wiki-sourced row per skill — and it is what decides
+   whether R4b's criterion reads "the episode resolves" or "the mechanic resolves"
+   (see §3's R4b row, which now scores both).
+2. **Energy and adrenaline are still unmodelled, and adrenaline now has a concrete
+   cost.** The default bar's only two stances (Battle Rage 317, Rush 319) cost 4
+   adrenaline, so the run had to swap in the 5-energy Frenzy via `--skills` to press a
+   stance at all. **Whether the client greys an uncharged adrenaline skill and swallows
+   the keypress is untested**, and that is the cheapest reason to model it.
+3. **Name the enchantment sentinel.** `0x20000`/`0x30000` are an enum in the high word
+   and nothing in this repo names them. The client draws "Enchantment Spell" and a
+   maintained-enchantment tooltip from *somewhere*, so whatever reads that slot is the
+   same kind of anchor `s_attrib`'s accessors were for the item modifiers.
+4. **How retail REFRESHES an effect is NOT FOUND.** Re-sending the apply does nothing
+   (measured under both id choices). `0x0044`-then-`0x0042` would work and there is no
+   evidence retail does it. Only becomes live when something needs to extend a running
+   effect, and nothing does.
+5. **Conditions need the join this server does not have.** A condition's duration comes
+   from the skill that INFLICTED it, not from its own row (480: endpoints 3/3, on the
+   wire at 9.0). Modelling one means tracking that attribution.
+### The authoring stack got its infrastructure (2026-08-20)
+
+Branch `claude/archive-infrastructure`: `5dad657`, `ce573d8`, `6a9d00c`, `bae0e1d`,
+`1c35eae`, `772029e`. Six offline pieces, no client run anywhere in the arc, each
+built by an agent and then attacked by an adversarial skeptic before landing —
+every piece took at least one must-fix and every fix is proven red-then-green.
+
+**THE HEADLINE: the archive write path is now operated through tools, not
+scripts, and no launch happens on an unverified archive.**
+`toolkit/mapdata/overlay.py` replaces the `a*stage.py` family for edit-in-place
+runs — a TOML manifest names ACTIVE/RETAIL and the edits by FILE ID;
+plan/build/deploy/retail/status/verify-after; every edit through
+`declaration_fault` plus the reverse-closure gate; the post-flight diffs
+against the PRE-LAUNCH record. `datcheck.assert_archive_safe` is the cage's
+sibling on the archive axis — ten open-time rules, the MFT self-crc that
+preflight is blind to, a crc sweep, fingerprint identity when a profile is
+named — wired at all FOUR launch sites and held there by a disk-derived Popen
+census, clearing all eight real vault archives in 6–7 s each.
+
+**Four things came out of it that outlive the arc:**
+
+1. **C-8 is SETTLED** (`datledger.py`): the 20-row census disagreement was
+   7 rows of archive difference plus 13 of counting convention, both
+   historical numbers reproduced exactly; the "661 unwritable rows" headline
+   is a `dat_study`/`entries` figure and now says so.
+2. **"Who else reads this row?" is answerable before a write** (`refindex.py`),
+   keyed by MFT row because 3,226 referenced rows on `dat_study` carry more
+   than one file-id spelling. The full index (10.5 MB,
+   `vault/research/refindex/`) reproduced the mdlrefs study's 27 unreferenced
+   FA1-only heads EXACTLY at population — and found the largest "shared
+   skeleton" group is 8,385 heads on an all-zero one-node key, which is why
+   the overlay gate tiers on `contentless` instead of demanding 8,384
+   acknowledgements.
+3. **A staged archive IS its delta** (`datdelta.py`): capture vs retail,
+   reconstitute byte-identically, `--prove` before deleting the 4.2 GB
+   original. The seven staged archives under `vault/exports/archivewrite/`
+   can now be reduced to kilobytes each, with proof.
+4. **A seam probe is worth its agent**: run cold against the finished pieces,
+   it caught the launch gate and `overlay --status` disagreeing about the
+   same bytes five different ways (row-addressed vs file-id-addressed
+   identity, unchecked document trust, raw exceptions past
+   `except ArchiveUnsafe`, a silent `retail_rows` fall-through). All closed
+   the same day, gate and status now proven against one document set.
+
+A/B runs have their mechanical half (`toolkit/harness/abrun.py`): two arms
+through overlay's own verbs, evidence bound to a NAME census of capture
+directories, verdicts written incrementally so a hard kill loses nothing.
+Frame/video measurement stays out by the owner's call. New floors:
+datledger 95, refindex 92, datdelta 84, overlay 133, datcheck 149→168,
+abrun 120.
+
+### Outbound damage is REAL — the armour term, the critical, and the numbers on screen (2026-08-20)
+
+[studies/isle §2, §4, §4.1](studies/isle/FINDINGS.md), `studies/combat` F3. Landed
+`abd9910`, `2b57034`, `2173584`, `89609f5`, on top of the same day's `611417b`
+(armour rating) and `31c79df` (weapon damage).
+
+**The formula was derived on 2026-08-18 and sat unused for two days.** `studies/isle`
+rung 7 read the outbound damage model off 495 live damage events, and `GV_CRITICAL = 17`
+was CONFIRMED in the same run — while `hit_enemy` rolled a number and sent it straight
+through. Both are now in the swing:
+
+```
+points = round( roll * mult * 2 ** ((SL - AR) / 40) )
+SL = 5*rank to T, then 5*T + 2*(rank-T),   T = (level+4)/2
+critical: the range MAXIMUM, at AR - 20
+```
+
+**THE CHECK HAS NO FREE PARAMETERS.** Feed the implementation the rung-7 character's
+own weapon (customized 15-22), her rank (13) and the three armour ratings her fight was
+measured against, and it must land on the point bands retail produced. It does, at all
+six endpoints — `AR60 → 19..27`, `AR80 → 13..19`, `AR100 → 9..14` — and the critical
+lands on **39, not 38**, which pins the rounding rule the study rules `floor` out on.
+The bands came off retail traffic and nothing here was tuned to them.
+
+**Then the client drew it.** Capture `20260820T162204`: the server's stream and the
+client's floating numbers agree swing for swing (`-5`, `-7`, `-9`), 15 swings killed the
+100 HP practice target, and the distribution matched the offline model exactly. A second
+run caught the critical: **`-12`, in the same yellow, font and float as an ordinary
+hit** — so `17 REPLACES 16` is true of the rendering too and nothing marks a critical as
+special (isle §4.1). That was worth photographing because the opposite was plausible.
+
+**Creature armour is DERIVED, after a picked 60 was the wrong SHAPE.** 60 is the Isle's
+own Suit baseline, which is why it was picked, and it is level-20 armour on a level-1
+creature — the failure `studies/monsterai` §3.3 already records for reach. WIKI (GWW
+"Armor rating") gives `AR = 3*level + profession bonus`, the bonus read off a *second*
+page's level-20 maxima, so the test makes two wiki pages cross-check each other through
+our arithmetic. Our level-1 Monk Hatcher derives to **AR 3**, and the fight went from
+~35 swings to ~14.
+
+**Three corroborations fell out unsought**, all from GWW pages fetched for something
+else: its damage-multiplier table is `2^((60-AR)/40)` to three decimals — the divisor
+the Isle measured, arrived at independently by players; "60 is the baseline" is the
+assumption the band test already rested on; and Warrior armour "25...80 with Armor +20
+(vs. physical damage)" is exactly what our five starter pieces decode to.
+
+**What was deliberately NOT copied**, because the study's scope is narrow and this is
+the wiring rather than the claim: the `1.20` (that character's own `Damage +20%` and
+customization, which the fit cannot separate — ours is 1.0); a second crit multiplier
+(it is an armour reduction, expressed once, since `2^(20/40) = √2` makes "×1.414" and
+"at AR−20" one statement); and any unmet-requirement penalty (REFUTED at 3.5%, with the
+study forbidding a replacement in terms). Crit RATE is the five measured ranks;
+`critical_rate` interpolates between them and clamps outside, both labelled OURS.
+
+**The harness can order a swing now, and that was the blocker.** Watching a damage
+number needs the player to swing; the player swings on `0x0026 ATTACK_AGENT`; the client
+sends that on a click at a HOSTILE — the world-anchored click `control.py` says this
+harness cannot aim. `interact:` could not stand in (its server arm is the NPC dialog
+path and never begins an attack). So `control.py` gained a second slot and `attack:` is
+both an action and a **walk verb** — the latter because actions all fire before the
+walk and the hold while `--shots` photographs only those two, so a fight ordered from
+the action script can finish unphotographed. Measured, not reasoned: a critical landed
+at 20:11:39 and the first hold frame was stamped 20:13:58, **139 s later**. Anchoring
+frames by TIMESTAMP rather than filename is what caught it.
+
+**NEXT, in cost order:**
+
+1. ~~**Nothing reads the PLAYER's armour.**~~ **DONE 2026-08-20** (`962408a`,
+   `ae34dbc`). Incoming damage scales by `2^((60−AR)/40)` at the location GWW's
+   published 3/2/1/1/1 odds pick, so the player takes **13 a swing instead of 10** and
+   dies in 8 — `-13` in RED on screen against the YELLOW an outgoing hit draws, which
+   with §4.1's critical means the client's only damage-number distinction is
+   **direction**. Checked against a **40-row oracle nobody here wrote**: GWW publishes
+   the multiplier for every rating 0–195 in fives and our arithmetic lands on all of
+   it. Armour is **per-location, never summed** — there is a check whose whole job is
+   that nothing is 125 — and the `+20` is **typed** to physical, so AR is 45 against
+   the Hatcher and 25 against anything elemental. The `Armor calculation` page (owner's
+   link) added the Bonus-armour **cap of 25**, encoded though it does not bite at our
+   values, and turned out to be a **third witness** for the critical: it lists critical
+   hits under Special-armour *penalties*, i.e. retail models one as an armour reduction,
+   exactly the AR−20 shape the Isle measured.
+
+   **Two things fell out that are worth more than the feature.** It exposed a **real
+   bug** — `land_swing` had no corpse guard, so called directly it re-killed the body
+   and re-sent the effects bit per swing. Nothing on the wire was ever wrong, and it was
+   invisible because the *arithmetic* hid it: at a flat fraction the player died on
+   exactly the last of `ceil(1/fraction)` swings, so no swing was ever left over.
+   Armour moved death earlier and three death bits came out at once. And **`--no-armour`
+   is not "AR 0"** — the term is skipped, so an unarmoured character takes the baseline
+   hit and is *tougher* than one in starter armour (AR 45 is below the 60 baseline).
+   Backwards as a model of nakedness, correct as a control for "does the term engage";
+   named in a check so it is not discovered from a log.
+
+2. **AND THE PATH THE ENEMY ACTUALLY USES IGNORES ARMOUR** — found by running it, not
+   by the tests (isle §4.2). The first attempt produced `player hit by skill 312` three
+   times and **not one melee swing**: the Hatcher's four-slot bar always has something
+   recharged, so `land_swing` — the function the term was just wired into — barely runs
+   in a real fight. `skill_damage` has no armour term at all; the player took **46 a
+   hit** through it while wearing AR 45. **Not fixed blind**, because GWW makes it a
+   PER-SKILL property (armour-respecting is "all damage from attacks and most spells
+   dealing elemental damage", while Mesmer/Necromancer/Monk lines and all attack-skill
+   bonus damage ignore armour), and this server has no per-skill flag to hang it on —
+   `agents.GV_ARMOR_IGNORING = 55` exists and nothing reads it. A global answer would
+   put a wrong number on every skill in the game rather than leaving one honest gap.
+3. **SL uses level 20 while the body is level 1.** Defensible only because the
+   character also carries a 200-point attribute budget, which is ours — but it is an
+   assumption, not a measurement, and the cheapest thing here for a capture to overturn.
+4. **The unmet-requirement term stays unmodelled** and should stay that way until a
+   capture separates the divisor from SL. `studies/isle` §2 bounds both and forbids
+   publishing a replacement; the rank-8 critical is the same defect's sharpest face.
+5. **`--practice-target` is doing two jobs** — it stops the creature attacking *and*
+   stops it moving — so a fight watched this way is never a fight that moves.
+
+### Hero AI: the client holds NONE of it, and the wiki holds more than expected (2026-08-20)
+
+[studies/heroes §5.5, §5.6](studies/heroes/FINDINGS.md). Landed `7df1dce`, `d037bc5`.
+
+**Asked directly, because §4 answers the skill bar and §5 answers the wire and neither
+answers this.** `studies/monsterai`'s negative is total but it is about MONSTERS, and
+GWW says "heroes and henchmen share the same AI" while saying nothing about
+hero↔monster — so it does not transfer and was re-run with hero vocabulary.
+
+Two independent routes, each with a control. **937 embedded source paths, 51 matching
+hero/companion/AI vocabulary, and all 51 are UI, a client-side `Cli` record, or a
+`Const` table** — not one behaviour module and no `Srv` half of anything. **19,758
+asserts, and a behaviour-vocabulary regex returns exactly one hit**:
+`GmPetCommander:127 m_aiMode == CHAR_AI_MODE_AGGRESSIVE`, a widget asserting its own
+button state. The symbol that settles it is beside it: `m_aiMode < AI_MODE_ICONS`, next
+to two image lists. **The client's entire notion of hero AI is how many pictures the
+button strip can draw.**
+
+So it is ours to author, and §5.6 records what the authoring can be checked against —
+counted rather than estimated, including a correction: `Category:Hero-vetted skills`
+reads as "184 rules already written down" and is really 183 pages, 182 with a
+`Hero Usage` section, 232 statements, **~92 with an implementable condition** and ~90
+qualitative ("Heroes will rarely use this skill"). Architecture: **AI policy is
+per-SKILL data, not per-unit logic**, corroborated by GWW *Foe* and a Guru archive
+guide independently.
+
+**Deliberately NOT planned further, owner's call.** The rules are conditions over effect
+state R4b does not model — energy, adrenaline, enchantments, conditions and hexes are
+all absent — and if the per-skill architecture is right then **the skill substrate's
+schema IS the AI's schema**, so designing the policy table first is designing half the
+skill table blind. Build the substrate, let the row shape settle, then hang policy on it.
+
+### Item modifiers DECODED, and the attribute panel answers our server (2026-08-20)
+
+[studies/itemmods/FINDINGS.md](studies/itemmods/FINDINGS.md) (new) and
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §31–§34.6. Branch
+`claude/hero-henchmen-opcodes-6ee002`, landed over eight merges: `4ab2537`,
+`15ce4e2`, `790165d`, `d49bea4`, `3cdb0c8`, `a5bf2c0`, `f1887c5`, `2f15b41`.
+
+**THE HEADLINE: an item's 32-bit modifier words are decoded, and the retail client
+has rendered one we composed.** `studies/character` called these "the largest hole"
+in three separate places and `studies/combat`, `studies/enemy` and `studies/isle`
+each record the same wall; `content/items.toml` could only copy them verbatim out of
+a capture. The format is read out of the client's own parser in `ItemName.cpp` —
+**`{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}`** with two skip
+predicates — over **157 identifier slots in two jump tables, 133 distinct handler
+bodies**. Each identifier's meaning comes from ArenaNet's own words, because every
+handler formats through TextApi and the template id is extractable. Validated on
+**5,266/5,266 real modifier words** across 1,781 item declarations (a wrong shift or
+mask scatters identifiers across a 10-bit space and most miss both tables) and
+located structurally on all three builds. `toolkit/clientscan/itemmods.py`,
+`test_itemmods.py` (30 checks, floor 30), `vault/content/item_modifiers.toml`.
+
+**The attribute-bonus identifier is 543 (Stacking) and 542 (Non-stacking)** — `arg`
+the attribute, `arg2` the amount, and `arg2` doubles as the Minor/Major/Superior
+grade index. **Confirmed by the client drawing our own word**: `0x21F81301` went on
+the starter hammer and the tooltip read `Hammer Mastery +1 (Stacking)`
+(`20260820T113942`). Every field had to be right at once, including the **bit-19
+prefix** — bits 31, 30 and 19 are constant per identifier over the whole corpus and
+must be copied rather than computed, so composing from the four fields alone yields a
+different identifier entirely.
+
+**Three things came out of it that outlive the arc:**
+
+1. **`asserts.py` counts are a FLOOR and this arc paid for reading one as a census.**
+   "Exactly two handlers treat their argument as an attribute index" came from the two
+   asserts naming `attrib < CHAR_ATTRIBS`. The real number is **fourteen**, found by
+   anchoring on a data structure instead — `s_attrib`'s four field accessors, located
+   by their own shape, and then everything that calls the name-id one. The tool says
+   so in its own output; the lesson is to believe it.
+2. **A negative needs a positive control, and 617 got one.** `ItemName.cpp` renders
+   nothing for 21 of its 157 slots, including the two busiest in the wild. **633 is
+   the attribute REQUIREMENT** — read by a dedicated `ItCliApi` function whose "no
+   requirement" default is literally `CHAR_ATTRIBS`, feeding a `ChCliApi` lookup into
+   the char attribute container at `[charCtx+0xAC]` and a `setge` against the
+   player's rank. **617 is read by NOTHING** in build 38797: no literal compare in
+   `.text` in any encoding, not among the ten identifiers `ItCliApi`'s by-argument
+   accessors ask for, and the image holds exactly **one** identifier-indexed jump
+   table. That negative is only worth stating because the same scan finds 633 twice
+   and names ten others.
+3. **The panel and the tooltip are two independent paths, proven by an experiment
+   that could have refuted it.** With the bonus word on the item the attribute panel
+   shows Hammer Mastery **7** against a base of 6 — not 8. The client reads the item's
+   words for the TOOLTIP and the server's `0x003A` effective column for the PANEL and
+   does not mix them (`20260820T114403`).
+
+**Also landed, on the wire.** The c2s attribute-spend protocol is answered — `0x000E`
+/`0x000F`/`0x0010` against `0x0036`/`0x0038`/`0x003B` — with a real server-side model
+(`toolkit/authsrv/attribspend.py`, `test_attribspend.py` 49 checks) that **persists**
+across a restart; the panel is a client-side prediction the server reconciles.
+`0x0093` is `AGENT_MINION_COUNT`, named from the client's own display template. Six
+buff opcodes named (63–68). The `charCtx` container family closes at seven.
+
+**NEXT, in cost order:**
+
+1. **`equipped_attribute_bonuses()` should decode `modifiers` instead of reading
+   `content/items.toml`'s declared `attribute_bonus`.** Deliberately NOT done: the
+   two now hold one fact twice — the shape of bug §34.5 is about — and it is guarded
+   rather than ignored (`test_itemmods.py` §11, with a control that proves it can go
+   red). The blocker is placement, not effort: `authsrv` importing `itemmods` drags
+   `pinned` → `vaultpath` into a path that must work on a bare machine, so the pure
+   decode wants a home both can reach. **This pays the day a SECOND bonus-bearing
+   item exists** — a headpiece (543 is literally the headpiece form) or a rune (542)
+   — which is also when the right home stops being a guess.
+2. ~~**What reads 617?**~~ **ANSWERED 2026-08-20 as far as a client read can answer
+   it** (`b8d894a`, studies/itemmods §4.1/§4.3). **Nothing does.** The negative now
+   rests on a bounded total rather than an empty search: to isolate bits 29-20 x86
+   leaves two ways, both fixed byte sequences, and there are **sixteen** such sites
+   in the whole image, naming eleven identifiers between them — the same sixteen on
+   all three builds, with 633 among them and 617 never. The four non-immediate
+   routes are closed (accessor call sites, vtable, a second dispatch table, a mask
+   keeping bit 19), and **item creation `memcpy`s the array verbatim** — 66
+   functions reachable from `0x0161`'s handler, one touches the modifiers, and it
+   interprets one identifier out of them. The positive half: `arg2` is a
+   per-`model_id` constant, **71/71**, with the file id as the control that FAILS —
+   which corrected the study's "29 of 34 item model ids", a file-id result under the
+   model id's name. What remains is not a gap in the search but that **ArenaNet's
+   server is not readable from here**; naming the field would need their server, a
+   build we do not hold, or a campaign varying one skin at a time.
+3. **542 cannot be composed.** Its three-bit prefix has no corpus witness — no
+   capture of ours carries one — so `attribute_bonus_word()` ships the stacking form
+   only and refuses to invent the other.
+4. **34 of 157 identifiers extract no text id at all**, and the `labels`/`templates`
+   split is best-effort where a handler branches before formatting. The complete
+   ordered `text_ids` list is what the content rows carry.
+5. ~~**Two arcs are unblocked and neither has collected.**~~ **`studies/character`
+   COLLECTED 2026-08-20** (`611417b`). Armour rating is identifier **572**'s argument
+   and it is on screen: the chest's tooltip reads `Armor: 25` / `Armor +20 (vs.
+   physical damage)` (`20260820T125155`). The experiment had been open since
+   2026-08-06 because it was **two problems wearing one coat** — the words were opaque
+   *and* this server sent no armour at all, so the character was bare-chested and there
+   was nothing to hover. It now declares the five pieces, places them at the slots
+   retail's own `0x006F` writes name, and dresses the body. **Those five content rows
+   also stopped being UPSTREAM**: ArenaNet sent us these exact model ids nine times
+   each across three captures, every fixed field and all three modifier words agreeing
+   (`test_armour.py`, 16 checks). **`studies/combat` COLLECTED the same day** (`31c79df`): weapon
+   damage is **584**, `arg` the MAXIMUM and `arg2` the minimum, drawn as
+   `Blunt Dmg: 3-5` by the client itself. `HIT_FRACTION` is retired from the
+   player's swing — it dealt 15% of *the target's* max health, so every creature
+   took the same seven swings however tough it was — and survives only as the
+   no-weapon fallback. F3's "GWCA's `ItemModifier` struct is second-gate territory,
+   §6.1 row first" never came into it: the client's own parser was the shorter route
+   and the better witness, and no upstream was opened. **Both arcs are now
+   collected.**
+
+   ~~**Still absent, and worth one line so it is not read as done:** nothing APPLIES
+   an armour rating — this server sends five pieces carrying one and no damage term
+   reads it — and attribute-rank scaling and criticals are absent too. The range is
+   ArenaNet's; the roll inside it is ours. **And the floating damage numbers over a
+   struck target have not been watched**: making the player swing needs a click on a
+   hostile, which the harness cannot aim, so that one is the owner's run.~~
+   **ALL FOUR CLOSED THE SAME DAY** — the armour term, rank scaling, the critical and
+   the on-screen watch. See the entry above; the harness learned to aim rather than
+   the run being handed over.
+
+### Identifiers: a convention for new tokens, a resolver for the old ones (2026-08-20)
+
+[studies/idents/CONVENTION.md](studies/idents/CONVENTION.md) (new) and
+[studies/idents/HANDOFF.md](studies/idents/HANDOFF.md). Landed `f8d63a1`; §3's
+`R-IDENTS` row is the status.
+
+**THE HEADLINE IS A REFUSAL.** "C-8 finished, looking into C-9 next" cannot be resolved
+by a cold session — the census found the same letter meaning a correction in one arc, a
+build step in another and a ladder rung in a third, plus the same letter twice inside one
+document. The obvious fix, renumbering the existing tokens into a clean scheme, is the
+exact shape of the 2026-08-12 provenance scrub whose 46 rewrites were all reverted, and
+it was **refused**: nothing is migrated, and every historical token is grandfathered.
+(That scope is owner-ratified: §7 Q8, CLOSED 2026-08-20.) What landed is a rule for
+NEW tokens only (a registered word prefix naming
+the defining document, with the token's KIND in a legend line rather than in the
+letter), the resolver that works on the documents written before the rule
+(`python toolkit/whichrung.py C-8`), and an accumulation tripwire —
+`toolkit/identlint.py` + `test_identlint.py`, provlint's posture, not a gate.
+
+**Also settled:** the `PLAN.md`/`HANDOFF.md` R-ladder drift is closed by annotation in
+place rather than a re-sync, because the duplication *is* the mechanism
+(`HANDOFF.md:116`); and the undocumented bare-integer commit-subject prefix
+(`29:`→…, count deliberately unpinned — it grew even while this arc landed) is retired
+with its meaning recorded, not rewritten.
+
+**NEXT:**
+
+1. **Nothing is scheduled.** The convention is live for the next document that mints a
+   token; there is no follow-up work and deliberately no migration backlog.
+2. **If `test_identlint.py` goes red**, it is reporting accumulation, not a forbidden
+   commit — raise the ceiling in the test with a comment saying why, as
+   `test_provlint.py` does, or prefix the new namespace. Do not scrub existing tokens
+   to make it green.
 
 ### Merchants — a player can now BUY from a server we wrote (2026-08-19)
 
@@ -1412,7 +2012,56 @@ node counts.
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
 
-### Movement — latch FIXED; teleport EXPLAINED; FOUR fixes dead and the arc re-aimed (2026-08-19)
+### Movement — THE WARP IS REPRODUCIBLE ON DEMAND, and suppressing our own grants removes ~90% of it (2026-08-20, round 4)
+
+**Hold S and spam-click forward** — 45 seconds, and the arc finally has a trigger. Holding a key keeps `0x003D` flowing, which defeats the click arm's staleness guard, so every click is granted (196 clicks → 140 grants → 5 hard jumps). The control is as cheap: **click and THEN keyboard**, and the guard refuses every click (2.1 s is already too stale), no grant goes out, the desync test is never evaluated, and there are **zero warps** — twice. Keyboard-only walking is healthy at **283–287 u/s with 0.00 jumps**, which REFUTES the working report that holding W gives ~1 s of movement. **`--grant-suppress`** (new, off by default) refuses the click grant while the player keyboards: measured A/B, same operator, 100 s apart, **199 grants → 2, 11.49 → 1.39 hard rows/min, 9,687 → 903 u/min displacement** (8.3× and 10.7×), beating its pre-registered 3.1×. ⚠ **A palliative, not the fix**: retail grants continuously while keyboarding (88.5% of 2,855 live grants answer a `0x003D`) and does not warp, because its destination is the client's own endpoint — we stopped warping by going quiet, at the cost of an authoritative position that aggro/interact/clip still read. ⚠ **The timing evidence is REFUTED** (grant density; rotation control 2.39/5, Fisher p = 0.64); what carries it is the landing geometry (p = 3.0e-5), the reporting-controlled 2×2 (P = 3.4e-10) and the decode. **Next: grant the client's OWN endpoint, short and always refreshed** — FINDINGS' candidate #1, still unbuilt, and the only shape that prevents rather than shrinks. See `studies/movement/FINDINGS.md` §"round 4".
+
+### Movement — the OTHER two callers are decoded, and gate 2 is knowledge not a lever (2026-08-20, round 3)
+
+`0x00709E90`'s other caller is the LOCAL PLAYER's own move planner (`0x0081ADB0`, ChCliBase.cpp:248 `this == context->playerControlledChar`) and `0x005FEF70`'s is AgAgent's one-shot obstacle sidestep (`0x00600500`) — so the client plans with the same *function* it is judged by but never the same *question*: the planner starts from ASYNC (`0x005FC42D [edi+0x14c]`), gate 2 from SYNC, and both callers of `0x005FEF70` read a zero identically (n = 2 of 2, the predicate was not over-generalised). **Both parameter asymmetries are incidental** — `maxCount` 4-vs-9 cannot produce a zero (`*pathCount` is the emitted count; overflow drops through a void `ret`; the fallback returns truncated results unvalidated) and arg3 300-vs-10000 is a march budget whose exhaustion *succeeds*. `pathCount == 0` narrows to "the START point could not be RESOLVED", defeatable by an integer alone (`0x0072AE4F` range-checks the start's plane against `staticData->map.Count()`), **but we never write such a value** (plane is literal 0 or the client's echo, 12/12 config rows). Round 2's one live hole is inert: tier 1 is `LoadLibraryA("PathEngine.dll")`, absent from the owner's install. **★ Gate 2 has n = 0 observed firings** — gate 1's 299.3326 u straight-line fence subsumes all 24 measured snaps (623 paired intervals, min before-separation 342.8 u). Next is unchanged (the `clientControlled` breakpoint), plus one cheap new assert: **n = 12 configured spawns, 8 OK / 1 plane-mismatch (map 474) / 3 off-mesh — all four are placeholder (0,0) rows and 7 of 7 real spawns pass.** See `studies/movement/FINDINGS.md` §2026-08-20 round 3.
+
+### Movement — the FALLBACK half is DECODED; "under 300 u" is not safe (2026-08-20)
+
+**Movement / AgTrack fallback — DECODED 2026-08-20, and "300 u" is dead as a rule.** Three gates (straight-line >299.3326 u — exactly 300.0 SNAPS; walkable `pathCount==0`, meaning OUR granted position is off the navmesh; `timeToEvent<0.0005f`), any one snaps, and the snap reseeds EVERY world-1 agent. **No gate is a server lever.** Next: measure `clientControlled` alongside separation to find which gate fires (`0x0060580D`/`0x00605820`), and price `0x002C` — the one real lever — against the record that it was already tried and removed as "the warp the player described". See `studies/movement/FINDINGS.md` §2026-08-20 round 2.
+
+### Movement — the AgTrack match test is DECODED and shape 1 is DEAD (2026-08-20)
+
+`0x00605AF0` compares POINT ONLY (100.0f straight-line-squared-strict AND walkable-path-linear-inclusive, ~99.6 u effective) against `source+0x78` — the SYNC agent's own dead-reckoned position, which our `0x0029` never writes (n = 0 writes in `0x00602A40`) — over ArenaNet's `history` chain, not a prediction; so no grant can make it match, `--heading-grant` already proved that on the wire, and the next job is the undecoded fallback half `0x00605753`–`0x0060583D` where a MISS is actually adjudicated (and the 300.0f gate there is STRAIGHT-LINE, correcting FINDINGS:2373).
+
+### Movement — ★ MECHANISM DECODED IN THE BINARY; SIX fixes dead; three shapes left (2026-08-19)
+
+**★ READ [studies/movement/HANDOFF.md](studies/movement/HANDOFF.md)'s top box before
+anything else.** The warp is fully traced: the snap is `0x006022B0` copying SYNC →
+ASYNC, reached only from `0x00605FC0` (exactly 3 callers, **all message-driven —
+never per-frame**), whose test `0x006055E0` returns "no snap" if one of the client's
+own pending predicted commands matches our grant (100.0 @0x00946560) and otherwise
+compares the **walkable path length** between the copies against **300.0f
+@0x00946564**. We answer a click with `0x0029` (SYNC-only); the authoritative copy
+glides there and PARKS (93.4 of 177.3 s); the player keyboards away; **nothing we
+send can reach the copy they see** — `0x0025`'s async arm is gated shut for the
+client-controlled agent (`0x005FD5D3`, `[mgr+0x1E0]`); separation grows to 3,648 u
+unwatched; the next grant or arrival redeems it all at once.
+**A SIXTH CANDIDATE IS DEAD:** the `0x002B` direction factor is worth **−3.1%
+magnitude and 0% frequency** on the shipped build (two independent derivations),
+and `0x0027` at spawn is a measured no-op. **The shipped build's real separation is
+p50 1,164 u** (n=251) — every "125.9 u / under 150 u" bound in the older record came
+from `171153`, a refuted configuration. **The scoreboard's denominators are not
+comparable** (coverage 31% / 72% / 89%); per observed second the default build is
+the worst on displaced distance. `movesync.py` and `pinned.py` were repaired this
+round, both mutation-pinned: the hard bar grew a **distance arm** (≥ 520 u below the
+0.05 s dt floor, corpus **61 → 64** hard rows over 961 captures), so the three
+configurations now read **7 / 20 / 13** hard jumps and **1.31 / 5.69 / 11.88** per
+minute of span with magnitude p50 **1,969 / 569 / 582 u** — implied velocity is
+demoted to a labelled gate input everywhere — and the pin now carries per-build
+TUPLES of accepted patched digests that the patchers themselves register, so it no
+longer refuses the 38797 we launch and can represent 38833.
+The three shapes left, in evidence order: **match the client's pending
+command** (the only one that prevents a snap), **`0x002C`** (the sole ungated
+both-copies position primitive; `AgTrack::Clear` + double SetPosition), and
+**`0x0027` as a mid-flight re-bake** (reaches both copies AND re-issues the
+outstanding grant). Everything below this paragraph predates the decode.
+
+### Movement — latch FIXED; teleport EXPLAINED; FIVE fixes dead and the arc re-aimed (2026-08-19)
 
 **Picking this up cold? Read
 [studies/movement/HANDOFF.md](studies/movement/HANDOFF.md) first** -- the
@@ -1432,7 +2081,8 @@ second consecutive refusal is adopted regardless. `test_position_trust.py`, floo
 is a scheduled teleport.** It caches an arrival tick at `agent+0x48` and a target at
 `agent+0x9C`; at that exact millisecond the client snaps. Seven arrivals watched
 directly in client memory (98 u to 5,238 u), each within one 20 ms sample of schedule;
-`+0x48` is set once and never re-armed. The formula
+`+0x48` is set once **per isolated click grant — under re-grants it re-arms freely
+(304 re-arms in 61 s; FINDINGS refuted the unqualified "never re-armed")**. The formula
 `+0x48 = +0x58 + floor(dist*1000/(maxSpeed*moveSpeed))` predicted 18,187 ms against
 18,087 actual.
 
@@ -1496,10 +2146,19 @@ separation 587 u before each resync. **Both terms are required: the granted poin
 must be where the player is actually going AND it must be refreshed.** Each of
 our two configurations does exactly one of those.
 
-**LARGEST REMAINING HOLE:** capture `20260811T173940` has **5 jumps and zero
-player grants**. If nothing we sent steered the authoritative copy, this
-mechanism did not move the player. Same population as the 5-of-12 teleports that
-land nowhere near a grant.
+**THE "LARGEST REMAINING HOLE" IS CLOSED (2026-08-19, later): an instrument
+artifact.** Capture `20260811T173940`'s five jumps were a client WALKING —
+pre-2026-08-19 captures emitted `position_report` from the `0x0047` stop arm
+only, hiding 130 of the capture's 158 position observations; spliced, 0 of 5
+jumps exceed run speed (max implied 243.3 u/s) and positions are bit-identical
+across every client silence. The number had been quoted from above movesync's
+own REFUSING-a-verdict line. The live half of the population is OUR gamesrv
+corpus's **26 kinematically impossible steps** (7 captures, one of them the default
+build), since adjudicated as 25 resyncs and one client-side click-move at 2.6x the
+walk budget, and quoted as magnitude and excess over the 288 u/s budget (excess
+p50 671 u, max 3,804 u over the corpus's 43 detections) rather than as the implied
+velocity this line used to carry (v p50 2,521 u/s, max 23,279 u/s) — see the FINDINGS
+corpus-pass section.
 
 **THE FIFTH CANDIDATE IS REFUTED (2026-08-19), and it is the worst of the
 three configurations.** Run `20260819T182652`: **14.6 jumps/min against a stated
@@ -1565,10 +2224,48 @@ grants sit outside any watched interval for this reason. And **retire the 320 u/
 ceiling**: it fires on 19.7% of legitimate retail intervals, because it sits below the
 383.04 u/s boost mode the wire declares literally.
 
-Secondary, still open: 5 of 12 corpus teleports land nowhere near a granted point; the
+Secondary, ~~still open~~ **ADJUDICATED 2026-08-19**: 26 of 43 warpscan detections in
+OUR gamesrv corpus are kinematically impossible, **25 of the 26 are resyncs**, the
+survivor is a client-side click-move at 2.6x the walk budget, and the 729-768 u band
+is our own heading-derived grant leash (n=21, p90 757.5) rather than the `0x003D`
+heading-vector length. Quote them as excess over the 288 u/s budget (p50 671 u,
+max 3,804 u over the 43) and never as the implied velocity this line carried
+(v p50 2,521 u/s); the
 two `0x003D` magnitude constants (765.017539 / 768.000000) stratify by `movementType`
 91.2% vs 22.3% but have no mechanism; and the sync (`+0xE8`) vs async (`+0x14C`) agent
 question decides whether the model we watch is the one the player sees.
+
+**THE SECOND CORPUS PASS (2026-08-19, later) — the handoff's §4 list was run, every
+number adversarially re-derived; record in FINDINGS "the corpus pass on the handoff's
+list", next actions in HANDOFF §4.** In brief: (1) retail does NOT stop on keyboard
+onset (1 of 499 onsets, a zone transition) — it SUPERSEDES at one RTT, so the
+`0x0028` subtraction candidate is dead before it was built, and supersede-every-heading
+IS dead candidates 3/5 (both already ran a tighter leash than retail and warped more —
+the point is bracketed from both sides). (2) The `0x002B` contest resolves:
+`0x002B = direction_factor × modifier` (1.00/0.66/0.75 × snare, byte↔float lock
+0/1,049), the absolute base rides `0x0027` (288 / 383.04 boost; we send `0x0027`
+never, `0x002B`=1.0 always) — but the CAUSAL step is open: our client backpedals at
+0.66× while we send 1.0, so the factor is client-side on the predicted copy, and
+whether the wire float steers the AUTHORITATIVE copy needs the handlers or a client
+run. (3) TWO new structural findings: the 300 u scoreboard metric is contaminated
+(retail scores 6.4/min on it with ZERO intervals over 400 u/s; speed-gated our
+configs read 1.31 / 5.69 / 11.88 hard-jumps/min of span, not 5.7 / 12.8 / 14.6 —
+corrected 2026-08-19 from 1.3 / 5.4 / 11.9 when the bar gained its distance arm,
+n = 7 / 20 / 13), and the default
+build's authoritative copy is mostly PARKED (moving 39.8% of backward intervals,
+mean 114.57 u/s; duty cycle tracks grant rate 0%→98%) — its separation is the client
+walking away from a parked point. (4) The snap trigger (timer vs threshold) has
+never been measured and decides whether any slow-the-copy fix can bound FREQUENCY;
+the five movetap runs already hold the answer. Sixth-candidate VALUES are ready
+(0.66 = `c3f5283f`, 0.75, `0x0027 288.0` at spawn as its own change, re-send at
+report cadence — "edge-triggered" falsified at 72.2% same-family repeats); its
+causal step is NOT. ~~`pinned.py` still blocks the next live run (stale patched hash;
+no 38833 row).~~ **FIXED 2026-08-19**: `Build.patched` is a per-build TUPLE of
+accepted digests — the current patcher's 38797 copy and both 38833 copies committed
+— and both patchers register what they write into
+`vault/client-patched/patched_digests.json`; the loosening is fenced by refusals a
+mutation reddens (`test_pinned.py` 143 checks / floor 130, `test_buildid.py` 42 /
+floor 39).
 
 **Instruments:** `toolkit/clientscan/movetap.py` (client-side arrival time and live
 position; `--selftest` needs no client) and `toolkit/authsrv/warpscan.py` (scores a
@@ -1593,7 +2290,7 @@ the frame bus — `0x00F4`'s frame `0x10000064` and `0x00F5 TITLE_UPDATE`'s `0x1
 same CtlText panel (`toolkit/clientscan/framebus.py` post/subscribe scan, closing the open lead at
 `studies/character/RUNS.md:203`). That shared-panel technique generalizes to any UPSTREAM display opcode.
 
-**NEXT: the 14 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
+**NEXT: the 13 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
 deliberately OUT of the schema; full ledger and each held-reason at `studies/smsgnames` §4/§5):
 1. **`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL`** — the critic's strongest withheld pair:
    a genuine two-witness MESSAGE identity (fileId SOURCED at `ItCliApi:2410`/`:2505`), held only
@@ -1601,9 +2298,22 @@ deliberately OUT of the schema; full ledger and each held-reason at `studies/sms
    fix `0x0161`'s off-by-one field indices first (critic flagged: name is wire field 12, code[] field 13).
 2. **`0x009A`** — the char-record `+0x30` dword store keyed by agent id that PAIRS with the now-named
    `0x009B AGENT_SET_NAME` at `+0x34` (same `0x38`-stride ChCli record). Read what consumes `+0x30`.
-3. **`0x005D`** — candidate `CHAT_MESSAGE`: an encoded (EncString) wide message appended to the
-   string table at `ctx+4`. Needs the sender/body cross-check against the local-chat surface
-   (`studies/recon` §491).
+3. ~~**`0x005D`** — candidate `CHAT_MESSAGE`: needs the sender/body cross-check~~ **EARNED
+   2026-08-19, and the cross-check ran OFFLINE** — the corpus already held it
+   ([studies/chat/FINDINGS.md](studies/chat/FINDINGS.md)). The whole family landed at once:
+   `0x005D CHAT_MESSAGE_CORE` (body fragments, cap measured 121 = declared−1), `0x005E
+   CHAT_MESSAGE_SERVER` (133/133 words = the subject playerId or 0), `0x005F CHAT_MESSAGE_NPC`
+   (45 sightings, commit tag carries the sender's enc-name), `0x0061 CHAT_MESSAGE_LOCAL`
+   (**47/47 sender playerIds resolve to `0x0059` names**, typed player text verbatim in the
+   bodies — "wtb Axe grip of the paragon" et al.). `0x0060` stays unnamed: zero witnesses.
+   The server now ANSWERS `0x0064 CHAT_SEND` (test_dispatch's oldest recorded drop): All-chat
+   echo + the observed `/bow` reply, everything else refused loudly (`chatdefs.py`,
+   `test_chatdefs.py` — the framing check is byte-identity against ArenaNet's own multi-part
+   advert). **The loopback confirmation RAN 2026-08-20, all three arms as predicted**
+   (`studies/chat` §10): `!hello` rendered `Test Warrior: hello` off the byte-exact echo,
+   `/bow` rendered its emote line, and the `#test` control rendered NOTHING — which also
+   proves the echo is the only render path (no client-local copy). Chat is DONE as a
+   mechanism; what remains is breadth (other sigils/channels need labelled captures first).
 4. **`0x0147`/`0x0148`** — the equip-set pair, already asserting `ITEM_PLAYER_EQUIP_SETS`
    (`ItCliInv:375`/`:329`); then the player-record pair `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0` and the
    marker `0x008D`.
@@ -1981,8 +2691,147 @@ builder (written by sibling `0x0073`, not permanently stale), `+0x20` is their c
 `d3` is a **packed character-appearance dword** (`s_appearanceSlot`), not an id — which is
 why one field gates both the name and the equipment. **Hazard on record: `0x0073` and
 `0x0074` are mutually destructive**, each zeroing what the other carries.
-Next in this corner: `+0xAC` and `+0x508`, the last two unread, by the now-routine method
-(despawn-sweep remover → log string on the not-found path → sibling branch).
+**THE CONTAINER FAMILY IS CLOSED (§31, 2026-08-19)** — all seven read (the sweep walks a
+SEVENTH inline at `+0x5BC` that §28.12 miscounted past), and the punchline is that neither
+remaining row needed new reading: **`+0xAC` is heroes §12/§13's `attribState` and `+0x508`
+is skillcast §14's `BuffState`** — both fully mapped in neighbouring studies this table
+never joined, the heroes-§13.1 failure twice more. The joins paid immediately:
+ChCliAttrib's opcode family is **six contiguous** (`0x0036`–`0x003B`, we knew two — new:
+`0x36` dequeues and UNAPPLIES a pending attribute modifier by sequence, `0x38` points+
+replay, `0x39` writes a still-unnamed `+0x438`, `0x3B` single-attribute set), and heroes
+§13.1's three anonymous sub-arrays now mean pending-queue / processed-sequences / the
+store. The buff six are named — `BUFF_SOURCE_ADD`/`_REMOVE`, `BUFF_TARGET_ADD`/
+`_ADD_TIMED`/`_EXTEND_TIMED`/`_REMOVE` (0x3F–0x44), the client's own API names, two
+independent builds — with the full event set (`0x10000062/63/55/56/57`). `+0x5BC` is
+GmEffect's per-agent value feed, written by `0x0093` — whose writer **updates every match
+then unconditionally APPENDS** (measured; re-sending state on reconnect appends
+duplicates, first-match-wins readers — a server hazard on record). ~~Still open:
+skillcast §14.4's CONTESTED buff field~~ **ANSWERED same day, by running the probe
+(skillcast §14.7): the field is the ATTRIBUTE RANK the effect's tooltip renders at —
+three arms 0/14/12 drew pixel-identical icons whose tooltip numbers are
+`round(lo+(hi−lo)·rank/15)` on skill 316's own scale windows, nine numbers, zero free
+parameters. GWCA's `attribute_level` confirmed, Headquarter's `effect_type` refuted.
+The run also earned the harness a `hover:FX,FY,SECS` walk verb — a HUD tooltip is now a
+readable surface unattended. And the `buff_side` probe ran the same night (skillcast
+§14.8): every clause held — `0x3F` alone lights the maintained-enchantment UPKEEP
+MONITOR above the energy bar, `0x40` clears it while the effect icon stands, the
+countdown bar is record `+0x10`'s only visible reader (absent at 0.0, depleting at 30),
+and the upkeep icon needs no `0x0093`, which subtracts the one guessed consumer from the
+`+0x5BC` table.**
+
+**THE C2S SIDE IS READ, AND THE ATTRIBUTE PANEL IS A CLIENT-PREDICTION PROTOCOL — §32,
+the first one identified in this repo.** The advice to "read the c2s side for a
+sequence-carrying spend first" was right and it paid: a click **queues** a 16-byte
+modifier at `attribState+0x400`, **applies it locally**, then sends `0x000E`/`0x000F`
+`[agent, sequence, attribute]`; the server answers with the fixed triple
+**`(0x0036` retire-prediction, `0x0038` points, `0x003B` attribute`)` — 14 of 14 in a
+live capture**, against `(0x0037, 0x003A)` create-then-fill 8 of 8. Nine live rank
+transitions price out **exactly** against `s_attribPoints` in both directions with no
+free parameter. Named: c2s `ATTRIBUTE_DECREASE`/`INCREASE`/`LOAD` (upstream's names,
+previously its weakest tier — now the direction assignment is measured and the two
+anonymous dwords are named), s2c `ATTRIBUTE_SPEND_ACK`, `ATTRIBUTE_POINTS_AVAILABLE`,
+`ATTRIBUTE_POINTS_TOTAL` (high — two arcs) and `AGENT_UPDATE_ATTRIBUTE`.
+**`+0x438` is CLOSED**: the attribute-point TOTAL, 200 in all 8 live sightings, and
+`studies/unitsetup` had already named `0x0039` from a level-up burst — the third cross-arc
+join in two days. `0x00818E40` (never read before) shows the rank costs are **derived,
+recomputed per change**, and enforces "you cannot raise a primary attribute of a
+profession that is not your primary" — with `s_attrib`'s isPrimary flag on exactly ten
+rows, one per profession, matching [heroes §14.2](studies/heroes/FINDINGS.md) from the
+other end. Two client defects on record: `0x0010`'s framer clamps to 64 with a 16-entry
+buffer, and the decrease path has no attribute bound check.
+
+**The server still has no arm for any of the three**, and that is now a *recorded* drop
+with a reason rather than a gap (`test_dispatch.py`'s `DROPPED_ON_PURPOSE`): the blocker
+is not knowledge — §32.9 is a complete spec — but **state**, since ranks come from a
+content row and the point budget is a constant sent for both of `0x0037`'s fields, which
+those fields' new meanings make wrong (we claim every point unspent while handing out
+ranks). One warning if anyone arms it: reply with the **whole** triple or none of it — the
+client re-stacks unacknowledged predictions on top of fresh authoritative values, so a
+half-arm is worse than the drop.
+
+**`0x0093` IS NAMED — §33, the container family's last open field.** Its value dword is a
+**MINION COUNT**, and the client says so in words rather than by position: the reader
+passes it to TextApi as `%num1%` of string 50499 *'You are currently controlling %num1%
+minion[s].'* (or 50498 with the agent's own name as `%str1%`), with two more GmEffect
+readers agreeing — one rendering it as a number, one gating on non-zero. That **refutes**
+§31.3's band-level "upkeep/maintained-effect value" RECONSTRUCTION, and it **narrows**
+§30.4 rather than contradicting it: no message declares which agents ARE minions (the
+roster panel decides that by its own flag test), but this one declares HOW MANY one agent
+has — so that section's heading, "there is no minion message", is corrected in place.
+**CONFIRMED ON A CLIENT the same night** (§33.5, captures `20260820T081504` /
+`20260820T082018`): sending 7 drew a minion icon reading **7**, tooltip *'You are currently
+controlling 7 minions.'*; sending 1 redrew it as *'1 minion.'* — the template's own `[s]`
+plural resolving, which nothing else could drive — and sending 0 removed the row while a
+buff icon sent alongside **stayed**, so the removal is specific. `AGENT_MINION_COUNT` is
+**high**. Retail usage is still unobserved (zero live witnesses): the meaning is measured,
+the usage is not.
+
+**And the run produced a method failure worth more than the result — §33.6.** The first
+run was called a null and was not: `--walk` and `--shots` do not overlap, so `hold*.png`
+begins after the probe has cleaned up and `w*.png` is the window that matters. Worse than
+the misread was the response — the artifact got a *mechanism* built from real disassembly
+("the row is a child frame, so a monitor must exist first"), and a second run appeared to
+confirm it. Both halves were wrong. A free positive control was sitting in the same frames
+and was read as data instead. Anchor frames by timestamp, not by filename glob.
+
+**THE ARMS LANDED, 2026-08-20 -- a player can spend attribute points on a server we
+wrote (§34).** `studies/review`'s standing complaint (*"you sat there spending attribute
+points and the server had nowhere to put them"*) is closed. Caged run `20260820T084923`:
+the client's own Skills and Attributes panel went **27 -> 25 -> 22** unused points across
+two clicks on Tactics' **+**, rank 1 -> 2 -> 3, and `20260820T085218` ran the mirror --
+one click DOWN, refund 1, 27 -> 28. Three predictions made from the disassembly held on
+screen: the sequence was **0 both times** (§32.2's LIFO recycling), the arrows **re-priced
+themselves** after every click (`0x00818E40`, §32.4), and Strength at rank 12 shows a ▼20
+refund and **no up arrow at all** (`s_attribPoints[12] = -1`, the cap rendered as a missing
+button).
+
+New: `toolkit/authsrv/attribspend.py` (pure, stdlib-only -- the cost curve and the client's
+three refusal rules), `attribpoints.py --emit-content` feeding a `client-table`
+`attribute_cost` table, `points_total = 200` on the player content row, arms for `0x000F`,
+`0x000E` and `0x0010`, and `test_attribspend.py` (35 checks, floor 35) whose §5 REPLAYS the
+nine real rank transitions from live capture `20260818T132739` and requires this model to
+reproduce ArenaNet's own balances -- no free parameter. `0x0037` now carries **(available,
+total)** instead of one constant twice, which retires a stale comment: its *"every live
+0x0037 is [0,0], 8 of 8"* was true of two captures, and across **13 captures and 48
+sightings** the corpus reads [0,0] x14, [1,5]/[6,10] x8, and [x,200] x26 -- with
+field3 <= field4 in 48 of 48, which is a third, independent settling of the field order.
+
+**AND IT PERSISTS (§34.5, same day).** Three processes: seed from the store (`55 of 200`,
+`17=9, 19=12`), click Axe Mastery's **+** (`raise: 18 0 -> 1`, saved to disk), **restart** --
+and a brand-new process sends `54 of 200`, `17=9, 18=1, 19=12`, with the panel reading 54
+unused and Axe Mastery 1. Closing this exposed a latent SECOND SOURCE OF TRUTH: the burst
+read the persisted spread for `0x003A` while `0x0037`'s balance came from the content row,
+and they agreed only because nothing had ever written the store -- persisting a spend is
+exactly what pulls them apart. `attribspend.seed_ranks` is now the single answer and is
+tested from both sides. Ranks only are stored; the budget stays a content fact and
+`available` is recomputed, so the two cannot drift. Free corroboration: the store's
+pre-existing `17=9, 19=12` priced out to 55 unused and the client drew ▼11▲13 on Strength,
+▼20-and-no-up on capped Hammer Mastery, ▲1-and-no-down on Axe Mastery at 0 -- four numbers
+typed nowhere in this repo. Schema: `0x0038` and `0x003B` go medium -> **high** (static read
+plus rendered effect); `0x0036` stays medium on purpose, since ACK is our word.
+
+**ITEM BONUSES LANDED (§34.6, same day)** and the corpus specified them: across all 34
+`0x003A` and all 14 `0x003B` in the vault the two value columns differ by **0 or +1 and
+nothing else** over 94 (attribute, sighting) pairs, the +1 belonging to attribute 20 alone
+in 26 of 26 sightings of one character -- whose base slid 12→7 with the bonus riding along
+unchanged. So the bonus is **display-only** (every refund closed on `s_attribPoints[BASE]`;
+counting it would need a cost for 'rank 13', which does not exist) and **uncapped** (retail
+sent effective 13 against a cap of 12). That CONFIRMS the prediction `attribute_columns`
+made against itself in 2026-08-15 -- *"if a capture ever shows the two differing, THIS is
+the line that was wrong"* -- with the reading right and only its "ours wears nothing"
+premise expired. The starter hammer declares `attribute_bonus = [[19, 1]]` and
+`equipped_attribute_bonuses()` sums the worn set, gated on `EQUIP_WEAPON` so `--no-weapon`
+is a real control. **NOT a decoding of ArenaNet's `modifiers` dwords** -- still the
+character arc's largest open hole -- and the content row says so in place. On screen, both
+directions: at the cap the panel drew Hammer Mastery **13 in BLUE** with ▼20 and no up
+arrow; one click of ▼ sent `0x003B attr 19 = 11 +1 = 12` and drew **12 in blue** with
+▼16 ▲20. The client has its own render path for a boosted attribute, and its chevrons price
+off the BASE throughout -- so display-only is something the client renders, not just
+something we honour. test_attribspend §10, floor 42 → 49.
+
+Still open here: `0x0010`'s arm has zero live witnesses anywhere in the corpus and is built
+to a static reading alone; and the `modifiers` dwords remain undecoded, so a bonus is
+declared by us rather than read off the item ArenaNet shipped.
 
 **Corrections this arc owes, all recorded in the study:** §4's claim that the harness runs
 38833 (it selects by build and *excludes* it — use `--exe` and `RURIK_DAT`); §13.2's
@@ -2185,7 +3034,111 @@ compression-8 encoder exists. **Authorship that reaches the full animation set n
 encoder, or an archive permitted to grow** — that is the next arc, and it is a decision
 for the owner rather than a gap in this one.
 
-### The archive write-size wall — A1–A4 and A6 are RUN; the encoder's risk is now entirely its matcher (2026-08-18)
+### The archive write-size wall — the arc is DOWN and the encoder is now AUTHORING INFRASTRUCTURE (2026-08-18 → 2026-08-20)
+
+**2026-08-20, ~12:24 — A10 RAN, owner-driven, P1 FIRED. PLAYBACK TIMING LIVES IN THE
+LINKED KEY CLOCK, AND IT IS NOW AN AUTHORED CONTROL SURFACE.** Study §19.6, and the
+ANSWERED block in `studies/anim/FINDINGS.md` §6. Owner, on video: *"normal in control
+then slowed down in the deployed"* — the between-runs control N6 required, and the
+retime did not hedge where U7's did, because U7 retimed the n3C tag track in the one
+file where the clock does not live. Instrumented record all green: our 15 rows
+byte-identical through the client's Flush, sweep exactly retail's 177,319/0, coupling
+re-measured on the ACTIVE bytes 237/237 + 242/242, 30 walk cycles logged, no crash
+dialog — and **N2 is retired by the client itself, which played key times 3.09× beyond
+retail's shipped ceiling**. Magnitude recorded honestly as "visibly slowed vs baseline"
+(not frame-measured ×4). **The ladder's capability story closes: authored CONTENT
+(run 7), CREATED rows (A9), authored TIMING (A10) — all client-proven at compression 8,
+in place.** The A10 archive is LEFT DEPLOYED — the hatcher animates at quarter speed by
+design until `a10stage.py --retail --yes`.
+
+**2026-08-20, midday — A10 WAS STAGED: the FA1 write-back, re-authored onto the PROVEN
+clock; the launch is the owner's.** Study §19; runbook `vault/research/archivewrite/
+A10-RUN.md`. The U7-era edit (§17.8 item 2's "re-author the payload") turned out to be
+**structurally a null** — it scaled the n3C tag table, while the sampler reads `blk2C`'s
+76,008 channel times and the clamp windows on the SAME clock (both max exactly
+22,883,332). The staged edit retimes that proven clock **×4 across 15 rows in place**
+(fourteen linked files + the shell's 234 coupled windows; 222949 dropped at +4 B of
+slack; n3C/`u32_0F`/n40 stay retail everywhere after a verifier showed no partial scaling
+preserves both measured couplings — "Design B"). Verified by **blind re-derivation, 15/15
+byte-identical, with a Design-A control red on 11 of 15**; two isolated rebuilds
+hash-identical; whole-4.2 GB diff zero unowned bytes; every row fits its own reservation
+(15018 at 1,016,720 B, +12,912). **Both launch outcomes are findings**: quarter-speed
+animation (foot slide is the shape cue) ⇒ playback timing lives in the linked key
+clock; null ⇒ it does not — sharpening `studies/anim`'s open timing question, and not
+dismissible as "file not read" since run 7 proved the channel renders. Named risk first
+in the failure list: ×4 exits retail's attested time envelope 3.09×. Procedure: baseline
+clip FIRST (no within-frame control exists), then `a10stage.py --deploy --yes`, the
+run-7-style harness line with `--walk`, video, `--verify-after`, `--retail --yes` or
+leave. **H8 is live** — a client ran in the shared run directory at 11:44 on 2026-08-20
+from another session; confirm nobody is mid-run before deploying.
+
+**2026-08-20, ~09:40 — A9 RAN, owner-driven, GREEN on every pre-registered prediction.
+THE RETAIL CLIENT READ A ROW THIS PROJECT CREATED.** Study §18.6. Owner at the keyboard:
+*"Hatcher with normal animations/proportions"* — which, by the measured load-time fact
+(the FA8 loop resolves every link at spawn and requires `m_seqCount != 0`), IS the
+verdict that the `datalloc`-created chain under new file id `0x5F0AD` was resolved,
+decompressed from our compression-8 bytes and parsed as a skeleton, and the retargeted
+20,060 B shell — a small row compressed by us — read on the way. Instrumented half: 37
+`walks to` cycles + 54 attack/cast lines in the gamesrv log, **no crash-dialog.txt**;
+archive after: preflight 10/10, crc sweep 177,322/0 bad, only scratch rows 8315/8316
+moved, **our 16 rows byte-identical and the created chain intact through the client's
+own Flush** — nothing repaired or discarded, MFT numbers unmoved (H1 never fired), and
+the client accepted our ASCENDING chain where retail's all descend (H7 answered). Still
+deliberately unclaimed: E3's rider (no instrument shows the client opened rows
+8295-8306, so the all-skip shape stays without a client witness) and the two
+phantom-pair shapes (unshippable on real content). `report.json` was never written —
+the owner closed the client mid-hold — and the verdict does not rest on it. **The A9
+archive is LEFT DEPLOYED**; `a9stage.py --retail --yes` restores the baseline.
+`datalloc.py`'s "no client has ever read a row this module allocated" caveat had its
+FINDINGS-39 moment and is superseded with scope stated (one chain shape, one build,
+one launch). **With this, every layer of new-content authoring is client-proven:
+encode (A8), edit in place (run 7), grow/relocate (offline, §17), CREATE (A9).**
+
+**2026-08-20, earlier — A9 WAS STAGED: the client oracle for §17's shapes, one launch, the
+owner's to run.** Study §18; procedure `vault/research/archivewrite/A9-RUN.md`. The staged
+archive (`vault/exports/archivewrite/a9/Gw.a9.dat`) carries three independent arms — a
+`datalloc`-CREATED 3-row chain under new file id `0x5F0AD` holding 222949's payload
+compressed by us, the hatcher shell retargeted 4 bytes so the client's own FA8 link walk
+resolves that row **at spawn** (load-time resolution measured at `0x00794850`: every link,
+`m_seqCount != 0`, so a normal animating hatcher IS the verdict), and twelve byte-identical
+small rows re-encoded in place as an unscored rider carrying the attested all-skip
+declared-5 table. Skeptic-verified GREEN, including a from-scratch **byte-identical 4.2 GB
+rebuild** and a whole-file diff attributing every changed byte to exactly the intended
+rows. Two envelope shapes (both phantom pairs) are UNSHIPPABLE on real content — 0
+occurrences over every dial and the archive's 2,500 most compressible rows — and stay
+recorded, not forced. Deploy: `a9stage.py --deploy --yes`, client closed, run directory
+confirmed free (another session used it at 00:11 on 2026-08-20); launch:
+`python toolkit/harness/session.py --enemy --hold 150 --shots 10`; then
+`a9stage.py --verify-after`; then `--retail --yes` or leave deployed. **Never click the
+client's crash dialog** — its default button uploads a dump to ArenaNet.
+
+**2026-08-20 — THE AUTHORING HARDENING LANDED, `0802b1f`, study §17, corrections §0 C-11/C-12/C-13.**
+A6–A8 proved the encoder on one big row; what stood between that and *authoring new
+content* was four named gaps, and all four are closed offline: **(1)** every table our
+encoder emits is now a retail-attested SHAPE — `gwentropy.authoring_table`, floors dist ≥ 5
+/ lit ≥ 257, closing §13.5's gaps A, B, the distance half of C, and D, with the A8 anchor
+row **byte-identical** (crc `0xd03ab671` now pinned in the suite) and the lift costing
+**+0 B on 120 real small retail rows**; **(2)** `datwrite.replace(grow_to=)` grows a shrunk
+row back — §14.4's "fatal for a second write" defect, reproduced then fixed, with one
+`_grow_gate` shared with `--restore`, which gained the EOF/MFT/withheld-run refusals by the
+factoring; **(3)** the journal is a durable file — measured **34.1× / 533 MB** write
+amplification on a real run and a torn flush that lost the whole journal, now 1.00×,
+fsync-per-record, torn-tail recovery, all 59 vault journals still parse; **(4)** `datalloc`
+gained the fidelity gate an adversarial verifier proved it lacked — **a corrupted-trailer
+gwenc stream reached disk GREEN through `alloc(confirm=True)`** (528-flip census: 394
+wrong-bytes streams accepted), and `expect=` is now mandatory with `extraBytes 8`, the gate
+running in `alloc()` too because `alloc(plan=)` bypassed `plan_alloc` entirely. The
+capstone is **`test_authorflow.py`**: one synthetic archive, six steps at compression 8 —
+author → create a NEW row under a new file id → revise smaller → grow back → outgrow,
+refuse, relocate → revert to pristine **byte-for-byte** — because this arc's two worst
+defects (C-6, §14.4) were compositional and green in isolation. Floors: gwenc 55→60,
+datwrite 138→199, datalloc 100→177 (TESTS.md had said 98), authorflow 59 new; suite
+affected-set all green, srclint 22/22. **Not consulted: the client** — no retail client has
+read a small-row or datalloc-created output yet; that one-launch check is §17.8's item 1
+and rides the next convenient launch. The skeptic pattern paid for the **fifth**
+consecutive rung (a builder's "proven end to end" was true of framing only), and the
+matcher is priced at ~0.19 MB/s / 82 MB peak — fine for the loop, recorded so nobody
+re-measures it.
 
 **Full study: [studies/archivewrite/FINDINGS.md](studies/archivewrite/FINDINGS.md).** Five
 routes scouted, each attacked by its own skeptic; **four of five verdicts overturned**. A

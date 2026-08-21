@@ -91,7 +91,8 @@ The three forward questions:
   the worn one is disputed: the per-slot visual-equip message (our 111/0x006F)
   is the probe that settles both the opcode mapping and the slot order.
   Appearance comes from `file_id & 0x7fffffff`, not `model_id`. The armour
-  *rating* lives in item modifier words nobody has decoded — the largest hole
+  *rating* lives in item modifier words — **decoded 2026-08-20, identifier 572's
+  argument, and read off the client's own tooltip; see §2** — once the largest hole
   this pass leaves. (Section 2.)
 - **3. Creation** — runs entirely on the game channel behind a
   `REQUEST_GAME_INSTANCE` flagged `map_type 11` and/or `map_id 0`; the flow is
@@ -1665,12 +1666,68 @@ slots; we currently send `SET_ACTIVE_WEAPON_SET` and four `WEAPON_SET` with noth
 
 ### The modifier words: NOT DONE
 
+**DECODED 2026-08-20 -- see [studies/itemmods/FINDINGS.md](../itemmods/FINDINGS.md).**
+The format is `{identifier: bits 29-20, arg: bits 17-8, arg2: bits 7-0}`, read out of
+the client's own parser and checked against all 5,266 modifier words in the live
+corpus (100% dispatch to identifiers the client handles). Armour rating is identifier
+**572**'s argument; the `+N vs. damage type` line is **527**. The sentence below stood
+for two weeks and is kept as written.
+
 **Nobody on this pass decoded a single item modifier word, and this is the largest
 remaining hole in the armour picture.** `GmDefaultArmors` ships literal lists —
 `{0xA3C81900, 0x80400000, 0xA0F81400}` for the warrior chest, `{0x24481400}` for the
 backpack — and `CREATE_NAMED_ITEM` reserves 64 dwords for them. **Armour rating lives in
 those words.** Sending an empty modifier list produces armour that renders and protects
 nothing, which is a legitimate first milestone but is not the finished job.
+
+#### THE RATING IS ON SCREEN, 2026-08-20 — and the job was two jobs
+
+The paragraph above is kept as written because both halves of it were right, and
+because the second half is why the first one stayed open for a fortnight. The words
+were opaque *and* **this server was not sending the armour at all**: the character
+stood in every capture bare-chested with five empty slots on the paper doll, so the
+experiment this section proposed — *"read the rating out of the client's own item
+tooltip"* — had nothing to hover. Decoding the words would not have finished it.
+
+Both are fixed. `authsrv.STARTER_ARMOUR` declares the five pieces, places each in the
+equipped bag at the slot retail's own `0x006F` writes name, and one `0x006E` with five
+nonzero positions dresses the body. Hovering the chest (`20260820T125155`):
+
+```
+Ringmail Hauberk
+Armor: 25
+Armor +20 (vs. physical damage)
+```
+
+> **Armour rating is identifier 572's argument, read off ArenaNet's own renderer.**
+> OBSERVED. `0xA3C81900` → 572 arg **25** → `Armor: 25`, through string 2438
+> `%str1%: %num1%` with 2372 `Armor`. The second line is two words together:
+> `0xA0F81400` → 527 arg **20**, and `0x80400000` → identifier **4**, whose only
+> string is 2480 `vs. physical damage`. The leggings read the same, so it is per item
+> and not a panel total.
+
+**The character is dressed, which was the milestone this section wanted.** Predictions
+were written first and all three held: the body renders wearing the set, the tooltip
+carries the rating, and five nonzero `0x006E` positions did not trip an assert. The
+item NAMES resolve too — `Ringmail Hauberk`, `Ringmail Leggings` — so
+`GmDefaultArmors`' encoded-name dwords are good.
+
+**AND THESE FIVE ROWS ARE NO LONGER UPSTREAM.** `content/items.toml` said of them:
+*"one lineage's hand-written table, no capture of ours carries these bytes."* That is
+refutable and our own vault refutes it. ArenaNet's server sent us `0x0161` declarations
+for **all five of these exact model ids** — 823, 2440, 355, 1598, 6136 — **nine
+sightings each across three captures**, and every fixed field agrees: `file_id`,
+`item_type`, `dye_tint`, `materials`, `unk1`, `flags`, `value`, `model_id`, `quantity`,
+**and all three modifier words**. The one field that differs is `dye_colors`, which is
+*meant* to: it is what a player dyed that instance, and retail shows four values for one
+model with ours among them. The rows move to CORROBORATED against a first-party capture
+— which is a stronger witness than a second lineage, and it was luck rather than design
+that the vault's character wore the same starter set. `test_armour.py` §3 replays it.
+
+**What this does NOT show.** That the client *renders* a rating is not that anything
+*applies* it: nothing in this server reduces incoming damage by armour, and the tooltip
+is a display surface exactly as `studies/pvpui` §34.6's attribute panel is. Armour as a
+damage term is `studies/combat`'s, unstarted.
 
 Two specific things this pass should have done and did not: **GWCA's `ItemModifier` struct
 was never quoted**, and **Py4GW's item modules and its `PacketSniffer.py` item entries were
@@ -1689,7 +1746,7 @@ is an import artifact, not a wire ordering.
 | Question | What would answer it |
 |---|---|
 | Which slot ordering does build 38797 use inside message 110? | **The one probe worth running.** Send message **111** per-slot — chest first (index 2, agreed by everyone) to prove the pipeline, then the legs piece alone and look at whether it lands on legs or feet. 111 is also where gw-preservation's `EquipVisualSlot` is a *sourced* prediction, so a wrong answer there falsifies something specific. If 111 does nothing at all, our 0x006D/0x006E/0x006F mapping is wrong and that is the real finding. |
-| What does a modifier word encode, and where is armour rating? | Read GWCA's `ItemModifier` struct and Py4GW's item modules first — both unread, both on disk. Then send the warrior chest with OpenTyria's three literal words and read the rating out of the client's own item tooltip. The client is the oracle here, as it was for movement. |
+| ~~What does a modifier word encode, and where is armour rating?~~ **ANSWERED 2026-08-20** | The format is decoded from the client's own parser ([studies/itemmods](../itemmods/FINDINGS.md)) and **armour rating is identifier 572's argument**, read off the tooltip on a caged client exactly as this row proposed: `Armor: 25`. The row said to read GWCA's `ItemModifier` struct and Py4GW's item modules first; neither was needed and neither was opened — the client's own dispatch table was the shorter route and the better witness. |
 | Does the client require `INVENTORY_CREATE_BAG` before `ITEM_MOVED_TO_LOCATION`, or is message 110 alone enough to render? | Untested and unstated by any source — upstream and gw-preservation both happen to emit the bag first. Try 353 + 110 with no bag, then add 319 and 318, and see which is the minimum that draws. |
 | What are flag bits 0x1000 and 0x2 in `0x20001006`? | Unknown in every source. gw-preservation *computes* only `0x20000004` for the same armour class, yet hardcodes OpenTyria's exact anomalous values as name-keyed exceptions (`item/item.go:370-375`: `0x20001202` for Third Eye, `0x22001000` for Starter Truncheon, both verbatim in `GmDefaultArmors.c`). That is strong evidence the two share an upstream data extraction — and no evidence at all about what the bits mean. |
 
