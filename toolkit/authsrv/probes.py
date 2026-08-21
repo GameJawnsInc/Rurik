@@ -2062,6 +2062,76 @@ def _morale_steps(agent_id):
     ]
 
 
+def _morale_store_steps(agent_id):
+    """MORALE-Q7: does `0x00EE`'s delta write the client's stored morale?
+
+    `--probe morale` answered what reaches the SCREEN -- `0x009C` draws the
+    death-penalty indicator, the delta draws nothing -- and could not answer
+    whether the delta is IGNORED or merely silent. A message that updates a
+    value without repainting it looks identical from a screenshot, and the two
+    readings say different things about what a server must send.
+
+    So this probe is not read with eyes at all. It walks the attribute store
+    through three distinct values that only we could have chosen, which lets
+    `toolkit/clientscan/moralestore.py` find the store in the client's own
+    memory WITHOUT anybody's offsets -- an address that follows 77, then 88,
+    then 66 is the store; an address that holds 77 by coincidence is not. Then
+    the delta lands, and the store either moves or does not.
+
+    THE DWELLS ARE THE DESIGN. Step 1 gets 25 s because the locating scan is a
+    full sweep of the client's committed memory and has to finish before the
+    value changes under it; everything after gets 12 s, which is 24 samples at
+    the watcher's 2 Hz. And every value stays inside the game's own 40..110
+    range, so a clamp cannot be mistaken for a refusal.
+
+    THE POSITIVE DIRECTION IS IN HERE TOO (step 6). A store that ignores -13
+    and also ignores +7 is ignoring the message; a store that takes one and not
+    the other is doing something stranger, and that difference is worth one
+    step.
+    """
+    def attrs(morale):
+        v = [0] * 15
+        v[0] = 424242          # xp -- the attr_legend trick: every field its
+        v[9] = 17              # level     own recognisable number, so the
+        v[10] = morale         # morale    memory dump can be read as a legend
+        v[13] = 13             # skill points
+        return v
+
+    return [
+        Step(3.0, 0x00E9, attrs(77),
+             "0x00E9 field 10 = 77 -- LOCATE",
+             "nothing on screen. moralestore.py scans for every dword == 77."),
+        Step(25.0, 0x00E9, attrs(88),
+             "0x00E9 field 10 = 88 -- FILTER 1",
+             "the watcher: candidates that did not follow 77 -> 88 are out."),
+        Step(12.0, 0x00E9, attrs(66),
+             "0x00E9 field 10 = 66 -- FILTER 2",
+             "three values in a row identifies the store beyond coincidence."),
+        Step(12.0, 0x00EE, [10, 0xFFFFFFF3],
+             "0x00EE [attr 10, -13] -- THE QUESTION",
+             "the watched address. 53 means the delta writes the store and "
+             "only the REPAINT was missing; 66 means the client ignores this "
+             "message on this build."),
+        Step(12.0, 0x009C, [agent_id, 41],
+             "0x009C [player, 41] -- the OTHER store",
+             "does the per-agent channel write the same address as the "
+             "per-player one, or a different one? The indicator should read "
+             "-59% either way."),
+        Step(12.0, 0x00EE, [10, 7],
+             "0x00EE [attr 10, +7] -- the positive direction",
+             "same address. A store that ignores both deltas is ignoring the "
+             "message rather than refusing a negative."),
+        Step(12.0, 0x00E9, attrs(100),
+             "0x00E9 field 10 = 100 -- restore, and a last positive control",
+             "the store must follow this one whatever the deltas did. If it "
+             "does not, the address was never the store and every reading "
+             "above is void."),
+        Step(4.0, 0x009C, [agent_id, 100],
+             "0x009C [player, 100] -- put the indicator back",
+             "the corner should clear."),
+    ]
+
+
 def _title_track_steps(agent_id):
     """The title cluster 0x00F3-0x00F6, on our client for the first time.
 
@@ -6649,6 +6719,32 @@ PROBES = {
              "later steps rebuilt the array from zeros and wiped the legend "
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
+    ),
+    "morale_store": lambda a, o: Probe(
+        question="MORALE-Q7: does 0x00EE [attr 10, delta] write the client's "
+                 "stored morale without repainting it, or is it ignored?",
+        predicts="The store is found by our own three values (77, 88, 66) and "
+                 "nobody's offsets. Then: if the address reads 53 after the "
+                 "-13, the delta writes and only the repaint was missing -- "
+                 "which would mean our server is right to send both channels "
+                 "and the Hero window may show what the corner does not. If it "
+                 "stays 66, the client ignores this message on build 38797 and "
+                 "0x009C is the whole mechanic client-side. Step 7 is the "
+                 "control that keeps either reading honest: the store MUST "
+                 "follow a fresh 0x00E9 whatever the deltas did.",
+        steps=_morale_store_steps(a),
+        note="ANSWERED 2026-08-20 (harness 20260820T224356, "
+             "studies/morale/RUNS.md Run 2): THE DELTA WRITES. The attribute "
+             "slot went 66 -> 53 on the -13 and 53 -> 60 on the +7, each "
+             "within one 0.5 s sample, while 0x009C [player, 41] moved it not "
+             "at all -- so 0x00EE and 0x009C are two stores for one number, "
+             "and only 0x009C repaints. The block came free: our values landed "
+             "at attr_id x 8 from the experience field, each stored TWICE, "
+             "which checks GWCA's dupe-pair layout against numbers of ours. "
+             "Read with toolkit/clientscan/moralestore.py, never with a "
+             "screenshot -- the corner already said all it has to say. Values "
+             "stay inside 40..110 so a clamp cannot read as a refusal. Needs "
+             "~110s: pass --hold 130.",
     ),
     "morale": lambda a, o: Probe(
         question="Which message draws the death-penalty indicator -- the "

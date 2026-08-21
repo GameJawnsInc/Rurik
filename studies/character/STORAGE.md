@@ -143,6 +143,19 @@ Answered at the reading level:
 >   `attr 12, +40` (×17) and `+50/+50` (×5), and a level-20's `0x00E9` shows
 >   930/930 — the current/total-earned pairing watched happening rather than
 >   read out of a struct name.
+>
+> **UPDATE 2026-08-20 — the dupe-paired block is MEASURED, in the client's own
+> memory.** `--probe morale_store` set three fields to values only we could have
+> chosen and `toolkit/clientscan/moralestore.py` watched them:
+> `+0/+4 = 424242` (experience, attr 0), `+72/+76 = 17` (level, attr 9),
+> `+80/+84 = morale` (attr 10), `+104/+108 = 13` (skill points, attr 13) —
+> i.e. **every entry is a value/dupe pair and the wire's `attr_id` is an index
+> into the array, at `attr_id × 8` bytes**. That is the layout this section
+> described from GWCA's header and could not check. It also settles what
+> `0x00EE`'s delta does: it writes this block (`66 → 53` on a `−13`, `53 → 60`
+> on a `+7`) and repaints nothing, while `0x009C` drives the on-screen
+> indicator from a different store.
+> [studies/morale/RUNS.md](../morale/RUNS.md) §Run 2.
 
 **Probe — built 2026-08-16, RUN 2026-08-18: `--probe faction_max` —
 OBSERVED, everything.** Agent-piloted (harness `20260818T112259`, no

@@ -9,12 +9,14 @@ It is answered now, and not by reasoning: **the live corpus contains exactly one
 player death**, and it is fully instrumented. Everything in §1 and §2 is read off
 that tick.
 
-**And as of 2026-08-20 the client half is measured too** — `--probe morale` ran
-green against our own client, agent-piloted, and answered both questions the
-capture could not ([RUNS.md](RUNS.md) §Run 1): `0x009C` draws the death-penalty
-indicator, `0x00EE`'s delta does not reach the screen at all, and the client
-**does not** recompute the pool maxima from morale — it displays the numbers the
-server sends, including a wrong one we sent on purpose.
+**And as of 2026-08-20 the client half is measured too**, over two runs
+([RUNS.md](RUNS.md)). `--probe morale` answered what reaches the screen:
+`0x009C` draws the death-penalty indicator, `0x00EE`'s delta does not, and the
+client **does not** recompute the pool maxima from morale — it displays the
+numbers the server sends, including a wrong one we sent on purpose.
+`--probe morale_store`, read with `ReadProcessMemory` rather than with eyes,
+then answered what the screen could not: **the delta is applied all the same**,
+`+=`, in both directions. There are two stores and one number (§2.4).
 
 **Identifiers.** `MORALE-P<n>` = a prediction registered before a probe runs.
 `MORALE-Q<n>` = an open question. Convention:
@@ -162,6 +164,50 @@ strength of this — the same reasoning that already named property 44
 (health regen, `2 hp/s` per pip; the tape carries `0.01667f × 120 = 2.0` on
 party members in this very window).
 
+### 2.4 Two stores, one number — MEASURED in the client's own memory
+
+`0x009C` and `0x00EE` do not write the same place, and until 2026-08-20 that was
+invisible: retail sends both on the same tick, so no capture can separate them.
+Probe `morale_store` walked the attribute store through values only we could
+have chosen while `moralestore.py` watched the client's memory (RUNS.md §Run 2):
+
+| what the server sent | the attribute slot |
+|---|---|
+| `0x00E9` field 10 = 77, then 88, then 66 | 77, 88, 66 — absolute |
+| **`0x00EE [10, −13]`** | **53** — applied |
+| `0x009C [player, 41]` | **unchanged** |
+| **`0x00EE [10, +7]`** | **60** — both directions |
+| `0x00E9` field 10 = 100 | 100 — the control |
+
+So:
+
+- **`0x00E9` / `0x00EE` → the player's attribute block.** Absolute set and `+=`
+  delta into the same slot. This is what the Hero window reads, and it is
+  *silent*: nothing repaints when it changes.
+- **`0x009C` → the per-agent morale.** This is what the top-left indicator reads
+  (Run 1), and it names an agent because a party member's penalty is drawable
+  too.
+
+**A server that sends one and not the other leaves the other stale**, which is
+why the death tick sends both — and now for a measured reason rather than
+because retail happened to.
+
+**The block's shape came free, and it corroborates the field map from the other
+side.** Our three chosen values landed at exactly `attr_id × 8` from the
+experience field, each stored **twice, adjacent**:
+
+```
++0/+4     424242  experience    attr 0     0 × 8 = 0
++72/+76   17      level         attr 9     9 × 8 = 72
++80/+84   morale  morale        attr 10   10 × 8 = 80
++104/+108 13      skill points  attr 13   13 × 8 = 104
+```
+
+The wire's `attr_id` is an index into that array. `studies/character/STORAGE.md`
+§2 described the value/dupe pairing from GWCA's header and could not check it;
+this checks it against numbers of ours, at three predicted offsets, with nothing
+else in ±0x80 moving.
+
 ---
 
 ## 3. The rules layer — WIKI
@@ -246,7 +292,7 @@ Test: `toolkit/authsrv/test_morale.py`, catalogued in
 | MORALE-Q4 | int property 54 at the revive (= 22, the new max energy) | one sighting, no second value, no upstream name |
 | MORALE-Q5 | Morale BOOSTS | zero sightings in the corpus. +10% is WIKI only, and the `[40, 110]` range is UPSTREAM (GWCA) |
 | MORALE-Q6 | Does DP survive a map change on the wire, and what resets it? | our corpus has no death followed by a zone. WIKI says an outpost resets it; the ATTR_SET at every login carries 100, which is consistent but is not the same claim |
-| MORALE-Q7 | Does `0x00EE`'s delta update the client's stored morale without repainting? | new, from the run above. The corner is the only readout it had; GWCA puts morale at `WorldContext +0x790`, so a memory read during a probe would settle it |
+| ~~MORALE-Q7~~ | Does `0x00EE`'s delta update the client's stored morale without repainting? | **ANSWERED 2026-08-20 — yes, it writes.** Read out of the client's own memory: `66 → 53` on a `−13` and `53 → 60` on a `+7`, within one 0.5 s sample each, while `0x009C [player, 41]` moved that slot not at all. Two channels, two stores. RUNS.md §Run 2, §2.4 below |
 
 ## 7. The probe — RAN 2026-08-20, GREEN
 
