@@ -1137,6 +1137,78 @@ HEADING_GRANT = False
 # the rate needs no movetap at all.
 CLIENT_ENDPOINT = False
 
+# --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
+# been run. OFF by default. `studies/movement/REALFIX.md` §1 is the spec and
+# §4's REALFIX-L1 is the run it exists for.
+#
+# WHAT IT SENDS, on every 0x003D while moving -- and "every" is the second
+# named variable, see THE GATE IT DROPS below:
+#   0x0025  AGENT_MOVE_DIRECTION [PLAYER_AGENT_ID, unit(vec2), movementType]
+#           -- exactly one per burst, whichever path asked for it.
+#   0x0029  AGENT_MOVE_TO_POINT  [PLAYER_AGENT_ID, the REPORTED position
+#           VERBATIM, plane, plane]
+# NO lead. NO clip on the wire. NO staleness gate. NO straight-shot gate. The
+# server's own model leg keeps its clipped destination in state["dest"] -- the
+# model/wire split --client-endpoint already proves four lines above.
+# NO STOP-ARM GRANT and NO CLICK-ARM CHANGE: a stop-arm 0x0029 is --stop-echo
+# and is REFUTED at :1004-1023.
+#
+# THE DESIGN GROUND, and it is the invariant's O1/O3 rather than a hunch. The
+# client's desync test asks whether the SYNC copy's dead-reckoned +0x78 lies
+# within 99.919968 u of the client's own history polyline, and that polyline
+# extends only BACKWARDS whenever the client holds no destination -- which is
+# the whole of keyboard movement. So LAG is on the polyline by construction and
+# LEAD is not. Every dead candidate in this arc granted a point AHEAD of the
+# client: --heading-grant at pos+vec2 clipped (766 u), --client-endpoint at
+# reported+vec2+0.5u (766 u), and both warped. Zero lead is the only setting
+# that satisfies O1 and O3 with no assumption about how fast the player is
+# actually travelling -- which is the term --client-endpoint's own refutation
+# blamed (player at 111.7 u/s, every grant asserting 288.0).
+#
+# THE CHEAPNESS CLAIM IS RETRACTED. DO NOT RE-QUOTE IT. The drafted spec said a
+# zero-distance grant "takes the <= 1.0 u short-circuit at 0x005FEA92 and
+# dispatches nothing", and used that to argue the extra cadence below is free.
+# It is FALSE of these grants. The <= 1.0 u compare measures |D - the SYNC
+# COPY's +0x78| (`D8 66 78 fsub dword [esi+0x78]` at 0x005FEB57), not
+# |D - the client|; the copy is chasing the player at run speed and is nowhere
+# near where the player has just reported standing. OBSERVED by replaying this
+# policy through toolkit/clientscan/grantsim.py against the four zero-grant
+# `ours` captures: **5 of 358 synthesized grants take the short-circuit**
+# (2/63, 1/64, 1/214, 1/17) and the median |d| from the copy is 143 / 420 /
+# 250 / 512 u (173940 / 182934 / 100340 / 182554). Every other one bakes a real
+# leg and dispatches at 0x005FEBEB -- a class-A test instant. The design stands;
+# its old justification does not. `REALFIX.md` §1's CORRECTION block of
+# 2026-08-21 is the record.
+#
+# Those are the figures under THIS policy, rate limit included. The correction
+# was first measured at 6 of 539 with medians 101 / 383 / 208 / 512, before
+# _heading_grant_ok existed and with the lead family scored at no rate limit at
+# all; re-measured after it landed the grant count falls (539 -> 358, the floor
+# refusing the reports inside it) and every median RISES, because the copy gets
+# longer to run away between grants. Both numbers say the same thing and the
+# newer one says it harder. Quote 358.
+#
+# THE GATE IT DROPS, priced rather than waved through. The shipped heading arm
+# answers only when `turned or walking is not True` (:9758). This flag's block
+# runs regardless, so it grants on every moving report. On click-free play that
+# gate opens on 11.1 / 24.3 / 61.2 / 80.8% of moving reports (`ours`,
+# 20260820T182554 / 182934, 20260814T100340, 20260811T173940) -- a 1.24x-9x
+# cadence delta; on the click-heavy refuted runs it is invisible (182652
+# 193/193, 171153 447/447). What bounds the cadence instead is the rate limit,
+# which is why the predicate below is NOT optional.
+#
+# THE RATE LIMIT IS _heading_grant_ok AND NOT _grant_verdict. See that
+# function; calling the click arm's policy here would emit ZERO grants and
+# degenerate this flag into --grant-suppress wearing a new name.
+#
+# THE PREDICTION, printed at startup so it cannot be rationalised afterwards --
+# the house pattern --client-endpoint, --resync and --grant-suppress all
+# follow, and the one --heading-grant's own refutation says was worth more than
+# the flag. It is REALFIX.md §4's, unedited, and it carries BOTH units and a
+# FAILURE SIGNATURE, because this arc has already lost a candidate that bounded
+# SIZE while the harm arrived as FREQUENCY.
+ZERO_LEAD = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -3031,6 +3103,121 @@ def _grant_verdict(state, now):
     if since is not None and since < GRANT_MIN_INTERVAL:
         return False, "rate-limited", age, since
     return True, "grant", age, since
+
+
+def _heading_grant_ok(state, now):
+    """Pure: may a ZERO-LEAD heading grant go on the wire right now?
+
+    Returns (grant, reason, since_last). No side effects, exactly like
+    _grant_verdict, _resync_verdict and _position_verdict -- and for the reason
+    _grant_verdict's own docstring gives: an offline scorer has to be able to
+    run THIS decision rather than a paraphrase of it that agrees with it by
+    construction. `toolkit/clientscan/grantsim.py` imports this symbol and
+    REALFIX-C3's heading arm is that import.
+
+    RULE 2 ONLY, and the absence of rule 1 is the whole point. _grant_verdict
+    is the CLICK arm's policy and its rule 1 refuses whenever the
+    locally-driving latch is younger than GRANT_LOCAL_WINDOW = 3.0 s -- a latch
+    the heading arm arms TEN LINES EARLIER, at
+    `state["kbd_moving_at"] = time.time() if moving else None` (:9715). Age is
+    ~0.0 on every call from that arm, so reusing _grant_verdict here would emit
+    ZERO grants under --grant-suppress and turn --zero-lead into --grant-suppress
+    with a new name. TESTS.md independently prices the same window at 87% of one
+    capture's span. Two policies, two predicates.
+
+    NO FLAG CHECK EITHER, deliberately, and it is the one place this predicate
+    is CLEANER than the one it sits beside. _grant_verdict short-circuits on the
+    GRANT_SUPPRESS module global, so grantsim has to set and restore that global
+    around every call to drive both arms. This one carries the rate limit and
+    nothing else, so the offline scorer runs it directly and the caller's `if
+    ZERO_LEAD:` is the only place the flag is read.
+
+    A REFUSED HEADING GRANT IS DROPPED, NOT HELD, and that is the second
+    difference from the click arm. A held click is the PLAYER'S CHOICE and
+    losing it loses a feature (grant_flush_tick exists for exactly that), but a
+    heading grant is superseded by construction: the client emits 0x003D while
+    moving at a median 0.28-0.30 s (`ours`, click-heavy runs -- the same cadence
+    --client-endpoint's refutation measured as its 0.28 s median grant age), so
+    the next report carries a fresher position than the one we just refused and
+    granting the stale one late would be the reproduction with a delay bolted
+    on. There is no pending machinery here and there must not be one.
+
+    THE CLOCK IS THE SHARED ONE. `grant_at` is stamped inside send() by
+    _note_wire_move for EVERY player 0x0029 whatever arm sent it (:2724-2731),
+    so this floor and the click arm's rule 2 share one clock by construction.
+    That is wanted: under --zero-lead --grant-suppress the two arms cannot
+    between them exceed one grant per GRANT_MIN_INTERVAL, which is the bound the
+    interval was derived for. A private `heading_grant_at` would have let the
+    two arms run at 2 x 2 Hz while each believed it was inside the floor.
+
+    A NEGATIVE `since` -- a grant stamped in the future under clock skew --
+    REFUSES, because `since < GRANT_MIN_INTERVAL` is true for it. That is the
+    same direction _grant_verdict's rule 2 fails in and the cheap one: an
+    over-refusal costs one grant the next report replaces in 0.3 s.
+    """
+    last = state.get("grant_at")
+    since = None if last is None else now - last
+    if since is not None and since < GRANT_MIN_INTERVAL:
+        return False, "heading-rate", since
+    return True, "zero-lead", since
+
+
+def zero_lead_composition(zero_lead=False, heading_grant=False,
+                          client_endpoint=False, grant_suppress=False,
+                          resync=False):
+    """Pure: may these movement flags run together, and what must be said?
+
+    Returns (refusal, notes). `refusal` is None or the text main() raises as a
+    SystemExit; `notes` are the startup lines for the combinations that ARE
+    allowed. Pure and argv-free so the composition matrix is a test rather than
+    a paragraph -- `--explorable`/`--outpost` refuse inline and nothing checks
+    them, and a refusal nobody has seen fire is a wish.
+
+    REFUSED: --zero-lead with --heading-grant or --client-endpoint. All three
+    answer the SAME 0x003D with a 0x0029, so the client would be handed two or
+    three destinations per report and a run would attribute the outcome to
+    none of them. Both of the others are REFUTED besides (:1049, :1090).
+
+    ALLOWED WITH A NOTE: --grant-suppress, because the arms are orthogonal --
+    that flag governs CLICK grants and this one governs HEADING grants. They do
+    share one rate-limit clock (`grant_at` is stamped in send() for every
+    0x0029 whatever sent it), so the note says the click arm will be quieter
+    than it is alone rather than pretending the two are independent.
+
+    ALLOWED WITH A NOTE: --resync, a different opcode (0x002C hard-sets BOTH
+    copies) on a different trigger -- but a second uncontrolled variable in an
+    A/B built for one, so the note says to prefer one arm at a time.
+    """
+    if not zero_lead:
+        return None, []
+    clash = [n for n, on in (("--heading-grant", heading_grant),
+                             ("--client-endpoint", client_endpoint)) if on]
+    if clash:
+        both = " and ".join(clash)
+        return (f"--zero-lead cannot be combined with {both}: all of them "
+                f"answer the SAME 0x003D heading with a 0x0029, so the client "
+                f"would be handed two destinations per report and the run "
+                f"would attribute the result to neither. "
+                f"{both} {'are' if len(clash) > 1 else 'is'} already REFUTED "
+                f"(authsrv.py:1049 and :1090). Pass at most one."), []
+    notes = []
+    if grant_suppress:
+        notes.append(
+            "      + --grant-suppress: ALLOWED -- orthogonal arms. That flag "
+            "governs CLICK grants and this one governs HEADING grants. They "
+            "share ONE rate-limit clock (state['grant_at'] is stamped in "
+            "send() for every 0x0029 whatever sent it), so between them they "
+            f"still cannot exceed one grant per {GRANT_MIN_INTERVAL:.2f}s. "
+            "Expect the click arm to be quieter than it is alone, and say "
+            "which flags were on when you report the run.")
+    if resync:
+        notes.append(
+            "      + --resync: ALLOWED -- a different opcode (0x002C, which "
+            "HARD-SETS both copies) on a different trigger. But it is a second "
+            "uncontrolled variable in an A/B built for one: a snap avoided "
+            "cannot be attributed between them. Prefer one arm at a time for "
+            "REALFIX-L1.")
+    return None, notes
 
 
 def grant_flush_tick(send, state, conn_id, rec=None, now=None):
@@ -9755,8 +9942,37 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             model_dest, blocked = clip_to_walkable(
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
-                            if turned or state.get("walking") is not True:
+                            # THE SHIPPED GATE, now a NAMED variable because a
+                            # second path asks the same question. `legacy_dir`
+                            # is byte-for-byte the condition that stood here
+                            # before --zero-lead existed, and with ZERO_LEAD off
+                            # `legacy_dir or zero_ok` IS `legacy_dir`: same
+                            # send, same payload, same label, same
+                            # state["walking"] write, same order.
+                            legacy_dir = (turned
+                                          or state.get("walking") is not True)
+                            # THE ZERO-LEAD VERDICT, evaluated HERE and SPENT in
+                            # the third named block below. It is up here for one
+                            # reason: retail's burst is 0x0025 then 0x0029 with
+                            # the grant ALWAYS LAST (3,023 of 3,071 live bursts,
+                            # zero counter-examples), so the direction has to go
+                            # out BEFORE the grant -- and whether to send one at
+                            # all now depends on a verdict this arm has not
+                            # reached yet. Hoisting the CALL is free precisely
+                            # because _heading_grant_ok is pure; hoisting the
+                            # SEND would have meant a second 0x0025 send site,
+                            # and one send site is what test_position_trust
+                            # section 8 locks. Deviation from REALFIX.md §P2's
+                            # literal block ordering, and this is its ground.
+                            zero_ok, zero_why, zero_since = False, None, None
+                            dir_src = "none"
+                            if ZERO_LEAD:
+                                now_z = time.time()
+                                zero_ok, zero_why, zero_since = (
+                                    _heading_grant_ok(state, now_z))
+                            if legacy_dir:
                                 state["walking"] = True
+                            if legacy_dir or zero_ok:
                                 # UNIT LENGTH. This field is a DIRECTION and we
                                 # were putting a DISPLACEMENT in it: `heading` is
                                 # the client's own 0x003D vec2, whose magnitude is
@@ -9794,11 +10010,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # client's own movementType, 2,215 of 2,254
                                 # (98.27%), the 39 disagreements all adjacent enum
                                 # values at transition instants.
+                                #
+                                # EXACTLY ONE PER BURST, and it is structural
+                                # rather than guarded: both paths route through
+                                # this one send, so there is no arrangement of
+                                # flags that can put two 0x0025 in one report's
+                                # burst. `dir_src` records which of them asked,
+                                # so a capture can tell a legacy turned-send
+                                # that swallowed a zero-lead one from a
+                                # zero-lead send the legacy gate would have
+                                # skipped -- the cadence delta the flag's own
+                                # comment prices is exactly the difference
+                                # between those two populations.
+                                dir_src = ("legacy+zero-lead"
+                                           if legacy_dir and zero_ok
+                                           else "legacy" if legacy_dir
+                                           else "zero-lead")
                                 send(GAME_SMSG_AGENT_MOVE_DIRECTION,
                                      [PLAYER_AGENT_ID, unit, moving],
                                      f"AGENT_MOVE_DIRECTION"
                                      f"({unit[0]:.3f},{unit[1]:.3f} "
-                                     f"type {moving})")
+                                     f"type {moving})"
+                                     + (f" [{dir_src}]" if ZERO_LEAD else ""))
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is
                                 # the only thing that stops a stale one maturing
@@ -9876,6 +10109,81 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                           plane],
                                          f"CLIENT ENDPOINT ({ex:.0f},{ey:.0f}) "
                                          f"plane {plane}")
+                            if ZERO_LEAD:
+                                # REALFIX-P2. THE THIRD NAMED BLOCK, and the
+                                # only one of the three that has never been run.
+                                # The flag's own comment at ZERO_LEAD carries
+                                # the design ground, the retracted cheapness
+                                # claim and the cadence the dropped gate costs.
+                                #
+                                # THE POINT IS THE CLIENT'S OWN REPORTED
+                                # POSITION, VERBATIM. Not `state["pos"]` (which
+                                # is the last report we BELIEVED, and is stale
+                                # in exactly the window a trust refusal opens),
+                                # not `model_dest` (which is OUR navmesh's
+                                # opinion and is the first of the two defects
+                                # that made --heading-grant warp), and not
+                                # `reported + anything`. No lead at all is the
+                                # single axis this candidate moves.
+                                #
+                                # NO CLIP ON THE WIRE, and here the argument is
+                                # a witness rather than a preference: the client
+                                # reported STANDING ON this point, so it is
+                                # walkable whatever our mesh believes
+                                # (REALFIX-O5). NO STALENESS GATE: the report is
+                                # in our hand and its age is 0 by construction.
+                                # NO STRAIGHT-SHOT GATE: the segment is
+                                # zero-length from the client's side.
+                                #
+                                # state["dest"] IS UNTOUCHED. Our own model keeps
+                                # the clipped leg computed above, so the server
+                                # still holds an opinion that respects walls for
+                                # aggro, interaction and collision. Only the WIRE
+                                # changes -- the same model/wire split
+                                # --client-endpoint proves ten lines up.
+                                #
+                                # BOTH PLANE WORDS ARE THE REPORTED PLANE. Field
+                                # 3 is the destination's plane and field 4 the
+                                # current one, closed from the binary three
+                                # times; for a zero-distance grant they are the
+                                # same plane and asserting it twice is the
+                                # honest answer rather than a 0 that would write
+                                # a wrong map index into agent+0x80.
+                                if rec is not None:
+                                    # EVERY evaluation, fired or refused, on the
+                                    # SAME channel the click arm uses -- a log
+                                    # holding only its own successes cannot
+                                    # score the flag against the cadence it
+                                    # exists to bound. The reason vocabulary is
+                                    # DISJOINT from the click arm's
+                                    # ("zero-lead"/"heading-rate" against
+                                    # "off"/"locally-moving"/"rate-limited"/
+                                    # "grant"), and `arm` names it outright, so
+                                    # one capture carrying both arms can be
+                                    # split by either field. grantsim's C3
+                                    # replay reads these rows.
+                                    rec.event("grant_verdict", fired=zero_ok,
+                                              reason=zero_why, arm="zero-lead",
+                                              deferred=False,
+                                              since_last=(None
+                                                          if zero_since is None
+                                                          else round(zero_since,
+                                                                     3)),
+                                              direction=dir_src,
+                                              dest=[float(reported[0]),
+                                                    float(reported[1])])
+                                if zero_ok:
+                                    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                         [PLAYER_AGENT_ID, list(reported),
+                                          plane, plane],
+                                         f"ZERO LEAD ({reported[0]:.0f},"
+                                         f"{reported[1]:.0f}) plane {plane} "
+                                         f"[dir {dir_src}]")
+                                # AND NO `else` HOLDING IT. A refused heading
+                                # grant is DROPPED; the next 0x003D supersedes
+                                # it in ~0.29 s by construction. See
+                                # _heading_grant_ok for why the click arm's hold
+                                # would be wrong here.
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -11817,6 +12125,35 @@ def main():
                          "answer a heading, so this is the shape we were "
                          "missing rather than a workaround. Score it with "
                          "toolkit/clientscan/movetap.py.")
+    ap.add_argument("--zero-lead", action="store_true",
+                    help="REALFIX-P2, and the only candidate in the lead family "
+                         "that has NEVER been run. Answer every keyboard "
+                         "heading while moving with 0x0025 (unit direction, the "
+                         "client's own movementType) and a 0x0029 at the "
+                         "client's REPORTED POSITION VERBATIM -- no lead, no "
+                         "clip, no staleness gate, no straight-shot gate -- "
+                         f"rate-limited to one per {GRANT_MIN_INTERVAL:.2f} s "
+                         "by _heading_grant_ok "
+                         "(rule 2 only; the click arm's _grant_verdict would "
+                         "emit ZERO here because the heading arm arms its own "
+                         "locally-driving latch ten lines earlier). THE GROUND: "
+                         "the client's history polyline extends only BACKWARDS "
+                         "while it holds no destination, so LAG is on it by "
+                         "construction and LEAD is not -- and both dead "
+                         "candidates in this family granted 766 u ahead. It "
+                         "DROPS the shipped `turned or not walking` gate, which "
+                         "on click-free play opens on 11-81%% of moving "
+                         "reports, and that extra cadence is NOT free: the "
+                         "drafted claim that a zero-distance grant takes the "
+                         "<=1.0 u short-circuit is RETRACTED (that compare "
+                         "measures from the SYNC COPY, and 353 of 358 "
+                         "synthesized grants bake a real leg). Stop arm and "
+                         "click arm untouched -- a stop-arm grant is "
+                         "--stop-echo and is refuted. Refuses to combine with "
+                         "--heading-grant or --client-endpoint (same arm, both "
+                         "refuted); combines with --grant-suppress and "
+                         "--resync. Its prediction is printed at startup. This "
+                         "is REALFIX-L1's treatment arm.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -12365,6 +12702,66 @@ def main():
               "and the conclusion was still wrong, because the prediction "
               "measured the wrong thing: it bounded the SIZE of the teleports "
               "and said nothing about their NUMBER.")
+
+    # THE COMPOSITION REFUSAL, decided by a PURE function so the matrix is a
+    # test rather than a paragraph, and evaluated BEFORE the flag is set so a
+    # refused combination cannot half-apply. See zero_lead_composition.
+    _zl_refusal, _zl_notes = zero_lead_composition(
+        zero_lead=a.zero_lead, heading_grant=a.heading_grant,
+        client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
+        resync=a.resync)
+    if _zl_refusal:
+        raise SystemExit(_zl_refusal)
+    if a.zero_lead:
+        global ZERO_LEAD
+        ZERO_LEAD = True
+        print("[map] --zero-lead ON. REALFIX-P2, the treatment arm of "
+              "REALFIX-L1, and the only candidate in the lead family never run.")
+        print(f"      SENDS     on EVERY 0x003D while moving, at most one per "
+              f"{GRANT_MIN_INTERVAL:.2f}s: 0x0025 (unit direction + the "
+              f"client's own movementType) then 0x0029 at the client's REPORTED "
+              f"POSITION VERBATIM. No lead, no clip, no staleness gate, no "
+              f"straight-shot gate. Exactly one 0x0025 per burst.")
+        print("      GROUND    the client's history polyline extends only "
+              "BACKWARDS while it holds no destination, so LAG is on it by "
+              "construction and LEAD is not (REALFIX-O1/O3). Both dead "
+              "candidates in this family granted 766 u AHEAD.")
+        print("      NOT       the stop arm (that is --stop-echo, REFUTED) and "
+              "not the click arm. state['dest'] keeps our own clipped leg; "
+              "only the wire changes.")
+        print("      RETRACTED, and do not re-quote it: 'a zero-distance grant "
+              "takes the <=1.0 u short-circuit and dispatches nothing' is FALSE "
+              "of these grants -- that compare measures from the SYNC COPY, and "
+              "5 of 358 synthesized grants take it. The dropped `turned` gate "
+              "costs real cadence; price it on the numbers.")
+        print("      PREDICTION, stated before the run, REALFIX.md sec.4 "
+              "unedited, in BOTH units because this arc has already lost a "
+              "candidate that bounded SIZE while harm arrived as FREQUENCY:")
+        print("        FREQUENCY <= 1.0 hard rows per minute of ACTIVE time "
+              "(P0 arm 3-6/min, bracketing the measured 4.19)")
+        print("        DISPLACED <= 40 u per active second (P0 arm 100-170, "
+              "bracketing 137.8)")
+        print("        SEPARATION movetap-measured SYNC vs the client's own "
+              "report: p50 <= 150 u and p90 <= 520 u (P0 arm p50 >= 800 u)")
+        print("      FAILURE SIGNATURE, pre-registered: if it fails it must "
+              "fail as FREQUENT SMALL displacements at report-chord scale "
+              "(33-70 u fine cadence, ~500 u on a keyboard hold), NOT as a rare "
+              "large teleport. A P2-arm displacement p50 above 520 u REFUTES "
+              "the 'lag is on the polyline' reading and sends the arc back to "
+              "REALFIX.md sec.2.2.")
+        print("      WOULD REFUTE THE INVARIANT ITSELF: a snap recorded while "
+              "movetap shows separation under 299.33 u and the copy behind the "
+              "player on ground already walked. That is gate 2, gate 3 or the "
+              "gate-free ResyncAllAsync, and it would make every policy in "
+              "REALFIX.md beside the point.")
+        print("      RUN IT    click-free, keyboard held through the WHOLE "
+              "waiting period, one deliberate sustained backpedal leg "
+              "(REALFIX-U4), movetap.py running throughout, arms alternated at "
+              "fixed intervals against the shipped default.")
+        print("      Score it with:  python toolkit/clientscan/movesync.py "
+              "--wire-only   (state the denominator)")
+        for _note in _zl_notes:
+            print(_note)
 
     if a.resync:
         global RESYNC

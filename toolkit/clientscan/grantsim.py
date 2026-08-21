@@ -189,13 +189,19 @@ once from argv, so `_grant_suppress()` sets and RESTORES it around the call --
 the only way to drive both arms of the shipped predicate rather than two
 paraphrases of it.
 
-**(2) REALFIX-C3 COVERS THE CLICK ARM ONLY, and is labelled `C3 (click-arm)`.**
-§2.6 permits exactly this: the heading arm's predicate `_heading_grant_ok` does
-not exist in `authsrv.py` yet (REALFIX-P2 specifies it as new code, carrying
-Rule 2 only), so there is nothing to import for P2/P3 and no heading-arm policy
-gate to run. P2 and P3 are therefore scored with NO rate limit at all, which is
-what `REALFIX.md` §P2's own block does before `_heading_grant_ok` lands. When it
-lands, C3 gains its heading arm and this note comes out.
+**(2) REALFIX-C3's TWO ARMS ARE NOT THE SAME KIND OF CHECK, and the heading one
+is not yet a message-level replay.** This note used to read "the heading arm's
+predicate does not exist in `authsrv.py` yet"; it landed on **2026-08-21**
+(`authsrv._heading_grant_ok`, REALFIX-P2's `--zero-lead`), so P2 and P3 now
+carry the SHIPPED rate limit rather than none, imported and run exactly as the
+click arm's is. What is still asymmetric is the EVIDENCE: the click arm is
+replayed against two captures' own recorded `grant_verdict` rows, reason for
+reason, while no capture in the vault contains a heading-arm row -- the flag has
+never been run. So §C3's heading half drives both arms of the real predicate
+against a SYNTHETIC c2s stream and hand-computed expectations, and is labelled
+as such. **The first REALFIX-L1 capture upgrades it to a message-level replay**
+on the same footing as `195137`/`195315`, and `replay_verdicts` already skips
+heading rows so that capture cannot silently redden the click arm.
 
 **(3) REALFIX-C2(b)'s "golden fixture capture" is a COMMITTED EXPECTED-COUNT
 VECTOR instead.** §2.6 asks for a committed fixture capture with an expected
@@ -741,6 +747,30 @@ def grant_verdict(state, now, suppress):
         return A._grant_verdict(state, now)
 
 
+def heading_verdict(state, now):
+    """(fired, reason, since_last) from `authsrv._heading_grant_ok`.
+
+    THE REAL PREDICATE, and unlike the click arm's it needs NO flag wrangling:
+    `_heading_grant_ok` carries rule 2 and nothing else, reads no module global,
+    and short-circuits on nothing, so there is no `ZERO_LEAD` to set and restore
+    around the call. The lead policies below apply it as their rate limit, which
+    is what makes REALFIX-C3's heading arm a policy gate rather than a
+    paraphrase of one.
+
+    Its reason vocabulary -- `zero-lead` / `heading-rate` -- is DISJOINT from
+    `_grant_verdict`'s, so a capture from a `--zero-lead` run carrying both
+    arms' `grant_verdict` rows can be split by reason alone (and by the `arm`
+    field besides). `replay_verdicts` filters on exactly that.
+    """
+    return _authsrv()._heading_grant_ok(state, now)
+
+
+# The reason strings only the HEADING arm emits. `replay_verdicts` skips these
+# rows so the click-arm replay's denominator stays the click arm's, and the
+# heading replay that REALFIX-L1's first capture will earn selects on them.
+HEADING_REASONS = frozenset(("zero-lead", "heading-rate"))
+
+
 def _click_arm(c2s, suppress, log=None):
     """REALFIX-P0 / P6: the shipped CLICK arm, driven by the real predicate.
 
@@ -844,6 +874,15 @@ def replay_verdicts(path, suppress):
                         == movesync.PLAYER_AGENT:
                     state["grant_at"] = t
         elif kind == "grant_verdict":
+            # THE CLICK ARM'S ROWS ONLY. A `--zero-lead` capture carries the
+            # heading arm's verdicts on this same channel by design, and
+            # re-deciding one of those with the CLICK predicate would compare
+            # two different policies and call the disagreement a defect. No
+            # capture in the vault has such a row yet; the filter is here so the
+            # first REALFIX-L1 capture does not silently redden C3.
+            if (r.get("arm") == "zero-lead"
+                    or r.get("reason") in HEADING_REASONS):
+                continue
             fired, why, age, since = grant_verdict(state, t, suppress)
             out.append({"t": t,
                         "recorded": (r.get("fired"), r.get("reason")),
@@ -900,11 +939,25 @@ def lead_policy(lead):
     arm's clip suspends collision entirely when our mesh does not cover the
     player, so it would not even express retail's D2.
 
-    NO RATE LIMIT: `_heading_grant_ok` does not exist in `authsrv.py` yet. See
-    deviation (2).
+    THE RATE LIMIT IS THE SHIPPED ONE. `authsrv._heading_grant_ok` LANDED
+    2026-08-21 and is imported and run here, not paraphrased -- REALFIX-P2's
+    rule 2 and nothing else, refusing while the last grant is younger than
+    `GRANT_MIN_INTERVAL`. A refused heading grant is DROPPED, never held, which
+    is the predicate's own documented semantics and the reason this loop needs
+    no pending machinery to match the server's.
+
+    `state["grant_at"]` is the server's SHARED grant clock, stamped inside
+    `send()` for every player `0x0029` whatever arm sent it. In the server, a
+    click grant therefore delays a heading grant. Here the lead policies are
+    heading-only streams by construction, so the only thing on this clock is
+    this policy's own emissions -- an approximation that can only make the
+    synthesized stream DENSER than the shipped one would be under
+    `--grant-suppress`, never sparser. Said out loud because the direction
+    matters: this file's numbers stay a FLOOR on harm.
     """
     def policy(c2s, params=None):
-        out = []
+        A = _authsrv()                              # noqa: F841 -- import gate
+        state, out = {}, []
         for m in c2s:
             if m["op"] != OP_HEADING or not m["mt"]:
                 continue
@@ -916,6 +969,10 @@ def lead_policy(lead):
             else:
                 u = m["unit"]
                 D = (p[0] + lead * u[0], p[1] + lead * u[1])
+            fired, _why, _since = heading_verdict(state, m["t"])
+            if not fired:
+                continue                # DROPPED, not held -- see the docstring
+            state["grant_at"] = m["t"]
             out.append((m["t"], D, m["plane"], m["plane"], "heading"))
         return out
     policy.lead = lead

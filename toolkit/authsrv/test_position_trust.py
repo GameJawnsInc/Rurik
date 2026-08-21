@@ -44,6 +44,17 @@ three captures of 2026-08-20 through the policy itself: the reproduction's 196
 clicks must all be refused and the ordinary capture's 5 must all be permitted,
 because either half alone is passed by a policy that is simply wrong in one
 direction.
+
+SECTION 14 IS `--zero-lead` (REALFIX-P2), and it is the first section here that
+EXECUTES a receive arm rather than only matching its syntax tree. Two of that
+flag's claims are behavioural and no AST matcher can reach them -- a moving
+report the shipped `turned or not walking` gate would SKIP is still granted
+under the flag, and the very same report sends NOTHING with the flag off -- so
+`receive_arm()` lifts the arm's own statements out of the receive loop and runs
+them against `authsrv.__dict__`. It executes the file's bytes, re-extracted
+every run. The AST locks stay beside it for the things a single execution cannot
+show: that ZERO_LEAD is named in the heading arm and in NEITHER the stop arm nor
+the click arm, and that exactly one `if ZERO_LEAD:` block in the file sends.
 """
 import ast
 import json
@@ -51,6 +62,7 @@ import math
 import os
 import struct
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -85,8 +97,17 @@ import vaultpath  # noqa: E402
 # console run, and the floor is the BARE-MACHINE subset for the reason the
 # paragraph above gives: setting it at 113 would red every machine that is not
 # the owner's, while 105 still catches a section quietly evaporating.
+#
+# 2026-08-21: section 14 (--zero-lead / REALFIX-P2) added 34, taking it to 147
+# with every fixture present and 139 without. Section 14 is entirely
+# fixture-free -- it drives the shipped predicate, executes the receive arm's
+# own statements lifted out of the file, and reads the syntax tree -- so the
+# whole of its 34 lands in the bare-machine subset and the two totals move by
+# the same amount. BOTH figures are read off real green console runs of their
+# own configuration: 147 from a normal run and 139 from one with RURIK_VAULT
+# pointing at a directory that does not exist. Neither is an enumeration.
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=105)
+                       floor=139)
 check = checks.adopt(LEDGER)
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
@@ -115,6 +136,71 @@ class FakeRec:
 
 def fresh(pos=ANCHOR, plane=0, seen=1000.0):
     return {"pos": pos, "plane": plane, "pos_seen": seen}
+
+
+def receive_arm(opcode_name, params):
+    """The SHIPPED body of one `elif opcode == NAME:` arm, as a callable.
+
+    WHY THIS EXISTS AND WHY IT IS NOT A PARAPHRASE. Sections 7 to 9 lock the
+    movement flags with AST matchers, which answer "is the source still shaped
+    like the policy" and cannot answer "what goes on the wire when this report
+    arrives". `--zero-lead`'s two hardest claims are behavioural -- a report the
+    shipped `turned or not walking` gate would SKIP still grants under the flag,
+    and the very same report sends NOTHING with the flag off -- and an AST
+    matcher can only assert that some source exists near them.
+
+    So the arm's own statements are lifted out of the receive loop, wrapped in a
+    function of the four free names it needs, and compiled against
+    `authsrv.__dict__` as globals. Every module-level name -- the flags
+    included, so flipping `authsrv.ZERO_LEAD` is seen -- resolves to the
+    server's own, and the body is re-extracted on every run, so it cannot go
+    stale against a file that has moved on. It executes `authsrv.py`'s bytes,
+    not a copy of them.
+
+    `params` names the arm's free variables in call order: the heading arm needs
+    (values, state, rec, send) and the stop arm needs `conn_id` too.
+    """
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    node = None
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                and isinstance(n.test.left, ast.Name)
+                and n.test.left.id == "opcode"
+                and len(n.test.comparators) == 1
+                and isinstance(n.test.comparators[0], ast.Name)
+                and n.test.comparators[0].id == opcode_name):
+            node = n
+    if node is None:
+        raise AssertionError(
+            f"no `elif opcode == {opcode_name}:` arm in authsrv.py -- the "
+            f"extractor must FAIL LOUDLY rather than hand back an empty body, "
+            f"which would make every behaviour check below pass vacuously")
+    args = ast.arguments(posonlyargs=[], args=[ast.arg(p) for p in params],
+                         vararg=None, kwonlyargs=[], kw_defaults=[],
+                         kwarg=None, defaults=[])
+    fn = ast.FunctionDef(name="_arm", args=args, body=node.body,
+                         decorator_list=[], returns=None, type_params=[])
+    mod = ast.Module(body=[fn], type_ignores=[])
+    ast.fix_missing_locations(mod)
+    ns = {}
+    exec(compile(mod, authsrv.__file__, "exec"),               # noqa: S102
+         authsrv.__dict__, ns)
+    return ns["_arm"]
+
+
+class Sent:
+    """A send() that records, and that stamps the server's own send-side hook."""
+
+    def __init__(self, state, now=None):
+        self.state, self.now, self.rows = state, now, []
+
+    def __call__(self, opcode, values, label, quiet=False):
+        now = self.now if self.now is not None else time.time()
+        authsrv._note_wire_move(self.state, opcode, values, now)
+        self.rows.append((opcode, values, label))
+
+    def of(self, opcode):
+        return [r for r in self.rows if r[0] == opcode]
 
 
 def main():
@@ -1445,6 +1531,429 @@ def main():
               f"minute. Nothing the flag does can touch it")
         print(f"     repro {repro[1]}/{repro[0]} refused, "
               f"ordinary {ordinary[2]}/{ordinary[0]} granted")
+
+    print("\n14. --zero-lead ships OFF, and it grants the REPORT verbatim")
+    # WHAT EARNS THIS SECTION. REALFIX-P2 is the ninth candidate in this arc and
+    # eight are dead. It is the only member of the lead family never run, and
+    # the one whose design ground is the invariant rather than an analogy: the
+    # client's history polyline extends only BACKWARDS while it holds no
+    # destination, so LAG is on it by construction and LEAD is not. Both dead
+    # members of the family granted 766 u AHEAD.
+    #
+    # AND ONE CLAIM IN ITS OWN SPEC IS RETRACTED, which is why this section
+    # checks the CADENCE as carefully as the payload. The drafted block argued
+    # that dropping the shipped `turned or not walking` gate is cheap "because a
+    # zero-distance grant takes the <= 1.0 u short-circuit and dispatches
+    # nothing". That compare measures from the SYNC COPY (`fsub [esi+0x78]` at
+    # 0x005FEB57), not from the client, and 353 of 358 synthesized grants bake a
+    # real leg (re-measured 2026-08-21 under the shipped rate limit; the
+    # correction's own 533 of 539 predates `_heading_grant_ok` and says the
+    # same thing more weakly). The gate-drop is a real cost and the rate limit is what bounds
+    # it, so `_heading_grant_ok` is not optional and section 14 treats it as the
+    # load-bearing half.
+    check(authsrv.ZERO_LEAD is False,
+          "--zero-lead is off by default",
+          "it is the NINTH candidate in this arc and eight are dead. It is "
+          "unproven until REALFIX-L1 scores it against the shipped default")
+
+    # ---- the predicate ------------------------------------------------
+    # PURITY FIRST, because everything downstream is built on it: grantsim
+    # imports this symbol and runs it against captures, which is only sound if
+    # the same state in gives the same verdict out and nothing is written back.
+    st = {"pos": ANCHOR, "plane": 0, "pos_seen": 0.0, "grant_at": 1000.0,
+          "kbd_moving_at": 1000.0}
+    before = json.dumps(st, sort_keys=True, default=str)
+    verdicts = [authsrv._heading_grant_ok(st, 1000.9) for _ in range(5)]
+    after = json.dumps(st, sort_keys=True, default=str)
+    check(len(set(verdicts)) == 1 and before == after,
+          "the predicate is PURE: same state in, same verdict out, nothing "
+          "written back",
+          f"{sorted(set(verdicts))} over 5 calls; state {before} -> {after}. "
+          f"_grant_verdict's own docstring says it was made side-effect-free so "
+          f"an offline scorer could run the decision rather than a paraphrase "
+          f"that agrees with it by construction -- grantsim imports THIS symbol "
+          f"for exactly that, and a predicate that mutates would make its "
+          f"replay depend on call order")
+
+    floor = authsrv.GRANT_MIN_INTERVAL
+    under = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.0 + floor - 1e-6)
+    at = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.0 + floor)
+    check(under == (False, "heading-rate", under[2]) and at[0] is True
+          and at[1] == "zero-lead",
+          f"RULE 2 at the boundary: one microsecond under {floor:.2f}s refuses, "
+          f"exactly {floor:.2f}s grants",
+          f"under={under} at={at} -- the floor is >= and not >, the same "
+          f"comparison the click arm's rule 2 uses, so the two arms cannot "
+          f"disagree about what 'a grant per interval' means")
+    virgin = authsrv._heading_grant_ok({}, 1000.0)
+    check(virgin == (True, "zero-lead", None),
+          "with no grant on record it fires, and says `since` is unknown rather "
+          "than 0",
+          f"{virgin} -- a None `since` reported as 0.0 would read as 'we just "
+          f"granted' in a capture and invert the whole telemetry")
+    skew = authsrv._heading_grant_ok({"grant_at": 1001.0}, 1000.0)
+    check(skew[0] is False and skew[1] == "heading-rate",
+          "and a grant stamped in the FUTURE refuses, rather than sailing "
+          "through an upper-bound-only test",
+          f"{skew} -- `since` is -1.0 under clock skew. Over-refusing costs one "
+          f"grant the next 0x003D replaces in ~0.29 s; under-refusing is the "
+          f"cadence this flag exists to bound")
+
+    # RULE 1 IS ABSENT, AND THAT IS THE POINT. This is the check that stops
+    # somebody "simplifying" the heading arm back onto _grant_verdict: that
+    # predicate's rule 1 refuses whenever the locally-driving latch is younger
+    # than GRANT_LOCAL_WINDOW, and the heading arm ARMS that latch ten lines
+    # before it would ask. Age is ~0 on every call, so P2 would emit zero grants
+    # under --grant-suppress and degenerate into --grant-suppress renamed.
+    kbd = {"grant_at": 0.0, "kbd_moving_at": 1000.0}
+    heading_says = authsrv._heading_grant_ok(kbd, 1000.0)
+    saved_gs = authsrv.GRANT_SUPPRESS
+    authsrv.GRANT_SUPPRESS = True
+    try:
+        click_says = authsrv._grant_verdict(kbd, 1000.0)
+    finally:
+        authsrv.GRANT_SUPPRESS = saved_gs
+    check(heading_says[0] is True and click_says[0] is False
+          and click_says[1] == "locally-moving",
+          "it carries RULE 2 ONLY: a state the click arm refuses as "
+          "locally-moving still grants here",
+          f"heading={heading_says} click={click_says} -- the heading arm arms "
+          f"`kbd_moving_at` ten lines before it would ask, so reusing "
+          f"_grant_verdict here emits ZERO grants under --grant-suppress and "
+          f"turns --zero-lead into --grant-suppress wearing a new name")
+    check(set(("zero-lead", "heading-rate")).isdisjoint(
+              {"off", "locally-moving", "rate-limited", "grant",
+               "pending-expired", "deferred-grant"}),
+          "and its reason vocabulary is DISJOINT from the click arm's",
+          "one capture from a --zero-lead run carries grant_verdict rows from "
+          "BOTH arms; if the two vocabularies overlapped, a replay could not "
+          "tell which policy produced a row and grantsim's C3 would be scoring "
+          "the wrong predicate")
+
+    # ONE CLOCK, and it is the shared one. A CLICK grant must move the heading
+    # floor, because `grant_at` is stamped inside send() for every 0x0029
+    # whatever arm sent it. A private heading clock would let the two arms run
+    # at 2 x 2 Hz while each believed it was inside the floor.
+    shared = {"pos": ANCHOR, "plane": 0, "pos_seen": 0.0}
+    wire = Sent(shared, now=2000.0)
+    wire(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [authsrv.PLAYER_AGENT_ID, [1.0, 2.0], 0, 0], "a click grant")
+    check(authsrv._heading_grant_ok(shared, 2000.1)[1] == "heading-rate"
+          and authsrv._heading_grant_ok(shared, 2000.0 + floor)[1] == "zero-lead",
+          "the floor reads the SHARED grant clock, so a CLICK grant delays a "
+          "heading grant",
+          f"grant_at={shared.get('grant_at')} -- under --zero-lead "
+          f"--grant-suppress the two arms cannot between them exceed one grant "
+          f"per {floor:.2f}s, which is the bound the interval was derived for")
+
+    # ---- the arm, EXECUTED --------------------------------------------
+    arm = receive_arm("GAME_CMSG_TURN_TO_DIRECTION",
+                      ("values", "state", "rec", "send"))
+    HEAD = [1, [1000.5, 2000.25], 7, [766.0, 0.0], 1]
+    SAME = [1, [1400.5, 2000.25], 7, [766.0, 0.0], 1]     # same heading, moved
+
+    def drive(reports, flag, stamp_age=0.0, plane=7):
+        """Run the shipped arm over `reports` with ZERO_LEAD set to `flag`.
+
+        `stamp_age` back-dates the send-side hook's `grant_at` by that many
+        seconds. The arm reads the real clock for its own `now`, so the rate
+        limit is driven by moving the LAST GRANT rather than by faking the
+        present: `stamp_age=0` leaves every send inside the floor (the rate
+        limit bites) and `stamp_age=10` puts every send well outside it (the
+        limit is open), with no monkey-patching of `time`.
+        """
+        st = {"pos": (1000.0, 2000.0), "plane": plane, "pos_seen": 0.0}
+        w, r = Sent(st), FakeRec()
+        was = authsrv.ZERO_LEAD
+        authsrv.ZERO_LEAD = flag
+        try:
+            for v in reports:
+                w.now = time.time() - stamp_age
+                arm(v, st, r, w)
+        finally:
+            authsrv.ZERO_LEAD = was
+        return st, w, r
+
+    st, w, r = drive([HEAD], True, stamp_age=10.0)
+    grants = w.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    check(len(grants) == 1 and grants[0][1][1] == [1000.5, 2000.25]
+          and grants[0][1][1][0] is not None,
+          "PAYLOAD: the granted point is the reported position VERBATIM, to the "
+          "byte",
+          f"{grants[0][1] if grants else None} against a report of "
+          f"[1000.5, 2000.25] and a server model at (1000.0, 2000.0). Not "
+          f"state['pos'] (stale in exactly the window a trust refusal opens), "
+          f"not model_dest (OUR navmesh's opinion, the first of the two defects "
+          f"that made --heading-grant warp), and not reported + anything")
+    check(len(grants[0][1]) == 4 and grants[0][1][2] == 7
+          and grants[0][1][3] == 7,
+          "and both plane words are the client's own reported plane",
+          f"{grants[0][1]} -- field 3 is the destination's plane and field 4 the "
+          f"current one, closed from the binary three times. For a zero-distance "
+          f"grant they are the same plane; forcing 0 writes a wrong map index "
+          f"into agent+0x80")
+    dirs = w.of(authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION)
+    check(len(dirs) == 1 and dirs[0][1][1] == [1.0, 0.0] and dirs[0][1][2] == 1,
+          "and exactly ONE 0x0025 rides with it, unit length, echoing the "
+          "client's movementType",
+          f"{[d[1] for d in dirs]} -- retail's burst shape. Both paths route "
+          f"through one send site, so no arrangement of flags can put two "
+          f"0x0025 in one report's burst")
+    check(w.rows.index(dirs[0]) < w.rows.index(grants[0]),
+          "and the 0x0029 is LAST in the burst",
+          f"{[row[0] for row in w.rows]} -- 3,023 of 3,071 live retail bursts "
+          f"put the grant last, with zero counter-examples")
+    check(st.get("dest") == (1766.5, 2000.25)
+          and list(st["dest"]) != grants[0][1][1],
+          "and state['dest'] still holds the server's own model leg, which is "
+          "NOT what went on the wire",
+          f"model={st.get('dest')} wire={grants[0][1][1]} -- reported + the "
+          f"client's own 766 u vec2, through clip_to_walkable. The model/wire "
+          f"split --client-endpoint proves: our own opinion still respects "
+          f"walls for aggro, interaction and collision, and only the wire "
+          f"changes. If these two were equal the flag would be granting the "
+          f"766 u endpoint, which is --heading-grant and is REFUTED")
+
+    # THE GATE-DROP, BOTH DIRECTIONS, and this is the pair that cannot be
+    # written as an AST match. `SAME` repeats the heading, so `turned` is False
+    # and `walking` is already True -- the shipped gate at :9878 SKIPS it.
+    st_on, w_on, r_on = drive([HEAD, SAME], True, stamp_age=10.0)
+    st_off, w_off, r_off = drive([HEAD, SAME], False, stamp_age=10.0)
+    on_grants = w_on.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    check(len(on_grants) == 2 and on_grants[1][1][1] == [1400.5, 2000.25]
+          and len(w_on.of(authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION)) == 2,
+          "GATE DROP: a moving report the shipped `turned` gate would SKIP is "
+          "still granted under the flag, 0x0025 and all",
+          f"{[row[2] for row in w_on.rows]} -- on click-free play that gate "
+          f"opens on only 11.1/24.3/61.2/80.8% of moving reports (`ours`, "
+          f"182554/182934/100340/173940), a 1.24x-9x cadence delta. Dropping it "
+          f"is the flag's SECOND named variable and it is not free")
+    check(len(w_off.rows) == 1
+          and w_off.rows[0][0] == authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION
+          and w_off.rows[0][1] == w_on.rows[0][1]
+          and "[" not in w_off.rows[0][2],
+          "CONTROL: with the flag OFF the same two reports send one 0x0025 and "
+          "NOTHING else -- the default path is byte-identical",
+          f"off={[row[2] for row in w_off.rows]} vs on="
+          f"{[row[2] for row in w_on.rows]}. `legacy_dir or zero_ok` IS "
+          f"`legacy_dir` when the flag is off, so it is the same send with the "
+          f"same payload in the same order, and the `[dir ...]` suffix on the "
+          f"console line appears only under the flag. Without this check the "
+          f"restructuring that hoisted `unit` out of the gate could have "
+          f"changed the shipped build and nothing would say so")
+
+    # THE RATE LIMIT, ON THE ARM. A second report inside the floor grants
+    # NOTHING and holds NOTHING.
+    st_r, w_r, r_r = drive([HEAD, SAME], True, stamp_age=0.0)
+    refused = [e for e in r_r.of("grant_verdict") if e["fired"] is False]
+    check(len(w_r.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)) == 1
+          and len(refused) == 1 and refused[0]["reason"] == "heading-rate",
+          "RATE: two reports 0 s apart produce ONE grant, and the refusal is "
+          "recorded",
+          f"grants={len(w_r.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT))} "
+          f"refusals={[e['reason'] for e in refused]}")
+    check("grant_pending" not in st_r,
+          "and a refused heading grant is DROPPED, not held",
+          f"{st_r.get('grant_pending')} -- the next 0x003D supersedes it by "
+          f"construction at a measured 0.28-0.30 s median, so holding it would "
+          f"grant a position the player has already left. A held CLICK is the "
+          f"player's choice; a held heading is our guess about a stale one")
+
+    # THE FOURTH CELL OF THE 2x2: legacy wants the direction, zero-lead is
+    # rate-refused. The shipped send must still go out -- a flag that suppresses
+    # the default build's own 0x0025 while refusing its grant would make the
+    # A/B's treatment arm quieter than the control on a message it does not
+    # even govern.
+    TURNED = [1, [1400.5, 2000.25], 7, [0.0, 766.0], 1]
+    st_t, w_t, r_t = drive([HEAD, TURNED], True, stamp_age=0.0)
+    late = r_t.of("grant_verdict")[-1]
+    check(len(w_t.of(authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION)) == 2
+          and len(w_t.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)) == 1
+          and late["fired"] is False and late["direction"] == "legacy",
+          "a report the LEGACY gate wants but the rate limit refuses still "
+          "sends its 0x0025, and only that",
+          f"{[row[2] for row in w_t.rows]}, last verdict {late['reason']}/"
+          f"{late['direction']} -- the four cells of (legacy wants it) x "
+          f"(zero-lead wants it) are legacy+zero-lead / zero-lead / legacy / "
+          f"none, and all four are now driven")
+
+    # THE TELEMETRY, on the click arm's own channel so one consumer sees both.
+    rows_on = r_on.of("grant_verdict")
+    rows_r = r_r.of("grant_verdict")
+    check(len(rows_on) == 2 and all(e["fired"] for e in rows_on)
+          and all(e["reason"] == "zero-lead" and e["arm"] == "zero-lead"
+                  for e in rows_on)
+          and [e["dest"] for e in rows_on] == [[1000.5, 2000.25],
+                                               [1400.5, 2000.25]]
+          and rows_on[0]["since_last"] is None,
+          "TELEMETRY: every evaluation is recorded on the click arm's own "
+          "`grant_verdict` channel, with the new reasons and an `arm` field",
+          f"{rows_on} -- a log holding only its own successes cannot score the "
+          f"flag against the cadence it exists to bound, and the first row's "
+          f"`since_last` is None rather than 0.0 because nothing had been "
+          f"granted yet")
+    check(len(rows_r) == 2 and [e["fired"] for e in rows_r] == [True, False]
+          and [e["reason"] for e in rows_r] == ["zero-lead", "heading-rate"],
+          "and a REFUSAL is recorded on the same channel, not dropped silently",
+          f"{[(e['fired'], e['reason']) for e in rows_r]} -- grantsim's C3 "
+          f"heading arm reads these rows, and a refusal that leaves no row "
+          f"makes the replay's denominator the wrong number")
+    check([e["direction"] for e in rows_on] == ["legacy+zero-lead", "zero-lead"]
+          and rows_r[1]["direction"] == "none",
+          "and it records WHICH path asked for the 0x0025, so a capture can "
+          "separate the two populations",
+          f"{[e['direction'] for e in rows_on]} then "
+          f"{rows_r[1]['direction']!r} on the refusal -- report 1 turned (both "
+          f"paths wanted the direction, ONE went out); report 2 did not, so "
+          f"only the zero-lead path wanted it; and a rate-refused report sends "
+          f"no direction at all, which is the cadence the legacy gate would "
+          f"have had")
+
+    # NO GRANT ON A STOP. A stop-arm 0x0029 is --stop-echo and it is REFUTED.
+    stop_arm = receive_arm("GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED",
+                           ("values", "state", "rec", "send", "conn_id"))
+    st_s = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+            "kbd_moving_at": 1000.0}
+    w_s, r_s = Sent(st_s), FakeRec()
+    was = authsrv.ZERO_LEAD
+    authsrv.ZERO_LEAD = True
+    try:
+        stop_arm([1, [1400.5, 2000.25], 7], st_s, r_s, w_s, 1)
+    finally:
+        authsrv.ZERO_LEAD = was
+    check(w_s.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT) == []
+          and st_s.get("kbd_moving_at") is None,
+          "STOP ARM: with --zero-lead ON a 0x0047 grants NOTHING, and still "
+          "clears the latch",
+          f"{[row[2] for row in w_s.rows]} -- a stop-arm 0x0029 IS --stop-echo "
+          f"and it is REFUTED (:1004-1023): the operator watched the character "
+          f"teleport anyway 9.9 s after an echo, then walk BACK toward the "
+          f"echoed point. The flag must not smuggle it back in")
+    def zl_names(node):
+        return [n for n in ast.walk(node)
+                if isinstance(n, ast.Name) and n.id == "ZERO_LEAD"]
+
+    def arm_node(name):
+        for n in ast.walk(src):
+            if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                    and isinstance(n.test.left, ast.Name)
+                    and n.test.left.id == "opcode"
+                    and len(n.test.comparators) == 1
+                    and isinstance(n.test.comparators[0], ast.Name)
+                    and n.test.comparators[0].id == name):
+                return n
+        return None
+
+    zl_blocks = [n for n in ast.walk(src)
+                 if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                 and n.test.id == "ZERO_LEAD"]
+    zl_send_blocks = [n for n in zl_blocks
+                      if any(isinstance(c, ast.Call)
+                             and isinstance(c.func, ast.Name)
+                             and c.func.id == "send" for c in ast.walk(n))]
+    zl_sends = [c for n in zl_send_blocks for c in ast.walk(n)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                and c.func.id == "send"]
+    check(len(zl_send_blocks) == 1 and len(zl_sends) == 1,
+          "and exactly ONE `if ZERO_LEAD:` block in the file SENDS anything, "
+          "and it sends once",
+          f"{len(zl_blocks)} ZERO_LEAD blocks of which {len(zl_send_blocks)} "
+          f"send, {len(zl_sends)} sends -- two send blocks would be two "
+          f"policies, which is how the heading arm once granted twice per "
+          f"report. (The second, sendless block is the verdict hoist that keeps "
+          f"the 0x0025 to one send site.)")
+    heading_arm_ast = arm_node("GAME_CMSG_TURN_TO_DIRECTION")
+    stop_arm_ast = arm_node("GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED")
+    click_arm_ast = arm_node("GAME_CMSG_MOVE_TO_COORD")
+    check(zl_names(heading_arm_ast) and not zl_names(stop_arm_ast)
+          and not zl_names(click_arm_ast),
+          "NO STOP-ARM CHANGE AND NO CLICK-ARM CHANGE: ZERO_LEAD is named in "
+          "the heading arm and in NEITHER of the other two",
+          f"heading={len(zl_names(heading_arm_ast))} "
+          f"stop={len(zl_names(stop_arm_ast))} "
+          f"click={len(zl_names(click_arm_ast))} -- a stop-arm grant IS "
+          f"--stop-echo (REFUTED, :1004-1023) and a click-arm change would make "
+          f"REALFIX-L1 a two-variable A/B. The heading count is the positive "
+          f"control: a matcher that finds ZERO_LEAD nowhere would pass the "
+          f"other two halves for the wrong reason")
+    zl = zl_send_blocks[0] if zl_send_blocks else None
+    payload = zl_sends[0].args[1].elts if zl_sends else []
+    dest_arg = payload[1] if len(payload) > 1 else None
+    check(isinstance(dest_arg, ast.Call) and isinstance(dest_arg.func, ast.Name)
+          and dest_arg.func.id == "list" and len(dest_arg.args) == 1
+          and isinstance(dest_arg.args[0], ast.Name)
+          and dest_arg.args[0].id == "reported",
+          "the source says `list(reported)` and nothing else",
+          f"{ast.dump(dest_arg) if dest_arg is not None else None}")
+    zl_clipped = zl is not None and any(
+        isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+        and c.func.id == "clip_to_walkable" for c in ast.walk(zl))
+    zl_state_pos = zl is not None and any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos"
+        for n in ast.walk(zl) if isinstance(n, ast.Subscript))
+    check(not zl_clipped and not zl_state_pos,
+          "and the block neither clips nor reaches for state['pos']",
+          f"clip={zl_clipped} state_pos={zl_state_pos} -- those are the two "
+          f"defects that made --heading-grant warp the owner's character, and "
+          f"the point is walkable by WITNESS: the client reported standing on it")
+    # THE CONTROL. Both matchers above only run against healthy source.
+    bad = ast.parse("if ZERO_LEAD:\n"
+                    "    d = clip_to_walkable(state, state['pos'])\n"
+                    "    send(OP, [PLAYER_AGENT_ID, list(d), plane, plane], 'x')")
+    bnode = next(n for n in ast.walk(bad) if isinstance(n, ast.If))
+    bad_clip = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                   and c.func.id == "clip_to_walkable" for c in ast.walk(bnode))
+    bad_state = any(
+        isinstance(n.value, ast.Name) and n.value.id == "state"
+        and isinstance(getattr(n, "slice", None), ast.Constant)
+        and n.slice.value == "pos"
+        for n in ast.walk(bnode) if isinstance(n, ast.Subscript))
+    check(bad_clip and bad_state,
+          "CONTROL: both matchers still SEE the old defects when handed them",
+          f"clip={bad_clip} state_pos={bad_state} -- if either stopped matching, "
+          f"the check above would pass for the wrong reason")
+
+    # ---- the composition matrix ---------------------------------------
+    # A refusal nobody has seen fire is a wish, so every cell is driven.
+    for other in ("heading_grant", "client_endpoint"):
+        why = authsrv.zero_lead_composition(zero_lead=True, **{other: True})[0]
+        check(why is not None and "cannot be combined" in why
+              and "REFUTED" in why,
+              f"COMPOSITION: --zero-lead REFUSES to combine with "
+              f"--{other.replace('_', '-')}",
+              f"{why!r} -- both answer the SAME 0x003D with a 0x0029, so the "
+              f"client would hold two destinations per report and the run would "
+              f"attribute the outcome to neither. Both are already REFUTED")
+    both = authsrv.zero_lead_composition(zero_lead=True, heading_grant=True,
+                                         client_endpoint=True)[0]
+    check(both is not None and "--heading-grant and --client-endpoint" in both
+          and " are already REFUTED" in both,
+          "and it names BOTH when both are passed, in the plural",
+          f"{both!r}")
+    for other, want in (("grant_suppress", "orthogonal arms"),
+                        ("resync", "one arm at a time")):
+        why, notes = authsrv.zero_lead_composition(zero_lead=True,
+                                                   **{other: True})
+        check(why is None and len(notes) == 1 and want in notes[0],
+              f"COMPOSITION: --{other.replace('_', '-')} is ALLOWED, and it "
+              f"prints a note",
+              f"refusal={why!r} notes={notes!r} -- allowing silently is how two "
+              f"variables end up in an A/B built for one")
+    pair = authsrv.zero_lead_composition(zero_lead=True, grant_suppress=True,
+                                         resync=True)
+    check(pair[0] is None and len(pair[1]) == 2,
+          "and both allowed flags together print both notes",
+          f"{pair}")
+    check(authsrv.zero_lead_composition() == (None, [])
+          and authsrv.zero_lead_composition(heading_grant=True,
+                                            client_endpoint=True) == (None, []),
+          "CONTROL: with --zero-lead OFF nothing is refused and nothing is "
+          "printed",
+          "the two refuted flags may still be run together against each other "
+          "-- this function speaks only for --zero-lead, and a refusal that "
+          "fires when the flag is off would be refusing everything")
 
     return LEDGER.verdict()
 
