@@ -140,7 +140,10 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # `grep -c` both read 230, so the occurrence count and the line count agree and
 # either grep gives the same answer.)
 #
-# Was 203 before section 11 (WORLDMAPS-W8: `readback`'s optional-chunk loop,
+# Was 213 before section 12 (WORLDMAPS-W12: an armed head that was never
+# re-bloated, which used to leave `readback` raising out of the FFNA decoder
+# about a 0-byte file, plus the control that a re-bloated head still reads
+# back clean), 203 before section 11 (WORLDMAPS-W8: `readback`'s optional-chunk loop,
 # asserted in the ABSENT direction it used to `continue` past), 195 before the
 # R2 fix pass (section 10b: the copied archive, the byte route and its negative,
 # the path route's own fixture, and one fixture each for the three journal
@@ -153,7 +156,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=213)
+LEDGER = checks.Ledger("test_deploy", floor=218)
 check = checks.adopt(LEDGER)
 
 
@@ -2788,6 +2791,66 @@ def section11():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# --------------------------------------------------------------- section 12
+#
+# THE DEFECT THIS SECTION IS ABOUT WAS A FAILURE WEARING THE WRONG NAME. When
+# `--install` arms a head to zero length and the client never re-bloats it, the
+# head stays 0 B. `readback` handed those 0 bytes straight to
+# `mapfile.MapFile.decode`, which raised `ValueError: ffna file is 0 bytes,
+# shorter than its 5-byte header` -- a traceback out of a decoder three layers
+# down, naming neither the map nor the cause. On 2026-08-21 (WORLDMAPS-W12)
+# that is exactly what a launch collision produced: another session held the
+# harness ports, this session's harness never bound, `harness rc 1` scrolled
+# past, and the run ENDED on a stack trace about a file header. An empty head
+# is not a corrupt file -- it is the single most likely outcome of a launch
+# that did not happen, and it is a RESULT: the compiler never ran.
+#
+# Both directions are asserted, because a guard that fires on everything is the
+# same defect from the other side: (a) the armed head goes red with a row that
+# names the file id and points at the harness, and (b) a head the client DID
+# re-bloat still produces the full readback -- the early return does not
+# swallow the healthy path.
+
+
+def section12():
+    """An un-recompiled head is a named result, not a decoder traceback."""
+    print("\n12. an armed head that was never re-bloated FAILS by name")
+    tmp = tempfile.mkdtemp()
+    try:
+        # (a) THE ARMED HEAD. Zero bytes, exactly as --install left it.
+        rows, bad = run_readback(tmp, "armed",
+                                 staged_map(READBACK_ENV, READBACK_SOUND),
+                                 b"")
+        check(bool(bad) and len(rows) == 1,
+              "a 0-byte head produces exactly one row and a non-empty `bad`, "
+              "rather than raising out of the FFNA decoder",
+              f"{len(rows)} row(s); bad={bad}")
+        got, line = verdict_of(rows, "never re-bloated")
+        check(got == "FAIL",
+              "and that row is a FAIL naming the thing that did not happen",
+              line)
+        check(f"{FIXTURE_FILE_ID:#08x}" in line and "0 B" in line,
+              "the row names the FILE ID and the zero length, so a reader "
+              "knows which map, and what state it was left in", line)
+        check("harness rc" in line and "Gw.log" in line,
+              "and it points at the harness rc and Gw.log -- the two places "
+              "that can say WHY the client never got there, which is the "
+              "information the traceback replaced", line)
+
+        # (b) THE CONTROL, and it is the half that matters. A guard that
+        # reddens a healthy readback would be worse than the traceback it
+        # replaced, and nothing in (a) can tell the difference.
+        rows, bad = run_readback(tmp, "rebloated",
+                                 staged_map(READBACK_ENV, READBACK_SOUND),
+                                 compiled_map(READBACK_ENV, READBACK_SOUND))
+        check(not bad and len(rows) > 1,
+              "CONTROL: a head the client DID re-bloat still produces the "
+              "whole readback, clean -- the early return is scoped to the "
+              "empty case and nothing else", f"{len(rows)} row(s); bad={bad}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -2836,6 +2899,7 @@ def main():
     section9()
     section10()
     section11()
+    section12()
     section2(area)
     return LEDGER.verdict()
 
