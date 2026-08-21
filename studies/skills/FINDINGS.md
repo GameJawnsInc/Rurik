@@ -3471,3 +3471,84 @@ something we have not identified for environmental sources. **One screenshot of
 a Student's ring taken 20 s after entry settles it**, and it costs nothing on the
 next Isle trip. Until then, this section describes OUR client's response to OUR
 messages, which is exactly what it was built to measure — and no further.
+
+### 32.5 Does this apply to RETAIL? The message shapes are identical, and the only gap left is the build
+
+§32.4 asked whether retail players see the ghost too, and said one live screenshot
+would settle it. That overstated the cost: **most of it settles offline**, because
+the client is the referee and the question is whether it can tell the two servers
+apart.
+
+Decoded with `bufflog` rather than by hand — a first pass scanning raw bytes for
+`0x0044` found matches inside float payloads (`00803f` is `1.0f`) and was thrown
+away:
+
+| source | message |
+|---|---|
+| **retail**, Isle Students | `0x0042 [target 25, skill 482, field3 0, buff 117, duration 10.0]` |
+| **retail**, Isle Students | `0x0042 [target 25, skill 2077, field3 0, buff 117, duration 10.0]` |
+| **ours**, the probe | `0x0042 [25, 478, 0, 1, 10.0]` |
+| **ours**, the probe | `0x0042 [25, 480, 0, 2, 10.0]` |
+
+**Field for field the same shape** — same target slot, `field3 = 0` on both sides,
+the same `10.0` f32 duration, and condition skill ids (type_code 8) in both. The
+client has nothing in the message to distinguish our application from ArenaNet's,
+so it should take the same path.
+
+**THE ONE GAP IS THE BUILD, and it is worth naming rather than waving past.** The
+retail capture is **38849**; the probe above ran on the loopback client, which was
+**38797** — 52 builds apart. Effect rendering is unlikely to have moved, but
+"unlikely" is not a measurement, and this repo has been wrong about a version
+assumption before.
+
+### 32.6 Closing the build gap meant building a 38849 loopback client, and a guard stopped the first attempt
+
+**The gap was closeable offline** — the retail build is on disk, since the
+operator's own install auto-updated to 38849 (`RUNBOOK` §"the build gate's
+'service' is a proxy"). The loopback client was two builds behind the service
+anyway, so rebuilding it is maintenance the runbook already prescribes after
+every ArenaNet update rather than work invented for this question.
+
+`dump_dh_params.py` on the 38849 install first, because that is the runbook's own
+go/no-go: **`GO.`** — `g = 4`, 512-bit prime, struct at VA `0x00a910d8`, so the
+crypto scheme did not move. Then `make_custom_client.py` + `make_run_dir.py`:
+`B == g^b mod p -> True`, classified `ours`, updater killed, filed at
+`vault/run/2026-08-20_21511009c460/`. `dhbuild.py` audits the whole vault clean.
+
+**THE FIRST LAUNCH WAS REFUSED, AND THE GUARD WAS RIGHT.** `contentids`:
+
+> `map 146 0x1B97D: the two archives bind this id to DIFFERENT FILES` — server
+> row 7982 is 1,300,036 B crc `0xA0AE500A`, client row 177262 is 1,300,044 B crc
+> `0x33F1A289`.
+
+So **build 38849 changed map 146's geometry** — 8 bytes longer, different CRC —
+and the server's study archive still holds the old one. Its own words for why
+that matters: *"the server would path against geometry the client is not drawing,
+and the run would look like it worked."* That is a silent-wrong-answer class of
+failure caught before a single packet, and it is the second guard this week to
+pay for itself.
+
+**Resolved without touching anything shared.** `vault/dat_study/Gw.dat` is used by
+other arcs and other sessions, so re-cutting it to 38849 is not a call this arc
+makes alone. `RURIK_DAT` pointed at the 38849 client's OWN archive makes the pair
+the same generation by construction — `test_contentids.py` §1 calls that *"the
+only pairing in this vault that is coherent today"* and it is what the
+2026-08-14 compass run used. **Recorded as owed maintenance:** the server's study
+archive is now a build behind the client's, and every default-paired run inherits
+that.
+
+With that pairing the guard went green — **"content file ids: 12 of 12 map row(s)
+agree across both archives"** — and the launch was then refused a SECOND time, by
+a different guard and equally correctly:
+
+> `REFUSING to launch ...6-08-20_21511009c460\Gw.exe` — *"no firewall cage
+> names this binary at all. This client carries OUR Diffie-Hellman parameters."*
+
+A newly built ours-DH binary is not in any cage rule, and `PLAN.md` §6.2 is
+absolute that such a client must never reach the real service — it does not fail
+cleanly, because Stage A completes first with whatever credential the client
+autofills. Caging is an **elevated** step by design (`isolate_client.ps1`, no
+arguments, which enumerates every client under `vault/run` rather than the single
+hardcoded path that once left one uncaged for a day). **So the 38849 re-run is
+staged and blocked on one elevated command, and the build gap in §32.5 stands
+until it runs.** Everything else about the rebuild is done and verified.
