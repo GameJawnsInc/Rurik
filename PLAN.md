@@ -1468,8 +1468,24 @@ UNMAPPED message).
    is what those runs are actually for: the spent ring reads exactly zero, and
    slot 4 loses more ring than slot 3 for the same 25 units. Qualitative claims
    intact, precision claims withdrawn.
-   **Still unseen:** only the outpost map-gate control (§26.6), which needs a
-   correct 207 sent to a client standing in a town.
+   **AND THE MAP GATE, which closes the channel** (E8, runs `20260821T140826` +
+   `20260821T141108`, [§30](studies/skills/FINDINGS.md)). A two-arm A/B, same
+   map and bar and walk, one flag apart. The confound was real and was defeated
+   structurally: an outpost forbids attacking, but the harness calls
+   `begin_attack` SERVER-side, so the outpost arm put **9 gains on the wire**
+   just like the control — checked before any pixel was measured. Result: in
+   the outpost every adrenal slot is **byte-identical before and after nine
+   gains**, while the explorable arm fills all three. **And the overlay is torn
+   down rather than merely unfilled** — an uncharged adrenal icon is DARK in an
+   explorable (103,64,27) and BRIGHT in an outpost (197,122,48), which is
+   `0x00542E43`'s NULL-payload branch destroying the overlay, confirmed from
+   outside the disassembly for the first time. It also retires §25's guess that
+   slot darkening might be an affordability grey: the darkening is the empty
+   state of a ring that only exists where the ring is drawn.
+   **This channel is now closed on the screen side** — charge, spend,
+   cross-pool tax, wipe and map gate all observed. What remains static-only is
+   the *reason* for the gate, which nothing observed explains and which is not
+   worth a probe.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client
