@@ -126,8 +126,20 @@ import movesync                                                # noqa: E402
 # real green runs of their own configuration -- 24 with `RURIK_VAULT` pointing
 # at a directory that does not exist, 66 with every fixture present -- and
 # neither is 19+5 done in anyone's head.
-FLOOR_BARE = 24
-FLOOR_FULL = 66
+#
+# 2026-08-21, AFTER REVIEW: §6b gained two checks and lost none. Its old
+# "negative control" counted the moving headings and compared them against a
+# count the check above it already pinned, so it could not fail independently;
+# it is now a real control (the verdict hook rebound to always fire, and the
+# same stream must grant all six). Beside it went a lock that the POLICY runs
+# the shipped predicate rather than a paraphrase of it -- perturb the server's
+# own GRANT_MIN_INTERVAL and the grant instants must follow -- and a driven
+# exercise of `replay_verdicts`'s heading-row filter, which had no capture in
+# any vault to filter and was therefore dead source. All three are fixture-free,
+# so both floors move by the same 2: 24 -> 26 and 66 -> 68, each re-measured
+# from a green run of its own configuration.
+FLOOR_BARE = 26
+FLOOR_FULL = 68
 LEDGER = checks.Ledger("grantsim: the offline grant-policy harness, "
                        "and its refusal to rank", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -150,7 +162,9 @@ except BaseException:                                          # noqa: BLE001
 
 # THE FLOOR FOLLOWS THE FIXTURES. Every section below either runs in full or
 # declares a skip, so with all three fixtures present the count is not variable
-# and 61 is a floor rather than a hope. Any other configuration keeps
+# and FLOOR_FULL is a floor rather than a hope. (This sentence carried the
+# literal 61 for a day after the constant had moved to 66, which is why it now
+# names the constant instead of restating its value.) Any other configuration keeps
 # `FLOOR_BARE`, which is the protection those configurations already had -- a
 # floor for a mixed machine would have to be set from a run of that machine, and
 # this one cannot produce it without hiding a fixture from itself.
@@ -434,10 +448,21 @@ def main():
     # capture's six headings are 0.25 s apart, so the shipped
     # GRANT_MIN_INTERVAL = 0.50 s floor passes three of them (t = 0.00, 0.50,
     # 1.00) -- 6 -> 3 grants per policy. The old form zipped `got` against
-    # `heads` positionally, which was only correct while every report produced a
-    # grant; with a rate limit in the loop it silently paired grant 2 with report
-    # 2 and reported a lead of 72.0 u for P2. Pair on the report's own `t`
-    # instead, which is right under any rate limit.
+    # `heads` POSITIONALLY, which is only correct while every report produces a
+    # grant; keying on the report's own `t` is right under any rate limit.
+    #
+    # WHAT THE OLD FORM WOULD ACTUALLY HAVE DONE, corrected 2026-08-21 after
+    # review, because the first version of this comment invented a near-miss.
+    # It claimed the positional zip "silently paired grant 2 with report 2 and
+    # reported a lead of 72.0 u for P2", i.e. that the file went green on a
+    # wrong number. IT DID NOT. Measured both ways against the current
+    # rate-limited policies: the zip yields offsets [0.0, 72.0, 144.0] for P2
+    # (and [85.92, 157.92, 229.92] for P3, [766, 838, 910] for lead-766), so
+    # `spine[0][1] == [0.0]` is FALSE and the check goes RED -- as does
+    # `all(n == 6 ...)`, since each policy now grants 3. The pairing fix is
+    # right and stays; the story that it caught a silent failure is withdrawn.
+    # An invented near-miss is worth less than nothing: it is a claim about this
+    # instrument's blind spots that the instrument does not have.
     heads = [m for m in moves if m["op"] == GS.OP_HEADING and m["mt"]]
     at_t = {m["t"]: m for m in heads}
     spine = []
@@ -796,18 +821,86 @@ def main():
           f"exactly the instants a floor of {floor:.2f} s admits, and the three "
           f"refused ones produce NO later grant, which is what 'dropped, not "
           f"held' means on the wire")
-    # THE NEGATIVE CONTROL, and it is the same shape sec. 6's click arm uses:
-    # run the same stream with the rate limit REMOVED and require a DIFFERENT
-    # answer. Without it, "the predicate agreed" is what a policy ignoring it
-    # entirely also produces.
-    no_limit = [m["t"] for m in moves if m["op"] == GS.OP_HEADING and m["mt"]]
-    check(len(no_limit) == 6 and len(got) == 3,
-          "NEGATIVE CONTROL: with no rate limit the same stream grants 6, so "
-          "the predicate is doing the work",
-          f"{len(no_limit)} moving headings vs {len(got)} grants. Before "
-          f"2026-08-21 this file scored P2 and P3 at 6 -- no rate limit existed "
-          f"to import -- and every check around it stayed green, which is why "
-          f"the count is pinned here rather than assumed")
+    # THE NEGATIVE CONTROL, AND IT IS NOW ONE. What stood here counted the
+    # moving headings in `moves` and asserted `len(no_limit) == 6 and
+    # len(got) == 3` -- but `no_limit` was never a limit-free RUN, just the
+    # denominator, and both halves were already pinned by the check immediately
+    # above. It could not fail unless that one did, so it added a check to the
+    # floor and refuted nothing. A control has to CHANGE something and watch the
+    # answer move: the rate limit is removed by rebinding the module's own
+    # verdict hook, and the same stream must then grant all six.
+    saved_hv = GS.heading_verdict
+    try:
+        GS.heading_verdict = lambda state, now: (True, "zero-lead", None)
+        unlimited = GS.policy_p2_zerolead(moves)
+    finally:
+        GS.heading_verdict = saved_hv
+    heads_n = len([m for m in moves if m["op"] == GS.OP_HEADING and m["mt"]])
+    check(heads_n == 6 and len(got) == 3 and len(unlimited) == 6
+          and [t for t, *_ in unlimited] == heads_t,
+          "NEGATIVE CONTROL: with the verdict forced to always fire, the SAME "
+          "stream grants all 6 -- so the predicate is doing the work",
+          f"{len(unlimited)} grants at {[t for t, *_ in unlimited]} unlimited "
+          f"against {len(got)} at {[t for t, *_ in got]} shipped, over "
+          f"{heads_n} moving headings. Before 2026-08-21 this file scored P2 "
+          f"and P3 at 6 -- no rate limit existed to import -- and every check "
+          f"around it stayed green")
+    # AND THE POLICY MUST RUN THE PREDICATE, NOT A PARAPHRASE OF IT. REALFIX-C3's
+    # whole stated ground is `_grant_verdict`'s own docstring: run the DECISION
+    # rather than a paraphrase that agrees with it by construction. The checks
+    # above prove the predicate is importable and that SOMETHING rate-limits the
+    # policy; neither proves the policy calls it. An adversarial pass replaced
+    # `heading_verdict(...)` inside `lead_policy` with an inline
+    # `fired = _since is None or _since >= 0.5` and this file stayed green at
+    # 66 of 66. So perturb the SERVER's own constant and require the policy's
+    # grant instants to follow: a paraphrase carrying a hard-coded 0.5 cannot.
+    saved_min = A.GRANT_MIN_INTERVAL
+    try:
+        A.GRANT_MIN_INTERVAL = 1.0
+        widened = GS.policy_p2_zerolead(moves)
+    finally:
+        A.GRANT_MIN_INTERVAL = saved_min
+    restored = GS.policy_p2_zerolead(moves)
+    check([t for t, *_ in widened] == [0.0, 1.0]
+          and [t for t, *_ in restored] == [0.0, 0.5, 1.0],
+          "C3 (heading) the POLICY runs the shipped predicate: doubling the "
+          "server's own GRANT_MIN_INTERVAL moves the policy's grant instants",
+          f"at 1.00 s the same stream grants at {[t for t, *_ in widened]} and "
+          f"at the shipped {floor:.2f} s it grants at "
+          f"{[t for t, *_ in restored]} -- an inline paraphrase carrying a "
+          f"hard-coded 0.5 would answer the same both times. This is the "
+          f"difference between 'the predicate exists' and 'the policy uses it', "
+          f"and it is the whole of what REALFIX-C3 was extended to cover")
+    # THE HEADING-ROW FILTER, DRIVEN. `replay_verdicts` skips rows carrying
+    # `arm == "zero-lead"` or a heading reason so REALFIX-L1's first capture
+    # cannot silently redden C3's CLICK arm. No capture in this vault has such a
+    # row yet, so nothing exercised those three lines: deleting them left this
+    # file green at 66 of 66. Feed it a hand-built capture carrying one row of
+    # each kind plus one ordinary click row as the positive control.
+    mixed = os.path.join(TMP, "authsrv-20260820T000002-c1.jsonl")
+    with open(mixed, "w", encoding="utf-8") as fh:
+        for r in ({"kind": "origin", "origin": origin.OURS, "t": 0.0,
+                   "produced_by": "test_grantsim (heading-filter fixture)",
+                   "server": "127.0.0.1:6112", "client": "127.0.0.1:50001"},
+                  {"kind": "grant_verdict", "t": 1.0, "fired": True,
+                   "reason": "zero-lead", "arm": "zero-lead"},
+                  {"kind": "grant_verdict", "t": 2.0, "fired": False,
+                   "reason": "heading-rate"},
+                  {"kind": "grant_verdict", "t": 3.0, "fired": True,
+                   "reason": "off"}):
+            fh.write(json.dumps(r) + "\n")
+    kept = GS.replay_verdicts(mixed, suppress=False)
+    check(len(kept) == 1 and kept[0]["t"] == 3.0
+          and kept[0]["recorded"] == (True, "off"),
+          "C3 (heading) `replay_verdicts` SKIPS heading rows and keeps the "
+          "click row beside them",
+          f"kept {[(r['t'], r['recorded']) for r in kept]} out of three rows -- "
+          f"one tagged `arm=zero-lead`, one carrying only the heading reason "
+          f"`heading-rate`, one ordinary click row. Both skip paths are driven "
+          f"separately because the `arm` field is newer than the reasons and a "
+          f"filter keyed on either alone would miss the other; the click row is "
+          f"the positive control, without which a filter that dropped "
+          f"EVERYTHING would pass")
 
     # =====================================================================
     print("\n7. REALFIX-C4 -- the nulls, including the one this file FAILS")

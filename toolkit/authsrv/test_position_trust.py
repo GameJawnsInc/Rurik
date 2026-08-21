@@ -106,9 +106,55 @@ import vaultpath  # noqa: E402
 # the same amount. BOTH figures are read off real green console runs of their
 # own configuration: 147 from a normal run and 139 from one with RURIK_VAULT
 # pointing at a directory that does not exist. Neither is an enumeration.
+#
+# 2026-08-21, AFTER REVIEW: TWO FLOORS, ONE PER FIXTURE CONFIGURATION, and the
+# single floor this file carried for a day was a real hole rather than a
+# tidiness point. Excess over a floor is not an error in `checks.py`, so a lone
+# BARE floor of 139 protected NONE of the 8 checks that only a vaulted machine
+# runs -- and the configuration the owner actually runs is the vaulted one. An
+# adversarial pass proved it: unhooking one section-14 check from the ledger on
+# a vaulted machine printed ALL CHECKS PASSED (146) against a floor of 139,
+# while the bare run of the same tree went red at 138 of 139. `test_grantsim.py`
+# fixes exactly this with FLOOR_BARE/FLOOR_FULL and this is the same shape.
+# BOTH numbers are measured from green runs of their own configuration; the
+# probes below decide which applies, and they are the same `os.path.exists`
+# checks sections 10 and 13 make for themselves.
+#
+# The same review added 13 checks to section 14 -- the trust-refusal pair and
+# its control, the SYNC-model assertion, the call-site `raise` lock and its
+# control, the banner pin and its control, the two vocabulary reads and the
+# widened composition matrix -- all fixture-free, so both floors moved by the
+# same 13: 152 bare and 160 vaulted, each read off a real green console run of
+# its own configuration (160 from a normal run, 152 with RURIK_VAULT pointing
+# at a directory that does not exist).
+FLOOR_BARE = 152
+FLOOR_FULL = 160
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
-                       floor=139)
+                       floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
+
+# THE FIXTURES, probed once. Section 10 needs the single 20260819 capture and
+# section 13 needs all three of the 20260820 ones; each contributes exactly 4
+# checks, which is the whole of the 8-check difference between the two floors.
+S10_CAPTURE = "authsrv-20260819T114759-c1.jsonl"
+S13_CAPTURES = ("authsrv-20260820T183311-c1.jsonl",
+                "authsrv-20260820T182934-c1.jsonl",
+                "authsrv-20260820T182554-c1.jsonl")
+
+
+def _have_capture(name):
+    return os.path.exists(
+        os.path.join(vaultpath.vault_path("captures", "gamesrv"), name))
+
+
+HAVE_S10 = _have_capture(S10_CAPTURE)
+HAVE_S13 = all(_have_capture(n) for n in S13_CAPTURES)
+# THE FLOOR FOLLOWS THE FIXTURES. Any mixed configuration keeps FLOOR_BARE,
+# which is the protection it already had: a floor for a half-stocked machine
+# would have to be measured on that machine, and this one cannot produce the
+# measurement without hiding a fixture from itself.
+if HAVE_S10 and HAVE_S13:
+    LEDGER.floor = FLOOR_FULL
 
 # The two real reports from run 20260819T114743, bit-exact from the capture.
 # t=50.549817, the last position the old guard accepted before it latched:
@@ -118,7 +164,10 @@ ANCHOR = (9463.3544921875, 7945.9384765625)
 # earlier, and the client's own next report is reachable from it at 285 u/s.
 JUMPED = (10995.26953125, 5549.82470703125)
 JUMPED_PLANE = 18
-CAPTURE = "authsrv-20260819T114759-c1.jsonl"
+# ONE SOURCE OF TRUTH with the floor probe above: if section 10's capture name
+# and HAVE_S10's drifted apart, the floor would follow one and the skip the
+# other, which is the failure the two floors exist to close.
+CAPTURE = S10_CAPTURE
 
 
 class FakeRec:
@@ -186,6 +235,30 @@ def receive_arm(opcode_name, params):
     exec(compile(mod, authsrv.__file__, "exec"),               # noqa: S102
          authsrv.__dict__, ns)
     return ns["_arm"]
+
+
+def grantsim_heading_reasons():
+    """`grantsim.HEADING_REASONS`, read out of its SOURCE rather than imported.
+
+    Read rather than imported on purpose. `toolkit/clientscan/grantsim.py` is
+    an offline scorer with its own import chain (`movesync`, `resyncscore`,
+    `origin`) and this file is a server-side policy test that must keep running
+    on a bare machine; taking that chain as an import dependency to read one
+    frozenset would be paying a large bill for a small fact. The literal is
+    parsed out of the file's own syntax tree, so it still cannot go stale, and
+    a rename or a deletion raises here rather than passing vacuously.
+    """
+    path = os.path.join(os.path.dirname(HERE), "clientscan", "grantsim.py")
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                and isinstance(n.targets[0], ast.Name)
+                and n.targets[0].id == "HEADING_REASONS"):
+            return set(ast.literal_eval(n.value.args[0]))
+    raise AssertionError(
+        "no HEADING_REASONS assignment in grantsim.py -- this reader must FAIL "
+        "LOUDLY rather than hand back an empty set, which would make the "
+        "disjointness check below pass for the wrong reason")
 
 
 class Sent:
@@ -1452,9 +1525,9 @@ def main():
     # refusals run upstream of them in the arm and are not modelled here, which
     # is why the ordinary capture's five clicks read as "permitted" even though
     # the real server refused all five on stale position and collision.
-    REPRO = "authsrv-20260820T183311-c1.jsonl"
-    ORDINARY = "authsrv-20260820T182934-c1.jsonl"
-    KEYBOARD = "authsrv-20260820T182554-c1.jsonl"
+    # Read off S13_CAPTURES, not restated: the floor probe and this section
+    # must not be able to disagree about which fixtures section 13 needs.
+    REPRO, ORDINARY, KEYBOARD = S13_CAPTURES
 
     def replay(name):
         """(clicks, refused_by_rule_1, granted, headings, stops) or None."""
@@ -1621,14 +1694,50 @@ def main():
           f"`kbd_moving_at` ten lines before it would ask, so reusing "
           f"_grant_verdict here emits ZERO grants under --grant-suppress and "
           f"turns --zero-lead into --grant-suppress wearing a new name")
-    check(set(("zero-lead", "heading-rate")).isdisjoint(
-              {"off", "locally-moving", "rate-limited", "grant",
-               "pending-expired", "deferred-grant"}),
-          "and its reason vocabulary is DISJOINT from the click arm's",
-          "one capture from a --zero-lead run carries grant_verdict rows from "
-          "BOTH arms; if the two vocabularies overlapped, a replay could not "
-          "tell which policy produced a row and grantsim's C3 would be scoring "
-          "the wrong predicate")
+    # THE VOCABULARIES, READ BACK OUT OF THE SHIPPED PREDICATES, and this check
+    # used to compare two LITERAL sets. It therefore read nothing from
+    # authsrv.py and could not fail: an adversarial pass made
+    # _heading_grant_ok return exactly "rate-limited" and "grant" -- the click
+    # arm's own two words, the vocabularies overlapping COMPLETELY -- and this
+    # line still printed PASS. A check that cannot fail is not a check. Both
+    # arms of both predicates are DRIVEN and the strings collected from what
+    # they return.
+    heading_words = set()
+    for st_h, now_h in (({}, 1000.0),                      # fires
+                        ({"grant_at": 1000.0}, 1000.0)):   # refuses
+        heading_words.add(authsrv._heading_grant_ok(st_h, now_h)[1])
+    click_words = set()
+    saved_gs2 = authsrv.GRANT_SUPPRESS
+    try:
+        authsrv.GRANT_SUPPRESS = False
+        click_words.add(authsrv._grant_verdict({}, 1000.0)[1])          # off
+        authsrv.GRANT_SUPPRESS = True
+        click_words.add(authsrv._grant_verdict({}, 1000.0)[1])          # grant
+        click_words.add(authsrv._grant_verdict(
+            {"kbd_moving_at": 1000.0}, 1000.0)[1])          # locally-moving
+        click_words.add(authsrv._grant_verdict(
+            {"grant_at": 1000.0}, 1000.0)[1])               # rate-limited
+    finally:
+        authsrv.GRANT_SUPPRESS = saved_gs2
+    check(len(heading_words) == 2 and len(click_words) == 4
+          and heading_words.isdisjoint(click_words),
+          "and its reason vocabulary is DISJOINT from the click arm's, both "
+          "sides READ BACK OUT OF THE SHIPPED PREDICATES",
+          f"heading={sorted(heading_words)} click={sorted(click_words)} -- one "
+          f"capture from a --zero-lead run carries grant_verdict rows from BOTH "
+          f"arms; if the two vocabularies overlapped, a replay could not tell "
+          f"which policy produced a row and grantsim's C3 would be scoring the "
+          f"wrong predicate. The counts are pinned too, so a predicate that "
+          f"collapsed to ONE word would not pass this by being trivially "
+          f"disjoint")
+    check(set(heading_words) == set(grantsim_heading_reasons()),
+          "and grantsim's HEADING_REASONS filter is the same two words the "
+          "predicate actually returns",
+          f"{sorted(heading_words)} against grantsim's "
+          f"{sorted(grantsim_heading_reasons())} -- that frozenset is what "
+          f"`replay_verdicts` skips heading rows ON. If the predicate's words "
+          f"drifted from it, the first REALFIX-L1 capture would be re-decided "
+          f"with the CLICK predicate and the disagreement called a defect")
 
     # ONE CLOCK, and it is the shared one. A CLICK grant must move the heading
     # floor, because `grant_at` is stamped inside send() for every 0x0029
@@ -1707,12 +1816,99 @@ def main():
           and list(st["dest"]) != grants[0][1][1],
           "and state['dest'] still holds the server's own model leg, which is "
           "NOT what went on the wire",
-          f"model={st.get('dest')} wire={grants[0][1][1]} -- reported + the "
-          f"client's own 766 u vec2, through clip_to_walkable. The model/wire "
-          f"split --client-endpoint proves: our own opinion still respects "
-          f"walls for aggro, interaction and collision, and only the wire "
-          f"changes. If these two were equal the flag would be granting the "
+          f"model={st.get('dest')} wire={grants[0][1][1]} -- "
+          f"clip_to_walkable(state['pos'] + the client's own 766 u vec2). Said "
+          f"precisely, because it matters on one report in the file: the leg is "
+          f"built from state['pos'], NOT from `reported`, and those are the "
+          f"same point only on an ACCEPTED report -- see the trust-refusal pair "
+          f"below, where the model stays at 1766 while the wire carries 41000. "
+          f"Our own opinion still respects walls for aggro, interaction and "
+          f"collision. If these two were equal the flag would be granting the "
           f"766 u endpoint, which is --heading-grant and is REFUTED")
+    # AND THE GRANT IS NOT WIRE-ONLY. `send()` runs _note_wire_move, which moves
+    # the SYNC model and stamps the shared grant clock. "Only the wire changes"
+    # was in three comments and a startup banner and it was too strong; this is
+    # the check that keeps the corrected version honest, because sync_to is the
+    # exact operand REALFIX-L1's movetap separation metric reads.
+    check(st.get("sync_to") == (1000.5, 2000.25)
+          and st.get("grant_at") is not None,
+          "and the grant is NOT wire-only: it moves the SYNC model and stamps "
+          "the shared grant clock",
+          f"sync_to={st.get('sync_to')} sync_at={st.get('sync_at')} "
+          f"grant_at={st.get('grant_at')} -- _note_wire_move runs inside send() "
+          f"for every player 0x0029 whatever arm sent it. sync_to is what "
+          f"movetap's separation metric is compared against, and grant_at is "
+          f"the CLICK arm's rate clock, so the flag reaches two server-side "
+          f"models besides the wire")
+
+    # ---- THE TRUST GUARD IS ADVISORY ON THE GRANT PATH -----------------
+    # WHAT EARNS THIS. Section 2 above is this file's headline: the position
+    # trust guard refuses an impossible jump and never latches. Under
+    # --zero-lead that guard's refusal DOES NOT stop the grant -- the rejected
+    # point goes on the wire verbatim and drags sync_to with it, while
+    # state['pos'] correctly holds. That is the design (the client says it is
+    # STANDING there, so the point is on its own history polyline whatever we
+    # believe, and granting state['pos'] instead would grant a point the player
+    # has already left) and it is the sharpest edge on the flag, so it is
+    # driven here rather than discovered in REALFIX-L1. It was neither
+    # documented nor driven until an adversarial pass found it.
+    JUMP = [1, [41000.0, 2000.0], 7, [766.0, 0.0], 1]
+
+    def drive_jump(pos_seen):
+        st_j = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": pos_seen}
+        w_j, r_j = Sent(st_j), FakeRec()
+        w_j.now = time.time() - 10.0
+        was_j = authsrv.ZERO_LEAD
+        authsrv.ZERO_LEAD = True
+        try:
+            arm(JUMP, st_j, r_j, w_j)
+        finally:
+            authsrv.ZERO_LEAD = was_j
+        return st_j, w_j, r_j
+
+    # `pos_seen = now` leaves the budget at the flat 900 u, so a 40,000 u claim
+    # is refused. Section 1 proves the budget only ever GROWS with silence, so
+    # this is the tightest the guard ever is.
+    st_j, w_j, r_j = drive_jump(time.time())
+    j_grants = w_j.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    refused_report = [e for e in r_j.of("position_report")
+                      if e.get("accepted") is False]
+    check(len(refused_report) == 1 and st_j["pos"] == (1000.0, 2000.0)
+          and len(j_grants) == 1 and j_grants[0][1][1] == [41000.0, 2000.0],
+          "TRUST REFUSAL: a report the guard REJECTS is still granted VERBATIM",
+          f"pos held at {st_j['pos']}, wire {j_grants[0][1] if j_grants else None} "
+          f"-- the guard protects OUR position model from a garbage decode; it "
+          f"does not certify a point unreachable. REALFIX-O5's witness argument "
+          f"governs the wire: the client reported STANDING there. Granting "
+          f"state['pos'] instead would be a lead BACKWARDS, taken in exactly "
+          f"the window our model is least entitled to name a destination")
+    check(st_j.get("sync_to") == (41000.0, 2000.0)
+          and st_j.get("dest") == (1766.0, 2000.0),
+          "and the SYNC model follows the rejected point while the MODEL leg "
+          "stays on the position we still believe",
+          f"sync_to={st_j.get('sync_to')} dest={st_j.get('dest')} -- the two "
+          f"halves come apart exactly here, and only here. state['dest'] is "
+          f"clip(state['pos'] + vec2) = (1766, 2000), NOT reported + vec2 = "
+          f"(41766, 2000). sync_to is what movetap's separation metric reads, "
+          f"so REALFIX-L1 must expect this arm to drag it; a run that scores a "
+          f"separation spike here is seeing the design and not a defect")
+    # THE CONTROL, and without it the pair above is just "a grant happened".
+    # The SAME report with a stale `pos_seen` is ACCEPTED (the budget grows at
+    # CLIENT_POSITION_TRUST_RATE), and then the model moves too -- so what the
+    # two runs differ in is the REFUSAL, not the report or the flag.
+    st_a, w_a, r_a = drive_jump(time.time() - 120.0)
+    a_grants = w_a.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    check(st_a["pos"] == (41000.0, 2000.0)
+          and len(a_grants) == 1 and a_grants[0][1][1] == [41000.0, 2000.0]
+          and st_a.get("dest") == (41766.0, 2000.0),
+          "CONTROL: the SAME report ACCEPTED grants the same point, and now the "
+          "model moves with it",
+          f"pos={st_a['pos']} dest={st_a.get('dest')} wire="
+          f"{a_grants[0][1][1] if a_grants else None} -- 120 s of silence puts "
+          f"the budget past 40,000 u. The wire is identical in both runs, which "
+          f"is what makes the refusal ADVISORY rather than merely absent, and "
+          f"state['dest'] here IS reported + vec2 because the two points have "
+          f"become the same point")
 
     # THE GATE-DROP, BOTH DIRECTIONS, and this is the pair that cannot be
     # written as an AST match. `SAME` repeats the heading, so `turned` is False
@@ -1915,25 +2111,210 @@ def main():
           f"clip={bad_clip} state_pos={bad_state} -- if either stopped matching, "
           f"the check above would pass for the wrong reason")
 
+    # ---- the CALL SITE, which is the half the matrix does not reach ----
+    # WHAT EARNS THIS. The matrix below drives the pure `zero_lead_composition`
+    # six ways, and every one of those cells goes red on a bad refusal. None of
+    # them touches the thing that ACTS on the answer. An adversarial pass
+    # replaced `raise SystemExit(_zl_refusal)` in main() with a print and this
+    # file stayed green at 147 of 147 -- a server started with `--zero-lead
+    # --client-endpoint` would then set both flags and answer every 0x003D with
+    # two destinations. The function's own docstring says a refusal nobody has
+    # seen fire is a wish; a refusal nobody RAISES is the same wish one level
+    # up. main() cannot be executed here (it binds a listener), so the call site
+    # is read out of the syntax tree.
+    main_fn = next((n for n in ast.walk(src)
+                    if isinstance(n, ast.FunctionDef) and n.name == "main"),
+                   None)
+    if main_fn is None:
+        raise AssertionError(
+            "no main() in authsrv.py -- this reader must FAIL LOUDLY rather "
+            "than hand back nothing, which would pass the call-site checks "
+            "below vacuously")
+    comp_assign = next(
+        (n for n in ast.walk(main_fn)
+         if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+         and isinstance(n.value.func, ast.Name)
+         and n.value.func.id == "zero_lead_composition"), None)
+    refusal_name = None
+    if comp_assign is not None and isinstance(comp_assign.targets[0],
+                                              ast.Tuple):
+        first = comp_assign.targets[0].elts[0]
+        refusal_name = first.id if isinstance(first, ast.Name) else None
+    raises = [n for n in ast.walk(main_fn)
+              if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+              and refusal_name is not None and n.test.id == refusal_name
+              and len(n.body) == 1 and isinstance(n.body[0], ast.Raise)
+              and isinstance(n.body[0].exc, ast.Call)
+              and isinstance(n.body[0].exc.func, ast.Name)
+              and n.body[0].exc.func.id == "SystemExit"]
+    check(comp_assign is not None and refusal_name is not None
+          and len(raises) == 1,
+          "CALL SITE: main() RAISES SystemExit on the refusal -- it does not "
+          "print it and carry on",
+          f"assign={comp_assign is not None} refusal={refusal_name!r} "
+          f"raises={len(raises)} -- replacing this `raise` with a print left "
+          f"all 147 checks green while the server ran a combination it had just "
+          f"declared impossible. The matrix below tests what the function "
+          f"DECIDES; this tests what main() DOES about it")
+    comp_kwargs = sorted(k.arg for k in comp_assign.value.keywords) \
+        if comp_assign is not None else []
+    check(comp_kwargs == ["click_sweep", "client_endpoint", "grant_suppress",
+                          "heading_grant", "resync", "stop_echo", "zero_lead"],
+          "and every flag the function can decide about is actually PASSED to "
+          "it from argv",
+          f"{comp_kwargs} -- a parameter the call site never fills defaults to "
+          f"False, so the refusal for it can never fire from a real command "
+          f"line. That is exactly how --stop-echo went unrefused: the function "
+          f"is only as wide as its narrowest caller")
+    # THE CONTROL. Both matchers above only ran against healthy source.
+    bad_main = ast.parse(
+        "def main():\n"
+        "    r, notes = zero_lead_composition(zero_lead=a.zero_lead)\n"
+        "    if r:\n"
+        "        print(r)\n")
+    bad_fn = next(n for n in ast.walk(bad_main)
+                  if isinstance(n, ast.FunctionDef))
+    bad_assign = next(
+        (n for n in ast.walk(bad_fn)
+         if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+         and isinstance(n.value.func, ast.Name)
+         and n.value.func.id == "zero_lead_composition"), None)
+    bad_name = bad_assign.targets[0].elts[0].id
+    bad_raises = [n for n in ast.walk(bad_fn)
+                  if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                  and n.test.id == bad_name and len(n.body) == 1
+                  and isinstance(n.body[0], ast.Raise)]
+    bad_kwargs = sorted(k.arg for k in bad_assign.value.keywords)
+    check(bad_assign is not None and not bad_raises
+          and bad_kwargs == ["zero_lead"],
+          "CONTROL: the same two matchers SEE a printed refusal and a "
+          "half-filled call when handed them",
+          f"raises={len(bad_raises)} kwargs={bad_kwargs} -- if either stopped "
+          f"matching, the two checks above would pass for the wrong reason")
+
+    # ---- the pre-registered banner, which is evidence and not decoration ----
+    # REALFIX.md sec. 4 and the flag's own comment both rest on "the prediction
+    # is printed VERBATIM at startup so it cannot be rationalised afterwards".
+    # Nothing read it: deleting the RETRACTED line and the whole PREDICTION
+    # block left this file green at 147. If the banner is load-bearing for
+    # REALFIX-L1's honesty it has to be pinned; if it is not, the claim has to
+    # stop being made. It is pinned -- on the SUBSTANTIVE lines only (the
+    # retraction and the three numeric bounds), not on the prose around them,
+    # because pinning the prose would make every wording fix a red test.
+    zl_arg = next((n for n in ast.walk(main_fn)
+                   if isinstance(n, ast.If)
+                   and isinstance(n.test, ast.Attribute)
+                   and n.test.attr == "zero_lead"), None)
+
+    def printed_text(node):
+        """Only strings that reach a `print(...)`, because only those are seen.
+
+        Collecting every string constant in the block would pass a banner whose
+        `print(` had been changed to an assignment -- the text still present in
+        the source and no operator ever seeing it. That is not hypothetical: it
+        is the first mutation this check was tried against, and it survived the
+        looser reader.
+        """
+        out = []
+        for call in ast.walk(node) if node is not None else ():
+            if not (isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Name)
+                    and call.func.id == "print"):
+                continue
+            for c in ast.walk(call):
+                if isinstance(c, ast.Constant) and isinstance(c.value, str):
+                    out.append(c.value)
+        return " ".join(out)
+
+    banner = printed_text(zl_arg)
+    wanted = ("RETRACTED", "1.0 hard rows per minute", "40 u per active second",
+              "p50 <= 150 u and p90 <= 520 u", "FAILURE SIGNATURE",
+              "REFUTE THE INVARIANT")
+    missing = [w for w in wanted if w not in banner]
+    check(zl_arg is not None and not missing,
+          "BANNER: the retraction and all three pre-registered numeric bounds "
+          "are printed at startup, verbatim",
+          f"missing={missing} from a banner of {len(banner)} chars -- "
+          f"REALFIX.md sec. 4's own words are 'printed verbatim at startup so "
+          f"it cannot be rationalised afterwards', and this arc has already "
+          f"lost a candidate (--heading-grant) whose prediction was MET while "
+          f"its conclusion was wrong, because the prediction bounded SIZE and "
+          f"the harm arrived as FREQUENCY. Both units are in the list above for "
+          f"that reason")
+    stripped = ast.parse("def main():\n    if a.zero_lead:\n"
+                         "        ZERO_LEAD = True\n")
+    # AND THE SECOND CONTROL IS THE MUTATION THAT SURVIVED THE FIRST DRAFT:
+    # the banner text still in the source but assigned instead of printed.
+    unprinted = ast.parse(
+        "def main():\n    if a.zero_lead:\n"
+        "        _dead = ('RETRACTED 1.0 hard rows per minute "
+        "40 u per active second p50 <= 150 u and p90 <= 520 u "
+        "FAILURE SIGNATURE REFUTE THE INVARIANT')\n")
+    strip_banner = printed_text(
+        next(n for n in ast.walk(stripped) if isinstance(n, ast.If)))
+    unprinted_banner = printed_text(
+        next(n for n in ast.walk(unprinted) if isinstance(n, ast.If)))
+    check("--zero-lead" in banner and "REALFIX-P2" in banner
+          and [w for w in wanted if w not in strip_banner] == list(wanted)
+          and [w for w in wanted if w not in unprinted_banner] == list(wanted),
+          "CONTROL: the same reader finds NOTHING in a stripped block, and "
+          "nothing in one whose banner is present but never PRINTED",
+          f"real banner {len(banner)} chars; stripped {len(strip_banner)}; "
+          f"present-but-unprinted {len(unprinted_banner)} -- both are missing "
+          f"all {len(wanted)} wanted lines. The second control exists because "
+          f"the first version of this reader collected every string constant in "
+          f"the block and therefore PASSED a banner whose `print(` had been "
+          f"turned into an assignment: the text in the file, no operator ever "
+          f"seeing it")
+
     # ---- the composition matrix ---------------------------------------
     # A refusal nobody has seen fire is a wish, so every cell is driven.
-    for other in ("heading_grant", "client_endpoint"):
-        why = authsrv.zero_lead_composition(zero_lead=True, **{other: True})[0]
+    #
+    # AND THE LIST IS READ OFF THE SHIPPED TABLE, not restated here. The gap an
+    # adversarial pass found was --stop-echo: the refusal keyed on "answers the
+    # same 0x003D" and --stop-echo answers 0x0047, so `--zero-lead --stop-echo`
+    # was allowed SILENTLY while REALFIX-P2's own spec block forbids it in
+    # capitals and every stop echo stamps the same shared grant clock. A matrix
+    # enumerated in the test would have had the identical hole, so the loop
+    # takes its cases from authsrv.ZERO_LEAD_REFUSED_ARMS and the count is
+    # pinned beside it.
+    refused_arms = authsrv.ZERO_LEAD_REFUSED_ARMS
+    check(len(refused_arms) == 3
+          and sorted(row[0] for row in refused_arms) == [
+              "--client-endpoint", "--heading-grant", "--stop-echo"],
+          "COMPOSITION: the refusal list is exactly the three refuted arms that "
+          "put a player 0x0029 on the wire",
+          f"{[row[0] for row in refused_arms]} -- --stop-echo joined on "
+          f"2026-08-21 after `--zero-lead --stop-echo` was found ALLOWED. It "
+          f"answers 0x0047, so a refusal written as 'the same 0x003D' could not "
+          f"see it, and REALFIX-P2's spec forbids it by name")
+    for flag, trigger, line, _what in refused_arms:
+        kw = flag.lstrip("-").replace("-", "_")
+        why = authsrv.zero_lead_composition(zero_lead=True, **{kw: True})[0]
         check(why is not None and "cannot be combined" in why
-              and "REFUTED" in why,
-              f"COMPOSITION: --zero-lead REFUSES to combine with "
-              f"--{other.replace('_', '-')}",
-              f"{why!r} -- both answer the SAME 0x003D with a 0x0029, so the "
-              f"client would hold two destinations per report and the run would "
-              f"attribute the outcome to neither. Both are already REFUTED")
+              and flag in why and "REFUTED" in why
+              and f":{line}" in why
+              and not any(o[0] in why for o in refused_arms if o[0] != flag),
+              f"COMPOSITION: --zero-lead REFUSES to combine with {flag}, and "
+              f"cites {flag}'s OWN line",
+              f"{why!r} -- each answers the player's own movement with its own "
+              f"0x0029 on the one shared grant clock ({flag} on {trigger}), so "
+              f"the client would hold two destinations and the run would "
+              f"attribute the outcome to neither. The single-clash message used "
+              f"to cite ':1049 and :1090' and say 'all of them' whatever was "
+              f"passed, so a refusal about one flag offered another's line as "
+              f"its ground")
     both = authsrv.zero_lead_composition(zero_lead=True, heading_grant=True,
                                          client_endpoint=True)[0]
     check(both is not None and "--heading-grant and --client-endpoint" in both
-          and " are already REFUTED" in both,
-          "and it names BOTH when both are passed, in the plural",
+          and " are already REFUTED" in both
+          and "authsrv.py:1049 and :1090" in both,
+          "and it names BOTH when both are passed, in the plural, with both "
+          "lines",
           f"{both!r}")
     for other, want in (("grant_suppress", "orthogonal arms"),
-                        ("resync", "one arm at a time")):
+                        ("resync", "one arm at a time"),
+                        ("click_sweep", "was not click-free")):
         why, notes = authsrv.zero_lead_composition(zero_lead=True,
                                                    **{other: True})
         check(why is None and len(notes) == 1 and want in notes[0],

@@ -1149,9 +1149,20 @@ CLIENT_ENDPOINT = False
 #           VERBATIM, plane, plane]
 # NO lead. NO clip on the wire. NO staleness gate. NO straight-shot gate. The
 # server's own model leg keeps its clipped destination in state["dest"] -- the
-# model/wire split --client-endpoint already proves four lines above.
+# model/wire split --client-endpoint already proves four lines above. What the
+# grant DOES move besides the wire is the SYNC model (sync_from/sync_to/sync_at)
+# and the shared `grant_at` clock, both through send()'s _note_wire_move hook;
+# "only the wire changes" would be too strong and the block itself says so.
 # NO STOP-ARM GRANT and NO CLICK-ARM CHANGE: a stop-arm 0x0029 is --stop-echo
-# and is REFUTED at :1004-1023.
+# and is REFUTED at :1004-1023 -- and as of 2026-08-21 that is enforced rather
+# than asserted, since zero_lead_composition REFUSES --zero-lead --stop-echo.
+#
+# A REPORT THE TRUST GUARD REFUSED IS STILL GRANTED VERBATIM, by design: the
+# client says it is STANDING there, so the point is on its own history polyline
+# whatever our model believes, and granting state["pos"] instead would grant a
+# point the player has left. The trust guard is therefore ADVISORY on the grant
+# path and the SYNC model follows the rejected point. The full argument is at
+# the block itself; both directions are driven by test_position_trust §14.
 #
 # THE DESIGN GROUND, and it is the invariant's O1/O3 rather than a hunch. The
 # client's desync test asks whether the SYNC copy's dead-reckoned +0x78 lies
@@ -3162,9 +3173,26 @@ def _heading_grant_ok(state, now):
     return True, "zero-lead", since
 
 
+# The OTHER arms that put a player 0x0029 on the wire off the movement path.
+# Each row is (flag, the trigger it answers, the line its refutation is
+# recorded at, what it grants). The refusal below is built FROM this table, so
+# a message about one flag cites that flag's own line -- an earlier version
+# hard-coded ":1049 and :1090" and said "all of them" whatever was passed, so a
+# refusal about --client-endpoint alone offered --heading-grant's line as its
+# ground.
+ZERO_LEAD_REFUSED_ARMS = (
+    ("--heading-grant", "0x003D", "1049",
+     "the client's own endpoint through OUR clip, 766 u ahead"),
+    ("--client-endpoint", "0x003D", "1090",
+     "the client's own endpoint unclipped, 766 u ahead"),
+    ("--stop-echo", "0x0047", "1004",
+     "a zero-distance echo on a move-cancel"),
+)
+
+
 def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
-                          resync=False):
+                          resync=False, stop_echo=False, click_sweep=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -3173,33 +3201,69 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     a paragraph -- `--explorable`/`--outpost` refuse inline and nothing checks
     them, and a refusal nobody has seen fire is a wish.
 
-    REFUSED: --zero-lead with --heading-grant or --client-endpoint. All three
-    answer the SAME 0x003D with a 0x0029, so the client would be handed two or
-    three destinations per report and a run would attribute the outcome to
-    none of them. Both of the others are REFUTED besides (:1049, :1090).
+    REFUSED: every flag in ZERO_LEAD_REFUSED_ARMS. The shared ground is not
+    "the same opcode" but the same WIRE EFFECT: each of them answers the
+    player's own movement with a player `0x0029` of its own, and every one of
+    those stamps the ONE shared grant clock (`grant_at`, stamped inside send()
+    for every player 0x0029 whatever sent it), so the client would hold two
+    granted destinations and each arm would starve the other inside
+    GRANT_MIN_INTERVAL. A run so configured could attribute its outcome to
+    neither. All three are REFUTED besides.
+
+    --stop-echo IS ON THAT LIST AND WAS MISSING FROM IT UNTIL 2026-08-21, which
+    is the failure this whole function exists to prevent: an adversarial pass
+    found `--zero-lead --stop-echo` allowed SILENTLY while REALFIX-P2's own
+    spec block forbids it in capitals ("NO STOP-ARM GRANT. That is --stop-echo
+    and it is REFUTED"). It answers 0x0047 rather than 0x003D, which is exactly
+    why a refusal keyed on "the same 0x003D" did not see it.
 
     ALLOWED WITH A NOTE: --grant-suppress, because the arms are orthogonal --
     that flag governs CLICK grants and this one governs HEADING grants. They do
-    share one rate-limit clock (`grant_at` is stamped in send() for every
-    0x0029 whatever sent it), so the note says the click arm will be quieter
+    share one rate-limit clock, so the note says the click arm will be quieter
     than it is alone rather than pretending the two are independent.
 
     ALLOWED WITH A NOTE: --resync, a different opcode (0x002C hard-sets BOTH
     copies) on a different trigger -- but a second uncontrolled variable in an
     A/B built for one, so the note says to prefer one arm at a time.
+
+    ALLOWED WITH A NOTE: --click-sweep, and it is allowed for the same reason
+    --resync is rather than because it is harmless. It is a CLICK-arm
+    diagnostic, not a refuted movement policy, so refusing it would be refusing
+    a diagnostic; but it deliberately sends plane assignments it knows to be
+    wrong, and a wrong plane writes a wrong map index into agent+0x80. On
+    REALFIX-L1's own click-free protocol it is inert, and if it is NOT inert
+    the run was not click-free. The note says both halves.
     """
     if not zero_lead:
         return None, []
-    clash = [n for n, on in (("--heading-grant", heading_grant),
-                             ("--client-endpoint", client_endpoint)) if on]
+    on_flags = {"--heading-grant": heading_grant,
+                "--client-endpoint": client_endpoint,
+                "--stop-echo": stop_echo}
+    clash = [row for row in ZERO_LEAD_REFUSED_ARMS if on_flags[row[0]]]
     if clash:
-        both = " and ".join(clash)
-        return (f"--zero-lead cannot be combined with {both}: all of them "
-                f"answer the SAME 0x003D heading with a 0x0029, so the client "
-                f"would be handed two destinations per report and the run "
-                f"would attribute the result to neither. "
+        def _join(items):
+            items = list(items)
+            if len(items) < 3:
+                return " and ".join(items)
+            return ", ".join(items[:-1]) + " and " + items[-1]
+        both = _join(row[0] for row in clash)
+        lines = _join((f"authsrv.py:{row[2]}" if i == 0 else f":{row[2]}")
+                      for i, row in enumerate(clash))
+        detail = "; ".join(f"{row[0]} answers {row[1]} with {row[3]}"
+                           for row in clash)
+        tail = ""
+        if any(row[0] == "--stop-echo" for row in clash):
+            tail = (" REALFIX-P2's own spec block forbids --stop-echo by name: "
+                    "'NO STOP-ARM GRANT.'")
+        return (f"--zero-lead cannot be combined with {both}: each of them "
+                f"answers the player's own movement with a player 0x0029 of "
+                f"its own, and every one of those stamps the SAME grant clock, "
+                f"so the client would hold two granted destinations and the "
+                f"two arms would starve each other inside the "
+                f"{GRANT_MIN_INTERVAL:.2f}s floor. The run would attribute its "
+                f"result to neither. ({detail}.) "
                 f"{both} {'are' if len(clash) > 1 else 'is'} already REFUTED "
-                f"(authsrv.py:1049 and :1090). Pass at most one."), []
+                f"({lines}).{tail} Pass at most one."), []
     notes = []
     if grant_suppress:
         notes.append(
@@ -3217,6 +3281,16 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "uncontrolled variable in an A/B built for one: a snap avoided "
             "cannot be attributed between them. Prefer one arm at a time for "
             "REALFIX-L1.")
+    if click_sweep:
+        notes.append(
+            "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
+            "refuted movement policy, so it is not on the refusal list. But it "
+            "deliberately sends plane assignments it knows to be WRONG, and a "
+            "wrong plane writes a wrong map index into agent+0x80: a snap it "
+            "caused would be attributed to --zero-lead. Its click grants also "
+            "stamp the shared grant clock and will starve the heading arm. "
+            "REALFIX-L1 is CLICK-FREE by protocol, so this flag should be "
+            "inert -- and if it is not inert, the run was not click-free.")
     return None, notes
 
 
@@ -10135,12 +10209,56 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # NO STRAIGHT-SHOT GATE: the segment is
                                 # zero-length from the client's side.
                                 #
-                                # state["dest"] IS UNTOUCHED. Our own model keeps
-                                # the clipped leg computed above, so the server
-                                # still holds an opinion that respects walls for
-                                # aggro, interaction and collision. Only the WIRE
-                                # changes -- the same model/wire split
-                                # --client-endpoint proves ten lines up.
+                                # state["dest"] IS UNTOUCHED BY THIS BLOCK. Our
+                                # own model keeps the leg computed above, which
+                                # is `clip_to_walkable(state["pos"] + vec2)` --
+                                # state["pos"], NOT `reported`. On an accepted
+                                # report those are the same point and the leg is
+                                # `reported + vec2` clipped; on a REFUSED one
+                                # they are not, and the model correctly stays on
+                                # the position we still believe. So the server
+                                # keeps an opinion that respects walls for
+                                # aggro, interaction and collision.
+                                #
+                                # "ONLY THE WIRE CHANGES" IS TOO STRONG AND IS
+                                # WITHDRAWN. The send below also runs
+                                # _note_wire_move, which rewrites sync_from /
+                                # sync_to / sync_at -- our model of where the
+                                # client's SYNC copy is, and the operand
+                                # REALFIX-L1's movetap separation metric reads --
+                                # and stamps `grant_at`, the CLICK arm's rate
+                                # clock. What is untouched is state["dest"] and
+                                # the click and stop arms; the SYNC model is not.
+                                #
+                                # AND A REPORT THE TRUST GUARD REFUSED IS STILL
+                                # GRANTED VERBATIM. That is deliberate and it is
+                                # the sharpest edge on this flag, so it is
+                                # written down rather than discovered in a run.
+                                # _take_client_position may have REJECTED this
+                                # report as an impossible jump and left
+                                # state["pos"] where it was; this block grants
+                                # the rejected point anyway, and _note_wire_move
+                                # then drags sync_to to it. The trust guard
+                                # becomes ADVISORY on the grant path.
+                                #
+                                # WHY THAT IS RIGHT HERE. The guard exists to
+                                # stop OUR position model being driven off a
+                                # garbage decode; it does not certify a point as
+                                # unreachable. REALFIX-O5's witness argument is
+                                # what governs the wire: the client says it is
+                                # STANDING on this point, so it is on the
+                                # client's own history polyline whatever we
+                                # believe, and a grant there is a grant onto the
+                                # polyline -- which is the entire design. Sending
+                                # state["pos"] instead would grant a point the
+                                # client has left, i.e. a LEAD backwards, and
+                                # would do it exactly in the window where our
+                                # model is least entitled to name a destination.
+                                # The cost is bounded by the same rate limit as
+                                # everything else on this arm, and the guard
+                                # still protects the model it was built for.
+                                # Driven both directions by test_position_trust
+                                # section 14.
                                 #
                                 # BOTH PLANE WORDS ARE THE REPORTED PLANE. Field
                                 # 3 is the destination's plane and field 4 the
@@ -12149,11 +12267,18 @@ def main():
                          "measures from the SYNC COPY, and 353 of 358 "
                          "synthesized grants bake a real leg). Stop arm and "
                          "click arm untouched -- a stop-arm grant is "
-                         "--stop-echo and is refuted. Refuses to combine with "
-                         "--heading-grant or --client-endpoint (same arm, both "
-                         "refuted); combines with --grant-suppress and "
-                         "--resync. Its prediction is printed at startup. This "
-                         "is REALFIX-L1's treatment arm.")
+                         "--stop-echo and is refuted. A report the "
+                         "position-trust guard REFUSES is still granted "
+                         "verbatim and the SYNC model follows it: the client "
+                         "says it is standing there, so the point is on its own "
+                         "history polyline whatever we believe. REFUSES to "
+                         "combine with --heading-grant, --client-endpoint or "
+                         "--stop-echo (every other arm that answers the "
+                         "player's movement with a player 0x0029, all three "
+                         "refuted, all on the one shared grant clock); combines "
+                         "with --grant-suppress, --resync and --click-sweep, "
+                         "each with a printed note. Its prediction is printed "
+                         "at startup. This is REALFIX-L1's treatment arm.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -12704,12 +12829,22 @@ def main():
               "and said nothing about their NUMBER.")
 
     # THE COMPOSITION REFUSAL, decided by a PURE function so the matrix is a
-    # test rather than a paragraph, and evaluated BEFORE the flag is set so a
-    # refused combination cannot half-apply. See zero_lead_composition.
+    # test rather than a paragraph, and RAISED rather than printed -- a
+    # refusal that only prints is a refusal that does not refuse, and
+    # test_position_trust section 14 locks the `raise` at this call site
+    # because replacing it with a print left every one of its 147 checks green
+    # while the server ran the refused combination.
+    #
+    # WHAT "BEFORE THE FLAG IS SET" DOES AND DOES NOT MEAN, corrected: ZERO_LEAD
+    # itself cannot half-apply, because it is set below this line. HEADING_GRANT
+    # and CLIENT_ENDPOINT above it are ALREADY set and have already printed
+    # their banners by the time we get here, and that is harmless only because
+    # SystemExit follows immediately -- the process ends before the listener
+    # binds a socket. Do not read this block as a general two-phase parse.
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=a.zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
-        resync=a.resync)
+        resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep)
     if _zl_refusal:
         raise SystemExit(_zl_refusal)
     if a.zero_lead:
@@ -12726,9 +12861,16 @@ def main():
               "BACKWARDS while it holds no destination, so LAG is on it by "
               "construction and LEAD is not (REALFIX-O1/O3). Both dead "
               "candidates in this family granted 766 u AHEAD.")
-        print("      NOT       the stop arm (that is --stop-echo, REFUTED) and "
-              "not the click arm. state['dest'] keeps our own clipped leg; "
-              "only the wire changes.")
+        print("      NOT       the stop arm (that is --stop-echo, REFUTED, and "
+              "REFUSED in combination with this flag) and not the click arm. "
+              "state['dest'] keeps our own clipped leg -- but the grant DOES "
+              "move the SYNC model and the shared grant clock through send(), "
+              "so 'only the wire changes' is too strong.")
+        print("      ADVISORY  a report the position-trust guard REFUSED is "
+              "still granted VERBATIM, and sync_to follows it. The client says "
+              "it is STANDING there, so the point is on its own history "
+              "polyline whatever we believe; granting state['pos'] instead "
+              "would grant a point the player has already left.")
         print("      RETRACTED, and do not re-quote it: 'a zero-distance grant "
               "takes the <=1.0 u short-circuit and dispatches nothing' is FALSE "
               "of these grants -- that compare measures from the SYNC COPY, and "
