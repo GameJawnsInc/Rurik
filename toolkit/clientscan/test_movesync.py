@@ -93,6 +93,7 @@ as a test missing from TESTS.md, and this repo has shipped it three times
   compared the same tuple with `>`, which raised -- so 16 green sections were
   followed by a TypeError and one check that could never pass.
 """
+import ast
 import contextlib
 import io
 import json
@@ -130,8 +131,15 @@ import vaultpath  # noqa: E402
 # and §21's clock-anchor checks (19), all of which are pure logic, synthetic
 # files and one in-process `authsrv.Recorder` -- so every one of them runs on a
 # bare machine and belongs in the floor.
+#
+# 124 -> 127 later on 2026-08-21, off two more real green runs: 177 with the
+# vault, 127 with `RURIK_VAULT` empty (the same 7 skips). The three are the
+# float arm's MEDIAN control -- one 5 s outlier that moves a mean 36 u and a
+# median not at all, the estimator distinction having been guarded on the
+# truncated side only -- and an AST import guard on movetap.py and movesync.py,
+# which `import pefile` walked straight through on this machine.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=124)
+                       floor=127)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -191,7 +199,12 @@ MOVETAP_SECTIONS = (
     # the appender (0x00605840), its allocator (0x00604BB0) and the walker
     # (0x006056A0). This is also the number the section declares when it skips
     # for want of a client snapshot, so it moves in one place.
-    ("_selftest_fence_bytes", 44),
+    # 44 -> 50 later the same day: the recycle test's OPERAND (0x00604BFF --
+    # the comment beside it named the block's oldest node and the bytes say
+    # its newest), the two SEVER sites and the block span that are the real
+    # reason a chain cannot dangle into a recycled block, and the COFF
+    # Characteristics word PTR_MAX's ceiling was asserted from in prose.
+    ("_selftest_fence_bytes", 50),
     ("_selftest_fence_refuses", 13),
     ("_selftest_fence_verdict", 7),
     ("_selftest_episodes", 7),
@@ -199,7 +212,13 @@ MOVETAP_SECTIONS = (
     ("_selftest_gate1", 26),
     ("_selftest_early_outs", 11),
     ("_selftest_naming", 8),
-    ("_selftest_chain", 28),
+    # 28 -> 44: a mutation lane opened ten holes this section could not see --
+    # a short read, the sync copy's plane word against the w word beside it,
+    # a legitimate allocation above the 2 GB line, the module-global rebinding
+    # the landing commit wrongly credited to section 17 below, the recycle
+    # hazard, the future tolerance's real ground, the read budget, and the
+    # printer's OUTPUT rather than its call site.
+    ("_selftest_chain", 44),
 )
 MOVESYNC_SECTIONS = (
     ("_selftest_jump_tally", 14),
@@ -1619,6 +1638,36 @@ def main():
               "every capture in the vault is a pre-T1 one, so the old "
               "estimator's behaviour is not free to move")
 
+        # THE FLOAT ARM'S ESTIMATOR IS A MEDIAN, AND UNTIL NOW NOTHING SAID SO.
+        # `offset_detail`'s docstring makes median-vs-max the whole design of
+        # the two arms, and the TRUNCATED arm's max is well guarded (swapping it
+        # for a mean reddens five checks including a vault replay). The float
+        # arm had no such control: every fixture above is exact by construction,
+        # so mean == median in all of them and substituting one for the other
+        # was invisible. A median is chosen precisely to survive a scheduling
+        # outlier, so the fixture now plants one: 39 rows on the truth and one
+        # row 5 s late. The mean moves 125 ms = 36 u; the median does not move
+        # at all.
+        out_rows = [dict(selfreport(t, 0.0, 0.0),
+                         wall=time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                            time.gmtime(int(T0 + t))),
+                         wall_unix=T0 + t + (5.0 if i == 7 else 0.0))
+                    for i, t in enumerate(ts)]
+        outl = cap(os.path.join(td, "outlier.jsonl"), out_rows)
+        _reps, w_out, _s = movesync.load_wire_reports(outl)
+        d_out = movesync.offset_detail(w_out)
+        offs = sorted(w_out.unix)
+        mean = sum(offs) / len(offs)
+        check(abs(d_out["offset"] - T0) < 1e-6 and abs(mean - T0) > 0.1
+              and abs(d_out["offset"] - mean) > 0.1,
+              f"one 5 s scheduling outlier in {len(offs)} rows moves the MEAN "
+              f"{(mean - T0) * 1000.0:+.0f} ms = "
+              f"{(mean - T0) * movesync.RUN_SPEED:+.0f} u and moves the median "
+              f"{(d_out['offset'] - T0) * 1e6:+.1f} us -- the float arm takes "
+              f"the median, which is the whole reason it is not a mean",
+              "the two estimators were distinguished in prose and by one "
+              "guarded arm only; this is the other arm")
+
         # NEVER SILENTLY MIX. A file with both kinds of row uses one family and
         # counts the other; averaging them would give a number that is neither.
         mixed = cap(os.path.join(td, "mixed.jsonl"), [
@@ -1753,8 +1802,18 @@ def main():
 
     # REALFIX-T2: the harness's leg table is the second clock, and it is
     # ANOTHER +/-0.5 s = +/-143 u on every leg-to-capture mapping.
+    # A GREP THAT A COMMENT SATISFIES IS NOT A CHECK. Commenting out
+    # `kw["wall_unix"] = time.time()` left the source greps below GREEN -- the
+    # behavioural checks above caught it, which is why this is a hardening and
+    # not a hole, but a row that can only pass is the mirror of one that can
+    # only fail. Every grep in this block runs over LIVE lines only.
+    def _live(path):
+        return "\n".join(
+            l for l in open(path, encoding="utf-8").read().splitlines()
+            if not l.lstrip().startswith("#"))
+
     sess = os.path.join(os.path.dirname(HERE), "harness", "session.py")
-    src_ss = open(sess, encoding="utf-8").read()
+    src_ss = _live(sess)
     check(all(k in src_ss for k in ('"started_unix": started_unix',
                                     '"ended_unix": ended_unix',
                                     '"settled_unix": settled_unix')),
@@ -1770,13 +1829,36 @@ def main():
           "and `settled_unix` is read AFTER the settle sleep, not before it",
           "a settled stamp taken before the sleep is the ended stamp under "
           "another name, and the 1.5 s between them is the whole point")
-    src_as = open(os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py"),
-                  encoding="utf-8").read()
+    src_as = _live(os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py"))
     check('kw["wall_unix"] = time.time()' in src_as
           and 'kw["wall"] = time.strftime' in src_as,
           "REALFIX-T1: `Recorder.event` stamps `wall_unix` beside `wall`",
           "the truncated stamp is the source of the whole 1.00 s spread and "
-          "the float one is one line beside it")
+          "the float one is one line beside it -- and this grep now runs over "
+          "LIVE lines, because commenting the stamp out left it green")
+
+    # PURITY, ASKED OF BOTH SYNTAX TREES. CLAUDE.md carve-out (1) scopes
+    # capstone/pefile to msghandler.py and codescan.py; neither of these is one
+    # of them, movetap's reader is pure ctypes, and both have to load on a bare
+    # machine. `import pefile` was planted at the top of movetap.py and this
+    # file, movetap --selftest, test_srclint and test_bareimport were ALL green,
+    # because both packages happen to be installed here. movetap guards itself
+    # in its own section 3; this is the same guard for movesync, and a second
+    # witness for movetap so the guard cannot be deleted from one place quietly.
+    for mod in ("movetap.py", "movesync.py"):
+        tree_m = ast.parse(open(os.path.join(HERE, mod), encoding="utf-8").read())
+        got = set()
+        for nd in ast.walk(tree_m):
+            if isinstance(nd, ast.Import):
+                got |= {al.name.split(".")[0] for al in nd.names}
+            elif isinstance(nd, ast.ImportFrom) and nd.module:
+                got.add(nd.module.split(".")[0])
+        bad_imp = got & {"capstone", "pefile", "PIL", "numpy"}
+        check(not bad_imp,
+              f"{mod} takes NO third-party import -- carve-out (1) names two "
+              f"files and this is not one of them",
+              f"found {sorted(bad_imp)}" if bad_imp
+              else f"{len(got)} module(s) imported, all stdlib or local")
 
     return LEDGER.verdict()
 

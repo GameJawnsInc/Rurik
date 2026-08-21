@@ -791,7 +791,7 @@ post-C9 movetap capture exists anywhere, n = 0. Until the run happens, **no real
 block from the tap can exist** — which is exactly why blocks 1–10 are fixtures and say so.
 
 **How to tell if these blocks have gone stale:** they were produced at HEAD `0841f5e` against
-`movetap.py` sha256 `b4027d387fb4a0a5d3cf185b8c4cfe386a1439206f02554de903073f1eec0a79` and
+`movetap.py` sha256 `0efb6270f5f309d81c8dd1dc31c621aadb66dba3595ff83f2934e16650139e9e` and
 `movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which
@@ -805,6 +805,16 @@ quote is unaffected** — no printer in either file changed, and the run-summary
 walk adds (`REALFIX-I1 history chain: …`) is NEW output rather than a rewrite of an existing
 block, so nothing here describes code that no longer exists. The hashes above are the current
 ones; a future session that finds them moved is still under the rule in the paragraph above.
+
+⚠ **REPINNED AGAIN, same day**, after a verifier lane and a mutation lane went over the
+REALFIX-I1 landing. `movetap.py` moved for three reasons and **none of them is a printer
+this section quotes**: prose corrections at the node-layout comment (the block recycle is
+measured on the block's NEWEST node, and the sever pass is the real dangle guarantee), the
+future tolerance getting its own constant on its real ground, and twenty-four new selftest
+checks. The one OUTPUT that changed is the run summary's chain-cost line, which moved into
+`chain_cost_line()` and whose delta now prints as a **Hz change** (`-47% Hz if the gate were
+removed`) rather than as an unsigned share — still new output, still not quoted below.
+`movesync.py` did not move; its hash is unchanged, which is the check working.
 
 ⚠ **THIS SECTION WAS WRONG BEFORE 2026-08-20, in five separate ways, and the record of that
 is load-bearing.** The blocks it showed were written **before the instrument existed**, and

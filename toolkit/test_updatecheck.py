@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 151,
-          "and the class-(a) census rides along, at 151",
+    check(len(state["pins"]) == 156,
+          "and the class-(a) census rides along, at 156",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -261,7 +261,17 @@ if exe:
           f"refute movetap's own prior comment. Every one is encoded FROM the "
           f"module constant and matched at its VA in the pinned image by "
           f"movetap._selftest_fence_bytes, so a 38833 rebase reddens rather "
-          f"than reading a linked list at the wrong offsets. Both literals "
+          f"than reading a linked list at the wrong offsets. 156 the same day: "
+          f"+5, still movetap.py (44 -> 49), and every one of the five "
+          f"pins a sentence this file had been ASSERTING. The recycle "
+          f"comment named the block's OLDEST node; 0x00604BFF's operand "
+          f"is [eax+edi-0x28] with eax = count*0x2C, which is index "
+          f"count-1, the NEWEST -- and the existing pin encoded only the "
+          f"CONSTANT 5000, leaving the operand free to be wrong inside a "
+          f"green [PASS]. The other four pin the SEVER pass "
+          f"(0x00604C56, 0x00604CBB, 0x00604CC2, 0x00604C49), which is "
+          f"the real reason a chain cannot dangle into a recycled block "
+          f"and had never been written down anywhere. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")

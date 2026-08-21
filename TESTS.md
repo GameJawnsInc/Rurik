@@ -3033,7 +3033,7 @@ Every one of these, in the order they were written:
   `run_suite.py` discovers `test_*.py` from DISK, so neither was ever invoked by
   it -- the same defect as a test missing from this file, which the tree has
   shipped three times (`test_pathmap.py`, `test_skillcast.py`,
-  `test_textrec.py`). §17 wraps movetap's fence sections: the **44** AgTrack,
+  `test_textrec.py`). §17 wraps movetap's fence sections: the **50** AgTrack,
   gate-1 and history-node displacements re-derived from build 38797's own bytes
   (each expected
   encoding BUILT FROM the module constant, so a wrong constant produces bytes
@@ -3050,17 +3050,54 @@ Every one of these, in the order they were written:
   the AgTrack record were ever touched and that +0x18 was UNVERIFIED: the
   appender writes record +0x08…+0x18 every time it runs and the walker reads
   +0x08…+0x14 back as the polyline's FIRST vertex before it steps to the head.
-  The bytes won and the comment was rewritten. **§17 also wraps
-  `_selftest_chain` (28), which drives `history_chain` over a bytearray** — no
+  The bytes won and the comment was rewritten. **44 → 50 later the same day,
+  after a verifier lane re-derived the layout and found the sentence beside the
+  recycle pin naming the wrong node.** The existing pin encoded only the
+  CONSTANT 5000 and left its operand free, so "recycled when its OLDEST node is
+  more than 5000 ms old" printed inside a green `[PASS]` while `0x00604BFF`'s
+  operand is `[eax+edi−0x28]` with `eax = count*0x2C` — index `count−1`, the
+  block's NEWEST node. The five new cases pin that operand (encoded FROM
+  `HIST_NODE_STRIDE`, so a belief in the oldest node writes `+4` and reddens)
+  and the SEVER pass beside it — `0x00604C56` zeroing every `node+0x04` into the
+  block, `0x00604CBB` doing the same for `record+0x04` across the array at
+  `0x00604CC2`'s `0x1C` stride, bounded by `0x00604C49`'s block span. **That
+  sever is the real reason a chain cannot dangle into a recycled block**, and
+  this tree had never written it down: the landing argued safety from the 5 s
+  bound it was misreading. Section 5 also now reads the COFF Characteristics
+  word out of the pinned image, because `PTR_MAX`'s ceiling had been asserted
+  from `0x0122` in prose and checked by nothing. **§17 also wraps
+  `_selftest_chain` (44), which drives `history_chain` over a bytearray** — no
   client, no vault, no `ReadProcessMemory` — through a healthy 4-node walk and
   every way a chain can be wrong: a chain longer than N (`truncated:max-nodes`,
   keeping the N nodes it read), a head in the null-guard region, one above the
   LARGE_ADDRESS_AWARE ceiling (measured off Characteristics `0x0122`, not
   assumed at `0x7FFF0000`), an unaligned head, an unreadable node at position 0
   and at position 1, a cycle, and two torn-read signatures — a node NEWER than
-  the node linking to it, and one dated more than a node-interval into the
-  future — with a matched control proving a few ms of world-0/world-1 clock skew
-  does NOT redden. **The gate is checked in both directions**: at exactly
+  the node linking to it, and one dated more than `HIST_FUTURE_TOL_MS` into the
+  future. **28 → 44 after a mutation lane opened 36 holes in this file and ten
+  stayed green**, all of them in the same two families: a fixture that could not
+  express the failure it named, and a guard sitting at a call site rather than
+  on the behaviour. The ten new cases are a SHORT read (the `len(blk) <` half of
+  the module's own refusal was unreachable — every fake memory returned either a
+  full span or `None`, so zero-padding a partial transfer minted a vertex at the
+  origin and reported `ok`); the SYNC copy's plane word against the `w` word
+  beside it (the fixture agent had `plane = 0` and `w = 0`, so the two dwords
+  were interchangeable — and that is the half of the pair grant #37 turns on;
+  the agent now carries plane 19, w 77, async 3, all distinct); a legitimate
+  allocation ABOVE the 2 GB line, because the old ceiling case planted its head
+  AT `PTR_MAX` and therefore refused whatever the constant was; the RECYCLE
+  hazard modelled end to end (a slot re-appended under the read carries the
+  current world clock and is caught as `unread:node-time-inverted`, which is the
+  only defence there is); the future tolerance pinned from BOTH sides on its
+  real ground; `HIST_NODE_SPAN` pinned to `N_POINT + 16`; a control that
+  rebinds the MODULE GLOBALS and calls `history_chain` without the argument; and
+  six checks that read `print_hist_summary`'s and `chain_cost_line`'s OUTPUT
+  back out of stdout. **The tolerance's stated ground was wrong and is
+  corrected**: it read "world-0/world-1 clock skew", but `sample()` and the
+  appender take `now` from the SAME slot (`0x00605893` / `0x006058A5` against
+  `A_WORLD`), so that control had no referent. The real ground is read ordering
+  — the clock is read before the nodes — and the constant is now
+  `HIST_FUTURE_TOL_MS = 250` rather than 2500. **The gate is checked in both directions**: at exactly
   `sep = 250.0 u` no read is issued at all (asserted on the fixture's own read
   log, because the gate is a design requirement — eight unconditional node reads
   is ~+40% of a sample and would fight REALFIX-T3's residual budget), and
@@ -3074,7 +3111,12 @@ Every one of these, in the order they were written:
   issues **8**, so an ungated walk would roughly double it and the gate is more
   load-bearing than the design note claimed, not less. (That is a read count.
   The Hz cost is a different quantity, needs a client, and is what
-  `movetap.chain_cost()` measures before every run for `main()` to print.)
+  `movetap.chain_cost()` measures before every run for `main()` to print, via
+  `chain_cost_line()` — which exists because the section-9 wiring row asks only
+  whether `main()` CALLS `chain_cost`, and a mutation that kept the call, threw
+  the result away and printed neither figure ran 206/206 green. There is now a
+  row requiring `print(chain_cost_line(...))` and a check on what that string
+  says.)
   **The point of the whole section is that
   a refused chain must never look like a short one**: "no node within
   MATCH_RADIUS of q" is the sentence that revives candidate B, and a torn read
@@ -3141,19 +3183,27 @@ Every one of these, in the order they were written:
   its call site is deleted, and a coverage check reading the table would then
   certify a section nobody ran -- the same defect one level up; deleting one
   `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
-  **80**, movetap **206**) so the operator's pre-flight command cannot diverge
+  **80**, movetap **230**) so the operator's pre-flight command cannot diverge
   from the
   suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
   green run executes and requires the module to refuse itself. (Both numbers
   were stale in this entry until 2026-08-21 — it said 65 for movesync, which
   had been 80 for a day — and movetap's was never here at all. `movetap`'s
-  moved 158 → **205** with REALFIX-I1: §5 28 → 44, §9's wiring table 22 → 25
-  with the three rows that keep the chain walk's OUTPUT alive (`chain_cost`
+  moved 158 → **206** with REALFIX-I1: §5 28 → 44, §9's wiring table 22 → 25
+  with the three rows that keep the chain walk's call sites alive (`chain_cost`
   priced, `print_hist_summary` called with its own three tallies, `hist_why`
   tallied at all), §12 7 → 8 with the check
   that `sample()` actually CALLS `history_chain` rather than splicing eight
   blank keys from nowhere, and the new §13 at 28. Read off the run:
-  6+1+1+0+44+13+14+15+25+38+13+8+28.) **movesync had no
+  6+1+1+0+44+13+14+15+25+38+13+8+28. **Then 206 → 230 the same day**, after a
+  verifier lane and a mutation lane: §3 1 → 2 (an AST guard refusing
+  capstone/pefile/PIL/numpy — `import pefile` was planted at the top of
+  `movetap.py` and the whole affected set stayed green, because both packages
+  are installed on the machine that would have caught it), §5 44 → 50, §9
+  25 → 26 (`main()` must PRINT the cost, not merely call `chain_cost` —
+  those three rows were described as keeping the OUTPUT alive and they keep the
+  CALL alive; three separate mutations gutted the printers at 206/206), and §13
+  28 → 44. Read off the run: 6+1+2+0+50+13+14+15+26+38+13+8+44.) **movesync had no
   module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
   each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
   leans on -- carried none, so deleting section 2's only check took it from 38
@@ -3187,15 +3237,28 @@ Every one of these, in the order they were written:
   a synthetic post-T1 capture (offset exact to the microsecond), a synthetic
   pre-T1 one at **0.977 s / 281 u** — 40 rows at a 0.317 s cadence, because six
   rows reach only 0.76 and would have understated the defect — and then
-  **`authsrv.Recorder` ITSELF, in process, writing 200 real rows**: spread
-  **11.4 µs = 0.0033 u**, against REALFIX §2.2's "< 1 ms (< 0.3 u)" clock term,
-  measured on the same two adjacent clock reads a live run makes rather than on
-  a fixture whose stamps are exact by construction. `offset_from_stamps` keeps
+  **`authsrv.Recorder` ITSELF, in process, writing 201 real rows**: spread
+  **12–32 µs = 0.004–0.009 u across runs**, against REALFIX §2.2's
+  "< 1 ms (< 0.3 u)" clock term, measured on the same two adjacent clock reads a
+  live run makes rather than on a fixture whose stamps are exact by
+  construction. (This entry said "200 rows, 11.4 µs" until 2026-08-21. The row
+  count was off by one — the origin row `Recorder.__init__` emits is included,
+  and the test asserts `n == len(reports) + 1` — and the µs figure is a single
+  draw from live scheduling jitter that re-runs at 12.4, 14.3 and 31.7. The
+  claim §2.2 needs survives by ~30× on the worst draw; the point estimate does
+  not, so the range is quoted.) **The float arm's MEDIAN now has its own
+  control**: one 5 s outlier in 40 rows, which moves a mean 125 ms = 36 u and
+  the median not at all. The truncated arm's max-estimator was well guarded and
+  the float arm's median was not, because every other fixture here is exact by
+  construction and mean == median in all of them. **And both source greps in
+  this section now run over LIVE lines**: commenting out
+  `kw["wall_unix"] = time.time()` left them green (the behavioural checks caught
+  it, which is why this is a hardening rather than a hole). `offset_from_stamps` keeps
   its two-value return (`pair`, `resyncscore`, `grantsim` and this file's own §1
   all unpack exactly two) and `WallStamps` subclasses `list`, so
   `getattr(walls, "unix", ())` IS the fallback test and a hand-built list of
-  floats still works — there is no version flag to get wrong. Floor **124**, the
-  bare-machine subset, against a green **174** with every capture present;
+  floats still works — there is no version flag to get wrong. Floor **127**, the
+  bare-machine subset, against a green **177** with every capture present;
   §11-§16 declare `LEDGER.skip` without
   them, and so does `movetap._selftest_fence_bytes` (that section's two checks
   and its one control are the only 3 of §17-§21's 70 that need the vault's
@@ -3206,10 +3269,17 @@ Every one of these, in the order they were written:
   looks healthy), `HIST_MAX_NODES` cut to 2 (a walk that called a truncated
   chain `ok` would licence a null over a polyline it never finished reading),
   and `PTR_MIN` dropped to 0 (a head inside the 64 KB null-guard region reading
-  as an address). Those controls are why `history_chain` resolves both
-  parameters from the module globals in its BODY: written as signature defaults
-  they are bound at import, and a control that moved the constant would have
-  changed nothing while appearing to. No client. ~4 s),
+  as an address). **This entry used to say those controls are why
+  `history_chain` resolves both parameters in its BODY. They are not**, and a
+  mutation proved it: all three pass the parameters explicitly, so moving the
+  defaults back into the signature left both this file at 174 and
+  `--selftest` at 206 green. The mechanism is real — rebinding a module global
+  is silently ignored under a signature default — and the control that actually
+  proves it now lives in `movetap._selftest_chain`, which moves
+  `HIST_MAX_NODES` and `HIST_SEP_GATE` on the module and calls without the
+  argument. **§21 also guards both modules' import lists** (`movetap.py` and
+  `movesync.py`, asked of the syntax tree), a second witness beside movetap's
+  own §3 so the guard cannot be deleted from one place quietly. No client. ~4 s),
   `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:
