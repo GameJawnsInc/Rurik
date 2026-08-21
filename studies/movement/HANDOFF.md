@@ -84,6 +84,23 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > followed a grant" is grant density (rotation control 2.39/5, Fisher p = 0.64).
 > What carries it is the landing geometry (p = 3.0e-5), the reporting-controlled
 > 2×2 (P = 3.4e-10) and the decode. FINDINGS, "round 4".
+>
+> ## ★ ROUND 5 (2026-08-20) — the invariant is stated, and the next build is NO lead
+>
+> Research only, no client run: FINDINGS "round 5" and the buildable spec in
+> [REALFIX.md](REALFIX.md). Round 4's closing "a short, always-refreshed endpoint
+> grant … has never been tried" is REFUTED — `--client-endpoint` IS that, and it
+> was the worst of the three refuted runs. What survives is **zero lead**: grant
+> the client's just-reported position, tip dropped — the only family that
+> satisfies the decoded invariant with no assumption about player speed, because
+> the history polyline extends only BACKWARDS under keyboarding (lag is on it by
+> construction; lead is not). The offline scorer is a calibration, refusal and
+> exposure instrument and honestly CANNOT rank the lead family — the P2-vs-P3
+> question needs the one live A/B (REALFIX-L1, owner-driven, click-free, keyboard
+> held, a deliberate backpedal leg, the `0x0060580D`/`0x00605820` gate breakpoint
+> riding along). **Do NOT rebuild refuted things under new names**: a stop-arm
+> `0x0029` IS `--stop-echo`; an unclipped endpoint heading grant IS
+> `--client-endpoint`. Both are run, measured and killed.
 
 ---
 
@@ -320,8 +337,8 @@ survivor is a client-side click-move at 2.6× the walk budget. `pinned.py` and
    memory read, and it is the 0.99 constant.) It asks whether a point lies within
    **100.0f** of a segment — **straight-line perpendicular, compared SQUARED and
    STRICT**, *and* within 100.0f of **walkable path length**, compared **LINEAR and
-   INCLUSIVE** (~99.6 u effective, because the client's leg sqrt is a table
-   approximation biased high, worst +0.39%, n = 5,000). Full decode with pseudocode:
+   INCLUSIVE** (**99.919968 u** effective — exhaustive over 2,048,001 float patterns
+   of the LUT sqrt, FINDINGS round 5; ~99.6 was a scaled worst case). Full decode:
    FINDINGS, "the AgTrack match test is decoded".
    **BUT THE POINT IT TESTS IS NOT OUR GRANT, AND THE LIST IS NOT A PREDICTION.**
    `0x00605643` reads `source+0x78` — the SYNC agent's own position, dead-reckoned to
