@@ -182,6 +182,33 @@ Every one of these, in the order they were written:
   measured 138: it had drifted 26 checks stale through five commits, which is
   the ledger's own defect class, caught by its own rule of measuring from a
   green run),
+  `toolkit/harness/test_preflight_owner.py` (the `--replace` OWNERSHIP gate,
+  added 2026-08-20 after the pre-flight's "is the listener python" test matched
+  a PARALLEL session's live stack at ~23:00 and killed its webgate (pid 18520)
+  and authsrv (pid 8412) mid-run — under one-worktree-per-session, another
+  session's stack is indistinguishable from our stale one by image name.
+  `--replace` now reads the listener's command line (pure ctypes:
+  `NtQueryInformationProcess(ProcessCommandLineInformation)` +
+  `CommandLineToArgvW`) and stops it only when the script it names resolves
+  into THIS session's tree; the refusal prints the other listener's tree so the
+  operator knows which session to coordinate with. The load-bearing check is
+  refused-AND-ALIVE: a real listener started from a stand-in foreign worktree
+  survives a `--replace` pre-flight that names its tree, while a real webgate
+  from this tree still dies — the design intent has to survive the fix. Tree
+  identity is nearest-`.git`-ancestor (a worktree's `.git` is a FILE), never a
+  path prefix, and the nesting-trap check is why: worktrees live UNDER the
+  main checkout, so a prefix test would call every worktree's stack the main
+  session's own — the same kill through a different door. `this_tree()` is
+  cross-checked against `git rev-parse --show-toplevel`'s own answer, the one
+  check that may skip (floor 29, measured 30). Everything unprovable refuses:
+  an unreadable command line, no script token, a RELATIVE script path (a
+  hand-run three-terminal server's cwd is invisible). Section 6 settles the
+  same evening's other question as executable fact rather than a reading of
+  the code: the gamesrv alias IS pre-flighted — a squatter parked on 127.0.0.3
+  at the gamesrv's port is refused before anything starts, and an AST check
+  pins `main()` handing `preflight` the WHOLE un-narrowed `server_specs()`
+  list, hops included. Every check runs on ephemeral ports so it can run
+  beside a live session),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
