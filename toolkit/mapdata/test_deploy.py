@@ -50,7 +50,18 @@ command got wrong:
     conflict would look exactly like a success, and so would one that reported a
     gate refusal the gate never gave.
 
-NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-9. Section 2 needs the
+  * **"Created" is a claim content makes; the archive has to agree.** Section 10
+    is the residual pass. `map_chain` checks a chain's SHAPE, and 349 retail
+    maps have that shape -- so a `created = true` row whose id happens to bind
+    one of them displaced it silently, while every line of output said the word
+    "created". It now takes the allocation journal as evidence, and the section
+    drives both answers on one archive. Beside it: the born-armed guard, which
+    was live code nothing exercised; the journal-clobber refusal `datalloc`'s
+    CLI has always had and this path went around; the three of `map_chain`'s
+    five refusals that had no fixture at all; and the grow-gate join, which used
+    to be four fragments of another module's prose.
+
+NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-10. Section 2 needs the
 archive because the borrowed halves are read from it at run time -- that is the
 provenance rule, not a convenience -- and the floor turns a vault-less run into
 the FAIL it is.
@@ -62,7 +73,9 @@ import ast
 import binascii
 import contextlib
 import io
+import json
 import os
+import shutil
 import struct
 import sys
 import tempfile
@@ -74,6 +87,7 @@ from archive import Archive  # noqa: E402
 import archive as archive_mod  # noqa: E402  -- raw vs convenience id table
 import content as content_mod  # noqa: E402
 import datalloc  # noqa: E402  -- section 8 drives its shape gate by hand
+import datwrite  # noqa: E402  -- section 10e joins on ITS token, not our copy
 import deploy  # noqa: E402
 import gwdat  # noqa: E402
 import gwenc  # noqa: E402
@@ -90,30 +104,38 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 167, MEASURED from a green run 2026-08-20 (sections 0,1,3,4,5,6,6b,7,8,9
-# score 163 and need no vault -- measured with RURIK_VAULT pointed at an empty
-# directory; section 2 reads the archive for the borrowed halves, which is the
-# provenance rule rather than a convenience, and the floor sitting ABOVE 163 is
-# what turns a vault-less run into the FAIL it is). Per section, counted from
-# the log rather than predicted: {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10,
-# 6b: 20, 7: 15, 8: 36, 9: 55}.
+# FLOOR: 203, MEASURED from a green run 2026-08-20 (sections 0,1,3..10 score 199
+# and need no vault -- measured with RURIK_VAULT pointed at an empty directory;
+# section 2 reads the archive for the borrowed halves, which is the provenance
+# rule rather than a convenience, and the floor sitting ABOVE 199 is what turns
+# a vault-less run into the FAIL it is). Per section, counted from the log
+# rather than predicted: {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20,
+# 7: 15, 8: 36, 9: 55, 10: 36}.
 #
 # COUNT THE LOG WITH THE SUBPROCESS WRITERS' OWN LINES EXCLUDED. They print in
-# the same `  [PASS] ...` shape as the ledger and a naive grep reads 184, which
-# is 17 more than the ledger says. There are THREE producers, not two, and the
-# arithmetic is worth writing down because the first version of this comment got
-# it wrong: `datwrite --verify` prints a `file header crc` line AND an `MFT
-# self-crc` line per run (6 runs, 12 lines), and `datmove` prints one
-# `0 overlapping row pair(s) afterwards` per move (5 moves, 5 lines). 184 - 17
-# = 167. Section 9's own arms are what move these counts, so re-measure both
-# numbers rather than adjusting them.
+# the same `[PASS] ...` shape as the ledger and a naive `grep -c "\[PASS\]"`
+# reads 220, which is 17 more than the ledger says. There are THREE producers,
+# not two, and the arithmetic is worth writing down because the first version of
+# this comment got it wrong: `datwrite --verify` prints a `file header crc` line
+# AND an `MFT self-crc` line per run (6 runs, 12 lines), and `datmove` prints
+# one `0 overlapping row pair(s) afterwards` per move (5 moves, 5 lines).
+# 220 - 17 = 203. Anchoring the grep at `^  \[PASS\]` drops datmove's five --
+# they carry no indent -- and reads 215, which is 203 + datwrite's 12. Sections
+# 9 and 10 are what move these counts, so re-measure both numbers rather than
+# adjusting them.
 #
-# Was 150 before the WORLDMAPS-W5 fix pass (the `created` half of the budget
-# gate, the negatives in 9(e), and `area_reserve`), 112 before section 9's
-# reserve (WORLDMAPS-W5), 92 before section 6b's serve-verdict checks, 84 before
-# section 8's dry-run and spill checks, 56 before section 8 and the create
-# branch, 35 before section 7 and the compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=167)
+# Was 195 before the R2 fix pass (section 10b: the copied archive, the byte
+# route and its negative, the path route's own fixture, and one fixture each for
+# the three journal conjuncts that a mutation sweep could delete unnoticed), 167
+# before the residual pass (section 10: the born-armed guard, the created-chain
+# evidence, the journal-clobber refusal, map_chain's three unexercised refusals,
+# and the typed grow-gate join), 150 before the WORLDMAPS-W5 fix pass (the
+# `created` half of the budget gate, the negatives in 9(e), and `area_reserve`),
+# 112 before section 9's reserve (WORLDMAPS-W5), 92 before section 6b's
+# serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
+# before section 8 and the create branch, 35 before section 7 and the
+# compression checks, 25 before section 6.
+LEDGER = checks.Ledger("test_deploy", floor=203)
 check = checks.adopt(LEDGER)
 
 
@@ -1177,8 +1199,14 @@ def section8():
         # (c) IDEMPOTENT. `created` is a claim about where a row CAME FROM, not
         # a mode it stays in: the second deploy of the same area must find the
         # chain and take the ordinary install path.
+        # `here=`/`tag=` are how the chain PROVES it is ours: they name the
+        # allocation journal `create_chain` wrote a moment ago. Without them a
+        # `created = true` row whose id already binds is refused, because
+        # `map_chain` checks the shape and 349 retail maps have that shape --
+        # section 10 is where both halves of that are driven.
         with Archive(path) as ar:
-            rows2, create2 = deploy.resolve_or_create(ar, NEW_FILE_ID, True)
+            rows2, create2 = deploy.resolve_or_create(ar, NEW_FILE_ID, True,
+                                                      here=tmp, tag="frontier")
         want = ((len(stream) + 511) // 512) * 512
         check(not create2 and rows2 == (head_row, partner_row, want),
               "a second deploy RESOLVES the chain it just made and falls "
@@ -1508,7 +1536,8 @@ def section9():
               "would have taken", f"{len(tail)} B of zeroes past the payload")
 
         with Archive(path) as ar:
-            rows2, create2 = deploy.resolve_or_create(ar, NEW_FILE_ID, True)
+            rows2, create2 = deploy.resolve_or_create(ar, NEW_FILE_ID, True,
+                                                      here=tmp, tag="budget")
         check(not create2 and rows2[2] == 1536,
               "and the archive reports that row's ceiling as 1,536 B, NOT the "
               "2,048 it was given -- the 24-byte MFT row has no entitlement "
@@ -1856,6 +1885,616 @@ def section9():
           f"{sorted(calls_with(unflagged, 'created'))}")
 
 
+# ---------------------------------------------------------------- section 10
+#
+# THE FIVE GUARDS WORLDMAPS-W3 LEFT OPEN, and one deferred from W5.
+#
+# Each of these was a real hole rather than a hypothetical, and three of them
+# have the same shape: a rule that is written down in one module and bypassed by
+# the path another module actually takes.
+#
+#   R1  the born-armed guard was LIVE AND UNTESTED -- three lines inside main(),
+#       reachable only with a vault, an archive, a donor and a content row.
+#   R2  `resolve_or_create`'s fall-through fired identically for OUR created
+#       chain and for a retail chain that happens to bind the id, because
+#       `map_chain` checks SHAPE and 349 retail maps have that shape. The FIRST
+#       version of the fix joined the allocation journal to the archive by the
+#       absolute path `datalloc` records, which refused an honest re-deploy on
+#       any COPY of the archive -- and archives here are copied whole as a
+#       matter of routine. It reads the archive's own bytes now, and each of the
+#       four facts it takes as evidence has its own fixture.
+#   R3  `datalloc`'s CLI has always refused to write over an existing journal;
+#       `create_chain` calls `alloc()` directly and never saw that check.
+#   R5  three of `map_chain`'s five raise sites had no fixture at all.
+#
+# R4 is `contentids.py`'s and is checked in `test_contentids.py` section 6. R6
+# is `datwrite`'s typed grow-gate refusal; the writer's half is `test_datwrite`
+# section 13 and the JOIN is checked here, in 10e, because the join is deploy's.
+
+
+def set_row_size(path, row, size):
+    """Write a row's `size` field straight into the MFT. -> None.
+
+    Section 10's own writer, spelled out of `struct` for the same reason
+    `read_row` is: the question in 10a is whether the guard reads the ARCHIVE,
+    and asking `datwrite` to stage the state would put the module under test on
+    both sides of it.
+    """
+    with open(path, "r+b") as fh:
+        fh.seek(0x10)
+        mft_off = int.from_bytes(fh.read(8), "little")
+        fh.seek(mft_off + row * ENTRY_SIZE + 0x08)
+        fh.write(struct.pack("<I", size))
+
+
+def journal_doc(path):
+    """An allocation journal as a plain dict, read with `json` alone.
+
+    Section 10's own reader, for the reason `read_row` is section 7's: the
+    question in 10b is whether `deploy` reads a journal STRUCTURALLY, and asking
+    `datwrite.read_journal` to parse the fixtures that drive that question would
+    put a module on both sides of it. An intact journal is one JSON object by
+    `read_journal`'s own first branch, so `json.loads` is the whole reader here.
+    """
+    with open(path, "rb") as fh:
+        return json.loads(fh.read().decode("utf-8"))
+
+
+def journal_edit(doc, offset):
+    """The `after` bytes of the one edit at `offset`. -> bytes"""
+    hits = [e for e in doc["edits"] if e["offset"] == offset]
+    if len(hits) != 1:
+        raise AssertionError(f"{len(hits)} edit(s) at {offset:#x}")
+    return bytes.fromhex(hits[0]["after"])
+
+
+def bend_journal(src, dst, offset, blob):
+    """Copy a journal with the edit at `offset` rewritten to `blob`. -> dst
+
+    ONE FIELD AT A TIME is the point. `allocation_recorded` names four facts it
+    reads out of a journal and three of them had no fixture until this existed
+    -- the R5 shape, one module over -- so each is bent on its own, from a
+    journal that was real a line earlier, and the CONTROL bends a field back to
+    the value it already had to prove the rewrite itself is not what refuses.
+    """
+    doc = journal_doc(src)
+    hits = [e for e in doc["edits"] if e["offset"] == offset]
+    if len(hits) != 1:
+        raise AssertionError(f"{len(hits)} edit(s) at {offset:#x} in {src}")
+    hits[0]["after"] = blob.hex()
+    with open(dst, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    return dst
+
+
+def bend_row(src, dst, offset, row_bytes, field, value):
+    """`bend_journal`, on one field of one 24-byte MFT row. -> dst"""
+    fields = list(struct.unpack("<QIHHII", row_bytes))
+    fields[field] = value
+    return bend_journal(src, dst, offset, struct.pack("<QIHHII", *fields))
+
+
+def rename_journal(src, dst, dat):
+    """Copy a journal with the archive it NAMES rewritten to `dat`. -> dst
+
+    The other half of 10b's pair: `bend_row` moves what the journal says it
+    wrote, this moves where it says it wrote it. Together they let each of
+    `allocation_recorded`'s two binding routes be driven with the other one
+    unable to answer.
+    """
+    doc = journal_doc(src)
+    doc["dat"] = dat
+    with open(dst, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    return dst
+
+
+def poke(path, offset, blob):
+    """Write `blob` at `offset`, straight into the file. -> None"""
+    with open(path, "r+b") as fh:
+        fh.seek(offset)
+        fh.write(blob)
+
+
+def main_fn(text):
+    """`deploy.main`'s syntax tree, out of `text`."""
+    return next(n for n in ast.walk(ast.parse(text))
+                if isinstance(n, ast.FunctionDef) and n.name == "main")
+
+
+def strings_in(nodes):
+    """Every string literal under `nodes`."""
+    out = set()
+    for n in nodes:
+        for x in ast.walk(n):
+            if isinstance(x, ast.Constant) and isinstance(x.value, str):
+                out.add(x.value)
+    return out
+
+
+def arm_if(text):
+    """The INNERMOST `if` in main() whose branches decide the arm. -> If|None
+
+    INNERMOST, and that is not fussiness. `ast.walk` reaches `if args.install:`
+    first -- it contains the arm and therefore contains the string -- so the
+    first version of this asked every question below about the wrong branch and
+    went red naming `args.install`. The arm sits inside that one; the smallest
+    candidate is the one whose test is the guard.
+    """
+    cands = [n for n in ast.walk(main_fn(text))
+             if isinstance(n, ast.If) and "rebloat.py" in strings_in([n])]
+    return min(cands, key=lambda n: len(list(ast.walk(n)))) if cands else None
+
+
+def already_from(text):
+    """The function names main() computes `already` from. -> set"""
+    for node in ast.walk(main_fn(text)):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "already"
+                   for t in node.targets):
+            continue
+        return {getattr(c.func, "id", "") or getattr(c.func, "attr", "")
+                for c in ast.walk(node.value) if isinstance(c, ast.Call)} | {
+                    n.id for n in ast.walk(node.value)
+                    if isinstance(n, ast.Name)}
+    return set()
+
+
+def section10():
+    """The residual guards: armed, ours, revertible, and shaped like a map."""
+    print("\n10. the guards W3 left open: armed, OURS, revertible, a map")
+    dim = INSTALL_DIM
+    snapped, _w = stx.snap_field(deploy.gen_plaza(dim), dim, dim)
+    blob = stx.StrippedTerrain.build(dim, dim, snapped).encode()
+    stream, _code, _n = deploy.install_bytes(blob)
+    src = open(deploy.__file__, encoding="utf-8").read()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = spill(tmp, "authored.bin", blob)
+
+        # -- 10a. R1: THE BORN-ARMED GUARD, BOTH WAYS -------------------------
+        #
+        # `rebloat --arm` refuses a zero-length head, and a created head is born
+        # zero-length -- so a create followed by an arm is a dead run. The guard
+        # that prevents it reads the ARCHIVE's own `head.size`, deliberately
+        # rather than trusting the `create` flag, and until today nothing
+        # exercised either answer.
+        displaced = os.path.join(tmp, "displaced")
+        build_archive(displaced, 4608)
+        check(not deploy.head_is_armed(displaced, ROW_HEAD),
+              "a DISPLACED retail head is not armed -- it holds a Bloated map, "
+              "so the install has to arm it and the client recompiles",
+              f"row {ROW_HEAD} holds {read_row(displaced, ROW_HEAD)[1]} B")
+
+        created = os.path.join(tmp, "created")
+        build_archive(created, 4608)
+        with captured():
+            head_row, partner_row = deploy.create_chain(
+                created, NEW_FILE_ID, blob, stream, 8, tmp, "r1")
+        check(deploy.head_is_armed(created, head_row),
+              "and a CREATED head IS armed the moment it exists -- born "
+              "zero-length, which is the state `rebloat --arm` refuses to "
+              "produce twice and the state the client's re-bloat path keys on",
+              f"row {head_row} holds {read_row(created, head_row)[1]} B")
+
+        # AND IT TRACKS THE ROW, NOT THE ORIGIN. This is the case the guard was
+        # written for and the reason it asks the archive: a client that has
+        # already re-bloated our created head leaves a NON-empty row, and the
+        # next deploy must arm it like any other. `create` would still say
+        # "created" here and would be answering a different question.
+        set_row_size(created, head_row, 300)
+        check(not deploy.head_is_armed(created, head_row),
+              "and once something writes content into that same created head "
+              "the answer FLIPS -- the guard is about the row's current state, "
+              "which is what a client re-bloating between two deploys leaves "
+              "behind", f"row {head_row} now holds "
+                        f"{read_row(created, head_row)[1]} B")
+        set_row_size(created, head_row, 0)
+
+        # AND main() ASKS IT, in the branch that decides the arm.
+        node = arm_if(src)
+        check(node is not None and isinstance(node.test, ast.Name)
+              and node.test.id == "already",
+              "main()'s arm sits under `if already:` -- one name, computed "
+              "once, so the two branches cannot disagree about what was asked",
+              ast.dump(node.test)[:60] if node else "no such branch")
+        check(node is not None and "rebloat.py" in strings_in(node.orelse)
+              and "rebloat.py" not in strings_in(node.body),
+              "and `rebloat.py` is reached ONLY from the else -- an armed head "
+              "is never armed twice, which would overwrite the first journal "
+              "with nothing",
+              f"body {sorted(s for s in strings_in(node.body) if '.py' in s)}, "
+              f"else {sorted(s for s in strings_in(node.orelse) if '.py' in s)}"
+              if node else "no such branch")
+        check(already_from(src) == {"head_is_armed", "dat", "head_row"},
+              "and `already` comes from head_is_armed(dat, head_row) -- the "
+              "ARCHIVE's answer, not `create`'s: 'we just made it empty' is our "
+              "word for it and `head.size == 0` is the row's",
+              f"{sorted(already_from(src))}")
+        # SABOTAGE, both ways, because a syntax-tree check passes on any source
+        # that merely mentions the right words.
+        trusted = src.replace("already = head_is_armed(dat, head_row)",
+                              "already = create")
+        check(trusted != src and already_from(trusted) == {"create"},
+              "SABOTAGE: pointing it at the `create` flag instead makes that "
+              "check go red -- which is the whole difference between asking the "
+              "archive and taking our own word for it",
+              f"{sorted(already_from(trusted))}")
+        flipped = src.replace("        already = head_is_armed(dat, head_row)\n"
+                              "        if already:",
+                              "        already = head_is_armed(dat, head_row)\n"
+                              "        if not already:")
+        bad = arm_if(flipped)
+        check(flipped != src and bad is not None
+              and not isinstance(bad.test, ast.Name),
+              "and inverting the test makes the branch check go red too -- "
+              "without that control it would pass on any `if` that happens to "
+              "contain the string", ast.dump(bad.test)[:60] if bad else "gone")
+
+        # -- 10b. R2: THE CHAIN HAS TO BE PROVABLY OURS -----------------------
+        #
+        # `map_chain` answers "is this shaped like a map". It cannot answer "did
+        # we make it", and the fall-through treated the two as the same
+        # question: a `created = true` row whose id binds a genuine ArenaNet map
+        # took the ordinary install path and displaced it, with every line of
+        # output saying the word "created".
+        with Archive(created) as ar:
+            rows, create = deploy.resolve_or_create(ar, NEW_FILE_ID, True,
+                                                    here=tmp, tag="r1")
+        check(not create and rows == (head_row, partner_row,
+                                      ((len(stream) + 511) // 512) * 512),
+              "THE CASE THIS MUST NOT BREAK: re-deploying our own chain finds "
+              "its allocation journal beside the archive and falls through to "
+              "install, reservation and all", f"{rows}")
+
+        why = ""
+        try:
+            with Archive(created) as ar:
+                deploy.resolve_or_create(ar, NEW_FILE_ID, True)
+        except deploy.Refused as exc:
+            why = str(exc)
+        check("ALREADY BINDS" in why and f"head row {head_row}" in why
+              and f"partner row {partner_row}" in why,
+              "and with nowhere to look for that journal it REFUSES, naming "
+              "what is actually there -- the rows, their flags and their sizes, "
+              "because the remedy depends on what a person makes of them",
+              why.splitlines()[0][:110] if why else "accepted")
+        ordered = ("_alloc.json" in why and "fresh id" in why
+                   and why.index("_alloc.json") < why.index("fresh id"))
+        check(ordered and "the journal travels with the archive" in why.lower(),
+              "and it names the RECOVERABLE remedy FIRST -- bring the journal "
+              "to the archive, which is where a whole-file copy leaves it -- "
+              "keeping `allocate under a fresh id` as the last resort it "
+              "actually is: that line is wrong advice for a chain that is "
+              "provably ours, and a wrong remedy in a refusal is what an "
+              "operator does at 2am",
+              why.splitlines()[-1][:110] if why else "accepted")
+
+        # THE RETAIL CHAIN. This is the failure itself: a plain fixture holding
+        # ArenaNet's own map 143 under its own id, and a content row claiming to
+        # have created it. Shape-identical to ours; provenance opposite.
+        retail = os.path.join(tmp, "retail")
+        build_archive(retail, 4608, file_id=NEW_FILE_ID)
+        why = ""
+        try:
+            with Archive(retail) as ar:
+                deploy.resolve_or_create(ar, NEW_FILE_ID, True,
+                                         here=tmp, tag="r1")
+        except deploy.Refused as exc:
+            why = str(exc)
+        check("ALREADY BINDS" in why and "349 retail maps" in why,
+              "a chain we did NOT make is refused even with a journal for this "
+              "area in the directory -- the journal names an archive, an id and "
+              "two rows, and this one names none of them",
+              why.splitlines()[0][:110] if why else "accepted")
+        check(deploy.created_evidence(retail, tmp, "r1", NEW_FILE_ID,
+                                      ROW_HEAD, ROW_PARTNER) is None
+              and deploy.created_evidence(created, tmp, "r1", NEW_FILE_ID,
+                                          head_row, partner_row) is not None,
+              "-- and the evidence check is what separates them: the SAME "
+              "journal is evidence about one archive and not the other",
+              f"{os.path.basename(deploy.alloc_journal_path(tmp, 'r1'))}")
+        # AND IT IS READ STRUCTURALLY, not as prose. Each of the facts the
+        # journal carries is asked for on its own.
+        j = deploy.alloc_journal_path(tmp, "r1")
+        check(deploy.allocation_recorded(j, created, NEW_FILE_ID, head_row,
+                                         partner_row)
+              and not deploy.allocation_recorded(j, created, NEW_FILE_ID + 1,
+                                                 head_row, partner_row)
+              and not deploy.allocation_recorded(j, created, NEW_FILE_ID,
+                                                 head_row + 1, partner_row)
+              and not deploy.allocation_recorded(j, created, NEW_FILE_ID,
+                                                 head_row, partner_row + 1)
+              and not deploy.allocation_recorded(j, retail, NEW_FILE_ID,
+                                                 head_row, partner_row),
+              "the journal is evidence for exactly ONE (archive, id, head, "
+              "partner) -- change any one of the four and it stops being "
+              "evidence, which is what makes it a fingerprint rather than a "
+              "file that exists")
+
+        # THE ARCHIVE IS ASKED, NOT ITS FILENAME -- and this is the fix a
+        # skeptic's probe forced. `datalloc` records an ABSOLUTE path, and
+        # archives here are copied WHOLE as a matter of routine: `overlay.py`
+        # copies manifest archives with `shutil.copyfile`, `make_run_dir.py`
+        # stages one per run directory, and RUNBOOK's own procedure copies
+        # `run-live\<build>\Gw.dat` over `run\<build>\Gw.dat`. The first version
+        # of this guard joined on that path, so an honest re-deploy of OUR OWN
+        # chain on a copy -- journal beside it, describing the copy byte-exactly
+        # -- was refused, and the refusal's closing line told the operator to
+        # allocate under a fresh id. Wrong advice, in the one state where the
+        # chain is provably ours.
+        doc = journal_doc(j)
+        named = struct.pack("<II", NEW_FILE_ID, head_row)
+        id_off = next(e["offset"] for e in doc["edits"]
+                      if bytes.fromhex(e["after"]) == named)
+        copied_dir = os.path.join(tmp, "copied")
+        os.makedirs(copied_dir)
+        copied = os.path.join(copied_dir, "Gw.dat")
+        shutil.copyfile(created, copied)
+        shutil.copyfile(j, deploy.alloc_journal_path(copied_dir, "r1"))
+        # CAUGHT rather than allowed to propagate: a regression here is a
+        # refusal, and a refusal that escapes the section is a traceback instead
+        # of a named FAIL -- which is the shape this whole pass is against.
+        rows_c, create_c, denied = None, None, ""
+        try:
+            with Archive(copied) as ar:
+                rows_c, create_c = deploy.resolve_or_create(
+                    ar, NEW_FILE_ID, True, here=copied_dir, tag="r1")
+        except deploy.Refused as exc:
+            denied = str(exc).splitlines()[0]
+        check(not denied and not create_c and rows_c == rows
+              and os.path.normcase(os.path.abspath(doc["dat"]))
+              != os.path.normcase(os.path.abspath(copied)),
+              "a WHOLE-FILE COPY of the archive, with its journal beside it, "
+              "falls through to install exactly as the original does -- and the "
+              "journal names the path it was ALLOCATED at, which this copy is "
+              "not, so what joined the two is the archive's own bytes",
+              denied[:110] if denied else
+              f"{rows_c} at ...{os.sep}"
+              f"{os.path.basename(copied_dir)}{os.sep}"
+              f"{os.path.basename(copied)}")
+
+        # AND IT IS A BYTE CHECK, not merely "some archive other than the named
+        # one". The same copy with the file-id record rebound one row over no
+        # longer carries what the allocation wrote, and stops being ours.
+        tampered = os.path.join(tmp, "tampered")
+        shutil.copyfile(created, tampered)
+        poke(tampered, id_off, struct.pack("<II", NEW_FILE_ID, head_row + 1))
+        check(deploy.archive_carries(copied, id_off, named)
+              and not deploy.archive_carries(tampered, id_off, named)
+              and not deploy.allocation_recorded(j, tampered, NEW_FILE_ID,
+                                                 head_row, partner_row),
+              "and an archive at neither path which does NOT carry that record "
+              "is not ours: the file-id record going live is the fingerprint, "
+              "so a copy with it rebound to another row is refused while the "
+              "byte-identical copy is not",
+              f"record at {id_off:#x} is {named.hex()}")
+
+        # AND THE PATH ROUTE IS STILL LOAD-BEARING, which is why it is kept as
+        # the FIRST route rather than replaced. The client rewrites the file-id
+        # table during ordinary play, so an archive that never moved can stop
+        # carrying that record at the offset the allocation put it -- and there
+        # the journal's own name for the file is the only join left.
+        settled = os.path.join(tmp, "settled")
+        shutil.copyfile(created, settled)
+        poke(settled, id_off, bytes(len(named)))
+        check(not deploy.archive_carries(settled, id_off, named)
+              and deploy.allocation_recorded(
+                  rename_journal(j, os.path.join(tmp, "j_settled.json"),
+                                 settled),
+                  settled, NEW_FILE_ID, head_row, partner_row),
+              "an archive that STAYED PUT while the id table moved under it no "
+              "longer carries the record, and its journal still NAMES it -- so "
+              "the two routes cover different failures and neither is "
+              "vestigial",
+              f"record at {id_off:#x} zeroed, journal names this file")
+
+        # THE THREE CONJUNCTS THAT DESCRIBE THE ROWS, one fixture each. This is
+        # R5's own shape one module over: `allocation_recorded` names four facts
+        # it reads out of the journal, and until now only the file-id record and
+        # the archive were exercised -- so a mutation sweep could delete the
+        # head's flags test, the nextStream test or the partner's flags test and
+        # this section stayed green. Each is bent ON ITS OWN, out of a journal
+        # that was real a line earlier.
+        mft = doc["mft_offset"]
+        head_off = mft + head_row * ENTRY_SIZE
+        partner_off = mft + partner_row * ENTRY_SIZE
+        head_after = journal_edit(doc, head_off)
+        partner_after = journal_edit(doc, partner_off)
+        check(not deploy.allocation_recorded(
+                  bend_row(j, os.path.join(tmp, "j_headflags.json"), head_off,
+                           head_after, 3, PLAIN_FILE_FLAGS),
+                  created, NEW_FILE_ID, head_row, partner_row),
+              "a journal whose HEAD row goes down with flags 3 rather than 259 "
+              "records somebody allocating a plain file, not a map, and is not "
+              "evidence that this chain is ours",
+              f"row {head_row} flags {MAP_HEAD_FLAGS} -> {PLAIN_FILE_FLAGS}")
+        check(not deploy.allocation_recorded(
+                  bend_row(j, os.path.join(tmp, "j_nextstream.json"), head_off,
+                           head_after, 4, partner_row + 1),
+                  created, NEW_FILE_ID, head_row, partner_row),
+              "a journal whose head is chained to a DIFFERENT partner is not "
+              "evidence for THIS pair -- nextStream is the only field that "
+              "makes two rows one map, and the pair is what the caller is about "
+              "to write into",
+              f"row {head_row} nextStream {partner_row} -> {partner_row + 1}")
+        check(not deploy.allocation_recorded(
+                  bend_row(j, os.path.join(tmp, "j_partnerflags.json"),
+                           partner_off, partner_after, 3, PLAIN_FILE_FLAGS),
+                  created, NEW_FILE_ID, head_row, partner_row),
+              "and a journal whose PARTNER row goes down with flags 3 rather "
+              "than 1 is not evidence either -- three fields, three fixtures, "
+              "because an unexercised conjunct is a conjunct that can be "
+              "deleted",
+              f"row {partner_row} flags {MAP_PARTNER_FLAGS} -> "
+              f"{PLAIN_FILE_FLAGS}")
+        check(deploy.allocation_recorded(
+                  bend_row(j, os.path.join(tmp, "j_same.json"), head_off,
+                           head_after, 3, MAP_HEAD_FLAGS),
+                  created, NEW_FILE_ID, head_row, partner_row),
+              "CONTROL: the same journal rewritten with the head's flags put "
+              "back to the value they already had is still evidence -- so the "
+              "three above refuse the BENT FIELD rather than refusing any "
+              "journal this test wrote",
+              f"row {head_row} flags {MAP_HEAD_FLAGS}, unchanged")
+
+        # CONTROL: a row that does NOT claim to be created is untouched by any
+        # of this. The displacement path is the one every area but frontier
+        # takes, and it must read exactly as it did before today.
+        with Archive(retail) as ar:
+            rows_r, create_r = deploy.resolve_or_create(ar, NEW_FILE_ID, False)
+        check(not create_r and rows_r[0] == ROW_HEAD
+              and rows_r[1] == ROW_PARTNER,
+              "CONTROL: the same chain, on a row without `created = true`, "
+              "resolves with no evidence asked for at all -- displacement is "
+              "what this command has always done and the guard is only about "
+              "the claim to have made the file", f"{rows_r}")
+
+        # -- 10c. R3: THE ALLOCATION JOURNAL IS NOT OVERWRITTEN ---------------
+        #
+        # `datalloc`'s CLI has refused this since it was written and deploy went
+        # around it: a second create with the same area name truncated the first
+        # run's journal at its first record, then printed the file it had just
+        # destroyed as the way back.
+        with open(j, "rb") as fh:
+            journal_before = fh.read()
+        second = os.path.join(tmp, "second")
+        build_archive(second, 4608)
+        with open(second, "rb") as fh:
+            archive_before = fh.read()
+        why = ""
+        try:
+            with captured():
+                deploy.create_chain(second, NEW_FILE_ID, blob, stream, 8,
+                                    tmp, "r1")
+        except deploy.Refused as exc:
+            why = str(exc)
+        with open(j, "rb") as fh:
+            journal_after = fh.read()
+        with open(second, "rb") as fh:
+            archive_after = fh.read()
+        check("already exists" in why and "only way back" in why,
+              "a create whose journal file already exists is REFUSED, quoting "
+              "datalloc's own reasoning rather than paraphrasing it",
+              why.splitlines()[0][:110] if why else "accepted")
+        check(journal_after == journal_before,
+              "and the first run's journal is byte-for-byte intact -- "
+              "overwriting it would leave its edits applied forever while a "
+              "later --revert of the new file reported success",
+              f"{len(journal_after)} B, unchanged")
+        check(archive_after == archive_before,
+              "and nothing was allocated: the refusal lands before the spill, "
+              "before the plan and before the first byte",
+              f"{len(archive_after)} B, unchanged")
+        check(not os.path.exists(os.path.join(tmp, "r1.c8.bin.tmp"))
+              and deploy.alloc_journal_path("d", "a")
+              == os.path.join("d", "a_alloc.json"),
+              "and the path both sides talk about is ONE expression -- the "
+              "create path refuses it and the install path reads it, so they "
+              "have to mean the same file", deploy.alloc_journal_path("d", "a"))
+
+        # -- 10d. R5: map_chain's THREE UNEXERCISED REFUSALS ------------------
+        #
+        # Five raise sites, two of them driven by section 8. These three have
+        # had no fixture at all, so a regression in any of them would go
+        # undetected by a green suite -- and each one is a shape that would
+        # otherwise reach `resolve_rows`, where `MapIndex.partner` reads
+        # `by_row.get(nextStream)` and row 0 is a real MFT row.
+        def refusal(name, extra):
+            p = os.path.join(tmp, name)
+            build_archive(p, 4608, extra_rows=extra)
+            try:
+                with Archive(p) as ar:
+                    deploy.map_chain(ar, FIXTURE_FILE_ID)
+            except deploy.Refused as exc:
+                return str(exc)
+            return ""
+
+        head_at = HEAD_BLOCK * BLOCK
+        why = refusal("nonext", {ROW_HEAD: (head_at, HEAD_SIZE, 0,
+                                            MAP_HEAD_FLAGS, 0)})
+        check("nextStream is 0" in why and "TWO rows and this is one" in why,
+              "a map head whose nextStream is 0 is REFUSED -- the chain "
+              "terminates there, and `MapIndex.partner` would resolve row 0, "
+              "which is the file header rather than None",
+              why.splitlines()[0][:110] if why else "accepted")
+        why = refusal("gone", {ROW_HEAD: (head_at, HEAD_SIZE, 0,
+                                          MAP_HEAD_FLAGS, ENTRY_COUNT + 4)})
+        check("absent from this archive's MFT" in why
+              and f"row {ENTRY_COUNT + 4}" in why,
+              "a head chained to a row this MFT does not have is REFUSED, "
+              "naming the row it named", why.splitlines()[0][:110]
+              if why else "accepted")
+        why = refusal("wrongflags",
+                      {ROW_PARTNER: (PARTNER_BLOCK * BLOCK, 4608, 0,
+                                     PLAIN_FILE_FLAGS, 0)})
+        check(f"0x{PLAIN_FILE_FLAGS:04X}" in why and "bijection" in why,
+              "and a partner carrying the wrong flags is REFUSED naming both "
+              "flag words -- MEASURED corpus-wide the nextStream link map is a "
+              "bijection and every Bloated head chains to one stream-0 row",
+              why.splitlines()[0][:110] if why else "accepted")
+        # CONTROL: the unmodified fixture is a chain, so the three above are
+        # refusing the DEVIATION rather than refusing everything.
+        p = os.path.join(tmp, "control")
+        build_archive(p, 4608)
+        with Archive(p) as ar:
+            got = deploy.map_chain(ar, FIXTURE_FILE_ID)
+        check(got is not None and got[0].index == ROW_HEAD
+              and got[1].index == ROW_PARTNER,
+              "CONTROL: the same fixture untouched resolves as a chain -- one "
+              "field apart from each of the three above",
+              f"head {got[0].index}, partner {got[1].index}")
+
+    # -- 10e. R6: THE GROW-GATE JOIN IS TYPED, WITH THE WORDING AS FALLBACK ---
+    #
+    # `install_partner` may relocate around a grow the GATE refused and must
+    # never relocate around anything else -- a declaration fault turned into a
+    # quiet datmove is the failure. It told the two apart by looking for four
+    # fixed fragments of datwrite's sentences, so the day one was reworded every
+    # claimant conflict became a refused install for a reason with nothing to do
+    # with the archive. datwrite names its own refusals now.
+    token = f"  {datwrite.GROW_GATE_TOKEN} condition=claimants"
+    check(deploy.grow_gate_refusal(token) is not None,
+          "a writer's output carrying ONLY the token -- no sentence this file "
+          "knows -- is recognised as a gate refusal: the join is the token now, "
+          "not the prose", deploy.grow_gate_refusal(token))
+    reworded = ("REFUSED: row 5 cannot take those blocks back, some other row "
+                "has them.\n" + token)
+    check(deploy.grow_gate_refusal(reworded) is not None,
+          "so datwrite REWORDING condition 1 no longer turns a claimant "
+          "conflict into a refused install -- which is what the old four-marker "
+          "join did, silently and in the safe direction",
+          deploy.grow_gate_refusal(reworded))
+    old = "row 5 needs to grow ... [0x600, 0x800) is CLAIMED by row 6."
+    check(deploy.grow_gate_refusal(old) is not None,
+          "and an OLDER datwrite that prints no token at all is still "
+          "recognised by its sentence -- the fallback is documented, not "
+          "vestigial: a vault copy or a bisect is exactly where it bites",
+          deploy.grow_gate_refusal(old))
+    check(deploy.grow_gate_refusal(
+              "row 5 reserves 1024 bytes and the new payload is 1148") is None
+          and deploy.grow_gate_refusal(
+              "REFUSED: will not write row 5 as compression 8") is None,
+          "and an ORDINARY refusal is still not a gate refusal, with or "
+          "without a token in the file -- that is the direction where a wrong "
+          "answer relocates around a declaration fault")
+    said = deploy.grow_gate_refusal(
+        "row 5 is CLAIMED by row 6.\n" + token)
+    check("CLAIMED by row 6" in said,
+          "and when both are present the HUMAN sentence is what comes back: "
+          "the token is the decision and the sentence is the report",
+          said)
+    check(datwrite.GROW_GATE_TOKEN not in "".join(deploy.GROW_GATE_MARKERS)
+          and len(deploy.GROW_GATE_MARKERS) == 4
+          and len(datwrite.GROW_GATE_CONDITIONS) == 4,
+          "and the fallback list still holds one fragment per condition -- four "
+          "sentences, four conditions, so a fifth condition cannot be added to "
+          "datwrite without this file noticing",
+          f"{len(deploy.GROW_GATE_MARKERS)} marker(s), "
+          f"{len(datwrite.GROW_GATE_CONDITIONS)} condition(s)")
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -1902,6 +2541,7 @@ def main():
     section7()
     section8()
     section9()
+    section10()
     section2(area)
     return LEDGER.verdict()
 

@@ -74,11 +74,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
-from archive import (Archive, file_id_table,  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
                      COMPRESSION_HUFFMAN, COMPRESSION_STORED, FILE_ID_HIGH_BIT)
 import content as content_mod  # noqa: E402
 import datalloc  # noqa: E402  -- the third verb: rows that did not exist
 import datcheck  # noqa: E402  -- the launch-side archive gate
+import datwrite  # noqa: E402  -- for the grow gate's TOKEN, never to write
 import envchunk  # noqa: E402
 import gwenc  # noqa: E402  -- the compression-8 encoder
 import mapchunks  # noqa: E402
@@ -501,6 +502,13 @@ def spill_stream(here, tag, stream, compression):
     return path
 
 
+# THE FALLBACK JOIN, and only the fallback since 2026-08-20. A fragment of each
+# of `_grow_gate`'s four sentences, in its order. `datwrite` now names its own
+# refusals -- `GrowGateRefused`, carrying a `condition`, and one
+# `GROW-GATE-REFUSED condition=<name>` line per refusal on the CLI -- so this
+# list is what recognises an OLDER writer: a vault copy, a bisect, a subprocess
+# resolved off a stale worktree. Keep it in step with the sentences; do not add
+# to it as a way of recognising anything new. See `grow_gate_refusal`.
 GROW_GATE_MARKERS = (
     "is CLAIMED by",                            # condition 1: other claimants
     "PAST THE END",                             # condition 2: EOF
@@ -522,17 +530,35 @@ def grow_gate_refusal(text):
     is for; falling back on the second would turn "these bytes are not what you
     declared" into a relocation that quietly succeeds.
 
-    So the recogniser is a fixed list of the gate's own four sentences rather
-    than "rc != 0", and an unrecognised failure is re-raised as a refusal by the
-    caller. Matching on message text is a weak join and it is named as one: if
-    `datwrite`'s wording moves, this returns None and the install REFUSES, which
-    is the safe direction -- a claimant conflict that becomes invisible is the
-    exact failure this whole path exists to avoid.
+    THE JOIN IS NOW TYPED, and this paragraph used to explain why it could not
+    be. It said: "the recogniser is a fixed list of the gate's own four
+    sentences rather than `rc != 0` ... Matching on message text is a weak join
+    and it is named as one: if `datwrite`'s wording moves, this returns None and
+    the install REFUSES, which is the safe direction." The direction was right
+    and the join was still prose -- a reworded sentence turned every claimant
+    conflict on this path into a refused install, silently, for a reason that
+    has nothing to do with the archive. `datwrite._grow_gate` now raises
+    `GrowGateRefused`, a `SystemExit` carrying a `condition`, and its CLI prints
+    ONE machine-readable line per refusal: `GROW-GATE-REFUSED condition=<name>`.
+    That line is what this joins on.
+
+    THE FOUR SENTENCES REMAIN, DOCUMENTED AS THE FALLBACK. An older `datwrite`
+    -- a vault copy, a bisect, a subprocess resolved off a stale worktree --
+    prints no token at all, and a fallback that refused there would be this
+    function's own failure mode in the other direction. So: token present is the
+    verdict; token absent falls back to `GROW_GATE_MARKERS`; neither is None and
+    the caller raises. The line RETURNED is the human sentence whenever there is
+    one, because it is what gets printed and what an operator has to read; the
+    token is the decision, not the report.
     """
-    for line in text.splitlines():
-        if any(m in line for m in GROW_GATE_MARKERS):
-            return line.strip()
-    return None
+    lines = [ln.strip() for ln in text.splitlines()]
+    worded = next((ln for ln in lines
+                   if any(m in ln for m in GROW_GATE_MARKERS)), None)
+    typed = next((ln for ln in lines
+                  if datwrite.GROW_GATE_TOKEN in ln), None)
+    if typed is None and worded is None:
+        return None
+    return worded or typed
 
 
 def area_reserve(area):
@@ -934,7 +960,167 @@ def map_chain(ar, file_id):
     return head, partner
 
 
-def resolve_or_create(ar, file_id, created):
+def alloc_journal_path(here, tag):
+    """Where `create_chain` writes an area's allocation journal. ONE expression.
+
+    Named rather than spelled out at each of its three call sites, because the
+    three now disagree about what they want from it and would drift: the create
+    path REFUSES to write over one (R3), the install path READS one as evidence
+    that a chain is ours (R2), and both have to be talking about the same file
+    for either to mean anything.
+    """
+    return os.path.join(here, f"{tag}_alloc.json")
+
+
+def archive_carries(dat, offset, blob):
+    """Is `blob` sitting at `offset` in `dat` RIGHT NOW? -> bool
+
+    Eight bytes and a seek, and it is the whole of what makes an allocation
+    journal evidence about the copy in front of us rather than about a filename
+    (`allocation_recorded`). Any read failure is a False rather than a raise:
+    the caller is deciding whether something is evidence, and an archive it
+    cannot read has not shown it anything.
+
+    AN EMPTY `blob` IS A FALSE, not a vacuous True. Every file carries zero
+    bytes at every offset, so the one-line version of this would hand a caller a
+    check that cannot fail -- which is the failure this pass exists to close,
+    one function smaller.
+    """
+    if not blob:
+        return False
+    try:
+        with open(dat, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(len(blob)) == blob
+    except OSError:
+        return False
+
+
+def allocation_recorded(journal, dat, file_id, head_row, partner_row):
+    """Does `journal` record US allocating THIS chain in THIS archive? -> bool
+
+    READ STRUCTURALLY, NOT AS PROSE, and that is deliberate after the grow
+    gate's four-sentence join (see `grow_gate_refusal`). `datalloc.alloc` writes
+    the journal's `what` strings for a human; what is checked here is BYTES:
+
+      * one edit's `after` is exactly `<II` (file_id, head_row) -- the file-id
+        record going live, which is step 4 of the allocation and the moment the
+        chain acquires its name;
+      * the edit at `mft_offset + head_row * 24` writes a 24-byte row whose
+        flags are the map head's and whose `nextStream` is `partner_row`;
+      * the edit at `mft_offset + partner_row * 24` writes the partner's flags;
+      * and the archive in front of us is the archive that file-id record went
+        into.
+
+    All four together say "this file recorded binding this id to this head,
+    chained to this partner, in this archive". `mft_offset` is read from the
+    JOURNAL rather than from the archive on purpose: the client relocates the
+    master file table during ordinary play (`datwrite.Journal` records it for
+    exactly that reason), so an offset compared against today's table would
+    stop matching for a reason that says nothing about who made the rows.
+
+    THE LAST CONJUNCT IS NOT A PATH COMPARE ANY MORE, and the fix is the same
+    lesson as the one above it. `datalloc` records an ABSOLUTE path, and
+    archives in this project are COPIED WHOLE as a matter of routine --
+    `overlay.py` copies manifest archives with `shutil.copyfile`,
+    `make_run_dir.py` stages one per run directory, and RUNBOOK's own procedure
+    copies `run-live/<build>/Gw.dat` over `run/<build>/Gw.dat`. A copy that
+    carries its journal beside it is OUR chain, described byte-exactly, and the
+    path compare refused it -- with a closing remedy ("allocate under a fresh
+    id") that is actively wrong advice in exactly that state. So the archive is
+    asked DIRECTLY instead: does it carry, at the offset the journal recorded,
+    the file-id record the journal says it wrote there? That survives a copy, a
+    rename, an `--out` that moved the build products, and a later relocation of
+    the partner. The path compare is KEPT as the FIRST route, cheap and not
+    weaker than it was, for the archive that stayed where it was while the
+    client rewrote the id table underneath it.
+
+    THE ROWS ARE THE CALLER'S CURRENT ONES, and that is what keeps this from
+    degenerating into "a journal exists": `resolve_or_create` reads
+    `head_row`/`partner_row` out of the archive in front of it, so a journal
+    describing some other allocation fails the `<II` conjunct before the archive
+    is opened at all.
+
+    A journal that will not parse is not evidence and is not an error here --
+    `datwrite.read_journal` refuses an empty or malformed one by name, and the
+    caller's job is to say what IS there rather than to re-raise.
+    """
+    try:
+        doc, _dropped = datwrite.read_journal(journal)
+    except (SystemExit, OSError, ValueError):
+        return False
+    if not isinstance(doc, dict):
+        return False
+    mft = doc.get("mft_offset")
+    if not isinstance(mft, int):
+        return False
+    named = struct.pack("<II", file_id, head_row)
+    rows_seen = {}
+    id_offsets = []
+    for ed in doc.get("edits", []):
+        try:
+            after = bytes.fromhex(ed.get("after", ""))
+            off = int(ed["offset"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if after == named:
+            id_offsets.append(off)
+        if len(after) != ENTRY_SIZE:
+            continue
+        for row in (head_row, partner_row):
+            if off == mft + row * ENTRY_SIZE:
+                rows_seen[row] = struct.unpack("<QIHHII", after)
+    head = rows_seen.get(head_row)
+    partner = rows_seen.get(partner_row)
+    if not (id_offsets
+            and head is not None and partner is not None
+            and head[3] == MAP_HEAD_FLAGS_U16 and head[4] == partner_row
+            and partner[3] == MAP_PARTNER_FLAGS_U16):
+        return False
+    # The binding, either way round: the name it was written under, or the
+    # bytes it was written as. The second is the one that survives a copy.
+    named_path = os.path.normcase(os.path.abspath(str(doc.get("dat", ""))))
+    if named_path == os.path.normcase(os.path.abspath(dat)):
+        return True
+    return any(archive_carries(dat, off, named) for off in id_offsets)
+
+
+def created_evidence(dat, here, tag, file_id, head_row, partner_row):
+    """The journal proving we made this chain, or None. -> path|None
+
+    Looks BESIDE THE ARCHIVE as well as in `here`, because those are the same
+    directory on every default invocation and differ only when `--out` moves the
+    build products somewhere else. Widening the search does not weaken the
+    check: whichever file is found still has to describe this id and these two
+    rows AND be bound to this archive by one of `allocation_recorded`'s two
+    routes, so a journal from another area is not evidence about this one.
+
+    A COPY OF THE ARCHIVE IS FOUND BY WHICHEVER JOURNAL TRAVELLED WITH IT. That
+    is the case this pair exists to serve and the case the path compare used to
+    refuse: copy `Gw.dat` and `<area>_alloc.json` into a fresh run directory --
+    which is what `make_run_dir.py` and RUNBOOK's `Copy-Item` step do -- and the
+    chain is still ours, because the copy carries the file-id record the journal
+    recorded. What does NOT travel is nothing: a journal left behind is a
+    refusal, and its remedy is to bring it along rather than to allocate again.
+    """
+    if not here or not tag:
+        return None
+    seen, out = set(), []
+    for d in (here, os.path.dirname(os.path.abspath(dat))):
+        if not d:
+            continue
+        p = os.path.abspath(alloc_journal_path(d, tag))
+        if os.path.normcase(p) not in seen:
+            seen.add(os.path.normcase(p))
+            out.append(p)
+    for p in out:
+        if os.path.isfile(p) and allocation_recorded(p, dat, file_id, head_row,
+                                                     partner_row):
+            return p
+    return None
+
+
+def resolve_or_create(ar, file_id, created, *, here=None, tag=None):
     """(rows, create). `rows` is None exactly when the chain must be CREATED.
 
     `created` is the maps.toml row's own `created = true` -- an area that asked
@@ -942,6 +1128,36 @@ def resolve_or_create(ar, file_id, created):
     id does not resolve" is also what a WRONG id looks like, and until 2026-08-20
     that was this command's loudest refusal. A row that does not claim to be
     created keeps that refusal.
+
+    AND THE FALL-THROUGH IS NOT SHAPE-ONLY ANY MORE (R2, WORLDMAPS residuals).
+    `map_chain` checks that a chain LOOKS like a map -- head flags 259, a
+    non-zero `nextStream`, a partner carrying flags 1 -- and 349 retail maps in
+    the owner's own archive look exactly like that. So for a `created = true`
+    row whose id already binds, this branch fired identically for OUR chain and
+    for a genuine ArenaNet map that happens to sit under the id, and the second
+    case installed our geometry over somebody's live area with no line of output
+    to distinguish it. The claim "this file is ours" came from `content/`, which
+    knows nothing about which copy is in front of it.
+
+    So the claim now has to be EVIDENCED against the archive: the allocation
+    journal `create_chain` wrote, describing this id and these exact two rows
+    and bound to the copy in front of us (`created_evidence`). No journal, or
+    one that describes something else, and this REFUSES naming what is actually
+    there -- the rows, their flags and their sizes -- because the remedy depends
+    on what a person makes of them.
+
+    THE CASE THIS MUST NOT BREAK is the idempotent re-deploy, which is the loop
+    an author actually runs: build, install, look, change the shape, install
+    again. That run finds its own journal beside the archive and passes, and
+    `test_deploy.py` section 10 drives exactly it. SO IS THE SAME LOOP ON A COPY
+    of the archive -- staged into a run directory, or copied from `run-live/` --
+    which the first version of this guard refused, because it joined on the
+    absolute path `datalloc` records rather than on the bytes the allocation put
+    in the file. `allocation_recorded` reads the archive now.
+
+    `here`/`tag` say where to look and default to None, which for a `created`
+    row means NO evidence can be found and the refusal fires. Fail-closed on
+    purpose: a caller that did not think about it is the caller this is for.
     """
     chain = map_chain(ar, file_id)
     if chain is not None:
@@ -949,7 +1165,45 @@ def resolve_or_create(ar, file_id, created):
         # map row, and re-deploying an area is the normal iterating loop -- the
         # second run replaces the partner in place and finds the head already
         # armed. Nothing about a row's origin survives into how it is written.
-        return resolve_rows(ar, file_id), False
+        rows = resolve_rows(ar, file_id)
+        if created and created_evidence(ar.path, here, tag, file_id,
+                                        rows[0], rows[1]) is None:
+            head, partner = chain
+            raise Refused(
+                f"file id {file_id:#x} ALREADY BINDS a map chain in this "
+                f"archive -- head row {head.index} ({head.size} B, flags "
+                f"0x{head.flags:04X}), partner row {partner.index} "
+                f"({partner.size} B, flags 0x{partner.flags:04X}, compression "
+                f"{partner.compression}) -- and nothing here shows that WE made "
+                f"it.\n"
+                f"  This area's maps.toml row says `created = true`, which is a "
+                f"claim about where the file came from and is made in "
+                f"content/, against no archive in particular. `map_chain` "
+                f"checks the SHAPE, and 349 retail maps in the owner's own copy "
+                f"have exactly this shape -- so installing here would displace "
+                f"a live ArenaNet area while every line of output said the "
+                f"word 'created'.\n"
+                f"  The evidence this wants is the allocation journal "
+                f"`{tag or '<area>'}_alloc.json`, beside the archive or beside "
+                f"--out, describing THIS id and THESE two rows. It is written "
+                f"by the run that allocated the chain and it is the only record "
+                f"that survives; the 24-byte MFT row has no field for who made "
+                f"it.\n"
+                f"  THE JOURNAL TRAVELS WITH THE ARCHIVE, so start there. A "
+                f"whole-file copy of a Gw.dat -- a staged run directory, or "
+                f"RUNBOOK's `Copy-Item run-live\\<build>\\Gw.dat "
+                f"run\\<build>\\Gw.dat` -- carries this chain with it and is "
+                f"still ours; the check follows it, because it asks whether "
+                f"THIS file holds the file-id record the journal recorded "
+                f"rather than what the file is called. What does not follow is "
+                f"a journal left behind in the directory the archive was copied "
+                f"FROM. Copy `{tag or '<area>'}_alloc.json` next to this "
+                f"archive (or next to --out) and run it again.\n"
+                f"  If the journal is genuinely gone, that is not recoverable "
+                f"from here: allocate under a fresh id (`datalloc.py "
+                f"--next-id`, which skips both spellings) and point the "
+                f"maps.toml row at it.")
+        return rows, False
     if not created:
         raise Refused(
             f"file id {file_id:#x} does not resolve in this archive, and its "
@@ -1083,7 +1337,39 @@ def create_chain(dat, file_id, plain, stream, compression, here, tag,
     because nothing on disk records it afterwards -- the 24-byte MFT row has no
     entitlement field, and `deploy.resolve_rows` recomputes a row's ceiling from
     its CURRENT size on every later run.
+
+    AN EXISTING JOURNAL IS REFUSED, FIRST, BEFORE ANY FILE IS TOUCHED (R3).
+    `datalloc`'s own CLI has refused this since it was written -- and this path
+    never went through it. `create_chain` calls the `alloc()` API directly, so
+    `_journal_path`'s check (`datalloc.py`, `_main`) was bypassed and a second
+    create with the same area name truncated the first one's journal at its
+    first record, then printed the file it had just destroyed as the way back.
+    The reasoning is `datalloc`'s and is quoted rather than paraphrased: A
+    JOURNAL IS THE ONLY WAY BACK FROM AN ALLOCATION. Overwriting one leaves the
+    edits it recorded applied forever, and a later `--revert` of the new file
+    would report success having restored none of them.
+
+    It is checked FIRST -- before the spill, before the plan -- because a run
+    that cannot be made revertible has not begun. That is a deliberate exception
+    to the spill-before-plan ordering below: the spill exists so that a chain
+    the ALLOCATOR refuses still leaves behind the bytes it refused, and this
+    refusal is about the operator's directory rather than about the chain.
     """
+    journal = alloc_journal_path(here, tag)
+    if os.path.exists(journal):
+        raise Refused(
+            f"{journal} already exists, and this will not write over it.\n"
+            f"  A journal is the only way back from an allocation. Overwriting "
+            f"one leaves the edits it recorded applied forever, and a later "
+            f"--revert of the new file would report success having restored "
+            f"none of them.\n"
+            f"  That is `datalloc`'s own refusal (its `_journal_path`), and it "
+            f"has always been CLI-only -- this command calls `alloc()` "
+            f"directly, so it was bypassed until 2026-08-20.\n"
+            f"  It is also the record `resolve_or_create` reads to prove a "
+            f"created chain is ours, so a clobbered one costs both the undo and "
+            f"the evidence. Move or delete it deliberately, or deploy with "
+            f"--out pointing somewhere else.")
     spill_stream(here, tag, stream, compression)
     # INSIDE A REFUSAL, because building the streams is now a place that can
     # refuse. `create_streams` puts `reserve` on a `datalloc.Stream`, and
@@ -1121,7 +1407,6 @@ def create_chain(dat, file_id, plain, stream, compression, here, tag,
               f"area declares no `reserve_bytes`, so the row gets what the "
               f"payload needs and a larger map later will relocate it")
 
-    journal = os.path.join(here, f"{tag}_alloc.json")
     try:
         plan = datalloc.alloc(dat, streams, file_id, journal, confirm=True)
     except datalloc.Refused as exc:
@@ -1463,6 +1748,34 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
     return verdict, note
 
 
+def head_is_armed(dat, head_row):
+    """Is this map head ALREADY the zero-length re-bloat trigger? -> bool
+
+    ASKED OF THE ARCHIVE, WHICH IS THE WHOLE POINT (R1). `rebloat --arm` refuses
+    a zero-length head -- rightly, since it cannot record a baseline mesh from a
+    row that has none, and a second arm would overwrite the first journal with
+    nothing. But "already armed" is not an error to `deploy`: the client
+    recompiles on load either way, and this command is meant to be run
+    repeatedly while iterating on a shape. The version before this guard turned
+    every re-run after an interrupted one into a dead end.
+
+    A CREATED HEAD IS BORN ARMED and lands here already zero length, so it takes
+    the same branch for the same reason. The archive is asked rather than
+    `create` ON PURPOSE: "we just made it empty" is our word for it, and
+    `head.size == 0` is the row's -- the stronger of the two, and the one that
+    still holds if a create half-ran, if a client rewrote the head between two
+    deploys, or if the caller threaded the wrong flag.
+
+    Factored out of `main` in 2026-08-20's residual pass for one reason: the
+    guard was live and untestable, three lines inside a function that needs a
+    vault, an archive, a donor and a content row to reach. It is the same
+    predicate, on the same field, asked at the same moment.
+    """
+    with Archive(dat) as ar:
+        head = next(e for e in ar.entries if e.index == head_row)
+        return head.size == 0
+
+
 def resolve_rows(archive, file_id):
     """(head row, partner row, partner reservation). By FILE ID, never remembered."""
     row = file_id_table(archive).get(file_id)
@@ -1557,6 +1870,13 @@ def main(argv=None):
 
     # 2. borrow
     dat = args.dat or os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
+    # HOISTED ABOVE THE ARCHIVE, and it used to be computed just before the
+    # write. `resolve_or_create` now needs the directory this run's build
+    # products live in, because that is where `<area>_alloc.json` -- the record
+    # that a created chain is OURS -- was written by the run that allocated it.
+    # The expression is unchanged and depends on nothing the archive says.
+    out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
+    here = os.path.dirname(out)
     with Archive(dat) as ar:
         biome_row = _donor_row(ar, area, "biome donor",
                                "donor_file_id", "donor_row")
@@ -1582,7 +1902,8 @@ def main(argv=None):
         # not distinguish the case it was run to preview. See create_note().
         bound = file_id_table(ar, raw=True).get(file_id)
         rows, create = ((None, False) if not args.install
-                        else resolve_or_create(ar, file_id, created_row))
+                        else resolve_or_create(ar, file_id, created_row,
+                                               here=here, tag=args.area))
 
     # 3. assemble
     report = assemble(area, heights, donor, dim)
@@ -1613,7 +1934,6 @@ def main(argv=None):
     if bud:
         print(f"  {bud}")
 
-    out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
     if args.out or args.install:
         with open(out, "wb") as fh:
             fh.write(report.blob)
@@ -1624,7 +1944,6 @@ def main(argv=None):
         return 0
 
     if args.install:
-        here = os.path.dirname(out)
         if create:
             print(f"\ncreating file id {file_id:#x} in {dat}: nothing binds it, "
                   f"and this area's map row asked to own its file")
@@ -1651,10 +1970,9 @@ def main(argv=None):
         # A CREATED HEAD IS BORN ARMED and lands here already zero length, so
         # this takes the same branch for the same reason. It is asked of the
         # ARCHIVE rather than of `create` on purpose: "we just made it empty" is
-        # our word for it, and `head_now.size == 0` is the row's.
-        with Archive(dat) as ar:
-            head_now = next(e for e in ar.entries if e.index == head_row)
-            already = head_now.size == 0
+        # our word for it, and `head.size == 0` is the row's. See
+        # `head_is_armed`, which is that question and nothing else.
+        already = head_is_armed(dat, head_row)
         if already:
             print("  the head is already zero length -- already armed, so the "
                   "client will recompile; not arming twice")

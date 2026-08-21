@@ -248,3 +248,77 @@ usable run measures 2,892,800 B — *unchanged* after the 2026-08-17
 extent-projection fix that `studies/archivewrite` §1.5 says should have withheld
 it. Either the fix does not reach that run (a live gap) or §1.5's diagnosis
 needs amending. Re-measured read-only 2026-08-20; recorded, not resolved.
+
+## The W3 residual guards, closed. LANDED 2026-08-20
+
+**OBSERVED (offline).** All five residuals W3 recorded, plus the typed refusal
+W5 deferred:
+
+- **R1** the born-armed guard (deploy.py reads the ARCHIVE's own `head.size == 0`
+  rather than trusting `create`) was live but untested — now tested both ways.
+- **R2** `created = true` beside an id that BINDS could silently return to
+  displacing a retail map, because `map_chain` checks shape only. The install
+  now requires evidence the chain is OURS. **The skeptic caught the first
+  design binding that evidence to the archive's PATH**, which refused an honest
+  re-deploy of our own chain on a copy — so it binds to the archive's own BYTES
+  instead: the `<II`(file_id, head_row) file-id record at the offset the alloc
+  journal recorded, which survives a whole-file copy, a rename and a partner
+  relocation. That is the cage's lesson (`dhbuild` reads the bytes, never the
+  filename) applied on the archive axis. The refusal now names the recoverable
+  state first — copy the journal next to the archive — with "allocate under a
+  fresh id" as the last resort it actually is.
+- **R3** deploy's create path bypassed the refusal datalloc's CLI documents as
+  "the only way back from an allocation" and could truncate an existing
+  `<area>_alloc.json`; it refuses now, before the spill.
+- **R4** contentids decided the created-row skip from the client table alone,
+  before the server side was consulted, so a real divergence read as a benign
+  pre-creation state. It consults both now.
+- **R5** three of `map_chain`'s five refusals had no fixture; one each.
+- **R6** `_grow_gate` gained a TYPED refusal so deploy no longer joins on
+  datwrite's message text (the text markers stay as a documented fallback, and
+  datwrite's messages and behaviour are byte-identical for every existing
+  caller).
+
+**And a mutation sweep found what review argued about**: three of the four
+structural conjuncts `allocation_recorded` documents were exercised by nothing —
+drop any one and the suite stayed green. One bent-journal fixture each (head
+flags 259→3, nextStream 17→18, partner flags 1→3) plus a CONTROL that rewriting
+a field to the value it already held is still evidence. Post-fix the sweep reads
+1+ red per conjunct, 0 for the control.
+
+**One regression this pass introduced and the orchestrator caught at
+integration, worth recording because the near-miss is the lesson**: a new
+"the check produced findings at all" assertion in `test_contentids` turned a
+DOCUMENTED environmental state — another session's client holding a 4 GB copy
+open, which the W4 sheet names — into a red suite, where the same file had
+skipped and stayed green before. It was nearly waved off as that known flake;
+the control that refuted the excuse was running HEAD's own version against the
+same locked archive and watching it pass. The guard now skips when nothing
+could be READ and still goes red when an archive was read and measured nothing
+— verified by driving the readable-but-empty case, which stays red. Floors:
+`test_deploy` 167→203, `test_datwrite` 212, `test_contentids` 29.
+
+## WORLDMAPS-W7 — the region walked. STAGED
+
+The question: does the client's compiler build a mesh from an authored map an
+order of magnitude larger than anything it has compiled for us, and does the
+flood fill's connectivity pruning behave the same over ~64× the cells? Nothing
+offline answers it — W6 measured what the map COSTS, not what the client does
+with it.
+
+The sheet is `vault/research/worldmaps/WORLDMAPS-W7-RUN.md`, sized from W6's
+measured ladder re-run for the note (256×256 = 142,374 B authored → 4,912 B
+comp-8 with 8 trees, ten blocks, 65,536/65,536 exact) with its own fresh
+capacity reading, a fresh file id (0x5F0B1), a label (map 165, the
+field-identical sibling of W4's 166), and the full read-only `plan_alloc`.
+**Copy chosen deliberately**: a throwaway from the 38797/C2 line, because W7
+installs exactly ONE created map and that lineage keeps dims as the single
+variable against W4's 64×64 result — the 38833 line's eight-map slack is for
+multi-area work, and a client build must match its archive lineage.
+
+**No trapezoid COUNT is predicted**: nothing has measured one at this scale, and
+a predicted count would be a check that cannot fail. The sheet carries both
+procedural fixes the last two runs cost: **cage a fresh run directory** (W4's
+first launch was refused fail-closed — the firewall cage is per-path) and
+**split the invocations so `Gw.log` is banked between the compile run and the
+serve run** (the evidence W2 lost). Owner-driven, on a go-ahead.
