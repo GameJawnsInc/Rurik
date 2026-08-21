@@ -44,12 +44,12 @@ import checks  # noqa: E402
 import morale  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# 50 on a green run with the shipped `REVIVE_REFILL_DEFER`; 49 with
+# 61 on a green run with the shipped `REVIVE_REFILL_DEFER`; 60 with
 # `RURIK_REVIVE_DEFER=0`, because section 6's revive branch checks one thing
 # when the refill is immediate and two when it is deferred. The floor is the
 # smaller of the two REAL runs rather than the larger, since a floor above what
 # a healthy run produces is a test that fails for being configured differently.
-LEDGER = checks.Ledger("morale and death penalty", floor=49)
+LEDGER = checks.Ledger("morale and death penalty", floor=60)
 
 # THE OBSERVATION, pinned as literals so this file states what it is testing
 # against rather than deriving it from the code under test. Capture
@@ -351,8 +351,82 @@ def main():
               "43 of 43 retail sightings carry 100 in this field; we sent 0, "
               "which is not a legal morale at all -- the range is 40..110")
 
-    # ---- 9. the shipped world is unchanged ---------------------------------
-    print("\n9. nothing above moved the default world")
+    # ---- 9. the grace window: a second death inside it is free -----------
+    print("\n9. dying again while standing up costs nothing")
+    LEDGER.ok(morale.death_is_free(1000.0, 0.0) is False,
+              "the FIRST death of a session is never free",
+              "revived_at 0 means never revived; answering that with "
+              "arithmetic instead of a guard is how a server quietly eats the "
+              "first death of every session")
+    LEDGER.ok(morale.death_is_free(1002.0, 1000.0) is True,
+              "2 s after a resurrection is inside the window", "")
+    LEDGER.ok(morale.death_is_free(1000.0 + morale.RESURRECTION_GRACE - 0.1,
+                                   1000.0) is True,
+              f"and so is {morale.RESURRECTION_GRACE - 0.1:.1f} s", "")
+    LEDGER.ok(morale.death_is_free(1000.0 + morale.RESURRECTION_GRACE,
+                                   1000.0) is False,
+              f"{morale.RESURRECTION_GRACE:.0f} s exactly is OUT",
+              "GWW says 14 seconds in PvE; the boundary is a decision and is "
+              "pinned here so it cannot drift by a tick")
+    LEDGER.ok(morale.RESURRECTION_GRACE == 14.0,
+              "and the window is the wiki's PvE figure",
+              f"{morale.RESURRECTION_GRACE} -- content/world.toml "
+              f"[player.morale].resurrection_grace, GWW 'Death Penalty' "
+              f"Exceptions")
+
+    authsrv.DEATH_PENALTY_FORCED = True
+    try:
+        state = {"map_id": 146, "level": 1}
+        authsrv.player_pools(state)
+        collect(authsrv.kill_player, state, 1, "first")
+        first = state["morale"]
+        LEDGER.ok(first == morale.BASELINE - morale.DEATH_STEP,
+                  "a real first death charges the full step", str(first))
+
+        # ...stand up, and die again immediately.
+        state["player_revived_at"] = time.time()
+        state["player_dead"] = False
+        sent = collect(authsrv.kill_player, state, 1, "again, at once")
+        LEDGER.ok(state["morale"] == first,
+                  "dying again inside the window leaves morale alone",
+                  f"{state['morale']} -- still {first}")
+        ops = [op for op, _v, _w in sent]
+        LEDGER.ok(authsrv.GAME_SMSG_AGENT_MORALE not in ops
+                  and authsrv.GAME_SMSG_PLAYER_ATTR_UPDATE not in ops,
+                  "and puts no morale message on the wire at all",
+                  f"{[hex(o) for o in ops]} -- a waived penalty that still "
+                  f"re-sends the maxima would look identical in the state and "
+                  f"different on the wire")
+        LEDGER.ok(state["player_dead"] is True,
+                  "the player is still DEAD, though",
+                  "the grace waives the penalty, not the death -- a free "
+                  "death that also failed to kill would be a very quiet bug")
+
+        # ...and once it expires, the next one costs again.
+        state["player_revived_at"] = time.time() - morale.RESURRECTION_GRACE - 1
+        state["player_dead"] = False
+        collect(authsrv.kill_player, state, 1, "after the window")
+        LEDGER.ok(state["morale"] == morale.after_death(first),
+                  "and a death past the window charges the full step again",
+                  f"{state['morale']} from {first}")
+
+        # the CONTROL that keeps the whole section honest: the revive path is
+        # what stamps the window, so a revive that forgot to would make every
+        # check above pass while the game rule never fires in a real session.
+        state2 = {"map_id": 146, "level": 1}
+        authsrv.player_pools(state2)
+        collect(authsrv.kill_player, state2, 1, "to be revived")
+        state2["player_died_at"] = 0.0
+        collect(authsrv.player_revive_due, state2, 1)
+        LEDGER.ok(state2.get("player_revived_at", 0.0) > 0.0,
+                  "CONTROL: the revive path stamps the window itself",
+                  "without this the grace can only ever fire in a test that "
+                  "sets the timestamp by hand")
+    finally:
+        authsrv.DEATH_PENALTY_FORCED = False
+
+    # ---- 10. the shipped world is unchanged ---------------------------------
+    print("\n10. nothing above moved the default world")
     LEDGER.ok(authsrv.DEATH_PENALTY_FORCED is False,
               "the force switch is off again", "a test that leaks a global "
               "into the next test in the same process is a haunted suite")

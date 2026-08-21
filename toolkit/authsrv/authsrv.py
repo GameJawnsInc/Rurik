@@ -4727,6 +4727,14 @@ ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 # close enough. Nothing here is a claim about retail.
 AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
 ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
+# ...and `--enemy-hit` overrides it for a run. This constant is OURS -- invented,
+# and the comment above has always said so -- which is what makes overriding it
+# an experiment knob rather than a falsified measurement. It exists for one
+# thing the default cannot reach: at 0.10 a death takes ~17 s, so a second death
+# always lands OUTSIDE the 14 s resurrection grace, and the rule a player
+# actually notices could not be watched in a session at all. A harder swing puts
+# the second death inside the window. Module-level default, per the PERSIST
+# lesson.
 # ONE TICK between the death bit clearing and the two pool refills, and the value is
 # MEASURED rather than chosen. The client checks
 # `min(f32 @ +0x130, +0x134) == 0.0` when a character is resurrected and logs
@@ -6539,6 +6547,10 @@ def player_pools(state):
     """
     state.setdefault("morale", morale.BASELINE)
     state.setdefault("morale_xp_bank", 0)
+    # When the player last stood up. 0.0 means never -- and `death_is_free`
+    # answers the falsy case FIRST, so the first death of a session can never
+    # fall inside a grace window that has not happened yet.
+    state.setdefault("player_revived_at", 0.0)
     state.setdefault("player_health", player_max_health(state))
     state.setdefault("player_dead", False)
     state.setdefault("player_died_at", 0.0)
@@ -6667,13 +6679,28 @@ def push_morale(send, state, conn_id, new_value, why):
 
 
 def death_penalty_due(send, state, conn_id):
-    """Charge the player for dying, if this map charges for it.
+    """Charge the player for dying, if this map charges for it and it is not free.
 
     Called from `kill_player` only, and AFTER the death bit -- the corpus's own
     order is status, then morale, then the maxima, all on one tick.
+
+    TWO GATES, and they refuse for different reasons. The map decides whether
+    deaths cost anything here at all (pre-Searing: no). The grace window decides
+    whether THIS death costs anything -- WIKI (GWW, "Death Penalty",
+    Acquisition/Exceptions): "Dying shortly after resurrection (5 seconds in
+    PvP, 14 in PvE)" never incurs one. Without it a party being wiped over and
+    over reaches the -60% floor in under a minute, every one of those deaths
+    landing while they are still standing up, which is a spiral the game
+    deliberately does not have.
     """
     if not map_death_penalty(state.get("map_id", -1)):
         return None
+    if morale.death_is_free(time.time(), state.get("player_revived_at", 0.0)):
+        since = time.time() - state["player_revived_at"]
+        print(f"[c{conn_id}] death penalty WAIVED: {since:.1f}s since the "
+              f"resurrection, inside the {morale.RESURRECTION_GRACE:.0f}s "
+              f"grace window", flush=True)
+        return player_morale(state)
     before = player_morale(state)
     after = morale.after_death(before)
     if after == before:
@@ -7270,6 +7297,10 @@ def player_revive_due(send, state, conn_id):
     # (test_guards section 6).
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
+    # THE GRACE WINDOW STARTS HERE, not at the refill: a player who is put back
+    # on their feet and killed again before they can act has not had a turn,
+    # and the deferred-refill experiment must not be able to move a game rule.
+    state["player_revived_at"] = time.time()
     state["player_health"] = player_max_health(state)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
     # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
@@ -11882,7 +11913,7 @@ def main():
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
-    global DEATH_PENALTY_FORCED
+    global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -12009,6 +12040,16 @@ def main():
                          "make every run depend on the runs before it. "
                          "Professions, skillbar and unlocks stay flag-"
                          "driven (charstore.py says why).")
+    ap.add_argument("--enemy-hit", type=float, default=None, metavar="FRACTION",
+                    help="How much of the player's MAXIMUM health a hostile "
+                         "swing takes, as a fraction. Default 0.10, which is "
+                         "~10 swings and ~17 s to a death -- longer than the "
+                         "14 s resurrection grace, so at the default a second "
+                         "death can never land inside the window and that rule "
+                         "cannot be watched at a client. This constant is ours "
+                         "and always said so, which is why overriding it is a "
+                         "knob rather than a lie. 0.35 gives a death in about "
+                         "6 s.")
     ap.add_argument("--death-penalty", action="store_true",
                     help="Charge -15%% morale for every player death in every "
                          "map, instead of asking the map. OFF by default and "
@@ -13067,6 +13108,14 @@ def main():
     PERSIST = a.persist
     if PERSIST:
         print(f"PERSIST: character store armed -- {charstore.store_dir()}")
+    if a.enemy_hit is not None:
+        if not 0.0 < a.enemy_hit <= 1.0:
+            raise SystemExit("--enemy-hit is a FRACTION of the player's "
+                             "maximum health, in (0, 1]")
+        ENEMY_HIT_FRACTION = a.enemy_hit
+        print(f"ENEMY HIT: {ENEMY_HIT_FRACTION:.2f} of the player's maximum "
+              f"per swing ({1 / ENEMY_HIT_FRACTION:.0f} swings to a death, "
+              f"~{ATTACK_INTERVAL / ENEMY_HIT_FRACTION:.0f}s)")
     DEATH_PENALTY_FORCED = a.death_penalty
     if DEATH_PENALTY_FORCED:
         print(f"DEATH PENALTY: forced ON for every map this session "

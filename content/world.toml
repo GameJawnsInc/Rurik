@@ -405,6 +405,7 @@ floor = 40
 ceiling = 110
 death_step = 15
 xp_per_percent = 75
+resurrection_grace = 14
 base_energy = 20
 base_health_level_1 = 100
 health_per_level = 20
@@ -435,6 +436,12 @@ equipped armor or weapon sets".
 xp_per_percent is the PvE counter -- 75 experience removes 1% of death penalty. The PvP
 counter (killing an enemy player removes 2% per living teammate) is deliberately absent:
 this server has no PvP and inventing the row would put an unreachable rule in the world.
+
+resurrection_grace is the one exception a player would actually notice at the keyboard:
+GWW's "Death Penalty" lists "Dying shortly after resurrection (5 seconds in PvP, 14 in
+PvE)" among the deaths that never incur a penalty. So a party that is being wiped repeatedly
+does not spiral -- the second death inside the window is free. 14 is the PvE figure and
+the only one here, for the same reason the PvP counter is absent.
 
 WHAT THIS ROW DOES NOT DECIDE: whether a death costs anything at all. That is the map's
 question, and pre-Searing -- every map this server ships -- never charges one. See the

@@ -5911,10 +5911,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
   energy regen, health max — with the delta carrying the wire's own
   `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
-  encoding through the codec. §8 pins the other half of the original
+  encoding through the codec. **§9 is the resurrection grace window** (GWW:
+  "Dying shortly after resurrection (5 seconds in PvP, 14 in PvE)" never incurs
+  a penalty): the boundary is pinned at both ends, the FIRST death of a session
+  is required not to be free — `revived_at == 0` answered by a guard rather
+  than by arithmetic, or a server eats everyone's first death — a waived death
+  is required to put NO morale message on the wire while still leaving the
+  player dead, and the CONTROL is that the revive path stamps the window
+  itself, without which the whole rule could only ever fire in a test that set
+  the timestamp by hand. §8 pins the other half of the original
   question: `0x00E9` field 10 stopped being one of the zeros this server
   sends, because retail carries 100 there in 43 of 43 sightings and 0 is
-  not a legal morale at all. Floor 49, against a green 50/49 across the two
+  not a legal morale at all. Floor 60, against a green 61/60 across the two
   revive configurations. No vault, no socket, no client),
   `toolkit/clientscan/test_moralestore.py` (the morale-store scanner, proven
   against a process this machine controls rather than against the game. It

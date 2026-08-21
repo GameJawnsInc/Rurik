@@ -225,6 +225,14 @@ GWW (page "Death Penalty", read 2026-08-20) states:
 - **Reset** when the party enters an outpost, when the party resigns, and between
   PvP matches. "Both Morale Boosts and Death Penalties remain until the party
   enters an outpost."
+- **A grace window after a resurrection.** "Dying shortly after resurrection
+  (5 seconds in PvP, 14 in PvE)" is on the same exception list, and it is the
+  one a player notices at the keyboard: without it a party being wiped over and
+  over reaches the −60% floor in under a minute, every one of those deaths
+  landing while they are still standing up. Implemented as
+  `[player.morale].resurrection_grace = 14` and `morale.death_is_free`, gated in
+  `death_penalty_due` — the second of the two gates there, the first being the
+  map. **Unit-tested; not yet watched at a client** (§7.1).
 - **Reduced in PvE by experience: 75 XP removes 1% DP.** (In PvP: killing an
   enemy player removes 2% per living teammate.)
 - Morale Boosts counter DP: if the boost exceeds the penalty the difference
@@ -315,7 +323,25 @@ us visibly. It showed 14. Morale is a *display* to the client and an
 *arithmetic* to the server, and a server that sends the percentage without the
 recomputed pools ships a death penalty that costs the player nothing.
 
-**What the run also cost, worth writing down.** The indicator sits at
+### 7.1 Owed: a real death, with the penalty armed
+
+The probe runs above put morale on the wire by hand. What has not been watched
+at a client is the whole path firing from a **real death** — an enemy killing
+the player, `kill_player` charging the penalty, the corner showing `−15%`, the
+bars shrinking to 85/22, and a second death inside the 14 s window costing
+nothing. The server side is implemented and unit-tested (`test_morale.py` §5,
+§6, §9); the run needs `--enemy --death-penalty`, and `--enemy-hit 0.35` to make
+the second death land inside the grace window at all (at the default 0.10 a
+death takes ~17 s, so a second one can never be free and the rule cannot be
+seen).
+
+The first attempt at that run died for a reason unrelated to any of this: a
+parallel session's `session.py --replace` pre-flight stopped what it took to be
+stale python listeners on 6601 and 6112, which were this session's live webgate
+and authsrv, and the client answered with `Code=058`. Nothing was learned about
+morale and nothing about the code is in doubt; the run is simply still owed.
+
+**What the earlier runs also cost, worth writing down.** The indicator sits at
 (10,32)–(60,82) — above the party window, under the title bar. The first crop
 of these frames started at y=100, found nothing, and for several minutes read
 as a refutation of P1 *and* P2. The HUD also repaints on a delay of roughly

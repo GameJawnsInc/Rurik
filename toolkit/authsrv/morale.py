@@ -49,6 +49,12 @@ FLOOR = int(_ROW["floor"])              # -60% death penalty, the cap
 CEILING = int(_ROW["ceiling"])          # +10% morale boost, the cap
 DEATH_STEP = int(_ROW["death_step"])    # what one death costs
 XP_PER_PERCENT = int(_ROW["xp_per_percent"])
+# The grace window after a resurrection, in seconds. WIKI (GWW, "Death Penalty",
+# Acquisition/Exceptions): "Dying shortly after resurrection (5 seconds in PvP,
+# 14 in PvE)" never incurs one. It is the exception a player NOTICES: without it
+# a party being wiped repeatedly spirals to the -60% floor in under a minute,
+# and every one of those deaths happens while they are still standing up.
+RESURRECTION_GRACE = float(_ROW["resurrection_grace"])
 BASE_ENERGY = int(_ROW["base_energy"])
 BASE_HEALTH_LEVEL_1 = int(_ROW["base_health_level_1"])
 HEALTH_PER_LEVEL = int(_ROW["health_per_level"])
@@ -104,6 +110,21 @@ def effective_max(total, base, value):
 def after_death(value):
     """Morale after one death: -15, floored at the -60% cap."""
     return clamp(int(value) - DEATH_STEP)
+
+
+def death_is_free(now, revived_at):
+    """Is this death inside the post-resurrection grace window?
+
+    `revived_at` is when the player last stood up, or 0 / None if they never
+    have -- and the FIRST death of a session must never be free, which is why
+    the falsy case is answered before the arithmetic rather than by letting
+    `now - 0` be a very large number and happening to work. A server that ate
+    the first death would look like a working grace window and be a bug that
+    only shows up in the number a player ends the evening with.
+    """
+    if not revived_at:
+        return False
+    return 0.0 <= (float(now) - float(revived_at)) < RESURRECTION_GRACE
 
 
 def experience_credit(value, bank, gained):
