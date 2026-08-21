@@ -128,9 +128,9 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 13,
-              "thirteen maps load (map.166, WORLDMAPS-W3's created chain, "
-              "landed 2026-08-20)",
+    LEDGER.ok(world.census().get("map", 0) == 14,
+              "fourteen maps load (map.165, WORLDMAPS-W7's 256x256 created "
+              "chain, landed 2026-08-20 -- see the note beside ADDED)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -205,7 +205,17 @@ def main():
     # existing one either: until a create has run against a given copy, this row
     # resolves nowhere and deploy says so. Whether a retail client compiles a map
     # from a chain born this way is WORLDMAPS-W4 and is not settled.
-    ADDED = {143, 144, 280, 27, 166}
+    # 165 is WORLDMAPS-W7's created chain and it is 166's row one size class up:
+    # same KIND (an id -- 0x5F0B1 -- that binds nothing until deploy allocates
+    # it), same generator, same donors, same centre-seed rule, and deliberately
+    # NO `reserve_bytes`, because a created row with a reserved zero tail has
+    # never been read by a client and declaring one here would make a red result
+    # at 256x256 ambiguous between the size and the tail. What it changes is
+    # dims: 65,536 cells against 166's 4,096, which is 16x the largest map any
+    # client has compiled for this project under compression and a created chain
+    # together. Whether the client's compiler builds a mesh at that size is
+    # WORLDMAPS-W7 and is not settled.
+    ADDED = {143, 144, 280, 27, 166, 165}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
@@ -216,6 +226,12 @@ def main():
               "`created = true` -- which is the flag that lets deploy allocate "
               "rather than refuse an id that resolves nowhere",
               str(msc.get(166)))
+    LEDGER.ok(msc.get(165) == (0x5F0B1, (12288.0, 12288.0), 0, False)
+              and world.get("map", "165").get("created") is True,
+              "map 165 is WORLDMAPS-W7's CREATED row at 256x256: the id after "
+              "166's, spawned at the centre of the 24,576-unit rect it authors, "
+              "and `created = true` for the same reason 166 carries it",
+              str(msc.get(165)))
     LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
               "map 143 is C2's target row, spawned at the centre of the "
               "DELIVERED map's rect", str(msc.get(143)))

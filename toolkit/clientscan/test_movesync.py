@@ -93,12 +93,14 @@ as a test missing from TESTS.md, and this repo has shipped it three times
   compared the same tuple with `>`, which raised -- so 16 green sections were
   followed by a TypeError and one check that could never pass.
 """
+import ast
 import contextlib
 import io
 import json
 import os
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -121,8 +123,23 @@ import vaultpath  # noqa: E402
 # gate-1 displacements from build 38797's own bytes -- needs the vault's client
 # snapshot, so it and its one control skip without it (2 checks). 100 is the
 # bare-machine subset and is the floor.
+#
+# 100 -> 124 on 2026-08-21 with REALFIX-T1/T2/I1, read off two real green runs
+# on that date and not predicted: 174 with the vault present, 124 with
+# `RURIK_VAULT` pointed at an empty directory (7 declared skips). The 24 are
+# §17's wrap + floor + three controls for movetap's new `_selftest_chain` (5)
+# and §21's clock-anchor checks (19), all of which are pure logic, synthetic
+# files and one in-process `authsrv.Recorder` -- so every one of them runs on a
+# bare machine and belongs in the floor.
+#
+# 124 -> 127 later on 2026-08-21, off two more real green runs: 177 with the
+# vault, 127 with `RURIK_VAULT` empty (the same 7 skips). The three are the
+# float arm's MEDIAN control -- one 5 s outlier that moves a mean 36 u and a
+# median not at all, the estimator distinction having been guarded on the
+# truncated side only -- and an AST import guard on movetap.py and movesync.py,
+# which `import pefile` walked straight through on this machine.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=100)
+                       floor=127)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -177,14 +194,31 @@ WALL = "2026-08-19T00:00:00Z"
 # is the one that can legitimately not run (no pinned client snapshot in the
 # vault); it declares its own size and this file turns that into a LEDGER.skip.
 MOVETAP_SECTIONS = (
-    ("_selftest_fence_bytes", 28),
+    # 28 -> 44 on 2026-08-21: REALFIX-I1 added sixteen node-layout
+    # displacements, each encoded FROM the constant and matched at its VA in
+    # the appender (0x00605840), its allocator (0x00604BB0) and the walker
+    # (0x006056A0). This is also the number the section declares when it skips
+    # for want of a client snapshot, so it moves in one place.
+    # 44 -> 50 later the same day: the recycle test's OPERAND (0x00604BFF --
+    # the comment beside it named the block's oldest node and the bytes say
+    # its newest), the two SEVER sites and the block span that are the real
+    # reason a chain cannot dangle into a recycled block, and the COFF
+    # Characteristics word PTR_MAX's ceiling was asserted from in prose.
+    ("_selftest_fence_bytes", 50),
     ("_selftest_fence_refuses", 13),
     ("_selftest_fence_verdict", 7),
     ("_selftest_episodes", 7),
     ("_selftest_flip_denominator", 8),
     ("_selftest_gate1", 26),
     ("_selftest_early_outs", 11),
-    ("_selftest_naming", 7),
+    ("_selftest_naming", 8),
+    # 28 -> 44: a mutation lane opened ten holes this section could not see --
+    # a short read, the sync copy's plane word against the w word beside it,
+    # a legitimate allocation above the 2 GB line, the module-global rebinding
+    # the landing commit wrongly credited to section 17 below, the recycle
+    # hazard, the future tolerance's real ground, the read budget, and the
+    # printer's OUTPUT rather than its call site.
+    ("_selftest_chain", 45),
 )
 MOVESYNC_SECTIONS = (
     ("_selftest_jump_tally", 14),
@@ -1356,6 +1390,30 @@ def main():
              "entirely, so folding it in inflates p and deflates the aliasing "
              "ratio -- the wrong direction for a guard")
 
+    _wrap(movetap, "_selftest_chain",
+          "REALFIX-I1: the history chain walks to a NULL terminator and every "
+          "other outcome names itself",
+          "the chain is the operand of the client's own match test, and a "
+          "torn read that returned a short chain would produce \"no node "
+          "within MATCH_RADIUS of q\" for free -- which is the sentence that "
+          "revives candidate B")
+    _control(movetap, "HIST_SEP_GATE", 1e9, "_selftest_chain",
+             "the sep > 250 u gate is load-bearing in BOTH directions",
+             "raising it past every fixture makes the healthy walk read as "
+             "`not-attempted:below-gate`, which is what a gate quietly set too "
+             "high would do to a whole live run -- the chain would never be "
+             "read and the file would look healthy")
+    _control(movetap, "HIST_MAX_NODES", 2, "_selftest_chain",
+             "and so is N: a chain longer than N must say TRUNCATED",
+             "with N=2 the healthy 4-node fixture stops mid-chain, and a walk "
+             "that called that `ok` would licence a null over a polyline it "
+             "never finished reading")
+    _control(movetap, "PTR_MIN", 0, "_selftest_chain",
+             "and so are the pointer bounds",
+             "with no low bound a head of 0x400 -- inside the 64 KB "
+             "null-guard region no Windows process ever maps -- reads as a "
+             "node address rather than as garbage")
+
     # ---------------------------------------------------------------------
     print("\n19. movesync's C4/C5/C9 sections, in the SUITE")
     # Same argument, the other file. These three were reachable only through
@@ -1503,6 +1561,304 @@ def main():
              "movesync sums a bare `bad` rather than routing through "
              "`checks.py`, so the summation is the only thing carrying a "
              "failure out, and it is worth seeing it carry one")
+
+    # ---------------------------------------------------------------------
+    print("\n21. REALFIX-T1: which clock the offset came from, and the residual")
+    # THE WHOLE 1.00 s WAS ON ONE SIDE AND IT WAS ONE LINE. `authsrv.py:8396`
+    # stamped `wall` truncated to the second, so `offset_from_stamps` could only
+    # bound the offset from below and the measured spread was 0.999920 s (L1 arm
+    # A) / 0.999777 s (arm B) -- 288 units at run speed, on every wire<->movetap
+    # pairing this arc has made. `wall_unix` is the same instant at 1e-7 s
+    # resolution. What this section is really about is that the two estimators
+    # are NEVER MIXED and that the file SAYS which one it used: a run that
+    # silently fell back to the truncated stamps produces identical-looking
+    # numbers everywhere downstream.
+    T0 = 1_755_000_000.5
+
+    def cap(path, rows):
+        return write_capture(path, rows)
+
+    with tempfile.TemporaryDirectory() as td:
+        # A post-T1 capture: every row carries BOTH stamps, exactly as
+        # `Recorder.event` now writes them.
+        # 40 rows at a 0.317 s cadence, not a handful: the truncated
+        # estimator's residual approaches 1.00 s only as the rows sample
+        # `frac(unix)` densely, and six rows reach 0.76 -- which would have
+        # understated the defect this whole delta is about. A real capture
+        # carries hundreds.
+        ts = [round(0.317 * k, 3) for k in range(40)]
+        post = cap(os.path.join(td, "post.jsonl"), [
+            dict(selfreport(t, 100.0 * i, 200.0 * i),
+                 wall=time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                    time.gmtime(int(T0 + t))),
+                 wall_unix=T0 + t)
+            for i, t in enumerate(ts)])
+        # A pre-T1 capture: the truncated stamp and nothing else. Every capture
+        # in the vault is one of these, so the fallback is not a corner case --
+        # it is the whole existing corpus.
+        pre = cap(os.path.join(td, "pre.jsonl"), [
+            dict(selfreport(t, 100.0 * i, 200.0 * i),
+                 wall=time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                    time.gmtime(int(T0 + t))))
+            for i, t in enumerate(ts)])
+
+        _reps, w_post, _s = movesync.load_wire_reports(post)
+        _reps, w_pre, _s = movesync.load_wire_reports(pre)
+        d_post = movesync.offset_detail(w_post)
+        d_pre = movesync.offset_detail(w_pre)
+
+        check(d_post["source"] == movesync.OFFSET_SRC_UNIX
+              and d_pre["source"] == movesync.OFFSET_SRC_TRUNC,
+              f"a capture carrying `wall_unix` is read from it "
+              f"({d_post['source']}) and one without falls back "
+              f"({d_pre['source']})",
+              "the preference is the whole delta; a loader that ignored the "
+              "float stamp would leave the 1.00 s in place with nothing saying so")
+        check(abs(d_post["offset"] - T0) < 1e-6,
+              f"and the float offset is the truth to the microsecond "
+              f"({d_post['offset'] - T0:+.9f} s)",
+              "per-row `wall_unix - t` IS the offset; anything else here means "
+              "the loader is deriving rather than reading it")
+        check(d_post["spread"] < 1e-6 and d_post["spread"] * movesync.RUN_SPEED < 0.3,
+              f"the achieved residual is {d_post['spread'] * 1000.0:.6f} ms = "
+              f"{d_post['spread'] * movesync.RUN_SPEED:.4f} u at "
+              f"{movesync.RUN_SPEED:.0f} u/s -- REALFIX section 2.2's "
+              f"\"< 1 ms (< 0.3 u)\" line, demonstrated",
+              "this is the number the whole clock-anchor delta exists to move")
+        check(0.9 < d_pre["spread"] < 1.0,
+              f"while the truncated estimator's residual is "
+              f"{d_pre['spread']:.6f} s = "
+              f"{d_pre['spread'] * movesync.RUN_SPEED:.0f} u -- the 1.00 s "
+              f"REALFIX section 2.1 measured, reproduced from a synthetic file",
+              "if the fallback did NOT show ~1 s here the fixture is not "
+              "exercising the defect and the comparison above means nothing")
+        check(d_pre["offset"] <= T0 and T0 - d_pre["offset"] < 1.0,
+              f"and the fallback still estimates from BELOW "
+              f"({d_pre['offset'] - T0:+.3f} s), unchanged",
+              "every capture in the vault is a pre-T1 one, so the old "
+              "estimator's behaviour is not free to move")
+
+        # THE FLOAT ARM'S ESTIMATOR IS A MEDIAN, AND UNTIL NOW NOTHING SAID SO.
+        # `offset_detail`'s docstring makes median-vs-max the whole design of
+        # the two arms, and the TRUNCATED arm's max is well guarded (swapping it
+        # for a mean reddens five checks including a vault replay). The float
+        # arm had no such control: every fixture above is exact by construction,
+        # so mean == median in all of them and substituting one for the other
+        # was invisible. A median is chosen precisely to survive a scheduling
+        # outlier, so the fixture now plants one: 39 rows on the truth and one
+        # row 5 s late. The mean moves 125 ms = 36 u; the median does not move
+        # at all.
+        out_rows = [dict(selfreport(t, 0.0, 0.0),
+                         wall=time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                            time.gmtime(int(T0 + t))),
+                         wall_unix=T0 + t + (5.0 if i == 7 else 0.0))
+                    for i, t in enumerate(ts)]
+        outl = cap(os.path.join(td, "outlier.jsonl"), out_rows)
+        _reps, w_out, _s = movesync.load_wire_reports(outl)
+        d_out = movesync.offset_detail(w_out)
+        offs = sorted(w_out.unix)
+        mean = sum(offs) / len(offs)
+        check(abs(d_out["offset"] - T0) < 1e-6 and abs(mean - T0) > 0.1
+              and abs(d_out["offset"] - mean) > 0.1,
+              f"one 5 s scheduling outlier in {len(offs)} rows moves the MEAN "
+              f"{(mean - T0) * 1000.0:+.0f} ms = "
+              f"{(mean - T0) * movesync.RUN_SPEED:+.0f} u and moves the median "
+              f"{(d_out['offset'] - T0) * 1e6:+.1f} us -- the float arm takes "
+              f"the median, which is the whole reason it is not a mean",
+              "the two estimators were distinguished in prose and by one "
+              "guarded arm only; this is the other arm")
+
+        # NEVER SILENTLY MIX. A file with both kinds of row uses one family and
+        # counts the other; averaging them would give a number that is neither.
+        mixed = cap(os.path.join(td, "mixed.jsonl"), [
+            dict(selfreport(t, 0.0, 0.0),
+                 wall=time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                    time.gmtime(int(T0 + t))),
+                 **({"wall_unix": T0 + t} if i >= len(ts) - 2 else {}))
+            for i, t in enumerate(ts)])
+        _reps, w_mix, _s = movesync.load_wire_reports(mixed)
+        d_mix = movesync.offset_detail(w_mix)
+        check(d_mix["source"] == movesync.OFFSET_SRC_UNIX
+              and d_mix["n"] == 2 and d_mix["n_trunc"] == len(ts)
+              and abs(d_mix["offset"] - T0) < 1e-6,
+              f"a MIXED file uses the {d_mix['n']} float row(s) and merely "
+              f"counts the {d_mix['n_trunc']} truncated ones "
+              f"({d_mix['offset'] - T0:+.9f} s from the truth)",
+              "pooling the two families gives an offset biased by the mix "
+              "ratio -- neither estimator, and no way to tell from the number")
+
+        # THE LINE ITSELF, read back out of stdout. A residual computed and not
+        # printed is the assumption T1 exists to remove, and `offset_from_stamps`
+        # is where every consumer in the tree goes through.
+        for d, want in ((d_post, "wall_unix"), (d_pre, "truncated")):
+            line = movesync.offset_line(d)
+            check(want in line and ("REALFIX-T1" in line),
+                  f"the printed line names its estimator: {line.strip()[:96]}",
+                  "which one was used is invisible in every downstream number, "
+                  "so if it is not on this line it is nowhere")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            off, spread = movesync.offset_from_stamps(w_post)
+        printed = buf.getvalue()
+        check((off, spread) == (d_post["offset"], d_post["spread"])
+              and "wall_unix" in printed
+              and f"{d_post['spread'] * 1000.0:.3f} ms" in printed,
+              "`offset_from_stamps` still returns the two-value contract every "
+              "caller unpacks, AND announces the source and residual",
+              f"returned {(off, spread)} and printed {printed!r} -- a third "
+              f"return value would have broken movesync.pair, resyncscore, "
+              f"grantsim and this file's own section 1")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            movesync.offset_from_stamps(w_post, announce=False)
+        check(buf.getvalue() == "",
+              "and `announce=False` really is silent, for the one caller that "
+              "prints the line itself",
+              "movesync.main() formats its own header; two copies of the line "
+              "would read as two different measurements")
+
+        # A plain list -- which is what every synthetic fixture and every
+        # pre-T1 caller hands it -- must take the fallback and NOT raise.
+        d_list = movesync.offset_detail([10.0, 10.5, 9.8])
+        check(d_list["source"] == movesync.OFFSET_SRC_TRUNC
+              and d_list["offset"] == 10.5,
+              "a plain `list` of truncated offsets still works unchanged "
+              f"({d_list['source']}, max {d_list['offset']})",
+              "`getattr(walls, 'unix', ())` IS the fallback test; a list has no "
+              "such attribute, so there is no version flag to get wrong")
+        check(movesync.offset_detail([])["source"] is None
+              and movesync.offset_from_stamps([], announce=False) == (None, None),
+              "and no stamps at all still yields None rather than a confident 0",
+              "a zero offset would pair every report against the wrong instant")
+
+        # T1's OTHER HALF, on the server: the row really carries both stamps.
+        rows = [json.loads(l) for l in open(post, encoding="utf-8")]
+        check(all("wall" in r and "wall_unix" in r for r in rows),
+              "the post-T1 row shape keeps `wall` beside `wall_unix`",
+              "every existing consumer and every vault fixture reads `wall`; "
+              "replacing it rather than adding beside it would strand the corpus")
+
+        # --- AND THE WHOLE THING END TO END, THROUGH THE REAL RECORDER ------
+        # The fixtures above are hand-built and their `wall_unix` is exact by
+        # construction, so their 0.000 ms residual measures the fixture. This
+        # writes a capture with `authsrv.Recorder` ITSELF -- the same two
+        # adjacent clock reads inside `event()` that a live run makes -- and
+        # loads it back through `load_wire_reports`. What it measures is the
+        # real thing: `perf_counter` against the system clock, over the real
+        # scheduling jitter between the two calls. No socket, no client, no
+        # server: `Recorder` only needs a directory.
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
+        try:
+            import authsrv                                   # noqa: E402
+        except Exception as exc:                             # pragma: no cover
+            LEDGER.skip("21. the real Recorder",
+                        f"authsrv would not import: {type(exc).__name__}: {exc}")
+        else:
+            rdir = os.path.join(td, "rec")
+            rec = authsrv.Recorder(rdir, 9)
+            for i in range(200):
+                rec.event("decoded", opcode=movesync.OP_SET_HEADING,
+                          name="MOVE_SET_HEADING",
+                          values=[32829, [100.0 * i, 200.0 * i], 0,
+                                  [0.0, 765.0], 1])
+            rec.meta.close()
+            rec.raw.close()
+            wrote = [f for f in os.listdir(rdir) if f.endswith(".jsonl")]
+            live = os.path.join(rdir, wrote[0])
+            reps_r, w_real, _s = movesync.load_wire_reports(live)
+            d_real = movesync.offset_detail(w_real)
+            check(d_real["source"] == movesync.OFFSET_SRC_UNIX
+                  and d_real["n"] == len(reps_r) + 1,
+                  f"the real `Recorder` writes {d_real['n']} float-stamped "
+                  f"row(s) and the loader reads them",
+                  "n is the reports plus the origin row Recorder.__init__ "
+                  "emits; anything less means rows are losing the stamp")
+            check(d_real["spread"] < 0.001,
+                  f"REALFIX-T1 DEMONSTRATED END TO END: the offset spread over "
+                  f"{d_real['n']} real rows is "
+                  f"{d_real['spread'] * 1e6:.1f} us = "
+                  f"{d_real['spread'] * movesync.RUN_SPEED:.4f} u, against the "
+                  f"{d_pre['spread']:.3f} s / "
+                  f"{d_pre['spread'] * movesync.RUN_SPEED:.0f} u the truncated "
+                  f"stamp gives -- REALFIX section 2.2's \"< 1 ms (< 0.3 u)\" "
+                  f"clock term, measured rather than assumed",
+                  "this is the ONE number the whole clock anchor exists to "
+                  "move, and it is measured on the same two adjacent clock "
+                  "reads a live run makes")
+            trunc_real = movesync.offset_detail(
+                movesync.WallStamps(list(w_real), ()))
+            check(trunc_real["spread"] > 100.0 * d_real["spread"],
+                  f"and the SAME capture scored on its truncated stamps gives "
+                  f"{trunc_real['spread']:.3f} s -- "
+                  f"{trunc_real['spread'] / max(d_real['spread'], 1e-12):.0f}x "
+                  f"worse on the identical rows",
+                  "the same file, the two estimators, side by side: this is "
+                  "the comparison that says the improvement is the stamp and "
+                  "not the fixture. NOTE the truncated arm is FLATTERED here "
+                  "-- 200 rows written in a few ms span less than one second, "
+                  "so its spread is the span rather than the 1.00 s a real run "
+                  "reaches; the synthetic fixture above is where the full "
+                  "defect shows, and 100x is deliberately far below it")
+
+    # REALFIX-T2: the harness's leg table is the second clock, and it is
+    # ANOTHER +/-0.5 s = +/-143 u on every leg-to-capture mapping.
+    # A GREP THAT A COMMENT SATISFIES IS NOT A CHECK. Commenting out
+    # `kw["wall_unix"] = time.time()` left the source greps below GREEN -- the
+    # behavioural checks above caught it, which is why this is a hardening and
+    # not a hole, but a row that can only pass is the mirror of one that can
+    # only fail. Every grep in this block runs over LIVE lines only.
+    def _live(path):
+        return "\n".join(
+            l for l in open(path, encoding="utf-8").read().splitlines()
+            if not l.lstrip().startswith("#"))
+
+    sess = os.path.join(os.path.dirname(HERE), "harness", "session.py")
+    src_ss = _live(sess)
+    check(all(k in src_ss for k in ('"started_unix": started_unix',
+                                    '"ended_unix": ended_unix',
+                                    '"settled_unix": settled_unix')),
+          "REALFIX-T2: `walk_legs` records float leg stamps beside the "
+          "whole-second strings",
+          "the leg row's three stamps were whole-second, worth +/-0.5 s = "
+          "+/-143 u on every leg-to-capture mapping in both L1 lanes' analyses")
+    check(src_ss.count("started_unix = time.time()") == 1
+          and src_ss.count("ended_unix = time.time()") == 1
+          and src_ss.count("settled_unix = time.time()") == 1
+          and src_ss.index("settled_unix = time.time()")
+              > src_ss.index("time.sleep(settle)"),
+          "and `settled_unix` is read AFTER the settle sleep, not before it",
+          "a settled stamp taken before the sleep is the ended stamp under "
+          "another name, and the 1.5 s between them is the whole point")
+    src_as = _live(os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py"))
+    check('kw["wall_unix"] = time.time()' in src_as
+          and 'kw["wall"] = time.strftime' in src_as,
+          "REALFIX-T1: `Recorder.event` stamps `wall_unix` beside `wall`",
+          "the truncated stamp is the source of the whole 1.00 s spread and "
+          "the float one is one line beside it -- and this grep now runs over "
+          "LIVE lines, because commenting the stamp out left it green")
+
+    # PURITY, ASKED OF BOTH SYNTAX TREES. CLAUDE.md carve-out (1) scopes
+    # capstone/pefile to msghandler.py and codescan.py; neither of these is one
+    # of them, movetap's reader is pure ctypes, and both have to load on a bare
+    # machine. `import pefile` was planted at the top of movetap.py and this
+    # file, movetap --selftest, test_srclint and test_bareimport were ALL green,
+    # because both packages happen to be installed here. movetap guards itself
+    # in its own section 3; this is the same guard for movesync, and a second
+    # witness for movetap so the guard cannot be deleted from one place quietly.
+    for mod in ("movetap.py", "movesync.py"):
+        tree_m = ast.parse(open(os.path.join(HERE, mod), encoding="utf-8").read())
+        got = set()
+        for nd in ast.walk(tree_m):
+            if isinstance(nd, ast.Import):
+                got |= {al.name.split(".")[0] for al in nd.names}
+            elif isinstance(nd, ast.ImportFrom) and nd.module:
+                got.add(nd.module.split(".")[0])
+        bad_imp = got & {"capstone", "pefile", "PIL", "numpy"}
+        check(not bad_imp,
+              f"{mod} takes NO third-party import -- carve-out (1) names two "
+              f"files and this is not one of them",
+              f"found {sorted(bad_imp)}" if bad_imp
+              else f"{len(got)} module(s) imported, all stdlib or local")
 
     return LEDGER.verdict()
 

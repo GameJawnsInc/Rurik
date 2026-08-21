@@ -328,11 +328,28 @@ this skill does not scale."""
 # `data.attribValue[index] <= 12`, and CharData:202's bound of 13 on the
 # s_attribPoints lookup).
 #
-# THE POINT BUDGET IS NOT MODELLED -- said out loud rather than left implied.
-# We do not read the client's s_attribPoints cost table, we do not track spend,
-# and 0x0037 goes out as [0, 0] because that is what all 8 live samples carry.
-# Whether this spread is affordable at any level is a question this server
-# cannot currently ask.
+# THE POINT BUDGET IS MODELLED, since 2026-08-20 (84fd41d). This block is
+# rewritten rather than deleted because what it used to say was a list of four
+# limitations, and the same place is where their removal belongs: it said the
+# client's s_attribPoints cost table is not read, that spend is not tracked,
+# that 0x0037 goes out as [0, 0] on the strength of all 8 live samples, and
+# that whether this spread is affordable is a question this server cannot ask.
+#
+# All four have moved. The cost curve IS read -- content table
+# `attribute_cost`, extracted from the client's own s_attribPoints by
+# toolkit/clientscan/attribpoints.py. Spend IS tracked, per connection, by
+# toolkit/authsrv/attribspend.py. 0x0037 carries [available, points_total],
+# which for the ranks below is [27, 200] and not [0, 0]: the corpus grew to 13
+# captures and 48 sightings, and the eight [0, 0] samples turned out to be
+# eight LOW-LEVEL characters rather than a constant -- field 3 is what is LEFT
+# and field 4 is the LIFETIME total (studies/pvpui/FINDINGS.md 32.5).
+#
+# And the affordability question is not merely askable now, it is ASKED:
+# toolkit/authsrv/test_spawn_burst.py section 4 checks `available >= 0`, so
+# raising the ranks past what 200 buys goes red in the suite instead of putting
+# a negative balance on the attribute panel. The ranks below sink 173 of the
+# 200 (97+48+21+6+1), and NOTHING STORES THAT NUMBER -- it is recomputed from
+# the cost curve, so editing a rank moves the balance on its own.
 [player.attributes]
 ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
 points_total = 200
@@ -380,6 +397,75 @@ above in a server that works. gw-preservation's own comment next to it says "REV
 THIS MORE", so nobody upstream knows what it is either. Energy regeneration is the
 obvious reading and it is a GUESS. If something ever depends on this number, measure
 it first.
+
+UPDATE 2026-08-20 -- MEASURED, and the guess was right. Property 43 is energy
+regeneration as a FRACTION OF MAXIMUM ENERGY PER SECOND, read off the one death in
+the live corpus: the same character carried 0.0528f at 25 max energy and 0.0600f at
+22, and 0.0528 x 25 = 0.0600 x 22 = 1.32 energy/s exactly -- the pool shrank under a
+death penalty and the absolute rate did not move. GWW ("Energy", "Regeneration and
+degeneration") gives one pip as 1 energy per 3 seconds, so 1.32/s is four pips at
+0.33 each, and THIS row's 0.0396 is 3 x 0.33 / 25: three pips on a 25-energy
+character. Nobody upstream knew what it was; it was never mysterious, only
+unlabelled. studies/morale/FINDINGS.md section 2.3.
+"""
+
+# ------------------------------------------------- morale, and the death penalty
+#
+# Morale is a percentage with 100 as neutral. It scales the character's BASE health and
+# energy -- not the totals -- and a death is -15 of it. Everything here is the RULE
+# layer; the wire layer (which opcodes carry it) is in authsrv.py and the evidence for
+# both is studies/morale/FINDINGS.md.
+
+[player.morale]
+baseline = 100
+floor = 40
+ceiling = 110
+death_step = 15
+xp_per_percent = 75
+base_energy = 20
+base_health_level_1 = 100
+health_per_level = 20
+
+[player.morale.provenance]
+source = "wiki"
+page = """GWW "Death Penalty" (sections Definition, Acquisition, Counters), "Morale \
+Boost" (Definition, Notes), "Health" (Maximum health) and "Energy" (Maximum energy, \
+Regeneration and degeneration), all read 2026-08-20."""
+verified = """OBSERVED against ArenaNet's own wire, and the check could have failed: \
+the one player death in the live corpus (20260817T183756, agent 27, t=78.813) carries \
+morale 100 -> 85 on two channels at once, and BOTH maxima move by exactly what these \
+numbers predict. Health 120 -> 102 is level 2's base 120 (= base_health_level_1 + \
+health_per_level) less 15%. Energy 25 -> 22 is base_energy 20 less 15%, subtracted \
+from a 25 total -- which is the discriminating one, because scaling the TOTAL gives \
+21.25 and no rounding rule reaches 22 from there. The floor and ceiling are corroborated \
+from a second lineage that shares no ancestry with the wiki: GWCA's PlayerAttrSet \
+annotates morale_percent "Ranges from 40 to 110"."""
+note = """
+base_health_level_1 and health_per_level are GWW's published progression ("start at
+level 1 with 100 health. This increases at 20 health per level up to a maximum of 480
+health at level 20"), so base health is 100 + 20 x (level - 1). base_energy is the
+innate 20 every profession has regardless of level; the +5/+10 from basic armor is
+real total energy but is NOT scaled by morale, which is what the wire measurement above
+shows and what GWW says outright: a boost "is not applied to energy or health from
+equipped armor or weapon sets".
+
+xp_per_percent is the PvE counter -- 75 experience removes 1% of death penalty. The PvP
+counter (killing an enemy player removes 2% per living teammate) is deliberately absent:
+this server has no PvP and inventing the row would put an unreachable rule in the world.
+
+WHAT THIS ROW DOES NOT DECIDE: whether a death costs anything at all. That is the map's
+question, and pre-Searing -- every map this server ships -- never charges one. See the
+map_rule rows in content/maps.toml.
+
+CORROBORATED the same day from the opposite direction (the energy arc, blind to
+the death-tick derivation above): ALL FIVE distinct property-43 values in the
+live corpus fit f32(0.33) * pips / max BIT-EXACTLY while the wiki's nominal 1/3
+energy per second fits none of them, the (pips, max) pairs are exactly GWW's
+basic-armour rows, and this row's 0.0396 (f32 0.03959999978542328) appears on
+ArenaNet's own wire in capture 20260810T235916 on four connections -- three
+pips, a Ranger's. Two derivations, no shared code path, one constant.
+studies/skills/FINDINGS.md section 23. The pip count 3 rides with max 25 as a
+pair; change either only together.
 """
 
 # ------------------------------------------------- weapon and creature swing rates

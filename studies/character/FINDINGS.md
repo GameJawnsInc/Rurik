@@ -1181,11 +1181,26 @@ packet, every field set to `1000 + index` so each number names its own field.
 | 6 | Imperial maximum — reads `/ 0` | **NOT THIS MESSAGE** |
 | 7, 8 | nothing visible anywhere in the Hero window | **NO VISIBLE EFFECT** |
 | 9 | level | **OBSERVED** |
-| 10 | nothing visible. Specifically NOT the `-100%` top-left indicator: 0, 40, 100 and 110 all left it unchanged | **REFUTED as morale** |
+| 10 | nothing visible. Specifically NOT the `-100%` top-left indicator: 0, 40, 100 and 110 all left it unchanged | ~~**REFUTED as morale**~~ — **the field IS morale; the DISPLAY is what was refuted.** See the 2026-08-20 update below |
 | 11 | Balthazar faction, current | **OBSERVED** |
 | 12 | Balthazar maximum — sent 1012 and 2000 on separate runs, bar reads `/ 0` both times | **NOT THIS MESSAGE** |
 | 13 | skill points | **OBSERVED** |
 | 14 | nothing visible | **NO VISIBLE EFFECT** |
+
+> **UPDATE 2026-08-20 — field 10 is morale after all, and this row's verdict was
+> too wide.** ArenaNet's own wire settles it: the live corpus's single player
+> death (`20260817T183756`, agent 27, t=78.813) carries `0x00EE [attr 10, -15]`
+> on the same tick as `0x009C [27, 85]`, and the character's maximum health and
+> energy move 120 → 102 and 25 → 22 — exactly 100 − 15 percent of BASE, on both
+> pools. GWCA names the same slot `Morale_Percent` and annotates its range as
+> 40 to 110. So the sweep above refuted the **top-left indicator being driven by
+> this message**, which stands and is worth knowing; it did not refute the field.
+> What draws the indicator was MORALE-Q1, and it is now ANSWERED against our own
+> client (2026-08-20, `--probe morale`): **`0x009C [agent, percent]` draws it**,
+> and `0x00EE`'s delta does not reach the screen at all. So this row's sweep was
+> aimed at the third of three channels. The mechanic lives in
+> [studies/morale/FINDINGS.md](../morale/FINDINGS.md). Fields 7, 8 and 14 are
+> untouched by this.
 
 **The strongest result here is the negative one.** All four faction maxima ignore
 this message. A single instance (field 12) was dismissible; four independent

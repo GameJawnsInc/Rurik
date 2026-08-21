@@ -791,11 +791,30 @@ post-C9 movetap capture exists anywhere, n = 0. Until the run happens, **no real
 block from the tap can exist** — which is exactly why blocks 1–10 are fixtures and say so.
 
 **How to tell if these blocks have gone stale:** they were produced at HEAD `0841f5e` against
-`movetap.py` sha256 `eedaf547a8f9c98e3544ec6cb43105d9716747ad8fa65d8297efa50961f54061` and
-`movesync.py` sha256 `6500cf55816606b308e5558ebacd5481d9d7ebd2caf32eb8f780e384f31c1234`. If
+`movetap.py` sha256 `9ef4b98d4aa849fb96e4cf6864545feab6c98fd913b45362a442cc10a154146e` and
+`movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which
 is the failure this rewrite was commissioned to repair.
+
+⚠ **REPINNED 2026-08-21 for REALFIX-T1 and REALFIX-I1, and the blocks below were re-read
+rather than re-hashed.** Both files changed: `movetap.py` gained the history-chain walk
+(`history_chain`, gated at `sep > 250 u`) and its `_selftest_chain` section, and `movesync.py`
+gained `offset_detail` / `offset_line` and the `wall_unix` preference. **What the blocks below
+quote is unaffected** — no printer in either file changed, and the run-summary line the chain
+walk adds (`REALFIX-I1 history chain: …`) is NEW output rather than a rewrite of an existing
+block, so nothing here describes code that no longer exists. The hashes above are the current
+ones; a future session that finds them moved is still under the rule in the paragraph above.
+
+⚠ **REPINNED AGAIN, same day**, after a verifier lane and a mutation lane went over the
+REALFIX-I1 landing. `movetap.py` moved for three reasons and **none of them is a printer
+this section quotes**: prose corrections at the node-layout comment (the block recycle is
+measured on the block's NEWEST node, and the sever pass is the real dangle guarantee), the
+future tolerance getting its own constant on its real ground, and twenty-four new selftest
+checks. The one OUTPUT that changed is the run summary's chain-cost line, which moved into
+`chain_cost_line()` and whose delta now prints as a **Hz change** (`-47% Hz if the gate were
+removed`) rather than as an unsigned share — still new output, still not quoted below.
+`movesync.py` did not move; its hash is unchanged, which is the check working.
 
 ⚠ **THIS SECTION WAS WRONG BEFORE 2026-08-20, in five separate ways, and the record of that
 is load-bearing.** The blocks it showed were written **before the instrument existed**, and
@@ -1208,7 +1227,7 @@ vault actually holds.** Real stdout, `movetap-20260819T145939.jsonl` ×
 movetap: movetap-20260819T145939.jsonl
 capture: authsrv-20260819T145717-c1.jsonl
 
-clock offset 1787165837.301 (from 8393 whole-second stamps, spread 1.000s)
+clock offset 1787165837.301 from 8393 truncated `wall` stamp(s) [PRE-REALFIX-T1, max-estimator]: residual 1.000 s = 288 u at 288 u/s -- this capture predates the float stamp
 SOURCE 268 spliced self-reports (236 x 0x003D + 32 x 0x0047); `position_report` agrees exactly
 CADENCE p50 0.254s  MAX 131.767s  actively reported 74.2s = 23% of a 320.3s span
 PAIRS 251 of 268 reports and 2063 samples (dropped 17 outside +/-0.25s)

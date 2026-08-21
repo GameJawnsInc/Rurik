@@ -31,6 +31,48 @@
 # `map_id` points at a maps.toml row, which is what the SERVER serves. The two
 # tables are deliberately separate: a map row is a fact about where something
 # is, an area row is a recipe for making one.
+#
+# `reserve_bytes` -- OPTIONAL, AND IT IS THE ONE FIELD HERE THAT IS ABOUT THE
+# ARCHIVE RATHER THAN ABOUT THE MAP (WORLDMAPS-W5, 2026-08-20). It is the
+# reservation `deploy.py --install` asks `datalloc` for when it CREATES this
+# area's chain: how many bytes of contiguous blocks the Stripped partner row is
+# GIVEN, as against the `size` it HOLDS. The placement rounds it up to whole
+# 512-byte blocks.
+#
+# WHY IT HAS TO BE STATED HERE AND NOT COMPUTED. A 24-byte MFT row is offset,
+# size, extraBytes, flags, nextStream and crc -- there is no entitlement field,
+# so once a row is written "what this row was given" survives nowhere on disk
+# (`datwrite.py`'s `_grow_gate`: the bound "has to come from GEOMETRY").
+# `deploy.resolve_rows` therefore recomputes a row's ceiling from its CURRENT
+# size, and a created row's first install set that ceiling to exactly its own
+# length -- zero headroom -- so the next, larger authored map was already past
+# it and relocated. The area declares the budget once, and both directions of
+# `deploy.py` honour it: creation asks for the blocks, and a later install that
+# outgrows the row's current reservation grows back into them in place
+# (`datwrite --grow-to`) instead of moving the row.
+#
+# IT IS ONLY SPENDABLE ON A ROW THIS TOOLKIT MADE, so it belongs on an area
+# whose maps.toml row carries `created = true` and does nothing on any other.
+# The reason is what `--grow-to` means: a statement about what a row was GIVEN.
+# For a chain `deploy.py` allocated, this field IS that statement -- creation
+# asked the allocator for exactly this many bytes. For a retail row we are
+# displacing, ArenaNet gave that row whatever it gave it, and annexing the
+# blocks behind it because OUR recipe declares a number would be inventing an
+# entitlement rather than restating one. So `install_partner` requires both the
+# budget and `created`, a displaced row fits-or-relocates exactly as it did
+# before this field existed, and a run that declares a budget it cannot spend
+# says so on the line where it relocates.
+#
+# IT IS AN AUTHORING BUDGET AND NOT A CLAIM ABOUT THE CLIENT. The client reads
+# `size`, which is the payload and is unchanged; the reserved tail is zeroes,
+# indistinguishable from the padding every block-rounded reservation has always
+# carried. Nothing in this repo has ever observed the client caring, and this
+# field asserts nothing about it. What it does cost is real: a contiguous free
+# run that big has to exist in the target archive at creation time, and
+# `datplan.classify_runs` is what decides that, per copy, on the day.
+#
+# Omit it and creation behaves exactly as it did before: reservation = the
+# first install's own length, and the next larger map relocates.
 
 [area.plaza]
 name = "Plaza"
@@ -69,6 +111,12 @@ sound = true         # 0x10000012 + deps: ambient audio
 
 # Props: how many trees to scatter, and the donor model to use. 0 disables.
 trees = 5
+# NO map_flags HERE, DELIBERATELY. WORLDMAPS-W11's water rule cannot touch this
+# area: gen_plaza(32) tops out 31 units down and the rule needs 40, so 0 of its
+# 1,024 cells are affected and the flag would be a no-op. It is also the control
+# map for WORLDMAPS-W2's byte-identity witness, and setting a field that changes
+# nothing about the mesh would still change the partner's bytes and stop that
+# comparison reproducing. Left at 0 on purpose.
 
 [area.plaza.provenance]
 source = "invented"
@@ -106,6 +154,14 @@ sun = true
 environment = true
 sound = true
 trees = 12
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 4,001 of 9,216 cells (43.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # FINDINGS 57's 88 trapezoids for this area was a flags-0, stored-install figure.
 
 [area.vale.provenance]
 source = "invented"
@@ -141,6 +197,14 @@ sun = true
 environment = true
 sound = true
 trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W8/W11 measured this area at flags 0 -- 64 trapezoids, mesh x 1248..6144, 2,582/4,096 = 63.04% -- twice on the probe copy.
 
 [area.sculpt.provenance]
 source = "invented"
@@ -187,6 +251,31 @@ environment = true
 sound = true
 trees = 8
 
+# THE HEADROOM THIS ROW IS GIVEN, and the header above is the whole rationale.
+# 8,192 B is 16 blocks. WHERE THE NUMBER COMES FROM, said plainly because it is
+# a choice rather than a measurement of this map: `deploy.install_bytes`' own
+# measured series on build 38797's donors (2026-08-20) puts a 96x96 gen_plaza
+# partner at 2,828 B of compression-8 stream -- 32x32 1,316 B, 64x64 2,012 B,
+# 96x96 2,828 B -- so 8,192 is that largest measured figure with a 2.9x margin,
+# and it comfortably holds a 96x96 compressed partner. It is NOT taken from a
+# measured ladder above 96x96: no such series existed when this row was written
+# (that is WORLDMAPS-W6), and `install_bytes` refuses to extrapolate its three
+# points on principle -- the ratio is a property of the generator and the donor,
+# not of the format. This area itself is 64x64 and installs 2,028 B, so the row
+# is created with roughly 6.1 kB it does not yet use. It is spendable because
+# this area's map row (166) carries `created = true` -- see the header: the
+# three areas that ride map 143 are displacing a retail row and could declare
+# this field to no effect.
+reserve_bytes = 8192
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W4's witness -- 64 trapezoids from a created chain -- was at flags 0.
+
 [area.frontier.provenance]
 source = "invented"
 verified = """Ours, chosen rather than observed, like every area row -- and what \
@@ -200,7 +289,268 @@ map's. Verified offline 2026-08-20 by `deploy.py --area frontier` against \
 the seed measures 0.0 degrees under the 15/35/30 slope classifier from FINDINGS 48 \
 -- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client would \
 build no navmesh for. The borrowed halves are named per field and read from the \
-owner's own archive at run time, never stored here. What is NOT verified is the \
+owner's own archive at run time, never stored here. `reserve_bytes` is an \
+AUTHORING budget and is verified only as arithmetic: it is the largest measured \
+compression-8 partner in `install_bytes`' 32/64/96 series (2,828 B at 96x96, build \
+38797 donors, 2026-08-20) with a stated 2.9x margin, and no client has been asked \
+anything about it -- the row it sizes declares `size`, the payload, exactly as it \
+did before the field existed. It is spendable only because this area's map row is \
+`created = true`: a budget declared on an area that DISPLACES a retail row buys \
+nothing, deliberately, since what that row was given is ArenaNet's statement rather \
+than ours. What is NOT verified is the \
 CLIENT, twice over: the spawn-in-one-trapezoid test needs the mesh the client \
 compiles (`deploy.readback`), and no retail client has ever read a created map chain \
 at all. Both are WORLDMAPS-W4, which is a run rather than a check."""
+
+[area.expanse]
+name = "The Expanse"
+map_id = 165
+dims = 256
+heights = "plaza"
+# The rect's centre. default_rect(256,256) is (0,0,24576,24576), so the centre is
+# (12288, 12288) -- grid cell (128,128), MEASURED at 0.0 degrees, which is the
+# plaza generator's dead-flat apron. The same rule `sculpt` and `frontier` use,
+# and for the same reason: the generator has a seam at gx == mid that steepens
+# with distance (86.3 degrees at the rect edge at this size), and only the centre
+# is guaranteed clear of it.
+seed_x = 12288.0
+seed_y = 12288.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 32,321 of 65,536 cells (49.3%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W7's witness -- 60 trapezoids, 33,120/65,536 = 50.54% coverage -- was at flags 0, and that run's whole coverage model describes the flags-0 world.
+# NO `reserve_bytes`, ON PURPOSE. W5's authoring budget is the obvious next thing
+# to spend here and this row deliberately does not: a created row with a reserved
+# zero tail has never been read by a client, and declaring one would make a red
+# result at this size ambiguous between the size and the tail. The row takes its
+# payload's own reservation -- 10 blocks, 5,120 B for a 4,912 B stream -- and
+# `deploy` prints that it did.
+
+[area.expanse.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row -- and what \
+this one adds over `frontier` is SIZE and nothing else: same generator, same two \
+donors by file id, same prop count, same centre-seed rule, same created chain, \
+same compression. 64x64 -> 256x256 is 16x the cells and 64x the 32x32 baseline. \
+Verified offline 2026-08-20 against `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat`: \
+65,536/65,536 samples round-trip exactly after the lattice snap (worst sample \
+moved 3), the assembled map is 142,374 B compressing to 4,912 B of compression-8 \
+stream, assemble+compress is 0.74 s in CPython, and the seed measures 0.0 degrees \
+-- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client \
+would build no navmesh for (FINDINGS 43, PathData:365). The borrowed halves are \
+named per field and read from the owner's own archive at run time, never stored \
+here.
+
+WHAT THIS ROW'S SHAPE MEANS FOR ITS MESH, said here because it will otherwise \
+read as a failure: `gen_plaza`'s dip side descends 4 units per cell without limit, \
+and MEASURED 2026-08-20 on the client's own compiled 64x64 mesh, ground at or \
+below a depth bracketed in (43, 47] stored units is ABSENT from the compiled \
+navmesh -- 0 of 1,003 cells at +47 and deeper, against 63.6% at +43. At 32x32 the \
+dip never reaches that depth and the mesh covers the whole rect; at 64x64 it \
+crosses at Chebyshev ring 20 and 37% of the rect is gone; at 256x256 the same ring \
+20 leaves roughly half the rect outside the mesh. That is a property of this \
+generator, not of the size, and the mechanism -- water from the borrowed \
+environment, a depth bound in the compiler, or the borrowed Zones chunk -- is \
+NOT established."""
+
+# RENAMED 2026-08-21: was `shoals` ("The Shoals"). The vault run note for
+# WORLDMAPS-W8 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.env_off]
+name = "Environment Off"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field changed. Same generator, same dims, same seed,
+# same donors, same prop count, same map id, same rows -- so the only thing that
+# differs between the two compiled meshes is whether the map carries an
+# environment chunk at all.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false       # <- THE VARIABLE. `stripbuild`'s ENV pair is
+                          # all-or-nothing (OPTIONAL, FINDINGS 51), so this
+                          # emits a map with no 0x10000009 and no 0x11000009.
+sound = true
+trees = 8
+
+[area.env_off.provenance]
+source = "invented"
+verified = """Ours, and it exists to answer ONE question with ONE variable. \
+WORLDMAPS-W7 measured a DEPTH CUT on the client's own compiled meshes: ground at \
+or below a threshold bracketed in (43, 47] stored units is absent from the \
+navmesh -- 0 of 1,003 cells at +47 and deeper on the 64x64 mesh, against 63.6% \
+at +43 -- and the same boundary predicted the 256x256 mesh's coverage to 0.01 \
+of a point (50.55% modelled, 50.54% measured, cut at Chebyshev ring 20). The \
+MECHANISM was left UNVERIFIED with three readings: the borrowed environment \
+chunk's water plane (the donor is Pre-Searing Ascalon and FINDINGS 51 records \
+that payload as not understood), a depth bound in the compiler itself, or the \
+borrowed 34-byte Zones chunk. This row is `sculpt` with `environment = false` \
+and nothing else changed, so the two meshes differ by the ENV chunk alone. If \
+the left third of the mesh returns, the water reading is confirmed; if the mesh \
+is unchanged, the water reading is refuted and the other two survive."""
+
+# RENAMED 2026-08-21: was `rills` ("The Rills"). The vault run note for
+# WORLDMAPS-W9 arm 1 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_largest]
+name = "Zones Largest"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x85DE   # <- THE VARIABLE. Coastal Gate's partner (row
+                             # 32681) carries a 15,870 B Zones against the
+                             # 34 B our template donor ships -- the largest
+                             # contrast in the archive.
+constants_row = 32680        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.zones_largest.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
+contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
+changes nothing about the compiled navmesh, the Zones reading is dead."""
+
+# RENAMED 2026-08-21: was `brooks` ("The Brooks"). The vault run note for
+# WORLDMAPS-W9 arm 2 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_smallest]
+name = "Zones Smallest"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x28F32   # <- THE VARIABLE. Sparring Basics' partner (row
+                             # 71586) carries a 2,030 B Zones against the
+                             # 34 B our template donor ships -- the SMALLEST
+                             # rich zone table in the archive, after a 15,870 B
+                             # one CRASHED the client (WORLDMAPS-W9 arm 1).
+constants_row = 71585        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.zones_smallest.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the SMALLEST of those that is still a real table (Sparring Basics, head row \
+71585 / partner 71586, 2,030 B) -- 60x our template's 34 B, but a fourteenth of \
+the 15,870 B one that `zones_largest` pointed at. It exists because that arm \
+CRASHED the client (WORLDMAPS-W9 arm 1, c0000005 on an unwritable page), so \
+this arm asks the same question with the smallest dose that still carries real \
+zone definitions. CORRECTED 2026-08-21: this paragraph was copy-pasted from \
+`zones_largest`'s row and described Coastal Gate / 15,870 B, which is not what \
+the fields above it select."""
+
+# SUPERSEDED 2026-08-21, kept as the record. This row was WORLDMAPS-W11's
+# registered treatment arm -- `sculpt` plus bit 0 -- and it did its job: the
+# excluded ground returned, 63.04% -> 93.26%. `sculpt` now carries `map_flags`
+# itself, so deploying this row and deploying `sculpt` produce the same map.
+# Kept because WORLDMAPS-W11's run note cites it -- under its old name, `deeps`.
+# RENAMED 2026-08-21: was `deeps` ("The Deeps"). The vault run note for
+# WORLDMAPS-W11 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.flags_bit0]
+name = "Flags Bit 0"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field added. Same generator, dims, seed, donors, prop
+# count and environment -- so the compiled mesh differs from sculpt's only by
+# the Map Parameters flags dword.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1            # <- THE VARIABLE. Bit 0 only; the TOP BYTE stays 0 so
+                         # the slope set stays the 15/35/30 that FINDINGS 48
+                         # measured in force.
+
+[area.flags_bit0.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull the lever WORLDMAPS-W10 found. W10 \
+located the navmesh depth bound statically in the pinned pristine 38797 client: \
+at 0x0072D3ED, inside PathFlood.cpp's per-triangle classifier 0x0072D2E0, the \
+code loads float32 40.0 from 0x0094DE30 and compares it against all three corner \
+z of a terrain triangle; all three deeper writes class 1 and RETURNS, skipping \
+the slope comparison entirely. That rule runs only when the dword tested at \
+0x0072D3C6 is CLEAR, and that dword is the Map Parameters flags field -- \
+identified structurally, since the ctx builder at 0x007249A0-B7 copies the four \
+rect floats off state+0x00..0x0C and `mapbuild.encode_map_parameters` packs \
+rect-then-flags, making state+0x10 the next field. Every map this toolkit has \
+built shipped flags = 0, because `stripbuild.build` never offered the argument \
+until now.
+
+VERIFIED OFFLINE 2026-08-21 before any client saw it: `encode_map_parameters` \
+puts the dword at payload offset +21, and it reads 0x00000000 with the default \
+and 0x00000001 with this row's value. Bit 0 only -- the same dword's TOP BYTE \
+selects the slope set at 0x0072CA1C, and FINDINGS 48 measured the 15/35/30 set \
+in force with it at zero, so this row must not disturb it.
+
+WHAT IS NOT VERIFIED, and it is the whole point of the run: whether bit 0 is the \
+gate. It has never been read out of an installed map's bytes -- W10 inferred \
+flags = 0 from `stripbuild`'s default argument -- and the inverted branch has \
+never been exercised by anything. This row exercises it."""

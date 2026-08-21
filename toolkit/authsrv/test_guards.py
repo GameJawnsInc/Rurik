@@ -101,8 +101,23 @@ def section_hit_enemy():
     state["agents"][10] = _fresh_agent()
     authsrv.hit_enemy(send, state, 10, 0)
     ops = [op for op, _, _ in sent]
-    check(len(sent) == 3, "control: the in-range path still sends the swing",
-          f"{len(sent)} messages: {ops}")
+    # 4 = the swing trio, plus the 0x00CF the landed WEAPON hit earns. It was
+    # 3 until 2026-08-21 put the adrenaline family on the wire; the count is
+    # spelled out rather than left bare so the next change names itself here.
+    #
+    # THE GAIN SITS IMMEDIATELY BEFORE THE DAMAGE, which is measured and was
+    # briefly pinned the other way round. Over the 49 live connections the
+    # message immediately after a 0x00CF is the damage (163/prop 16-or-17) 601
+    # times of 663, and the one before it is 159/prop 1 594 of 663 -- modal
+    # batch [159/prop1, 207, 163/prop16, 30], n=425. This check first shipped
+    # asserting the gain was LAST "because a hit has to land before it earns
+    # one", which is a plausible story about a sequence ArenaNet does not send.
+    check(len(sent) == 4
+          and ops.index(authsrv.AGENT_ADRENALINE_GAIN)
+              == ops.index(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET) - 1,
+          "control: the in-range path still sends the swing, gain before damage",
+          f"{len(sent)} messages: {ops} -- retail puts the 0x00CF between the "
+          f"attack marker and the damage, 601 of 663 by the following message")
     lo, hi = authsrv.PLAYER_SWING_DAMAGE
     left = state["agents"][10]["health"]
     check(100.0 - hi <= left <= 100.0 - lo,
@@ -153,9 +168,17 @@ def section_skill_press():
         authsrv.handle_skill_press(press, send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
     ops = [op for op, _, _ in sent]
+    # THE THIRD MESSAGE IS THE ENERGY DEBIT, wired 2026-08-20: Power Attack
+    # costs 5 and the corpus puts property 62 within 0.03-0.7 s of the
+    # USE_SKILL, so it rides the press burst. The assertion is not weakened --
+    # it is still an exact op list, and it still says the damage trio is
+    # absent, which is the whole subject of this section.
     check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
-          "the press sends E4 and the cast animation -- and NO damage",
+          "the press sends E4, the energy debit, then the cast animation "
+          "(retail's batch order: spend before the skill-naming property, "
+          "45 of 45) -- and NO damage",
           f"ops={ops} -- until 2026-08-15 this also sent the swing trio, so a "
           f"two-second spell dealt its damage before its own casting "
           f"animation began")
@@ -248,11 +271,24 @@ def section_land_swing():
     sent.clear()
     state["player_health"] = float(authsrv.agents.PLAYER_HEALTH)
     authsrv.land_swing(send, state, 10, agent, 0)
-    check(len(sent) == 2 and sent[0][0] ==
-          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-          "control: in-range keeps ArenaNet's order -- finished, then damage",
-          f"{[op for op, _, _ in sent]} -- 6 of 6 swings in the Lakeside "
-          f"tape, checked by byte offset (land_swing docstring)")
+    # 3 since 2026-08-21: finished, the 0x00CF the player earns for the damage
+    # TAKEN, then the damage. THIS SITE REPRODUCES RETAIL'S BATCH EXACTLY --
+    # [159/prop1, 207, 163/prop16] is the modal shape of all 663 corpus gains
+    # (n=425 with the trailing world tick) -- because land_swing already sent
+    # the finished marker before the damage.
+    #
+    # The pin briefly read "appended after the measured sequence, never
+    # inserted into it", which had the adrenaline message last. It belongs
+    # BETWEEN the two: the measured pair is finished-then-damage and the gain
+    # sits inside it, which is what the corpus shows and what this now asserts.
+    check(len(sent) == 3 and sent[0][0] ==
+          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+          and sent[1][0] == authsrv.AGENT_ADRENALINE_GAIN
+          and sent[2][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+          "control: in-range is retail's own batch -- finished, gain, damage",
+          f"{[op for op, _, _ in sent]} -- the finished/damage pair is 6 of 6 "
+          f"swings in the Lakeside tape by byte offset (land_swing docstring); "
+          f"the gain's position between them is 601 of 663 in the live corpus")
 
 
 def section_land_skill():
@@ -292,7 +328,13 @@ def section_land_skill():
     state["player_health"] = float(authsrv.agents.PLAYER_HEALTH)
     agent["casting"] = 0
     authsrv.land_skill(send, state, 10, agent, 0)
-    check(len(sent) == 1 and agent["casting"] is None,
+    # 2 since 2026-08-21: the 0x00CF the player earns for taking the damage,
+    # then the damage -- the gain first, as the corpus puts it (601 of 663 by
+    # the following message). A CAST grants the caster no strike -- that half
+    # of the wiki's rule says WEAPON hit -- so the only adrenaline message here
+    # is the victim's, and it is the player's own.
+    check(len(sent) == 2 and agent["casting"] is None
+          and sent[0][0] == authsrv.AGENT_ADRENALINE_GAIN,
           "control: in-range lands the skill and clears the slot",
           f"{[op for op, _, _ in sent]}, casting={agent['casting']}")
 
@@ -432,7 +474,13 @@ def section_player_refill_due():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.player_refill_due(send, state, 0)
-    check(len(sent) == 2 and state["player_refill_due_at"] is None,
+    # FOUR HALVES SINCE 2026-08-20, not two: the health pair (max, then the
+    # property-34 fraction) followed by the ENERGY pair (property 52 = 1.0 and
+    # property 43 back to the rate), which is the resurrect batch retail sends
+    # -- 52, 43 and 55 in one instant, OBSERVED in capture 20260817T183756. The
+    # contract this section is about is unchanged and still checked: a refused
+    # value sends nothing and leaves the timer armed; an accepted one disarms.
+    check(len(sent) == 4 and state["player_refill_due_at"] is None,
           "control: in-range sends both refill halves and disarms",
           f"ops={[op for op, _, _ in sent]}, "
           f"due={state['player_refill_due_at']!r}")
@@ -485,11 +533,14 @@ def section_overkill():
     agent = state["agents"][10]
     damage_vals = [vals for op, vals, _ in sent
                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
-    # 6 = the swing trio, then the kill window's three (status, reward,
-    # flags). It was 4 until step 9 gave a death its reward and flags
-    # messages; the count is spelled out rather than left as a bare literal
-    # so the next change to the kill window names itself here.
-    check(len(sent) == 6 and agent["dead"] is True and
+    # 7 = the swing trio, the 0x00CF the landing earns, then the kill window's
+    # three (status, reward, flags). It was 4 until step 9 gave a death its
+    # reward and flags messages, and 6 until 2026-08-21 put adrenaline on the
+    # wire; the count is spelled out rather than left as a bare literal so the
+    # next change to the kill window names itself here. NOTHING is sent for
+    # the dying AGENT's own adrenaline -- retail is self-scoped 9 of 9 -- and
+    # the count is what would catch a later session "fixing" that asymmetry.
+    check(len(sent) == 7 and agent["dead"] is True and
           damage_vals and damage_vals[0][3] == F32_MINUS_ONE,
           "an overkill swing sends -1.0 and the target dies",
           f"{len(sent)} messages (swing trio + kill window), "
@@ -646,7 +697,14 @@ def section_cast_timers():
         with sent_lock:
             sent.append((op, vals, label))
 
-    state = {"agents": {}}
+    # A DELIBERATELY BOTTOMLESS POOL. Skill 42 costs 10 energy and the player's
+    # is 25, so under the energy gate (wired 2026-08-20) 200 presses become 2
+    # casts and 198 refusals -- and this section is about the single-writer rule
+    # on `pending_casts`, not about what a skill costs. The gate stays ON, which
+    # is the shipped default; only the fixture's pool is made large enough that
+    # every press is affordable. test_pools sections 6-6b are where the gate
+    # itself is proven.
+    state = {"agents": {}, "energy": authsrv.pools.EnergyPool(1_000_000, 3)}
     errors = []
     done_pressing = threading.Event()
 

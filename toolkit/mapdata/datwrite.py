@@ -730,6 +730,56 @@ class Journal:
             self.fh = None
 
 
+#: The one word a reader joins on to say "the GROW GATE refused this, and not
+#: something else". It is deliberately not a sentence: sentences get reworded.
+GROW_GATE_TOKEN = "GROW-GATE-REFUSED"
+
+#: The four conditions `_grow_gate` enforces, in its own order, as the names the
+#: typed refusal carries. Stable identifiers rather than prose.
+GROW_GATE_CONDITIONS = ("claimants", "eof", "live-mft", "withheld-run")
+
+
+class GrowGateRefused(SystemExit):
+    """A grow the four-condition gate refused -- BY CONDITION, not by wording.
+
+    A SUBCLASS OF `SystemExit`, AND THAT IS THE WHOLE COMPATIBILITY ARGUMENT.
+    Every existing caller catches `SystemExit` (or lets it exit the process),
+    every message below is byte-for-byte what it was, and the exit code is
+    unchanged -- what is added is a `condition` a caller can branch on instead of
+    reading English. `overlay.py` and `deploy.py` both drive `replace(grow_to=)`
+    and both have to tell "another row took these blocks" apart from "these
+    bytes are not what you declared", because only the first may be followed by
+    a relocation.
+
+    WHY A TOKEN AS WELL AS A CLASS. `deploy.py` runs this module as a SUBPROCESS
+    -- an exception does not cross that boundary, and until 2026-08-20 it joined
+    on four fixed fragments of the gate's own sentences (`deploy.GROW_GATE_
+    MARKERS`). That join fails SAFE if the wording moves, which is the right
+    direction and still a join on prose. So `main()` prints one machine-readable
+    line naming the condition, and the wording becomes the fallback rather than
+    the contract. The line is ADDED beside the refusal, never inside it: the
+    refusal text is what readers and greps already know (test_datwrite 11a pins
+    its first sentence verbatim for exactly that reason).
+
+    `condition` is one of `GROW_GATE_CONDITIONS`, in the gate's own order.
+    """
+
+    def __init__(self, condition, message):
+        if condition not in GROW_GATE_CONDITIONS:
+            # A typo here would produce a refusal no consumer recognises, which
+            # is the failure this class exists to remove. Cheap, and it can only
+            # fire on a source edit.
+            raise ValueError(f"{condition!r} is not one of "
+                             f"{GROW_GATE_CONDITIONS}")
+        super().__init__(message)
+        self.condition = condition
+
+    @property
+    def marker(self):
+        """The one line a subprocess reader joins on. Never inside the message."""
+        return f"  {GROW_GATE_TOKEN} condition={self.condition}"
+
+
 class Writer:
     """An open archive plus the journal of what has been done to it.
 
@@ -908,6 +958,15 @@ class Writer:
         `datmove` imports `datwrite`, so a module-level import would also be
         circular. Only the grow path pays for it.
 
+        EVERY REFUSAL HERE IS A `GrowGateRefused`, which is a `SystemExit` with
+        a `condition` on it. The type is the change and the LOGIC IS NOT: the
+        four tests, their order and their four sentences are byte-for-byte what
+        they were. What it buys is a caller that can tell "another row took
+        these blocks" from "these bytes are not what you declared" without
+        reading English -- see the class, and `deploy.grow_gate_refusal`, which
+        was joining on four fixed fragments of the sentences below and would
+        have gone silently unrecognising the day one of them was reworded.
+
         A KNOWN LIMIT, stated rather than engineered around: all four conditions
         read `self.ar`, the snapshot taken in `__init__`, so a Writer that has
         already written in this run judges the grow against the pre-run table.
@@ -919,7 +978,8 @@ class Writer:
 
         taken = claimants(self.ar, lo, hi, exclude=row)
         if taken:
-            raise SystemExit(
+            raise GrowGateRefused(
+                "claimants",
                 f"row {row} needs to grow from {cur_res} to {want_res} B in "
                 f"place, and [0x{lo:X}, 0x{hi:X}) is CLAIMED by "
                 + ", ".join(f"row {i} (0x{o:X}..0x{h:X})"
@@ -930,7 +990,8 @@ class Writer:
 
         filesize = os.path.getsize(self.path)
         if hi > filesize:
-            raise SystemExit(
+            raise GrowGateRefused(
+                "eof",
                 f"row {row} would grow to [0x{e.offset:X}, 0x{hi:X}), which "
                 f"runs {hi - filesize} B PAST THE END of a {filesize} B "
                 f"archive.\n"
@@ -941,7 +1002,8 @@ class Writer:
 
         mlo, mhi = self.ar.mft_offset, self.ar.mft_offset + self.ar.mft_size
         if lo < mhi and mlo < hi:
-            raise SystemExit(
+            raise GrowGateRefused(
+                "live-mft",
                 f"row {row} would grow into the LIVE MASTER FILE TABLE: "
                 f"[0x{lo:X}, 0x{hi:X}) overlaps [0x{mlo:X}, 0x{mhi:X}).\n"
                 f"  Checked against the file header's own mft_offset/mft_size, "
@@ -955,7 +1017,8 @@ class Writer:
             xlo = ex.start_block * block
             xhi = xlo + ex.blocks * block
             if lo < xhi and xlo < hi:
-                raise SystemExit(
+                raise GrowGateRefused(
+                    "withheld-run",
                     f"row {row} would grow into blocks datplan WITHHOLDS: "
                     f"[0x{lo:X}, 0x{hi:X}) overlaps the free run at "
                     f"[0x{xlo:X}, 0x{xhi:X}), which carries "
@@ -1952,6 +2015,16 @@ def main():
             print("corrupting the MFT self-crc -- Arm C. Expect a full rescan.")
             w.put(row_offset(w.ar, MFT_SELF_ROW) + ENTRY_CRC,
                   struct.pack("<I", have ^ 1), "MFT self-crc (deliberately wrong)")
+    except GrowGateRefused as exc:
+        # THE TYPED REFUSAL, CARRIED ACROSS A PROCESS BOUNDARY. `deploy.py`
+        # drives this module as a subprocess, where an exception class is not
+        # available and only bytes are; without this line the only thing a
+        # caller could join on is the wording of the refusal itself. Printed
+        # BESIDE the message and never inside it, so the refusal text stays
+        # byte-for-byte what readers and greps already know, and re-raised
+        # unchanged so the exit code and the message are untouched.
+        print(exc.marker)
+        raise
     finally:
         w.close()
 

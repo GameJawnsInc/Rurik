@@ -1145,8 +1145,14 @@ which the load readings alone cannot separate.
 4. **Why is 24 absent from the rank-12 block** while 23 appears 9 times (p ≈ 0.046)?
 5. **What closes the 11-point gap** in the Master of Damage's closing health
    (`prop 55 = 300/590` against our ledger's 289)?
-6. **What is skill 364**, cast once by the player at t=1008.125 in a *walking* step? No
-   measurable effect on the block that follows, but it is an uncontrolled input.
+6. ~~**What is skill 364**, cast once by the player at t=1008.125 in a *walking* step? No
+   measurable effect on the block that follows, but it is an uncontrolled input.~~
+   **CLOSED 2026-08-20** — and "no measurable effect" was wrong by one channel:
+   at that exact timestamp the wire carries **property 62 = −0.25** on 0x00A2,
+   a 5-energy debit over the character’s max 20 (skills.toml, build 38797,
+   prices skill 364 at exactly 5) — invisible to this study’s consumer because
+   damagepass.py reads only 0x00A3 p16/17/18. The damage ledger itself is
+   untouched. [studies/skills §23](../skills/FINDINGS.md).
 7. **`parse_coded` returned a 13.8-trillion "string id"** for a `0x5F` blob without
    complaint. That deserves a guard.
 
