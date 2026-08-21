@@ -6912,3 +6912,95 @@ within one npc template — a definition is per-instance and outlives its agents
 and ArenaNet sends one for 140 re-creates of one worm — and REFUSED across two,
 since the array is a raw index and the second row would silently overwrite the
 first.
+
+---
+
+## 61. OBSERVED: an empty area is a STATE, and plaza's population never existed (2026-08-20, offline)
+
+Two follow-ups WORLDMAPS-W2 flagged and did not chase
+(`vault/research/worldmaps/WORLDMAPS-W2-RUN.md`, RESULTS P6). They turned out to
+be one thing seen from two sides: `deploy` could not tell an empty area from a
+crashed server, so it reported one as the other, and then the transcript it
+produced was read as evidence that something had gone missing.
+
+### 61.1 The serve check scored a correct run as a failure
+
+`spawn_population` has **two** legitimate exits, §60's and this one:
+
+    [c1] area 'plaza': no population rows; the world is the player and the geometry
+
+`PLACED_RE` matched only `area 'X': N of M placed`, so the no-rows line fell
+through to the arm written for a server that **crashed** mid-placement, and
+`serve_run` printed *"the server never got as far as placing bodies"* and
+returned 1. **Both arms of W2 hit it.** Each had served the mesh correctly — 55
+trapezoids, the server's own count against the archive's — and each ended:
+
+    SERVE CHECK FAILED -- the client walked on our map and the server did not
+
+which was false in both. The finding survived because a human read
+`gamesrv.log:122` and overrode the transcript. That is the failure mode worth
+naming: the check was not merely wrong, it was wrong in the direction that
+**discards a good result**, and the only thing standing between W2 and a
+retracted finding was somebody not believing the tool.
+
+`serve_run` now returns one of three verdicts — `SERVE_PASS`,
+`SERVE_UNPOPULATED`, `SERVE_FAILED` — and `main()` returns 1 from exactly one
+branch, which tests `SERVE_FAILED`. **The mesh stays load-bearing and the
+ordering is the claim**: an empty area may downgrade a PASS to
+SERVED-UNPOPULATED and may **never** lift a FAILED. A server that threw still
+prints neither line, so "no line at all" still means what it meant.
+
+The new verdict would be a check that cannot fail on its own — the server says
+"nothing here", we write it down, green — so it carries a **second reader**:
+`spawn_row_count` mirrors `area_population`'s two predicates and `serve_run`
+refuses when the two disagree in either direction. The same pattern as the mesh
+half, and for the same reason.
+
+### 61.2 The content drift did not happen: two different fives
+
+W2 recorded that *"plaza's population rows are gone from the loaded world where
+FINDINGS-56-era runs had them"*. **They were never there.** The "5 of 5" in
+§56's table is its own line, and it is not about bodies:
+
+| §56's row | what it counts |
+|---|---|
+| our props are in the compiled map — **5 of 5** | `StrippedProps` → `BloatedProps`, chunk `0x20000004`, static scenery baked into the map's geometry by the client's own compiler |
+| `area 'X': N of M placed` | live NPC bodies, `spawn_population`, a server that is running |
+
+Four independent readings, and none of them needed a client:
+
+1. **`content/world.toml` has never held a plaza spawn row.** Across every
+   commit that has ever touched the file, the only value `area` has ever taken
+   is `"sculpt"`.
+2. **The vault overlay holds no `world.toml` at all** — the suspect W2 named,
+   and it is empty of spawn rows and of any mention of plaza.
+3. **The corpus has no such line.** Every `N of M placed` line in
+   `vault/captures/harness/` reads `area 'sculpt': 3 of 3 placed`, seven of
+   them. There is no plaza placement line, and no "5 of 5" line, anywhere.
+4. **The rung-G run record contains the word "placed" zero times.** Its five is
+   `props: 5 at [(30, 15), (1, 30), (4, 1), (20, 30), (21, 1)]`.
+
+And the timeline settles it independently of all four. §56's run was
+**11:25–11:31** on 2026-08-13 and the document was committed at 11:32
+(`53ec713`). `spawn_population` did not exist until **18:48 that evening**
+(`0f68c04`), seven hours later — the commit that introduced population at all,
+and it populated **sculpt**, whose three positions are trapezoid centres read
+out of the sculpt mesh. At the moment of the §56 run there was no population
+feature, `--area` was not forwarded to the gamesrv, and no area had rows.
+
+**Nothing moved, so nothing is restored.** Plaza is a geometry area: it is the
+32×32 shape the toolkit uses to prove a map compiles, and its emptiness is the
+thing §61.1's new verdict now says out loud instead of misreporting.
+
+The hazard is the reading, and it is recorded rather than fixed, because §56's
+table is correct as written — both quantities are legitimately five, they sit
+one rung apart in the same arc, and `deploy.py` prints them within thirty lines
+of each other in the same transcript. The guard against re-deriving this
+conflation is in the tool now: a server that finds nothing where our content
+binds rows is a `SERVE_FAILED` that names both counts, so the next time
+somebody suspects a lost population the run itself answers.
+
+**Labels.** 61.1 OBSERVED (two client runs, both banked, plus twenty checks
+driven red by eight sabotages). 61.2 OBSERVED — it is a census over the repo's
+own history and the capture corpus, with `sculpt`'s three rows as the positive
+control that the same query finds what is really there.

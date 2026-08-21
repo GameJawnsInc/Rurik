@@ -1073,8 +1073,51 @@ NAVMESH_RE = re.compile(
 # nobody was reading.
 PLACED_RE = re.compile(r"area '([^']+)': (\d+) of (\d+) placed")
 
+# `area 'plaza': no population rows; the world is the player and the geometry`
+# -- `spawn_population`'s OTHER legitimate exit, and it is a VERDICT rather than
+# an absence. The distinction this pattern draws is the whole point: a server
+# that threw on the way to placing bodies prints NEITHER line, so "no line at
+# all" still means what it meant. This line is positive evidence the server
+# reached spawn_population, evaluated the area and had nothing to place.
+#
+# It was scored as a serve FAILURE until 2026-08-20. Both arms of WORLDMAPS-W2
+# hit it: the navmesh half of the check passed in each (55 trapezoids, the
+# server's own number against the archive's), the map was correct, and deploy
+# still exited 1 saying "the client walked on our map and the server did not" --
+# which was false. `vault/research/worldmaps/WORLDMAPS-W2-RUN.md` RESULTS, P6.
+UNPOPULATED_RE = re.compile(
+    r"area '([^']+)': no population rows; the world is the player and the "
+    r"geometry")
 
-def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
+# The three verdicts a serve run can carry. UNPOPULATED is not a softened FAIL
+# and not a quiet PASS: the mesh was served and proven, and the area is empty on
+# purpose. It gets its own word so a transcript cannot be read either way.
+SERVE_PASS = "PASS"
+SERVE_UNPOPULATED = "SERVED-UNPOPULATED"
+SERVE_FAILED = "FAILED"
+
+
+def spawn_row_count(world, area):
+    """How many spawn rows OUR content reader binds to `area`.
+
+    Mirrors the two predicates `authsrv.area_population` filters on -- the row
+    names this area, and the row is enabled -- and deliberately nothing else:
+    the rest of that function is set validation that RAISES rather than
+    filters, so a row it would reject is a row that stops the server, not one
+    that quietly drops out of this count.
+
+    It exists to be a SECOND READER. Without it `SERVED-UNPOPULATED` would be a
+    verdict that cannot fail -- the server says "nothing to place", we write it
+    down, done -- and a population that genuinely went missing would read as a
+    clean run. With it, the server's claim is checked against the content the
+    same content store hands us, and the two disagreeing is a real finding.
+    """
+    return sum(1 for row in world.rows("spawn").values()
+               if row.get("area") == area and row.get("enabled", True))
+
+
+def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
+              expect_rows=None):
     """A SECOND run, unarmed, that proves the SERVER read our mesh.
 
     WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
@@ -1090,12 +1133,18 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
     just read out of the archive. Comparing against a number we predicted would
     be a check that cannot fail -- this compares two independent readers of the
     same bytes, ours through `pathmap` and the server's through its own load.
+
+    Returns `(verdict, note)` where verdict is one of `SERVE_PASS`,
+    `SERVE_UNPOPULATED` or `SERVE_FAILED`. THE MESH IS THE LOAD-BEARING HALF and
+    it is not negotiable by the other one: a trapezoid count that disagrees with
+    the archive is `SERVE_FAILED` whatever the population did, and an empty area
+    can only ever downgrade a PASS to UNPOPULATED, never lift a FAILED.
     """
     t0 = time.time()
     rc = launch(exe, session, dat, map_id, hold, area=area)
     log = newest_harness_log(t0)
     if log is None:
-        return False, f"  harness rc {rc}, but no gamesrv log was written"
+        return SERVE_FAILED, f"  harness rc {rc}, but no gamesrv log was written"
     with open(log, "r", encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     hits = NAVMESH_RE.findall(text)
@@ -1103,34 +1152,64 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
     if not hits:
         why = ("PRE-WARM FAILED" if "PRE-WARM FAILED" in text
                else "no navmesh line at all")
-        return False, (f"  harness rc {rc}; {where}: {why} -- the server "
-                       f"served no collision")
+        return SERVE_FAILED, (f"  harness rc {rc}; {where}: {why} -- the server "
+                              f"served no collision")
     fid, planes, traps = hits[0]
     traps = int(traps)
-    ok = traps == expect_traps
+    mesh_ok = traps == expect_traps
+    verdict = SERVE_PASS if mesh_ok else SERVE_FAILED
     note = (f"  harness rc {rc}; {where}: server loaded 0x{fid} with "
             f"{planes} plane(s), {traps} trapezoids "
-            f"({'MATCHES' if ok else 'DISAGREES WITH'} the "
+            f"({'MATCHES' if mesh_ok else 'DISAGREES WITH'} the "
             f"{expect_traps} in the archive)")
 
     # AND THE POPULATION, if one was asked for. Separate from the mesh check
     # because they fail separately: the bodies are created at instance
     # bring-up, well after the navmesh is read, so a throw there leaves the
     # mesh line correct and every map check green.
+    #
+    # THREE OUTCOMES, not two. `spawn_population` has two legitimate exits and
+    # this used to recognise one of them, so an area with nothing in it scored
+    # the same as a server that crashed mid-placement.
     if area:
-        p = PLACED_RE.findall(text)
-        if not p:
-            ok = False
-            note += (f"\n  area {area!r}: NO population line -- the server "
-                     f"never got as far as placing bodies (look for a "
-                     f"traceback in {where}/gamesrv.log)")
-        else:
-            _, placed, total = p[0]
+        placed_hits = PLACED_RE.findall(text)
+        empty_hits = UNPOPULATED_RE.findall(text)
+        if placed_hits:
+            _, placed, total = placed_hits[0]
             good = placed == total and int(total) > 0
-            ok = ok and good
+            if not good:
+                verdict = SERVE_FAILED
             note += (f"\n  area {area!r}: {placed} of {total} bodies placed"
                      + ("" if good else "  <-- NOT ALL"))
-    return ok, note
+            # Our reader against the server's, same as the mesh half.
+            if expect_rows is not None and int(total) != expect_rows:
+                verdict = SERVE_FAILED
+                note += (f"\n  area {area!r}: but OUR content reader binds "
+                         f"{expect_rows} enabled spawn row(s) to it and the "
+                         f"server counted {total} -- the two readers disagree "
+                         f"about what lives here")
+        elif empty_hits:
+            # The server got there and had nothing to place. Only a downgrade:
+            # if the mesh disagreed this stays FAILED.
+            if verdict == SERVE_PASS:
+                verdict = SERVE_UNPOPULATED
+            note += (f"\n  area {area!r}: no population rows -- the server "
+                     f"reached spawn_population and the area is empty. The "
+                     f"mesh above is the served claim; there were no bodies "
+                     f"to place, which is a state and not a failure")
+            if expect_rows:
+                verdict = SERVE_FAILED
+                note += (f"\n  area {area!r}: AND THAT IS WRONG -- our content "
+                         f"reader binds {expect_rows} enabled spawn row(s) to "
+                         f"this area. The server loaded a world that does not "
+                         f"have them, so the two disagree about the content, "
+                         f"not about the map")
+        else:
+            verdict = SERVE_FAILED
+            note += (f"\n  area {area!r}: NO population line of EITHER kind -- "
+                     f"the server never got as far as evaluating the area "
+                     f"(look for a traceback in {where}/gamesrv.log)")
+    return verdict, note
 
 
 def resolve_rows(archive, file_id):
@@ -1379,13 +1458,26 @@ def main(argv=None):
         traps = trapezoid_count(dat, file_id)
         print(f"\nserve -- a second run, unarmed, so the server reads the "
               f"{traps}-trapezoid mesh the client just built:")
-        ok, note = serve_run(exe, session, dat, map_id, args.hold, traps,
-                             area=args.area)
+        # Only claim a row count when we are reading the same world the server
+        # will. `--repo-content-only` narrows OURS and not the server's, so the
+        # two would differ for a reason that is about this flag rather than
+        # about the content -- and a cross-check that fires on its own harness
+        # is worse than no cross-check.
+        expect_rows = (None if args.repo_content_only
+                       else spawn_row_count(world, args.area))
+        verdict, note = serve_run(exe, session, dat, map_id, args.hold, traps,
+                                  area=args.area, expect_rows=expect_rows)
         print(note)
-        if not ok:
+        if verdict == SERVE_FAILED:
             print("\nSERVE CHECK FAILED -- the client walked on our map and "
                   "the server did not")
             return 1
+        if verdict == SERVE_UNPOPULATED:
+            print(f"\nSERVE CHECK {SERVE_UNPOPULATED} -- the server served our "
+                  f"mesh and area {args.area!r} has nobody in it. The map half "
+                  f"is proven; the population half had nothing to prove.")
+        else:
+            print(f"\nSERVE CHECK {SERVE_PASS}")
     else:
         print("\nnote: the SERVER did not path against this mesh. It is in the "
               "archive now, so --serve runs again unarmed and proves it does.")

@@ -1359,14 +1359,26 @@ where 32×32 was the old ceiling. `--stored-install` is the byte-identical
 control arm. **WORLDMAPS-W3 landed** — `created = true` map rows make
 `--install` ALLOCATE a brand-new two-row chain via datalloc instead of
 displacing rows 71496/71497; `[map.166]`/`[area.frontier]` are the first area
-that takes nobody's row. Both skeptic-verified; floors test_deploy 35→92,
+that takes nobody's row. Both skeptic-verified; floors test_deploy 35→112,
 test_content 39→40, test_contentids 19→20.
 
-**The immediate next actions are the two owner-driven launches**, predictions
-registered, safer order first: **WORLDMAPS-W2**
-(`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` — does the client's re-bloat
-compiler read a partner WE compressed; A8/A9 answered adjacent questions,
-never for a map) and **WORLDMAPS-W4**
+**WORLDMAPS-W2 RAN 2026-08-20 and is GREEN** —
+`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` RESULTS. The retail client's
+re-bloat compiler READ the partner we compressed and built the identical map
+(3,941 B → 1,316 B comp 8, replace in place; readback identical to the stored
+arm line for line). The last place an authored map deviated from retail's own
+shape is closed. Its **two flagged follow-ups are both closed** (`ec5f426`,
+[studies/customarea §61](studies/customarea/FINDINGS.md)): `serve_run` scored
+the server's legitimate no-rows line as a serve FAILURE and now returns a third
+verdict, `SERVED-UNPOPULATED`, with the navmesh half still load-bearing (an
+empty area may downgrade a PASS, never lift a FAILED) and a second reader that
+refuses when our content and the server disagree about what lives in an area —
+test_deploy floor 92→112, twenty checks, eight sabotages. And the suspected
+content drift **did not happen**: plaza has never had a spawn row in any commit,
+and FINDINGS 56's "5 of 5" is its PROPS readback, not bodies.
+
+**The immediate next action is the remaining owner-driven launch**, prediction
+registered: **WORLDMAPS-W4**
 (`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` — does re-bloat fire for a
 head BORN zero-length under a created id; FINDINGS 36 item 4's untested case).
 Known deliberate gap: a compressed install SHRINKS the row, so small→large
