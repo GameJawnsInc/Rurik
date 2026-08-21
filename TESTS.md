@@ -3139,10 +3139,86 @@ Every one of these, in the order they were written:
   proves nothing — a policy that refuses everything passes the first and today's
   code passes the second — and the section says out loud that it replays rules 1
   and 2 only, the two geometry refusals running upstream of them and not being
-  modelled. Floor **105**, the bare-machine subset, against a green **113** with
-  every capture present; §10 and §13 are the two fixture-bearing sections
-  (4 checks each) and each declares `LEDGER.skip` without its files. No client.
-  ~2 s),
+  modelled. **§14 IS `--zero-lead` (REALFIX-P2), AND IT IS THE FIRST SECTION
+  HERE THAT EXECUTES A RECEIVE ARM** rather than only matching its syntax tree.
+  Two of that flag's claims are behavioural and no AST matcher can reach them --
+  a moving report the shipped `turned or not walking` gate would SKIP is still
+  granted under the flag, and the very same report sends **nothing** with the
+  flag off -- so `receive_arm()` lifts the arm's own statements out of the
+  receive loop, wraps them in a function of the four free names they need and
+  compiles them against `authsrv.__dict__`. It runs the file's bytes,
+  re-extracted every run, and it raises rather than handing back an empty body
+  if the arm is ever renamed. The section pins the **payload** (the granted
+  point is the client's reported position VERBATIM -- not `state["pos"]`, not
+  the clipped `model_dest` -- with both plane words the reported plane and the
+  `0x0029` LAST in the burst), **exactly one `0x0025` per burst** whichever path
+  asked for it, the **model/wire split** (`state["dest"]` still holds the
+  clipped 766 u leg while the wire carries the report), and that a rate-refused
+  heading grant is **DROPPED, not held** -- no `grant_pending` key appears.
+  `_heading_grant_ok` is checked for PURITY (five calls, one answer, state
+  byte-identical after) because `grantsim.py` imports and runs it, for its floor
+  at both edges of `GRANT_MIN_INTERVAL`, for refusing a grant stamped in the
+  FUTURE, and for **carrying rule 2 ONLY**: the very state the click arm refuses
+  as `locally-moving` still grants here, which is the check that stops the arm
+  being "simplified" onto `_grant_verdict` -- that predicate's rule 1 would emit
+  **zero** grants, because the heading arm arms the latch ten lines before it
+  would ask. The two arms' reason vocabularies are asserted DISJOINT
+  (`zero-lead`/`heading-rate` against `off`/`locally-moving`/`rate-limited`/
+  `grant`) -- **and both halves of that comparison are now READ BACK OUT OF THE
+  SHIPPED PREDICATES by driving them**, because the version that compared two
+  literal sets could not fail: a mutation that made `_heading_grant_ok` return
+  exactly `rate-limited` and `grant`, the vocabularies overlapping completely,
+  still printed PASS. A third read cross-checks those two words against
+  `grantsim.HEADING_REASONS`, parsed out of that file's syntax tree rather than
+  imported, since that frozenset is what the replay filter keys on. The stop
+  arm is EXECUTED too and must grant nothing -- a stop-arm `0x0029` **is**
+  `--stop-echo` and is refuted -- and the AST half asserts `ZERO_LEAD` is named
+  in the heading arm and in **neither** the stop nor the click arm, with the
+  heading count as its own positive control. **THE TRUST GUARD IS ADVISORY ON
+  THE GRANT PATH, and §14 drives that both ways** rather than leaving it to be
+  found in a live run: a report claiming a 40,000 u jump is REFUSED by the
+  policy this whole file is about -- `state["pos"]` holds -- and the arm grants
+  the rejected point VERBATIM anyway while `_note_wire_move` drags `sync_to` to
+  it, which is the exact operand REALFIX-L1's movetap separation metric reads.
+  Its control is the same report with a stale `pos_seen`, ACCEPTED, where the
+  wire is identical and the model moves too, so what the pair differs in is the
+  refusal and not the report. That pair also pins the precise statement of the
+  model/wire split: `state["dest"]` is `clip(state["pos"] + vec2)`, equal to
+  `reported + vec2` only on an accepted report, and the grant is **not**
+  wire-only -- it moves `sync_from`/`sync_to`/`sync_at` and stamps the shared
+  `grant_at`. Finally the **composition matrix** is driven cell by cell through
+  the pure `zero_lead_composition()`, with its cases taken from the shipped
+  `ZERO_LEAD_REFUSED_ARMS` table rather than restated: refusing `--heading-grant`,
+  `--client-endpoint` **and `--stop-echo`**, each citing its OWN refutation line
+  and naming no other flag, named in the plural with both lines when two are
+  passed; allowing `--grant-suppress`, `--resync` and `--click-sweep` each with
+  a printed note; and a control that with the flag OFF nothing is refused at
+  all. **`--stop-echo` was missing from that list until an adversarial pass
+  found `--zero-lead --stop-echo` accepted silently** -- the refusal was keyed
+  on "answers the same `0x003D`" and the stop arm answers `0x0047` -- which is
+  why the loop now reads the table instead of enumerating cases a test author
+  can forget the same way. **AND THE MATRIX'S ANSWER IS ENFORCED AT ITS CALL
+  SITE**: an AST read of `main()` requires the refusal to be `raise`d as a
+  `SystemExit` and requires every flag the function can decide about to actually
+  be passed to it, with a hand-built bad `main()` as the control. Replacing that
+  `raise` with a print left all 147 checks green while the server would have run
+  the refused combination, and a parameter the call site never fills can never
+  fire from a real command line -- which is precisely how `--stop-echo` went
+  unrefused. The **startup banner is pinned** for the same reason: `REALFIX.md`
+  §4 rests on "the prediction is printed verbatim at startup so it cannot be
+  rationalised afterwards", and deleting the retraction and all three numeric
+  bounds changed no test, so §14 now requires the retraction, both units of the
+  frequency/displacement bounds, the separation bound, the failure signature and
+  the invariant-refuting condition to be present in the block's own string
+  constants, with a stripped block as the control. Floors **152** bare and
+  **160** with every capture present, **one per configuration** -- a single
+  bare floor protected none of the 8 checks only a vaulted machine runs, proved
+  by unhooking one §14 check: vaulted printed ALL CHECKS PASSED at 146 against a
+  floor of 139 while the bare run went red at 138. §10 and §13 are the two
+  fixture-bearing sections (4 checks each), each declaring `LEDGER.skip` without
+  its files, and the probe that raises the floor reads the same capture names
+  those sections use. §14 is entirely fixture-free, so all 47 of its checks land
+  in both totals. No client. ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -3648,10 +3724,10 @@ Every one of these, in the order they were written:
   captures actually put on the wire, with the replayed `keyboard_age` agreeing
   numerically to **0.59 ms**; the NEGATIVE CONTROL replays `195315` with the flag
   the other way round and must reproduce **nothing at all**, 0 of 154. It is
-  labelled **§6 C3 (click-arm)** and the heading arm declares a `LEDGER.skip`
-  naming the missing symbol, because `authsrv.py` has no `_heading_grant_ok`
-  yet -- REALFIX-P2 specifies it as new code -- so P2 and P3 are scored with no
-  rate limit and this file does not call §6 the policy gate. **§3 IS THE
+  labelled **§6 C3 (click-arm)**, and its heading half is **§6b** -- see below.
+  Until 2026-08-21 that half was a `LEDGER.skip` naming a symbol `authsrv.py`
+  did not have; `_heading_grant_ok` landed that day, so P2 and P3 are no longer
+  scored with no rate limit at all. **§3 IS THE
   CONSTANT NOBODY HAD DERIVED:** the match test's effective threshold is not the
   `100.0f` the client compares against, because the comparison runs through the
   table sqrt at `0x0046E870`, so §3 re-reads the 256-dword LUT with a stdlib PE
@@ -3694,15 +3770,58 @@ Every one of these, in the order they were written:
   `20260820T182554`. §9's M1 bound moved from `2 * HISTORY_WINDOW` to
   `HISTORY_WINDOW`, since `lag_age` cannot legitimately exceed it and the factor
   of 2 was exactly the room its `lo` bound could be deleted in (4.55 s -> 7.42 s,
-  still green). Floor **19**, the bare-machine subset (§1's ten structural
-  asserts and §2's nine refusals build their own fixtures and read neither vault
-  nor client), RAISED to **61** once the fixture probes answer, because excess
-  over a floor is not an error and a bare floor protected none of the 42 checks
-  only a full machine runs -- deleting C2(a)'s three structural zeros on a
-  vaulted machine used to print ALL CHECKS PASSED and now names the shortfall.
-  §3-§9 declare seven `LEDGER.skip`s without the fixtures and §6's heading arm
-  declares an eighth always. Reads only; sends nothing, writes nothing, and
-  **does** import `authsrv.py` -- deliberately, see §6. No client. ~6 s),
+  still green). **§6b IS C3's HEADING ARM AND IT REPLACED A SKIP** on
+  2026-08-21, the day `authsrv._heading_grant_ok` landed with REALFIX-P2's
+  `--zero-lead`: `lead_policy` now imports and applies the SHIPPED rate limit
+  instead of scoring P2 and P3 with none, and §6b drives BOTH arms of that
+  predicate -- refused a microsecond under `GRANT_MIN_INTERVAL`, allowed at
+  exactly it, allowed with nothing on record -- against hand-computed
+  expectations, asserts the two arms' reason vocabularies are DISJOINT, and
+  pins the policy end to end on the synthetic stream: **six moving headings
+  0.25 s apart yield three grants** at `t = 0.00 / 0.50 / 1.00`, with the three
+  refused ones producing no later grant, which is what "dropped, not held" means
+  on the wire. **Its NEGATIVE CONTROL is a control now, and what stood there was
+  not**: it compared the stream's six moving headings against those three grants,
+  both of which the check immediately above already pinned, so it could not fail
+  independently -- it added one to the floor and refuted nothing. The verdict
+  hook is now rebound to always fire and the same stream must grant all six.
+  **Beside it sits the check that keeps C3 honest on its own stated ground:
+  the POLICY must RUN the shipped predicate, not merely import it.** Replacing
+  `lead_policy`'s `heading_verdict(...)` call with an inline
+  `fired = _since is None or _since >= 0.5` left this file green at 66 of 66 --
+  the paraphrase-that-agrees-by-construction C3 exists to rule out, invisible --
+  so the server's own `GRANT_MIN_INTERVAL` is perturbed (set and restored) and
+  the policy's grant instants must follow it, from `[0.0, 0.5, 1.0]` to
+  `[0.0, 1.0]`. A hard-coded 0.5 cannot. **And `replay_verdicts`'s heading-row
+  filter is DRIVEN** against a hand-built capture carrying one `arm="zero-lead"`
+  row, one bare `heading-rate` row and one ordinary click row as the positive
+  control; both skip paths are exercised separately because the `arm` field is
+  newer than the reasons and a filter keyed on either alone would miss the other.
+  Deleting all three of those lines used to change nothing, since no capture in
+  any vault has such a row. **It is deliberately NOT a message-level
+  replay**: no capture in any vault holds a heading-arm `grant_verdict` row, the
+  flag having never been run, and the banner says so -- **the first REALFIX-L1
+  capture upgrades §6b onto the same footing as §6's 195137/195315 gate**, and
+  `replay_verdicts` skips heading rows so that capture cannot silently
+  redden the click arm when it arrives. §2's lead spine was RE-PINNED in the same
+  commit, **6 grants per policy -> 3**, and its pairing fixed with it: the old
+  form zipped grants against reports positionally, which is right only while
+  every report grants, so keying on the report's own `t` is right under any rate
+  limit. **The claim that the old form stayed silently green at 72.0 u is
+  WITHDRAWN** -- measured both ways, the positional zip yields
+  `[0.0, 72.0, 144.0]` for P2 against a required `[0.0]`, so it goes RED. The fix
+  is right; the near-miss it was said to have caught never happened, and an
+  invented blind spot is worth less than none. Floors **26** bare (§1's ten
+  structural asserts, §2's nine refusals and §6b's seven predicate checks build
+  their own fixtures and read neither vault nor client), RAISED to **68** once the fixture probes
+  answer, because excess over a floor is not an error and a bare floor protected
+  none of the checks only a full machine runs -- deleting C2(a)'s three
+  structural zeros on a vaulted machine used to print ALL CHECKS PASSED and now
+  names the shortfall. Both figures are re-measured from green runs of their own
+  configuration, never 19+5 in anybody's head. §3-§9 declare seven
+  `LEDGER.skip`s without the fixtures and there is no longer an always-on
+  eighth. Reads only; sends nothing, writes nothing, and **does** import
+  `authsrv.py` -- deliberately, see §6. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
