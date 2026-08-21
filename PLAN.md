@@ -1454,10 +1454,22 @@ UNMAPPED message).
    non-multiple-of-25 costs are visible rather than tabular. Our own wire went
    out in the measured order — `0x00E4`, then `0x00D2`, then the naming
    property. The five non-adrenal slots held at 0 changed pixels throughout.
-   **Still unseen:** `0x00D0`'s wipe on screen (it fired on the wire a second
-   after the last frame; the teardown frame is NOT evidence — it reads ~100%
-   changed on the non-adrenal controls too, so it is a different screen state)
-   and the outpost map-gate control.
+   **AND THE WIPE** (E7, run `20260821T135905`, [§29](studies/skills/FINDINGS.md)).
+   Charge, break off, wait 30 s doing nothing. Exactly ONE `0x00D0` went out and
+   the three rings emptied **together, in one frame step** — full at 18:00:16,
+   empty at 18:00:21, due at ~18:00:20 — with no intermediate state anywhere and
+   the five non-adrenal controls at 0 changed pixels in all ten frames. Nothing
+   decays; `0x00821B00` walks all eight slots and repaints once.
+   **A METRIC CORRECTION RIDES WITH IT, and it reaches back into §28.** The fill
+   rule these runs used ("first row with ANY changed pixel") reported a
+   demonstrably empty ring as 100% full off three stray pixels. §28.4's
+   "within 1.6 points" is therefore WITHDRAWN — swept across thresholds the
+   point estimates move by up to 25 points. What survives every threshold, and
+   is what those runs are actually for: the spent ring reads exactly zero, and
+   slot 4 loses more ring than slot 3 for the same 25 units. Qualitative claims
+   intact, precision claims withdrawn.
+   **Still unseen:** only the outpost map-gate control (§26.6), which needs a
+   correct 207 sent to a client standing in a town.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client

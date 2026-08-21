@@ -2874,8 +2874,25 @@ the empty baseline — E5's own null standard, no tuned threshold:
 | 3 | 318 | **120** | 100.0% | **80.8%** | 79.2% |
 | 4 | 319 | **80** | 100.0% | **67.3%** | 68.8% |
 
-All three within 1.6 points of a number written down before the run. And the
-discriminator:
+**CORRECTED 2026-08-21, an hour after this section was written — the point
+estimates above are NOT good to 1.6 points, and this paragraph originally said
+they were.** They depend on a free parameter I never swept: how many changed
+pixels make a row "filled". At the setting used above (any single pixel) the
+agreement is 1.6 points; swept from 1 to 40 pixels, slot 3 ranges 65.4–80.8%
+and slot 4 ranges 42.3–67.3%. E7 then showed that the ≥1 setting is positively
+UNSAFE — it reported a fully empty ring as 100% full off three stray pixels in
+one row (§29.4). So the precision claim is withdrawn. **What survives the sweep
+is the entire finding**, and it survives at every single threshold:
+
+| minpx | 1 | 5 | 10 | 20 | 30 | 40 |
+|---|---|---|---|---|---|---|
+| slot 3 (cost 120) drop | 19.2 | 19.2 | 19.2 | 21.2 | 25.0 | 34.6 |
+| slot 4 (cost 80) drop | **32.7** | **36.5** | **36.5** | **42.3** | **44.2** | **57.7** |
+| slot 2 (spent) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+
+Slot 4 loses more ring than slot 3 at every setting, and the spent ring reads
+exactly zero at every setting. Those two statements have no free parameter in
+them, and they are what the run is for. The discriminator:
 
 ```
 slot 3 (cost 120):  ring dropped 19.2 points   (25/120 = 20.8%)
@@ -2883,7 +2900,7 @@ slot 4 (cost  80):  ring dropped 32.7 points   (25/ 80 = 31.2%)
 ```
 
 **Both slots lost exactly one strike; they lost visibly different amounts of
-ring.** A proportional tax — a quarter off each, say — would have dropped them
+ring — at every threshold, so the statement is parameter-free.** A proportional tax — a quarter off each, say — would have dropped them
 by the same number of points, and it did not. This is `cmp esi,0x19 /
 add esi,-0x19` at `0x00821C71` reaching the screen: the pool is carried in raw
 units, 25 is the size of a strike, and the ring is `adrenaline_b ÷
@@ -2907,7 +2924,10 @@ baseline it reads ~100% changed **on every slot including the two non-adrenal
 controls**, so the whole frame is a different screen state and any adrenaline
 reading taken from it would be an artifact. That is the aggregate-diff lesson
 catching a false positive in the act, and the in-frame controls are what caught
-it. **`0x00D0` on screen remains open**, and wants a run that simply waits.
+it. ~~**`0x00D0` on screen remains open**, and wants a run that simply waits.~~ —
+**DONE, §29.** The run that simply waited is below, and the artifact this
+paragraph caught turned out to be the same class of error as the metric defect
+§28.4 now carries.
 
 ### 28.7 Two measurement notes
 
@@ -2931,4 +2951,81 @@ row carrying any change) is art-independent, and under it §27.4's anomaly does
 not appear**: here the two 80-unit skills behave identically, one emptied to
 0.0% and one taxed to 67.3% against a predicted 68.8%. §27.4's caveat should be
 read as a defect of that metric rather than of the client.
+
+## 29. E7 — the wipe, and a metric that lied
+
+**2026-08-21, run `20260821T135905`, loopback, build 38797, server at
+`fa601a0`.** The last screen-side item on this channel. Predictions in
+`e7-predictions.md`, registered before launch.
+
+The design is the whole point: charge every pool, break off with `attack:0`,
+then **do nothing for thirty seconds**. The practice target never attacks, so
+no damage re-anchors the clock — the only clock running is the one the last
+`0x00CF` started.
+
+### 29.1 The wire
+
+Nine gains, then **exactly one** `0x00D0` and nothing after it:
+
+```
+[c1] s2c adrenaline cleared: 25s out of combat (0x00d0, 6B)
+[c1] the player's adrenaline is gone: 25s out of combat
+```
+
+P18 CONFIRMED — `tick` drops the clock either way, so a wiped bar cannot
+re-wipe, and one quiet period produced one message rather than a stream.
+
+### 29.2 P15 and P16 — all three at once, and not early. CONFIRMED
+
+Frames anchored by timestamp, never by filename. `attack:0` ran at 17:59:55, so
+the last gain is at or just before it and the wipe is due ~18:00:20:
+
+| frame | time | slot 2 (80) | slot 3 (120) | slot 4 (80) | controls |
+|---|---|---|---|---|---|
+| w003 | 18:00:08 | 100% | 100% | 100% | 0 |
+| w004 | 18:00:16 | 100% | 100% | 100% | 0 |
+| **w005** | **18:00:21** | **0.0%** | **0.0%** | **0.0%** | **0** |
+| w006–w010 | 18:00:25–44 | 0.0% | 0.0% | 0.0% | 0 |
+
+**The three rings empty together, in one frame step, with no intermediate
+state anywhere in the run** — which is `0x00821B00` walking all eight slots and
+firing the repaint once. Nothing drains gradually; there is no decay.
+
+And the timing brackets the prediction from both sides: full at 18:00:16, empty
+at 18:00:21, due at ~18:00:20. **No frame is empty before the 25 s mark**, which
+is the half that matters — an early wipe would have meant the clock is anchored
+somewhere other than the last gain.
+
+### 29.3 P17 — the controls hold. CONFIRMED
+
+Slots 1 and 5–8: **0 changed pixels in every one of the ten frames.** This is
+the control §28.6 argued for after `final.png` read ~100% changed on every slot
+including the non-adrenal ones. Here the wipe frame moves the three adrenal
+rings and nothing else, so it is the wipe rather than a screen-state change.
+
+### 29.4 The metric lied, and the controls are what caught it
+
+The first pass over these frames reported **slot 2 back at 100% in the last
+frame** — after a wipe, with nothing on the wire that could refill it. It was
+not real. Slot 2's mean colour in that frame is the EMPTY value (110,80,35
+against an empty baseline of 105,79,34; charged is 218,163,72). Three stray
+pixels in the topmost row crossed the difference threshold, and the fill rule
+in use — *the first row from the top carrying **any** changed pixel* — turned
+three pixels into a full ring.
+
+**That rule produced §28's numbers**, which is why §28.4 now carries a
+correction rather than its original precision claim. Swept across sensible
+settings the point estimates move by up to 25 points; the *findings* — a spent
+ring at exactly zero, and unequal drops for equal strikes — hold at every
+setting. E7 itself is immune because it contains no intermediate fill to
+measure: 100% and 0% are threshold-independent, and the table above is
+identical at minpx 10 and 25.
+
+The general lesson is the one already in this repo's notes and freshly earned:
+**a point estimate with an unswept free parameter gets over-read.** The check
+worth running is the one with no free parameter in it, and where that is not
+available, sweep the parameter and report what survives. Three runs in a row
+have now had their headline numbers moved by a threshold choice — §27.4's
+"anomaly" (a metric artifact), §28.4's precision (withdrawn), and this frame
+(a false positive) — while every *qualitative* claim has survived untouched.
 
