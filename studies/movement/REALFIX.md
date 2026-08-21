@@ -546,11 +546,13 @@ Then, at each instant, the match test is *recomputed from the sample*: a node in
 
 ---
 
-### 3. PER-MECHANISM FIX CANDIDATES — spec'd, NOT built
+### 3. PER-MECHANISM FIX CANDIDATES — F1 is BUILT and unrun; F2a, F2b and F3 are spec'd, NOT built
 
 #### REALFIX-F1 · the plane echo fix — one line and one state slot
 
-**Site:** `authsrv.py:10294-10296`, the zero-lead send's argument list.
+✅ **BUILT 2026-08-21 as `--plane-carry`, and UNRUN.** The flag, its state slot, its telemetry and its startup banner are in `authsrv.py`; `test_position_trust.py` §15 locks them at 22 checks (floors 182 vaulted / 174 bare), every one proven able to go red by a 15-mutation campaign. **It is a MODIFIER ON `--zero-lead`, enforced rather than documented:** `--plane-carry` alone is REFUSED at startup by `zero_lead_composition` and `main()` raises, because F1 has no send site of its own and an inert flag would run a server identical to the shipped default while the operator's log said "F1 arm". `--zero-lead` alone still runs — it is the arm F1 is measured against. **NOTHING BELOW HAS BEEN RUN AT A CLIENT.** The run it is aimed at is REALFIX-L3's X3 cell, and the F1 arm is `--zero-lead --plane-carry`.
+
+**Site:** the zero-lead send's argument list — `authsrv.py:10294-10296` as drafted, and the shipped attachment is the `if zero_ok:` send inside the `if ZERO_LEAD:` block (the line numbers moved with the flag's own comment block; the block is the anchor, not the number).
 
 ```python
 ## field 3 = the DESTINATION's plane (the newest report's) -- unchanged.
@@ -663,7 +665,7 @@ L1's nulls were quoted past their budget. These will not be.
 | 4½ | **REALFIX-T4** the §2.3 lag validator (`≥ 0`, `≤ 1/f_tap + 0.05 s`) ❌ **NOT BUILT — declared unbuilt 2026-08-21** | nowhere; it exists only in §2.3 | ~15 lines, offline | whether T1's anchor may be used at all |
 | 5 | run **arm P0** with the plan (geometry calibration) | — | ~5 min | cell assignment |
 | 6 | run **arm P2** with the plan | — | ~5 min | the verdict |
-| 7 | **REALFIX-F1** plane carry, only if 5–6 produce X1/X3 events | `toolkit/authsrv/authsrv.py:10294-10296` | 3 lines | the fix A/B |
+| 7 | **REALFIX-F1** plane carry ✅ **LANDED 2026-08-21 as `--plane-carry`, UNRUN** — items 5–6 produced X3 events (3 of them), which is the condition this row made it conditional on | `toolkit/authsrv/authsrv.py`, the `if ZERO_LEAD:` send | 1 field + 1 slot | the fix A/B |
 
 Items 1–4 are instrument work with no policy content and can land before any client is up. Each needs its `TESTS.md` entry in the same commit (`test_srclint.py` §7 checks both directions), and item 4 needs a `LEDGER` floor set from a real green run.
 
