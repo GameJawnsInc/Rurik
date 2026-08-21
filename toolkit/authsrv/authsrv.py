@@ -13187,9 +13187,25 @@ def main():
               "it.")
         print("      PREDICTION, stated before the run, REALFIX.md sec.6.3 "
               "unedited:")
+        # CORRECTED 2026-08-21, and the correction is the point of the line.
+        # This used to read "(REALFIX-L3 observed 11 in X3, 3 in X1, 6 in X5)"
+        # and L3 observed no such thing: 11/3/6 are REALFIX.md sec.6.4.1's
+        # "instants planned" column for X3/X1/X5 -- SIMULATED, for a plan that
+        # then yielded 8 ("the plan yielded 8 above-cut plane-rewriting
+        # instants rather than the 11 simulated", FINDINGS's L3 entry). A
+        # prediction printed as an observation, inside the one artifact whose
+        # whole job is that the baseline cannot be rationalised after the run,
+        # would have scored this arm's PRIMARY falsifier against a number
+        # nothing ever measured -- and 11 against 8 makes any F1 result read as
+        # a larger improvement than it is.
         print("        MISMATCH  grants whose field 4 differs from the SYNC "
-              "copy's agent+0x80 go to 0 (REALFIX-L3 observed 11 in X3, 3 in "
-              "X1, 6 in X5)")
+              "copy's agent+0x80 go to 0. BASELINE, from REALFIX-L3 itself: 8 "
+              "plane-rewriting grants ABOVE THE CUT and 2 below, 10 in the "
+              "whole run, of which the late X1 and X2a legs carry 3 and "
+              "produced 0 events. No finer per-cell split was recorded, so "
+              "the denominator is the run. The 11-in-X3 / 3-in-X1 / 6-in-X5 "
+              "triple this line used to quote is sec.6.4.1's SIMULATED "
+              "instants planned and was never observed.")
         print("        SEPARATION p50 and p90 UNCHANGED within 5% -- F1 touches "
               "no position, only a plane word")
         print("        EVENTS    the REALFIX-X3 event count goes to 0 (it was "

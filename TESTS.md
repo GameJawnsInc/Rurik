@@ -2918,14 +2918,20 @@ Every one of these, in the order they were written:
   field 3 leads field 4 in 75.4% of 1,245 differing rows, but that population is
   overwhelmingly NPCs and the player-identified version is UNVERIFIED at 87% vs
   39% -- with a stripped block and a present-but-never-printed block as its two
-  controls, plus the cp1252 scan. Floors **174** bare and **182** with every
-  capture present, **one per configuration** -- a single bare floor protected
-  none of the 8 checks only a vaulted machine runs, proved by unhooking one §14
+  controls, plus the cp1252 scan — **including the baseline counts, which were
+  the one evidential string in that banner nobody pinned**: it read "REALFIX-L3
+  observed 11 in X3, 3 in X1, 6 in X5" and those are REALFIX.md §4.1's
+  *simulated* `instants planned`, never observed, standing where the primary
+  falsifier's baseline goes; L3 produced **8** plane-rewriting grants above the
+  cut and 2 below, and the banner now says so and is pinned on it. Floors
+  **175** bare and **183** with every capture present, **one per
+  configuration** -- a single bare floor protected none of the 8 checks only a
+  vaulted machine runs, proved by unhooking one §14
   check: vaulted printed ALL CHECKS PASSED at 146 against a floor of 139 while
   the bare run went red at 138. §10 and §13 are the two fixture-bearing sections
   (4 checks each), each declaring `LEDGER.skip` without its files, and the probe
   that raises the floor reads the same capture names those sections use. §14 and
-  §15 are entirely fixture-free, so all 47 and all 22 of their checks land in
+  §15 are entirely fixture-free, so all 47 and all 23 of their checks land in
   both totals. **Every §15 check was proven able to go red**: 15 mutations
   planted one at a time in `authsrv.py` -- field 4 never carrying, field 3
   following it into the past, the slot advancing on a refusal, the default
@@ -2934,7 +2940,20 @@ Every one of these, in the order they were written:
   turned into assignments, a `U+26A0` planted, the call site dropping the
   kwarg, the flag shipping ON, the label drifting on the OFF path, a second
   sending `if PLANE_CARRY:` block, and the zero-lead send made to require the
-  modifier -- **15 red, tree restored byte-identical after each**. No client.
+  modifier -- **15 red, tree restored byte-identical after each**. **A second
+  adversarial pass then planted 23 (those 15 plus 13 more) and found ONE
+  survivor**: the slot write hoisted from after the `send()` to before it,
+  inside the same `if zero_ok:`. It is a no-op only for a send that RETURNS --
+  `send()` ends in `sock.sendall`, which raises, and the shipped `send()` says
+  so where it explains its own seq gaps -- so §15 now drives a `0x0029` through
+  a send that dies (`PcDeadWire`, faithful to the shipped order: the wire-move
+  hook before the bytes, the `sent` row after) and requires the slot to name the
+  last plane that reached the WIRE. That is the 23rd check. The same pass found
+  that dropping the `plane_differs` kwarg reddened by an uncaught `KeyError`
+  raised inside the check's own arguments, which aborts before
+  `LEDGER.verdict()` and leaves the floor unevaluated -- so the telemetry checks
+  read those four fields with `.get` and FAIL BY NAME, except the refused row,
+  where `None` is the answer and presence is asserted with `in`. No client.
   ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported

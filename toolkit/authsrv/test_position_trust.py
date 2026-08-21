@@ -153,8 +153,16 @@ import vaultpath  # noqa: E402
 # console runs of their own configuration (182 from a normal run, 174 with
 # RURIK_VAULT pointing at a directory that does not exist, which also printed
 # its 2 declared skips). Neither is an enumeration.
-FLOOR_BARE = 174
-FLOOR_FULL = 182
+#
+# 2026-08-21, F1 SECOND PASS: section 15 took one more check -- a send that
+# RAISES must not advance the carry slot, which is the only observable
+# difference between writing that slot before the send and after it, and the
+# ordering a mutation lane hoisted while every other check stayed green. Also
+# fixture-free, so both floors move by the same 1: 175 bare and 183 vaulted,
+# each read off a real green console run of its own configuration (183 normal,
+# 175 with RURIK_VAULT pointing at a directory that does not exist).
+FLOOR_BARE = 175
+FLOOR_FULL = 183
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -2396,7 +2404,7 @@ def main():
     def pc_report(x, plane, vec=(766.0, 0.0)):
         return [1, [x, 2000.25], plane, list(vec), 1]
 
-    def drive_pc(steps, carry, zero_lead=True):
+    def drive_pc(steps, carry, zero_lead=True, wire=None, catch=()):
         """Run the shipped heading arm with ZERO_LEAD/PLANE_CARRY set.
 
         `steps` is [(report, may_grant), ...]. The rate limit is driven by
@@ -2406,9 +2414,17 @@ def main():
         monkey-patching `time`. That is the same technique section 14's
         `drive()` uses through `Sent.now`, made per-report so a refusal can sit
         BETWEEN two grants, which is the shape the named limit is about.
+
+        `wire` swaps in a different send() (see `PcDeadWire`) and `catch` names
+        the exception class the driver absorbs, stashing it on `w.raised` --
+        together they let a report be driven through a send that FAILS, which
+        is the only way "the slot advances after the send" differs observably
+        from "before it". `catch=()` is a real `except` clause that catches
+        nothing, so every existing caller keeps propagating.
         """
         st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
-        w, r = Sent(st), FakeRec()
+        w, r = (Sent(st) if wire is None else wire(st)), FakeRec()
+        w.raised = []
         was_zl, was_pc = authsrv.ZERO_LEAD, authsrv.PLANE_CARRY
         authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = zero_lead, carry
         try:
@@ -2416,10 +2432,39 @@ def main():
                 now = time.time()
                 st["grant_at"] = now - (10.0 if may else 0.0)
                 w.now = now - 10.0
-                arm(values, st, r, w)
+                try:
+                    arm(values, st, r, w)
+                except catch as exc:
+                    w.raised.append(exc)
         finally:
             authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = was_zl, was_pc
         return st, w, r
+
+    class PcDeadWire(Sent):
+        """`Sent`, but the socket dies on the Nth `0x0029` -- as sendall can.
+
+        Faithful to the shipped `send()`'s ORDER, which is what makes the
+        result mean anything: `_note_wire_move` runs BEFORE the bytes go out
+        and the `sent` record is written AFTER, so a raise leaves the model
+        updated and no row behind. That path is not invented here -- the
+        shipped `send()` names it in its own words, "A GAP in seq means crypt
+        advanced the keystream for a message whose plaintext never reached this
+        file -- sendall raised in between".
+        """
+
+        def __init__(self, state, die_on):
+            super().__init__(state)
+            self.die_on, self.seen = die_on, 0
+
+        def __call__(self, opcode, values, label, quiet=False):
+            if opcode == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT:
+                self.seen += 1
+                if self.seen == self.die_on:
+                    authsrv._note_wire_move(
+                        self.state, opcode, values,
+                        time.time() if self.now is None else self.now)
+                    raise OSError("sendall: connection reset by peer")
+            return super().__call__(opcode, values, label, quiet)
 
     def payloads(w):
         return [row[1] for row in w.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)]
@@ -2590,6 +2635,39 @@ def main():
           f"straddle a boundary the carried plane is the wrong one of the "
           f"pair. It is a one-interval correction for a one-interval lag")
 
+    # ---- THE SAME INVARIANT FROM THE OTHER SIDE: a send that FAILED ------
+    # WHY THIS CHECK EXISTS, and it is a survivor's fix. A mutation lane moved
+    # `state["zl_last_grant_plane"] = plane` from AFTER the send() to BEFORE it,
+    # inside the same `if zero_ok:`, and section 15 stayed green -- it was read
+    # as a provable no-op, on the grounds that nothing between the read and the
+    # write observes the slot. That is true for a send that RETURNS, and the two
+    # orderings are not the same program otherwise: `send()` ends in
+    # `sock.sendall`, which raises, and the shipped code says so where it
+    # explains its own seq gaps. With the write after the send, a message that
+    # never reached the wire does not advance the slot; with it before, the next
+    # grant carries the plane of a point the copy was never sent to -- exactly
+    # the error the refusal case above is about, reached by a different door.
+    # The verdict row is a separate matter and is NOT claimed here: it is
+    # written before the send, so a dead wire also leaves a `fired=True` row for
+    # a message that never went out. That is narrower than the slot -- a session
+    # whose sendall raised is over -- but it is worth knowing when reading the
+    # last row of a truncated capture.
+    st_d, w_d, _r_d = drive_pc([(pc_report(1000.5, 0), True),
+                                (pc_report(1500.5, 18), True)], carry=True,
+                               wire=lambda st: PcDeadWire(st, 2),
+                               catch=OSError)
+    check(len(w_d.raised) == 1 and len(payloads(w_d)) == 1
+          and st_d.get("zl_last_grant_plane") == 0,
+          "and a send that RAISES does not advance the slot either -- the "
+          "write is after the send, so the slot names the last plane that "
+          "reached the WIRE",
+          f"{st_d.get('zl_last_grant_plane')} after {len(payloads(w_d))} "
+          f"payload(s) and {len(w_d.raised)} dead send(s) -- the second grant "
+          f"was evaluated, was allowed, and died in sendall, so the copy is "
+          f"still bound for the FIRST grant's point and 0 is still the right "
+          f"field 4. Hoisting the write above the send passes every other "
+          f"check in this section, which is how it survived a mutation lane")
+
     # ---- TELEMETRY: the wire is scoreable without re-deriving the policy ---
     # REALFIX-F1's own falsifier is "the field-4 mismatch count is not 0", so
     # the value actually SENT has to be in the row. A count nobody records is a
@@ -2597,29 +2675,41 @@ def main():
     # and REALFIX-Q8 is three movetap pairs that are unattributable for exactly
     # that reason, because the gamesrv jsonl header carries no argv.
     rows_b = r_b.of("grant_verdict")
+    # `.get`, NOT `[...]`, AND THE REASON IS THE LEDGER. Dropping the kwarg at
+    # the call site is a mutation this check must catch, and with subscripts it
+    # "caught" it by raising KeyError out of the check's own arguments -- which
+    # aborts the run before LEDGER.verdict() and leaves the remaining section-15
+    # checks unexecuted and the floor never evaluated. Red either way, but
+    # CLAUDE.md's "a run that measured nothing failed" machinery is bypassed by
+    # a traceback. A missing field now reads None and FAILS BY NAME. The one
+    # place that still needs presence rather than value is the refused row
+    # below, where None is the ANSWER and `.get` would make an absent field
+    # indistinguishable from the right one.
     check(len(rows_b) == 2
-          and [e["plane_dest"] for e in rows_b] == [0, 18]
-          and [e["plane_cur"] for e in rows_b] == [0, 0]
-          and [e["plane_differs"] for e in rows_b] == [False, True]
-          and all(e["plane_carry"] is True for e in rows_b),
+          and [e.get("plane_dest") for e in rows_b] == [0, 18]
+          and [e.get("plane_cur") for e in rows_b] == [0, 0]
+          and [e.get("plane_differs") for e in rows_b] == [False, True]
+          and all(e.get("plane_carry") is True for e in rows_b),
           "TELEMETRY: every grant row records field 3, the field 4 ACTUALLY "
           "SENT, whether they differ, and which arm produced it",
-          f"{[(e['plane_dest'], e['plane_cur'], e['plane_differs']) for e in rows_b]} "
+          f"{[(e.get('plane_dest'), e.get('plane_cur'), e.get('plane_differs')) for e in rows_b]} "
           f"-- `plane_differs` IS the pre-registered mismatch count, so the run "
           f"is scored from the capture rather than from a replay of a policy "
           f"nobody recorded. `plane_carry` names the arm in the row because the "
           f"capture header carries no argv (REALFIX-Q8)")
     rows_off_pc = r_off_pc.of("grant_verdict")
     check(len(rows_off_pc) == 2
-          and [e["plane_cur"] for e in rows_off_pc] == [0, 18]
-          and [e["plane_differs"] for e in rows_off_pc] == [False, False]
-          and all(e["plane_carry"] is False for e in rows_off_pc),
+          and [e.get("plane_cur") for e in rows_off_pc] == [0, 18]
+          and [e.get("plane_differs") for e in rows_off_pc] == [False, False]
+          and all(e.get("plane_carry") is False for e in rows_off_pc),
           "and the SAME reports with the flag off record the shipped field 4 "
           "and no mismatch",
-          f"{[(e['plane_dest'], e['plane_cur'], e['plane_differs']) for e in rows_off_pc]} "
+          f"{[(e.get('plane_dest'), e.get('plane_cur'), e.get('plane_differs')) for e in rows_off_pc]} "
           f"-- the two arms of the A/B are distinguishable from the rows alone")
     refused_row = refusals_l[0]
-    check(refused_row["plane_dest"] is None
+    check(all(k in refused_row for k in ("plane_dest", "plane_cur",
+                                         "plane_differs"))
+          and refused_row["plane_dest"] is None
           and refused_row["plane_cur"] is None
           and refused_row["plane_differs"] is None,
           "and a REFUSED evaluation records None rather than the field 4 it "
@@ -2684,8 +2774,20 @@ def main():
                    and isinstance(n.test, ast.Attribute)
                    and n.test.attr == "plane_carry"), None)
     pc_banner = printed_text(pc_arg)
+    # THE BASELINE COUNTS ARE PINNED TOO, and they were not until 2026-08-21.
+    # Every other evidential string here was pinned -- "87% and 39%", the 5%
+    # band, the X3 count -- so a banner that read "REALFIX-L3 observed 11 in
+    # X3, 3 in X1, 6 in X5" went through a 15-mutation campaign untouched. Those
+    # numbers are REALFIX.md sec.6.4.1's SIMULATED "instants planned" for a plan
+    # that then yielded 8, printed as an observation of the completed run, and
+    # they are the baseline the PRIMARY falsifier ("the field-4 mismatch count
+    # is not 0") gets scored against. An unpinned number in a pre-registration
+    # is a number that can drift back.
     pc_wanted = ("REALFIX-F1", "PREVIOUS GRANT'S plane",
                  "field 4 differs from the SYNC copy's agent+0x80 go to 0",
+                 "BASELINE, from REALFIX-L3 itself: 8 plane-rewriting grants "
+                 "ABOVE THE CUT and 2 below",
+                 "SIMULATED instants planned and was never observed",
                  "UNCHANGED within 5%", "X3 event count goes to 0", "FAILS IF",
                  "NAMED LIMIT", "more than ONE grant interval behind",
                  "OVERWHELMINGLY NPCs", "87% and 39%",
@@ -2706,6 +2808,8 @@ def main():
         "def main():\n    if a.plane_carry:\n"
         "        _dead = (\"REALFIX-F1 PREVIOUS GRANT'S plane FAILS IF "
         "field 4 differs from the SYNC copy's agent+0x80 go to 0 "
+        "BASELINE, from REALFIX-L3 itself: 8 plane-rewriting grants ABOVE THE "
+        "CUT and 2 below SIMULATED instants planned and was never observed "
         "UNCHANGED within 5% X3 event count goes to 0 NAMED LIMIT "
         "more than ONE grant interval behind OVERWHELMINGLY NPCs 87% and 39% "
         "NECESSARY, NOT SUFFICIENT\")\n")
