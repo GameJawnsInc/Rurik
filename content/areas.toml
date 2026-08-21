@@ -366,8 +366,11 @@ generator, not of the size, and the mechanism -- water from the borrowed \
 environment, a depth bound in the compiler, or the borrowed Zones chunk -- is \
 NOT established."""
 
-[area.shoals]
-name = "The Shoals"
+# RENAMED 2026-08-21: was `shoals` ("The Shoals"). The vault run note for
+# WORLDMAPS-W8 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.env_off]
+name = "Environment Off"
 map_id = 143
 dims = 64
 heights = "plaza"
@@ -389,7 +392,7 @@ environment = false       # <- THE VARIABLE. `stripbuild`'s ENV pair is
 sound = true
 trees = 8
 
-[area.shoals.provenance]
+[area.env_off.provenance]
 source = "invented"
 verified = """Ours, and it exists to answer ONE question with ONE variable. \
 WORLDMAPS-W7 measured a DEPTH CUT on the client's own compiled meshes: ground at \
@@ -405,12 +408,15 @@ and nothing else changed, so the two meshes differ by the ENV chunk alone. If \
 the left third of the mesh returns, the water reading is confirmed; if the mesh \
 is unchanged, the water reading is refuted and the other two survive."""
 
-[area.rills]
-name = "The Rills"
+# RENAMED 2026-08-21: was `rills` ("The Rills"). The vault run note for
+# WORLDMAPS-W9 arm 1 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_largest]
+name = "Zones Largest"
 map_id = 143
 dims = 64
 heights = "plaza"
-# `shoals`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
 # thing that selects the borrowed Zones chunk. Environment stays FALSE so this
 # arm differs from WORLDMAPS-W8's treatment in exactly one place.
 seed_x = 3072.0
@@ -428,7 +434,7 @@ environment = false
 sound = true
 trees = 8
 
-[area.rills.provenance]
+[area.zones_largest.provenance]
 source = "invented"
 verified = """Ours, and it exists to vary the ONE thing no authored area in this \
 project has ever varied. Every map this toolkit has built borrows its Header and \
@@ -444,12 +450,15 @@ the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum 
 contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
 changes nothing about the compiled navmesh, the Zones reading is dead."""
 
-[area.brooks]
-name = "The Brooks"
+# RENAMED 2026-08-21: was `brooks` ("The Brooks"). The vault run note for
+# WORLDMAPS-W9 arm 2 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_smallest]
+name = "Zones Smallest"
 map_id = 143
 dims = 64
 heights = "plaza"
-# `shoals`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
 # thing that selects the borrowed Zones chunk. Environment stays FALSE so this
 # arm differs from WORLDMAPS-W8's treatment in exactly one place.
 seed_x = 3072.0
@@ -468,7 +477,7 @@ environment = false
 sound = true
 trees = 8
 
-[area.brooks.provenance]
+[area.zones_smallest.provenance]
 source = "invented"
 verified = """Ours, and it exists to vary the ONE thing no authored area in this \
 project has ever varied. Every map this toolkit has built borrows its Header and \
@@ -480,17 +489,25 @@ ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
 Zones chunk and nothing else, which is what makes this a single variable. Our \
 template's 34-byte form is shared by 25 maps; real maps carry zone material \
 definitions with .ini paths and float arrays up to 15,870 B. This row points at \
-the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
-contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
-changes nothing about the compiled navmesh, the Zones reading is dead."""
+the SMALLEST of those that is still a real table (Sparring Basics, head row \
+71585 / partner 71586, 2,030 B) -- 60x our template's 34 B, but a fourteenth of \
+the 15,870 B one that `zones_largest` pointed at. It exists because that arm \
+CRASHED the client (WORLDMAPS-W9 arm 1, c0000005 on an unwritable page), so \
+this arm asks the same question with the smallest dose that still carries real \
+zone definitions. CORRECTED 2026-08-21: this paragraph was copy-pasted from \
+`zones_largest`'s row and described Coastal Gate / 15,870 B, which is not what \
+the fields above it select."""
 
 # SUPERSEDED 2026-08-21, kept as the record. This row was WORLDMAPS-W11's
 # registered treatment arm -- `sculpt` plus bit 0 -- and it did its job: the
 # excluded ground returned, 63.04% -> 93.26%. `sculpt` now carries `map_flags`
 # itself, so deploying this row and deploying `sculpt` produce the same map.
-# Kept because the run note cites it by name.
-[area.deeps]
-name = "The Deeps"
+# Kept because WORLDMAPS-W11's run note cites it -- under its old name, `deeps`.
+# RENAMED 2026-08-21: was `deeps` ("The Deeps"). The vault run note for
+# WORLDMAPS-W11 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.flags_bit0]
+name = "Flags Bit 0"
 map_id = 143
 dims = 64
 heights = "plaza"
@@ -512,7 +529,7 @@ map_flags = 1            # <- THE VARIABLE. Bit 0 only; the TOP BYTE stays 0 so
                          # the slope set stays the 15/35/30 that FINDINGS 48
                          # measured in force.
 
-[area.deeps.provenance]
+[area.flags_bit0.provenance]
 source = "invented"
 verified = """Ours, and it exists to pull the lever WORLDMAPS-W10 found. W10 \
 located the navmesh depth bound statically in the pinned pristine 38797 client: \
