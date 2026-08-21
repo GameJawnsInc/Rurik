@@ -2159,6 +2159,82 @@ warrior melee sessions in the live corpus surface no adrenaline-shaped
 property. So either the client animates its own icons from combat it can
 already see — it watches its hits land and its health drop, and it holds the
 unit costs in its own table — or the channel hides in an unmapped opcode.
-UNRESOLVED, and the harness can answer it: put an adrenal skill on the bar,
-land four hits, watch the icon. The server tracks the pools authoritatively
-either way; what is at stake is only whether the icons charge on screen.
+~~UNRESOLVED~~ — **answered the same evening, §25**: the harness put Sever
+Artery on the bar, landed nine hits, and the icon never moved. The client
+does not self-animate adrenaline; the display waits for a message nobody has
+mapped. The server tracks the pools authoritatively regardless.
+
+## 25. The client consumes all of it — four runs, 2026-08-20 evening
+
+The substrate landed at `68d9850` (gate, debit, regen, adrenaline pools,
+death/revive emissions) and four loopback runs measured what the client does
+with each message. Predictions were written before the first launch
+(session scratchpad, `run-predictions.md`); every P below names its verdict.
+
+**E1 (`20260820T230059`) — the debit and the climb.** The first property-62
+any client has ever received from this server. Fifteen frames, every one
+reconciled against the server's own logged pool plus 0.99 e/s times the gap:
+**the client displays floor(its own integration of max + rate + debits)** —
+including the two frames that discriminate floor from round (server 22.56 →
+client **22**; 23.5 → **23**) — and the climb between messages runs at
+exactly the prop-43 rate. Fourteen frames sit on exact press-time anchors;
+the fifteenth (24 at ~+2 s) is consistent within the one press whose time is
+estimated. P1 CONFIRMED, P2 CONFIRMED (the client animates the rate, as it
+does for health). **And the energy bar draws THREE `›››` arrows — the 3-pip
+rate, rendered** — with a control: at death (E3) the rate goes to 0.0 and the
+orb empties outright. One pip-quantum, one arrow, the energy twin of isle
+B4's health-pip result.
+
+**E2 (`20260820T230849`) — the refusals, and the answer to §8's question.**
+A 25-energy skill (863) drained the pool 25 → 0.00 in one cast, and the
+recovery staircase came back **5 → 11 → 17 → 22 → 25** across ~6 s frames —
+~1 e/s, the sent rate, from near-empty. Then the two refusals: with 7.70
+energy the client **SENT** the 25-energy `USE_SKILL` anyway, and with 0
+adrenaline it **SENT** the `0x8027` attack-skill press —
+
+> **The client does not swallow an unaffordable press, and it does not grey
+> the slot for affordability** (the darkening our first read saw was the
+> SELECTED-SKILL gold border moving between slots). Against our server, the
+> gate is the SERVER's, both halves. P3/P5 answered: no client-side gate
+> fired. What retail's server answers a refused press with — ours answers
+> with silence, and the client visibly re-animates the pressed slot for
+> ~10 s afterwards — is a new open question; retail players see a "Not
+> enough Energy" feedback that has to come from somewhere.
+
+Also observed: the practice target died to THREE Power Attacks (they hit
+for ~41, not the ~19 the walk plan assumed), which is why this run's Sever
+charge stopped at 75 units — the fourth swing hit a corpse. And the
+**25-second non-combat wipe fired live**: `the player's adrenaline is gone`.
+
+**E3 (`20260820T231700`) — death and the resurrect pair.** The enemy killed
+the player; the kill batch carried `energy regeneration stops` (43 = 0.0,
+the retail death shape) and the client emptied the orb with the health. Ten
+seconds later the revive sent the retail resurrect pair — **52 = 1.0 then
+43 = rate** — and **the orb refilled on screen** (frame 23:17:44 empty,
+23:17:50 full). Yesterday's runs left that orb at 0 forever; this was
+property 52's first render on any client, ours or theirs. P8, P9 CONFIRMED.
+Bonus: the post-revive Sever press was refused at **46 units accumulated
+purely from taking hits** — the 1-unit-per-1%-health-lost rule visibly at
+work with zero swings landed.
+
+**E4 (`20260820T232138`) — the full adrenaline cycle.** Nine landed
+auto-attack swings (each +25, pool capped at its 100-unit cost), then:
+`skill 382 spends 100 adrenaline; every other pool loses a strike` →
+`EFFECT_APPLY(Bleeding on agent 10, buff 1, 9.0s, inflicted by skill 382 at
+rank 3)` — charge, spend, cross-pool tax and the condition landing through
+the effect substrate, one unbroken chain. The immediate re-press proved the
+reset: `needs 100, has 75` — exactly three post-spend swings' worth. P6
+CONFIRMED.
+
+**P7 REFUTED, and the negative is the finding: the client does NOT charge
+the adrenal icon from observed combat.** At a server-side pool of 100 —
+charged, accepted, spent — Sever's slot rendered pixel-identical to its
+0-unit state (E4 frames w001 vs w002/w003; the gold ring in w004 is press
+feedback, present for refused and accepted presses alike). The dark icon at
+zero units matches GWW's description, but the flames-creeping-up display is
+fed by the client's own adrenaline store (GWCA's `SkillbarSkill.adrenaline_a`,
++0x00) — and **no source anywhere maps the message that fills it**: not
+schema/messages.json, not GWCA's `Opcodes.h` (GWCA reads it from client
+MEMORY). Finding that opcode is now a named clientscan target: what writes
+`SkillbarSkill.adrenaline_a`, and which RECV handler reaches it.
+
