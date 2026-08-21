@@ -4520,3 +4520,90 @@ not merely small, so the identity holds through the client's own node bookkeepin
 rather than approximately, and (b) it holds at the warp instants, which is what
 rules the straight-line conjunct out **there**. Under any leaded policy the same
 measurement would not be definitional — and that is the version worth taking.
+
+## 2026-08-21 — REALFIX-F1 RAN: zero warps, but its own primary falsifier FIRED, and the event reduction is not significant at n = 1
+
+**OBSERVED, `ours`.** Third arm on the identical L3 plan, `--zero-lead
+--plane-carry`, capture `20260821T143411` / `movetap-…143429` (9.5 Hz — below
+floor, positives valid, nulls void).
+
+| | **P0 default** | **P2 `--zero-lead`** | **F1 `+ --plane-carry`** |
+|---|---|---|---|
+| **REALFIX-E events** | 0 | **3** | **0** |
+| max `async_at` step | 43.0 u | 476.8 u | **38.3 u** |
+| grants | 0 | 88 | 93 |
+| plane-word changes | — | 10 | **24** |
+| samples above the gate-1 cut | 97% | 29% | 38% |
+| separation p50 / p90 / max | 3712 / 6046 / 6138 | 150 / 498 / 530 | 227 / **491** / 527 |
+
+**F1 is doing the thing it was built to do.** 24 grants carried a field 4 that
+differs from field 3 — the carry firing at every boundary crossing — against 0 in
+the control, where the two fields are equal by construction.
+
+### The falsifier fired: the mismatch did not go to zero
+
+F1's pre-registration, printed at startup: *"grants whose field 4 differs from
+the SYNC copy's `agent+0x80` go to 0 … FAILS IF the field-4 mismatch count is not
+0."* Scored against client memory, per grant, both arms:
+
+| | grants | field 4 ≠ the copy's own plane |
+|---|---|---|
+| P2 `--zero-lead` | 88 | **8 (9%)** |
+| F1 `+ --plane-carry` | 93 | **5 (5%)** |
+
+**Five is not zero, so the primary falsifier FIRED.** And all five sit **above the
+cut** — the exact combination that produced 3 of 8 events in the control:
+
+```
+t= 50.21 (10950,4720) w3=18 w4=18 | copy plane 0 | sep 514
+t= 77.42 (10950,4708) w3=18 w4=18 | copy plane 0 | sep 511
+t=104.67 (10950,4699) w3=18 w4=18 | copy plane 0 | sep 511
+t=178.93 (11123,5249) w3=18 w4=18 | copy plane 0 | sep 366
+t=191.66 (10860,4816) w3=18 w4=18 | copy plane 0 | sep 429
+```
+
+**Every one is the spec's own NAMED LIMIT, biting exactly where it said it
+would**: *"F1 under-corrects when the copy is more than one grant interval
+behind."* All five send `w4 = 18` because the **previous grant** was already on
+plane 18 — the client had been on the deck for two grants while the copy was
+still back on plane 0. F1 corrects a one-interval lag; these are two-interval
+lags. The limit was written before the run and is now measured.
+
+### ⚠ The event reduction is NOT significant, and saying otherwise would be the
+
+
+On the condition that actually matters — above the cut **and** field 4 wrong —
+the control had **8 such grants and 3 events**; F1 had **5 such grants and 0
+events**. **Fisher exact: p = 0.196.** At these counts, zero events in five
+exposures is what chance produces about one time in five. **F1's zero is
+consistent with the fix working and equally consistent with it doing nothing to
+the events**, and the run cannot separate those.
+
+What the run *does* establish: F1 **reduces the exposure** (8 → 5 dangerous
+grants, −37%) by a mechanism that is measured rather than argued, and it does so
+without touching position — separation p90 **498 → 491 u (−1.4%)**, inside the
+±5% the prediction demanded.
+
+⚠ **The p50 separation moved 150 → 227 u (+51%) and above-cut time 29% → 38%,
+and F1 cannot have caused either** — it changes one 16-bit field and no
+coordinate. That is run-to-run path variance on an identical script, the same
+variance that made L1's two identical-play baselines differ by 1.7×. **It is also
+the reason the event comparison is weak: if the substrate moves that much between
+runs, a 3-versus-0 difference at n = 1 per arm is not a measurement.**
+
+### What this means for the fix
+
+**The mechanism story survives and strengthens** — the carry works, the residual
+is explained by its own stated limit, and nothing contradicts round 6 or L3.
+**The fix is not demonstrated.** Two things would settle it, in order:
+
+1. **REALFIX-F1b — carry the plane of the grant the copy has ARRIVED at, not the
+   previous one sent.** The server already computes arrival (`dist / speed` is
+   the same arithmetic the bake uses), so this needs no navmesh and no new
+   measurement; it closes exactly the two-interval case all five residuals sit
+   in. **Predicted: the field-4 mismatch count reaches 0**, which is the
+   falsifier F1 just failed, and it is a real prediction because F1's own
+   residual pattern says where the remaining five come from.
+2. **Repetition.** Three arms × three runs would put the event comparison on
+   n = 9 per arm; at the control's 3-in-8 rate, that is enough for the Fisher
+   test to separate a real zero from a lucky one.
