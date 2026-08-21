@@ -2663,16 +2663,35 @@ counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
    charge a bar, put one adrenal skill on recharge, send a 207, and watch whether
    that slot's fill moves. Cheap, and it is the only one of the five rules with a
    single line of evidence.
-2. **Are the sub-25 gains the health-loss rule?** §26.5's join is unrun. Until
-   it is, that reading is INFERRED and the 32 values are just small integers.
+2. ~~**Are the sub-25 gains the health-loss rule?**~~ — **RUN 2026-08-21, and
+   it CORRECTED the rule.** They are the health-loss rule: 31 of the 32 carry a
+   same-batch `0x00A3` naming the gaining agent as its target, so each joins to
+   the exact damage that produced it. **But the wiki's "floored" is wrong —
+   the wire rounds.** floor fits 14/31, ceil 17/31, `floor(pct)+1` 17/31,
+   **round 31/31**. The discriminating rows are |pct| 2.500, 2.708, 2.917 and
+   3.542 granting 3, 3, 3 and 4 where flooring grants 2, 2, 2 and 3.
+   `pools.damage_units` shipped the wiki's rule and was corrected; the reading
+   is now OBSERVED rather than INFERRED. Two caveats kept: the sign is
+   negative on the wire and the magnitude is what the rule reads (flooring the
+   negative rounds away from zero and fits nothing — an arithmetic slip that
+   made a correct hypothesis look 0-for-31), and the no-grant BOUNDARY moving
+   from 1% to 0.5% is an extrapolation, since the corpus's smallest sample is
+   2.5%.
 3. **What is 209 for?** Zero live witnesses. A resynchronisation after a
    reconnect and a hero/henchman bar push are both plausible and neither is
    evidenced. If the answer is "nothing on retail", say so — energy property 33
    is the precedent for an implemented-and-unused handler.
 4. **Opcode 231 needs its own pass** (§26.3). It is the fifth writer of this
    store, its shape matches 210's, and this section deliberately did not name it.
-5. **The `u16`/`u32` width disagreement at `+0x38`** (§26.8) is latent on 38797
-   and should be re-measured on 38833 before anyone relies on it staying latent.
+5. ~~**The `u16`/`u32` width disagreement at `+0x38`**~~ — **MEASURED on both
+   builds 2026-08-21: still latent.** The high word is zero in **all 3,443
+   rows on 38797 AND on 38833**, which also carry the same 151 nonzero costs
+   over the same distinct set {20, 25, 50, 60, 75, 80, 100, 120, 125, 130, 140,
+   150, 160, 175, 200, 220, 240, 250} — note 20, 60, 130, 140, 160, 175 and 220
+   are not multiples of 25, which is §26.8's raw-units point from a second
+   build. `skilltable.py` reading a dword where the client reads a word remains
+   harmless, and is now harmless *across a build bump* rather than on one
+   image. Worth aligning the widths anyway; no longer worth blocking on.
 6. ~~**Nothing here has been sent to a client yet.**~~ — **DONE the same day,
    §27.** The run was made, the prediction it registered (`units/cost`, not a
    count of quarters) was CONFIRMED, and §26's central claim is no longer static

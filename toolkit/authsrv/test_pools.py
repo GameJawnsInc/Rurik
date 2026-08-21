@@ -632,9 +632,16 @@ def section_adrenaline_pool():
     print("\n4c. the gain from damage is FLOORED, and zero is not combat")
     c = pools.AdrenalinePool({319: 80})
     c.on_hit_landed(0.0)
-    LEDGER.ok(c.on_damage_taken(0.007, 5.0) == [] and c.units[319] == 25,
-              "0.7% of maximum health grants NOTHING",
-              "WIKI: one unit per 1% lost, floored. A stream of scratches must "
+    # 0.2%, NOT 0.7%. Re-pinned 2026-08-21 when the corpus refuted the wiki's
+    # floored rule (see `damage_units`): rounding puts the no-grant boundary at
+    # 0.5%, so 0.7% now grants ONE unit and is no longer a no-op. The check
+    # still needs a genuinely 0-unit event to make its point, and 0.2% is one
+    # under either rule -- which is why it was chosen over a value that only
+    # works under the new one.
+    LEDGER.ok(c.on_damage_taken(0.002, 5.0) == [] and c.units[319] == 25,
+              "0.2% of maximum health grants NOTHING",
+              "one unit per 1% lost, ROUNDED (31/31 of the corpus join). A "
+              "stream of scratches must "
               "not charge a bar")
     LEDGER.ok(c.tick(26.0) is True and c.units[319] == 0,
               "and that no-op did NOT refresh the combat clock -- 26 s wipes",
@@ -1410,14 +1417,30 @@ def section_adrenaline_wire():
 
         print("\n11d. a sub-1% hit sends nothing, and the control at 1% does")
         sent.clear()
-        LEDGER.ok(pools.damage_units(0.007) == 0
-                  and pools.damage_units(0.01) == 1,
-                  "the floor is the rule: 0.7% is nothing, 1.0% is one unit",
-                  f"{pools.damage_units(0.007)} and {pools.damage_units(0.01)} "
-                  f"-- WIKI, and `damage_units` is a module function precisely "
-                  f"so the granted integer and the wire integer cannot be two "
-                  f"different numbers")
-        authsrv.player_gains_adrenaline(send, state, pools.damage_units(0.007),
+        # THE RULE IS ROUND, NOT FLOOR -- measured 2026-08-21 against a wiki
+        # that says floored. All 32 sub-25 gains in the live corpus, 31 of
+        # which carry a same-batch 0x00A3 naming the gaining agent, join to
+        # their own damage: round fits 31/31, floor 14/31, ceil 17/31. The
+        # discriminating rows are |pct| 2.500/2.708/2.917/3.542 granting
+        # 3/3/3/4 where flooring grants 2/2/2/3.
+        #
+        # The BOUNDARY moves with it, from 1% to 0.5%, and that half is an
+        # EXTRAPOLATION rather than a measurement: the corpus's smallest
+        # sample is 2.5%, so nothing observed says what retail does below 1%.
+        # Pinned to the rule we can defend, and labelled so nobody reads the
+        # 0.4/0.6 pair as measured.
+        LEDGER.ok(pools.damage_units(0.004) == 0
+                  and pools.damage_units(0.006) == 1
+                  and pools.damage_units(0.025) == 3,
+                  "round is the rule: 0.4% is nothing, 0.6% is one, 2.5% is "
+                  "three (the corpus's own smallest sample)",
+                  f"{pools.damage_units(0.004)}, {pools.damage_units(0.006)} "
+                  f"and {pools.damage_units(0.025)} -- `damage_units` is a "
+                  "module function precisely so the granted integer and the "
+                  "wire integer cannot be two different numbers. The 0.4/0.6 "
+                  "pair is EXTRAPOLATED (no sub-1% sample exists); 2.5 -> 3 is "
+                  "OBSERVED and is one of the four rows that refuted floor")
+        authsrv.player_gains_adrenaline(send, state, pools.damage_units(0.004),
                                         time.time(), 0, "a scratch")
         LEDGER.ok(sent == [],
                   "so a scratch puts NOT ONE MESSAGE out",

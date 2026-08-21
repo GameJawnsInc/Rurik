@@ -472,8 +472,37 @@ class EnergyPool:
 def damage_units(fraction_of_max_health):
     """Adrenaline units granted by taking `fraction_of_max_health` damage.
 
-    WIKI (GWW, "Adrenaline", rev. 2026-07-02): one unit per 1% of MAXIMUM
-    health lost, FLOORED -- so a hit for under 1% grants nothing.
+    ONE UNIT PER 1% OF MAXIMUM HEALTH LOST, **ROUNDED TO NEAREST** -- and the
+    rounding is MEASURED, against a wiki that says otherwise.
+
+    WIKI (GWW, "Adrenaline", rev. 2026-07-02) says FLOORED. **The wire says
+    round**, and this function shipped the wiki's rule until 2026-08-21.
+    OBSERVED: all 32 sub-25 gains in the 14-capture live corpus, 31 of which
+    carry a same-batch `0x00A3` damage message naming the gaining agent as its
+    target, so each gain can be joined to the exact damage that produced it:
+
+        rule            fits
+        floor(pct)      14 / 31
+        ceil(pct)       17 / 31
+        floor(pct)+1    17 / 31
+        ROUND(pct)      31 / 31
+
+    The four discriminating rows are the ones where the two rules disagree --
+    |pct| 2.500, 2.708, 2.917 and 3.542 granting 3, 3, 3 and 4 units where
+    flooring would grant 2, 2, 2 and 3. There is no exact .5 anywhere in the
+    corpus (2.500 is 2.50000003 in the float), so half-up and half-even are
+    indistinguishable here and this uses half-up; a capture landing exactly on
+    .5 would separate them.
+
+    Note the sign: property 16's value is a NEGATIVE fraction on the wire, and
+    the magnitude is what the rule reads. A first cut of this join floored the
+    negative directly, which rounds AWAY from zero and fit nothing -- the
+    arithmetic slip is worth recording because it made a correct hypothesis
+    look 0-for-31.
+
+    A hit for under 0.5% now grants nothing (it rounds to zero) where the
+    floored reading put that boundary at 1%. Nothing in the corpus sits in that
+    band, so which side of it retail lands on is UNVERIFIED.
 
     A MODULE FUNCTION AND NOT A METHOD, because two callers need the same
     number for two different purposes and neither may compute it its own way:
@@ -484,10 +513,11 @@ def damage_units(fraction_of_max_health):
     permanently out of step with nothing able to resync them.
 
     The 1e-9 is arithmetic hygiene, not a game rule: 0.29 * 100 is
-    28.999999999999996 in binary, and flooring that to 28 would lose a unit to
-    the representation rather than to the mechanic.
+    28.999999999999996 in binary, and letting the representation decide a unit
+    boundary would lose a unit to the encoding rather than to the mechanic.
     """
-    return int(math.floor(float(fraction_of_max_health) * 100.0 + 1e-9))
+    pct = abs(float(fraction_of_max_health)) * 100.0
+    return int(math.floor(pct + 0.5 + 1e-9))
 
 
 class AdrenalinePool:
