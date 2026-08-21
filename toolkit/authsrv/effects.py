@@ -444,8 +444,24 @@ class EffectTable:
         ArenaNet does no such thing here. What is NOT settled is the half that
         decides whether we may copy it: between `apply + duration` and the late
         removal, is the effect still DRAWN? A wire capture cannot see a screen.
-        `--probe effect_silent_extend` asks exactly that, and until it runs this
-        table keeps the shape it has -- the divergence is recorded, not acted on.
+        `--probe effect_silent_extend` RAN 2026-08-21 (studies/skills 32) and the
+        answer is a third thing neither reading proposed: **the client owns the
+        expiry but does not forget the effect.** The live icon vanishes on the
+        client's own timer with no packet -- ~9 s against a 10.0 s duration, some
+        15 s before a late `0x0044` was sent -- and the slot then holds a STATIC,
+        heavily faded ghost of the same icon until the removal arrives, which
+        clears it. Measured, not eyeballed: same-state frames are byte-identical
+        (diff 0.000), the slot moves 6.829 across the removal while a same-sized
+        control patch beside it moves 0.000, and the ghost is held unchanged
+        across 14 s of frames.
+
+        SO THIS TABLE'S PAIR IS NOT LOAD-BEARING, AND SILENCE IS NOT FREE. The
+        late removal landed correctly on an already-expired effect -- no refusal,
+        no desync -- so REMOVE-then-APPLY is not required for correctness. But an
+        effect held open by silence stops being VISIBLE at its stated duration,
+        so anything the player must see for time T needs a duration covering T or
+        a re-application. The shape here is unchanged: what changed is that both
+        options are now costed from a measurement rather than assumed.
         """
         if duration is None or duration <= 0:
             raise EffectError(

@@ -1649,6 +1649,16 @@ The residual is then a measurement rather than an error: it is how long the oper
 remained in range after the first application. The torch that held longest, skill 483 at
 `+55.0` against a 5.0 s duration, is a fifty-five-second stand.
 
+**AND THE SCREEN HALF IS NOW ANSWERED TOO** — `--probe effect_silent_extend`,
+2026-08-21, [studies/skills §32](../skills/FINDINGS.md). Our client **owns the
+expiry**: the live icon goes at the stated duration with no packet, and the slot
+then holds a static, heavily faded GHOST of it until the removal lands. So a
+silent extension keeps the server's bookkeeping but not the player's view. Which
+raises the question this section cannot answer and one screenshot can: **for the
+15 late episodes above, was the operator looking at a live icon or a ghost?** The
+Disease that killed them outlasted its 10.0 s duration many times over. Take one
+frame 20 s into a Student's ring on the next Isle trip.
+
 ## 9. Rung 8c, LIVE #5 — the rank ladder: the unmet penalty SCALES, and PINNED is dead (2026-08-21, capture `20260821T163511`)
 
 **Rung 7's one open defect is now half closed, and the half that closed is the one

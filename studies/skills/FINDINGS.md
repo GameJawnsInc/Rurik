@@ -3399,3 +3399,75 @@ resolves to the wrong thing turns every assertion behind it into a no-op, and
 the defence is an anchor the artifact can refute rather than a plausible-looking
 first element.
 
+## 32. The client runs its OWN expiry timer — but it does not forget the effect (`--probe effect_silent_extend`, 2026-08-21)
+
+**Answers the question `effects.EffectTable.apply` had left open** — its docstring
+ended *"how retail refreshes one is NOT FOUND"*, and
+[studies/isle §8.6](../isle/FINDINGS.md) had just answered the WIRE half: retail
+refreshes by sending nothing and delaying the `0x0044`. A capture cannot see a
+screen, so this probe read the other half. Run `20260821T173954`, verdict PASS,
+all seven steps confirmed on the wire in `gamesrv.log` before any frame was
+opened (`0x0042` 20 B, `0x0044` 10 B, three declared refusals silent).
+
+**Design.** CONTROL: skill 478 for 10.0 s, removed at exactly `apply + duration`
+— the shape our server emits today, which proves a removal removes. TREATMENT:
+skill 480 for 10.0 s, then **25 seconds of server silence**, then a late
+`0x0044`. Screenshots every ~2.35 s throughout.
+
+### 32.1 The prediction was half right, and the half it got wrong is the finding
+
+Pre-registered: *"the icon is STILL DRAWN at +13 s and +20 s with the timer bar
+drained to empty, and it goes only when the late `0x0044` lands."* What happened:
+
+- **The live icon vanished on the client's own timer, with no packet.** The
+  Burning icon was gone roughly 15 seconds before the late `0x0044` was sent. The
+  visible window was ~9 s against a 10.0 s stated duration, not the ~25 s the
+  "waits to be told" reading requires. **The client owns the expiry.**
+- **But the slot did not go empty.** Between self-expiry and the removal the
+  client holds a **static, heavily faded ghost of the same icon** — an amplified
+  diff reproduces the flame sprite's exact shape — and clears it the moment the
+  `0x0044` arrives.
+
+**Neither naive reading would have got this.** "Is the icon there?" answers *no*;
+a pixel diff answers *yes*. The state is a third thing: **presented as expired,
+still slotted.**
+
+### 32.2 Why the ghost is a measurement and not my eye
+
+| comparison | slot region | control region elsewhere on the same HUD row |
+|---|---|---|
+| consecutive frames, same state (6 pairs) | **0.000** | 0.000 |
+| across the late removal (4 pairs) | **6.829** | **0.000** |
+
+The noise floor is *exactly* zero — the camera is static, so same-state frames
+are byte-identical. The change is **6.829 in the slot and 0.000 in a same-sized
+control patch beside it**, which is what rules out lighting, animation and any
+global render change. And the seven state-B frames spanning **+25.8 s to +39.9 s
+are byte-identical to each other**, so this is a held static state, not a fade
+still in progress.
+
+### 32.3 What this decides for our own substrate
+
+**`REMOVE-then-APPLY` is NOT required, and silence is NOT free.** The late
+removal landed correctly on an effect the client had already expired visually —
+no refusal, no desync — so the pair this table emits is not load-bearing for
+correctness. But an effect held open by silence **stops being visible to the
+player at its stated duration**. So:
+
+- for anything the player must SEE for time T, the duration we send must cover T
+  (or the effect must be re-applied); silence extends the server's bookkeeping,
+  not the player's experience;
+- `effects.py` is still not changed behaviourally on the strength of this — what
+  changed is that the cost of each option is now measured rather than assumed.
+
+### 32.4 The question this opens, and it is cheap
+
+**Do retail players see the ghost too?** §8.6's Isle episodes ran +1.25 s to
++55.0 s past their stated durations on ONE apply each, so by this client's rule
+the operator spent most of that time looking at a faded icon while the condition
+still cost health — the Disease that killed them outlasted its 10.0 s duration
+many times over. That is either a real quirk players live with, or retail sends
+something we have not identified for environmental sources. **One screenshot of
+a Student's ring taken 20 s after entry settles it**, and it costs nothing on the
+next Isle trip. Until then, this section describes OUR client's response to OUR
+messages, which is exactly what it was built to measure — and no further.
