@@ -4302,3 +4302,193 @@ conflated (by this session, in the plan assembly) and the conflation is what put
    marched one.** The rule already exists (`REALFIX.md` §6.1.5, cell assignment
    from the observed path); what this run shows is that it must also govern plan
    *construction*, not only scoring.
+
+## 2026-08-21, later — THE YAW CALIBRATION: W4 is CONFIRMED, my refutation of it is WITHDRAWN, and W5 was the only broken constant
+
+**OBSERVED, `ours`, dedicated sweep** — capture `20260821T130913`, harness
+`20260821T130838`, plan `[wait:2 W:2 wait:2 S:3]` baseline then the same cycle
+after each of `yaw:±100, ±250, ±500, ±1000, ±2000`. Eleven out-and-back
+measurements around spawn, each leg's travel bearing taken from its own first and
+last report with the leg boundaries read off `REALFIX-T2`'s float stamps.
+
+### The yaw response is LINEAR, and it is the number the design gave
+
+| token | Δ facing | °/px |
+|---|---|---|
+| −100 | +7.47° | −0.07468 |
+| ±250 | ∓20.06° | −0.08023 |
+| ±500 | ∓40.06 / +40.28° | −0.08011 / −0.08057 |
+| ±1000 | ∓80.28 / +80.36° | −0.08028 / −0.08036 |
+| ±2000 | ∓160.36 / +160.06° | −0.08018 / −0.08003 |
+
+**Least squares through the origin: −0.080152 °/px, n = 9, residual max 0.55°
+over a ±2,000 px range.** `REALFIX-W4`'s `−0.0800` reproduces to three figures.
+
+⚠ **THIS WITHDRAWS THIS DOCUMENT'S OWN "W4 IS REFUTED", written hours earlier and
+merged.** That claim came from reading yaw responses out of the L2 capture, where
+two things corrupted every pairing: **S legs reverse the travel bearing by 180°**
+and were being read as yaw effects (the ±179.8° "responses"), and **wall-slid legs
+report the wall's bearing, not the facing** (the −0.005 °/px "response"). The
+correct method needs a dedicated sweep with clean legs, which is what this is. A
+constant is not refuted by a measurement taken through a confound the measurement
+did not control for.
+
+### The operator caught the one bad leg, and the guard now catches it too
+
+The operator warned mid-run that the first out-and-back angles looked like they
+were hitting a wall. **They were**: leg 0 ran **436 u of an expected 570 (76%)
+with a 71° mid-leg bend**, and its `yaw:100` pairing reads −13.65° against the
+−8.02° every other token predicts. It is **EXCLUDED** by two automatic rules —
+distance < 80% of `v·duration`, or a mid-leg bearing deviation > 20° — and both
+rules are in the fitter rather than in prose. Without the exclusion the fit moves
+and the residual triples.
+
+### W5, the spawn facing, is the ONLY constant that was wrong — and it is not 44°
+
+`REALFIX-W5` said −65.80°. The L2 post-mortem then said "+44.31°, measured". **Both
+are wrong, and the second is wrong in an instructive way.** L2 arm P0's opening
+trace, read interval by interval:
+
+| gap | dist | bearing | |
+|---|---|---|---|
+| 1.57 s | 428.7 u | **+3.30°** | free travel, full speed |
+| 0.50 s | **46.9 u** | +77.66° | cadence tightens, speed collapses to 94 u/s |
+| 0.50 s | 58.0 u | +65.06° | |
+| 0.50 s | 104.3 u | +45.52° | |
+| 0.50 s | 107.7 u | +44.37° | |
+| 0.50 s | 106.4 u | **+44.30°** | held — **this is the WALL's bearing** |
+
+That is round 4's own wall-contact signature (report cadence 1.80 s → 0.50 s at
+contact, speed falling to 260–265 u/s there and to 94 u/s here). **The "+44.31°
+held heading" the post-mortem measured was the character sliding along a wall**,
+which is exactly the error the post-mortem was written to correct, committed one
+paragraph later. Recorded because it is the second time in one day this arc read a
+wall as a fact about the player.
+
+**The true spawn facing, from two independent runs:** L2 arm P0's first free
+interval `+3.30° − 2.40°` (`yaw:-30`) = **+0.90°**; the calibration's second W leg
+`−7.41° + 8.02°` (`yaw:100`) = **+0.59°**. **W5 = +0.75° ± 0.15°**, against the
+−65.80° the plan assumed — a **66.5° error**, and the whole reason L2 walked
+northeast into a wall instead of southeast to the bridge.
+
+### What this unblocks
+
+Steering is calibrated: from spawn `(9826, 8077)` at `+0.75°`, the bearing to the
+bridge's north apron `(10990, 5750)` is **−63.42°**, i.e. **`yaw:801`** — one
+token, and the geometry march can be trusted for the first time because both of
+its frame constants are now measured rather than assumed. **REALFIX-L3 is the L2
+plan with `W5 = +0.75°`**, and the standing rule from the L2 post-mortem still
+governs: the plan is validated against the OBSERVED path, and any leg that runs
+short or bends is a wall, not a datum.
+
+## 2026-08-21 — REALFIX-L3: THE WARP IS REPRODUCED PROSPECTIVELY, THE PLANE REWRITE IS THE TRIGGER, AND CORNER-CUTTING IS REFUTED AT THE CELL BUILT TO TEST IT
+
+**OBSERVED, `ours`.** Two arms, the corrected six-cell plan (`W5 = +0.75°`,
+`W4 = −0.080152`), identical scripted input, movetap attached after the map
+verdict at a requested 20 Hz. P0 `20260821T131938` / `movetap-…131955`;
+P2 `20260821T132546` / `movetap-…132603` (`--zero-lead`). **Both arms reached the
+bridge this time** — P0 spent 48% of its samples in the corridor with 555 on
+plane 18, against L2's zero — which is what makes everything below a measurement
+rather than an accident.
+
+Scored on **REALFIX-E only** (an `async_at` step ≥ 150 u within ≤ 0.25 s), the
+definition pre-registered in round 6 precisely so that `sep`, `gate1`, `fence` and
+the plane words stay covariates and cannot be recruited as identifiers.
+
+### 1. The headline, and the control that gives it its weight
+
+| | **P0 default** | **P2 `--zero-lead`** |
+|---|---|---|
+| **REALFIX-E events** | **0** | **3** — 476.8, 465.9, 242.8 u |
+| max `async_at` step | **43.0 u** (n = 2,537) | 476.8 u (p99 38.3) |
+| grants | **0** | 88 |
+| samples above the gate-1 cut | **2,461 (97%)** | 747 (29%) |
+| samples with the two copies' planes DISAGREEING | **571** | 137 |
+| fence clears | 2 | 6 |
+
+**The control is the finding.** P0 carried the supposedly dangerous state far more
+heavily than P2 — **7× the plane-mismatch samples and 97% of its run above the
+gate-1 cut, against P2's 29%** — and its rendered copy never moved more than
+**43 u** in a sample. Separation and plane disagreement are not sufficient, and
+they are not even close. What P0 lacks is the **grant**: with none sent, the
+AgTrack dispatcher is never entered and the client is never asked the question.
+
+### 2. Every event is a plane rewrite, and the timing is now real
+
+Each event follows a grant by **0.05 / 0.10 / 0.11 s** — the bake → dispatch →
+reseed chain, timed against `REALFIX-T1`'s **0.354 ms** clock residual (0.10 u at
+run speed) rather than round 6's 1.00 s slop. Decoded from the sent bytes:
+
+| event | grant | dest | plane word | previous grant's | sep before → after |
+|---|---|---|---|---|---|
+| t+46.37, 476.8 u | t=63.695 | (10951, 4929) | **18** | 0 | 500.7 → 23.9 |
+| t+76.49, 465.9 u | t=93.759 | (10948, 4625) | **18** | 0 | 509.1 → 13.8 |
+| t+110.85, 242.8 u | t=128.111 | (10948, 4617) | **18** | 0 | 294.7 → 23.0 |
+
+All three are **backward** (y falling 4916→4439, 4622→4157, 4617→4374), all land
+on the lagged authoritative copy (13.8–23.9 u), all carry `fence_raw` 1→0 in the
+same sample, and all sit on the bridge (`async` plane 18) with the **sync copy
+reading plane 0** — the copy is on the near side, the client is on the deck, and
+we stamp the client's plane onto the copy.
+
+**The grant-level 2×2, from client memory, the whole run:**
+
+| | above the cut | below |
+|---|---|---|
+| **plane word rewritten** | **8 grants → 3 events** | 2 → 0 |
+| plane word unchanged | **28 grants → 0 events** | 50 → 0 |
+
+**Twenty-eight grants landed on a copy more than 299.33 u out of position with
+the plane word unchanged, and not one of them warped.** Fisher exact on the
+above-cut row, 3/8 against 0/28: **p = 0.0078**. Round 6 measured 3/4 against
+0/27 retrospectively; this is the same result obtained forward, from a run
+designed to produce it, with a control arm that could not express it.
+
+**Still necessary-not-sufficient, and the ratio is now better measured**: 5 of the
+8 plane-rewriting above-cut grants did **not** warp (round 6's grant #37 was the
+first such case, at n = 1). Whatever selects those 3 from those 8 is unmeasured;
+`REALFIX-I1`'s chain nodes are recorded in this capture (709 `ok` walks) and are
+where that question gets answered.
+
+### 3. The crux cell resolves: corner-cutting is REFUTED
+
+All three events are on the **shuttle** — constant x ≈ 10,950, y sweeping
+4,113–4,929, i.e. **REALFIX-X3**, the straight perpendicular crossing with no wall
+contact. The wall cells ran and produced nothing: **the late legs (X1's parapet
+slides across the boundary and X2a's slides inside the deck) carry 55 grants, 15
+of them above the cut and 3 of them plane-rewriting, and produced 0 events.**
+
+REALFIX-X3's pre-registration reads: *"`X3 ≥ 6 with X2a = 0` ⇒ **A**, B refuted."*
+The direction is met — **X3 = 3, X2a = 0** — while the count is under the
+predicted 6 because the plan yielded 8 above-cut plane-rewriting instants rather
+than the 11 simulated. **Recorded as: candidate B (corner-cutting) is REFUTED at
+the cell built to test it, and candidate A (the plane echo) is the surviving
+mechanism, at a rate lower than predicted.** ⚠ X2a's null is a null: at 3 events
+per 8 treated grants, the probability of seeing none in its 15 above-cut instants
+is not negligible, and the cell's own power note said so before the run.
+
+⚠ **The X5 falsifier did NOT cleanly fire.** Event 3's pre-snap separation reads
+**294.66 u, below the 299.332591 cut** — which is `REALFIX.md`'s stated condition
+for the invariant itself to fail. It is **not** claimed here: movetap achieved
+**9.1 Hz against the 20 requested**, so consecutive samples are ~110 ms apart and
+the copy covers ~32 u between them; the true pre-snap separation is within
+sampling reach of the cut. **Positives valid, nulls void, and this particular
+positive's covariate is not precise enough to fire a falsifier.** A rerun at a
+sustained 20 Hz decides it.
+
+### 4. What this licenses, and what it does not
+
+**Licensed:** the plane word is the trigger under `--zero-lead`, forward and
+backward, in two independent runs, with a control arm that carried more of every
+rival condition and produced nothing. **REALFIX-F1** — send the plane that
+arrived with the point the copy is standing on, rather than the client's current
+plane — now has a reproduction to be tested against, and its own prediction is
+already written: the three bridge reseeds go to zero, separation unchanged within
+5%, and the field-4 mismatch count goes to 0.
+
+**Not licensed:** which of the 8 treated grants warp (3 did, 5 did not); anything
+about the round-4 spam-click regime, which this plan does not touch; and any claim
+resting on a sub-100 ms covariate at 9 Hz. **The tap rate is now the binding
+instrument limit** — it has run at 7.8–9.1 Hz against a 20 Hz request in every
+session today, and `REALFIX-T3` said the residual becomes sample-phase-bound the
+moment the clock stopped being the problem. It did; it is.
