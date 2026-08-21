@@ -147,8 +147,18 @@ import movesync                                                # noqa: E402
 # 68 -> 81 vaulted. Both re-measured from green runs of their own configuration
 # -- 81 with every fixture present, 28 with `RURIK_VAULT` pointing at a
 # directory that does not exist, which also printed its 8 declared skips.
-FLOOR_BARE = 28
-FLOOR_FULL = 81
+#
+# 2026-08-21, AFTER THE F1b MUTATION LANE: section 10 gained 5 -- 2 fixture-free
+# (FIELD4_SCREEN's diagonal against FIELD4_MEASURED / FIELD4_F1B_EXPECTED, and
+# its coverage of FIELD4_PAIRS) and 3 vaulted (the six-cell screen against the
+# live computation, and the pairing window bracketed against each capture's own
+# cadence). Two of the three survivors that lane found were the server banner's
+# counterfactual table, which no test in the tree read; the screen constant and
+# these checks are what `test_position_trust.py` §16 now ties that banner to.
+# 28 -> 30 bare, 81 -> 86 vaulted, each re-measured from a green run of its own
+# configuration.
+FLOOR_BARE = 30
+FLOOR_FULL = 86
 LEDGER = checks.Ledger("grantsim: the offline grant-policy harness, "
                        "and its refusal to rank", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -1095,6 +1105,42 @@ def main():
           f"2's 1.000 s leg. This is the shape of all of F1's residuals and the "
           f"whole reason F1b exists; a replay that could not tell the two apart "
           f"would score them identically and say nothing")
+    # FIELD4_SCREEN IS THE TABLE THE SERVER'S BANNER TRANSCRIBES, and these two
+    # checks are the only thing standing between that banner and a number
+    # nobody computed. `authsrv.py` may not import this module -- grantsim
+    # imports authsrv, and the server path stays dependency-clean -- so the
+    # banner holds literals and `test_position_trust.py` §16 rebuilds its three
+    # printed rows from this dict. That tie is worth nothing unless the dict is
+    # itself pinned, which is the vaulted check below; this one is its
+    # fixture-free half, and it is what keeps the screen's own three published
+    # scalars from disagreeing with the six-cell table beside them.
+    screen_diag = {
+        ("shipped-zerolead", "20260821T132546"),
+        ("F1-planecarry", "20260821T143411"),
+    }
+    diag_ok = all(GS.FIELD4_SCREEN[pol][st][0] == GS.FIELD4_MEASURED[st]
+                  for pol, st in screen_diag)
+    check(diag_ok
+          and (GS.FIELD4_SCREEN["F1b-arrivalcarry"]["20260821T143411"][0]
+               == GS.FIELD4_F1B_EXPECTED)
+          and set(GS.FIELD4_SCREEN) == set(GS.FIELD4_POLICIES),
+          "FIELD4_SCREEN's diagonal IS the calibration pin and its F1b cell IS "
+          "FIELD4_F1B_EXPECTED -- one table, not three drifting scalars",
+          f"diagonal {[GS.FIELD4_SCREEN[p][s][0] for p, s in sorted(screen_diag)]} "
+          f"against FIELD4_MEASURED {sorted(GS.FIELD4_MEASURED.values())}; F1b "
+          f"cell {GS.FIELD4_SCREEN['F1b-arrivalcarry']['20260821T143411']} "
+          f"against FIELD4_F1B_EXPECTED {GS.FIELD4_F1B_EXPECTED}. A screen that "
+          f"published 3 in one constant and 0 in the table would let the server "
+          f"print either and stay green")
+    check(set(GS.FIELD4_SCREEN["F1b-arrivalcarry"])
+          == set(GS.FIELD4_SCREEN["F1-planecarry"])
+          == set(GS.FIELD4_SCREEN["shipped-zerolead"])
+          == {s for s, _tap, _arm in GS.FIELD4_PAIRS},
+          "and every policy carries a cell for every capture the census runs",
+          f"{sorted(GS.FIELD4_SCREEN['F1b-arrivalcarry'])} against "
+          f"{sorted(s for s, _t, _a in GS.FIELD4_PAIRS)} -- adding a third "
+          f"capture to FIELD4_PAIRS without extending this table would leave "
+          f"the banner printing a two-column screen of a three-column run")
     if not (HAVE_GAMESRV and HAVE_MOVETAP):
         LEDGER.skip("F1b the counterfactual against the L3 captures",
                     "this vault has no captures/gamesrv or no captures/movetap; "
@@ -1120,6 +1166,33 @@ def main():
                   f"is a real exercise of the policy: its slot advances only on "
                   f"a SEND, so the rate-limit refusals in that capture have to "
                   f"leave it alone or the whole stream drifts")
+            # THE PAIRING WINDOW, BRACKETED FROM BOTH SIDES BY THIS CAPTURE.
+            # FIELD4_PAIR_GAP used to be one constant doing two jobs, and only
+            # the OTHER job (grant attribution, now FIELD4_ATTRIB_GAP) was
+            # exercised: widening the shared constant 20x moved neither the
+            # anchored headline nor this pin, because every grant's
+            # last-strictly-before sample lands within 0.122 s. So the pairing
+            # role is checked directly. Wide enough: the worst observed lead
+            # fits inside it, or grants would be dropped as unpaired at the
+            # margin. Narrow enough: it cannot span three tap intervals, which
+            # is the derivation its own comment states ("a sample is ~0.105 s
+            # and this admits at most two") and the thing that stops the
+            # strictly-before rule reaching back ACROSS a tap dropout on some
+            # future capture. Both operands are measured from the capture, and
+            # `pair_lead_max` is taken over EVERY grant rather than over the
+            # ones that paired, so shrinking the window cannot make its own
+            # counter-example disappear.
+            check(c["pair_lead_max"] <= GS.FIELD4_PAIR_GAP
+                  and GS.FIELD4_PAIR_GAP <= 3.0 * c["tap_dt_median"],
+                  f"  and the {GS.FIELD4_PAIR_GAP:.2f}s pairing window is "
+                  f"bracketed by this capture's own cadence, not asserted",
+                  f"worst grant-to-sample lead {c['pair_lead_max']:.3f}s "
+                  f"against a window of {GS.FIELD4_PAIR_GAP:.2f}s, which is "
+                  f"{GS.FIELD4_PAIR_GAP / c['tap_dt_median']:.2f} tap intervals "
+                  f"at this capture's median {c['tap_dt_median']:.3f}s against "
+                  f"a bound of 3.00. The window is NOT binding here -- all "
+                  f"{by[stamp]['grants']} grants pair identically at 0.25 s and "
+                  f"at 5.0 s -- so nothing else in this file can see it move")
             check(c["own_nearest"] == GS.FIELD4_PUBLISHED_NEAREST[stamp]
                   and c["own_nearest"] < want,
                   f"  and the PUBLISHED nearest-sample count "
@@ -1197,6 +1270,22 @@ def main():
               f"policy's own model agrees with it by construction. It is kept "
               f"because the OTHER two policies do not come out at zero under "
               f"it, and it is printed under a label rather than in the table")
+        # EVERY CELL OF THE PUBLISHED SCREEN, against the live computation.
+        # This is the pin that makes `test_position_trust.py` §16's banner tie
+        # mean something: the banner is rebuilt from FIELD4_SCREEN, and
+        # FIELD4_SCREEN is this table. Without it the two files would agree
+        # with each other about a number neither had measured.
+        live_screen = {pol: {r["stamp"]: (r["anchored"][pol]["mismatch"],
+                                          r["anchored"][pol]["scored"])
+                             for r in rows}
+                       for pol in GS.FIELD4_POLICIES}
+        check(live_screen == GS.FIELD4_SCREEN,
+              "EVERY CELL of the published 3-policy x 2-capture screen "
+              "reproduces, denominators included",
+              f"live {live_screen} against FIELD4_SCREEN {GS.FIELD4_SCREEN} -- "
+              f"the denominators are the point as much as the counts: 3 of 69 "
+              f"and 3 of 3 are not the same claim, and the banner prints both "
+              f"halves of every cell")
         check("REFUSED as a fitted parameter" in text
               and "does NOT reach 0" in text,
               "and the printed report REFUSES the guard band that would close "

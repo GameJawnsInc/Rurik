@@ -3014,8 +3014,24 @@ Every one of these, in the order they were written:
   in the same commit to read `zero_lead_composition`'s **own signature** instead
   of a literal list of eight names: adding a ninth turned it red, which is the
   check working, but the only maintenance a literal can prompt is "paste the new
-  name in". Floors **207** bare and **215** vaulted, both re-measured; §16 is
-  fixture-free like §14 and §15, so all 32 of its checks land in both. No
+  name in". **AND THE TABLE UNDER THAT PROSE IS PINNED TOO, which it was not
+  until a mutation lane deleted it and stayed green.** §16 pinned seventeen
+  banner *substrings* and left the three-row counterfactual table they summarise
+  free: deleting the rows left 215/215, and rewriting the F1b row to the drafted
+  **"0 of 69"** the offline screen had already refuted — beside prose still
+  reading "F1b DOES NOT REACH ZERO" and "come in at ~3" — left 215/215 as well.
+  The rows are now rebuilt from `grantsim.FIELD4_SCREEN`, cell by cell,
+  numerator and denominator, so the banner cannot drift from the scorer; this
+  file imports `grantsim` for that constant and `authsrv` never may (grantsim
+  imports authsrv, and the server path stays dependency-clean), which is why the
+  tie is made on the test side and why §10 there pins the constant itself
+  against the live computation. §16's composition refusals also stopped
+  **crashing** instead of failing: `ac_alone[:60]` was sliced inside an evidence
+  f-string that Python builds *before* `check()` runs, so deleting either
+  refusal raised `TypeError` on `None`, killed the section mid-run and left nine
+  checks and the ledger's floor unevaluated — caught by exit code, naming
+  nothing. Floors **208** bare and **216** vaulted, both re-measured; §16 is
+  fixture-free like §14 and §15, so all 33 of its checks land in both. No
   client. ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
@@ -3817,10 +3833,27 @@ Every one of these, in the order they were written:
   policies driven against a hand-built grant stream, separating on exactly the
   two-interval lag (`F1 [0,0,18]` vs `F1b [0,0,0]` with grant 2 still in flight)
   — so the floors move by **different** amounts, which is the case the two-floor
-  split exists for. Floors **28** bare (§1's ten
+  split exists for. **§10 ALSO PUBLISHES THE SCREEN AS A CONSTANT AND PINS EVERY
+  CELL OF IT.** `FIELD4_SCREEN` is the 3-policy × 2-capture table the server's
+  `--arrival-carry` banner transcribes, and §10 checks all six cells —
+  denominators included, because 3 of 69 and 3 of 3 are not the same claim —
+  against the live computation, plus fixture-free that its diagonal *is*
+  `FIELD4_MEASURED` and its F1b cell *is* `FIELD4_F1B_EXPECTED`. That is the
+  half that gives `test_position_trust.py` §16's banner tie its meaning; without
+  it the two files would agree about a number neither had measured. **And
+  `FIELD4_PAIR_GAP` was split in two**: it was simultaneously the grant↔tap
+  pairing tolerance and the grant-attribution radius, so neither could move
+  without silently moving the other, and only the attribution role
+  (`FIELD4_ATTRIB_GAP` now) was exercised — every grant's last-strictly-before
+  sample lands within **0.122 s**, so all 88 and all 93 pair identically at
+  0.25 s and at 5.0 s and a 20× widening moved neither the headline nor the
+  pin. The pairing role is now bracketed from both sides by each capture's own
+  cadence (the worst observed lead must fit inside the window; the window must
+  not span three tap intervals), so it is a check the data can refute rather
+  than a constant nothing reads. Floors **30** bare (§1's ten
   structural asserts, §2's nine refusals, §6b's seven predicate checks and
-  §10's two policy-separation checks build their own fixtures and read neither
-  vault nor client), RAISED to **81** once the fixture probes
+  §10's four fixture-free checks build their own fixtures and read neither
+  vault nor client), RAISED to **86** once the fixture probes
   answer, because excess over a floor is not an error and a bare floor protected
   none of the checks only a full machine runs -- deleting C2(a)'s three
   structural zeros on a vaulted machine used to print ALL CHECKS PASSED and now

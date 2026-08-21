@@ -1683,12 +1683,66 @@ FIELD4_RESIDUAL_NOTE = (
 # NOT zero. Scored offline, above.
 FIELD4_F1B_EXPECTED = 3
 
-# Pair a grant with the tap sample NEAREST IN TIME, refusing past this. Both
-# files carry `wall_unix`, so this is REALFIX-T1-exact -- the residual is the
-# float stamp's own 0.354 ms, not a clock alignment -- and 0.25 s is the same
-# window REALFIX-E is defined over. The tap runs at 7.8-9.5 Hz against a 20 Hz
-# request, so a sample is 0.105-0.128 s wide and this admits at most two.
+# THE SIX CELLS THE SERVER'S --arrival-carry BANNER TRANSCRIBES, so that the
+# banner and the scorer cannot drift apart in silence. `authsrv.py` prints this
+# table as the evidence for its own pre-registered prediction and MAY NOT import
+# this module (grantsim imports authsrv; the server path stays dependency-clean),
+# so the tie is made on the test side: `test_grantsim.py` §10 pins every cell
+# against the live computation, and `test_position_trust.py` §16 rebuilds the
+# banner's three printed rows from this dict and requires them verbatim.
+#
+# WHY IT IS A CONSTANT AND NOT A COMMENT. It was a comment. A mutation lane
+# rewrote the banner's F1b row from "3 of 69" to "0 of 69" -- the DRAFTED
+# prediction this screen had already refuted, printed beside prose still reading
+# "F1b DOES NOT REACH ZERO" and "come in at ~3" -- and the whole suite stayed
+# green at 215/215. That is section 15's own defect (a number the artifact
+# exists to make unrationalisable, left free) reappearing in the numeric half of
+# the same banner one section later.
+#
+# (mismatch, scored) per policy per capture; `scored` is the denominator AFTER
+# the contamination refusal, which is why the two counterfactual columns on the
+# P2 capture score over 8 grants and not 88.
+FIELD4_SCREEN = {
+    "shipped-zerolead": {"20260821T132546": (10, 88),
+                         "20260821T143411": (18, 36)},
+    "F1-planecarry": {"20260821T132546": (0, 8),
+                      "20260821T143411": (6, 93)},
+    "F1b-arrivalcarry": {"20260821T132546": (0, 8),
+                         "20260821T143411": (3, 69)},
+}
+
+# TWO ROLES, TWO CONSTANTS, and they were ONE constant until 2026-08-21.
+#
+# (a) PAIRING. Pair a grant with a tap sample, refusing past this. Both files
+# carry `wall_unix`, so this is REALFIX-T1-exact -- the residual is the float
+# stamp's own 0.354 ms, not a clock alignment -- and 0.25 s is the same window
+# REALFIX-E is defined over. The tap runs at 7.8-9.5 Hz against a 20 Hz request,
+# so a sample is 0.103-0.108 s wide (median, both captures) and this admits at
+# most two. Used by `_nearest_tap`, `field4_seed` and `field4_anchored`.
+#
+# ⚠ THIS ROLE IS NOT BINDING ON THE TWO CAPTURES WE HAVE, which is exactly why
+# it needs its own name and its own check rather than sharing a number. Every
+# grant's last-strictly-before sample lands within 0.122 s, so all 88 and all 93
+# pair identically at 0.25 s and at 5.0 s: a 20x widening moves neither the
+# anchored headline nor the calibration pin, and nothing would have gone red.
+# On a capture with a real tap dropout the strictly-before rule would reach back
+# ACROSS the gap and only this constant would stop it. `test_grantsim.py` §10
+# therefore brackets it from BOTH sides against the captures' own cadence --
+# wide enough that the observed pairing lead fits, narrow enough that it cannot
+# span three tap intervals -- so the guard is a check the data can refute.
 FIELD4_PAIR_GAP = 0.25
+
+# (b) ATTRIBUTION. "Is this plane-word transition one WE wrote?" A transition
+# within this of a grant is ours (field 4 stamped it); everything else is a
+# write by the CLIENT and is the population the arrival model is falsified
+# against. Used by `field4_client_writes` and `field4_arrival_check`.
+#
+# THIS ROLE IS BINDING, and it is the one a mutation reddens: widening it makes
+# every transition attributable to a grant, the arrival control loses its
+# population, and the instrument refuses 0-of-0 rather than passing it. Same
+# value as (a) today and derived the same way -- two tap intervals -- but they
+# answer different questions and either could move without the other.
+FIELD4_ATTRIB_GAP = 0.25
 
 # The gate for "a non-grant plane write lands on a modelled arrival". Three tap
 # intervals at the rate these captures actually achieved. REALFIX-T3 said the
@@ -1929,7 +1983,7 @@ def field4_arrival_check(replay, taps):
     """Does the model's ARRIVAL schedule explain the writes WE did not make?
 
     This is the falsifiable half of the instrument. Walk the observed plane-word
-    transitions; ignore any within `FIELD4_PAIR_GAP` of a grant (we wrote those
+    transitions; ignore any within `FIELD4_ATTRIB_GAP` of a grant (we wrote those
     ourselves through field 4); every remaining one is a write by the CLIENT,
     and the model says it must be an arrival carrying that plane as its field 3.
 
@@ -1947,7 +2001,7 @@ def field4_arrival_check(replay, taps):
             near = min([abs(grant_ts[j] - s["t"])
                         for j in (i - 1, i) if 0 <= j < len(grant_ts)]
                        or [float("inf")])
-            if near <= FIELD4_PAIR_GAP:
+            if near <= FIELD4_ATTRIB_GAP:
                 prev, prev_t = p, s["t"]
                 continue
             cand = sorted(((abs(a - s["t"]), a)
@@ -2016,8 +2070,8 @@ def field4_word_check(replay, taps, seed_plane):
 def field4_client_writes(grants, taps):
     """The plane-word writes the CLIENT made for itself. PURELY OBSERVATIONAL.
 
-    Every transition of the observed word that is not within FIELD4_PAIR_GAP of
-    a grant. No model is consulted -- that is the point: these are the instants
+    Every transition of the observed word that is not within FIELD4_ATTRIB_GAP
+    of a grant. No model is consulted -- that is the point: these are the instants
     at which the client overwrote whatever we had stamped, so they are where the
     observed trace RE-ANCHORS and becomes usable again for a counterfactual.
 
@@ -2035,7 +2089,7 @@ def field4_client_writes(grants, taps):
             near = min([abs(gts[j] - s["t"])
                         for j in (i - 1, i) if 0 <= j < len(gts)]
                        or [float("inf")])
-            if near > FIELD4_PAIR_GAP:
+            if near > FIELD4_ATTRIB_GAP:
                 out.append((s["t"], p))
         prev = p
     return out
@@ -2074,11 +2128,22 @@ def field4_anchored(grants, taps, replay):
     writes = field4_client_writes(grants, taps)
     dirty, ci = False, 0
     scored, rows, skipped = 0, [], {"contaminated": 0, "unpaired": 0}
+    # THE PAIRING WINDOW'S OWN MARGIN, reported rather than assumed. `lead_max`
+    # is the largest gap between a grant and the last sample STRICTLY BEFORE it
+    # -- taken whether or not that sample fell inside the window, which is the
+    # whole point. Recording only the ones that PAIRED would make the margin
+    # unfalsifiable from the narrow side: shrink the window and the offending
+    # grants simply stop being counted, so `lead_max <= FIELD4_PAIR_GAP` would
+    # hold by construction. Measured over every grant it goes red in BOTH
+    # directions. Policy-invariant (pairing reads no field 4).
+    leads = []
     for k, g in enumerate(grants):
         while ci < len(writes) and writes[ci][0] <= g["t"]:
             dirty = False
             ci += 1
         j = bisect.bisect_left(ts, g["t"]) - 1
+        if j >= 0 and g["t"] - ts[j] >= 0.0:
+            leads.append(g["t"] - ts[j])
         paired = j >= 0 and 0.0 <= g["t"] - ts[j] <= FIELD4_PAIR_GAP
         f4 = replay["rows"][k]["field4"]
         if not paired:
@@ -2095,7 +2160,8 @@ def field4_anchored(grants, taps, replay):
             dirty = True
     return {"scored": scored, "mismatch": len(rows), "rows": rows,
             "skipped": sum(skipped.values()), "why_skipped": skipped,
-            "client_writes": len(writes)}
+            "client_writes": len(writes),
+            "lead_max": max(leads) if leads else float("nan")}
 
 
 def field4_capture(stamp, tap, arm):
@@ -2145,6 +2211,18 @@ def field4_capture(stamp, tap, arm):
             r["field4"] == r["as_sent"] for r in own["rows"]),
         "arrival": field4_arrival_check(own, taps),
         "word": field4_word_check(own, taps, seed_plane),
+        # THE PAIRING WINDOW, BRACKETED FROM BOTH SIDES BY THE CAPTURE ITSELF.
+        # `pair_lead_max` is how close FIELD4_PAIR_GAP came to binding (it does
+        # not, on either capture) and `tap_dt_median` is the cadence the
+        # constant's own derivation cites -- "a sample is ~0.105 s wide and this
+        # admits at most two". §10 checks the constant against both, so a
+        # widened window is caught by a check the data can refute instead of
+        # only indirectly, through the arrival control collapsing to 0-of-0.
+        "pair_lead_max": own_anchored["lead_max"],
+        "tap_dt_median": (sorted(b["t"] - a["t"]
+                                 for a, b in zip(taps, taps[1:]))[
+                              max(len(taps) - 1, 1) // 2]
+                          if len(taps) > 1 else float("nan")),
     }
     return out
 
@@ -2495,6 +2573,10 @@ def print_planecarry(rows=None):
              f"({w['frac'] * 100:.2f}%), floor "
              f"{FIELD4_WORD_AGREEMENT * 100:.0f}%  "
              f"{'PASS' if w['frac'] >= FIELD4_WORD_AGREEMENT else 'FAIL'}")
+        _say(f"      pairing window {FIELD4_PAIR_GAP:.2f}s: worst grant-to-"
+             f"sample lead {c['pair_lead_max']:.3f}s over a tap whose median "
+             f"sample is {c['tap_dt_median']:.3f}s -- NOT BINDING here, so it "
+             f"is bracketed rather than assumed")
     _say(f"    GATE: {'PASS' if ok else 'FAIL'}")
     _say("")
     _say("  THE COUNTERFACTUAL -- what each policy WOULD have sent, anchored on "

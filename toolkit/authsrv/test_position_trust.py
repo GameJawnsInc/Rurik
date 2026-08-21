@@ -85,9 +85,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+
 import checks     # noqa: E402
 import authsrv    # noqa: E402
 import vaultpath  # noqa: E402
+# THE OFFLINE SCORER, IMPORTED BY THE TEST AND NEVER BY THE SERVER. Section 16
+# rebuilds the --arrival-carry banner's counterfactual table from
+# `grantsim.FIELD4_SCREEN` so the banner and the scorer cannot drift apart in
+# silence. It has to be this direction: `grantsim` imports `authsrv` (for the
+# shipped arrival model), so `authsrv` importing `grantsim` would be a cycle AND
+# would put a clientscan module on the server path. The tie is therefore made
+# here, on the test side, and `test_grantsim.py` §10 pins FIELD4_SCREEN itself
+# against the live computation. Nothing in grantsim runs at import time -- no
+# vault, no client image -- so this import is bare-machine safe and both floors
+# below move by the same amount.
+import grantsim   # noqa: E402
 
 # MEASURED from a real green run: 24 checks with the capture present, 20
 # without; section 8 (the unit-vector lock) added 8 on 2026-08-19 and
@@ -177,8 +190,18 @@ import vaultpath  # noqa: E402
 # green console runs of their own configuration (215 from a normal run, 207
 # with RURIK_VAULT pointing at a directory that does not exist, which also
 # printed its 2 declared skips). Neither is an enumeration.
-FLOOR_BARE = 207
-FLOOR_FULL = 215
+#
+# 2026-08-21, AFTER THE F1b MUTATION LANE: one check, and it is the survivor
+# that lane found. Section 16's banner had its seventeen PROSE substrings pinned
+# and the three-row counterfactual TABLE under them free -- deleting the rows,
+# or rewriting the F1b row to the drafted "0 of 69" the offline screen had
+# already refuted, left this file green at 215/215 either way. The new check
+# rebuilds those rows from `grantsim.FIELD4_SCREEN`. It is fixture-free like the
+# rest of 16 (the constant is a module literal; grantsim opens nothing at import),
+# so both floors move by the same 1: 208 bare and 216 vaulted, each read off a
+# real green run of its own configuration.
+FLOOR_BARE = 208
+FLOOR_FULL = 216
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -3071,14 +3094,22 @@ def main():
     authsrv.arrival_carry_advance(st2, 1000.0, aA2, 21, (2 * S, 0.0))
     f4_ok, why_ok = authsrv.arrival_carry_field4(st2, 1003.0, 5)
     _aB2, dB2 = authsrv.arrival_carry_leg(st2, 1003.0, B)
+    # THE DIFFERENCE IS READ OFF THE TWO MEASURED LEGS, not recomputed from the
+    # fixture. It said `from_abandoned - S` -- a constant that never touches
+    # `dB` -- so a mutation collapsing the in-flight leg onto the abandoned
+    # destination left this control printing "differ by 119.3 u" while both
+    # legs actually read 407.294. Check (3) catches that mutation on its own,
+    # so the hole was in the narration; an evidence string that cannot
+    # contradict the run is still the shape this repo books as a defect, and
+    # the separation is now asserted rather than described.
     check(f4_ok == 21 and why_ok == "arrived"
-          and abs(dB2 - from_abandoned) < 1e-6,
+          and abs(dB2 - from_abandoned) < 1e-6 and abs(dB2 - dB) > 1e-6,
           "CONTROL: with the same pair one second later A HAS arrived, so 21 "
           "IS carried and the leg starts from A's destination",
           f"{f4_ok} ({why_ok}), leg {dB2:.3f} u against the in-flight case's "
           f"{dB:.3f} -- the discard is a discard of what is IN FLIGHT, not of "
           f"everything, and the two legs differ by "
-          f"{from_abandoned - S:.1f} u so the start point is measured")
+          f"{dB2 - dB:.1f} u so the start point is measured")
 
     # (4) A RATE-LIMIT REFUSAL CHANGES NOTHING, and that is enforced by the read
     # being PURE rather than by the caller remembering to skip it.
@@ -3318,6 +3349,20 @@ def main():
           f"destination the copy was never sent to")
 
     # ---- composition: the matrix, both directions ------------------------
+    # EVERY REFUSAL BELOW IS SLICED THROUGH `_shown`, AND THAT IS NOT STYLE.
+    # These read `zero_lead_composition(...)[0]`, which is None when the
+    # composition is ALLOWED -- i.e. exactly when the refusal has been deleted
+    # and the check must fail. Python builds the evidence f-string BEFORE
+    # `check()` runs, so a bare `ac_alone[:60]` raises TypeError on None: the
+    # mutation is still caught by the exit code, but section 16 dies mid-run,
+    # its remaining checks never execute and the ledger's floor is never
+    # evaluated -- a red run that names nothing and declares no skip, which is
+    # the failure both `checks.py` and CLAUDE.md's "a red test names the broken
+    # thing" exist to prevent. Two mutations of the F1b lane landed exactly
+    # here.
+    def _shown(refusal, n):
+        return (refusal or "<ALLOWED -- no refusal returned>")[:n]
+
     ac_alone = authsrv.zero_lead_composition(arrival_carry=True)[0]
     ac_both = authsrv.zero_lead_composition(zero_lead=True, plane_carry=True,
                                             arrival_carry=True)[0]
@@ -3326,7 +3371,7 @@ def main():
           and ac_ok == (None, []),
           "COMPOSITION: --arrival-carry alone is REFUSED; with --zero-lead it "
           "runs clean",
-          f"alone -> {ac_alone[:60]!r}...; with --zero-lead -> {ac_ok} -- an "
+          f"alone -> {_shown(ac_alone, 60)!r}...; with --zero-lead -> {ac_ok} -- an "
           f"inert flag would run a server identical to the shipped default "
           f"while the operator's log said 'F1b arm', and the null would be "
           f"published against F1b's prediction. Same refusal --plane-carry "
@@ -3334,7 +3379,7 @@ def main():
     check(ac_both and "TWO POLICIES FOR ONE WIRE FIELD" in ac_both,
           "and --plane-carry WITH --arrival-carry is refused as two policies "
           "for one field",
-          f"{ac_both[:90]!r}... -- whichever the send site read, the other "
+          f"{_shown(ac_both, 90)!r}... -- whichever the send site read, the other "
           f"would be inert, and both print their OWN pre-registered prediction "
           f"at startup, so a server carrying both announces two predictions "
           f"and can honestly satisfy neither")
@@ -3343,7 +3388,7 @@ def main():
     check(ac_triple and "TWO POLICIES FOR ONE WIRE FIELD" in ac_triple,
           "CONTROL: with --zero-lead ALSO missing, the two-policies refusal "
           "still wins over the needs-zero-lead one",
-          f"{ac_triple[:60]!r}... -- 'you passed two field-4 policies' is the "
+          f"{_shown(ac_triple, 60)!r}... -- 'you passed two field-4 policies' is the "
           f"more useful thing to be told when someone passes all three, and "
           f"the ordering of the two checks is what decides which fires")
     ac_clash = authsrv.zero_lead_composition(zero_lead=True, arrival_carry=True,
@@ -3352,7 +3397,7 @@ def main():
           and "TWO POLICIES" not in ac_clash,
           "and with --zero-lead on, the refuted-arm refusals still win over "
           "the F1b pairing",
-          f"{ac_clash[:70]!r}... -- F1b rides on the zero-lead send site, so a "
+          f"{_shown(ac_clash, 70)!r}... -- F1b rides on the zero-lead send site, so a "
           f"combination that makes that site unattributable is refused for the "
           f"same reason with or without it")
     _ref, ac_notes = authsrv.zero_lead_composition(zero_lead=True,
@@ -3396,6 +3441,46 @@ def main():
           f"F1b was DRAFTED predicting 0, its own pre-screen says 3, and a "
           f"banner still claiming 0 would pre-register a number the author "
           f"already knew could not be met")
+    # AND THE NUMBERS THOSE SEVENTEEN SUBSTRINGS SUMMARISE. The prose above was
+    # pinned and the TABLE under it was not, which a mutation lane proved twice
+    # on 2026-08-21: deleting the three counterfactual rows outright left this
+    # file green at 215/215, and rewriting the F1b row to "0 of 69" -- the
+    # drafted prediction the offline screen had already refuted, printed beside
+    # prose still reading "F1b DOES NOT REACH ZERO" and "come in at ~3" -- left
+    # it green too. A banner that can contradict itself in its own numeric half
+    # is section 15's defect exactly ("REALFIX-L3 observed": a prediction
+    # printed as an observation inside the artifact whose whole job is that the
+    # baseline cannot be rationalised after the run), one section later.
+    #
+    # THE ROWS ARE REBUILT FROM `grantsim.FIELD4_SCREEN`, not restated here, so
+    # the tie is to the scorer rather than to a second literal that could drift
+    # with the first. `authsrv` may not import grantsim (see the import block),
+    # so the banner holds literals and this is what binds them; the constant is
+    # in turn pinned cell-by-cell against the live computation by
+    # `test_grantsim.py` §10, which is the half that makes this one mean
+    # something. Whitespace is collapsed because the banner column-aligns
+    # ("0 of  8") and the alignment is not the claim.
+    ac_flat = " ".join(ac_banner.split())
+    ac_rows = {"shipped-zerolead": "shipped --zero-lead",
+               "F1-planecarry": "F1 --plane-carry",
+               "F1b-arrivalcarry": "F1b --arrival-carry"}
+    ac_want_rows, ac_bad_rows = [], []
+    for _pol, _label in ac_rows.items():
+        _cells = grantsim.FIELD4_SCREEN[_pol]
+        _row = _label + " " + " | ".join(
+            f"{_cells[s][0]} of {_cells[s][1]}"
+            for s, _t, _a in grantsim.FIELD4_PAIRS)
+        ac_want_rows.append(_row)
+        if _row not in ac_flat:
+            ac_bad_rows.append(_row)
+    check(ac_arg is not None and not ac_bad_rows and len(ac_want_rows) == 3,
+          "and the THREE COUNTERFACTUAL ROWS it prints as the evidence for that "
+          "prediction are the offline scorer's own cells, numerator and "
+          "denominator",
+          f"missing={ac_bad_rows} of {ac_want_rows} -- the F1b row is the sharp "
+          f"one: 3 of 69 is the screened result and 0 of 69 is the DRAFTED "
+          f"prediction it refuted, and a banner free to print either could "
+          f"pre-register the number it already knew it would miss")
     ac_strip = ast.parse("def main():\n    if a.arrival_carry:\n"
                          "        ARRIVAL_CARRY = True\n")
     ac_unprinted = ast.parse(
