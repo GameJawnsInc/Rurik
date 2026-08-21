@@ -317,7 +317,8 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
           tiles=None, sync_hash=0, sync_flag=0, props=None,
           prop_dep_ids=None, env_payload=None, env_dep_ids=None,
           sound_payload=None, sound_dep_ids=None,
-          table_a=None, table_b=None, angle_index=None, tex_word=None):
+          table_a=None, table_b=None, angle_index=None, tex_word=None,
+          map_flags=0):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
@@ -377,7 +378,17 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
         payload[cid] = bytes(constants[cid])
         origin[cid] = "borrowed"
 
-    payload[MAP_PARAMS] = mapbuild.encode_map_parameters(rect)
+    # `map_flags` is the Map Parameters flags dword and it defaults to 0, which
+    # is what every map this toolkit has ever built shipped. It is offered
+    # because WORLDMAPS-W10 found the navmesh DEPTH BOUND gated by it: the
+    # per-triangle classifier at 0x0072D2E0 tests all three corner z against
+    # float32 40.0 (0x0094DE30) and writes class 1 -- excluding the triangle and
+    # skipping the slope test entirely -- but only when the dword reaching
+    # 0x0072D3C6 is CLEAR. The same dword's TOP BYTE selects the slope set at
+    # 0x0072CA1C (FINDINGS 48 measured 15/35/30 in force with it at 0), so a
+    # caller varying bit 0 must leave the top byte alone or it changes two
+    # things at once.
+    payload[MAP_PARAMS] = mapbuild.encode_map_parameters(rect, map_flags)
     origin[MAP_PARAMS] = "generated"
 
     sp = props_mod.StrippedProps.minimal() if props is None else props

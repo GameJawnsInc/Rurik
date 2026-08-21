@@ -445,3 +445,52 @@ definitions with .ini paths and float arrays up to 15,870 B. This row points at 
 the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
 contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
 changes nothing about the compiled navmesh, the Zones reading is dead."""
+
+[area.deeps]
+name = "The Deeps"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field added. Same generator, dims, seed, donors, prop
+# count and environment -- so the compiled mesh differs from sculpt's only by
+# the Map Parameters flags dword.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1            # <- THE VARIABLE. Bit 0 only; the TOP BYTE stays 0 so
+                         # the slope set stays the 15/35/30 that FINDINGS 48
+                         # measured in force.
+
+[area.deeps.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull the lever WORLDMAPS-W10 found. W10 \
+located the navmesh depth bound statically in the pinned pristine 38797 client: \
+at 0x0072D3ED, inside PathFlood.cpp's per-triangle classifier 0x0072D2E0, the \
+code loads float32 40.0 from 0x0094DE30 and compares it against all three corner \
+z of a terrain triangle; all three deeper writes class 1 and RETURNS, skipping \
+the slope comparison entirely. That rule runs only when the dword tested at \
+0x0072D3C6 is CLEAR, and that dword is the Map Parameters flags field -- \
+identified structurally, since the ctx builder at 0x007249A0-B7 copies the four \
+rect floats off state+0x00..0x0C and `mapbuild.encode_map_parameters` packs \
+rect-then-flags, making state+0x10 the next field. Every map this toolkit has \
+built shipped flags = 0, because `stripbuild.build` never offered the argument \
+until now.
+
+VERIFIED OFFLINE 2026-08-21 before any client saw it: `encode_map_parameters` \
+puts the dword at payload offset +21, and it reads 0x00000000 with the default \
+and 0x00000001 with this row's value. Bit 0 only -- the same dword's TOP BYTE \
+selects the slope set at 0x0072CA1C, and FINDINGS 48 measured the 15/35/30 set \
+in force with it at zero, so this row must not disturb it.
+
+WHAT IS NOT VERIFIED, and it is the whole point of the run: whether bit 0 is the \
+gate. It has never been read out of an installed map's bytes -- W10 inferred \
+flags = 0 from `stripbuild`'s default argument -- and the inverted branch has \
+never been exercised by anything. This row exercises it."""
