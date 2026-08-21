@@ -375,11 +375,16 @@ The VALUES are weaker than the ids and should not be read as measured. 25 energy
 100 health are a starting character's, taken from gw-preservation's
 gameservice/player.go:268-269, not observed on our wire.
 
-float_43 = 0.0396 is worse still and is kept only because it travels with the pair
-above in a server that works. gw-preservation's own comment next to it says "REVERSE
-THIS MORE", so nobody upstream knows what it is either. Energy regeneration is the
-obvious reading and it is a GUESS. If something ever depends on this number, measure
-it first.
+float_43 = 0.0396 was a GUESS travelling with the pair above ("REVERSE THIS MORE",
+says gw-preservation's own comment) until 2026-08-20, when something depended on it
+and it was measured first, as this note used to demand. It is the energy REGEN RATE
+in max-fractions per second, and the number decomposes exactly: f32(0.33) * 3 pips
+/ 25 max -- GWW's Ranger armor row (3 pips, 25 energy), consistent with energy=25
+above. The identical f32 bit pattern (0.03959999978542328) appears on the retail
+wire in capture 20260810T235916 on four connections, one of five observed clusters
+that all fit the same formula bit-exactly while the wiki's nominal 1/3 e/s fits
+none. Full model: studies/skills/FINDINGS.md section 23. The pip count 3 rides with
+max 25 as a pair; change either only together.
 """
 
 # ------------------------------------------------- weapon and creature swing rates

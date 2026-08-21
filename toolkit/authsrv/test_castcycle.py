@@ -61,12 +61,20 @@ def section_press_shape():
     try:
         _press(authsrv, send, state)
         ops = [op for op, _, _ in sent]
-        check(ops == [0x00E4, 0x00A0],
-              "the press sends E4 then the 0x00A0 [60, caster, target, skill] "
-              "animation, and nothing else yet",
+        # 0x00A2 IS THE ENERGY DEBIT, wired 2026-08-20 -- skill 42 costs 10 and
+        # the corpus puts property 62 inside 0.03-0.7 s of the USE_SKILL, so it
+        # rides the press burst rather than the tick. Still an exact op list,
+        # and it still says what this section is about: none of E5/E3/E6 and no
+        # damage leaves at the press. test_pools sections 6-6c own the debit.
+        check(ops == [0x00E4, 0x00A2, 0x00A0],
+              "the press sends E4, the energy debit, then the 0x00A0 "
+              "[60, caster, target, skill] animation -- retail's own batch "
+              "order, spend before the property that names the skill "
+              "(45 of 45, test_pools section 2c) -- and nothing else yet",
               f"ops={[hex(o) for o in ops]} -- E5/E3/E6 belong to the tick; "
               f"the old immediate 0x00E3 is gone from the press")
-        check(sent[1][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 0, 42],
+        # sent[2], not [1]: the debit now sits between E4 and the animation
+        check(sent[2][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 0, 42],
               "the animation carries the OBSERVED player shape (4/4 in the "
               "live corpus); GV 58 is deliberately absent (0 of 21,543)",
               f"vals={sent[1][1]}")

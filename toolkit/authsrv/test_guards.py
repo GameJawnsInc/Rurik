@@ -153,9 +153,17 @@ def section_skill_press():
         authsrv.handle_skill_press(press, send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
     ops = [op for op, _, _ in sent]
+    # THE THIRD MESSAGE IS THE ENERGY DEBIT, wired 2026-08-20: Power Attack
+    # costs 5 and the corpus puts property 62 within 0.03-0.7 s of the
+    # USE_SKILL, so it rides the press burst. The assertion is not weakened --
+    # it is still an exact op list, and it still says the damage trio is
+    # absent, which is the whole subject of this section.
     check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
-          "the press sends E4 and the cast animation -- and NO damage",
+          "the press sends E4, the energy debit, then the cast animation "
+          "(retail's batch order: spend before the skill-naming property, "
+          "45 of 45) -- and NO damage",
           f"ops={ops} -- until 2026-08-15 this also sent the swing trio, so a "
           f"two-second spell dealt its damage before its own casting "
           f"animation began")
@@ -432,7 +440,13 @@ def section_player_refill_due():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.player_refill_due(send, state, 0)
-    check(len(sent) == 2 and state["player_refill_due_at"] is None,
+    # FOUR HALVES SINCE 2026-08-20, not two: the health pair (max, then the
+    # property-34 fraction) followed by the ENERGY pair (property 52 = 1.0 and
+    # property 43 back to the rate), which is the resurrect batch retail sends
+    # -- 52, 43 and 55 in one instant, OBSERVED in capture 20260817T183756. The
+    # contract this section is about is unchanged and still checked: a refused
+    # value sends nothing and leaves the timer armed; an accepted one disarms.
+    check(len(sent) == 4 and state["player_refill_due_at"] is None,
           "control: in-range sends both refill halves and disarms",
           f"ops={[op for op, _, _ in sent]}, "
           f"due={state['player_refill_due_at']!r}")
@@ -646,7 +660,14 @@ def section_cast_timers():
         with sent_lock:
             sent.append((op, vals, label))
 
-    state = {"agents": {}}
+    # A DELIBERATELY BOTTOMLESS POOL. Skill 42 costs 10 energy and the player's
+    # is 25, so under the energy gate (wired 2026-08-20) 200 presses become 2
+    # casts and 198 refusals -- and this section is about the single-writer rule
+    # on `pending_casts`, not about what a skill costs. The gate stays ON, which
+    # is the shipped default; only the fixture's pool is made large enough that
+    # every press is affordable. test_pools sections 6-6b are where the gate
+    # itself is proven.
+    state = {"agents": {}, "energy": authsrv.pools.EnergyPool(1_000_000, 3)}
     errors = []
     done_pressing = threading.Event()
 

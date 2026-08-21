@@ -3412,6 +3412,68 @@ Every one of these, in the order they were written:
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
+  `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — R4b's other half, where
+  `effects.py` models what a cast puts ON somebody and `pools.py` models what it
+  takes. Until 2026-08-20 this server took nothing: two harness runs that day pressed
+  eight skills including Flare (5 energy in retail) and the player's orb sat flat at
+  25, because nothing here had ever sent a property 62. **§2 is the section that
+  carries the module and it has NO FREE PARAMETER**, the same shape `test_effects`
+  §2 established. Energy has no opcode of its own — it rides the generic property
+  channel — and the whole model is one quantum: **`rate = f32(0.33) * pips / max`**,
+  which reproduces **all five** of retail's distinct property-43 values BIT-EXACTLY
+  while the nominal rule every source states, one third of a point of energy per
+  second, reproduces **zero** of five. §1 is that discriminating negative, and it
+  also pins that the constant is a `float` and not a `double`: `f32(0.33*p/m)` from
+  the double gets 2 of 5, rounding 0.33 to f32 FIRST gets 5 of 5. **The check with no
+  free parameter is the pips**: join each of the 52 property-43 events to that
+  agent's own property-41 maximum (52 of 52 join, none orphaned) and solve — every
+  one lands on an INTEGER, and on the integers GWW's armour table predicts (base 20
+  energy / 2 pips; Ranger +1/+5, casters +2/+10). A wrong constant has no reason to
+  produce integers at all. §2 also predicts all 45 property-62 spends from the
+  client's own energy-cost column; crosses every activation in the corpus against
+  them into a **2×2 with TWO EMPTY CELLS** — the observing player's own agent spends
+  on 45 of 45 paid casts and 0 of 44 free ones, and **722 casts by other agents, 579
+  of them paid, carry not one spend**, which is what makes "property 62 is the own
+  agent's and nobody else's" a rule rather than a tendency; and confirms **property
+  33 — an absolute "your energy is now N" — appears 0 times in 13,378 property
+  messages** while the positive control finds 97 and 52 of its neighbours in the same
+  scan, so the client INTEGRATES energy itself and a server that sends no deltas
+  leaves the orb flat. §§3–4 are the two pools as state machines: the death penalty
+  re-sends the SAME pips over the NEW denominator (0.0528 → 0.06, OBSERVED n=1),
+  a zero-cost cast returns None rather than 0.0 so a `-0.0` cannot reach the wire,
+  and adrenaline is WIKI throughout (25 units per weapon hit; 1 unit per 1% of max
+  health lost, FLOORED, with zero damage granting nothing **and not counting as
+  combat** — a control proves a real gain at the same instant DOES refresh the
+  25-second clock). **Costs are RAW UNITS and not the number on the icon**: Battle
+  Rage is 80 raw displayed as 4, and GWW's own Notes say it *"exactly requires 80
+  units of adrenaline (3 strikes and 5 units)"* — four strikes would be wrong by a
+  whole hit. **§§5–10 are the GLUE**, driving `authsrv.py` through a fake `send`.
+  §5 does not test new code at all and is the one to read first: it asserts that
+  `agents.PLAYER_FLOAT_43` — the 0.0396 shipped since it was copied out of
+  gw-preservation with *"purpose unknown upstream too"* beside it — **IS**
+  `wire_regen_rate(3, 25)` bit for bit, three pips over the 25-energy pool the same
+  spawn burst already declares. The magic number was a measurement. §6 presses Flare
+  and requires exactly one property 62 at f32(-0.2) on `0x00A2`; §6b requires an
+  unaffordable press to produce **not one message** and no pending cast (the refusal
+  SHAPE is RECONSTRUCTION — retail's answer is unobserved and the client may swallow
+  it locally — but a half-refusal is wrong under every reading); §6c pins the free
+  cast sending nothing; §6d proves `--no-energy` is a real control and that the
+  default is ON. §7 charges Sever Artery with four landed swings **through
+  `hit_enemy`**, spends it, and requires every other pool down exactly one strike —
+  paid at USE, "whether or not the skill is interrupted or fails", the opposite of
+  the energy spend. §8 is the death batch (property 43 → 0.0) and the resurrect batch
+  (52 = 1.0 and 43 back to the rate) with a PREDICTION on record: the orb sticks at 0
+  after a revive today, and must refill once these go out. §9 pins the glyph hook AND
+  the row it is waiting on — skill 200 is the only content row labelled `Energy` and
+  its amount is **refused**, because the client gives it 10→18 with the scale bit
+  CLEAR and `resolve_duration` already sets the precedent that bit-clear DIFFERING
+  endpoints have zero witnesses; the discount, the two charges and the closing
+  `0x0044` are then exercised against a stubbed amount, with an ATTACK skill at the
+  same cost as the control. §10 is the enemy's gate, which rate-limits the
+  heal-spam PLAN.md §8 item 4 names without touching the round robin, and requires
+  **no property 62 for it** — 0 of 722. Needs `vault/captures/live/` for §2, declared
+  as a skip; needs the client-table content overlay for §§5–10, which is NOT
+  skippable and should go red without it; floor 82 of a 98-check green run),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture

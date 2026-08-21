@@ -1213,6 +1213,13 @@ crossed the wire in any session we have recorded** — in either direction. Our
 character has an empty bar and every session ends during the early handshake. The
 client, for its part, sends nothing skill-related either.
 
+> **[Superseded 2026-08-20.** True when written — every session then ended in the
+> early handshake. The live corpus has since grown to 14 captures, and it now
+> holds **44 `USE_SKILL` (0x0046) episodes across 7 distinct skill ids**, with
+> full activate/recharge/property bookkeeping — §16–§24 below are built on
+> them. This sentence kept reading as current for ten days; the correction is
+> dated so it cannot again.]
+
 **A caveat on the OBSERVED tier itself.** The bytes in our captures are ours; the
 *names* attached to them are OpenTyria's. Our label table matches ldufr's
 `opcodes.h` precisely where ldufr disagrees with the rest of the cluster — our
@@ -2025,3 +2032,133 @@ draws. The client's 6.03 is that animation, done by the client from one number.
 The expiry sends the rate back to zero, which is the half a server is most
 likely to forget: the icon goes and the arrows stay.
 
+---
+
+# OBSERVED, 2026-08-20 (third pass): ENERGY has a complete wire model — and ADRENALINE has no wire at all
+
+The energy recon ran as five parallel read-only censuses over the 14-capture
+live corpus (13,378 property-channel messages, 49 connections, every one
+decoding to its final byte), the pinned build-38797 client table, and the
+2026-08-20 harness frames. Everything below is theirs plus two checks run by
+the orchestrator; scratch scripts are named in the session log.
+
+## 23. Energy rides four properties, and its quantum is f32(0.33) — not one third
+
+Energy has **no dedicated opcode**. It rides the same generic property channel
+as health, on the **no-target** variants only (0x009F int, 0x00A2 float —
+never once on 0x00A0/0x00A3, whose only populated float properties remain
+{16, 17, 55}; energy bookkeeping has no victim field because it is always
+self-directed):
+
+| property | channel | n (live corpus) | what it is |
+|---|---|---|---|
+| **41** | 0x009F int | 97, values {20, 22, 25, 30} | **MAX energy**, sent as the same (1, real) on-create pair as health’s 42 |
+| **43** | 0x00A2 float | 52 | **regen RATE**, fraction of max per second, sent once on change — never periodic |
+| **62** | 0x00A2 float | 45, all negative | **discrete SPEND**: −(energy_cost / max), once per completed cast |
+| **52** | 0x00A2 float | 1 | **discrete GAIN**: the one witness is a resurrect, value exactly 1.0 |
+| 33 | any | **0** | the candidate absolute setter: **NOT FOUND**, positive control green (34/44/52/55/62 all found by the identical scan) |
+
+**The rate’s quantum, settled bit-exactly.** The corpus carries exactly five
+nonzero prop-43 values. Three candidate formulas were tested against the raw
+f32 bit patterns; only one reproduces all five:
+
+| observed f32 | = f32(f32(0.33)·pips/max) | GWW armor row |
+|---|---|---|
+| 0.032999999821186066 | 2 pips / 20 **or** 3 / 30 (degenerate) | Warrior base — or caster before armor |
+| 0.03959999978542328 | 3 / 25 | Ranger (+1 pip, +5e) |
+| 0.04400000348687172 | 4 / 30 | caster basic armor (+2, +10) |
+| 0.052800003439188004 | 4 / 25 | Dervish/Assassin (+2, +5) |
+| 0.06000000238418579 | 4 / 22 | 4 pips over a death-penalty max |
+
+The nominal rule — WIKI (GWW, "Energy" §Regeneration, rev 2026-03-15): *"Each
+pip of Energy regeneration generates 1 Energy every 3 seconds"* — predicts
+p/(3m), which matches **zero of the five** bit patterns. The wire’s constant is
+**0.33 held in single precision**, not one third: `f32(0.33) × pips ÷ max`,
+rounded once more to f32. Same class of result as health’s 2/H quantum
+(isle B4), and the (pips, max) pairs are **exactly GWW’s basic-armor table
+rows** — an independent join nobody tuned.
+
+**The denominator is the CURRENT max, and one agent proves it by dying.**
+Capture `20260817T183756`, agent 27: max 25, rate 0.0528 (= 4 pips/25). At
+t=353.299 one batch carries the death bit (0x00F1 effects=16), prop 41 re-sent
+**22**, prop 42 re-sent **102** — 102 is 120 × 0.85 exactly, a death-penalty
+hit to the maxima — and **prop 43 driven to 0.0**: regen stops at death. At
+t=363.343, 10.044 s later: death bit clears, **prop 43 = 0.06 = the same 4 pips
+over the NEW max 22**, **prop 52 = 1.0** and prop 55 = 1.0 — a resurrect
+refilling both pools in one instant. Four properties, one mechanism, retail
+bytes. (One recon agent initially read the 25→22 as a *current*-energy spend;
+the 42=102 co-occurrence in the same death batch settles it as the maxima.)
+
+**Prop 62 is −cost/max, validated against the client’s own table with zero
+exceptions.** All **45** spends in the corpus, **8 distinct skills** (105, 153,
+364, 394, 780, 783, 814, 858) over three pool sizes, every one predicted
+exactly from `skills.toml`’s own energy column — skill 364 ("Charge!") alone
+22 times across 6 connections, always −0.25 = 5e over max 20 (the control: a
+fixed denominator of 20 misses 18 of 45 across the other pools). It fires
+**once** per cast, 0.03–0.7 s after `USE_SKILL` (mostly ~0.05 s), and **the
+spend precedes the property-60 that names the skill in the same batch, 45 of
+45** — measured because a stream-order join first scored 18 of 45 by hanging
+each spend on the previous cast. **Zero-cost casts send nothing** — 0 of the
+observing agent’s 44 free casts carry one. **And prop 62 is scoped to the
+agent whose orb is on screen**: a 2×2 with two empty cells — the observing
+player’s agent spends on 45 of 45 paid casts and 0 of 44 free ones, while
+**722 casts by OTHER agents (579 of them paid) carry not one spend** — so a
+server must not emit 62 for its NPCs, and ours does not. The client sends
+nothing energy-shaped in the other direction: `USE_SKILL`’s four payload
+fields never carry a quantity. (An earlier count in this section read 44
+episodes over five skills — that was the c2s `USE_SKILL` join, which sees only
+connections whose client half decodes; the s2c activation join above is the
+wider net and the shipped oracle enforces its numbers.)
+
+**The client does not predict a deduction.** Two 2026-08-20 harness runs
+(`20260820T190210`, `20260820T190917`): eight presses including Flare — 5e in
+retail — and the energy bar sat at 25 in every frame while health visibly
+re-rendered 54→100→54 in the same frames. Our server has never had a prop-62
+call site (`GV_ENERGY_SPENT` defined, zero uses), so the flat bar is the
+measurement: **energy display waits for the server**. The client does zero the
+orb at death client-side — and leaves it 0 after revive, because our revive
+path sends no energy property where retail sends 52=1.0 + 43=rate. That is a
+falsifiable prediction for the next run: emit the resurrect pair and the orb
+should refill.
+
+**Closed in passing:** `studies/isle` §9 item 6’s "skill 364… no measurable
+effect" — it had one, −0.25 max-energy on prop 62 at the exact flagged
+timestamp (t=1008.125, capture `20260818T132739`), a channel damagepass.py
+never reads. And `content/world.toml`’s `float_43 = 0.0396` — gw-preservation’s
+"REVERSE THIS MORE" constant — is now **measured**: it is f32(0.33)·3/25, the
+Ranger armor row, and the identical bit pattern appears in capture
+`20260810T235916` on four connections. `studies/profession/RESKIN.md` §24.1’s
+counts (52: never observed; 62: n=6) were true against its twelve-capture
+corpus and are superseded by this one — addendum written there.
+
+## 24. Adrenaline: the table carries the threshold, the wiki carries the rules, and the wire carries nothing anyone has named
+
+**The client table’s +0x38 is raw units and it is the USE threshold.** §10
+measured the field (80/120/80 for Battle Rage/Defy Pain/Rush, displayed
+strikes = ceil(units/25)); GWW’s own "Battle Rage" Notes: *"exactly requires
+80 units… 3 strikes and 5 units"*. `skills.toml` now carries it per row as
+`adrenaline_units` (extractor extended this arc).
+
+**The rules — WIKI (GWW, "Adrenaline", rev 2026-07-02), player-visible tier:**
+
+- Gain **25 units (= one strike) per successful weapon hit** on an opponent —
+  weapon hits, not spell damage. Multi-hit attack skills grant one per hit.
+- Gain **1 unit per 1% of maximum health lost** to damage, **floored** (sub-1%
+  grants nothing), counted before damage reduction.
+- **Each adrenal skill has its own pool; all pools grow simultaneously.**
+- On USE: the used skill’s pool resets to zero and **every other skill loses
+  one strike (25 units)** — *"whether or not the skill is interrupted or it
+  fails"*.
+- **All adrenaline is lost on death, or after 25 seconds of non-combat** (no
+  attack landed, no damage taken — zero damage does not count as combat).
+
+**And the wire is silent.** `schema/messages.json` names no adrenaline message.
+GWCA’s `Opcodes.h` names none. GWCA reads `adrenaline_a/b` out of **client
+memory** (`SkillbarSkill`, +0x00/+0x04), not out of a packet it maps. The
+warrior melee sessions in the live corpus surface no adrenaline-shaped
+property. So either the client animates its own icons from combat it can
+already see — it watches its hits land and its health drop, and it holds the
+unit costs in its own table — or the channel hides in an unmapped opcode.
+UNRESOLVED, and the harness can answer it: put an adrenal skill on the bar,
+land four hits, watch the icon. The server tracks the pools authoritatively
+either way; what is at stake is only whether the icons charge on screen.
