@@ -606,3 +606,204 @@ exists so the area holds THREE bodies rather than two -- a population of two is 
 satisfied by code that handles exactly two, and the count is the claim here. \
 `attacks_back = false` so that one of the two hostiles is passive, which keeps \
 a run readable when both are in aggro range at once."""
+
+
+# ---------------------------------------------------------------- WORLDMAPS-W15
+# Bodies on ground that exists ONLY because Map Parameters bit 0 is set.
+#
+# Every placement in this project so far stands on ground the client would have
+# meshed either way. These do not. WORLDMAPS-W12 put the submerged floor INTO
+# the navmesh and W13 stood the player's own spawn on it; what neither showed is
+# whether the SERVER will put a body there, because `place_on_mesh` re-checks
+# every spawn against the mesh and refuses one it cannot find ground for.
+#
+# The coordinates are trapezoid centres of the client-compiled flags-1 mesh
+# (`w13_armB_head.bin`), which is how `sculpt_watcher` and its two siblings were
+# chosen. What is new is the VERIFICATION recorded in each row: each point was
+# checked against the flags-0 mesh from the same session (`w13_armA_head.bin`)
+# and is not merely outside it but further from ANY flags-0 ground than
+# `PLACE_SEARCH_RADIUS` (480 u), so the server's own nudge cannot rescue it and
+# a placement here cannot be an accident of the search.
+
+[spawn.sculpt_deep_shallows]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 23
+definition = 5              # hatcher, shared with the watcher trio by template
+max_health = 100
+x = 43.5
+y = 2764.5
+allegiance = "noncombatant"
+attacks_back = false
+enabled = true
+
+[spawn.sculpt_deep_shallows.provenance]
+source = "invented"
+verified = """Ours, and the position is the load-bearing part. (43.5, 2764.5) \
+is the centre of trapezoid 89 of the navmesh the retail client compiled from \
+our terrain with map_flags = 1, read back out of the archive after the run that \
+built it (WORLDMAPS-W13 arm B). MEASURED OFFLINE against arm A -- the flags-0 \
+twin compiled by the same client from the same archive in the same session -- \
+the point is NOT inside that mesh, and the nearest flags-0 ground of any kind \
+is 1,207 units away. `authsrv.PLACE_SEARCH_RADIUS` is 480, so if a body stands \
+here it is because bit 0 put ground under it and not because the server found \
+somewhere nearby."""
+
+[spawn.sculpt_deep_hollow]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 24
+definition = 5
+max_health = 100
+x = 379.5
+y = 652.5
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.sculpt_deep_hollow.provenance]
+source = "invented"
+verified = """Ours. Trapezoid 22's centre in the flags-1 mesh of WORLDMAPS-W13 \
+arm B. VERIFIED OFFLINE before staging: not inside the flags-0 mesh, and 1,053 \
+units from the nearest flags-0 ground -- twice the server's 480-unit placement \
+search. Placed in a different corner from its two siblings on purpose: three \
+bodies clustered in one trapezoid would test one trapezoid three times."""
+
+[spawn.sculpt_deep_farside]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 25
+definition = 5
+max_health = 100
+x = 55.8
+y = 6006.0
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.sculpt_deep_farside.provenance]
+source = "invented"
+verified = """Ours. Trapezoid 13's centre in the flags-1 mesh of WORLDMAPS-W13 \
+arm B, at the far corner of the rect. VERIFIED OFFLINE: not inside the flags-0 \
+mesh, 1,765 units from the nearest flags-0 ground -- the largest margin of the \
+three, and chosen so the trio spans the recovered region rather than sampling \
+one edge of it."""
+
+# ---- the flags-0 control arm. Same six positions, distinct agent ids. --------
+# `area_population` binds on the area NAME, so a control arm needs its own rows.
+# The three SHALLOW ones are copies of sculpt_watcher/hostile/farside and are
+# the within-arm control: they must place in BOTH arms.
+
+# AGENT IDS 40..45, NOT 30..35. The first version of this block used 30 and the
+# server refused the whole area at start-up: `agent_id 30 ... which the party
+# side reserves (player 1, henchman 30, heroes 200..206)`. That guard is
+# `area_population`'s set validation, which RAISES rather than filters -- so the
+# run cost two launches and produced no evidence at all, which is the correct
+# outcome and is why the guard is there. Definitions are reserved too (henchman
+# 9, heroes 10..16); 5 is clear of both.
+[spawn.f0_watcher]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 40
+definition = 5
+max_health = 100
+x = 2934.0
+y = 3046.5
+allegiance = "noncombatant"
+attacks_back = false
+enabled = true
+
+[spawn.f0_watcher.provenance]
+source = "invented"
+verified = """Ours -- `sculpt_watcher`'s position, bound to the flags-0 arm. It \
+is trapezoid 10's centre in the flags-1 mesh AND is inside the flags-0 mesh \
+too, which is exactly why it is here: it is the control that says the arm can \
+place anything at all."""
+
+[spawn.f0_hostile]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 41
+definition = 5
+max_health = 100
+x = 2618.6
+y = 2921.0
+allegiance = "hostile"
+attacks_back = true
+enabled = true
+
+[spawn.f0_hostile.provenance]
+source = "invented"
+verified = """Ours -- `sculpt_hostile`'s position, bound to the flags-0 arm, as \
+part of the within-arm control trio."""
+
+[spawn.f0_farside]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 42
+definition = 5
+max_health = 100
+x = 2595.5
+y = 3520.0
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.f0_farside.provenance]
+source = "invented"
+verified = """Ours -- `sculpt_farside`'s position, bound to the flags-0 arm, as \
+part of the within-arm control trio."""
+
+[spawn.f0_deep_shallows]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 43
+definition = 5
+max_health = 100
+x = 43.5
+y = 2764.5
+allegiance = "noncombatant"
+attacks_back = false
+enabled = true
+
+[spawn.f0_deep_shallows.provenance]
+source = "invented"
+verified = """Ours, and this row is EXPECTED TO BE REFUSED -- that is its job. \
+Same point as `sculpt_deep_shallows`, on the arm where bit 0 is clear, so the \
+ground under it is not in the compiled mesh and the nearest ground that is sits \
+1,207 units away against a 480-unit search. A row that cannot fail proves \
+nothing; this one is here to fail on one arm and succeed on the other."""
+
+[spawn.f0_deep_hollow]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 44
+definition = 5
+max_health = 100
+x = 379.5
+y = 652.5
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.f0_deep_hollow.provenance]
+source = "invented"
+verified = """Ours, expected to be refused. `sculpt_deep_hollow`'s point with \
+bit 0 clear; 1,053 units from the nearest flags-0 ground."""
+
+[spawn.f0_deep_farside]
+area = "sculpt_flags0"
+npc = "hatcher"
+agent_id = 45
+definition = 5
+max_health = 100
+x = 55.8
+y = 6006.0
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.f0_deep_farside.provenance]
+source = "invented"
+verified = """Ours, expected to be refused. `sculpt_deep_farside`'s point with \
+bit 0 clear; 1,765 units from the nearest flags-0 ground."""

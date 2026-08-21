@@ -622,3 +622,43 @@ effects that are not persisted are likewise invisible here. Traversal onto the
 ground from dry land was not tested. The server cannot see the bit at all
 (`map_flags`: zero occurrences under `toolkit/authsrv/`). Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W13-RUN.md` §RESULTS.
+
+## WORLDMAPS-W15 — authored population stands on the recovered ground. 2026-08-21
+
+**OBSERVED (retail client + our server, build 38797; two arms one bit apart,
+same session, same archive).** WORLDMAPS-W12 put the submerged floor into the
+navmesh and W13 stood the player's own spawn on it. Placing a **body** is a
+separate gate with its own code — `authsrv.place_on_mesh` re-checks every spawn
+and refuses one it cannot find ground for — and every placement this project had
+made until now stood on ground the client would have meshed either way.
+
+| | `sculpt` (flags 1) | `sculpt_flags0` (flags 0) |
+|---|---|---|
+| bodies placed | **6 of 6** | **3 of 6** |
+| refusals | 0 | **3, exactly the deep trio** |
+| mesh served | 99 traps (matches archive) | 64 traps (matches archive) |
+
+The three deep bodies placed at **exactly** the coordinates asked for — (56,
+6006), (380, 652), (44, 2764) — with no `MOVED` annotation. The same three
+coordinates on the flags-0 arm were each refused with *"not on the navmesh and
+nothing within 480 units is either"*. Their offline margins to the nearest
+flags-0 ground were 1,207 / 1,053 / 1,765 units against a 480-unit search, so no
+nudge could have rescued them.
+
+**The within-arm control is what makes this a result rather than an
+observation.** Three shallow rows placed in BOTH arms at the same coordinates,
+including an identical 96-unit nudge on `farside` — so arm 2 was not broken, and
+the placement search behaves the same either side of the flag. That control had
+authority to void the finding and none to confirm it.
+
+**This is also the first populated `--serve` in the arc**, and the first time
+`serve_run`'s population half — which cross-checks the server's count against
+our own content reader — has run against a flags-1 mesh. Arm 2's SERVE_FAILED
+was registered as the predicted outcome before the run, since `serve_run` marks
+`placed != total` as NOT ALL.
+
+**Scope.** Placement is not pathing: nothing here shows a player can WALK onto
+that ground, which is still W13's open residual. No encounter was driven, and
+whether a body standing in deep water looks right is a visual verdict for the
+owner. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W15-RUN.md` §RESULTS.
