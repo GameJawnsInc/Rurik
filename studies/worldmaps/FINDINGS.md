@@ -355,3 +355,35 @@ where that ladder belongs); and the depth cut's MECHANISM, which has three
 readings — the borrowed environment's water plane, a compiler depth bound, the
 borrowed Zones chunk — and one cheap disambiguating run: the same 64×64 map
 with `environment = false`.
+
+## WORLDMAPS-W8 — what cuts the deep ground out? NOT the water. 2026-08-21
+
+**OBSERVED (retail client, build 38797, two arms one field apart —
+agent-driven).** WORLDMAPS-W7 left the depth cut's mechanism UNVERIFIED with
+three readings. This run kills the leading one.
+
+Two arms on the `-probe` copy, both displacing map 143's rows, differing only in
+`environment`: **the compiled meshes are identical to the cell** — 64
+trapezoids, 7,660 B path chunk, mesh x 1248..6144, 2,582/4,096 = 63.04%
+coverage, leftmost column 13, in BOTH. **The borrowed Pre-Searing environment
+chunk does not carry the cut.**
+
+**The null is not vacuous, and that is the part worth reading.** Two controls
+make it readable: the treatment was verified at the bytes — the installed
+partner carries no `0x10000009` and no `0x11000009` while `SOUND` and its deps
+are present, decoding to 9,994 B against `sculpt`'s 10,535 B, the difference
+being exactly the 639 B env payload and its deps — and the instrument was shown
+to DETECT the cut, because arm A reproduces W7's recorded witness (cut at column
+13, 63.04% against 62.99% under a slightly wider sample). A null measured with
+an instrument that cannot see the effect, or with a treatment that never
+happened, is the failure shape this repo keeps meeting; both are closed here.
+
+Also settled in passing: **a map with no environment chunk compiles and serves
+normally** — `stripbuild`'s OPTIONAL table is correct at the client, no assert,
+re-bloat line present in both arms.
+
+**What survives**: a depth bound in the compiler itself, or the borrowed 34-byte
+Zones chunk. The Zones reading is the cheaper next test and nothing has ever
+varied it — every authored area in this project carries the same 32x32
+template's copy. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W8-RUN.md` §RESULTS.
