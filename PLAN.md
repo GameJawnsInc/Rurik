@@ -1381,9 +1381,45 @@ UNMAPPED message).
 
 **NEXT, in cost order:**
 
-1. **The adrenaline-display opcode.** GWCA's `SkillbarSkill.adrenaline_a`
-   (+0x00) is the store the icon draws from; nobody maps what fills it.
-   Clientscan target: find the writer, walk back to the RECV handler.
+1. ~~**The adrenaline-display opcode.**~~ **CLOSED 2026-08-21, and the entry was
+   wrong about the store as well as the opcode.** The icon draws from the slot's
+   SECOND dword, `adrenaline_b` (**+0x04**) — not `adrenaline_a` (+0x00), which
+   is what this line used to say. The accessor `0x00821050` indexes
+   `container + slot*0x14 + 8` while the charge loop writes
+   `container + slot*0x14 + 4`: two functions, two displacements, one stride.
+   The pair is a **deferred-commit double buffer** — +0x00 accumulates, a
+   deferred task copies it to +0x04, and +0x04 is the only half any accessor
+   exposes. (Py4GW_Reforged reading `adrenaline_a` as the live value is *also*
+   right: a bot wants the accumulator, the screen shows the committed copy.
+   Complementary, not contested.) **Four opcodes fill it**, none of them named
+   by any upstream: **207** `{agent, units}` the charge, **208** `{agent}` clear
+   all, **209** `{agent, skill, copy, units}` an absolute set that retail sends
+   **0** times in 114,985 messages, **210** `{agent, skill, copy}` the spend.
+   Measured: 663/22/0/39 over 49 connections, self-scoped 9 of 9, and the spend
+   leads its own activation by exactly one message 39 of 39. All of it is pinned
+   by `toolkit/authsrv/test_adrenwire.py`. **Note for the sender:** the fill is
+   drawn only in `MISSION_MAP_GAME` and is torn down elsewhere, so a correct 207
+   sent to a client in an outpost yields a pixel-identical icon — any probe must
+   be in an explorable or a mission.
+
+   **AND THE SERVER NOW SENDS IT (2026-08-21).** `authsrv.py` declares
+   `AGENT_ADRENALINE_GAIN/CLEAR/SET/SPEND` and emits three of the four behind the
+   existing `ENERGY` flag: `0x00CF` on every gain the PLAYER's pools take (a
+   landed weapon hit, damage taken — raw units, and a 0-unit gain sends nothing),
+   `0x00D2` at the use site immediately before the property that names the skill,
+   and `0x00D0` at both clear sites (death, last in the batch; the 25 s timeout,
+   isolated). **209 is declared and never sent** — 0 of 724 — and `test_pools`
+   §11a counts its occurrences in the source to keep it that way. **Enemy pools
+   stay off the wire** (self-scoped 9 of 9). One real behaviour change came with
+   it: `AdrenalinePool` now takes a `recharging` predicate and mirrors the
+   client's own skip of a recharging slot (`0x008219C0`), because 209's absence
+   means nothing could ever resync the two books. `test_pools` floor 82 → 105,
+   green 98 → 121; `test_guards` re-pinned four in-range controls and
+   `test_agentlife` one ordering pin (both APPEND the new message after the
+   measured sequence rather than inserting into it).
+   **What is still open on this channel:** nobody has yet SEEN a filled icon —
+   the run that closes it must be in an explorable or a mission (the map gate
+   above), and it is the first thing to point a client at.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client

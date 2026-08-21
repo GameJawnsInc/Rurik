@@ -2817,9 +2817,10 @@ Every one of these, in the order they were written:
   control. Sections 0-3 score 46 against a floor of 98, so a vault-less run goes
   red. ~12 s),
   `toolkit/authsrv/test_spawn_burst.py` (the nine messages that put a body in the
-  world, and since 2026-08-15 **the one that killed the client**. Section 4 used to
-  read `0x003A`'s payload at a stride of 3 — `triples[0::3]` for the ids,
-  `[1::3]` for the ranks — which is our builder's layout checked against itself,
+  world, and since 2026-08-15 **the one that killed the client**. The
+  column-major section (§5 today, §4 then) used to read `0x003A`'s payload at
+  a stride of 3 — `triples[0::3]` for the ids, `[1::3]` for the ranks — which
+  is our builder's layout checked against itself,
   and it was green while every session ended in `Assertion: level <
   arrsize(s_attribPoints)` / `CharData.cpp(202)`. The wire is COLUMN-MAJOR: the
   handler computes `n = count / 3` and slices ONE flat array at `n` and `2n`, so
@@ -2831,8 +2832,37 @@ Every one of these, in the order they were written:
   way, and REQUIRES an out-of-range rank to fall out — printing
   `column2=[9, 19, 6, 6, 20]`, the 19 being exactly what the client asserted on,
   at exactly the index it asserted at. Without it the ten checks above are ours
-  agreeing with ourselves and would pass on any self-consistent layout. Floor
-  34 -> 38. No socket, no client. ~1 s),
+  agreeing with ourselves and would pass on any self-consistent layout.
+  **TWO sections were rebuilt on 2026-08-21, and the second is the cautionary
+  one.** The old section 3 read one constant — `authsrv.ATTRIBUTE_POINTS == 0`,
+  the 8-of-8 live value — and `84fd41d` turned that constant into per-character
+  state at 08:55 on 2026-08-20, so this file spent a day raising
+  `AttributeError` while being named in TESTS.md as part of the suite. **The
+  burst still sends `0x0037`, so the fix was not a deletion**: the new §4 builds
+  the same `attribspend.AttributeState` the burst builds — a bare `{}`
+  connection state, no socket and no store — and pins the balance the server
+  actually puts on the wire. 200 lifetime, **173 priced off the client's own
+  cost curve rather than typed in** (the test re-sums `s_attribPoints[1..rank]`
+  itself), 27 unspent; that the ranks are AFFORDABLE, which is the question
+  `content/world.toml` said out loud that this server could not ask; that the
+  two fields are DIFFERENT numbers, which is the 2026-08-19 bug (one value in
+  both slots told the client every point was unspent while handing it ranks that
+  had cost some); that field 3 <= field 4, the 48-of-48 corpus invariant that
+  settled the CONTESTED field order; and a CONTROL requiring the swapped order
+  to break it. Collapsing `available` to `points_total` reddens four of them,
+  the CONTROL included.
+  **Section 5's defect was worse, because it was GREEN.** It called
+  `attribute_columns()` with no arguments while the burst calls
+  `attribute_columns(live_ranks, bonuses)` — a binding that invokes a different
+  overload than the caller under test binds nothing. The two diverged at 10:23
+  the same day (`8b50ca1`), and by exactly the finding of that commit: column 3
+  is base **plus equipped gear**, so the starter hammer's `+1` makes Hammer
+  Mastery go out as 7 over a base of 6, which is what the client drew in capture
+  `20260820T113942`. The section now calls what the burst calls, and its new
+  check requires at least one column-3 gap to actually BE +1 — the one check
+  that can tell the two calls apart, since with equal columns they are
+  indistinguishable. Deleting the bonus from `attribute_columns` reddens three.
+  Floor 34 -> 38 -> 48. No socket, no client. ~1 s),
   `toolkit/authsrv/test_attribspend.py` (the attribute SPEND model -- the state this
   server had never had. Until 2026-08-20 ranks came from a content row and never
   moved, and `studies/review` had years ago flagged the consequence: "you sat there
@@ -4364,9 +4394,107 @@ Every one of these, in the order they were written:
   `0x0044` are then exercised against a stubbed amount, with an ATTACK skill at the
   same cost as the control. §10 is the enemy's gate, which rate-limits the
   heal-spam PLAN.md §8 item 4 names without touching the round robin, and requires
-  **no property 62 for it** — 0 of 722. Needs `vault/captures/live/` for §2, declared
-  as a skip; needs the client-table content overlay for §§5–10, which is NOT
-  skippable and should go red without it; floor 82 of a 98-check green run),
+  **no property 62 for it** — 0 of 722. **§11 is the ADRENALINE FAMILY ON THE WIRE
+  (2026-08-21)**, and the paragraph it replaced is the reason it is worth reading:
+  this file used to assert *"NOTHING about the adrenaline goes on the wire"* because
+  no upstream catalog names an opcode for it. Four do — `0x00CF` charge, `0x00D0`
+  clear-all, `0x00D1` absolute set, `0x00D2` spend — and `test_adrenwire.py` carries
+  the model while §11 carries the SENDER. All four encode through the real codec to
+  the **client's own declared sizes** (10/6/16/12); a landed weapon hit puts out one
+  `[player, 25]` in RAW UNITS because the client ADDS the message's number to each
+  slot; **the enemy's pool moves and not one message names it** (self-scoped 9 of 9 —
+  and the target is 100 health precisely so its own pool clears the 1% floor, because
+  the first cut used a 5,000-health dummy and the silence was vacuous); a sub-1% gain
+  sends nothing with an 11% control at the same call site that does; the spend lands
+  **immediately before the property naming the skill**, 39 of 39 in the corpus, and
+  carries **no property 62** — which is ArenaNet's own
+  `!(energyCost && skillData.adrenaline)` asserting at two independent sites that a
+  skill cannot carry both costs, so that order never has to be decided. **§11f is the
+  client's RECHARGE SKIP** (`cmp [esi+8],0 / jne` at `0x008219C0`) mirrored into the
+  pool with its own control — the divergence it closes would be permanent, because
+  209 is the only message that could correct it and retail sends it **0 of 724**.
+  §11g puts the death clear **LAST** in the batch and says why the corpus cannot rule
+  (the cell is EMPTY, not zero: no connection carrying adrenaline ever witnesses its
+  own agent dying), so an unmeasured message goes after a measured sequence rather
+  than inside it. §11h requires the timeout wipe to be an **isolated** `0x00D0` and
+  nothing else, which is retail's own shape — 15 of 15, at 24.973–25.015 s. §11a also
+  counts `AGENT_ADRENALINE_SET` in `authsrv.py`'s source text and requires exactly
+  **one** occurrence — a declaration and no send site — and ties those constants to
+  `schema/overrides.json`'s four names, which the derivation pass wrote off the
+  client's own descriptors and the wiring pass wrote off the house naming rule with
+  nothing forcing them together. Needs `vault/captures/live/`
+  for §2, declared as a skip; needs the client-table content overlay for §§5–11, which
+  is NOT skippable and should go red without it; floor 105 of a 121-check green run
+  (was 82 of 98 before §11)),
+  `toolkit/authsrv/test_adrenwire.py` (**adrenaline IS on the wire, and this is the
+  file that stops us forgetting again**. Until 2026-08-21 `pools.py`'s header read
+  *"ADRENALINE IS NOT ON THE WIRE AT ALL, and that is a finding rather than a gap"* and
+  `authsrv.py` repeated it — a floor (nobody had looked) read as a ceiling, the same
+  error shape CLAUDE.md records for the provenance gate. **Four
+  opcodes carry it**: 207 `{agent, units}` the CHARGE, 208 `{agent}` CLEAR ALL, 209
+  `{agent, skill, copy, units}` an ABSOLUTE SET, 210 `{agent, skill, copy}` the SPEND.
+  **The names are OURS** — NOT FOUND in maintained GWCA, OpenTyria, Headquarter, GWLP-R,
+  Py4GW_Reforged and gw-preservation, all searched — so no §6.1 register row is owed and
+  no upstream can corroborate them either; the client and the corpus are the only two
+  witnesses and the file is built out of both. **§§1–3 are the mandatory core** and need
+  neither: the four declared shapes out of `schema/messages.json`, a tripwire tying this
+  file's own census constants to each other (631 + 32 = 663; 20+11+8 = 39, so HALF an
+  edit goes red rather than passing two mutually inconsistent sections), and the one that
+  is a real finding — **adrenaline costs are NOT all multiples of 25**. Seven distinct
+  costs in ArenaNet's own column (80, 120, 130, 140, 160, 220, 240) are off the grid, so
+  25 is the GAIN PER STRIKE and not the quantum of the bar, which is why
+  `pools.AdrenalinePool` holds RAW UNITS; the control is that eight other costs *are*
+  multiples, because an all-off-grid column is what a wrong offset also produces. **§§4–7
+  are the corpus oracle**, `test_pools` §2's shape over all 14 live captures: 663 / 22 /
+  **0** / 39 across 49 connections and 114,985 messages framed with zero errors. The zero
+  is the one to read — **209 is a fully wired handler retail never sends**, the same shape
+  as energy property 33, with its three neighbours (724) as the positive control that
+  makes a null mean something. §4b splits 207's amount into **631 at exactly 25 and a
+  32-message tail below it**, and pins that **none exceeds 25 and none is 0** — the strike
+  rule's own signature, since 25 is the largest single event the rule allows and the
+  opcode is unsigned so it cannot express a loss. The tail is labelled **INFERRED, not
+  measured**: GWW's *1 unit per 1% of maximum health lost* would produce exactly this
+  ragged shape, but nothing in the corpus joins it to health traffic yet. **§5 is the
+  check that refuted a wrong reading** — an earlier draft claimed retail broadcasts 207
+  for other agents' bars, on the strength of ids 7/11/13/25 across the corpus. Those are
+  four SESSIONS: every connection carrying 207 names **exactly one** agent and it is that
+  connection's own `SKILLBAR_UPDATE` (218) agent, 9 of 9 — **and the control is what makes
+  it a finding**, because those same connections carry 9 to 24 distinct agents on the
+  property channel, so "one agent" is a property of the opcode and not of a thin capture.
+  §6 joins all 39 spends to the client's own cost column (382/384/385, all nonzero) with
+  the control that gives it teeth: the same lookup over everything the corpus shows being
+  CAST finds **753 casts of 50 ZERO-adrenaline skills**, none of which ever gets a 210.
+  **§7 is the answer the sender needs** — the spend leads its own activation by **exactly
+  one message**, 39 of 39, always property 50, same batch; the energy channel orders
+  itself the same way (property 62 then 60), so "debit before announce" is a rule of this
+  protocol rather than a quirk. **§§8–11 read the pinned build-38797 image, stdlib only —
+  no capstone, no pefile, so it keeps working on a bare machine.** §8 walks the dispatch
+  chain as **arithmetic** rather than comparing addresses with themselves: four
+  descriptors at a 12-byte stride whose type arrays declare 0xCF…0xD2 **in order** (which
+  is what makes `0x00BC96B8` opcode 207's descriptor rather than an address we chose to
+  call that), field counts that agree with `schema/messages.json` **4 of 4 from two
+  independent derivations**, and each handler's rel32 resolved stub → thunk → worker.
+  §9 pins the stores, including the identity **4 + 8 × 0x14 == 0xA4** that three separate
+  immediates in the charge loop have to satisfy, and the one worth reading twice: the UI
+  event loads a **FIXED 25.0f from .rdata**, not the message's amount — so a 3-unit gain
+  and a 25-unit gain produce the same flash, which is why §4b's tail is invisible on
+  screen and had to be found in the bytes. **§10 is the correction this build owes**: the
+  icon draws from **+0x04**, not the +0x00 PLAN.md named, proved by two functions
+  indexing the same stride at 4 and at 8 — a deferred-commit double buffer. It also pins
+  **the map gate**, which changes probe design: the fill is drawn only in
+  `MISSION_MAP_GAME` (== 1) and is actively TORN DOWN otherwise, so a perfectly correct
+  207 sent to a client sitting in an outpost yields a **pixel-identical icon** and a null
+  from an outpost run means nothing. §11 cites **four assert sites singly**, each as the
+  evidence for one claim per CLAUDE.md's measurement boundary — `ChCliSkill:84`
+  *"context->skillAdrenalineUpdateArray.Count()"* names the whole deferred chain, and
+  `skillData.adrenaline` at **two independent files** promotes `skilltable.py`'s
+  `adrenaline_units` decode from our name for the column to the client's own. Needs
+  `vault/captures/live/` for §§4–7 and the pinned image for §§8–11, both declared as
+  skips; the content overlay is NOT skippable and §3 goes red without it. **Floor 10 of a
+  55-check green run**, and the file says plainly what that floor cannot catch — on a
+  machine with both fixtures a dropped section would still clear 10, so §4's
+  capture/connection/message pin and §8's printed image are the real "did it run" guards
+  and the floor is the fixture-less backstop),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
@@ -6606,7 +6734,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   at E5 rather than at the press — would have stopped being tested while still
   printing PASS. A CONTROL was added beside it that could not have existed
   before the fix: casting a HEX at the same agent must swing nothing at it.
-  Floor 40 → 41),
+  **The four in-range CONTROLS were re-pinned on 2026-08-21** when the adrenaline
+  family went on the wire: the counts went 3 → 4, 2 → 3, 1 → 2 and 6 → 7, and each
+  one now names the trailing `0x00CF` explicitly rather than absorbing it into a
+  bare literal. Two of them carry a claim worth more than the count — the swing's
+  `MELEE_ATTACK_FINISHED`-then-damage adjacency is ArenaNet's own (6 of 6 in the
+  Lakeside tape) and the adrenaline message is APPENDED after it, never inserted
+  into it; and the overkill row's 7 is what would catch a later session sending an
+  adrenaline message for the dying AGENT, which retail never does (self-scoped,
+  9 of 9). Floor 40 → 41),
   `toolkit/authsrv/test_morale.py` (morale and the death penalty — the
   arithmetic, the gate and the wire tick. Three things are actually at risk and
   each has its own section. **The base-versus-total scale**: morale scales a
