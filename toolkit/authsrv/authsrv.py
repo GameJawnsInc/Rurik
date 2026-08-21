@@ -57,6 +57,7 @@ import questdefs  # noqa: E402
 import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 import effects  # noqa: E402
+import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -684,6 +685,23 @@ def _send_markers(send, state, why=""):
             send(GAME_SMSG_AGENT_GENERIC_VALUE,
                  [PROP_QUEST_MARKER, agent, value],
                  f"QUEST_MARKER(agent {agent}) = {value}{why}")
+
+
+def _u32(x):
+    """A SIGNED integer as the dword the codec will put on the wire.
+
+    The schema types these fields `dword` and the codec packs them `<I`, which
+    refuses a negative outright rather than wrapping it -- so a message whose
+    field is genuinely signed needs the two's-complement done here. Exactly one
+    thing is signed today: `0x00EE`'s morale delta, which is -15 on a death and
+    was read off ArenaNet's wire as `0xFFFFFFF1`.
+
+    The mirror of `_f32_of`'s trap, from the send side: the wire has no idea
+    which of its dwords are signed, and `struct.error` is the friendly failure
+    here -- the unfriendly one is a caller who masks by hand somewhere else and
+    gets it right by luck.
+    """
+    return int(x) & 0xFFFFFFFF
 
 
 def _f32(x):
@@ -1323,6 +1341,17 @@ GAME_SMSG_TITLE_TRACK_INFO = 0x00F6
 # purpose: a global assigned only inside main()'s flag block is the exact
 # NameError shape that broke every instance load on 2026-08-16.
 PERSIST = False
+# Force death-penalty acquisition on regardless of what the map says. OFF by
+# default and module-level for the same reason PERSIST is: a global assigned only
+# inside main()'s flag block is the NameError that broke every instance load on
+# 2026-08-16.
+#
+# WHY A FLAG AT ALL. Every map this server ships is pre-Searing, where retail
+# charges nothing for a death (GWW, "Death Penalty", Exceptions), so a faithful
+# world can never exercise the mechanic -- and an implementation nothing can run
+# is an implementation nobody has watched. This is the `--explorable` idiom:
+# a switch that makes a gated thing testable, rather than a lie in the content.
+DEATH_PENALTY_FORCED = False
 PLAYER_ATTR_COUNT = 15
 PLAYER_ATTR_XP = 0
 PLAYER_ATTR_LEVEL = 9
@@ -1862,6 +1891,27 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+
+# THE SAME OPCODE, the other attribute. `0x00EE` is `[attr_id, delta]` over the
+# 15 player attributes, so the kill reward above (attr 0, experience) and the
+# death penalty below (attr 10, morale) are one message with two jobs. Named
+# twice on purpose: a reader who greps for the penalty should not have to know
+# that it rides the reward's constant.
+GAME_SMSG_PLAYER_ATTR_UPDATE = 0x00EE
+PLAYER_ATTR_MORALE_ID = 10
+
+# Morale, per AGENT and absolute, where `0x00EE` is per PLAYER and a delta.
+# OBSERVED 2026-08-20 over the whole live corpus (`toolkit/authsrv/moralescan.py`):
+# 83 sightings across 43 connections, 82 of them the neutral 100, and the single
+# 85 lands on the same tick as the corpus's only `0x00EE [10, -15]`, on the same
+# agent, in the same tape. 100 - 15 = 85 in two encodings at once.
+#
+# This retires "n=1, first-witness, uncatalogued" (studies/combat/PLAN.md 13),
+# which was true when the corpus was two captures and is not now. What that
+# study found still stands: the `[10,0]`+`[0,X]` pair marked by this opcode is a
+# broadcast burst rather than a kill shape. What changes is that attr 10 has a
+# name -- `[10, 0]` is a morale no-op riding an experience award.
+GAME_SMSG_AGENT_MORALE = 0x009C
 def balthazar_rate(map_id):
     """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
 
@@ -5295,6 +5345,13 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # status/reward/flags order is ArenaNet's own tick shape, and the
         # accrual only appends to it (and only under --persist).
         accrue_kill_rewards(send, state, conn_id)
+        # ...and so does the other half of the death penalty. WIKI (GWW, "Death
+        # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
+        # so the kill reward that just went out is also the way back up. Sends
+        # nothing at all while morale is neutral, which is every session in
+        # which nothing has died -- and nothing on the first two kills after a
+        # death either, because 26 XP is not a percent yet.
+        morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -6206,12 +6263,17 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["attacking"] = None          # a corpse stops swinging back
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+    # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
+    # tick behind it, same tick. Silent in every map this server ships, because
+    # pre-Searing charges nothing -- `map_death_penalty` is where that is
+    # decided and `content/maps.toml` is where it is written down.
+    death_penalty_due(send, state, conn_id)
 
 
 def agent_pool_max(state, agent_id):
     """Maximum health of one agent, or None if this server does not know it."""
     if agent_id == PLAYER_AGENT_ID:
-        return float(agents.PLAYER_HEALTH)
+        return player_max_health(state)
     agent = state.get("agents", {}).get(agent_id)
     return float(agent["max_health"]) if agent else None
 
@@ -6327,7 +6389,7 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id):
     """
     if target_id == PLAYER_AGENT_ID:
         player_pools(state)
-        before, pool = state["player_health"], float(agents.PLAYER_HEALTH)
+        before, pool = state["player_health"], player_max_health(state)
     else:
         agent = state.get("agents", {}).get(target_id)
         if not agent or agent.get("dead"):
@@ -6475,10 +6537,167 @@ def player_pools(state):
     number, which was fine while nothing could damage the player and is exactly the
     gap that made "you cannot die" a property of the code rather than a decision.
     """
-    state.setdefault("player_health", float(agents.PLAYER_HEALTH))
+    state.setdefault("morale", morale.BASELINE)
+    state.setdefault("morale_xp_bank", 0)
+    state.setdefault("player_health", player_max_health(state))
     state.setdefault("player_dead", False)
     state.setdefault("player_died_at", 0.0)
     return state
+
+
+# ------------------------------------------------------------ morale, and DP
+#
+# The mechanic in one line: morale is a percentage with 100 neutral, a death is
+# -15 of it, and it scales the character's BASE health and energy. The arithmetic
+# is `morale.py`, the constants are `content/world.toml` `[player.morale]`, the
+# evidence is `studies/morale/FINDINGS.md`, and what lives here is the WIRE --
+# which messages carry it, in what order, at which events.
+
+
+def player_morale(state):
+    """This player's morale percentage. 100 until something charges for a death."""
+    return int(state.setdefault("morale", morale.BASELINE))
+
+
+def player_base_health(state):
+    """The level-derived health morale scales -- NOT the total.
+
+    They are the same number for the character this server ships (level 1, no
+    health upgrades) and they stop being the same the day a rune goes on, which
+    is why the two are asked for separately everywhere below.
+    """
+    return morale.base_health(int(state.get("level", START_LEVEL)))
+
+
+def player_max_health(state):
+    """Maximum health as the client should currently see it, morale included."""
+    return float(morale.effective_max(agents.PLAYER_HEALTH,
+                                      player_base_health(state),
+                                      player_morale(state)))
+
+
+def player_max_energy(state):
+    """Maximum energy, ditto. Base energy is the innate 20; armour rides free."""
+    return int(morale.effective_max(agents.PLAYER_ENERGY, morale.BASE_ENERGY,
+                                    player_morale(state)))
+
+
+def map_death_penalty(map_id):
+    """Does a death cost morale in this map?
+
+    THE DEFAULT IS NO, and that is the wiki's answer for this world rather than a
+    stub: every map this server ships is pre-Searing, and GWW's "Death Penalty"
+    lists "Deaths in pre-Searing Ascalon" among the deaths that never incur one.
+    So a faithful Lakeside County charges nothing, and `content/maps.toml`'s
+    `map_rule` rows say so out loud with the citation attached.
+
+    A map with no rule row gets False for the same reason `map_explorable`
+    defaults False: the safer wrong answer is the one that fails to apply a
+    penalty rather than the one that invents a penalty for a place nobody
+    checked. `--death-penalty` overrides, which is how the mechanic gets tested
+    in a world where retail would never fire it.
+    """
+    if DEATH_PENALTY_FORCED:
+        return True
+    row = agents.WORLD.rows("map_rule").get(str(map_id), {})
+    return bool(row.get("death_penalty", False))
+
+
+def push_morale(send, state, conn_id, new_value, why):
+    """Move the player's morale and put ArenaNet's own tick on the wire.
+
+    THE SHAPE IS OBSERVED, off the one player death in the live corpus
+    (20260817T183756, agent 27, t=78.813) -- five messages, one tick:
+
+        0x009C [player, 85]        morale, absolute, per agent
+        0x00EE [10,     -15]       morale, as a delta, per player
+        0x009F [41, player, 22]    the recomputed maximum ENERGY
+        0x00A2 [43, player, f]     energy regeneration, rescaled to the new pool
+        0x009F [42, player, 102]   the recomputed maximum HEALTH
+
+    THE MAXIMA ARE THE SERVER'S JOB, and that is MEASURED rather than assumed
+    since 2026-08-20. Retail sent both explicitly, so the client never had to
+    derive them -- and `--probe morale` then showed that it CANNOT: one frame of
+    that run has the corner reading -30% while the health and energy bars still
+    read 100 and 25, and when the maxima did arrive the energy bar showed the
+    14 we sent rather than the 19 its own arithmetic gives (studies/morale/
+    RUNS.md Run 1, MORALE-P3). A server that sends the percentage and forgets
+    the pools ships a death penalty that costs the player nothing.
+
+    The regeneration resend is not decoration either: property 43 carries a
+    FRACTION of maximum energy per second, so a pool that shrinks 15% while this
+    stands still is a 15% slower regeneration nobody asked for. Retail resent it;
+    so do we.
+    """
+    old = player_morale(state)
+    new_value = morale.clamp(new_value)
+    if new_value == old:
+        return old
+    state["morale"] = new_value
+    max_energy = player_max_energy(state)
+    max_health = int(player_max_health(state))
+    send(GAME_SMSG_AGENT_MORALE, [PLAYER_AGENT_ID, new_value],
+         f"morale {morale.display(new_value)} on the player ({why})")
+    send(GAME_SMSG_PLAYER_ATTR_UPDATE,
+         [PLAYER_ATTR_MORALE_ID, _u32(new_value - old)],
+         f"morale delta {new_value - old:+d} ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
+         f"maximum energy {max_energy} at morale {morale.display(new_value)}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                     agents.PLAYER_ENERGY, max_energy))],
+         "energy regeneration, rescaled to the new pool")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
+         f"maximum health {max_health} at morale {morale.display(new_value)}")
+    # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
+    # to notice: our own bookkeeping is what decides when the player dies, so a
+    # current health left above the new maximum would make the next fraction we
+    # compute exceed 1.0 -- the CharPool.cpp:84 shape, arriving through the
+    # damage path instead of the revive path. WIKI (GWW, "Health"): a decrease
+    # in maximum health "will never reduce current health below 1".
+    if state.get("player_health", 0.0) > max_health:
+        state["player_health"] = float(max(1, max_health))
+    print(f"[c{conn_id}] morale {old} -> {new_value} "
+          f"({morale.display(new_value)}, {why}): max health {max_health}, "
+          f"max energy {max_energy}", flush=True)
+    return new_value
+
+
+def death_penalty_due(send, state, conn_id):
+    """Charge the player for dying, if this map charges for it.
+
+    Called from `kill_player` only, and AFTER the death bit -- the corpus's own
+    order is status, then morale, then the maxima, all on one tick.
+    """
+    if not map_death_penalty(state.get("map_id", -1)):
+        return None
+    before = player_morale(state)
+    after = morale.after_death(before)
+    if after == before:
+        print(f"[c{conn_id}] death penalty already at the "
+              f"{morale.display(before)} cap; nothing to charge", flush=True)
+        return before
+    return push_morale(send, state, conn_id, after, "died")
+
+
+def morale_experience(send, state, conn_id, gained):
+    """Experience buys death penalty back, 1% per 75 XP.
+
+    WIKI (GWW, "Death Penalty", section Counters). The bank is what makes this
+    honest at our kill sizes: a 26-XP kill is not a third of a percent on the
+    wire, it is nothing at all until the third one.
+    """
+    before = player_morale(state)
+    after, bank, recovered = morale.experience_credit(
+        before, int(state.get("morale_xp_bank", 0)), gained)
+    state["morale_xp_bank"] = bank
+    if not recovered:
+        return before
+    return push_morale(send, state, conn_id, after,
+                       f"{recovered}% back from experience")
 
 
 def enemy_attack_tick(send, state, conn_id):
@@ -6813,14 +7032,14 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
     # reading, not a measurement, and it is the cheapest thing here for a
     # capture to overturn.
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    dealt = player_max_health(state) * ENEMY_HIT_FRACTION
     location = None
     if ARMOUR_TERM:
         location = roll_hit_location()
         armour = player_armour_at(location, physical=True)
         if armour is not None:
             dealt *= armour_multiplier(armour)
-    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+    frac = _damage_fraction(dealt, player_max_health(state),
                             agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
@@ -6831,7 +7050,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by {agent_id}: "
-          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}"
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
           + (f" (struck the {location.replace('warrior_', '')}, "
              f"AR {player_armour_at(location):.0f})" if location else ""),
           flush=True)
@@ -6989,7 +7208,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # and the player's health were consumed before the guard could refuse --
     # a refused value would have cost real state for a message that never
     # went out (test_guards section 4).
-    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+    frac = _damage_fraction(dealt, player_max_health(state),
                             agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
     state["player_health"] = max(0.0, state["player_health"] - dealt)
@@ -6997,7 +7216,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
-          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}", flush=True)
 
     if state["player_health"] <= 0.0:
         kill_player(send, state, conn_id)
@@ -7014,6 +7233,25 @@ def player_revive_due(send, state, conn_id):
     death -- a defeated overlay, a party wipe, a walk back from a resurrection
     shrine -- is not modelled here at all. Getting back up on a timer is the least
     wrong thing that keeps a session usable, and it is a placeholder.
+
+    THERE IS ONE NOW, and the paragraph above is out of date in the half that
+    matters. The 2026-08-17 capture holds a player death and its resurrection
+    ten seconds later (studies/morale/FINDINGS.md section 1), and retail's shape
+    differs from ours in three ways worth writing down before someone
+    "corrects" this function toward a guess:
+
+      * it is a SHRINE RESPAWN -- the position jumps, and the agents that fall
+        out of range go with `0x0021` in the same tick. Ours stands the body up
+        where it fell.
+      * the pools refill through `0x00A2` properties 52 and 55 at 1.0, not
+        through property 34 on the target channel. Ours has been through 34
+        since the agentprops arc and the client accepts it; which one the
+        `Health non-zero on resurrect` complaint prefers is unmeasured, and it
+        is the cheapest remaining experiment on this path (MORALE-Q3's
+        neighbour).
+      * the MAXIMA ARE NOT RESTORED. That one is not cosmetic and is now
+        implemented: the death penalty lives in the reduced maxima, so a revive
+        that hands them back deletes the mechanic.
     """
     player_pools(state)
     if not state["player_dead"]:
@@ -7032,7 +7270,7 @@ def player_revive_due(send, state, conn_id):
     # (test_guards section 6).
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
-    state["player_health"] = float(agents.PLAYER_HEALTH)
+    state["player_health"] = player_max_health(state)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
     # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
     # `Health non-zero on resurrect` on every revive we send -- 49 times across the
@@ -7048,8 +7286,14 @@ def player_revive_due(send, state, conn_id):
         print(f"[c{conn_id}] the player is back up "
               f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
         return
+    # THE MAXIMUM AT THIS MORALE, not the one the character had before it died.
+    # That is the death penalty's whole shape: retail's own revive restored the
+    # pools and left the reduced maxima standing (studies/morale/FINDINGS.md 1),
+    # so a revive that quietly handed the 15% back would undo the mechanic from
+    # the one place nobody would think to look for it.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+          int(player_max_health(state))],
          "restore the player's maximum")
     # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
@@ -7096,7 +7340,8 @@ def player_refill_due(send, state, conn_id):
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_refill_due_at"] = None
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+          int(player_max_health(state))],
          "restore the player's maximum (deferred)")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
@@ -10630,6 +10875,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 print(f"[c{conn_id}] PERSIST: sheet from "
                                       f"{_ps_store.path}", flush=True)
                         _ps_level = (_ps_row or {}).get("level", START_LEVEL)
+                        # ...and in the state, because morale needs it: the
+                        # penalty scales BASE health, which is 100 + 20 per
+                        # level and nothing else. It used to live only in this
+                        # local, so a death path four thousand lines away had
+                        # no way to ask how big the character was.
+                        state["level"] = _ps_level
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
                              f"level {_ps_level} on the player's AGENT")
@@ -10755,6 +11006,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # walk back.
                         player_attrs = [0] * PLAYER_ATTR_COUNT
                         player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
+                        # ...and field 10 stopped being one of the zeros on
+                        # 2026-08-20. Retail carries 100 here in 43 of 43
+                        # sightings across the whole live corpus, on level-1
+                        # and level-20 characters alike, and 0 is not a legal
+                        # morale at all -- the range is 40 to 110. Sending a
+                        # zero was not the cautious choice it looked like; it
+                        # was a value the game never sends, in a field whose
+                        # own probe once read the illegal "-100%" back.
+                        player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)
                         if _ps_row is not None:
                             player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
                             player_attrs[13] = _ps_row["skill_points"]
@@ -10854,21 +11114,41 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # on the bar was unaffordable. Order and values follow
                         # gw-preservation's sendPlayerAttributes, which is a
                         # server the real client accepts.
+                        # MORALE FIRST, because the two pools below are computed
+                        # from it. Retail sends this at login too -- `0x009C
+                        # [player, 100]` at t=0.897 of the death capture, before
+                        # its own pool burst -- and we never did, which is what
+                        # "we set morale to 100" used to mean: nothing on the
+                        # wire and a zero in the attribute set.
+                        player_pools(state)
+                        send(GAME_SMSG_AGENT_MORALE,
+                             [PLAYER_AGENT_ID, player_morale(state)],
+                             f"morale {morale.display(player_morale(state))} "
+                             f"on the player")
+                        _energy_max = player_max_energy(state)
+                        _health_max = int(player_max_health(state))
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID,
-                              agents.PLAYER_ENERGY],
-                             f"PLAYER energy = {agents.PLAYER_ENERGY}")
+                              _energy_max],
+                             f"PLAYER energy = {_energy_max}")
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
-                              agents.PLAYER_HEALTH],
-                             f"PLAYER health = {agents.PLAYER_HEALTH}")
+                              _health_max],
+                             f"PLAYER health = {_health_max}")
                         # The value field is a dword carrying IEEE float bits,
-                        # same as the damage path above.
+                        # same as the damage path above. The purpose is no
+                        # longer unknown -- it is energy regeneration as a
+                        # fraction of the pool per second, so it is rescaled if
+                        # morale has moved the pool (agents.PROP_ENERGY_REGEN).
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-                             [agents.PROP_UNKNOWN_FLOAT_43, PLAYER_AGENT_ID,
+                             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
                               PLAYER_AGENT_ID,
-                              _f32(agents.PLAYER_FLOAT_43)],
-                             "PLAYER float 43 (purpose unknown upstream too)")
+                              _f32(morale.regen_fraction(
+                                  agents.PLAYER_FLOAT_43,
+                                  agents.PLAYER_ENERGY, _energy_max))],
+                             f"PLAYER energy regeneration "
+                             f"({agents.PLAYER_FLOAT_43 * agents.PLAYER_ENERGY:.2f}"
+                             f"/s over a {_energy_max} pool)")
                         # Putting the weapon on the BODY is a different question
                         # from putting it in the weapon-set UI, and we had only
                         # done the latter. Upstream sources this message from the
@@ -11602,6 +11882,7 @@ def main():
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
+    global DEATH_PENALTY_FORCED
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -11728,6 +12009,17 @@ def main():
                          "make every run depend on the runs before it. "
                          "Professions, skillbar and unlocks stay flag-"
                          "driven (charstore.py says why).")
+    ap.add_argument("--death-penalty", action="store_true",
+                    help="Charge -15%% morale for every player death in every "
+                         "map, instead of asking the map. OFF by default and "
+                         "the default is RETAIL's answer rather than a stub: "
+                         "GWW's \"Death Penalty\" lists pre-Searing deaths "
+                         "among those that never incur one, and every map this "
+                         "server ships is pre-Searing, so a faithful world "
+                         "never fires the mechanic. This is how it gets "
+                         "watched anyway -- the --explorable idiom, a switch "
+                         "rather than a lie in content/maps.toml. "
+                         "studies/morale/FINDINGS.md.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="Send GAME_SMSG 0x00B6 in the spawn burst: which "
                          "professions the character may take as a SECONDARY. "
@@ -12775,6 +13067,13 @@ def main():
     PERSIST = a.persist
     if PERSIST:
         print(f"PERSIST: character store armed -- {charstore.store_dir()}")
+    DEATH_PENALTY_FORCED = a.death_penalty
+    if DEATH_PENALTY_FORCED:
+        print(f"DEATH PENALTY: forced ON for every map this session "
+              f"(-{morale.DEATH_STEP}% per death, floor "
+              f"{morale.display(morale.FLOOR)}). Retail charges nothing in "
+              f"pre-Searing, which is every map this server ships -- so this "
+              f"is a deliberate experiment, not the world.")
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

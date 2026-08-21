@@ -1028,7 +1028,20 @@ PROP_ENERGY_MAX = 41
 # our float-record dispatch does have a real case for 43. Energy regeneration is
 # the obvious reading and is a GUESS -- it is here because it travels with the
 # pair above in a server that works, not because we know what it does.
-PROP_UNKNOWN_FLOAT_43 = 43
+#
+# THAT GUESS IS NOW MEASURED, 2026-08-20, and the name follows the measurement.
+# It is energy regeneration as a FRACTION OF MAXIMUM ENERGY PER SECOND, read off
+# the one player death in the live corpus: the same character carried 0.0528f at
+# 25 maximum energy and 0.0600f at 22 across the death, and 0.0528 x 25 ==
+# 0.0600 x 22 == 1.32 energy/s. The pool shrank under a death penalty; the
+# absolute rate did not move, which is a check the fraction reading passes and
+# an absolute-rate reading fails. GWW's pip is 1 energy per 3 s, so 1.32 is four
+# pips at 0.33, and content's 0.0396 is three pips on a 25-energy character.
+# studies/morale/FINDINGS.md section 2.3.
+PROP_ENERGY_REGEN = 43
+# The old spelling, kept because renaming a constant is not a reason to break a
+# call site, and because "unknown" is exactly what it was for four months.
+PROP_UNKNOWN_FLOAT_43 = PROP_ENERGY_REGEN
 _PLAYER = WORLD.get("player", "defaults")
 PLAYER_ENERGY = _PLAYER["energy"]
 PLAYER_HEALTH = _PLAYER["health"]

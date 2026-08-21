@@ -1346,6 +1346,59 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
+
+Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md).
+
+**The question was "we send morale as 100 and nobody knows what that means".**
+It is answered from ArenaNet's own wire rather than from a mirror: the live
+corpus holds exactly **one player death**, it is fully instrumented, and it
+carries the whole mechanic in a single tick — `0x009C [agent, 85]` and
+`0x00EE [attr 10, −15]` together, then the server's own recomputed maxima,
+health 120 → 102 and energy 25 → 22. Morale is a percentage with 100 neutral
+that scales the character's **base** health and energy, and the energy figure is
+what proves the "base" in that sentence: scaling the total gives 21.25, which is
+not 22 and is not an integer.
+
+Landed: `morale.py` (arithmetic), `[player.morale]` + `[map_rule.*]` (rules and
+the per-map gate, wiki-cited), the death tick and the XP counter in `authsrv.py`,
+`moralescan.py` (the corpus census, so "the only −15 in fourteen captures" stays
+checkable), and `test_morale.py` (floor 47, green 48). Three older claims are
+corrected in place: `0x00E9` field 10 was **not** refuted as morale — its
+*display* was; `0x009C` is no longer "n=1, uncatalogued"; and property 43 is
+energy regeneration as a fraction of the pool per second, which also explains the
+`0.0396` this repo inherited from gw-preservation and shipped as "purpose
+unknown".
+
+**Every map this server ships is pre-Searing, where retail charges nothing for
+dying**, so the shipped world is deliberately silent and `--death-penalty` is
+what makes the mechanic watchable.
+
+**THE PROBE RAN 2026-08-20 AND IS GREEN** — `--probe morale`, agent-piloted,
+harness `20260820T220732`, all six steps verified in the gamesrv log before a
+pixel was read ([studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 1). Both
+questions the corpus could not answer are closed, and one prediction was
+refuted:
+
+- **MORALE-Q1 — `0x009C` draws the indicator.** `[player, 70]` alone put a red
+  chevron reading `−30%` in the top-left corner; `0x00EE [10, −15]` alone drew
+  nothing over three frames and 9.2 s (MORALE-P1 REFUTED, P2 confirmed).
+  `[player, 110]` flipped the chevron up and teal at `+10%` (P4).
+- **MORALE-Q2 — the maxima are the SERVER's job.** One frame carries it: the
+  corner reads `−30%` while the health and energy bars still read 100 and 25.
+  The pools moved only when properties 41/42 landed, and the energy bar then
+  showed the **14** we sent on purpose rather than the 19 the client's own
+  arithmetic would give (P3). A server that sends morale and forgets the pools
+  ships a penalty that costs nothing.
+- The control held: retail's own `0x00EE [10, 0]` no-op changed nothing over
+  eleven frames.
+
+Two things measured in passing and worth reusing: the indicator is at
+(10,32)–(60,82) at 1936×1040 — a crop starting at y=100 misses it and reads as
+a refutation — and the HUD repaints on a **1–4 s delay** rather than on the
+packet, so a probe reading it wants ≥5 s between a send and its screenshot.
+
 ### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:

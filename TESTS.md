@@ -5890,6 +5890,32 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   printing PASS. A CONTROL was added beside it that could not have existed
   before the fix: casting a HEX at the same agent must swing nothing at it.
   Floor 40 → 41),
+  `toolkit/authsrv/test_morale.py` (morale and the death penalty — the
+  arithmetic, the gate and the wire tick. Three things are actually at risk and
+  each has its own section. **The base-versus-total scale**: morale scales a
+  character's BASE health and energy, never the totals, and on the one death
+  ArenaNet's corpus contains that is the difference between the observed 22 and
+  the naive 21.25 — so §1 pins the ENERGY figure (the discriminating one; health
+  cannot discriminate, because base and total are both 100 for the character we
+  ship) and asserts outright that scaling the total does NOT reach the observed
+  number. **The gate**: every map this server ships is pre-Searing, where retail
+  charges nothing for dying (GWW, "Death Penalty", Exceptions), so §4 asserts
+  the SILENCE — a death in Lakeside County puts no morale on the wire — and then
+  asserts `--death-penalty` breaks it, because a default that fired would look
+  like a working feature and be a fabrication. **The revive**: the penalty lives
+  entirely in the maxima, so the cheapest way to delete the mechanic is to
+  restore `PLAYER_HEALTH` when the player stands up, which is what that code did
+  until 2026-08-20; §6 kills a player, stands them back up through BOTH revive
+  configurations (the shipped one-tick defer and `RURIK_REVIVE_DEFER=0`) and
+  reads the maximum that goes out. §5 asserts the death tick is ArenaNet's own
+  order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
+  energy regen, health max — with the delta carrying the wire's own
+  `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
+  encoding through the codec. §8 pins the other half of the original
+  question: `0x00E9` field 10 stopped being one of the zeros this server
+  sends, because retail carries 100 there in 43 of 43 sightings and 0 is
+  not a legal morale at all. Floor 49, against a green 50/49 across the two
+  revive configurations. No vault, no socket, no client),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless

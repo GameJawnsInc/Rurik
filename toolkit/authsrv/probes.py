@@ -1975,6 +1975,93 @@ def _faction_max_steps(agent_id):
     ]
 
 
+def _morale_steps(agent_id):
+    """Which channel draws the death-penalty indicator, and who computes the maxima.
+
+    THE WIRE IS ALREADY SETTLED, off ArenaNet's own one player death
+    (studies/morale/FINDINGS.md): morale is 100-neutral, a death is -15, it
+    arrives twice in one tick -- `0x009C [agent, 85]` absolute and
+    `0x00EE [10, -15]` as a delta -- and the server then pushes recomputed
+    maxima on properties 41 and 42. What no capture can answer is what the
+    CLIENT does with any of it, because retail sent all of it at once. Two
+    questions survive, and they are separable by leaving things OUT:
+
+      MORALE-Q1  which message draws the top-left indicator? The 15-dword
+                 `0x00E9` provably does not: attr_legend sent field 10 as 0,
+                 40, 100 and 110 and the indicator never moved. That refuted
+                 the DISPLAY, not the field -- and left two candidates.
+      MORALE-Q2  does the client derive the pool maxima from morale itself, or
+                 only show what the server sends? Retail never had to reveal
+                 this. If our morale-without-maxima steps shrink the globes,
+                 it is the client's arithmetic; if they do not, the maxima are
+                 ours to compute and a server that forgets them ships a death
+                 penalty that costs nothing.
+
+    THE ORDER IS THE EXPERIMENT. Each candidate goes out ALONE first, with no
+    property update anywhere near it, so a moving indicator names its own
+    channel. The maxima come last, together, which is also the state a player
+    would actually be in -- so the run ends on the readable configuration
+    rather than on a diagnostic one. attr_legend's lesson, applied: a later
+    step must not wipe the evidence of an earlier one, and here nothing does,
+    because every step moves morale FURTHER rather than resetting it.
+
+    Fixed-position HUD throughout: the top-left indicator, the two globes. No
+    aiming, no world-anchored click, so this is agent-pilotable under the
+    2026-08-17 boundary -- but it still launches a client, which is the
+    owner's call.
+    """
+    HEALTH_MAX, ENERGY_MAX = 42, 41
+
+    return [
+        # MORALE-P1
+        Step(3.0, 0x00EE, [10, 0xFFFFFFF1],
+             "0x00EE [attr 10, -15] ALONE -- the delta channel",
+             "the TOP-LEFT corner. A red -15% there means the delta message "
+             "draws the indicator and 0x00E9's refutation was about the "
+             "full-set message only. Nothing means the display is elsewhere -- "
+             "step 2 is the other candidate. Also watch the two globes: if "
+             "they shrink with no property update behind them, the client "
+             "computes the maxima itself (MORALE-Q2) and that is the bigger "
+             "finding of the two."),
+        # MORALE-P2
+        Step(10.0, 0x009C, [agent_id, 70],
+             "0x009C [player, 70] ALONE -- the absolute, per-agent channel",
+             "the same corner. -30% appearing HERE rather than at step 1 makes "
+             "0x009C the display channel -- which is the reading the corpus "
+             "leans toward, because 0x009C names an agent and a party window "
+             "has to show a party member's penalty too. If BOTH steps moved "
+             "it, the client accepts either and our server is right to send "
+             "both."),
+        # MORALE-P3 -- the maxima, at last, and only now
+        Step(10.0, 0x009F, [ENERGY_MAX, agent_id, 14],
+             "property 41: maximum energy 25 -> 14 (-30% of base 20 is -6; 14 "
+             "is deliberately LOWER so a client-side value would disagree)",
+             "the energy globe. 14 means the server's number wins outright. A "
+             "globe reading 19 -- what -30% of base 20 actually gives -- means "
+             "the client had already computed its own and IGNORED ours, which "
+             "would be the day this mechanic stops being the server's job."),
+        Step(2.0, 0x009F, [HEALTH_MAX, agent_id, 70],
+             "property 42: maximum health 100 -> 70, matching -30%",
+             "the health globe, and the party window. This is the configuration "
+             "a real -30% player is in; read the whole HUD and screenshot it."),
+        # MORALE-P4 -- the other end of the range
+        Step(10.0, 0x009C, [agent_id, 110],
+             "0x009C [player, 110] -- a +10% MORALE BOOST, the ceiling",
+             "the indicator's other face. GW draws a boost with a different "
+             "icon from a penalty (blue/gold rather than red), so the icon "
+             "swapping is what confirms 110 is read as +10 rather than as a "
+             "large penalty. The corpus has never carried a boost at all -- "
+             "zero sightings in fourteen captures -- so this step is the only "
+             "evidence this project can get for the top half of the range."),
+        Step(6.0, 0x00EE, [10, 0],
+             "0x00EE [attr 10, 0] -- retail's own no-op, for the control",
+             "nothing should change. This exact message appears 39 times in "
+             "the live corpus riding experience awards, so a client that "
+             "reacts to it would mean the burst finding in "
+             "studies/combat/PLAN.md 13 has a second reading."),
+    ]
+
+
 def _title_track_steps(agent_id):
     """The title cluster 0x00F3-0x00F6, on our client for the first time.
 
@@ -6562,6 +6649,33 @@ PROBES = {
              "later steps rebuilt the array from zeros and wiped the legend "
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
+    ),
+    "morale": lambda a, o: Probe(
+        question="Which message draws the death-penalty indicator -- the "
+                 "0x00EE delta or the per-agent 0x009C -- and does the client "
+                 "compute the reduced maxima itself or only display ours?",
+        predicts="MORALE-P1/P2: exactly one of the first two steps puts a red "
+                 "percentage in the top-left corner. 0x009C is the favourite: "
+                 "it names an agent, and a party window has to show a party "
+                 "member's penalty. MORALE-P3: the globes do NOT move until "
+                 "properties 41/42 arrive, and then they read 14 and 70 -- the "
+                 "server's numbers, not the -30%-of-base arithmetic, which is "
+                 "why 14 was chosen to disagree with 19. MORALE-P4: 110 draws "
+                 "a BOOST icon rather than a penalty one. Every step is a "
+                 "fixed-position HUD readout.",
+        steps=_morale_steps(a),
+        note="ANSWERED 2026-08-20, agent-piloted, all six steps verified "
+             "in the gamesrv log before a pixel was read (harness "
+             "20260820T220732; studies/morale/RUNS.md Run 1). 0x009C DRAWS "
+             "the indicator -- red chevron, -30% -- and 0x00EE's delta drew "
+             "nothing over three frames and 9.2 s; 110 flipped the chevron up "
+             "and teal at +10%; and the pools did NOT move until properties "
+             "41/42 landed, then showed the 14 we sent rather than the 19 the "
+             "client's own arithmetic would give. So the maxima are the "
+             "SERVER's job. Kept runnable: it is also the calibration for the "
+             "corner, which sits at (10,32)-(60,82) and which a crop starting "
+             "at y=100 misses entirely. The HUD repaints on a ~1-4 s delay, "
+             "so leave >=5 s between a send and its screenshot.",
     ),
     "faction_max": lambda a, o: Probe(
         question="Do the four one-dword messages 0x00EA-0x00ED set the "
