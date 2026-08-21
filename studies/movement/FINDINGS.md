@@ -4757,3 +4757,72 @@ buy a cell that is actually where it says it is. And the general rule this is th
 third instance of: **a plan's later legs are only where the plan says while
 nothing has touched geometry; after any wall contact, position is an observation,
 not a prediction.**
+
+## 2026-08-21 — ★★ REALFIX-L4: THE FIX IS DEMONSTRATED. Pooled 9 of 21 against 0 of 13, Fisher p = 0.0056
+
+**OBSERVED, `ours`.** Two arms, a **shuttle-only** plan built for exposure rather
+than coverage — the wall cells were dropped (they drift off the deck, and X2a
+never ran) and that time spent on **8 crossing cycles** instead of 3. Identical
+scripted input both arms; movetap attached after the map verdict.
+Control `20260821T161910` / `movetap-…161928`; F1 `20260821T162449` /
+`movetap-…162505`.
+
+| | **control `--zero-lead`** | **F1 `+ --plane-carry`** |
+|---|---|---|
+| **REALFIX-E events** | **6** | **0** |
+| max `async_at` step | 472.2 u | **60.7 u** |
+| grants | 61 | 70 |
+| field 4 ≠ the copy's own plane | 14 | **8** |
+| **…and above the cut (TREATED)** | **13** | **8** |
+| separation p50 / p90 / max | 303 / 513 / 529 | 349 / 515 / 529 |
+| samples above the cut | 56% | **69%** |
+
+The six control events: 463.5, 472.2, 263.6, 467.1, 285.3, 458.7 u, each
+collapsing separation from 297–515 u onto 13.8–27.1 u. **The design worked as
+intended** — 13 treated grants against L3's 8, at a consistent rate (6/13 = 0.46
+against L3's 3/8 = 0.375).
+
+### The statistics, and this run is why they close
+
+| comparison | control | F1 | Fisher (one-sided) |
+|---|---|---|---|
+| L3 alone | 3 of 8 | 0 of 5 | p = 0.196 |
+| **L4 alone** | **6 of 13** | **0 of 8** | **p = 0.032** |
+| **POOLED** | **9 of 21** | **0 of 13** | **p = 0.0056** |
+
+Under the null that F1 does nothing to events, its 13 pooled treated grants
+should have produced **5.6 events**. They produced **zero**.
+
+**And it is not an exposure artifact — the arithmetic runs the wrong way for
+that.** The F1 arm sent **more** grants (70 vs 61) and spent **more** of its run
+above the gate-1 cut (**69% vs 56%**) with a **higher** p50 separation (349 vs
+303 u). It had more of every condition that precedes a warp, and produced none.
+
+### What is now established, and in what terms
+
+**REALFIX-F1 removes the warp.** The mechanism was decoded (round 6), reproduced
+prospectively with a control that could not express it (L3), and is now removed
+by a three-line change at p = 0.0056 across two independent runs with 34 treated
+grants between them. The chain from wire to warp is measured end to end: field 4
+→ `agent+0x80` → `q`'s plane in the match test's walkable conjunct → no match →
+gate 1 at ~500 u → whole-roster reseed → the character yanked ~460 u backward.
+
+**What is still NOT established, and none of it is load-bearing for the above:**
+
+- **F1 does not zero its own mechanism proxy.** Field 4 still disagreed with the
+  copy's plane on **8 of 70** grants here (14 of 61 in the control), so the
+  primary falsifier from F1's own banner remains failed. Its offline screen says
+  why: some are two-interval lags, some are the sub-frame arrival race. **The
+  fix works despite an imperfect proxy, which means the proxy is not the
+  mechanism** — a distinction this arc should keep, because F1b was built to zero
+  the proxy and would have bought nothing measurable here.
+- **The regime is one map, one plan, keyboard-only, click-free.** The round-4
+  spam-click regime (11.49 hard rows/min under the shipped default) is untouched
+  by any of this and remains the operator's run.
+- **The instrument ran at 8.4–9.5 Hz against a 20 Hz request** in both arms.
+  Positives valid, nulls void — and the headline here rests on a **positive in
+  the control** (6 events) and a null in the treatment. The null is licensed by
+  the control's own rate at matched exposure, not by the tap.
+- **`--zero-lead` itself remains undemonstrated as a warp fix** against the
+  shipped default. It is the substrate F1 is measured on, not a proven
+  improvement over P0 — and P0 in this regime sends no grants at all.
