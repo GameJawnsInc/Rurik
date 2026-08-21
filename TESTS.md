@@ -3033,11 +3033,52 @@ Every one of these, in the order they were written:
   `run_suite.py` discovers `test_*.py` from DISK, so neither was ever invoked by
   it -- the same defect as a test missing from this file, which the tree has
   shipped three times (`test_pathmap.py`, `test_skillcast.py`,
-  `test_textrec.py`). §17 wraps movetap's fence sections: the 28 AgTrack and
-  gate-1 displacements re-derived from build 38797's own bytes (each expected
+  `test_textrec.py`). §17 wraps movetap's fence sections: the **44** AgTrack,
+  gate-1 and history-node displacements re-derived from build 38797's own bytes
+  (each expected
   encoding BUILT FROM the module constant, so a wrong constant produces bytes
   that are not at that VA), and the 13 refusal cases that keep a failed read
-  from minting the `0` that means "the fence is shut". §18 wraps movetap's
+  from minting the `0` that means "the fence is shut". **28 → 44 on 2026-08-21
+  with REALFIX-I1, and sixteen of them are the history chain the client's own
+  match test walks**: the next pointer (`0x00605A5D` push-front AND
+  `0x00605732`'s advance — both ends, so null-terminates is read twice), the
+  time field the allocator writes from its argument (`0x00604DCC`, `mod=00`
+  being the proof it is at +0x00), the four-dword point including the plane word
+  (`0x00605A63`…`0x00605A75`), the 0x2C stride, the 256-node block cap, the
+  5000 ms block recycle and the 2500 ms head-age rule. **Four of the sixteen
+  REFUTE this tree's own committed comment**, which said only +0x00 and +0x04 of
+  the AgTrack record were ever touched and that +0x18 was UNVERIFIED: the
+  appender writes record +0x08…+0x18 every time it runs and the walker reads
+  +0x08…+0x14 back as the polyline's FIRST vertex before it steps to the head.
+  The bytes won and the comment was rewritten. **§17 also wraps
+  `_selftest_chain` (28), which drives `history_chain` over a bytearray** — no
+  client, no vault, no `ReadProcessMemory` — through a healthy 4-node walk and
+  every way a chain can be wrong: a chain longer than N (`truncated:max-nodes`,
+  keeping the N nodes it read), a head in the null-guard region, one above the
+  LARGE_ADDRESS_AWARE ceiling (measured off Characteristics `0x0122`, not
+  assumed at `0x7FFF0000`), an unaligned head, an unreadable node at position 0
+  and at position 1, a cycle, and two torn-read signatures — a node NEWER than
+  the node linking to it, and one dated more than a node-interval into the
+  future — with a matched control proving a few ms of world-0/world-1 clock skew
+  does NOT redden. **The gate is checked in both directions**: at exactly
+  `sep = 250.0 u` no read is issued at all (asserted on the fixture's own read
+  log, because the gate is a design requirement — eight unconditional node reads
+  is ~+40% of a sample and would fight REALFIX-T3's residual budget), and
+  `HIST_SEP_GATE < GATE1_CUT − GATE1_BAND` so no sample that could ever be
+  classified `above` is skipped by it. **And the cost is MEASURED rather than
+  argued**: the section drives the real `sample()` over a whole-sample fake
+  memory whose only variable is where the ASYNC twin stands (100 u vs 4,000 u,
+  same shipped gate, no flag) and counts the reads — **8 below the gate, 17 for
+  a full 8-node walk, +112%**. REALFIX.md §2.4 argued the gate from "a full
+  sample is ~20 ReadProcessMemory calls, so 8 node reads is ~+40%"; `sample()`
+  issues **8**, so an ungated walk would roughly double it and the gate is more
+  load-bearing than the design note claimed, not less. (That is a read count.
+  The Hz cost is a different quantity, needs a client, and is what
+  `movetap.chain_cost()` measures before every run for `main()` to print.)
+  **The point of the whole section is that
+  a refused chain must never look like a short one**: "no node within
+  MATCH_RADIUS of q" is the sentence that revives candidate B, and a torn read
+  produces it for free. §18 wraps movetap's
   C2/C3/C6/C7/C8/C9 sections -- episodes (7), the flip denominator (8), gate 1's
   ASYNC twin and 0x005FF820's clamp (26), the two early-outs (11), the
   vocabulary (7). §19 wraps movesync's C4/C5/C9 -- the three-way jump tally
@@ -3100,9 +3141,19 @@ Every one of these, in the order they were written:
   its call site is deleted, and a coverage check reading the table would then
   certify a section nobody ran -- the same defect one level up; deleting one
   `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
-  **65**) so the operator's pre-flight command cannot diverge from the
+  **80**, movetap **206**) so the operator's pre-flight command cannot diverge
+  from the
   suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
-  green run executes and requires the module to refuse itself. **movesync had no
+  green run executes and requires the module to refuse itself. (Both numbers
+  were stale in this entry until 2026-08-21 — it said 65 for movesync, which
+  had been 80 for a day — and movetap's was never here at all. `movetap`'s
+  moved 158 → **205** with REALFIX-I1: §5 28 → 44, §9's wiring table 22 → 25
+  with the three rows that keep the chain walk's OUTPUT alive (`chain_cost`
+  priced, `print_hist_summary` called with its own three tallies, `hist_why`
+  tallied at all), §12 7 → 8 with the check
+  that `sample()` actually CALLS `history_chain` rather than splicing eight
+  blank keys from nowhere, and the new §13 at 28. Read off the run:
+  6+1+1+0+44+13+14+15+25+38+13+8+28.) **movesync had no
   module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
   each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
   leans on -- carried none, so deleting section 2's only check took it from 38
@@ -3122,11 +3173,43 @@ Every one of these, in the order they were written:
   the defect it now guards**: it compared a section's `(bad, ran)` tuple against
   `0` -- which cannot be true -- and then compared the same tuple with `>`,
   which raised, so 16 green sections were followed by a TypeError and one check
-  that could never pass. Floor **100**, the bare-machine subset, against a green
-  **150** with every capture present; §11-§16 declare `LEDGER.skip` without
+  that could never pass. **§21 IS THE CLOCK ANCHOR, REALFIX-T1/T2, added
+  2026-08-21, and its subject is that the two estimators are NEVER MIXED and
+  that the file SAYS which one it used** — a run that silently fell back to the
+  truncated `wall` stamp produces identical-looking numbers everywhere
+  downstream, which is how a 1.00 s error survived two whole analysis lanes.
+  `authsrv.Recorder.event` now stamps `wall_unix` beside `wall`, and
+  `movesync.offset_detail` prefers it (median over per-row offsets, spread as
+  the residual) or falls back to the truncated max-estimator (offset from below,
+  ~1 s residual by construction) — one family or the other, with `n` against
+  `n_trunc` naming a mixed file rather than averaging it into a number that is
+  neither. It is demonstrated THREE ways and the third is the one that carries:
+  a synthetic post-T1 capture (offset exact to the microsecond), a synthetic
+  pre-T1 one at **0.977 s / 281 u** — 40 rows at a 0.317 s cadence, because six
+  rows reach only 0.76 and would have understated the defect — and then
+  **`authsrv.Recorder` ITSELF, in process, writing 200 real rows**: spread
+  **11.4 µs = 0.0033 u**, against REALFIX §2.2's "< 1 ms (< 0.3 u)" clock term,
+  measured on the same two adjacent clock reads a live run makes rather than on
+  a fixture whose stamps are exact by construction. `offset_from_stamps` keeps
+  its two-value return (`pair`, `resyncscore`, `grantsim` and this file's own §1
+  all unpack exactly two) and `WallStamps` subclasses `list`, so
+  `getattr(walls, "unix", ())` IS the fallback test and a hand-built list of
+  floats still works — there is no version flag to get wrong. Floor **124**, the
+  bare-machine subset, against a green **174** with every capture present;
+  §11-§16 declare `LEDGER.skip` without
   them, and so does `movetap._selftest_fence_bytes` (that section's two checks
-  and its one control are the only 3 of §17-§20's 46 that need the vault's
-  client snapshot; the other 43 run on a bare machine). No client. ~2 s),
+  and its one control are the only 3 of §17-§21's 70 that need the vault's
+  client snapshot; the other 67 run on a bare machine). **§17 also wraps
+  `movetap._selftest_chain`, REALFIX-I1**, with three controls that each redden
+  it: `HIST_SEP_GATE` raised past every fixture (which is what a gate quietly
+  set too high does to a whole live run — the chain is never read and the file
+  looks healthy), `HIST_MAX_NODES` cut to 2 (a walk that called a truncated
+  chain `ok` would licence a null over a polyline it never finished reading),
+  and `PTR_MIN` dropped to 0 (a head inside the 64 KB null-guard region reading
+  as an address). Those controls are why `history_chain` resolves both
+  parameters from the module globals in its BODY: written as signature defaults
+  they are bound at import, and a control that moved the constant would have
+  changed nothing while appearing to. No client. ~4 s),
   `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:
