@@ -604,6 +604,13 @@ Skip the grant when the newest report's position deviates from the straight extr
 **The run it changes: the X1 and X2a legs.** Under B it removes the event; under A it does nothing. Cost: one skipped grant per deflection = **+1 chord (~515 u) of separation exactly at contact**, which is the worst moment to add lag if B is *wrong*.
 **Label:** this is not derived from any measurement in the record and has no retail grounding. **Do not build it before X2a returns a positive.**
 
+#### REALFIX-F4 · bound the click grant's lead — **REFUTED AT A DESK 2026-08-21, never built**
+
+**Site (had it been built):** the click send at `authsrv.py:11253` — refuse a grant whose destination lies further than a bound *B* from the client's own last report.
+**Why it looked right:** the spam-click regime's warps are gate 1 firing on a granted point 1,400–2,600 u away, and a grant inside `MATCH_RADIUS` cannot reach gate 1.
+**Why it is refused, measured over the whole `ours` corpus (2,445 grants, 82 attributable warps):** at `MATCH_RADIUS` it refuses **99% of warp-causing grants at a cost of 94% of ALL grants**; at 1,000 u the ratio INVERTS (35% benefit, 45% cost). **The bound does not separate, because a click grant is far BY DEFINITION** — "far grants" and "all click grants" are one population. That makes F4 `--grant-suppress` with extra steps, and the arc already ships that.
+**What it rules out generally:** any click-arm policy keyed on the grant's own distance. FINDINGS §"REALFIX-F4 REFUTED AT A DESK".
+
 #### The finding that constrains the whole ladder
 
 At keyboard cadence, **the chord length is set by the client's own 515 u report trigger (W2), not by our grant floor.** We cannot grant more often than reports arrive. So if candidate B fires in X2a, **P2 has no cheap dial** — F2a costs the separation win outright, F2b is inert in this regime, and F3 is invention. That makes X2a the ladder-deciding cell: a positive there sends the arc to P3/§2.2, not to a P2 parameter.

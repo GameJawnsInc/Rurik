@@ -5105,7 +5105,7 @@ times.
 **And `--zero-lead` does not touch the click arm**, so the same nine clicks under
 A3's flags would have produced the same lead-carrying grants. **PREDICTION,
 recorded before it is tested: the composite would NOT have prevented these three
-warps.**
+warps.** ⚠ **CONTESTED the same day by a desk screen — see §"REALFIX-F4 REFUTED AT A DESK": under `--zero-lead`, 137 overwrite grants would have fired, the first 0.91–2.13 s after each click grant and 6.0–33.2 s before each warp. Whether the client HONOURS an overwrite is UNVERIFIED, so the prediction is neither confirmed nor withdrawn — it is now the thing the next run decides.**
 
 ### ★ AND IT SETTLES L5's OPEN QUESTION: THE COMPOSITE BOUGHT NOTHING MEASURABLE
 
@@ -5127,3 +5127,109 @@ the cost of refusing outright — with every click refused *"the client pathed
 itself to the clicked point anyway"*, cos 0.994–1.000, 5 of 5 — so the click
 grant is not load-bearing for click-to-move. **Needs a minted identifier and its
 own pre-registration before a line is written.**
+
+## 2026-08-21, later — REALFIX-F4 REFUTED AT A DESK BEFORE IT WAS BUILT, and the desk work undermines my own L6 prediction
+
+**No client run, no server code written.** Three offline screens over captures
+already in the vault. This is the second candidate the desk has killed
+(REALFIX-F1b was the first) and the pattern is now the arc's cheapest instrument.
+
+### 1. REALFIX-F4 — bound the click grant's lead — is REFUTED
+
+**The candidate**, minted here per `studies/idents/CONVENTION.md` (`F<n>` = fix
+candidates; F1/F1b/F2a/F2b/F3 taken): refuse a click grant whose destination
+lies further than a bound *B* from the client's own last reported position,
+since a grant inside `MATCH_RADIUS` cannot fail the match test and reach gate 1.
+
+**Its own refutation criterion, stated in the screen before it ran:** the bound
+earns its place only if it refuses the warp-causing grants while NOT refusing
+everything — otherwise it is `--grant-suppress` with extra steps.
+
+**Screened over the whole `origin = ours` corpus** — 2,445 grants, 82 warps
+attributable to a granted point within 150 u:
+
+| bound | BENEFIT: warp-causing grants refused | COST: all grants refused |
+|---|---|---|
+| `MATCH_RADIUS` 99.92 u | 81 / 82 (**99%**) | 2,299 / 2,445 (**94%**) |
+| `GATE1_CUT` 299.33 u | 77 / 82 (94%) | 2,129 / 2,445 (87%) |
+| 520 u | 72 / 82 (88%) | 1,979 / 2,445 (81%) |
+| 1,000 u | 29 / 82 (35%) | 1,102 / 2,445 (45%) |
+
+**The curves track each other, and at the loosest bound the ratio inverts
+(35% benefit at 45% cost — worse than indifferent).** There is no separation to
+find, and the reason is structural: **a click grant is far BY DEFINITION** —
+it names the point the player clicked. The population of "far grants" and the
+population of "all click grants" are the same population. **F4 is refused. Do
+not build it.**
+
+**What this rules out generally:** any click-arm policy keyed on the grant's own
+distance. The discriminator, if one exists, is not in the grant.
+
+### 2. Reseed-onto-our-model is REFUTED, and two of L6's three warps are clean
+
+The rival reading of L6's warps — gate 1 reseeds the whole roster onto the
+authoritative copy, so the landing is wherever the SERVER believed the player
+was, and its proximity to an old granted point is a coincidence of our own
+integration. **Tested against `position_report.ours`, the server's own belief,
+strictly before each warp:**
+
+| warp | to the nearest GRANTED point | to OUR MODEL | to the client's OWN past track |
+|---|---|---|---|
+| 1 | **27.9 u** | 966.6 u | 591.1 u |
+| 2 | 114.2 u | **2,224.9 u** | **105.2 u** |
+| 3 | **0.0 u** | 1,324.6 u | 422.7 u |
+
+**Reseed-onto-our-model is dead** — warp 2 sits 2,225 u from our model. **Warps
+1 and 3 are unambiguously the granted destination**, held **8.82 s** and
+**6.88 s** and then applied.
+
+⚠ **Warp 2 is UNRESOLVABLE and is withdrawn as evidence for anything**: 114.2 u
+to grant 1's destination against 105.2 u to a position the client itself held
+26.2 s earlier. At n = 1 that difference cannot be called. **In particular it
+must NOT be read as showing that grants QUEUE rather than replace** — that was
+this session's first reading of it (grant 2 was already sent when warp 2 fired
+on grant 1's point) and the own-past column takes it away.
+
+### 3. ⚠ MY OWN L6 PREDICTION IS UNDERMINED — the overwrite arrives in time
+
+L6 recorded: *"the composite would NOT have prevented these three warps"*,
+reasoning that `--zero-lead` does not touch the click arm so the same
+lead-carrying grant goes out. **That is true about the GRANT and ignores what
+happens 0.5 s later.**
+
+Replaying L6's real report stream through the SHIPPED `_heading_grant_ok`, with
+L6's real click grants stamping the shared clock: **137 zero-lead grants would
+have fired**, each naming the client's own position. Per warp:
+
+| warp | its grant | overwrites available before it | first one lands |
+|---|---|---|---|
+| 1 | t+37.06 | **11** | 2.13 s after the grant, **6.69 s before** the warp |
+| 2 | t+37.06 | **53** | 2.13 s after the grant, **33.22 s before** the warp |
+| 3 | t+71.49 | **10** | 0.91 s after the grant, **5.97 s before** the warp |
+
+**Every warp had an overwrite available, with seconds to spare.**
+
+⚠ **This is NOT a demonstration that the composite works.** It shows the
+overwrite would be **sent** in time; it does not show the client **honours** it.
+Whether a second `AGENT_MOVE_TO_POINT` clears a pending destination or is held
+behind it is **UNVERIFIED** — nothing here reads `+0x48`, and §2's warp 2 can no
+longer be used to argue either way. **The prediction is downgraded from
+"recorded before it is tested" to CONTESTED, and the run below decides it.**
+
+### What to run, and why it is now cheap
+
+**`--zero-lead --grant-suppress`, in a regime that DELIBERATELY produces
+cold-latch clicks.** L6 taught the recipe: rule 1 disarms on a `0x0047` stop, so
+**release the movement key for ~0.5 s, click somewhere far, then resume
+keyboarding.** L6 produced 9 such windows by accident in 484 clicks; a protocol
+aimed at them produces dozens.
+
+**The two outcomes are both informative and they are opposite:** warps → 0 means
+the overwrite is honoured and the composite closes the residue `--grant-suppress`
+leaves; warps at L6's ~2/min means the destination survives an overwrite, which
+sends the arc to the client-side question — which of the 13 SetPosition sites
+re-applies a destination seconds later (REALFIX-Q5) — and needs a movetap on
+`+0x48`, which L6 did not carry. **Carry one this time.**
+
+**The control is already banked**: L6 itself, `--grant-suppress` alone, 3 warps
+in 89 s at 2.02/min, same operator, same map, same day.
