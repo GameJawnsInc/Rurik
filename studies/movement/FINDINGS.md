@@ -4228,3 +4228,77 @@ if X1/X3 produce events. The round-4 trigger run stays with the owner and is
 unchanged. Pre-registered predictions with their power arithmetic are in the
 protocol; the ladder-deciding cell is X2a — a positive there sends the arc to
 P3/§2.2, because W2 means no grant-side parameter can shorten the chord.
+
+## 2026-08-21 — REALFIX-L2 RAN AND REACHED NO CELL: the plan's frame was 108° wrong, and yaw is not linear
+
+**The instruments landed and work. The protocol did not run.** Two arms, identical
+28-leg plan, P0 (`--explorable`) then P2 (`+ --zero-lead`), movetap attached after
+the map verdict at 20 Hz. Captures `20260821T123327` / `123942` (gamesrv),
+`movetap-20260821T123338` / `124010`. **Not one of the six cells was visited.**
+
+### What went wrong, measured from P0's own capture
+
+| constant | plan assumed | **MEASURED** | error |
+|---|---|---|---|
+| spawn facing (REALFIX-W5) | −65.80° | **+44.31°** (first held heading, n=4 intervals within 1°) | **+108°** |
+| yaw response (REALFIX-W4) | −0.0800 °/px, linear | `yaw:332` → **−1.69°** (−0.0051 °/px); `yaw:951` → **+113.22°** (+0.119); `yaw:−1451` → **−140.00°** (+0.097); `yaw:111` → **+26.78°** (+0.241) | **nonlinear AND sign-inconsistent** |
+
+Every leg after the first inherits the facing error, and the yaws cannot correct it
+because their response is not a constant times pixels. The character walked
+northeast — x 9826→14170, y 8077→11130 — while the bridge corridor the round-6
+events came from (x 10860–11123, y 4326–5279, plane 18) sits ~2,300 u south.
+**0 of 2,567 (P0) and 0 of 2,154 (P2) samples inside it.**
+
+⚠ **The navmesh march did not catch this and could not have.** It marched from the
+*assumed* spawn facing, so it validated a path the client never walked; it reported
+"zero unintended blocked legs" for a plan that never left the wrong quadrant. **A
+plan validated only against our own mesh is validated against our own assumption.**
+The operator flagged wall contact twice during these runs and was right both times.
+
+**REALFIX-W4 is REFUTED as a calibration.** The design lane's own supporting
+measurement — "the commanded heading is exactly constant within a leg, max
+deviation 0.000° over 16 legs" — is *within-leg constancy*, which is true and
+useful, and it does not license a **between-leg** yaw response. The two were
+conflated (by this session, in the plan assembly) and the conflation is what put
+`yaw:N ⇒ −0.08·N` into a protocol as if it were measured.
+
+### What the run DID establish
+
+- **REALFIX-I1 works.** First chain walks ever taken from a live client: P2
+  **775 `ok`** node walks, 119 `truncated:max-nodes`, 1,259 `not-attempted:below-gate`
+  (the gate doing its job), 1 `empty:head-null`. P0: 179 `ok`, 2,193 truncated. The
+  refusal vocabulary appears in real data and no sample returned garbage.
+- **The chain walk's live Hz cost is now measured**, closing readiness item (3):
+  **23,839 Hz gated vs 18,430 Hz forced, −23%** at the reader's own capability. The
+  offline read-count figure (+112%) is the pessimistic bound; the achieved Hz cost
+  is a quarter of that.
+- **REALFIX-T1 is in the captures** — `wall_unix` present, so the 1.00 s offset
+  spread that cost round 6 its alignment is gone from every future run.
+- **A weak but real data point on the mechanism.** P2 sent **79 grants**, and
+  movetap recorded **680 of 2,154 samples with separation above the gate-1 cut**
+  (p50 424, max 530 u) — **with zero REALFIX-E events** (async step max **54.2 u**;
+  P0's max 62.5 u). And the two copies' planes **never disagreed**: the
+  `(sync_plane, async_plane)` census is `{(0,0): 2,070, (29,29): 84}`, against L1
+  arm B's 45 mismatched samples. **Consistent with round 6's reading — above-cut
+  separation alone does not warp, and no plane mismatch means no warp — but it is
+  not a test of it**, because the run never produced the treatment condition (a
+  plane rewrite onto a lagged copy). Recorded as corroboration of the *necessity*
+  half at n=680, not as evidence about sufficiency.
+- Both arms crossed a plane 0↔29 boundary (84–90 samples) in the northeast, so
+  **the map has a second plane boundary the character reaches on its natural
+  facing** — a candidate site that needs no yaw at all.
+
+### What REALFIX-L3 needs, in order
+
+1. **Calibrate yaw empirically, or design around it.** The response is nonlinear
+   and possibly saturating (332 px → 1.7°, 951 px → 113°). Cheapest: one dedicated
+   run of `yaw:N wait:2 W:2` for N ∈ {±100, ±250, ±500, ±1000, ±2000}, reading the
+   held heading after each — no map knowledge needed, and it is the calibration
+   `PROBE-GATEFIRE`-style protocols have always required before steering.
+2. **Or relocate the cells to the plane 0↔29 boundary** the character reaches on
+   its own facing, which removes yaw from the critical path entirely. Its geometry
+   is unmeasured; P0's capture is the calibration substrate for it.
+3. **Either way, the plan must be validated against an OBSERVED path, never a
+   marched one.** The rule already exists (`REALFIX.md` §6.1.5, cell assignment
+   from the observed path); what this run shows is that it must also govern plan
+   *construction*, not only scoring.
