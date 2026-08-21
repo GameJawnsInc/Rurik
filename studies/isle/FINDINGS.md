@@ -1305,6 +1305,60 @@ pre-registration was checked against the source before sealing. On the operator'
 480-health pool the property-44 rate should move by `pips × 2 / 480`: −0.0125
 (bleeding), −0.0167 (poison/disease), −0.0292 (burning), −0.0042 (torch degen hex).
 
+## 5.1 Property 44 is a NET rate, and torch3's prediction is written as if it were not (pre-registered 2026-08-20, BEFORE the run)
+
+**Recorded before the live session, not after, because a correction written after
+the data arrives is a rescue rather than a prediction.** The sealed plan is NOT
+edited — its sha256 stays valid — and this is the reading rule that goes with it.
+
+B4 settled that property 44 is the **net** health-regeneration rate: *"prop 44
+must step to (natural − condition) × 2/H at apply time"*. The sealed plan's
+degeneration predictions are stated as bare condition contributions — torch3
+expects *"about −0.0041667"* for the one-pip torch hex. Those two are the same
+statement **only while natural regeneration is zero**.
+
+**It is not zero at torch3, and that step is the one place on the route where it
+cannot be.** B4 also measured the ramp: *"the player's regen ramp starts ~5-6 s
+after last damage, stepping +1 quantum per ~2 s"*, and it observed the player
+carrying positive prop-44 (1 and 2 pips) directly. Leg A is a **no-combat** leg —
+the Master of Magic does not fight — so by the time the operator has stood
+adjacent to a torch for 30-40 s, the ramp has been running the whole time.
+
+On the operator's 480-health pool, one pip is `2/480 = 0.0041667`:
+
+| natural regen | torch hex | **net prop 44 sent** |
+|---|---|---|
+| +0 pip | −1 pip | −0.0041667 ← what the plan predicts |
+| +1 pip | −1 pip | **0.0000000** |
+| +2 pip | −1 pip | **+0.0041667** — same magnitude, **opposite sign** |
+
+**The failure mode this creates is a FALSE REFUTATION, and it is pre-loaded.**
+The plan says: *"If no property-44 arrives, 'degeneration is server-owned' is
+refuted for retail and that is a bigger result than the confirmation."* At
+natural +1 the net is exactly zero, and at natural +2 the value has the sign
+flipped — so a reading that asks *"did we see −0.0041667?"* answers **no** in both
+cases and hands back the plan's own headline refutation off an artifact where the
+mechanism worked perfectly.
+
+**The reading rule, with no free parameter either way: score the STEP, not the
+value.** Whatever the baseline, the rate must step **down by exactly one pip
+(0.0041667) at apply** and back **up by one pip at expiry**. The torch re-applies
+every ~2 s against a 10.0 s duration, so the effect never lapses while the
+operator stands there: one step down on arrival, one step up ~10 s after stepping
+away. That is why the *"step well away"* halves of steps 5-7 are measurements and
+not walking.
+
+**Leg B is unaffected and the contrast is the point.** At `stud1`-`studdegen` the
+operator is being hit continuously, the ramp is reset by every swing, natural
+regen is therefore ~0, and the plan's bare −0.0125 / −0.0167 / −0.0292 stand as
+written. **The one leg where nothing attacks you is the one leg whose prediction
+assumed something was.**
+
+*Label: RECONSTRUCTION.* The ramp and the positive player prop-44 are B4's
+OBSERVED values; that the ramp will have run to a specific pip count by torch3 is
+inference, which is exactly why the step test is preferred over any predicted
+baseline.
+
 ## 6. What rung 8's session is now for
 
 Four things, none of which the corpus can supply:
