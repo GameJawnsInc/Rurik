@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 134,
-          "and the class-(a) census rides along, at 134",
+    check(len(state["pins"]) == 135,
+          "and the class-(a) census rides along, at 135",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -246,7 +246,13 @@ if exe:
           f"+21 and a 16th file, all of it the gate-fire instrument "
           f"(clientscan/movetap.py 1 -> 28 for the AgTrack fence record and the "
           f"ASYNC twin, clientscan/movesync.py 0 -> 7 for the same record's offsets "
-          f"read back out of a capture). Both literals "
+          f"read back out of a capture). 135 on 2026-08-20 as well, +1 and a 17th file: "
+          f"clientscan/grantsim.py's LUT_VA, the 256-dword table behind the client's "
+          f"own sqrt, which REALFIX-C0 needs to derive the match test's effective "
+          f"99.919968 u threshold (and, as its positive control, gate 1's 299.332591 u). "
+          f"It is the cheapest class of pin there is -- resolved through pinned.find(), "
+          f"which verifies the image sha256, and re-derived from that image by "
+          f"test_grantsim.py rather than trusted. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")

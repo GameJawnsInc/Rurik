@@ -439,6 +439,16 @@ this server has no PvP and inventing the row would put an unreachable rule in th
 WHAT THIS ROW DOES NOT DECIDE: whether a death costs anything at all. That is the map's
 question, and pre-Searing -- every map this server ships -- never charges one. See the
 map_rule rows in content/maps.toml.
+
+CORROBORATED the same day from the opposite direction (the energy arc, blind to
+the death-tick derivation above): ALL FIVE distinct property-43 values in the
+live corpus fit f32(0.33) * pips / max BIT-EXACTLY while the wiki's nominal 1/3
+energy per second fits none of them, the (pips, max) pairs are exactly GWW's
+basic-armour rows, and this row's 0.0396 (f32 0.03959999978542328) appears on
+ArenaNet's own wire in capture 20260810T235916 on four connections -- three
+pips, a Ranger's. Two derivations, no shared code path, one constant.
+studies/skills/FINDINGS.md section 23. The pip count 3 rides with max 25 as a
+pair; change either only together.
 """
 
 # ------------------------------------------------- weapon and creature swing rates

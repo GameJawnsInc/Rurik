@@ -57,6 +57,7 @@ import questdefs  # noqa: E402
 import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 import effects  # noqa: E402
+import pools  # noqa: E402
 import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
@@ -1155,6 +1156,89 @@ HEADING_GRANT = False
 # the rate needs no movetap at all.
 CLIENT_ENDPOINT = False
 
+# --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
+# been run. OFF by default. `studies/movement/REALFIX.md` §1 is the spec and
+# §4's REALFIX-L1 is the run it exists for.
+#
+# WHAT IT SENDS, on every 0x003D while moving -- and "every" is the second
+# named variable, see THE GATE IT DROPS below:
+#   0x0025  AGENT_MOVE_DIRECTION [PLAYER_AGENT_ID, unit(vec2), movementType]
+#           -- exactly one per burst, whichever path asked for it.
+#   0x0029  AGENT_MOVE_TO_POINT  [PLAYER_AGENT_ID, the REPORTED position
+#           VERBATIM, plane, plane]
+# NO lead. NO clip on the wire. NO staleness gate. NO straight-shot gate. The
+# server's own model leg keeps its clipped destination in state["dest"] -- the
+# model/wire split --client-endpoint already proves four lines above. What the
+# grant DOES move besides the wire is the SYNC model (sync_from/sync_to/sync_at)
+# and the shared `grant_at` clock, both through send()'s _note_wire_move hook;
+# "only the wire changes" would be too strong and the block itself says so.
+# NO STOP-ARM GRANT and NO CLICK-ARM CHANGE: a stop-arm 0x0029 is --stop-echo
+# and is REFUTED at :1004-1023 -- and as of 2026-08-21 that is enforced rather
+# than asserted, since zero_lead_composition REFUSES --zero-lead --stop-echo.
+#
+# A REPORT THE TRUST GUARD REFUSED IS STILL GRANTED VERBATIM, by design: the
+# client says it is STANDING there, so the point is on its own history polyline
+# whatever our model believes, and granting state["pos"] instead would grant a
+# point the player has left. The trust guard is therefore ADVISORY on the grant
+# path and the SYNC model follows the rejected point. The full argument is at
+# the block itself; both directions are driven by test_position_trust §14.
+#
+# THE DESIGN GROUND, and it is the invariant's O1/O3 rather than a hunch. The
+# client's desync test asks whether the SYNC copy's dead-reckoned +0x78 lies
+# within 99.919968 u of the client's own history polyline, and that polyline
+# extends only BACKWARDS whenever the client holds no destination -- which is
+# the whole of keyboard movement. So LAG is on the polyline by construction and
+# LEAD is not. Every dead candidate in this arc granted a point AHEAD of the
+# client: --heading-grant at pos+vec2 clipped (766 u), --client-endpoint at
+# reported+vec2+0.5u (766 u), and both warped. Zero lead is the only setting
+# that satisfies O1 and O3 with no assumption about how fast the player is
+# actually travelling -- which is the term --client-endpoint's own refutation
+# blamed (player at 111.7 u/s, every grant asserting 288.0).
+#
+# THE CHEAPNESS CLAIM IS RETRACTED. DO NOT RE-QUOTE IT. The drafted spec said a
+# zero-distance grant "takes the <= 1.0 u short-circuit at 0x005FEA92 and
+# dispatches nothing", and used that to argue the extra cadence below is free.
+# It is FALSE of these grants. The <= 1.0 u compare measures |D - the SYNC
+# COPY's +0x78| (`D8 66 78 fsub dword [esi+0x78]` at 0x005FEB57), not
+# |D - the client|; the copy is chasing the player at run speed and is nowhere
+# near where the player has just reported standing. OBSERVED by replaying this
+# policy through toolkit/clientscan/grantsim.py against the four zero-grant
+# `ours` captures: **5 of 358 synthesized grants take the short-circuit**
+# (2/63, 1/64, 1/214, 1/17) and the median |d| from the copy is 143 / 420 /
+# 250 / 512 u (173940 / 182934 / 100340 / 182554). Every other one bakes a real
+# leg and dispatches at 0x005FEBEB -- a class-A test instant. The design stands;
+# its old justification does not. `REALFIX.md` §1's CORRECTION block of
+# 2026-08-21 is the record.
+#
+# Those are the figures under THIS policy, rate limit included. The correction
+# was first measured at 6 of 539 with medians 101 / 383 / 208 / 512, before
+# _heading_grant_ok existed and with the lead family scored at no rate limit at
+# all; re-measured after it landed the grant count falls (539 -> 358, the floor
+# refusing the reports inside it) and every median RISES, because the copy gets
+# longer to run away between grants. Both numbers say the same thing and the
+# newer one says it harder. Quote 358.
+#
+# THE GATE IT DROPS, priced rather than waved through. The shipped heading arm
+# answers only when `turned or walking is not True` (:9758). This flag's block
+# runs regardless, so it grants on every moving report. On click-free play that
+# gate opens on 11.1 / 24.3 / 61.2 / 80.8% of moving reports (`ours`,
+# 20260820T182554 / 182934, 20260814T100340, 20260811T173940) -- a 1.24x-9x
+# cadence delta; on the click-heavy refuted runs it is invisible (182652
+# 193/193, 171153 447/447). What bounds the cadence instead is the rate limit,
+# which is why the predicate below is NOT optional.
+#
+# THE RATE LIMIT IS _heading_grant_ok AND NOT _grant_verdict. See that
+# function; calling the click arm's policy here would emit ZERO grants and
+# degenerate this flag into --grant-suppress wearing a new name.
+#
+# THE PREDICTION, printed at startup so it cannot be rationalised afterwards --
+# the house pattern --client-endpoint, --resync and --grant-suppress all
+# follow, and the one --heading-grant's own refutation says was worth more than
+# the flag. It is REALFIX.md §4's, unedited, and it carries BOTH units and a
+# FAILURE SIGNATURE, because this arc has already lost a candidate that bounded
+# SIZE while the harm arrived as FREQUENCY.
+ZERO_LEAD = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -2097,6 +2181,80 @@ GAME_SMSG_EFFECT_REMOVE = effects.OP_EFFECT_REMOVE    # 68
 # same way --no-armour-term isolates the armour one. ON by default: an effect
 # that only appears behind a flag is an effect nobody watches.
 EFFECTS = True
+
+# ---- WHAT A SKILL COSTS, wired 2026-08-20 ---------------------------------
+#
+# The other half of R4b. `effects.py` models what a cast PUTS ON somebody;
+# `pools.py` models what it TAKES, and until today this server took nothing:
+# two harness runs on 2026-08-20 pressed eight skills including Flare (5 energy
+# in retail) and the player's orb sat flat at 25 the whole time, because nothing
+# here had ever sent a property 62.
+#
+# ENERGY HAS NO OPCODE OF ITS OWN -- it rides the generic property channel, and
+# `pools.py`'s docstring carries the whole measurement. The three numbers this
+# file puts on the wire:
+#
+#   property 41 on 0x009F   maximum energy      (already sent, at spawn)
+#   property 43 on 0x00A2   regeneration RATE, a fraction of max per second,
+#                           sent ONCE on change and never streamed (OBSERVED
+#                           n=52; the client animates the orb from it)
+#   property 62 on 0x00A2   one discrete SPEND per completed cast, negative,
+#                           -(cost / max). OBSERVED n=45, and 0 of 44 zero-cost
+#                           casts carry one
+#   property 52 on 0x00A2   a discrete GAIN. OBSERVED n=1, at a resurrect, 1.0
+#
+# ADRENALINE IS NOT ON THE WIRE AT ALL and that is a finding rather than a gap:
+# no opcode in `schema/messages.json`, none in GWCA's `Opcodes.h`, and GWCA
+# reads the charge out of client MEMORY. So the server tracks the pools
+# authoritatively and sends nothing for them -- which is the only reading that
+# is right whether or not the client animates the icons itself. A client run
+# answers that; nothing here waits on it.
+GV_ENERGY_REGEN = pools.GV_ENERGY_REGEN            # 43
+
+# THE PLAYER'S PIPS, and this is a number we did not choose so much as EXPLAIN.
+# `agents.PLAYER_FLOAT_43` has been 0.0396 since it was copied out of
+# gw-preservation's `sendPlayerAttributes` as a magic constant with "purpose
+# unknown upstream too" written beside it in the spawn send. It is
+# `wire_regen_rate(3, 25)` exactly, bit for bit -- three pips over a 25-energy
+# pool, which WIKI (GWW, "Energy", rev. 2026-03-15) gives as the RANGER armour
+# row (base 20/2 pips, Ranger +1 pip and +5 energy). `agents.PLAYER_ENERGY` is
+# 25, the same row's other half. So the two constants this server already sent
+# agree with the armour table and with each other, and section 5 of
+# `test_pools.py` asserts that identity rather than restating the literal.
+PLAYER_ENERGY_PIPS = 3
+
+# THE ENEMY'S POOL, and the profession half of it is RECONSTRUCTION. WIKI, same
+# page: casters are +2 pips/+10 energy over the base 20/2, and "hostile NPCs
+# ... regenerate Energy at an additional pip" -- so 4 + 1 = 5 pips over 30
+# energy is a hostile caster. Our standing hostile's bar (Restore Condition,
+# Scourge Sacrifice, Holy Strike, Vital Blessing) is a monk/necromancer bar, so
+# "caster" is the reading its own skills support; it is not measured, and
+# nothing on the wire declares an NPC's profession to us.
+ENEMY_ENERGY = 30
+ENEMY_ENERGY_PIPS = 5
+
+# The five type codes a Glyph of Lesser Energy cheapens, and the boundary is
+# RECONSTRUCTION. GWW says "your next 2 Spells"; the client's type column has
+# Hex Spell (4), Spell (5) and Enchantment Spell (6) among the codes
+# `studies/presearing/MANIFEST.md` 8 decoded, and those three are the ones
+# whose GWW type name contains the word Spell. Whether ArenaNet's own test is
+# the type code or a separate flag is NOT FOUND.
+SPELL_TYPE_CODES = (4, 5, 6)
+GLYPH_TYPE_CODE = 12
+
+# WIKI (GWW, "Glyph of Lesser Energy", infobox as fetched 2026-08-20): "For 15
+# seconds, your next 2 Spells cost 10...18 less Energy." Two charges, and the
+# 15 seconds are already the episode's own duration -- the client's duration
+# slot for skill 200 carries a flat 15 and `effects.resolve_duration` already
+# sends it. What was missing is the two.
+GLYPH_SPELL_CHARGES = 2
+
+# The switch, the same shape as --no-effects and for the same reason. ON by
+# default, because a cost that only exists behind a flag is a cost nobody pays:
+# with --no-energy this server behaves exactly as it did before 2026-08-20 --
+# no gate, no debit, no regeneration, no adrenaline -- which makes it a real
+# control for anything a run sees on the orb or the skill icons.
+ENERGY = True
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
 SKILLBAR_SLOTS = 8
@@ -3081,6 +3239,184 @@ def _grant_verdict(state, now):
     if since is not None and since < GRANT_MIN_INTERVAL:
         return False, "rate-limited", age, since
     return True, "grant", age, since
+
+
+def _heading_grant_ok(state, now):
+    """Pure: may a ZERO-LEAD heading grant go on the wire right now?
+
+    Returns (grant, reason, since_last). No side effects, exactly like
+    _grant_verdict, _resync_verdict and _position_verdict -- and for the reason
+    _grant_verdict's own docstring gives: an offline scorer has to be able to
+    run THIS decision rather than a paraphrase of it that agrees with it by
+    construction. `toolkit/clientscan/grantsim.py` imports this symbol and
+    REALFIX-C3's heading arm is that import.
+
+    RULE 2 ONLY, and the absence of rule 1 is the whole point. _grant_verdict
+    is the CLICK arm's policy and its rule 1 refuses whenever the
+    locally-driving latch is younger than GRANT_LOCAL_WINDOW = 3.0 s -- a latch
+    the heading arm arms TEN LINES EARLIER, at
+    `state["kbd_moving_at"] = time.time() if moving else None` (:9715). Age is
+    ~0.0 on every call from that arm, so reusing _grant_verdict here would emit
+    ZERO grants under --grant-suppress and turn --zero-lead into --grant-suppress
+    with a new name. TESTS.md independently prices the same window at 87% of one
+    capture's span. Two policies, two predicates.
+
+    NO FLAG CHECK EITHER, deliberately, and it is the one place this predicate
+    is CLEANER than the one it sits beside. _grant_verdict short-circuits on the
+    GRANT_SUPPRESS module global, so grantsim has to set and restore that global
+    around every call to drive both arms. This one carries the rate limit and
+    nothing else, so the offline scorer runs it directly and the caller's `if
+    ZERO_LEAD:` is the only place the flag is read.
+
+    A REFUSED HEADING GRANT IS DROPPED, NOT HELD, and that is the second
+    difference from the click arm. A held click is the PLAYER'S CHOICE and
+    losing it loses a feature (grant_flush_tick exists for exactly that), but a
+    heading grant is superseded by construction: the client emits 0x003D while
+    moving at a median 0.28-0.30 s (`ours`, click-heavy runs -- the same cadence
+    --client-endpoint's refutation measured as its 0.28 s median grant age), so
+    the next report carries a fresher position than the one we just refused and
+    granting the stale one late would be the reproduction with a delay bolted
+    on. There is no pending machinery here and there must not be one.
+
+    THE CLOCK IS THE SHARED ONE. `grant_at` is stamped inside send() by
+    _note_wire_move for EVERY player 0x0029 whatever arm sent it (:2724-2731),
+    so this floor and the click arm's rule 2 share one clock by construction.
+    That is wanted: under --zero-lead --grant-suppress the two arms cannot
+    between them exceed one grant per GRANT_MIN_INTERVAL, which is the bound the
+    interval was derived for. A private `heading_grant_at` would have let the
+    two arms run at 2 x 2 Hz while each believed it was inside the floor.
+
+    A NEGATIVE `since` -- a grant stamped in the future under clock skew --
+    REFUSES, because `since < GRANT_MIN_INTERVAL` is true for it. That is the
+    same direction _grant_verdict's rule 2 fails in and the cheap one: an
+    over-refusal costs one grant the next report replaces in 0.3 s.
+    """
+    last = state.get("grant_at")
+    since = None if last is None else now - last
+    if since is not None and since < GRANT_MIN_INTERVAL:
+        return False, "heading-rate", since
+    return True, "zero-lead", since
+
+
+# The OTHER arms that put a player 0x0029 on the wire off the movement path.
+# Each row is (flag, the trigger it answers, the line its refutation is
+# recorded at, what it grants). The refusal below is built FROM this table, so
+# a message about one flag cites that flag's own line -- an earlier version
+# hard-coded ":1049 and :1090" and said "all of them" whatever was passed, so a
+# refusal about --client-endpoint alone offered --heading-grant's line as its
+# ground.
+ZERO_LEAD_REFUSED_ARMS = (
+    ("--heading-grant", "0x003D", "1049",
+     "the client's own endpoint through OUR clip, 766 u ahead"),
+    ("--client-endpoint", "0x003D", "1090",
+     "the client's own endpoint unclipped, 766 u ahead"),
+    ("--stop-echo", "0x0047", "1004",
+     "a zero-distance echo on a move-cancel"),
+)
+
+
+def zero_lead_composition(zero_lead=False, heading_grant=False,
+                          client_endpoint=False, grant_suppress=False,
+                          resync=False, stop_echo=False, click_sweep=False):
+    """Pure: may these movement flags run together, and what must be said?
+
+    Returns (refusal, notes). `refusal` is None or the text main() raises as a
+    SystemExit; `notes` are the startup lines for the combinations that ARE
+    allowed. Pure and argv-free so the composition matrix is a test rather than
+    a paragraph -- `--explorable`/`--outpost` refuse inline and nothing checks
+    them, and a refusal nobody has seen fire is a wish.
+
+    REFUSED: every flag in ZERO_LEAD_REFUSED_ARMS. The shared ground is not
+    "the same opcode" but the same WIRE EFFECT: each of them answers the
+    player's own movement with a player `0x0029` of its own, and every one of
+    those stamps the ONE shared grant clock (`grant_at`, stamped inside send()
+    for every player 0x0029 whatever sent it), so the client would hold two
+    granted destinations and each arm would starve the other inside
+    GRANT_MIN_INTERVAL. A run so configured could attribute its outcome to
+    neither. All three are REFUTED besides.
+
+    --stop-echo IS ON THAT LIST AND WAS MISSING FROM IT UNTIL 2026-08-21, which
+    is the failure this whole function exists to prevent: an adversarial pass
+    found `--zero-lead --stop-echo` allowed SILENTLY while REALFIX-P2's own
+    spec block forbids it in capitals ("NO STOP-ARM GRANT. That is --stop-echo
+    and it is REFUTED"). It answers 0x0047 rather than 0x003D, which is exactly
+    why a refusal keyed on "the same 0x003D" did not see it.
+
+    ALLOWED WITH A NOTE: --grant-suppress, because the arms are orthogonal --
+    that flag governs CLICK grants and this one governs HEADING grants. They do
+    share one rate-limit clock, so the note says the click arm will be quieter
+    than it is alone rather than pretending the two are independent.
+
+    ALLOWED WITH A NOTE: --resync, a different opcode (0x002C hard-sets BOTH
+    copies) on a different trigger -- but a second uncontrolled variable in an
+    A/B built for one, so the note says to prefer one arm at a time.
+
+    ALLOWED WITH A NOTE: --click-sweep, and it is allowed for the same reason
+    --resync is rather than because it is harmless. It is a CLICK-arm
+    diagnostic, not a refuted movement policy, so refusing it would be refusing
+    a diagnostic; but it deliberately sends plane assignments it knows to be
+    wrong, and a wrong plane writes a wrong map index into agent+0x80. On
+    REALFIX-L1's own click-free protocol it is inert, and if it is NOT inert
+    the run was not click-free. The note says both halves.
+    """
+    if not zero_lead:
+        return None, []
+    on_flags = {"--heading-grant": heading_grant,
+                "--client-endpoint": client_endpoint,
+                "--stop-echo": stop_echo}
+    clash = [row for row in ZERO_LEAD_REFUSED_ARMS if on_flags[row[0]]]
+    if clash:
+        def _join(items):
+            items = list(items)
+            if len(items) < 3:
+                return " and ".join(items)
+            return ", ".join(items[:-1]) + " and " + items[-1]
+        both = _join(row[0] for row in clash)
+        lines = _join((f"authsrv.py:{row[2]}" if i == 0 else f":{row[2]}")
+                      for i, row in enumerate(clash))
+        detail = "; ".join(f"{row[0]} answers {row[1]} with {row[3]}"
+                           for row in clash)
+        tail = ""
+        if any(row[0] == "--stop-echo" for row in clash):
+            tail = (" REALFIX-P2's own spec block forbids --stop-echo by name: "
+                    "'NO STOP-ARM GRANT.'")
+        return (f"--zero-lead cannot be combined with {both}: each of them "
+                f"answers the player's own movement with a player 0x0029 of "
+                f"its own, and every one of those stamps the SAME grant clock, "
+                f"so the client would hold two granted destinations and the "
+                f"two arms would starve each other inside the "
+                f"{GRANT_MIN_INTERVAL:.2f}s floor. The run would attribute its "
+                f"result to neither. ({detail}.) "
+                f"{both} {'are' if len(clash) > 1 else 'is'} already REFUTED "
+                f"({lines}).{tail} Pass at most one."), []
+    notes = []
+    if grant_suppress:
+        notes.append(
+            "      + --grant-suppress: ALLOWED -- orthogonal arms. That flag "
+            "governs CLICK grants and this one governs HEADING grants. They "
+            "share ONE rate-limit clock (state['grant_at'] is stamped in "
+            "send() for every 0x0029 whatever sent it), so between them they "
+            f"still cannot exceed one grant per {GRANT_MIN_INTERVAL:.2f}s. "
+            "Expect the click arm to be quieter than it is alone, and say "
+            "which flags were on when you report the run.")
+    if resync:
+        notes.append(
+            "      + --resync: ALLOWED -- a different opcode (0x002C, which "
+            "HARD-SETS both copies) on a different trigger. But it is a second "
+            "uncontrolled variable in an A/B built for one: a snap avoided "
+            "cannot be attributed between them. Prefer one arm at a time for "
+            "REALFIX-L1.")
+    if click_sweep:
+        notes.append(
+            "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
+            "refuted movement policy, so it is not on the refusal list. But it "
+            "deliberately sends plane assignments it knows to be WRONG, and a "
+            "wrong plane writes a wrong map index into agent+0x80: a snap it "
+            "caused would be attributed to --zero-lead. Its click grants also "
+            "stamp the shared grant clock and will starve the heading arm. "
+            "REALFIX-L1 is CLICK-FREE by protocol, so this flag should be "
+            "inert -- and if it is not inert, the run was not click-free.")
+    return None, notes
 
 
 def grant_flush_tick(send, state, conn_id, rec=None, now=None):
@@ -5312,11 +5648,39 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     print(f"[c{conn_id}] hit agent {target_id}: "
           f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
 
+    # ---- ADRENALINE, both directions of this one hit ---------------------
+    #
+    # WIKI (GWW, "Adrenaline", rev. 2026-07-02): 25 units -- one strike -- per
+    # successful WEAPON hit on an opponent, and 1 unit per 1% of maximum health
+    # LOST to damage, floored.
+    #
+    # THE STRIKE IS GATED ON `swing`, which is what makes it a weapon hit. A
+    # spell resolving through this function passes `swing=False` (it sends no
+    # ATTACK_STARTED and no MELEE_ATTACK_FINISHED, because those two name the
+    # ends of a swing), and a spell's damage grants the caster no adrenaline in
+    # the game. The damage half is NOT gated: damage taken is damage taken
+    # however it arrived.
+    if ENERGY:
+        if swing:
+            player_adrenaline(state).on_hit_landed(now)
+        agent_adrenaline(agent).on_damage_taken(
+            dealt / float(agent["max_health"]), now)
+
     if agent["health"] <= 0.0:
         # Death is bit 4 of the effects word, not a message. Seven guesses at a
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # AND A CORPSE CARRIES NO CHARGE. WIKI, same page: all adrenaline is
+        # lost upon death. Nothing goes on the wire for it -- adrenaline has no
+        # opcode anywhere (not in `schema/messages.json`, not in GWCA's
+        # `Opcodes.h`; GWCA reads it out of client memory), so this is a
+        # server-side book that the client never sees. The energy pool is left
+        # alone rather than zeroed: the revive path refills it, and no capture
+        # shows what happens to an NPC's energy at death because no capture
+        # shows an NPC's energy at all.
+        if ENERGY:
+            agent_adrenaline(agent).clear()
         # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
         # removal landing before apply + duration as `stripped` and names
         # death as one of its three causes, so leaving them running would put
@@ -5381,6 +5745,318 @@ def skill_timing(skill_id):
         return 0.0, 0.0, 0.0
     return (float(row["activation"]), float(row["aftercast"]),
             float(row["recharge"]))
+
+
+_MISSING_UNIT_ROWS = set()
+
+
+def skill_cost(skill_id):
+    """(energy, adrenaline RAW UNITS) for a skill, from the same content rows.
+
+    The mirror of `skill_timing`, reading the same client-table rows and taking
+    the same honest fallback: a skill with no row costs (0, 0) and says so once
+    per id through `skill_timing`'s own announcement, because the two are read
+    together at every call site and a second copy of that message would double
+    every line.
+
+    THE ADRENALINE COLUMN IS RAW UNITS AND NOT THE NUMBER ON THE ICON. The
+    client's table holds the raw total at +0x38 and the client DISPLAYS
+    `ceil(units/25)` (`clientscan/skilltable.py:180`). Battle Rage (317) is 80
+    raw and shows 4, Defy Pain (318) is 120 and shows 5, Sever Artery (382) is
+    100. GWW says so in Battle Rage's own Notes -- it "exactly requires 80 units
+    of adrenaline (3 strikes and 5 units)" -- so reading the displayed 4 and
+    multiplying by 25 would demand 100 and leave the skill dark through a fight
+    it should have fired in. `ceil` is lossy and the raw cost is NOT recoverable
+    from the displayed one: a 4 covers everything from 76 to 100.
+
+    So a row with only the displayed column REFUSES rather than reconstructing:
+    the skill is treated as costing no adrenaline at all, loudly and once per
+    id, naming the extractor re-run that fixes it. Zero is the inert direction
+    -- an adrenal skill fires freely, which is visible -- where a guessed 100
+    would be silently unfireable.
+    """
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return 0, 0
+    energy = int(row.get("energy", 0) or 0)
+    units = row.get("adrenaline_units")
+    if units is None:
+        if skill_id not in _MISSING_UNIT_ROWS:
+            _MISSING_UNIT_ROWS.add(skill_id)
+            print(f"[skills] skill {skill_id} has no `adrenaline_units` column "
+                  f"-- its raw cost is NOT recoverable from the displayed "
+                  f"`adrenaline` ({row.get('adrenaline')}), so it costs no "
+                  f"adrenaline here. Re-run "
+                  f"`skilltable.py --emit-content vault/content/skills.toml`",
+                  flush=True)
+        return energy, 0
+    return energy, int(units)
+
+
+def player_energy(state):
+    """The player's energy pool, created on first use.
+
+    Lazily, for the reason `effect_table` is lazy: `state` is built in two
+    places and a pool created in one of them would be missing in the other --
+    the shape of bug that works in the loopback harness and not in a session.
+
+    THE POOL IS SEEDED FULL and the client is never told the current value,
+    because there is no message that could tell it: property 33, the obvious
+    absolute "your energy is now N", appears **0 times in 13,378 property
+    messages** across the live corpus while the positive control finds 97
+    property-41s and 52 property-43s in the same scan. The client INTEGRATES
+    the number itself from the maximum, the rate and the deltas -- so the
+    server's copy and the client's are two integrations of the same three
+    inputs, and `EnergyPool.tick` deliberately integrates the f32 rate we
+    actually sent rather than `pips * 0.33`.
+    """
+    pool = state.get("energy")
+    if pool is None:
+        # setdefault, not assignment: this is called from BOTH the connection
+        # thread (the gate) and the world tick (energy_tick), and two racing
+        # first touches must converge on ONE pool -- dict.setdefault is a
+        # single dict operation under the GIL, so the loser adopts the
+        # winner's pool instead of overwriting it. The pools' own methods take
+        # an RLock for the same two-thread reason (pools.py, "TWO THREADS").
+        # The maximum routes through the morale arc's player_max_energy()
+        # (merge 2026-08-20): identical to agents.PLAYER_ENERGY at neutral
+        # morale, and the one source of truth once a death penalty moves it.
+        # NOTE their measured rule: morale scales the BASE energy only, armour
+        # bonuses ride unscaled (studies/morale/FINDINGS.md section 2.2).
+        pool = state.setdefault("energy", pools.EnergyPool(
+            player_max_energy(state), PLAYER_ENERGY_PIPS, time.time()))
+    return pool
+
+
+def player_adrenaline(state):
+    """The player's adrenaline pools, one per adrenal skill on the bar.
+
+    REBUILT WHEN THE BAR CHANGES, which `--skills` can do at launch and which a
+    later skill-swap message would do mid-session. A pool keyed to a skill that
+    is no longer on the bar is charge the player cannot spend, and the wiki's
+    cross-cost ("every OTHER skill loses one strike") would keep paying it.
+    """
+    bar = tuple(SKILLBAR)
+    pool = state.get("adrenaline")
+    if pool is None or state.get("adrenaline_bar") != bar:
+        fresh = pools.AdrenalinePool({sid: skill_cost(sid)[1] for sid in bar})
+        if "adrenaline" not in state:
+            # Same two-thread first touch as `player_energy`: setdefault so
+            # racing creators converge on ONE pool.
+            pool = state.setdefault("adrenaline", fresh)
+        else:
+            # A deliberate REBUILD (the bar changed) stays plain assignment:
+            # --skills only changes the bar at launch today, and a mid-session
+            # swap message would arrive on one thread.
+            pool = state["adrenaline"] = fresh
+        state["adrenaline_bar"] = bar
+    return pool
+
+
+def agent_energy(agent):
+    """One hostile's energy pool, on the agent dict rather than in `state`.
+
+    Enemies get a pool for one reason: our own AI casts on a recharge timer and
+    nothing else, so the Hatcher's Restore Condition fires every 2 seconds
+    forever (`PLAN.md` section 8 item 4). Energy is the limiter retail already
+    has, and it costs no new invention to apply -- the skill's cost is the
+    client's own column.
+    """
+    pool = agent.get("energy_pool")
+    if pool is None:
+        pool = agent["energy_pool"] = pools.EnergyPool(
+            ENEMY_ENERGY, ENEMY_ENERGY_PIPS, time.time())
+    return pool
+
+
+def agent_adrenaline(agent):
+    """One hostile's adrenaline pools, over ITS own bar. Same rebuild rule."""
+    bar = tuple(row[0] for row in (agent.get("skills") or ()))
+    pool = agent.get("adrenaline_pool")
+    if pool is None or agent.get("adrenaline_bar") != bar:
+        pool = agent["adrenaline_pool"] = pools.AdrenalinePool(
+            {sid: skill_cost(sid)[1] for sid in bar})
+        agent["adrenaline_bar"] = bar
+    return pool
+
+
+_GLYPH_UNREADABLE = set()
+
+
+def glyph_energy_amount(skill_id, rank):
+    """How much energy this glyph takes off a spell at `rank`, or None.
+
+    The join is the same one `skill_damage` and `skill_heal` make: the client's
+    table carries the MAGNITUDE and `content/world.toml`'s `skill_effect` block
+    carries what the magnitude MEANS, sourced per skill from GWW's own
+    progression-variable name. `scale_means = "Energy"` is the label, and today
+    exactly one row wears it: skill 200, Glyph of Lesser Energy.
+
+    AND THAT ROW CANNOT BE READ YET, which is a refusal rather than a bug. The
+    client gives skill 200 `scale0 = 10, scale15 = 18` with `skill_arguments =
+    0` -- the SCALE BIT IS CLEAR -- so `skill_scale_value` refuses it, exactly
+    as it refuses Rush's 25. That refusal is right by the precedent
+    `effects.resolve_duration` already sets for the duration slot: bit clear
+    with EQUAL endpoints is a flat constant we have witnesses for, and bit clear
+    with DIFFERING endpoints has zero witnesses anywhere in the corpus and is
+    refused. 10 and 18 differ.
+
+    SO WHAT THE ROW NEEDS, precisely, is an explicit amount that does not go
+    through the bitfield -- a field beside `scale_means` in
+    `[skill_effect.200]` carrying the number (GWW's progression is 10..18 at
+    Energy Storage 0..15, and the row's own provenance already records that the
+    wiki and the bitfield disagree about whether it scales) -- or a second
+    witness that says the bit-clear slot is meaningful here. Until then the hook
+    below is live but INERT against today's content: an unreadable amount makes
+    `energy_cost_for` skip the episode entirely, so no discount is applied AND
+    no charge is counted -- the glyph does nothing at all, which is the
+    direction that cannot invent a number.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if row.get("scale_means") != "Energy":
+        return None
+    try:
+        return int(skill_scale_value(skill_id, rank, "scale"))
+    except ValueError as ex:
+        if skill_id not in _GLYPH_UNREADABLE:
+            _GLYPH_UNREADABLE.add(skill_id)
+            print(f"[skills] glyph {skill_id} scales `Energy` but its amount is "
+                  f"UNREADABLE, so no cast is cheapened: {ex}", flush=True)
+        return None
+
+
+def energy_cost_for(state, caster_id, skill_id, rank):
+    """(cost, glyph episode, discount) for one cast. Consumes nothing.
+
+    Split from the debit deliberately: the GATE has to know what a cast would
+    cost before deciding whether it may start, and a glyph charge burnt by a
+    press that was then refused is a charge the player never got.
+
+    GWW (Glyph of Lesser Energy): "For 15 seconds, your next 2 Spells cost
+    10...18 less Energy". The floor at zero is the same one ArenaNet's own
+    interpolator asserts (ConstSkill:3769) and it matters here -- a 5-energy
+    Flare under a 15-point glyph costs nothing, and a NEGATIVE cost would come
+    out the far side as a positive property 62, a message retail never sends.
+    """
+    base = skill_cost(skill_id)[0]
+    if base <= 0:
+        # A FREE SPELL BURNS NO CHARGE, and that is RECONSTRUCTION: GWW states
+        # the charge count and never says what a 0-energy spell does to it.
+        # Not consuming is the conservative direction, and it is also the only
+        # one this server can observe the difference of -- the wire carries
+        # nothing for a free cast (44 of 44).
+        return base, None, 0
+    row_type = None
+    try:
+        row_type = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
+    except Exception:                                          # noqa: BLE001
+        pass
+    if row_type not in SPELL_TYPE_CODES:
+        return base, None, 0
+    table = state.get("effects")
+    if not table:
+        return base, None, 0
+    for ep in table.on_agent(caster_id):
+        if ep.get("type_code") != GLYPH_TYPE_CODE:
+            continue
+        amount = glyph_energy_amount(ep["skill"], ep.get("rank", rank))
+        if amount is None:
+            continue
+        return max(0, base - amount), ep, amount
+    return base, None, 0
+
+
+def spend_glyph_charge(send, state, ep, conn_id, skill_id):
+    """Burn one of the glyph's charges, and close the episode when they run out.
+
+    The close goes out as a real `0x0044` through the same door an expiry uses
+    -- re-sending or silently dropping an episode leaves the icon on screen for
+    an effect the server has already retired, which is measured (a repeat
+    `0x0042` for a live (agent, skill) is DISCARDED by the client, twice, on
+    2026-08-20).
+    """
+    ep["charges"] = int(ep.get("charges", GLYPH_SPELL_CHARGES)) - 1
+    print(f"[c{conn_id}] glyph {ep['skill']} cheapened skill {skill_id}: "
+          f"{ep['charges']} of {GLYPH_SPELL_CHARGES} charge(s) left",
+          flush=True)
+    if ep["charges"] > 0:
+        return
+    table = effect_table(state)
+    table.close(ep["buff"])
+    send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+         f"EFFECT_REMOVE(buff {ep['buff']}, glyph {ep['skill']}, SPENT -- "
+         f"{GLYPH_SPELL_CHARGES} spells used)")
+    print(f"[c{conn_id}] glyph {ep['skill']} on agent {ep['agent']} is spent "
+          f"(buff {ep['buff']})", flush=True)
+
+
+def energy_tick(send, state, conn_id):
+    """Regenerate energy, and expire adrenaline. SILENT, and that is measured.
+
+    Retail sends property 43 ONCE and the client animates the orb from it --
+    52 events across the whole live corpus, every one a create or a change,
+    none of them a stream. So this integrates the server's copy of the same
+    number and puts NOTHING on the wire, exactly as `degen_tick` spends health
+    without drawing a damage number. `send` is in the signature for the tick's
+    uniform shape and for the day a degeneration or a resize needs a message
+    out of here; today it is deliberately unused.
+
+    The adrenaline half is the one thing here that can produce output, and only
+    on a real event: WIKI (GWW, "Adrenaline") -- all adrenaline is lost after 25
+    seconds out of combat, and `AdrenalinePool.tick` returns True exactly once,
+    when a bar that had charge is wiped.
+    """
+    if not ENERGY:
+        return
+    now = time.time()
+    player_energy(state).tick(now)
+    if player_adrenaline(state).tick(now):
+        print(f"[c{conn_id}] the player's adrenaline is gone: "
+              f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}) or agent.get("dead"):
+            continue
+        agent_energy(agent).tick(now)
+        if agent_adrenaline(agent).tick(now):
+            print(f"[c{conn_id}] agent {agent_id} loses its adrenaline: "
+                  f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
+
+
+def restore_player_energy(send, state, conn_id, why):
+    """The resurrect batch's energy half: a full refill and the rate back on.
+
+    OBSERVED n=1 and it is one instant of capture `20260817T183756`: the death
+    bit clears, property 43 goes back to the agent's own rate, property 52
+    arrives as exactly 1.0 and property 55 (the health half, which this server
+    already sends) as exactly 1.0 alongside it.
+
+    PREDICTION, on record before the run that tests it: the client's energy orb
+    today STICKS AT 0 after a revive -- the 2026-08-20 harness frames show it --
+    because the client's own death path zeroes the pool (`fldz` at 0x008183F0,
+    the same reason the health bar needs its property-34 refill) and our revive
+    path has never sent an energy property at all. With these two out, the orb
+    must refill. If it does not, then property 52 is not a setter for the pool
+    the orb draws and the reading is wrong; nothing else here would change.
+    """
+    if not ENERGY:
+        return
+    pool = player_energy(state)
+    # Guard before effect: the fraction is validated before the pool is filled
+    # and before the first send, so a refusal leaves the server's book and the
+    # wire in the same (un-restored) state rather than in two different ones.
+    gain = _fraction(1.0, agents.GV_ENERGY_GAIN, "refill the player's energy")
+    pool.refill()
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
+         f"energy refilled to {pool.maximum:.0f} ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(pool.rate)],
+         f"energy regeneration back to {pool.pips} pip(s) ({why})")
 
 
 # ------------------------------------------------- buying from a merchant
@@ -5826,6 +6502,52 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
 
+    # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
+    #
+    # A press this server cannot pay for produces NOTHING: no E4, no cast
+    # animation, no pending entry, no recharge. Same discipline as `hit_enemy`'s
+    # fraction guard -- refuse before any effect, so a refusal cannot leave half
+    # a cast cycle on the wire and a recharge burning on a skill that never
+    # fired.
+    #
+    # THE SHAPE OF THE REFUSAL IS OURS -- RECONSTRUCTION, and it is the one
+    # thing in this block that is not measured. What retail's server does when a
+    # client presses an unaffordable skill is UNOBSERVED on our corpus: the
+    # client may well swallow the press itself and never send `0x0046` at all,
+    # in which case this branch is unreachable in a real session and the log
+    # line below is how a run finds that out. Either way the server must not
+    # cast for free.
+    cost, glyph_ep, discount, units = 0, None, 0, 0
+    pool = None
+    if ENERGY:
+        rank = player_rank_for_skill(skill_id)
+        cost, glyph_ep, discount = energy_cost_for(state, PLAYER_AGENT_ID,
+                                                   skill_id, rank)
+        units = skill_cost(skill_id)[1]
+        pool = player_energy(state)
+        pool.tick(now)
+        bar = player_adrenaline(state)
+        # BOTH costs are checked, independently, because a skill can in
+        # principle carry both columns and the table is what says so -- not an
+        # assumption here that adrenal and energy skills partition the bar.
+        if units > 0 and not bar.charged(skill_id):
+            have = bar.units.get(skill_id)
+            # An adrenal skill that is not on SKILLBAR has no pool at all, and
+            # "has 0" would name a counter that does not exist -- the skeptic
+            # pass hand-drove exactly that misreport for an off-bar Battle
+            # Rage. A real session cannot reach it (the client cannot press an
+            # off-bar slot); a test driver can.
+            print(f"[c{conn_id}] REFUSED skill {skill_id}: "
+                  + (f"needs {units} adrenaline, has {have}"
+                     if have is not None else
+                     f"adrenal ({units} units) but NOT ON THE BAR, no pool"),
+                  flush=True)
+            return
+        if cost > 0 and not pool.can_pay(cost):
+            print(f"[c{conn_id}] REFUSED skill {skill_id}: needs {cost} "
+                  f"energy, has {pool.current:.2f}", flush=True)
+            return
+
     # The queue law from the constants' comment: E4 at accept, the cast
     # begins when the caster frees (the previous cast's aftercast end), E5
     # at begin + activation. `cast_busy_until` is only ever touched on this
@@ -5837,6 +6559,56 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
          f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # ---- AND THE DEBIT, in the same breath as the announcement -----------
+    #
+    # RETAIL FIRES PROPERTY 62 0.03-0.7 SECONDS AFTER THE USE_SKILL, mostly
+    # around 0.05 s (OBSERVED over the live corpus), so sending it here --
+    # inside the press burst -- is inside the observed envelope rather than at
+    # some invented offset. AND THE ORDER WITHIN THE BURST IS MEASURED: the
+    # spend PRECEDES the property-60 that names the skill, same batch, 45 of
+    # 45 (test_pools section 2c, whose scanner had to learn this the hard way
+    # -- a stream-order join scored 18 of 45 until the ordering was read off
+    # the batches). The first cut of this burst sent them the other way round;
+    # the skeptic pass caught it shipping an order retail never produced. It
+    # is deliberately NOT deferred to the E5 branch of `cast_tick`: the corpus
+    # puts the spend a few tens of milliseconds after the press, not an
+    # activation later, and 45 of 45 paid casts carry exactly one.
+    #
+    # ZERO-COST CASTS SEND NOTHING, 44 of 44. `EnergyPool.spend` returns None
+    # for those rather than 0.0, so this cannot put a -0.0 on the wire -- a
+    # value that reads as a spend in every log we have and that retail never
+    # sends.
+    #
+    # THE ADRENALINE COST IS PAID HERE TOO, and that is the wiki rather than
+    # symmetry: using an adrenal skill zeroes its own pool and costs every
+    # OTHER pool one strike "whether or not the skill is interrupted or fails"
+    # (WIKI, GWW "Adrenaline", rev. 2026-07-02), so it is paid at USE and not
+    # at completion -- the opposite of the energy spend, which the corpus shows
+    # landing once per COMPLETED cast.
+    if ENERGY:
+        if glyph_ep is not None and discount:
+            spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
+        if units > 0:
+            player_adrenaline(state).use(skill_id)
+            print(f"[c{conn_id}] skill {skill_id} spends {units} adrenaline; "
+                  f"every other pool loses a strike", flush=True)
+        # Guard before effect: the fraction is validated before the pool is
+        # touched, so a refused value cannot leave the server's energy debited
+        # for a message that never went out.
+        frac = (None if cost <= 0 else
+                _fraction(pools.spend_fraction(cost, pool.maximum),
+                          agents.GV_ENERGY_SPENT,
+                          f"the energy for skill {skill_id}"))
+        pool.spend(cost)
+        if frac is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                 [agents.GV_ENERGY_SPENT, PLAYER_AGENT_ID, frac],
+                 f"energy -{cost} of {pool.maximum:.0f} for skill {skill_id}")
+            print(f"[c{conn_id}] skill {skill_id} costs {cost} energy"
+                  + (f" (glyph {glyph_ep['skill']} took off {discount})"
+                     if discount else "")
+                  + f": {pool.current:.2f}/{pool.maximum:.0f} left", flush=True)
+
     # The cast animation, in the OBSERVED player shape: 0x00A0
     # [60, caster, target, skill], 4 of 4 player activations in the live
     # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
@@ -5847,6 +6619,8 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
          f"cast animation: player casts {skill_id}")
+
+
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
         # The target rides the pending entry so the DAMAGE can land at cast
@@ -6263,11 +7037,29 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["attacking"] = None          # a corpse stops swinging back
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+    if ENERGY:
+        player_adrenaline(state).clear()    # WIKI: all of it, on death
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
     # tick behind it, same tick. Silent in every map this server ships, because
     # pre-Searing charges nothing -- `map_death_penalty` is where that is
     # decided and `content/maps.toml` is where it is written down.
-    death_penalty_due(send, state, conn_id)
+    pushed = death_penalty_due(send, state, conn_id)
+    # THE DEATH BATCH'S OTHER HALF, OBSERVED: retail sends property 43 = 0.0
+    # in the same instant the death bit goes up -- twice in the corpus, and
+    # those two are exactly the events whose solved pip count is 0.0 where
+    # every other property-43 solves to a positive integer (`pools.py`, the
+    # 52-of-52 join). A corpse regenerates nothing, and a client left
+    # animating the orb upward through a death would show energy arriving on
+    # a body that cannot spend it. When the morale tick fired, ITS batch
+    # already carried the zero (push_morale's dead branch, the capture's own
+    # order); a death in a map that charges nothing -- every map this server
+    # ships -- sends the zero standalone. Retail's no-penalty death batch is
+    # UNWITNESSED (no pre-Searing death in the corpus), so the standalone
+    # shape is RECONSTRUCTION from the corpse-regenerates-nothing rule.
+    if ENERGY and not pushed:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(0.0)],
+             "energy regeneration stops: the player is dead")
 
 
 def agent_pool_max(state, agent_id):
@@ -6476,6 +7268,12 @@ def revive_due(send, state, conn_id):
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
+        # A body that stands up stands up with a full pool, the same as its
+        # health. Nothing goes out for it: the client is never told an NPC's
+        # energy (0 witnesses in the corpus), so this is bookkeeping that only
+        # the enemy's own cast gate reads.
+        if ENERGY:
+            agent_energy(agent).refill()
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
         # ONE TICK before the refills, the same as the player path. The client's
@@ -6612,7 +7410,8 @@ def push_morale(send, state, conn_id, new_value, why):
         0x009C [player, 85]        morale, absolute, per agent
         0x00EE [10,     -15]       morale, as a delta, per player
         0x009F [41, player, 22]    the recomputed maximum ENERGY
-        0x00A2 [43, player, f]     energy regeneration, rescaled to the new pool
+        0x00A2 [43, player, 0.0]   energy regeneration -- ZERO at death; the
+                                   rescaled rate is the RESURRECT batch's
         0x009F [42, player, 102]   the recomputed maximum HEALTH
 
     THE MAXIMA ARE THE SERVER'S JOB, and that is MEASURED rather than assumed
@@ -6644,10 +7443,33 @@ def push_morale(send, state, conn_id, new_value, why):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
          f"maximum energy {max_energy} at morale {morale.display(new_value)}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
-          _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
+    # THE POOL'S OWN BOOK RESIZES WITH THE WIRE (energy-arc merge,
+    # 2026-08-20): set_maximum recomputes the stored rate the way retail's
+    # numbers show (0.0528 at 25 -> 0.06 at 22, the same four pips), so the
+    # RESURRECT resend in restore_player_energy is already rescaled with no
+    # second computation to drift.
+    if ENERGY:
+        player_energy(state).set_maximum(max_energy)
+    # THE CHANNEL IS 0x00A2 AND THE DEATH VALUE IS ZERO -- both are the
+    # capture's, not a choice: the only death-with-morale batch in the corpus
+    # (20260817T183756, conn 52294, t=353.299) is {0x00F1, 0x009C 85,
+    # 0x00EE -15, 0x009F 41=22, 0x00A2 [43, 27, 0.0], 0x009F 42=102}, and
+    # studies/morale/FINDINGS.md's own table says the same ("energy
+    # regeneration -> 0 while dead"). The rescaled nonzero rate appears at the
+    # RESURRECT ten seconds later, never in the death batch -- a corpse
+    # regenerates nothing. This code briefly shipped the rescaled value here
+    # on 0x00A3; both halves diverged from the study's own table and the
+    # energy-arc merge fixed them against the bytes. For a LIVING morale
+    # change no batch exists in the corpus; sending the rescaled fraction
+    # there is RECONSTRUCTION (the fraction must track the pool or the
+    # absolute rate silently changes -- the docstring's argument).
+    _dead = bool(state.get("player_dead"))
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+          _f32(0.0 if _dead else
+               morale.regen_fraction(agents.PLAYER_FLOAT_43,
                                      agents.PLAYER_ENERGY, max_energy))],
+         "energy regeneration stops: the player is dead" if _dead else
          "energy regeneration, rescaled to the new pool")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
@@ -6679,7 +7501,8 @@ def death_penalty_due(send, state, conn_id):
     if after == before:
         print(f"[c{conn_id}] death penalty already at the "
               f"{morale.display(before)} cap; nothing to charge", flush=True)
-        return before
+        return None                      # nothing went out; the caller's
+                                         # standalone 43 = 0.0 still must
     return push_morale(send, state, conn_id, after, "died")
 
 
@@ -6792,8 +7615,56 @@ def enemy_attack_tick(send, state, conn_id):
         # not an observation: no NPC in the corpus casts twice, so there is no
         # recharge cycle anywhere to tell start-triggered from finish-triggered.
         slot = pick_skill(agent, now)
+        # ---- AND THE RESOURCE GATE, which is NOT an AI rule ---------------
+        #
+        # `pick_skill` is declared in its own docstring to be a testing fixture
+        # and not a decision about AI, and nothing about the selector changes
+        # here: it still returns the next ready slot, round robin, and this
+        # asks a different question about the slot it returned -- can this
+        # agent PAY for it. A resource check belongs on the cast path for the
+        # same reason the player's does; putting it in the selector would make
+        # the selector a policy.
+        #
+        # AND IT INCIDENTALLY RATE-LIMITS THE HEAL SPAM `PLAN.md` section 8
+        # item 4 complains about: Restore Condition costs 5 energy on a 2.0 s
+        # recharge, and 5 pips over a 30-energy pool is 1.65 energy a second, so
+        # the pool -- not the recharge -- is what paces it, which is how retail
+        # paces it too. An unpayable slot is skipped and stays ready, so the
+        # agent retries it as the pool fills rather than skipping down the bar;
+        # advancing the cursor here would be exactly the AI decision this
+        # comment says is not being made.
+        if slot is not None and ENERGY:
+            _sid = agent["skills"][slot][0]
+            _cost, _units = skill_cost(_sid)
+            _pool = agent_energy(agent)
+            _pool.tick(now)
+            _short = None
+            if _units > 0 and not agent_adrenaline(agent).charged(_sid):
+                _short = (f"{_units} adrenaline, has "
+                          f"{agent_adrenaline(agent).units.get(_sid, 0)}")
+            elif _cost > 0 and not _pool.can_pay(_cost):
+                _short = f"{_cost} energy, has {_pool.current:.2f}"
+            if _short is not None:
+                slot = None
+                # Once every few seconds, not once per tick: at 20 ticks a
+                # second a broke agent would fill the log with the same line.
+                if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                    agent["cast_refused_at"] = now
+                    print(f"[c{conn_id}] agent {agent_id} cannot cast skill "
+                          f"{_sid}: needs {_short}", flush=True)
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
+            # THE ENEMY PAYS, AND NOTHING GOES ON THE WIRE FOR IT. Property 62
+            # is the observing player's OWN agent's and nobody else's: across
+            # the live corpus, 722 casts by other agents -- 579 of them paid --
+            # carry not one spend, and the two empty cells of that 2x2 are what
+            # make it a rule rather than a tendency. So this debits the server's
+            # book and sends nothing.
+            if ENERGY:
+                _cost, _units = skill_cost(skill_id)
+                if _units > 0:
+                    agent_adrenaline(agent).use(skill_id)
+                agent_energy(agent).spend(_cost)
             agent["skill_ready"][slot] = now + recharge
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
@@ -7049,6 +7920,17 @@ def land_swing(send, state, agent_id, agent, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
+    # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
+    # a strike for a successful weapon hit; the player gets one unit per 1% of
+    # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
+    # by the wiki's own words, does not count as combat either. The fraction is
+    # of the player's maximum and is taken BEFORE any reduction, which costs
+    # nothing to say because this server models no reduction after the armour
+    # term above.
+    if ENERGY:
+        agent_adrenaline(agent).on_hit_landed(time.time())
+        player_adrenaline(state).on_damage_taken(
+            dealt / float(agents.PLAYER_HEALTH), time.time())
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
           + (f" (struck the {location.replace('warrior_', '')}, "
@@ -7215,6 +8097,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
+    # Damage taken is damage taken, whatever delivered it -- WIKI puts the
+    # one-unit-per-1% rule on damage and not on attacks. No strike for the
+    # caster, though: that half of the rule says WEAPON hit, and a cast is not
+    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that reason).
+    if ENERGY:
+        player_adrenaline(state).on_damage_taken(
+            dealt / float(agents.PLAYER_HEALTH), time.time())
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}", flush=True)
 
@@ -7301,6 +8190,10 @@ def player_revive_due(send, state, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar")
+    # AND THE ENERGY HALF OF THE SAME BATCH -- see `restore_player_energy`,
+    # which carries the OBSERVED resurrect instant (52 = 1.0 and 43 = the rate,
+    # alongside the 55 = 1.0 this path's health refill already mirrors).
+    restore_player_energy(send, state, conn_id, "revived")
     print(f"[c{conn_id}] the player is back up", flush=True)
 
 
@@ -7346,6 +8239,10 @@ def player_refill_due(send, state, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
+    # The energy rides the DEFERRED batch when the experiment is armed, so the
+    # two refills stay together whichever branch of 1f a run is testing --
+    # splitting them would make the deferral a different experiment.
+    restore_player_energy(send, state, conn_id, "revived, deferred")
     print(f"[c{conn_id}] deferred refill sent", flush=True)
 
 
@@ -9213,6 +10110,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Degeneration AFTER the expiries, so a condition that
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
+                        # Energy regeneration and the adrenaline timeout, right
+                        # behind health's. Both are SILENT -- retail sends the
+                        # rate once and the client animates the orb from it (52
+                        # events in the corpus, none of them a stream), and
+                        # adrenaline has no opcode at all -- so this tick puts
+                        # nothing on the wire and only logs a real wipe.
+                        energy_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -10000,8 +10904,37 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             model_dest, blocked = clip_to_walkable(
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
-                            if turned or state.get("walking") is not True:
+                            # THE SHIPPED GATE, now a NAMED variable because a
+                            # second path asks the same question. `legacy_dir`
+                            # is byte-for-byte the condition that stood here
+                            # before --zero-lead existed, and with ZERO_LEAD off
+                            # `legacy_dir or zero_ok` IS `legacy_dir`: same
+                            # send, same payload, same label, same
+                            # state["walking"] write, same order.
+                            legacy_dir = (turned
+                                          or state.get("walking") is not True)
+                            # THE ZERO-LEAD VERDICT, evaluated HERE and SPENT in
+                            # the third named block below. It is up here for one
+                            # reason: retail's burst is 0x0025 then 0x0029 with
+                            # the grant ALWAYS LAST (3,023 of 3,071 live bursts,
+                            # zero counter-examples), so the direction has to go
+                            # out BEFORE the grant -- and whether to send one at
+                            # all now depends on a verdict this arm has not
+                            # reached yet. Hoisting the CALL is free precisely
+                            # because _heading_grant_ok is pure; hoisting the
+                            # SEND would have meant a second 0x0025 send site,
+                            # and one send site is what test_position_trust
+                            # section 8 locks. Deviation from REALFIX.md §P2's
+                            # literal block ordering, and this is its ground.
+                            zero_ok, zero_why, zero_since = False, None, None
+                            dir_src = "none"
+                            if ZERO_LEAD:
+                                now_z = time.time()
+                                zero_ok, zero_why, zero_since = (
+                                    _heading_grant_ok(state, now_z))
+                            if legacy_dir:
                                 state["walking"] = True
+                            if legacy_dir or zero_ok:
                                 # UNIT LENGTH. This field is a DIRECTION and we
                                 # were putting a DISPLACEMENT in it: `heading` is
                                 # the client's own 0x003D vec2, whose magnitude is
@@ -10039,11 +10972,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # client's own movementType, 2,215 of 2,254
                                 # (98.27%), the 39 disagreements all adjacent enum
                                 # values at transition instants.
+                                #
+                                # EXACTLY ONE PER BURST, and it is structural
+                                # rather than guarded: both paths route through
+                                # this one send, so there is no arrangement of
+                                # flags that can put two 0x0025 in one report's
+                                # burst. `dir_src` records which of them asked,
+                                # so a capture can tell a legacy turned-send
+                                # that swallowed a zero-lead one from a
+                                # zero-lead send the legacy gate would have
+                                # skipped -- the cadence delta the flag's own
+                                # comment prices is exactly the difference
+                                # between those two populations.
+                                dir_src = ("legacy+zero-lead"
+                                           if legacy_dir and zero_ok
+                                           else "legacy" if legacy_dir
+                                           else "zero-lead")
                                 send(GAME_SMSG_AGENT_MOVE_DIRECTION,
                                      [PLAYER_AGENT_ID, unit, moving],
                                      f"AGENT_MOVE_DIRECTION"
                                      f"({unit[0]:.3f},{unit[1]:.3f} "
-                                     f"type {moving})")
+                                     f"type {moving})"
+                                     + (f" [{dir_src}]" if ZERO_LEAD else ""))
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is
                                 # the only thing that stops a stale one maturing
@@ -10121,6 +11071,125 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                           plane],
                                          f"CLIENT ENDPOINT ({ex:.0f},{ey:.0f}) "
                                          f"plane {plane}")
+                            if ZERO_LEAD:
+                                # REALFIX-P2. THE THIRD NAMED BLOCK, and the
+                                # only one of the three that has never been run.
+                                # The flag's own comment at ZERO_LEAD carries
+                                # the design ground, the retracted cheapness
+                                # claim and the cadence the dropped gate costs.
+                                #
+                                # THE POINT IS THE CLIENT'S OWN REPORTED
+                                # POSITION, VERBATIM. Not `state["pos"]` (which
+                                # is the last report we BELIEVED, and is stale
+                                # in exactly the window a trust refusal opens),
+                                # not `model_dest` (which is OUR navmesh's
+                                # opinion and is the first of the two defects
+                                # that made --heading-grant warp), and not
+                                # `reported + anything`. No lead at all is the
+                                # single axis this candidate moves.
+                                #
+                                # NO CLIP ON THE WIRE, and here the argument is
+                                # a witness rather than a preference: the client
+                                # reported STANDING ON this point, so it is
+                                # walkable whatever our mesh believes
+                                # (REALFIX-O5). NO STALENESS GATE: the report is
+                                # in our hand and its age is 0 by construction.
+                                # NO STRAIGHT-SHOT GATE: the segment is
+                                # zero-length from the client's side.
+                                #
+                                # state["dest"] IS UNTOUCHED BY THIS BLOCK. Our
+                                # own model keeps the leg computed above, which
+                                # is `clip_to_walkable(state["pos"] + vec2)` --
+                                # state["pos"], NOT `reported`. On an accepted
+                                # report those are the same point and the leg is
+                                # `reported + vec2` clipped; on a REFUSED one
+                                # they are not, and the model correctly stays on
+                                # the position we still believe. So the server
+                                # keeps an opinion that respects walls for
+                                # aggro, interaction and collision.
+                                #
+                                # "ONLY THE WIRE CHANGES" IS TOO STRONG AND IS
+                                # WITHDRAWN. The send below also runs
+                                # _note_wire_move, which rewrites sync_from /
+                                # sync_to / sync_at -- our model of where the
+                                # client's SYNC copy is, and the operand
+                                # REALFIX-L1's movetap separation metric reads --
+                                # and stamps `grant_at`, the CLICK arm's rate
+                                # clock. What is untouched is state["dest"] and
+                                # the click and stop arms; the SYNC model is not.
+                                #
+                                # AND A REPORT THE TRUST GUARD REFUSED IS STILL
+                                # GRANTED VERBATIM. That is deliberate and it is
+                                # the sharpest edge on this flag, so it is
+                                # written down rather than discovered in a run.
+                                # _take_client_position may have REJECTED this
+                                # report as an impossible jump and left
+                                # state["pos"] where it was; this block grants
+                                # the rejected point anyway, and _note_wire_move
+                                # then drags sync_to to it. The trust guard
+                                # becomes ADVISORY on the grant path.
+                                #
+                                # WHY THAT IS RIGHT HERE. The guard exists to
+                                # stop OUR position model being driven off a
+                                # garbage decode; it does not certify a point as
+                                # unreachable. REALFIX-O5's witness argument is
+                                # what governs the wire: the client says it is
+                                # STANDING on this point, so it is on the
+                                # client's own history polyline whatever we
+                                # believe, and a grant there is a grant onto the
+                                # polyline -- which is the entire design. Sending
+                                # state["pos"] instead would grant a point the
+                                # client has left, i.e. a LEAD backwards, and
+                                # would do it exactly in the window where our
+                                # model is least entitled to name a destination.
+                                # The cost is bounded by the same rate limit as
+                                # everything else on this arm, and the guard
+                                # still protects the model it was built for.
+                                # Driven both directions by test_position_trust
+                                # section 14.
+                                #
+                                # BOTH PLANE WORDS ARE THE REPORTED PLANE. Field
+                                # 3 is the destination's plane and field 4 the
+                                # current one, closed from the binary three
+                                # times; for a zero-distance grant they are the
+                                # same plane and asserting it twice is the
+                                # honest answer rather than a 0 that would write
+                                # a wrong map index into agent+0x80.
+                                if rec is not None:
+                                    # EVERY evaluation, fired or refused, on the
+                                    # SAME channel the click arm uses -- a log
+                                    # holding only its own successes cannot
+                                    # score the flag against the cadence it
+                                    # exists to bound. The reason vocabulary is
+                                    # DISJOINT from the click arm's
+                                    # ("zero-lead"/"heading-rate" against
+                                    # "off"/"locally-moving"/"rate-limited"/
+                                    # "grant"), and `arm` names it outright, so
+                                    # one capture carrying both arms can be
+                                    # split by either field. grantsim's C3
+                                    # replay reads these rows.
+                                    rec.event("grant_verdict", fired=zero_ok,
+                                              reason=zero_why, arm="zero-lead",
+                                              deferred=False,
+                                              since_last=(None
+                                                          if zero_since is None
+                                                          else round(zero_since,
+                                                                     3)),
+                                              direction=dir_src,
+                                              dest=[float(reported[0]),
+                                                    float(reported[1])])
+                                if zero_ok:
+                                    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                         [PLAYER_AGENT_ID, list(reported),
+                                          plane, plane],
+                                         f"ZERO LEAD ({reported[0]:.0f},"
+                                         f"{reported[1]:.0f}) plane {plane} "
+                                         f"[dir {dir_src}]")
+                                # AND NO `else` HOLDING IT. A refused heading
+                                # grant is DROPPED; the next 0x003D supersedes
+                                # it in ~0.29 s by construction. See
+                                # _heading_grant_ok for why the click arm's hold
+                                # would be wrong here.
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -11137,12 +12206,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              f"PLAYER health = {_health_max}")
                         # The value field is a dword carrying IEEE float bits,
                         # same as the damage path above. The purpose is no
-                        # longer unknown -- it is energy regeneration as a
-                        # fraction of the pool per second, so it is rescaled if
-                        # morale has moved the pool (agents.PROP_ENERGY_REGEN).
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+                        # longer unknown -- energy regeneration as a fraction
+                        # of the pool per second (agents.PROP_ENERGY_REGEN),
+                        # rescaled if morale has moved the pool. AND THE
+                        # CHANNEL IS MEASURED: all 52 corpus property-43s ride
+                        # 0x00A2, the NO-TARGET float twin -- zero ride 0x00A3
+                        # (studies/skills section 23) -- so this send is off
+                        # the WITH-target form both arcs inherited from
+                        # gw-preservation's sendPlayerAttributes. The constant
+                        # decomposes as f32(0.33) * 3 pips / 25 max, the
+                        # ranger armour row (merge of the energy and morale
+                        # arcs, 2026-08-20 -- each had one half).
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                              [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
-                              PLAYER_AGENT_ID,
                               _f32(morale.regen_fraction(
                                   agents.PLAYER_FLOAT_43,
                                   agents.PLAYER_ENERGY, _energy_max))],
@@ -12109,6 +13185,42 @@ def main():
                          "answer a heading, so this is the shape we were "
                          "missing rather than a workaround. Score it with "
                          "toolkit/clientscan/movetap.py.")
+    ap.add_argument("--zero-lead", action="store_true",
+                    help="REALFIX-P2, and the only candidate in the lead family "
+                         "that has NEVER been run. Answer every keyboard "
+                         "heading while moving with 0x0025 (unit direction, the "
+                         "client's own movementType) and a 0x0029 at the "
+                         "client's REPORTED POSITION VERBATIM -- no lead, no "
+                         "clip, no staleness gate, no straight-shot gate -- "
+                         f"rate-limited to one per {GRANT_MIN_INTERVAL:.2f} s "
+                         "by _heading_grant_ok "
+                         "(rule 2 only; the click arm's _grant_verdict would "
+                         "emit ZERO here because the heading arm arms its own "
+                         "locally-driving latch ten lines earlier). THE GROUND: "
+                         "the client's history polyline extends only BACKWARDS "
+                         "while it holds no destination, so LAG is on it by "
+                         "construction and LEAD is not -- and both dead "
+                         "candidates in this family granted 766 u ahead. It "
+                         "DROPS the shipped `turned or not walking` gate, which "
+                         "on click-free play opens on 11-81%% of moving "
+                         "reports, and that extra cadence is NOT free: the "
+                         "drafted claim that a zero-distance grant takes the "
+                         "<=1.0 u short-circuit is RETRACTED (that compare "
+                         "measures from the SYNC COPY, and 353 of 358 "
+                         "synthesized grants bake a real leg). Stop arm and "
+                         "click arm untouched -- a stop-arm grant is "
+                         "--stop-echo and is refuted. A report the "
+                         "position-trust guard REFUSES is still granted "
+                         "verbatim and the SYNC model follows it: the client "
+                         "says it is standing there, so the point is on its own "
+                         "history polyline whatever we believe. REFUSES to "
+                         "combine with --heading-grant, --client-endpoint or "
+                         "--stop-echo (every other arm that answers the "
+                         "player's movement with a player 0x0029, all three "
+                         "refuted, all on the one shared grant clock); combines "
+                         "with --grant-suppress, --resync and --click-sweep, "
+                         "each with a printed note. Its prediction is printed "
+                         "at startup. This is REALFIX-L1's treatment arm.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -12211,6 +13323,16 @@ def main():
                          "shipped in until 2026-08-20. Use it to say whether "
                          "something the client did was THIS channel rather "
                          "than the cast cycle it rides on.")
+    ap.add_argument("--no-energy", action="store_true",
+                    help="do not charge for skills: no energy gate, no "
+                         "property-62 spend, no regeneration and no "
+                         "adrenaline. The control for the cost channel, and "
+                         "it restores exactly the behaviour this server "
+                         "shipped with until 2026-08-20 -- every skill free, "
+                         "the orb flat at 25, the enemy casting on its "
+                         "recharge alone. Use it to say whether something a "
+                         "run saw was THIS channel rather than the cast cycle "
+                         "it rides on.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -12658,6 +13780,83 @@ def main():
               "measured the wrong thing: it bounded the SIZE of the teleports "
               "and said nothing about their NUMBER.")
 
+    # THE COMPOSITION REFUSAL, decided by a PURE function so the matrix is a
+    # test rather than a paragraph, and RAISED rather than printed -- a
+    # refusal that only prints is a refusal that does not refuse, and
+    # test_position_trust section 14 locks the `raise` at this call site
+    # because replacing it with a print left every one of its 147 checks green
+    # while the server ran the refused combination.
+    #
+    # WHAT "BEFORE THE FLAG IS SET" DOES AND DOES NOT MEAN, corrected: ZERO_LEAD
+    # itself cannot half-apply, because it is set below this line. HEADING_GRANT
+    # and CLIENT_ENDPOINT above it are ALREADY set and have already printed
+    # their banners by the time we get here, and that is harmless only because
+    # SystemExit follows immediately -- the process ends before the listener
+    # binds a socket. Do not read this block as a general two-phase parse.
+    _zl_refusal, _zl_notes = zero_lead_composition(
+        zero_lead=a.zero_lead, heading_grant=a.heading_grant,
+        client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
+        resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep)
+    if _zl_refusal:
+        raise SystemExit(_zl_refusal)
+    if a.zero_lead:
+        global ZERO_LEAD
+        ZERO_LEAD = True
+        print("[map] --zero-lead ON. REALFIX-P2, the treatment arm of "
+              "REALFIX-L1, and the only candidate in the lead family never run.")
+        print(f"      SENDS     on EVERY 0x003D while moving, at most one per "
+              f"{GRANT_MIN_INTERVAL:.2f}s: 0x0025 (unit direction + the "
+              f"client's own movementType) then 0x0029 at the client's REPORTED "
+              f"POSITION VERBATIM. No lead, no clip, no staleness gate, no "
+              f"straight-shot gate. Exactly one 0x0025 per burst.")
+        print("      GROUND    the client's history polyline extends only "
+              "BACKWARDS while it holds no destination, so LAG is on it by "
+              "construction and LEAD is not (REALFIX-O1/O3). Both dead "
+              "candidates in this family granted 766 u AHEAD.")
+        print("      NOT       the stop arm (that is --stop-echo, REFUTED, and "
+              "REFUSED in combination with this flag) and not the click arm. "
+              "state['dest'] keeps our own clipped leg -- but the grant DOES "
+              "move the SYNC model and the shared grant clock through send(), "
+              "so 'only the wire changes' is too strong.")
+        print("      ADVISORY  a report the position-trust guard REFUSED is "
+              "still granted VERBATIM, and sync_to follows it. The client says "
+              "it is STANDING there, so the point is on its own history "
+              "polyline whatever we believe; granting state['pos'] instead "
+              "would grant a point the player has already left.")
+        print("      RETRACTED, and do not re-quote it: 'a zero-distance grant "
+              "takes the <=1.0 u short-circuit and dispatches nothing' is FALSE "
+              "of these grants -- that compare measures from the SYNC COPY, and "
+              "5 of 358 synthesized grants take it. The dropped `turned` gate "
+              "costs real cadence; price it on the numbers.")
+        print("      PREDICTION, stated before the run, REALFIX.md sec.4 "
+              "unedited, in BOTH units because this arc has already lost a "
+              "candidate that bounded SIZE while harm arrived as FREQUENCY:")
+        print("        FREQUENCY <= 1.0 hard rows per minute of ACTIVE time "
+              "(P0 arm 3-6/min, bracketing the measured 4.19)")
+        print("        DISPLACED <= 40 u per active second (P0 arm 100-170, "
+              "bracketing 137.8)")
+        print("        SEPARATION movetap-measured SYNC vs the client's own "
+              "report: p50 <= 150 u and p90 <= 520 u (P0 arm p50 >= 800 u)")
+        print("      FAILURE SIGNATURE, pre-registered: if it fails it must "
+              "fail as FREQUENT SMALL displacements at report-chord scale "
+              "(33-70 u fine cadence, ~500 u on a keyboard hold), NOT as a rare "
+              "large teleport. A P2-arm displacement p50 above 520 u REFUTES "
+              "the 'lag is on the polyline' reading and sends the arc back to "
+              "REALFIX.md sec.2.2.")
+        print("      WOULD REFUTE THE INVARIANT ITSELF: a snap recorded while "
+              "movetap shows separation under 299.33 u and the copy behind the "
+              "player on ground already walked. That is gate 2, gate 3 or the "
+              "gate-free ResyncAllAsync, and it would make every policy in "
+              "REALFIX.md beside the point.")
+        print("      RUN IT    click-free, keyboard held through the WHOLE "
+              "waiting period, one deliberate sustained backpedal leg "
+              "(REALFIX-U4), movetap.py running throughout, arms alternated at "
+              "fixed intervals against the shipped default.")
+        print("      Score it with:  python toolkit/clientscan/movesync.py "
+              "--wire-only   (state the denominator)")
+        for _note in _zl_notes:
+            print(_note)
+
     if a.resync:
         global RESYNC
         RESYNC = True
@@ -12792,6 +13991,12 @@ def main():
         EFFECTS = False
         print("NO EFFECTS: no 0x0042 goes out, so stances, hexes and "
               "enchantments cast and leave nothing on the target.")
+
+    if a.no_energy:
+        global ENERGY
+        ENERGY = False
+        print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
+              "goes out, and no adrenaline is tracked.")
 
     if a.no_armour:
         global EQUIP_ARMOUR

@@ -1346,6 +1346,58 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### ENERGY AND ADRENALINE exist, and the client consumes both (2026-08-20, late)
+
+[studies/skills §23–§25](studies/skills/FINDINGS.md), `toolkit/authsrv/pools.py`,
+landed `68d9850`. NEXT item 1 of the entry below is DONE; this entry replaces it.
+
+**The wire model, measured** (five-agent recon workflow over the 14-capture live
+corpus, then a 4-agent build+skeptic workflow): max = int prop 41; regen RATE =
+float prop 43, **quantum f32(0.33)·pips/max — bit-exact on all five retail
+clusters while the wiki's nominal 1/3 fits zero**; spend = prop 62 =
+−cost/max, once per paid cast, BEFORE the prop-60 in the same batch (45/45),
+scoped to the observing agent alone (722 other-agent casts carry none); gain =
+prop 52 (n=1, resurrect, 1.0); **no absolute setter exists** (prop 33: 0 of
+13,378, control green). The sibling morale arc measured the same quantum blind
+from the death tick — two derivations, no shared code, same constant.
+
+**The server now**: gates every press and every enemy pick (the pool paces
+Restore Condition — §8's old item 4 heal-spam, closed by a resource rule);
+debits in retail's batch order; regenerates silently; grows adrenaline by GWW's
+rules (25/hit, 1 per 1% health lost floored, raw UNITS not displayed strikes);
+wipes on death and 25 s of quiet; sends the retail death (43=0.0) and resurrect
+(52=1.0 + 43=rate) batches.
+
+**Four runs, every prediction pre-registered**: the client displays
+floor(its own integration) and never drifts (15/15 frames); it draws one `›`
+arrow per pip and animates the climb at the sent rate; the orb empties at death
+and — NEW — **refills at revive** (prop 52's first render anywhere); the full
+adrenaline cycle runs charge→spend→Bleeding-through-the-substrate→reset. Two
+negatives worth as much: **the client does not gate presses** (it sent a
+25-energy skill with 7.7 energy and an uncharged adrenal skill — the server is
+the gate, both halves) and **the client does not self-animate the adrenal
+icon** (pixel-identical at 0 and at a spent 100 — the flames wait for an
+UNMAPPED message).
+
+**NEXT, in cost order:**
+
+1. **The adrenaline-display opcode.** GWCA's `SkillbarSkill.adrenaline_a`
+   (+0x00) is the store the icon draws from; nobody maps what fills it.
+   Clientscan target: find the writer, walk back to the RECV handler.
+2. **What answers a refused press.** Ours is silence and the client visibly
+   re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
+   Also: our client SENT both unaffordable presses — whether retail's client
+   gates locally (and on which store) is unknown; the answer likely rides the
+   same investigation.
+3. **The five unmodelled mechanics** (unchanged from the entry below): attack
+   speed, movement speed, damage negation, energy cost reduction (GoLE's
+   datum: the row needs an explicit amount — scale bit clear, endpoints 10/18
+   differ, refused per the resolve_duration precedent), arrow bonus damage.
+4. **Merge-time reconciliation with the morale arc** (landed on main while
+   this was in flight): route `EnergyPool.maximum` through
+   `player_max_energy()` — NOTE it scales BASE energy only, armour bonuses
+   ride unscaled (their §2.2) — and adopt the `PROP_ENERGY_REGEN` rename.
+5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
 ### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
 
 Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
@@ -1510,7 +1562,7 @@ each measured before it was built and three of them then watched at a client.
 | Enchantment (6) | Reversal of Fortune 307 | 8 s | ✗ damage negation | ✓ applied |
 | Signet (7) | Healing Signet 1 | — | ✓ **heals 88** | ✓ client health **54→100** |
 | Skill (10) | Charm Animal 411 | ✗ | ✗ a pet | ✗ |
-| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ no energy model | ✓ applied |
+| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ energy model EXISTS (2026-08-20 evening); the glyph's own discount is inert — its scale bit is clear with differing endpoints and the amount is refused, not invented | ✓ applied |
 | Attack (14) | Sever Artery 382 | Bleeding 9 s | ✓ **3 pips of degeneration** | ✓ **three arrows on screen** |
 | Preparation (19) | Ignite Arrows 431 | 24 s | ✗ fire damage on arrows | ✓ applied |
 
@@ -2109,6 +2161,10 @@ node counts.
 "unwritable" wall (row 11196, 1,029,564 B in a 1,029,632 B reservation) — is the human male player
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
+
+### Movement — REALFIX-H1 LANDED: the harness calibrates, refuses to rank, and survived a 33-mutation campaign (2026-08-21)
+
+`toolkit/clientscan/grantsim.py` + `test_grantsim.py` (floor **61**, bare-machine 19, one loud skip), TESTS.md entry same commit, census 134 → 135 with exactly one new live pin (`LUT_VA = 0x0093CAC8`). **REALFIX-C0 is met**: both exhaustive scans land bit-exact on the pinned boundaries (`0x461C0000` → 99.9199680 u; `0x47AF0000` → 299.3325909 u; exactly-300.0 snaps), reproduced BLIND by an independent verifier from its own hand-decode of the nine instructions, and the constants are asserted against their own derivation functions. Calibration: predicted 69 vs measured 60 hard jumps over the eleven-capture set (1.15×, per-capture vector implementation-pinned), the three structural zeros exact, match-deletion null 1.77×, rotation monotone, and `rank_or_refuse()` returns **None** over the full 54-cell sensitivity band — the 766 u lead is worst in 27/27 match-ON cells and *wins* in 27/27 match-OFF cells, so printing an ordering is a red check. Review was adversarial and productive: 33 mutations (26 red first pass, 5 genuine survivors each given a check and proven red, 2 survivals-by-design recorded), byte-exactness verified against the pinned image with one V1 address corrected in return, and **one spec claim RETRACTED at its source — P2's grants are NOT zero-distance**: the `≤ 1.0 u` short-circuit measures from the SYNC COPY (`fsub [esi+0x78]`), not the client, and only 6 of 539 synthesized P2 grants take it (median `|d|` 101–512 u), so every other P2 grant is a class-A test instant and "extra cadence is nearly free" is corrected in `REALFIX.md` §P2 and FINDINGS round 5 §5. **What remains: optionally price P5 on `resyncscore`'s yank column, then REALFIX-L1 — the one owner-driven live A/B.** ⓘ **UPDATED LATER THE SAME DAY: `--zero-lead` and its `_heading_grant_ok` predicate LANDED** (`authsrv.py`, `test_position_trust.py` §14, `test_grantsim.py` §6b), so C3's heading arm is un-skipped, `lead_policy` carries the shipped rate limit, and the two figures above move with it: **358 synthesized P2 grants, 5 taking the short-circuit** (medians 143 / 420 / 250 / 512 u) — the count falls because the 0.5 s floor refuses the reports inside it and every median RISES because the copy runs further between grants, so the retraction reads harder, not weaker. ⓘ **AND AFTER TWO ADVERSARIAL VERIFIER LANES, same day, floors now `test_position_trust` 160 vaulted / 152 bare and `test_grantsim` 68 / 26 bare** (this line first carried "138/146", which was wrong on both halves and wrong in the file `CLAUDE.md` names as the status authority; `TESTS.md` had it right in the same commit). Nothing on the wire changed — payload, planes, burst order and the flag-off control were each attacked at the byte level and held, and the offline P2 replay matches the shipped arm's grant instants and destinations element-for-element on all four counterfactual captures, 358 for 358. What changed is the seams: **`--zero-lead --stop-echo` was accepted silently** and is now refused (the refusal keyed on "the same `0x003D`" and `--stop-echo` answers `0x0047`); the composition refusal is enforced at its call site by a test rather than only decided by a pure function; `lead_policy` is now locked to *run* the shipped predicate rather than merely import it; `replay_verdicts`'s heading filter and the startup banner's pre-registered prediction are driven instead of assumed; a report the position-trust guard REFUSES is documented and tested as granted-verbatim-anyway with the SYNC model following it; and **one invented claim was withdrawn** — the old lead-spine pairing would have gone RED under the rate limit, not silently green at 72 u. **REALFIX-M1 is priced against REALFIX-D2 in `REALFIX.md` §4 item 2 and it is the one uncomfortable number: offline, P2's M1 max reaches 4.94 s on `20260814T100340` against D2's "FAILS if M1 max reaches 5.0 s", and D2's non-falsifier "max ≤ 3.0 s everywhere" is violated on two of four captures.** **REALFIX-L1 is runnable and is the only thing left before the run.**
 
 ### Movement — REALFIX: the invariant is stated, retail's policy is an executable spec, and the offline scorer honestly cannot rank (2026-08-20, round 5)
 

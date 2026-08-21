@@ -3139,10 +3139,86 @@ Every one of these, in the order they were written:
   proves nothing — a policy that refuses everything passes the first and today's
   code passes the second — and the section says out loud that it replays rules 1
   and 2 only, the two geometry refusals running upstream of them and not being
-  modelled. Floor **105**, the bare-machine subset, against a green **113** with
-  every capture present; §10 and §13 are the two fixture-bearing sections
-  (4 checks each) and each declares `LEDGER.skip` without its files. No client.
-  ~2 s),
+  modelled. **§14 IS `--zero-lead` (REALFIX-P2), AND IT IS THE FIRST SECTION
+  HERE THAT EXECUTES A RECEIVE ARM** rather than only matching its syntax tree.
+  Two of that flag's claims are behavioural and no AST matcher can reach them --
+  a moving report the shipped `turned or not walking` gate would SKIP is still
+  granted under the flag, and the very same report sends **nothing** with the
+  flag off -- so `receive_arm()` lifts the arm's own statements out of the
+  receive loop, wraps them in a function of the four free names they need and
+  compiles them against `authsrv.__dict__`. It runs the file's bytes,
+  re-extracted every run, and it raises rather than handing back an empty body
+  if the arm is ever renamed. The section pins the **payload** (the granted
+  point is the client's reported position VERBATIM -- not `state["pos"]`, not
+  the clipped `model_dest` -- with both plane words the reported plane and the
+  `0x0029` LAST in the burst), **exactly one `0x0025` per burst** whichever path
+  asked for it, the **model/wire split** (`state["dest"]` still holds the
+  clipped 766 u leg while the wire carries the report), and that a rate-refused
+  heading grant is **DROPPED, not held** -- no `grant_pending` key appears.
+  `_heading_grant_ok` is checked for PURITY (five calls, one answer, state
+  byte-identical after) because `grantsim.py` imports and runs it, for its floor
+  at both edges of `GRANT_MIN_INTERVAL`, for refusing a grant stamped in the
+  FUTURE, and for **carrying rule 2 ONLY**: the very state the click arm refuses
+  as `locally-moving` still grants here, which is the check that stops the arm
+  being "simplified" onto `_grant_verdict` -- that predicate's rule 1 would emit
+  **zero** grants, because the heading arm arms the latch ten lines before it
+  would ask. The two arms' reason vocabularies are asserted DISJOINT
+  (`zero-lead`/`heading-rate` against `off`/`locally-moving`/`rate-limited`/
+  `grant`) -- **and both halves of that comparison are now READ BACK OUT OF THE
+  SHIPPED PREDICATES by driving them**, because the version that compared two
+  literal sets could not fail: a mutation that made `_heading_grant_ok` return
+  exactly `rate-limited` and `grant`, the vocabularies overlapping completely,
+  still printed PASS. A third read cross-checks those two words against
+  `grantsim.HEADING_REASONS`, parsed out of that file's syntax tree rather than
+  imported, since that frozenset is what the replay filter keys on. The stop
+  arm is EXECUTED too and must grant nothing -- a stop-arm `0x0029` **is**
+  `--stop-echo` and is refuted -- and the AST half asserts `ZERO_LEAD` is named
+  in the heading arm and in **neither** the stop nor the click arm, with the
+  heading count as its own positive control. **THE TRUST GUARD IS ADVISORY ON
+  THE GRANT PATH, and §14 drives that both ways** rather than leaving it to be
+  found in a live run: a report claiming a 40,000 u jump is REFUSED by the
+  policy this whole file is about -- `state["pos"]` holds -- and the arm grants
+  the rejected point VERBATIM anyway while `_note_wire_move` drags `sync_to` to
+  it, which is the exact operand REALFIX-L1's movetap separation metric reads.
+  Its control is the same report with a stale `pos_seen`, ACCEPTED, where the
+  wire is identical and the model moves too, so what the pair differs in is the
+  refusal and not the report. That pair also pins the precise statement of the
+  model/wire split: `state["dest"]` is `clip(state["pos"] + vec2)`, equal to
+  `reported + vec2` only on an accepted report, and the grant is **not**
+  wire-only -- it moves `sync_from`/`sync_to`/`sync_at` and stamps the shared
+  `grant_at`. Finally the **composition matrix** is driven cell by cell through
+  the pure `zero_lead_composition()`, with its cases taken from the shipped
+  `ZERO_LEAD_REFUSED_ARMS` table rather than restated: refusing `--heading-grant`,
+  `--client-endpoint` **and `--stop-echo`**, each citing its OWN refutation line
+  and naming no other flag, named in the plural with both lines when two are
+  passed; allowing `--grant-suppress`, `--resync` and `--click-sweep` each with
+  a printed note; and a control that with the flag OFF nothing is refused at
+  all. **`--stop-echo` was missing from that list until an adversarial pass
+  found `--zero-lead --stop-echo` accepted silently** -- the refusal was keyed
+  on "answers the same `0x003D`" and the stop arm answers `0x0047` -- which is
+  why the loop now reads the table instead of enumerating cases a test author
+  can forget the same way. **AND THE MATRIX'S ANSWER IS ENFORCED AT ITS CALL
+  SITE**: an AST read of `main()` requires the refusal to be `raise`d as a
+  `SystemExit` and requires every flag the function can decide about to actually
+  be passed to it, with a hand-built bad `main()` as the control. Replacing that
+  `raise` with a print left all 147 checks green while the server would have run
+  the refused combination, and a parameter the call site never fills can never
+  fire from a real command line -- which is precisely how `--stop-echo` went
+  unrefused. The **startup banner is pinned** for the same reason: `REALFIX.md`
+  §4 rests on "the prediction is printed verbatim at startup so it cannot be
+  rationalised afterwards", and deleting the retraction and all three numeric
+  bounds changed no test, so §14 now requires the retraction, both units of the
+  frequency/displacement bounds, the separation bound, the failure signature and
+  the invariant-refuting condition to be present in the block's own string
+  constants, with a stripped block as the control. Floors **152** bare and
+  **160** with every capture present, **one per configuration** -- a single
+  bare floor protected none of the 8 checks only a vaulted machine runs, proved
+  by unhooking one §14 check: vaulted printed ALL CHECKS PASSED at 146 against a
+  floor of 139 while the bare run went red at 138. §10 and §13 are the two
+  fixture-bearing sections (4 checks each), each declaring `LEDGER.skip` without
+  its files, and the probe that raises the floor reads the same capture names
+  those sections use. §14 is entirely fixture-free, so all 47 of its checks land
+  in both totals. No client. ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -3597,6 +3673,155 @@ Every one of these, in the order they were written:
   **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
   without it. Reads only; sends nothing, and never imports `authsrv.py`. No
   client. ~7 s),
+  `toolkit/clientscan/test_grantsim.py` (**WOULD A DIFFERENT GRANT POLICY HAVE
+  SNAPPED -- AND THE ANSWER IS THAT THIS FILE CANNOT TELL YOU, ON PURPOSE.** The
+  guard on `toolkit/clientscan/grantsim.py`, which replays a capture's own c2s
+  `0x003D`/`0x003E`/`0x0047` through each candidate policy, drives a byte-exact
+  rebuild of the client's `0x005FE950` bake, and asks the client's own question
+  at the client's own two caller classes. Where `resyncscore` prices an ADDITIVE
+  fix and `grantsuppress` prices the SUBTRACTION, this prices a SUBSTITUTION.
+  **IT IS NOT A RANKER AND ITS TESTS REFUSE TO LET IT BECOME ONE.** §8 sweeps the
+  match test's PRESENCE alongside its radius over 54 cells, because that is the
+  axis where the ranking inverts: with the match test on, leads 0 u and 86 u
+  score identically on three of four counterfactual captures (0/0, 0/0, 2/2,
+  3/2) and only the already-refuted 766 u lead separates -- **it is worst in 27
+  of 27 cells** -- while with the match test off it **WINS in 27 of 27** (2 vs 10
+  on `20260820T182554`, 21 vs 23 on `182934`, 29 vs 48 on `20260814T100340`).
+  `rank_or_refuse()` therefore returns None on the real substrate and §8 asserts
+  BOTH directions, refusing on an inverting band and still producing an ordering
+  on a synthetic invariant one, so the refusal is a measurement rather than a
+  function that always says no. **THE HEADLINE IS THE CALIBRATION.** §5
+  reproduces the measured hard-jump census on eleven `ours` captures across five
+  configurations -- 60 measured, 69 predicted, 1.15x -- and, the check that
+  separates this from its own first draft, **exactly zero** on the three
+  captures that sent zero grants, where round 5's separation-only scorer
+  predicted 16, 12 and 34 because `20260819T145717`'s real separation is p50
+  1,164 u with 7 jumps in 320 s. §5 asserts a **committed per-capture
+  expected-count vector** rather than a ratio band, because two independent
+  implementations of the same written specification gave 69 and 80 against that
+  60; committing a capture is refused (the vault stays local), so the fixture is
+  split -- a SYNTHETIC minimal capture this file builds carries the structural
+  behaviour and the vector is NUMBERS ONLY, keyed by stamp, and is recorded as
+  **IMPLEMENTATION-PINNED**: it is what this code does, not what the spec
+  entails. **§7 IS WHERE IT ADMITS WHAT IT CANNOT SEE:** deleting the match test
+  takes 69 to 122 (1.77x) and rotating destinations inflates it monotonically
+  (69/73/99/133 at k = 0/1/5/17), but shifting every grant by +0.35 s --
+  destroying causality outright, below the 0.490 s inter-grant median -- scores
+  **60, dead on the measured total**, so the shift null is gated per capture at
+  +3.0 s only (`195137` 8 -> 0 against a measured 8, `182652` 12 -> 5 against 13)
+  and the +0.35 s failure is PRINTED. At matched perturbation scale the file is
+  no more geometry-sensitive than cadence-sensitive -- rotate-1 +5.8% against
+  shift-(-0.35 s) +10.1%, asserted to stay inside one order of each other so the
+  manufactured asymmetry cannot come back. **§6 RUNS THE SERVER'S OWN
+  PREDICATE**, and it is the one place this file breaks its neighbours' rule:
+  `grantsim.py` imports `authsrv.py` (lazily, first use only) rather than
+  mirroring its constants out of the source text, because `_grant_verdict`'s own
+  docstring says it was made side-effect-free so an offline scorer could run the
+  decision rather than a paraphrase that agrees with it by construction.
+  `20260820T195137`'s **199** `grant_verdict` rows (all `off`) and
+  `20260820T195315`'s **154** (**152 `locally-moving` + 2 `grant`**) are
+  reproduced exactly, reason for reason, against the 199 and 2 `0x0029` those
+  captures actually put on the wire, with the replayed `keyboard_age` agreeing
+  numerically to **0.59 ms**; the NEGATIVE CONTROL replays `195315` with the flag
+  the other way round and must reproduce **nothing at all**, 0 of 154. It is
+  labelled **§6 C3 (click-arm)**, and its heading half is **§6b** -- see below.
+  Until 2026-08-21 that half was a `LEDGER.skip` naming a symbol `authsrv.py`
+  did not have; `_heading_grant_ok` landed that day, so P2 and P3 are no longer
+  scored with no rate limit at all. **§3 IS THE
+  CONSTANT NOBODY HAD DERIVED:** the match test's effective threshold is not the
+  `100.0f` the client compares against, because the comparison runs through the
+  table sqrt at `0x0046E870`, so §3 re-reads the 256-dword LUT with a stdlib PE
+  walk and scans **all 2,048,001 float patterns in [9000, 11000]** to put the
+  boundary at `9984.0f` = **99.919968 u** -- with gate 1 as the positive
+  control, the identical scan over a different 2,560,001-pattern window
+  reproducing `89600.0f` = **299.332591 u** and settling that a true separation
+  of exactly **300.0 u SNAPS**. Both module constants are then asserted against
+  their own derivations, because a constant that has drifted from the function
+  that produced it is the defect the section exists for. **§4 GATES ON THE
+  GLIDE-CONDITIONED RESIDUAL**, from the two high-grant movetap pairs only
+  (`152716` p50 20.68 u, `171153` 14.62 u, both max under 61 u against a 99.92 u
+  decision radius), because three of the five pairs are 53-83% parked and their
+  unconditioned p50 of 0.00 measures the parking, not the model -- those three
+  are reported, and their parked fractions asserted against the record.
+  **AND THE INPUT PLAN INVERTS THE OBVIOUS ONE:** the refuted-run captures carry
+  real grants and real snaps and are therefore CALIBRATION substrate, while the
+  COUNTERFACTUAL substrate is the zero-grant set -- because `20260819T182652`,
+  the capture that refuted `--client-endpoint`, yields **3.2 s and 259 u** of
+  client track before its own first teleport contaminates everything after it,
+  and because that zero-grant substrate is fast-running and click-free, which is
+  the regime where every lead candidate is least harmful and where the shipped
+  default survives by sending nothing at all. Every bracket is printed as
+  `[match ON, match OFF]` and never as one arm, which replaces the drafted "skip
+  the match test when chord p90 exceeds the radius" rule that fires on 4 of 4
+  counterfactual and 7 of 11 calibration captures. **AND A MUTATION AUDIT PUT
+  FOUR MORE CHECKS IN**, each pinning something that had been printed rather
+  than asserted: §1(b)'s arrival tick now runs a SECOND leg of 150 u
+  (520.833 ms, so trunc 520 against round 521) with both expectations
+  HARD-CODED, because the old one recomputed `int(200000 / GS.COPY_SPEED)` --
+  the same expression and the same constant it was checking, which left
+  `COPY_RATE = 0.9` green; §2 pins the LEAD SPINE at 0 / 85.919968 / 766 u from
+  what each policy GRANTS, because handing P2 the 766 u lead used to pass all 57
+  checks while §9 printed "the match distance is 0 by IDENTITY" beside it; §3
+  asserts that NO pattern's table sqrt lands exactly on either cut below its
+  boundary (0 and 0, over the 2,048,001- and 2,560,001-pattern windows), which
+  is the fact -- not a theorem -- that lets one `> cut` scan serve gate
+  1's `> 300.0f` and the match test's strict `< 100.0`; and §5(d) pins the 2.0 s
+  ACTIVE-TIME threshold against `movesync.FREE_SILENCE`, 5.27x apart on
+  `20260820T182554`. §9's M1 bound moved from `2 * HISTORY_WINDOW` to
+  `HISTORY_WINDOW`, since `lag_age` cannot legitimately exceed it and the factor
+  of 2 was exactly the room its `lo` bound could be deleted in (4.55 s -> 7.42 s,
+  still green). **§6b IS C3's HEADING ARM AND IT REPLACED A SKIP** on
+  2026-08-21, the day `authsrv._heading_grant_ok` landed with REALFIX-P2's
+  `--zero-lead`: `lead_policy` now imports and applies the SHIPPED rate limit
+  instead of scoring P2 and P3 with none, and §6b drives BOTH arms of that
+  predicate -- refused a microsecond under `GRANT_MIN_INTERVAL`, allowed at
+  exactly it, allowed with nothing on record -- against hand-computed
+  expectations, asserts the two arms' reason vocabularies are DISJOINT, and
+  pins the policy end to end on the synthetic stream: **six moving headings
+  0.25 s apart yield three grants** at `t = 0.00 / 0.50 / 1.00`, with the three
+  refused ones producing no later grant, which is what "dropped, not held" means
+  on the wire. **Its NEGATIVE CONTROL is a control now, and what stood there was
+  not**: it compared the stream's six moving headings against those three grants,
+  both of which the check immediately above already pinned, so it could not fail
+  independently -- it added one to the floor and refuted nothing. The verdict
+  hook is now rebound to always fire and the same stream must grant all six.
+  **Beside it sits the check that keeps C3 honest on its own stated ground:
+  the POLICY must RUN the shipped predicate, not merely import it.** Replacing
+  `lead_policy`'s `heading_verdict(...)` call with an inline
+  `fired = _since is None or _since >= 0.5` left this file green at 66 of 66 --
+  the paraphrase-that-agrees-by-construction C3 exists to rule out, invisible --
+  so the server's own `GRANT_MIN_INTERVAL` is perturbed (set and restored) and
+  the policy's grant instants must follow it, from `[0.0, 0.5, 1.0]` to
+  `[0.0, 1.0]`. A hard-coded 0.5 cannot. **And `replay_verdicts`'s heading-row
+  filter is DRIVEN** against a hand-built capture carrying one `arm="zero-lead"`
+  row, one bare `heading-rate` row and one ordinary click row as the positive
+  control; both skip paths are exercised separately because the `arm` field is
+  newer than the reasons and a filter keyed on either alone would miss the other.
+  Deleting all three of those lines used to change nothing, since no capture in
+  any vault has such a row. **It is deliberately NOT a message-level
+  replay**: no capture in any vault holds a heading-arm `grant_verdict` row, the
+  flag having never been run, and the banner says so -- **the first REALFIX-L1
+  capture upgrades §6b onto the same footing as §6's 195137/195315 gate**, and
+  `replay_verdicts` skips heading rows so that capture cannot silently
+  redden the click arm when it arrives. §2's lead spine was RE-PINNED in the same
+  commit, **6 grants per policy -> 3**, and its pairing fixed with it: the old
+  form zipped grants against reports positionally, which is right only while
+  every report grants, so keying on the report's own `t` is right under any rate
+  limit. **The claim that the old form stayed silently green at 72.0 u is
+  WITHDRAWN** -- measured both ways, the positional zip yields
+  `[0.0, 72.0, 144.0]` for P2 against a required `[0.0]`, so it goes RED. The fix
+  is right; the near-miss it was said to have caught never happened, and an
+  invented blind spot is worth less than none. Floors **26** bare (§1's ten
+  structural asserts, §2's nine refusals and §6b's seven predicate checks build
+  their own fixtures and read neither vault nor client), RAISED to **68** once the fixture probes
+  answer, because excess over a floor is not an error and a bare floor protected
+  none of the checks only a full machine runs -- deleting C2(a)'s three
+  structural zeros on a vaulted machine used to print ALL CHECKS PASSED and now
+  names the shortfall. Both figures are re-measured from green runs of their own
+  configuration, never 19+5 in anybody's head. §3-§9 declare seven
+  `LEDGER.skip`s without the fixtures and there is no longer an always-on
+  eighth. Reads only; sends nothing, writes nothing, and **does** import
+  `authsrv.py` -- deliberately, see §6. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
@@ -4034,6 +4259,68 @@ Every one of these, in the order they were written:
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
+  `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — R4b's other half, where
+  `effects.py` models what a cast puts ON somebody and `pools.py` models what it
+  takes. Until 2026-08-20 this server took nothing: two harness runs that day pressed
+  eight skills including Flare (5 energy in retail) and the player's orb sat flat at
+  25, because nothing here had ever sent a property 62. **§2 is the section that
+  carries the module and it has NO FREE PARAMETER**, the same shape `test_effects`
+  §2 established. Energy has no opcode of its own — it rides the generic property
+  channel — and the whole model is one quantum: **`rate = f32(0.33) * pips / max`**,
+  which reproduces **all five** of retail's distinct property-43 values BIT-EXACTLY
+  while the nominal rule every source states, one third of a point of energy per
+  second, reproduces **zero** of five. §1 is that discriminating negative, and it
+  also pins that the constant is a `float` and not a `double`: `f32(0.33*p/m)` from
+  the double gets 2 of 5, rounding 0.33 to f32 FIRST gets 5 of 5. **The check with no
+  free parameter is the pips**: join each of the 52 property-43 events to that
+  agent's own property-41 maximum (52 of 52 join, none orphaned) and solve — every
+  one lands on an INTEGER, and on the integers GWW's armour table predicts (base 20
+  energy / 2 pips; Ranger +1/+5, casters +2/+10). A wrong constant has no reason to
+  produce integers at all. §2 also predicts all 45 property-62 spends from the
+  client's own energy-cost column; crosses every activation in the corpus against
+  them into a **2×2 with TWO EMPTY CELLS** — the observing player's own agent spends
+  on 45 of 45 paid casts and 0 of 44 free ones, and **722 casts by other agents, 579
+  of them paid, carry not one spend**, which is what makes "property 62 is the own
+  agent's and nobody else's" a rule rather than a tendency; and confirms **property
+  33 — an absolute "your energy is now N" — appears 0 times in 13,378 property
+  messages** while the positive control finds 97 and 52 of its neighbours in the same
+  scan, so the client INTEGRATES energy itself and a server that sends no deltas
+  leaves the orb flat. §§3–4 are the two pools as state machines: the death penalty
+  re-sends the SAME pips over the NEW denominator (0.0528 → 0.06, OBSERVED n=1),
+  a zero-cost cast returns None rather than 0.0 so a `-0.0` cannot reach the wire,
+  and adrenaline is WIKI throughout (25 units per weapon hit; 1 unit per 1% of max
+  health lost, FLOORED, with zero damage granting nothing **and not counting as
+  combat** — a control proves a real gain at the same instant DOES refresh the
+  25-second clock). **Costs are RAW UNITS and not the number on the icon**: Battle
+  Rage is 80 raw displayed as 4, and GWW's own Notes say it *"exactly requires 80
+  units of adrenaline (3 strikes and 5 units)"* — four strikes would be wrong by a
+  whole hit. **§§5–10 are the GLUE**, driving `authsrv.py` through a fake `send`.
+  §5 does not test new code at all and is the one to read first: it asserts that
+  `agents.PLAYER_FLOAT_43` — the 0.0396 shipped since it was copied out of
+  gw-preservation with *"purpose unknown upstream too"* beside it — **IS**
+  `wire_regen_rate(3, 25)` bit for bit, three pips over the 25-energy pool the same
+  spawn burst already declares. The magic number was a measurement. §6 presses Flare
+  and requires exactly one property 62 at f32(-0.2) on `0x00A2`; §6b requires an
+  unaffordable press to produce **not one message** and no pending cast (the refusal
+  SHAPE is RECONSTRUCTION — retail's answer is unobserved and the client may swallow
+  it locally — but a half-refusal is wrong under every reading); §6c pins the free
+  cast sending nothing; §6d proves `--no-energy` is a real control and that the
+  default is ON. §7 charges Sever Artery with four landed swings **through
+  `hit_enemy`**, spends it, and requires every other pool down exactly one strike —
+  paid at USE, "whether or not the skill is interrupted or fails", the opposite of
+  the energy spend. §8 is the death batch (property 43 → 0.0) and the resurrect batch
+  (52 = 1.0 and 43 back to the rate) with a PREDICTION on record: the orb sticks at 0
+  after a revive today, and must refill once these go out. §9 pins the glyph hook AND
+  the row it is waiting on — skill 200 is the only content row labelled `Energy` and
+  its amount is **refused**, because the client gives it 10→18 with the scale bit
+  CLEAR and `resolve_duration` already sets the precedent that bit-clear DIFFERING
+  endpoints have zero witnesses; the discount, the two charges and the closing
+  `0x0044` are then exercised against a stubbed amount, with an ATTACK skill at the
+  same cost as the control. §10 is the enemy's gate, which rate-limits the
+  heal-spam PLAN.md §8 item 4 names without touching the round robin, and requires
+  **no property 62 for it** — 0 of 722. Needs `vault/captures/live/` for §2, declared
+  as a skip; needs the client-table content overlay for §§5–10, which is NOT
+  skippable and should go red without it; floor 82 of a 98-check green run),
   `toolkit/authsrv/test_chatdefs.py` (the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
