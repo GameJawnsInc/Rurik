@@ -694,10 +694,17 @@ one edge of it."""
 # The three SHALLOW ones are copies of sculpt_watcher/hostile/farside and are
 # the within-arm control: they must place in BOTH arms.
 
+# AGENT IDS 40..45, NOT 30..35. The first version of this block used 30 and the
+# server refused the whole area at start-up: `agent_id 30 ... which the party
+# side reserves (player 1, henchman 30, heroes 200..206)`. That guard is
+# `area_population`'s set validation, which RAISES rather than filters -- so the
+# run cost two launches and produced no evidence at all, which is the correct
+# outcome and is why the guard is there. Definitions are reserved too (henchman
+# 9, heroes 10..16); 5 is clear of both.
 [spawn.f0_watcher]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 30
+agent_id = 40
 definition = 5
 max_health = 100
 x = 2934.0
@@ -716,7 +723,7 @@ place anything at all."""
 [spawn.f0_hostile]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 31
+agent_id = 41
 definition = 5
 max_health = 100
 x = 2618.6
@@ -733,7 +740,7 @@ part of the within-arm control trio."""
 [spawn.f0_farside]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 32
+agent_id = 42
 definition = 5
 max_health = 100
 x = 2595.5
@@ -750,7 +757,7 @@ part of the within-arm control trio."""
 [spawn.f0_deep_shallows]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 33
+agent_id = 43
 definition = 5
 max_health = 100
 x = 43.5
@@ -770,7 +777,7 @@ nothing; this one is here to fail on one arm and succeed on the other."""
 [spawn.f0_deep_hollow]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 34
+agent_id = 44
 definition = 5
 max_health = 100
 x = 379.5
@@ -787,7 +794,7 @@ bit 0 clear; 1,053 units from the nearest flags-0 ground."""
 [spawn.f0_deep_farside]
 area = "sculpt_flags0"
 npc = "hatcher"
-agent_id = 35
+agent_id = 45
 definition = 5
 max_health = 100
 x = 55.8

@@ -1769,8 +1769,22 @@ VisData or Collision chunk in either arm, so no differential over our artifacts
 can see those branches. Runtime effects that are not persisted are invisible to
 a file diff. Traversal onto the ground from dry land was not tested. The server
 cannot see the bit at all (`map_flags`: zero occurrences under
-`toolkit/authsrv/`). `studies/worldmaps/FINDINGS.md` W13/W14,
-`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`.
+`toolkit/authsrv/`).
+
+**WORLDMAPS-W15 then put BODIES on that ground, the same day.** Placing a body
+is a separate gate from meshing the ground -- `place_on_mesh` re-checks every
+spawn and refuses one it cannot find ground for -- and every placement this
+project had made stood on ground the client would have meshed either way. Two
+arms, one bit apart, same session: `sculpt` at flags 1 placed **6 of 6** with
+zero refusals, the three deep bodies landing at EXACTLY (56,6006), (380,652) and
+(44,2764) with no nudge; `sculpt_flags0` placed **3 of 6** and refused exactly
+those three, each *"not on the navmesh and nothing within 480 units is either"*
+against offline margins of 1,207 / 1,053 / 1,765 units. The three shallow rows
+placed in BOTH arms including an identical 96-unit nudge, which is the
+within-arm control that had authority to void the whole thing. First populated
+`--serve` in the arc. **Authored population works on ground that exists only
+because of one bit.** `studies/worldmaps/FINDINGS.md` W13/W14 and W15,
+`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`, `...-W15-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
