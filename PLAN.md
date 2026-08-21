@@ -1482,8 +1482,21 @@ UNMAPPED message).
    outside the disassembly for the first time. It also retires §25's guess that
    slot darkening might be an affordability grey: the darkening is the empty
    state of a ring that only exists where the ring is drawn.
+   **AND THE BLINK WARNING** (E9, run `20260821T141806`,
+   [§31](studies/skills/FINDINGS.md)) — raised by the owner from GWW
+   (*"partially filled skills will begin blinking"*), a behaviour §§25–30 never
+   tested. **We were already producing it and no server change was needed:**
+   `0x00CF`'s handler fires UI event `0x10000058` carrying the `.rdata` float
+   at `0x009495B4`, MEASURED `0000c841` = **25.0**, the timeout itself, and
+   `GmCtlSkImage:1483` calls it *"the adrenaline timer on a skill image"*. The
+   countdown is CLIENT-side. Measured at ~1 s frames: the PARTIAL ring
+   oscillates (9 direction changes, dipping to exactly its ring-gone
+   luminance and back — the fill goes fully off, not dim) while both CAPPED
+   rings stay rock-flat until the wipe and the non-adrenal controls have a
+   range of **zero**. So only partially filled skills warn, which is GWW's
+   sentence read strictly. Corroborated by the owner watching it live.
    **This channel is now closed on the screen side** — charge, spend,
-   cross-pool tax, wipe and map gate all observed. What remains static-only is
+   cross-pool tax, wipe, map gate and the blink warning all observed. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
 2. **What answers a refused press.** Ours is silence and the client visibly
