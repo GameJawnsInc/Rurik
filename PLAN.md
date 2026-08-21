@@ -1359,22 +1359,37 @@ where 32×32 was the old ceiling. `--stored-install` is the byte-identical
 control arm. **WORLDMAPS-W3 landed** — `created = true` map rows make
 `--install` ALLOCATE a brand-new two-row chain via datalloc instead of
 displacing rows 71496/71497; `[map.166]`/`[area.frontier]` are the first area
-that takes nobody's row. Both skeptic-verified; floors test_deploy 35→92,
+that takes nobody's row. Both skeptic-verified; floors test_deploy 35→112,
 test_content 39→40, test_contentids 19→20.
 
-**WORLDMAPS-W2 RAN GREEN 2026-08-20** (agent-driven, owner's go-ahead; the
-verdicts are mechanical): the client's re-bloat compiler read the partner WE
-compressed and built the identical map — readback line-for-line equal to the
-stored control, partner untouched at 1,316 B comp 8, navmesh served both
-arms. `vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS. **WORLDMAPS-W4 RAN
-GREEN the same day**: the client resolved a chain born under an id nothing had
-ever bound (0x5F0B0), logged the re-bloat line naming it, compiled our terrain
-from the created compression-8 partner (64 trapezoids, readback 6/6 including
-the owed spawn-in-one-trapezoid check), left the partner byte-untouched and
-kept the registration through Flush — FINDINGS 36 item 4 closed, A9's witness
-extended from READ to COMPILED, displacement retired. The throwaway was
-delta-captured (PROVEN, 24,736 B for 4.2 GB — datdelta's first real customer)
-and deleted. `vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS.
+**WORLDMAPS-W2 RAN 2026-08-20 and is GREEN** —
+`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` RESULTS. The retail client's
+re-bloat compiler READ the partner we compressed and built the identical map
+(3,941 B → 1,316 B comp 8, replace in place; readback identical to the stored
+arm line for line). The last place an authored map deviated from retail's own
+shape is closed. Its **two flagged follow-ups are both closed** (`ec5f426`,
+[studies/customarea §61](studies/customarea/FINDINGS.md)): `serve_run` scored
+the server's legitimate no-rows line as a serve FAILURE and now returns a third
+verdict, `SERVED-UNPOPULATED`, with the navmesh half still load-bearing (an
+empty area may downgrade a PASS, never lift a FAILED) and a second reader that
+refuses when our content and the server disagree about what lives in an area —
+test_deploy floor 92→112, twenty checks, eight sabotages. And the suspected
+content drift **did not happen**: plaza has never had a spawn row in any commit,
+and FINDINGS 56's "5 of 5" is its PROPS readback, not bodies.
+
+**WORLDMAPS-W4 RAN 2026-08-20 and is GREEN too** —
+`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS. The client resolved a
+map chain born under an id nothing had ever bound (0x5F0B0), logged the re-bloat
+line naming it, compiled our terrain from the created compression-8 partner (64
+trapezoids, readback 6/6 including the owed spawn-in-one-trapezoid check), left
+the partner byte-untouched and kept the registration through Flush — FINDINGS 36
+item 4 closed, A9's witness extended from READ to COMPILED, and displacement
+retired: the next authored area need not take rows 71496/71497 hostage. The
+throwaway was delta-captured (PROVEN, 24,736 B for 4.2 GB — datdelta's first
+real customer) and deleted. Two sheet lessons recorded: a fresh run directory
+needs its own firewall cage (fail-closed refusal worked as designed), and the
+launch stages were split to keep the compile run's Gw.log from the serve
+sessions.
 Known deliberate gap: a compressed install SHRINKS the row, so small→large
 iteration relocates until `grow_to` is wired into the map path — its own
 change, costed separately.
@@ -1996,6 +2011,10 @@ node counts.
 "unwritable" wall (row 11196, 1,029,564 B in a 1,029,632 B reservation) — is the human male player
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
+
+### Movement — THE WARP IS REPRODUCIBLE ON DEMAND, and suppressing our own grants removes ~90% of it (2026-08-20, round 4)
+
+**Hold S and spam-click forward** — 45 seconds, and the arc finally has a trigger. Holding a key keeps `0x003D` flowing, which defeats the click arm's staleness guard, so every click is granted (196 clicks → 140 grants → 5 hard jumps). The control is as cheap: **click and THEN keyboard**, and the guard refuses every click (2.1 s is already too stale), no grant goes out, the desync test is never evaluated, and there are **zero warps** — twice. Keyboard-only walking is healthy at **283–287 u/s with 0.00 jumps**, which REFUTES the working report that holding W gives ~1 s of movement. **`--grant-suppress`** (new, off by default) refuses the click grant while the player keyboards: measured A/B, same operator, 100 s apart, **199 grants → 2, 11.49 → 1.39 hard rows/min, 9,687 → 903 u/min displacement** (8.3× and 10.7×), beating its pre-registered 3.1×. ⚠ **A palliative, not the fix**: retail grants continuously while keyboarding (88.5% of 2,855 live grants answer a `0x003D`) and does not warp, because its destination is the client's own endpoint — we stopped warping by going quiet, at the cost of an authoritative position that aggro/interact/clip still read. ⚠ **The timing evidence is REFUTED** (grant density; rotation control 2.39/5, Fisher p = 0.64); what carries it is the landing geometry (p = 3.0e-5), the reporting-controlled 2×2 (P = 3.4e-10) and the decode. **Next: grant the client's OWN endpoint, short and always refreshed** — FINDINGS' candidate #1, still unbuilt, and the only shape that prevents rather than shrinks. See `studies/movement/FINDINGS.md` §"round 4".
 
 ### Movement — the OTHER two callers are decoded, and gate 2 is knowledge not a lever (2026-08-20, round 3)
 
