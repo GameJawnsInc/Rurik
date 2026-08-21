@@ -164,6 +164,43 @@ strength of this — the same reasoning that already named property 44
 (health regen, `2 hp/s` per pip; the tape carries `0.01667f × 120 = 2.0` on
 party members in this very window).
 
+**Two points is a reading, not a law, so the whole corpus was asked the sharper
+question** (`moralescan.py --pips`): join every property-43 sighting to that
+agent's own property-41 maximum, and ask whether the value is bit-exactly
+`f32(f32(q) · pips / max)` for an INTEGER pip count. 47 sightings join, 7
+distinct `(max, value)` pairs:
+
+| max | value | bits | n | 0.33 | 1/3 |
+|---|---|---|---|---|---|
+| 20 | 0.033 | `0x3D072B02` | 26 | **2 pips, exact** | no fit |
+| 22 | 0.06 | `0x3D75C290` | 1 | **4 pips, exact** | no fit |
+| 25 | 0.0396 | `0x3D22339C` | 4 | **3 pips, exact** | no fit |
+| 25 | 0.0528 | `0x3D5844D1` | 10 | **4 pips, exact** | no fit |
+| 30 | 0.044 | `0x3D343959` | 4 | **4 pips, exact** | no fit |
+| 22, 25 | 0.0 | `0x00000000` | 2 | 0 pips | 0 pips |
+
+**Five of five non-zero values are exact at 0.33 and none fits 1/3**, on the
+bits rather than on a tolerance, with the pip count constrained to a whole
+number. The two zeroes are the death tick suspending regeneration.
+
+**And the pip counts are the wiki's own table, read back off the wire.** GWW
+("Energy" §Basic armor) gives 20 energy / 2 pips for a Warrior, 25 / 3 for a
+Ranger, 25 / 4 for an Assassin or Dervish, 30 / 4 for the casters — which is
+exactly the four non-zero rows above, including both 25-energy variants. Three
+sources with no shared ancestry agree: the death tick's invariance, the corpus
+join, and a table players wrote down.
+
+> **CORROBORATED from a second arc, independently.** The energy/adrenaline
+> session (worktree `friendly-chatelet-c2b4dc`) reached `0.33` from a different
+> direction — a fit across the corpus plus a 52-of-52 integer-pips join against
+> each agent's prop-41 — and reports client-render confirmation: their server
+> sends property-62 debits, the client's energy readout tracks the server's
+> integration to `floor()` across 15 frames, climbs at exactly the property-43
+> rate, and draws **three regeneration arrows** for a 3-pip rate. That is
+> UPSTREAM-of-a-peer until their branch lands (`studies/skills` §23,
+> `test_pools`); what is checked HERE is the table above, which this repo can
+> re-run.
+
 ### 2.4 Two stores, one number — MEASURED in the client's own memory
 
 `0x009C` and `0x00EE` do not write the same place, and until 2026-08-20 that was

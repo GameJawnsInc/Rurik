@@ -385,7 +385,15 @@ UPDATE 2026-08-20 -- MEASURED, and the guess was right. Property 43 is energy
 regeneration as a FRACTION OF MAXIMUM ENERGY PER SECOND, read off the one death in
 the live corpus: the same character carried 0.0528f at 25 max energy and 0.0600f at
 22, and 0.0528 x 25 = 0.0600 x 22 = 1.32 energy/s exactly -- the pool shrank under a
-death penalty and the absolute rate did not move. GWW ("Energy", "Regeneration and
+death penalty and the absolute rate did not move.
+
+AND THIS ROW'S OWN NUMBER IS IN THE CORPUS. `moralescan.py --pips` joins every
+property-43 sighting to its agent's property-41 maximum: 0.0396 at a 25 maximum
+appears 4 times on ArenaNet's own wire, bit-exact, and is 3 pips at 0.33 -- a
+Ranger's, per GWW's basic-armor table. So the value gw-preservation shipped and
+nobody upstream could explain is retail's, and the source line above understates
+what backs it. The row keeps `source = "gw-preservation"` because that is where WE
+got it; the corroboration is recorded here rather than by rewriting history. GWW ("Energy", "Regeneration and
 degeneration") gives one pip as 1 energy per 3 seconds, so 1.32/s is four pips at
 0.33 each, and THIS row's 0.0396 is 3 x 0.33 / 25: three pips on a 25-energy
 character. Nobody upstream knew what it was; it was never mysterious, only

@@ -47,6 +47,13 @@ PLAYER_ATTR_SET = 0x00E9        # 15 dwords, field 10 = morale, absolute
 AGENT_MORALE = 0x009C           # [agent_id, percent] -- per AGENT, absolute
 PROP_INT = 0x009F               # [prop, agent, value]  41 = energy, 42 = health
 PROP_FLOAT = 0x00A2             # [prop, agent, f32]    43 = energy regen
+PROP_FLOAT_TARGET = 0x00A3      # the same properties, three-field form
+PROP_ENERGY_MAX = 41
+PROP_ENERGY_REGEN = 43
+# GWW ("Energy", Regeneration and degeneration) calls a pip "1 Energy every 3
+# seconds". The game's own constant is not 1/3 but 0.33 -- see `--pips`.
+PIP_NOMINAL = 1.0 / 3.0
+PIP_MEASURED = 0.33
 PLAYER_INFO = 0x0059            # field 2 is the receiving player's own agent id
 ATTR_MORALE = 10
 MORALE_BASELINE = 100
@@ -151,8 +158,87 @@ def death_window(codec_obj, row, before=1.0, after=12.0):
     return out
 
 
+def pip_join(codec_obj):
+    """Every prop-43 value in the corpus, joined to that agent's prop-41 maximum.
+
+    THE CHECK THIS SUPPORTS. `studies/morale/FINDINGS.md` 2.3 reads property 43
+    as energy regeneration expressed as a FRACTION OF MAXIMUM ENERGY PER SECOND,
+    from one death tick where the pool shrank 25 -> 22 and the absolute rate did
+    not move (0.0528f x 25 == 0.0600f x 22 == 1.32/s). Two points is a reading,
+    not a law, so this asks the whole corpus the sharper question: is every
+    sighting bit-exactly `f32(f32(q) * pips / max)` for an INTEGER pip count --
+    and for which q?
+
+    A fit has nowhere to hide. `pips` must be a whole number, the comparison is
+    on the f32 BITS rather than a tolerance, and the rival hypothesis (the
+    wiki's nominal 1/3) is scored on the same data in the same pass.
+    """
+    per_max = {}
+    for cap in live_captures():
+        stamp = os.path.basename(cap)
+        try:
+            conns = tape.chain(cap)
+        except Exception:                              # noqa: BLE001
+            continue
+        for conn in conns:
+            try:
+                _meta, events = tape.load_tape(cap, conn)
+                msgs, _receipt = tape.decode_all(events, codec_obj, "GAME_SMSG")
+            except Exception:                          # noqa: BLE001
+                continue
+            emax = {}
+            for _t, op, vals in msgs:
+                v = vals[1:]
+                if op == PROP_INT and int(v[0]) == PROP_ENERGY_MAX:
+                    emax[int(v[1])] = int(v[2])
+                elif (op in (PROP_FLOAT, PROP_FLOAT_TARGET)
+                      and int(v[0]) == PROP_ENERGY_REGEN):
+                    agent = int(v[1])
+                    if emax.get(agent):
+                        per_max.setdefault((emax[agent], f32(v[-1])),
+                                           []).append((stamp, agent))
+    return per_max
+
+
+def pip_fit(value, pool, quantum, max_pips=20):
+    """The integer pip count that reproduces `value` bit-for-bit, or None."""
+    want = struct.unpack("<I", struct.pack("<f", value))[0]
+    for pips in range(0, max_pips + 1):
+        got = struct.unpack("<f", struct.pack(
+            "<f", struct.unpack("<f", struct.pack("<f", quantum))[0]
+            * pips / pool))[0]
+        if struct.unpack("<I", struct.pack("<f", got))[0] == want:
+            return pips
+    return None
+
+
+def report_pips(codec_obj):
+    per_max = pip_join(codec_obj)
+    print(f"{sum(len(v) for v in per_max.values())} prop-43 sighting(s) joined "
+          f"to a prop-41 maximum; {len(per_max)} distinct (max, value) pair(s)")
+    score = {"0.33": 0, "1/3": 0}
+    for (pool, value), seen in sorted(per_max.items()):
+        bits = struct.unpack("<I", struct.pack("<f", value))[0]
+        cells = []
+        for name, q in (("0.33", PIP_MEASURED), ("1/3", PIP_NOMINAL)):
+            pips = pip_fit(value, pool, q)
+            score[name] += 1 if pips is not None else 0
+            cells.append(f"{name}: "
+                         + (f"{pips} pip(s) EXACT" if pips is not None
+                            else "no fit"))
+        print(f"  max {pool:3d}  value {value:.8g}  bits 0x{bits:08X}  "
+              f"n={len(seen):2d}   " + "   ".join(cells))
+    print(f"\n  0.33 fits {score['0.33']} of {len(per_max)}; "
+          f"1/3 fits {score['1/3']} of {len(per_max)}")
+    print("  (a zero value is 0 pips -- regeneration is suspended while dead, "
+          "which is the death tick's own 0x00A2 [43, agent, 0.0f])")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--pips", action="store_true",
+                    help="instead of the morale census, join every prop-43 to "
+                         "its agent's prop-41 and score the pip quantum")
     ap.add_argument("--window", action="store_true",
                     help="also print every message around each non-baseline "
                          "morale event")
@@ -161,6 +247,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     codec_obj = codec.Codec(overrides=OVERRIDES)
+    if args.pips:
+        report_pips(codec_obj)
+        return 0
     rows, stats = scan(codec_obj)
     if args.json:
         print(json.dumps({"rows": rows, "stats": dict(stats)}, indent=1))
