@@ -1788,8 +1788,36 @@ VisData or Collision chunk in either arm, so no differential over our artifacts
 can see those branches. Runtime effects that are not persisted are invisible to
 a file diff. Traversal onto the ground from dry land was not tested. The server
 cannot see the bit at all (`map_flags`: zero occurrences under
-`toolkit/authsrv/`). `studies/worldmaps/FINDINGS.md` W13/W14,
-`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`.
+`toolkit/authsrv/`).
+
+**WORLDMAPS-W15 then put BODIES on that ground, the same day.** Placing a body
+is a separate gate from meshing the ground -- `place_on_mesh` re-checks every
+spawn and refuses one it cannot find ground for -- and every placement this
+project had made stood on ground the client would have meshed either way. Two
+arms, one bit apart, same session: `sculpt` at flags 1 placed **6 of 6** with
+zero refusals, the three deep bodies landing at EXACTLY (56,6006), (380,652) and
+(44,2764) with no nudge; `sculpt_flags0` placed **3 of 6** and refused exactly
+those three, each *"not on the navmesh and nothing within 480 units is either"*
+against offline margins of 1,207 / 1,053 / 1,765 units. The three shallow rows
+placed in BOTH arms including an identical 96-unit nudge, which is the
+within-arm control that had authority to void the whole thing. First populated
+`--serve` in the arc. **Authored population works on ground that exists only
+because of one bit.**
+
+**WORLDMAPS-W16 CLOSED THE LAST RESIDUAL: the ground is WALKED.** Two arms, the
+same walk plan and the same start (1536, 1536), so no camera calibration enters
+the comparison. At flags 1 the character walked **1,536 units to x = 0**, the far
+edge of the rect, crossing the flags-0 wall by 1,248 units. At flags 0 it walked
+288 units and halted at **x = 1248.0** -- exactly where our offline decode of the
+client's own compiled mesh says the ground ends. A no-free-parameter prediction
+landing ON THE UNIT: the client's collision and our decoder agree about where the
+world stops.
+
+**The arc's chain is now complete** -- the ground is meshed (W12), the spawn
+stands on it (W13), bit 0 touches only the Path chunk (W14), bodies are placed on
+it (W15), and a character walks out onto it (W16). `studies/worldmaps/FINDINGS.md`
+W13/W14, W15 and W16, `vault/research/worldmaps/WORLDMAPS-W13-RUN.md`,
+`...-W15-RUN.md`, `...-W16-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
