@@ -1555,8 +1555,18 @@ against sculpt's 10,714, a 720 B difference closing to the byte as 639 + 65 +
 two chunk headers) and the instrument was shown to detect the cut (arm A
 reproduces W7's witness). Also settled in passing: a map with NO environment
 chunk compiles and serves. What survives: a compiler depth bound, or the
-borrowed 34-byte Zones chunk -- the cheaper next test, and the one thing no
-authored area has ever varied.
+borrowed 34-byte Zones chunk. **WORLDMAPS-W9 then found the Zones swap is
+IMPOSSIBLE, which is itself the finding**: a foreign zone table breaks the map
+compiler -- Coastal Gate's 15,870 B table CRASHED the client (c0000005, write to
+0x1acff000) and Sparring Basics' 2,030 B one HUNG it at Loading 100% (98% of a
+core, 1.19 GB flat), both at the same log line, inside the re-bloat compile,
+with the server already through INSTANCE_LOAD_FINISH and the archive undamaged
+either time. So the compile path CONSUMES Zones (where deleting environment
+changed not one byte) and a zone table is COUPLED to its map -- coupling not
+identified. No mesh was produced, so the depth cut is untouched by it, and the
+next rung must author a MODIFIED version of our own 34-byte table rather than
+borrow one, which needs that layout read first. A depth bound in the compiler
+is now the only reading no experiment has contradicted.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
