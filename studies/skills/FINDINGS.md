@@ -2795,14 +2795,35 @@ sits *lower* than both. A display keyed to strikes rather than to raw units
 could not produce that, and it is the on-screen counterpart of §26.8's census
 finding that 151 skills carry costs that are not multiples of 25.
 
-**HONEST LIMIT, and it is a real one.** Slots 2 and 4 have the *same* cost and
-should therefore show the *same* fill; they read 55.6% and 48.1%. The likeliest
-reading is animation phase — slot 4's boundary is diffuse where slot 2's is
-sharp (six partial rows against two), which is what a fill still in motion looks
-like. But that is a READING of one frame, not a measurement: the run sampled
-every ~5 s against a 1.75 s attack speed, so it never caught two clean
-intermediate states of the same slot. **A denser sample settles it**, and until
-one exists "the two 80-unit skills agree" is UNVERIFIED rather than confirmed.
+**HONEST LIMIT — and it was mostly the METRIC, not the client. Re-measured
+2026-08-21 after §29.4.** As first written this paragraph read: *"Slots 2 and 4
+have the same cost and should therefore show the same fill; they read 55.6% and
+48.1%. The likeliest reading is animation phase… until [a denser sample] exists
+'the two 80-unit skills agree' is UNVERIFIED rather than confirmed."*
+
+That 7.5-point gap came from the rows-over-30%-of-width statistic, which §29.4
+showed is sensitive to the icon art *underneath* the fill. Re-measured with the
+art-independent boundary criterion the whole series settled on, the same eight
+frames give:
+
+| frame | slot 2 (80) | slot 3 (120) | slot 4 (80) |
+|---|---|---|---|
+| w001 | 0.0% | 0.0% | 0.0% |
+| **w002** | **21.2%** | 15.4% | **25.0%** |
+| w003–w008 | 100.0% | 100.0% | 100.0% |
+
+**The two 80-unit skills agree exactly in seven of the eight frames**, and in
+the single mid-charge frame they differ by 3.8 points — about two rows of 52,
+down from 7.5. **And the ORDER FLIPS**: the old statistic put slot 2 above slot
+4, this one puts slot 4 above slot 2. A difference whose *sign* depends on the
+statistic is a property of the measurement, not of the client.
+
+What honestly remains is much smaller than the original caveat: a ~2-row
+difference in one frame, which animation phase would explain and which the
+metric's own boundary sensitivity would also explain, with nothing here able to
+separate them. The claim "the two 80-unit skills agree" is CONFIRMED in seven
+frames and unresolved at the two-row level in one — not the open question this
+paragraph used to describe.
 
 ### 27.5 What E5 did NOT reach
 
