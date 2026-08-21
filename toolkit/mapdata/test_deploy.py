@@ -77,14 +77,15 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 92, MEASURED from a green run 2026-08-20 (sections 0,1,3,4,5,6,7,8
-# score 88 and need no vault -- measured with RURIK_VAULT pointed at an empty
+# FLOOR: 112, MEASURED from a green run 2026-08-20 (sections 0,1,3,4,5,6,6b,7,8
+# score 108 and need no vault -- measured with RURIK_VAULT pointed at an empty
 # directory; section 2 reads the archive for the borrowed halves, which is the
-# provenance rule rather than a convenience, and the floor sitting ABOVE 88 is
-# what turns a vault-less run into the FAIL it is). Was 84 before section 8's
-# dry-run and spill checks, 56 before section 8 and the create branch, 35 before
-# section 7 and the compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=92)
+# provenance rule rather than a convenience, and the floor sitting ABOVE 108 is
+# what turns a vault-less run into the FAIL it is). Was 92 before section 6b's
+# serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
+# before section 8 and the create branch, 35 before section 7 and the
+# compression checks, 25 before section 6.
+LEDGER = checks.Ledger("test_deploy", floor=112)
 check = checks.adopt(LEDGER)
 
 
@@ -334,6 +335,242 @@ def section6():
         "and ArenaNet's own 27-trapezoid map 143 parses too, so the check is "
         "the COMPARISON and not the pattern -- 27 is what the server actually "
         "logged on 43 runs while the client drew ours")
+
+    section6_population()
+
+
+# The two lines `spawn_population` can legitimately end on, verbatim as the
+# server prints them. OURS, not ArenaNet's -- `authsrv.py` is in this repo and
+# section6_population reconstructs both from its syntax tree rather than
+# trusting these copies.
+PLACED_LINE = "[c1] area 'sculpt': 3 of 3 placed"
+EMPTY_LINE = ("[c1] area 'plaza': no population rows; the world is the player "
+              "and the geometry")
+MESH_LINE = "[map] navmesh 0x287D3: 1 planes, 55 trapezoids"
+
+
+def render_fstring(node):
+    """An f-string's text with its placeholders filled by sample values.
+
+    So a check can ask whether a regex matches what a module ACTUALLY PRINTS
+    rather than whether it matches a copy of that line pasted into a test. The
+    copy is the thing that rots: `UNPOPULATED_RE` hard-codes eleven words of
+    another module's prose, and if somebody rewords the message the pattern
+    stops matching a line that still means the same thing -- which is precisely
+    the failure this whole section is repairing, one layer up.
+    """
+    out = []
+    for v in node.values:
+        if isinstance(v, ast.Constant):
+            out.append(v.value)
+        elif isinstance(v, ast.FormattedValue):
+            name = getattr(v.value, "id", "")
+            sample = {"conn_id": "1", "area": "plaza",
+                      "placed": "3", "total": "3"}.get(name, "?")
+            out.append(repr(sample) if v.conversion == ord("r") else sample)
+    return "".join(out)
+
+
+def find_print_fstring(fn, needle):
+    """The rendered f-string of the `print` inside `fn` whose text holds `needle`."""
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == "print"):
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.JoinedStr):
+                text = render_fstring(arg)
+                if needle in text:
+                    return text
+    return None
+
+
+class FakeServe:
+    """`serve_run` with the client taken out: a canned gamesrv log, nothing launched.
+
+    `serve_run`'s decision is the part that was wrong, and it is pure -- read a
+    log, choose a verdict. Everything around it (launching two clients, holding
+    a map open for 45 s) is what makes it untestable, so this replaces exactly
+    that and leaves the decision alone. `launch` returns rc 0 and
+    `newest_harness_log` returns the file we just wrote.
+    """
+
+    def __init__(self, text):
+        self.text = text
+
+    def __enter__(self):
+        self.dir = tempfile.mkdtemp()
+        self.log = os.path.join(self.dir, "gamesrv.log")
+        with open(self.log, "w", encoding="utf-8") as fh:
+            fh.write(self.text)
+        self.saved = (deploy.launch, deploy.newest_harness_log)
+        deploy.launch = lambda *a, **k: 0
+        deploy.newest_harness_log = lambda after: self.log
+        return self
+
+    def __exit__(self, *exc):
+        deploy.launch, deploy.newest_harness_log = self.saved
+        return False
+
+
+def serve_verdict(text, area=None, expect_traps=55, expect_rows=None):
+    """The verdict `serve_run` reaches on a canned log."""
+    with FakeServe(text) as f:
+        return deploy.serve_run("exe", "session", "dat", 143, 0, expect_traps,
+                                area=area, expect_rows=expect_rows)[0]
+
+
+def section6_population():
+    """An EMPTY area is a state, not a failure -- and the mesh still rules.
+
+    WHAT WENT WRONG. `PLACED_RE` matched one of `spawn_population`'s two
+    legitimate exits. The other one -- `area 'plaza': no population rows; the
+    world is the player and the geometry` -- fell through to the arm written for
+    a server that CRASHED mid-placement, so an area with nobody in it scored
+    "the server never got as far as placing bodies" and deploy exited 1.
+
+    Both arms of WORLDMAPS-W2 hit it on 2026-08-20. Each had served the mesh
+    correctly -- 55 trapezoids, the server's own count against the archive's --
+    and each was reported as a serve FAILURE. The run's finding survived only
+    because a human read the gamesrv log and overrode the transcript
+    (`vault/research/worldmaps/WORLDMAPS-W2-RUN.md`, RESULTS P6).
+
+    The repair has to hold three things apart, and the third is the one worth
+    testing: an empty area may downgrade a PASS to SERVED-UNPOPULATED, and it
+    may NEVER lift a FAILED. A mesh that disagrees with the archive is the whole
+    reason this run exists.
+    """
+    print("\n6b. an empty area is its own verdict, and the mesh still rules")
+    src = open(os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py"),
+               encoding="utf-8").read()
+    tree = ast.parse(src)
+
+    # (a) BOTH patterns against what authsrv ACTUALLY PRINTS, reconstructed from
+    # its syntax tree. A test that only checked a pasted copy would stay green
+    # through the exact drift that broke this.
+    pop = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                and n.name == "spawn_population"), None)
+    check(pop is not None, "authsrv defines spawn_population()")
+    live_empty = find_print_fstring(pop, "no population rows") if pop else None
+    check(live_empty is not None,
+          "and its no-rows print is found in the tree -- the line this whole "
+          "section is about", f"{live_empty!r}")
+    if live_empty:
+        check(deploy.UNPOPULATED_RE.findall(live_empty) == ["plaza"],
+              "UNPOPULATED_RE matches the line authsrv BUILDS, not a copy of "
+              "it pasted here -- reword the server's message and this goes red",
+              f"{live_empty!r}")
+        check(live_empty.endswith(EMPTY_LINE[len("[c1] "):]),
+              "and the copy in this file is still the same line, so the "
+              "canned logs below are testing the real thing",
+              f"{live_empty!r}")
+
+    # (b) the two patterns are DISJOINT, both directions. They share the
+    # `area 'X':` prefix, which is exactly how one swallowed the other's line.
+    check(deploy.UNPOPULATED_RE.findall(PLACED_LINE) == [],
+          "and a populated line does NOT parse as the empty one")
+    check(deploy.PLACED_RE.findall(EMPTY_LINE) == [],
+          "and the empty line does NOT parse as a populated one -- the bug was "
+          "the other half of this, and both halves are one edit apart")
+
+    # (c) the three verdicts, behaviourally, on canned logs.
+    check(serve_verdict(f"{MESH_LINE}\n{PLACED_LINE}\n", area="sculpt")
+          == deploy.SERVE_PASS,
+          "mesh MATCHES + every body placed -> PASS")
+    check(serve_verdict(f"{MESH_LINE}\n{EMPTY_LINE}\n", area="plaza")
+          == deploy.SERVE_UNPOPULATED,
+          "mesh MATCHES + the area is empty -> SERVED-UNPOPULATED, which is "
+          "neither of the other two -- this is the W2 case, and it exited 1")
+    check(serve_verdict(f"{MESH_LINE}\n", area="plaza") == deploy.SERVE_FAILED,
+          "mesh MATCHES + NEITHER line -> FAILED, because a server that threw "
+          "on the way to spawn_population prints nothing at all and that still "
+          "has to be caught")
+    check(deploy.SERVE_UNPOPULATED not in (deploy.SERVE_PASS,
+                                           deploy.SERVE_FAILED),
+          "and the three verdicts are three distinct values -- an alias would "
+          "make the new one unreadable in a transcript",
+          f"{deploy.SERVE_PASS}/{deploy.SERVE_UNPOPULATED}/{deploy.SERVE_FAILED}")
+
+    # (d) THE LOAD-BEARING HALF. The mesh is why the second run happens; an
+    # empty area must not be able to talk it into passing. Same log as the
+    # SERVED-UNPOPULATED case above, one number changed.
+    bad_mesh = "[map] navmesh 0x287D3: 1 planes, 27 trapezoids"
+    check(serve_verdict(f"{bad_mesh}\n{EMPTY_LINE}\n", area="plaza",
+                        expect_traps=55) == deploy.SERVE_FAILED,
+          "mesh DISAGREES + the area is empty -> still FAILED. An empty area "
+          "downgrades a PASS; it can never lift a FAILED, and 27 vs 55 is the "
+          "real pair -- ArenaNet's build of map 143 against ours")
+    check(serve_verdict(f"{bad_mesh}\n{PLACED_LINE}\n", area="sculpt",
+                        expect_traps=55) == deploy.SERVE_FAILED,
+          "and a full population does not rescue a wrong mesh either")
+    check(serve_verdict(f"{bad_mesh}\n", expect_traps=55)
+          == deploy.SERVE_FAILED,
+          "and with no --area at all the mesh is the entire verdict")
+
+    # (e) the SECOND READER. Without this, SERVED-UNPOPULATED is a verdict that
+    # cannot fail: the server says "nothing here", we write it down, green. The
+    # content drift W2 went looking for would read as a clean run.
+    check(serve_verdict(f"{MESH_LINE}\n{EMPTY_LINE}\n", area="plaza",
+                        expect_rows=0) == deploy.SERVE_UNPOPULATED,
+          "an empty area our content reader ALSO calls empty stays "
+          "SERVED-UNPOPULATED -- two readers, agreeing")
+    check(serve_verdict(f"{MESH_LINE}\n{EMPTY_LINE}\n", area="plaza",
+                        expect_rows=5) == deploy.SERVE_FAILED,
+          "but a server finding nothing where our content binds 5 rows is "
+          "FAILED -- that is a population that went missing, and it is the one "
+          "thing SERVED-UNPOPULATED must not be allowed to hide")
+    check(serve_verdict(f"{MESH_LINE}\n{PLACED_LINE}\n", area="sculpt",
+                        expect_rows=5) == deploy.SERVE_FAILED,
+          "and the same disagreement is caught from the populated side: 3 of 3 "
+          "placed is not a pass when our own reader binds 5")
+
+    # (f) spawn_row_count mirrors area_population's filter. It is a SECOND
+    # reader only if it reads the same predicates; a copy that drifted would be
+    # a rubber stamp with a check's name on it.
+    apop = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                 and n.name == "area_population"), None)
+    check(apop is not None, "authsrv defines area_population()")
+    if apop:
+        body = ast.dump(apop)
+        check("'area'" in body and "'enabled'" in body,
+              "and it filters on `area` and `enabled` -- the two predicates "
+              "deploy.spawn_row_count mirrors")
+    counted = deploy.spawn_row_count(
+        _FakeWorld({"a": {"area": "plaza", "enabled": True},
+                    "b": {"area": "plaza"},
+                    "c": {"area": "plaza", "enabled": False},
+                    "d": {"area": "sculpt"},
+                    "e": {}}), "plaza")
+    check(counted == 2,
+          "spawn_row_count takes rows naming the area, defaults `enabled` to "
+          "true, and drops disabled rows and other areas", f"{counted}")
+
+    # (g) and main() maps the verdicts to exit codes: ONLY FAILED returns 1.
+    # Asked of the syntax tree because the alternative is a real client run.
+    dep = open(deploy.__file__, encoding="utf-8").read()
+    main_fn = next(n for n in ast.walk(ast.parse(dep))
+                   if isinstance(n, ast.FunctionDef) and n.name == "main")
+    guarded = [n for n in ast.walk(main_fn)
+               if isinstance(n, ast.If)
+               and any(isinstance(c, ast.Name) and c.id == "SERVE_FAILED"
+                       for c in ast.walk(n.test))
+               and any(isinstance(r, ast.Return)
+                       and isinstance(r.value, ast.Constant)
+                       and r.value.value == 1 for r in ast.walk(n))]
+    check(len(guarded) == 1,
+          "main() returns 1 from exactly ONE branch, and that branch tests "
+          "SERVE_FAILED -- so SERVED-UNPOPULATED exits 0, which is the whole "
+          "behaviour change", f"{len(guarded)} such branch(es)")
+
+
+class _FakeWorld:
+    """The one method `spawn_row_count` calls, over rows this test chooses."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def rows(self, kind):
+        return self._rows if kind == "spawn" else {}
 
 
 def section4():

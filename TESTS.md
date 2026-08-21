@@ -1895,11 +1895,47 @@ Every one of these, in the order they were written:
   file id and an area pointing at 143 would install into the displacement row and
   never reach the create branch. Finally main() must CALL both
   `resolve_or_create` and `create_chain`, asked of the syntax tree with the
-  sabotage that flips it, for section 3's reason. Sections 0-1 and 3-8 need no
-  vault and score 88 against a floor of 92 (both MEASURED, the vault-less one
-  with `RURIK_VAULT` pointed at an empty directory), so the floor still does what
-  it was for -- a vault-less run exits 1. (The line this replaces said "score 10
-  against a floor of 14", stale by two floor changes)),
+  sabotage that flips it, for section 3's reason. **Section 6b is the serve
+  verdict, and it exists because a correct run was reported as a failure**
+  (2026-08-20, WORLDMAPS-W2). `spawn_population` has TWO legitimate exits --
+  `area 'X': N of M placed` and `area 'X': no population rows; the world is the
+  player and the geometry` -- and `PLACED_RE` matched only the first, so the
+  second fell through to the arm written for a server that CRASHED mid-placement
+  and printed "the server never got as far as placing bodies". BOTH arms of W2
+  hit it: each had served the mesh correctly (55 trapezoids, the server's own
+  count against the archive's), and each exited 1 saying "the client walked on
+  our map and the server did not", which was false. The finding survived only
+  because a human read the gamesrv log and overrode the transcript. `serve_run`
+  now returns one of three VERDICTS -- `SERVE_PASS`, `SERVE_UNPOPULATED`,
+  `SERVE_FAILED` -- and `main()` returns 1 from exactly one branch, which tests
+  `SERVE_FAILED`. The load-bearing claim is the ORDERING and it gets its own
+  checks: an empty area may downgrade a PASS to SERVED-UNPOPULATED and may NEVER
+  lift a FAILED, driven with the real pair (ArenaNet's 27-trapezoid build of map
+  143 against our 55) from both sides, plus the no-`--area` case where the mesh
+  is the entire verdict. `serve_run`'s decision is pure -- read a log, choose a
+  verdict -- so it is tested BEHAVIOURALLY on canned logs with `launch` and
+  `newest_harness_log` stubbed, rather than on the syntax tree: the two clients
+  and the 45-second hold are the only reason it was ever untestable. The regexes
+  are checked DISJOINT in both directions (they share the `area 'X':` prefix,
+  which is how one swallowed the other's line), and `UNPOPULATED_RE` is matched
+  against the line `authsrv` ACTUALLY BUILDS -- reconstructed from its syntax
+  tree by `render_fstring`, not against a copy pasted into the test -- because
+  the pattern hard-codes eleven words of another module's prose and a reword
+  would otherwise break it silently. The other half is a SECOND READER:
+  `spawn_row_count` mirrors `area_population`'s two predicates (the row names
+  the area, the row is enabled) and `serve_run` refuses when it disagrees with
+  the server, in either direction. Without it SERVED-UNPOPULATED would be a
+  verdict that cannot fail -- the server says "nothing here", we write it down,
+  green -- and a population that genuinely went missing would read as a clean
+  run. Its own suppression is deliberate and narrow: under `--repo-content-only`
+  deploy's world is narrowed and the server's is not, so the count is not
+  claimed at all rather than compared against a world it does not describe. All
+  twenty of this section's checks were driven RED by eight sabotages, including
+  the original defect restored and the authsrv reword. Sections 0-1 and 3-8 need
+  no vault and score 108 against a floor of 112 (both MEASURED, the vault-less
+  one with `RURIK_VAULT` pointed at an empty directory), so the floor still does
+  what it was for -- a vault-less run exits 1. (The line this replaces said
+  "score 10 against a floor of 14", stale by two floor changes)),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
