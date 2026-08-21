@@ -1346,6 +1346,83 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
+
+Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md).
+
+**The question was "we send morale as 100 and nobody knows what that means".**
+It is answered from ArenaNet's own wire rather than from a mirror: the live
+corpus holds exactly **one player death**, it is fully instrumented, and it
+carries the whole mechanic in a single tick — `0x009C [agent, 85]` and
+`0x00EE [attr 10, −15]` together, then the server's own recomputed maxima,
+health 120 → 102 and energy 25 → 22. Morale is a percentage with 100 neutral
+that scales the character's **base** health and energy, and the energy figure is
+what proves the "base" in that sentence: scaling the total gives 21.25, which is
+not 22 and is not an integer.
+
+Landed: `morale.py` (arithmetic), `[player.morale]` + `[map_rule.*]` (rules and
+the per-map gate, wiki-cited), the death tick and the XP counter in `authsrv.py`,
+`moralescan.py` (the corpus census, so "the only −15 in fourteen captures" stays
+checkable), and `test_morale.py` (floor 47, green 48). Three older claims are
+corrected in place: `0x00E9` field 10 was **not** refuted as morale — its
+*display* was; `0x009C` is no longer "n=1, uncatalogued"; and property 43 is
+energy regeneration as a fraction of the pool per second, which also explains the
+`0.0396` this repo inherited from gw-preservation and shipped as "purpose
+unknown".
+
+**Every map this server ships is pre-Searing, where retail charges nothing for
+dying**, so the shipped world is deliberately silent and `--death-penalty` is
+what makes the mechanic watchable.
+
+**THE PROBE RAN 2026-08-20 AND IS GREEN** — `--probe morale`, agent-piloted,
+harness `20260820T220732`, all six steps verified in the gamesrv log before a
+pixel was read ([studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 1). Both
+questions the corpus could not answer are closed, and one prediction was
+refuted:
+
+- **MORALE-Q1 — `0x009C` draws the indicator.** `[player, 70]` alone put a red
+  chevron reading `−30%` in the top-left corner; `0x00EE [10, −15]` alone drew
+  nothing over three frames and 9.2 s (MORALE-P1 REFUTED, P2 confirmed).
+  `[player, 110]` flipped the chevron up and teal at `+10%` (P4).
+- **MORALE-Q2 — the maxima are the SERVER's job.** One frame carries it: the
+  corner reads `−30%` while the health and energy bars still read 100 and 25.
+  The pools moved only when properties 41/42 landed, and the energy bar then
+  showed the **14** we sent on purpose rather than the 19 the client's own
+  arithmetic would give (P3). A server that sends morale and forgets the pools
+  ships a penalty that costs nothing.
+- The control held: retail's own `0x00EE [10, 0]` no-op changed nothing over
+  eleven frames.
+
+Two things measured in passing and worth reusing: the indicator is at
+(10,32)–(60,82) at 1936×1040 — a crop starting at y=100 misses it and reads as
+a refutation — and the HUD repaints on a **1–4 s delay** rather than on the
+packet, so a probe reading it wants ≥5 s between a send and its screenshot.
+
+**AND THE FOLLOW-UP RAN THE SAME DAY** — `--probe morale_store`, harness
+`20260820T224356`, read with `ReadProcessMemory` rather than with eyes
+(RUNS.md §Run 2). **MORALE-Q7 is answered: `0x00EE`'s delta DOES write the
+client's stored morale** — `66 → 53` on a `−13`, `53 → 60` on a `+7`, each
+within one 0.5 s sample — while `0x009C [player, 41]` moved that slot not at
+all. So the two messages are **two stores for one number**: the attribute block
+(absolute and delta, silent, what the Hero window reads) and the per-agent
+morale (absolute, what the corner reads). A server that sends one and not the
+other leaves the other stale; ours sends both.
+
+The block's shape came free and is worth more than the question that produced
+it: our chosen values landed at exactly **`attr_id × 8`** from the experience
+field, each **stored twice, adjacent** — so the wire's `attr_id` is an index
+into that array, and `studies/character/STORAGE.md` §2's value/dupe layout,
+described from GWCA's header and never checked, is now checked against numbers
+of ours. Nobody's offsets were used to find it: the probe holds one field
+constant and the scanner anchors on that.
+
+`toolkit/clientscan/moralestore.py` is the reader (read-only by construction —
+`PROCESS_VM_READ`, never `WRITE`), and it carries the lesson that cost the
+first attempt: **locate on a constant the experiment never changes**, because a
+scan for the value under test can run before the probe sets it and lock onto
+hundreds of coincidences.
+
 ### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
@@ -2027,6 +2104,10 @@ node counts.
 "unwritable" wall (row 11196, 1,029,564 B in a 1,029,632 B reservation) — is the human male player
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
+
+### Movement — REALFIX: the invariant is stated, retail's policy is an executable spec, and the offline scorer honestly cannot rank (2026-08-20, round 5)
+
+Research only — five lanes plus three adversarial skeptics in worktree `realfix-endpoint-grant` (branch `worktree-realfix-endpoint-grant`), no client run, nothing built. **Round 4's "a short, always-refreshed endpoint grant … has never been tried" is REFUTED by its own document**: `--client-endpoint` (`authsrv.py:1138`) is exactly that — grant age at jump p50 0.28 s, faster than retail — and it was run as `20260819T182652` and refuted at FINDINGS:2028 as the worst of the three. The genuinely untried configuration is **NO lead**: grant the client's just-reported position with the 765–768 u tip dropped. **The invariant (REALFIX-O0–O6)**: the client judges at exactly two caller classes — the destination bake `0x005FEBEB` and a hard SetPosition (`0x006022A1`/`0x00602BBD`) — and asks whether the SYNC copy's own dead-reckoned `+0x78` lies within **99.919968 u** (exhaustive over 2,048,001 float patterns; the ~99.6 figure is corrected in this commit) of the client's history polyline, which **extends only backwards whenever the client holds no destination — LAG is on it by construction, LEAD is not**. A snap wipes every world-1 agent's history head, the match conjunction is straight-line-only on a degenerate segment (exactly the keyboard regime), and the polyline is not client-only — our own writes append while the fence is closed. **Retail's policy is an executable spec** on a resolved 9-capture `live` corpus: `0x0029` is last in every burst shape (3,023 of 3,071, zero counter-examples); the stop reply is `0x002B` + a zero-distance `0x0029`, never `0x0028` (7 of 114); `0x0029`'s trailing fields are destination plane and current plane, closed three times, so "send 0" is refused; and **31.0% of grants are truncated at a world-anchored boundary lying ~79° across the ray**, which the strongest wire-only rival (a stale grant origin, pre-registered) fails to explain — 0.2% against its own 3.8% control. **The offline harness is a calibration, refusal and exposure instrument — NOT a ranker**: leads 0 and 86 score identically on three of four captures with the match test on, the already-refuted 766 u lead wins on three of four with it off, and two independent implementations of the same written spec gave 69 and 80 against 60 measured. Candidates (P2 zero-lead first), gates REALFIX-C0–C5, pre-registered predictions and the run plan: [studies/movement/REALFIX.md](studies/movement/REALFIX.md). **Next: land REALFIX-C0 (the radius derivation as a committed check), land `grantsim.py` against C1–C5, then ONE owner-driven live A/B — `--zero-lead` vs the shipped default, click-free, keyboard held throughout, a deliberate backpedal leg, `movetap` running, and the `0x0060580D`/`0x00605820` gate breakpoint riding along** (REALFIX-Q1 — the arc's highest-value unrun measurement for three rounds).
 
 ### Movement — THE WARP IS REPRODUCIBLE ON DEMAND, and suppressing our own grants removes ~90% of it (2026-08-20, round 4)
 

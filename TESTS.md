@@ -182,6 +182,33 @@ Every one of these, in the order they were written:
   measured 138: it had drifted 26 checks stale through five commits, which is
   the ledger's own defect class, caught by its own rule of measuring from a
   green run),
+  `toolkit/harness/test_preflight_owner.py` (the `--replace` OWNERSHIP gate,
+  added 2026-08-20 after the pre-flight's "is the listener python" test matched
+  a PARALLEL session's live stack at ~23:00 and killed its webgate (pid 18520)
+  and authsrv (pid 8412) mid-run — under one-worktree-per-session, another
+  session's stack is indistinguishable from our stale one by image name.
+  `--replace` now reads the listener's command line (pure ctypes:
+  `NtQueryInformationProcess(ProcessCommandLineInformation)` +
+  `CommandLineToArgvW`) and stops it only when the script it names resolves
+  into THIS session's tree; the refusal prints the other listener's tree so the
+  operator knows which session to coordinate with. The load-bearing check is
+  refused-AND-ALIVE: a real listener started from a stand-in foreign worktree
+  survives a `--replace` pre-flight that names its tree, while a real webgate
+  from this tree still dies — the design intent has to survive the fix. Tree
+  identity is nearest-`.git`-ancestor (a worktree's `.git` is a FILE), never a
+  path prefix, and the nesting-trap check is why: worktrees live UNDER the
+  main checkout, so a prefix test would call every worktree's stack the main
+  session's own — the same kill through a different door. `this_tree()` is
+  cross-checked against `git rev-parse --show-toplevel`'s own answer, the one
+  check that may skip (floor 29, measured 30). Everything unprovable refuses:
+  an unreadable command line, no script token, a RELATIVE script path (a
+  hand-run three-terminal server's cwd is invisible). Section 6 settles the
+  same evening's other question as executable fact rather than a reading of
+  the code: the gamesrv alias IS pre-flighted — a squatter parked on 127.0.0.3
+  at the gamesrv's port is refused before anything starts, and an AST check
+  pins `main()` handing `preflight` the WHOLE un-narrowed `server_specs()`
+  list, hops included. Every check runs on ephemeral ports so it can run
+  beside a live session),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
@@ -6247,6 +6274,47 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   printing PASS. A CONTROL was added beside it that could not have existed
   before the fix: casting a HEX at the same agent must swing nothing at it.
   Floor 40 → 41),
+  `toolkit/authsrv/test_morale.py` (morale and the death penalty — the
+  arithmetic, the gate and the wire tick. Three things are actually at risk and
+  each has its own section. **The base-versus-total scale**: morale scales a
+  character's BASE health and energy, never the totals, and on the one death
+  ArenaNet's corpus contains that is the difference between the observed 22 and
+  the naive 21.25 — so §1 pins the ENERGY figure (the discriminating one; health
+  cannot discriminate, because base and total are both 100 for the character we
+  ship) and asserts outright that scaling the total does NOT reach the observed
+  number. **The gate**: every map this server ships is pre-Searing, where retail
+  charges nothing for dying (GWW, "Death Penalty", Exceptions), so §4 asserts
+  the SILENCE — a death in Lakeside County puts no morale on the wire — and then
+  asserts `--death-penalty` breaks it, because a default that fired would look
+  like a working feature and be a fabrication. **The revive**: the penalty lives
+  entirely in the maxima, so the cheapest way to delete the mechanic is to
+  restore `PLAYER_HEALTH` when the player stands up, which is what that code did
+  until 2026-08-20; §6 kills a player, stands them back up through BOTH revive
+  configurations (the shipped one-tick defer and `RURIK_REVIVE_DEFER=0`) and
+  reads the maximum that goes out. §5 asserts the death tick is ArenaNet's own
+  order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
+  energy regen, health max — with the delta carrying the wire's own
+  `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
+  encoding through the codec. §8 pins the other half of the original
+  question: `0x00E9` field 10 stopped being one of the zeros this server
+  sends, because retail carries 100 there in 43 of 43 sightings and 0 is
+  not a legal morale at all. Floor 49, against a green 50/49 across the two
+  revive configurations. No vault, no socket, no client),
+  `toolkit/clientscan/test_moralestore.py` (the morale-store scanner, proven
+  against a process this machine controls rather than against the game. It
+  exists because the tool's headline output is a NEGATIVE as often as a
+  positive — "nothing in this window ever changed" is what "the delta is
+  ignored" would look like AND what a scanner that cannot see anything looks
+  like, so the null needs a control before it is evidence. A child process
+  holds a constant at a known address and walks a value through 77 → 88 → 66 →
+  53 beside it; §1 requires the region walk to actually read megabytes and to
+  find the child's own address, §2 requires the watched window to record all
+  four values in order and its NEIGHBOURS to record none, §3 measures the
+  coincidence rate that broke the first MORALE-Q7 attempt (22,304 hits for the
+  value `1` against 4 for the anchor 424242 — which is why the method locates
+  on a constant the experiment never changes), and §4 requires an unmapped
+  address to read as None rather than as zeroes. Floor 8, Windows-only,
+  skips honestly elsewhere. ~10 s),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless

@@ -89,6 +89,20 @@ GRANDFATHERED = {
     os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,  # 11
     os.path.join("studies", "enemy", "PLAN.md"): 25,          # 11
     os.path.join("studies", "skillcast", "FINDINGS.md"): 20,  # 7
+    # 11 on 2026-08-20, one over NEWCOMER_CEILING on the day round 5 landed, and the
+    # ruling is easy because the offending citation is a REPEAT: four of the eleven
+    # are the SAME assert (`Map.cpp:1239`), re-cited once per section that leans on
+    # it -- and the fourth citation is round 5 DOWNGRADING the very name that assert
+    # was once read as evidence for (`MapFindPath` OBSERVED -> RECONSTRUCTION,
+    # because the assert sits at 0x00709E75 inside the sibling function). A document
+    # that re-cites one assert in order to retract what it argued is the opposite of
+    # a dump. The distinct asserts are seven across a 3,900-line five-round decode
+    # arc, each pinning one claim (AgTrack.cpp:458 the world fence, AgAgent.cpp:1250
+    # the bake's own precondition, PathApi.cpp:510 the plane bound...). 25 is the
+    # proportion the 11-12 entries below already carry. Note who raised it: the
+    # session whose own arc hit the wall. The check that matters is unchanged and
+    # cheap -- read the citations and ask whether any argues for nothing.
+    os.path.join("studies", "movement", "FINDINGS.md"): 25,   # 11: four are one repeated assert; round 5's decode
     # 25 on 2026-08-14 and the ceiling WAS 25, i.e. zero headroom -- a tripwire with
     # no room is one that fires on the next ordinary edit, which is how a tripwire
     # gets switched off. Raised to 40 the same day, deliberately in the proportion
