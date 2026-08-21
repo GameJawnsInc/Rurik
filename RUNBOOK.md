@@ -431,6 +431,46 @@ sits in the right folder while having no cave. `livesession.py` refuses it at pr
 for exactly that (`key_tapped` false) — which is the only reason a wrong pick is loud
 instead of another zero-key run.
 
+**AND THE BUILD GATE'S "SERVICE" IS A PROXY THAT ONLY YOU CAN REFRESH. Observed
+2026-08-21, immediately after the above.** `check_build_matches_service` compares the
+launch exe against `service_build()`, whose docstring calls `C:\gw` *"the owner's
+auto-updating install"*. **It does not auto-update — it updates when it is LAUNCHED**,
+and the standing rule is that we never launch it. So the moment ArenaNet ships a build,
+the proxy is stale until the owner personally opens their own client, and the gate is
+comparing against a build the service stopped serving.
+
+What that looked like: a correct, freshly-built **38849** client was refused with
+*"the launch client is build 38849; the live service is serving 38833"* — the exact
+reverse of the truth. The service was serving 38849; `C:\gw` was the stale one.
+
+**FOLLOWING THE REFUSAL'S OWN ADVICE REPRODUCES THE FAILURE IT EXISTS TO PREVENT**,
+and this is the part worth reading twice. It says *"NO staged live build is 38833.
+Rebuild."* Rebuilding against a stale `C:\gw` yields a **38833** client; its updater is
+LIVE by design; it self-updates to 38849 on login; the build-specific key-tap cave is
+lost in the copy that runs; **0 keys tapped**. That is precisely the failure documented
+in the section above, arrived at by obeying the guard.
+
+**The fix is to refresh the proxy, and it is the owner's action, not a tool's.** Launch
+the owner's own install once and let it patch. Adding `-image` fetches the full content
+image while you are there, which is worth doing: `make_run_dir.py` sources `Gw.dat` from
+`C:\gw`, so a current install also means the live run starts with complete content
+instead of streaming during the session. Then re-run `make_run_dir.py --live --patched
+<exe>` so the staged directory picks the refreshed archive up — it re-copies on a size
+change and skips otherwise.
+
+**Check it is really the same build before trusting the agreement**, because "both read
+38849" is weaker than it looks — a build number is 5 digits and the exe is 10 MB. Compare
+the **sha256 of `C:\gw\Gw.exe` against the source the patched build was made from**; on
+2026-08-21 they were byte-identical (`21511009c460a2a9...`), which is what actually
+established that the staged client is the binary the service serves. The `-image` content
+files land in `Gw.dat` and do not touch the exe, so they cannot change that answer.
+
+**A cheap tightening nobody has built yet:** if any staged `run-live/` binary reads a
+HIGHER build than `C:\gw`, the install is provably stale — the only way a `run-live` copy
+reaches a higher build is the service having served it. That inference needs no network
+and would turn today's misleading refusal into "your install is behind; launch it once".
+Unbuilt as of 2026-08-21, and deliberately not written minutes before a live run.
+
 **4. Cage the patched client** (elevated PowerShell, one time per patched exe):
 
 ```bash
@@ -484,6 +524,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 | Roster empty but login succeeded | Campaign gate | Try the all-campaigns bitmask `b'\x3f' + b'\x00'*7` in `ACCOUNT_INFO` |
 | `undecodable` in terminal 2 | Unknown opcode, framing stopped | Correct behaviour — it refuses to guess. The printed leading bytes are the next thing to identify |
 | Anything at all after an ArenaNet update | Parameters rotated | `python toolkit/updatecheck.py --after <baseline>` first — it names what moved and what still resolves — then redo the one-time setup in full |
+| `the launch client is build N; the live service is serving M`, where **M is older than N** | The gate's "service" is `C:\gw`, which updates only when LAUNCHED -- so it is stale, not the service. Do **not** follow the refusal's advice to rebuild against it: that yields a client older than the service, which self-updates mid-run and loses the key-tap cave | Launch the owner's own install once (add `-image` to fetch full content), then re-run `make_run_dir.py --live --patched <exe>`. Confirm by sha256 that `C:\gw\Gw.exe` matches the source the patched build was made from |
 | A live run ends `0 distinct session key(s) tapped` **and** `THE CLIENT BINARY CHANGED DURING THIS RUN` | ArenaNet published a build mid-session; the LIVE updater rewrote `run-live/`'s exe and the key-tap cave went with it | **Not** the row above — `updatecheck.py` reads `C:\gw`, which the update did not touch, and will report nothing moved. See §"IT UPDATED MID-RUN" above: rebuild from the *updated* binary, and register the rotated stock params before the patcher will accept it |
 
 **Never point a patched client at the real service.** It carries our DH values, so
