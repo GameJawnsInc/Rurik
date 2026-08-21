@@ -414,7 +414,7 @@ The 2×2 the brief asks for is `{angled wall-slide, straight} × {plane-crossing
 
 #### 1.4 The plan, leg by leg
 
-Facing convention: degrees are `atan2(uy, ux)` of the *travel* direction, as the client reports it in `values[3]`. `yaw:N` changes it by `−0.0800·N` degrees (W4).
+Facing convention: degrees are `atan2(uy, ux)` of the *travel* direction, as the client reports it in `values[3]`. ⚠ **`yaw:N` changes it by `−0.0800·N` degrees (W4) is REFUTED — measured 2026-08-21, and it is why L2 reached no cell.** Observed: `yaw:332` → −1.69°, `yaw:951` → +113.22°, `yaw:−1451` → −140.00°, `yaw:111` → +26.78° — nonlinear and sign-inconsistent, spanning −0.005 to +0.24 °/px. W4's real content is *within-leg* heading constancy (max deviation 0.000° over 16 legs), which is true and licenses nothing about the response *between* legs. **The spawn facing is +44.31°, not −65.80°** (measured, first held heading), so every leg here inherits a 108° error. **Do not run this plan as written**; see FINDINGS §"REALFIX-L2 RAN AND REACHED NO CELL" and calibrate yaw first, or relocate the cells to the plane 0↔29 boundary that lies on the natural facing.
 
 **PART 0 — transit (2 legs, both stop-bounded).** From spawn (9826.0, 8077.0) at facing ≈ −65.8° ± 1.1°:
 
