@@ -61,7 +61,16 @@ command got wrong:
     five refusals that had no fixture at all; and the grow-gate join, which used
     to be four fragments of another module's prose.
 
-NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-10. Section 2 needs the
+  * **A chunk we deliberately did NOT author has to be asserted absent.**
+    `readback`'s loop over the optional payload chunks used to skip its
+    assertion when the staged map omitted one, so WORLDMAPS-W8 installed a map
+    with `environment = false`, read a clean 6/6, and had been told nothing
+    about the environment -- while the fact the arm turned on, that the client's
+    COMPILED map carries none either and so had no fallback, was recovered by
+    hand afterwards. Section 11 drives the loop present, absent, and sabotaged,
+    because absent-and-unasserted looked exactly like absent-and-confirmed.
+
+NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-11. Section 2 needs the
 archive because the borrowed halves are read from it at run time -- that is the
 provenance rule, not a convenience -- and the floor turns a vault-less run into
 the FAIL it is.
@@ -92,6 +101,9 @@ import deploy  # noqa: E402
 import gwdat  # noqa: E402
 import gwenc  # noqa: E402
 import mapfile as mfile  # noqa: E402
+import pathchunk  # noqa: E402  -- section 11 assembles a compiled map's mesh
+import pathmap  # noqa: E402
+from props import StrippedProps  # noqa: E402
 import stripbuild as sb  # noqa: E402
 import strippedterrain as stx  # noqa: E402
 import checks  # noqa: E402
@@ -104,13 +116,13 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 203, MEASURED from a green run 2026-08-20 (sections 0,1,3..10 score 199
+# FLOOR: 213, MEASURED from a green run 2026-08-21 (sections 0,1,3..11 score 209
 # and need no vault -- measured with RURIK_VAULT pointed at an empty directory;
 # section 2 reads the archive for the borrowed halves, which is the provenance
-# rule rather than a convenience, and the floor sitting ABOVE 199 is what turns
+# rule rather than a convenience, and the floor sitting ABOVE 209 is what turns
 # a vault-less run into the FAIL it is). Per section, counted from the log
 # rather than predicted: {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20,
-# 7: 15, 8: 36, 9: 55, 10: 36}.
+# 7: 15, 8: 36, 9: 55, 10: 36, 11: 10}.
 #
 # COUNT THE LOG WITH THE SUBPROCESS WRITERS' OWN LINES EXCLUDED. They print in
 # the same `[PASS] ...` shape as the ledger and a naive `grep -c "\[PASS\]"`
@@ -119,14 +131,20 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # this comment got it wrong: `datwrite --verify` prints a `file header crc` line
 # AND an `MFT self-crc` line per run (6 runs, 12 lines), and `datmove` prints
 # one `0 overlapping row pair(s) afterwards` per move (5 moves, 5 lines).
-# 220 - 17 = 203. Anchoring the grep at `^  \[PASS\]` drops datmove's five --
-# they carry no indent -- and reads 215, which is 203 + datwrite's 12. Sections
+# 230 - 17 = 213. Anchoring the grep at `^  \[PASS\]` drops datmove's five --
+# they carry no indent -- and reads 225, which is 213 + datwrite's 12. Sections
 # 9 and 10 are what move these counts, so re-measure both numbers rather than
-# adjusting them.
+# adjusting them. (Section 11 is the one place a check's DETAIL quotes another
+# producer's `[PASS]` row -- `readback`'s. `verdict_of` strips the quoted row's
+# marker so that stays one marker per line: MEASURED 2026-08-21, `grep -o` and
+# `grep -c` both read 230, so the occurrence count and the line count agree and
+# either grep gives the same answer.)
 #
-# Was 195 before the R2 fix pass (section 10b: the copied archive, the byte
-# route and its negative, the path route's own fixture, and one fixture each for
-# the three journal conjuncts that a mutation sweep could delete unnoticed), 167
+# Was 203 before section 11 (WORLDMAPS-W8: `readback`'s optional-chunk loop,
+# asserted in the ABSENT direction it used to `continue` past), 195 before the
+# R2 fix pass (section 10b: the copied archive, the byte route and its negative,
+# the path route's own fixture, and one fixture each for the three journal
+# conjuncts that a mutation sweep could delete unnoticed), 167
 # before the residual pass (section 10: the born-armed guard, the created-chain
 # evidence, the journal-clobber refusal, map_chain's three unexercised refusals,
 # and the typed grow-gate join), 150 before the WORLDMAPS-W5 fix pass (the
@@ -135,7 +153,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=203)
+LEDGER = checks.Ledger("test_deploy", floor=213)
 check = checks.adopt(LEDGER)
 
 
@@ -2495,6 +2513,281 @@ def section10():
           f"{len(datwrite.GROW_GATE_CONDITIONS)} condition(s)")
 
 
+# --------------------------------------------------------------- section 11
+#
+# WORLDMAPS-W8: `readback`'s optional-chunk loop, in the direction it never ran.
+#
+# THE DEFECT THIS SECTION IS ABOUT WAS A CHECK THAT COULD NOT FIRE. The loop
+# over the optional payload chunks read `want = staged.find(scid)` and then
+# `if want is None: continue`, so an area that declares `environment = false`
+# got its environment assertion SKIPPED rather than INVERTED. W8 installed
+# exactly that map, `readback` printed a clean 6/6, and it had said nothing at
+# all about the environment -- while the fact the whole arm turned on, that the
+# client's COMPILED map carries no `0x20000009` either and so had no donor,
+# global or cached environment to fall back on, was recovered by hand out of the
+# allocation journal after the fact. Absence is what makes "we removed X and
+# nothing changed" mean "X was not the cause"; unasserted, the null is about an
+# instrument that never looked.
+#
+# THE ARM THAT MATTERS IS THE SABOTAGE. A compiled map that DOES carry the chunk
+# our staged map omitted has to go red, because that is the only arrangement in
+# which the omission was not real -- and before the fix it was indistinguishable
+# from success: this section's (d) returned `bad == []` against the old code,
+# which is the same clean verdict W8 read as evidence.
+#
+# NO VAULT, NO CLIENT, and no compiler: the "compiled" map is one this file
+# assembles, so what each arm carries is a fact about the rule rather than about
+# whichever retail map was to hand. The fixture's compiled head holds a pathing
+# chunk (so the re-compiled and spawn rows are real) plus whichever optional
+# chunks the arm is about, and nothing else -- the height-field and prop rows
+# are about chunks a compiler always emits and are a different subject, still
+# conditional in `readback` and deliberately not this section's business.
+
+READBACK_DIM = 32
+READBACK_SEED = (1536.0, 1536.0)     # dead centre of the one trapezoid below
+READBACK_ENV = bytes(range(64)) * 3          # 192 B, stands in for the 639 B
+READBACK_SOUND = bytes(range(48))[::-1] * 2  # 96 B, stands in for the 89 B
+
+
+def readback_area():
+    """The three keys `readback` reads out of an area row. Nothing else."""
+    return {"seed_x": READBACK_SEED[0], "seed_y": READBACK_SEED[1],
+            "dims": READBACK_DIM}
+
+
+def opaque(chunk_id, payload):
+    return mfile.Chunk(chunk_id, bytes(payload), mfile.FORM_OPAQUE)
+
+
+def staged_map(env=None, sound=None):
+    """A Stripped map carrying real terrain and prop chunks, optionals by arm.
+
+    Terrain and props are REAL -- `readback` decodes both unconditionally
+    (`stx.StrippedTerrain` for the height field it compares, `StrippedProps` for
+    the count it expects) and a stand-in would raise before reaching the loop
+    under test.
+    """
+    snapped, _worst = stx.snap_block(deploy.GENERATORS["flat"](READBACK_DIM))
+    chunks = [opaque(sb.HEADER, bytes(8)),
+              opaque(sb.PROPS, StrippedProps.minimal().encode()),
+              opaque(sb.TERRAIN,
+                     stx.StrippedTerrain.build(READBACK_DIM, READBACK_DIM,
+                                               snapped).encode())]
+    if env is not None:
+        chunks.append(opaque(sb.ENV, env))
+    if sound is not None:
+        chunks.append(opaque(sb.SOUND, sound))
+    return mfile.MapFile(chunks=chunks).encode()
+
+
+def compiled_map(env=None, sound=None):
+    """What we pretend the client's compiler produced: a path chunk, optionals.
+
+    One plane, one trapezoid spanning the whole 32x32 map, so the two rows that
+    are about the mesh (`the client re-compiled the map`, and the spawn landing
+    in exactly one trapezoid) are answered by real geometry rather than skipped.
+    A skipped row here would put this section in the same shape as the defect it
+    is about.
+    """
+    trap = pathmap.Trapezoid(
+        0, 0, y_top=3072.0, y_bottom=0.0, x_top_left=0.0, x_top_right=3072.0,
+        x_bottom_left=0.0, x_bottom_right=3072.0,
+        neighbours=(pathmap.NO_NEIGHBOUR,) * 4)
+    plane = pathchunk.Plane(index=0, poly=[(0.0, 0.0)], edges=[(0.0, 0.0)],
+                            traps=[trap], root_type=2, sinks=[0])
+    chunks = [opaque(0x20000008, pathchunk.PathChunk(
+        boundary=[(0.0, 0.0), (3072.0, 3072.0)], planes=[plane], plane_map=[0],
+        obstacles=pathchunk.Obstacles(3, 3)).encode())]
+    if env is not None:
+        chunks.append(opaque(0x20000009, env))
+    if sound is not None:
+        chunks.append(opaque(0x20000012, sound))
+    return mfile.MapFile(chunks=chunks).encode()
+
+
+def head_only_archive(path, blob):
+    """An archive whose one map head IS `blob`, under `FIXTURE_FILE_ID`.
+
+    NOT `build_archive`. That fixture's head is a fixed 300-byte pattern in one
+    block with the partner in the next, which is right for section 7's subject
+    (which verb ran, and what the row was marked) and wrong for this one: here
+    the head's BYTES are the subject and a compiled map does not fit in a block.
+    No partner row either, and that is a claim rather than a shortcut --
+    `readback` resolves the file id to a row, reads THAT row and decodes it, so
+    a fixture with a chain would be carrying evidence the code never consults.
+    """
+    head_block = 2
+    mft_block = head_block + -(-len(blob) // BLOCK)
+    mft_off, mft_size = mft_block * BLOCK, ENTRY_COUNT * ENTRY_SIZE
+    buf = bytearray(bytes([SLACK]) * (mft_off + mft_size))
+    buf[BLOCK:BLOCK + 8] = struct.pack("<II", FIXTURE_FILE_ID, ROW_HEAD)
+    buf[head_block * BLOCK:head_block * BLOCK + len(blob)] = blob
+
+    head = bytearray(32)
+    head[0:4] = FILE_MAGIC
+    struct.pack_into("<I", head, 0x04, 32)
+    struct.pack_into("<I", head, 0x08, BLOCK)
+    struct.pack_into("<Q", head, 0x10, mft_off)
+    struct.pack_into("<I", head, 0x18, mft_size)
+    struct.pack_into("<I", head, 0x0C, binascii.crc32(bytes(head[:12])))
+    buf[0:32] = head
+
+    rows = {ROW_HEADER:  (0, 32, 0, 3, 0),
+            ROW_IDTABLE: (BLOCK, 8, 0, 3, 0),
+            ROW_SELF:    (mft_off, mft_size, 0, 3, 0),
+            ROW_HEAD:    (head_block * BLOCK, len(blob), 0, MAP_HEAD_FLAGS, 0)}
+    mft = bytearray(mft_size)
+    mft[0:4] = MFT_MAGIC
+    struct.pack_into("<I", mft, 0x0C, ENTRY_COUNT)
+    for row, (off, size, comp, flags, nxt) in rows.items():
+        crc = 0 if row in (ROW_HEADER, ROW_SELF) else binascii.crc32(
+            bytes(buf[off:off + size]))
+        struct.pack_into("<QIHHII", mft, row * ENTRY_SIZE,
+                         off, size, comp, flags, nxt, crc)
+    struct.pack_into("<I", mft, ROW_SELF * ENTRY_SIZE + 20, self_crc(mft))
+    buf[mft_off:mft_off + mft_size] = mft
+    with open(path, "wb") as fh:
+        fh.write(bytes(buf))
+
+
+def run_readback(tmp, name, staged_blob, compiled_blob):
+    """`deploy.readback` against a one-arm archive. -> (rows, bad)."""
+    dat = os.path.join(tmp, f"{name}.dat")
+    head_only_archive(dat, compiled_blob)
+    return deploy.readback(dat, FIXTURE_FILE_ID, staged_blob, readback_area())
+
+
+def verdict_of(rows, needle):
+    """(PASS/FAIL, the row with its own marker stripped) for the row `needle` names.
+
+    Asked by SUBSTRING and required to match exactly once, because the arms
+    below differ in which rows exist at all -- an arm that produced no
+    environment row would otherwise be read as an arm that produced a passing
+    one, which is precisely the defect under test wearing a different hat.
+
+    The marker comes OFF the returned body deliberately. These rows go into
+    `check`'s detail, and a detail carrying its own `[PASS]` would both read as
+    a second verdict on the same line and break the floor comment's grep
+    arithmetic, which counts markers.
+    """
+    hit = [r for r in rows if needle in r]
+    if len(hit) != 1:
+        return f"{len(hit)} rows", f"{len(hit)} matching row(s)"
+    got = "PASS" if "[PASS]" in hit[0] else "FAIL"
+    return got, hit[0].replace(f"[{got}]", "", 1).strip()
+
+
+def section11():
+    """The optional-chunk loop, present and absent, with the sabotage."""
+    print("\n11. readback asserts an optional chunk's ABSENCE, not just its "
+          "presence")
+    tmp = tempfile.mkdtemp()
+    try:
+        # (a) PRESENT, AND CARRIED. The assertion that already existed, run
+        # unchanged, so the fix is shown not to have cost the case it had.
+        rows, bad = run_readback(tmp, "carried",
+                                 staged_map(READBACK_ENV, READBACK_SOUND),
+                                 compiled_map(READBACK_ENV, READBACK_SOUND))
+        got, line = verdict_of(rows, "our environment payload carried VERBATIM")
+        check(got == "PASS" and not bad,
+              "an authored environment the compiled map carries verbatim still "
+              "PASSes, and the whole readback is clean",
+              f"{got}; bad={bad}")
+        n_present = len(rows)
+
+        # (b) PRESENT AND DIFFERENT. The other half of the existing assertion:
+        # one byte off the end is a compiler that did not carry ours.
+        rows, bad = run_readback(tmp, "bent",
+                                 staged_map(READBACK_ENV, READBACK_SOUND),
+                                 compiled_map(READBACK_ENV[:-1], READBACK_SOUND))
+        got, _line = verdict_of(rows, "our environment payload carried VERBATIM")
+        check(got == "FAIL" and bad == ["our environment payload carried "
+                                        "VERBATIM"],
+              "and a compiled environment one byte short of ours goes red, "
+              "naming that row and only that row", f"{got}; bad={bad}")
+
+        # (c) ABSENT ON BOTH SIDES -- W8's arm B, and the row it never printed.
+        # The clean verdict is asserted TOGETHER WITH the row's existence: W8's
+        # readback was clean too, and clean-with-nothing-said is the failure.
+        rows, bad = run_readback(tmp, "absent",
+                                 staged_map(None, READBACK_SOUND),
+                                 compiled_map(None, READBACK_SOUND))
+        got, line = verdict_of(rows, "our map carries no environment")
+        check(got == "PASS" and not bad,
+              "a map that authors NO environment gets a PASSing row saying the "
+              "compiled map carries none either -- W8's arm B, which used to "
+              "print nothing here", line)
+        check("compiled map carries none either" in line
+              and "no donor, global or cached" in line,
+              "and the row SAYS what the absence buys: no donor, global or "
+              "cached environment for the compiler to fall back on, which is "
+              "what licenses reading the arm's null as being about our change")
+        check(len(rows) == n_present,
+              "and the absent arm prints as many rows as the present one -- "
+              "the skip is gone, so a reader cannot mistake an unasserted "
+              "chunk for an asserted one", f"{len(rows)} vs {n_present}")
+
+        # (d) THE SABOTAGE. We authored no environment and the compiled map has
+        # one anyway. MEASURED against the pre-fix loop: this arm returned
+        # `bad == []`, indistinguishable from (c).
+        rows, bad = run_readback(tmp, "smuggled",
+                                 staged_map(None, READBACK_SOUND),
+                                 compiled_map(READBACK_ENV, READBACK_SOUND))
+        got, line = verdict_of(rows, "our map carries no environment")
+        check(got == "FAIL" and bad == ["our map carries no environment, and "
+                                        "the compiled map carries none either"],
+              "but a compiled map that carries an environment we never authored "
+              "goes RED -- the arrangement in which the omission was not real, "
+              "and the one the old loop could not tell from success",
+              f"{got}; bad={bad}")
+        check(f"{len(READBACK_ENV)} B" in line,
+              "and the failing row prices the smuggled chunk, so the log says "
+              "how much environment came from somewhere we did not author",
+              line)
+
+        # (e) SOUND, BOTH WAYS. The loop has two entries and only one has been
+        # driven above; a fix that reached `environment` by name would pass
+        # everything so far. This is the same pair against 0x20000012.
+        rows, bad = run_readback(tmp, "mute",
+                                 staged_map(READBACK_ENV, None),
+                                 compiled_map(READBACK_ENV, None))
+        got, line = verdict_of(rows, "our map carries no sound")
+        check(got == "PASS" and not bad,
+              "sound is asserted the same way when the area declares none",
+              line)
+        rows, bad = run_readback(tmp, "dubbed",
+                                 staged_map(READBACK_ENV, None),
+                                 compiled_map(READBACK_ENV, READBACK_SOUND))
+        got, _line = verdict_of(rows, "our map carries no sound")
+        check(got == "FAIL" and len(bad) == 1,
+              "and a compiled map with a sound chunk we did not author goes red "
+              "too -- the inversion is the LOOP's, not one chunk id's",
+              f"{got}; bad={bad}")
+
+        # (f) THE LOOP ITSELF, at the source. Both entries of the tuple reach
+        # the same two calls, so a third optional chunk added to it inherits
+        # both directions rather than only the one somebody remembered.
+        fn = next(n for n in ast.walk(ast.parse(
+                      open(deploy.__file__, encoding="utf-8").read()))
+                  if isinstance(n, ast.FunctionDef) and n.name == "readback")
+        loops = [n for n in ast.walk(fn) if isinstance(n, ast.For)
+                 and any(isinstance(c, ast.Constant) and c.value == 0x20000009
+                         for c in ast.walk(n.iter))]
+        bare = [n for n in ast.walk(loops[0]) if isinstance(n, ast.Continue)] \
+            if loops else []
+        guarded = [n for n in ast.walk(loops[0])
+                   if isinstance(n, ast.Call)
+                   and getattr(n.func, "id", "") == "row_"] if loops else []
+        check(len(loops) == 1 and len(guarded) == 2,
+              "the optional-chunk loop reaches row_() on BOTH paths, so a chunk "
+              "id added to its tuple is asserted in both directions rather than "
+              "in whichever one somebody remembered",
+              f"{len(loops)} loop(s), {len(guarded)} row_() call(s), "
+              f"{len(bare)} continue(s)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -2542,6 +2835,7 @@ def main():
     section8()
     section9()
     section10()
+    section11()
     section2(area)
     return LEDGER.verdict()
 
