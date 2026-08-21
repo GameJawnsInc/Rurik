@@ -4022,3 +4022,52 @@ regime and went unprobed; and movetap stalled to 12.2 / 9.5 Hz against its own
 floors on both arms (background load; positives valid, nulls void — do not read
 the arm-A "0 `+0x48` changes" as exhaustive, though with 0 grants there was
 nothing to re-arm).
+
+## 2026-08-21, later — L1 FIRST RUN IS VOID AS A P2 VERDICT: the operator saw arm B warp, and the design cannot rule on it
+
+**OPERATOR-REFUTED, same day.** The section above reported arm B at 0 hard rows and
+called P2's harm bounds "MET at zero." **The operator watched arm B bug out near
+the map's bridge.** The instrument did not see it, and the run's design is why —
+three defects, all mine:
+
+1. **The negative was quoted past its blind budget.** Arm B was inside a report
+   interval ≤ 2 s for only 32% of its span; the hard bar cannot see inside a
+   silence, and round 5's own instrument note orders every negative qualified by
+   exactly this. "0 hard rows" was a claim about 63 observed seconds wearing the
+   costume of a claim about the run.
+2. **Geometry stalls and desync stalls are indistinguishable in this trace.** The
+   scripted walk plowed into obstacles and the walkmesh's end in BOTH arms, so a
+   stuck-and-silent stretch in arm B (where the bug lives, per the operator) has
+   an innocent twin in arm A. The "matched collision substrate" table in the
+   section above measured that the two arms stalled EQUALLY — which is precisely
+   why it cannot say WHY either one stalled. A control that shares the confound
+   is not a control.
+3. **The 16× separation contrast survives; nothing else does.** Copy-parked-at-
+   4,402 u vs copy-at-267 u is read off continuous movetap tracks and does not
+   depend on catching any event. Every per-event claim from this run — including
+   "~66 test instants, none snapped" — is WITHDRAWN as unverifiable.
+
+**The operator's hypothesis, registered before analysis: ANGLED MOVEMENT LOSES
+SYNC, and the failure was near the bridge.** Two candidate mechanisms fit the
+decoded record, both UNVERIFIED:
+
+- **The plane echo.** Both arms cross plane 0 ↔ 18 six times (OBSERVED, the
+  report stream's own `values[2]`; the plane-18 stretches are the bridge, and arm
+  B's 21.6 s silence sits inside one). Retail's `0x0029` carries
+  `(dest_plane, cur_plane)` and they DIFFER at transitions (14 of 987);
+  `--zero-lead` echoes the single reported plane into BOTH fields. A wrong plane
+  in `agent+0x80` is gate 2's own operand, and the walkable-100 match conjunct
+  runs on the navmesh the plane names.
+- **Node-chain corner-cutting.** History nodes push on a movement-command change
+  or a 2.5 s head age (`0x0060593A`); a steady angled slide changes no command,
+  so the polyline is chords of ~2.5 s of curved travel — and the match's
+  straight-line-to-segment test is STRICT at ~100 u. A copy correctly lagging ON
+  the real path can sit > 100 u from a chord that cuts the bridge approach's
+  corner, fail the match, and hand a 300–500 u lag to gate 1.
+
+Analysis of both captures against both candidates is running; REALFIX-L2 gets
+designed from its result, with the confound controlled — legs bounded by stops,
+no leg long enough to go silent, open-ground control legs, and the bridge crossed
+deliberately. Until then the only L1 claims that stand are the separation
+contrast and the flag's mechanical operation (66 grants, telemetry, 81 client-
+memory re-arms).
