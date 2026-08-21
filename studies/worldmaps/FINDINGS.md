@@ -662,3 +662,42 @@ that ground, which is still W13's open residual. No encounter was driven, and
 whether a body standing in deep water looks right is a visual verdict for the
 owner. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W15-RUN.md` §RESULTS.
+
+## WORLDMAPS-W16 — the recovered ground is WALKED, and without the bit the client stops to the unit. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms, identical walk plan, same
+session).** W12 put the submerged floor in the mesh, W13 stood the spawn on it,
+W15 placed bodies on it. None of those is traversal: a walking character is
+stopped by the client's own collision against the mesh it compiled.
+
+| | min x reached | vs the flags-0 wall at 1248 |
+|---|---|---|
+| `walkedge1` (flags 1) | **0** | crossed by 1,248 u |
+| `walkedge0` (flags 0) | **1248** | **stopped exactly at it** |
+
+Both started at (1536, 1536) and got the same plan — `yaw:2246 wait:1 W:14
+wait:2`, a 180° about-face then one 14-second leg — so no camera calibration
+enters the comparison. The flags-1 character walked **1,536 units to x = 0**,
+the far edge of the rect. The flags-0 character walked 288 units and halted at
+**x = 1248.0**, which is where our offline decode of the client's own compiled
+mesh says the ground ends. **A no-free-parameter prediction landing on the
+unit**: the client's collision and our decoder agree about where the world
+stops.
+
+**The instrument needed a correction and the first run was not a null.** An
+initial four-leg sweep gave min x = 1372, which looks like a failure to cross.
+The trace says otherwise: leg 1 went EAST (so `W` is +x from the default
+camera), and the best westward leg stopped after ~1,728 units, which is exactly
+`6 s x 288 u/s` — the leg's duration, not the ground. Scoring that as a negative
+would have been a false null manufactured by the rig, and only reading the trace
+rather than the summary caught it.
+
+**Found in passing**: an area's `seed_x`/`seed_y` is not where the player
+arrives. The seed drives the compile flood and `readback`'s spawn assertion; the
+player is placed at the MAP row's `spawn_x`/`spawn_y` unless `--area` is passed.
+
+**Scope.** Walkability, not immersion — the W10/W11 rule is a navmesh rule, and
+nothing here measures swimming, drowning or how any of it looks, which is a
+visual verdict for the owner. One start line, one heading, and the walk was
+one-way. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W16-RUN.md` §RESULTS.
