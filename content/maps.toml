@@ -546,3 +546,47 @@ page = 'GWW "Death Penalty", section Acquisition, read 2026-08-20'
 note = """
 Sparkfly Swamp, a post-Searing (Nightfall) explorable. Same rule as map_rule.90.
 """
+
+[map.165]
+name = "The Expanse (a created chain at 256x256 -- WORLDMAPS-W7)"
+file_id = 0x5F0B1
+created = true
+spawn_x = 12288.0
+spawn_y = 12288.0
+plane = 0
+explorable = false
+
+[map.165.provenance]
+source = "invented"
+verified = """OURS: it names a file that exists in no archive until \
+`deploy.py --area expanse --install` allocates it. The id was chosen against ONE \
+archive generation and this row says which, per [map.148]'s correction: \
+`datalloc.next_free_file_id(ar, 0x5F0B1)` returned 0x5F0B1 on 2026-08-20 against \
+`vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` (171,023 file-id records, highest \
+plain id 0x5F0AC), and neither 0x5F0B1 nor its bit-31 sibling 0x8005F0B1 appears \
+in that copy's raw table or in the 38833 copy's. It is the id after WORLDMAPS-W4's \
+0x5F0B0, deliberately adjacent and deliberately not A9's 0x5F0AD. `deploy.py` \
+re-checks the id against whichever archive it is installing into and refuses if \
+anything -- including a sibling -- binds it.
+
+THE MAP ID IS A COSMETIC LABEL, exactly as [map.143], [map.144] and [map.166] say \
+of theirs. 165 is a real row of the client's own area table \
+(`toolkit/clientscan/areatable.py` against the vaulted build-38797 client, both \
+independent locators agreeing at VA 0x0096de38 over 888 records): campaign 1, \
+continent 1, region 7, type 10, flags 0, party 1-4, level 1-20, no file id of its \
+own, name resolving at run time from name_id 10470. It is the field-identical \
+sibling of the row WORLDMAPS-W4 already proved at the client. The client will \
+print that name over OUR terrain; the area table names no map file, so nothing \
+joins the label to the file id except this row.
+
+VERIFIED OFFLINE 2026-08-20, before any client saw it, against that same copy: \
+the 256x256 field round-trips 65,536/65,536 samples exactly after a lattice snap \
+whose worst sample moved 3, the assembled map is 142,374 B (141,503 generated, \
+770 borrowed, 99.39% ours) compressing to 4,912 B of compression-8 stream (3.5% \
+of stored), and the spawn (12288, 12288) measures 0.0 degrees under the 15/35/30 \
+classifier from FINDINGS 48.
+
+WHAT IS NOT VERIFIED: the spawn-in-EXACTLY-ONE-trapezoid test, which needs the \
+mesh the CLIENT compiles, and everything else about a map this size -- no client \
+has compiled anything above 96x96 for this project, and nothing above 64x64 under \
+compression and a created chain together. WORLDMAPS-W7 is the run that settles it."""

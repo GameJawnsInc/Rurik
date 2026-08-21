@@ -271,3 +271,59 @@ than ours. What is NOT verified is the \
 CLIENT, twice over: the spawn-in-one-trapezoid test needs the mesh the client \
 compiles (`deploy.readback`), and no retail client has ever read a created map chain \
 at all. Both are WORLDMAPS-W4, which is a run rather than a check."""
+
+[area.expanse]
+name = "The Expanse"
+map_id = 165
+dims = 256
+heights = "plaza"
+# The rect's centre. default_rect(256,256) is (0,0,24576,24576), so the centre is
+# (12288, 12288) -- grid cell (128,128), MEASURED at 0.0 degrees, which is the
+# plaza generator's dead-flat apron. The same rule `sculpt` and `frontier` use,
+# and for the same reason: the generator has a seam at gx == mid that steepens
+# with distance (86.3 degrees at the rect edge at this size), and only the centre
+# is guaranteed clear of it.
+seed_x = 12288.0
+seed_y = 12288.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+# NO `reserve_bytes`, ON PURPOSE. W5's authoring budget is the obvious next thing
+# to spend here and this row deliberately does not: a created row with a reserved
+# zero tail has never been read by a client, and declaring one would make a red
+# result at this size ambiguous between the size and the tail. The row takes its
+# payload's own reservation -- 10 blocks, 5,120 B for a 4,912 B stream -- and
+# `deploy` prints that it did.
+
+[area.expanse.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row -- and what \
+this one adds over `frontier` is SIZE and nothing else: same generator, same two \
+donors by file id, same prop count, same centre-seed rule, same created chain, \
+same compression. 64x64 -> 256x256 is 16x the cells and 64x the 32x32 baseline. \
+Verified offline 2026-08-20 against `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat`: \
+65,536/65,536 samples round-trip exactly after the lattice snap (worst sample \
+moved 3), the assembled map is 142,374 B compressing to 4,912 B of compression-8 \
+stream, assemble+compress is 0.74 s in CPython, and the seed measures 0.0 degrees \
+-- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client \
+would build no navmesh for (FINDINGS 43, PathData:365). The borrowed halves are \
+named per field and read from the owner's own archive at run time, never stored \
+here.
+
+WHAT THIS ROW'S SHAPE MEANS FOR ITS MESH, said here because it will otherwise \
+read as a failure: `gen_plaza`'s dip side descends 4 units per cell without limit, \
+and MEASURED 2026-08-20 on the client's own compiled 64x64 mesh, ground at or \
+below a depth bracketed in (43, 47] stored units is ABSENT from the compiled \
+navmesh -- 0 of 1,003 cells at +47 and deeper, against 63.6% at +43. At 32x32 the \
+dip never reaches that depth and the mesh covers the whole rect; at 64x64 it \
+crosses at Chebyshev ring 20 and 37% of the rect is gone; at 256x256 the same ring \
+20 leaves roughly half the rect outside the mesh. That is a property of this \
+generator, not of the size, and the mechanism -- water from the borrowed \
+environment, a depth bound in the compiler, or the borrowed Zones chunk -- is \
+NOT established."""
