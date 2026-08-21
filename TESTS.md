@@ -2229,24 +2229,24 @@ Every one of these, in the order they were written:
   compiled chunk existing. They are a different question -- nothing declares
   those optional, so the fix there is an unconditional assertion, and it needs
   its own evidence about what the compiler always emits.
-  Sections 0-1 and 3-13 need no vault and score 225 against a floor of 229 (both
+  Sections 0-1 and 3-13 need no vault and score 226 against a floor of 230 (both
   MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
   directory, which exits 1 naming the 4-check shortfall), so the floor still
   does what it was for. Per section, counted from the log rather than predicted:
-  {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
-  10: 36, 11: 10, 12: 5, 13: 11}.
+  {0: 3, 1: 3, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
+  10: 36, 11: 10, 12: 5, 13: 11}. Section 1 is 3 since WORLDMAPS-W17 added the 'ramp' generator.
   **Count the log with the subprocess writers' own lines EXCLUDED, and note
   there are THREE producers rather than two**: an unanchored
-  `grep -c "\[PASS\]"` reads 246 where the ledger says 229, because
+  `grep -c "\[PASS\]"` reads 247 where the ledger says 230, because
   `datwrite --verify` prints a `file header crc` line AND an `MFT self-crc` line
   per run (6 runs, 12 lines) and `datmove` prints one `0 overlapping row pair(s)
-  afterwards` per move (5 moves, 5 lines). 246 - 17 = 229; anchoring the grep at
-  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 241 =
-  229 + datwrite's 12. An earlier version of this note said 162 from two
+  afterwards` per move (5 moves, 5 lines). 247 - 17 = 230; anchoring the grep at
+  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 242 =
+  230 + datwrite's 12. An earlier version of this note said 162 from two
   producers and was wrong on both counts, so re-measure these rather than
   adjusting them. Section 11 is the one place a check's DETAIL quotes another
   producer's row, and `verdict_of` strips the marker so both greps still agree:
-  MEASURED, `grep -o` and `grep -c` each read 246.
+  MEASURED, `grep -o` and `grep -c` each read 247.
   **Section 12 (WORLDMAPS-W12, 2026-08-21) is a failure that wore the wrong
   name.** `--install` arms a map's head to zero length so the client must
   recompile it; when the client never runs, the head stays 0 B, and `readback`
