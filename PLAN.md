@@ -1783,8 +1783,22 @@ against offline margins of 1,207 / 1,053 / 1,765 units. The three shallow rows
 placed in BOTH arms including an identical 96-unit nudge, which is the
 within-arm control that had authority to void the whole thing. First populated
 `--serve` in the arc. **Authored population works on ground that exists only
-because of one bit.** `studies/worldmaps/FINDINGS.md` W13/W14 and W15,
-`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`, `...-W15-RUN.md`.
+because of one bit.**
+
+**WORLDMAPS-W16 CLOSED THE LAST RESIDUAL: the ground is WALKED.** Two arms, the
+same walk plan and the same start (1536, 1536), so no camera calibration enters
+the comparison. At flags 1 the character walked **1,536 units to x = 0**, the far
+edge of the rect, crossing the flags-0 wall by 1,248 units. At flags 0 it walked
+288 units and halted at **x = 1248.0** -- exactly where our offline decode of the
+client's own compiled mesh says the ground ends. A no-free-parameter prediction
+landing ON THE UNIT: the client's collision and our decoder agree about where the
+world stops.
+
+**The arc's chain is now complete** -- the ground is meshed (W12), the spawn
+stands on it (W13), bit 0 touches only the Path chunk (W14), bodies are placed on
+it (W15), and a character walks out onto it (W16). `studies/worldmaps/FINDINGS.md`
+W13/W14, W15 and W16, `vault/research/worldmaps/WORLDMAPS-W13-RUN.md`,
+`...-W15-RUN.md`, `...-W16-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

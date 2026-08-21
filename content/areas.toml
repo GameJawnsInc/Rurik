@@ -665,3 +665,69 @@ than argued: whether the client loads such a map cleanly, whether it relocates \
 the body to the nearest mesh (deploy's serve path mentions a placement nudge of \
 up to 480 units, which is LESS than this row's 720-unit margin -- chosen for \
 that reason), or whether it refuses outright."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W16
+# The traversal pair. Same shape as `sculpt`, seeded 48 units EAST of the
+# flags-0 mesh edge so that walking west is the experiment.
+
+[area.walkedge1]
+name = "Sculpted Vale (walk from the edge)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# Seed at (1296, 4272): column 13, row 44. MEASURED offline against the two
+# WORLDMAPS-W13 head dumps -- this point is on ground in BOTH arms, and walking
+# west from it there are 48 units of ground at flags 0 and 1,296 at flags 1.
+seed_x = 1296.0
+seed_y = 4272.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1
+
+[area.walkedge1.provenance]
+source = "invented"
+verified = """Ours. The seed is chosen, the ground under it is not: (1296, \
+4272) is inside a trapezoid of BOTH meshes WORLDMAPS-W13 compiled -- arm A at \
+flags 0 and arm B at flags 1, same client, same archive, same session -- which \
+is what makes it a fair start line rather than a start line that only exists in \
+one arm. MEASURED OFFLINE by stepping west in 24-unit increments through each \
+compiled mesh: 48 units of contiguous ground at flags 0, 1,296 at flags 1. \
+UNVERIFIED and the point of the run: whether the CLIENT lets a character walk \
+that ground. The mesh containing it (W12), the spawn standing on it (W13) and \
+the server placing bodies on it (W15) are all established; traversal is not, \
+and none of the three implies it."""
+
+[area.walkedge0]
+name = "Sculpted Vale (walk from the edge, flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `walkedge1` with map_flags omitted. Same seed, same shape, same donors.
+seed_x = 1296.0
+seed_y = 4272.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.walkedge0.provenance]
+source = "invented"
+verified = """Ours, and it is the arm that should hit a wall. Same seed as \
+`walkedge1`, on the map where the water rule still applies, so the compiled \
+mesh stops 48 units west of the start line. It carries the SAME walk plan as \
+its twin, which is what removes the need to calibrate the camera: the two arms \
+share a heading, so whatever direction the character actually faces, the arms \
+differ only in what ground is under it. A bearing model would be a free \
+parameter; sharing the plan is not."""
