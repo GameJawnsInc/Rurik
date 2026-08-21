@@ -29,6 +29,14 @@ ArenaNet's server and must never be refused on our content rows, and "the call
 sits inside the RUN_ROOT branch" is invisible to a grep -- the string
 `contentids.preflight(dat)` is present either way.
 
+Section 6 is the ORDERING, and it is the same defect as this file's original one
+seen from a different side: a question answered against the wrong half of the
+pair. A `created = true` row whose id binds nothing was skipped as "not made yet"
+from the CLIENT's table alone, before the server's was read -- so a chain
+deployed into one copy and not the other read as the benign pre-creation state
+and refused nothing, while the server would send an id the client cannot bind.
+Synthetic, so every cell differs from its neighbour by exactly one fact.
+
 No client, no socket, no launch. Sections 0-1 need the vault; section 2 needs
 `vault/run-live/` and skips loudly without it.
 """
@@ -61,7 +69,19 @@ import vaultpath                                              # noqa: E402
 # 2026-08-15: +7 for section 5, which is SYNTHETIC -- it fakes `check`'s return
 # and needs no vault at all, so unlike 1b/2/2b it can never skip and belongs in
 # the mandatory core rather than above it. 12 + 7 = 19.
-FLOOR = 19
+#
+# 2026-08-20: +1 in section 0 for the created/retail split (WORLDMAPS-W3), which
+# runs before any archive is opened and so is mandatory core; section 1 gained
+# two more that are NOT (they need a client archive). 19 + 1 = 20, and a healthy
+# run against this vault now executes 31. MEASURED, both numbers.
+#
+# 2026-08-20, the residual pass: +9 for section 6, the created-row ORDERING (a
+# created id in one archive and not the other). Synthetic, like section 5 and
+# for the same reason -- it drives `check()` over hand-built tables, so it needs
+# no vault and cannot skip, and no real vault can be made to hold the state it
+# is about on demand. 20 + 9 = 29, and a healthy run against this vault now
+# executes 40. MEASURED, both numbers.
+FLOOR = 29
 
 LEDGER = checks.Ledger("content file ids vs the archives a run uses",
                        floor=FLOOR)
@@ -118,6 +138,23 @@ def main():
           f"and the two Pre-Searing rows share 0x{PRESEARING_FILE_ID:X}",
           f"{presearing} -- if this moves, the exposure moved with it")
 
+    # CREATED ROWS ARE HELD OUT OF EVERY ARCHIVE-SELECTING SCAN BELOW, and this
+    # is not tidiness -- it is the fixture defect this section nearly shipped.
+    # A created row (WORLDMAPS-W3, 2026-08-20) names a file id that binds nothing
+    # until `deploy.py --install` allocates it, so `any(f not in raw for f in
+    # ids.values())` is TRUE OF EVERY ARCHIVE the moment one exists. Section 2
+    # picks its positive control with exactly that test, and with 0x5F0B0 in the
+    # set it selected the first archive in the list instead of a
+    # mid-replacement one: four checks went red naming Pre-Searing while the
+    # code under test was fine and the FIXTURE had silently resolved to the
+    # wrong archive. The retail ids are the ones an archive can be judged by.
+    created = contentids.created_map_ids()
+    retail_ids = {m: f for m, f in ids.items() if m not in created}
+    check(created and not (created & set(retail_ids)),
+          "the created rows are named and held out of the archive scans -- an "
+          "id nothing binds yet says nothing about which copy is behind",
+          f"created {sorted(created)}, {len(retail_ids)} retail row(s) left")
+
     client = contentids.default_client_dat()
     if client is None:
         LEDGER.skip("everything from section 1 on",
@@ -136,14 +173,54 @@ def main():
     findings, skips = contentids.check(client, client)
     for why in skips:
         LEDGER.skip("an archive", why)
-    check(bool(findings), "the check produced findings at all",
-          f"{len(findings)} row(s) -- zero would mean it measured nothing")
+    # MEASURED NOTHING IS A FAILURE ONLY WHEN SOMETHING COULD HAVE BEEN
+    # MEASURED. `check()` reports an unreadable archive through `skips`, and
+    # another session holding one of these 4 GB copies open is a DOCUMENTED
+    # condition rather than a defect in the guard -- the WORLDMAPS-W4 run sheet
+    # names it, and it was true in this tree on 2026-08-20 while a parallel
+    # session's client ran. Asserting unconditionally turned that state into a
+    # red suite where this file had skipped and stayed green before, which is a
+    # test reporting the environment as a regression. So: nothing to read ->
+    # declare the skip; an archive READ and still nothing -> red, which is the
+    # case the check exists for and which the control below drives.
+    if skips and not findings:
+        LEDGER.skip("the check produced findings at all",
+                    "no archive could be read this run, so there was nothing "
+                    "to measure -- see the skip(s) above")
+    else:
+        check(bool(findings), "the check produced findings at all",
+              f"{len(findings)} row(s) -- zero would mean it measured nothing")
     fatal = [f for f in findings if f.level == "fatal"]
     check(not fatal, "no FATAL when both sides are the same generation",
           "; ".join(repr(f) for f in fatal) if fatal else "clean")
     check(all(f.level == "ok" for f in findings),
           "every content row agrees across both archives",
           f"{sum(1 for f in findings if f.level == 'ok')} of {len(findings)}")
+    # AND THE CREATED ROW IS SKIPPED RATHER THAN JUDGED. Not a finding of any
+    # level: there is nothing to compare until `deploy.py` has allocated the
+    # chain in this copy. It reached FATAL before the created state existed,
+    # which -- with `served=None`, the fail-closed default that tape runs and
+    # every un-`--map`ped run take -- refused every loopback launch in the repo
+    # over one row no run touched. That is the 2026-08-15 false positive again.
+    #
+    # GATED ON `findings`, and the gate is not caution -- it is the same
+    # measured hazard the rest of this file has: another session holds these
+    # 4 GB archives open, `check()` returns nothing at all, and the row above
+    # already goes red for exactly that reason. Two MORE reds naming created
+    # rows would send a reader after the wrong thing.
+    if not findings:
+        LEDGER.skip("the created-row split",
+                    "check() returned no findings, so the client archive could "
+                    "not be read this run -- see the check above")
+    else:
+        check(not [f for f in findings if f.map_id in created],
+              "a CREATED row whose id nothing binds yet produces no finding at "
+              "all -- it cannot disagree with an archive it is not in",
+              f"created {sorted(created)}")
+        check(any(str(m) in s for m in created for s in skips),
+              "and it is SKIPPED OUT LOUD, naming the row -- 'nothing "
+              "disagreed' and 'nothing was checked' must not look alike",
+              "; ".join(s[:90] for s in skips) or "no skip recorded")
     # `preflight` must not raise on the good pair -- the guard has to be silent
     # when nothing is wrong, or it will be removed.
     try:
@@ -172,7 +249,7 @@ def main():
         try:
             rawt = file_id_table(ar, raw=True)
             dual = file_id_table(ar)
-            for mid, f in sorted(ids.items()):
+            for mid, f in sorted(retail_ids.items()):
                 if f in dual and f not in rawt:
                     armed_dat, armed_id = cand, f
                     break
@@ -221,7 +298,7 @@ def main():
                 rawt = contentids.file_id_table(ar, raw=True)
         except (OSError, ValueError):
             continue
-        if any(f not in rawt for f in ids.values()):
+        if any(f not in rawt for f in retail_ids.values()):
             live = cand
             break
     if live is None:
@@ -426,6 +503,146 @@ def main():
               "'nothing disagreed' and 'nothing was checked' must not look alike")
     finally:
         contentids.check = real_check
+
+    # -- 6. a CREATED row is only "not made yet" if NEITHER side has it ------
+    #
+    # SYNTHETIC, and mandatory core for section 5's reason: it needs no vault,
+    # so it cannot skip, and no real vault can be made to hold the state it is
+    # about on demand.
+    #
+    # THE DEFECT IT PINS. The created-row skip used to be decided from the
+    # CLIENT's table alone, before the server's was read at all -- `s_tab` is
+    # built at the top of `check()` and first consulted twenty lines past a
+    # `continue` this row could never come back from. So the one state that
+    # matters most, the chain allocated into ONE copy and not the other, read as
+    # the benign pre-creation case and refused nothing. That is not a cosmetic
+    # ordering: the server would send a map id whose file the client cannot
+    # bind, which is this module's own FATAL case (`Code=007`, loud on the
+    # client and silent in the server log) arrived at from the created side.
+    #
+    # Each cell below is one archive pair, and the pairs differ by ONE fact.
+    print("\n6. a created id in one archive and not the other is a DIVERGENCE")
+
+    class _World:
+        """The two questions `contentids` asks a world, and nothing else."""
+
+        def __init__(self, rows):
+            self._rows = rows              # {map_id: (file_id, created)}
+
+        def map_static_config(self):
+            return {m: (f,) for m, (f, _c) in self._rows.items()}
+
+        def rows(self, _kind):
+            return {str(m): {"created": c} for m, (_f, c) in self._rows.items()}
+
+    class _Entry:
+        """The four fields `check()` reads off an MFT entry."""
+
+        def __init__(self, index, size, crc, flags=contentids.MAP_FLAGS):
+            self.index, self.size = index, size
+            self.crc, self.flags = crc, flags
+
+    CFID = 0x5F0B0                        # the created id, content/maps.toml 166
+    RFID = 0x287D3                        # a retail one, map 143's own
+
+    def run(client, server, world):
+        """One (client table, server table) pair through check(). -> (findings, skips)
+
+        `client` and `server` are None for an unreadable archive, or
+        {file_id: entry}. Keyed on the PATH, and the two paths differ, because
+        `check` asks the client's half with raw=True and the server's without --
+        a stub keyed on the flag alone would answer the same for both.
+        """
+        def table(spec):
+            if spec is None:
+                return None, None
+            tab = {f: e.index for f, e in spec.items()}
+            return tab, {e.index: e for e in spec.values()}
+
+        real = contentids.index
+        tables = {"client.dat": table(client), "server.dat": table(server)}
+        try:
+            contentids.index = lambda dat, raw=False: tables[dat]
+            return contentids.check("client.dat", "server.dat", world)
+        finally:
+            contentids.index = real
+
+    made = _World({166: (CFID, True)})
+    ours = _Entry(90, 1148, 0xABCD)
+
+    # (a) NEITHER binds it. The benign state, preserved exactly: no finding of
+    # any level, and a skip that says so out loud.
+    findings, skips = run({}, {}, made)
+    check(not findings and len(skips) == 1 and "NEITHER" in skips[0],
+          "neither archive binds the created id: still a SKIP and still no "
+          "finding -- this is the state before `deploy.py --install` has run "
+          "anywhere, and the 2026-08-15 lesson is that a guard which refuses it "
+          "gets deleted", skips[0][:100] if skips else f"{findings}")
+
+    # (b) THE FIX. The server has the chain and the client does not.
+    findings, skips = run({}, {CFID: ours}, made)
+    fatal = [f for f in findings if f.level == "fatal"]
+    check(len(fatal) == 1 and fatal[0].map_id == 166,
+          "the SERVER binding it while the client does not is FATAL, not a "
+          "skip -- one copy has been deployed to and the other has not, and "
+          "that is exactly what a mid-arc deploy leaves behind",
+          f"{[repr(f) for f in findings]} / skips {skips}")
+    check(fatal and "rather than the pre-creation state" in fatal[0].text
+          and "row 90" in fatal[0].text,
+          "and it says which state it is NOT, naming the server's row -- the "
+          "whole failure was one state reading as the other",
+          fatal[0].text[:120] if fatal else "no finding")
+    check(not skips,
+          "and nothing is skipped: 'nothing disagreed' and 'nothing was "
+          "checked' must not look alike, and here something disagreed",
+          f"{skips}")
+
+    # (c) BOTH bind it, same bytes. Once the chain exists on both sides the row
+    # is an ordinary map row -- the half that matters for the run that finally
+    # serves one.
+    findings, skips = run({CFID: ours}, {CFID: _Entry(12, 1148, 0xABCD)}, made)
+    check([f.level for f in findings] == ["ok"] and not skips,
+          "both archives binding it to the SAME bytes is plain OK -- row "
+          "indices do not survive a patch, so identity is size+crc",
+          f"{[repr(f) for f in findings]}")
+
+    # (d) BOTH bind it, different bytes. The created row gets the same identity
+    # rule as every other, which is the claim the docstring makes for it.
+    findings, _s = run({CFID: ours}, {CFID: _Entry(12, 2000, 0x1234)}, made)
+    check([f.level for f in findings] == ["fatal"]
+          and "DIFFERENT FILES" in findings[0].text,
+          "and binding it to DIFFERENT bytes is the ordinary different-file "
+          "FATAL -- a created row is checked like any other the moment both "
+          "copies have it", findings[0].text[:90] if findings else "nothing")
+
+    # (e) The client has it and the server does not. Degraded, not wrong: the
+    # server has no navmesh and collision falls back to off.
+    findings, _s = run({CFID: ours}, {}, made)
+    check([f.level for f in findings] == ["warn"],
+          "the client having it and the server not is a WARN -- no navmesh, "
+          "collision off, the run is degraded rather than wrong, and that arm "
+          "is unchanged", f"{[repr(f) for f in findings]}")
+
+    # (f) The server's archive cannot be read at all. Neither answer is
+    # available, so neither is claimed -- and the skip says which question went
+    # unanswered rather than implying the benign one.
+    findings, skips = run({}, None, made)
+    check(not [f for f in findings if f.map_id == 166]
+          and any("could not be read" in s and "166" in s for s in skips),
+          "an unreadable SERVER archive is a skip that names the question it "
+          "could not answer -- not the pre-creation state, which is a claim "
+          "about both copies", "; ".join(s[:80] for s in skips) or "silent")
+
+    # CONTROL: the same shape on a row that does NOT say `created = true`. It
+    # was always fatal and still is, so (b) above is the created branch changing
+    # and not the whole loop.
+    retail = _World({143: (RFID, False)})
+    findings, skips = run({}, {RFID: _Entry(90, 1148, 0xABCD)}, retail)
+    check([f.level for f in findings] == ["fatal"]
+          and "EXACT 32-bit" in findings[0].text and not skips,
+          "CONTROL: a NON-created row the client cannot bind was always fatal "
+          "and still is, by the older sentence -- so what moved is the created "
+          "branch alone", findings[0].text[:90] if findings else "nothing")
 
     print(f"\nread the archives in {time.perf_counter() - t0:.1f}s")
     return LEDGER.verdict()

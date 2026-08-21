@@ -182,6 +182,33 @@ Every one of these, in the order they were written:
   measured 138: it had drifted 26 checks stale through five commits, which is
   the ledger's own defect class, caught by its own rule of measuring from a
   green run),
+  `toolkit/harness/test_preflight_owner.py` (the `--replace` OWNERSHIP gate,
+  added 2026-08-20 after the pre-flight's "is the listener python" test matched
+  a PARALLEL session's live stack at ~23:00 and killed its webgate (pid 18520)
+  and authsrv (pid 8412) mid-run — under one-worktree-per-session, another
+  session's stack is indistinguishable from our stale one by image name.
+  `--replace` now reads the listener's command line (pure ctypes:
+  `NtQueryInformationProcess(ProcessCommandLineInformation)` +
+  `CommandLineToArgvW`) and stops it only when the script it names resolves
+  into THIS session's tree; the refusal prints the other listener's tree so the
+  operator knows which session to coordinate with. The load-bearing check is
+  refused-AND-ALIVE: a real listener started from a stand-in foreign worktree
+  survives a `--replace` pre-flight that names its tree, while a real webgate
+  from this tree still dies — the design intent has to survive the fix. Tree
+  identity is nearest-`.git`-ancestor (a worktree's `.git` is a FILE), never a
+  path prefix, and the nesting-trap check is why: worktrees live UNDER the
+  main checkout, so a prefix test would call every worktree's stack the main
+  session's own — the same kill through a different door. `this_tree()` is
+  cross-checked against `git rev-parse --show-toplevel`'s own answer, the one
+  check that may skip (floor 29, measured 30). Everything unprovable refuses:
+  an unreadable command line, no script token, a RELATIVE script path (a
+  hand-run three-terminal server's cwd is invisible). Section 6 settles the
+  same evening's other question as executable fact rather than a reading of
+  the code: the gamesrv alias IS pre-flighted — a squatter parked on 127.0.0.3
+  at the gamesrv's port is refused before anything starts, and an AST check
+  pins `main()` handing `preflight` the WHOLE un-narrowed `server_specs()`
+  list, hops included. Every check runs on ephemeral ports so it can run
+  beside a live session),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
@@ -406,8 +433,36 @@ Every one of these, in the order they were written:
   decompresses without raising, trailer declares 0 against a 0-byte expectation
   -- which is why a new arm was needed; the comp-8-with-no-declared-payload
   refusal (hole 1) keeps its own separate reason, and the C-6 arm still sees the
-  same bytes as compressed when they are declared STORED. 199 checks against a
-  floor of 199, was 138, was 136, was 87, was 78, was 66),
+  same bytes as compressed when they are declared STORED.
+  **Section 13 (2026-08-20) gives the grow gate's refusal a TYPE, floor
+  199 -> 212, and the defect it closes is in a CONSUMER.** `deploy.py` drives
+  `--replace --grow-to` as a subprocess and may follow ONE kind of non-zero exit
+  with a relocation -- the gate refusing, which is a fact about the archive --
+  and must never follow any other, because a declaration fault turned into a
+  quiet `datmove` is the failure. It told them apart by four fixed fragments of
+  the sentences in `_grow_gate` ("is CLAIMED by", "PAST THE END", "LIVE MASTER
+  FILE TABLE", "datplan WITHHOLDS"), so a reworded sentence would have turned
+  every claimant conflict into a refused install -- silently, in the safe
+  direction, for a reason with nothing to do with the archive. `_grow_gate` now
+  raises `GrowGateRefused`, a `SystemExit` SUBCLASS carrying a `condition` from
+  `GROW_GATE_CONDITIONS`, and `main()` prints one
+  `GROW-GATE-REFUSED condition=<name>` line BESIDE the refusal -- never inside
+  it, so every message is byte-for-byte what it was and §11a's verbatim
+  first-sentence pin still holds, and the subclass means every existing
+  `except SystemExit` in the tree and the vault is untouched. THE LOGIC DID NOT
+  MOVE: four tests, same order, same sentences, same exit code. Each condition
+  gets its own in-process fixture and is read by TYPE rather than by output --
+  claimants and EOF directly, the live MFT and the withheld run behind §11's two
+  stubs, which are the only way those two are reachable on a 4 KB archive.
+  **The load-bearing checks are the two NEGATIVES**: a payload past the caller's
+  own stated entitlement is an ordinary `SystemExit` and the CLI prints NO
+  token, and neither does `--replace` with no `--data` -- a token on every
+  failure would be worse than no token, and that is the shape a careless version
+  of this change would have. Sabotage driven by hand, red: condition 1 put back
+  to a bare `SystemExit` reddens 2. 212 checks against a floor of 212, was 199,
+  was 138, was 136, was 87, was 78, was 66),
+
+=== AMENDMENT 2 of 3 — test_deploy, section 10 and the floor (REWRITTEN for this fix pass) ===
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -1479,7 +1534,44 @@ Every one of these, in the order they were written:
   decompressed and animated from a 3-stream chain this verb allocated under a
   new file id, and the chain survived the client's Flush byte-intact. One chain
   shape, one build, one launch — the suite below is still what proves the verb
-  in general. Floor 177),
+  in general. **Section 15 is the RESERVE** (2026-08-20, WORLDMAPS-W5), and its
+  subject is a field that is deliberately not about the payload. Until this rung
+  a created row's reservation was exactly `blocks_for(len(data))` -- zero
+  headroom BY CONSTRUCTION -- so a created chain's second, larger install was
+  already past a ceiling nobody had chosen and fell through
+  `deploy.resolve_or_create` to a relocation; and the archive records no
+  entitlement anywhere, the 24-byte MFT row having no such field, so the number
+  has to be STATED by whoever authored the row. `Stream(reserve=N)` states it and
+  reaches EXACTLY ONE line of the module -- the block computation in
+  `plan_alloc`'s placement, `max(len(data), reserve)`. The whole risk is that
+  it LEAKS, so every check asks the same question twice: that the RESERVATION
+  moved and that the size, the crc and the declaration did NOT. A 900 B payload
+  with `reserve=2560` is placed in 2,560 B of blocks against a CONTROL of the
+  same bytes with no reserve taking 1,024 -- a different reservation AND a
+  different run, since the fixture's usable runs are 1 block at 5, 2 at 7-8 and 6
+  at 10-15 -- while `size` and `crc` are identical across the pair and the armed
+  head still owns no extent. Three refusals, each with its own control: a reserve
+  on a ZERO-LENGTH stream is refused naming the partner as the row that grows (an
+  armed head has no offset to reserve blocks at, so a budget there would be
+  accepted and do nothing), and the same empty head with no reserve still
+  constructs; a reserve UNDER its own payload is refused rather than clamped,
+  because `max()` would paper over it and report headroom nobody has, and a
+  reserve exactly EQUAL to the payload is legal; and `1024.5`, `"1024"`, `None`,
+  `True` and `-512` are each refused as not a whole number of bytes. A budget
+  larger than the largest usable run is refused by the ordinary "nothing fits"
+  placement rule -- a reserve buys real blocks or it buys nothing. The handed-in
+  plan gets section 14's discipline in BOTH directions: a plan computed BEFORE
+  the reserve was set would give the row what the payload needs while the caller
+  went on believing it bought headroom, and a plan reserving blocks no stream
+  asked for is the same disagreement from the other side; both are refused with
+  the archive byte-identical, because `r.reservation` is carried out verbatim and
+  can never be re-derived afterwards. Finally the WRITE, judged on bytes rather
+  than on the planner's word: the row declares the payload's size and crc, holds
+  exactly the bytes handed in, and is ZEROED across the whole budget -- the
+  fixture fills unclaimed space with 0xCC, so 1,660 bytes of zeroes past a 900 B
+  payload is the reservation being real rather than the padding a 2-block row
+  would have had -- with `datcheck --preflight` 10 of 10 and no two rows sharing
+  storage. Floor 203),
   `toolkit/mapdata/test_authorflow.py` (AUTHOR A FILE THAT NEVER EXISTED INTO
   AN ARCHIVE, AT COMPRESSION 8, AND WALK IT BACK. Every verb here has its own
   test and all of them are green; what none of them measures is the SEQUENCE,
@@ -1788,8 +1880,9 @@ Every one of these, in the order they were written:
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
   a module with its own test -- so this file checks only what is true of the
-  COMPOSITION, and each of its three sections is a defect the first runs of the
-  command actually had. **The two kinds of borrowing are different**: structural
+  COMPOSITION, and each of its sections is either a defect the first runs of the
+  command actually had or, for sections 4-9, a claim about the bytes the row
+  will hold. **The two kinds of borrowing are different**: structural
   constants (Header, Zones) must come from a map shaped like ours, the biome
   (textures, sun, env, sound) from wherever you like, and taking both from
   Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
@@ -1800,8 +1893,399 @@ Every one of these, in the order they were written:
   first version asked whether `main()` contained any `join(dirname(dat), ...)`,
   which it does TWICE because the output path defaults that way, so it returned
   True against a sabotaged source and could not fail. The test now runs that
-  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
-  vault and score 10 against a floor of 14),
+  exact sabotage and requires the answer to flip. **The row holds COMPRESSED
+  bytes now, and the fit is judged on those** (2026-08-20, WORLDMAPS-W1):
+  `install_bytes` runs `gwenc.encode` after `assemble` and prints both sizes and
+  the ratio every run, and `install_partner` threads `--compression 8 --expect
+  <plain>` through BOTH writers -- `datwrite --replace` and `datmove --move` --
+  because compression only RAISES the ceiling and a compressed replace beside a
+  stored relocate would put the deviation back exactly where a bigger map lands.
+  Section 7 runs five real installs against a hand-laid archive holding one map
+  chain whose reservation the FILE chooses, so "compressed fits where stored did
+  not" is a fact about the rule rather than an accident of one retail map: 9,051
+  B of authored 64x64 terrain compresses to 1,148 B, and against a 1,536-byte
+  reservation it REPLACES where the old rule relocated. The other four keep that
+  one honest -- the row is marked 8 and `gwdat` decodes it back to the exact
+  authored blob, the HEAD row is untouched, a map past its reservation even
+  compressed still RELOCATES (compression does not obviate `datmove`),
+  `--stored-install` writes the authored bytes verbatim marked 0 as the control
+  arm, and the SABOTAGE flips one byte of the declared `--expect` payload and
+  requires the writer to refuse with the archive byte-identical afterwards --
+  which is the only refutation that exists, since the entry crc is over the
+  STORED bytes and `datcheck` has no notion of a compression code. The row is
+  read back by a walker written out of `int.from_bytes`, sharing no code with
+  `archive.py`. Section 4 measures the gain per size (20.2% / 12.7% / 9.7% at
+  32/64/96) and bounds it only as "strictly smaller", because a pinned number
+  would go red on an encoder change that was an improvement. Section 5's AST
+  pins MOVED with the dispatch rather than being weakened: `main()` must CALL
+  `install_partner`, `install_partner` must reach both writers, still without
+  `--check-overlaps` and now with `--compression` AND `--expect` in both
+  argument lists. **Section 8 is the map that displaces nobody** (2026-08-20, WORLDMAPS-W3).
+  Every authored area before it rode map 143 -- MFT rows 71496/71497, a live
+  retail area in the owner's own copy that nothing in this repo can name
+  (FINDINGS 16-P7: there are ZERO provably-dead rows) -- because `datwrite` and
+  `datmove` both start from a row ArenaNet made. `deploy.py --install` now
+  ALLOCATES the chain instead when the area's map row carries `created = true`
+  and its file id binds nothing: `create_streams` builds `[Stream(b"", 259),
+  Stream(gwenc_stream, 1, extra_bytes=8, expect=plain)]` and `create_chain`
+  drives `datalloc.plan_alloc`/`alloc`. What makes this section different from
+  section 7 is that its failures are SILENT -- section 7's are loud (a row holds
+  the wrong bytes, a verb did nothing), while a file id registered on the PARTNER
+  instead of the head passes every crc rule and all ten of `datcheck`'s
+  open-time rules right up until the client's reconcile deletes the head and
+  frees its extent, and a row below `FIRST_CLAIMABLE_ROW` is handed to somebody
+  else at the next launch. So the created rows are read back by this file's own
+  `read_next` and `read_id_pairs`, written out of `int.from_bytes` and sharing no
+  code with `archive.py`: the head is flags 259 and ZERO length with no extent,
+  the partner is flags 1 marked compression 8 and `gwdat`-decodes to the exact
+  authored blob, the head chains to the partner and the partner terminates, the
+  id names the head and NO id names the partner, and both rows sit at index >=
+  16. The fixture's declared row count was raised 6 -> 16 for exactly that last
+  rule: `plan_alloc` refuses a chain linked below 16, so six rows would have
+  failed for a reason about the FIXTURE. Four refusals are driven, each on its
+  own hand-laid archive: an id bound to a non-map-chain shape (flags 3 on stream
+  0) is refused naming the row and its flags; an id whose BIT-31 SIBLING is bound
+  is refused before the allocator sees it, with a control proving the fixture
+  really is the dual-registration shape the default `file_id_table` would hide
+  (`plan_alloc` tests exact membership and would accept it -- that gap is
+  studies/archivewrite FINDINGS 17.5, still open, so the CALLER refuses); an
+  absent id on a row WITHOUT `created = true` keeps the old refusal, because
+  "resolves nowhere" is also what a typo looks like; and a resolving id falls
+  through to the install path, which is then RUN -- a second deploy replaces in
+  place, so a created row is an ordinary row the moment it exists. Two sabotages:
+  one byte of the declared payload flipped is refused through the create path
+  before the plan is even computed, archive byte-identical afterwards; and a
+  chain handed over PARTNER FIRST is refused by the allocator's own shape loop,
+  driven by hand because `deploy` cannot express it, which is the claim. **Two
+  of section 8's checks are about a RUN NOTE rather than about bytes, and they
+  are there because a skeptic ran the command** (2026-08-20): W4's step 1 is a
+  build-only run whose output the operator compares against a prediction
+  registered beforehand, and it printed nothing about the row -- `create` is
+  computed only under `--install` (deciding costs a refusal; a dry run must not
+  refuse) and the create line was printed under that same decision, so a CORRECT
+  dry run against an unbound id was indistinguishable from a broken
+  area -> map row -> file id join, i.e. it read as a refutation. `create_note` now
+  answers on every run and this section drives all four of its states -- the
+  build-only line names the id and says `--install would CREATE`, the `--install`
+  line is unchanged, an unbound id on a row that did NOT ask previews the
+  REFUSAL, and a bound id says nothing because `verify()` already did -- plus an
+  AST pin that `main()` calls it OUTSIDE any `create`/`install` test, with the
+  sabotage that wraps it back up in `if create:` and makes that pin red (the
+  sabotage's search string is newline-anchored: without that it is a substring of
+  its own replacement and produced an IndentationError instead of a clean red).
+  The other pair covers `spill_stream`: `install_partner` HAD to write
+  `<area>.c8.bin` because both CLI writers take `--data FILE`, `create_chain`
+  did not because `datalloc` takes bytes, so the path that needed the file least
+  was the only one producing it -- backwards, since after an install the row is
+  itself a second copy while a created chain the client rewrites or deletes
+  leaves none. The create path now spills before the plan (so a refused
+  allocation still leaves what was refused) and a STORED write still spills
+  nothing. The content round-trip loads `[map.166]` (file id `0x5F0B0`,
+  `created = true`, source `invented`) and `[area.frontier]` (64x64, sculpt's
+  donors by FILE ID) and checks the server's `map_static_config` still builds --
+  and that frontier does NOT ride map 143, because deploy joins area -> map row ->
+  file id and an area pointing at 143 would install into the displacement row and
+  never reach the create branch. Finally main() must CALL both
+  `resolve_or_create` and `create_chain`, asked of the syntax tree with the
+  sabotage that flips it, for section 3's reason. **Section 6b is the serve
+  verdict, and it exists because a correct run was reported as a failure**
+  (2026-08-20, WORLDMAPS-W2). `spawn_population` has TWO legitimate exits --
+  `area 'X': N of M placed` and `area 'X': no population rows; the world is the
+  player and the geometry` -- and `PLACED_RE` matched only the first, so the
+  second fell through to the arm written for a server that CRASHED mid-placement
+  and printed "the server never got as far as placing bodies". BOTH arms of W2
+  hit it: each had served the mesh correctly (55 trapezoids, the server's own
+  count against the archive's), and each exited 1 saying "the client walked on
+  our map and the server did not", which was false. The finding survived only
+  because a human read the gamesrv log and overrode the transcript. `serve_run`
+  now returns one of three VERDICTS -- `SERVE_PASS`, `SERVE_UNPOPULATED`,
+  `SERVE_FAILED` -- and `main()` returns 1 from exactly one branch, which tests
+  `SERVE_FAILED`. The load-bearing claim is the ORDERING and it gets its own
+  checks: an empty area may downgrade a PASS to SERVED-UNPOPULATED and may NEVER
+  lift a FAILED, driven with the real pair (ArenaNet's 27-trapezoid build of map
+  143 against our 55) from both sides, plus the no-`--area` case where the mesh
+  is the entire verdict. `serve_run`'s decision is pure -- read a log, choose a
+  verdict -- so it is tested BEHAVIOURALLY on canned logs with `launch` and
+  `newest_harness_log` stubbed, rather than on the syntax tree: the two clients
+  and the 45-second hold are the only reason it was ever untestable. The regexes
+  are checked DISJOINT in both directions (they share the `area 'X':` prefix,
+  which is how one swallowed the other's line), and `UNPOPULATED_RE` is matched
+  against the line `authsrv` ACTUALLY BUILDS -- reconstructed from its syntax
+  tree by `render_fstring`, not against a copy pasted into the test -- because
+  the pattern hard-codes eleven words of another module's prose and a reword
+  would otherwise break it silently. The other half is a SECOND READER:
+  `spawn_row_count` mirrors `area_population`'s two predicates (the row names
+  the area, the row is enabled) and `serve_run` refuses when it disagrees with
+  the server, in either direction. Without it SERVED-UNPOPULATED would be a
+  verdict that cannot fail -- the server says "nothing here", we write it down,
+  green -- and a population that genuinely went missing would read as a clean
+  run. Its own suppression is deliberate and narrow: under `--repo-content-only`
+  deploy's world is narrowed and the server's is not, so the count is not
+  claimed at all rather than compared against a world it does not describe. All
+  twenty of this section's checks were driven RED by eight sabotages, including
+  the original defect restored and the authsrv reword. **Section 9 is the row's own HEADROOM,
+  declared by the area** (2026-08-20, WORLDMAPS-W5), and its headline arm is a
+  case that could not happen in this tree the day before. A compressed install
+  writes the size field and so SHRINKS a row's reservation; `resolve_rows`
+  recomputes the ceiling from the CURRENT size; and the 24-byte MFT row has no
+  entitlement field, so "what this row was given" survived nowhere.
+  `install_partner` therefore relocated -- always, even into a chain we created
+  ourselves, whose partner was born with zero headroom by construction.
+  `datwrite`'s `grow_to` was the flag for exactly this and had one caller,
+  `restore()`. An area may now declare `reserve_bytes`, and deploy honours it in
+  both directions: creation asks `datalloc` for that many blocks, and a later
+  install past the row's current reservation but inside the budget runs
+  `--replace --grow-to` instead of `datmove`. The section drives all three
+  outcomes over ONE archive, in the order an author actually produces them, so
+  each verb is judged against the row the previous one left behind: created with
+  a 2,048 B budget (the row zeroed to the end of it, where this fixture fills
+  unclaimed space with 0xCC, so the reservation is real rather than the 1,536 B
+  a 1,148 B payload would have taken), and `resolve_rows` then reporting that
+  row's ceiling as 1,536 and NOT the 2,048 it was given -- which is the
+  entitlement-not-recorded fact as a MEASUREMENT rather than a quotation; then
+  1,952 B GROWING BACK IN PLACE at the same offset; then 2,744 B RELOCATING and
+  saying which budget it is past; then 1,148 B simply FITTING, the ordinary arm
+  untouched. **THE BUDGET IS HALF A GATE, and both halves have a control.**
+  `--grow-to` is a statement about what a row was GIVEN: for a chain this
+  toolkit allocated the area's budget IS that statement, and for a RETAIL row we
+  are displacing it is not -- annexing the blocks behind ArenaNet's row because
+  our recipe declares a number would be inventing an entitlement. So
+  `install_partner` requires `reserve` AND `created`, and the section runs the
+  SAME install three ways, one field apart each time: no budget relocates (as
+  every run of this command did before today), budget plus `created` grows in
+  place, and budget WITHOUT `created` relocates again and has to SAY the budget
+  went unspent -- the one relocation whose cause is a rule rather than a size.
+  `budget_note` mirrors the same two fields, because a preview that promises a
+  grow the install will not attempt is worse than no line at all. **And the
+  refusal is checked as hard as the success.** `_grow_gate`'s first condition is
+  that no other live row has taken the blocks this one freed, which is a fact
+  about the archive; a fallback that swallowed it would turn a claimant conflict
+  into a relocation that quietly worked. So `build_archive` gained an
+  `extra_rows` hook, a squatter is planted in the very block the row would
+  annex, and the run has to PRINT the gate's own sentence and name it as the
+  reason before relocating -- with the squatter's 300 B asserted untouched
+  afterwards and the squatter-free fixture growing cleanly as the positive
+  control. The recogniser is checked both ways (an ordinary refusal is not a
+  gate refusal; each of the four markers is), and then the case that matters
+  most: a grow whose declared payload has one byte flipped PASSES the gate --
+  the blocks really are free -- and fails on the declaration, which must be
+  RAISED rather than relocated around. **That arm is asserted on the NEGATIVES,
+  and the reason is a defect this file shipped with for a day.** "It raised" and
+  "the archive is byte-identical" both hold even when the recogniser is broken
+  to accept ANY failure, because `datmove` independently refuses the same lie
+  and re-raises the identical sentence with nothing written -- MEASURED, by
+  breaking it: the run printed "THE GROW GATE REFUSED: <a temp-file path>",
+  relocated around a bad declaration, and stayed green. What catches it is what
+  the run SAID: the captured output must contain neither the gate's headline nor
+  "RELOCATING instead". Where two independent refusals guard the same bad input,
+  a positive-only assertion measures the second one. Because `verify()` predicts
+  a verb from the row's CURRENT reservation and would contradict the install for
+  precisely this new case, the budget gets its own preview line, `budget_note`,
+  driven through all five of its states. The content round-trip requires
+  `reserve_bytes` to load as a whole number of 512-byte blocks (datalloc refuses
+  a fraction), to be at least the 2,828 B of the largest compressed partner this
+  toolkit has MEASURED, to read as zero on an area that never asked for one, and
+  to sit on a maps.toml row carrying `created = true` -- the only kind of row it
+  can be spent on. `deploy.area_reserve` is where content becomes a number and
+  is therefore where a bad one is refused: `2048.5`, `"8192"`, `-512` and `True`
+  each name content/areas.toml, because `int()` truncates the first silently, the
+  third is falsely truthy all the way to a printed line, and the INSTALL path
+  never builds a `datalloc.Stream` to catch either. A budget under its own
+  payload must reach the operator as `deploy.Refused` and not as a traceback --
+  `create_streams` builds a Stream, so the create path gained a raise site
+  `__main__` cannot see, and the check asserts the TYPE by module and name since
+  both classes are called `Refused`. Finally `main()` must pass BOTH keywords --
+  `reserve=` to the two writers (the create path chooses the ceiling, the install
+  path spends it) and `created=` to `install_partner` and `budget_note`, whose
+  absence is silent rather than red -- asked of the syntax tree, with a
+  rename-not-delete sabotage per keyword so the calls stay parseable and only the
+  keyword goes. Four sabotages driven by hand, all red: the recogniser accepting
+  any failure (3), `created` dropped from the gate (3), `create_streams` back
+  outside the refusal (2), and `area_reserve` reverted to a bare `int()` (4).
+  **Section 10 (2026-08-20) is the RESIDUAL pass -- the guards WORLDMAPS-W3 left
+  open plus one deferred from W5, floor 167 -> 203 across a build and a fix.**
+  (1) THE BORN-ARMED GUARD WAS LIVE CODE NOTHING EXERCISED: three lines inside
+  `main()`, reachable only with a vault, an archive, a donor and a content row.
+  It is `deploy.head_is_armed` now -- the same question on the same field at the
+  same moment -- and both answers are driven on real fixtures: a displaced
+  retail head (300 B) is not armed, a created head (0 B) is, and writing content
+  into that SAME created head flips it back, which is the case the guard exists
+  for and the reason it asks the ARCHIVE rather than the `create` flag.
+  `main()`'s branch is pinned on the syntax tree -- the INNERMOST `if`, because
+  the first version of the finder reached `if args.install:` and asked every
+  question about the wrong branch -- with two sabotages: pointing `already` at
+  `create`, and inverting the test. (2) `resolve_or_create`'s fall-through fired
+  IDENTICALLY for our created chain and for a retail chain that happens to bind
+  the id, because `map_chain` checks SHAPE and 349 retail maps in the owner's
+  own copy have that shape -- so `created = true`, a claim `content/` makes
+  against no archive in particular, displaced a live ArenaNet area while every
+  line of output said the word "created". It takes the allocation journal as
+  EVIDENCE now, read STRUCTURALLY rather than as prose (the lesson of the
+  grow-gate join, one item down): the journal must carry an edit whose bytes are
+  exactly `<II`(file_id, head_row) -- the file-id record going live, step 4 of
+  the allocation and the moment the chain acquires its name -- and write 24-byte
+  MFT rows at the journal's OWN recorded `mft_offset` (not today's: the client
+  relocates the table during ordinary play) with the head's flags chaining to
+  the partner and the partner's flags. **THE FOURTH CONJUNCT -- is this journal
+  about the archive in front of us -- WAS A PATH COMPARE, AND THAT WAS ITS OWN
+  BUG; a skeptic's probe found it and the fix pass closed it.** `datalloc`
+  records an ABSOLUTE path, and archives here are copied WHOLE as a matter of
+  routine (`overlay.py`'s `shutil.copyfile`, `make_run_dir.py` staging a run
+  directory, RUNBOOK's `Copy-Item run-live\<build>\Gw.dat run\<build>\Gw.dat`),
+  so an honest re-deploy of OUR OWN chain on a copy -- journal travelling beside
+  it, describing the copy byte-exactly -- was REFUSED, and the refusal's closing
+  line told the operator to allocate under a fresh id: wrong advice in the one
+  state where the chain is provably ours. The archive is asked DIRECTLY now
+  (`deploy.archive_carries`, eight bytes and a seek): does it carry, at the
+  offset the journal recorded, the file-id record the journal says it wrote
+  there? That survives a copy, a rename, an `--out` that moved the build
+  products, and a later relocation of the partner, and it is a stronger join
+  than a filename in any case. The PATH compare is KEPT as the first route and
+  has a fixture of its OWN -- an archive that stayed put while the id table
+  moved under it, record zeroed, journal still naming the file -- so the two
+  routes cover different failures and neither is vestigial. The refusal names
+  bringing the journal to the archive BEFORE the fresh-id last resort, and a
+  check pins that ORDER rather than the words. **AND EVERY CONJUNCT HAS A
+  FIXTURE, which is the other half of the fix.** The first version asserted
+  "change any one of the four and it stops being evidence" from one line that
+  varied (archive, id, partner+1) -- three, not four, and `partner+1` is refused
+  by the presence test -- so a mutation sweep could DELETE the head-flags test,
+  the nextStream test or the partner-flags test with the section still green:
+  R5's own shape, one function over. One bent journal each now (259 -> 3,
+  nextStream 17 -> 18, partner 1 -> 3), plus the CONTROL that the same rewrite
+  machinery putting a field back to the value it already had is still evidence,
+  so what the three refuse is the BENT FIELD rather than the rewrite. Sweep
+  after the fix, run rather than argued: dropping id, headflags, nextstream,
+  partnerflags, the path route or the byte route each reddens 1; dropping the
+  binding entirely reddens 2; `archive_carries` returning True for anything
+  reddens 3. THE CASE THIS MUST NOT BREAK -- the idempotent re-deploy, the loop
+  an author actually runs -- is its own check on the original AND on a
+  whole-file copy, and so is the control that a row WITHOUT `created = true` is
+  untouched, since displacement is what this command has always done. (3)
+  `datalloc`'s CLI has refused to overwrite an allocation journal since it was
+  written and `create_chain` calls `alloc()` directly, so a second create with
+  the same area name truncated the first run's undo record and then printed the
+  file it had just destroyed as the way back. Refused now at deploy's own write
+  site, FIRST -- before the spill, before the plan, before any file is touched
+  -- quoting datalloc's reasoning rather than paraphrasing it, with the journal
+  and the archive both asserted byte-unchanged afterwards. (4) Three of
+  `map_chain`'s five raise sites had NO fixture at all: `nextStream == 0` (where
+  `MapIndex.partner` reads `by_row.get(nextStream)` and would resolve row 0, the
+  file header, rather than None), a partner absent from the MFT, and a partner
+  carrying the wrong flags. One fixture each, all from `build_archive`'s
+  existing `extra_rows` so no fixture parameter was added, plus the unmodified
+  archive as the CONTROL that the three refuse the DEVIATION rather than
+  refusing everything. (5) The grow-gate join is typed (see `test_datwrite`
+  §13): a writer output carrying only `GROW-GATE-REFUSED condition=...` is
+  recognised, a REWORDED condition-1 sentence carrying the token is recognised,
+  an older writer with the sentence and no token still is -- the four-fragment
+  list is the documented fallback rather than vestigial, and a vault copy or a
+  bisect is exactly where it bites -- and an ordinary refusal is still not a
+  gate refusal either way. When both are present the HUMAN sentence is what
+  comes back: the token is the decision, the sentence is the report. Sabotages
+  driven by hand across both passes, all red: the evidence check disabled (2),
+  the journal-clobber check disabled (3), `head_is_armed` made unfalsifiable
+  (2), and the eight-way conjunct sweep above.
+  Sections 0-1 and 3-10 need no vault and score 199 against a floor of 203 (both
+  MEASURED, the vault-less one with `RURIK_VAULT` pointed at an empty directory,
+  which exits 1 naming the 4-check shortfall), so the floor still does what it
+  was for. Per section, counted from the log rather than predicted: {0: 3, 1: 2,
+  2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55, 10: 36}.
+  **Count the log with the subprocess writers' own lines EXCLUDED, and note
+  there are THREE producers rather than two**: an unanchored
+  `grep -c "\[PASS\]"` reads 220 where the ledger says 203, because
+  `datwrite --verify` prints a `file header crc` line AND an `MFT self-crc` line
+  per run (6 runs, 12 lines) and `datmove` prints one `0 overlapping row pair(s)
+  afterwards` per move (5 moves, 5 lines). 220 - 17 = 203; anchoring the grep at
+  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 215 =
+  203 + datwrite's 12. An earlier version of this note said 162 from two
+  producers and was wrong on both counts, so re-measure these rather than
+  adjusting them.
+  (The line this replaces said "score 10 against a floor of 14", stale by two
+  floor changes)),
+
+=== AMENDMENT 3 of 3 — test_contentids, section 6 and the floor (builder's, unchanged) ===
+  `toolkit/mapdata/test_mapscale.py` (the authored-map SCALE ladder, `mapscale.py`,
+  which answers "how big can an area be" with measurements instead of the two
+  things that were available before: a disassembly-derived cap nothing has ever
+  approached (`dim_x*dim_y <= 2^24`, i.e. 4096x4096 square) and three compression
+  points at 32/64/96. The module IMPORTS `deploy`/`stripbuild`/`datplan`/`datalloc`
+  and edits none of them, so what this file checks is arithmetic over somebody
+  else's proven pipeline -- plus the three things that are not arithmetic.
+  **Section 2 is the whole reason the module has the shape it does.** `snap_block`
+  is a ONE-TILE function -- handed a whole field it projects the first 1,024
+  samples and leaves every other tile's curvature alone -- and that bug shipped
+  once and hid behind the worst-error statistic, because a linear field
+  round-trips exactly whether or not anybody snapped it and only CURVATURE is
+  lost. MEASURED here on one 64x64 wobble field: `snap_block` over the whole
+  field reports worst error **4** and round-trips **2,060 of 4,096** samples;
+  `snap_field` reports worst error **4** and round-trips **4,096 of 4,096**. The
+  statistic is IDENTICAL and the per-sample count separates them by 2,036
+  samples, so every rung carries the count and the section asserts all three legs
+  -- the two worst errors agreeing (the blindness, measured rather than
+  remembered), the count going red on the half-snapped field, and the CONTROL
+  that it stays green on the snapped one, without which "refuse everything" would
+  pass. `measure(heights=...)` exists for exactly this: a supplied field is NOT
+  snapped, because projecting it first would erase the difference the column
+  reports, and `snap_worst` comes back None rather than 0 since 0 would be a
+  claim. Section 0 pins the dims gate as TWO INDEPENDENT WALLS and proves it in
+  both directions: 8192x2048 clears the area cap exactly AND the tag-0 per-axis
+  byte cap exactly and is ACCEPTED, while 8224x32 is 1.6% of the area cap and is
+  still refused, because `8224/32 - 1` is 256 and tag 0 gives each axis one byte.
+  It also proves the gate runs BEFORE an assemble is spent -- a six-rung ladder
+  costs real seconds a rung -- by replacing `deploy.assemble` with a raiser and
+  requiring `ladder([32, 48])` to come back with `_gate_dims`' own "not both
+  multiples of 32" rather than the raiser's AssertionError. **Section 3 is about
+  what a report stops being able to ANSWER, and both of its guards were added
+  after review found the module failing its own stated rules one field away.** A
+  `Capacity` loses its run list through JSON and keeps its summary, so `fit()` on
+  a restored one returned `(blocks, None)` -- and `Rung.lines()` renders a None
+  run as "NO usable run in this copy is big enough", which is the identical text
+  a MEASURED refusal prints. Measured against the c2 copy: live `fit(4820)` ->
+  `(10, (118658, 10))`, restored -> `(10, None)`, with `largest_usable_run_bytes`
+  still reading 953,856 -- a fabricated refusal for a stream the same object's
+  surviving summary says fits 197 times over, from the module whose docstring
+  says "IT NEVER QUOTES A CAPACITY FIGURE FROM A DOCUMENT". A restored capacity
+  now carries `from_document` and REFUSES, naming `--dat` as the remedy, and the
+  section checks that beside the CONTROL that a measured capacity still places
+  the same stream (a measured copy with genuinely zero usable runs must keep
+  answering None, which is a finding). The second guard is the same sin from the
+  other side: `Rung.from_dict` policed UNKNOWN fields while `Rung.__init__` fills
+  absent ones with None, so `Rung.from_dict({})` was ACCEPTED and
+  `snapped_exactly` reported a perfect round trip because `None == None` -- and
+  that property is what `main()` sets its exit code from, so a truncated or
+  older-version report read as every rung surviving the codec. `from_dict` now
+  requires the whole field set and names what is missing, and `snapped_exactly`
+  refuses over a None rather than answering, which is the belt to that brace
+  since a field can be PRESENT and explicitly null. Each is checked with its
+  control (a rung that HAS both numbers still answers True), because a guard
+  whose failure mode is silence is exactly the kind "refuse everything" would
+  pass. Section 4 needs the vault and carries the RECONCILIATION that makes the
+  ladder trustworthy: with the plaza row's own configuration (5 trees, seed
+  `1536,1536`) it reproduces `deploy.install_bytes`' measured table TO THE BYTE
+  at all three of its dims -- 3,941->1,316, 10,654->2,012, 21,786->2,828 -- so
+  this is a measurement of deploy's pipeline rather than of a re-implementation
+  that drifted, and at `--trees 8` it likewise reproduces WORLDMAPS-W4's frontier
+  (10,714->2,028). The SEED is load-bearing and that took finding: the Path chunk
+  carries the boundary point verbatim, so moving it changes no byte COUNT and
+  changes which bytes, and compression 8 notices -- at each rung's own centre
+  64x64 measures 2,008 rather than 2,012. The same section measures one archive
+  copy's capacity FRESH (free runs, MFT slack, id-table slack) and asserts only
+  RELATIONSHIPS, never a remembered number, because every one of those figures is
+  play-history state that expires the next time the copy is played; the MFT-slack
+  check is re-derived from the archive's own geometry (size plus slack lands
+  exactly on a block edge, slack under one block) rather than restated as
+  `rows*24 + remainder`, which could not fail. Its closing check is section 3's
+  restored-capacity guard run against the REAL copy and the real stream size. The
+  default ladder is small on purpose -- 32 and 64, one 64, three dims against the
+  copy, about 3.5 s -- and the big rungs (128/192/256) are section 5 behind
+  `--big`, because the suite runs constantly and a rung nobody is waiting for
+  gets skipped by a person instead of by a flag. Floor 62, MEASURED (the first
+  draft guessed 47, the run scored 54, and section 3's two restore guards took it
+  to 62): 48 checks with no vault in reach, 62 with, 66 under `--big`. Three
+  hand-driven sabotages have each been run red -- restoring the pre-fix `fit()`
+  reddens two checks, the pre-fix `from_dict` two, the pre-fix `snapped_exactly`
+  one, every control staying green),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
@@ -2600,10 +3084,65 @@ Every one of these, in the order they were written:
   exists to enable before a packet went out; the scan is against **cp1252**
   rather than ASCII, because the em dashes elsewhere in `authsrv.py` are fine
   and a blanket rule would be wrong, and its control plants a `U+26A0` and
-  requires the scan to still see it. Floor **69**, the bare-machine subset,
-  against a green **73** with `authsrv-20260819T114759-c1.jsonl` present; §10 is
-  the only fixture-bearing section (4 checks) and declares `LEDGER.skip` without
-  it. No client. ~1 s),
+  requires the scan to still see it. **§12 locks `--grant-suppress`**, the
+  EIGHTH candidate and the first that acts by sending **less** rather than by
+  sending something better. Three captures of 2026-08-20 earned it: keyboard
+  only (`182554`) is 283-287 u/s every interval with zero clicks, zero grants
+  and **0.00 hard jumps/min**; five clicks the server *refused* (`182934`) is
+  zero grants and zero warps; and the reproduction (`183311`) is the owner
+  holding S while spam-clicking forward — **196 clicks → 140 grants in 44 s**,
+  one every 0.13 s, **five hard jumps** (p50 1,372 u, max 3,010 u, 6.82/min)
+  with four of the five landing 0.10-0.23 s after a grant. `0x0029` is
+  SYNC-ONLY, so a grant sent mid-keyboard drives the authoritative copy away
+  from the rendered one *and* re-runs the desync test that snaps them together
+  past 299.332591 u. The section asserts the flag ships OFF and that with it off
+  a state that would be refused twice over grants anyway, records nothing, and
+  does not even clear a pending it finds; that both constants carry
+  derivations — the 3.0 s locally-driving window is sized off **n = 3,420** gaps
+  between consecutive `0x003D`-moving reports with no `0x0047` between them
+  across **987 `ours` captures** (p50 0.500, p90 1.801, p99 2.737, with a real
+  mode at 2.74-2.79 s: 144 exceed 2.00 s and only **9 exceed 3.00 s**, so 3.0
+  covers 99.74% while 2.0 would open a hole in 4.2%), and the 0.5 s grant floor
+  is fixed by **two independent derivations landing on the same number** —
+  retail's own median player inter-grant gap of 0.492 s over 2,855
+  player-directed `0x0029`, and the same `299.332591 / (2·288)` = 0.5197 s
+  separation ceiling `--resync` uses. Rule 1 is asserted at **both edges**,
+  inclusive at the window, lapsed one microsecond past it, and **armed on a
+  negative age** because clock skew sails through an upper-bound-only test; its
+  control is the cleared latch granting the very same click, without which
+  "refuse everything" passes. Rule 2 is bounded **above and below** (twenty
+  clicks over 1.9 s produce 4 grants, not 20 **and not 0**), driven through the
+  real `_note_wire_move` hook so the clock under test is the server's own — the
+  click arm, the heading arm, the endpoint arm, the stop echo and the click
+  sweep all grant through it, and a limit fed from the click arm alone would be
+  blind to four senders. The deferred half is asserted to send once, be
+  consumed, carry its two plane words in the click arm's order, be **dropped**
+  rather than delayed once the player keyboards again, and expire inclusively at
+  `2 · GRANT_MIN_INTERVAL`. Structurally: `state["kbd_moving_at"]` has **exactly
+  two writers**, one conditional on the client's own `moving` and one flat
+  `None` — deliberately *not* `state["walking"]`, which the click arm itself
+  clears, so keying rule 1 on it would have let the first click of the
+  reproduction disarm the latch and the other 195 straight through; the three
+  geometry reasons survive verbatim and their refusal is strictly **before** the
+  new gate, since those lines say something about the map and are what the owner
+  reads live; the arm has one grant send and it sits after the gate; and
+  `state["grant_pending"]` is a single assigned slot with **zero appends**,
+  which is the whole difference between rate-limiting and deferring the storm by
+  one interval. Its controls are handed the defects on purpose — a latch keyed
+  off `state["walking"]`, and an `elif` chain where body-scoped matching sees 1
+  send while `ast.walk` sees 2 (the real bug this check caught while being
+  written). **§13 is the replay, and it is the treatment and its control from
+  the wire rather than from a fixture we wrote**: `196/196` of the
+  reproduction's clicks refused as locally-moving with **zero** grants
+  surviving, `5/5` of the ordinary capture's clicks **permitted**, and the
+  keyboard-only run carrying no clicks to decide at all. Either half alone
+  proves nothing — a policy that refuses everything passes the first and today's
+  code passes the second — and the section says out loud that it replays rules 1
+  and 2 only, the two geometry refusals running upstream of them and not being
+  modelled. Floor **105**, the bare-machine subset, against a green **113** with
+  every capture present; §10 and §13 are the two fixture-bearing sections
+  (4 checks each) and each declares `LEDGER.skip` without its files. No client.
+  ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
@@ -2975,6 +3514,89 @@ Every one of these, in the order they were written:
   with the vault present; §13-§14, §15-§17 and §18-§19 declare `LEDGER.skip` in
   groups without `captures/gamesrv`, `captures/live` and `captures/movetap`.
   Reads only; sends nothing, and never imports `authsrv.py`. No client. ~6 s),
+  `toolkit/clientscan/test_grantsuppress.py` (WHAT WOULD SUPPRESSING THE GRANT
+  HAVE DONE -- the guard on `toolkit/clientscan/grantsuppress.py`, which replays
+  `authsrv.py`'s `GRANT_SUPPRESS` rule against the captures from the owner's own
+  2026-08-20 session BEFORE the reproduction is played again. Where
+  `resyncscore` prices an ADDITIVE fix (send a `0x002C` we never send), this
+  prices the SUBTRACTION, and its spine is a stream neither of the other two
+  loads: the c2s control traffic (`0x003D` with its `movementType`, `0x0047`,
+  `0x003E`) that says whether the player's hands were on the keyboard when we
+  granted. It reuses `movesync`'s loaders and its repaired two-arm hard bar
+  verbatim and defines no bar of its own -- §3 asserts that BY IDENTITY, and by
+  the absence of `hard_step`/`HARD_JUMP_*` from the file's own text, because a
+  private copy is how a fix gets scored on a friendlier bar than the defect.
+  **THE HEADLINE, and its honest half.** On the reproduction
+  `authsrv-20260820T183311-c1` (196 clicks, 140 grants, 44 s, 5 hard jumps at
+  p50 1,372 u / max 3,010 u / 6.82 per minute of span) the keyboard arm
+  suppresses **140 of 140** -- every grant went out while the client was
+  backpedalling under its own control -- and the counterfactual removes **5 of
+  5** hard jumps. On the capture of the build we actually ship,
+  `20260819T145717`, the same rule removes only **2-3 of 7**: 2 plausibly kept
+  because a causal grant survives it, and 2-3 UNATTRIBUTED with no grant in the
+  causal set at all. §14 pins that row as the load-bearing one, because 5-of-5
+  is a statement about that session and not about the build.
+  **§12 IS THE SECTION THAT REFUSES THE COMFORTABLE NUMBER.** "4 of the 5 jumps
+  had a grant inside 0.5 s" is true and very nearly free: grants arrive every
+  0.150 s in that storm, so **83 of the capture's own 132 report instants (63%)
+  also have one**, and the jumps beat their own baseline by 17 points over
+  n = 5. The rotation control -- jump times moved, grant train untouched --
+  still scores **18/27 = 67%**. So on the reproduction the time arm is grant
+  DENSITY and the file says so ABOVE the count. `20260819T145717`, whose
+  baseline is 10%, is where that arm carries information (43% vs 10%, rotations
+  0-2 of 7). **§13 is what does discriminate, and it is the fifth jump**: the
+  one with no grant inside 0.5 s landed **0.000 u -- bit-identical -- on a point
+  granted 5.07 s earlier**, against a control (nearest place the client had
+  already stood) of 1,105 u. It is not unexplained; it is the `+0x48` arrival
+  maturing, which a 0.5 s lookback cannot see by construction, and 2 of the 5
+  landings are bit-exact on a granted point. The counterfactual is therefore
+  printed as a **BRACKET** across two attributions (a 50 u display band, and a
+  parameter-free "closer to a granted point than to anywhere it had already
+  stood") rather than at either alone, and §6 asserts the four buckets --
+  removed / kept / unattributed / **unknown** -- PARTITION on every capture. The
+  fourth exists because `sup_at.get(t, False)` would score a lookup MISS as
+  "the rule keeps it", which reads as a finding when the truth is that the code
+  could not tell. **THE CONTROLS, and the reason there are two kinds.** Tonight's
+  other two captures carry **ZERO grants**, so a suppression share over them is
+  0/0 and §7 pins that the tool REFUSES it by name and returns non-zero rather
+  than printing a comfortable "0 of 0". The control with a denominator is §8:
+  the **five clicks** in `20260820T182934`, of which the rule calls **0**
+  keyboard-driving at every W in the sweep, against 196 of 196 in the
+  reproduction -- the same classifier, the opposite answer. §9 is the mutation
+  that proves it can fail: delete the stop term and 182934 goes 0/5 -> 1/5 at
+  W=1.0 and 0/5 -> 2/5 at the shipped W=3.0, and the stop term keeps 10 of
+  `145717`'s 40 grants. §10 is the classifier's POSITIVE control and it prices
+  the rule's only free parameter against the client's own cadence: a straight
+  keyboard hold in `20260820T182554` reports every **1.80-1.82 s**, so W = 1.0
+  -- `authsrv.py`'s own `fresh` constant, and the number a reviewer reaches for
+  -- leaves **10 of that capture's 15 intra-hold intervals uncovered**, which is
+  grant-shaped leakage in exactly the posture the owner is most likely to try
+  next; at 2.0 and at the shipped 3.0 it is 0 of 15, and the classifier calls
+  87% of that capture's span driving against 56% of the click-only one.
+  **§15 pins the two arms MARGINALLY and mirrors the server's own constants.**
+  Behind the keyboard arm the rate limit removes nothing MORE, which reads as
+  "it does nothing" and would get it deleted; ALONE it takes the reproduction
+  from 140 grants to **38** (102 suppressed) -- independently reproducing the
+  figure `authsrv.py`'s own comment carries. The rate arm is asserted to be a
+  STATE MACHINE and not a pairwise filter (102 vs 134 over the same timestamps,
+  because a suppressed grant does not reset the floor). `GRANT_LOCAL_WINDOW`,
+  `GRANT_MIN_INTERVAL` and `GRANT_SUPPRESS` are read out of `authsrv.py`'s
+  SOURCE TEXT -- never imported, that is a server module -- and pinned against
+  this file's mirrors, so a retune reddens here and whoever retunes re-runs the
+  replay; every number above is a number FOR THOSE VALUES, and the flag is
+  asserted OFF by default so this is a costing of an OPT-IN. The headline is
+  also asserted identical at this file's independently derived W = 2.0, sized
+  from a different corpus filter (74 captures, 4,190 intra-hold gaps, 96.25%
+  at or under 2.00 s) than the server's 3.0. **Nine mutations were built and
+  run and all nine redden**: deleting the stop term, deleting the recency term,
+  letting a missing suppression key score as `kept`, scoring the density null
+  over the jumps instead of the population, attributing by time only, making the
+  rate arm pairwise, drifting either shipped-constant mirror, and turning the
+  0/0 refusal into a plain zero -- with the source sha256 asserted identical
+  before and after. Floor **29**, the bare-machine subset, against a green
+  **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
+  without it. Reads only; sends nothing, and never imports `authsrv.py`. No
+  client. ~7 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE
   INSTRUMENT, and this is what makes that true.
   `studies/movement/PROBE-GATEFIRE.md` §6 tells an operator what `movetap` and
@@ -4988,8 +5610,13 @@ Every one of these, in the order they were written:
   no condition-1 claim to break, got no refusal, and reddened naming the gate while the
   gate was fine. It did that within minutes of landing, when a parallel session removed
   `effects.toml` and left `npcs.toml`, whose rows are all `capture`; the honest answer
-  there is the skip it now declares. Floor 39, the MEASURED vault-less score; 40 on an
-  overlay with no extracted-source row, 42 with one),
+  there is the skip it now declares. Floor 40, the MEASURED vault-less score; 41 on an
+  overlay with no extracted-source row, 43 with one. It was 39 until 2026-08-20,
+  when WORLDMAPS-W3's `[map.166]` was NAMED here rather than absorbed into the
+  count -- the migration section pins the exact SET of map ids and its own
+  comment says why ("the table grew" and "a row changed meaning" look identical
+  to a length check), so a created row costs one named check and one line of
+  prose about what makes it a different kind of row),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away
@@ -5037,7 +5664,68 @@ Every one of these, in the order they were written:
   in the repo -- this file's own docstring names that cost ("one that refuses
   everything gets deleted the first time it blocks a run"). §5 is SYNTHETIC, so
   unlike §1b/§2/§2b it can never skip and joins the mandatory core, taking the
-  floor to 19. The check that matters most is the fail-closed one: an EMPTY set
+  floor to 19; 2026-08-20 took it to 20 for the created/retail split, which runs
+  before any archive is opened, and the residual pass took it to 29 for §6.
+  **§6 is the ORDERING, and it is this file's own original defect seen from the
+  other side: a question answered against the wrong half of the pair.** The
+  created-row SKIP was decided from the CLIENT's table alone -- `s_tab` is built
+  at the top of `check()` and first consulted twenty lines past a `continue`
+  this row could never come back from -- so a chain allocated into the SERVER's
+  archive and not the client's read as the benign pre-creation state and refused
+  nothing, while the server would send a map id whose file the client cannot
+  bind (`Code=007`: loud on the client, silent in the server log, the shape that
+  costs a session to diagnose). The server is consulted FIRST now. A skip needs
+  BOTH sides empty and says "NEITHER"; the server alone binding it is FATAL,
+  naming the server's row and saying which state it is NOT, because the whole
+  failure was one state reading as the other; an unreadable server archive is a
+  skip naming the question it could not answer, since "not made yet" is a claim
+  about both copies. §6 is SYNTHETIC like §5 -- it drives `check()` over
+  hand-built tables keyed on the archive PATH, since `check` asks the client's
+  half `raw=True` and a stub keyed on the flag alone would answer the same for
+  both -- so it cannot skip, it joins the mandatory core, and no real vault can
+  be made to hold this state on demand. Seven cells, each one fact apart from
+  its neighbour (neither, server-only, both-same, both-different, client-only,
+  server-unreadable) plus the CONTROL that a NON-created row the client cannot
+  bind was always fatal and still is, by the older sentence -- so what moved is
+  the created branch alone. Sabotage driven by hand, red: reading the server
+  back AFTER the skip decision reddens 3.
+
+=== FOR THE COMMIT MESSAGE (the WORLDMAPS residual pass and its fix, 2026-08-20, offline) ===
+
+- Floors moved, every one MEASURED from a real green run and never projected: test_deploy 167 -> 203 (199 vault-less, exit 1 naming the 4-check shortfall -- which is what the floor is for); test_contentids 20 -> 29 (a green run scores 40 with 2 declared skips); test_datwrite 199 -> 212.
+- Tests run and their counts: test_deploy (203), test_datwrite (212), test_contentids (40/2 skips), test_mapscale (62/1 skip, it imports deploy read-only), test_srclint (22, it lints the whole tree), and as collateral on the datwrite change test_overlay (133), test_datmove (46), test_datalloc (203). The full suite was NOT run, per the house rule.
+- datwrite is safety-critical and the change is a TYPE, not logic: `_grow_gate`'s four raise sites become `GrowGateRefused(condition, ...)`, a `SystemExit` subclass. Every message, every condition, their order and the exit code are byte-for-byte unchanged; the machine-readable `GROW-GATE-REFUSED condition=<name>` line is printed by `main()` BESIDE the refusal and never inside it, because an exception class does not cross a subprocess boundary and `deploy.py` reads bytes.
+- New in deploy.py: `head_is_armed()` (R1, the guard factored out of main so it can be asked), `alloc_journal_path()` / `allocation_recorded()` / `created_evidence()` (R2) and `archive_carries()` (R2's fix). `resolve_or_create` gains keyword-only `here=`/`tag=`, fail-closed. `main()` hoists `out`/`here` above the archive block -- same expression, depends on nothing the archive says -- and threads them.
+- THE R2 EVIDENCE CHECK JOINS ON BYTES, NOT ON A FILENAME. The first version compared the absolute path `datalloc` records against the archive's, which refused an honest re-deploy of our own chain on any whole-file COPY of the archive -- and copying a Gw.dat is routine here (`overlay.py`, `make_run_dir.py`, RUNBOOK's `Copy-Item`). It now accepts EITHER the recorded path OR the archive still carrying the file-id record the journal wrote, at the offset it wrote it. Each of the four conjuncts has its own fixture; a mutation sweep over all of them is in test_deploy §10b's comments.
+- Behaviour changes an operator will meet: a `created = true` row whose id already binds REFUSES without an allocation journal that describes it AND is bound to this copy; a create whose `<area>_alloc.json` exists REFUSES; and a created id bound in one archive and not the other is FATAL in the pre-flight rather than a skip, which will fire the first time W7 deploys the chain into one copy and launches against the other. All three name their remedy, and the first now names the recoverable one (bring the journal to the archive) before the last resort (allocate under a fresh id).
+- Every vault touch was READ-ONLY: two build-only `deploy.py` runs (plaza, frontier) and the two test files' own archive reads. No client was launched, no archive was written, no commits were made.
+- Known flake, not a regression: one mid-session test_contentids run went red on §1's "the check produced findings at all" with both halves reporting the client archive unreadable -- the 4 GB archive was momentarily held open by another session, which is the hazard §1's own comment describes. Readable a second later; the re-run was green. **A CREATED content row is a third state and it
+  nearly deleted this guard**: `[map.166]` names a file id that binds nothing
+  until `deploy.py --install` allocates it, so `check()` returned FATAL for every
+  archive and -- with `served=None`, the fail-closed default that tape runs and
+  every un---map-ped run take -- that one row refused EVERY loopback launch in
+  the repo, which is precisely the 2026-08-15 false positive this file's own
+  docstring warns about. `contentids.check` now records an absent created id as a
+  printed SKIP and judges it normally the moment an archive binds it, and this
+  file holds the created rows OUT of both archive-selecting scans: section 2
+  picks its positive control with `any(f not in raw for f in ids.values())`,
+  which is true of EVERY archive once a created id exists, so it silently
+  selected the wrong archive and four checks went red naming Pre-Searing while
+  the code under test was fine -- a fixture resolving to the wrong thing, which
+  is the defect `vaultpath.require_dir()` exists to prevent one level up. The
+  two new section-1 checks are gated on `check()` having returned findings at
+  all, because these are 4 GB files another session may hold open. The check that
+  matters most is the fail-closed one
+
+FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
+- test_deploy floor 56 -> 92 across the two passes. MEASURED green runs 2026-08-20: 92 with the vault, 88 without (RURIK_VAULT pointed at an empty directory, section 2 skips, exit 1 -- which is what the floor is for). Section 8 adds 36 checks in total: 28 from the build pass, 8 from this fix pass (4 on `create_note`'s states, 2 AST pins with a sabotage, 2 on `spill_stream`).
+- test_content floor 39 -> 40; a green run scores 43 with the vault overlay (re-confirmed today).
+- test_contentids floor 19 -> 20; a green run scores 31 with 2 declared skips (re-confirmed today).
+- Fixture change worth naming: test_deploy's hand-laid archive declares 16 rows rather than 6, so an appended chain lands at index >= 16 (FIRST_CLAIMABLE_ROW). Section 7 is unaffected and still green.
+- content/maps.toml [map.166] and content/areas.toml [area.frontier] are the only content rows added; nothing else in content/ moved, and this fix pass did not touch either.
+- New in deploy.py from this pass: `create_note()` (the row line, printed on every run) and `spill_stream()` (shared by both write paths). `install_partner`'s stored/compressed branch became one line through the helper; behaviour on that arm is unchanged.
+- Every vault touch in both passes was READ-ONLY: the C2 copy was read for `plan_alloc`, for the step-1 dry run and for the donors. Nothing was written to any vault archive, no client was launched, and datalloc.py/gwenc.py/datwrite.py/datmove.py were not modified.
+- Tests run this pass: test_deploy (92, green), test_srclint (22, green -- it lints the whole tree, so any source edit is its business), test_content (43) and test_contentids (31/2 skips) to confirm the RUN note's precondition counts. The full suite was NOT run, per the house rule.: an EMPTY set
   must refuse exactly as `None` does, because a caller whose `--map` parse came
   back empty must not thereby clear the whole table. Out-of-scope disagreements
   are demoted and PRINTED, never hidden, and returned with level `fatal`
@@ -5648,6 +6336,47 @@ Every one of these, in the order they were written:
   printing PASS. A CONTROL was added beside it that could not have existed
   before the fix: casting a HEX at the same agent must swing nothing at it.
   Floor 40 → 41),
+  `toolkit/authsrv/test_morale.py` (morale and the death penalty — the
+  arithmetic, the gate and the wire tick. Three things are actually at risk and
+  each has its own section. **The base-versus-total scale**: morale scales a
+  character's BASE health and energy, never the totals, and on the one death
+  ArenaNet's corpus contains that is the difference between the observed 22 and
+  the naive 21.25 — so §1 pins the ENERGY figure (the discriminating one; health
+  cannot discriminate, because base and total are both 100 for the character we
+  ship) and asserts outright that scaling the total does NOT reach the observed
+  number. **The gate**: every map this server ships is pre-Searing, where retail
+  charges nothing for dying (GWW, "Death Penalty", Exceptions), so §4 asserts
+  the SILENCE — a death in Lakeside County puts no morale on the wire — and then
+  asserts `--death-penalty` breaks it, because a default that fired would look
+  like a working feature and be a fabrication. **The revive**: the penalty lives
+  entirely in the maxima, so the cheapest way to delete the mechanic is to
+  restore `PLAYER_HEALTH` when the player stands up, which is what that code did
+  until 2026-08-20; §6 kills a player, stands them back up through BOTH revive
+  configurations (the shipped one-tick defer and `RURIK_REVIVE_DEFER=0`) and
+  reads the maximum that goes out. §5 asserts the death tick is ArenaNet's own
+  order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
+  energy regen, health max — with the delta carrying the wire's own
+  `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
+  encoding through the codec. §8 pins the other half of the original
+  question: `0x00E9` field 10 stopped being one of the zeros this server
+  sends, because retail carries 100 there in 43 of 43 sightings and 0 is
+  not a legal morale at all. Floor 49, against a green 50/49 across the two
+  revive configurations. No vault, no socket, no client),
+  `toolkit/clientscan/test_moralestore.py` (the morale-store scanner, proven
+  against a process this machine controls rather than against the game. It
+  exists because the tool's headline output is a NEGATIVE as often as a
+  positive — "nothing in this window ever changed" is what "the delta is
+  ignored" would look like AND what a scanner that cannot see anything looks
+  like, so the null needs a control before it is evidence. A child process
+  holds a constant at a known address and walks a value through 77 → 88 → 66 →
+  53 beside it; §1 requires the region walk to actually read megabytes and to
+  find the child's own address, §2 requires the watched window to record all
+  four values in order and its NEIGHBOURS to record none, §3 measures the
+  coincidence rate that broke the first MORALE-Q7 attempt (22,304 hits for the
+  value `1` against 4 for the anchor 424242 — which is why the method locates
+  on a constant the experiment never changes), and §4 requires an unmapped
+  address to read as None rather than as zeroes. Floor 8, Windows-only,
+  skips honestly elsewhere. ~10 s),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`
   interchange (`unitexport.py`), and the Blender viewer measured headless

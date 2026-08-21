@@ -57,6 +57,50 @@ without re-deriving it, and what it needs in order not to repeat the failures.
 > real lever found is `0x002C`, which clears the tracking record and sets BOTH
 > copies, and which an earlier build already tried and removed as "the warp the
 > player described". Read §4 item 1's NEXT JOB before picking anything up.
+>
+> ## ★★ THE WARP IS REPRODUCIBLE ON DEMAND (2026-08-20) — START HERE
+>
+> **HOLD S AND SPAM-CLICK FORWARD.** That is the trigger, it takes 45 seconds,
+> and it is the thing this arc lacked all week. Holding a movement key keeps the
+> client's `0x003D` flowing, which defeats the click arm's staleness guard, so
+> every click is granted; 196 clicks became 140 grants and 5 hard jumps.
+> **The control is equally cheap: click and then keyboard**, and the guard
+> refuses every click (2.1 s was already too stale), no grant goes out, and the
+> desync test is never evaluated. **Zero grants, zero warps, twice.**
+>
+> **WARPS APPEAR ONLY WHERE WE GRANT, AND SCALE WITH HOW MUCH WE GRANT.**
+> `--grant-suppress` (off by default) refuses the click grant while the player
+> is keyboarding. Measured A/B, same operator, same play, 100 s apart:
+> **199 grants → 2, hard rows 11.49 → 1.39/min, displacement 9,687 → 903 u/min**
+> (8.3× and 10.7×). It beat its own pre-registered prediction of 3.1×.
+>
+> ⚠ **IT IS A PALLIATIVE, NOT THE FIX, and read this before quoting it.** Retail
+> grants CONTINUOUSLY while the player keyboards — 88.5% of 2,855 live player
+> grants answer a `0x003D`, median gap 0.492 s — and does not warp, because its
+> destination is the client's own endpoint. We stopped warping by going silent,
+> which costs us an authoritative position that `state["pos"]` consumers
+> (aggro radius, `clip_to_walkable`, interact range) still need.
+> ⚠ **And the timing evidence that motivated it is REFUTED** — "4 of 5 jumps
+> followed a grant" is grant density (rotation control 2.39/5, Fisher p = 0.64).
+> What carries it is the landing geometry (p = 3.0e-5), the reporting-controlled
+> 2×2 (P = 3.4e-10) and the decode. FINDINGS, "round 4".
+>
+> ## ★ ROUND 5 (2026-08-20) — the invariant is stated, and the next build is NO lead
+>
+> Research only, no client run: FINDINGS "round 5" and the buildable spec in
+> [REALFIX.md](REALFIX.md). Round 4's closing "a short, always-refreshed endpoint
+> grant … has never been tried" is REFUTED — `--client-endpoint` IS that, and it
+> was the worst of the three refuted runs. What survives is **zero lead**: grant
+> the client's just-reported position, tip dropped — the only family that
+> satisfies the decoded invariant with no assumption about player speed, because
+> the history polyline extends only BACKWARDS under keyboarding (lag is on it by
+> construction; lead is not). The offline scorer is a calibration, refusal and
+> exposure instrument and honestly CANNOT rank the lead family — the P2-vs-P3
+> question needs the one live A/B (REALFIX-L1, owner-driven, click-free, keyboard
+> held, a deliberate backpedal leg, the `0x0060580D`/`0x00605820` gate breakpoint
+> riding along). **Do NOT rebuild refuted things under new names**: a stop-arm
+> `0x0029` IS `--stop-echo`; an unclipped endpoint heading grant IS
+> `--client-endpoint`. Both are run, measured and killed.
 
 ---
 
@@ -293,8 +337,8 @@ survivor is a client-side click-move at 2.6× the walk budget. `pinned.py` and
    memory read, and it is the 0.99 constant.) It asks whether a point lies within
    **100.0f** of a segment — **straight-line perpendicular, compared SQUARED and
    STRICT**, *and* within 100.0f of **walkable path length**, compared **LINEAR and
-   INCLUSIVE** (~99.6 u effective, because the client's leg sqrt is a table
-   approximation biased high, worst +0.39%, n = 5,000). Full decode with pseudocode:
+   INCLUSIVE** (**99.919968 u** effective — exhaustive over 2,048,001 float patterns
+   of the LUT sqrt, FINDINGS round 5; ~99.6 was a scaled worst case). Full decode:
    FINDINGS, "the AgTrack match test is decoded".
    **BUT THE POINT IT TESTS IS NOT OUR GRANT, AND THE LIST IS NOT A PREDICTION.**
    `0x00605643` reads `source+0x78` — the SYNC agent's own position, dead-reckoned to

@@ -31,6 +31,48 @@
 # `map_id` points at a maps.toml row, which is what the SERVER serves. The two
 # tables are deliberately separate: a map row is a fact about where something
 # is, an area row is a recipe for making one.
+#
+# `reserve_bytes` -- OPTIONAL, AND IT IS THE ONE FIELD HERE THAT IS ABOUT THE
+# ARCHIVE RATHER THAN ABOUT THE MAP (WORLDMAPS-W5, 2026-08-20). It is the
+# reservation `deploy.py --install` asks `datalloc` for when it CREATES this
+# area's chain: how many bytes of contiguous blocks the Stripped partner row is
+# GIVEN, as against the `size` it HOLDS. The placement rounds it up to whole
+# 512-byte blocks.
+#
+# WHY IT HAS TO BE STATED HERE AND NOT COMPUTED. A 24-byte MFT row is offset,
+# size, extraBytes, flags, nextStream and crc -- there is no entitlement field,
+# so once a row is written "what this row was given" survives nowhere on disk
+# (`datwrite.py`'s `_grow_gate`: the bound "has to come from GEOMETRY").
+# `deploy.resolve_rows` therefore recomputes a row's ceiling from its CURRENT
+# size, and a created row's first install set that ceiling to exactly its own
+# length -- zero headroom -- so the next, larger authored map was already past
+# it and relocated. The area declares the budget once, and both directions of
+# `deploy.py` honour it: creation asks for the blocks, and a later install that
+# outgrows the row's current reservation grows back into them in place
+# (`datwrite --grow-to`) instead of moving the row.
+#
+# IT IS ONLY SPENDABLE ON A ROW THIS TOOLKIT MADE, so it belongs on an area
+# whose maps.toml row carries `created = true` and does nothing on any other.
+# The reason is what `--grow-to` means: a statement about what a row was GIVEN.
+# For a chain `deploy.py` allocated, this field IS that statement -- creation
+# asked the allocator for exactly this many bytes. For a retail row we are
+# displacing, ArenaNet gave that row whatever it gave it, and annexing the
+# blocks behind it because OUR recipe declares a number would be inventing an
+# entitlement rather than restating one. So `install_partner` requires both the
+# budget and `created`, a displaced row fits-or-relocates exactly as it did
+# before this field existed, and a run that declares a budget it cannot spend
+# says so on the line where it relocates.
+#
+# IT IS AN AUTHORING BUDGET AND NOT A CLAIM ABOUT THE CLIENT. The client reads
+# `size`, which is the payload and is unchanged; the reserved tail is zeroes,
+# indistinguishable from the padding every block-rounded reservation has always
+# carried. Nothing in this repo has ever observed the client caring, and this
+# field asserts nothing about it. What it does cost is real: a contiguous free
+# run that big has to exist in the target archive at creation time, and
+# `datplan.classify_runs` is what decides that, per copy, on the day.
+#
+# Omit it and creation behaves exactly as it did before: reservation = the
+# first install's own length, and the next larger map relocates.
 
 [area.plaza]
 name = "Plaza"
@@ -150,3 +192,82 @@ hard-crested ridge, not out of a Python formula. Verified by `deploy.py --area \
 sculpt --blend`, which re-derives the lattice from the mesh's world positions, \
 rounds and snaps onto the codec's reachable set with both errors reported, and \
 checks the seed against the slope classifier before anything is written."""
+
+# THE FIRST AREA THAT DOES NOT DISPLACE ANYBODY. Every row above rides map 143,
+# i.e. MFT rows 71496/71497 -- a live retail area in the owner's own copy that we
+# cannot name (FINDINGS 16-P7: there are ZERO provably-dead rows in the archive).
+# That was never the goal; it was the only verb available, because `datwrite` and
+# `datmove` both start from a row ArenaNet made. This row's map points at a file id
+# that binds NOTHING, and `deploy.py --install` allocates the chain instead
+# (WORLDMAPS-W3). Everything else here is deliberately unchanged from `sculpt`:
+# same size, same donors, same seed, same borrowed set -- so the ONE thing that
+# differs between a proven run and this one is where the rows came from.
+#
+# `map_id` NAMES THE MAPS.TOML ROW THAT CARRIES THE FILE ID, and that is why this
+# row does not ride 143 like its neighbours. deploy joins area -> map row -> file
+# id, so pointing this area at 143 would install it into the displacement row and
+# the create branch would never fire. The map id ITSELF is still cosmetic -- 166 is
+# a label the client already knows and prints over our terrain, exactly as
+# maps.toml [map.143] and [map.144] say of theirs.
+[area.frontier]
+name = "The Frontier"
+map_id = 166
+dims = 64
+heights = "plaza"
+# The 64x64 centre, which is where `sculpt` puts its seed too and for the reason
+# recorded there: the plaza generator has a 61-degree cliff at gx == mid, and the
+# centre is measured at 3 degrees.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+# THE HEADROOM THIS ROW IS GIVEN, and the header above is the whole rationale.
+# 8,192 B is 16 blocks. WHERE THE NUMBER COMES FROM, said plainly because it is
+# a choice rather than a measurement of this map: `deploy.install_bytes`' own
+# measured series on build 38797's donors (2026-08-20) puts a 96x96 gen_plaza
+# partner at 2,828 B of compression-8 stream -- 32x32 1,316 B, 64x64 2,012 B,
+# 96x96 2,828 B -- so 8,192 is that largest measured figure with a 2.9x margin,
+# and it comfortably holds a 96x96 compressed partner. It is NOT taken from a
+# measured ladder above 96x96: no such series existed when this row was written
+# (that is WORLDMAPS-W6), and `install_bytes` refuses to extrapolate its three
+# points on principle -- the ratio is a property of the generator and the donor,
+# not of the format. This area itself is 64x64 and installs 2,028 B, so the row
+# is created with roughly 6.1 kB it does not yet use. It is spendable because
+# this area's map row (166) carries `created = true` -- see the header: the
+# three areas that ride map 143 are displacing a retail row and could declare
+# this field to no effect.
+reserve_bytes = 8192
+
+[area.frontier.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row -- and what \
+this one adds over `sculpt` is that the ROW ITSELF is ours: `map_id = 166` names a \
+maps.toml row whose file id 0x5F0B0 binds nothing in any archive, so installing this \
+area CREATES its two MFT rows through `datalloc` rather than overwriting a retail \
+map's. Verified offline 2026-08-20 by `deploy.py --area frontier` against \
+`vault/run/2026-07-29_221c13772c7a-c2/Gw.dat`: the 64x64 field round-trips \
+4,096/4,096 samples exactly after the lattice snap, the assembled map is 10,714 B \
+(9,843 generated, 770 borrowed) compressing to 2,028 B of compression-8 stream, and \
+the seed measures 0.0 degrees under the 15/35/30 slope classifier from FINDINGS 48 \
+-- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client would \
+build no navmesh for. The borrowed halves are named per field and read from the \
+owner's own archive at run time, never stored here. `reserve_bytes` is an \
+AUTHORING budget and is verified only as arithmetic: it is the largest measured \
+compression-8 partner in `install_bytes`' 32/64/96 series (2,828 B at 96x96, build \
+38797 donors, 2026-08-20) with a stated 2.9x margin, and no client has been asked \
+anything about it -- the row it sizes declares `size`, the payload, exactly as it \
+did before the field existed. It is spendable only because this area's map row is \
+`created = true`: a budget declared on an area that DISPLACES a retail row buys \
+nothing, deliberately, since what that row was given is ArenaNet's statement rather \
+than ours. What is NOT verified is the \
+CLIENT, twice over: the spawn-in-one-trapezoid test needs the mesh the client \
+compiles (`deploy.readback`), and no retail client has ever read a created map chain \
+at all. Both are WORLDMAPS-W4, which is a run rather than a check."""

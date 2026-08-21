@@ -3034,7 +3034,7 @@ client's destination".
    produced.
 3. **A miss is not a snap.** The fallback half is where the decision actually
    lives once the match fails, and it is undecoded.
-4. **The effective threshold is ~99.6 u, not 100**, and biased toward snapping.
+4. **The effective threshold is 99.919968 u** (⚠ this line read ~99.6 until round 5 re-measured it exhaustively), biased toward snapping.
 
 **Nothing here is a fix, and none of it has been run.** The one short-circuit that
 does exist — `0x002B` carrying `facing = 9` against an armed `+0x48`, which
@@ -3476,3 +3476,465 @@ reason the rest of the channel is latent (the spawn is a placeholder and the map
 is not in play), and it should be fixed when 474 gets a real spawn rather than
 carried as a surprise.
 
+---
+
+## 2026-08-20, round 4 — THE WARP IS REPRODUCIBLE ON DEMAND, AND SUPPRESSING OUR OWN GRANTS REMOVES ~90% OF IT
+
+**OBSERVED.** Five client runs on the owner's own machine, one operator, one
+session, back to back. Every number below is read off the captures with
+`movesync.py`'s repaired two-arm hard bar (implied speed > 400 u/s at
+dt >= 0.05 s, or displacement >= 520 u below that floor). This is the first
+round of this arc driven by PLAY rather than by corpus archaeology, and it
+produced in one evening both things the arc had been missing: **a reliable
+trigger** and **a clean control**.
+
+### 1. The trigger — hold S and spam-click forward
+
+| stamp | clicks | headings | **grants** | span | jumps | rate | p50 / max | displacement |
+|---|---|---|---|---|---|---|---|---|
+| `20260820T182554` keyboard only | 0 | 18 | **0** | 26.2 s | **0** | 0.00/min | — | **0 u/min** |
+| `20260820T182934` click, then keyboard | 5 | 74 | **0** | 114.8 s | **0** | 0.00/min | — | **0 u/min** |
+| `20260820T183311` **hold S + spam-click** | 196 | 128 | **140** | 44.0 s | **5** | 6.82/min | 1,372 / 3,010 u | 11,182 u/min |
+| `20260820T195137` baseline repeat | 207 | 132 | **199** | 41.8 s | **8** | 11.49/min | 795 / 1,917 u | 9,687 u/min |
+| `20260820T195315` **`--grant-suppress`** | 180 | 112 | **2** | 43.2 s | **1** | **1.39/min** | 651 / 651 u | **903 u/min** |
+
+**The grant count is the whole story.** Warps appear only where we grant, scale
+with how much we grant, and all but vanish when we stop.
+
+### 2. Why ordinary play does not warp — the server was already refusing
+
+`20260820T182934` is the finding nobody expected: the owner clicked five times
+and **the server answered none of them**, for reasons it logged verbatim:
+
+> `click to (11388, 2298): not a straight shot -- leaving it to the client's own pathing`
+> `click to (7961, 11308): we last saw the player 8.9s ago -- leaving it to the client's own pathing`
+
+The staleness guard is strict enough that **2.1 s was too stale**. Because the
+owner clicked and then keyboarded, every click was refused, no grant went out,
+and — decisively — **the desync test was never evaluated at all**, since the
+grant bake `0x005FEBEB` is one of only three callers of `0x00605FC0`. Zero
+grants, zero jumps, and the client pathed itself to the clicked point anyway
+(cos 0.994–1.000, closing 90–3,224 u across silences of 1.2–17.0 s, n = 5).
+
+**Holding S defeats that guard**, because the client emits `0x003D` continuously
+while moving, so "we last saw the player" never goes stale and every click is
+granted. That is the whole trick, and it is why the arc could never summon the
+warp before: casual play keeps the guard shut.
+
+### 3. Keyboard movement is healthy — CORRECTED, and it corrects an operator report
+
+`20260820T182554` is three ~8 s W-holds. **Every interval sits at 283–287 u/s**
+against a 288 u/s walk, with exactly three `0x0047` stops (one per release), so
+these were genuinely continuous holds and not re-presses. **0.00 hard jumps.**
+The client walks correctly on its own local prediction with almost no server
+involvement — 6 `0x0025` in 27 s and no grants at all.
+
+This **refutes** the working report that "holding W gives ~1 s of movement then
+stops": it did not reproduce under `--explorable` with no grant flags. The
+symptom is real to the operator but is configuration-dependent and is NOT a
+property of keyboard movement as such. What DID show up in the same capture is
+the client's own unit/terrain collision, cleanly: during a stretch the operator
+described as walking into a wall at ~40°, `x` froze at `11123.0`, speed fell to
+**260–265 u/s**, and the report cadence tightened from 1.80 s to **0.50 s**.
+
+### 4. `--grant-suppress` — the A/B
+
+Two runs, 100 seconds apart, same operator, same play, one flag different.
+**199 grants → 2. Hard rows 11.49 → 1.39/min (8.3×). Displacement 9,687 → 903
+u/min (10.7×).** Both terms fell together.
+
+**The pre-registered prediction was 3.1× on displacement and 2.5–3.7 hard rows
+per minute. The result beat it on both.** Recorded because a prediction that was
+too pessimistic is as much a miss as one that was too optimistic.
+
+**A REVIEWER PREDICTION FAILED, in our favour.** The size term was expected to
+worsen — surviving jumps 2.7× bigger, p50 1,969 u against 735 u. The single
+survivor is **651 u, smaller than the baseline's own 795 u p50**. With **n = 1**
+that settles nothing about the distribution; it only says the penalty did not
+appear here. Two or three more runs would.
+
+⚠ **VARIANCE IS LARGE AND THE A/B IS n = 1 PER ARM.** The two baseline runs of
+the identical play differ by 1.7× in rate (6.82 vs 11.49/min) and 1.15× in
+displacement. The effect survives that only because it is ~10×.
+
+### 5. THE TIMING EVIDENCE THAT MOTIVATED THE FIX IS WORTHLESS — REFUTED
+
+The fix was proposed on "4 of 5 hard jumps landed 0.10–0.23 s after a grant."
+**That is a restatement of grant density and nothing else.** In `183311`, 140
+grants span 32.7 s at one every 0.150 s, so **49.2% of the capture's wall clock
+and 57.1% of its own report instants are also within 0.23 s of a grant.** A
+rotation control — sliding the jump times against an untouched grant train over
+199 offsets — scores a mean **2.39 of 5**, and 77 of 199 rotations equal or beat
+the real 3 of 5. Fisher one-sided **p = 0.64** at 0.23 s, **p = 0.34** at 0.30 s.
+
+**What survives the identical test**, and what the flag actually rests on:
+
+- **THE LANDING GEOMETRY** — five sub-unit landings on points we had granted,
+  **p = 3.0e-5**. Grant density cannot fake landing *on* the destination.
+- **THE REPORTING-CONTROLLED 2×2** — 5.67 jumps/min while granting against 0.88
+  while silent, **P = 3.4e-10**.
+- **THE DECODE** — `0x0029` is SYNC-ONLY, so a grant issued while the player
+  drives locally cannot reach the copy they see and can only create divergence.
+
+### 6. What this is NOT — retail contradicts the premise
+
+**ArenaNet grants continuously while the player keyboards and does not warp.**
+88.5% of 2,855 player-directed live `0x0029` are triggered by a `0x003D`
+heading, at a median inter-grant gap of 0.492 s. Retail does not warp because its
+destination is **the client's own proposed endpoint plus 0.5 u** — it follows
+rather than leads.
+
+`--grant-suppress` forbids exactly what retail does most. **It works by making us
+quiet, not by making us correct**, and "suppress the grant" already sits on the
+dead-candidate scoreboard. It is a palliative for OUR stale destinations.
+
+**The cost is real and is not visible in these captures.** `state["pos"]` feeds
+aggro radius, `clip_to_walkable` and interaction range. Staying silent means our
+authoritative position stops tracking the player, which will surface in combat
+and interaction rather than in movement. **UNMEASURED:** the cost of rule 1 in
+its own regime — the n = 5 evidence that a refused click still walks the player
+is all from clicks after a STOP, where rule 1 never fires.
+
+### 7. What is still unbuilt
+
+**Grant the client's own endpoint**, continuously, the way retail does — so the
+two copies agree instead of one going silent. FINDINGS' candidate #1 calls this
+"the only shape that PREVENTS the snap rather than shrinking it." `--heading-grant`
+was an attempt at it and is REFUTED for warping more, but its own record says why:
+the destination was left to mature into a teleport. A SHORT, always-refreshed
+endpoint grant is a different animal and has never been tried.
+
+**And the server models no unit-vs-unit collision at all** (`authsrv.py`: "client
+collides for itself and does it better than our navmesh does"). The client's model
+is now decoded as a by-product of the gate work — radius at `agent+0xD0`, combined
+radii via `0x005FED20`, a 60° forward cone, and the sidestep at `0x00600500`
+displacing perpendicular to velocity by `(combinedRadius + 10.0) - |distFromLine|`,
+all on ArenaNet's own field names. When an NPC blocks the player, their client
+stops them and our copy walks through: the same divergence, arriving as
+rubber-banding rather than as a snap.
+
+## 2026-08-20, round 5 — THE REAL FIX, RESEARCHED: the invariant, retail's policy, and the offline harness that scores candidates before a client run
+
+Five research lanes and three skeptic lanes, no client run, nothing written to the repo or the vault. Round 4 ended with a paragraph saying the fix "has never been tried"; this round found that paragraph contradicted 1,570 lines earlier in its own document, decoded what the client actually asks and when, re-measured retail's policy term by term against a nine-capture `live` corpus, built and then broke an offline scorer, and comes out with a smaller, sharper claim than it started with. **The headline is not a candidate. It is that the offline instrument cannot rank the candidates it was built to rank, and the reason it cannot is itself a finding about the mechanism.**
+
+Origin discipline, stated once and honoured throughout: every `ours` number below comes from eleven loopback captures under `vault/captures/gamesrv/` plus five `movetap` pairs; every `live` number comes from the nine-capture retail corpus named in §3.1. **The two are never pooled and every figure carries its origin.** All static claims are build 38797 from the pinned image `vault/client/2026-07-29_221c13772c7a/Gw.exe`, n = 1 image, 0 runtime observations, and every address in this round was re-read by two lanes independently.
+
+**Identifiers.** `REALFIX-*` tokens minted here and below are declared in
+[REALFIX.md](REALFIX.md)'s legend — that file is the arc's buildable spec.
+
+---
+
+### 1. Round 4 §7 is REFUTED as stated, and the replacement is narrower than either reading
+
+`FINDINGS:3598-3605` reads, in full: *"**Grant the client's own endpoint**, continuously, the way retail does… `--heading-grant` was an attempt at it and is REFUTED for warping more… A SHORT, always-refreshed endpoint grant is a different animal and has never been tried."*
+
+**It has been tried.** `--client-endpoint` (`CLIENT_ENDPOINT`, `authsrv.py:1138`, block at `:9843-9878`) computes `ex,ey = reported + heading + 0.5·unit(heading)` — the client's own reported position plus the client's own vec2 plus retail's own +0.500 u constant, **unclipped**, sent on every `0x003D` while moving, **measured grant age at jump p50 0.28 s**, which is shorter-lived than `--heading-grant`'s 0.32 s and far shorter than retail's own 0.492 s median. That is a short, always-refreshed endpoint grant by every term in round 4's own sentence, and it is the *more* precise match than `--heading-grant`, whose point is computed from our stale `state["pos"]` and clipped by our navmesh. It ran as `20260819T182652` (`ours`) and was refuted at `FINDINGS:2028` under the header "`--client-endpoint` REFUTED, and it is the worst of the three".
+
+Round 4 §7 names only `--heading-grant` and never mentions `--client-endpoint` by name or by its refutation. **Recorded as REFUTED-as-stated. A later lane must not re-propose or re-build `--client-endpoint` under the belief that it is fresh.**
+
+What round 4 *appears* to mean and does not say is narrower: no configuration has combined a short always-refreshed client-endpoint grant with a fix to the underlying SYNC-ONLY architecture. Round 5 narrows it further, and this is the substantive correction: **the untried configuration is not a short lead. It is NO lead** — granting the client's just-reported position with the 765–768 u tip *dropped* — and that is a different animal again from both refuted runs. See §6.
+
+---
+
+### 2. THE REALFIX INVARIANT, as adjudicated
+
+#### 2.1 When the client asks
+
+`0x00605FC0` (the AgTrack dispatch) has **exactly 3 direct callers** — CONFIRMED independently by two lanes with `codescan --xrefs` — and they reduce to **two event classes**:
+
+- **(A) the destination bake**, `0x005FEBEB` at the tail of `0x005FE950`, unconditional on the glide arm (`0x005FEBCE je 0x5febe1` skips only the facing dispatcher `0x00602660`). Reached by every `0x0029`/`0x002A`, by `0x0027`'s re-issue through `0x00602A40`, and by any local async destination set through the shared mutator.
+- **(B) a hard SetPosition**, `0x006022A1` (the tail of the teleport primitive `0x006020B0`) and `0x00602BBD` (the unarmed arm of `0x00602B20`), which are the two arms of one dispatch. Reached from the arrival consumption (`0x00601817`/`0x00601899`, whose site compares `[esi+0x78]` against `[esi+0x9c]`), the collision resolver (`0x00600A91`), `0x002C`'s two arms (`0x005FDAE5`/`0x005FDB49`), and the resync's own writes.
+
+**OBSERVED.** Xref counts CONFIRMED by the skeptic pass: 3 into `0x00605FC0`, 7 into `0x006020B0`, 7 into `0x00602B20`, each list matching. The recursion assert quotes ArenaNet's own words at `0x0060227B`: `!(*curr)->m_timeStopMovement || ((*curr)->m_targetPoint.position != AGENT_INVALID_POSITION)`, `P:\Code\Engine\Agent\AgAgent.cpp` line 2090 — a single assert cited as the evidence for a single claim, which is what the provenance gate permits.
+
+**"Dispatched exactly once per SetPosition" is REFUTED.** `0x006020B0` recurses over the child array at `0x0060221E`, each recursion reaching its own `0x006022A1`; and after the bake's own dispatch, `0x005FEC7E` re-bakes each child, `0x005FEC9A` enters the bounded-6 collision frame whose `0x00600A91` SetPositions, and `0x005FECAC` (also `0x00602BE5`) reaches `0x006011F0`'s arrival consumer. **Every instant count in this round is a FLOOR**, and any rate arithmetic built on "one dispatch per grant" is a lower bound.
+
+The fence upstream: `0x00606002` (`clientControlled == 0` ⇒ never called), `0x00606013` (`source.world == 1` ⇒ straight to the recorder), and one-shot behaviour — `AgTrack::Clear` (`0x00605F70`) zeroes the flag at `0x00605FA7` and the history head at `0x00605FAE`; only `0x00605F10` re-arms, with 2 callers, both under ChCliBase player-command sites (module named by assert: `this == context->playerControlledChar`, `ChCliBase.cpp` line 164, at `0x0081ad27`). **New this round:** the re-arm is a **no-op on an already-armed record** (`0x00605F3F cmp` / `0x00605F43 jne`), which the one-shot narrative has been mis-stating — it does not re-null the head on every player command.
+
+#### 2.2 What makes it pass — and the exception that decides the whole policy question
+
+The match test walks the history chain newest→oldest with `prev` seeded from `state.position`:
+
+```
+match ⟺ ∃ segment (node[i].position → node[i-1].position)
+        with  ‖q − closestPoint(q, seg)‖² < 100.0²      (STRICT, SQUARED, straight-line)
+        AND   walkPathLen(q, c) ≤ 100.0                 (INCLUSIVE, LINEAR, navmesh)
+```
+
+where `q = source[0x78..0x88]` — **the SYNC copy's own dead-reckoned position, never our grant** (`0x00602A40` writes `+0x88..+0x94`, `+0x9C..+0xA8` and `+0x80`, and n = 0 writes to `+0x78`).
+
+**⚠ The conjunction is not unconditional, and the exception is exactly the regime that matters.** `0x00605AFF`/`0x00605B0C` test `a.x == b.x && a.y == b.y` and route a **degenerate** segment into a point test whose success at `0x00605B5E je 0x605c60` jumps directly to `0x00605C62 mov eax,1`, **skipping the walkable query pushed at `0x00605C40` entirely.** And segment 0 is degenerate exactly when `+0x48 == 0` at the recording instant: the recorder's `+0x48 == 0` arm (`0x00605909`) writes the same `[ebp-0x44..-0x38]` block into both `node.position` (push at `0x00605A60`) and `state.position` (the seed, `0x00605A38`). **Under keyboard movement, with no destination held, the 100 u test on segment 0 is straight-line only.** OBSERVED, new this round; it replaces the doc-level claim that "the two conjuncts differ on every axis that can be got wrong", which is true for segments 1..n and false for segment 0.
+
+**The 100 u radius is re-measured and the ~99.6 u debt is retired.** `FINDINGS:3133` said the companion figure "should be re-measured before it is quoted again"; it now has been. Re-implementing the nine instructions at `0x0046E870` with the 256-entry LUT at `0x0093CAC8` and scanning **all 2,048,001 float patterns in [9000, 11000]**: the last passing `distSq` is 9983.9990234375 (true 99.9199631, approx 99.91996002) and the first failing is `0x461C0000` = 9984.0f (true 99.9199680, approx 100.23970795). **The single-leg effective TRUE threshold is 99.919968 u.** `[99.61, 100.00]` is the many-leg accumulation limit and is a different quantity. The method's positive control is gate 1: the same scan over [80000, 100000] (2,560,001 patterns) reproduces `89600.0f` → **299.332591 u** to seven significant figures, three times independently, including that **a true separation of exactly 300.0 u SNAPS**. **OBSERVED.**
+
+⚠ **`FINDINGS:3037` and `HANDOFF.md`'s match-test description read ~99.6 u until this round's write-up; both are corrected in the same commit as this section.** And the supporting claim that the table sqrt's error is "one-signed positive" is **REFUTED as an exhaustive statement**: 27 under-estimates in 2,560,001 patterns over [80000,100000] (worst −4.474e-08 relative) and 16 in 2,048,001 over [9000,11000] (worst −3.701e-08). The bias is overwhelmingly positive and the boundary pattern itself over-estimates, so no conclusion moves — but "0 under-estimates" was an n = 20,000 sample quoted beside an exhaustive result.
+
+**Where the polyline comes from — "client only" is REFUTED.** `0x00606103 test edx,edx / jne 0x606110` means a world-0 agent with `clientControlled == 0` falls through to `0x0060610B` and **appends**. The fence is closed after every snap until the next player local command, so during those windows **our own** sync-side bakes and SetPositions push nodes and rewrite `state.position`. The re-arm nulls the head (`0x00605F4F`) but never clears `state+8..+0x18`, so the seed that segment 0 runs to can be a server-written point that survives the re-arm. The control attribution in any policy argument must say "client, plus our own writes during fence-closed windows", not "client only".
+
+Coarseness and expiry: a node is pushed on any movement-command change (`0x00605945`–`0x006059B4`) or when the head is older than **2500 ms** (`0x0060593A cmp eax,0x9c4`); 256-entry blocks are recycled when the block's newest entry is older than **5000 ms** (`0x00604C03 cmp ecx,0x1388`), stride `0x2c`, block span `0x2c04`. `seg_match` reads only positions — **no time filter at all** in `0x00605AF0..0x00605C6A`. The 250 ms constant at `0x00604F09` is in a different function and its role in the match test remains **UNVERIFIED**.
+
+#### 2.3 What happens on a miss, and what a snap costs
+
+```
+A = deadreckon(sync,  world[0].time)      # 0x006057AD — OURS, end to end
+B = deadreckon(async, world[1].time)      # 0x006057BA — never on the wire
+GATE 1: MapDist(A,B,300.0,straightOnly=1) > 300.0f  -> SNAP   # 0x006057EA, cut 299.332591 u
+GATE 2: MapFindPath(A,B,300.0f,4,&n,&P); n == 0     -> SNAP   # 0x0060580D, start-conditioned
+GATE 3: step_is_clear(source, A, P) == 0            -> SNAP   # 0x00605820, 60° cone, 0.0005 s cut
+        else                                           NO SNAP
+```
+
+`edi` is the sole return accumulator, n = 3 writes across `[0x605753, 0x60583E)`. A **match short-circuits all three**: `0x0060574C jmp 0x60582b` with `mov eax,edi` at `0x0060582E` and `esi` provably 0 there. The round-3 sentence "below 300 two further checks can still force the snap" was already recorded REFUTED-as-stated at `FINDINGS:2986-2988`; it is confirmed dead and should not be re-quoted.
+
+⚠ **Two names in the address table are downgraded.** `asserts.py --at 0x00709E90 --span 600` returns **0 sites** and the only naming evidence (`*pathCount <= maxCount`, `Map.cpp(1239)`) sits at `0x00709E75` inside the sibling `0x00709D30` — which `FINDINGS:3420` already lists under "Claims that DIED this round — do not re-quote". `asserts.py --at 0x00709990 --span 400` also returns 0 sites. **The behaviour of both is OBSERVED; the names "MapFindPath" and "MapDist" are RECONSTRUCTION — project labels, not the client's word.** Any later document quoting them owes the qualifier.
+
+**A snap is roster-wide, and it is worse than previously recorded.** `0x0060604C`–`0x006060F4` loops every agent in world 1, skipping nulls and `flags & 0x10000`, and `0x006060A2 mov [eax+ebx],0` / `0x006060A9 mov [eax+ebx+4],0` run **unconditionally** — zeroing not only every agent's `clientControlled` flag but **every agent's history head** (record+4, the same field `clear_record` nulls at `0x00605FAE`). One agent failing the gates destroys the entire visible roster's polyline. Modelling a snap as "the player's character teleports" is wrong by a factor of the roster, and the consequence — the next test after any snap has a NULL head and goes **straight to the gates** (`0x006056B8`) — applies to every agent at once.
+
+And the gates are not the only route: `0x005FCAA0` is a public no-arg `ResyncAllAsync` (`lea ecx,[ecx+0x1cc]; jmp 0x00605E40`) running the same per-agent reseed **with no gate evaluation**, 3 callers (`0x004E6E82`, `0x00816499`, `0x0081655D`), two firing when the *local* command layer's own path test `0x0070A170` returns 0. **UNVERIFIED as a live route; a fix built on the three gates does not close it.**
+
+#### 2.4 The bake, and the law that ranks every candidate
+
+```
+d        = D − [+0x78]                       # 0x005FEB57 fsub [esi+0x78]  ← from the COPY
+S        = [+0x60] * [+0x5C]                 # 0x005FEBA4 fld / 0x005FEBA7 fmul
+[+0xB0],[+0xB4] = unit(d) * S                # 0x005FEBBF / 0x005FEBC8
+[+0x58]  = now ;  [+0x48] = now + trunc(|d|*1000/S), clamp ≥ 1
+read(t)  = [+0x78] + vel*((t − [+0x58])*0.001)     # 0x005FFB40
+```
+
+**The bake measures `d` from `+0x78` — the copy — and never re-pins `+0x78` toward the player.** Re-granting re-aims; it does not correct accumulated error. That single instruction is why cadence alone bounds nothing, and it is what `FINDINGS:1486-1492` observed empirically ("stacking grants does not bound the teleport; it converts one large one into many small frequent ones") without naming.
+
+**★ The `distSq ≤ 1.0` short-circuit dispatches nothing.** `0x005FEA85 fcom st(1) / test ah,0x41 / jp 0x5feae1` sends `distSq > 1.0` to the glide arm; **fall-through at `0x005FEA92` is the `≤ 1.0` arm**, which writes `+0x78..+0x84 = D` directly, stores the residual `fldz` into `+0xB0`/`+0xB4` (**velocity zeroed**), arms `+0x48 = max(now+1, 1)`, and `0x005FEADE ret 0xc`. CONFIRMED and strengthened by the skeptic pass: `0x005FE99C lea edi,[esi+0x78]` proves the distance really is measured from `+0x78`, and there is **no path from that arm to `0x005FEBEB` nor to the child-bake / collision / arrival fan-out at `0x005FEBF0-0x005FECAC`.** A grant within 1.0 u of the copy's own brought-forward position is the only server message that hard-writes `+0x78` and evaluates no test at all.
+
+**THE INVARIANT.** *At every instant the client is asked to judge — a bake, or any hard SetPosition, with the fence open — the SYNC agent's own dead-reckoned position `+0x78` must lie within 99.919968 u of the client's history polyline (straight-line to the segment, plus a walkable conjunct that is skipped on a degenerate segment), or else survive three gates the server can neither see nor address.*
+
+**REALFIX-O1** — the polyline is [current destination] → [current leg start] → [older leg starts]. Segment 0 looks forward *only* while the client itself holds a destination (`+0x48 != 0` at the recording instant, `0x006058D6`). **Under keyboard movement nothing ahead of the player is on the polyline, and everything behind on ground already walked is.** LAG is on the polyline by construction; LEAD is not. RECONSTRUCTION from OBSERVED control flow, and it is the single most load-bearing structural fact in this round.
+
+**REALFIX-O2** — `t_max = 100 / ‖v_player − S·û‖`. At our measured median player speed of 111.7 u/s against a declared 288, `‖Δv‖ = 176.3` ⇒ `t_max = 0.567 s`. Retail's median inter-grant is **0.490 s** (`live`, n = 3,127) — *inside that bound*, and nothing in the derivation used retail's number as an input. CORROBORATED by a check that could have failed.
+
+**REALFIX-O3** — `dist ≤ S · Δt_refresh` ⇒ the copy arrives before the next grant, `+0x78` is re-pinned to `D` exactly, and the lead is bounded by `dist` **with no assumption about the player's speed**. At Δt = 0.30 s and S = 288 that is 86 u. This is the only obligation the server can discharge from what it knows.
+
+**REALFIX-O4** — copy speed vs player speed is unavailable; the server cannot know instantaneous player speed and the client can.
+
+**REALFIX-O5** — every granted point must resolve on the client's navmesh, plane included (gate 2's failing operand is our own point).
+
+**REALFIX-O0** — *a match must happen at all.* After every snap the head is NULL and the first test goes to the gates. Any family whose safety argument runs through the match owes this assumption explicitly.
+
+**REALFIX-O6** — for `0x002C` only: `|D − async position|` must be small, and the server has never read the async array (`movetap.py` reads `[AGBASE+0xE8]`; `[agentMgr+0x14C]` is unread). UNVERIFIED, not satisfied.
+
+**The runaway law, which unifies the two rival diagnoses.** The tree's standing attribution for `--client-endpoint`'s failure is the **speed** term (`authsrv.py:1094-1098`: "the player moved at a median 111.7 u/s while every grant told the client moveSpeed 1.0 = 288.0"); the invariant lane's is the **lead** term. **Both are one term.** The copy travels a lead `L` at `S` while the player travels it at `v_player`; harm accrues at `(S − v_player)` for `L/S` seconds, so the runaway is `L · (S − v_player)/S` per cycle and **the two variables multiply**. Retail is safe at `L = 766` because their `v_player ≈ S` (forward 288, backpedal 189.8 u/s = 0.659 × 288, n = 32, `live`); we are unsafe at the same `L` because ours is 111.7. **At `L = 0` the speed error cannot produce overshoot at all** — the copy parks at `D` and the short-circuit zeroes velocity — which is why zero lead is simultaneously the zero-speed-error configuration and why the lead family is not testing a variable the record blames on something else. RECONSTRUCTION, from OBSERVED pieces.
+
+#### 2.5 Violation modes, with the corrections carried
+
+**(a) The copy runs AHEAD — `--client-endpoint`.** `D` re-pinned every 0.34 s to ~766 u ahead of the player; `+0x78` integrating at 288 toward it; gap closing at 176.3 u/s; convergence onto the ray tip in 766/176.3 = 4.35 s ⇒ 13.8/min against a measured 14.6/min (−5.4%), and snap magnitude ≈ the tip (max 754 u, p50 582 u). Shape explained decisively, rate suggestively.
+
+⚠ **Two corrections to how this was argued.** First, the sawtooth rows pooled runs: 582 u p50 / 754 u max / 13-of-197 are `20260819T182652` (`--client-endpoint`), while 119.7 u and 124.8 u/s are `20260819T171436` + `authsrv-20260819T171153-c1.jsonl` (`--heading-grant`), and `FINDINGS:3201` records that `182652` **has no movetap partner and contributes nothing**. Same origin, different configuration — the arithmetic `(582 − 119.7)/124.8` is cross-configuration and must be labelled or dropped. Second, **the "one-shot fence throttles the rate" reading is REFUTED as co-equal**: the fence closes only on a snap and re-opens on any player local command; in a run described as holding S and spam-clicking, with 193 grants in 65.6 s, the closed windows are sub-second and the fence cannot remove ~160 dispatches/min. **The runaway mechanism is the surviving reading.**
+
+**(b) The copy parked far behind — the default build.** `0x0029` is SYNC-ONLY and `0x0025`'s async arm is gated shut for the client-controlled agent: `0x005FD5CD cmp dword [eax+ecx*4],0 / jne` skips when a record is armed, and `0x005FD5D3 cmp ebx,[esi+0x1e0] / je` skips when the agent id *is* the controlled agent — the id latched at `0x00605F45` inside the flag==0 branch and cleared only on removal, so **the second gate is permanent for the session**. Separation p50 1,164 / p90 2,163 / max 3,648 u (n = 251 paired reports, `ours`, movetap-confirmed).
+
+⚠ **The "Kills: any policy that refuses to grant" verdict is DOWNGRADED.** The cited run `20260820T182934` measured 5 of 5 clicks refused, 0 grants, **0 jumps, 0 u/min**, and a client that pathed itself to the clicked point anyway (cos 0.994–1.000, closing 90–3,224 u across silences of 1.2–17.0 s, n = 5). The cost is real and lives in aggro radius, `clip_to_walkable` and interaction range, and `FINDINGS:3589-3595` marks it **UNMEASURED**. Record it as an unpriced non-movement cost, not a kill.
+
+**(c) The granted point off-navmesh — gate 2.** Mechanism CONFIRMED including the geometry-free plane channel (start plane ≥ `map.Count()` and below 0xFFFF returns NULL at `0x0072AE4F`→`0x0072B132` before a float is touched; 65535 UNDECIDABLE). **Exposure today is nil** — every plane we send is literal 0 or the client's own echo — and **gate 2 has n = 0 observed firings**: 24 snaps over 623 paired intervals, 0 of 24 beginning below the gate, minimum before-separation 342.8 u. Gate 1 fences it. The severity note travels with the citation: every map with a real spawn coordinate passes, 7 of 7; the maps in play (146/148/449/280) are all OK; the latent instance is map 474's `(0,0)` placeholder.
+
+**(d) Gate-3 crowding.** Reached only below 299.33 u. A neighbour inside the 60° forward cone whose `combinedRadiusSq` contains `A` returns 0 ⇒ snap at *any* separation, including zero, and it arrives as rubber-banding rather than as a teleport, which the hard bar does not count. ArenaNet's own naming, cited as the single assert it is: `(timeToEvent == (float)HUGE_VAL) || (m_point.position != obstacleCenter)`, `AgAgent.cpp` line 773. The collision resolver itself hard-SetPositions, so **a crowd generates test instants nobody asked for.**
+
+**(e) One-shot and expiry.** The second mistake is judged harder than the first (NULL head ⇒ straight to the gates); a pass shrinks the budget (`lastMatch->next = NULL` at `0x00605746`); the chain covers at most ~5 s of past; and silence does not remove the test — `--grant-suppress` removes the *bake* caller only.
+
+---
+
+### 3. Retail's policy, as an executable spec
+
+#### 3.1 The nine-capture corpus is RESOLVED
+
+The recon lane flagged the 9-member `live` subset as UNVERIFIED as to membership. It is now settled and independently reproduced by two lanes working from separate loaders: of 13 `origin=live` session directories, **exactly 9 carry ≥ 1 player-directed `0x0029`**, and that set reproduces every FINDINGS denominator to the unit.
+
+`20260807T143055, 20260810T235916, 20260817T180610, 20260817T183323, 20260817T183756, 20260817T231139, 20260818T094648, 20260818T132739, 20260819T132414`
+
+(`183323` contributes 3 grants and 0 headings.) Denominators, `live`: `0x003D` **2,675**; player `0x0029` **3,170**; heading-paired **2,938**; on-ray **2,599**; off-ray **339**; at +0.500 **1,642**; `0x0047` **114**; `0x003E` **26**; inter-grant n **3,127**, p50 **0.490 s**, **82.1%** ≤ 1.0 s. **OBSERVED, and cite this set rather than "9 live captures".**
+
+#### 3.2 The policy
+
+```
+on c2s 0x003D (pos=v[1], plane=v[2], vec2=v[3], movementType=v[4]):
+    u        = normalize(vec2)                       # |vec2| ∈ 765.017 .. 768.000
+    endpoint = pos + vec2 + 0.500*u                  # D1  ADJUDICATED
+    dest     = <world-anchored truncation>(pos, endpoint)   # D2  OBSERVED-new, §3.4
+    send 0x0025 (agent, u, movementType)             # S1
+    if movementType != last_family: send 0x002B (agent, rate(family), family)   # S2
+    send 0x0029 (agent, dest, dest_plane, cur_plane) # S3  — 0x0029 is ALWAYS last
+
+on c2s 0x0047 (pos=v[1], plane=v[2]):
+    send 0x002B (agent, 1.0, last_family)            # 77.2% of stops
+    send 0x0029 (agent, pos, plane, plane)           # zero-distance echo, 61.4%
+    # NOT 0x0028. 22.8% of stops draw nothing at all.
+
+on c2s 0x003E (click):
+    send 0x0029 (agent, clicked_point_verbatim, dest_plane, cur_plane)
+    # then let the heading stream supersede it; do not hold it.
+```
+
+**ADJUDICATED terms, reproduced this round:** D1's +0.500 u constant (1,642 of 2,599 on-ray rows at residual 0.500 ± 0.01; **1** of 2,599 within ±0.01 of the bare endpoint; the residual histogram over [−2,+2] is a single spike, `{0.0: 2, 0.4: 1, 0.5: 1643}`; per-capture rate **32.8%–88.3%**, so **cite the constant, never the rate**). `0x0025`'s unit-length content (p50 0.999593, n = 2,256, 100% < 1.01) and its trailing-byte `movementType` echo (2,217/2,256 = 98.27%). The burst shapes: `0x0025`+`0x0029` **1,506 (49.0%)**, `0x0025`+`0x002B`+`0x0029` **734 (23.9%)**, bare `0x0029` **585 (19.0%)**, and — omitted by `FINDINGS:1746` — `0x0029`+`0x002B` **243 (7.9%)**, over 3,071 grant bursts of 3,336, per-capture **36.4–88.5 / 5.8–29.2 / 3.8–34.0 / 1.4–9.9%**. Every one of those counts was reproduced by a second lane using its own burst decoder.
+
+**OBSERVED-new, with the spread that the pooled figure hides:**
+
+- **`0x0025` carries nothing the server computes.** The vec2 is `unit(client's own vec2)` — angle to it p50 0.000°, **2,193 of 2,231 exactly 0°**, the 38-row tail being family transitions.
+- **Message order is a hard rule.** `0x0025 → 0x0029` 1,499 · `0x0025 → 0x002B → 0x0029` 707 · bare 568 · `0x002B → 0x0029` 200 · `0x002B→0x0029→0x002B→0x0029` 32 · `0x0029→0x0029` 17. **`0x0029` is last in every shape that contains it; `0x0025` precedes `0x002B`; zero counter-examples in 3,023 of 3,071 bursts.**
+- **The stop reply is a zero-distance `0x0029` and the companion is `0x002B`, not `0x0028`.** Of 114 stops: 98 (86.0%) answered within 1.0 s, of which exactly **70** land < 1 u from the reported stop (`|dest − stop|` p50 **0.000 u**), latency p50 0.034 s. `0x002B` present in 88 (77.2%) — **per capture 45.5% / 50.0% / 66.7% / 75.0% / 77.8% / 86.0% / 88.9% / 100.0%, and 57 of the 114 stops come from one session**. `0x0028` in 7 (6.1%). `FINDINGS:1338`'s count of 70 is preserved; its denominator of 88 is corrected to **114**. Its "257 corpus-wide, 81 naming the player" `0x0028` census is also stale — on the adjudicated 9 the counts are **282 and 95**, of which only **7 (7.4%)** fall in a stop window. **A server author must not send `0x0028` on a stop.**
+- **The first `0x003D` after a stop is not special**: 112 of 112 answered, latency p50 0.035 s, identical to mid-run (2,559/2,563 = 99.8%). No resume gate.
+- **Family change ⇒ `0x002B`.** Within a 0.06 s burst, changed 503/552 (91.1%) vs same 156/2,002 (7.8%). A second lane using a slightly different burst-membership rule gets 576/586 (98.3%) vs 242/2,043 (11.8%). **The direction replicates on every capture that has family changes; the multiplier does not** — per capture **6.3× / 6.4× / 6.7× / 8.6× / 8.7× / 19.4× / 59.2×**, with one capture at n = 0 family changes. **Quote it as "≥ 6× on every capture that has family changes", not as 11.7×.**
+- **`0x0027` is sent rarely and only on a real base-speed change**: 153 player-directed sends, `383.04 ×76, 288.00 ×65, 385.92 ×6, 325.44 ×2, 230.40 ×2, 144.00 ×1`. Not per grant.
+
+#### 3.3 Three claims that do not survive, and one label that is upgraded
+
+- **T1's "99.9% of headings answered within 1.0 s" is WEAKENED to a check that cannot fail.** Shifting every grant timestamp by **+0.35 s** — below the 0.490 s inter-grant median, destroying causality outright — still answers **99.4%–100.0%** per capture. What carries the claim is the *latency*: at a ≤ 0.10 s window the pooled rate is **95.1%** but per capture it runs **43.0%–100.0%** (`20260817T183756` = 77/179, answer latency p50 **0.123 s** / p90 0.259 s against O1's pooled p50 0.035 / p90 0.053 — a 5× outlier the pooled row hides). **Retail answers nearly every heading; the "no trigger predicate at all" phrasing is not established by the 1.0 s number alone.**
+- **`0x0029`'s trailing word fields are NOT "NOT FOUND"; they are CLOSED.** `0x005FD890` builds `{x, y, field3}` into a local Point and passes field4 as `0x00602A40`'s third argument, which `0x00602A6C` writes to `agent+0x80` unless it is −1: **field 3 = destination plane, field 4 = agent's current plane** (`FINDINGS:3364` "CONFIRMED and CLOSED", third independent derivation at `:3428`, SOURCED with rivals ruled out at `studies/smsg/FINDINGS.md:130-135`). The wire corroborates rather than contests: both fields are 0 ~84% of the time because plane 0 is the common case, the non-zero rows are "often equal to each other" (`(mt=1, w3=26, w4=26) ×52`), and retail's two fields differ in **14 of 987 (1.4%)** — the plane transitions. **"Send 0" is refused: it writes a wrong map index into `agent+0x80`. Send `(dest_plane, cur_plane)`, the order `authsrv.py:9987` already uses.**
+- **T5's fourth row is misdescribed.** Trigger census of 3,170 player grants: heading **2,938 (92.7%)**, `0x0047` **118 (3.7%)**, click **41 (1.3%)**, and **73 (2.3%)** which were called "no prior c2s move msg". **Zero of 3,170 have no prior c2s movement message.** All 73 answer a `0x003D` older than the 1.0 s pairing window — lag p10 1.04, **p50 2.58**, p90 10.26, max 15.57 s. **Retail re-grants on a stale heading; it does not grant out of nowhere.** A server author reading the old wording builds an unsolicited-grant channel, which is the wrong mechanism.
+- **T4 is UNDECIDABLE and both numbers should stop being quoted.** `FINDINGS:1600`'s "click grant superseded within a median 0.490 s" conflates the corpus-wide inter-grant median with the click grant's lifetime; a direct measurement gives p50 1.923 s, but at **n = 23 over the corpus's only 26 clicks**, in keyboard-dominant sessions, neither figure is established. What survives is the direction (click grants *are* superseded) and one structural fact: **41 grants attribute to 26 clicks — retail re-grants during a click-move with no new c2s message.**
+- **SP1 stays CONTESTED and the "third rule" is a variant.** Attributing `0x002B` by the message's own trailing byte gives n = 1,049: forward 900 → 1.0 ×648 (72.0%), 0.33 ×44, 200 distinct values; backward 64 → 0.66 ×46 (71.9%), 1.0 ×12; side 78 → **0.75 ×55 (70.5%), which was in neither prior rule**; 214 distinct floats corpus-wide. **Both arms of the old contest are true at once** — a family-rate mode at ~71% per family and a wide continuous buff/snare population in the same field. But the rule falls back to "the last `0x003D` within 1.0 s" by construction and the trailing byte *is* that heading's echo 93–98% of the time, so it is ~95% one of the two arms it is offered as arbitrating, and the per-family n's do not reproduce from a pure own-byte partition (935/52/62 against 900/64/78). **The decider is unchanged: `movetap.py` on `agent+0x5C`/`+0x60` during sustained backpedalling.**
+
+#### 3.4 D2 — what a "clipped" destination is, and what it costs us
+
+**911 of 2,938 heading-paired grants (31.0%, per-capture 7.3%–48.5%) are on the client's own ray and short** — `|cross|` p50 0.0002 u, p95 0.0071, max 0.81; along-track p05 22.1 / p25 167.4 / **p50 347.9** / p75 551.9 / p95 714.1 u, i.e. a median **45.4%** of one displacement quantum, continuous rather than quantized (densest 0.01-wide fraction bin holds 2.3%). Reproduced independently by a second lane to the unit, including a shortfall p50 of 418.8 u. **8 of 911 (0.9%) land *behind* the report**, min −60.8 u.
+
+Four tests, each able to fail, establish that the truncation is **world-anchored at a locally straight boundary running across the ray**:
+
+| test | result |
+|---|---|
+| **E** — does the destination ride the player? | `|Δdest|/|Δplayer|` p50 **1.03** for full-length pairs (n=585) vs **0.12** for clipped pairs (n=205), 64.9% under 0.25 |
+| **F** — what direction is the local line? | 192 collinear neighbourhoods, angle(line, ray) p50 **78.8°**, **117 of 192 in the 75–90° bin**; destination-cloud anisotropy p50 **0.000** vs 0.557 for the trigger positions |
+| **B** — agent collision? | nearest other agent's granted position p50 **326.3 u**, 26 of 493 (5.3%) under 10 u, no radius spike |
+| **H14** — the previous destination resent? | 72 of 867 (8.3%) vs 74 of 1,922 (3.9%) — 2.1×, not a mechanism |
+
+**And the strongest wire-only rival was built, pre-registered and REFUTED.** H-STALE (`dest = p_k + vec2 + 0.5·u` from an *earlier* report) predicts on-ray, shortened-only, TEST E's ~0 ratio, TEST F's ~90° (a frozen origin with a rotating ray puts destinations on an arc), continuous depth, few repeats — and it predicts both of the things the clip measurement itself refuted. Searching 12 reports back: **2 of 911 clipped grants (0.2%) match an earlier origin to < 1 u, best-error p50 142.3 u, against a declared control of 3.8% for the at-+0.5 population.** The clipped set matches an earlier origin *less* often than the unclipped set does. **The clip is not derivable from the wire.**
+
+⚠ **It is not a pairing artifact, and the control is tighter than first reported.** Clipped rows do pair looser (lag p90 0.158 / p99 0.524 s against 0.054 / 0.246 for at-+0.5; 8.0% beyond 0.2 s vs 2.2%), but pushing the window four steps past the first control gives 30.8% at ≤ 0.15 s, **30.6% at ≤ 0.10 s and 30.6% (781 of 2,549) at ≤ 0.07 s** — tighter than the at-+0.5 population's own p90.
+
+**Two predictions written before the numbers were REFUTED, and they matter.** The player is **not** blocked (client speed on the trigger interval p50 **287.8 u/s** clipped vs 287.9 unclipped; 1.7% vs 1.5% under 100 u/s) — this is the ray *grazing* geometry the player then slides along, not walking into a wall. And **the client walks straight past it**: within 3 s the median along-fraction reached is **1.20**, with **57.4% overshooting the granted point by > 20 u** against 20.2% for +0.5 grants. **The clip shortens the leg the authoritative copy is given while the client keeps going — it is a separation-growth source, not a stop.**
+
+**The identification of the boundary as the walkable navmesh is RECONSTRUCTION**, and its previously-cited evidence is withdrawn: the `Map.cpp(1239)` / `0x00709E90` identification is on `FINDINGS:3420`'s do-not-re-quote list, and that address is in the *client* binary describing the client's own resync gate — a different machine than the server whose D2 this models. The trapezoid reading has separate support at `FINDINGS:3380`; the grade stands, the citation does not.
+
+⚠ **The cost claim "we express D2 on ~11.5% of grants where retail expresses it on 100%" is REFUTED and must not propagate.** It inverts `FINDINGS:3368`: **88.5% is the heading arm's share of retail traffic** (corroborated at `:3582`), not a collision-suspension rate. The suspension predicate is `if not pm.walkable(px, py)` at `authsrv.py:3122-3128`, and this tree measures it at `authsrv.py:10080-10086`: *"MEASURED over 532 reports — 93.8% clean, 5.5% not on our mesh at all, 0.8% on a single plane that is not the one the client named, 0.0% genuinely ambiguous."* **Our server expresses a clip on ~94% of grants and suspends it on ~5.5%.** (The 2,855 denominator that travelled with the inverted claim is also superseded by 2,938 of 3,170.)
+
+**What D2 does change is the framing of the lead family.** Retail's own effective lead is **not** "766 u always": 1,642 grants (56% of the heading-paired set) sit at the full 765–768 u tip, and **911 (31%) sit at a median 348 u**, 0.9% of them behind the player. **Retail itself ships a mixture of leads that the 0 / 86 / 766 spine brackets** — and it is safe at all of them only because its `v_player ≈ S` (§2.4). RECONSTRUCTION, from the OBSERVED depth distribution.
+
+---
+
+### 4. Instruments and substrate — what exists, what does not, and three captures nobody named
+
+**Committed and validated:** `resyncscore.sync_track()` (`toolkit/clientscan/resyncscore.py:626`) — the glide-and-park forward model of the SYNC copy — and `validate_sync_model()` (`:678`), which checks it against a direct memory read through `movesync.pair()`. **This corrects a standing belief that no forward simulator was ever committed.**
+
+⚠ **But it is a NARROWER instrument than round 3's, and the "extends round 3's calibration" framing is REFUTED.** Round 3's model is "driven only by our wire (`0x0029`/`0x002B`/`0x0027`/`0x0028`/`0x002C`)" (`FINDINGS:2455-2457`); `resyncscore`'s takes its grants from `movesync.load_grants` (`resyncscore.py:423`), which decodes **only opcode 41 = `0x0029`** (`movesync.py:229`), and glides at a constant `run_speed`. A grep over `toolkit/` for round 3's budget instrument (`AUTH-PARKED` / `AUTH-MOVING`) returns **0 hits outside the two `studies/movement/` documents**. The five-pair numbers below are a **new calibration of a different model**, not a widening of an old one.
+
+**Excluding `0x0025` is sound and should stay** — it rests on a handler read, not on residual-fitting: `0x0025`'s handler `0x005FD540` reaches only a facing setter writing `+0xB8`/`+0xBC`/`+0xC0` (`FINDINGS:1379-1381`), and the `+0x48` writer census finds five stores, none of them `0x0025`. It touches neither `+0x78`, `+0x58`, `+0x48` nor the velocity. **Excluding `0x002B`, `0x0027` and `0x002C` is NOT sound** — all three move the copy — which scopes the simulator to `0x0029`-only policies and puts three of the five candidates outside it (§6).
+
+**Five calibration pairs exist in the vault, not two.** Every `movetap-*.jsonl` file pairs with a wire capture:
+
+| capture | movetap | n | residual p50 | p90 | max | **parked %** | **glide-conditioned p50** |
+|---|---|---|---|---|---|---|---|
+| `145717` | `145939` | 251 | 0.00 | 43.54 | 67.42 | 53.0% | **27.55** |
+| `150336` | `150349` | 29 | 0.00 | — | 42.73 | 58.6% | **23.54** |
+| `150522` | `150537` | 59 | 0.00 | — | 33.78 | 83.1% | **24.53** |
+| `152716` | `152723` | 106 | 19.27 | 38.53 | 59.46 | 8.5% | **20.68** |
+| `171153` | `171436` | 183 | 14.42 | 30.46 | 60.54 | 3.8% | **14.62** |
+
+**All `ours`. The unconditioned p50 is diluted by parked samples** — the three pairs reading 0.00 are exactly the three that are 53–83% parked — and the statistic `FINDINGS:2457` itself uses is the glide-conditioned one. Round 3's `|sim − live| p50 0.0–13.0 u, max 72.2 u` should be restated as **unconditioned p50 0.0–19.3 u, max 67.4 u, n = 628 over five pairs; glide-conditioned p50 14.6–27.6 u.** The two pairs that are *not* parked-dominated are the high-grant configurations — the only regime resembling any grant-heavy candidate — and there the per-sample model error runs p90 30.5–38.5 u, max 59.5–60.5 u **against a 99.92 u decision radius.** That ratio is the honest bound on any offline verdict.
+
+**REALFIX-U1.** Three of the five pairs (`150336`/`150349`, `150522`/`150537`, **`152716`/`152723`**) are named in no study document; their run configuration is UNVERIFIED because the gamesrv jsonl headers carry no argv. **`152716` is the `--heading-grant` decisive trial and it is NOT wire-only** — it has a full SYNC-array movetap trace and it is the widest-residual pair in the set.
+
+**REALFIX-U2 — the substrate inversion, and it decides the whole input plan.** The client's reports after a capture's own first teleport describe a player standing where no other policy would have put them. Honest counterfactual window = `[start, first measured hard step)`:
+
+| stamp | span s | clean s | clean % | reports | clean distance u |
+|---|---|---|---|---|---|
+| `182652` (`--client-endpoint`) | 65.6 | **3.2** | **4.9%** | 10 | 259 |
+| `171153` | 210.9 | 33.4 | 15.8% | 56 | 3,185 |
+| `195137` | 41.8 | 8.5 | 20.4% | 20 | 2,121 |
+| `145717` | 320.3 | 138.8 | 43.3% | 14 | 1,982 |
+| `152716` | 36.0 | 29.3 | 81.4% | 84 | 6,076 |
+| **`100340`** | 765.1 | **719.0** | 94.0% | 274 | **43,177** |
+| **`173940`** | 100.0 | **100.0** | 100% | 158 | 9,353 |
+| **`182554`** | 26.2 | **26.2** | 100% | 21 | 6,433 |
+| **`182934`** | 114.8 | **114.8** | 100% | 79 | 22,586 |
+
+**The refuted-run captures are CALIBRATION substrate; the zero-grant captures are COUNTERFACTUAL substrate.** The capture that refuted `--client-endpoint` yields 3.2 s and 259 u of uncontaminated track. The four clean captures give ~960 s and ~81,500 u of policy-free player path. Independently re-measured by a second lane to within one report interval.
+
+⚠ **The counterfactual substrate is fast-running and click-free, and both biases are load-bearing.** Player speed p50 is **263.3 / 262.3 / 283.2 / 280.0 u/s** against a declared 288, which is the regime where any lead policy's runaway rate `(S − v_player)` is *smallest* — **a null for a lead candidate on this substrate is not an acquittal.** And clicks number **0 / 5 / 21 / 0**, so the default build sends ~0 grants there and achieves near-perfect survival by doing nothing. **The harness can price harm a candidate ADDS and can never price harm a candidate REMOVES.**
+
+**Report cadence, which sizes every blind spot** (non-hard intervals ≤ 2.0 s, `ours`): gap p50 0.251–0.301 s and chord p50 **32.7–69.7 u** on seven captures; `100340` 0.500 s / 94.8 u; `182934` 0.501 s / 127.5 u; and **`182554` 1.785 s / 445.9 u**, reproducing `TESTS.md`'s "a straight keyboard hold reports every 1.80–1.82 s". Chord **p90** exceeds the 99.919968 u match radius on **4 of 4** counterfactual captures (141.6 / 514.4 / 477.5 / 516.1 u) and **7 of 11** calibration captures.
+
+**REALFIX-U3 — denominator debt.** `FINDINGS:2519-2523`'s active-time triple does not fully reproduce. Measured this round on the whole capture at the same 2.0 s threshold: jumps per minute of *active* time **4.19 / 7.87 / 13.32** (default / `--heading-grant` `171153` / `--client-endpoint`) against FINDINGS' 4.19 / 7.48 / 11.27, and u displaced per active second **137.8 / 73.5 / 124.0** against 137.8 / 69.5 / 101.4. **The first term matches exactly in both, which establishes the method; the other two are presumably scoped to the movetap window rather than the capture.** Name the window, every time. What does not change is the ruling: **per span the default build looks best on frequency and per observed second it is the WORST on displaced distance**, and `FINDINGS:2643`'s "no candidate can be scored against 5.7/min" stands.
+
+---
+
+### 5. The candidate set, with exact deltas from refuted runs
+
+**REALFIX-P0 · DEFAULT (control, shipped).** Click grants only, clipped from our origin, three refusals; bare `0x0025` on a *turned* heading; nothing on stop. Violates O1, O2, O3. Measured `ours`: 1.31/min span, 4.19/min active, 137.8 u per active second, separation p50 1,164 u, click grants left outstanding a median 5.84 s and a max 56.17 s.
+
+**REALFIX-P2 · ZERO-LEAD.** `D = the client's just-reported position, verbatim.` Satisfies O1 **by construction** (`q` is a point the client reported standing on), O3 (lead ≤ 1.0 u, no runaway term), O5 **by witness**, and — the point of §2.4 — it is the only configuration in which the speed error cannot produce overshoot, because the copy never travels past `D`.
+
+> **Delta from `--client-endpoint` (`20260819T182652`, REFUTED, 13/197 hard, 11.88/min span): the lead term, and TWO others that were not named.**
+> (1) **the lead**: drop `+ vec2 + 0.5·unit(vec2)` — 766 → 0;
+> (2) **the stop arm**: any `0x0029` on `0x0047` **IS `--stop-echo`**, bit-identical to `authsrv.py:10345-10360`, which is **run and killed** (`20260819T134811`; `authsrv.py:1012-1017`: "the echo does not overwrite the pending click destination; it adds a SECOND one"). **Cut it. `--client-endpoint` had no stop grant.**
+> (3) **the trigger**: the shipped heading path is gated at `authsrv.py:9758` behind `turned or state.get("walking") is not True`, and `walking` is cleared only by the *click* arm. On click-heavy play every click reopens it (`182652`: 193 grants against 193 headings; `171153`: 447/447), so the gate is invisible in both refuted runs — but on the **click-free counterfactual substrate** it opens on only **11.1% / 24.3% / 61.2% / 80.8%** of moving reports (`182554` / `182934` / `100340` / `173940`), a **1.24×–9× cadence delta**. **Name it, do not hide it.** Retail has no trigger predicate; P2's grants are zero-distance and take the `≤ 1.0 u` short-circuit when the copy is caught up, so extra cadence is nearly free for *this* candidate specifically — which is the ground for dropping the gate in P2 and not a general licence.
+
+**REALFIX-P3 · SHORT-LEAD** (`L = min(S · Δt_refresh, radius) = 86 u`). Discharges O3 mechanically: `dist ≤ S·Δt` ⇒ the copy arrives before the next grant and `+0x78` is re-pinned to `D` exactly, with no speed assumption.
+
+> **Delta from `--client-endpoint`: the lead magnitude only, 766 → 86 — provided the clip is DROPPED.** As first drafted, P3 added `clip_to_walkable` while P2 and `--client-endpoint` are both unclipped, making it a two-variable step from both neighbours. **Adjudicated: run the family unclipped at 0 / 86 / 766 and treat O5 as a named risk rather than a code term** — because retail's D2 is world-anchored geometry we cannot compute (§3.4) and our heading arm's clip suspends collision entirely when our mesh does not cover the player anyway (`FINDINGS:3428-3432`; the plane-aware predicate lives on the *click* arm).
+
+⚠ **P3's safety argument as previously written is REFUTED, and the replacement is a direct measurement of the right operand.** The old argument scaled a 398.3 u tip drift proportionally to an 86 u lead to get "~45 u p50 / ~71 u p90, inside the radius". Three defects: the 398.3 figure is `ours`, not `live` (`FINDINGS:2924`, `:2951`); the decomposition `tip(t₂) − tip(t₁) = Δp + L·Δû` has an `L`-independent term (measured `|Δp|` p50 **46.9** / p90 **143.7 u** over 852 same-mode consecutive `0x003D` pairs, `ours`, against `766|Δû|` p50 27.2 u); and the operand measured directly refutes the bound — **`|D(L=86) − the client's next report|` reads p50 89.4 u, p90 136.4 u, with 389 of 852 = 45.7% at or beyond 99.919968 u** (turn-conditioned subset, n = 291: p50 41.1 / p90 116.8 u, 14.8% beyond). **On either selection the p90 is 1.6–1.9× the claimed ~71 u and lies outside the radius.**
+
+**And that measurement is exactly the right operand at the arrival instant.** Under P3, O3's whole point is that the copy *arrives*; at arrival `+0x78 = D` exactly, so `q = D` and the match operand is precisely `|D − the client's track|`. **P3 therefore fails the match on roughly 46% of its arrivals** — which is not automatically a snap (an 86 u lead keeps gate 1's 299.33 u comfortably), but it routes those instants to gates 2 and 3, which are invisible offline (§7). **This is the clearest single number separating P2 from P3, and it favours P2.**
+
+**REALFIX-P1 · RETAIL MIMICRY — a fidelity reference, not an experiment.** Full §3.2 policy including S1/S2/S3 ordering, `(dest_plane, cur_plane)` planes, the stale-heading re-grant (T5 corrected), and the zero-distance stop echo. **Delta from `--client-endpoint` = FOUR terms** (family-rate `0x002B`; a clip; real plane fields; click-grant supersession), so a bad result names none of them. It also **cannot express D2 faithfully** — retail's clip is world-anchored geometry, ours is a navmesh line-walk that suspends off-mesh. Its harm scales as `766 · (288 − v_player)/288`, so it will look harmless on any fast-running capture and break the first time the owner backpedals or is snared. **Keep it as the reference the lead family is read against; do not run it as an ablation, and do not run it first.**
+
+**REALFIX-P4 · `0x0027` RE-ARM — CUT.** `0x0027`'s setter `0x00602910` settles the agent by dead-reckoning to *now* and rewriting `+0x78` **to the runaway point**, then re-issues the outstanding grant. It re-*aims*; it does not re-*pin*. `0x0027` at spawn is a measured no-op (`+0x5C` already 288.0, `+0x60` already 1.0, in 4,115/4,115 movetap samples). It needs a new SMSG constant, a new builder in `agents.py` and a new wire test — `0x0027` has **no constant, no builder and no call site anywhere in the repo**, its only namesake being `GAME_CMSG_ATTACK_SKILL` in the opposite direction — bought for a candidate the mechanism read grades FAILS provably and the harness admits it cannot score. **Recorded as a dead candidate with grounds; its one genuinely new property (it reaches both copies, no `[esi+0x1e0]` gate) is subsumed by any family that never lets a destination go stale.**
+
+**REALFIX-P5 · `0x002C` CLIENT-PIN — already built (`--resync`), never run.** Fires only on the client's own last accepted report, never our integrator, under four refusals (report age ≤ 100/288 = 0.347 s; zero refused-report streak; separation ≥ threshold; rate ≥ 0.5 s). O1 is n/a by construction — `0x002C` clears the AgTrack record first (`0x005FDA78`) then SetPositions both copies, so no follow-up reaches a gate and no roster reseed happens. **Delta from the REMOVED `0x002C` build = TWO terms** (payload changed from `state["pos"]` to `state["client_pos"]`; three refusal gates that did not exist), so it is not a clean ablation either. **It trades snaps for yanks**: the removed build's five sends "carried the client 630, 189 and 765 units… that is the warp the player described" (`authsrv.py:2580-2585`). **O6 is UNVERIFIED, not satisfied** — the quantity that decides whether it is safe is the async array, which nothing in this repo has ever read.
+
+**REALFIX-P6 · GRANT-SUPPRESS (control, shipped, run once).** 1.39/min vs 11.49/min span (8.3×), 903 vs 9,687 u/min (10.7×), `ours`, **n = 1 A/B pair with two identical-play baselines differing 1.7× in rate**. It removes the bake caller only; arrivals, `0x002C`, collision resolution and the resync's own SetPositions still dispatch. **It works by making us quiet, not by making us correct**, and `state["pos"]` silently stops tracking — an UNMEASURED cost in aggro radius, `clip_to_walkable` and interaction range. **The correct interim ship and the wrong destination.**
+
+**Dead candidates carried forward** (from `FINDINGS:1716-1737` plus this round): echo-the-client's-vector (a no-op, same expression); `--stop-echo` (run and killed, and **re-entering P2 by the back door was caught only in review**); any direction/backward guard (retail has none — 25 of 29 backward grants point behind facing, up to 768.5 u); "+0.500 u as the fix" (real to ±0.00003 u but worth 2 ms at 288 u/s, below the instrument's 20 ms); the `k ≤ 1` safety clamp (struck pre-build); `--heading-grant`; `--client-endpoint`; `0x0028` at keyboard onset (retail's onset behaviour is SUPERSESSION — 496 of 499 terminated by a fresh `0x0029`, `0x0028` exactly once and that one a zone transfer); "supersede every heading" (already the two refuted runs under another name).
+
+---
+
+### 6. What offline scoring cannot see — and the four things that broke the scorer
+
+An offline harness was specified, built to spec by one lane and independently reimplemented by another. **It does not do the job it was built for, and the reasons are findings.**
+
+**6.1 A separation threshold is not a snap model.** A naive proxy — simulate the copy from grants, flag every report at ≥ 299.332591 u — predicts **16, 12 and 34** snaps on three captures that sent **zero grants** and measured **zero jumps**, and 46 against a measured 7 on the default build whose real separation is p50 1,164 u for 320 s. **REFUTED as a scorer.** A caller-aware proxy (test instants + match + gate 1, every constant the client's own) takes those three captures to **exactly zero structurally**, which is the check that matters.
+
+**6.2 The headline calibration is implementation-dependent.** Two independent implementations of the same written specification, driven by the same as-sent `0x0029` streams over the same eleven `ours` captures, give **69** and **80** predicted against **60** measured — 1.15× and 1.33×. They agree on the three structural zeros and on eight of eleven per-capture counts, and diverge most on the round-4 captures (`183311` 6 vs 10, `195137` 8 vs 12). **A `[0.7, 1.5]×` acceptance band drawn after seeing 1.15 swallows both, and would swallow 90 against 60.** Pin the spec to a golden fixture or say the number is implementation-dependent.
+
+**6.3 The instrument is not "strong on geometry, weak on cadence" — that asymmetry is manufactured.** Its own nulls: the **smallest** geometry perturbation (rotate destinations by 1) moves the total 69 → 73, **+5.8%**; the **smallest** cadence perturbation (shift −0.35 s) moves it 69 → 76, **+10.1%**. The claimed asymmetry sets rotate-by-17 (+64) beside shift-by-+0.35 s (−9). What *is* true and load-bearing: **the +0.35 s causality-destroying shift scores 60, dead on the measured total**, so the total is not discriminating on sub-report-interval timing; and **deleting the match test doubles the prediction (122 vs 69)**, so the match test is genuinely load-bearing.
+
+**6.4 It cannot separate the lead family, and the parameter that decides the ranking is not in its sweep.** Running leads 0 / 86 / 766 through the specified scorer on the four counterfactual captures, `ours`:
+
+| capture | match ON: 0 / 86 / 766 | match OFF: 0 / 86 / 766 |
+|---|---|---|
+| `173940` | 0 / 0 / 12 | — |
+| `182554` | 0 / 0 / 3 | 10 / 10 / **3** |
+| `182934` | 2 / 2 / 14 | 23 / 23 / **22** |
+| `100340` | 3 / 2 / 26 | 48 / 45 / **30** |
+
+**With the match test on, P2 and P3 are indistinguishable on three of four captures; only the already-refuted 766 u lead separates. With it off, the ranking INVERTS and the refuted configuration wins on three of four.** And the draft's own degradation rule — skip the match test wherever the report chord p90 exceeds the radius — **fires on 100% of the counterfactual substrate** (chord p90 141.6 / 514.4 / 477.5 / 516.1 u) and on 7 of 11 calibration captures, i.e. it forces the entire counterfactual onto the scorer §6.1 refuted. **The sweep varied the match RADIUS (50/100/200 u) and never the match test's PRESENCE, which is the axis the ranking is not invariant on.**
+
+**6.5 Under zero lead the match test is a tautology of the proxy's construction — but the underlying structure is real.** `q` at every P2 dispatch is a point the client itself reported, and the proxy's polyline *is* the report track, so the distance is 0 by identity, not by measurement. The structure behind it is nonetheless the invariant's O1: a lagging copy is on ground already walked. **The consequence is that P2 needs a different offline metric.** Its residual exposure is not snaps but **REALFIX-M1, lag age** — how far back on the polyline `q` sits, in seconds of client travel, against the chain's ~5 s block-recycle bound (`0x00604C03 cmp ecx,0x1388`). That is measurable and is not a tautology.
+
+**6.6 Three proxy biases, and the third was missing.** *Optimistic (we under-predict):* the real chain is truncated on a match (`lastMatch->next = NULL`), so our 5 s window is more generous than the client's; and the polyline is not client-only (§2.2), so nodes exist that we cannot see. *Pessimistic (we over-predict):* **the client's history nodes are pushed at its own local-move rate, so our report track is a SUBSAMPLE** — our polyline lies chordally inside the true one and our distance-to-polyline is systematically over-estimated. Direction stated for all three; magnitude **NOT FOUND** for all three. Combined with the simulator's own p90 30–41 u / max 60 u error in the high-grant regime, **the two proxy errors are of the same order as the 99.92 u decision radius.**
+
+**6.7 Structurally invisible at any offline resolution.** Gate 2 and gate 3, both of which can only *add* snaps — so **every harness score is a FLOOR on total harm**, and gate 3 arrives as rubber-banding the hard bar does not count at all. The `0x0025` async-arm gate. The gate-free `ResyncAllAsync` route. Unit-vs-unit collision, which the server models not at all while the client's model is fully decoded (radius at `agent+0xD0`, combined radii via `0x005FED20`, the 60° cone, the sidestep at `0x00600500` displacing by `(combinedRadius + 10.0) − |distFromLine|`). The client's own `+0x5C`/`+0x60` under a buff or snare (retail's 214 distinct `0x002B` floats, `live`). Whether the *player* moves differently under a candidate. And the whole non-movement cost of silence.
+
+**6.8 And the simulator's scope excludes three of the five candidates.** It bakes `S = 1.0 × 288.0` and models no `0x002B`, so under P1's family rates a BACK leg runs at 190.1 u/s while the harness bakes 288 — a 1.51× error in the operand of both the match test and gate 1. `0x0027` (P4) and `0x002C` (P5) are likewise unmodelled. **P1, P4 and P5 are outside the instrument.**
+
+**⇒ What the harness IS.** A calibration instrument (it reproduces the measured hard-jump census on eleven `ours` captures across five configurations, and takes the three zero-grant captures to zero structurally); a **refusal** instrument (it can kill a candidate that predicts harm the zero-grant control did not have); and an **exposure meter** (REALFIX-M1 lag age for P2, REALFIX-M2 arrival match-failure fraction for P3, and `resyncscore`'s yank column for P5). **It is not a ranker, and the P2-vs-P3 question needs a live A/B.** Reporting it as a ranker is the same defect as reporting a partial suite run as a full one.
+
+---
+
+### 7. What this round changed in the record
+
+REFUTED and replaced: round 4 §7's "never been tried" (§1); "the two conjuncts differ on every axis" for segment 0 (§2.2); "the polyline is client-only" (§2.2); "dispatched exactly once per SetPosition" (§2.1); "the one-shot fence throttles the observed rate" as a co-equal reading (§2.5a); the ~99.6 u match threshold, now 99.919968 u exhaustively (§2.2); "one-signed positive" sqrt error (§2.2); `0x00709E90`/`0x00709990`'s names as OBSERVED (§2.3); "0x0029 fields 3/4 NOT FOUND" and "send 0" (§3.3); T5's "no prior c2s move msg" (§3.3); "we express D2 on ~11.5% of grants" (§3.4); "`152716` is wire-only" (§4); "`resyncscore`'s simulator extends round 3's calibration" (§4); P3's proportional-drift safety argument (§5); "the harness can settle P2 vs P3" (§6.4).
+
+WEAKENED with the caveat carried inline: T1 (a null reproduces it); T3's 11.7× (per-capture 6.3×–59.2×); P2's 77.2% and O1's latency (per-capture spread); SP1's "third rule" (a variant, ~95% one of the arms it arbitrates); T4 (UNDECIDABLE at n = 23); §3(b)'s "Kills" verdict on refusal policies (unpriced non-movement cost).
+
+New OBSERVED: the nine-capture membership; retail's message ordering, stop shape, `0x0025` echo, `0x0027` census; D2's four properties and H-STALE's refutation; the two caller classes and their xref graphs; the `≤ 1.0 u` short-circuit's non-dispatch; the roster-wide history wipe; the re-arm's no-op-when-armed; five calibration pairs with glide-conditioned residuals; the substrate inversion; the caller-aware proxy's eleven-capture calibration and its nulls; the lead sweep; `|D(86) − next report|`.
+
+---
