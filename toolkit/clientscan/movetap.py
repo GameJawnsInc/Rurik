@@ -1254,8 +1254,13 @@ def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
 # future-tolerance bound pinned from both sides on its REAL ground, the read
 # budget itself, and six checks that read print_hist_summary's and
 # chain_cost_line's OUTPUT back out of stdout.
-# Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+44.
-SELFTEST_FLOOR = 230
+# 230 -> 231: the future-tolerance block's own first draft wrote every case
+# as HIST_FUTURE_TOL_MS +/- 1, so all three scaled WITH the constant and
+# widening 250 back to 2500 ran green -- the self-referential defect this
+# round was closing, reproduced inside the fix for it. A FIXED 400 ms case
+# pins the tolerance into [40, 400).
+# Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+45.
+SELFTEST_FLOOR = 231
 
 
 def _say_check(ok, text):
@@ -3599,6 +3604,13 @@ def _selftest_chain():
     # HIST_FUTURE_TOL_MS). The real ground is read ordering: the clock is read
     # before the nodes, so an append in between is legitimately ahead. With the
     # case above and these two the constant cannot move without reddening.
+    # AND TWO OF THE THREE ARE FIXED LITERALS, WHICH IS THE WHOLE POINT. The
+    # first draft of this block wrote every case as `HIST_FUTURE_TOL_MS + 1` and
+    # `HIST_FUTURE_TOL_MS - 1`, so all of them scaled WITH the constant and
+    # widening 250 back to 2500 ran green -- the same self-referential defect
+    # this section was written to close in the PTR_MAX case, reproduced inside
+    # the fix for it. 40 and 400 do not move: together they pin the tolerance
+    # into [40, 400), and only the boundary pair below is relative.
     for lag, want, n_want, why in (
             (40, HIST_OK, 2, "one reader-latency's worth of append lag"),
             (HIST_FUTURE_TOL_MS - 1, HIST_OK, 2, "and right up to the bound")):
@@ -3606,6 +3618,12 @@ def _selftest_chain():
         lagged[0] = (lagged[0][0], NOW + lag, 0.0, 0.0, 0, 0, lagged[0][6])
         case(f"but {lag} ms ahead does NOT redden -- {why}",
              run(lagged, _chain_record(CHAIN_BLOCK + 4))[0], want, n_want)
+    wide = _straight_chain(2)
+    wide[0] = (wide[0][0], NOW + 400, 0.0, 0.0, 0, 0, wide[0][6])
+    case("and a FIXED 400 ms ahead still refuses -- the bound is a sample "
+         "latency, not the client's 2500 ms head-age rule it was borrowed from",
+         run(wide, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-time-future", 0)
 
     # --- the mirror of section 6's rule -----------------------------------
     fails = [run(n, _chain_record(h))[0] for h, n in (

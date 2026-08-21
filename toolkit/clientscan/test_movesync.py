@@ -218,7 +218,7 @@ MOVETAP_SECTIONS = (
     # the landing commit wrongly credited to section 17 below, the recycle
     # hazard, the future tolerance's real ground, the read budget, and the
     # printer's OUTPUT rather than its call site.
-    ("_selftest_chain", 44),
+    ("_selftest_chain", 45),
 )
 MOVESYNC_SECTIONS = (
     ("_selftest_jump_tally", 14),

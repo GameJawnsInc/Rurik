@@ -791,7 +791,7 @@ post-C9 movetap capture exists anywhere, n = 0. Until the run happens, **no real
 block from the tap can exist** — which is exactly why blocks 1–10 are fixtures and say so.
 
 **How to tell if these blocks have gone stale:** they were produced at HEAD `0841f5e` against
-`movetap.py` sha256 `0efb6270f5f309d81c8dd1dc31c621aadb66dba3595ff83f2934e16650139e9e` and
+`movetap.py` sha256 `9ef4b98d4aa849fb96e4cf6864545feab6c98fd913b45362a442cc10a154146e` and
 `movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which

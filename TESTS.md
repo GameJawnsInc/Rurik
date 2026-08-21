@@ -3066,7 +3066,7 @@ Every one of these, in the order they were written:
   bound it was misreading. Section 5 also now reads the COFF Characteristics
   word out of the pinned image, because `PTR_MAX`'s ceiling had been asserted
   from `0x0122` in prose and checked by nothing. **§17 also wraps
-  `_selftest_chain` (44), which drives `history_chain` over a bytearray** — no
+  `_selftest_chain` (45), which drives `history_chain` over a bytearray** — no
   client, no vault, no `ReadProcessMemory` — through a healthy 4-node walk and
   every way a chain can be wrong: a chain longer than N (`truncated:max-nodes`,
   keeping the N nodes it read), a head in the null-guard region, one above the
@@ -3183,7 +3183,7 @@ Every one of these, in the order they were written:
   its call site is deleted, and a coverage check reading the table would then
   certify a section nobody ran -- the same defect one level up; deleting one
   `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
-  **80**, movetap **230**) so the operator's pre-flight command cannot diverge
+  **80**, movetap **231**) so the operator's pre-flight command cannot diverge
   from the
   suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
   green run executes and requires the module to refuse itself. (Both numbers
@@ -3203,7 +3203,12 @@ Every one of these, in the order they were written:
   25 → 26 (`main()` must PRINT the cost, not merely call `chain_cost` —
   those three rows were described as keeping the OUTPUT alive and they keep the
   CALL alive; three separate mutations gutted the printers at 206/206), and §13
-  28 → 44. Read off the run: 6+1+2+0+50+13+14+15+26+38+13+8+44.) **movesync had no
+  28 → 45. Read off the run: 6+1+2+0+50+13+14+15+26+38+13+8+45. (44 for an
+  hour: the future-tolerance block's own first draft wrote every case as
+  `HIST_FUTURE_TOL_MS ± 1`, so all three scaled with the constant and
+  widening 250 back to 2500 ran green — the self-referential defect this
+  round was closing, reproduced inside the fix for it. A FIXED 400 ms case
+  pins it into [40, 400).) **movesync had no
   module-level floor until 2026-08-20**: its sections 8-10 carried a `_floor`
   each and its sections 1-7 -- the pre-probe guards the operator's pre-flight
   leans on -- carried none, so deleting section 2's only check took it from 38
