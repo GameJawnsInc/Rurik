@@ -6664,12 +6664,18 @@ PROBES = {
                  "a BOOST icon rather than a penalty one. Every step is a "
                  "fixed-position HUD readout.",
         steps=_morale_steps(a),
-        note="The wire half is already OBSERVED off ArenaNet's own death "
-             "(studies/morale/FINDINGS.md 1): 100 -> 85 on both channels in "
-             "one tick, maxima 120 -> 102 and 25 -> 22 pushed by the server. "
-             "This probe asks only what retail could not tell us, because "
-             "retail sent everything at once. Runs against our own server on "
-             "loopback; no death is needed and none is staged.",
+        note="ANSWERED 2026-08-20, agent-piloted, all six steps verified "
+             "in the gamesrv log before a pixel was read (harness "
+             "20260820T220732; studies/morale/RUNS.md Run 1). 0x009C DRAWS "
+             "the indicator -- red chevron, -30% -- and 0x00EE's delta drew "
+             "nothing over three frames and 9.2 s; 110 flipped the chevron up "
+             "and teal at +10%; and the pools did NOT move until properties "
+             "41/42 landed, then showed the 14 we sent rather than the 19 the "
+             "client's own arithmetic would give. So the maxima are the "
+             "SERVER's job. Kept runnable: it is also the calibration for the "
+             "corner, which sits at (10,32)-(60,82) and which a crop starting "
+             "at y=100 misses entirely. The HUD repaints on a ~1-4 s delay, "
+             "so leave >=5 s between a send and its screenshot.",
     ),
     "faction_max": lambda a, o: Probe(
         question="Do the four one-dword messages 0x00EA-0x00ED set the "

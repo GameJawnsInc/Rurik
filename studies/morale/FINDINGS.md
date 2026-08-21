@@ -9,6 +9,13 @@ It is answered now, and not by reasoning: **the live corpus contains exactly one
 player death**, and it is fully instrumented. Everything in §1 and §2 is read off
 that tick.
 
+**And as of 2026-08-20 the client half is measured too** — `--probe morale` ran
+green against our own client, agent-piloted, and answered both questions the
+capture could not ([RUNS.md](RUNS.md) §Run 1): `0x009C` draws the death-penalty
+indicator, `0x00EE`'s delta does not reach the screen at all, and the client
+**does not** recompute the pool maxima from morale — it displays the numbers the
+server sends, including a wrong one we sent on purpose.
+
 **Identifiers.** `MORALE-P<n>` = a prediction registered before a probe runs.
 `MORALE-Q<n>` = an open question. Convention:
 [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
@@ -233,26 +240,38 @@ Test: `toolkit/authsrv/test_morale.py`, catalogued in
 
 | id | question | why it is not answered here |
 |---|---|---|
-| MORALE-Q1 | Which message drives the top-left DP indicator: `0x009C`, `0x00EE`, or both? | needs a client. Probe below |
-| MORALE-Q2 | Does the client recompute the maxima itself from morale, or only display what the server sends? | The server sent both maxima explicitly, so the client never had to. A probe that sends morale WITHOUT the maxima separates them |
+| ~~MORALE-Q1~~ | Which message drives the top-left DP indicator: `0x009C`, `0x00EE`, or both? | **ANSWERED 2026-08-20 — `0x009C`.** `[player, 70]` alone drew a red `−30%` chevron at (10,32)–(60,82); `0x00EE [10, −15]` alone drew nothing over three frames and 9.2 s. RUNS.md §Run 1 |
+| ~~MORALE-Q2~~ | Does the client recompute the maxima itself from morale, or only display what the server sends? | **ANSWERED 2026-08-20 — it displays ours.** One frame carries it: at t+16.4 the corner reads `−30%` while the bars still read 100 and 25. Properties 41/42 then set them, and the energy bar showed the **14** we sent rather than the 19 its own arithmetic would give |
 | MORALE-Q3 | `0x00A2` vs `0x00A3` for property 43 | retail uses the plain channel; we use the target channel and the client has never complained. Both may be accepted |
 | MORALE-Q4 | int property 54 at the revive (= 22, the new max energy) | one sighting, no second value, no upstream name |
 | MORALE-Q5 | Morale BOOSTS | zero sightings in the corpus. +10% is WIKI only, and the `[40, 110]` range is UPSTREAM (GWCA) |
 | MORALE-Q6 | Does DP survive a map change on the wire, and what resets it? | our corpus has no death followed by a zone. WIKI says an outpost resets it; the ATTR_SET at every login carries 100, which is consistent but is not the same claim |
+| MORALE-Q7 | Does `0x00EE`'s delta update the client's stored morale without repainting? | new, from the run above. The corner is the only readout it had; GWCA puts morale at `WorldContext +0x790`, so a memory read during a probe would settle it |
 
-## 7. The probe — `--probe morale`, predictions registered first
+## 7. The probe — RAN 2026-08-20, GREEN
 
-Loopback, our own client, our own server. Fixed-position HUD readout, so it is
-agent-pilotable under the 2026-08-17 boundary
-(`feedback-owner-drives-client-runs`), but it still needs the owner's go-ahead
-to launch a client.
+Loopback, our own client, our own server, agent-piloted with no operator input.
+Full sheet: [RUNS.md](RUNS.md) §Run 1. Predictions were registered before the
+run and are scored here as written:
 
-| id | step | prediction |
+| id | prediction | result |
 |---|---|---|
-| MORALE-P1 | `0x00EE [10, −15]` alone | If the DP indicator appears top-left, attr 10 drives the display and `0x00E9`'s refutation was about the full-set message only |
-| MORALE-P2 | `0x009C [player, 85]` alone | If the indicator appears here instead, the display is the per-agent channel, and MORALE-Q1 is answered the other way |
-| MORALE-P3 | either of the above, with **no** property 41/42 | If the health/energy globes shrink anyway, the client recomputes the maxima from morale (MORALE-Q2 = client-side). If they do not move, the maxima are the server's job and ours must send them |
-| MORALE-P4 | `0x009C [player, 110]` | +10% is the wiki's ceiling and the corpus has never carried a boost. A boost icon rather than a DP icon is the confirmation |
+| MORALE-P1 | `0x00EE [10, −15]` alone draws the indicator | **REFUTED** — nothing, three frames, 9.2 s |
+| MORALE-P2 | `0x009C [player, 85]` alone draws it instead | **CONFIRMED** — red chevron, `−30%`, at 70 |
+| MORALE-P3 | the globes do not move until properties 41/42, and then read OUR numbers | **CONFIRMED** — `−30%` displayed beside untouched 100/25 bars, then 14 and 70 |
+| MORALE-P4 | `0x009C [player, 110]` draws a BOOST, not a penalty | **CONFIRMED** — the chevron flips up and turns teal, `+10%` |
+| control | `0x00EE [10, 0]`, retail's own no-op, changes nothing | **HELD** — eleven frames, 34 s |
 
-A run that produces MORALE-P1 and MORALE-P3 answers both open questions that
-matter for the server, in one session, without a death.
+**The one that mattered was P3, and it was designed to be able to fail.** The
+energy maximum was sent as **14** rather than the 19 that −30% of base 20
+actually gives, so a client computing its own answer would have disagreed with
+us visibly. It showed 14. Morale is a *display* to the client and an
+*arithmetic* to the server, and a server that sends the percentage without the
+recomputed pools ships a death penalty that costs the player nothing.
+
+**What the run also cost, worth writing down.** The indicator sits at
+(10,32)–(60,82) — above the party window, under the title bar. The first crop
+of these frames started at y=100, found nothing, and for several minutes read
+as a refutation of P1 *and* P2. The HUD also repaints on a delay of roughly
+1–4 s rather than on the packet, in 3 of 3 cases; a probe reading it wants ≥5 s
+between a send and its screenshot.

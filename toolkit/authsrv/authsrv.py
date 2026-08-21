@@ -6615,10 +6615,14 @@ def push_morale(send, state, conn_id, new_value, why):
         0x00A2 [43, player, f]     energy regeneration, rescaled to the new pool
         0x009F [42, player, 102]   the recomputed maximum HEALTH
 
-    THE MAXIMA ARE THE SERVER'S JOB. Retail sent both explicitly, so the client
-    never had to derive them -- and whether it also derives them for itself is
-    MORALE-Q2, unanswered and probe-shaped. Sending them is the reading that is
-    safe under both answers.
+    THE MAXIMA ARE THE SERVER'S JOB, and that is MEASURED rather than assumed
+    since 2026-08-20. Retail sent both explicitly, so the client never had to
+    derive them -- and `--probe morale` then showed that it CANNOT: one frame of
+    that run has the corner reading -30% while the health and energy bars still
+    read 100 and 25, and when the maxima did arrive the energy bar showed the
+    14 we sent rather than the 19 its own arithmetic gives (studies/morale/
+    RUNS.md Run 1, MORALE-P3). A server that sends the percentage and forgets
+    the pools ships a death penalty that costs the player nothing.
 
     The regeneration resend is not decoration either: property 43 carries a
     FRACTION of maximum energy per second, so a pool that shrinks 15% while this

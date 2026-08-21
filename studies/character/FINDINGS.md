@@ -1195,9 +1195,12 @@ packet, every field set to `1000 + index` so each number names its own field.
 > pools. GWCA names the same slot `Morale_Percent` and annotates its range as
 > 40 to 110. So the sweep above refuted the **top-left indicator being driven by
 > this message**, which stands and is worth knowing; it did not refute the field.
-> What draws the indicator is still open (`0x009C` is the candidate) and is
-> MORALE-Q1 in [studies/morale/FINDINGS.md](../morale/FINDINGS.md), which carries
-> the whole mechanic. Fields 7, 8 and 14 are untouched by this.
+> What draws the indicator was MORALE-Q1, and it is now ANSWERED against our own
+> client (2026-08-20, `--probe morale`): **`0x009C [agent, percent]` draws it**,
+> and `0x00EE`'s delta does not reach the screen at all. So this row's sweep was
+> aimed at the third of three channels. The mechanic lives in
+> [studies/morale/FINDINGS.md](../morale/FINDINGS.md). Fields 7, 8 and 14 are
+> untouched by this.
 
 **The strongest result here is the negative one.** All four faction maxima ignore
 this message. A single instance (field 12) was dismissible; four independent

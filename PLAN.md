@@ -1375,13 +1375,29 @@ unknown".
 dying**, so the shipped world is deliberately silent and `--death-penalty` is
 what makes the mechanic watchable.
 
-**OWED: one client run, `--probe morale`.** Two questions the corpus cannot
-answer because retail sent everything at once — which channel draws the top-left
-indicator (MORALE-Q1), and whether the client computes the reduced maxima itself
-or only displays ours (MORALE-Q2). Predictions MORALE-P1..P4 are registered in
-the arc doc and printed by `--list-probes`. Fixed-position HUD readout
-throughout, so it is agent-pilotable under the 2026-08-17 boundary; it still
-needs the owner's go-ahead to launch a client.
+**THE PROBE RAN 2026-08-20 AND IS GREEN** — `--probe morale`, agent-piloted,
+harness `20260820T220732`, all six steps verified in the gamesrv log before a
+pixel was read ([studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 1). Both
+questions the corpus could not answer are closed, and one prediction was
+refuted:
+
+- **MORALE-Q1 — `0x009C` draws the indicator.** `[player, 70]` alone put a red
+  chevron reading `−30%` in the top-left corner; `0x00EE [10, −15]` alone drew
+  nothing over three frames and 9.2 s (MORALE-P1 REFUTED, P2 confirmed).
+  `[player, 110]` flipped the chevron up and teal at `+10%` (P4).
+- **MORALE-Q2 — the maxima are the SERVER's job.** One frame carries it: the
+  corner reads `−30%` while the health and energy bars still read 100 and 25.
+  The pools moved only when properties 41/42 landed, and the energy bar then
+  showed the **14** we sent on purpose rather than the 19 the client's own
+  arithmetic would give (P3). A server that sends morale and forgets the pools
+  ships a penalty that costs nothing.
+- The control held: retail's own `0x00EE [10, 0]` no-op changed nothing over
+  eleven frames.
+
+Two things measured in passing and worth reusing: the indicator is at
+(10,32)–(60,82) at 1936×1040 — a crop starting at y=100 misses it and reads as
+a refutation — and the HUD repaints on a **1–4 s delay** rather than on the
+packet, so a probe reading it wants ≥5 s between a send and its screenshot.
 
 ### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
 
