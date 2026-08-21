@@ -4302,3 +4302,81 @@ conflated (by this session, in the plan assembly) and the conflation is what put
    marched one.** The rule already exists (`REALFIX.md` §6.1.5, cell assignment
    from the observed path); what this run shows is that it must also govern plan
    *construction*, not only scoring.
+
+## 2026-08-21, later — THE YAW CALIBRATION: W4 is CONFIRMED, my refutation of it is WITHDRAWN, and W5 was the only broken constant
+
+**OBSERVED, `ours`, dedicated sweep** — capture `20260821T130913`, harness
+`20260821T130838`, plan `[wait:2 W:2 wait:2 S:3]` baseline then the same cycle
+after each of `yaw:±100, ±250, ±500, ±1000, ±2000`. Eleven out-and-back
+measurements around spawn, each leg's travel bearing taken from its own first and
+last report with the leg boundaries read off `REALFIX-T2`'s float stamps.
+
+### The yaw response is LINEAR, and it is the number the design gave
+
+| token | Δ facing | °/px |
+|---|---|---|
+| −100 | +7.47° | −0.07468 |
+| ±250 | ∓20.06° | −0.08023 |
+| ±500 | ∓40.06 / +40.28° | −0.08011 / −0.08057 |
+| ±1000 | ∓80.28 / +80.36° | −0.08028 / −0.08036 |
+| ±2000 | ∓160.36 / +160.06° | −0.08018 / −0.08003 |
+
+**Least squares through the origin: −0.080152 °/px, n = 9, residual max 0.55°
+over a ±2,000 px range.** `REALFIX-W4`'s `−0.0800` reproduces to three figures.
+
+⚠ **THIS WITHDRAWS THIS DOCUMENT'S OWN "W4 IS REFUTED", written hours earlier and
+merged.** That claim came from reading yaw responses out of the L2 capture, where
+two things corrupted every pairing: **S legs reverse the travel bearing by 180°**
+and were being read as yaw effects (the ±179.8° "responses"), and **wall-slid legs
+report the wall's bearing, not the facing** (the −0.005 °/px "response"). The
+correct method needs a dedicated sweep with clean legs, which is what this is. A
+constant is not refuted by a measurement taken through a confound the measurement
+did not control for.
+
+### The operator caught the one bad leg, and the guard now catches it too
+
+The operator warned mid-run that the first out-and-back angles looked like they
+were hitting a wall. **They were**: leg 0 ran **436 u of an expected 570 (76%)
+with a 71° mid-leg bend**, and its `yaw:100` pairing reads −13.65° against the
+−8.02° every other token predicts. It is **EXCLUDED** by two automatic rules —
+distance < 80% of `v·duration`, or a mid-leg bearing deviation > 20° — and both
+rules are in the fitter rather than in prose. Without the exclusion the fit moves
+and the residual triples.
+
+### W5, the spawn facing, is the ONLY constant that was wrong — and it is not 44°
+
+`REALFIX-W5` said −65.80°. The L2 post-mortem then said "+44.31°, measured". **Both
+are wrong, and the second is wrong in an instructive way.** L2 arm P0's opening
+trace, read interval by interval:
+
+| gap | dist | bearing | |
+|---|---|---|---|
+| 1.57 s | 428.7 u | **+3.30°** | free travel, full speed |
+| 0.50 s | **46.9 u** | +77.66° | cadence tightens, speed collapses to 94 u/s |
+| 0.50 s | 58.0 u | +65.06° | |
+| 0.50 s | 104.3 u | +45.52° | |
+| 0.50 s | 107.7 u | +44.37° | |
+| 0.50 s | 106.4 u | **+44.30°** | held — **this is the WALL's bearing** |
+
+That is round 4's own wall-contact signature (report cadence 1.80 s → 0.50 s at
+contact, speed falling to 260–265 u/s there and to 94 u/s here). **The "+44.31°
+held heading" the post-mortem measured was the character sliding along a wall**,
+which is exactly the error the post-mortem was written to correct, committed one
+paragraph later. Recorded because it is the second time in one day this arc read a
+wall as a fact about the player.
+
+**The true spawn facing, from two independent runs:** L2 arm P0's first free
+interval `+3.30° − 2.40°` (`yaw:-30`) = **+0.90°**; the calibration's second W leg
+`−7.41° + 8.02°` (`yaw:100`) = **+0.59°**. **W5 = +0.75° ± 0.15°**, against the
+−65.80° the plan assumed — a **66.5° error**, and the whole reason L2 walked
+northeast into a wall instead of southeast to the bridge.
+
+### What this unblocks
+
+Steering is calibrated: from spawn `(9826, 8077)` at `+0.75°`, the bearing to the
+bridge's north apron `(10990, 5750)` is **−63.42°**, i.e. **`yaw:801`** — one
+token, and the geometry march can be trusted for the first time because both of
+its frame constants are now measured rather than assumed. **REALFIX-L3 is the L2
+plan with `W5 = +0.75°`**, and the standing rule from the L2 post-mortem still
+governs: the plan is validated against the OBSERVED path, and any leg that runs
+short or bends is a wall, not a datum.
