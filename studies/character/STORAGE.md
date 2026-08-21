@@ -133,6 +133,12 @@ Answered at the reading level:
 >   `attr 10, delta 0xFFFFFFF1` = **−15**: the morale = value − 100 encoding,
 >   from retail (a −15% death penalty in the flesh). Our display probe's
 >   refutation stands for the *top-left indicator*, not for the encoding.
+>   **FOLLOWED UP 2026-08-20, and this line was the thread that pulled the whole
+>   mechanic out**: that −15 sits on a full death tick — `0x009C [27, 85]` on the
+>   same tick, and the character's maxima moving 120 → 102 and 25 → 22, which is
+>   −15% of BASE health and energy rather than of the totals. The arc is
+>   [studies/morale/FINDINGS.md](../morale/FINDINGS.md); the server now models
+>   it.
 > - **Fields 11/12 move together**: `0x00EE` sends paired `attr 11, +40` /
 >   `attr 12, +40` (×17) and `+50/+50` (×5), and a level-20's `0x00E9` shows
 >   930/930 — the current/total-earned pairing watched happening rather than

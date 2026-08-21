@@ -1346,6 +1346,43 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
+
+Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md).
+
+**The question was "we send morale as 100 and nobody knows what that means".**
+It is answered from ArenaNet's own wire rather than from a mirror: the live
+corpus holds exactly **one player death**, it is fully instrumented, and it
+carries the whole mechanic in a single tick — `0x009C [agent, 85]` and
+`0x00EE [attr 10, −15]` together, then the server's own recomputed maxima,
+health 120 → 102 and energy 25 → 22. Morale is a percentage with 100 neutral
+that scales the character's **base** health and energy, and the energy figure is
+what proves the "base" in that sentence: scaling the total gives 21.25, which is
+not 22 and is not an integer.
+
+Landed: `morale.py` (arithmetic), `[player.morale]` + `[map_rule.*]` (rules and
+the per-map gate, wiki-cited), the death tick and the XP counter in `authsrv.py`,
+`moralescan.py` (the corpus census, so "the only −15 in fourteen captures" stays
+checkable), and `test_morale.py` (floor 47, green 48). Three older claims are
+corrected in place: `0x00E9` field 10 was **not** refuted as morale — its
+*display* was; `0x009C` is no longer "n=1, uncatalogued"; and property 43 is
+energy regeneration as a fraction of the pool per second, which also explains the
+`0.0396` this repo inherited from gw-preservation and shipped as "purpose
+unknown".
+
+**Every map this server ships is pre-Searing, where retail charges nothing for
+dying**, so the shipped world is deliberately silent and `--death-penalty` is
+what makes the mechanic watchable.
+
+**OWED: one client run, `--probe morale`.** Two questions the corpus cannot
+answer because retail sent everything at once — which channel draws the top-left
+indicator (MORALE-Q1), and whether the client computes the reduced maxima itself
+or only displays ours (MORALE-Q2). Predictions MORALE-P1..P4 are registered in
+the arc doc and printed by `--list-probes`. Fixed-position HUD readout
+throughout, so it is agent-pilotable under the 2026-08-17 boundary; it still
+needs the owner's go-ahead to launch a client.
+
 ### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:

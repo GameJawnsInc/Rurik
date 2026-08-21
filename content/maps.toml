@@ -483,3 +483,66 @@ happens either way" -- holds on a block that can discriminate it. Block (4,3) ca
 base quadrants on 331 of its 1,024 cells. Every earlier capture was arg4 = 0
 throughout, where the two readings are identical by construction.
 """
+
+# ------------------------------------------------- does a death cost anything here?
+#
+# A separate KIND rather than a `death_penalty` field on the map rows above, because
+# provenance is per row and those rows are provenanced for their file ids and spawn
+# points -- `source = "measured"` on a row whose file id we read out of our own archive
+# says nothing about a rule players observed, and hanging a wiki-sourced boolean under
+# it would be exactly the quiet mislabel this store exists to prevent.
+#
+# ABSENCE MEANS FALSE, deliberately, and it is the same argument `map_explorable` makes
+# one screen up: a map we have not ruled on gets the safer wrong answer, which is a
+# death that costs nothing rather than a penalty invented for a place we never checked.
+# `toolkit/authsrv/test_morale.py` refuses a `map_rule` key that names no `map` row, so
+# the two tables cannot drift apart silently.
+
+[map_rule.148]
+death_penalty = false
+
+[map_rule.148.provenance]
+source = "wiki"
+page = 'GWW "Death Penalty", section Acquisition/Exceptions, read 2026-08-20'
+note = """
+"Deaths in pre-Searing Ascalon" is listed outright among the deaths that never result
+in DP. Ascalon City (Pre-Searing) is one, so this row is retail's own answer rather
+than a simplification of it.
+"""
+
+[map_rule.146]
+death_penalty = false
+
+[map_rule.146.provenance]
+source = "wiki"
+page = 'GWW "Death Penalty", section Acquisition/Exceptions, read 2026-08-20'
+note = """
+Lakeside County is pre-Searing, so the same exception covers it -- and this is the row
+that matters most in practice, because 146 is the explorable this server fights in.
+Every combat run to date has been in a place where retail charges nothing for dying.
+That is not a gap in the implementation; it is the implementation agreeing with the
+game. Pass --death-penalty to force acquisition on for a probe.
+"""
+
+[map_rule.90]
+death_penalty = true
+
+[map_rule.90.provenance]
+source = "wiki"
+page = 'GWW "Death Penalty", section Acquisition, read 2026-08-20'
+note = """
+Lornar's Pass is a post-Searing Prophecies explorable and none of the exception list
+touches it: "Each time a character dies they suffer a 15% DP in post-Searing PvE".
+Here so the store holds at least one map where the rule fires, and so the false rows
+above are a decision rather than the only shape this table has ever taken.
+"""
+
+[map_rule.558]
+death_penalty = true
+
+[map_rule.558.provenance]
+source = "wiki"
+page = 'GWW "Death Penalty", section Acquisition, read 2026-08-20'
+note = """
+Sparkfly Swamp, a post-Searing (Nightfall) explorable. Same rule as map_rule.90.
+"""
