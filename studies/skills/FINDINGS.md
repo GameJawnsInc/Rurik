@@ -2790,9 +2790,10 @@ one exists "the two 80-unit skills agree" is UNVERIFIED rather than confirmed.
 Stated plainly, because a run that answers two of four questions and reports
 four is how §25's own P7 nearly went unnoticed:
 
-- **P12, the spend's on-screen reset (`0x00D2`), is UNTESTED.** The walk landed
-  hits and never pressed the charged skill.
-- **P13, the cross-pool tax, is UNTESTED** for the same reason. This is the half
+- ~~**P12, the spend's on-screen reset (`0x00D2`), is UNTESTED.**~~ — **DONE,
+  §28: CONFIRMED**, the spent ring empties to 0.0%.
+- ~~**P13, the cross-pool tax, is UNTESTED.**~~ — **DONE, §28: CONFIRMED**, and
+  it settled the unit question — equal strikes, unequal rings. This is the half
   of GWW's on-use rule that no screen has ever shown, and the default bar's
   three adrenal skills at 80/120/80 are an unusually good instrument for it: one
   press should drop the other two by exactly one strike each, which at those
@@ -2822,4 +2823,112 @@ unavailable in this environment, and by the time it was noticed the peer had
 committed on top, so a rewrite would have rewritten their work too. Recorded
 here and in the following commit's message instead — `git status` before
 `git add -A` is the habit that prevents it.
+
+## 28. E6 — the spend, and the tax that proves the unit
+
+**2026-08-21, run `20260821T134216`, loopback, build 38797, server at
+`9916de8`.** Closes the first two items §27.5 left open. Predictions registered
+before the client launched (`e6-predictions.md`), including the numbers.
+
+### 28.1 The rig, and why the default bar is the instrument
+
+Nine landed hits capped every pool, then **`attack:0` broke off the swing** so
+no further gain could reach the readout, then slot 2 was pressed. The server
+log is the proof that the window is clean: nine `0x00CF`s, the `0x00D2`, and
+**zero `0x00CF` after it**.
+
+The bar makes the run discriminating for free. Slots 2 and 4 cost **80**, slot
+3 costs **120**, and slots 1 and 5–8 are non-adrenal controls in the same
+frame. So one press taxes two rings by the same 25 units against different
+denominators — and if the display taxed by a *fraction* instead, both would
+drop by the same visible amount.
+
+### 28.2 Our own wire, in ArenaNet's order
+
+```
+c2s USE_SKILL
+s2c SKILL_ACTIVATED_BROADCAST(skill 317 via USE_SKILL)   0x00E4
+s2c adrenaline spend: skill 317 (copy 0)                 0x00D2   <-- between
+s2c cast animation: player casts 317                     0x00A0
+```
+
+Which is the measured retail shape from §26: `0x00E4` precedes the spend 38 of
+38, and the property naming the skill follows it 39 of 39. The sender was
+built to that census rather than to symmetry with the energy debit, and this
+is the first time it has been seen going out.
+
+### 28.3 P12 — the spent ring empties. CONFIRMED
+
+Slot 2 goes from a full ring to **0.0%** — every row indistinguishable from the
+pre-charge empty icon. `0x00821C00` writes both halves of the matched slot to
+zero and the screen agrees.
+
+### 28.4 P13 — the tax is 25 UNITS, not a share of the ring. CONFIRMED
+
+Fill measured as the first row from the top carrying any changed pixel against
+the empty baseline — E5's own null standard, no tuned threshold:
+
+| slot | skill | cost | charged | after the press | predicted |
+|---|---|---|---|---|---|
+| 2 | 317 | 80 | 100.0% | **0.0%** | 0.0% |
+| 3 | 318 | **120** | 100.0% | **80.8%** | 79.2% |
+| 4 | 319 | **80** | 100.0% | **67.3%** | 68.8% |
+
+All three within 1.6 points of a number written down before the run. And the
+discriminator:
+
+```
+slot 3 (cost 120):  ring dropped 19.2 points   (25/120 = 20.8%)
+slot 4 (cost  80):  ring dropped 32.7 points   (25/ 80 = 31.2%)
+```
+
+**Both slots lost exactly one strike; they lost visibly different amounts of
+ring.** A proportional tax — a quarter off each, say — would have dropped them
+by the same number of points, and it did not. This is `cmp esi,0x19 /
+add esi,-0x19` at `0x00821C71` reaching the screen: the pool is carried in raw
+units, 25 is the size of a strike, and the ring is `adrenaline_b ÷
+skillData.adrenaline` with the skill's own raw cost underneath. §26.8's census
+finding that 151 skills carry non-multiples of 25 is now visible rather than
+tabular.
+
+### 28.5 P14 — the controls hold. CONFIRMED
+
+Slots 1 and 5–8 sit at **0 changed pixels** across the press, as they did
+through all seven frames of E5. The tax reaches exactly the occupied adrenal
+slots and nothing else, which is `0x00821C4C`'s `(skillId, skillCopy)` join
+behaving.
+
+### 28.6 The wipe is still unseen, and a near-miss worth recording
+
+The 25 s timeout **did** fire on the wire — `adrenaline cleared: 25s out of
+combat (0x00d0, 6B)` — about a second after the last scripted frame. The
+teardown frame `final.png` is *not* evidence for it: measured against the empty
+baseline it reads ~100% changed **on every slot including the two non-adrenal
+controls**, so the whole frame is a different screen state and any adrenaline
+reading taken from it would be an artifact. That is the aggregate-diff lesson
+catching a false positive in the act, and the in-frame controls are what caught
+it. **`0x00D0` on screen remains open**, and wants a run that simply waits.
+
+### 28.7 Two measurement notes
+
+**The first attempt (`20260821T133856`) was contaminated and the log said so.**
+`S:0.5` does not break off an attack — the swing continued and two more gains
+landed after the spend, which would have refilled the taxed pools and hidden
+the very effect the run was for. `attack:0` is the clean stop: `begin_attack`
+finds no agent 0 and clears `state["attacking"]`. The contamination was
+detectable only because the server log lists every `0x00CF` in order; a
+screenshot-only run would have shown two plausible rings and no way to know.
+
+**Pixel-identity is too strict a null here, and E5's phrasing invited the
+error.** The client re-renders with sub-threshold variation everywhere, so
+"identical to the baseline" finds nothing empty even on a ring that is visibly
+empty. E5's controls read 0.0% under a *threshold* of 24, not under equality;
+this section uses the same threshold and says so. The intermediate attempt —
+counting rows over a 30%-of-width threshold — is what produced §27.4's
+unresolved discrepancy between two equal-cost skills, because that statistic is
+sensitive to the icon art underneath the fill. **The boundary criterion (first
+row carrying any change) is art-independent, and under it §27.4's anomaly does
+not appear**: here the two 80-unit skills behave identically, one emptied to
+0.0% and one taxed to 67.3% against a predicted 68.8%. §27.4's caveat should be
+read as a defect of that metric rather than of the client.
 

@@ -1443,11 +1443,21 @@ UNMAPPED message).
    only land on 31.25/62.5/93.75%. Defy Pain (120) sits visibly lower than the
    two 80-unit skills on identical grants — `adrenaline_b ÷ skillData.adrenaline`
    on screen. §25's P7 is inverted under its own rig.
-   **Still unseen, and §27.5 lists them rather than letting the run round up:**
-   210's on-screen reset, the cross-pool tax, 208's wipe, and the outpost
-   map-gate control. The bar's 80/120/80 costs make the tax an unusually sharp
-   next probe — one press should drop the other two rings by a *different*
-   fraction each.
+   **AND THE SPEND AND THE TAX, the same day** (E6, run `20260821T134216`,
+   [§28](studies/skills/FINDINGS.md)). Nine hits capped every pool, `attack:0`
+   broke off the swing so nothing could refill them, and slot 2 was pressed:
+   the spent ring went to **0.0%**, and the other two dropped by **19.2 and
+   32.7 points of ring for the same 25 units** — costs 120 and 80. All three
+   within 1.6 points of numbers registered before the run. **That settles what
+   the bar counts:** a proportional tax would have moved both rings equally, so
+   the pool is RAW UNITS with 25 the size of a strike, and §26.8's 151
+   non-multiple-of-25 costs are visible rather than tabular. Our own wire went
+   out in the measured order — `0x00E4`, then `0x00D2`, then the naming
+   property. The five non-adrenal slots held at 0 changed pixels throughout.
+   **Still unseen:** `0x00D0`'s wipe on screen (it fired on the wire a second
+   after the last frame; the teardown frame is NOT evidence — it reads ~100%
+   changed on the non-adrenal controls too, so it is a different screen state)
+   and the outpost map-gate control.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client
