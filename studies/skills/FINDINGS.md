@@ -3589,3 +3589,60 @@ in those windows, and no other message is known to touch it, but "we did not fin
 one" is weaker than "there is none". A single retail screenshot 20 s into a ring
 would convert the last link from inference to observation, and it is now worth
 exactly that one frame and no more.
+
+### 32.8 SCOPE CORRECTION: the silent extension is ENVIRONMENTAL-ONLY, and §32.3 overreached
+
+**Raised by the owner, 2026-08-21: "any credence to thinking these condition
+circles are some sort of hard-coded exception that combat doesn't follow?"**
+There is, and checking it found an overreach in this arc's own handoff.
+
+Every effect episode in the vault carrying a duration, scored by close residual
+and partitioned by how it was applied:
+
+| applied by | n | residual |
+|---|---|---|
+| **environmental** — the Isle's torches (984/998/999) and Students (479-486, 2077) | **15** | **LATE, +1.25 s to +55.0 s** |
+| cast or attack — 160, 364, 348, 814, 179 | 78 | **never late.** Exact, or early (a cure) |
+
+**All 15 late closures come from the two rung-8 runs** — the only sessions where
+the operator deliberately stood in range. Not one cast- or attack-applied effect
+has EVER closed late, across six captures and five skills.
+
+**And the same environmental skills close exactly when nobody loiters**, which is
+what rules out "those skill ids are special": skill 480 at `-0.00` and `+0.00`,
+984 at `+0.00`, 998 at `-0.00` in the rung-6 roster run, and 998/999 at `-0.04`
+in the rung-8 run itself once the operator had stepped away. **The variable is
+standing in the source's radius, not the skill.**
+
+**SO §32.3's HANDOFF WAS WRONG IN SCOPE.** It said this table "emits a shape
+retail does not", reasoning from the silent extension to how our server should
+refresh a cast effect. Those are two different mechanisms and the corpus separates
+them cleanly. Worse, the cast side does not say what §32.3 implied either:
+`effects.EffectTable.apply` already records that retail's 15 overlapping
+re-applications are **all under 0.5 s — same-instant doubles, not re-casts** —
+each carrying a NEW buff id while the first episode still closes on its own
+duration. So retail **stacks** those; it does not extend them.
+
+**The honest state, per mechanism:**
+
+- **Environmental / persistent-area:** retail refreshes silently and delays the
+  `0x0044`. OBSERVED, 15 episodes. Our server has no analogue of this source type,
+  so there is nothing here to copy or to fix.
+- **Cast or attack:** retail has **no witnessed case of a live effect being
+  deliberately extended at all.** Not silently, not by REMOVE-then-APPLY, not by a
+  refreshing re-apply. The 15 overlaps are simultaneity, not extension. **Our
+  REMOVE-then-APPLY is therefore unwitnessed either way — it is neither confirmed
+  nor refuted**, and §32.3 should not have leaned on the Isle to judge it.
+
+**And the Isle is a training area**, which is the general form of the owner's
+point and worth carrying beyond this section: its torches and Students are
+pedagogical props built to apply one condition on contact. Generalising from them
+to combat is a scope error of exactly the kind [§4](#) warns about elsewhere, and
+this section exists because it was made here.
+
+**What survives unchanged.** §32.1-32.2's client behaviour (self-expiry at the
+stated duration, then a held faded ghost until the removal) is a fact about the
+CLIENT, which receives one `0x0042` and a late `0x0044` and cannot know what
+applied them. §32.7's conclusion that a retail player in a Student's ring watches
+a ghost also stands — that is the environmental case, measured on its own build.
+Only the generalisation to combat is withdrawn.

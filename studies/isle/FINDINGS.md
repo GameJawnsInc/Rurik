@@ -1619,7 +1619,13 @@ That contradicts what this project's own effect substrate does.
 re-application *"extends as REMOVE-then-APPLY — the only replacement shape the client
 honours"*. Retail does not do that here: no remove/apply pair exists in the window, and
 the client kept rendering the condition regardless. **So our server emits wire traffic
-retail does not**, and the client evidently tolerates a silent extension. Whether the
+retail does not** for THIS source type, and the client evidently tolerates a
+silent extension. **SCOPE, added 2026-08-21 and it matters** — see
+[studies/skills §32.8](../skills/FINDINGS.md): every late closure in the vault is
+environmental (these torches and Students), and **no cast- or attack-applied
+effect has ever closed late** in 78 episodes over five skills. The Isle is a
+training area; this paragraph is about its props and must not be read as a claim
+about combat. Whether the
 client is tracking the timer itself or simply waiting for the `0x0044` is not settled by
 this capture.
 
