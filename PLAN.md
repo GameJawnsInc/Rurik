@@ -1565,8 +1565,23 @@ either time. So the compile path CONSUMES Zones (where deleting environment
 changed not one byte) and a zone table is COUPLED to its map -- coupling not
 identified. No mesh was produced, so the depth cut is untouched by it, and the
 next rung must author a MODIFIED version of our own 34-byte table rather than
-borrow one, which needs that layout read first. A depth bound in the compiler
-is now the only reading no experiment has contradicted.
+borrow one, which needs that layout read first. **WORLDMAPS-W10 then FOUND it in the disassembly: the bound is 40.0**, a
+float32 at 0x0094DE30 compared against all three corner z of a terrain triangle
+at 0x0072D3ED, inside PathFlood.cpp's per-triangle classifier 0x0072D2E0 -- all
+three deeper writes class 1 and RETURNS, jumping around the slope test, which is
+why the dip's 2.39 degrees were never the issue. Reachability re-derived hop by
+hop from the Path chunk's bloat handler, every hop a unique reference. **It also
+corrects our own framing**: the (43, 47] bracket W7 measured is not the bound,
+it is the SMEAR of a hard 40.0 across the generator's 4-unit-per-cell gradient,
+because the rule needs ALL THREE corners past it. What discriminates is not the
+coverage agreements -- those are worthless, since at 32x32 the rule is inert yet
+a per-quad model still over-predicts by 11.23 points -- but a two-sided bracket
+at [39, 43), the fact that 40.0 is the ONLY float constant in that window across
+the 275-function reachable subtree, and a partial intermediate bucket that kills
+every per-cell rival. **The rule is GATED by bit 0 of the Map Parameters flags
+dword, and that is the next experiment**: our maps ship flags = 0, so if that
+bit disables the depth rule, setting it brings the deep ground back -- one flag,
+one launch, and it can fail cleanly.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
