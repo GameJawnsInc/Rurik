@@ -1492,6 +1492,23 @@ def readback(dat, file_id, staged_blob, area):
         row = file_id_table(ar)[file_id]        # re-resolve; the head RELOCATES
         head = next(e for e in ar.entries if e.index == row)
         blob = ar.read(head)
+
+    # The head is still ARMED -- zero length -- so the client never re-bloated
+    # it. Say that, rather than letting the decoder raise three layers down
+    # about a 0-byte FFNA: on 2026-08-21 a harness that could not bind its
+    # ports (another session held them) surfaced here as a ValueError about a
+    # file header, which names neither the cause nor the thing that failed.
+    # An empty head is a RESULT -- "the compiler never ran" -- not a corrupt
+    # file, and it is the single most likely outcome of any launch that did
+    # not happen.
+    if not blob:
+        return ([f"  [FAIL] the client never re-bloated {file_id:#08x} -- "
+                 f"its head is still 0 B, exactly as --install armed it. "
+                 f"The map was never compiled, so there is nothing to check "
+                 f"it against. Look at the harness rc above and at "
+                 f"Gw.log before looking at anything here."],
+                ["head still armed"])
+
     hm = mfile.MapFile.decode(blob, strict=False)
 
     out, bad = [], []

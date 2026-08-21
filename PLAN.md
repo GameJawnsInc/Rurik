@@ -1475,7 +1475,7 @@ first attempt: **locate on a constant the experiment never changes**, because a
 scan for the value under test can run before the probe sets it and lock onto
 hundreds of coincidences.
 
-### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
+### WORLDMAPS: the ladder landed, and the four shipped areas are verified at the client (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
@@ -1601,9 +1601,36 @@ could ever have found it, which is why W9's Zones swap was doomed as well.
 **What it gives the project**: one content field and authored maps can have
 walkable underwater terrain -- lake beds, sunken ruins, a canyon floor below the
 waterline. It also retires a silent tax, since every authored map built here has
-been losing its deep ground to a rule nobody knew was there. Scope is one map,
-one shape, one build, one launch; what bit 0 does BESIDES ungating the rule is
-unmeasured.
+been losing its deep ground to a rule nobody knew was there.
+
+**WORLDMAPS-W12 THEN PAID THE VERIFICATION THAT W11 LEFT OWED, 2026-08-21.**
+W11's scope was one map, one shape, one launch -- and the four DELIVERABLE areas
+were flagged on the strength of it without any of them going near a client. All
+four have now run: four installs, four launches, `harness rc 0` each, every
+`readback` row green, flags dword `0x00000001` off all four compiled heads.
+
+| area | dims | trapezoids flags 0 -> now | coverage now |
+|---|---|---|---|
+| sculpt | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| frontier | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| vale | 96 | 88 -> **156** | 8,750/9,216 = **94.94%** |
+| expanse | 256 | 60 -> **98** | 65,070/65,536 = **99.29%** |
+
+**Every authored area this project ships now reaches its own map edge.** Two of
+the four carry no free parameter: `sculpt` assembles sha256-identical to W11's
+treatment arm, so its numbers REPRODUCE W11 on a different day; and `frontier`
+produced the identical mesh from a **created chain** (`0x5F0B0`), so that
+delivery path costs the mesh nothing. One registered prediction FAILED --
+expanse was predicted 96-99% and measured 99.29% -- and the failure was in the
+STATEMENT, not the model: the band was written by clipping its upper edge at 99%
+(98.86 + 3 is not a coverage figure), making it -2.86/+0.14 rather than the +/-3
+it was registered as. Across all four the model held to +/-3.
+
+**What is STILL unmeasured, and it is the same gap W11 left**: what bit 0 does
+BESIDES ungating the depth rule. And none of these four runs passed `--serve`,
+so the recovered ground is IN the mesh and has not been walked.
+`studies/worldmaps/FINDINGS.md` W12,
+`vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 

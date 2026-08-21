@@ -523,3 +523,47 @@ ungating this rule is unmeasured. The 276 cells still outside the mesh are
 attributed to slope by their scatter across all 64 columns, not by a separate
 measurement. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W11-RUN.md` §RESULTS.
+
+## WORLDMAPS-W12 — the flag holds on all four deliverable areas. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four installs, four launches, `harness
+rc 0` and every readback row green on each).** WORLDMAPS-W11 measured bit 0 of
+the Map Parameters flags on ONE probe row; the four deliverable areas were then
+flagged on the strength of it and had not been near a client since. They have
+now:
+
+| area | dims | traps flags 0 -> now | coverage now |
+|---|---|---|---|
+| sculpt | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| frontier | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| vale | 96 | 88 -> **156** | 8,750/9,216 = **94.94%** |
+| expanse | 256 | 60 -> **98** | 65,070/65,536 = **99.29%** |
+
+The flags dword reads `0x00000001` off all four compiled heads with the rect
+intact. **Every authored area this project ships now reaches its own map edge.**
+
+**Two results carry no free parameter.** `sculpt` assembles sha256-identical to
+W11's treatment arm (checked before the run), so its 99 trapezoids and 3,820
+cells are a REPRODUCTION of W11 on a different day — W11 independently
+re-confirmed. And `frontier` produced the same 99 trapezoids, the same 10,988 B
+path chunk and the same 3,820 cells from a **created chain** (`0x5F0B0`, a file
+id ArenaNet never shipped) rather than a displaced retail row: the created-chain
+path costs the mesh nothing.
+
+**One registered prediction FAILED, and the failure was in how it was stated.**
+Expanse was predicted at 96–99% and measured 99.29%. The underlying model was
+wrong by −280 cells (−0.43 pt), comfortably inside the ±3 points it was
+registered with; the band was written by CLIPPING the upper edge at 99%, because
+98.86 + 3 is not a coverage figure, and the clip made it −2.86/+0.14 rather than
+±3. The clip is what failed. Across all four maps the model held to ±3, and
+**its sign flips with size** — over-predicting at 64 and 96, under-predicting at
+256 — which is the shape the two omissions declared beforehand would produce
+(ignoring flood reachability over-predicts; scoring by quad centre while the
+client emits cell-SPANNING trapezoids under-predicts, and at 256×256 the client
+covered 65,536 cells with 98 trapezoids). That attribution is a READING; nothing
+in this run separates the two terms.
+
+**Scope.** What bit 0 does BESIDES ungating the depth rule is still unmeasured.
+The server did not path against any of these meshes (`--serve` not passed), so
+the recovered ground is IN the mesh and has not been walked. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W12-RUN.md` §RESULTS.
