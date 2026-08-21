@@ -1473,7 +1473,10 @@ def readback(dat, file_id, staged_blob, area):
 
     The whole verdict is mechanical, which is the point: nobody has to look at
     or listen to anything for this to be a result. Every row here is a thing the
-    compiler could have contradicted.
+    compiler could have contradicted -- and that sentence was FALSE of the
+    optional-chunk loop until 2026-08-21, which is what its comment is about: a
+    row that does not print because the case it covers did not arise is not a
+    row the compiler could have contradicted, it is a row nobody asked for.
     """
     import terrain as trn_bloated
     from props import BloatedProps
@@ -1512,11 +1515,30 @@ def readback(dat, file_id, staged_blob, area):
              "the compiled height field equals the one we authored",
              f"{same}/{len(st.heights)} samples")
 
+    # THE OPTIONAL CHUNKS, BOTH WAYS -- and the absent way is the one worth
+    # having. This loop used to read `if want is None: continue`, which made the
+    # absent case a CHECK THAT CANNOT FIRE. WORLDMAPS-W8 installed a map with
+    # `environment = false`, readback printed a clean 6/6, and it had asserted
+    # NOTHING about the environment; the fact that actually mattered -- that the
+    # client's COMPILED map carries no 0x20000009 either, so there was no donor,
+    # global or cached environment to fall back on -- had to be established by
+    # hand afterwards, out of the allocation journal. That fact is what makes
+    # "we removed X and nothing changed" mean "X was not the cause"; without it
+    # the null is a statement about an instrument that never looked. So an
+    # omitted chunk INVERTS the assertion rather than skipping it.
     for cid, scid, what in ((0x20000009, ENV, "environment"),
                             (0x20000012, SOUND, "sound")):
         want = staged.find(scid)
         got = hm.find(cid)
         if want is None:
+            row_(got is None,
+                 f"our map carries no {what}, and the compiled map carries "
+                 f"none either",
+                 f"nothing to fall back on -- no donor, global or cached "
+                 f"{what}" if got is None else
+                 f"but the compiler produced {len(got.payload())} B of "
+                 f"{what} we did not author, so anything this arm concludes "
+                 f"from its absence is about a chunk that was THERE")
             continue
         row_(got is not None and got.payload() == want.payload(),
              f"our {what} payload carried VERBATIM", f"{len(want.payload())} B")

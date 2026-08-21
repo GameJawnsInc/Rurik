@@ -2186,21 +2186,67 @@ Every one of these, in the order they were written:
   driven by hand across both passes, all red: the evidence check disabled (2),
   the journal-clobber check disabled (3), `head_is_armed` made unfalsifiable
   (2), and the eight-way conjunct sweep above.
-  Sections 0-1 and 3-10 need no vault and score 199 against a floor of 203 (both
-  MEASURED, the vault-less one with `RURIK_VAULT` pointed at an empty directory,
-  which exits 1 naming the 4-check shortfall), so the floor still does what it
-  was for. Per section, counted from the log rather than predicted: {0: 3, 1: 2,
-  2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55, 10: 36}.
+  **Section 11 (2026-08-21) is `readback`'s optional-chunk loop asserted in the
+  direction it used to `continue` past, floor 203 -> 213.** The loop over the
+  optional payload chunks (`0x20000009` environment, `0x20000012` sound) read
+  `want = staged.find(scid)` and then `if want is None: continue`, so an area
+  declaring `environment = false` had its environment assertion SKIPPED rather
+  than INVERTED -- a check that cannot fire, found by an adversarial pass on
+  WORLDMAPS-W8. That run installed exactly such a map, `readback` printed a
+  clean 6/6, and it had said nothing whatever about the environment; the fact
+  the arm actually turned on -- that the client's COMPILED map carries no
+  `0x20000009` either, so there was no donor, global or cached environment to
+  fall back on -- was recovered by hand out of the allocation journal
+  afterwards. That fact is what makes "we removed X and nothing changed" mean
+  "X was not the cause", and unasserted the null is a statement about an
+  instrument that never looked. An omitted chunk now produces a row asserting
+  the compiled map carries none either, and the row SAYS so in the log. The
+  section drives the loop on a hand-laid archive whose one map head IS the
+  "compiled" map this file assembles -- one plane, one trapezoid spanning the
+  whole 32x32 field, so the mesh rows are answered by real geometry rather than
+  skipped, which would have put the section in the same shape as the defect.
+  Four arrangements, one field apart each: authored-and-carried still PASSes
+  clean (the pre-existing assertion, shown not to have been paid for); a
+  compiled environment one byte short of ours goes red naming that row and only
+  that row; ABSENT ON BOTH SIDES gets a PASSing row, with the clean verdict
+  asserted TOGETHER WITH the row's existence and a count that the absent arm
+  prints as many rows as the present one, because clean-with-nothing-said is the
+  whole failure; and the SABOTAGE -- a compiled map carrying an environment we
+  never authored -- goes RED. That last arm is the load-bearing one and it was
+  MEASURED against the pre-fix loop, where it returned `bad == []`,
+  indistinguishable from the honest absence. Sound is driven the same pair, so
+  the inversion is shown to be the LOOP's rather than one chunk id's, and an AST
+  check pins that both paths reach `row_()` so a third id added to the tuple
+  inherits both directions. `verdict_of` finds a row by substring and requires
+  exactly one match -- an arm that produced NO environment row would otherwise
+  read as one that produced a passing row, the defect wearing a different hat --
+  and strips the quoted row's own marker before it goes into a check's detail,
+  which is what keeps the log at one marker per line. Sabotage sweep, run rather
+  than argued: reverting `readback` to the bare `continue` reddens 8 of the 10,
+  and the 2 that stay green are exactly the regression guards on the unchanged
+  present-path. NOT touched, and named here so it is a decision rather than an
+  oversight: the height-field and prop rows are still conditional on the
+  compiled chunk existing. They are a different question -- nothing declares
+  those optional, so the fix there is an unconditional assertion, and it needs
+  its own evidence about what the compiler always emits.
+  Sections 0-1 and 3-11 need no vault and score 209 against a floor of 213 (both
+  MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
+  directory, which exits 1 naming the 4-check shortfall), so the floor still
+  does what it was for. Per section, counted from the log rather than predicted:
+  {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
+  10: 36, 11: 10}.
   **Count the log with the subprocess writers' own lines EXCLUDED, and note
   there are THREE producers rather than two**: an unanchored
-  `grep -c "\[PASS\]"` reads 220 where the ledger says 203, because
+  `grep -c "\[PASS\]"` reads 230 where the ledger says 213, because
   `datwrite --verify` prints a `file header crc` line AND an `MFT self-crc` line
   per run (6 runs, 12 lines) and `datmove` prints one `0 overlapping row pair(s)
-  afterwards` per move (5 moves, 5 lines). 220 - 17 = 203; anchoring the grep at
-  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 215 =
-  203 + datwrite's 12. An earlier version of this note said 162 from two
+  afterwards` per move (5 moves, 5 lines). 230 - 17 = 213; anchoring the grep at
+  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 225 =
+  213 + datwrite's 12. An earlier version of this note said 162 from two
   producers and was wrong on both counts, so re-measure these rather than
-  adjusting them.
+  adjusting them. Section 11 is the one place a check's DETAIL quotes another
+  producer's row, and `verdict_of` strips the marker so both greps still agree:
+  MEASURED, `grep -o` and `grep -c` each read 230.
   (The line this replaces said "score 10 against a floor of 14", stale by two
   floor changes)),
 

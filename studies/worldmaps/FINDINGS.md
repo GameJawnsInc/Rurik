@@ -396,8 +396,16 @@ exactly. **The fallback hypothesis dies at the output side too**: arm B's
 COMPILED head carries no `0x20000009` either, so no donor, global or cached
 environment was available — and `deploy.readback` could not have caught that,
 because `deploy.py:1512-1518` SKIPS the environment assertion when the staged
-map has none, a check that cannot fire. **And the client's compiler is
-deterministic**, shown accidentally: the head before arm A and the head arm A
+map has none, a check that cannot fire. (**CLOSED 2026-08-21.** That loop
+INVERTS now rather than skipping: an optional chunk the staged map omits gets a
+row asserting the compiled map carries none either, printed in the same verdict
+block as every other row — so the fact this run recovered by hand out of the
+allocation journal is asserted on every future run instead. `test_deploy.py`
+§11 drives it present, absent and sabotaged, the sabotage being a compiled map
+that DOES carry the chunk we omitted; against the old loop that arm returned
+`bad == []`, indistinguishable from the honest absence recorded above. Floor
+203 → 213, and reverting the fix reddens 8 of §11's 10 checks.) **And the
+client's compiler is deterministic**, shown accidentally: the head before arm A and the head arm A
 produced are byte-identical (`78c0174e…`), which is what licenses reading
 identical output as "the input did not matter". Two corrections to my own
 write-up: `sculpt`'s partner is 10,714 B, not the 10,535 B I lifted from W6's
