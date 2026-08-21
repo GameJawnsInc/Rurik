@@ -1515,7 +1515,23 @@ UNMAPPED message).
    it asks which sites COMPUTE a value and a constant zero computes nothing.
    Sideways find: `moralescan.py` identified the observer by the first
    `0x0059` and was **wrong on 20 of 44 connections**; corrected to the
-   self-scoped property 41, with the morale census numbers unchanged. What remains static-only is
+   self-scoped property 41, with the morale census numbers unchanged.
+   **AND THE RECHARGE GATE IS SEEN (2026-08-21, §32)** — the last
+   loopback-testable item. A 120-cost skill on a 12 s recharge ends at **40.4%
+   against a predicted 41.7%** for "the 4 in-window gains were skipped, the 2
+   after expiry landed", where no gate at all predicts 100%; the matched
+   120-cost control with no recharge refilled from the same messages. Two
+   witnesses now, where §26.2's rule 2 had one line of disassembly. **The run's
+   designed readout was CONFOUNDED and says so itself** — the recharge sweep
+   draws in the same rectangle as the fill, so slot 2 read 100% right after
+   being spent to zero and then *fell* with nothing on the wire; the answer came
+   from the residue after the sweep cleared. Fourth metric trap in this series,
+   fourth one caught by an in-frame control rather than by re-reading code.
+   **WHAT REMAINS IS NOT LOOPBACK-TESTABLE:** whether a spend restarts retail's
+   25 s clock. Ours does not, the corpus cannot arbitrate (no spend sits inside
+   any of the 15 sampled clear windows), and settling it needs a **live**
+   capture of a spend followed by 25 quiet seconds — human-driven under §6.2,
+   not something a loopback run can answer. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
 2. **What answers a refused press.** Ours is silence and the client visibly

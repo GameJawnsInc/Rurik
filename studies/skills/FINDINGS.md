@@ -2668,11 +2668,14 @@ counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
 
 ### 26.11 Open
 
-1. **The recharge gate has never been seen live.** Rule 2 of §26.2 is read off
-   `cmp dword [esi+8],0 / jne` and nothing in the corpus isolates it. The probe:
-   charge a bar, put one adrenal skill on recharge, send a 207, and watch whether
-   that slot's fill moves. Cheap, and it is the only one of the five rules with a
-   single line of evidence.
+1. ~~**The recharge gate has never been seen live.**~~ — **SEEN 2026-08-21,
+   §32, and it holds.** Two witnesses now stand behind it where there was one
+   line of disassembly: the measurement (a 120-cost skill on a 12 s recharge
+   ends at 40.4% against a predicted 41.7% for "4 gains skipped, 2 landed",
+   versus 100% had none been skipped) and GWW's own *"recharging skills cannot
+   rebuild adrenaline"*. Note the run's designed readout was confounded — the
+   recharge SWEEP draws in the same rectangle as the fill — and the answer came
+   from the residue after the sweep cleared. §32.2.
 2. ~~**Are the sub-25 gains the health-loss rule?**~~ — **RUN 2026-08-21, and
    it CORRECTED the rule.** They are the health-loss rule: 31 of the 32 carry a
    same-batch `0x00A3` naming the gaining agent as its target, so each joins to
@@ -3646,3 +3649,82 @@ CLIENT, which receives one `0x0042` and a late `0x0044` and cannot know what
 applied them. §32.7's conclusion that a retail player in a Student's ring watches
 a ghost also stands — that is the environmental case, measured on its own build.
 Only the generalisation to combat is withdrawn.
+
+## 32. E10 — the recharge gate, read from the residue
+
+**2026-08-21, run `20260821T190847`, loopback, build 38797, server at
+`26ea691`.** §26.11 item 1, the last loopback-testable item on this channel.
+Predictions in `e10-predictions.md`. **The run's designed readout failed and the
+run still answers**, which is the part worth reading.
+
+### 32.1 The rig
+
+Bar `[316, **373**, 318, 319, 320, 321, 322, 323]`. Skill **373** costs 120
+units and recharges **12 s**; **318** costs the identical 120 and recharges 0.
+So treatment and matched control differ *only* in the recharge, and any
+divergence cannot be a denominator artefact — the thing §28 showed matters.
+
+The wire did exactly what the test needs: 9 gains capped everything, the spend
+of 373, `SKILL_RECHARGE(skill 373, 12s)`, then **4 gains inside the window**,
+`SKILL_RECHARGED`, then **2 gains after**. P26 met — the client was sent the
+gains and does the per-slot application itself, so the gate under test is its own.
+
+### 32.2 The designed readout is CONFOUNDED, and the data says so itself
+
+| frame | time | s2 (373) | s3 (318) | s4 (319) |
+|---|---|---|---|---|
+| charged | 23:09:46 | 100.0% | 100.0% | 100.0% |
+| post-spend | 23:09:52 | **100.0%** | 80.8% | 63.5% |
+| in-window | 23:09:59 | **100.0%** | 100.0% | 100.0% |
+| after expiry | 23:10:05 → 23:10:23 | **40.4%** | 100.0% | 100.0% |
+
+**Slot 2 reads 100% immediately after being spent to zero** — and then *drops*
+to 40.4% with no spend and no clear on the wire. Adrenaline cannot fall on its
+own, so the 100% is not adrenaline: it is the **recharge sweep**, the overlay
+`GmSkSlot` draws from the same accessor §26.12 traced, in the same rectangle as
+the fill. The internal contradiction is the proof, and no external assumption is
+needed for it.
+
+**This is a design error, not a client behaviour.** Testing a *recharge* gate
+required a skill with a recharge, which necessarily puts a recharge sweep on the
+one slot being measured. E6 never hit it because 317 recharges in 0 s. The two
+signals are confounded by construction, and any P24 verdict read off the
+in-window frames — either way — would have been the sweep.
+
+### 32.3 The residue answers it anyway
+
+Once `SKILL_RECHARGED` clears the sweep, slot 2's pixels are the fill alone, and
+the two hypotheses predict numbers three-fold apart:
+
+| | 373's units | fill | measured |
+|---|---|---|---|
+| **gate HELD** — 4 skipped, 2 land | 0 + 50 | **41.7%** | **40.4%** ✓ |
+| gate FAILED — all 6 land | 150 → capped 120 | 100.0% | — |
+
+**40.4% is 21 of 52 rows; 41.7% is 21.7.** Within one row, and the same
+1–2 point agreement E5–E9 produced. **P24 CONFIRMED** — the client skips a
+recharging slot, so `0x008219C0`'s single line reaches the display. **P25
+CONFIRMED**: the matched 120-cost control refilled 80.8% → 100% from those same
+messages, so the skip is specific to the recharging slot and not a dead wire.
+**P27 CONFIRMED**: the slot became eligible the moment the recharge expired.
+
+Two independent witnesses now stand behind this rule — this measurement and
+GWW's *"recharging skills cannot rebuild adrenaline"* (§26.11 item 3) — where
+before there was one line of disassembly.
+
+### 32.4 The lesson, which is the fourth of its kind here
+
+E5 mis-measured on icon art, E6 on a too-strict null, E7 on a whole-frame state
+change, and E10 on an overlay sharing the fill's rectangle. **Every one was
+caught by an in-frame control or an internal contradiction, and none by
+re-reading the code.** The rule this series keeps re-learning: when a readout is
+visual, the thing that saves you is another region of the same frame that must
+not move — and when a value moves in a direction the mechanic forbids, believe
+the contradiction over the metric.
+
+**Still open on this channel, and NOT loopback-testable:** whether a spend
+restarts retail's 25 s clock (§26.11's divergence). Our server says no and the
+corpus cannot arbitrate — no spend sits inside any of the 15 sampled clear
+windows. That needs a **live** capture of a spend followed by 25 quiet seconds,
+which is a human-driven run under `PLAN.md` §6.2, not a loopback one.
+
