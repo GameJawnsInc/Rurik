@@ -3476,3 +3476,139 @@ reason the rest of the channel is latent (the spawn is a placeholder and the map
 is not in play), and it should be fixed when 474 gets a real spawn rather than
 carried as a surprise.
 
+---
+
+## 2026-08-20, round 4 — THE WARP IS REPRODUCIBLE ON DEMAND, AND SUPPRESSING OUR OWN GRANTS REMOVES ~90% OF IT
+
+**OBSERVED.** Five client runs on the owner's own machine, one operator, one
+session, back to back. Every number below is read off the captures with
+`movesync.py`'s repaired two-arm hard bar (implied speed > 400 u/s at
+dt >= 0.05 s, or displacement >= 520 u below that floor). This is the first
+round of this arc driven by PLAY rather than by corpus archaeology, and it
+produced in one evening both things the arc had been missing: **a reliable
+trigger** and **a clean control**.
+
+### 1. The trigger — hold S and spam-click forward
+
+| stamp | clicks | headings | **grants** | span | jumps | rate | p50 / max | displacement |
+|---|---|---|---|---|---|---|---|---|
+| `20260820T182554` keyboard only | 0 | 18 | **0** | 26.2 s | **0** | 0.00/min | — | **0 u/min** |
+| `20260820T182934` click, then keyboard | 5 | 74 | **0** | 114.8 s | **0** | 0.00/min | — | **0 u/min** |
+| `20260820T183311` **hold S + spam-click** | 196 | 128 | **140** | 44.0 s | **5** | 6.82/min | 1,372 / 3,010 u | 11,182 u/min |
+| `20260820T195137` baseline repeat | 207 | 132 | **199** | 41.8 s | **8** | 11.49/min | 795 / 1,917 u | 9,687 u/min |
+| `20260820T195315` **`--grant-suppress`** | 180 | 112 | **2** | 43.2 s | **1** | **1.39/min** | 651 / 651 u | **903 u/min** |
+
+**The grant count is the whole story.** Warps appear only where we grant, scale
+with how much we grant, and all but vanish when we stop.
+
+### 2. Why ordinary play does not warp — the server was already refusing
+
+`20260820T182934` is the finding nobody expected: the owner clicked five times
+and **the server answered none of them**, for reasons it logged verbatim:
+
+> `click to (11388, 2298): not a straight shot -- leaving it to the client's own pathing`
+> `click to (7961, 11308): we last saw the player 8.9s ago -- leaving it to the client's own pathing`
+
+The staleness guard is strict enough that **2.1 s was too stale**. Because the
+owner clicked and then keyboarded, every click was refused, no grant went out,
+and — decisively — **the desync test was never evaluated at all**, since the
+grant bake `0x005FEBEB` is one of only three callers of `0x00605FC0`. Zero
+grants, zero jumps, and the client pathed itself to the clicked point anyway
+(cos 0.994–1.000, closing 90–3,224 u across silences of 1.2–17.0 s, n = 5).
+
+**Holding S defeats that guard**, because the client emits `0x003D` continuously
+while moving, so "we last saw the player" never goes stale and every click is
+granted. That is the whole trick, and it is why the arc could never summon the
+warp before: casual play keeps the guard shut.
+
+### 3. Keyboard movement is healthy — CORRECTED, and it corrects an operator report
+
+`20260820T182554` is three ~8 s W-holds. **Every interval sits at 283–287 u/s**
+against a 288 u/s walk, with exactly three `0x0047` stops (one per release), so
+these were genuinely continuous holds and not re-presses. **0.00 hard jumps.**
+The client walks correctly on its own local prediction with almost no server
+involvement — 6 `0x0025` in 27 s and no grants at all.
+
+This **refutes** the working report that "holding W gives ~1 s of movement then
+stops": it did not reproduce under `--explorable` with no grant flags. The
+symptom is real to the operator but is configuration-dependent and is NOT a
+property of keyboard movement as such. What DID show up in the same capture is
+the client's own unit/terrain collision, cleanly: during a stretch the operator
+described as walking into a wall at ~40°, `x` froze at `11123.0`, speed fell to
+**260–265 u/s**, and the report cadence tightened from 1.80 s to **0.50 s**.
+
+### 4. `--grant-suppress` — the A/B
+
+Two runs, 100 seconds apart, same operator, same play, one flag different.
+**199 grants → 2. Hard rows 11.49 → 1.39/min (8.3×). Displacement 9,687 → 903
+u/min (10.7×).** Both terms fell together.
+
+**The pre-registered prediction was 3.1× on displacement and 2.5–3.7 hard rows
+per minute. The result beat it on both.** Recorded because a prediction that was
+too pessimistic is as much a miss as one that was too optimistic.
+
+**A REVIEWER PREDICTION FAILED, in our favour.** The size term was expected to
+worsen — surviving jumps 2.7× bigger, p50 1,969 u against 735 u. The single
+survivor is **651 u, smaller than the baseline's own 795 u p50**. With **n = 1**
+that settles nothing about the distribution; it only says the penalty did not
+appear here. Two or three more runs would.
+
+⚠ **VARIANCE IS LARGE AND THE A/B IS n = 1 PER ARM.** The two baseline runs of
+the identical play differ by 1.7× in rate (6.82 vs 11.49/min) and 1.15× in
+displacement. The effect survives that only because it is ~10×.
+
+### 5. THE TIMING EVIDENCE THAT MOTIVATED THE FIX IS WORTHLESS — REFUTED
+
+The fix was proposed on "4 of 5 hard jumps landed 0.10–0.23 s after a grant."
+**That is a restatement of grant density and nothing else.** In `183311`, 140
+grants span 32.7 s at one every 0.150 s, so **49.2% of the capture's wall clock
+and 57.1% of its own report instants are also within 0.23 s of a grant.** A
+rotation control — sliding the jump times against an untouched grant train over
+199 offsets — scores a mean **2.39 of 5**, and 77 of 199 rotations equal or beat
+the real 3 of 5. Fisher one-sided **p = 0.64** at 0.23 s, **p = 0.34** at 0.30 s.
+
+**What survives the identical test**, and what the flag actually rests on:
+
+- **THE LANDING GEOMETRY** — five sub-unit landings on points we had granted,
+  **p = 3.0e-5**. Grant density cannot fake landing *on* the destination.
+- **THE REPORTING-CONTROLLED 2×2** — 5.67 jumps/min while granting against 0.88
+  while silent, **P = 3.4e-10**.
+- **THE DECODE** — `0x0029` is SYNC-ONLY, so a grant issued while the player
+  drives locally cannot reach the copy they see and can only create divergence.
+
+### 6. What this is NOT — retail contradicts the premise
+
+**ArenaNet grants continuously while the player keyboards and does not warp.**
+88.5% of 2,855 player-directed live `0x0029` are triggered by a `0x003D`
+heading, at a median inter-grant gap of 0.492 s. Retail does not warp because its
+destination is **the client's own proposed endpoint plus 0.5 u** — it follows
+rather than leads.
+
+`--grant-suppress` forbids exactly what retail does most. **It works by making us
+quiet, not by making us correct**, and "suppress the grant" already sits on the
+dead-candidate scoreboard. It is a palliative for OUR stale destinations.
+
+**The cost is real and is not visible in these captures.** `state["pos"]` feeds
+aggro radius, `clip_to_walkable` and interaction range. Staying silent means our
+authoritative position stops tracking the player, which will surface in combat
+and interaction rather than in movement. **UNMEASURED:** the cost of rule 1 in
+its own regime — the n = 5 evidence that a refused click still walks the player
+is all from clicks after a STOP, where rule 1 never fires.
+
+### 7. What is still unbuilt
+
+**Grant the client's own endpoint**, continuously, the way retail does — so the
+two copies agree instead of one going silent. FINDINGS' candidate #1 calls this
+"the only shape that PREVENTS the snap rather than shrinking it." `--heading-grant`
+was an attempt at it and is REFUTED for warping more, but its own record says why:
+the destination was left to mature into a teleport. A SHORT, always-refreshed
+endpoint grant is a different animal and has never been tried.
+
+**And the server models no unit-vs-unit collision at all** (`authsrv.py`: "client
+collides for itself and does it better than our navmesh does"). The client's model
+is now decoded as a by-product of the gate work — radius at `agent+0xD0`, combined
+radii via `0x005FED20`, a 60° forward cone, and the sidestep at `0x00600500`
+displacing perpendicular to velocity by `(combinedRadius + 10.0) - |distFromLine|`,
+all on ArenaNet's own field names. When an NPC blocks the player, their client
+stops them and our copy walks through: the same divergence, arriving as
+rubber-banding rather than as a snap.
