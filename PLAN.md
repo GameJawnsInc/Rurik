@@ -358,7 +358,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10**, `fbedcfb` — **and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 | **R-IDENTS** | **An identifier convention for new tokens, and a resolver for the old ones** | A token met in prose resolves to its defining document in one command, and a new namespace is minted with a registered word prefix | ✅ **2026-08-20**, arc landed `f8d63a1`. The arc: [studies/idents/CONVENTION.md](studies/idents/CONVENTION.md) (the rule, and the only place it is written) + [studies/idents/HANDOFF.md](studies/idents/HANDOFF.md) (the census and the three defects — cross-arc collision, kind collision, and the same letter twice in one document). **The headline is a refusal**: a mass renumber of the existing tokens was costed and rejected as the exact shape of the 2026-08-12 provenance scrub, so nothing is migrated and every historical `C-6`, `R0a`, `H1` keeps its name. **Scope note:** the no-migration scope is owner-ratified — §7 Q8, CLOSED 2026-08-20. What landed instead: new tokens take a registered word prefix (`GATEFIRE-C3`) whose word names the *defining document* and is declared in a legend line in that document — the kind of thing a token is lives in the legend, never in the letter, because encoding kind in the letter is what produced the collisions in the first place; a resolver that works on the 80 documents written *before* the convention AND on the tokens it mints (`python toolkit/whichrung.py C-8`, plus the raw grep one-liner in CONVENTION.md §4, which is hyphen-literal and returns two of `C8`'s three row-or-heading defining sites and one of `C-8`'s — the tool returns all three and names the ambiguity, and a fourth definer, a bold list-lead in `studies/combat/PLAN.md`, sits outside both patterns, which is why every count is a floor); and an accumulation tripwire, `toolkit/identlint.py` + `test_identlint.py`, explicitly **not** a hard gate — provlint's posture, for provlint's reason. Two side findings: the R-ladder drift between `PLAN.md` §3 and `HANDOFF.md` was closed by **annotating in place**, not syncing (`HANDOFF.md:116`) — re-syncing two copies only resets the clock, and the `R0`→`R0a`/`R0b` split turned out to *vindicate* that document's own headline call; and the bare-integer commit-subject prefix (`29:`→…, defined by no document — no count is pinned, it grew by one between census and landing) is **retired** with its meaning recorded rather than rewritten. Census counts are floors: the widened re-run found several times HANDOFF §2.1's 108 defining sites, and quoting any number bare is refused — ask the tool. |
 
-| **R-ISLE** | **The Isle of the Nameless as a calibration range** | Rungs per [studies/isle/PLAN.md](studies/isle/PLAN.md): reader, route, offline bench, loopback probes, plumbing, then the live sessions | 🔶 **rungs 1-5 DONE 2026-08-16/17**, landed `f17cd49`. The arc: [studies/isle/HANDOFF.md](studies/isle/HANDOFF.md) (**start here cold** — the traps, not the status) + [studies/isle/PLAN.md](studies/isle/PLAN.md) (the north-star doc: instruments, skeptic-attacked designs, the ladder) + [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) (rung 3's eight offline answers; rung 4's four operator-confirmed probe results). Headlines: the AoE radii are static (`s_skill +0x6C`: adjacent 156 / nearby 240 / in-the-area 312, +10-16 bounding-radius hypothesis for the Isle markers to test); the Master of Damage's chat numbers are extractable AND rendered ("is now level 17!" on our own client — 0x5D needs its 0x5E tag); the enc_name → nameplate route is PROVEN (station 1470 = the Ascalon City outfitter, operator-read); conditions map 478=Bleeding..486=Weakness (+2077) with degen server-owned; the three damage kinds separate on the client bar (16/17 debit, 18 notifies); `agentroster.py` reads any capture into cross-session-stable stations; `map.280` is in content with the 0x0195 prediction pre-registered; a PvP-only character reaches 280 (owner-confirmed, GWW-corroborated — the ONE PvE area they may enter). **rung 6 is DONE 2026-08-17/18** across two live captures — `20260817T231139` (the island west and centre; 15/15 connections after the manifest-writeback fix) and `20260818T094648` (the east line, 5/5). Both `game_mode base`, `exe_unchanged: true`, seals AGREE. Results: `0x0195` field 1 = **165811 six times**, and it is a TERRAIN-FILE id shared with map 248, not a per-map id — the whole message is now decoded in [studies/mapload/FINDINGS.md](studies/mapload/FINDINGS.md) (7 fields, 30 loads, both builds; settles `studies/tape` §1.2, corrects a `0x0084EE83` misattribution in `studies/enemy`, and moved `map.280`'s spawn to retail's arrival position); field 2 is the arrival position, byte-identical across all Isle loads; **7 of 10 pre-registered missing definition indices** were found in the unwalked east (130, 139, 146 still unseen); the east holds the **skill-bar foe Masters with their pets and spirits** — level-0 model-less bodies with churning agent ids beside a level-20 owner, matching three separate pre-run wiki claims on profession, level and summon structure at once; the **Students** came out 10 bodies over 10 consecutive slots split exactly 5 ally / 5 foe; and the range ladder is closed (10 rungs, byte-identical across visits, ±12.4 u). Which body carries which NAME is NOT recoverable from a capture — the `enc_name` render is the only route, and a claim identifying one was withdrawn under adversarial review. **RUNG 7 IS DONE 2026-08-18** — capture `20260818T132739`, 9/9 decrypted, seals agree, 495 damage events, then five independent agents (one blind re-derivation, one wiki sourcing, two adversarial, one on the chat oracle) sent at the results. **The armour exponent B9 called NOT REACHED is now reached, and the whole outbound damage formula with it**: `points = round(roll × 1.20 × 2^((SL − AR)/40))` with SL = 5·rank to 12 then +2 per rank, pinned by a **band test with zero free parameters** (AR60's support fixes the scale; AR80 → 13..19 and AR100 → 9..14 follow exactly). The mean-ratio fit gives D = 39.5, 95% CI **[37.30, 42.00]** — containing 40 at −0.8σ/−0.1σ, and it must never be quoted bare, which is the review's sharpest correction. **`GV_CRITICAL = 17` is CONFIRMED**, ending a CONTESTED row: 10/10 blocks zero-variance over 100 events, one multiplier fitting nine blocks inside a 0.83% window containing √2, p16+p17 = one event per swing (so 17 REPLACES 16), and crit rate rising monotonically 6%→34% with attribute rank. **The Master of Damage oracle worked**: its announced total 1496 equals our independently summed integer points exactly and *selects* H=590 out of the fraction grid's `{590k}` family — a check that could have failed. **Gate 1's attribute channel is measured at last** (`0x0037 [agent, unspent, 200]`, `0x003A` column-major base|effective ranks, `0x003B` per-change, `0x0038` the debit): the +1 rune bonus is visible on the wire, damage uses the EFFECTIVE rank, and the point budget closes two unrelated ways to cum(12) = 97. **Four claims were corrected or refuted by the review and all are recorded**: the unmet-requirement `/3` is REFUTED at 3.5% with no replacement permitted (the rank-8 crit is a disjointness, not a rounding miss — the one open defect); the rank-kink ratio is statistically worthless (95% CI [−17, 24]) and is replaced by ratios of means at −0.8σ/+0.3σ; "continuous roll" is downgraded to "≥ ~40 steps"; and the 1496 line is an end-of-combat auto-report, not the `/bow` response (`/bow` is 4.46 s later). Full record: [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 7, LIVE #2". **Rung 8 PREP DONE the same day, and its exit criterion was MET OFFLINE** ([studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 8 prep"): the design expected a refutation because `0x0042` had zero ArenaNet witnesses, and the corpus in fact holds **97 applies + 88 removals**, with `0x0044` closing `0x0042` at apply+duration to the millisecond. **Field 3 is the applier's ATTRIBUTE RANK** — confirmed on four skills against GWW progressions (Windborne Speed at the Master of Winds' 15 Air Magic → 13 s; `"Charge!"` at the operator's own Tactics 10 → 10 s; Pin Down's Crippled at rank 13 → 13 s; the environment torches at rank 0 → fixed 30 s) — so the two conditions where it equals the duration were arithmetic accident. **Hexes and enchantments, §3.3's "largest single miss … no instrument at all", were already captured and merely unidentified**: skill **984 = Torch Enchantment** and **998 = Torch Hex**, 30 s each, matching GWW's effect ids exactly. And the repo's **first cure** is on record — `"Charge!"` stripping Crippled in the same millisecond, its 33% speed boost visible as 288 × 1.33 on `0x0027`. Consumer built first again: `toolkit/authsrv/bufflog.py` (36 checks) reads episodes as EXPIRED / STRIPPED / OPEN and refuses to attribute an effect outside a mark window, since `0x0042` carries no source agent. **The live session is staged** (`vault/plans/isle_rung8_effects.txt`, 27 steps) for the four things the corpus cannot give: skill **999** (the degeneration torch, never captured), the five foe Students' condition ids, degeneration in pips against GWW's 3/4/4/7, and the rank ladder that closes rung 7's open defect. Prep detail: the consumer `toolkit/authsrv/damagepass.py` built and proven on retail bytes first — the rung-6 detour's PvP arenas turn out to hold the vault's largest damage corpus (641 p16 + 119 p17), which measured the attack-skill confound (10 of 11 arena p17 groups nonzero-variance) and recovered 480 = level-20 base health from a fraction grid; the bench geometry is recovered (Suits 152/153/154/152 in a row, the 60-pair predicted at its ends; MoD prof-6 candidates 144/145); the sealed-plan draft with every prediction pre-registered (including both weapon-type branches for the rank sweep) is staged at `vault/plans/isle_rung7_damage.txt`; and the blocking behavioural-cap question was ruled same-day — **§7 Q7, the cap is STRUCK** — so **the run itself is next and is the operator's**: RUNBOOK live procedure + `--minutes 45 --mode base --plan vault/plans/isle_rung7_damage.txt`. Bonus banked en route: the no-combat east run's one combat episode (operator hit by slot 137's Pin Down) shows **condition application arriving on `0x0042` on retail traffic** (481 Crippled, 13.0f duration-like arg, move speed halved server-side) — rung 8's Torches-first channel question observed once, early. Residuals riding the next loopback pass: the varint send, the overhead channel, skill 2077's render, the energy probe. |
+| **R-ISLE** | **The Isle of the Nameless as a calibration range** | Rungs per [studies/isle/PLAN.md](studies/isle/PLAN.md): reader, route, offline bench, loopback probes, plumbing, then the live sessions | 🔶 **rungs 1-5 DONE 2026-08-16/17**, landed `f17cd49`. The arc: [studies/isle/HANDOFF.md](studies/isle/HANDOFF.md) (**start here cold** — the traps, not the status) + [studies/isle/PLAN.md](studies/isle/PLAN.md) (the north-star doc: instruments, skeptic-attacked designs, the ladder) + [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) (rung 3's eight offline answers; rung 4's four operator-confirmed probe results). Headlines: the AoE radii are static (`s_skill +0x6C`: adjacent 156 / nearby 240 / in-the-area 312, +10-16 bounding-radius hypothesis for the Isle markers to test); the Master of Damage's chat numbers are extractable AND rendered ("is now level 17!" on our own client — 0x5D needs its 0x5E tag); the enc_name → nameplate route is PROVEN (station 1470 = the Ascalon City outfitter, operator-read); conditions map 478=Bleeding..486=Weakness (+2077) with degen server-owned; the three damage kinds separate on the client bar (16/17 debit, 18 notifies); `agentroster.py` reads any capture into cross-session-stable stations; `map.280` is in content with the 0x0195 prediction pre-registered; a PvP-only character reaches 280 (owner-confirmed, GWW-corroborated — the ONE PvE area they may enter). **rung 6 is DONE 2026-08-17/18** across two live captures — `20260817T231139` (the island west and centre; 15/15 connections after the manifest-writeback fix) and `20260818T094648` (the east line, 5/5). Both `game_mode base`, `exe_unchanged: true`, seals AGREE. Results: `0x0195` field 1 = **165811 six times**, and it is a TERRAIN-FILE id shared with map 248, not a per-map id — the whole message is now decoded in [studies/mapload/FINDINGS.md](studies/mapload/FINDINGS.md) (7 fields, 30 loads, both builds; settles `studies/tape` §1.2, corrects a `0x0084EE83` misattribution in `studies/enemy`, and moved `map.280`'s spawn to retail's arrival position); field 2 is the arrival position, byte-identical across all Isle loads; **7 of 10 pre-registered missing definition indices** were found in the unwalked east (130, 139, 146 still unseen); the east holds the **skill-bar foe Masters with their pets and spirits** — level-0 model-less bodies with churning agent ids beside a level-20 owner, matching three separate pre-run wiki claims on profession, level and summon structure at once; the **Students** came out 10 bodies over 10 consecutive slots split exactly 5 ally / 5 foe; and the range ladder is closed (10 rungs, byte-identical across visits, ±12.4 u). Which body carries which NAME is NOT recoverable from a capture — the `enc_name` render is the only route, and a claim identifying one was withdrawn under adversarial review. **RUNG 7 IS DONE 2026-08-18** — capture `20260818T132739`, 9/9 decrypted, seals agree, 495 damage events, then five independent agents (one blind re-derivation, one wiki sourcing, two adversarial, one on the chat oracle) sent at the results. **The armour exponent B9 called NOT REACHED is now reached, and the whole outbound damage formula with it**: `points = round(roll × 1.20 × 2^((SL − AR)/40))` with SL = 5·rank to 12 then +2 per rank, pinned by a **band test with zero free parameters** (AR60's support fixes the scale; AR80 → 13..19 and AR100 → 9..14 follow exactly). The mean-ratio fit gives D = 39.5, 95% CI **[37.30, 42.00]** — containing 40 at −0.8σ/−0.1σ, and it must never be quoted bare, which is the review's sharpest correction. **`GV_CRITICAL = 17` is CONFIRMED**, ending a CONTESTED row: 10/10 blocks zero-variance over 100 events, one multiplier fitting nine blocks inside a 0.83% window containing √2, p16+p17 = one event per swing (so 17 REPLACES 16), and crit rate rising monotonically 6%→34% with attribute rank. **The Master of Damage oracle worked**: its announced total 1496 equals our independently summed integer points exactly and *selects* H=590 out of the fraction grid's `{590k}` family — a check that could have failed. **Gate 1's attribute channel is measured at last** (`0x0037 [agent, unspent, 200]`, `0x003A` column-major base|effective ranks, `0x003B` per-change, `0x0038` the debit): the +1 rune bonus is visible on the wire, damage uses the EFFECTIVE rank, and the point budget closes two unrelated ways to cum(12) = 97. **Four claims were corrected or refuted by the review and all are recorded**: the unmet-requirement `/3` is REFUTED at 3.5% with no replacement permitted (the rank-8 crit is a disjointness, not a rounding miss — the one open defect); the rank-kink ratio is statistically worthless (95% CI [−17, 24]) and is replaced by ratios of means at −0.8σ/+0.3σ; "continuous roll" is downgraded to "≥ ~40 steps"; and the 1496 line is an end-of-combat auto-report, not the `/bow` response (`/bow` is 4.46 s later). Full record: [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 7, LIVE #2". **Rung 8 PREP DONE the same day, and its exit criterion was MET OFFLINE** ([studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) "Rung 8 prep"): the design expected a refutation because `0x0042` had zero ArenaNet witnesses, and the corpus in fact holds **97 applies + 88 removals**, with `0x0044` closing `0x0042` at apply+duration to the millisecond. **Field 3 is the applier's ATTRIBUTE RANK** — confirmed on four skills against GWW progressions (Windborne Speed at the Master of Winds' 15 Air Magic → 13 s; `"Charge!"` at the operator's own Tactics 10 → 10 s; Pin Down's Crippled at rank 13 → 13 s; the environment torches at rank 0 → fixed 30 s) — so the two conditions where it equals the duration were arithmetic accident. **Hexes and enchantments, §3.3's "largest single miss … no instrument at all", were already captured and merely unidentified**: skill **984 = Torch Enchantment** and **998 = Torch Hex**, 30 s each, matching GWW's effect ids exactly. And the repo's **first cure** is on record — `"Charge!"` stripping Crippled in the same millisecond, its 33% speed boost visible as 288 × 1.33 on `0x0027`. Consumer built first again: `toolkit/authsrv/bufflog.py` (36 checks) reads episodes as EXPIRED / STRIPPED / OPEN and refuses to attribute an effect outside a mark window, since `0x0042` carries no source agent. **The live session is staged** (`vault/plans/isle_rung8_effects.txt`, 27 steps) for the four things the corpus cannot give: skill **999** (the degeneration torch, never captured), the five foe Students' condition ids, degeneration in pips against GWW's 3/4/4/7, and the rank ladder that closes rung 7's open defect. Prep detail: the consumer `toolkit/authsrv/damagepass.py` built and proven on retail bytes first — the rung-6 detour's PvP arenas turn out to hold the vault's largest damage corpus (641 p16 + 119 p17), which measured the attack-skill confound (10 of 11 arena p17 groups nonzero-variance) and recovered 480 = level-20 base health from a fraction grid; the bench geometry is recovered (Suits 152/153/154/152 in a row, the 60-pair predicted at its ends; MoD prof-6 candidates 144/145); the sealed-plan draft with every prediction pre-registered (including both weapon-type branches for the rank sweep) is staged at `vault/plans/isle_rung7_damage.txt`; and the blocking behavioural-cap question was ruled same-day — **§7 Q7, the cap is STRUCK** — so **the run itself is next and is the operator's**: RUNBOOK live procedure + `--minutes 45 --mode base --plan vault/plans/isle_rung7_damage.txt`. Bonus banked en route: the no-combat east run's one combat episode (operator hit by slot 137's Pin Down) shows **condition application arriving on `0x0042` on retail traffic** (481 Crippled, 13.0f duration-like arg, move speed halved server-side) — rung 8's Torches-first channel question observed once, early. Residuals riding the next loopback pass: the varint send, the overhead channel, skill 2077's render, the energy probe. **RUNG 8 IS DONE 2026-08-21**, across three short runs after the 27-step design proved unfollowable mid-session (`20260821T152147` effects, `20260821T155022` the last two conditions, `20260821T163511` the rank ladder). **Skill 999 observed** and the **condition map is COMPLETE** — all ten Students named to ids, 482 = Deep Wound confirmed by elimination and 2077 = Cracked Armor corroborated by GWW's own `<!--id:2077-->`. **The unmet-weapon-requirement penalty SCALES with rank**, closing rung 7's one open defect: PINNED dies on the distributions, not a fit — eleven 3s at rank 5 that PINNED cannot reach, and zero 6s at ranks 5/6/7 against twenty at rank 8 (`5.5e-10`). Means within 1.1%, r8 control at +0.5% of rung 7 on the same body, divisor **3.098 [3.073, 3.133]** which newly excludes 10/3. **§4's crit disjointness reproduced** on a different day and still unexplained. Two runbook traps landed with it: an ArenaNet build shipped mid-run and took the key-tap cave with it, and the build gate's "service" is `C:\gw`, which only updates when LAUNCHED — it refused a correct 38849 client as "stale", and following its own advice reproduces the zero-key failure. |
 
 Two structural changes, both argued below in §4.
 
@@ -1346,7 +1346,270 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
-### WORLDMAPS: the offline half landed, two launches staged (2026-08-20)
+### ENERGY AND ADRENALINE exist, and the client consumes both (2026-08-20, late)
+
+[studies/skills §23–§25](studies/skills/FINDINGS.md), `toolkit/authsrv/pools.py`,
+landed `68d9850`. NEXT item 1 of the entry below is DONE; this entry replaces it.
+
+**The wire model, measured** (five-agent recon workflow over the 14-capture live
+corpus, then a 4-agent build+skeptic workflow): max = int prop 41; regen RATE =
+float prop 43, **quantum f32(0.33)·pips/max — bit-exact on all five retail
+clusters while the wiki's nominal 1/3 fits zero**; spend = prop 62 =
+−cost/max, once per paid cast, BEFORE the prop-60 in the same batch (45/45),
+scoped to the observing agent alone (722 other-agent casts carry none); gain =
+prop 52 (n=1, resurrect, 1.0); **no absolute setter exists** (prop 33: 0 of
+13,378, control green). The sibling morale arc measured the same quantum blind
+from the death tick — two derivations, no shared code, same constant.
+
+**The server now**: gates every press and every enemy pick (the pool paces
+Restore Condition — §8's old item 4 heal-spam, closed by a resource rule);
+debits in retail's batch order; regenerates silently; grows adrenaline by GWW's
+rules (25/hit, 1 per 1% health lost floored, raw UNITS not displayed strikes);
+wipes on death and 25 s of quiet; sends the retail death (43=0.0) and resurrect
+(52=1.0 + 43=rate) batches.
+
+**Four runs, every prediction pre-registered**: the client displays
+floor(its own integration) and never drifts (15/15 frames); it draws one `›`
+arrow per pip and animates the climb at the sent rate; the orb empties at death
+and — NEW — **refills at revive** (prop 52's first render anywhere); the full
+adrenaline cycle runs charge→spend→Bleeding-through-the-substrate→reset. Two
+negatives worth as much: **the client does not gate presses** (it sent a
+25-energy skill with 7.7 energy and an uncharged adrenal skill — the server is
+the gate, both halves) and **the client does not self-animate the adrenal
+icon** (pixel-identical at 0 and at a spent 100 — the flames wait for an
+UNMAPPED message).
+
+**NEXT, in cost order:**
+
+1. ~~**The adrenaline-display opcode.**~~ **CLOSED 2026-08-21, and the entry was
+   wrong about the store as well as the opcode.** The icon draws from the slot's
+   SECOND dword, `adrenaline_b` (**+0x04**) — not `adrenaline_a` (+0x00), which
+   is what this line used to say. The accessor `0x00821050` indexes
+   `container + slot*0x14 + 8` while the charge loop writes
+   `container + slot*0x14 + 4`: two functions, two displacements, one stride.
+   The pair is a **deferred-commit double buffer** — +0x00 accumulates, a
+   deferred task copies it to +0x04, and +0x04 is the only half any accessor
+   exposes. (Py4GW_Reforged reading `adrenaline_a` as the live value is *also*
+   right: a bot wants the accumulator, the screen shows the committed copy.
+   Complementary, not contested.) **Four opcodes fill it**, none of them named
+   by any upstream: **207** `{agent, units}` the charge, **208** `{agent}` clear
+   all, **209** `{agent, skill, copy, units}` an absolute set that retail sends
+   **0** times in 114,985 messages, **210** `{agent, skill, copy}` the spend.
+   Measured: 663/22/0/39 over 49 connections, self-scoped 9 of 9. **Two
+   different landmarks bracket the spend and it is worth naming both, because
+   confusing them is how the sender nearly shipped backwards**: `0x00E4`
+   SKILL_ACTIVATE for the same skill PRECEDES the spend 38 of 38, and the int
+   property naming that skill FOLLOWS it at +1 in the same batch 39 of 39. The
+   property is **50** (`CastAttackSkill`) in all 39 and never 60 — no prop-60
+   names an attack skill anywhere in the corpus — so the energy arc's
+   "spend before the naming property" shape holds here too, against a landmark
+   that arc never had to look at. All of it is pinned
+   by `toolkit/authsrv/test_adrenwire.py`. **Note for the sender:** the fill is
+   drawn only in `MISSION_MAP_GAME` and is torn down elsewhere, so a correct 207
+   sent to a client in an outpost yields a pixel-identical icon — any probe must
+   be in an explorable or a mission.
+
+   **AND THE SERVER NOW SENDS IT (2026-08-21).** `authsrv.py` declares
+   `AGENT_ADRENALINE_GAIN/CLEAR/SET/SPEND` and emits three of the four behind the
+   existing `ENERGY` flag: `0x00CF` on every gain the PLAYER's pools take (a
+   landed weapon hit, damage taken — raw units, and a 0-unit gain sends nothing),
+   `0x00D2` at the use site immediately before the property that names the skill,
+   and `0x00D0` at both clear sites (death, last in the batch; the 25 s timeout,
+   isolated). **209 is declared and never sent** — 0 of 724 — and `test_pools`
+   §11a counts its occurrences in the source to keep it that way. **Enemy pools
+   stay off the wire** (self-scoped 9 of 9). One real behaviour change came with
+   it: `AdrenalinePool` now takes a `recharging` predicate and mirrors the
+   client's own skip of a recharging slot (`0x008219C0`), because 209's absence
+   means nothing could ever resync the two books. `test_pools` floor 82 → 105,
+   green 98 → 121; `test_guards` re-pinned four in-range controls and
+   `test_agentlife` one ordering pin. **Those pins were re-pinned AGAIN before
+   the arc landed, and the correction is the important half:** the first cut
+   appended the gain after the damage, and the corpus puts it BEFORE — the
+   message immediately preceding a `0x00CF` is 159/prop 1
+   (`melee_attack_finished`) 594 times of 663 and the one immediately following
+   is the damage 601 of 663, modal batch `[159/prop1, 207, 163/prop16, 30]`
+   n=425. **This is the second time this arc shipped a burst in an order retail
+   never produces** (the energy debit was the first), and both times tests had
+   already grown up defending it — which is the argument for pinning an order
+   against a census rather than against the sender.
+   **AND THE CLIENT DRAWS IT (2026-08-21, run `20260821T125215`,
+   [studies/skills §27](studies/skills/FINDINGS.md)).** Twelve `0x00CF`s into an
+   explorable, and the three adrenal slots of the default bar fill from the
+   bottom while the five non-adrenal slots stay at **0.0% changed pixels in all
+   seven frames** — an in-frame null control, which is what makes the movement
+   attributable to the message rather than to the fight. The fill is a
+   CONTINUOUS fraction of the raw cost, confirmed on the one mid-charge frame:
+   30/54, 17/54 and 26/54 rows, where quarter-strikes on an 80-unit skill could
+   only land on 31.25/62.5/93.75%. Defy Pain (120) sits visibly lower than the
+   two 80-unit skills on identical grants — `adrenaline_b ÷ skillData.adrenaline`
+   on screen. §25's P7 is inverted under its own rig.
+   **AND THE SPEND AND THE TAX, the same day** (E6, run `20260821T134216`,
+   [§28](studies/skills/FINDINGS.md)). Nine hits capped every pool, `attack:0`
+   broke off the swing so nothing could refill them, and slot 2 was pressed:
+   the spent ring went to **0.0%**, and the other two dropped by **19.2 and
+   32.7 points of ring for the same 25 units** — costs 120 and 80. All three
+   within 1.6 points of numbers registered before the run. **That settles what
+   the bar counts:** a proportional tax would have moved both rings equally, so
+   the pool is RAW UNITS with 25 the size of a strike, and §26.8's 151
+   non-multiple-of-25 costs are visible rather than tabular. Our own wire went
+   out in the measured order — `0x00E4`, then `0x00D2`, then the naming
+   property. The five non-adrenal slots held at 0 changed pixels throughout.
+   **AND THE WIPE** (E7, run `20260821T135905`, [§29](studies/skills/FINDINGS.md)).
+   Charge, break off, wait 30 s doing nothing. Exactly ONE `0x00D0` went out and
+   the three rings emptied **together, in one frame step** — full at 18:00:16,
+   empty at 18:00:21, due at ~18:00:20 — with no intermediate state anywhere and
+   the five non-adrenal controls at 0 changed pixels in all ten frames. Nothing
+   decays; `0x00821B00` walks all eight slots and repaints once.
+   **A METRIC CORRECTION RIDES WITH IT, and it reaches back into §28.** The fill
+   rule these runs used ("first row with ANY changed pixel") reported a
+   demonstrably empty ring as 100% full off three stray pixels. §28.4's
+   "within 1.6 points" is therefore WITHDRAWN — swept across thresholds the
+   point estimates move by up to 25 points. What survives every threshold, and
+   is what those runs are actually for: the spent ring reads exactly zero, and
+   slot 4 loses more ring than slot 3 for the same 25 units. Qualitative claims
+   intact, precision claims withdrawn.
+   **AND THE MAP GATE, which closes the channel** (E8, runs `20260821T140826` +
+   `20260821T141108`, [§30](studies/skills/FINDINGS.md)). A two-arm A/B, same
+   map and bar and walk, one flag apart. The confound was real and was defeated
+   structurally: an outpost forbids attacking, but the harness calls
+   `begin_attack` SERVER-side, so the outpost arm put **9 gains on the wire**
+   just like the control — checked before any pixel was measured. Result: in
+   the outpost every adrenal slot is **byte-identical before and after nine
+   gains**, while the explorable arm fills all three. **And the overlay is torn
+   down rather than merely unfilled** — an uncharged adrenal icon is DARK in an
+   explorable (103,64,27) and BRIGHT in an outpost (197,122,48), which is
+   `0x00542E43`'s NULL-payload branch destroying the overlay, confirmed from
+   outside the disassembly for the first time. It also retires §25's guess that
+   slot darkening might be an affordability grey: the darkening is the empty
+   state of a ring that only exists where the ring is drawn.
+   **AND THE BLINK WARNING** (E9, run `20260821T141806`,
+   [§31](studies/skills/FINDINGS.md)) — raised by the owner from GWW
+   (*"partially filled skills will begin blinking"*), a behaviour §§25–30 never
+   tested. **We were already producing it and no server change was needed:**
+   `0x00CF`'s handler fires UI event `0x10000058` carrying the `.rdata` float
+   at `0x009495B4`, MEASURED `0000c841` = **25.0**, the timeout itself, and
+   `GmCtlSkImage:1483` calls it *"the adrenaline timer on a skill image"*. The
+   countdown is CLIENT-side. Measured at ~1 s frames: the PARTIAL ring
+   oscillates (9 direction changes, dipping to exactly its ring-gone
+   luminance and back — the fill goes fully off, not dim) while both CAPPED
+   rings stay rock-flat until the wipe and the non-adrenal controls have a
+   range of **zero**. So only partially filled skills warn, which is GWW's
+   sentence read strictly. Corroborated by the owner watching it live.
+   **This channel is now closed on the screen side** — charge, spend,
+   cross-pool tax, wipe, map gate and the blink warning all observed.
+   **AND THE TWO STATIC ITEMS ARE CLOSED TOO (2026-08-21, §26.12–26.13).**
+   **231** is the recharge family's *indefinite* case — it drops the pool and
+   writes the never-sentinel, and its adrenaline zeroing is **not special**:
+   229 runs a byte-identical sequence while 230 and 232 leave the pool alone,
+   so the rule is "when unavailability BEGINS, the pool is dropped" (WIKI
+   corroborates both halves). Its name is deliberately **not promoted** —
+   one wire witness is below the two-witness bar, and `SKILL_DISABLED` would
+   collide with the real per-slot disabled bitmask at `+0xA4` that opcodes
+   100/101 write and 231 never touches. **209** is "nothing on retail",
+   now EARNED: heroes are absent from the corpus (control green — henchmen
+   appear 21 times and got zero skill state), the resync story lost its
+   mechanism when GWW's own rule turned out to be the client's rule, and the
+   corpus contains **no reconnect at all** (all 48 skillbar pushes arrive
+   0.22–0.90 s into their connection). **The store has SIX writers, not five**
+   — §26.3 corrected; 229 was hidden by that section's own stated bound, since
+   it asks which sites COMPUTE a value and a constant zero computes nothing.
+   Sideways find: `moralescan.py` identified the observer by the first
+   `0x0059` and was **wrong on 20 of 44 connections**; corrected to the
+   self-scoped property 41, with the morale census numbers unchanged. What remains static-only is
+   the *reason* for the gate, which nothing observed explains and which is not
+   worth a probe.
+2. **What answers a refused press.** Ours is silence and the client visibly
+   re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
+   Also: our client SENT both unaffordable presses — whether retail's client
+   gates locally (and on which store) is unknown; the answer likely rides the
+   same investigation.
+3. **The five unmodelled mechanics** (unchanged from the entry below): attack
+   speed, movement speed, damage negation, energy cost reduction (GoLE's
+   datum: the row needs an explicit amount — scale bit clear, endpoints 10/18
+   differ, refused per the resolve_duration precedent), arrow bonus damage.
+4. **Merge-time reconciliation with the morale arc** (landed on main while
+   this was in flight): route `EnergyPool.maximum` through
+   `player_max_energy()` — NOTE it scales BASE energy only, armour bonuses
+   ride unscaled (their §2.2) — and adopt the `PROP_ENERGY_REGEN` rename.
+5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
+### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
+
+Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md).
+
+**The question was "we send morale as 100 and nobody knows what that means".**
+It is answered from ArenaNet's own wire rather than from a mirror: the live
+corpus holds exactly **one player death**, it is fully instrumented, and it
+carries the whole mechanic in a single tick — `0x009C [agent, 85]` and
+`0x00EE [attr 10, −15]` together, then the server's own recomputed maxima,
+health 120 → 102 and energy 25 → 22. Morale is a percentage with 100 neutral
+that scales the character's **base** health and energy, and the energy figure is
+what proves the "base" in that sentence: scaling the total gives 21.25, which is
+not 22 and is not an integer.
+
+Landed: `morale.py` (arithmetic), `[player.morale]` + `[map_rule.*]` (rules and
+the per-map gate, wiki-cited), the death tick and the XP counter in `authsrv.py`,
+`moralescan.py` (the corpus census, so "the only −15 in fourteen captures" stays
+checkable), and `test_morale.py` (floor 47, green 48). Three older claims are
+corrected in place: `0x00E9` field 10 was **not** refuted as morale — its
+*display* was; `0x009C` is no longer "n=1, uncatalogued"; and property 43 is
+energy regeneration as a fraction of the pool per second, which also explains the
+`0.0396` this repo inherited from gw-preservation and shipped as "purpose
+unknown".
+
+**Every map this server ships is pre-Searing, where retail charges nothing for
+dying**, so the shipped world is deliberately silent and `--death-penalty` is
+what makes the mechanic watchable.
+
+**THE PROBE RAN 2026-08-20 AND IS GREEN** — `--probe morale`, agent-piloted,
+harness `20260820T220732`, all six steps verified in the gamesrv log before a
+pixel was read ([studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 1). Both
+questions the corpus could not answer are closed, and one prediction was
+refuted:
+
+- **MORALE-Q1 — `0x009C` draws the indicator.** `[player, 70]` alone put a red
+  chevron reading `−30%` in the top-left corner; `0x00EE [10, −15]` alone drew
+  nothing over three frames and 9.2 s (MORALE-P1 REFUTED, P2 confirmed).
+  `[player, 110]` flipped the chevron up and teal at `+10%` (P4).
+- **MORALE-Q2 — the maxima are the SERVER's job.** One frame carries it: the
+  corner reads `−30%` while the health and energy bars still read 100 and 25.
+  The pools moved only when properties 41/42 landed, and the energy bar then
+  showed the **14** we sent on purpose rather than the 19 the client's own
+  arithmetic would give (P3). A server that sends morale and forgets the pools
+  ships a penalty that costs nothing.
+- The control held: retail's own `0x00EE [10, 0]` no-op changed nothing over
+  eleven frames.
+
+Two things measured in passing and worth reusing: the indicator is at
+(10,32)–(60,82) at 1936×1040 — a crop starting at y=100 misses it and reads as
+a refutation — and the HUD repaints on a **1–4 s delay** rather than on the
+packet, so a probe reading it wants ≥5 s between a send and its screenshot.
+
+**AND THE FOLLOW-UP RAN THE SAME DAY** — `--probe morale_store`, harness
+`20260820T224356`, read with `ReadProcessMemory` rather than with eyes
+(RUNS.md §Run 2). **MORALE-Q7 is answered: `0x00EE`'s delta DOES write the
+client's stored morale** — `66 → 53` on a `−13`, `53 → 60` on a `+7`, each
+within one 0.5 s sample — while `0x009C [player, 41]` moved that slot not at
+all. So the two messages are **two stores for one number**: the attribute block
+(absolute and delta, silent, what the Hero window reads) and the per-agent
+morale (absolute, what the corner reads). A server that sends one and not the
+other leaves the other stale; ours sends both.
+
+The block's shape came free and is worth more than the question that produced
+it: our chosen values landed at exactly **`attr_id × 8`** from the experience
+field, each **stored twice, adjacent** — so the wire's `attr_id` is an index
+into that array, and `studies/character/STORAGE.md` §2's value/dupe layout,
+described from GWCA's header and never checked, is now checked against numbers
+of ours. Nobody's offsets were used to find it: the probe holds one field
+constant and the scanner anchors on that.
+
+`toolkit/clientscan/moralestore.py` is the reader (read-only by construction —
+`PROCESS_VM_READ`, never `WRITE`), and it carries the lesson that cost the
+first attempt: **locate on a constant the experiment never changes**, because a
+scan for the value under test can run before the probe sets it and lock onto
+hundreds of coincidences.
+
+### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is stood on (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
@@ -1390,9 +1653,173 @@ real customer) and deleted. Two sheet lessons recorded: a fresh run directory
 needs its own firewall cage (fail-closed refusal worked as designed), and the
 launch stages were split to keep the compile run's Gw.log from the serve
 sessions.
-Known deliberate gap: a compressed install SHRINKS the row, so small→large
-iteration relocates until `grow_to` is wired into the map path — its own
-change, costed separately.
+**W5-W7 carried it into the authoring LOOP (2026-08-20, `5cac69e`+).** The gap
+W1 recorded is CLOSED: an area declares its own `reserve_bytes` budget,
+creation honours it, and a bigger second install GROWS BACK IN PLACE rather
+than relocating -- scoped to rows we created, because gating on the budget
+alone would have grown ArenaNet's row into blocks it never gave us. W6
+measured the scale ladder nobody had: authored maps compress BETTER the bigger
+they get (32x32 = 32.9% of stored, 256x256 = 3.4%, 142,195 -> 4,820 B, ten
+blocks, every rung round-tripping 100% exact in 0.28 s), so the byte budget
+never binds -- **MFT ROWS bind**, and the 38797 line has room for exactly ONE
+more created map where the 38833 line has eight. The five guards W3 left open
+are closed, including the sharp one where `created = true` beside a bound id
+could silently displace a retail map: the install now proves the chain is ours
+from the archive's own BYTES (the file-id record the alloc journal recorded),
+never from a path, which is the cage's rule on the archive axis.
+**WORLDMAPS-W7 RAN GREEN 2026-08-21** and the ladder is done: the client
+compiled a 256x256 authored map -- 65,536 cells, 16x the largest it had ever
+compiled for this project -- from a chain born under an id nothing had bound,
+logged the re-bloat line naming 0x05f0b1, wrote back a 13,584 B head (467,132 B
+decoded), left the 4,912 B compressed partner untouched, and the server served
+the 60-trapezoid mesh. **The sharp result is a prediction that could have
+failed**: a depth cut measured on the client's own 64x64 mesh predicted 50.55%
+of the 256x256 rect would survive, cut at Chebyshev ring 20 -- measured 50.54%,
+mesh starting at grid column 109. The throwaway lives on as a PROVEN 46,033 B
+delta. vault/research/worldmaps/WORLDMAPS-W7-RUN.md.
+
+**WORLDMAPS-W8 answered the mechanism question the same day, with a REFUTATION.**
+The depth cut is NOT the borrowed Pre-Searing environment chunk: two arms one
+content field apart (environment true/false, same generator, same rows, same
+copy) compiled meshes IDENTICAL to the cell -- 64 trapezoids, 7,660 B path
+chunk, 2,582/4,096 = 63.04% coverage, leftmost column 13 in both. The null is
+readable because both its controls fired: the treatment was verified at the
+bytes (no 0x10000009, no 0x11000009, SOUND still present, partner 9,994 B
+against sculpt's 10,714, a 720 B difference closing to the byte as 639 + 65 +
+two chunk headers) and the instrument was shown to detect the cut (arm A
+reproduces W7's witness). Also settled in passing: a map with NO environment
+chunk compiles and serves. What survives: a compiler depth bound, or the
+borrowed 34-byte Zones chunk. **WORLDMAPS-W9 then found the Zones swap is
+IMPOSSIBLE, which is itself the finding**: a foreign zone table breaks the map
+compiler -- Coastal Gate's 15,870 B table CRASHED the client (c0000005, write to
+0x1acff000) and Sparring Basics' 2,030 B one HUNG it at Loading 100% (98% of a
+core, 1.19 GB flat), both at the same log line, inside the re-bloat compile,
+with the server already through INSTANCE_LOAD_FINISH and the archive undamaged
+either time. So the compile path CONSUMES Zones (where deleting environment
+changed not one byte) and a zone table is COUPLED to its map -- coupling not
+identified. No mesh was produced, so the depth cut is untouched by it, and the
+next rung must author a MODIFIED version of our own 34-byte table rather than
+borrow one, which needs that layout read first. **WORLDMAPS-W10 then FOUND it in the disassembly: the bound is 40.0**, a
+float32 at 0x0094DE30 compared against all three corner z of a terrain triangle
+at 0x0072D3ED, inside PathFlood.cpp's per-triangle classifier 0x0072D2E0 -- all
+three deeper writes class 1 and RETURNS, jumping around the slope test, which is
+why the dip's 2.39 degrees were never the issue. Reachability re-derived hop by
+hop from the Path chunk's bloat handler, every hop a unique reference. **It also
+corrects our own framing**: the (43, 47] bracket W7 measured is not the bound,
+it is the SMEAR of a hard 40.0 across the generator's 4-unit-per-cell gradient,
+because the rule needs ALL THREE corners past it. What discriminates is not the
+coverage agreements -- those are worthless, since at 32x32 the rule is inert yet
+a per-quad model still over-predicts by 11.23 points -- but a two-sided bracket
+at [39, 43), the fact that 40.0 is the ONLY float constant in that window across
+the 275-function reachable subtree, and a partial intermediate bucket that kills
+every per-cell rival. **The rule is GATED by bit 0 of the Map Parameters flags dword -- and
+WORLDMAPS-W11 PULLED THAT LEVER THE SAME DAY AND IT WORKS.** `map_flags = 1` on
+the area row, one bit in a 41-byte chunk, against a control measured twice on
+the same copy: coverage 63.04% -> 93.26%, the mesh reaching column 0 instead of
+13, trapezoids 64 -> 99. W10's whole static chain is confirmed at the client,
+and the rule predicts the boundary TO THE COLUMN (col 12's quad corners 47/43,
+both past 40, excluded; col 13's 43/39, one shallower, kept -- and 13 is exactly
+where the control mesh started).
+
+**AND THE OWNER'S EYES NAMED THE CONSTANT: 40.0 IS A WATER LINE.** Watching the
+run: *"i was floating over the water there instead of standing ankle-deep in it
+like usual."* Values increase downward in these maps, so "all three corners >=
+40.0" means "entirely more than 40 units under water" -- the shallows are
+walkable, which is why the mesh stopped at the last quad with a corner above the
+line. **This vindicates WORLDMAPS-W8's intuition while leaving its refutation
+intact, and that distinction is the finding**: the water line is a COMPILER
+CONSTANT, not map content. The environment chunk renders water; `0x0094DE30`
+decides what water does to the navmesh -- so no experiment varying map content
+could ever have found it, which is why W9's Zones swap was doomed as well.
+
+**What it gives the project**: one content field and authored maps can have
+walkable underwater terrain -- lake beds, sunken ruins, a canyon floor below the
+waterline. It also retires a silent tax, since every authored map built here has
+been losing its deep ground to a rule nobody knew was there.
+
+**WORLDMAPS-W12 THEN PAID THE VERIFICATION THAT W11 LEFT OWED, 2026-08-21.**
+W11's scope was one map, one shape, one launch -- and the four DELIVERABLE areas
+were flagged on the strength of it without any of them going near a client. All
+four have now run: four installs, four launches, `harness rc 0` each, every
+`readback` row green, flags dword `0x00000001` off all four compiled heads.
+
+| area | dims | trapezoids flags 0 -> now | coverage now |
+|---|---|---|---|
+| sculpt | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| frontier | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| vale | 96 | 88 -> **156** | 8,750/9,216 = **94.94%** |
+| expanse | 256 | 60 -> **98** | 65,070/65,536 = **99.29%** |
+
+**Every authored area this project ships now reaches its own map edge.** Two of
+the four carry no free parameter: `sculpt` assembles sha256-identical to W11's
+treatment arm, so its numbers REPRODUCE W11 on a different day; and `frontier`
+produced the identical mesh from a **created chain** (`0x5F0B0`), so that
+delivery path costs the mesh nothing. One registered prediction FAILED --
+expanse was predicted 96-99% and measured 99.29% -- and the failure was in the
+STATEMENT, not the model: the band was written by clipping its upper edge at 99%
+(98.86 + 3 is not a coverage figure), making it -2.86/+0.14 rather than the +/-3
+it was registered as. Across all four the model held to +/-3.
+
+**WORLDMAPS-W13/W14 CLOSED BOTH OF W12'S RESIDUALS THE SAME DAY.** Four arms
+one field apart, six launches, one client and one archive in one session.
+
+**W13 -- the ground is STOOD ON.** A seed placed eight columns inside the
+excluded region, on the same 64x64 shape: at flags 0 **the client CRASHED
+compiling it** -- `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
+dest[-2].pos)`, `PathFlood.cpp(681)`, the same source file as W10's depth
+classifier -- and at flags 1 it compiled clean with the spawn landing in
+exactly one trapezoid. **One bit is the difference between a crash and a
+walkable spawn.** The second, unarmed run then made the SERVER pre-warm it:
+`[map] navmesh 0x287D3: 1 planes, 99 trapezoids`, matching what `pathmap` reads
+from the same bytes. First flags-1 mesh the server has ever read, and the first
+run in this arc without `collision is OFF`. A same-session flags-0 twin also
+reproduced every figure held for this shape, so **W12's deltas were not measured
+against a moving baseline**.
+
+**W14 -- bit 0 changes the Path chunk and NOTHING ELSE in the artifact.** Two
+compiled heads, one bit apart, compared by a raw slice walk: exactly two of
+twelve chunks differ, Map Parameters (one byte, offset +21) and Path
+(7,660 -> 10,988 B). Zones is byte-identical, and **Terrain is byte-identical at
+28,503 B** -- the determinism control that licenses reading the rest.
+
+**What remains out of reach, and one piece permanently**: our compiled heads
+carry 12 chunks against retail Kamadan's 24, and we emit no Sight, Shore, Water,
+VisData or Collision chunk in either arm, so no differential over our artifacts
+can see those branches. Runtime effects that are not persisted are invisible to
+a file diff. Traversal onto the ground from dry land was not tested. The server
+cannot see the bit at all (`map_flags`: zero occurrences under
+`toolkit/authsrv/`).
+
+**WORLDMAPS-W15 then put BODIES on that ground, the same day.** Placing a body
+is a separate gate from meshing the ground -- `place_on_mesh` re-checks every
+spawn and refuses one it cannot find ground for -- and every placement this
+project had made stood on ground the client would have meshed either way. Two
+arms, one bit apart, same session: `sculpt` at flags 1 placed **6 of 6** with
+zero refusals, the three deep bodies landing at EXACTLY (56,6006), (380,652) and
+(44,2764) with no nudge; `sculpt_flags0` placed **3 of 6** and refused exactly
+those three, each *"not on the navmesh and nothing within 480 units is either"*
+against offline margins of 1,207 / 1,053 / 1,765 units. The three shallow rows
+placed in BOTH arms including an identical 96-unit nudge, which is the
+within-arm control that had authority to void the whole thing. First populated
+`--serve` in the arc. **Authored population works on ground that exists only
+because of one bit.**
+
+**WORLDMAPS-W16 CLOSED THE LAST RESIDUAL: the ground is WALKED.** Two arms, the
+same walk plan and the same start (1536, 1536), so no camera calibration enters
+the comparison. At flags 1 the character walked **1,536 units to x = 0**, the far
+edge of the rect, crossing the flags-0 wall by 1,248 units. At flags 0 it walked
+288 units and halted at **x = 1248.0** -- exactly where our offline decode of the
+client's own compiled mesh says the ground ends. A no-free-parameter prediction
+landing ON THE UNIT: the client's collision and our decoder agree about where the
+world stops.
+
+**The arc's chain is now complete** -- the ground is meshed (W12), the spawn
+stands on it (W13), bit 0 touches only the Path chunk (W14), bodies are placed on
+it (W15), and a character walks out onto it (W16). `studies/worldmaps/FINDINGS.md`
+W13/W14, W15 and W16, `vault/research/worldmaps/WORLDMAPS-W13-RUN.md`,
+`...-W15-RUN.md`, `...-W16-RUN.md`.
+`studies/worldmaps/FINDINGS.md` W12,
+`vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
 ### R4b: eight of the nine families now resolve, three of them mechanically (2026-08-20)
 
@@ -1412,7 +1839,7 @@ each measured before it was built and three of them then watched at a client.
 | Enchantment (6) | Reversal of Fortune 307 | 8 s | ✗ damage negation | ✓ applied |
 | Signet (7) | Healing Signet 1 | — | ✓ **heals 88** | ✓ client health **54→100** |
 | Skill (10) | Charm Animal 411 | ✗ | ✗ a pet | ✗ |
-| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ no energy model | ✓ applied |
+| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ energy model EXISTS (2026-08-20 evening); the glyph's own discount is inert — its scale bit is clear with differing endpoints and the amount is refused, not invented | ✓ applied |
 | Attack (14) | Sever Artery 382 | Bleeding 9 s | ✓ **3 pips of degeneration** | ✓ **three arrows on screen** |
 | Preparation (19) | Ignite Arrows 431 | 24 s | ✗ fire damage on arrows | ✓ applied |
 

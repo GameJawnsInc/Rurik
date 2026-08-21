@@ -1975,6 +1975,163 @@ def _faction_max_steps(agent_id):
     ]
 
 
+def _morale_steps(agent_id):
+    """Which channel draws the death-penalty indicator, and who computes the maxima.
+
+    THE WIRE IS ALREADY SETTLED, off ArenaNet's own one player death
+    (studies/morale/FINDINGS.md): morale is 100-neutral, a death is -15, it
+    arrives twice in one tick -- `0x009C [agent, 85]` absolute and
+    `0x00EE [10, -15]` as a delta -- and the server then pushes recomputed
+    maxima on properties 41 and 42. What no capture can answer is what the
+    CLIENT does with any of it, because retail sent all of it at once. Two
+    questions survive, and they are separable by leaving things OUT:
+
+      MORALE-Q1  which message draws the top-left indicator? The 15-dword
+                 `0x00E9` provably does not: attr_legend sent field 10 as 0,
+                 40, 100 and 110 and the indicator never moved. That refuted
+                 the DISPLAY, not the field -- and left two candidates.
+      MORALE-Q2  does the client derive the pool maxima from morale itself, or
+                 only show what the server sends? Retail never had to reveal
+                 this. If our morale-without-maxima steps shrink the globes,
+                 it is the client's arithmetic; if they do not, the maxima are
+                 ours to compute and a server that forgets them ships a death
+                 penalty that costs nothing.
+
+    THE ORDER IS THE EXPERIMENT. Each candidate goes out ALONE first, with no
+    property update anywhere near it, so a moving indicator names its own
+    channel. The maxima come last, together, which is also the state a player
+    would actually be in -- so the run ends on the readable configuration
+    rather than on a diagnostic one. attr_legend's lesson, applied: a later
+    step must not wipe the evidence of an earlier one, and here nothing does,
+    because every step moves morale FURTHER rather than resetting it.
+
+    Fixed-position HUD throughout: the top-left indicator, the two globes. No
+    aiming, no world-anchored click, so this is agent-pilotable under the
+    2026-08-17 boundary -- but it still launches a client, which is the
+    owner's call.
+    """
+    HEALTH_MAX, ENERGY_MAX = 42, 41
+
+    return [
+        # MORALE-P1
+        Step(3.0, 0x00EE, [10, 0xFFFFFFF1],
+             "0x00EE [attr 10, -15] ALONE -- the delta channel",
+             "the TOP-LEFT corner. A red -15% there means the delta message "
+             "draws the indicator and 0x00E9's refutation was about the "
+             "full-set message only. Nothing means the display is elsewhere -- "
+             "step 2 is the other candidate. Also watch the two globes: if "
+             "they shrink with no property update behind them, the client "
+             "computes the maxima itself (MORALE-Q2) and that is the bigger "
+             "finding of the two."),
+        # MORALE-P2
+        Step(10.0, 0x009C, [agent_id, 70],
+             "0x009C [player, 70] ALONE -- the absolute, per-agent channel",
+             "the same corner. -30% appearing HERE rather than at step 1 makes "
+             "0x009C the display channel -- which is the reading the corpus "
+             "leans toward, because 0x009C names an agent and a party window "
+             "has to show a party member's penalty too. If BOTH steps moved "
+             "it, the client accepts either and our server is right to send "
+             "both."),
+        # MORALE-P3 -- the maxima, at last, and only now
+        Step(10.0, 0x009F, [ENERGY_MAX, agent_id, 14],
+             "property 41: maximum energy 25 -> 14 (-30% of base 20 is -6; 14 "
+             "is deliberately LOWER so a client-side value would disagree)",
+             "the energy globe. 14 means the server's number wins outright. A "
+             "globe reading 19 -- what -30% of base 20 actually gives -- means "
+             "the client had already computed its own and IGNORED ours, which "
+             "would be the day this mechanic stops being the server's job."),
+        Step(2.0, 0x009F, [HEALTH_MAX, agent_id, 70],
+             "property 42: maximum health 100 -> 70, matching -30%",
+             "the health globe, and the party window. This is the configuration "
+             "a real -30% player is in; read the whole HUD and screenshot it."),
+        # MORALE-P4 -- the other end of the range
+        Step(10.0, 0x009C, [agent_id, 110],
+             "0x009C [player, 110] -- a +10% MORALE BOOST, the ceiling",
+             "the indicator's other face. GW draws a boost with a different "
+             "icon from a penalty (blue/gold rather than red), so the icon "
+             "swapping is what confirms 110 is read as +10 rather than as a "
+             "large penalty. The corpus has never carried a boost at all -- "
+             "zero sightings in fourteen captures -- so this step is the only "
+             "evidence this project can get for the top half of the range."),
+        Step(6.0, 0x00EE, [10, 0],
+             "0x00EE [attr 10, 0] -- retail's own no-op, for the control",
+             "nothing should change. This exact message appears 39 times in "
+             "the live corpus riding experience awards, so a client that "
+             "reacts to it would mean the burst finding in "
+             "studies/combat/PLAN.md 13 has a second reading."),
+    ]
+
+
+def _morale_store_steps(agent_id):
+    """MORALE-Q7: does `0x00EE`'s delta write the client's stored morale?
+
+    `--probe morale` answered what reaches the SCREEN -- `0x009C` draws the
+    death-penalty indicator, the delta draws nothing -- and could not answer
+    whether the delta is IGNORED or merely silent. A message that updates a
+    value without repainting it looks identical from a screenshot, and the two
+    readings say different things about what a server must send.
+
+    So this probe is not read with eyes at all. It walks the attribute store
+    through three distinct values that only we could have chosen, which lets
+    `toolkit/clientscan/moralestore.py` find the store in the client's own
+    memory WITHOUT anybody's offsets -- an address that follows 77, then 88,
+    then 66 is the store; an address that holds 77 by coincidence is not. Then
+    the delta lands, and the store either moves or does not.
+
+    THE DWELLS ARE THE DESIGN. Step 1 gets 25 s because the locating scan is a
+    full sweep of the client's committed memory and has to finish before the
+    value changes under it; everything after gets 12 s, which is 24 samples at
+    the watcher's 2 Hz. And every value stays inside the game's own 40..110
+    range, so a clamp cannot be mistaken for a refusal.
+
+    THE POSITIVE DIRECTION IS IN HERE TOO (step 6). A store that ignores -13
+    and also ignores +7 is ignoring the message; a store that takes one and not
+    the other is doing something stranger, and that difference is worth one
+    step.
+    """
+    def attrs(morale):
+        v = [0] * 15
+        v[0] = 424242          # xp -- the attr_legend trick: every field its
+        v[9] = 17              # level     own recognisable number, so the
+        v[10] = morale         # morale    memory dump can be read as a legend
+        v[13] = 13             # skill points
+        return v
+
+    return [
+        Step(3.0, 0x00E9, attrs(77),
+             "0x00E9 field 10 = 77 -- LOCATE",
+             "nothing on screen. moralestore.py scans for every dword == 77."),
+        Step(25.0, 0x00E9, attrs(88),
+             "0x00E9 field 10 = 88 -- FILTER 1",
+             "the watcher: candidates that did not follow 77 -> 88 are out."),
+        Step(12.0, 0x00E9, attrs(66),
+             "0x00E9 field 10 = 66 -- FILTER 2",
+             "three values in a row identifies the store beyond coincidence."),
+        Step(12.0, 0x00EE, [10, 0xFFFFFFF3],
+             "0x00EE [attr 10, -13] -- THE QUESTION",
+             "the watched address. 53 means the delta writes the store and "
+             "only the REPAINT was missing; 66 means the client ignores this "
+             "message on this build."),
+        Step(12.0, 0x009C, [agent_id, 41],
+             "0x009C [player, 41] -- the OTHER store",
+             "does the per-agent channel write the same address as the "
+             "per-player one, or a different one? The indicator should read "
+             "-59% either way."),
+        Step(12.0, 0x00EE, [10, 7],
+             "0x00EE [attr 10, +7] -- the positive direction",
+             "same address. A store that ignores both deltas is ignoring the "
+             "message rather than refusing a negative."),
+        Step(12.0, 0x00E9, attrs(100),
+             "0x00E9 field 10 = 100 -- restore, and a last positive control",
+             "the store must follow this one whatever the deltas did. If it "
+             "does not, the address was never the store and every reading "
+             "above is void."),
+        Step(4.0, 0x009C, [agent_id, 100],
+             "0x009C [player, 100] -- put the indicator back",
+             "the corner should clear."),
+    ]
+
+
 def _title_track_steps(agent_id):
     """The title cluster 0x00F3-0x00F6, on our client for the first time.
 
@@ -3279,6 +3436,82 @@ def _condition_render_steps(agent_id):
              "if this renders a condition too, the type-8 set travels as a "
              "set; if it renders nothing or a bare buff, 2077 is special."),
         Step(9.0, 0x0044, [agent_id, 3], "68: remove it", "clean up."),
+    ]
+
+
+def _effect_silent_extend_steps(agent_id):
+    """Does the client self-expire an effect, or does it wait for `0x0044`?
+
+    THIS QUESTION IS RETAIL'S, and the Isle arc is what raised it.
+    `studies/isle/FINDINGS.md` 8.6 measured ArenaNet extending a live effect by
+    sending NOTHING: across two live captures, 15 episodes closed LATE -- by
+    +1.25 s to +55.0 s against their own stated duration -- with no intervening
+    `0x0042`, no `0x0044`, and no other traffic in the window. The seven
+    episodes that were NOT being refreshed closed within +/-0.042 s of
+    `apply + duration`, over three different durations and both captures, which
+    is what rules out a coarse sweep and makes the long holds real.
+
+    OUR SERVER DOES SOMETHING RETAIL DOES NOT. `effects.EffectTable.apply`'s own
+    docstring ends "how retail refreshes one is NOT FOUND", and
+    `studies/skills` concluded from OUR implementation that a longer
+    re-application "extends as REMOVE-then-APPLY -- the only replacement shape
+    the client honours". Retail plainly does not do that here. But 8.6 is a
+    WIRE measurement and cannot see the screen, so it leaves the half that
+    decides what our server may emit: between `apply + duration` and the late
+    `0x0044`, IS THE EFFECT STILL DRAWN?
+
+    The probe sends raw messages and keeps no server-side effect table, which is
+    the point -- it isolates the CLIENT's own timer from ours.
+    """
+    return [
+        Step(2.0, 0x0042, [agent_id, 478, 0, 1, _f32(10.0)],
+             "CONTROL apply: skill 478 (Bleeding), duration 10.0",
+             "the effects area above the skill bar. Icon appears with a brown "
+             "down-arrow. Note the timer bar -- it should start full."),
+        Step(10.0, 0x0044, [agent_id, 1],
+             "CONTROL remove: 0x0044 at exactly apply + duration",
+             "the icon goes. This is the shape our server emits today and the "
+             "rig's positive control: it proves a removal removes, so a "
+             "persisting icon later cannot be blamed on a dead channel."),
+
+        Step(4.0, 0x0042, [agent_id, 480, 0, 2, _f32(10.0)],
+             "TREATMENT apply: skill 480 (Burning), duration 10.0 -- and then "
+             "NOTHING is sent for 25 s",
+             "icon appears, bar full. From here the server goes silent, which "
+             "is exactly what retail does while you stand in a Student's ring."),
+        Step(13.0, 0x0000, [],
+             "WATCH at apply + 13 s -- THREE SECONDS PAST THE STATED DURATION. "
+             "This is the measurement the whole probe exists for.",
+             "IS THE ICON STILL THERE? Say yes or no out loud before anything "
+             "else, then describe the timer bar: full, empty, drained, absent, "
+             "or refilled. PREDICTION: the icon is STILL DRAWN and the bar has "
+             "drained to empty, because retail holds effects far past their "
+             "stated duration with no traffic and a client that self-expired "
+             "would leave ArenaNet rendering nothing while the condition is "
+             "still costing health. THE RIVAL OUTCOME IS THE BIGGER RESULT: if "
+             "the icon is GONE, the client runs its own authoritative timer, "
+             "retail's silent extension is invisible to the player, and our "
+             "server cannot extend silently for anything that must be SEEN.",
+             sends=False),
+        Step(7.0, 0x0000, [],
+             "WATCH at apply + 20 s -- twice the stated duration",
+             "same two questions. A yes here rules out a slow fade or a "
+             "one-frame lag at the boundary being mistaken for persistence.",
+             sends=False),
+        Step(5.0, 0x0044, [agent_id, 2],
+             "TREATMENT remove: the late 0x0044, at apply + 25 s",
+             "does the icon go NOW? If it was still drawn and this removes it, "
+             "the client is server-authoritative on expiry and a silent "
+             "extension is legal -- our substrate can stop emitting the "
+             "REMOVE-then-APPLY pair retail never sends. If the icon had "
+             "already gone, watch for anything odd here: a removal for an "
+             "effect the client has forgotten is a shape we would be emitting "
+             "blind."),
+        Step(6.0, 0x0000, [],
+             "END: quiet frames",
+             "the final state of the effects area, and whether the client is "
+             "still alive.",
+             sends=False),
     ]
 
 
@@ -5805,6 +6038,37 @@ PROBES = {
              "because 66's setter calls no refresh and 65's does; step 1 "
              "establishes what a bare toggle does so it can be discounted.",
     ),
+    "effect_silent_extend": lambda a, o: Probe(
+        question="Between apply+duration and a LATE 0x0044, is the effect still "
+                 "drawn? Retail extends effects by sending nothing; does the "
+                 "client self-expire, or wait to be told?",
+        predicts="THE ICON IS STILL DRAWN AT +13 s AND +20 s on a 10 s "
+                 "duration, with the timer bar drained to empty, and it goes "
+                 "only when the late 0x0044 lands at +25 s. That is what "
+                 "retail's own traffic requires: studies/isle 8.6 measured 15 "
+                 "episodes closing +1.25 s to +55.0 s late with NO intervening "
+                 "traffic, against 7 un-refreshed ones closing within 42 ms of "
+                 "their own duration -- so the durations are honest, the close "
+                 "is precise, and something held those effects open silently. "
+                 "THE RIVAL OUTCOME IS THE MORE VALUABLE ONE: if the icon "
+                 "vanishes at +10 s unprompted, the client owns the timer, "
+                 "retail's silent extension never reaches the player's eye, "
+                 "and our server may NOT extend silently for any effect the "
+                 "player has to see -- which would make effects.py's "
+                 "REMOVE-then-APPLY correct after all, for a reason nobody has "
+                 "stated.",
+        steps=_effect_silent_extend_steps(a),
+        note="Cross-arc: the Isle arc measured the wire, this reads the screen, "
+             "and neither half decides it alone. effects.EffectTable.apply's "
+             "docstring currently ends 'how retail refreshes one is NOT FOUND' "
+             "-- studies/isle 8.6 answers the wire half (retail sends nothing "
+             "and delays the removal) and this probe answers whether that is "
+             "renderable. FIXED-POSITION UI ONLY: the whole readout is the "
+             "effects area above the skill bar, so no aiming and no world "
+             "click is involved. Run with --shots so the boundary at +10 s is "
+             "caught in frames rather than from memory; the two sends=False "
+             "steps are observation points and deliberately transmit nothing.",
+    ),
     "condition_render": lambda a, o: Probe(
         question="Does 0x0042 carrying a CONDITION skill id (type_code 8) "
                  "render as a condition -- brown down-arrow, gold-bordered "
@@ -6562,6 +6826,59 @@ PROBES = {
              "later steps rebuilt the array from zeros and wiped the legend "
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
+    ),
+    "morale_store": lambda a, o: Probe(
+        question="MORALE-Q7: does 0x00EE [attr 10, delta] write the client's "
+                 "stored morale without repainting it, or is it ignored?",
+        predicts="The store is found by our own three values (77, 88, 66) and "
+                 "nobody's offsets. Then: if the address reads 53 after the "
+                 "-13, the delta writes and only the repaint was missing -- "
+                 "which would mean our server is right to send both channels "
+                 "and the Hero window may show what the corner does not. If it "
+                 "stays 66, the client ignores this message on build 38797 and "
+                 "0x009C is the whole mechanic client-side. Step 7 is the "
+                 "control that keeps either reading honest: the store MUST "
+                 "follow a fresh 0x00E9 whatever the deltas did.",
+        steps=_morale_store_steps(a),
+        note="ANSWERED 2026-08-20 (harness 20260820T224356, "
+             "studies/morale/RUNS.md Run 2): THE DELTA WRITES. The attribute "
+             "slot went 66 -> 53 on the -13 and 53 -> 60 on the +7, each "
+             "within one 0.5 s sample, while 0x009C [player, 41] moved it not "
+             "at all -- so 0x00EE and 0x009C are two stores for one number, "
+             "and only 0x009C repaints. The block came free: our values landed "
+             "at attr_id x 8 from the experience field, each stored TWICE, "
+             "which checks GWCA's dupe-pair layout against numbers of ours. "
+             "Read with toolkit/clientscan/moralestore.py, never with a "
+             "screenshot -- the corner already said all it has to say. Values "
+             "stay inside 40..110 so a clamp cannot read as a refusal. Needs "
+             "~110s: pass --hold 130.",
+    ),
+    "morale": lambda a, o: Probe(
+        question="Which message draws the death-penalty indicator -- the "
+                 "0x00EE delta or the per-agent 0x009C -- and does the client "
+                 "compute the reduced maxima itself or only display ours?",
+        predicts="MORALE-P1/P2: exactly one of the first two steps puts a red "
+                 "percentage in the top-left corner. 0x009C is the favourite: "
+                 "it names an agent, and a party window has to show a party "
+                 "member's penalty. MORALE-P3: the globes do NOT move until "
+                 "properties 41/42 arrive, and then they read 14 and 70 -- the "
+                 "server's numbers, not the -30%-of-base arithmetic, which is "
+                 "why 14 was chosen to disagree with 19. MORALE-P4: 110 draws "
+                 "a BOOST icon rather than a penalty one. Every step is a "
+                 "fixed-position HUD readout.",
+        steps=_morale_steps(a),
+        note="ANSWERED 2026-08-20, agent-piloted, all six steps verified "
+             "in the gamesrv log before a pixel was read (harness "
+             "20260820T220732; studies/morale/RUNS.md Run 1). 0x009C DRAWS "
+             "the indicator -- red chevron, -30% -- and 0x00EE's delta drew "
+             "nothing over three frames and 9.2 s; 110 flipped the chevron up "
+             "and teal at +10%; and the pools did NOT move until properties "
+             "41/42 landed, then showed the 14 we sent rather than the 19 the "
+             "client's own arithmetic would give. So the maxima are the "
+             "SERVER's job. Kept runnable: it is also the calibration for the "
+             "corner, which sits at (10,32)-(60,82) and which a crop starting "
+             "at y=100 misses entirely. The HUD repaints on a ~1-4 s delay, "
+             "so leave >=5 s between a send and its screenshot.",
     ),
     "faction_max": lambda a, o: Probe(
         question="Do the four one-dword messages 0x00EA-0x00ED set the "

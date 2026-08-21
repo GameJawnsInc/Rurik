@@ -426,7 +426,56 @@ class EffectTable:
         repeat `0x0042` for a live (agent, skill) is DISCARDED -- the icon is
         not duplicated and the timer is not reset -- whether the buff id is new
         or the same. Re-sending the apply is therefore not a way to refresh an
-        effect, and how retail refreshes one is NOT FOUND.
+        effect.
+
+        ~~and how retail refreshes one is NOT FOUND~~ -- **THE WIRE HALF IS NOW
+        ANSWERED, and it is not a message at all.** `studies/isle/FINDINGS.md`
+        8.6: retail refreshes by sending NOTHING and delaying the `0x0044`.
+        Across two live captures, 15 episodes closed LATE -- +1.25 s to +55.0 s
+        past their own stated duration -- with no `0x0042`, no `0x0044` and no
+        other traffic in the window, while the 7 episodes that were not being
+        refreshed closed within +/-0.042 s of `apply + duration` over three
+        durations and both captures. The precise seven are what rule out a
+        coarse sweep and make the long holds real.
+
+        ~~SO THIS TABLE EMITS A SHAPE RETAIL DOES NOT.~~ **SCOPE-CORRECTED
+        2026-08-21 (studies/skills 32.8), and the correction is the owner's:
+        the silent extension is ENVIRONMENTAL-ONLY and says nothing about casts.**
+        Scored across the whole vault, all 15 late closures are the Isle's torches
+        and Students, from the two runs where the operator deliberately stood in
+        range; 78 cast- or attack-applied episodes over five skills and six
+        captures are NEVER late -- exact, or early via a cure. The same
+        environmental skills close exactly when nobody loiters (480, 984, 998 at
+        +/-0.00 in the rung-6 run), so the variable is standing in the radius, not
+        the skill. The Isle is a TRAINING AREA and its appliers are pedagogical
+        props; generalising them to combat was a scope error.
+
+        WHAT THAT LEAVES FOR THIS TABLE. Retail has no witnessed case of a live
+        CAST effect being deliberately extended at all -- not silently, and not by
+        REMOVE-then-APPLY. The 15 overlaps recorded above are same-instant doubles
+        under 0.5 s, which is simultaneity rather than extension. So the shape here
+        is UNWITNESSED either way, neither confirmed nor refuted, and the Isle
+        cannot judge it. What is NOT settled is the half that
+        decides whether we may copy it: between `apply + duration` and the late
+        removal, is the effect still DRAWN? A wire capture cannot see a screen.
+        `--probe effect_silent_extend` RAN 2026-08-21 (studies/skills 32) and the
+        answer is a third thing neither reading proposed: **the client owns the
+        expiry but does not forget the effect.** The live icon vanishes on the
+        client's own timer with no packet -- ~9 s against a 10.0 s duration, some
+        15 s before a late `0x0044` was sent -- and the slot then holds a STATIC,
+        heavily faded ghost of the same icon until the removal arrives, which
+        clears it. Measured, not eyeballed: same-state frames are byte-identical
+        (diff 0.000), the slot moves 6.829 across the removal while a same-sized
+        control patch beside it moves 0.000, and the ghost is held unchanged
+        across 14 s of frames.
+
+        SO THIS TABLE'S PAIR IS NOT LOAD-BEARING, AND SILENCE IS NOT FREE. The
+        late removal landed correctly on an already-expired effect -- no refusal,
+        no desync -- so REMOVE-then-APPLY is not required for correctness. But an
+        effect held open by silence stops being VISIBLE at its stated duration,
+        so anything the player must see for time T needs a duration covering T or
+        a re-application. The shape here is unchanged: what changed is that both
+        options are now costed from a measurement rather than assumed.
         """
         if duration is None or duration <= 0:
             raise EffectError(

@@ -1145,8 +1145,14 @@ which the load readings alone cannot separate.
 4. **Why is 24 absent from the rank-12 block** while 23 appears 9 times (p ≈ 0.046)?
 5. **What closes the 11-point gap** in the Master of Damage's closing health
    (`prop 55 = 300/590` against our ledger's 289)?
-6. **What is skill 364**, cast once by the player at t=1008.125 in a *walking* step? No
-   measurable effect on the block that follows, but it is an uncontrolled input.
+6. ~~**What is skill 364**, cast once by the player at t=1008.125 in a *walking* step? No
+   measurable effect on the block that follows, but it is an uncontrolled input.~~
+   **CLOSED 2026-08-20** — and "no measurable effect" was wrong by one channel:
+   at that exact timestamp the wire carries **property 62 = −0.25** on 0x00A2,
+   a 5-energy debit over the character’s max 20 (skills.toml, build 38797,
+   prices skill 364 at exactly 5) — invisible to this study’s consumer because
+   damagepass.py reads only 0x00A3 p16/17/18. The damage ledger itself is
+   untouched. [studies/skills §23](../skills/FINDINGS.md).
 7. **`parse_coded` returned a 13.8-trillion "string id"** for a `0x5F` blob without
    complaint. That deserves a guard.
 
@@ -1264,6 +1270,36 @@ From the three Isle captures, merged:
   concrete: **only five Students can attack, so at most five conditions arrive by
   being hit**, and any plan promising a ten-condition map from combat alone is
   over-promising by half.
+- **SLOT ORDER IS NOT POSITION ORDER, and the operator navigates by position.**
+  The line is walked south→north; the slot numbers are not. A rung-8 study sheet
+  built from the slot list alone would send the operator to the wrong bodies, so
+  the mapping is recorded here rather than re-derived per session:
+
+  | # from south | y | slot | model | side |
+  |---|---|---|---|---|
+  | 1 | 1173 | 161 | 130065 | **FOE** |
+  | 2 | 1424 | 160 | 130098 | **FOE** |
+  | 3 | 1680 | 163 | 116661 | **FOE** |
+  | 4 | 1918 | 162 | 158806 | ally |
+  | 5 | 2165 | 157 | 130065 | **FOE** |
+  | 6 | 2422 | 159 | 129922 | ally |
+  | 7 | 2686 | 158 | 116718 | ally |
+  | 8 | 2945 | 156 | 129922 | ally |
+  | 9 | 3193 | 164 | 129922 | ally |
+  | 10 | 3422 | 165 | 130065 | **FOE** |
+
+  So the five foes are positions **1, 2, 3, 5 and 10** — three together at the
+  south end, one past a single ally, then a ~1,250 u walk north to the last.
+  **Four allies sit between foes 5 and 10; the fifth (position 4) sits between
+  foes 3 and 5**, which is the trap in routing the `cracked` step off the walk
+  back south: stopping at foe 5 leaves one ally unvisited.
+- **Corroboration is uneven along the line, and the north end is the thin part.**
+  Slots **156-163 have two independent witnesses** — `20260817T231139` and
+  `20260818T132739` — agreeing on position to the byte and on allegiance. Slots
+  **164 and 165 have one** (`20260817T231139` only); the rung-7 run never went far
+  enough north to bring them into compass range. Position 10, the northernmost
+  foe, is therefore the least-corroborated body on the island's west edge, and its
+  absence on the day would be a **thin observation**, not a navigation error.
 
 ## 5. Degeneration, with the numbers sourced rather than recalled
 
@@ -1274,6 +1310,60 @@ and Poison −1" from memory and was wrong on both — caught only because the
 pre-registration was checked against the source before sealing. On the operator's
 480-health pool the property-44 rate should move by `pips × 2 / 480`: −0.0125
 (bleeding), −0.0167 (poison/disease), −0.0292 (burning), −0.0042 (torch degen hex).
+
+## 5.1 Property 44 is a NET rate, and torch3's prediction is written as if it were not (pre-registered 2026-08-20, BEFORE the run)
+
+**Recorded before the live session, not after, because a correction written after
+the data arrives is a rescue rather than a prediction.** The sealed plan is NOT
+edited — its sha256 stays valid — and this is the reading rule that goes with it.
+
+B4 settled that property 44 is the **net** health-regeneration rate: *"prop 44
+must step to (natural − condition) × 2/H at apply time"*. The sealed plan's
+degeneration predictions are stated as bare condition contributions — torch3
+expects *"about −0.0041667"* for the one-pip torch hex. Those two are the same
+statement **only while natural regeneration is zero**.
+
+**It is not zero at torch3, and that step is the one place on the route where it
+cannot be.** B4 also measured the ramp: *"the player's regen ramp starts ~5-6 s
+after last damage, stepping +1 quantum per ~2 s"*, and it observed the player
+carrying positive prop-44 (1 and 2 pips) directly. Leg A is a **no-combat** leg —
+the Master of Magic does not fight — so by the time the operator has stood
+adjacent to a torch for 30-40 s, the ramp has been running the whole time.
+
+On the operator's 480-health pool, one pip is `2/480 = 0.0041667`:
+
+| natural regen | torch hex | **net prop 44 sent** |
+|---|---|---|
+| +0 pip | −1 pip | −0.0041667 ← what the plan predicts |
+| +1 pip | −1 pip | **0.0000000** |
+| +2 pip | −1 pip | **+0.0041667** — same magnitude, **opposite sign** |
+
+**The failure mode this creates is a FALSE REFUTATION, and it is pre-loaded.**
+The plan says: *"If no property-44 arrives, 'degeneration is server-owned' is
+refuted for retail and that is a bigger result than the confirmation."* At
+natural +1 the net is exactly zero, and at natural +2 the value has the sign
+flipped — so a reading that asks *"did we see −0.0041667?"* answers **no** in both
+cases and hands back the plan's own headline refutation off an artifact where the
+mechanism worked perfectly.
+
+**The reading rule, with no free parameter either way: score the STEP, not the
+value.** Whatever the baseline, the rate must step **down by exactly one pip
+(0.0041667) at apply** and back **up by one pip at expiry**. The torch re-applies
+every ~2 s against a 10.0 s duration, so the effect never lapses while the
+operator stands there: one step down on arrival, one step up ~10 s after stepping
+away. That is why the *"step well away"* halves of steps 5-7 are measurements and
+not walking.
+
+**Leg B is unaffected and the contrast is the point.** At `stud1`-`studdegen` the
+operator is being hit continuously, the ramp is reset by every swing, natural
+regen is therefore ~0, and the plan's bare −0.0125 / −0.0167 / −0.0292 stand as
+written. **The one leg where nothing attacks you is the one leg whose prediction
+assumed something was.**
+
+*Label: RECONSTRUCTION.* The ramp and the positive player prop-44 are B4's
+OBSERVED values; that the ramp will have run to a specific pip count by torch3 is
+inference, which is exactly why the step test is preferred over any predicted
+baseline.
 
 ## 6. What rung 8's session is now for
 
@@ -1293,3 +1383,409 @@ Four things, none of which the corpus can supply:
 The plan is sealed at `vault/plans/isle_rung8_effects.txt`, 27 steps, and the
 consumer (`toolkit/authsrv/bufflog.py`, 36 checks) was built and proven on the
 97 existing witnesses before the plan was written — rung 7's discipline, kept.
+
+---
+
+## 7. Rung 8, LIVE #3 — the run (2026-08-21, capture `20260821T152147`)
+
+**Cancelled at step 17 of 27, and three of the four goals are MET anyway.** Seals
+AGREE, `exe_unchanged: true`, `game_mode base`, 3 keys, 2 game connections, 17 apply
+episodes and **`unattributed 0`** — every episode fell inside a mark window. Leg C (the
+rank ladder) never ran, so rung 7's unmet-requirement defect stays open. Operator notes:
+`vault/captures/live/20260821T152147/notes.md`.
+
+**The operator read F9 as "go to the next condition" rather than "advance one plan
+step", and that misreading produced a better dataset than the plan's own design.**
+Steps 10-14 name five FOES and skip the allies; walking every body in line order instead
+returned **eight** conditions. See §7.5.
+
+### 7.1 Skill 999 is OBSERVED, and the pre-registered prediction is met exactly
+
+`0x0042` skill **999**, field3 **0**, duration **10.0**, n=2 — the plan's torch3 line
+predicted *"skill 999, field3 0, duration 10.0 — a shorter duration than the other two,
+which is itself a discriminator"*, and all four clauses hold. The last torch effect that
+had never been captured is captured. With 984 (30.0) and 998 (30.0) replicating from the
+rung-6 run, **all three torch effects are now on retail wire**.
+
+**The two hex torches are NOT distinguishable by name** — the client renders both as
+`Torch of Hexes` (screenshot, F11 note 1), so the plan's *"the one WITHOUT degeneration"*
+was not an instruction anyone could follow. The operator guessed; the guess was right,
+and it is *provable* rather than lucky, because 999 landed inside step 6's window and 998
+inside step 5's. **The duration is the discriminator, not the nameplate** — which is
+exactly what the plan predicted the duration would be good for, arriving a step earlier
+than intended.
+
+### 7.2 The condition map: eight ids, two independent witnesses, joined by walk order
+
+The operator walked the line south-to-north pressing F9 at each body. The captured skill
+ids come out in **exactly the order the client's own nameplates read** in the F11 note-3
+screenshot — 8 for 8, in sequence:
+
+| F9 step | skill | condition | nameplate rendered on screen |
+|---|---|---|---|
+| 10 | 483 | Disease | Student of Disease (southernmost) |
+| 11 | 485 | Dazed | Student of Dazed |
+| 12 | 486 | Weakness | Student of Weakness |
+| 13 | 484 | Poison | Student of Poison |
+| 14 | 479 | Blind | Student of Blind |
+| 15 | 481 | Crippled | Student of Crippled |
+| 16 | 480 | Burning | Student of Burning |
+| 17 | 478 | Bleeding | Student of Bleeding |
+
+**CORROBORATED**, and the two witnesses share no author or ancestry: one is the skill id
+in ArenaNet's `0x0042`, the other is ArenaNet's rendered `enc_name`. This answers what
+§"Rung 6" recorded as unrecoverable — *"which body carries which NAME is NOT recoverable
+from a capture; the enc_name render is the only route"* — by supplying the render and
+joining on walk order. Eight consecutive agreements is not a coincidence available to
+chance.
+
+**Unwitnessed: 482 (Deep Wound) and 2077 (Cracked Armor)** — the two northernmost
+Students, never reached. They are the only conditions on the island still unseen, and
+they are the cheapest thing left on the west edge.
+
+### 7.3 Degeneration in pips — GWW's published table reproduced with no free parameter
+
+Property 44 on `0x00A2`, joined against live effects and the player's own `health_max`:
+
+| skill | condition | measured | GWW |
+|---|---|---|---|
+| 478 | Bleeding | **-3 pips** | 3 |
+| 483 | Disease | **-4 pips** | 4 |
+| 484 | Poison | **-4 pips** | 4 |
+| 480 | Burning | **-7 pips** | 7 |
+| 999 | Torch degen hex | **-1 pip** (-0.0041667 on H=480) | — |
+| 479 | Blind | **0** — the ramp continues through it | not a degen condition |
+
+Four for four against a table fetched before the run. **And the arithmetic survives a
+max-health change, which is a check that could have failed:** Poison reads rate
+`-0.0166667` at H=480 and `-0.0196078` at H=408 — two different rates, **both exactly 4
+pips**. The rate is a fraction of maximum health, as B4 said, and the pip is the
+invariant.
+
+### 7.4 The natural regeneration ramp, and §5.1's warning vindicated on the wire
+
+§5.1 was written before this run: property 44 is a NET rate, so torch3's bare
+`-0.0041667` holds only while natural regeneration is zero, and **the predicted failure
+mode occurred.** At t=299.6 s the rate reads exactly the predicted **-0.0041667** with
+999 live. Forty-nine seconds later it reads **`+0.0000000` with the same effect still
+live** — the ramp had climbed a pip and cancelled it. A reading that asked *"did we see
+-0.0041667?"* would have scored the plan's own headline refutation off an artifact where
+the mechanism worked perfectly.
+
+**B4's "+1 quantum per ~2 s" is now pinned to exactly 2.0 s.** Seven consecutive samples
+at t = 353.6, 355.6, 357.6, 359.6, 361.6, 363.6, 365.6 step +1 pip each, +1 to +7.
+
+**One correction to §5.1's own reading rule, from this data.** §5.1 said to score the
+step as *"down by exactly one pip at apply"*. The observed step at apply is
+**-(natural + condition)**: the ramp stood at +7 when 999 landed and the net went to -1,
+a step of -8. Health loss resets the ramp, and degeneration is health loss — so while a
+degenerating effect is live the natural term sits at 0 and the net equals the condition
+alone. **Score the LEVEL while the effect is live, not the step across the transition**;
+the step is contaminated by whatever the ramp had reached. The pip table in §7.3 is read
+that way.
+
+### 7.5 Ally/foe does not gate condition application, and the five-condition ceiling was about combat
+
+§4 measured 5 allies / 5 foes and concluded *"only five Students can attack, so at most
+five conditions arrive by being hit"*. True, and irrelevant: **the Students apply by
+PROXIMITY, not by attacking** — each stands in a visible ring (screenshot, note 3) and
+the condition arrives on entering it, the same mechanism as the torches. Eight conditions
+came from ten bodies with **no attack made by or against the operator** in Leg B, and the
+foes never attacked at all. The ceiling bounded the wrong mechanism.
+
+### 7.6 Buff ids are per-EFFECT, not per-target
+
+`torch4`'s registered question, answered on a strafe (F11 note 2 — the ring is too wide to
+stand in two at once, but crossing works): skill 998 on buff **121** and skill 999 on buff
+**98** are live on the same target simultaneously. Peak concurrency 2, 8 distinct ids over
+17 episodes, 9 reused. Ids are also reused *across* episodes for the same skill — 999 took
+buff 98 at both step 6 and step 7.
+
+### 7.7 The death penalty is on the wire, and it corroborates a note nobody typed into the capture
+
+`health_max` moves **480 to 408** mid-capture — exactly x0.85, one death penalty — between
+the last 480-scaled sample (t=490.3 s) and the first 408-scaled one (t=676.8 s). F11 note
+4 was pressed at 527 s and reads *"died to diseased, resurrected"*; the effect live at the
+time is 483 = Disease. Three records agree and none derives from the other two.
+
+### 7.8 What the plan got wrong, recorded because the next plan inherits it
+
+1. **`F9` was read as "next condition", not "next step".** The plan's step text is long
+   and prediction-heavy; the operator saw a per-body cadence and used it. Shorter steps
+   with one action each — owner's instruction, 2026-08-21.
+2. **`torch2`/`torch3` were not followable** — both torches render the same name.
+3. **`stud1`-`stud5` named foes** on a mechanism where allegiance does not matter, which
+   would have discarded three of the eight conditions had it been followed.
+4. **60 s per Student is far more than needed** — application is near-immediate on
+   entering the ring, and the whole eight-condition sweep took under 5 minutes at 12-39 s
+   per body.
+
+---
+
+## 8. Rung 8b, LIVE #4 — the condition map is COMPLETE (2026-08-21, capture `20260821T155022`)
+
+Six steps, ~3 minutes of activity, every prediction met. Seals AGREE,
+`exe_unchanged: true`, `game_mode base`, 3 keys, 6 apply episodes, **`unattributed 0`**.
+The first run written under the owner's 2026-08-21 instruction — short, one action per
+step, predictions sealed in the comment block instead of in the step text the operator
+reads mid-run — and it produced a clean result at a twentieth of the previous plan's
+length.
+
+### 8.1 `482 = Deep Wound`, and the elimination inference held
+
+`0x0042` skill **482**, field3 **0**, duration **10.0**, n=2. This was the one id in the
+table that rested on nothing but our own arithmetic: 478-486 is contiguous, eight were
+witnessed in LIVE #3, 482 was the only gap, and GWW publishes **no id** for Deep Wound —
+checked before the run through the wiki API across all ten conditions, where **only
+Cracked Armor carries an `<!--id:2077-->` comment**. So the wire was the only thing that
+could settle it, and it did.
+
+`0x0042` skill **2077**, field3 0, duration 10.0, n=2 — the registered replication, met.
+
+**All ten conditions on the Isle are now witnessed on retail traffic**, each joined to
+the nameplate the client renders. The map is closed.
+
+### 8.2 Deep Wound moves property 42 by exactly 20%, twice, and returns both times
+
+| wire t | property 42 | what is live |
+|---|---|---|
+| 43.0 | **480** | baseline |
+| 80.4 | **384** | 482 applies (step 2) |
+| 106.1 | **480** | 482 closes |
+| 113.8 → 142.3 | **480, unmoved** | 2077 live (step 3) |
+| 150.7 | **384** | 482 re-applies (step 4) |
+| 163.9 | **480** | 482 closes |
+
+`480 × 0.8 = 384` exactly, on the same millisecond as the apply, on both applications,
+returning to 480 on both closes. WIKI (GWW, "Deep Wound", fetched 2026-08-21): *"your
+maximum Health is reduced by 20%"*. The published **100-health cap** did not bind here
+(20% of 480 is 96) and is recorded in the sealed plan so a larger-health character is not
+read against the wrong rule later.
+
+**And the control ran in the same capture:** across 2077's entire 28.5 s window property
+42 never moved. One condition moves it, the other does not, in one session, on one
+character — which is what makes this a measurement rather than a coincidence.
+
+### 8.3 Cracked Armor is visible ONLY as the `0x0042` itself
+
+No property 42 change, no property 44 change, no other property moving in its window.
+WIKI: *"you have -20 armor (minimum 60)"* — armour only, and armour is not a field we
+read off the wire. The sealed plan registered that if some property HAD moved here it
+would be a candidate armour field and worth more than the id; none did. **NOT FOUND**,
+recorded as a null rather than left as a gap.
+
+### 8.4 Neither condition degenerates — and the player received NO property-44 message at all
+
+Property 44 fires only when the net rate CHANGES (B4). Across this whole capture the
+player (agent 25) is the target of all six episodes and of every property-42 sample, and
+carries **zero** property-44 messages; the 24 in the connection belong to agents 122, 93,
+119 and 123. So the strongest form of the prediction holds: neither Deep Wound nor
+Cracked Armor degenerates, and the server never had a rate change to report.
+
+**One clause of the prediction was NOT met, and it is recorded as a miss.** The sealed
+plan expected Deep Wound's current-health loss to reset the natural regeneration ramp and
+so to produce a fresh `+1 pip / 2.0 s` climb. No such messages arrived. The likely reading
+— **RECONSTRUCTION**, not measured here — is that the reduction is not damage: GWW says
+Deep Wound *"doesn't do any permanent damage in itself"* and that its health loss *"will
+not take effect until it is triggered through gaining or losing health"*. A character who
+never drops below the reduced maximum never engages regeneration, so the rate never
+changes and nothing is sent. Settling it needs a character taking real damage under Deep
+Wound, which is a different run.
+
+### 8.5 Concurrency confirmed on a strafe, because the rings do not overlap
+
+F11 note 1 (operator, 156.7 s): *"can't do 2 at once, so I strafed between them over and
+over to keep retriggering, then left the rings until both conditions wore off."* The
+rings are disjoint, so `both` could not be executed as written — and the strafe answered
+the question anyway. From **150.7 to 163.6 s both conditions are live simultaneously**:
+2077 on buff **117**, 482 on buff **113**, peak concurrency 2. Distinct ids for two
+effects on one target, replicating §7.6. Ids are recycled across episodes — buff 117
+carried 482 at step 2 and 2077 at steps 3 and 4 — so an id identifies an *episode*, never
+a skill and never a target.
+
+### 8.6 On RETAIL, re-application inside the duration is silent — and that DIVERGES from our own server
+
+**About five strafe cycles produced exactly ONE apply of each condition.** The capture
+holds 6 applies and 6 removes total, all six accounted for by the six episodes; there is
+no extra traffic anywhere in step 4's window.
+
+Yet the effects plainly outlasted a single application: step 4's episodes were held
+**13.2 s and 13.5 s** against a stated duration of **10.0 s**, and step 2's ran **25.6 s**
+against the same 10.0. The timer was being extended while the operator was in range, and
+**ArenaNet sent nothing at all to say so.**
+
+That contradicts what this project's own effect substrate does.
+[studies/skills](../skills/FINDINGS.md) concluded from our implementation that a longer
+re-application *"extends as REMOVE-then-APPLY — the only replacement shape the client
+honours"*. Retail does not do that here: no remove/apply pair exists in the window, and
+the client kept rendering the condition regardless. **So our server emits wire traffic
+retail does not** for THIS source type, and the client evidently tolerates a
+silent extension. **SCOPE, added 2026-08-21 and it matters** — see
+[studies/skills §32.8](../skills/FINDINGS.md): every late closure in the vault is
+environmental (these torches and Students), and **no cast- or attack-applied
+effect has ever closed late** in 78 episodes over five skills. The Isle is a
+training area; this paragraph is about its props and must not be read as a claim
+about combat. Whether the
+client is tracking the timer itself or simply waiting for the `0x0044` is not settled by
+this capture.
+
+~~*Alternative reading, kept because it is not excluded:* the late `0x0044` might be a
+periodic server-side sweep rather than a refreshed timer, in which case the durations
+are honest and the close is merely coarse.~~
+
+**THE ALTERNATIVE READING IS NOW REFUTED, offline, from the captures already in hand
+(2026-08-21).** It said the late `0x0044` *"might be a periodic server-side sweep rather
+than a refreshed timer, in which case the durations are honest and the close is merely
+coarse."* Scored across both runs' effect connections, the twenty-two episodes carrying
+a duration split with **no overlap at all**:
+
+| close residual | n | states |
+|---|---|---|
+| within **±0.042 s** of `apply + duration` | **7** | all `expired` |
+| **late**, +1.25 s to +55.0 s | **15** | all `stripped` |
+
+**A sweep cannot land seven closes inside 42 milliseconds.** The exact seven span three
+different durations (10.0, 13.0, 30.0) and both captures, and they include skill 998 at
+30.0 s and skill 999 at 10.0 s — the same torch effects that run long in the other
+column. So the closing mechanism is precise, the stated durations are honest, and the
+long-held episodes really were being **extended while the operator stood in range, with
+nothing on the wire to say so.**
+
+The residual is then a measurement rather than an error: it is how long the operator
+remained in range after the first application. The torch that held longest, skill 483 at
+`+55.0` against a 5.0 s duration, is a fifty-five-second stand.
+
+**AND THE SCREEN HALF IS NOW ANSWERED TOO** — `--probe effect_silent_extend`,
+2026-08-21, [studies/skills §32](../skills/FINDINGS.md). Our client **owns the
+expiry**: the live icon goes at the stated duration with no packet, and the slot
+then holds a static, heavily faded GHOST of it until the removal lands. So a
+silent extension keeps the server's bookkeeping but not the player's view. Which
+raises the question this section cannot answer and one screenshot can: **for the
+15 late episodes above, was the operator looking at a live icon or a ghost?** The
+Disease that killed them outlasted its 10.0 s duration many times over.
+
+**ANSWERED 2026-08-21 without a live run** — [studies/skills §32.7](../skills/FINDINGS.md).
+Retail's Student `0x0042` and our probe's are field-for-field identical (same
+target slot, `field3 0`, same `10.0` f32, condition ids both sides), so the client
+cannot tell them apart; and the probe was re-run on a purpose-built **38849**
+loopback client — this capture's own build — giving results identical to three
+decimals. **A ghost.** The operator saw a live icon for the stated ~10 s and a
+faded, dead-looking one for the rest of each stay, while the condition kept
+costing health. Most of the Disease that killed them landed behind an expired
+icon. One retail frame 20 s into a ring would upgrade the last link from
+inference to observation; nothing else here needs it.
+
+## 9. Rung 8c, LIVE #5 — the rank ladder: the unmet penalty SCALES, and PINNED is dead (2026-08-21, capture `20260821T163511`)
+
+**Rung 7's one open defect is now half closed, and the half that closed is the one
+`FINDINGS` §9 called "the highest-value next measurement".** Four unmet ranks on one
+Temple trip, 235 property-16 events and 16 property-17, every block against **npc slot
+152 at (−5915, 2079)** — the same body rung 7 used, which is what makes r8 a control
+rather than a new measurement. Seals AGREE, `exe_unchanged: true`, `game_mode base`.
+
+### 9.1 The result, and the band test carried it
+
+The two readings under test, both anchored to rung 7's measured r8 = 5.067 so that
+neither got a free parameter the other did not: **SCALES** (the penalty is a divisor on
+the rank-appropriate damage, so damage still climbs with rank) against **PINNED** (the
+penalty fixes the strike level, so damage is identical at every unmet rank).
+
+| rank | n | band | mean | SCALES | err | PINNED | err |
+|---|---|---|---|---|---|---|---|
+| 5 | 58 | 3..5 | 3.864 | 3.91 | **−1.1%** | 5.07 | −23.7% |
+| 6 | 54 | 4..5 | 4.296 | 4.26 | **+0.8%** | 5.07 | −15.2% |
+| 7 | 58 | 4..5 | 4.637 | 4.65 | **−0.2%** | 5.07 | −8.5% |
+| 8 | 65 | 4..6 | 5.093 | 5.07 | **+0.5%** | 5.07 | +0.5% |
+
+**But the means are the weaker half. The distributions settle it outright**, and they do
+it with no fitted quantity at all:
+
+| rank | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|
+| 5 | **11** | 44 | 3 | 0 |
+| 6 | 0 | 38 | 16 | 0 |
+| 7 | 0 | 21 | 37 | 0 |
+| 8 | 0 | 14 | 31 | **20** |
+
+**PINNED predicts these four rows are the SAME row.** They are not, and the two ends
+each kill it independently:
+
+- **Rank 5 produced eleven 3s in 58 swings.** PINNED's floor is `15 × 0.27389 = 4.108`;
+  reaching 3 needs a roll below 12.78, under the weapon's stated minimum of 15. Not
+  improbable under PINNED — **impossible**.
+- **Rank 8 produced twenty 6s (30.8%); ranks 5, 6 and 7 produced none.** Under PINNED
+  the rate is the same at every rank, so rank 5's zero-from-58 has probability
+  `0.692^58 = 5.5 × 10⁻¹⁰`.
+
+*Label: OBSERVED.* **The unmet-weapon-requirement penalty SCALES with attribute rank.**
+
+### 9.2 The divisor: 10/3 is now excluded too
+
+Per block, `D = met(rank) / observed` with `met(rank) = 18.5 × 1.20 × 2^((5·rank−60)/40)`:
+
+| rank | met | observed | D |
+|---|---|---|---|
+| 5 | 12.1046 | 3.864 | 3.1327 |
+| 6 | 13.2002 | 4.296 | 3.0727 |
+| 7 | 14.3949 | 4.637 | 3.1045 |
+| 8 | 15.6978 | 5.093 | 3.0823 |
+
+**Mean D = 3.098, spread 3.073..3.133.** §2 had left the divisor in `(3.106, 3.394]`
+holding SL=40, and recorded that *"3 is excluded, 10/3 is not"*. **10/3 = 3.333 is now
+excluded as well** — it sits 6.4% above the highest of four independent per-block
+estimates whose own spread is 1.9%. 3 remains excluded, just outside the other end.
+
+**This does NOT name the mechanism**, and the distinction §2 drew still stands: a
+divisor of 3.098 on the rank-appropriate damage and some other pairing of divisor with
+strike-level drop can produce the same four numbers. What the ladder establishes is the
+**rank dependence**, not the parameterisation.
+
+### 9.3 The crit disjointness REPRODUCED — on a different day, and now at rank 5
+
+Read at H = 480, the four property-17 blocks are **6 / 7 / 8 / 8** points at ranks
+5/6/7/8, each with zero variance (n = 2/6/3/5), which is §4's single-valued-per-block
+law holding again. Against the range maximum each rank admits:
+
+| rank | crit | ordinary max | implied c |
+|---|---|---|---|
+| 5 | 6 | 4.646 | 1.2913 |
+| 6 | 7 | 5.067 | 1.3815 |
+| 7 | 8 | 5.526 | 1.4478 |
+| 8 | 8 | 6.026 | **1.3277** |
+
+Rung 7's met blocks require `c ≥ 1.40866`; its rank-8 block admitted
+`c ∈ [1.20530, 1.36600)`. **Rank 8 here lands at 1.3277 — inside rung 7's rank-8
+interval and outside the met-block one, reproducing the disjointness on a different day
+with a different attribute path to the same rank.** So §4's defect is not an artifact of
+that session.
+
+**It is reproduced, NOT pinned, and the reason is arithmetic rather than modesty.** The
+crits are integers between 6 and 8 at n = 2..6, so one rounding step is 6–8% of the
+value, and the implied `c` column spans 1.29..1.45 without any model changing. **No crit
+rule may be published off these four numbers.** What they do establish is that the
+anomaly survives replication, which is what §4 could not say.
+
+### 9.4 What this run could not do, and it is one cheap fix
+
+**Every block in this run is requirement-UNMET**, so the capture contains no internal
+met-requirement reference and `damagepass`'s own `divisor` field came back `None` — the
+ratio it fits needs a met block, and rung 7 supplied one only because r9 happened to sit
+beside r8. **The `met(rank)` column in §9.2 is therefore the FORMULA's**, validated
+across seven distinct (AR, rank) conditions in §2 but not re-measured here. One extra
+block at effective 13 on the same Suit, in the same connection, would make the divisor
+internally determined and cost about eighty seconds. It belongs in the next ladder.
+
+### 9.5 The draft error the recomputation caught, recorded because it nearly shipped
+
+The Leg C draft carried in `isle_rung8_effects.txt` stated the rank-6 SCALES band as
+**4..5**. Recomputing before sealing gave **3..5**: the low end is `15 × 0.230299 =
+3.455`, which rounds to 3. An observed 3 at rank 6 would have read as a refutation of
+*both* models when it is ordinary SCALES.
+
+The same pass showed **rank 6's low end discriminates nothing anyway** — 3.455 against
+the 3.5 boundary is a 1.3% margin, the same trap §2 named when a rank-11 block *"passed
+on luck"* at 0.037%. So the sealed plan carried an explicit **do not score a rank-6
+three**, and rank 6 in fact produced none. The step that mattered was rank 5, where both
+directions are decisive by 14.8% and 15.5%, and that is where the eleven 3s landed.
+**Predictions recomputed rather than copied is what turned a leg with one usable block
+into one with a decisive block and three corroborating ones.**

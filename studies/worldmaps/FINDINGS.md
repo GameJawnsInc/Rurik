@@ -4,12 +4,16 @@ The arc: retire the two constraints that keep authored areas one-at-a-time and
 small — the uncompressed install (every authored map had to be SMALLER than
 what ArenaNet compressed into its row) and the displacement mechanism (every
 authored area overwrites a live retail map's rows, currently 71496/71497 via
-map 143). Four rungs; the even ones are owner-driven client launches with
-predictions registered first, A9/A10 style.
+map 143). W1-W4 did that and are landed, the even ones client-proven; W5-W7
+carry it forward into the authoring LOOP (headroom, scale, and a walked
+region). Client launches are staged A9/A10 style with predictions registered
+first. W8-W9 are the arc's first PROBE rungs -- authored maps used as an
+instrument to ask the client questions rather than to deliver content -- and
+their subject is WORLDMAPS-W7's depth cut.
 
 **Identifiers.** `WORLDMAPS-W<n>` = rungs of this arc's ladder, defined in this
 document. Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md);
-never bare `W1`–`W4`, which collide with `studies/profession` among others.
+never bare `W1`–`W9`, which collide with `studies/profession` among others.
 
 Labels per [studies/character/FINDINGS.md](../character/FINDINGS.md).
 
@@ -151,3 +155,549 @@ have to take rows 71496/71497 hostage. Still unestablished, per the sheet:
 survival across a client patch, more than one created map per archive (the
 C2-lineage MFT slack is exactly one chain), a second created chain in one
 session.
+
+## WORLDMAPS-W5 — headroom: an area declares its own budget. LANDED 2026-08-20
+
+**OBSERVED (offline, this tree).** The gap W1 recorded and W4 inherited: a
+compressed install SHRINKS the row, and a created partner is sized to its exact
+payload — `datalloc.Stream` has no reservation parameter and `_place` computes
+`blocks_for(len(data))` — so the *second, larger* install of any area, created or
+displaced, relocated. `datwrite.replace(grow_to=)` was the flag for it and had
+exactly one caller (`restore()`), because `grow_to` needs a "what this row was
+GIVEN" number and **a row's true reservation is recorded nowhere**
+(`datwrite.py:875-880`: "the bound therefore has to come from GEOMETRY").
+
+**The answer is that the AREA states it.** `content/areas.toml` rows carry an
+optional `reserve_bytes` — an authoring budget with provenance, not an inference
+— `datalloc.Stream(reserve=)` honours it in placement block-sizing ONLY (size,
+crc, `expect` and every existing gate stay bound to the real payload), and
+`deploy.install_partner` spends it: a stream past the row's current reservation
+but inside the declared budget now GROWS BACK IN PLACE instead of relocating.
+Measured: a created chain given a 2,048 B budget takes a 1,952 B second install
+at the same offset, where the same install with no budget relocates. Before this
+rung that arm did not exist.
+
+**Two things the skeptic corrected, and both are the interesting half:**
+
+1. **The grow arm is scoped to a row WE created.** The first build gated only on
+   the budget, so an area declaring `reserve_bytes` beside a DISPLACED retail row
+   would have grown ArenaNet's row into blocks it never gave us. Now
+   `install_partner(..., created=)` requires both, the preview mirrors the same
+   gate so it cannot promise a verb the install will not pick, and the relocate
+   line says why: *"this row was not created by us, so what it was given is
+   ArenaNet's statement and not ours."* The control is one field apart and takes
+   the opposite verb.
+2. **A check that asserted only "it raised, and nothing was written" could not
+   fail for its own reason.** `datmove` independently refuses the same lie and
+   re-raises the same sentence with the archive byte-identical, so a fallback
+   recogniser that misclassified a declaration fault as a claimant conflict
+   stayed invisible — MEASURED by breaking it: the run printed "THE GROW GATE
+   REFUSED: <a temp-file path>" and relocated around a bad declaration while the
+   suite stayed green. The check that catches it is the NEGATIVE on what the run
+   SAID it was doing.
+
+Also fixed at the root: a raw `datalloc.Refused` escaped `create_chain` past
+deploy's own handler (exit 1 with a stack instead of exit 2 with a remedy), and
+`int(area.get("reserve_bytes", 0) or 0)` silently truncated `2048.5` and let
+`-512` through — `area_reserve()` now refuses a non-int, a bool and a negative,
+naming the file to edit. Floors: `test_deploy` 112→167, `test_datalloc`
+177→203. Four sabotages driven by hand, each red on the guard it names.
+
+**Still open, deliberately:** `grow_gate_refusal` joins on datwrite's MESSAGE
+TEXT (four markers) and fails SAFE if datwrite rewords — a typed refusal out of
+`_grow_gate` is the strong fix and belongs with the residuals pass, since it
+touches datwrite, which this rung was told not to.
+
+## WORLDMAPS-W6 — the scale ladder, measured. LANDED 2026-08-20
+
+**OBSERVED (offline, real runs against `vault/run/2026-07-29_221c13772c7a-c2`,
+generator `plaza`, donors by file id 0x1B97D→row 7982 and 0x22E2C→row 46196).**
+`toolkit/mapdata/mapscale.py` walks a ladder of dims through deploy's own
+pipeline and reports what each costs, because the corpus stopped at 96×96 and
+`install_bytes`' docstring explicitly refuses to extrapolate its three points:
+
+| dim | cells | authored | comp-8 | % stored | blocks |
+|---|---|---|---|---|---|
+| 32×32 | 1,024 | 3,822 B | 1,256 B | 32.9% | 3 |
+| 64×64 | 4,096 | 10,535 B | 1,956 B | 18.6% | 4 |
+| 96×96 | 9,216 | 21,667 B | 2,768 B | 12.8% | 6 |
+| 128×128 | 16,384 | 37,026 B | 3,572 B | 9.6% | 7 |
+| 192×192 | 36,864 | 80,916 B | 4,232 B | 5.2% | 9 |
+| 256×256 | 65,536 | 142,195 B | 4,820 B | 3.4% | 10 |
+
+All six round-trip **100% of samples exactly**; assemble+compress at 256×256 is
+0.28 s. **Authored maps compress BETTER the bigger they get** — 64× the cells
+costs 37× the stored bytes and only 3.8× the compressed stream, because only
+terrain tag 1 is entropy-coded and everything a generator emits around it is
+repetitive raw bytes.
+
+**The result that matters is which budget binds: not bytes, ROWS.** A 256×256
+partner is ten blocks against a largest usable run of 953,856 B on that copy —
+the byte budget is not close to binding at any dim on this ladder. MFT slack is:
+the 38797/c2 line has 48 B = 2 rows = exactly **one** more created map; the
+38833 copy has 424 B = 17 rows = **eight**. Any multi-area work belongs on the
+38833 line; single-region work can stay on the proven 38797 one.
+
+Two guards the skeptic added are worth naming because they are the same defect
+class this repo keeps meeting: a `Capacity` restored from a JSON report
+manufactured a FALSE placement answer ("no usable run is big enough" for a
+stream its own summary said fits by 197×) and now refuses as un-measured, and
+`Rung.from_dict` accepted MISSING fields so an empty record claimed a perfect
+round trip (`None == None`). Floor 62 (66 under `--big`), 1 declared skip.
+
+**Open, and NOT chosen between two readings:** `dat_study_38833`'s largest
+usable run measures 2,892,800 B — *unchanged* after the 2026-08-17
+extent-projection fix that `studies/archivewrite` §1.5 says should have withheld
+it. Either the fix does not reach that run (a live gap) or §1.5's diagnosis
+needs amending. Re-measured read-only 2026-08-20; recorded, not resolved.
+
+## The W3 residual guards, closed. LANDED 2026-08-20
+
+**OBSERVED (offline).** All five residuals W3 recorded, plus the typed refusal
+W5 deferred:
+
+- **R1** the born-armed guard (deploy.py reads the ARCHIVE's own `head.size == 0`
+  rather than trusting `create`) was live but untested — now tested both ways.
+- **R2** `created = true` beside an id that BINDS could silently return to
+  displacing a retail map, because `map_chain` checks shape only. The install
+  now requires evidence the chain is OURS. **The skeptic caught the first
+  design binding that evidence to the archive's PATH**, which refused an honest
+  re-deploy of our own chain on a copy — so it binds to the archive's own BYTES
+  instead: the `<II`(file_id, head_row) file-id record at the offset the alloc
+  journal recorded, which survives a whole-file copy, a rename and a partner
+  relocation. That is the cage's lesson (`dhbuild` reads the bytes, never the
+  filename) applied on the archive axis. The refusal now names the recoverable
+  state first — copy the journal next to the archive — with "allocate under a
+  fresh id" as the last resort it actually is.
+- **R3** deploy's create path bypassed the refusal datalloc's CLI documents as
+  "the only way back from an allocation" and could truncate an existing
+  `<area>_alloc.json`; it refuses now, before the spill.
+- **R4** contentids decided the created-row skip from the client table alone,
+  before the server side was consulted, so a real divergence read as a benign
+  pre-creation state. It consults both now.
+- **R5** three of `map_chain`'s five refusals had no fixture; one each.
+- **R6** `_grow_gate` gained a TYPED refusal so deploy no longer joins on
+  datwrite's message text (the text markers stay as a documented fallback, and
+  datwrite's messages and behaviour are byte-identical for every existing
+  caller).
+
+**And a mutation sweep found what review argued about**: three of the four
+structural conjuncts `allocation_recorded` documents were exercised by nothing —
+drop any one and the suite stayed green. One bent-journal fixture each (head
+flags 259→3, nextStream 17→18, partner flags 1→3) plus a CONTROL that rewriting
+a field to the value it already held is still evidence. Post-fix the sweep reads
+1+ red per conjunct, 0 for the control.
+
+**One regression this pass introduced and the orchestrator caught at
+integration, worth recording because the near-miss is the lesson**: a new
+"the check produced findings at all" assertion in `test_contentids` turned a
+DOCUMENTED environmental state — another session's client holding a 4 GB copy
+open, which the W4 sheet names — into a red suite, where the same file had
+skipped and stayed green before. It was nearly waved off as that known flake;
+the control that refuted the excuse was running HEAD's own version against the
+same locked archive and watching it pass. The guard now skips when nothing
+could be READ and still goes red when an archive was read and measured nothing
+— verified by driving the readable-but-empty case, which stays red. Floors:
+`test_deploy` 167→203, `test_datwrite` 212, `test_contentids` 29.
+
+## WORLDMAPS-W7 — the region walked. RAN GREEN 2026-08-21
+
+**OBSERVED (retail client, build 38797, one map, one launch cycle —
+agent-driven on the owner's go-ahead, mechanical readouts).** The client
+compiled a **256×256** authored map — 65,536 cells, 16× the largest it had ever
+compiled for this project under compression and a created chain together — from
+a two-row chain born under `0x5F0B1`, an id nothing had ever bound. It logged
+`Perf: Map file '0x05f0b1' failed to load.  Attempting to re-bloat.`, built a
+mesh of 60 trapezoids, wrote the head back at **13,584 B** (decoding to 467,132
+B of Bloated map — more than twice the largest head it has ever written for us),
+left the 4,912 B compressed partner byte-untouched, and kept the registration
+through its own Flush. Readback 6/6 including the spawn-in-exactly-one-trapezoid
+check `[map.165]` recorded as owed; the server's own independent load named the
+same 60 (`SERVED-UNPOPULATED` — the third verdict added the same day, because
+the area deliberately carries no spawn rows). The diff names only our two added
+rows plus the client's own scratch rows 8315/8316 relocating, nothing
+UNCLASSIFIED, and `--assert-safe` clears 10/10 with 177,329 payload CRCs.
+
+**The sharpest result is a prediction that could have failed.** While the sheet
+was being written, the client's own 64×64 mesh was measured and revealed a
+**depth cut**: ground at or below a threshold bracketed in (43, 47] stored units
+is absent from the compiled navmesh — 0 of 1,003 cells at +47 and deeper against
+63.6% at +43. Because `gen_plaza`'s dip descends 4 units per cell without limit,
+that predicted roughly HALF a 256×256 rect would be missing: **50.55% surviving,
+cut at Chebyshev ring 20**. **Measured: 50.54%** (33,120 of 65,536 quad centres
+inside the mesh), the mesh beginning at x = 10,464 — grid column 109, ring 20,
+exactly where the model put it. A model built at one size predicted the
+next-but-two to one part in ten thousand. Registering the naive "coverage holds
+at ~88%" would have scored a correct run as a catastrophic scale failure; "the
+boundary does not move" is the form of the claim that cannot be satisfied by
+accident.
+
+Note the trapezoid COUNT barely moves with size — 55 / 64 / 60 at 32 / 64 / 256
+— which follows from the coverage result rather than contradicting it: half the
+rect is outside the mesh and what remains is dead-flat apron decomposing into a
+few very large trapezoids. Judging on the count alone would have read 60 as a
+regression against the 64×64 map's 64, which is exactly the trap
+`studies/customarea` FINDINGS 38 records.
+
+Full scoring of P1–P10, and the one procedural deviation — step 2 ran as a
+single invocation, so `rebloat.verify` had no before-image and P5 was scored
+from the bytes instead (the head's recorded before-state is size 0, born armed;
+its after-state decodes as a map with trapezoids, which is `classify`'s own
+definition of REBUILT) — are in
+`vault/research/worldmaps/WORLDMAPS-W7-RUN.md` §RESULTS. The throwaway was
+delta-captured (17 spans, **46,033 B** for 4.2 GB, PROVEN byte-identical) and
+deleted.
+
+**Still open, and stated rather than implied**: anything above 256×256 (the
+format allows 16,777,216 cells; this run used 65,536); a created row given MORE
+blocks than it holds (W5's `reserve_bytes`, deliberately not spent here so a red
+result could not be ambiguous between the size and the tail); two created maps
+in one archive (the 38797 lineage has rows for exactly one — the 38833 line is
+where that ladder belongs); and the depth cut's MECHANISM, which has three
+readings — the borrowed environment's water plane, a compiler depth bound, the
+borrowed Zones chunk — and one cheap disambiguating run: the same 64×64 map
+with `environment = false`.
+
+## WORLDMAPS-W8 — what cuts the deep ground out? NOT the water. 2026-08-21
+
+**OBSERVED (retail client, build 38797, two arms one field apart —
+agent-driven).** WORLDMAPS-W7 left the depth cut's mechanism UNVERIFIED with
+three readings. This run kills the leading one.
+
+Two arms on the `-probe` copy, both displacing map 143's rows, differing only in
+`environment`: **the compiled meshes are identical to the cell** — 64
+trapezoids, 7,660 B path chunk, mesh x 1248..6144, 2,582/4,096 = 63.04%
+coverage, leftmost column 13, in BOTH. **The borrowed Pre-Searing environment
+chunk does not carry the cut.**
+
+**The null is not vacuous, and that is the part worth reading.** Two controls
+make it readable: the treatment was verified at the bytes — the installed
+partner carries no `0x10000009` and no `0x11000009` while `SOUND` and its deps
+are present, decoding to 9,994 B against `sculpt`'s **10,714 B**, a 720 B
+difference closing to the byte as 639 (ENV) + 65 (ENV_DEPS) + two 8-byte chunk
+headers — and the instrument was shown
+to DETECT the cut, because arm A reproduces W7's recorded witness (cut at column
+13, 63.04% against 62.99% under a slightly wider sample). A null measured with
+an instrument that cannot see the effect, or with a treatment that never
+happened, is the failure shape this repo keeps meeting; both are closed here.
+
+Also settled in passing: **a map with no environment chunk compiles and serves
+normally** — `stripbuild`'s OPTIONAL table is correct at the client, no assert.
+(The re-bloat LOG line survives for arm B only: each launch overwrites `Gw.log`,
+so arm B's client clobbered arm A's. Arm A's recompile is proved from the bytes
+instead. Third time this defect has cost evidence — bank the log per arm.)
+
+**The evidence got STRONGER under attack**, and two of my own claims were wrong.
+An adversarial pass returned *stands* and recovered what the run had not:
+**the compiled navmeshes are BYTE-IDENTICAL**, not merely equal on three
+statistics — `shoals_rebloat.json`'s journal preserves the exact 6,144 B arm B
+overwrote, which is arm A's compiled head, and all ten shared chunks match byte
+for byte (path chunk 7,660 B, sha256 `dfa1a5cc…` in both) with the only
+difference in either direction being arm A's ENV pair, 41,432 − 40,712 = 720
+exactly. **The fallback hypothesis dies at the output side too**: arm B's
+COMPILED head carries no `0x20000009` either, so no donor, global or cached
+environment was available — and `deploy.readback` could not have caught that,
+because `deploy.py:1512-1518` SKIPS the environment assertion when the staged
+map has none, a check that cannot fire. (**CLOSED 2026-08-21.** That loop
+INVERTS now rather than skipping: an optional chunk the staged map omits gets a
+row asserting the compiled map carries none either, printed in the same verdict
+block as every other row — so the fact this run recovered by hand out of the
+allocation journal is asserted on every future run instead. `test_deploy.py`
+§11 drives it present, absent and sabotaged, the sabotage being a compiled map
+that DOES carry the chunk we omitted; against the old loop that arm returned
+`bad == []`, indistinguishable from the honest absence recorded above. Floor
+203 → 213, and reverting the fix reddens 8 of §11's 10 checks.) **And the
+client's compiler is deterministic**, shown accidentally: the head before arm A and the head arm A
+produced are byte-identical (`78c0174e…`), which is what licenses reading
+identical output as "the input did not matter". Two corrections to my own
+write-up: `sculpt`'s partner is 10,714 B, not the 10,535 B I lifted from W6's
+modelled ladder (a different corpus, no donor constants — the arithmetic did not
+close), and "re-bloat line present in both arms" had no surviving artifact for
+arm A, because each launch overwrites `Gw.log`.
+
+**What survives**: a depth bound in the compiler itself, or the borrowed 34-byte
+Zones chunk. The Zones reading is the cheaper next test and nothing has ever
+varied it — every authored area in this project carries the same 32x32
+template's copy. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W8-RUN.md` §RESULTS.
+
+## WORLDMAPS-W9 — the Zones swap is IMPOSSIBLE, and that is the finding. 2026-08-21
+
+**OBSERVED (retail client, build 38797, two arms).** The last cheap reading for
+WORLDMAPS-W7's depth cut was the borrowed 34-byte Zones chunk — the one thing no
+authored area had ever varied. It cannot be varied by a donor swap: **a foreign
+zone table breaks the client's map compiler.**
+
+Measured first, so the swap would have been a clean single variable: across all
+349 map heads the HEADER chunk has **one** distinct payload archive-wide
+(`2411873903000000`, 349/349) while ZONES has **308** — so `constants_file_id`
+selects the Zones chunk alone. Ours is the minimal 34-byte form, shared by 25
+maps; real maps carry zone material definitions with `.ini` paths and float
+arrays up to 15,870 B.
+
+Both arms died inside the re-bloat compile — `Gw.log`'s last line in each is
+`Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.`, with the
+server already through `INSTANCE_LOAD_FINISH`:
+
+| arm | Zones | outcome |
+|---|---|---|
+| Coastal Gate (466× ours) | 15,870 B | **CRASH**, `c0000005`, write to `0x1acff000` |
+| Sparring Basics (60× ours) | 2,030 B | **HANG** at Loading 100%, 98% of a core, 1.19 GB flat |
+
+**What it establishes.** The compile path CONSUMES the Zones chunk — which
+beside WORLDMAPS-W8 is a sharp contrast: deleting the environment chunk changed
+the compiled mesh not by one byte, while swapping the zone table kills the
+compiler. And a zone table is COUPLED to its map: two foreign ones from opposite
+ends of the size range, both fatal. **The coupling is not identified.**
+
+**What it does not establish**: anything about the depth cut, since no mesh was
+produced. And it REFUTED a piece of the design's own reasoning — I registered
+that richer-than-referenced was the safe direction; both arms went richer and
+both were fatal.
+
+**Where this leaves the depth cut.** A donor swap is exhausted as a method. The
+next rung must author a MODIFIED version of our own 34-byte table (vary one
+field, keep the shape), which needs that layout read first — nothing in this
+repo has done it. Reading 2, a depth bound in the compiler itself, is now the
+only reading no experiment has contradicted.
+
+**The archive survived both**: `--assert-safe` green after each, 10 of 10 rules,
+177,318 payload CRCs. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W9-RUN.md` §RESULTS.
+
+## WORLDMAPS-W11 — the lever works, and the bound is a WATER LINE. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one variable against a control measured
+twice on the same copy).** `map_flags = 1` on the area row — bit 0 of the Map
+Parameters flags dword, top byte untouched — and the excluded ground came back:
+
+| | control (flags 0) | treatment (flags 1) |
+|---|---|---|
+| trapezoids | 64 | **99** |
+| mesh x | 1248 .. 6144 | **0 .. 6144** |
+| coverage | 2,582/4,096 = 63.04% | **3,820/4,096 = 93.26%** |
+
+**WORLDMAPS-W10's static chain is confirmed at the client**: the 40.0 constant
+at `0x0094DE30`, the all-three-corners test at `0x0072D3ED`, the gate at
+`0x0072D3C6`, and the identification of state+0x10 as the flags dword. And the
+rule predicts the boundary TO THE COLUMN — column 12's quad has corners 47 and
+43 (both past 40, excluded), column 13's has 43 and 39 (one shallower, kept),
+and 13 is exactly where the control mesh started.
+
+**WHAT THE NUMBER IS.** Watching the run, the owner reported: *"i was floating
+over the water there instead of standing ankle-deep in it like usual."*
+**40.0 is a WATER LINE.** Values increase downward in these maps (the apron at
+-13 is dry, the dip descends to +229), so "all three corners >= 40.0" means "this
+triangle is more than 40 units under water". The shallows are walkable — which
+is why the mesh stopped at the last quad with a corner above the line — and with
+bit 0 set the submerged floor is meshed too.
+
+**This vindicates W8's intuition while leaving its refutation intact, and the
+distinction is the point.** W8 proved the borrowed environment chunk does not
+carry the cut (byte-identical meshes with it deleted). True, and the water
+reading was still right about WHAT: the water line is a **compiler constant**,
+not map content. The env chunk renders water; `0x0094DE30` decides what water
+does to the navmesh. No experiment varying map CONTENT could have found it —
+which is also why W9's Zones swap was doomed.
+
+**What it gives the project**: authored maps can now have walkable underwater
+terrain — lake beds, sunken ruins, a canyon floor below the waterline — via one
+content field. And it retires a silent tax: every authored map built here has
+been losing its deep ground to a rule nobody knew existed.
+
+**APPLIED to the deliverable areas, 2026-08-21.** , , 
+and  now carry , recovering 43.4%, 34.4%, 34.4% and
+**49.3%** of their cells respectively -- every map this project ships had been
+losing that ground silently. Two rows deliberately do NOT: , because
+gen_plaza(32) tops out 31 units down and the rule needs 40, so the flag is a
+no-op there AND it is WORLDMAPS-W2's byte-identity control; and the probe rows
+//, which exist to reproduce specific measurements
+(including two that crash the client) and would stop documenting them if
+changed.  is marked SUPERSEDED --  now carries the same shape.
+**Every mesh measurement recorded in this document for those four areas was
+taken at flags 0** and each row says so beside its own field; re-running them
+now will not reproduce those numbers, by design.
+
+**Scope**: one map, one shape, one build, one launch. What bit 0 does BESIDES
+ungating this rule is unmeasured. The 276 cells still outside the mesh are
+attributed to slope by their scatter across all 64 columns, not by a separate
+measurement. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W11-RUN.md` §RESULTS.
+
+## WORLDMAPS-W12 — the flag holds on all four deliverable areas. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four installs, four launches, `harness
+rc 0` and every readback row green on each).** WORLDMAPS-W11 measured bit 0 of
+the Map Parameters flags on ONE probe row; the four deliverable areas were then
+flagged on the strength of it and had not been near a client since. They have
+now:
+
+| area | dims | traps flags 0 -> now | coverage now |
+|---|---|---|---|
+| sculpt | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| frontier | 64 | 64 -> **99** | 3,820/4,096 = **93.26%** |
+| vale | 96 | 88 -> **156** | 8,750/9,216 = **94.94%** |
+| expanse | 256 | 60 -> **98** | 65,070/65,536 = **99.29%** |
+
+The flags dword reads `0x00000001` off all four compiled heads with the rect
+intact. **Every authored area this project ships now reaches its own map edge.**
+
+**Two results carry no free parameter.** `sculpt` assembles sha256-identical to
+W11's treatment arm (checked before the run), so its 99 trapezoids and 3,820
+cells are a REPRODUCTION of W11 on a different day — W11 independently
+re-confirmed. And `frontier` produced the same 99 trapezoids, the same 10,988 B
+path chunk and the same 3,820 cells from a **created chain** (`0x5F0B0`, a file
+id ArenaNet never shipped) rather than a displaced retail row: the created-chain
+path costs the mesh nothing.
+
+**One registered prediction FAILED, and the failure was in how it was stated.**
+Expanse was predicted at 96–99% and measured 99.29%. The underlying model was
+wrong by −280 cells (−0.43 pt), comfortably inside the ±3 points it was
+registered with; the band was written by CLIPPING the upper edge at 99%, because
+98.86 + 3 is not a coverage figure, and the clip made it −2.86/+0.14 rather than
+±3. The clip is what failed. Across all four maps the model held to ±3, and
+**its sign flips with size** — over-predicting at 64 and 96, under-predicting at
+256 — which is the shape the two omissions declared beforehand would produce
+(ignoring flood reachability over-predicts; scoring by quad centre while the
+client emits cell-SPANNING trapezoids under-predicts, and at 256×256 the client
+covered 65,536 cells with 98 trapezoids). That attribution is a READING; nothing
+in this run separates the two terms.
+
+**Scope.** What bit 0 does BESIDES ungating the depth rule is still unmeasured.
+The server did not path against any of these meshes (`--serve` not passed), so
+the recovered ground is IN the mesh and has not been walked. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W12-RUN.md` §RESULTS.
+
+## WORLDMAPS-W13/W14 — the recovered ground is stood on, and bit 0 touches exactly one chunk. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four arms one field apart, six launches,
+same client and archive in one session).**
+
+**W13 — the ground.** A seed placed at (528, 528), eight columns inside the
+region the water rule excludes, on the same 64×64 shape:
+
+| arm | flags | outcome |
+|---|---|---|
+| `sculpt_deep0` | 0 | **the client CRASHED compiling it** |
+| `sculpt_deep1` | 1 | compiled clean; **the spawn lands in exactly one trapezoid** |
+
+The crash is `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
+dest[-2].pos)` at `PathFlood.cpp(681)` — **the same source file as W10's depth
+classifier**. It is a degenerate-vertex guard, and read with FINDINGS 34's flood
+(which starts from the seed) it says the flood began where no valid triangle
+exists and emitted a degenerate path. **One bit is the difference between a
+crash and a walkable spawn.** I registered this arm as failing `readback`'s
+spawn assertion; it never got that far, so the prediction is CONFIRMED on its
+discriminating claim and WRONG on its predicted failure mode.
+
+**The server read it, for the first time.** A second, unarmed run pre-warmed the
+map: `[map] navmesh 0x287D3: 1 planes, 99 trapezoids`, matching what `pathmap`
+reads from the same bytes — two independent readers — and the first run in this
+arc without `collision is OFF`. Every W12 run had served no mesh at all, which
+is structural: `--install` arms the head, so the run that PRODUCES a mesh can
+never serve it.
+
+**A same-session flags-0 twin was compiled for the first time** and reproduced
+every figure held for this shape (64 trapezoids, 7,660 B, 2,582/4,096 = 63.04%,
+column 13). **W12's deltas were not measured against a moving baseline.**
+
+**W14 — the bound.** Two compiled heads, same shape, one bit apart, compared by
+a raw slice walk over the wire format:
+
+**Exactly two of twelve chunks differ — Map Parameters (`0x2000000C`, at one
+byte, offset +21) and Path (`0x20000008`, 7,660 → 10,988 B).** Everything else
+is byte-identical, including **Zones** (42 B), which was the chunk to watch as a
+flags-reading branch whose output reaches our artifact. **Terrain is
+byte-identical at 28,503 B**, which is the determinism control that licenses
+reading the rest: had it moved, the diff would have been void rather than
+positive.
+
+**Within the compiled artifact, bit 0 changes the Path chunk and nothing else.**
+
+**Scope, and one piece of it is permanent.** Our compiled heads carry 12 chunks;
+retail Kamadan carries 24. We emit **no Sight, Shore, Water, VisData or
+Collision chunk in either arm**, so no differential over our artifacts can ever
+see those branches — a property of what we author, not of the flag. Runtime
+effects that are not persisted are likewise invisible here. Traversal onto the
+ground from dry land was not tested. The server cannot see the bit at all
+(`map_flags`: zero occurrences under `toolkit/authsrv/`). Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W13-RUN.md` §RESULTS.
+
+## WORLDMAPS-W15 — authored population stands on the recovered ground. 2026-08-21
+
+**OBSERVED (retail client + our server, build 38797; two arms one bit apart,
+same session, same archive).** WORLDMAPS-W12 put the submerged floor into the
+navmesh and W13 stood the player's own spawn on it. Placing a **body** is a
+separate gate with its own code — `authsrv.place_on_mesh` re-checks every spawn
+and refuses one it cannot find ground for — and every placement this project had
+made until now stood on ground the client would have meshed either way.
+
+| | `sculpt` (flags 1) | `sculpt_flags0` (flags 0) |
+|---|---|---|
+| bodies placed | **6 of 6** | **3 of 6** |
+| refusals | 0 | **3, exactly the deep trio** |
+| mesh served | 99 traps (matches archive) | 64 traps (matches archive) |
+
+The three deep bodies placed at **exactly** the coordinates asked for — (56,
+6006), (380, 652), (44, 2764) — with no `MOVED` annotation. The same three
+coordinates on the flags-0 arm were each refused with *"not on the navmesh and
+nothing within 480 units is either"*. Their offline margins to the nearest
+flags-0 ground were 1,207 / 1,053 / 1,765 units against a 480-unit search, so no
+nudge could have rescued them.
+
+**The within-arm control is what makes this a result rather than an
+observation.** Three shallow rows placed in BOTH arms at the same coordinates,
+including an identical 96-unit nudge on `farside` — so arm 2 was not broken, and
+the placement search behaves the same either side of the flag. That control had
+authority to void the finding and none to confirm it.
+
+**This is also the first populated `--serve` in the arc**, and the first time
+`serve_run`'s population half — which cross-checks the server's count against
+our own content reader — has run against a flags-1 mesh. Arm 2's SERVE_FAILED
+was registered as the predicted outcome before the run, since `serve_run` marks
+`placed != total` as NOT ALL.
+
+**Scope.** Placement is not pathing: nothing here shows a player can WALK onto
+that ground, which is still W13's open residual. No encounter was driven, and
+whether a body standing in deep water looks right is a visual verdict for the
+owner. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W15-RUN.md` §RESULTS.
+
+## WORLDMAPS-W16 — the recovered ground is WALKED, and without the bit the client stops to the unit. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms, identical walk plan, same
+session).** W12 put the submerged floor in the mesh, W13 stood the spawn on it,
+W15 placed bodies on it. None of those is traversal: a walking character is
+stopped by the client's own collision against the mesh it compiled.
+
+| | min x reached | vs the flags-0 wall at 1248 |
+|---|---|---|
+| `walkedge1` (flags 1) | **0** | crossed by 1,248 u |
+| `walkedge0` (flags 0) | **1248** | **stopped exactly at it** |
+
+Both started at (1536, 1536) and got the same plan — `yaw:2246 wait:1 W:14
+wait:2`, a 180° about-face then one 14-second leg — so no camera calibration
+enters the comparison. The flags-1 character walked **1,536 units to x = 0**,
+the far edge of the rect. The flags-0 character walked 288 units and halted at
+**x = 1248.0**, which is where our offline decode of the client's own compiled
+mesh says the ground ends. **A no-free-parameter prediction landing on the
+unit**: the client's collision and our decoder agree about where the world
+stops.
+
+**The instrument needed a correction and the first run was not a null.** An
+initial four-leg sweep gave min x = 1372, which looks like a failure to cross.
+The trace says otherwise: leg 1 went EAST (so `W` is +x from the default
+camera), and the best westward leg stopped after ~1,728 units, which is exactly
+`6 s x 288 u/s` — the leg's duration, not the ground. Scoring that as a negative
+would have been a false null manufactured by the rig, and only reading the trace
+rather than the summary caught it.
+
+**Found in passing**: an area's `seed_x`/`seed_y` is not where the player
+arrives. The seed drives the compile flood and `readback`'s spawn assertion; the
+player is placed at the MAP row's `spawn_x`/`spawn_y` unless `--area` is passed.
+
+**Scope.** Walkability, not immersion — the W10/W11 rule is a navmesh rule, and
+nothing here measures swimming, drowning or how any of it looks, which is a
+visual verdict for the owner. One start line, one heading, and the walk was
+one-way. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W16-RUN.md` §RESULTS.

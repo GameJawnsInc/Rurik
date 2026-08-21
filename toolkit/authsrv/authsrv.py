@@ -57,6 +57,8 @@ import questdefs  # noqa: E402
 import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 import effects  # noqa: E402
+import pools  # noqa: E402
+import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -684,6 +686,23 @@ def _send_markers(send, state, why=""):
             send(GAME_SMSG_AGENT_GENERIC_VALUE,
                  [PROP_QUEST_MARKER, agent, value],
                  f"QUEST_MARKER(agent {agent}) = {value}{why}")
+
+
+def _u32(x):
+    """A SIGNED integer as the dword the codec will put on the wire.
+
+    The schema types these fields `dword` and the codec packs them `<I`, which
+    refuses a negative outright rather than wrapping it -- so a message whose
+    field is genuinely signed needs the two's-complement done here. Exactly one
+    thing is signed today: `0x00EE`'s morale delta, which is -15 on a death and
+    was read off ArenaNet's wire as `0xFFFFFFF1`.
+
+    The mirror of `_f32_of`'s trap, from the send side: the wire has no idea
+    which of its dwords are signed, and `struct.error` is the friendly failure
+    here -- the unfriendly one is a caller who masks by hand somewhere else and
+    gets it right by luck.
+    """
+    return int(x) & 0xFFFFFFFF
 
 
 def _f32(x):
@@ -1597,6 +1616,17 @@ GAME_SMSG_TITLE_TRACK_INFO = 0x00F6
 # purpose: a global assigned only inside main()'s flag block is the exact
 # NameError shape that broke every instance load on 2026-08-16.
 PERSIST = False
+# Force death-penalty acquisition on regardless of what the map says. OFF by
+# default and module-level for the same reason PERSIST is: a global assigned only
+# inside main()'s flag block is the NameError that broke every instance load on
+# 2026-08-16.
+#
+# WHY A FLAG AT ALL. Every map this server ships is pre-Searing, where retail
+# charges nothing for a death (GWW, "Death Penalty", Exceptions), so a faithful
+# world can never exercise the mechanic -- and an implementation nothing can run
+# is an implementation nobody has watched. This is the `--explorable` idiom:
+# a switch that makes a gated thing testable, rather than a lie in the content.
+DEATH_PENALTY_FORCED = False
 PLAYER_ATTR_COUNT = 15
 PLAYER_ATTR_XP = 0
 PLAYER_ATTR_LEVEL = 9
@@ -2136,6 +2166,27 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+
+# THE SAME OPCODE, the other attribute. `0x00EE` is `[attr_id, delta]` over the
+# 15 player attributes, so the kill reward above (attr 0, experience) and the
+# death penalty below (attr 10, morale) are one message with two jobs. Named
+# twice on purpose: a reader who greps for the penalty should not have to know
+# that it rides the reward's constant.
+GAME_SMSG_PLAYER_ATTR_UPDATE = 0x00EE
+PLAYER_ATTR_MORALE_ID = 10
+
+# Morale, per AGENT and absolute, where `0x00EE` is per PLAYER and a delta.
+# OBSERVED 2026-08-20 over the whole live corpus (`toolkit/authsrv/moralescan.py`):
+# 83 sightings across 43 connections, 82 of them the neutral 100, and the single
+# 85 lands on the same tick as the corpus's only `0x00EE [10, -15]`, on the same
+# agent, in the same tape. 100 - 15 = 85 in two encodings at once.
+#
+# This retires "n=1, first-witness, uncatalogued" (studies/combat/PLAN.md 13),
+# which was true when the corpus was two captures and is not now. What that
+# study found still stands: the `[10,0]`+`[0,X]` pair marked by this opcode is a
+# broadcast burst rather than a kill shape. What changes is that attr 10 has a
+# name -- `[10, 0]` is a morale no-op riding an experience award.
+GAME_SMSG_AGENT_MORALE = 0x009C
 def balthazar_rate(map_id):
     """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
 
@@ -2321,6 +2372,161 @@ GAME_SMSG_EFFECT_REMOVE = effects.OP_EFFECT_REMOVE    # 68
 # same way --no-armour-term isolates the armour one. ON by default: an effect
 # that only appears behind a flag is an effect nobody watches.
 EFFECTS = True
+
+# ---- WHAT A SKILL COSTS, wired 2026-08-20 ---------------------------------
+#
+# The other half of R4b. `effects.py` models what a cast PUTS ON somebody;
+# `pools.py` models what it TAKES, and until today this server took nothing:
+# two harness runs on 2026-08-20 pressed eight skills including Flare (5 energy
+# in retail) and the player's orb sat flat at 25 the whole time, because nothing
+# here had ever sent a property 62.
+#
+# ENERGY HAS NO OPCODE OF ITS OWN -- it rides the generic property channel, and
+# `pools.py`'s docstring carries the whole measurement. The three numbers this
+# file puts on the wire:
+#
+#   property 41 on 0x009F   maximum energy      (already sent, at spawn)
+#   property 43 on 0x00A2   regeneration RATE, a fraction of max per second,
+#                           sent ONCE on change and never streamed (OBSERVED
+#                           n=52; the client animates the orb from it)
+#   property 62 on 0x00A2   one discrete SPEND per completed cast, negative,
+#                           -(cost / max). OBSERVED n=45, and 0 of 44 zero-cost
+#                           casts carry one
+#   property 52 on 0x00A2   a discrete GAIN. OBSERVED n=1, at a resurrect, 1.0
+#
+# ADRENALINE HAS FOUR OPCODES OF ITS OWN, and this paragraph used to say it had
+# none. See the block below.
+GV_ENERGY_REGEN = pools.GV_ENERGY_REGEN            # 43
+
+# ---- THE ADRENALINE FAMILY, wired 2026-08-21 ------------------------------
+#
+# WHAT THIS REPLACES. Until today this file said "ADRENALINE IS NOT ON THE WIRE
+# AT ALL and that is a finding rather than a gap", `pools.py` said the same,
+# and both cited the same two absences: no adrenaline opcode in
+# `schema/messages.json` and none in GWCA's `Opcodes.h`. Both absences are
+# real. The conclusion was still wrong -- the catalog carries all four SHAPES
+# and names none of them (`GAME_SMSG_0207`..`0210`), and NO UPSTREAM ANYWHERE
+# names them: GWCA (gwdevhub__GWToolboxpp `Opcodes.h`), OpenTyria,
+# Headquarter, GWLP-R, Py4GW_Reforged and gw-preservation were all searched
+# and are all NOT FOUND. Absence from every mirror got read as absence from the
+# protocol, which is the same mistake in the same shape as the four days of
+# provenance over-refusal at the top of CLAUDE.md. THE NAMES BELOW ARE OURS
+# and owe no derivation-register row.
+#
+# THE CHAIN, MEASURED by static walk of the pinned build-38797 image. Every
+# link has exactly ONE caller, so there is no branch to have read wrong:
+#
+#   207  RECV table 0x00BC8F68 entry 156 -> descriptor 0x00BC96B8, dispatch
+#        member 0x00BC96C0 -> stub 0x0091F3F0 -> thunk 0x00814500 (`mov
+#        ecx,[eax+0x2c]; add ecx,0x6f0`, the hotKeyState container) -> worker
+#        0x00821980. The worker walks the 8 slots at stride 0x14 and, for each
+#        one that is not recharging (+0x08), not empty (+0x0C) and whose skill
+#        row's `movzx word [row+0x38]` is nonzero, writes
+#        `min(cost, current + units)` to +0x00. `mov [esi],ecx` at 0x008219EA
+#        is THE ONLY arithmetic write to a slot's +0x00 in the whole image.
+#   208  0x0091F410 -> 0x00814520 -> 0x00821B00: both halves of all 8 slots to
+#        zero, UI event 0x10000059 at 0x00821B4D.
+#   209  0x0091F430 -> 0x00814540 -> 0x00821B70: matches ONE slot on (skillId
+#        +0x0C, skillCopy +0x10) and writes the message's units to BOTH halves.
+#   210  0x0091F460 -> 0x00814570 -> 0x00821C00, guarded by ArenaNet's own
+#        `Assertion: skill / ChCliSkill.cpp(463)`. Named slot to 0; every other
+#        occupied slot `cmp esi,0x19 / jbe -> 0 / else add esi,-0x19` on both
+#        halves. 0x19 is 25, which is `pools.STRIKE_UNITS`.
+#
+# ARENANET'S OWN WORDS (SOURCED, `clientscan/asserts.py --grep`):
+# `context->skillAdrenalineUpdateArray.Count()` at ChCliSkill.cpp:84 names the
+# deferred repaint chain adrenaline, and `!(energyCost && skillData.adrenaline)`
+# guards `cmp word [+0x38],0` at BOTH GmCtlSkCard.cpp:409 and
+# GmCtlSkListEntry.cpp:185. That second one is why the send order below cannot
+# go wrong: A SKILL CANNOT CARRY BOTH COSTS, so 0x00D2 and property 62 can
+# never ride the same burst.
+#
+# MEASURED ON RETAIL'S WIRE: 49 GAME_SMSG connections over the 14 live
+# captures, 114,985 messages, zero framing errors. 663 x 207, 22 x 208,
+# 0 x 209, 39 x 210.
+#
+#   * 209 IS A LIVE HANDLER RETAIL NEVER USES -- 0 of 724 -- exactly like
+#     energy property 33, which is 0 of 13,378. So this server declares it and
+#     does not send it. Sending an absolute setter would be the one message
+#     that can hide a divergence rather than expose it.
+#   * SELF-SCOPED, 9 of 9: every connection carrying a 207 names exactly one
+#     agent, and it is that connection's own opcode-218 agent. See the
+#     `agent_adrenaline` comment for why the enemy pools stay off the wire.
+#   * 207's amounts are 25 x631 (one strike per landed weapon hit, OBSERVED)
+#     and 32 sub-25 gains {3:6, 4:12, 5:1, 6:5, 7:1, 8:3, 11:4}. Reading the
+#     second population as GWW's one-unit-per-1%-of-max-health-lost is
+#     INFERRED; nothing joins them to health traffic yet.
+#
+# THE MAP GATE, and it changes how a probe is designed rather than what this
+# file sends: GmSkSlot 0x00542E43 calls MissionCliGetMap and 0x00542E48
+# `cmp eax,1 / jne` -- the adrenaline fill is drawn ONLY in MISSION_MAP_GAME
+# (==1, MsCliApi:251), and in an OUTPOST (==0, QuestLog:261) the overlay is
+# actively torn down. A perfectly correct 207 sent to a client sitting in an
+# outpost yields a pixel-identical icon. Any run that wants to see these must
+# be in an explorable or a mission.
+#
+# AND THE DISPLAY READS THE OTHER HALF. The icon draws from +0x04
+# (adrenaline_b): ChCliApi 0x00816EF0 returns slot +0x04 and has exactly one
+# caller image-wide, GmSkSlot 0x00542E78, which reads the threshold as
+# `movzx word [esi+0x38]` and forwards both to Controls::SkillImage msg 0x59,
+# which DIVIDES them (0x008C6188 `fdiv`) and forwards the fraction as msg 0x56.
+# No /25 and no quarter quantisation -- the bar is a continuous fraction of the
+# RAW cost, which is the other reason the pools are modelled in raw units.
+# +0x00 is the accumulator behind a deferred commit (207 queues the agent into
+# `skillAdrenalineUpdateArray` and task 0x00820DD0 copies a->b); 209 and 210
+# write both halves so they repaint without waiting on the queue.
+#
+# The four take agent_id first, so they take the AGENT_ prefix this file
+# already uses for that shape.
+AGENT_ADRENALINE_GAIN = 0x00CF          # 207 {agent, units}          10 bytes
+AGENT_ADRENALINE_CLEAR = 0x00D0         # 208 {agent}                  6 bytes
+AGENT_ADRENALINE_SET = 0x00D1           # 209 {agent, skill, copy, units}  16 b
+AGENT_ADRENALINE_SPEND = 0x00D2         # 210 {agent, skill, copy}     12 bytes
+
+# THE PLAYER'S PIPS, and this is a number we did not choose so much as EXPLAIN.
+# `agents.PLAYER_FLOAT_43` has been 0.0396 since it was copied out of
+# gw-preservation's `sendPlayerAttributes` as a magic constant with "purpose
+# unknown upstream too" written beside it in the spawn send. It is
+# `wire_regen_rate(3, 25)` exactly, bit for bit -- three pips over a 25-energy
+# pool, which WIKI (GWW, "Energy", rev. 2026-03-15) gives as the RANGER armour
+# row (base 20/2 pips, Ranger +1 pip and +5 energy). `agents.PLAYER_ENERGY` is
+# 25, the same row's other half. So the two constants this server already sent
+# agree with the armour table and with each other, and section 5 of
+# `test_pools.py` asserts that identity rather than restating the literal.
+PLAYER_ENERGY_PIPS = 3
+
+# THE ENEMY'S POOL, and the profession half of it is RECONSTRUCTION. WIKI, same
+# page: casters are +2 pips/+10 energy over the base 20/2, and "hostile NPCs
+# ... regenerate Energy at an additional pip" -- so 4 + 1 = 5 pips over 30
+# energy is a hostile caster. Our standing hostile's bar (Restore Condition,
+# Scourge Sacrifice, Holy Strike, Vital Blessing) is a monk/necromancer bar, so
+# "caster" is the reading its own skills support; it is not measured, and
+# nothing on the wire declares an NPC's profession to us.
+ENEMY_ENERGY = 30
+ENEMY_ENERGY_PIPS = 5
+
+# The five type codes a Glyph of Lesser Energy cheapens, and the boundary is
+# RECONSTRUCTION. GWW says "your next 2 Spells"; the client's type column has
+# Hex Spell (4), Spell (5) and Enchantment Spell (6) among the codes
+# `studies/presearing/MANIFEST.md` 8 decoded, and those three are the ones
+# whose GWW type name contains the word Spell. Whether ArenaNet's own test is
+# the type code or a separate flag is NOT FOUND.
+SPELL_TYPE_CODES = (4, 5, 6)
+GLYPH_TYPE_CODE = 12
+
+# WIKI (GWW, "Glyph of Lesser Energy", infobox as fetched 2026-08-20): "For 15
+# seconds, your next 2 Spells cost 10...18 less Energy." Two charges, and the
+# 15 seconds are already the episode's own duration -- the client's duration
+# slot for skill 200 carries a flat 15 and `effects.resolve_duration` already
+# sends it. What was missing is the two.
+GLYPH_SPELL_CHARGES = 2
+
+# The switch, the same shape as --no-effects and for the same reason. ON by
+# default, because a cost that only exists behind a flag is a cost nobody pays:
+# with --no-energy this server behaves exactly as it did before 2026-08-20 --
+# no gate, no debit, no regeneration, no adrenaline -- which makes it a real
+# control for anything a run sees on the orb or the skill icons.
+ENERGY = True
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
 SKILLBAR_SLOTS = 8
@@ -5919,6 +6125,23 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # 17 REPLACES 16 rather than annotating it -- p16 + p17 = 495 = one event
     # per swing across the whole Isle rung-7 capture. Sending both would draw
     # two numbers for one hit.
+    # THE GAIN PRECEDES THE DAMAGE, and that is measured rather than tidy.
+    # Over the 49 live connections the message immediately BEFORE a 0x00CF is
+    # 159/prop 1 (melee_attack_finished) 594 times of 663, and the one
+    # immediately AFTER is 163/prop 16-or-17 (the damage) 601 times of 663 --
+    # modal batch [159/prop1, 207, 163/prop16, 30], n=425, zero counterexamples
+    # to the gain-then-damage adjacency. The first cut of this sender put the
+    # gain last at all three sites; the skeptic pass of 2026-08-21 caught it,
+    # which is the SECOND time this arc has shipped a burst in an order retail
+    # never produces (the energy debit was the first, and two tests had already
+    # begun defending it).
+    #
+    # AND THE PLAYER'S HALF GOES ON THE WIRE while the agent's does not, which
+    # is measured rather than tidy: every one of the 9 corpus connections
+    # carrying a 0x00CF names exactly ONE agent, its own.
+    if ENERGY and swing:
+        player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
+                                conn_id, f"weapon hit on agent {target_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -5933,11 +6156,48 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     print(f"[c{conn_id}] hit agent {target_id}: "
           f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
 
+    # ---- ADRENALINE, both directions of this one hit ---------------------
+    #
+    # WIKI (GWW, "Adrenaline", rev. 2026-07-02): 25 units -- one strike -- per
+    # successful WEAPON hit on an opponent, and 1 unit per 1% of maximum health
+    # LOST to damage, floored.
+    #
+    # THE STRIKE IS GATED ON `swing`, which is what makes it a weapon hit. A
+    # spell resolving through this function passes `swing=False` (it sends no
+    # ATTACK_STARTED and no MELEE_ATTACK_FINISHED, because those two name the
+    # ends of a swing), and a spell's damage grants the caster no adrenaline in
+    # the game. The damage half is NOT gated: damage taken is damage taken
+    # however it arrived.
+    #
+    # THE PLAYER'S HALF GOES ON THE WIRE and the agent's does not, and that is
+    # measured rather than tidy: every one of the 9 corpus connections carrying
+    # a 0x00CF names exactly ONE agent, its own. `player_gains_adrenaline`
+    # carries the rest.
+    if ENERGY:
+        # The player's strike went out ABOVE, in retail's own batch position.
+        # THIS half is SILENT, and a later session must not "fix" the
+        # asymmetry: retail is 9 of 9 self-scoped, so a 0x00CF naming an enemy
+        # would be traffic we invented. Same rule, same evidence shape, as
+        # property 62's 0 of 722.
+        agent_adrenaline(agent).on_damage_taken(
+            dealt / float(agent["max_health"]), now)
+
     if agent["health"] <= 0.0:
         # Death is bit 4 of the effects word, not a message. Seven guesses at a
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # AND A CORPSE CARRIES NO CHARGE. WIKI, same page: all adrenaline is
+        # lost upon death. STILL nothing on the wire for it, and the reason
+        # changed on 2026-08-21: it is not that adrenaline has no opcode (it
+        # has four) but that they are SELF-SCOPED, 9 of 9 -- an 0x00D0 naming
+        # an enemy is traffic retail never produces. The player's own death
+        # DOES send one; `kill_player` is where. The energy pool is left alone
+        # rather than zeroed: the revive path refills it, and no capture shows
+        # what happens to an NPC's energy at death because no capture shows an
+        # NPC's energy at all.
+        if ENERGY:
+            agent_adrenaline(agent).clear()
         # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
         # removal landing before apply + duration as `stripped` and names
         # death as one of its three causes, so leaving them running would put
@@ -5966,6 +6226,13 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # status/reward/flags order is ArenaNet's own tick shape, and the
         # accrual only appends to it (and only under --persist).
         accrue_kill_rewards(send, state, conn_id)
+        # ...and so does the other half of the death penalty. WIKI (GWW, "Death
+        # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
+        # so the kill reward that just went out is also the way back up. Sends
+        # nothing at all while morale is neutral, which is every session in
+        # which nothing has died -- and nothing on the first two kills after a
+        # death either, because 26 XP is not a percent yet.
+        morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -5995,6 +6262,409 @@ def skill_timing(skill_id):
         return 0.0, 0.0, 0.0
     return (float(row["activation"]), float(row["aftercast"]),
             float(row["recharge"]))
+
+
+_MISSING_UNIT_ROWS = set()
+
+
+def skill_cost(skill_id):
+    """(energy, adrenaline RAW UNITS) for a skill, from the same content rows.
+
+    The mirror of `skill_timing`, reading the same client-table rows and taking
+    the same honest fallback: a skill with no row costs (0, 0) and says so once
+    per id through `skill_timing`'s own announcement, because the two are read
+    together at every call site and a second copy of that message would double
+    every line.
+
+    THE ADRENALINE COLUMN IS RAW UNITS AND NOT THE NUMBER ON THE ICON. The
+    client's table holds the raw total at +0x38 and the client DISPLAYS
+    `ceil(units/25)` (`clientscan/skilltable.py:180`). Battle Rage (317) is 80
+    raw and shows 4, Defy Pain (318) is 120 and shows 5, Sever Artery (382) is
+    100. GWW says so in Battle Rage's own Notes -- it "exactly requires 80 units
+    of adrenaline (3 strikes and 5 units)" -- so reading the displayed 4 and
+    multiplying by 25 would demand 100 and leave the skill dark through a fight
+    it should have fired in. `ceil` is lossy and the raw cost is NOT recoverable
+    from the displayed one: a 4 covers everything from 76 to 100.
+
+    So a row with only the displayed column REFUSES rather than reconstructing:
+    the skill is treated as costing no adrenaline at all, loudly and once per
+    id, naming the extractor re-run that fixes it. Zero is the inert direction
+    -- an adrenal skill fires freely, which is visible -- where a guessed 100
+    would be silently unfireable.
+    """
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return 0, 0
+    energy = int(row.get("energy", 0) or 0)
+    units = row.get("adrenaline_units")
+    if units is None:
+        if skill_id not in _MISSING_UNIT_ROWS:
+            _MISSING_UNIT_ROWS.add(skill_id)
+            print(f"[skills] skill {skill_id} has no `adrenaline_units` column "
+                  f"-- its raw cost is NOT recoverable from the displayed "
+                  f"`adrenaline` ({row.get('adrenaline')}), so it costs no "
+                  f"adrenaline here. Re-run "
+                  f"`skilltable.py --emit-content vault/content/skills.toml`",
+                  flush=True)
+        return energy, 0
+    return energy, int(units)
+
+
+def player_energy(state):
+    """The player's energy pool, created on first use.
+
+    Lazily, for the reason `effect_table` is lazy: `state` is built in two
+    places and a pool created in one of them would be missing in the other --
+    the shape of bug that works in the loopback harness and not in a session.
+
+    THE POOL IS SEEDED FULL and the client is never told the current value,
+    because there is no message that could tell it: property 33, the obvious
+    absolute "your energy is now N", appears **0 times in 13,378 property
+    messages** across the live corpus while the positive control finds 97
+    property-41s and 52 property-43s in the same scan. The client INTEGRATES
+    the number itself from the maximum, the rate and the deltas -- so the
+    server's copy and the client's are two integrations of the same three
+    inputs, and `EnergyPool.tick` deliberately integrates the f32 rate we
+    actually sent rather than `pips * 0.33`.
+    """
+    pool = state.get("energy")
+    if pool is None:
+        # setdefault, not assignment: this is called from BOTH the connection
+        # thread (the gate) and the world tick (energy_tick), and two racing
+        # first touches must converge on ONE pool -- dict.setdefault is a
+        # single dict operation under the GIL, so the loser adopts the
+        # winner's pool instead of overwriting it. The pools' own methods take
+        # an RLock for the same two-thread reason (pools.py, "TWO THREADS").
+        # The maximum routes through the morale arc's player_max_energy()
+        # (merge 2026-08-20): identical to agents.PLAYER_ENERGY at neutral
+        # morale, and the one source of truth once a death penalty moves it.
+        # NOTE their measured rule: morale scales the BASE energy only, armour
+        # bonuses ride unscaled (studies/morale/FINDINGS.md section 2.2).
+        pool = state.setdefault("energy", pools.EnergyPool(
+            player_max_energy(state), PLAYER_ENERGY_PIPS, time.time()))
+    return pool
+
+
+def player_adrenaline(state):
+    """The player's adrenaline pools, one per adrenal skill on the bar.
+
+    REBUILT WHEN THE BAR CHANGES, which `--skills` can do at launch and which a
+    later skill-swap message would do mid-session. A pool keyed to a skill that
+    is no longer on the bar is charge the player cannot spend, and the wiki's
+    cross-cost ("every OTHER skill loses one strike") would keep paying it.
+    """
+    bar = tuple(SKILLBAR)
+    pool = state.get("adrenaline")
+    if pool is None or state.get("adrenaline_bar") != bar:
+        # THE RECHARGE PREDICATE IS THE CLIENT'S OWN SKIP RULE, injected as a
+        # closure so `pools.py` keeps importing nothing from this file. See
+        # `recharging_skills` for what it reads and why the divergence it
+        # closes would otherwise be permanent.
+        fresh = pools.AdrenalinePool({sid: skill_cost(sid)[1] for sid in bar},
+                                     recharging=lambda: recharging_skills(state))
+        if "adrenaline" not in state:
+            # Same two-thread first touch as `player_energy`: setdefault so
+            # racing creators converge on ONE pool.
+            pool = state.setdefault("adrenaline", fresh)
+        else:
+            # A deliberate REBUILD (the bar changed) stays plain assignment:
+            # --skills only changes the bar at launch today, and a mid-session
+            # swap message would arrive on one thread.
+            pool = state["adrenaline"] = fresh
+        state["adrenaline_bar"] = bar
+    return pool
+
+
+def agent_energy(agent):
+    """One hostile's energy pool, on the agent dict rather than in `state`.
+
+    Enemies get a pool for one reason: our own AI casts on a recharge timer and
+    nothing else, so the Hatcher's Restore Condition fires every 2 seconds
+    forever (`PLAN.md` section 8 item 4). Energy is the limiter retail already
+    has, and it costs no new invention to apply -- the skill's cost is the
+    client's own column.
+    """
+    pool = agent.get("energy_pool")
+    if pool is None:
+        pool = agent["energy_pool"] = pools.EnergyPool(
+            ENEMY_ENERGY, ENEMY_ENERGY_PIPS, time.time())
+    return pool
+
+
+def recharging_skills(state):
+    """The player's skill ids whose recharge the CLIENT currently has running.
+
+    THE CLIENT SKIPS A RECHARGING SLOT WHEN IT TAKES ADRENALINE. `cmp [esi+8],0
+    / jne` at 0x008219C0 in worker 0x00821980 tests the slot's recharge field
+    BEFORE it looks at the skill id, and it is unambiguous. Our pool granted to
+    everything, so from the first 0x00CF sent while an adrenal skill was
+    recharging the two books would have disagreed -- permanently, because the
+    only message that could resync them is 209 and retail sends it zero times
+    in 724.
+
+    THE WINDOW IS E5 TO E6 AND NOT PRESS TO E6, because the CLIENT is the thing
+    being mirrored and the client learns about the recharge from `0x00E5`
+    (`cast_tick`'s first branch) and forgets it at `0x00E6`. Between the press
+    and E5 the client's slot still reads recharge 0 and would take the units,
+    so this must say the skill is not recharging in that interval even though
+    the server knows a cast is pending.
+
+    Reads `pending_casts`, which the world tick mutates while the connection
+    thread calls this. The list() is the whole synchronisation: entries are
+    appended by one thread and removed by another, and iterating the live list
+    is what raises mid-fight.
+    """
+    now = time.time()
+    return {cast["skill_id"] for cast in list(state.get("pending_casts") or ())
+            if cast.get("e5_sent") and now < cast["e6_at"]}
+
+
+def agent_adrenaline(agent):
+    """One hostile's adrenaline pools, over ITS own bar. Same rebuild rule.
+
+    NO `recharging` PREDICATE, and that asymmetry is deliberate rather than an
+    omission. The client's skip rule is mirrored for the PLAYER because the
+    client holds a copy of the player's book that nothing can resync; no client
+    anywhere holds a copy of an enemy's adrenaline, so applying the same rule
+    here would be a claim about retail's SERVER with no referee to check it
+    against. The enemy pool exists to pace our own AI and nothing else.
+    """
+    bar = tuple(row[0] for row in (agent.get("skills") or ()))
+    pool = agent.get("adrenaline_pool")
+    if pool is None or agent.get("adrenaline_bar") != bar:
+        pool = agent["adrenaline_pool"] = pools.AdrenalinePool(
+            {sid: skill_cost(sid)[1] for sid in bar})
+        agent["adrenaline_bar"] = bar
+    return pool
+
+
+def player_gains_adrenaline(send, state, units, now, conn_id, why):
+    """Grant `units` to the player's pools AND tell the client, from one call.
+
+    ONE FUNCTION SO THE TWO BOOKS CANNOT DIVERGE. The client adds the MESSAGE'S
+    number to its own slots (`add eax,[ebp+0xc]` at 0x008219E1), so the value
+    granted here and the value on the wire have to be the same integer; a
+    caller that did `pool.grant(...)` and `send(...)` separately is one edit
+    away from them being two.
+
+    A ZERO-UNIT GAIN SENDS NOTHING and grants nothing. `on_damage_taken`
+    already no-ops on a sub-1% hit -- WIKI is explicit that zero damage "does
+    not count as being in combat" -- and the wire has to match: an 0x00CF with
+    units 0 leaves the client's `something gained` flag (`mov edi,1` at
+    0x008219EC) clear and repaints nothing, so it is a message that does
+    nothing and that retail has no reason to produce.
+
+    A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though -- full pools, a bar
+    with no adrenal skill on it, everything recharging. The client's handler is
+    a no-op in exactly those cases too, so nothing is misdrawn; and it is what
+    keeps the 25-second clock honest, because retail's own clears are MEASURED
+    at 25.00 s after the last 207 ON THE WIRE (15 of 15, spread 42 ms) rather
+    than after the last slot that actually moved.
+    """
+    if not ENERGY or units <= 0:
+        return
+    player_adrenaline(state).grant(units, now)
+    send(AGENT_ADRENALINE_GAIN, [PLAYER_AGENT_ID, int(units)],
+         f"adrenaline +{int(units)} ({why})")
+
+
+_GLYPH_UNREADABLE = set()
+
+
+def glyph_energy_amount(skill_id, rank):
+    """How much energy this glyph takes off a spell at `rank`, or None.
+
+    The join is the same one `skill_damage` and `skill_heal` make: the client's
+    table carries the MAGNITUDE and `content/world.toml`'s `skill_effect` block
+    carries what the magnitude MEANS, sourced per skill from GWW's own
+    progression-variable name. `scale_means = "Energy"` is the label, and today
+    exactly one row wears it: skill 200, Glyph of Lesser Energy.
+
+    AND THAT ROW CANNOT BE READ YET, which is a refusal rather than a bug. The
+    client gives skill 200 `scale0 = 10, scale15 = 18` with `skill_arguments =
+    0` -- the SCALE BIT IS CLEAR -- so `skill_scale_value` refuses it, exactly
+    as it refuses Rush's 25. That refusal is right by the precedent
+    `effects.resolve_duration` already sets for the duration slot: bit clear
+    with EQUAL endpoints is a flat constant we have witnesses for, and bit clear
+    with DIFFERING endpoints has zero witnesses anywhere in the corpus and is
+    refused. 10 and 18 differ.
+
+    SO WHAT THE ROW NEEDS, precisely, is an explicit amount that does not go
+    through the bitfield -- a field beside `scale_means` in
+    `[skill_effect.200]` carrying the number (GWW's progression is 10..18 at
+    Energy Storage 0..15, and the row's own provenance already records that the
+    wiki and the bitfield disagree about whether it scales) -- or a second
+    witness that says the bit-clear slot is meaningful here. Until then the hook
+    below is live but INERT against today's content: an unreadable amount makes
+    `energy_cost_for` skip the episode entirely, so no discount is applied AND
+    no charge is counted -- the glyph does nothing at all, which is the
+    direction that cannot invent a number.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if row.get("scale_means") != "Energy":
+        return None
+    try:
+        return int(skill_scale_value(skill_id, rank, "scale"))
+    except ValueError as ex:
+        if skill_id not in _GLYPH_UNREADABLE:
+            _GLYPH_UNREADABLE.add(skill_id)
+            print(f"[skills] glyph {skill_id} scales `Energy` but its amount is "
+                  f"UNREADABLE, so no cast is cheapened: {ex}", flush=True)
+        return None
+
+
+def energy_cost_for(state, caster_id, skill_id, rank):
+    """(cost, glyph episode, discount) for one cast. Consumes nothing.
+
+    Split from the debit deliberately: the GATE has to know what a cast would
+    cost before deciding whether it may start, and a glyph charge burnt by a
+    press that was then refused is a charge the player never got.
+
+    GWW (Glyph of Lesser Energy): "For 15 seconds, your next 2 Spells cost
+    10...18 less Energy". The floor at zero is the same one ArenaNet's own
+    interpolator asserts (ConstSkill:3769) and it matters here -- a 5-energy
+    Flare under a 15-point glyph costs nothing, and a NEGATIVE cost would come
+    out the far side as a positive property 62, a message retail never sends.
+    """
+    base = skill_cost(skill_id)[0]
+    if base <= 0:
+        # A FREE SPELL BURNS NO CHARGE, and that is RECONSTRUCTION: GWW states
+        # the charge count and never says what a 0-energy spell does to it.
+        # Not consuming is the conservative direction, and it is also the only
+        # one this server can observe the difference of -- the wire carries
+        # nothing for a free cast (44 of 44).
+        return base, None, 0
+    row_type = None
+    try:
+        row_type = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
+    except Exception:                                          # noqa: BLE001
+        pass
+    if row_type not in SPELL_TYPE_CODES:
+        return base, None, 0
+    table = state.get("effects")
+    if not table:
+        return base, None, 0
+    for ep in table.on_agent(caster_id):
+        if ep.get("type_code") != GLYPH_TYPE_CODE:
+            continue
+        amount = glyph_energy_amount(ep["skill"], ep.get("rank", rank))
+        if amount is None:
+            continue
+        return max(0, base - amount), ep, amount
+    return base, None, 0
+
+
+def spend_glyph_charge(send, state, ep, conn_id, skill_id):
+    """Burn one of the glyph's charges, and close the episode when they run out.
+
+    The close goes out as a real `0x0044` through the same door an expiry uses
+    -- re-sending or silently dropping an episode leaves the icon on screen for
+    an effect the server has already retired, which is measured (a repeat
+    `0x0042` for a live (agent, skill) is DISCARDED by the client, twice, on
+    2026-08-20).
+    """
+    ep["charges"] = int(ep.get("charges", GLYPH_SPELL_CHARGES)) - 1
+    print(f"[c{conn_id}] glyph {ep['skill']} cheapened skill {skill_id}: "
+          f"{ep['charges']} of {GLYPH_SPELL_CHARGES} charge(s) left",
+          flush=True)
+    if ep["charges"] > 0:
+        return
+    table = effect_table(state)
+    table.close(ep["buff"])
+    send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+         f"EFFECT_REMOVE(buff {ep['buff']}, glyph {ep['skill']}, SPENT -- "
+         f"{GLYPH_SPELL_CHARGES} spells used)")
+    print(f"[c{conn_id}] glyph {ep['skill']} on agent {ep['agent']} is spent "
+          f"(buff {ep['buff']})", flush=True)
+
+
+def energy_tick(send, state, conn_id):
+    """Regenerate energy silently; expire adrenaline with one 0x00D0.
+
+    THE ENERGY HALF IS SILENT AND THAT IS MEASURED. Retail sends property 43
+    ONCE and the client animates the orb from it -- 52 events across the whole
+    live corpus, every one a create or a change, none of them a stream. So this
+    integrates the server's copy of the same number and puts nothing on the
+    wire for it, exactly as `degen_tick` spends health without drawing a damage
+    number.
+
+    THE ADRENALINE HALF DOES SEND, since 2026-08-21. `send` was in this
+    signature "for the day a degeneration or a resize needs a message out of
+    here" and marked deliberately unused; the day arrived from the other
+    direction. `AdrenalinePool.tick` returns True exactly once, when a bar that
+    had charge is wiped, and that is the one event this tick puts on the wire.
+
+    NOTHING GOES OUT FOR AN AGENT'S WIPE. Retail's adrenaline traffic is
+    self-scoped 9 of 9 (see the `AGENT_ADRENALINE_*` block), so the loop below
+    stays a log line.
+    """
+    if not ENERGY:
+        return
+    now = time.time()
+    player_energy(state).tick(now)
+    if player_adrenaline(state).tick(now):
+        # THE ONE MESSAGE THIS TICK CAN PRODUCE, and it is the shape retail's
+        # own timeout wipe has: an ISOLATED 0x00D0 with nothing but world ticks
+        # around it. MEASURED, 15 of 15 -- every isolated clear in the live
+        # corpus lands 24.973 to 25.015 s after that agent's own last 207
+        # GAIN, mean 25.00, spread 42 ms. `ADRENALINE_TIMEOUT_S` was WIKI's 25
+        # before anyone had counted one. GAIN ONLY: none of the 15 has a 210
+        # in its window, so whether a spend re-anchors retail's clock is
+        # UNKNOWN and ours does not (`AdrenalinePool.use` says so).
+        #
+        # OURS LANDS WITHIN ONE WORLD TICK OF 25.0 rather than on it, because
+        # `tick` is polled; retail's spread is 42 ms and ours is the tick
+        # period. That is a divergence a capture of our own wire would show,
+        # and it is cheap to name and expensive to remove.
+        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+             f"adrenaline cleared: {pools.ADRENALINE_TIMEOUT_S:.0f}s "
+             f"out of combat")
+        print(f"[c{conn_id}] the player's adrenaline is gone: "
+              f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}) or agent.get("dead"):
+            continue
+        agent_energy(agent).tick(now)
+        if agent_adrenaline(agent).tick(now):
+            print(f"[c{conn_id}] agent {agent_id} loses its adrenaline: "
+                  f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
+
+
+def restore_player_energy(send, state, conn_id, why):
+    """The resurrect batch's energy half: a full refill and the rate back on.
+
+    OBSERVED n=1 and it is one instant of capture `20260817T183756`: the death
+    bit clears, property 43 goes back to the agent's own rate, property 52
+    arrives as exactly 1.0 and property 55 (the health half, which this server
+    already sends) as exactly 1.0 alongside it.
+
+    PREDICTION, on record before the run that tests it: the client's energy orb
+    today STICKS AT 0 after a revive -- the 2026-08-20 harness frames show it --
+    because the client's own death path zeroes the pool (`fldz` at 0x008183F0,
+    the same reason the health bar needs its property-34 refill) and our revive
+    path has never sent an energy property at all. With these two out, the orb
+    must refill. If it does not, then property 52 is not a setter for the pool
+    the orb draws and the reading is wrong; nothing else here would change.
+    """
+    if not ENERGY:
+        return
+    pool = player_energy(state)
+    # Guard before effect: the fraction is validated before the pool is filled
+    # and before the first send, so a refusal leaves the server's book and the
+    # wire in the same (un-restored) state rather than in two different ones.
+    gain = _fraction(1.0, agents.GV_ENERGY_GAIN, "refill the player's energy")
+    pool.refill()
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
+         f"energy refilled to {pool.maximum:.0f} ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(pool.rate)],
+         f"energy regeneration back to {pool.pips} pip(s) ({why})")
 
 
 # ------------------------------------------------- buying from a merchant
@@ -6440,6 +7110,52 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
 
+    # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
+    #
+    # A press this server cannot pay for produces NOTHING: no E4, no cast
+    # animation, no pending entry, no recharge. Same discipline as `hit_enemy`'s
+    # fraction guard -- refuse before any effect, so a refusal cannot leave half
+    # a cast cycle on the wire and a recharge burning on a skill that never
+    # fired.
+    #
+    # THE SHAPE OF THE REFUSAL IS OURS -- RECONSTRUCTION, and it is the one
+    # thing in this block that is not measured. What retail's server does when a
+    # client presses an unaffordable skill is UNOBSERVED on our corpus: the
+    # client may well swallow the press itself and never send `0x0046` at all,
+    # in which case this branch is unreachable in a real session and the log
+    # line below is how a run finds that out. Either way the server must not
+    # cast for free.
+    cost, glyph_ep, discount, units = 0, None, 0, 0
+    pool = None
+    if ENERGY:
+        rank = player_rank_for_skill(skill_id)
+        cost, glyph_ep, discount = energy_cost_for(state, PLAYER_AGENT_ID,
+                                                   skill_id, rank)
+        units = skill_cost(skill_id)[1]
+        pool = player_energy(state)
+        pool.tick(now)
+        bar = player_adrenaline(state)
+        # BOTH costs are checked, independently, because a skill can in
+        # principle carry both columns and the table is what says so -- not an
+        # assumption here that adrenal and energy skills partition the bar.
+        if units > 0 and not bar.charged(skill_id):
+            have = bar.units.get(skill_id)
+            # An adrenal skill that is not on SKILLBAR has no pool at all, and
+            # "has 0" would name a counter that does not exist -- the skeptic
+            # pass hand-drove exactly that misreport for an off-bar Battle
+            # Rage. A real session cannot reach it (the client cannot press an
+            # off-bar slot); a test driver can.
+            print(f"[c{conn_id}] REFUSED skill {skill_id}: "
+                  + (f"needs {units} adrenaline, has {have}"
+                     if have is not None else
+                     f"adrenal ({units} units) but NOT ON THE BAR, no pool"),
+                  flush=True)
+            return
+        if cost > 0 and not pool.can_pay(cost):
+            print(f"[c{conn_id}] REFUSED skill {skill_id}: needs {cost} "
+                  f"energy, has {pool.current:.2f}", flush=True)
+            return
+
     # The queue law from the constants' comment: E4 at accept, the cast
     # begins when the caster frees (the previous cast's aftercast end), E5
     # at begin + activation. `cast_busy_until` is only ever touched on this
@@ -6451,6 +7167,91 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
          f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # ---- AND THE DEBIT, in the same breath as the announcement -----------
+    #
+    # RETAIL FIRES PROPERTY 62 0.03-0.7 SECONDS AFTER THE USE_SKILL, mostly
+    # around 0.05 s (OBSERVED over the live corpus), so sending it here --
+    # inside the press burst -- is inside the observed envelope rather than at
+    # some invented offset. AND THE ORDER WITHIN THE BURST IS MEASURED: the
+    # spend PRECEDES the property-60 that names the skill, same batch, 45 of
+    # 45 (test_pools section 2c, whose scanner had to learn this the hard way
+    # -- a stream-order join scored 18 of 45 until the ordering was read off
+    # the batches). The first cut of this burst sent them the other way round;
+    # the skeptic pass caught it shipping an order retail never produced. It
+    # is deliberately NOT deferred to the E5 branch of `cast_tick`: the corpus
+    # puts the spend a few tens of milliseconds after the press, not an
+    # activation later, and 45 of 45 paid casts carry exactly one.
+    #
+    # ZERO-COST CASTS SEND NOTHING, 44 of 44. `EnergyPool.spend` returns None
+    # for those rather than 0.0, so this cannot put a -0.0 on the wire -- a
+    # value that reads as a spend in every log we have and that retail never
+    # sends.
+    #
+    # THE ADRENALINE COST IS PAID HERE TOO, and that is the wiki rather than
+    # symmetry: using an adrenal skill zeroes its own pool and costs every
+    # OTHER pool one strike "whether or not the skill is interrupted or fails"
+    # (WIKI, GWW "Adrenaline", rev. 2026-07-02), so it is paid at USE and not
+    # at completion -- the opposite of the energy spend, which the corpus shows
+    # landing once per COMPLETED cast.
+    if ENERGY:
+        if glyph_ep is not None and discount:
+            spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
+        if units > 0:
+            player_adrenaline(state).use(skill_id)
+            # ---- AND 0x00D2 GOES OUT HERE, WHICH IS MEASURED --------------
+            #
+            # OBSERVED, 39 of 39, and it is as clean as this corpus gets:
+            # every opcode-210 in the 14 live captures is IMMEDIATELY followed
+            # -- next message, identical timestamp, same batch -- by the int
+            # property naming the same skill on the same agent. Zero
+            # exceptions and zero occurrences the other way round. (The
+            # property is 50 in all 39, the attack-skill flavour; these are
+            # warrior sword adrenal skills. This server sends 60 for every
+            # cast, which is a pre-existing divergence and not this one.)
+            #
+            # So the spend PRECEDES the naming property, which is the SAME
+            # answer the energy arc measured for property 62 (45 of 45, same
+            # batch, spend first) -- and here it is measured directly rather
+            # than carried over.
+            #
+            # THE ONE ORDER NOBODY CAN MEASURE IS 0x00D2 AGAINST PROPERTY 62,
+            # and ArenaNet's own assert says nobody has to:
+            # `!(energyCost && skillData.adrenaline)` at GmCtlSkCard.cpp:409
+            # and GmCtlSkListEntry.cpp:185 -- a skill cannot carry both costs,
+            # so `frac` below is always None on this branch and the two spends
+            # can never appear in one burst. The 0x00D2 therefore lands
+            # immediately before the cast animation on our wire too, exactly
+            # where retail puts it.
+            #
+            # THE COPY IS THE CLIENT'S OWN, echoed from the press
+            # (`values[2]`), and is not assumed to be 0. It has to be: the
+            # client's worker matches a slot on (skillId +0x0C, skillCopy
+            # +0x10), and +0x10 is filled from SKILLBAR_UPDATE's second array
+            # -- which this server sends as `SKILLBAR_PVP_MASKS`, eight zeros.
+            # Echoing is what E4/E5/E3/E6 already do with the same field, so a
+            # copy this server could not match would have broken the cast
+            # cycle first.
+            send(AGENT_ADRENALINE_SPEND, [PLAYER_AGENT_ID, skill_id, copy],
+                 f"adrenaline spend: skill {skill_id} (copy {copy})")
+            print(f"[c{conn_id}] skill {skill_id} spends {units} adrenaline; "
+                  f"every other pool loses a strike", flush=True)
+        # Guard before effect: the fraction is validated before the pool is
+        # touched, so a refused value cannot leave the server's energy debited
+        # for a message that never went out.
+        frac = (None if cost <= 0 else
+                _fraction(pools.spend_fraction(cost, pool.maximum),
+                          agents.GV_ENERGY_SPENT,
+                          f"the energy for skill {skill_id}"))
+        pool.spend(cost)
+        if frac is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                 [agents.GV_ENERGY_SPENT, PLAYER_AGENT_ID, frac],
+                 f"energy -{cost} of {pool.maximum:.0f} for skill {skill_id}")
+            print(f"[c{conn_id}] skill {skill_id} costs {cost} energy"
+                  + (f" (glyph {glyph_ep['skill']} took off {discount})"
+                     if discount else "")
+                  + f": {pool.current:.2f}/{pool.maximum:.0f} left", flush=True)
+
     # The cast animation, in the OBSERVED player shape: 0x00A0
     # [60, caster, target, skill], 4 of 4 player activations in the live
     # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
@@ -6461,6 +7262,8 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
          f"cast animation: player casts {skill_id}")
+
+
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
         # The target rides the pending entry so the DAMAGE can land at cast
@@ -6877,12 +7680,64 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["attacking"] = None          # a corpse stops swinging back
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+    # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
+    # tick behind it, same tick. Silent in every map this server ships, because
+    # pre-Searing charges nothing -- `map_death_penalty` is where that is
+    # decided and `content/maps.toml` is where it is written down.
+    pushed = death_penalty_due(send, state, conn_id)
+    # THE DEATH BATCH'S OTHER HALF, OBSERVED: retail sends property 43 = 0.0
+    # in the same instant the death bit goes up -- twice in the corpus, and
+    # those two are exactly the events whose solved pip count is 0.0 where
+    # every other property-43 solves to a positive integer (`pools.py`, the
+    # 52-of-52 join). A corpse regenerates nothing, and a client left
+    # animating the orb upward through a death would show energy arriving on
+    # a body that cannot spend it. When the morale tick fired, ITS batch
+    # already carried the zero (push_morale's dead branch, the capture's own
+    # order); a death in a map that charges nothing -- every map this server
+    # ships -- sends the zero standalone. Retail's no-penalty death batch is
+    # UNWITNESSED (no pre-Searing death in the corpus), so the standalone
+    # shape is RECONSTRUCTION from the corpse-regenerates-nothing rule.
+    if ENERGY and not pushed:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(0.0)],
+             "energy regeneration stops: the player is dead")
+    # ---- AND THE ADRENALINE, LAST, WHICH IS THE POSITION I CAN DEFEND ------
+    #
+    # WIKI: all adrenaline is lost upon death, and the client has a handler
+    # that does exactly that (0x00821B00 zeroes both halves of all 8 slots).
+    #
+    # THE CORPUS CANNOT RULE ON THIS ONE AND THE CELL IS EMPTY RATHER THAN
+    # ZERO, which is a stronger statement than "we saw no death clear": across
+    # the 14 live captures, NOT ONE of the 9 connections carrying adrenaline
+    # ever witnesses its own agent dying. The two populations never overlap, so
+    # retail's 22 clears being none of them says nothing at all about what a
+    # death batch carries.
+    #
+    # SO THE POSITION IS CHOSEN BY WHAT IT MUST NOT DISTURB. The death bit ->
+    # 0x009C morale -> 0x00EE delta adjacency directly above IS measured, off
+    # ArenaNet's own capture, and `test_morale.py` section 5 pins it by index.
+    # An unmeasured message goes AFTER a measured sequence, never inside it --
+    # the first cut of this change put the clear at index 1 and split that
+    # adjacency, which is a real order retail produced traded for one nobody
+    # has seen. Nothing in the batch above touches a skill slot, so the client
+    # cannot tell the two apart anyway: 0x00D0 zeroes and repaints on its own.
+    #
+    # SENDING IT AT ALL IS SAFE UNDER BOTH READINGS of what the client does
+    # with the death bit. If the client wipes the slots locally, this is an
+    # idempotent no-op. If it does not, and we stayed silent, the player would
+    # stand up from a revive with a full bar and nothing could correct it --
+    # 209 is the resync and retail sends it 0 times in 724. Wrong under one
+    # reading, harmless under the other.
+    if ENERGY:
+        player_adrenaline(state).clear()
+        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+             f"adrenaline cleared: the player died ({why})")
 
 
 def agent_pool_max(state, agent_id):
     """Maximum health of one agent, or None if this server does not know it."""
     if agent_id == PLAYER_AGENT_ID:
-        return float(agents.PLAYER_HEALTH)
+        return player_max_health(state)
     agent = state.get("agents", {}).get(agent_id)
     return float(agent["max_health"]) if agent else None
 
@@ -6998,7 +7853,7 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id):
     """
     if target_id == PLAYER_AGENT_ID:
         player_pools(state)
-        before, pool = state["player_health"], float(agents.PLAYER_HEALTH)
+        before, pool = state["player_health"], player_max_health(state)
     else:
         agent = state.get("agents", {}).get(target_id)
         if not agent or agent.get("dead"):
@@ -7085,6 +7940,12 @@ def revive_due(send, state, conn_id):
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
+        # A body that stands up stands up with a full pool, the same as its
+        # health. Nothing goes out for it: the client is never told an NPC's
+        # energy (0 witnesses in the corpus), so this is bookkeeping that only
+        # the enemy's own cast gate reads.
+        if ENERGY:
+            agent_energy(agent).refill()
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
         # ONE TICK before the refills, the same as the player path. The client's
@@ -7146,10 +8007,192 @@ def player_pools(state):
     number, which was fine while nothing could damage the player and is exactly the
     gap that made "you cannot die" a property of the code rather than a decision.
     """
-    state.setdefault("player_health", float(agents.PLAYER_HEALTH))
+    state.setdefault("morale", morale.BASELINE)
+    state.setdefault("morale_xp_bank", 0)
+    state.setdefault("player_health", player_max_health(state))
     state.setdefault("player_dead", False)
     state.setdefault("player_died_at", 0.0)
     return state
+
+
+# ------------------------------------------------------------ morale, and DP
+#
+# The mechanic in one line: morale is a percentage with 100 neutral, a death is
+# -15 of it, and it scales the character's BASE health and energy. The arithmetic
+# is `morale.py`, the constants are `content/world.toml` `[player.morale]`, the
+# evidence is `studies/morale/FINDINGS.md`, and what lives here is the WIRE --
+# which messages carry it, in what order, at which events.
+
+
+def player_morale(state):
+    """This player's morale percentage. 100 until something charges for a death."""
+    return int(state.setdefault("morale", morale.BASELINE))
+
+
+def player_base_health(state):
+    """The level-derived health morale scales -- NOT the total.
+
+    They are the same number for the character this server ships (level 1, no
+    health upgrades) and they stop being the same the day a rune goes on, which
+    is why the two are asked for separately everywhere below.
+    """
+    return morale.base_health(int(state.get("level", START_LEVEL)))
+
+
+def player_max_health(state):
+    """Maximum health as the client should currently see it, morale included."""
+    return float(morale.effective_max(agents.PLAYER_HEALTH,
+                                      player_base_health(state),
+                                      player_morale(state)))
+
+
+def player_max_energy(state):
+    """Maximum energy, ditto. Base energy is the innate 20; armour rides free."""
+    return int(morale.effective_max(agents.PLAYER_ENERGY, morale.BASE_ENERGY,
+                                    player_morale(state)))
+
+
+def map_death_penalty(map_id):
+    """Does a death cost morale in this map?
+
+    THE DEFAULT IS NO, and that is the wiki's answer for this world rather than a
+    stub: every map this server ships is pre-Searing, and GWW's "Death Penalty"
+    lists "Deaths in pre-Searing Ascalon" among the deaths that never incur one.
+    So a faithful Lakeside County charges nothing, and `content/maps.toml`'s
+    `map_rule` rows say so out loud with the citation attached.
+
+    A map with no rule row gets False for the same reason `map_explorable`
+    defaults False: the safer wrong answer is the one that fails to apply a
+    penalty rather than the one that invents a penalty for a place nobody
+    checked. `--death-penalty` overrides, which is how the mechanic gets tested
+    in a world where retail would never fire it.
+    """
+    if DEATH_PENALTY_FORCED:
+        return True
+    row = agents.WORLD.rows("map_rule").get(str(map_id), {})
+    return bool(row.get("death_penalty", False))
+
+
+def push_morale(send, state, conn_id, new_value, why):
+    """Move the player's morale and put ArenaNet's own tick on the wire.
+
+    THE SHAPE IS OBSERVED, off the one player death in the live corpus
+    (20260817T183756, agent 27, t=78.813) -- five messages, one tick:
+
+        0x009C [player, 85]        morale, absolute, per agent
+        0x00EE [10,     -15]       morale, as a delta, per player
+        0x009F [41, player, 22]    the recomputed maximum ENERGY
+        0x00A2 [43, player, 0.0]   energy regeneration -- ZERO at death; the
+                                   rescaled rate is the RESURRECT batch's
+        0x009F [42, player, 102]   the recomputed maximum HEALTH
+
+    THE MAXIMA ARE THE SERVER'S JOB, and that is MEASURED rather than assumed
+    since 2026-08-20. Retail sent both explicitly, so the client never had to
+    derive them -- and `--probe morale` then showed that it CANNOT: one frame of
+    that run has the corner reading -30% while the health and energy bars still
+    read 100 and 25, and when the maxima did arrive the energy bar showed the
+    14 we sent rather than the 19 its own arithmetic gives (studies/morale/
+    RUNS.md Run 1, MORALE-P3). A server that sends the percentage and forgets
+    the pools ships a death penalty that costs the player nothing.
+
+    The regeneration resend is not decoration either: property 43 carries a
+    FRACTION of maximum energy per second, so a pool that shrinks 15% while this
+    stands still is a 15% slower regeneration nobody asked for. Retail resent it;
+    so do we.
+    """
+    old = player_morale(state)
+    new_value = morale.clamp(new_value)
+    if new_value == old:
+        return old
+    state["morale"] = new_value
+    max_energy = player_max_energy(state)
+    max_health = int(player_max_health(state))
+    send(GAME_SMSG_AGENT_MORALE, [PLAYER_AGENT_ID, new_value],
+         f"morale {morale.display(new_value)} on the player ({why})")
+    send(GAME_SMSG_PLAYER_ATTR_UPDATE,
+         [PLAYER_ATTR_MORALE_ID, _u32(new_value - old)],
+         f"morale delta {new_value - old:+d} ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
+         f"maximum energy {max_energy} at morale {morale.display(new_value)}")
+    # THE POOL'S OWN BOOK RESIZES WITH THE WIRE (energy-arc merge,
+    # 2026-08-20): set_maximum recomputes the stored rate the way retail's
+    # numbers show (0.0528 at 25 -> 0.06 at 22, the same four pips), so the
+    # RESURRECT resend in restore_player_energy is already rescaled with no
+    # second computation to drift.
+    if ENERGY:
+        player_energy(state).set_maximum(max_energy)
+    # THE CHANNEL IS 0x00A2 AND THE DEATH VALUE IS ZERO -- both are the
+    # capture's, not a choice: the only death-with-morale batch in the corpus
+    # (20260817T183756, conn 52294, t=353.299) is {0x00F1, 0x009C 85,
+    # 0x00EE -15, 0x009F 41=22, 0x00A2 [43, 27, 0.0], 0x009F 42=102}, and
+    # studies/morale/FINDINGS.md's own table says the same ("energy
+    # regeneration -> 0 while dead"). The rescaled nonzero rate appears at the
+    # RESURRECT ten seconds later, never in the death batch -- a corpse
+    # regenerates nothing. This code briefly shipped the rescaled value here
+    # on 0x00A3; both halves diverged from the study's own table and the
+    # energy-arc merge fixed them against the bytes. For a LIVING morale
+    # change no batch exists in the corpus; sending the rescaled fraction
+    # there is RECONSTRUCTION (the fraction must track the pool or the
+    # absolute rate silently changes -- the docstring's argument).
+    _dead = bool(state.get("player_dead"))
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+          _f32(0.0 if _dead else
+               morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                     agents.PLAYER_ENERGY, max_energy))],
+         "energy regeneration stops: the player is dead" if _dead else
+         "energy regeneration, rescaled to the new pool")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
+         f"maximum health {max_health} at morale {morale.display(new_value)}")
+    # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
+    # to notice: our own bookkeeping is what decides when the player dies, so a
+    # current health left above the new maximum would make the next fraction we
+    # compute exceed 1.0 -- the CharPool.cpp:84 shape, arriving through the
+    # damage path instead of the revive path. WIKI (GWW, "Health"): a decrease
+    # in maximum health "will never reduce current health below 1".
+    if state.get("player_health", 0.0) > max_health:
+        state["player_health"] = float(max(1, max_health))
+    print(f"[c{conn_id}] morale {old} -> {new_value} "
+          f"({morale.display(new_value)}, {why}): max health {max_health}, "
+          f"max energy {max_energy}", flush=True)
+    return new_value
+
+
+def death_penalty_due(send, state, conn_id):
+    """Charge the player for dying, if this map charges for it.
+
+    Called from `kill_player` only, and AFTER the death bit -- the corpus's own
+    order is status, then morale, then the maxima, all on one tick.
+    """
+    if not map_death_penalty(state.get("map_id", -1)):
+        return None
+    before = player_morale(state)
+    after = morale.after_death(before)
+    if after == before:
+        print(f"[c{conn_id}] death penalty already at the "
+              f"{morale.display(before)} cap; nothing to charge", flush=True)
+        return None                      # nothing went out; the caller's
+                                         # standalone 43 = 0.0 still must
+    return push_morale(send, state, conn_id, after, "died")
+
+
+def morale_experience(send, state, conn_id, gained):
+    """Experience buys death penalty back, 1% per 75 XP.
+
+    WIKI (GWW, "Death Penalty", section Counters). The bank is what makes this
+    honest at our kill sizes: a 26-XP kill is not a third of a percent on the
+    wire, it is nothing at all until the third one.
+    """
+    before = player_morale(state)
+    after, bank, recovered = morale.experience_credit(
+        before, int(state.get("morale_xp_bank", 0)), gained)
+    state["morale_xp_bank"] = bank
+    if not recovered:
+        return before
+    return push_morale(send, state, conn_id, after,
+                       f"{recovered}% back from experience")
 
 
 def enemy_attack_tick(send, state, conn_id):
@@ -7244,8 +8287,56 @@ def enemy_attack_tick(send, state, conn_id):
         # not an observation: no NPC in the corpus casts twice, so there is no
         # recharge cycle anywhere to tell start-triggered from finish-triggered.
         slot = pick_skill(agent, now)
+        # ---- AND THE RESOURCE GATE, which is NOT an AI rule ---------------
+        #
+        # `pick_skill` is declared in its own docstring to be a testing fixture
+        # and not a decision about AI, and nothing about the selector changes
+        # here: it still returns the next ready slot, round robin, and this
+        # asks a different question about the slot it returned -- can this
+        # agent PAY for it. A resource check belongs on the cast path for the
+        # same reason the player's does; putting it in the selector would make
+        # the selector a policy.
+        #
+        # AND IT INCIDENTALLY RATE-LIMITS THE HEAL SPAM `PLAN.md` section 8
+        # item 4 complains about: Restore Condition costs 5 energy on a 2.0 s
+        # recharge, and 5 pips over a 30-energy pool is 1.65 energy a second, so
+        # the pool -- not the recharge -- is what paces it, which is how retail
+        # paces it too. An unpayable slot is skipped and stays ready, so the
+        # agent retries it as the pool fills rather than skipping down the bar;
+        # advancing the cursor here would be exactly the AI decision this
+        # comment says is not being made.
+        if slot is not None and ENERGY:
+            _sid = agent["skills"][slot][0]
+            _cost, _units = skill_cost(_sid)
+            _pool = agent_energy(agent)
+            _pool.tick(now)
+            _short = None
+            if _units > 0 and not agent_adrenaline(agent).charged(_sid):
+                _short = (f"{_units} adrenaline, has "
+                          f"{agent_adrenaline(agent).units.get(_sid, 0)}")
+            elif _cost > 0 and not _pool.can_pay(_cost):
+                _short = f"{_cost} energy, has {_pool.current:.2f}"
+            if _short is not None:
+                slot = None
+                # Once every few seconds, not once per tick: at 20 ticks a
+                # second a broke agent would fill the log with the same line.
+                if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                    agent["cast_refused_at"] = now
+                    print(f"[c{conn_id}] agent {agent_id} cannot cast skill "
+                          f"{_sid}: needs {_short}", flush=True)
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
+            # THE ENEMY PAYS, AND NOTHING GOES ON THE WIRE FOR IT. Property 62
+            # is the observing player's OWN agent's and nobody else's: across
+            # the live corpus, 722 casts by other agents -- 579 of them paid --
+            # carry not one spend, and the two empty cells of that 2x2 are what
+            # make it a rule rather than a tendency. So this debits the server's
+            # book and sends nothing.
+            if ENERGY:
+                _cost, _units = skill_cost(skill_id)
+                if _units > 0:
+                    agent_adrenaline(agent).use(skill_id)
+                agent_energy(agent).spend(_cost)
             agent["skill_ready"][slot] = now + recharge
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
@@ -7484,25 +8575,53 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
     # reading, not a measurement, and it is the cheapest thing here for a
     # capture to overturn.
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    dealt = player_max_health(state) * ENEMY_HIT_FRACTION
     location = None
     if ARMOUR_TERM:
         location = roll_hit_location()
         armour = player_armour_at(location, physical=True)
         if armour is not None:
             dealt *= armour_multiplier(armour)
-    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+    frac = _damage_fraction(dealt, player_max_health(state),
                             agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
 
+    # THE GAIN PRECEDES THE DAMAGE, and that is measured rather than tidy.
+    # Over the 49 live connections the message immediately BEFORE a 0x00CF is
+    # 159/prop 1 (melee_attack_finished) 594 times of 663, and the one
+    # immediately AFTER is 163/prop 16-or-17 (the damage) 601 times of 663 --
+    # modal batch [159/prop1, 207, 163/prop16, 30], n=425, zero counterexamples
+    # to the gain-then-damage adjacency. The first cut of this sender put the
+    # gain last at all three sites; the skeptic pass of 2026-08-21 caught it,
+    # which is the SECOND time this arc has shipped a burst in an order retail
+    # never produces (the energy debit was the first, and two tests had already
+    # begun defending it).
+    # This site reproduces retail's batch EXACTLY -- MELEE_ATTACK_FINISHED
+    # above, the gain here, the damage below -- because it already sent the
+    # finished marker first.
+    if ENERGY:
+        _now = time.time()
+        agent_adrenaline(agent).on_hit_landed(_now)   # SILENT: self-scoped, 9/9
+        player_gains_adrenaline(
+            send, state,
+            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
+    # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
+    # a strike for a successful weapon hit; the player gets one unit per 1% of
+    # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
+    # by the wiki's own words, does not count as combat either. The fraction is
+    # of the player's maximum and is taken BEFORE any reduction, which costs
+    # nothing to say because this server models no reduction after the armour
+    # term above.
+
     print(f"[c{conn_id}] player hit by {agent_id}: "
-          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}"
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
           + (f" (struck the {location.replace('warrior_', '')}, "
              f"AR {player_armour_at(location):.0f})" if location else ""),
           flush=True)
@@ -7660,15 +8779,27 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # and the player's health were consumed before the guard could refuse --
     # a refused value would have cost real state for a message that never
     # went out (test_guards section 4).
-    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+    frac = _damage_fraction(dealt, player_max_health(state),
                             agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
     state["player_health"] = max(0.0, state["player_health"] - dealt)
+    # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
+    # for the caster: that half of the rule says WEAPON hit, and a cast is not
+    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that
+    # reason). Damage taken is damage taken, whatever delivered it -- WIKI puts
+    # the one-unit-per-1% rule on damage and not on attacks.
+    if ENERGY:
+        player_gains_adrenaline(
+            send, state,
+            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
+                                  f"{skill_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
+
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
-          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}", flush=True)
 
     if state["player_health"] <= 0.0:
         kill_player(send, state, conn_id)
@@ -7685,6 +8816,25 @@ def player_revive_due(send, state, conn_id):
     death -- a defeated overlay, a party wipe, a walk back from a resurrection
     shrine -- is not modelled here at all. Getting back up on a timer is the least
     wrong thing that keeps a session usable, and it is a placeholder.
+
+    THERE IS ONE NOW, and the paragraph above is out of date in the half that
+    matters. The 2026-08-17 capture holds a player death and its resurrection
+    ten seconds later (studies/morale/FINDINGS.md section 1), and retail's shape
+    differs from ours in three ways worth writing down before someone
+    "corrects" this function toward a guess:
+
+      * it is a SHRINE RESPAWN -- the position jumps, and the agents that fall
+        out of range go with `0x0021` in the same tick. Ours stands the body up
+        where it fell.
+      * the pools refill through `0x00A2` properties 52 and 55 at 1.0, not
+        through property 34 on the target channel. Ours has been through 34
+        since the agentprops arc and the client accepts it; which one the
+        `Health non-zero on resurrect` complaint prefers is unmeasured, and it
+        is the cheapest remaining experiment on this path (MORALE-Q3's
+        neighbour).
+      * the MAXIMA ARE NOT RESTORED. That one is not cosmetic and is now
+        implemented: the death penalty lives in the reduced maxima, so a revive
+        that hands them back deletes the mechanic.
     """
     player_pools(state)
     if not state["player_dead"]:
@@ -7703,7 +8853,7 @@ def player_revive_due(send, state, conn_id):
     # (test_guards section 6).
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
-    state["player_health"] = float(agents.PLAYER_HEALTH)
+    state["player_health"] = player_max_health(state)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
     # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
     # `Health non-zero on resurrect` on every revive we send -- 49 times across the
@@ -7719,8 +8869,14 @@ def player_revive_due(send, state, conn_id):
         print(f"[c{conn_id}] the player is back up "
               f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
         return
+    # THE MAXIMUM AT THIS MORALE, not the one the character had before it died.
+    # That is the death penalty's whole shape: retail's own revive restored the
+    # pools and left the reduced maxima standing (studies/morale/FINDINGS.md 1),
+    # so a revive that quietly handed the 15% back would undo the mechanic from
+    # the one place nobody would think to look for it.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+          int(player_max_health(state))],
          "restore the player's maximum")
     # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
@@ -7728,6 +8884,10 @@ def player_revive_due(send, state, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar")
+    # AND THE ENERGY HALF OF THE SAME BATCH -- see `restore_player_energy`,
+    # which carries the OBSERVED resurrect instant (52 = 1.0 and 43 = the rate,
+    # alongside the 55 = 1.0 this path's health refill already mirrors).
+    restore_player_energy(send, state, conn_id, "revived")
     print(f"[c{conn_id}] the player is back up", flush=True)
 
 
@@ -7767,11 +8927,16 @@ def player_refill_due(send, state, conn_id):
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_refill_due_at"] = None
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+          int(player_max_health(state))],
          "restore the player's maximum (deferred)")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
+    # The energy rides the DEFERRED batch when the experiment is armed, so the
+    # two refills stay together whichever branch of 1f a run is testing --
+    # splitting them would make the deferral a different experiment.
+    restore_player_energy(send, state, conn_id, "revived, deferred")
     print(f"[c{conn_id}] deferred refill sent", flush=True)
 
 
@@ -9654,6 +10819,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Degeneration AFTER the expiries, so a condition that
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
+                        # Energy regeneration and the adrenaline timeout, right
+                        # behind health's. The energy half is SILENT -- retail
+                        # sends the rate once and the client animates the orb
+                        # from it, 52 events in the corpus and none of them a
+                        # stream. The adrenaline half emits ONE 0x00D0 on a
+                        # real wipe, which is the shape retail's own timeout
+                        # has: an isolated clear 25.00 s after the last gain,
+                        # 15 of 15.
+                        energy_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -11653,6 +12827,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 print(f"[c{conn_id}] PERSIST: sheet from "
                                       f"{_ps_store.path}", flush=True)
                         _ps_level = (_ps_row or {}).get("level", START_LEVEL)
+                        # ...and in the state, because morale needs it: the
+                        # penalty scales BASE health, which is 100 + 20 per
+                        # level and nothing else. It used to live only in this
+                        # local, so a death path four thousand lines away had
+                        # no way to ask how big the character was.
+                        state["level"] = _ps_level
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
                              f"level {_ps_level} on the player's AGENT")
@@ -11778,6 +12958,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # walk back.
                         player_attrs = [0] * PLAYER_ATTR_COUNT
                         player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
+                        # ...and field 10 stopped being one of the zeros on
+                        # 2026-08-20. Retail carries 100 here in 43 of 43
+                        # sightings across the whole live corpus, on level-1
+                        # and level-20 characters alike, and 0 is not a legal
+                        # morale at all -- the range is 40 to 110. Sending a
+                        # zero was not the cautious choice it looked like; it
+                        # was a value the game never sends, in a field whose
+                        # own probe once read the illegal "-100%" back.
+                        player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)
                         if _ps_row is not None:
                             player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
                             player_attrs[13] = _ps_row["skill_points"]
@@ -11877,21 +13066,48 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # on the bar was unaffordable. Order and values follow
                         # gw-preservation's sendPlayerAttributes, which is a
                         # server the real client accepts.
+                        # MORALE FIRST, because the two pools below are computed
+                        # from it. Retail sends this at login too -- `0x009C
+                        # [player, 100]` at t=0.897 of the death capture, before
+                        # its own pool burst -- and we never did, which is what
+                        # "we set morale to 100" used to mean: nothing on the
+                        # wire and a zero in the attribute set.
+                        player_pools(state)
+                        send(GAME_SMSG_AGENT_MORALE,
+                             [PLAYER_AGENT_ID, player_morale(state)],
+                             f"morale {morale.display(player_morale(state))} "
+                             f"on the player")
+                        _energy_max = player_max_energy(state)
+                        _health_max = int(player_max_health(state))
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID,
-                              agents.PLAYER_ENERGY],
-                             f"PLAYER energy = {agents.PLAYER_ENERGY}")
+                              _energy_max],
+                             f"PLAYER energy = {_energy_max}")
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                              [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
-                              agents.PLAYER_HEALTH],
-                             f"PLAYER health = {agents.PLAYER_HEALTH}")
+                              _health_max],
+                             f"PLAYER health = {_health_max}")
                         # The value field is a dword carrying IEEE float bits,
-                        # same as the damage path above.
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-                             [agents.PROP_UNKNOWN_FLOAT_43, PLAYER_AGENT_ID,
-                              PLAYER_AGENT_ID,
-                              _f32(agents.PLAYER_FLOAT_43)],
-                             "PLAYER float 43 (purpose unknown upstream too)")
+                        # same as the damage path above. The purpose is no
+                        # longer unknown -- energy regeneration as a fraction
+                        # of the pool per second (agents.PROP_ENERGY_REGEN),
+                        # rescaled if morale has moved the pool. AND THE
+                        # CHANNEL IS MEASURED: all 52 corpus property-43s ride
+                        # 0x00A2, the NO-TARGET float twin -- zero ride 0x00A3
+                        # (studies/skills section 23) -- so this send is off
+                        # the WITH-target form both arcs inherited from
+                        # gw-preservation's sendPlayerAttributes. The constant
+                        # decomposes as f32(0.33) * 3 pips / 25 max, the
+                        # ranger armour row (merge of the energy and morale
+                        # arcs, 2026-08-20 -- each had one half).
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+                              _f32(morale.regen_fraction(
+                                  agents.PLAYER_FLOAT_43,
+                                  agents.PLAYER_ENERGY, _energy_max))],
+                             f"PLAYER energy regeneration "
+                             f"({agents.PLAYER_FLOAT_43 * agents.PLAYER_ENERGY:.2f}"
+                             f"/s over a {_energy_max} pool)")
                         # Putting the weapon on the BODY is a different question
                         # from putting it in the weapon-set UI, and we had only
                         # done the latter. Upstream sources this message from the
@@ -12625,6 +13841,7 @@ def main():
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
+    global DEATH_PENALTY_FORCED
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -12751,6 +13968,17 @@ def main():
                          "make every run depend on the runs before it. "
                          "Professions, skillbar and unlocks stay flag-"
                          "driven (charstore.py says why).")
+    ap.add_argument("--death-penalty", action="store_true",
+                    help="Charge -15%% morale for every player death in every "
+                         "map, instead of asking the map. OFF by default and "
+                         "the default is RETAIL's answer rather than a stub: "
+                         "GWW's \"Death Penalty\" lists pre-Searing deaths "
+                         "among those that never incur one, and every map this "
+                         "server ships is pre-Searing, so a faithful world "
+                         "never fires the mechanic. This is how it gets "
+                         "watched anyway -- the --explorable idiom, a switch "
+                         "rather than a lie in content/maps.toml. "
+                         "studies/morale/FINDINGS.md.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="Send GAME_SMSG 0x00B6 in the spawn burst: which "
                          "professions the character may take as a SECONDARY. "
@@ -13037,6 +14265,18 @@ def main():
                          "shipped in until 2026-08-20. Use it to say whether "
                          "something the client did was THIS channel rather "
                          "than the cast cycle it rides on.")
+    ap.add_argument("--no-energy", action="store_true",
+                    help="do not charge for skills: no energy gate, no "
+                         "property-62 spend, no regeneration and no "
+                         "adrenaline -- and, since 2026-08-21, none of the "
+                         "four 0x00CF/0x00D0/0x00D2 adrenaline messages. The "
+                         "control for the cost channel, and it restores "
+                         "exactly the behaviour this server shipped with "
+                         "until 2026-08-20 -- every skill free, the orb flat "
+                         "at 25, the skill icons dark, the enemy casting on "
+                         "its recharge alone. Use it to say whether something "
+                         "a run saw was THIS channel rather than the cast "
+                         "cycle it rides on.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
@@ -13903,6 +15143,13 @@ def main():
         print("NO EFFECTS: no 0x0042 goes out, so stances, hexes and "
               "enchantments cast and leave nothing on the target.")
 
+    if a.no_energy:
+        global ENERGY
+        ENERGY = False
+        print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
+              "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
+              "and 0x00D2 all stay off the wire).")
+
     if a.no_armour:
         global EQUIP_ARMOUR
         EQUIP_ARMOUR = False
@@ -14177,6 +15424,13 @@ def main():
     PERSIST = a.persist
     if PERSIST:
         print(f"PERSIST: character store armed -- {charstore.store_dir()}")
+    DEATH_PENALTY_FORCED = a.death_penalty
+    if DEATH_PENALTY_FORCED:
+        print(f"DEATH PENALTY: forced ON for every map this session "
+              f"(-{morale.DEATH_STEP}% per death, floor "
+              f"{morale.display(morale.FLOOR)}). Retail charges nothing in "
+              f"pre-Searing, which is every map this server ships -- so this "
+              f"is a deliberate experiment, not the world.")
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

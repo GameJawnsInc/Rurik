@@ -292,8 +292,18 @@ def build_of(data: bytes):
 #     the witness: all 199 Attacks are 5, 75 of 76 Stances are 0, and every
 #     Glyph, Preparation and type-16 skill is 0. Codes 1, 3, 4, 6, 14 and 16
 #     are NOT resolved here and nothing reads them.
+#
+# `adrenaline_units` was added 2026-08-20, alongside the existing `adrenaline`
+# (the ceil(units/25) DISPLAYED strike count). The server-side mechanic needs
+# the raw unit total, not the display: Battle Rage (skill 317; OBSERVED here,
+# name resolved via textrec against this same build) charges at 80 raw units
+# per +0x38, which ceil(80/25) displays as 4 strikes -- WIKI, GWW "Battle
+# Rage" Notes, "exactly requires 80 units", checked 2026-08-20. `parse_record()`
+# already decodes the raw total at +0x38 as `adrenaline_units`; this only adds
+# it to the emitted set.
 CONTENT_FIELDS = ("activation", "aftercast", "recharge",
-                  "energy", "adrenaline", "attribute", "profession",
+                  "energy", "adrenaline", "adrenaline_units",
+                  "attribute", "profession",
                   "type_code", "target",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15")

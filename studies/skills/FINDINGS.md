@@ -1213,6 +1213,13 @@ crossed the wire in any session we have recorded** — in either direction. Our
 character has an empty bar and every session ends during the early handshake. The
 client, for its part, sends nothing skill-related either.
 
+> **[Superseded 2026-08-20.** True when written — every session then ended in the
+> early handshake. The live corpus has since grown to 14 captures, and it now
+> holds **44 `USE_SKILL` (0x0046) episodes across 7 distinct skill ids**, with
+> full activate/recharge/property bookkeeping — §16–§24 below are built on
+> them. This sentence kept reading as current for ten days; the correction is
+> dated so it cannot again.]
+
 **A caveat on the OBSERVED tier itself.** The bytes in our captures are ours; the
 *names* attached to them are OpenTyria's. Our label table matches ldufr's
 `opcodes.h` precisely where ldufr disagrees with the rest of the cluster — our
@@ -2025,3 +2032,1617 @@ draws. The client's 6.03 is that animation, done by the client from one number.
 The expiry sends the rate back to zero, which is the half a server is most
 likely to forget: the icon goes and the arrows stay.
 
+---
+
+# OBSERVED, 2026-08-20 (third pass): ENERGY has a complete wire model — and ADRENALINE has no wire at all
+
+The energy recon ran as five parallel read-only censuses over the 14-capture
+live corpus (13,378 property-channel messages, 49 connections, every one
+decoding to its final byte), the pinned build-38797 client table, and the
+2026-08-20 harness frames. Everything below is theirs plus two checks run by
+the orchestrator; scratch scripts are named in the session log.
+
+## 23. Energy rides four properties, and its quantum is f32(0.33) — not one third
+
+Energy has **no dedicated opcode**. It rides the same generic property channel
+as health, on the **no-target** variants only (0x009F int, 0x00A2 float —
+never once on 0x00A0/0x00A3, whose only populated float properties remain
+{16, 17, 55}; energy bookkeeping has no victim field because it is always
+self-directed):
+
+| property | channel | n (live corpus) | what it is |
+|---|---|---|---|
+| **41** | 0x009F int | 97, values {20, 22, 25, 30} | **MAX energy**, sent as the same (1, real) on-create pair as health’s 42 |
+| **43** | 0x00A2 float | 52 | **regen RATE**, fraction of max per second, sent once on change — never periodic |
+| **62** | 0x00A2 float | 45, all negative | **discrete SPEND**: −(energy_cost / max), once per completed cast |
+| **52** | 0x00A2 float | 1 | **discrete GAIN**: the one witness is a resurrect, value exactly 1.0 |
+| 33 | any | **0** | the candidate absolute setter: **NOT FOUND**, positive control green (34/44/52/55/62 all found by the identical scan) |
+
+**The rate’s quantum, settled bit-exactly.** The corpus carries exactly five
+nonzero prop-43 values. Three candidate formulas were tested against the raw
+f32 bit patterns; only one reproduces all five:
+
+| observed f32 | = f32(f32(0.33)·pips/max) | GWW armor row |
+|---|---|---|
+| 0.032999999821186066 | 2 pips / 20 **or** 3 / 30 (degenerate) | Warrior base — or caster before armor |
+| 0.03959999978542328 | 3 / 25 | Ranger (+1 pip, +5e) |
+| 0.04400000348687172 | 4 / 30 | caster basic armor (+2, +10) |
+| 0.052800003439188004 | 4 / 25 | Dervish/Assassin (+2, +5) |
+| 0.06000000238418579 | 4 / 22 | 4 pips over a death-penalty max |
+
+The nominal rule — WIKI (GWW, "Energy" §Regeneration, rev 2026-03-15): *"Each
+pip of Energy regeneration generates 1 Energy every 3 seconds"* — predicts
+p/(3m), which matches **zero of the five** bit patterns. The wire’s constant is
+**0.33 held in single precision**, not one third: `f32(0.33) × pips ÷ max`,
+rounded once more to f32. Same class of result as health’s 2/H quantum
+(isle B4), and the (pips, max) pairs are **exactly GWW’s basic-armor table
+rows** — an independent join nobody tuned.
+
+**The denominator is the CURRENT max, and one agent proves it by dying.**
+Capture `20260817T183756`, agent 27: max 25, rate 0.0528 (= 4 pips/25). At
+t=353.299 one batch carries the death bit (0x00F1 effects=16), prop 41 re-sent
+**22**, prop 42 re-sent **102** — 102 is 120 × 0.85 exactly, a death-penalty
+hit to the maxima — and **prop 43 driven to 0.0**: regen stops at death. At
+t=363.343, 10.044 s later: death bit clears, **prop 43 = 0.06 = the same 4 pips
+over the NEW max 22**, **prop 52 = 1.0** and prop 55 = 1.0 — a resurrect
+refilling both pools in one instant. Four properties, one mechanism, retail
+bytes. (One recon agent initially read the 25→22 as a *current*-energy spend;
+the 42=102 co-occurrence in the same death batch settles it as the maxima.)
+
+**Prop 62 is −cost/max, validated against the client’s own table with zero
+exceptions.** All **45** spends in the corpus, **8 distinct skills** (105, 153,
+364, 394, 780, 783, 814, 858) over three pool sizes, every one predicted
+exactly from `skills.toml`’s own energy column — skill 364 ("Charge!") alone
+22 times across 6 connections, always −0.25 = 5e over max 20 (the control: a
+fixed denominator of 20 misses 18 of 45 across the other pools). It fires
+**once** per cast, 0.03–0.7 s after `USE_SKILL` (mostly ~0.05 s), and **the
+spend precedes the property-60 that names the skill in the same batch, 45 of
+45** — measured because a stream-order join first scored 18 of 45 by hanging
+each spend on the previous cast. **Zero-cost casts send nothing** — 0 of the
+observing agent’s 44 free casts carry one. **And prop 62 is scoped to the
+agent whose orb is on screen**: a 2×2 with two empty cells — the observing
+player’s agent spends on 45 of 45 paid casts and 0 of 44 free ones, while
+**722 casts by OTHER agents (579 of them paid) carry not one spend** — so a
+server must not emit 62 for its NPCs, and ours does not. The client sends
+nothing energy-shaped in the other direction: `USE_SKILL`’s four payload
+fields never carry a quantity. (An earlier count in this section read 44
+episodes over five skills — that was the c2s `USE_SKILL` join, which sees only
+connections whose client half decodes; the s2c activation join above is the
+wider net and the shipped oracle enforces its numbers.)
+
+**The client does not predict a deduction.** Two 2026-08-20 harness runs
+(`20260820T190210`, `20260820T190917`): eight presses including Flare — 5e in
+retail — and the energy bar sat at 25 in every frame while health visibly
+re-rendered 54→100→54 in the same frames. Our server has never had a prop-62
+call site (`GV_ENERGY_SPENT` defined, zero uses), so the flat bar is the
+measurement: **energy display waits for the server**. The client does zero the
+orb at death client-side — and leaves it 0 after revive, because our revive
+path sends no energy property where retail sends 52=1.0 + 43=rate. That is a
+falsifiable prediction for the next run: emit the resurrect pair and the orb
+should refill.
+
+**Closed in passing:** `studies/isle` §9 item 6’s "skill 364… no measurable
+effect" — it had one, −0.25 max-energy on prop 62 at the exact flagged
+timestamp (t=1008.125, capture `20260818T132739`), a channel damagepass.py
+never reads. And `content/world.toml`’s `float_43 = 0.0396` — gw-preservation’s
+"REVERSE THIS MORE" constant — is now **measured**: it is f32(0.33)·3/25, the
+Ranger armor row, and the identical bit pattern appears in capture
+`20260810T235916` on four connections. `studies/profession/RESKIN.md` §24.1’s
+counts (52: never observed; 62: n=6) were true against its twelve-capture
+corpus and are superseded by this one — addendum written there.
+
+## 24. Adrenaline: the table carries the threshold, the wiki carries the rules, and the wire carries nothing anyone has named
+
+**The client table’s +0x38 is raw units and it is the USE threshold.** §10
+measured the field (80/120/80 for Battle Rage/Defy Pain/Rush, displayed
+strikes = ceil(units/25)); GWW’s own "Battle Rage" Notes: *"exactly requires
+80 units… 3 strikes and 5 units"*. `skills.toml` now carries it per row as
+`adrenaline_units` (extractor extended this arc).
+
+**The rules — WIKI (GWW, "Adrenaline", rev 2026-07-02), player-visible tier:**
+
+- Gain **25 units (= one strike) per successful weapon hit** on an opponent —
+  weapon hits, not spell damage. Multi-hit attack skills grant one per hit.
+- Gain **1 unit per 1% of maximum health lost** to damage, **floored** (sub-1%
+  grants nothing), counted before damage reduction.
+- **Each adrenal skill has its own pool; all pools grow simultaneously.**
+- On USE: the used skill’s pool resets to zero and **every other skill loses
+  one strike (25 units)** — *"whether or not the skill is interrupted or it
+  fails"*.
+- **All adrenaline is lost on death, or after 25 seconds of non-combat** (no
+  attack landed, no damage taken — zero damage does not count as combat).
+
+~~**And the wire is silent.**~~ — **SUPERSEDED 2026-08-21 by §26: the wire was
+never silent, it was UNNAMED.** Four GAME_SMSG opcodes carry adrenaline — 207,
+208, 209, 210 (`0x00CF`–`0x00D2`) — and 724 of them are sitting in this same
+live corpus. The paragraph below is kept verbatim because every sentence in it
+is *true as written*, and the shape of the miss is the lesson: this section
+searched the sources for the WORD, and no source anywhere has it, so a source
+survey could not have found the channel and a corpus scan with no name to look
+for did not either. The second horn of the disjunction below is the right one,
+and what settled it was the client's own receive table, not any source.
+
+**And the wire is silent.** `schema/messages.json` names no adrenaline message.
+GWCA’s `Opcodes.h` names none. GWCA reads `adrenaline_a/b` out of **client
+memory** (`SkillbarSkill`, +0x00/+0x04), not out of a packet it maps. The
+warrior melee sessions in the live corpus surface no adrenaline-shaped
+property. So either the client animates its own icons from combat it can
+already see — it watches its hits land and its health drop, and it holds the
+unit costs in its own table — or the channel hides in an unmapped opcode.
+~~UNRESOLVED~~ — **answered the same evening, §25**: the harness put Sever
+Artery on the bar, landed nine hits, and the icon never moved. The client
+does not self-animate adrenaline; the display waits for a message nobody has
+mapped. The server tracks the pools authoritatively regardless.
+
+## 25. The client consumes all of it — four runs, 2026-08-20 evening
+
+The substrate landed at `68d9850` (gate, debit, regen, adrenaline pools,
+death/revive emissions) and four loopback runs measured what the client does
+with each message. Predictions were written before the first launch
+(session scratchpad, `run-predictions.md`); every P below names its verdict.
+
+**E1 (`20260820T230059`) — the debit and the climb.** The first property-62
+any client has ever received from this server. Fifteen frames, every one
+reconciled against the server's own logged pool plus 0.99 e/s times the gap:
+**the client displays floor(its own integration of max + rate + debits)** —
+including the two frames that discriminate floor from round (server 22.56 →
+client **22**; 23.5 → **23**) — and the climb between messages runs at
+exactly the prop-43 rate. Fourteen frames sit on exact press-time anchors;
+the fifteenth (24 at ~+2 s) is consistent within the one press whose time is
+estimated. P1 CONFIRMED, P2 CONFIRMED (the client animates the rate, as it
+does for health). **And the energy bar draws THREE `›››` arrows — the 3-pip
+rate, rendered** — with a control: at death (E3) the rate goes to 0.0 and the
+orb empties outright. One pip-quantum, one arrow, the energy twin of isle
+B4's health-pip result.
+
+**E2 (`20260820T230849`) — the refusals, and the answer to §8's question.**
+A 25-energy skill (863) drained the pool 25 → 0.00 in one cast, and the
+recovery staircase came back **5 → 11 → 17 → 22 → 25** across ~6 s frames —
+~1 e/s, the sent rate, from near-empty. Then the two refusals: with 7.70
+energy the client **SENT** the 25-energy `USE_SKILL` anyway, and with 0
+adrenaline it **SENT** the `0x8027` attack-skill press —
+
+> **The client does not swallow an unaffordable press, and it does not grey
+> the slot for affordability** (the darkening our first read saw was the
+> SELECTED-SKILL gold border moving between slots). Against our server, the
+> gate is the SERVER's, both halves. P3/P5 answered: no client-side gate
+> fired. What retail's server answers a refused press with — ours answers
+> with silence, and the client visibly re-animates the pressed slot for
+> ~10 s afterwards — is a new open question; retail players see a "Not
+> enough Energy" feedback that has to come from somewhere.
+
+Also observed: the practice target died to THREE Power Attacks (they hit
+for ~41, not the ~19 the walk plan assumed), which is why this run's Sever
+charge stopped at 75 units — the fourth swing hit a corpse. And the
+**25-second non-combat wipe fired live**: `the player's adrenaline is gone`.
+
+**E3 (`20260820T231700`) — death and the resurrect pair.** The enemy killed
+the player; the kill batch carried `energy regeneration stops` (43 = 0.0,
+the retail death shape) and the client emptied the orb with the health. Ten
+seconds later the revive sent the retail resurrect pair — **52 = 1.0 then
+43 = rate** — and **the orb refilled on screen** (frame 23:17:44 empty,
+23:17:50 full). Yesterday's runs left that orb at 0 forever; this was
+property 52's first render on any client, ours or theirs. P8, P9 CONFIRMED.
+Bonus: the post-revive Sever press was refused at **46 units accumulated
+purely from taking hits** — the 1-unit-per-1%-health-lost rule visibly at
+work with zero swings landed.
+
+**E4 (`20260820T232138`) — the full adrenaline cycle.** Nine landed
+auto-attack swings (each +25, pool capped at its 100-unit cost), then:
+`skill 382 spends 100 adrenaline; every other pool loses a strike` →
+`EFFECT_APPLY(Bleeding on agent 10, buff 1, 9.0s, inflicted by skill 382 at
+rank 3)` — charge, spend, cross-pool tax and the condition landing through
+the effect substrate, one unbroken chain. The immediate re-press proved the
+reset: `needs 100, has 75` — exactly three post-spend swings' worth. P6
+CONFIRMED.
+
+**P7 REFUTED, and the negative is the finding: the client does NOT charge
+the adrenal icon from observed combat.** (EXPLAINED in §26 and INVERTED
+in §27: nothing was filling `adrenaline_b` because no `0x00CF` had ever been
+sent. With one, the same rig fills the same slots and the controls stay at
+zero. The refutation stands exactly as written — it was a true statement
+about a client nobody had sent the message to.) At a server-side pool of 100 —
+charged, accepted, spent — Sever's slot rendered pixel-identical to its
+0-unit state (E4 frames w001 vs w002/w003; the gold ring in w004 is press
+feedback, present for refused and accepted presses alike). The dark icon at
+zero units matches GWW's description, but the flames-creeping-up display is
+fed by the client's own adrenaline store (GWCA's `SkillbarSkill.adrenaline_a`,
++0x00) — and **no source anywhere maps the message that fills it**: not
+schema/messages.json, not GWCA's `Opcodes.h` (GWCA reads it from client
+MEMORY). Finding that opcode is now a named clientscan target: what writes
+`SkillbarSkill.adrenaline_a`, and which RECV handler reaches it.
+
+**ANSWERED 2026-08-21, §26 — and the refutation STANDS, now with a mechanism.**
+Four RECV handlers write that store and nothing else does; our server sent none
+of them, so there was nothing for the icon to draw. The target question was also
+better than it knew: `adrenaline_a` (+0x00) is an ACCUMULATOR, and the icon does
+not draw from it at all — it draws from `adrenaline_b` (+0x04), a deferred
+commit of the first. Two things this run could not have known are now on record
+for whoever re-runs it: the fill is drawn only while the map state is
+`MISSION_MAP_GAME`, and the bar is a continuous fraction of the skill's RAW
+cost, not a count of strikes.
+
+# OBSERVED, 2026-08-21 (fourth pass): adrenaline HAS a wire — four opcodes
+
+§25 ended with a named target: *what writes `SkillbarSkill.adrenaline_a`, and
+which RECV handler reaches it.* This is the answer. It took the route every hard
+question in this repo has taken — read the client's own receive table, then
+check the reading against ArenaNet's own traffic — and it went to the binary
+first precisely because §24 had already proved the sources were exhausted.
+
+**What §24 got wrong, and it is worth naming before the evidence.** §24 searched
+for the *word* and concluded the wire was silent. The word is not there: no
+reimplementation in the vault names an adrenaline message, and the client itself
+never names one either. But the channel was in `schema/messages.json` the whole
+time, as four unnamed layouts. A survey keyed on a name cannot find a thing
+nobody named. §24's second horn — *"or the channel hides in an unmapped
+opcode"* — was the right one.
+
+Static work is on the **pinned pristine build 38797**. No client was launched
+for this pass, nothing was patched, and the live corpus was read and not written.
+
+## 26. The adrenaline family: `0x00CF` gains, `0x00D0` clears, `0x00D1` sets, `0x00D2` spends
+
+### 26.1 The four messages
+
+MEASURED. Shapes are `msgshape.py`'s **recovered** descriptors, not
+`msghandler.py --table`'s — the cmd slots in the static image read
+`['0xcf', '0x0', '0x0']` because a load-time initializer fills them, and citing
+the static view for a shape is how a reader gets a confidently wrong answer.
+Every one of the four agrees byte-for-byte with the layout `schema/messages.json`
+already carried, so naming them changed no field list; that is proved rather
+than asserted in §26.10.
+
+| opcode | hex | recovered shape | wire | worker | what the handler does | live |
+|---|---|---|---|---|---|---|
+| **207** | `0x00CF` | `[agent_id, u32]` | 10 B | `0x00821980` | adds `units` to every eligible slot, capped at that skill's cost | **663** |
+| **208** | `0x00D0` | `[agent_id]` | 6 B | `0x00821B00` | zeroes both halves of all 8 slots | **22** |
+| **209** | `0x00D1` | `[agent_id, u16, u32, u32]` | 16 B | `0x00821B70` | writes `units` to one slot, both halves | **0** |
+| **210** | `0x00D2` | `[agent_id, u16, u32]` | 12 B | `0x00821C00` | used skill → 0, every other occupied slot −25 | **39** |
+
+Names are in `schema/overrides.json` as `AGENT_ADRENALINE_GAIN` / `_CLEAR` /
+`_SET` / `_SPEND`. **Every one of those names is INFERRED** — no ArenaNet string
+names any of these four messages. What is SOURCED is the *store* they write
+(§26.7); the verbs are our summary of what each handler does.
+
+**The dispatch chains, and why they cannot be mis-read.** MEASURED, one link at
+a time, `codescan.py --xrefs` on each:
+
+```
+  RECV table 0x00BC8F68
+    207  stub 0x0091F3F0 -> thunk 0x00814500 -> worker 0x00821980
+    208  stub 0x0091F410 -> thunk 0x00814520 -> worker 0x00821B00
+    209  stub 0x0091F430 -> thunk 0x00814540 -> worker 0x00821B70
+    210  stub 0x0091F460 -> thunk 0x00814570 -> worker 0x00821C00
+```
+
+Each of the eight downstream functions has **exactly one direct caller in the
+image**, so there is no branch anywhere in the chain to have taken wrongly.
+Every thunk does the same two things: `mov ecx,[eax+0x2C]` then `add ecx,0x6F0`
+— the per-agent skill-bar container that ArenaNet's own assert calls
+`hotKeyState` (`ChCliSkill.cpp:718`, the same container opcode 100's override
+row already named). A record is 0xA4 bytes: eight slots of stride 0x14 starting
+at record+4, ending at record+0xA4. The bound is SOURCED too —
+`ChCliSkill.cpp:124` asserts `hotKey < arrsize(hotKeyState->hotKey)` on the
+accessor's slot index.
+
+Slot layout, as the four handlers use it:
+
+| offset | field | who touches it |
+|---|---|---|
+| +0x00 | `adrenaline_a` — the accumulator | 207 adds, 210 decrements, the deferred commit reads |
+| +0x04 | `adrenaline_b` — the display copy | 208/209/210 write; the commit writes; **the only half any accessor exposes** |
+| +0x08 | recharge | 207 reads it as a gate |
+| +0x0C | skill id | matched by 209 and 210 |
+| +0x10 | skill copy | matched by 209 and 210 |
+
+### 26.2 The charging loop, read instruction by instruction
+
+MEASURED at `0x00821980`. Five rules, and each one is a single instruction pair
+rather than an inference:
+
+1. **Walk exactly eight slots.** `0x008219AD lea ebx,[eax+0xA4]` (the end) and
+   `0x008219B5 lea esi,[eax+4]` (the first), stepped `0x008219F1 add esi,0x14`.
+2. **Skip a RECHARGING slot.** `0x008219C0 cmp dword [esi+8],0 / jne` — a skill
+   whose recharge is nonzero takes no adrenaline at all. This is a rule the wiki summary
+   in §24 does not carry, and the client enforces it.
+3. **Skip an EMPTY slot.** `0x008219C6 mov eax,[esi+0xC] / test eax,eax / je`.
+4. **Skip a NON-ADRENAL skill.** `0x008219CE call 0x005A88B0` resolves the skill
+   row (`imul eax,esi,0xA4` + base `0x00988ED0`, bound `0xD73` = 3443 rows), then
+   `0x008219D6 movzx ecx,word [eax+0x38] / test cx,cx / je`. Zero cost, no charge.
+5. **Add, then CAP at the skill's own cost.** `0x008219DF mov eax,[esi]` /
+   `0x008219E1 add eax,[ebp+0xC]` / `0x008219E4 cmp ecx,eax / jb / mov ecx,eax` /
+   `0x008219EA mov [esi],ecx`. That is `slot = min(cost, slot + units)`.
+
+`0x008219EC mov edi,1` sets a *something-gained* flag, and **if no slot took the
+units the handler returns having done nothing** — no event, no queue entry, no
+repaint. Everything is UNSIGNED: `0x00CF` cannot express a loss, and a server
+that wants one has to send `0x00D0` or `0x00D2`.
+
+**The 25.0f is a constant, not the amount.** On any gain the handler posts UI
+event `0x10000058` carrying `fld dword [0x009495B4]` — MEASURED as raw bytes
+`0000c841` in `.rdata`, i.e. `25.0f`, a fixed literal. It is **not** the
+message's `units` field. Anyone reading that `fld` as "the amount gained" would
+get 25 for a 3-unit gain; the amount reaches the store through `[ebp+0xC]` and
+nowhere else.
+
+### 26.3 The deferred `a`→`b` commit, and why the split exists
+
+MEASURED. After the loop, 207 appends the agent to the array at `ctx+0x6E0` and
+schedules deferred task `0x00820DD0`. That task pops the front entry, re-finds
+the record, and runs `0x00820E84 mov ecx,[eax]` / `0x00820E86 mov [eax+4],ecx`
+across all eight slots — `adrenaline_a` → `adrenaline_b` — then posts
+`0x10000059`, the repaint.
+
+**This is a deferred-commit double buffer, and the asymmetry is the evidence.**
+`+0x00` is written by the arithmetic and read by almost nothing; `+0x04` is
+written by every handler that wants an immediate repaint and is the only half
+the accessor exposes (§26.4). `0x00CF` alone routes through the queue — 208, 209
+and 210 write **both** halves inline and repaint on the spot, which is exactly
+what you do when the value is already final and you are not batching.
+
+**How hard that claim was checked.** `codescan.py --xrefs 0x00820F10` says the
+record lookup — the only direct path to a slot in the image — has **25 direct
+call sites**, and every one falls inside a single contiguous stretch of `.text`,
+`0x00820E6E`–`0x008230AB`, whose asserts are `ChCliSkill`'s. All 25 were
+disassembled. Within that bound, a slot's `+0x00` is:
+
+- **computed** at exactly four sites — `0x008219EA` (207's capped add),
+  `0x00821B30` (208's zero), `0x00821BD7` (209's set), `0x00821C7E` (210's
+  decrement);
+- **cleared wholesale** by the skill-bar load path, which memsets the whole
+  0x14-byte slot (`call 0x0046DBF0`, `ecx` = slot base, `edx` = 0x14) — so
+  loading a bar drops adrenaline as a side effect;
+- **moved wholesale** by two five-dword slot copies (`0x008224A4`,
+  `0x00822861`), which relocate a slot without computing anything;
+- and **read to compute with** at three sites only: 207's own `add`, the
+  deferred commit, and 210's decrement.
+
+That is a bounded search, not a census, and the bound is what makes it
+refutable: anything reaching a slot without going through `0x00820F10` is
+outside it. Naming the bound is deliberate — `studies/enemy/PLAN.md` §6o once reported a
+scope-limited search as a global absence and closed a question for a session
+with a false sentence.
+
+**A FIFTH AND A SIXTH writer exist, and neither is one of these four.**
+*(Corrected 2026-08-21: this said FIFTH. Opcode **229** `0x00E5`
+SKILL_RECHARGE is a sixth — worker `0x00822B90`, reached via stub
+`0x0091F690` and thunk `0x00814920`, whose matched-slot body zeroes both
+halves at `0x00822C00`/`0x00822C06` in a sequence **byte-identical** to
+231's before writing the recharge timestamp at `0x00822C41`. It was missed
+here because this section's bounded search asked which sites COMPUTE a
+value into `+0x00`, and a constant zero computes nothing. The bound was
+stated honestly and still hid a writer — worth keeping as the example.)*
+
+**And the fifth:** Opcode **231**
+(`0x00E7`, `[agent_id, u16, u32]`, 12 B — the same shape as 210) reaches worker
+`0x00822D10` via stub `0x0091F6E0` and thunk `0x00814980`, matches one slot, and
+zeroes **both** adrenaline halves (`0x00822D7C`, `0x00822D82`) before setting the
+recharge field to `0xFFFFFFFF` and posting a second event. It is almost
+certainly a *skill disabled* message and this pass is **not naming it** — one
+handler read is not enough, and 231 has its own evidence to gather. It is
+recorded here because any model of this store that lists four writers is already
+wrong.
+
+### 26.4 The display path ends at an `fdiv` — and it is the RAW cost, with no quarters
+
+MEASURED, and this is the correction §25 could not make.
+
+`ChCliApi 0x00816EF0` is the adrenaline accessor. It returns
+`[record + 0x14*slot + 8]` — computed as `lea eax,[esi+esi*4]` /
+`mov eax,[edi+eax*4+8]` at `0x00821081`, which is slot base **+0x04**, the
+display copy. It has **exactly one direct caller in the entire image**
+(`codescan --xrefs`, zero aligned words holding the VA): `GmSkSlot 0x00542E78`.
+
+That caller fetches the display half, fetches the cost beside it, and posts both
+to one control:
+
+```
+00542E78  call 0x816EF0                  ; adrenaline_b for this slot
+00542E7D  mov  [ebp-8], eax
+00542E80  movzx eax, word ptr [esi+0x38] ; the skill row's adrenaline cost
+00542E84  mov  [ebp-4], eax
+00542E8D  push 0x59                      ; -> Controls::SkillImage, payload {b, cost}
+```
+
+`GmCtlSkImage 0x008C6112` receives message `0x59`, and its arithmetic is the
+whole answer:
+
+- `0x008C6140 cmp eax,ecx / jb` — if `adrenaline_b >= cost`, the fraction is
+  never computed and a different, fully-charged visual is used;
+- otherwise both values are converted as **unsigned** (`fild` plus the
+  `fadd [0x93c1d8]` = `4294967296.0` fixup for a set sign bit) and
+  `0x008C6188 fdiv` divides them;
+- the quotient is forwarded as message `0x56`.
+
+**So the fill is a continuous fraction of the RAW unit cost.** There is no
+division by 25 anywhere on this path and no quantisation to quarters. A 3-unit
+gain on a 100-unit skill sends the control `0.03`, not zero — what the control
+then *draws* with that number is one hop further than this pass traced, and the
+run in §26.11 item 6 is what would settle it. §10's `ceil(units/25)` is still
+right for the *number printed on the skill card*; it has nothing to do with the
+fraction on this path.
+
+**And it corrects a claim of ours.** `PLAN.md` (~line 1384) says the display
+store is `SkillbarSkill.adrenaline_a (+0x00)`. **That is wrong** — the display
+store is `+0x04`. Note what is *not* being corrected: `Py4GW_Reforged` reads
+`adrenaline_a` as the live value and that is also right, for a different
+consumer. A bot wants the accumulator, which is current the instant the message
+lands; the screen shows the committed copy, which lags by one deferred task.
+The two readings are complementary, not contested.
+
+### 26.5 What retail actually sends — the census
+
+MEASURED by this session over the live corpus: `vault/captures/live` holds **14**
+capture directories, **10** of which carry a decrypted game channel; those ten
+hold **49 GAME_SMSG connections** and **114,985 messages**, every connection
+decoding to its final byte with zero framing errors (`tape.decode_all` refuses a
+partial decode, and the pooling rule refuses any connection whose `origin` is
+not `live`).
+
+| opcode | n | payload distribution |
+|---|---|---|
+| 207 | **663** | `25` ×631; sub-25 gains ×32: `{3:6, 4:12, 5:1, 6:5, 7:1, 8:3, 11:4}` |
+| 208 | **22** | — |
+| 209 | **0** | — |
+| 210 | **39** | skill ids `{382: 20, 384: 11, 385: 8}` |
+
+**Self-scoped, 9 of 9.** Every connection that carries a 207 names **exactly one
+agent id**, and that id equals the same connection's own opcode-218
+`SKILLBAR_UPDATE` agent. Zero mismatches, zero multi-agent connections. The nine
+connections sit in three captures and show only four distinct ids —
+`{7, 11, 13, 25}`, with two connections in one capture both naming `11` — which
+is what a per-instance agent handle looks like, not four agents being tracked.
+
+**This REFUTED an earlier draft of this same pass**, which read the four
+distinct ids as evidence that retail broadcasts adrenaline for other agents'
+bars. It does not. Adrenaline is scoped exactly like energy property 62
+(§23): a server emits it only for the agent whose own UI shows the value, and
+ours must not emit it for NPCs.
+
+**Two amount populations, and only one of them has a reading with evidence.**
+The `25`s are OBSERVED as a value, and 25 units per landed weapon hit is exactly
+the first of the two WIKI gain rules §24 already records. The 32 sub-25 gains
+are also OBSERVED as values, and the obvious reading is §24's second rule — one
+unit per 1% of maximum health lost, floored — which would make
+`{3,4,5,6,7,8,11}` percentages of a health bar.
+**That reading is INFERRED and nothing joins it to health traffic yet.** The
+join is cheap and specific and has not been run: for each sub-25 gain, find the
+health property on the same agent within the same batch and test
+`units == floor(100 · damage / max_health)`. Until somebody does that, the
+population is a set of small integers that is *consistent with* a rule, which is
+what coincidence also looks like.
+
+**209's zero is a result, not a gap.** A fully implemented live handler that
+retail never used in anything this repo has captured — the same shape of finding
+as energy property 33 (§23), also implemented, also never sent. It is why 209 is
+filed at `medium` while its three siblings are `high`.
+
+### 26.6 The map-state gate, and what it does to probe design
+
+MEASURED, and this changes how the next run must be set up.
+
+`GmSkSlot 0x00542E43` calls `MissionCliGetMap` (`0x0084D9B0`, which returns
+`missionCtx[+0x238]`), then `0x00542E48 cmp eax,1` / `0x00542E4B jne`. On the
+`jne` path the control is sent message `0x59` with a **NULL payload**
+(`0x00542E9F push 0 / push 0`) — the overlay is not merely left stale, it is
+torn down.
+
+The enum values are SOURCED from ArenaNet's own asserts and the branches they
+guard, not guessed:
+
+- `MsCliApi.cpp:251` asserts `context->map == MISSION_MAP_GAME` guarding
+  `cmp dword [esi+0x238],1` → **`MISSION_MAP_GAME == 1`**;
+- `QuestLog.cpp:261` asserts `MISSION_MAP_OUTPOST == MissionCliGetMap()`
+  guarding `test eax,eax / je` → **`MISSION_MAP_OUTPOST == 0`**.
+
+**So a perfectly correct 207 sent while the client sits in an OUTPOST produces a
+pixel-identical icon.** Any probe of this family has to be in an explorable or a
+mission, and a null from an outpost run means nothing at all — it is a check
+that cannot fail, which is not a check. (This does **not** explain §25's P7:
+that run's icon stayed dark because nothing had written the store at all, our
+server having sent none of these four. The map gate is a *second* requirement
+the next run has to satisfy, not a re-reading of the last one.)
+
+### 26.7 ArenaNet's own words
+
+SOURCED. Four assert sites carry the word, and two of them do real work:
+
+| site | expression | what it settles |
+|---|---|---|
+| `ChCliSkill.cpp:84` @ `0x00820DEB` | `context->skillAdrenalineUpdateArray.Count()` | names the whole deferred chain **adrenaline** |
+| `GmCtlSkCard.cpp:409` @ `0x008CC42D` | `!(energyCost && skillData.adrenaline)` | guards `cmp word [esi+0x38],0` |
+| `GmCtlSkListEntry.cpp:185` @ `0x008D377A` | `!(energyCost && skillData.adrenaline)` | guards `cmp word [edi+0x38],0` |
+| `GmCtlSkImage.cpp:1483` @ `0x008C61F4` | *"Clearing the adrenaline timer on a skill image is currently not supported. Bug Austin about this."* | the control drawing `0x59` is the adrenaline control, in ArenaNet's own words |
+
+The middle two are the load-bearing pair. **`word[skillRow+0x38]` IS
+`skillData.adrenaline`, at two independent sites in two different source
+files** — which promotes `toolkit/clientscan/skilltable.py`'s `adrenaline_units`
+from our name for the field to *the client's own*. §10 measured that field and
+called it a threshold; ArenaNet calls it `adrenaline`, and both are true.
+
+Two more entry-guard asserts pin field 2 of the two matching handlers as
+`skill`: `ChCliSkill.cpp:442` at `0x00821B85` (209) and `ChCliSkill.cpp:463` at
+`0x00821C16` (210), each guarding a `test` on that argument. The row lookup's
+own bound assert is at `ConstSkill.cpp:3833`, and it names the table `s_skill`.
+
+A caution the tooling itself prints: `asserts.py` reads 19,758 sites and knows
+it is short by at least 373 more it cannot pattern-match, so **"no assert names
+X" from that tool is a floor, not a census.** Nothing above depends on an
+absence.
+
+### 26.8 Adrenaline costs are NOT all multiples of 25
+
+MEASURED over all **3,443** rows of build 38797's skill table (base VA
+`0x00988ED0`, stride 0xA4). **151 rows carry a nonzero cost:**
+
+```
+20:1   25:2   50:6   60:1   75:10   80:20  100:24  120:20  125:2
+130:5  140:5  150:20  160:5  175:5  200:21  220:1  240:2   250:1
+```
+
+Nine of the eighteen distinct values are **not** multiples of 25. So **the pool
+must be modelled in raw units** — 25 is the gain per weapon strike, not the
+quantum of the bar — which is what `pools.py` already does and what §26.4's
+`fdiv` independently requires.
+
+**A latent width disagreement, recorded before it bites.** The client reads
+`+0x38` as `movzx WORD` at both `0x00542E80` and `0x008219D6` — 16 bits.
+`skilltable.py` (~line 198) reads it as `u32`. On build 38797 the high word is
+**0 on every one of the 3,443 rows** (measured), so nothing is wrong today and
+nothing needs changing today. But the widths disagree, and if a future build
+ever parks a flag in that high word, our decode silently inflates a cost by
+65,536× while the client ignores it.
+
+### 26.9 No upstream names any of this — with positive controls
+
+**NOT FOUND**, and searched with a control green in every file so the negative
+means something (`feedback: a negative needs a positive control`). Six opcode
+tables across five lineages:
+
+| lineage | file | `adrenalin` | `0x00CF`–`0x00D2` | control |
+|---|---|---|---|---|
+| GWCA (maintained, gwdevhub) | `Dependencies/GWCA/.../Opcodes.h` | 0 | none | `0x00D9` found |
+| GWCA (GregLando113) | `Include/GWCA/Packets/Opcodes.h` | 0 | none | `0x00D9` found |
+| GWCA (JaborGW) | `Include/GWCA/Packets/Opcodes.h` | 0 | none | `0x00D9` found |
+| Headquarter | `code/client/opcodes.h` | 0 | none | `0x00D9` found |
+| OpenTyria | `code/opcodes.h` | 0 | none | `0x00D9` found |
+| Py4GW_Reforged_Native | `include/GW/common/opcodes.h` | 0 | none | `0x00D9` found |
+
+The control matters: all six tables share build 38797's numbering (`0x00D9` /
+`0x00DA` are the skillbar pair in every one, and our own census joined 207
+against opcode 218 successfully), so their silence is silence about *these*
+messages and not about some other build's.
+
+**Three lineages DO carry the four shapes, and every one of them leaves the
+messages unnamed.** This is the strongest corroboration in the section and it is
+worth spelling out, because none of it was taken from anybody — the shapes were
+derived from the client's own recovered descriptors and *then* compared:
+
+- `gw-preservation/network-log-explorer` (`Constants.ts`) lists cmd arrays for
+  `0x00cf`–`0x00d2` that match ours **cmd for cmd**: `[0x0010, 0x0404]`,
+  `[0x0010]`, `[0x0010, 0x0204, 0x0404, 0x0404]`, `[0x0010, 0x0204, 0x0404]`.
+  Its *name* map, in the same file, skips straight from `0x00CD` to `0x00D9`.
+- **`sgwlpr` and `GWLP-R` predate this numbering, and finding them required
+  correcting for the shift.** Their skill block sits **12 lower** than ours —
+  GWLP-R has `P206_UpdateSkillBar` where we have 218, `P215_SkillActivated`
+  where we have 227, `P217_SkillRecharge` / `P218_SkillRecharged` where we have
+  229 / 230. At 207 − 12 = **195**, `sgwlpr`'s `PacketTemplates.xml` carries four
+  consecutive packets whose fields are exactly ours:
+  `195 = [agentid, int32]`, `196 = [agentid]`,
+  `197 = [agentid, int16, int32, int32]`, `198 = [agentid, int16, int32]`.
+  GWLP-R's `P195`–`P198` are the same four, and all four class names are
+  `_Unknown`.
+
+Four consecutive layouts matching across a build gap of a decade or more is
+not something a coincidence produces, and it is a shape check with no free
+parameter: the offset was fixed by three *other* messages before 195 was looked
+at. Use of `gw-preservation` is confined to exactly this — verifying a value we
+derived ourselves, the only thing that upstream's terms permit (`CLAUDE.md`,
+second gate) — and nothing here takes a layout, an algorithm or a constant from
+any of the three, so no derivation-register row is owed.
+
+**So the four names are OURS** — and, worth saying plainly, the reason nobody
+named them is not that they are obscure. They are four consecutive opcodes in
+the middle of the skill block, 724 of them in this corpus. They went unnamed
+because everyone who wanted adrenaline read it out of client memory instead,
+where it is one `ReadProcessMemory` away.
+
+### 26.10 What did not change, proved rather than argued
+
+The codec reads only `fields`; the four override rows add none, so decoding
+*cannot* change. That is exactly the sort of claim our own decoder can be made to
+agree with, so it was checked the other way round: the **entire** live corpus was
+decoded twice — once against the committed `overrides.json`, once against the
+working tree's — and hashed.
+
+```
+committed overrides:    b11aba5b…  114,985 messages
+working-tree overrides: b11aba5b…  114,985 messages
+```
+
+Identical SHA-256 over every decoded field of every message. The four
+schema-reading tests were also re-run before and after and returned the same
+counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
+`authsrv/test_smsgnames.py` 26 — all green, 83 checks.
+
+### 26.11 Open
+
+1. **The recharge gate has never been seen live.** Rule 2 of §26.2 is read off
+   `cmp dword [esi+8],0 / jne` and nothing in the corpus isolates it. The probe:
+   charge a bar, put one adrenal skill on recharge, send a 207, and watch whether
+   that slot's fill moves. Cheap, and it is the only one of the five rules with a
+   single line of evidence.
+2. ~~**Are the sub-25 gains the health-loss rule?**~~ — **RUN 2026-08-21, and
+   it CORRECTED the rule.** They are the health-loss rule: 31 of the 32 carry a
+   same-batch `0x00A3` naming the gaining agent as its target, so each joins to
+   the exact damage that produced it. **But the wiki's "floored" is wrong —
+   the wire rounds.** floor fits 14/31, ceil 17/31, `floor(pct)+1` 17/31,
+   **round 31/31**. The discriminating rows are |pct| 2.500, 2.708, 2.917 and
+   3.542 granting 3, 3, 3 and 4 where flooring grants 2, 2, 2 and 3.
+   `pools.damage_units` shipped the wiki's rule and was corrected; the reading
+   is now OBSERVED rather than INFERRED. Two caveats kept: the sign is
+   negative on the wire and the magnitude is what the rule reads (flooring the
+   negative rounds away from zero and fits nothing — an arithmetic slip that
+   made a correct hypothesis look 0-for-31), and the no-grant BOUNDARY moving
+   from 1% to 0.5% is an extrapolation, since the corpus's smallest sample is
+   2.5%.
+3. ~~**What is 209 for?**~~ — **ANSWERED 2026-08-21: "nothing on retail" is
+   now EARNED rather than assumed, and both named candidates died.** Verified
+   CONFIRMED by an adversarial pass.
+   **The hero/henchman push is REFUTED twice over.** Structurally: the worker
+   has no hero-specific machinery its siblings lack — the record lookup
+   `0x00820F10` is a plain binary search keyed on agent id with no comparison
+   against the local player, so 207/208/210 would already serve a hero
+   unchanged. And empirically: **heroes are absent from the corpus**
+   (`0x01C2` PARTY_HERO_ADD = 0 of 114,985) — with a green positive control,
+   since the identical scan finds `0x01BF` PARTY_HENCHMAN_ADD **21 times over 7
+   connections**. Better still, those henchmen are the decisive datum:
+   **companions demonstrably existed and retail pushed them no skill state at
+   all** — zero 218/207/208/209/210/229/230/231 naming any of them.
+   **The resync-after-drift story lost its mechanism.** It rested on 207's
+   recharge skip (`0x008219C0`) being a client-side quirk the server might not
+   share. It is not a quirk: GWW states *"recharging skills cannot rebuild
+   adrenaline"*, so it is a GAME rule both sides implement and no drift arises
+   from it.
+   **What survives is narrower and unfalsified**: an absolute restore into a
+   session whose state the server cannot derive from deltas — a reconnect or
+   mid-instance resume. **And the corpus is silent on it for a MEASURED reason
+   rather than a hopeful one:** all 48 skillbar pushes arrive 0.22–0.90 s into
+   their connection, so every one of the 49 connections is a fresh instance
+   entry and the corpus **contains no reconnect at all**. The one experiment
+   that would settle it is named in §26.12.
+   **Method note worth more than the answer**: "is this agent the observer" was
+   checked with two independent routes — `0x017D` INSTANCE_LOAD_PLAYER_NAME and
+   `0x0199` INSTANCE_LOAD_INFO's player number, each mapped through `0x0059`'s
+   `(player_number, agent_id)` — agreeing on 40 of 40 resolvable connections
+   and disagreeing on 0. The obvious shortcut fails hard: taking the FIRST
+   `0x0059` as self is wrong on 20 of 44 connections, because `0x0059` is
+   broadcast for every player in the instance. `toolkit/authsrv/moralescan.py`
+   shipped that shortcut and was corrected the same day (§26.13).
+4. ~~**Opcode 231 needs its own pass**~~ — **DONE 2026-08-21, §26.12.**
+5. ~~**The `u16`/`u32` width disagreement at `+0x38`**~~ — **MEASURED on both
+   builds 2026-08-21: still latent.** The high word is zero in **all 3,443
+   rows on 38797 AND on 38833**, which also carry the same 151 nonzero costs
+   over the same distinct set {20, 25, 50, 60, 75, 80, 100, 120, 125, 130, 140,
+   150, 160, 175, 200, 220, 240, 250} — note 20, 60, 130, 140, 160, 175 and 220
+   are not multiples of 25, which is §26.8's raw-units point from a second
+   build. `skilltable.py` reading a dword where the client reads a word remains
+   harmless, and is now harmless *across a build bump* rather than on one
+   image. Worth aligning the widths anyway; no longer worth blocking on.
+6. ~~**Nothing here has been sent to a client yet.**~~ — **DONE the same day,
+   §27.** The run was made, the prediction it registered (`units/cost`, not a
+   count of quarters) was CONFIRMED, and §26's central claim is no longer static
+   plus wire: a client has now been made to draw this family. The two halves
+   §27 did *not* reach — 210's on-screen reset and 208's wipe — are restated as
+   open there rather than closed here.
+
+## 27. E5 — the flames, on screen
+
+**2026-08-21, run `20260821T125215`, loopback, build 38797, server at
+`98806c0`.** The fifth run of the series §25 opened, and the one that closes
+§25's P7. Predictions were registered before the client launched
+(session scratchpad, `e5-predictions.md`) and before the build workflow that
+produced the sender had reported.
+
+### 27.1 Why this run could be short
+
+E5 is E4 **with one thing changed** — the server now sends `0x00CF` — so E4 is
+its own control and was already collected. That is the whole design: §25 had
+already established that at a server-side pool of 100 the icon rendered
+pixel-identical to its 0-unit state, so any movement here is attributable to
+the message rather than to the fight.
+
+**The instrument is the DEFAULT bar**, which turned out to be better than the
+single-skill rig §26.11 imagined. `[316, 317, 318, 319, 320, 321, 322, 323]`
+carries three adrenal skills whose costs are *not* multiples of 25, and five
+non-adrenal ones:
+
+| slot | id | `adrenaline_units` |
+|---|---|---|
+| 1 | 316 | — (non-adrenal) |
+| **2** | **317** | **80** |
+| **3** | **318** | **120** |
+| **4** | **319** | **80** |
+| 5–8 | 320–323 | — (non-adrenal) |
+
+So slots 1 and 5–8 are an **in-frame null control**: they sit in the same
+screenshot, under the same lighting, through the same fight. This matters more
+than it sounds — `studies/review`'s aggregate-diff lesson is that a
+changed-pixel spike over a whole HUD finds tooltips and toasts, not findings.
+
+### 27.2 What the server sent
+
+Twelve gains, each `0x00CF, 10 B`, each emitted **before** its damage message —
+retail's batch position, fixed the same morning after the skeptic pass caught
+the sender shipping it last:
+
+```
+[c1] attacking agent 10 (Hatcher [Collector])
+[c1] s2c adrenaline +25 (weapon hit on agent 10) (0x00cf, 10B)
+[c1] hit agent 10: 93/100
+[c1] s2c adrenaline +25 (weapon hit on agent 10) (0x00cf, 10B)
+[c1] hit agent 10: 88/100
+      … twelve in all
+```
+
+The first `0x00CF` any client has ever been sent by this server, or by any
+server we have written.
+
+### 27.3 P10 — the flames move. CONFIRMED
+
+Fraction of each slot's pixels differing from the pre-attack baseline
+(`walk2-shot.png`, every pool at 0), threshold 24/765:
+
+| frame | slot 1 | **slot 2** | **slot 3** | **slot 4** | slot 5 | slot 6 | slot 7 | slot 8 |
+|---|---|---|---|---|---|---|---|---|
+| walk4 | 0.0% | **49.2%** | **23.8%** | **40.3%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| walk6 | 0.0% | **89.8%** | **89.0%** | **89.2%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| walk8 … walk16 | 0.0% | **89.8%** | **89.0%** | **89.2%** | 0.0% | 0.0% | 0.0% | 0.0% |
+
+**The five control slots are at exactly 0.0% in all seven frames.** Not "close
+to zero" — zero changed pixels, which is the same pixel-identity standard that
+made §25's negative trustworthy, now producing a positive on the three slots
+next to them. §25's P7 is not merely explained, it is inverted under the
+identical rig.
+
+### 27.4 P11 — a continuous fraction, not quarters. CONFIRMED
+
+The whole-slot percentages above are **not comparable across slots** — they
+depend on the icon art underneath. So the fill was measured the way the client
+draws it: per row, bottom-up, counting rows that moved. On `walk4`, the one
+frame that caught the bar mid-charge:
+
+```
+slot 1 (316, non-adrenal)   0/54 rows =  0.0%   ..................................
+slot 2 (317,  80 units)    30/54 rows = 55.6%   ..##############################++
+slot 3 (318, 120 units)    17/54 rows = 31.5%   ..#################+++............
+slot 4 (319,  80 units)    26/54 rows = 48.1%   ..##########################++++++
+slot 5 (320, non-adrenal)   0/54 rows =  0.0%   ..................................
+```
+
+**The fill rises from the bottom and stops at arbitrary heights.** Quarter-strike
+quantisation on an 80-unit skill could only ever land on 31.25%, 62.5% or
+93.75%; 55.6% and 48.1% are neither. This is the `fdiv` at `0x008C6188`
+rendering — `adrenaline_b ÷ skillData.adrenaline` — and §26.11's registered
+prediction, confirmed.
+
+**And the denominator is the skill's own raw cost, visibly.** Slot 3 costs 120
+where slots 2 and 4 cost 80. All three received identical grants, and slot 3
+sits *lower* than both. A display keyed to strikes rather than to raw units
+could not produce that, and it is the on-screen counterpart of §26.8's census
+finding that 151 skills carry costs that are not multiples of 25.
+
+**HONEST LIMIT — and it was mostly the METRIC, not the client. Re-measured
+2026-08-21 after §29.4.** As first written this paragraph read: *"Slots 2 and 4
+have the same cost and should therefore show the same fill; they read 55.6% and
+48.1%. The likeliest reading is animation phase… until [a denser sample] exists
+'the two 80-unit skills agree' is UNVERIFIED rather than confirmed."*
+
+That 7.5-point gap came from the rows-over-30%-of-width statistic, which §29.4
+showed is sensitive to the icon art *underneath* the fill. Re-measured with the
+art-independent boundary criterion the whole series settled on, the same eight
+frames give:
+
+| frame | slot 2 (80) | slot 3 (120) | slot 4 (80) |
+|---|---|---|---|
+| w001 | 0.0% | 0.0% | 0.0% |
+| **w002** | **21.2%** | 15.4% | **25.0%** |
+| w003–w008 | 100.0% | 100.0% | 100.0% |
+
+**The two 80-unit skills agree exactly in seven of the eight frames**, and in
+the single mid-charge frame they differ by 3.8 points — about two rows of 52,
+down from 7.5. **And the ORDER FLIPS**: the old statistic put slot 2 above slot
+4, this one puts slot 4 above slot 2. A difference whose *sign* depends on the
+statistic is a property of the measurement, not of the client.
+
+What honestly remains is much smaller than the original caveat: a ~2-row
+difference in one frame, which animation phase would explain and which the
+metric's own boundary sensitivity would also explain, with nothing here able to
+separate them. The claim "the two 80-unit skills agree" is CONFIRMED in seven
+frames and unresolved at the two-row level in one — not the open question this
+paragraph used to describe.
+
+### 27.5 What E5 did NOT reach
+
+Stated plainly, because a run that answers two of four questions and reports
+four is how §25's own P7 nearly went unnoticed:
+
+- ~~**P12, the spend's on-screen reset (`0x00D2`), is UNTESTED.**~~ — **DONE,
+  §28: CONFIRMED**, the spent ring empties to 0.0%.
+- ~~**P13, the cross-pool tax, is UNTESTED.**~~ — **DONE, §28: CONFIRMED**, and
+  it settled the unit question — equal strikes, unequal rings. This is the half
+  of GWW's on-use rule that no screen has ever shown, and the default bar's
+  three adrenal skills at 80/120/80 are an unusually good instrument for it: one
+  press should drop the other two by exactly one strike each, which at those
+  costs is a *different* fraction of each ring.
+- **P14, the outpost map-gate control, was not run.** §26.6's
+  `MissionCliGetMap() == 1` gate therefore still rests on the disassembly alone.
+- The **25 s wipe (`0x00D0`)** was not observed on screen either.
+
+### 27.6 Two process notes worth keeping
+
+**The first attempt failed for a reason the log stated in its second line.**
+`--no-enemy` is the *harness's* default and the hostile needs `session.py
+--enemy`; the run ordered an attack into an empty world, and `begin_attack`
+returned silently because agent 10 did not exist. The server log said `NO ENEMY:
+the world will contain the player and nothing else.` at line 2 and it was read
+past. The harness's own verdict caught it (`RUN VERDICT RETRACTED`) rather than
+letting eight screenshots of an unchanged bar be scored as a null result — which
+is exactly what that retraction machinery is for, and the second time it has
+paid for itself.
+
+**`git add -A` in a shared worktree swept up another session's work.** Commit
+`98806c0` carries a peer session's `test_spawn_burst.py` repair and ~32 lines of
+`TESTS.md` alongside the adrenaline arc, under a message describing only the
+latter. Nothing was lost and nothing conflicted, but the commit is wrong about
+its own contents. It was left un-split deliberately: `git rebase -i` is
+unavailable in this environment, and by the time it was noticed the peer had
+committed on top, so a rewrite would have rewritten their work too. Recorded
+here and in the following commit's message instead — `git status` before
+`git add -A` is the habit that prevents it.
+
+## 28. E6 — the spend, and the tax that proves the unit
+
+**2026-08-21, run `20260821T134216`, loopback, build 38797, server at
+`9916de8`.** Closes the first two items §27.5 left open. Predictions registered
+before the client launched (`e6-predictions.md`), including the numbers.
+
+### 28.1 The rig, and why the default bar is the instrument
+
+Nine landed hits capped every pool, then **`attack:0` broke off the swing** so
+no further gain could reach the readout, then slot 2 was pressed. The server
+log is the proof that the window is clean: nine `0x00CF`s, the `0x00D2`, and
+**zero `0x00CF` after it**.
+
+The bar makes the run discriminating for free. Slots 2 and 4 cost **80**, slot
+3 costs **120**, and slots 1 and 5–8 are non-adrenal controls in the same
+frame. So one press taxes two rings by the same 25 units against different
+denominators — and if the display taxed by a *fraction* instead, both would
+drop by the same visible amount.
+
+### 28.2 Our own wire, in ArenaNet's order
+
+```
+c2s USE_SKILL
+s2c SKILL_ACTIVATED_BROADCAST(skill 317 via USE_SKILL)   0x00E4
+s2c adrenaline spend: skill 317 (copy 0)                 0x00D2   <-- between
+s2c cast animation: player casts 317                     0x00A0
+```
+
+Which is the measured retail shape from §26: `0x00E4` precedes the spend 38 of
+38, and the property naming the skill follows it 39 of 39. The sender was
+built to that census rather than to symmetry with the energy debit, and this
+is the first time it has been seen going out.
+
+### 28.3 P12 — the spent ring empties. CONFIRMED
+
+Slot 2 goes from a full ring to **0.0%** — every row indistinguishable from the
+pre-charge empty icon. `0x00821C00` writes both halves of the matched slot to
+zero and the screen agrees.
+
+### 28.4 P13 — the tax is 25 UNITS, not a share of the ring. CONFIRMED
+
+Fill measured as the first row from the top carrying any changed pixel against
+the empty baseline — E5's own null standard, no tuned threshold:
+
+| slot | skill | cost | charged | after the press | predicted |
+|---|---|---|---|---|---|
+| 2 | 317 | 80 | 100.0% | **0.0%** | 0.0% |
+| 3 | 318 | **120** | 100.0% | **80.8%** | 79.2% |
+| 4 | 319 | **80** | 100.0% | **67.3%** | 68.8% |
+
+**CORRECTED 2026-08-21, an hour after this section was written — the point
+estimates above are NOT good to 1.6 points, and this paragraph originally said
+they were.** They depend on a free parameter I never swept: how many changed
+pixels make a row "filled". At the setting used above (any single pixel) the
+agreement is 1.6 points; swept from 1 to 40 pixels, slot 3 ranges 65.4–80.8%
+and slot 4 ranges 42.3–67.3%. E7 then showed that the ≥1 setting is positively
+UNSAFE — it reported a fully empty ring as 100% full off three stray pixels in
+one row (§29.4). So the precision claim is withdrawn. **What survives the sweep
+is the entire finding**, and it survives at every single threshold:
+
+| minpx | 1 | 5 | 10 | 20 | 30 | 40 |
+|---|---|---|---|---|---|---|
+| slot 3 (cost 120) drop | 19.2 | 19.2 | 19.2 | 21.2 | 25.0 | 34.6 |
+| slot 4 (cost 80) drop | **32.7** | **36.5** | **36.5** | **42.3** | **44.2** | **57.7** |
+| slot 2 (spent) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+
+Slot 4 loses more ring than slot 3 at every setting, and the spent ring reads
+exactly zero at every setting. Those two statements have no free parameter in
+them, and they are what the run is for. The discriminator:
+
+```
+slot 3 (cost 120):  ring dropped 19.2 points   (25/120 = 20.8%)
+slot 4 (cost  80):  ring dropped 32.7 points   (25/ 80 = 31.2%)
+```
+
+**Both slots lost exactly one strike; they lost visibly different amounts of
+ring — at every threshold, so the statement is parameter-free.** A proportional tax — a quarter off each, say — would have dropped them
+by the same number of points, and it did not. This is `cmp esi,0x19 /
+add esi,-0x19` at `0x00821C71` reaching the screen: the pool is carried in raw
+units, 25 is the size of a strike, and the ring is `adrenaline_b ÷
+skillData.adrenaline` with the skill's own raw cost underneath. §26.8's census
+finding that 151 skills carry non-multiples of 25 is now visible rather than
+tabular.
+
+### 28.5 P14 — the controls hold. CONFIRMED
+
+Slots 1 and 5–8 sit at **0 changed pixels** across the press, as they did
+through all seven frames of E5. The tax reaches exactly the occupied adrenal
+slots and nothing else, which is `0x00821C4C`'s `(skillId, skillCopy)` join
+behaving.
+
+### 28.6 The wipe is still unseen, and a near-miss worth recording
+
+The 25 s timeout **did** fire on the wire — `adrenaline cleared: 25s out of
+combat (0x00d0, 6B)` — about a second after the last scripted frame. The
+teardown frame `final.png` is *not* evidence for it: measured against the empty
+baseline it reads ~100% changed **on every slot including the two non-adrenal
+controls**, so the whole frame is a different screen state and any adrenaline
+reading taken from it would be an artifact. That is the aggregate-diff lesson
+catching a false positive in the act, and the in-frame controls are what caught
+it. ~~**`0x00D0` on screen remains open**, and wants a run that simply waits.~~ —
+**DONE, §29.** The run that simply waited is below, and the artifact this
+paragraph caught turned out to be the same class of error as the metric defect
+§28.4 now carries.
+
+### 28.7 Two measurement notes
+
+**The first attempt (`20260821T133856`) was contaminated and the log said so.**
+`S:0.5` does not break off an attack — the swing continued and two more gains
+landed after the spend, which would have refilled the taxed pools and hidden
+the very effect the run was for. `attack:0` is the clean stop: `begin_attack`
+finds no agent 0 and clears `state["attacking"]`. The contamination was
+detectable only because the server log lists every `0x00CF` in order; a
+screenshot-only run would have shown two plausible rings and no way to know.
+
+**Pixel-identity is too strict a null here, and E5's phrasing invited the
+error.** The client re-renders with sub-threshold variation everywhere, so
+"identical to the baseline" finds nothing empty even on a ring that is visibly
+empty. E5's controls read 0.0% under a *threshold* of 24, not under equality;
+this section uses the same threshold and says so. The intermediate attempt —
+counting rows over a 30%-of-width threshold — is what produced §27.4's
+unresolved discrepancy between two equal-cost skills, because that statistic is
+sensitive to the icon art underneath the fill. **The boundary criterion (first
+row carrying any change) is art-independent, and under it §27.4's anomaly does
+not appear**: here the two 80-unit skills behave identically, one emptied to
+0.0% and one taxed to 67.3% against a predicted 68.8%. §27.4's caveat should be
+read as a defect of that metric rather than of the client.
+
+## 29. E7 — the wipe, and a metric that lied
+
+**2026-08-21, run `20260821T135905`, loopback, build 38797, server at
+`fa601a0`.** The last screen-side item on this channel. Predictions in
+`e7-predictions.md`, registered before launch.
+
+The design is the whole point: charge every pool, break off with `attack:0`,
+then **do nothing for thirty seconds**. The practice target never attacks, so
+no damage re-anchors the clock — the only clock running is the one the last
+`0x00CF` started.
+
+### 29.1 The wire
+
+Nine gains, then **exactly one** `0x00D0` and nothing after it:
+
+```
+[c1] s2c adrenaline cleared: 25s out of combat (0x00d0, 6B)
+[c1] the player's adrenaline is gone: 25s out of combat
+```
+
+P18 CONFIRMED — `tick` drops the clock either way, so a wiped bar cannot
+re-wipe, and one quiet period produced one message rather than a stream.
+
+### 29.2 P15 and P16 — all three at once, and not early. CONFIRMED
+
+Frames anchored by timestamp, never by filename. `attack:0` ran at 17:59:55, so
+the last gain is at or just before it and the wipe is due ~18:00:20:
+
+| frame | time | slot 2 (80) | slot 3 (120) | slot 4 (80) | controls |
+|---|---|---|---|---|---|
+| w003 | 18:00:08 | 100% | 100% | 100% | 0 |
+| w004 | 18:00:16 | 100% | 100% | 100% | 0 |
+| **w005** | **18:00:21** | **0.0%** | **0.0%** | **0.0%** | **0** |
+| w006–w010 | 18:00:25–44 | 0.0% | 0.0% | 0.0% | 0 |
+
+**The three rings empty together, in one frame step, with no intermediate
+state anywhere in the run** — which is `0x00821B00` walking all eight slots and
+firing the repaint once. Nothing drains gradually; there is no decay.
+
+And the timing brackets the prediction from both sides: full at 18:00:16, empty
+at 18:00:21, due at ~18:00:20. **No frame is empty before the 25 s mark**, which
+is the half that matters — an early wipe would have meant the clock is anchored
+somewhere other than the last gain.
+
+### 29.3 P17 — the controls hold. CONFIRMED
+
+Slots 1 and 5–8: **0 changed pixels in every one of the ten frames.** This is
+the control §28.6 argued for after `final.png` read ~100% changed on every slot
+including the non-adrenal ones. Here the wipe frame moves the three adrenal
+rings and nothing else, so it is the wipe rather than a screen-state change.
+
+### 29.4 The metric lied, and the controls are what caught it
+
+The first pass over these frames reported **slot 2 back at 100% in the last
+frame** — after a wipe, with nothing on the wire that could refill it. It was
+not real. Slot 2's mean colour in that frame is the EMPTY value (110,80,35
+against an empty baseline of 105,79,34; charged is 218,163,72). Three stray
+pixels in the topmost row crossed the difference threshold, and the fill rule
+in use — *the first row from the top carrying **any** changed pixel* — turned
+three pixels into a full ring.
+
+**That rule produced §28's numbers**, which is why §28.4 now carries a
+correction rather than its original precision claim. Swept across sensible
+settings the point estimates move by up to 25 points; the *findings* — a spent
+ring at exactly zero, and unequal drops for equal strikes — hold at every
+setting. E7 itself is immune because it contains no intermediate fill to
+measure: 100% and 0% are threshold-independent, and the table above is
+identical at minpx 10 and 25.
+
+The general lesson is the one already in this repo's notes and freshly earned:
+**a point estimate with an unswept free parameter gets over-read.** The check
+worth running is the one with no free parameter in it, and where that is not
+available, sweep the parameter and report what survives. Three runs in a row
+have now had their headline numbers moved by a threshold choice — §27.4's
+"anomaly" (a metric artifact), §28.4's precision (withdrawn), and this frame
+(a false positive) — while every *qualitative* claim has survived untouched.
+
+## 30. E8 — the outpost gate, and the overlay that is torn down
+
+**2026-08-21, runs `20260821T140826` (outpost) and `20260821T141108`
+(explorable), loopback, build 38797, server at `12ef6b1`.** The last
+screen-side item on this channel, and the only NEGATIVE in the series.
+Predictions in `e8-predictions.md`.
+
+### 30.1 The confound, named first and defeated
+
+§26.6's claim is read off `0x00542E43` alone: the fill is drawn only when
+`MissionCliGetMap() == MISSION_MAP_GAME`. Testing it means sending a correct
+`0x00CF` to a client standing in a town — and there is a specific, known reason
+the run could produce a worthless null: **an outpost forbids attacking**
+(§25/E5). No attack, no hit, no gain, and "the ring did not fill" would be a
+statement about the attack rule rather than the display gate.
+
+**It did not fire, and the reason is structural.** The harness's `attack:10`
+does not click — it calls `begin_attack` SERVER-side, the same entry the
+`ATTACK_AGENT` arm uses, and our server does not consult the map type. So the
+outpost arm put **9 gains on the wire, exactly as the explorable arm did**, and
+that precondition was checked before a single pixel was measured.
+
+### 30.2 The A/B
+
+Same map (148), same bar, same walk, same nine gains. One flag differs:
+
+| arm | slot | fill@10 | fill@25 | mean RGB before | mean RGB after |
+|---|---|---|---|---|---|
+| **A outpost** | 2 (317) | **0.0%** | **0.0%** | (197,122,48) | **(197,122,48)** |
+| **A outpost** | 3 (318) | **0.0%** | **0.0%** | (154,111,52) | **(154,111,52)** |
+| **A outpost** | 4 (319) | **0.0%** | **0.0%** | (137,85,33) | **(137,85,33)** |
+| B explorable | 2 (317) | 100.0% | 100.0% | (103,64,27) | (220,143,58) |
+| B explorable | 3 (318) | 100.0% | 100.0% | (82,59,29) | (177,134,63) |
+| B explorable | 4 (319) | 100.0% | 100.0% | (72,46,20) | (158,102,40) |
+
+**P19 CONFIRMED.** In the outpost the three rings do not move — and not merely
+"below threshold": the mean colour of every adrenal slot is **byte-identical
+before and after nine gains**. **P20 CONFIRMED**: the same rig, one flag
+changed, fills all three. Non-adrenal controls sit at 0.0% in both arms.
+
+### 30.3 The overlay is torn down, not merely unfilled — and the colours say so
+
+The result is better than the null it was designed to produce. Compare the two
+arms' *starting* states: an uncharged adrenal icon in an EXPLORABLE is **dark**
+(103,64,27), while the same icon in an OUTPOST is **bright** (197,122,48) —
+brighter than the explorable's fully-charged state is dark. So the outpost is
+not showing an empty ring; it is showing **no ring at all**.
+
+That is exactly what `0x00542E43`'s `jne` path does, and this is its first
+confirmation from outside the disassembly: the branch sends msg `0x59` with a
+NULL payload, `GmCtlSkImage` substitutes `{0,0}` and **destroys the overlay**
+(`call 0x631220`). Three distinct on-screen states, all now observed:
+
+| state | slot 2 mean RGB | what it is |
+|---|---|---|
+| outpost, any adrenaline | (197,122,48) | no overlay — the plain icon |
+| explorable, 0 units | (103,64,27) | overlay present, ring empty |
+| explorable, full | (220,143,58) | overlay present, ring full |
+
+The darkening a player reads as "not ready yet" is therefore **part of the
+adrenaline overlay**, not a property of the icon — which also retires, from the
+other direction, §25's early guess that slot darkening might be an
+affordability grey. It is neither affordability nor the selection border: it is
+the empty state of a ring that only exists where the ring is drawn.
+
+### 30.4 What this closes, and the one thing it does not
+
+Every screen-side claim about this channel is now observed: the charge (§27),
+the spend and the cross-pool tax (§28), the wipe (§29), and the map gate here.
+**What is still static-only** is the *reason* for the gate — nothing observed
+says why ArenaNet tears the overlay down in towns rather than leaving a stale
+ring, and the disassembly does not say either. Not worth a probe; worth not
+claiming.
+
+## 31. E9 — the blink warning, and we were already producing it
+
+**2026-08-21, run `20260821T141806`, loopback, build 38797, server at
+`dc1bbc8`.** Raised by the owner from GWW's Adrenaline page — *"A visual
+warning appears, with partially filled skills will begin blinking"* — a
+behaviour §§25–30 never tested and never mentioned. Predictions in
+`e9-predictions.md`.
+
+### 31.1 Why §29 was silent on it rather than negative
+
+Two independent reasons, either sufficient. **E7 capped every pool**, and the
+wiki's warning is for PARTIALLY filled skills, so nothing was eligible to
+blink. And **E7's frames were 5–8 s apart** through the warning window, where a
+blink is sub-second and aliases to nothing. A run can be clean, pass every
+prediction, and still be blind to a whole behaviour — which is the argument for
+reading the wiki against a finished result, not only before it.
+
+### 31.2 The mechanism was already in §26, unrecognised
+
+`0x00CF`'s handler fires UI event **`0x10000058`** carrying `{agent, f32}`,
+the float loaded from `.rdata` `0x009495B4` — **MEASURED bytes `0000c841` =
+25.0**, the timeout itself. `GmSkSlot` forwards it as msg `0x5A` to
+`GmCtlSkImage`, whose own assert names it:
+
+> `GmCtlSkImage:1483` — *"Clearing the adrenaline timer on a skill image is
+> currently not supported. Bug Austin about this."*
+
+The handler stores the float (`fstp [edx+0x10]`, `fstp [edx+0x14]`,
+`mov [edx+0x18],0`) and never accumulates. **So the countdown is CLIENT-side
+and armed by a message this server already sends.** §26 recorded that event as
+"the strike flash" with the 25.0 noted only as a fixed constant; it is the
+warning timer, and the constant is the timeout.
+
+### 31.3 The measurement
+
+Four gains left slot 3 **partial** (100/120) while slots 2 and 4 capped —
+so one frame holds all three categories. Mean luminance, 26 frames ~1 s apart;
+the wipe lands at `hold019`:
+
+| slot | state | range | direction changes | verdict |
+|---|---|---|---|---|
+| 1 | non-adrenal | **0** | 0 | flat |
+| 2 | **capped** | 87 | **1** (the wipe step) | flat |
+| **3** | **PARTIAL** | **20** | **9** | **OSCILLATES** |
+| 4 | **capped** | 61 | **1** (the wipe step) | flat |
+| 5 | non-adrenal | **0** | 0 | flat |
+
+**P21 CONFIRMED, P22 CONFIRMED** — the controls are flat to a range of *zero*,
+so the oscillation is not a global flicker.
+
+**And the blink goes fully OFF, not dim.** Slot 3's post-wipe luminance — ring
+gone — is 62. During the warning window slot 3 hits exactly 62 at `hold015` and
+`hold017` and returns to 74–75 between them. The warning hides the fill
+entirely and restores it, a square wave aliased at 1 s sampling.
+
+**A finding the wiki implies and this shows: capped skills do NOT blink.**
+Slots 2 and 4 sit rock-flat at 156 and 111 through the entire warning window,
+changing exactly once — at the wipe. Only the partially filled ring warns,
+which is GWW's sentence read strictly.
+
+### 31.4 Corroborated by the owner, watching
+
+**OBSERVED, owner, live during this run: "i watched it blink, seemed good."**
+That is worth more than it looks. Three times in this series a headline number
+came from a pixel metric that turned out to be wrong (§27.4's phantom anomaly,
+§28.4's withdrawn precision, §29.4's false 100%), and a human eye on the actual
+screen is the one witness that shares none of those failure modes.
+
+### 31.5 The answer to the question that prompted it
+
+**Yes — we capture it, and we were capturing it before anyone asked.** No
+server change was made for this section. The server sends nothing at all
+between the last `0x00CF` and the `0x00D0` 25 s later; the blink is the
+client's own timer, armed by the gain message, and it appeared the first time
+anyone sampled fast enough to see it. **P23 CONFIRMED.**
+
+Worth stating plainly because the opposite was equally possible: had the
+warning ridden its own opcode, this channel would have been incomplete and
+nothing in §§25–30 would have revealed it.
+
+## 26.12 Opcode 231 — the recharge family's *indefinite* case
+
+**Settled 2026-08-21** (§26.11 item 4), static plus corpus, verified CONFIRMED
+by an adversarial re-derivation. §26.3 declined to name it on one handler read;
+this is the evidence it asked for.
+
+**The chain, each link with exactly one way in** (`codescan --xrefs`): RECV
+table `0x00BC8F68` → stub `0x0091F6E0` (0 direct calls, 1 data word at
+`0x00BC97E0`) → thunk `0x00814980` → worker `0x00822D10`. So the only path into
+this worker is opcode 231 arriving off the wire; no client-side code disables a
+skill through this door. Shape `[agent_id, u16 skillId, u32 skillCopy]`, 12 B,
+from `msgshape.py` — **CORROBORATED by a lineage with no shared ancestry**,
+gw-preservation's `network-log-explorer` typing `0x00e7` as the identical triple.
+
+**What it does**, MEASURED with bytes:
+
+```
+00822D79  8b4604              mov eax,[esi+4]      ; SAVE the old adrenaline_b
+00822D7C  c70600000000        mov [esi],0          ; adrenaline_a = 0
+00822D82  c7460400000000      mov [esi+4],0        ; adrenaline_b = 0
+00822D89  85c0 / 7419         test eax,eax / je    ; repaint only if there WAS any
+00822D99  push 0x10000059     ;  the adrenaline repaint, payload {agent}
+00822DA9  fld  [0x948654]     ;  +INFINITY (bytes 00 00 80 7f)
+00822DC3  c74608ffffffff      mov [esi+8],0xFFFFFFFF   ; recharge = NEVER
+00822DBB  push 0x1000005d     ;  {agent, skillId, skillCopy, +inf, +inf}
+```
+
+**CORRECTION to [studies/skillcast](../skillcast/FINDINGS.md) §5**, which reads
+*"adrenaline_a = 0; if (adrenaline_b) fire 0x10000059; adrenaline_b = 0"*. The
+image saves the old `adrenaline_b` **first** and zeroes **both** halves before
+testing the saved value. The guard is on the previous adrenaline, and that
+detail is what makes the next paragraph decidable.
+
+### The zeroing is PURPOSEFUL — and NOT special to 231
+
+The four recharge-family workers read side by side settle §26.3's question:
+
+| opcode | what it means | touches adrenaline? |
+|---|---|---|
+| **229** `0x00E5` SKILL_RECHARGE | unavailability BEGINS, timed | **zeroes both halves** — `0x00822C00`/`0x00822C06`, a sequence **byte-identical** to 231's |
+| **230** `0x00E6` SKILL_RECHARGED | unavailability ENDS | **no** — its entire matched body is `mov [ecx+8],0` |
+| **231** `0x00E7` | unavailability BEGINS, indefinite | **zeroes both halves** |
+| **232** `0x00E8` | describes a partial recharge | **no** |
+
+**The rule is "when unavailability begins, the pool is dropped"**, and it is
+229's rule as much as 231's — so any model treating adrenaline-clearing as a
+property of *disabling* is wrong. **WIKI corroborates from outside the binary**:
+GWW's Adrenaline page says *"Disabled skills also lose all their adrenaline
+while recharging skills cannot rebuild adrenaline"* — both halves, matching both
+workers.
+
+### The name is NOT being promoted, and that is the finding
+
+`studies/skillcast` §5 proposed **SKILL_DISABLED** (explicitly INFERRED). It is
+defensible in meaning and **collides with a physically different channel**: the
+client keeps a per-slot *disabled* bitmask at `HotKeyState+0xA4` (GWCA's
+`Skillbar.disabled`), written by opcodes **100/101** (`bts`/`btr` at
+`0x00822085`/`0x0082208A`; GWCA names them HERO_SKILL_STATUS /
+HERO_SKILL_STATUS_BITMAP) and read by accessor `0x00816F40` — and **231 never
+touches it**. "Disabled" also fails to separate 231 from 229, since GWW uses the
+word for Dervish avatars being *"disabled for 45 seconds"*, which is a TIMED
+disable and therefore 229's job.
+
+`SKILL_RECHARGE_INDEFINITE` is proposed instead — it sits in the existing
+register beside SKILL_RECHARGE/SKILL_RECHARGED, names the field 231 actually
+writes, and carries the discriminating fact. **It stays INFERRED and out of
+`schema/overrides.json`**: witness 1 (the handler) is strong, witness 2 (the
+wire) is n=1, and that is below `studies/smsgnames`' two-witness bar. **No
+ArenaNet string names this message** — the worker contains zero asserts and
+pushes zero string pointers, and the positive control is green (the identical
+grep finds `adrenalin`, `hotKeyState` and ChCliSkill's own asserts). No upstream
+names it either: absent from the maintained GWCA, Headquarter, OpenTyria and
+the network-log-explorer name map.
+
+### The single wire witness
+
+**Exactly one `0x00E7` in 114,985 live messages** — capture `20260817T231139`,
+t=105.145, naming **skill 2**, which `textrec.py` resolves through the client's
+own string table to **"Resurrection Signet"**. After it, skill 2 appears in no
+message of any kind for the remaining **116 seconds** of the tape. That is
+retail's one-use-per-morale-boost rule, and a signet that cannot come back until
+a condition the server controls is exactly what an *indefinite* recharge is for.
+
+**One honest wrinkle, flagged rather than smoothed:** the cast began
+(`0x00E4`) at t=99.646 and the `0x00E7` landed at t=105.145 — 5.499 s, against
+skill 2's own table activation of 3.0 s. A co-firing `0x00E3` supports "at cast
+end", but the interval does not match the table and nothing here explains the
+difference.
+
+### Open
+
+- **Does 231 make a skill uncastable, or only paint the slot?** The DISPLAY path
+  is proved end to end — `GmSkSlot 0x00543181` calls the recharge accessor,
+  recognises `INT_MAX`, and loads the same `+inf` constant, skipping the sweep
+  arithmetic. The INPUT gate is untraced.
+- **What re-enables it.** WIKI says a morale boost; which opcode carries that is
+  unknown, and the observed connection never re-armed skill 2.
+- **Opcode 232 has ZERO occurrences too** — a second fully-implemented,
+  never-observed handler in this same family, alongside 209 and energy property
+  33. Three now, which starts to look like a pattern rather than three accidents.
+
+## 26.13 A tool defect found sideways: "which agent is me"
+
+Recorded here because the adrenaline pass found it and in
+[studies/morale](../morale/FINDINGS.md) because that is whose tool it is.
+
+Establishing that no adrenaline message ever names a non-observer needed a
+sound answer to *which agent is the observer*. The obvious shortcut —
+**take the first `0x0059` and call its agent id ours** — is wrong, because
+`0x0059` is `AGENT_CREATE_PLAYER` and the server broadcasts one for **every**
+player in the instance: 16 to 56 of them in a busy outpost. The first is
+whoever the server happened to send first.
+
+`toolkit/authsrv/moralescan.py` shipped exactly that shortcut, with a comment
+asserting *"field 2 is the receiving player's own agent id"*. **MEASURED against
+the self-scoped anchor: the two rules agree on 24 connections and DISAGREE on
+20 of 44** — 45% wrong — e.g. naming agent 16 where the observer is 767.
+
+**The sound anchor is property 41 (MAX ENERGY)**, which §23 measured as
+self-scoped across 97 sightings; an independent route (`0x0199`'s player number
+mapped through `0x0059`'s pairs) agrees with it wherever both resolve, 40 of 40.
+`moralescan.py` now uses property 41 and **does not fall back** to the old rule
+— a connection with no property 41 leaves the flag unset, which is the honest
+answer, where guessing would restore the 45%.
+
+**Nothing published was wrong**, and that is worth stating precisely rather than
+implying either more or less: `studies/morale`'s census claims count VALUES
+across all agents ("the only non-zero `0x00EE` is −15", "the only `0x009C` that
+is not 100 is 85") and never consult the flag. Re-running the census after the
+fix reproduces both numbers exactly — 40 sightings, 83 sightings, same two
+departures. So this is a **latent** defect corrected before it was relied on,
+not a result being withdrawn.
+
+The general shape is one this repo keeps meeting: a fixture that silently
+resolves to the wrong thing turns every assertion behind it into a no-op, and
+the defence is an anchor the artifact can refute rather than a plausible-looking
+first element.
+
+## 32. The client runs its OWN expiry timer — but it does not forget the effect (`--probe effect_silent_extend`, 2026-08-21)
+
+**Answers the question `effects.EffectTable.apply` had left open** — its docstring
+ended *"how retail refreshes one is NOT FOUND"*, and
+[studies/isle §8.6](../isle/FINDINGS.md) had just answered the WIRE half: retail
+refreshes by sending nothing and delaying the `0x0044`. A capture cannot see a
+screen, so this probe read the other half. Run `20260821T173954`, verdict PASS,
+all seven steps confirmed on the wire in `gamesrv.log` before any frame was
+opened (`0x0042` 20 B, `0x0044` 10 B, three declared refusals silent).
+
+**Design.** CONTROL: skill 478 for 10.0 s, removed at exactly `apply + duration`
+— the shape our server emits today, which proves a removal removes. TREATMENT:
+skill 480 for 10.0 s, then **25 seconds of server silence**, then a late
+`0x0044`. Screenshots every ~2.35 s throughout.
+
+### 32.1 The prediction was half right, and the half it got wrong is the finding
+
+Pre-registered: *"the icon is STILL DRAWN at +13 s and +20 s with the timer bar
+drained to empty, and it goes only when the late `0x0044` lands."* What happened:
+
+- **The live icon vanished on the client's own timer, with no packet.** The
+  Burning icon was gone roughly 15 seconds before the late `0x0044` was sent. The
+  visible window was ~9 s against a 10.0 s stated duration, not the ~25 s the
+  "waits to be told" reading requires. **The client owns the expiry.**
+- **But the slot did not go empty.** Between self-expiry and the removal the
+  client holds a **static, heavily faded ghost of the same icon** — an amplified
+  diff reproduces the flame sprite's exact shape — and clears it the moment the
+  `0x0044` arrives.
+
+**Neither naive reading would have got this.** "Is the icon there?" answers *no*;
+a pixel diff answers *yes*. The state is a third thing: **presented as expired,
+still slotted.**
+
+### 32.2 Why the ghost is a measurement and not my eye
+
+| comparison | slot region | control region elsewhere on the same HUD row |
+|---|---|---|
+| consecutive frames, same state (6 pairs) | **0.000** | 0.000 |
+| across the late removal (4 pairs) | **6.829** | **0.000** |
+
+The noise floor is *exactly* zero — the camera is static, so same-state frames
+are byte-identical. The change is **6.829 in the slot and 0.000 in a same-sized
+control patch beside it**, which is what rules out lighting, animation and any
+global render change. And the seven state-B frames spanning **+25.8 s to +39.9 s
+are byte-identical to each other**, so this is a held static state, not a fade
+still in progress.
+
+### 32.3 What this decides for our own substrate
+
+**`REMOVE-then-APPLY` is NOT required, and silence is NOT free.** The late
+removal landed correctly on an effect the client had already expired visually —
+no refusal, no desync — so the pair this table emits is not load-bearing for
+correctness. But an effect held open by silence **stops being visible to the
+player at its stated duration**. So:
+
+- for anything the player must SEE for time T, the duration we send must cover T
+  (or the effect must be re-applied); silence extends the server's bookkeeping,
+  not the player's experience;
+- `effects.py` is still not changed behaviourally on the strength of this — what
+  changed is that the cost of each option is now measured rather than assumed.
+
+### 32.4 The question this opens, and it is cheap
+
+**Do retail players see the ghost too?** §8.6's Isle episodes ran +1.25 s to
++55.0 s past their stated durations on ONE apply each, so by this client's rule
+the operator spent most of that time looking at a faded icon while the condition
+still cost health — the Disease that killed them outlasted its 10.0 s duration
+many times over. That is either a real quirk players live with, or retail sends
+something we have not identified for environmental sources. **One screenshot of
+a Student's ring taken 20 s after entry settles it**, and it costs nothing on the
+next Isle trip. Until then, this section describes OUR client's response to OUR
+messages, which is exactly what it was built to measure — and no further.
+
+### 32.5 Does this apply to RETAIL? The message shapes are identical, and the only gap left is the build
+
+§32.4 asked whether retail players see the ghost too, and said one live screenshot
+would settle it. That overstated the cost: **most of it settles offline**, because
+the client is the referee and the question is whether it can tell the two servers
+apart.
+
+Decoded with `bufflog` rather than by hand — a first pass scanning raw bytes for
+`0x0044` found matches inside float payloads (`00803f` is `1.0f`) and was thrown
+away:
+
+| source | message |
+|---|---|
+| **retail**, Isle Students | `0x0042 [target 25, skill 482, field3 0, buff 117, duration 10.0]` |
+| **retail**, Isle Students | `0x0042 [target 25, skill 2077, field3 0, buff 117, duration 10.0]` |
+| **ours**, the probe | `0x0042 [25, 478, 0, 1, 10.0]` |
+| **ours**, the probe | `0x0042 [25, 480, 0, 2, 10.0]` |
+
+**Field for field the same shape** — same target slot, `field3 = 0` on both sides,
+the same `10.0` f32 duration, and condition skill ids (type_code 8) in both. The
+client has nothing in the message to distinguish our application from ArenaNet's,
+so it should take the same path.
+
+**THE ONE GAP IS THE BUILD, and it is worth naming rather than waving past.** The
+retail capture is **38849**; the probe above ran on the loopback client, which was
+**38797** — 52 builds apart. Effect rendering is unlikely to have moved, but
+"unlikely" is not a measurement, and this repo has been wrong about a version
+assumption before. **CLOSED in §32.7 by rebuilding the loopback client at 38849
+and re-running: identical to three decimals.**
+
+### 32.6 Closing the build gap meant building a 38849 loopback client, and a guard stopped the first attempt
+
+**The gap was closeable offline** — the retail build is on disk, since the
+operator's own install auto-updated to 38849 (`RUNBOOK` §"the build gate's
+'service' is a proxy"). The loopback client was two builds behind the service
+anyway, so rebuilding it is maintenance the runbook already prescribes after
+every ArenaNet update rather than work invented for this question.
+
+`dump_dh_params.py` on the 38849 install first, because that is the runbook's own
+go/no-go: **`GO.`** — `g = 4`, 512-bit prime, struct at VA `0x00a910d8`, so the
+crypto scheme did not move. Then `make_custom_client.py` + `make_run_dir.py`:
+`B == g^b mod p -> True`, classified `ours`, updater killed, filed at
+`vault/run/2026-08-20_21511009c460/`. `dhbuild.py` audits the whole vault clean.
+
+**THE FIRST LAUNCH WAS REFUSED, AND THE GUARD WAS RIGHT.** `contentids`:
+
+> `map 146 0x1B97D: the two archives bind this id to DIFFERENT FILES` — server
+> row 7982 is 1,300,036 B crc `0xA0AE500A`, client row 177262 is 1,300,044 B crc
+> `0x33F1A289`.
+
+So **build 38849 changed map 146's geometry** — 8 bytes longer, different CRC —
+and the server's study archive still holds the old one. Its own words for why
+that matters: *"the server would path against geometry the client is not drawing,
+and the run would look like it worked."* That is a silent-wrong-answer class of
+failure caught before a single packet, and it is the second guard this week to
+pay for itself.
+
+**Resolved without touching anything shared.** `vault/dat_study/Gw.dat` is used by
+other arcs and other sessions, so re-cutting it to 38849 is not a call this arc
+makes alone. `RURIK_DAT` pointed at the 38849 client's OWN archive makes the pair
+the same generation by construction — `test_contentids.py` §1 calls that *"the
+only pairing in this vault that is coherent today"* and it is what the
+2026-08-14 compass run used. **Recorded as owed maintenance:** the server's study
+archive is now a build behind the client's, and every default-paired run inherits
+that.
+
+With that pairing the guard went green — **"content file ids: 12 of 12 map row(s)
+agree across both archives"** — and the launch was then refused a SECOND time, by
+a different guard and equally correctly:
+
+> `REFUSING to launch ...6-08-20_21511009c460\Gw.exe` — *"no firewall cage
+> names this binary at all. This client carries OUR Diffie-Hellman parameters."*
+
+A newly built ours-DH binary is not in any cage rule, and `PLAN.md` §6.2 is
+absolute that such a client must never reach the real service — it does not fail
+cleanly, because Stage A completes first with whatever credential the client
+autofills. Caging is an **elevated** step by design (`isolate_client.ps1`, no
+arguments, which enumerates every client under `vault/run` rather than the single
+hardcoded path that once left one uncaged for a day). **So the 38849 re-run is
+staged and blocked on one elevated command, and the build gap in §32.5 stands
+until it runs.** Everything else about the rebuild is done and verified.
+
+### 32.7 The gap is CLOSED: 38849 behaves identically, so retail players see the ghost
+
+Same probe, same plan, the **38849** loopback client — the exact build the Isle
+capture came from. Run `20260821T180010`, verdict PASS, all seven steps confirmed
+on the wire first.
+
+| measurement | 38797 | **38849** |
+|---|---|---|
+| live-icon windows | 2 | 2 |
+| treatment window | +16.5 .. +23.5 s | **+16.4 .. +23.4 s** |
+| same-state frame noise floor | 0.000 | **0.000** |
+| slot change across the late removal | 6.829 | **6.829** |
+| control patch across the same removal | 0.000 | **0.000** |
+
+**Identical to three decimal places on a different build.** In both, the live icon
+dies ~16 s before the late `0x0044` is sent, and the faded ghost holds until it
+arrives.
+
+**So the chain closes without a live run**, and each link is measured rather than
+assumed: retail's Student application and our probe's are field-for-field the same
+`0x0042` (§32.5); the client cannot tell them apart; and the client's behaviour is
+now measured on retail's own build. **A retail player standing in a Student's ring
+sees a live condition icon for its stated ~10 s and a dead-looking faded one for
+the rest of the stay, while the condition keeps costing health the whole time.**
+The Disease that killed the operator in `20260821T152147` did most of its damage
+behind an icon that had already visually expired.
+
+*Label: OBSERVED for the client behaviour on both builds and for the message-shape
+identity; RECONSTRUCTION for the retail player's experience, since we render our
+own messages and not ArenaNet's.* **The one thing not excluded** is an unidentified
+opcode that refreshes the client's timer — §8.6 found nothing on the effect channel
+in those windows, and no other message is known to touch it, but "we did not find
+one" is weaker than "there is none". A single retail screenshot 20 s into a ring
+would convert the last link from inference to observation, and it is now worth
+exactly that one frame and no more.
+
+### 32.8 SCOPE CORRECTION: the silent extension is ENVIRONMENTAL-ONLY, and §32.3 overreached
+
+**Raised by the owner, 2026-08-21: "any credence to thinking these condition
+circles are some sort of hard-coded exception that combat doesn't follow?"**
+There is, and checking it found an overreach in this arc's own handoff.
+
+Every effect episode in the vault carrying a duration, scored by close residual
+and partitioned by how it was applied:
+
+| applied by | n | residual |
+|---|---|---|
+| **environmental** — the Isle's torches (984/998/999) and Students (479-486, 2077) | **15** | **LATE, +1.25 s to +55.0 s** |
+| cast or attack — 160, 364, 348, 814, 179 | 78 | **never late.** Exact, or early (a cure) |
+
+**All 15 late closures come from the two rung-8 runs** — the only sessions where
+the operator deliberately stood in range. Not one cast- or attack-applied effect
+has EVER closed late, across six captures and five skills.
+
+**And the same environmental skills close exactly when nobody loiters**, which is
+what rules out "those skill ids are special": skill 480 at `-0.00` and `+0.00`,
+984 at `+0.00`, 998 at `-0.00` in the rung-6 roster run, and 998/999 at `-0.04`
+in the rung-8 run itself once the operator had stepped away. **The variable is
+standing in the source's radius, not the skill.**
+
+**SO §32.3's HANDOFF WAS WRONG IN SCOPE.** It said this table "emits a shape
+retail does not", reasoning from the silent extension to how our server should
+refresh a cast effect. Those are two different mechanisms and the corpus separates
+them cleanly. Worse, the cast side does not say what §32.3 implied either:
+`effects.EffectTable.apply` already records that retail's 15 overlapping
+re-applications are **all under 0.5 s — same-instant doubles, not re-casts** —
+each carrying a NEW buff id while the first episode still closes on its own
+duration. So retail **stacks** those; it does not extend them.
+
+**The honest state, per mechanism:**
+
+- **Environmental / persistent-area:** retail refreshes silently and delays the
+  `0x0044`. OBSERVED, 15 episodes. Our server has no analogue of this source type,
+  so there is nothing here to copy or to fix.
+- **Cast or attack:** retail has **no witnessed case of a live effect being
+  deliberately extended at all.** Not silently, not by REMOVE-then-APPLY, not by a
+  refreshing re-apply. The 15 overlaps are simultaneity, not extension. **Our
+  REMOVE-then-APPLY is therefore unwitnessed either way — it is neither confirmed
+  nor refuted**, and §32.3 should not have leaned on the Isle to judge it.
+
+**And the Isle is a training area**, which is the general form of the owner's
+point and worth carrying beyond this section: its torches and Students are
+pedagogical props built to apply one condition on contact. Generalising from them
+to combat is a scope error of exactly the kind [§4](#) warns about elsewhere, and
+this section exists because it was made here.
+
+**What survives unchanged.** §32.1-32.2's client behaviour (self-expiry at the
+stated duration, then a held faded ghost until the removal) is a fact about the
+CLIENT, which receives one `0x0042` and a late `0x0044` and cannot know what
+applied them. §32.7's conclusion that a retail player in a Student's ring watches
+a ghost also stands — that is the environmental case, measured on its own build.
+Only the generalisation to combat is withdrawn.
