@@ -371,16 +371,39 @@ chunk does not carry the cut.**
 **The null is not vacuous, and that is the part worth reading.** Two controls
 make it readable: the treatment was verified at the bytes — the installed
 partner carries no `0x10000009` and no `0x11000009` while `SOUND` and its deps
-are present, decoding to 9,994 B against `sculpt`'s 10,535 B, the difference
-being exactly the 639 B env payload and its deps — and the instrument was shown
+are present, decoding to 9,994 B against `sculpt`'s **10,714 B**, a 720 B
+difference closing to the byte as 639 (ENV) + 65 (ENV_DEPS) + two 8-byte chunk
+headers — and the instrument was shown
 to DETECT the cut, because arm A reproduces W7's recorded witness (cut at column
 13, 63.04% against 62.99% under a slightly wider sample). A null measured with
 an instrument that cannot see the effect, or with a treatment that never
 happened, is the failure shape this repo keeps meeting; both are closed here.
 
 Also settled in passing: **a map with no environment chunk compiles and serves
-normally** — `stripbuild`'s OPTIONAL table is correct at the client, no assert,
-re-bloat line present in both arms.
+normally** — `stripbuild`'s OPTIONAL table is correct at the client, no assert.
+(The re-bloat LOG line survives for arm B only: each launch overwrites `Gw.log`,
+so arm B's client clobbered arm A's. Arm A's recompile is proved from the bytes
+instead. Third time this defect has cost evidence — bank the log per arm.)
+
+**The evidence got STRONGER under attack**, and two of my own claims were wrong.
+An adversarial pass returned *stands* and recovered what the run had not:
+**the compiled navmeshes are BYTE-IDENTICAL**, not merely equal on three
+statistics — `shoals_rebloat.json`'s journal preserves the exact 6,144 B arm B
+overwrote, which is arm A's compiled head, and all ten shared chunks match byte
+for byte (path chunk 7,660 B, sha256 `dfa1a5cc…` in both) with the only
+difference in either direction being arm A's ENV pair, 41,432 − 40,712 = 720
+exactly. **The fallback hypothesis dies at the output side too**: arm B's
+COMPILED head carries no `0x20000009` either, so no donor, global or cached
+environment was available — and `deploy.readback` could not have caught that,
+because `deploy.py:1512-1518` SKIPS the environment assertion when the staged
+map has none, a check that cannot fire. **And the client's compiler is
+deterministic**, shown accidentally: the head before arm A and the head arm A
+produced are byte-identical (`78c0174e…`), which is what licenses reading
+identical output as "the input did not matter". Two corrections to my own
+write-up: `sculpt`'s partner is 10,714 B, not the 10,535 B I lifted from W6's
+modelled ladder (a different corpus, no donor constants — the arithmetic did not
+close), and "re-bloat line present in both arms" had no surviving artifact for
+arm A, because each launch overwrites `Gw.log`.
 
 **What survives**: a depth bound in the compiler itself, or the borrowed 34-byte
 Zones chunk. The Zones reading is the cheaper next test and nothing has ever

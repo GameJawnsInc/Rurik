@@ -1551,7 +1551,8 @@ copy) compiled meshes IDENTICAL to the cell -- 64 trapezoids, 7,660 B path
 chunk, 2,582/4,096 = 63.04% coverage, leftmost column 13 in both. The null is
 readable because both its controls fired: the treatment was verified at the
 bytes (no 0x10000009, no 0x11000009, SOUND still present, partner 9,994 B
-against sculpt is 10,535) and the instrument was shown to detect the cut (arm A
+against sculpt's 10,714, a 720 B difference closing to the byte as 639 + 65 +
+two chunk headers) and the instrument was shown to detect the cut (arm A
 reproduces W7's witness). Also settled in passing: a map with NO environment
 chunk compiles and serves. What survives: a compiler depth bound, or the
 borrowed 34-byte Zones chunk -- the cheaper next test, and the one thing no
