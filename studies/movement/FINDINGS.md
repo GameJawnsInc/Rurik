@@ -4492,3 +4492,31 @@ resting on a sub-100 ms covariate at 9 Hz. **The tap rate is now the binding
 instrument limit** — it has run at 7.8–9.1 Hz against a 20 Hz request in every
 session today, and `REALFIX-T3` said the residual becomes sample-phase-bound the
 moment the clock stopped being the problem. It did; it is.
+
+### REALFIX-I1's first result: the copy is ON the polyline, so the walkable conjunct is the only thing that can fail
+
+**OBSERVED**, from L3's P2 capture (`movetap-20260821T132603`), 709 complete chain
+walks, 698 of them scorable against the recomputed match predicate:
+
+- **The nearest chain segment to the SYNC copy is 0.0 u away in 698 of 698
+  samples (100%).** The straight-line conjunct of `seg_match` therefore passes
+  everywhere in this run, and **no warp here can be a straight-line failure.**
+  With the copy provably on the polyline, the only conjunct left to fail is the
+  **walkable** one at `0x00605C40`/`0x00709990`, whose start is `q` — carrying the
+  plane word `agent+0x80`, which is the field `--zero-lead` rewrites. **Round 6
+  reached that site by eliminating the alternatives; this reaches it by
+  measurement.**
+- **76 of the 698 samples have the nearest segment on a DIFFERENT plane than the
+  sync copy**, and event 3's neighbourhood is one of them: `syncplane 0` while the
+  nearest chain segment reads `segplane 18`, held across four consecutive samples
+  before the snap.
+
+⚠ **The 0.0 u is partly definitional under this policy, and round 5 §6.5 named
+that before the run.** Under zero lead the copy parks on a previously granted
+point, a granted point IS a previously reported position, and chain nodes are
+positions the client reported — so a small distance is expected by construction.
+What the measurement adds beyond the tautology is (a) it is **exactly** 0.0 and
+not merely small, so the identity holds through the client's own node bookkeeping
+rather than approximately, and (b) it holds at the warp instants, which is what
+rules the straight-line conjunct out **there**. Under any leaded policy the same
+measurement would not be definitional — and that is the version worth taking.
