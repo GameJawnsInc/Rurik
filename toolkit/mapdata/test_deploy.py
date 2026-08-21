@@ -39,7 +39,18 @@ command got wrong:
     with every crc still correct, and an id whose bit-31 sibling exists leaves
     two live registrations nothing we own counts.
 
-NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-8. Section 2 needs the
+  * **A row can be grown BACK into blocks it freed, but only up to a number
+    somebody stated, and only in a row we made.** A compressed install shrinks
+    a row's reservation and the archive records no entitlement anywhere, so
+    until 2026-08-20 the next larger authored map relocated -- always, even into
+    a row we created ourselves. Section 9 drives an area's declared
+    `reserve_bytes` through all three outcomes on one archive, holds the budget
+    against a row we did NOT create and watches it go unspent, and makes the
+    grow gate refuse on purpose -- because a fallback that swallowed a claimant
+    conflict would look exactly like a success, and so would one that reported a
+    gate refusal the gate never gave.
+
+NO VAULT, NO ARCHIVE, NO CLIENT for sections 0-1, 3-9. Section 2 needs the
 archive because the borrowed halves are read from it at run time -- that is the
 provenance rule, not a convenience -- and the floor turns a vault-less run into
 the FAIL it is.
@@ -49,6 +60,8 @@ the FAIL it is.
 
 import ast
 import binascii
+import contextlib
+import io
 import os
 import struct
 import sys
@@ -77,15 +90,30 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 112, MEASURED from a green run 2026-08-20 (sections 0,1,3,4,5,6,6b,7,8
-# score 108 and need no vault -- measured with RURIK_VAULT pointed at an empty
+# FLOOR: 167, MEASURED from a green run 2026-08-20 (sections 0,1,3,4,5,6,6b,7,8,9
+# score 163 and need no vault -- measured with RURIK_VAULT pointed at an empty
 # directory; section 2 reads the archive for the borrowed halves, which is the
-# provenance rule rather than a convenience, and the floor sitting ABOVE 108 is
-# what turns a vault-less run into the FAIL it is). Was 92 before section 6b's
-# serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
-# before section 8 and the create branch, 35 before section 7 and the
-# compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=112)
+# provenance rule rather than a convenience, and the floor sitting ABOVE 163 is
+# what turns a vault-less run into the FAIL it is). Per section, counted from
+# the log rather than predicted: {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10,
+# 6b: 20, 7: 15, 8: 36, 9: 55}.
+#
+# COUNT THE LOG WITH THE SUBPROCESS WRITERS' OWN LINES EXCLUDED. They print in
+# the same `  [PASS] ...` shape as the ledger and a naive grep reads 184, which
+# is 17 more than the ledger says. There are THREE producers, not two, and the
+# arithmetic is worth writing down because the first version of this comment got
+# it wrong: `datwrite --verify` prints a `file header crc` line AND an `MFT
+# self-crc` line per run (6 runs, 12 lines), and `datmove` prints one
+# `0 overlapping row pair(s) afterwards` per move (5 moves, 5 lines). 184 - 17
+# = 167. Section 9's own arms are what move these counts, so re-measure both
+# numbers rather than adjusting them.
+#
+# Was 150 before the WORLDMAPS-W5 fix pass (the `created` half of the budget
+# gate, the negatives in 9(e), and `area_reserve`), 112 before section 9's
+# reserve (WORLDMAPS-W5), 92 before section 6b's serve-verdict checks, 84 before
+# section 8's dry-run and spill checks, 56 before section 8 and the create
+# branch, 35 before section 7 and the compression checks, 25 before section 6.
+LEDGER = checks.Ledger("test_deploy", floor=167)
 check = checks.adopt(LEDGER)
 
 
@@ -771,7 +799,7 @@ def self_crc(mft):
 
 
 def build_archive(path, partner_size, file_id=FIXTURE_FILE_ID,
-                  head_flags=MAP_HEAD_FLAGS):
+                  head_flags=MAP_HEAD_FLAGS, extra_rows=None):
     """One map chain whose partner declares `partner_size`. -> the head's bytes.
 
     `file_id` and `head_flags` are parameters for section 8's refusals, which are
@@ -779,6 +807,15 @@ def build_archive(path, partner_size, file_id=FIXTURE_FILE_ID,
     table, or a head that is a plain file (flags 3, stream 0) instead of a
     Bloated map head (259). Both defaults are the shape section 7 has always
     built, so nothing above changes.
+
+    `extra_rows` is section 9's, and it exists to put a SQUATTER in the blocks a
+    shrunk partner freed: {index: (offset, size, compression, flags,
+    nextStream)}, merged over the map chain above. `datwrite.claimants` counts
+    any row with a non-zero size whose RESERVATION intersects the range, so one
+    row in a spare slot is the whole of grow-gate condition 1 -- and condition 1
+    is the one that means something real about the archive rather than about the
+    geometry. Rows 6-15 are erased and unused, so a squatter there disturbs
+    nothing else in the fixture.
     """
     buf = bytearray(bytes([SLACK]) * FILE_SIZE)
     rows = {
@@ -790,6 +827,7 @@ def build_archive(path, partner_size, file_id=FIXTURE_FILE_ID,
         ROW_PARTNER: (PARTNER_BLOCK * BLOCK, partner_size, 0,
                       MAP_PARTNER_FLAGS, 0),
     }
+    rows.update(extra_rows or {})
     buf[BLOCK:BLOCK + 8] = struct.pack("<II", file_id, ROW_HEAD)
     head_bytes = pattern(ROW_HEAD, HEAD_SIZE)
     buf[HEAD_BLOCK * BLOCK:HEAD_BLOCK * BLOCK + HEAD_SIZE] = head_bytes
@@ -1370,6 +1408,454 @@ def section8():
           f"constants {int(a['constants_file_id']):#x}")
 
 
+# ---------------------------------------------------------------- section 9
+#
+# WORLDMAPS-W5: the row's own headroom, declared by the area.
+#
+# THE CASE THIS SECTION EXISTS FOR IS ONE THAT COULD NOT HAPPEN UNTIL TODAY. A
+# created partner's reservation was exactly its first install's length and a
+# displaced one's was recomputed from its current size, so a row that had been
+# shrunk could never be grown back: `install_partner` compared and relocated,
+# and `datwrite`'s `grow_to` -- the flag for precisely this -- was never passed
+# by anything. The GROWS-BACK-IN-PLACE arm below is therefore the load-bearing
+# new check, and it is paired with a control that removes the budget and watches
+# the same install relocate instead.
+#
+# AND THE REFUSAL IS CHECKED AS HARD AS THE SUCCESS. `_grow_gate`'s first
+# condition -- another live row has taken the blocks this one freed -- is a fact
+# about the archive, and a fallback that swallowed it would turn a claimant
+# conflict into a relocation that quietly worked. So the squatter fixture drives
+# the gate red on purpose, and the run has to SAY so before it relocates.
+
+
+@contextlib.contextmanager
+def captured():
+    """stdout as a string, INCLUDING the grow arm's writer.
+
+    The replace and relocate arms hand their subprocess the real fd, so those
+    writers print past this buffer to the console. The GROW arm does not: it
+    captures the writer (the fallback decision is made from what the writer
+    SAID) and re-writes both streams to `sys.stdout`, which `redirect_stdout`
+    has swapped -- so `datwrite`'s own lines land in here. That asymmetry is
+    what the FLOOR comment's grep arithmetic is about, and it is why a check
+    can assert on the gate's own sentence at all.
+    """
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        yield buf
+
+
+def section9():
+    """A declared budget: created with it, grown back into it, and past it."""
+    print("\n9. reserve_bytes: the headroom an area declares for its own row")
+
+    def authored(dim):
+        snapped, _w = stx.snap_field(deploy.gen_plaza(dim), dim, dim)
+        blob = stx.StrippedTerrain.build(dim, dim, snapped).encode()
+        stream, code, _n = deploy.install_bytes(blob)
+        return blob, stream, code
+
+    b64, s64, _c = authored(64)      # 9,051 B ->  1,148 B, reservation 1,536
+    b96, s96, _c = authored(96)      # 20,183 B -> 1,952 B, reservation 2,048
+    b128, s128, _c = authored(128)   # 35,542 B -> 2,744 B, reservation 3,072
+    BUDGET = 2048                    # chosen here, like section 7's reservations
+
+    # (a) THE CHAIN'S SHAPE. The budget goes on the partner and `datalloc.Stream`
+    # refuses it on the head, which is why this is asked of `create_streams`
+    # rather than left to the allocator to notice.
+    streams = deploy.create_streams(b64, s64, 8, reserve=BUDGET)
+    check(streams[1].reserve == BUDGET and streams[0].reserve == 0,
+          "the budget rides the PARTNER, the row that holds the geometry -- the "
+          "head is born empty and owns no extent to reserve",
+          f"head {streams[0].reserve}, partner {streams[1].reserve}")
+    why = ""
+    try:
+        datalloc.Stream(b"", MAP_HEAD_FLAGS, reserve=BUDGET)
+    except datalloc.Refused as exc:
+        why = str(exc)
+    check("owns NO EXTENT" in why,
+          "and putting it on the head is REFUSED by the allocator rather than "
+          "accepted and ignored", why.splitlines()[0] if why else "accepted")
+    check(deploy.create_streams(b64, s64, 8)[1].reserve == 0,
+          "CONTROL: with no budget the partner asks for nothing, which is every "
+          "run of this command before WORLDMAPS-W5")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out64 = spill(tmp, "a64.bin", b64)
+        out96 = spill(tmp, "a96.bin", b96)
+        out128 = spill(tmp, "a128.bin", b128)
+
+        # (b) CREATED WITH THE BUDGET, then re-installed THREE times: the
+        # iterating loop an author actually runs, in one archive, so each verb
+        # is judged against the row the previous one left behind.
+        path = os.path.join(tmp, "budget")
+        build_archive(path, 4608)
+        with captured():
+            head_row, partner_row = deploy.create_chain(
+                path, NEW_FILE_ID, b64, s64, 8, tmp, "budget", reserve=BUDGET)
+        off, size, comp, _f, raw = read_row(path, partner_row)
+        check(size == len(s64) and comp == 8 and gwdat.decompress(raw)[0] == b64,
+              "the created row declares the PAYLOAD's size and holds it -- a "
+              "budget moves the reservation and nothing the client reads",
+              f"{size} B at 0x{off:X}, comp {comp}")
+        with open(path, "rb") as fh:
+            whole = fh.read()
+        tail = whole[off + size:off + BUDGET]
+        check(len(tail) == BUDGET - size and set(tail) == {0},
+              "and the row was GIVEN the whole budget: zeroed to the end of it, "
+              "where this fixture fills unclaimed space with 0xCC -- the "
+              "reservation is real rather than the 1,536 B a 1,148 B payload "
+              "would have taken", f"{len(tail)} B of zeroes past the payload")
+
+        with Archive(path) as ar:
+            rows2, create2 = deploy.resolve_or_create(ar, NEW_FILE_ID, True)
+        check(not create2 and rows2[2] == 1536,
+              "and the archive reports that row's ceiling as 1,536 B, NOT the "
+              "2,048 it was given -- the 24-byte MFT row has no entitlement "
+              "field, which is exactly why the AREA has to state one",
+              f"resolve_rows says {rows2[2]} B")
+
+        # THE HEADLINE. 1,952 B is past the 1,536 the archive reports and inside
+        # the 2,048 the area declared, so the row takes its own freed blocks
+        # back instead of moving. This arm did not exist before today.
+        with captured() as buf:
+            verb = deploy.install_partner(path, out96, b96, s96, 8, head_row,
+                                          partner_row, rows2[2], "grow96",
+                                          reserve=BUDGET, created=True)
+        grew = buf.getvalue()
+        off2, size2, comp2, _f, raw2 = read_row(path, partner_row)
+        check(verb == "grow" and off2 == off,
+              "a bigger install inside the declared budget GROWS BACK IN PLACE "
+              "-- same row, same offset, a reservation annexed from the blocks "
+              "this row freed", f"{verb}, 0x{off:X} -> 0x{off2:X}")
+        check(size2 == len(s96) and comp2 == 8
+              and gwdat.decompress(raw2)[0] == b96,
+              "and it holds the new map, still marked 8, read back through the "
+              "same decompress-and-compare a replace gets", f"{size2} B")
+        check("GROWS BACK" in grew and str(BUDGET) in grew,
+              "and the run SAYS which of the three outcomes happened, naming "
+              "the entitlement it is spending -- a grown row and a row that "
+              "never needed to grow are indistinguishable afterwards",
+              next((l.strip() for l in grew.splitlines() if "GROWS BACK" in l),
+                   "said nothing")[:96])
+
+        # PAST THE BUDGET. Compression raised the ceiling and a budget raises it
+        # again; neither removes it.
+        with captured() as buf:
+            verb = deploy.install_partner(path, out128, b128, s128, 8, head_row,
+                                          partner_row, 2048, "far128",
+                                          reserve=BUDGET, created=True)
+        far = buf.getvalue()
+        off3, size3, comp3, _f, raw3 = read_row(path, partner_row)
+        check(verb == "relocate" and off3 != off2,
+              "an install past the declared budget RELOCATES -- the budget is a "
+              "statement about what this row was given, not a request for more",
+              f"{verb}, 0x{off2:X} -> 0x{off3:X}")
+        check(f"past the {BUDGET} B" in far,
+              "and says the budget is what it is past, rather than reporting a "
+              "bare size", next((l.strip() for l in far.splitlines()
+                                 if "RELOCATES" in l), "said nothing")[:96])
+        check(size3 == len(s128) and gwdat.decompress(raw3)[0] == b128,
+              "and the moved row holds the new map", f"{size3} B")
+
+        # AND BACK DOWN. The row now reserves 3,072; a smaller map fits and the
+        # first arm still reads "replace", unchanged by any of this.
+        with captured() as buf:
+            verb = deploy.install_partner(path, out64, b64, s64, 8, head_row,
+                                          partner_row, 3072, "back64",
+                                          reserve=BUDGET, created=True)
+        check(verb == "replace" and "FITS" in buf.getvalue(),
+              "a smaller map after that simply FITS -- the ordinary arm is "
+              "untouched by the budget", f"{verb}")
+
+        # (c) THE CONTROL FOR THE HEADLINE. Same archive shape, same stream,
+        # same shrunk ceiling -- and no declared budget. Without this the grow
+        # above could be anything about the fixture rather than about the field.
+        def install(name, partner_size, blob, stream, reserve, extra_rows=None,
+                    created=True):
+            p = os.path.join(tmp, name)
+            build_archive(p, partner_size, extra_rows=extra_rows)
+            spilled = spill(tmp, f"{name}.bin", blob)
+            with captured() as b:
+                v = deploy.install_partner(p, spilled, blob, stream, 8,
+                                           ROW_HEAD, ROW_PARTNER,
+                                           ((partner_size + 511) // 512) * 512,
+                                           name, reserve=reserve,
+                                           created=created)
+            return p, v, b.getvalue()
+
+        p, verb, said = install("nobudget", 1024, b64, s64, 0)
+        moved = read_row(p, ROW_PARTNER)[0]
+        check(verb == "relocate" and moved != PARTNER_BLOCK * BLOCK,
+              "CONTROL: the SAME install with no declared budget relocates, as "
+              "every run of this command did before today -- the budget is what "
+              "changes the verb, not the geometry and not the fixture",
+              f"{verb}, 0x{PARTNER_BLOCK * BLOCK:X} -> 0x{moved:X}")
+        p, verb, said = install("withbudget", 1024, b64, s64, 8192)
+        check(verb == "grow"
+              and read_row(p, ROW_PARTNER)[0] == PARTNER_BLOCK * BLOCK,
+              "and with one declared it grows in place instead -- one field "
+              "apart, opposite verbs", f"{verb}")
+
+        # AND THE SECOND HALF OF THE GATE. `grow_to` is a statement about what
+        # a row was GIVEN. For a chain this toolkit allocated the area's budget
+        # IS that statement -- creation asked for exactly it. For a RETAIL row
+        # we are displacing it is not: ArenaNet gave that row whatever it gave
+        # it, and annexing the blocks behind it because our recipe declares a
+        # number would be inventing an entitlement. So the budget alone must not
+        # be enough, and this is the same install as the line above with the
+        # other field flipped.
+        p, verb, said = install("notours", 1024, b64, s64, 8192, created=False)
+        moved = read_row(p, ROW_PARTNER)[0]
+        check(verb == "relocate" and moved != PARTNER_BLOCK * BLOCK,
+              "CONTROL: the same budget on a row we did NOT create is not "
+              "spendable -- a displaced retail row fits or relocates exactly as "
+              "it did before this field existed",
+              f"{verb}, 0x{PARTNER_BLOCK * BLOCK:X} -> 0x{moved:X}")
+        check("NOT spendable" in said and "8192" in said,
+              "and the run SAYS the budget went unspent rather than leaving an "
+              "operator to compare two numbers that fit -- this is the one "
+              "relocation whose cause is a rule and not a size",
+              next((l.strip() for l in said.splitlines()
+                    if "RELOCATES" in l), "said nothing")[:120])
+        check("GROWS BACK" not in said,
+              "and it never asked datwrite to grow: --grow-to on a retail row "
+              "would be us stating what ArenaNet gave it")
+
+        # (d) THE GATE SAYS NO. A squatter sits in the block this row would
+        # annex, which is `_grow_gate` condition 1 and the only one of the four
+        # that means somebody else is using the space.
+        squat = {6: (PARTNER_BLOCK * BLOCK + 1024, 300, 0, MAP_PARTNER_FLAGS, 0)}
+        p, verb, said = install("claimed", 1024, b64, s64, 8192,
+                                extra_rows=squat)
+        moved = read_row(p, ROW_PARTNER)[0]
+        check(verb == "relocate" and moved != PARTNER_BLOCK * BLOCK,
+              "a grow the gate refuses still gets the map installed -- it "
+              "relocates rather than failing the run", f"{verb}")
+        check("THE GROW GATE REFUSED" in said and "CLAIMED" in said,
+              "and the refusal is PRINTED, quoting the gate's own sentence -- a "
+              "silent fallback is how a claimant conflict becomes invisible",
+              next((l.strip() for l in said.splitlines()
+                    if "GROW GATE REFUSED" in l), "said nothing")[:96])
+        check("RELOCATING instead" in said,
+              "and the relocation names the refusal as its reason rather than "
+              "reading as an ordinary size decision")
+        check(gwdat.decompress(read_row(p, ROW_PARTNER)[4])[0] == b64,
+              "and the relocated row holds the authored map, proved by the same "
+              "readback every other arm gets")
+        _o, sq_size, _c, _fl, _r = read_row(p, 6)
+        check(sq_size == 300,
+              "and the squatter is untouched -- the point of the gate is that "
+              "its 300 B are still its own", f"row 6 holds {sq_size} B")
+
+        # (e) AN UNRECOGNISED FAILURE IS NOT A GATE REFUSAL. Same grow, but the
+        # declared payload is a lie: the gate PASSES (the blocks are free) and
+        # datwrite then refuses on the declaration. Falling back to datmove here
+        # would turn "these bytes are not what you declared" into a relocation
+        # that quietly succeeded.
+        bad = b64[:-1] + bytes([b64[-1] ^ 0xFF])
+        liar = spill(tmp, "liar64.bin", bad)
+        p = os.path.join(tmp, "liar")
+        build_archive(p, 1024)
+        with open(p, "rb") as fh:
+            before = fh.read()
+        why = ""
+        with captured() as buf:
+            try:
+                deploy.install_partner(p, liar, bad, s64, 8, ROW_HEAD,
+                                       ROW_PARTNER, 1024, "liar", reserve=8192,
+                                       created=True)
+            except deploy.Refused as exc:
+                why = str(exc)
+        said = buf.getvalue()
+        with open(p, "rb") as fh:
+            after = fh.read()
+        check("the archive writer refused" in why,
+              "a grow that fails for a reason the gate did not give is RAISED, "
+              "not relocated around -- ONE byte of the declared payload flipped",
+              why or "it fell through to datmove")
+        # AND THE NEGATIVES, WHICH ARE THE CHECK. The two above pass even when
+        # the recogniser is broken to accept ANY failure, because `datmove`
+        # independently refuses the same lie and re-raises the identical
+        # sentence with nothing written -- MEASURED, by breaking it: the
+        # behavioural checks stayed green while a declaration fault was
+        # misclassified as a claimant conflict and relocated around, which is
+        # the exact failure this arm exists to catch. What that sabotage cannot
+        # survive is the run having SAID the gate refused when it did not.
+        check("THE GROW GATE REFUSED" not in said,
+              "and it did not report a gate refusal the gate never gave -- the "
+              "recogniser's whole job is telling those two apart, and a "
+              "fallback that ran and then failed anyway looks identical from "
+              "the outside", next((l.strip() for l in said.splitlines()
+                                   if "GROW GATE" in l), "said nothing"))
+        check("RELOCATING instead" not in said,
+              "and it did not relocate around it: a declaration fault must not "
+              "become a move that quietly succeeds on some other archive where "
+              "datmove would take these bytes",
+              next((l.strip() for l in said.splitlines()
+                    if "RELOCATING" in l), "did not relocate"))
+        check(after == before,
+              "and nothing was written: the declaration is checked before the "
+              "first byte either way", f"{len(after)} B, unchanged")
+        check(deploy.grow_gate_refusal(
+                  "row 5 reserves 1024 bytes and the new payload is 1148") is None
+              and deploy.grow_gate_refusal(
+                  "row 5 needs to grow ... is CLAIMED by row 6") is not None,
+              "and the recogniser itself is asked both ways: an ordinary "
+              "refusal is not a gate refusal, and the gate's own sentence is")
+        for marker in deploy.GROW_GATE_MARKERS:
+            check(deploy.grow_gate_refusal(f"  x {marker} y") is not None,
+                  f"the recogniser knows grow-gate condition {marker!r}")
+
+        # (e2) AND A BAD BUDGET IS THIS COMMAND'S REFUSAL, not a traceback.
+        # `create_streams` builds a `datalloc.Stream`, so the create path gained
+        # a raise site that `deploy.__main__` -- which catches `deploy.Refused`
+        # and nothing else -- cannot see. An authoring mistake in
+        # content/areas.toml is the likeliest way anybody meets it, and the
+        # difference is exit 1 with a stack against exit 2 with a remedy.
+        why, kind = "", None
+        # BARE `Exception`, because the TYPE is what is being checked: catching
+        # deploy.Refused here would let the wrong class through to the runner.
+        try:
+            with captured():
+                deploy.create_chain(os.path.join(tmp, "budget"), NEW_FILE_ID,
+                                    b64, s64, 8, tmp, "toosmall", reserve=1000)
+        except Exception as exc:                          # noqa: BLE001
+            why, kind = str(exc), type(exc)
+        # MODULE AND NAME: both classes are called `Refused`, so the bare name
+        # reads identically whichever one was raised.
+        named = f"{kind.__module__}.{kind.__name__}" if kind else "nothing raised"
+        check(kind is deploy.Refused,
+              "a budget UNDER its own payload reaches the operator as this "
+              "command's own Refused -- `__main__` catches deploy.Refused and "
+              "nothing else, so a raw datalloc.Refused is a traceback", named)
+        check("reserve_bytes" in why and "areas.toml" in why,
+              "and it names the file to edit: the number came from content, so "
+              "the remedy is a content edit and not an archive one",
+              why.splitlines()[-1].strip() if why else "said nothing")
+
+    # (f) WHAT A DRY RUN SAYS, before any of it. `verify` predicts a verb from
+    # the row's CURRENT reservation, which contradicts the install for exactly
+    # the case this rung added -- so the budget gets its own line.
+    check(deploy.budget_note(1952, 1536, 0, created=True) is None,
+          "an area with no budget prints no budget line -- the field is "
+          "optional and its absence is silent")
+    said = deploy.budget_note(1952, 1536, 2048, created=True)
+    check("GROW" in said and "grow gate" in said,
+          "past the reservation and inside the budget: the preview says GROW, "
+          "and names the gate that can still refuse it", said)
+    said = deploy.budget_note(1148, 1536, 2048, created=True)
+    check("not needed" in said,
+          "inside the reservation: the budget says so rather than claiming "
+          "credit for a replace that needed nothing", said)
+    said = deploy.budget_note(2744, 2048, 2048, created=True)
+    check("RELOCATES" in said,
+          "past both: the preview agrees with the verb the install will pick",
+          said)
+    said = deploy.budget_note(1148, None, 2048, created=True)
+    check("CREATE" in said,
+          "and on the create path there is no reservation to compare against, "
+          "so it states what the allocator will be asked for", said)
+    # THE PREVIEW MIRRORS THE GATE, or it predicts a verb the install will not
+    # pick. Same numbers as the GROW line above, `created` flipped.
+    said = deploy.budget_note(1952, 1536, 2048, created=False)
+    check("RELOCATES" in said and "created = true" in said and "GROW" not in said,
+          "and on a row we did not create the preview says RELOCATES and names "
+          "the missing `created = true` -- a preview that promised a grow the "
+          "install refuses to attempt is worse than no line at all", said)
+
+    # THE CONTENT ROW ITSELF, repo only for section 0's reason. The number is a
+    # CHOICE and the row says where it came from; what is checked here is that
+    # it loads as an int, that it is big enough to be worth declaring, and that
+    # the areas which never asked for one still read as zero.
+    world = content_mod.load(vault_dir="")
+    front = world.get("area", "frontier")
+    budget = front.get("reserve_bytes")
+    check(isinstance(budget, int) and budget % 512 == 0,
+          "content/areas.toml's `reserve_bytes` loads as a whole number of "
+          "512-byte blocks -- datalloc refuses a fraction, and a budget that "
+          "does not round is a budget with a surprise in it", f"{budget} B")
+    check(budget >= 2828,
+          "and it holds the largest compressed partner this toolkit has "
+          "MEASURED -- 2,828 B at 96x96 on build 38797's donors -- with room "
+          "over, which is the whole claim the row makes for it",
+          f"{budget} B against 2,828 B")
+    check(int(front["dims"]) == INSTALL_DIM and budget > 4 * len(s64),
+          "the area it sits on is 64x64 and installs far under it, so the "
+          "budget is headroom for a LATER map rather than a fit for this one",
+          f"{len(s64)} B installed, {budget} B reserved")
+    check(world.get("area", "plaza").get("reserve_bytes", 0) == 0,
+          "and an area that never asked for one reads as zero -- the field is "
+          "optional and its absence is the pre-WORLDMAPS-W5 behaviour exactly")
+    # AND THE ROW IT SITS ON OWNS ITS FILE. A budget on a displacing area is
+    # unspendable by design, so the one row that declares one has to be the
+    # created kind or the field in the repo is decoration.
+    check(bool(world.get("map", str(front["map_id"])).get("created", False)),
+          "and the area that declares a budget rides a maps.toml row carrying "
+          "`created = true` -- the only kind of row the budget can be spent on",
+          f"map {front['map_id']}")
+
+    # WHERE CONTENT BECOMES A NUMBER is where a bad one is refused, and the
+    # install path never builds a `datalloc.Stream` to refuse it for us.
+    check(deploy.area_reserve({}) == 0 and deploy.area_reserve(front) == budget,
+          "`area_reserve` reads the field, and absent is 0 rather than a "
+          "refusal -- the field is optional", f"{deploy.area_reserve(front)} B")
+    for bad_value in (2048.5, "8192", -512, True):
+        got = None
+        try:
+            deploy.area_reserve({"reserve_bytes": bad_value})
+        except deploy.Refused as exc:
+            got = str(exc)
+        check(got is not None and "areas.toml" in got,
+              f"and reserve_bytes={bad_value!r} is REFUSED naming the file to "
+              f"edit -- int() would truncate the first silently and the third "
+              f"is falsely truthy all the way to a printed line",
+              (got or "accepted").splitlines()[0])
+
+    # (g) AND main() THREADS IT. Everything above calls the two writers
+    # directly; a budget the command line cannot deliver is a docstring. Asked
+    # of the syntax tree with the sabotage that makes it flip, as section 8 does.
+    src = open(deploy.__file__, encoding="utf-8").read()
+
+    def calls_with(text, kw):
+        fn = next(n for n in ast.walk(ast.parse(text))
+                  if isinstance(n, ast.FunctionDef) and n.name == "main")
+        return {getattr(n.func, "id", "") for n in ast.walk(fn)
+                if isinstance(n, ast.Call)
+                and any(k.arg == kw for k in n.keywords)}
+
+    check({"install_partner", "create_chain"} <= calls_with(src, "reserve"),
+          "main() passes reserve= to BOTH writers -- the create path chooses "
+          "the ceiling and the install path spends it, and a command that "
+          "reaches only one leaves the other silently at zero",
+          f"{sorted(calls_with(src, 'reserve'))}")
+    # AND `created` WITH IT, because the budget is half a gate. `install_partner`
+    # defaults it to False -- the pre-WORLDMAPS-W5 behaviour -- so a main() that
+    # threads the budget and not the flag reaches the new code path never, and
+    # every check above would still be green.
+    check("install_partner" in calls_with(src, "created"),
+          "and it passes created= to install_partner, the other half of the "
+          "gate -- a budget threaded without it grows nothing, and the default "
+          "is False for exactly that reason",
+          f"{sorted(calls_with(src, 'created'))}")
+    check("budget_note" in calls_with(src, "created"),
+          "and to budget_note, so the preview is computed from the same two "
+          "fields the install decides on")
+    # THE SABOTAGE RENAMES rather than deletes: the calls stay parseable and the
+    # keyword this asks about is gone, which is what a source that merely
+    # mentions the word looks like.
+    dropped = src.replace("reserve=reserve", "reserve_off=reserve")
+    check(dropped != src and not calls_with(dropped, "reserve"),
+          "and taking the keyword back out makes that check go red -- without "
+          "this control it would pass on any source that merely mentions the "
+          "word", f"{sorted(calls_with(dropped, 'reserve'))}")
+    unflagged = src.replace("created=created_row", "created_off=created_row")
+    check(unflagged != src and not calls_with(unflagged, "created"),
+          "and the same control for created=, which is the keyword whose "
+          "absence is silent rather than red",
+          f"{sorted(calls_with(unflagged, 'created'))}")
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -1415,6 +1901,7 @@ def main():
     section6()
     section7()
     section8()
+    section9()
     section2(area)
     return LEDGER.verdict()
 

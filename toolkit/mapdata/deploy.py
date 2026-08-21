@@ -42,6 +42,14 @@ WHAT IT DOES, in order, refusing rather than continuing at each step:
      one -- two rows under a new id via `datalloc`, the head born empty. That is
      WORLDMAPS-W3; whether a retail client compiles a map from a chain it has
      never seen is WORLDMAPS-W4 and is a client question, not an offline one.
+     An area may also declare `reserve_bytes`, the reservation its row is
+     entitled to: creation asks the allocator for that many blocks instead of
+     just enough, and a later install into THAT row -- the one we created --
+     that outgrows its current reservation grows back into them in place
+     rather than relocating (WORLDMAPS-W5). The archive records no such number
+     anywhere, which is why the AREA states it and every run prints it; and a
+     row ArenaNet made is never grown on the strength of it, because what that
+     row was given is not ours to state.
   6. LAUNCH (`--launch`).  The harness, pointed at the area's own map id --
      which is a thing worth writing down, because a harness PASS means "the
      client reached A map", and pointing it at the wrong one produced two runs
@@ -493,8 +501,126 @@ def spill_stream(here, tag, stream, compression):
     return path
 
 
+GROW_GATE_MARKERS = (
+    "is CLAIMED by",                            # condition 1: other claimants
+    "PAST THE END",                             # condition 2: EOF
+    "LIVE MASTER FILE TABLE",                   # condition 3: the live MFT
+    "datplan WITHHOLDS",                        # condition 4: a withheld run
+)
+
+
+def grow_gate_refusal(text):
+    """The `_grow_gate` refusal inside a writer's output, or None.
+
+    THE POINT IS TO TELL TWO FAILURES APART, and the reason it matters is that
+    only one of them may be followed by a relocation. `datwrite --replace
+    --grow-to` exits non-zero for the grow gate (some other row claims the
+    blocks this one freed; the range runs past EOF, into the live MFT, or into a
+    container generation `datplan` withholds) and ALSO for every ordinary
+    reason -- a bad declaration, a missing file, a refused archive. Falling back
+    to `datmove` on the first kind is correct and is what the row's own budget
+    is for; falling back on the second would turn "these bytes are not what you
+    declared" into a relocation that quietly succeeds.
+
+    So the recogniser is a fixed list of the gate's own four sentences rather
+    than "rc != 0", and an unrecognised failure is re-raised as a refusal by the
+    caller. Matching on message text is a weak join and it is named as one: if
+    `datwrite`'s wording moves, this returns None and the install REFUSES, which
+    is the safe direction -- a claimant conflict that becomes invisible is the
+    exact failure this whole path exists to avoid.
+    """
+    for line in text.splitlines():
+        if any(m in line for m in GROW_GATE_MARKERS):
+            return line.strip()
+    return None
+
+
+def area_reserve(area):
+    """The area row's `reserve_bytes`, or 0. -> int
+
+    WHERE CONTENT BECOMES A NUMBER, which is the place to refuse a bad one. The
+    field is optional and absent means 0 -- every area row said that before
+    WORLDMAPS-W5 and three of them still do. What it may NOT be is almost a
+    number: TOML will hand back `2048.5` or `-512` as happily as `8192`, and
+    both of those travel a long way before anything notices. `int()` on the
+    first truncates silently, so the run would reserve 2,048 while the row says
+    2,048.5; the second is falsely truthy and would print "past the -512 B this
+    area declares".
+
+    `datalloc.Stream` refuses both, but only on the CREATE path -- the install
+    path never builds a Stream, so a fraction there would reach `--grow-to` as
+    an argparse type error out of a subprocess. Asking here covers both
+    directions and names the file the operator has to edit.
+    """
+    raw = area.get("reserve_bytes", 0)
+    if raw is None:
+        return 0
+    # BOOLS BOTH WAYS. `True` is an int in Python and would sail through as a
+    # 1-byte budget; refusing only that one would leave `false` meaning 0, which
+    # is a second spelling of absent and one more thing to read.
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise Refused(
+            f"this area's `reserve_bytes` is {raw!r}, which is not a whole "
+            f"number of bytes.\n"
+            f"  A reservation is counted in bytes and rounded up to whole "
+            f"512-byte blocks by the allocator. Edit the row in "
+            f"content/areas.toml, or drop the field to state no budget.")
+    if raw < 0:
+        raise Refused(
+            f"this area's `reserve_bytes` is {raw}, and a negative reservation "
+            f"is not a budget.\n"
+            f"  Drop the field from the row in content/areas.toml to state no "
+            f"budget: absent is 0, which is the behaviour every area row had "
+            f"before WORLDMAPS-W5.")
+    return raw
+
+
+def budget_note(size, reservation, reserve, created=False):
+    """What a DECLARED budget does to the verb `verify` just predicted. -> str|None
+
+    `verify` compares the stream against the row's CURRENT reservation and says
+    "fits" or "will RELOCATE", which is the whole truth for a row with no
+    declared entitlement. For a row that has one, the middle case exists and the
+    two lines would otherwise contradict each other: the preview would announce
+    a relocation and the install would grow the row back in place.
+
+    Printed from `main` rather than folded into `verify`, deliberately. `verify`
+    is about the map -- does it round-trip, does the seed stand up, does it fit
+    -- and the budget is about the archive; a run that prints one line about the
+    map and one about the row can be read against a prediction, where a single
+    sentence hedged three ways cannot.
+
+    `created` MIRRORS `install_partner`'S OWN GATE and defaults to False for the
+    same reason it does there: a budget is only spent on a row this toolkit
+    allocated. A preview that promised a grow for a displaced retail row would
+    be predicting a verb the install will not pick, which is worse than saying
+    nothing.
+    """
+    if not reserve:
+        return None
+    if not created:
+        return (f"budget: {reserve} B declared, but this area's map row does "
+                f"not carry `created = true` -- the budget is only spent on a "
+                f"row this toolkit allocated, so an install here fits or "
+                f"RELOCATES exactly as it did before the field existed")
+    if reservation is None:
+        return (f"budget: this area declares {reserve} B of reservation, which "
+                f"the CREATE path will ask the allocator for")
+    if size <= reservation:
+        return (f"budget: {reserve} B declared, and the row's current "
+                f"{reservation} B already holds this stream -- the budget is "
+                f"not needed on this install")
+    if size <= reserve:
+        return (f"budget: {reserve} B declared, so the install will ask "
+                f"datwrite to GROW the row back to its stated entitlement "
+                f"rather than relocate it -- subject to the grow gate "
+                f"(claimants, EOF, the live MFT, datplan's withheld runs)")
+    return (f"budget: {reserve} B declared and this stream is {size} B, which "
+            f"is past it -- the budget cannot help and the row RELOCATES")
+
+
 def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
-                    reservation, tag):
+                    reservation, tag, *, reserve=0, created=False):
     """Put `stream` in the Stripped partner row and PROVE the row holds it.
 
     `out` is the file already holding `plain`, and `plain` is the payload a
@@ -515,17 +641,47 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     What is gone is the asymmetry -- we compress now too, so the comparison is
     between like and like.
 
-    NOT GROWN BACK, and this is the case the next change is about. `replace`
+    GROWN BACK, SINCE WORLDMAPS-W5, AND ONLY WHEN THE AREA SAID SO. `replace`
     writes the size field, so a compressed install SHRINKS the row's reservation
     (map 143's partner: 4,608 B -> 1,536 B after a 1,316 B plaza). The next,
     larger authored map is then past a ceiling the row's own freed blocks sit
-    behind, and this function relocates rather than growing in place.
-    `datwrite`'s `grow_to` is exactly the flag for it and is deliberately NOT
-    wired here: it is a separate change with its own claimant/EOF/withheld-run
-    gate, and folding it into this one would make a failed install ambiguous
-    between the two.
+    behind. `datwrite`'s `grow_to` is the flag for it and this function now
+    passes it -- but only up to `reserve`, the entitlement the area row declares
+    in `content/areas.toml`, because the archive records no such number anywhere
+    and `grow_to` is defined as a STATEMENT about what a row was given rather
+    than a request for more. With no budget declared, this is byte-for-byte the
+    old behaviour: fit, or relocate.
 
-    Returns the verb that ran: "replace" or "relocate".
+    THREE OUTCOMES NOW, AND EACH ONE IS PRINTED. The middle one is the whole
+    change and it is invisible from the outside -- a row that grew back in place
+    and a row that never needed to grow both read as "replace" afterwards, and a
+    row that relocated is only distinguishable by its offset. So the run says
+    which of the three happened, in the run's own log, at the moment it happens.
+
+    A REFUSED GROW IS NEVER SWALLOWED. `_grow_gate` refuses for four reasons
+    (claimants, EOF, the live MFT, a withheld container run) and the first of
+    them means another row has taken the blocks this one freed -- which is a
+    real fact about the archive that a silent relocation would erase. So the
+    gate's own sentence is printed, then the relocation runs and says it is
+    running BECAUSE of it. An unrecognised failure is not a grow-gate refusal
+    and is raised, exactly as before: see `grow_gate_refusal`.
+
+    ONLY INTO A ROW WE MADE, and `created` is the second half of the gate rather
+    than a courtesy. `grow_to` is defined as a statement about what a row was
+    GIVEN, and for a row THIS toolkit allocated, the area's `reserve_bytes` IS
+    that statement -- `create_chain` asked the allocator for exactly it. For a
+    displaced RETAIL row it is not: ArenaNet gave that row whatever it gave it,
+    our recipe's budget says nothing about it, and annexing the blocks behind it
+    on the strength of a number from `content/areas.toml` would be inventing an
+    entitlement. So a displaced row keeps the pre-WORLDMAPS-W5 behaviour exactly
+    -- fit, or relocate -- however large a budget its area declares. `created`
+    is the maps.toml row's own claim, threaded from `main`; hardening THAT claim
+    against a retail chain that happens to bind the id is the R2 residual
+    (`resolve_or_create`'s fall-through is shape-only) and is not this gate's
+    job. Default False, because the safe direction for a caller who did not
+    think about it is the old behaviour.
+
+    Returns the verb that ran: "replace", "grow" or "relocate".
     """
     here = os.path.dirname(out)
     # ONE FILE ON THE STORED ARM, deliberately: --data and --expect naming the
@@ -534,31 +690,81 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     # returns None there for exactly that reason.
     data_path = spill_stream(here, tag, stream, compression) or out
 
-    if len(stream) <= reservation:
-        verb = "replace"
-        print(f"  {len(stream)} B fits the {reservation} B reservation "
-              f"-- replacing in place")
+    def replace_argv(grow_to=None):
+        # A SEPARATE JOURNAL FOR THE GROW ARM. A grow the gate refuses and the
+        # relocation that follows it are two runs against one row, and a journal
+        # file is the only way back from either of them.
+        which = "grow" if grow_to else "replace"
         argv = [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
                 "--replace", str(partner_row), "--data", data_path,
                 "--compression", str(compression), "--expect", out,
-                "--journal", os.path.join(here, f"{tag}_replace.json"),
-                "--verify"]
-    else:
-        verb = "relocate"
-        print(f"  {len(stream)} B does NOT fit the {reservation} B "
-              f"reservation -- RELOCATING the row")
+                "--journal", os.path.join(here, f"{tag}_{which}.json")]
+        if grow_to:
+            argv += ["--grow-to", str(grow_to)]
+        return argv + ["--verify"]
+
+    def relocate_argv():
         # NO --check-overlaps here: it is a READ-ONLY verb that returns
         # before any move, so passing it got rc 0 with nothing written and
         # this function reported "installed". datmove runs the overlap
         # check itself after a real move.
-        argv = [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
+        return [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
                 "--row", str(partner_row), "--data", data_path, "--move",
                 "--confirm", "--compression", str(compression),
                 "--expect", out,
                 "--journal", os.path.join(here, f"{tag}_move.json")]
-    rc = subprocess.run(argv, text=True).returncode
-    if rc != 0:
-        raise Refused(f"the archive writer refused (rc {rc})")
+
+    def run(argv):
+        rc = subprocess.run(argv, text=True).returncode
+        if rc != 0:
+            raise Refused(f"the archive writer refused (rc {rc})")
+
+    if len(stream) <= reservation:
+        verb = "replace"
+        print(f"  FITS: {len(stream)} B in the {reservation} B reservation "
+              f"-- replacing in place")
+        run(replace_argv())
+    elif reserve and created and len(stream) <= reserve:
+        verb = "grow"
+        print(f"  GROWS BACK: {len(stream)} B is past the row's current "
+              f"{reservation} B, and this area declares a {reserve} B "
+              f"entitlement -- asking datwrite to annex the blocks this row "
+              f"freed rather than relocating it")
+        # CAPTURED, not inherited, because the decision below is made from what
+        # the writer SAID. Both streams are re-printed first so nothing the
+        # operator would have seen is lost -- only its ordering changes.
+        proc = subprocess.run(replace_argv(grow_to=reserve), text=True,
+                              capture_output=True)
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+        if proc.returncode != 0:
+            gate = grow_gate_refusal(proc.stdout + proc.stderr)
+            if gate is None:
+                raise Refused(f"the archive writer refused (rc "
+                              f"{proc.returncode})")
+            print(f"  THE GROW GATE REFUSED: {gate}")
+            print(f"  RELOCATING instead, and saying so: the row could not take "
+                  f"its own freed blocks back, which is a fact about this "
+                  f"archive and not a detail of this install")
+            verb = "relocate"
+            run(relocate_argv())
+    else:
+        verb = "relocate"
+        if not reserve:
+            why = "and no entitlement is declared for this area"
+        elif not created:
+            # NAMED, because this is the one relocation whose cause is a rule
+            # rather than a size: the budget would have covered this stream and
+            # was not spent, and an operator reading the run would otherwise be
+            # left comparing two numbers that fit.
+            why = (f"and the {reserve} B this area declares is NOT spendable "
+                   f"here -- this row was not created by us, so what it was "
+                   f"given is ArenaNet's statement and not ours")
+        else:
+            why = f"past the {reserve} B this area declares"
+        print(f"  RELOCATES: {len(stream)} B does NOT fit the {reservation} B "
+              f"reservation, {why} -- moving the row")
+        run(relocate_argv())
     prove_partner(dat, head_row, plain, compression)
     return verb
 
@@ -801,7 +1007,7 @@ def create_note(file_id, size, bound, created, install):
             f"nowhere is also what a WRONG id looks like")
 
 
-def create_streams(plain, stream, compression):
+def create_streams(plain, stream, compression, reserve=0):
     """The two rows of a NEW map chain, HEAD FIRST. -> [Stream, Stream].
 
     Separated from the write so the SHAPE can be inspected without an archive,
@@ -828,14 +1034,22 @@ def create_streams(plain, stream, compression):
     everywhere -- FINDINGS C-6). For a stored row the bytes ARE the payload, so
     passing it is the caller stating that positively, exactly as
     `install_partner` does.
+
+    `reserve` GOES ON THE PARTNER AND ONLY THE PARTNER, and `datalloc.Stream`
+    refuses it on the head rather than accepting it silently -- an empty row owns
+    no extent, so a budget there would buy nothing. The partner is the row that
+    holds the geometry and the row a later, larger authored map has to grow. 0
+    is "no budget stated", which is what every area row said before
+    WORLDMAPS-W5 and what the three that ride map 143 still say.
     """
     extra = 8 if compression == COMPRESSION_HUFFMAN else 0
     return [datalloc.Stream(b"", MAP_HEAD_FLAGS_U16),
             datalloc.Stream(stream, MAP_PARTNER_FLAGS_U16,
-                            extra_bytes=extra, expect=plain)]
+                            extra_bytes=extra, expect=plain, reserve=reserve)]
 
 
-def create_chain(dat, file_id, plain, stream, compression, here, tag):
+def create_chain(dat, file_id, plain, stream, compression, here, tag,
+                 reserve=0):
     """Allocate a map's two rows under an id nothing binds yet. -> (head, partner).
 
     THE PLAN IS PRINTED AND THEN THROWN AWAY. `alloc(plan=...)` exists and is not
@@ -860,15 +1074,52 @@ def create_chain(dat, file_id, plain, stream, compression, here, tag):
     copy -- see `spill_stream`, and WORLDMAPS-W4's capture list, which names the
     file. It happens BEFORE the plan so that a chain the allocator refuses still
     leaves behind the thing that was refused.
+
+    `reserve` IS THE ONE CHANCE TO CHOOSE THIS ROW'S CEILING, which is why the
+    number is printed rather than merely passed. A created partner's reservation
+    used to be exactly the first install's own length, so the second, larger
+    authored map was already past a bound nobody had picked; the area's
+    `reserve_bytes` picks it, once, here. It is stated in the run's own log
+    because nothing on disk records it afterwards -- the 24-byte MFT row has no
+    entitlement field, and `deploy.resolve_rows` recomputes a row's ceiling from
+    its CURRENT size on every later run.
     """
     spill_stream(here, tag, stream, compression)
-    streams = create_streams(plain, stream, compression)
+    # INSIDE A REFUSAL, because building the streams is now a place that can
+    # refuse. `create_streams` puts `reserve` on a `datalloc.Stream`, and
+    # `datalloc` checks the number there -- a fraction, a negative, a budget
+    # under its own payload. That is an authoring mistake in
+    # `content/areas.toml`, and an authoring mistake must reach the operator as
+    # this command's own REFUSED line rather than as a traceback: `__main__`
+    # catches `deploy.Refused` and nothing else, so a raw `datalloc.Refused`
+    # from three lines above the try below exits 1 with a stack instead of 2
+    # with a remedy.
+    try:
+        streams = create_streams(plain, stream, compression, reserve=reserve)
+    except datalloc.Refused as exc:
+        raise Refused(
+            f"this area's declared reservation is not one the allocator will "
+            f"take:\n  {exc}\n"
+            f"  The number is `reserve_bytes` in content/areas.toml, so the "
+            f"remedy is a content edit and not an archive one.") from exc
     try:
         with Archive(dat) as ar:
             preview = datalloc.plan_alloc(ar, streams, file_id)
     except datalloc.Refused as exc:
         raise Refused(f"the allocator will not plan this chain:\n  {exc}") from exc
     preview.show()
+    part = preview.rows[1]
+    if reserve:
+        print(f"  reservation: {part.reservation} B for a {part.size} B "
+              f"stream, from this area's declared {reserve} B entitlement -- "
+              f"{part.reservation - part.size} B of headroom, so an authored "
+              f"map up to {part.reservation} B compressed replaces this row in "
+              f"place instead of relocating it")
+    else:
+        print(f"  reservation: {part.reservation} B for a {part.size} B "
+              f"stream, {part.reservation - part.size} B of headroom -- this "
+              f"area declares no `reserve_bytes`, so the row gets what the "
+              f"payload needs and a larger map later will relocate it")
 
     journal = os.path.join(here, f"{tag}_alloc.json")
     try:
@@ -1274,9 +1525,18 @@ def main(argv=None):
     # says this area owns its file rather than displacing a retail one. Whether
     # the file exists yet is the archive's answer and is asked below.
     created_row = bool(map_row.get("created", False))
+    # `reserve_bytes` is the AREA's claim, not the map's: it says how much room
+    # this recipe wants for the geometry it produces, and the archive records no
+    # such number anywhere (see `content/areas.toml`'s header and
+    # `install_partner`). Absent means "no budget" and reproduces every run of
+    # this command before WORLDMAPS-W5 exactly. It is only SPENDABLE on a row
+    # this toolkit created -- `created_row` above -- which is why the two are
+    # read together and threaded together.
+    reserve = area_reserve(area)
     print(f"area {args.area!r}: {area['name']} -- map {map_id}, "
           f"{dim}x{dim}, file id {file_id:#x}"
-          + ("  (created: this area owns its file)" if created_row else ""))
+          + ("  (created: this area owns its file)" if created_row else "")
+          + (f"  (reserve {reserve} B)" if reserve else ""))
 
     # 1. geometry
     if args.blend:
@@ -1344,6 +1604,14 @@ def main(argv=None):
     row_note = create_note(file_id, len(stream), bound, created_row, args.install)
     if row_note:
         print(f"  {row_note}")
+    # AFTER `verify`'s reservation line and never inside it. That line predicts
+    # a verb from the row's CURRENT reservation, which is the whole truth for a
+    # row with no declared entitlement and a contradiction for one that has --
+    # see `budget_note`.
+    bud = budget_note(len(stream), rows[2] if rows else None, reserve,
+                      created=created_row)
+    if bud:
+        print(f"  {bud}")
 
     out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
     if args.out or args.install:
@@ -1361,14 +1629,16 @@ def main(argv=None):
             print(f"\ncreating file id {file_id:#x} in {dat}: nothing binds it, "
                   f"and this area's map row asked to own its file")
             head_row, partner_row = create_chain(
-                dat, file_id, report.blob, stream, compression, here, args.area)
+                dat, file_id, report.blob, stream, compression, here,
+                args.area, reserve=reserve)
         else:
             head_row, partner_row, reservation = rows
             print(f"\ninstalling into {dat}: head {head_row}, "
                   f"partner {partner_row}")
             verb = install_partner(dat, out, report.blob, stream, compression,
                                    head_row, partner_row, reservation,
-                                   args.area)
+                                   args.area, reserve=reserve,
+                                   created=created_row)
             print(f"  the partner row was written by {verb}")
         # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
         # zero-length head -- rightly, since it cannot record a baseline mesh

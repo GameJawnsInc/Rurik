@@ -45,11 +45,12 @@ import gwdat  # noqa: E402
 import gwenc  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: 177, MEASURED from a green run on 2026-08-20, not guessed. Every section
+# FLOOR: 203, MEASURED from a green run on 2026-08-20, not guessed. Every section
 # builds its own fixture, so there is no corpus to be missing, no vault to
 # resolve, and nothing that can legitimately skip. Per section, counted from the
 # log rather than predicted: {1: 6, 2: 5, 3: 11, 4: 23, 5: 25, 6: 3, 7: 4, 8: 3,
-# 9: 7, 10: 2, 11: 5, 12: 23, 13: 29, 14: 31}.
+# 9: 7, 10: 2, 11: 5, 12: 23, 13: 29, 14: 31, 15: 26}. Was 177 before section
+# 15's reserve (WORLDMAPS-W5).
 #
 # THIS NUMBER HAS BEEN WRONG IN THIS COMMENT BEFORE. It read "FLOOR: 98" while
 # the `floor=` below said 100, from 2026-08-15 until 2026-08-19 -- a stale figure
@@ -144,7 +145,7 @@ import checks  # noqa: E402
 # advisory" has to mean -- before this arc `alloc(plan=P)` ran NEITHER, and a
 # doctored plan put extraBytes 8 onto plainly stored bytes with every rule in
 # this project green.
-LEDGER = checks.Ledger("dat alloc", floor=177)
+LEDGER = checks.Ledger("dat alloc", floor=203)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -1611,6 +1612,185 @@ def section_fidelity(tmp):
           (m or "-- it did not refuse").splitlines()[-1][:72])
 
 
+# ------------------------------------------------------ 15. the reserve
+#
+# WORLDMAPS-W5. Until 2026-08-20 a created row's reservation was exactly
+# `blocks_for(len(data))` -- zero headroom by construction -- so a created
+# chain's SECOND, larger install was already past a ceiling nobody had chosen
+# and fell through to a relocation. `Stream(reserve=N)` is the caller stating
+# what the row is entitled to, once, at creation.
+#
+# THE WHOLE RISK OF THIS FIELD IS THAT IT LEAKS. `size` is what the client
+# reads; `reserve` is a private statement about how far the row may grow later.
+# So every check below asks the same question twice -- that the RESERVATION
+# moved, and that the size, the crc and the declaration did NOT.
+
+
+def section_reserve(tmp):
+    print("\n15. reserve: headroom the row is GIVEN, not bytes it HOLDS")
+    partner = pattern(31, 900)
+    # 900 B is 2 blocks; 2560 is 5. The fixture's usable runs are 1 block at 5,
+    # 2 at 7-8 and 6 at 10-15, so the two cases land in DIFFERENT runs and the
+    # control below differs in offset as well as in reservation.
+    budget = 5 * BLOCK
+
+    path, _ = fresh(tmp, "reserve.dat")
+    with Archive(path) as ar:
+        with quiet():
+            plan = datalloc.plan_alloc(
+                ar, [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                     datalloc.Stream(partner, datalloc.MAP_PARTNER_FLAGS_U16,
+                                     reserve=budget)], 0x3000)
+            bare = datalloc.plan_alloc(ar, map_streams(partner), 0x3001)
+    part, control = plan.rows[1], bare.rows[1]
+    check(part.reservation == budget,
+          "a stream carrying reserve=2560 is placed in 2560 B of blocks",
+          f"{part.reservation} B for a {len(partner)} B payload")
+    check(control.reservation == 1024 and part.reservation != control.reservation,
+          "CONTROL: the same 900 B payload with no reserve gets 1024 B -- the "
+          "reservation moved because of the budget, not because of the bytes",
+          f"{control.reservation} B without, {part.reservation} B with")
+    check(part.size == len(partner) and control.size == part.size,
+          "and `size` is the PAYLOAD either way -- the client reads this field "
+          "and knows nothing about our budget", f"{part.size} B")
+    check(part.crc == binascii.crc32(partner) == control.crc,
+          "so is the crc: it is over the bytes, never over the reservation")
+    check(plan.rows[0].reservation == 0 and plan.rows[0].size == 0,
+          "and the armed head is untouched -- zero length, no extent, the "
+          "re-bloat trigger exactly as before")
+
+    with quiet() as out:
+        part.show()
+    said = out.getvalue()
+    check(f"+{budget}" in said and f"{budget - len(partner)} B of headroom" in said,
+          "the plan STATES the headroom it is buying rather than leaving the "
+          "reader to subtract -- a budget nobody prints is a budget nobody "
+          "checks against the row that asked for it", said.strip()[:96])
+
+    # Placement CONSUMES the reserved blocks, which is the property that makes
+    # the budget worth anything: a second row handed the tail of this run would
+    # be sitting in the space the first one was promised.
+    with Archive(path) as ar:
+        with quiet():
+            two = datalloc.plan_alloc(
+                ar, [datalloc.Stream(partner, 259, reserve=budget),
+                     datalloc.Stream(pattern(32, 600), 1)], 0x3002)
+    a, b = two.rows
+    check(not (a.offset < b.offset + b.reservation
+               and b.offset < a.offset + a.reservation),
+          "a second stream in the same allocation is placed OUTSIDE the "
+          "reserved extent, not inside its unused tail",
+          f"0x{a.offset:X} +{a.reservation} and 0x{b.offset:X} +{b.reservation}")
+
+    # THE REFUSALS.
+    with Archive(path) as ar:
+        def why(streams):
+            return refusal(datalloc.plan_alloc, ar, streams, 0x3000)
+
+        m = refusal(datalloc.Stream, b"", datalloc.MAP_HEAD_FLAGS_U16,
+                    reserve=1024)
+        check(m and "owns NO EXTENT" in m and "PARTNER" in m,
+              "a reserve on a ZERO-LENGTH stream is refused, naming the partner "
+              "as the row that grows -- an armed head has no offset to reserve "
+              "blocks at, so a budget there would be accepted and do nothing",
+              (m or "-- accepted").splitlines()[0])
+        check(refusal(datalloc.Stream, b"", datalloc.MAP_HEAD_FLAGS_U16) is None,
+              "CONTROL: the same empty head with NO reserve still constructs -- "
+              "the refusal is about the budget, not about emptiness")
+        m = refusal(datalloc.Stream, partner, 1, reserve=len(partner) - 1)
+        check(m and "smaller than" in m and "wrong row" in m,
+              "a reserve UNDER its own payload is refused rather than clamped -- "
+              "max() would paper over it and report headroom nobody has",
+              (m or "-- accepted").splitlines()[0])
+        check(refusal(datalloc.Stream, partner, 1,
+                      reserve=len(partner)) is None,
+              "CONTROL: a reserve exactly equal to the payload is legal -- the "
+              "rule is `>= len(data)`, and a row entitled to just itself is a "
+              "statement, not an error")
+        for bad in (1024.5, "1024", None, True):
+            m = refusal(datalloc.Stream, partner, 1, reserve=bad)
+            check(m and "not a whole number of bytes" in m,
+                  f"reserve={bad!r} is refused: a reservation is counted in "
+                  f"bytes", (m or "-- accepted").splitlines()[0][:64])
+        m = refusal(datalloc.Stream, partner, 1, reserve=-512)
+        check(m and "not a whole number of bytes" in m,
+              "and so is a negative one")
+
+        # The budget is judged by the same placement rule the payload is: a
+        # reserve nothing can hold is "nothing fits", not a silent shrink.
+        m = why([datalloc.Stream(pattern(33, 300), 259,
+                                 reserve=LARGEST_USABLE + BLOCK)])
+        check(m and "nothing fits" in m,
+              "a budget larger than the largest usable run is refused by the "
+              "ordinary placement rule -- a reserve buys real blocks or it "
+              "buys nothing", f"largest usable {LARGEST_USABLE} B")
+
+    # THE HANDED-IN PLAN, mirroring section 14's extraBytes discipline. The
+    # write carries `r.reservation` out verbatim, and the archive has no
+    # entitlement field, so a row given less than its budget is indistinguishable
+    # afterwards from a row that never had one.
+    ppath, _ = fresh(tmp, "reserve_plan.dat")
+    pbefore = blob(ppath)
+    budgeted = [datalloc.Stream(b"", datalloc.MAP_HEAD_FLAGS_U16),
+                datalloc.Stream(partner, datalloc.MAP_PARTNER_FLAGS_U16,
+                                reserve=budget)]
+    with Archive(ppath) as ar:
+        with quiet():
+            stale = datalloc.plan_alloc(ar, map_streams(partner), 0x3000)
+    m = refusal(datalloc.alloc, ppath, budgeted, 0x3000,
+                os.path.join(tmp, "reserve_plan.journal.json"), confirm=True,
+                plan=stale)
+    check(m and "reserves 1024 B" in m and f"asks for {budget} B" in m,
+          "a plan computed BEFORE the reserve was set is refused rather than "
+          "carried out -- it would give the row what the payload needs while "
+          "the caller believed it bought headroom",
+          (m or "-- accepted").splitlines()[0])
+    check(blob(ppath) == pbefore, "and the archive is byte-identical")
+    with Archive(ppath) as ar:
+        with quiet():
+            fat = datalloc.plan_alloc(ar, budgeted, 0x3000)
+    m = refusal(datalloc.alloc, ppath, map_streams(partner), 0x3000,
+                os.path.join(tmp, "reserve_plan2.journal.json"), confirm=True,
+                plan=fat)
+    check(m and f"reserves {budget} B" in m and "asks for 1024 B" in m,
+          "and the OTHER direction too: a plan reserving blocks no stream asked "
+          "for is the same disagreement seen from the other side",
+          (m or "-- accepted").splitlines()[0])
+
+    # AND THE WRITE. The reservation is the one number here that cannot be
+    # re-derived from the archive afterwards, so the evidence has to be the
+    # BYTES: the payload where it belongs, zeroes across the whole budget, and
+    # nothing else claiming any of it.
+    wpath, _ = fresh(tmp, "reserve_write.dat")
+    wbefore = blob(wpath)
+    with quiet():
+        wplan = datalloc.alloc(wpath, budgeted, 0x3000,
+                               os.path.join(tmp, "reserve_write.journal.json"),
+                               confirm=True)
+    pi = wplan.rows[1].index
+    rows = read_rows(wpath)
+    off = rows[pi][0]
+    check(rows[pi][1] == len(partner) and rows[pi][5] == binascii.crc32(partner),
+          "the written row declares the PAYLOAD's size and crc, not the "
+          "budget's", f"size {rows[pi][1]}, crc 0x{rows[pi][5]:08X}")
+    check(payload_of(wpath, pi) == partner,
+          "and holds exactly the bytes handed in", f"{len(partner)} B")
+    tail = blob(wpath)[off + len(partner):off + budget]
+    check(len(tail) == budget - len(partner) and set(tail) == {0},
+          "the reserved tail is ZEROED across the whole budget -- the fixture "
+          "fills free space with 0xCC, so this is the reservation being real "
+          "rather than the padding a 2-block row would have had",
+          f"{len(tail)} B of zeroes past the payload")
+    check(len(blob(wpath)) == len(wbefore),
+          "the file did not change length", f"{len(wbefore)} B")
+    check(datcheck_clear(wpath),
+          "datcheck --preflight is 10 of 10 over an archive with a reserved row")
+    with Archive(wpath) as ar:
+        check(datmove.overlaps(ar) == [],
+              "and no two rows share storage -- the reserved blocks are the new "
+              "row's and nobody else's")
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         section_fixture(tmp)
@@ -1627,6 +1807,7 @@ def main():
         section_cli(tmp)
         section_compressed(tmp)
         section_fidelity(tmp)
+        section_reserve(tmp)
     return LEDGER.verdict()
 
 
