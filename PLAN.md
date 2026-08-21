@@ -1362,11 +1362,12 @@ displacing rows 71496/71497; `[map.166]`/`[area.frontier]` are the first area
 that takes nobody's row. Both skeptic-verified; floors test_deploy 35→92,
 test_content 39→40, test_contentids 19→20.
 
-**The immediate next actions are the two owner-driven launches**, predictions
-registered, safer order first: **WORLDMAPS-W2**
-(`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` — does the client's re-bloat
-compiler read a partner WE compressed; A8/A9 answered adjacent questions,
-never for a map) and **WORLDMAPS-W4**
+**WORLDMAPS-W2 RAN GREEN 2026-08-20** (agent-driven, owner's go-ahead; the
+verdicts are mechanical): the client's re-bloat compiler read the partner WE
+compressed and built the identical map — readback line-for-line equal to the
+stored control, partner untouched at 1,316 B comp 8, navmesh served both
+arms. `vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS. **The
+remaining launch is WORLDMAPS-W4**
 (`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` — does re-bloat fire for a
 head BORN zero-length under a created id; FINDINGS 36 item 4's untested case).
 Known deliberate gap: a compressed install SHRINKS the row, so small→large

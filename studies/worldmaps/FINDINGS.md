@@ -50,21 +50,29 @@ relocates where it used to sit still. `datwrite --replace grow_to=` is exactly
 the flag for it and is its own change with its own gate; folding it into W1
 would have made a failed install ambiguous between two mechanisms.
 
-## WORLDMAPS-W2 — the first compression-8 MAP row a retail client reads. STAGED
+## WORLDMAPS-W2 — the first compression-8 MAP row a retail client reads. RAN GREEN 2026-08-20
 
-The question no offline check can answer: does the client's re-bloat compiler
-read a partner WE compressed? `gwenc`'s round-trip is through `gwdat`, OUR
-decoder — "it proves agreement with our reader, NOT correctness against the
-client's" (`datwrite.declaration_fault`'s own docstring). A8 answered this for
-a generic row and A9 for a created chain; **no map's Stripped partner has ever
-reached a client carrying bytes we compressed.**
+**OBSERVED (retail client, build 38797, one map, one launch per arm —
+agent-driven on the owner's explicit go-ahead; the readouts are mechanical, so
+the owner-drives boundary did not bite).** Two arms on the C2 copy, control
+first, one flag apart. **The client's re-bloat compiler READ the partner we
+compressed and built the identical map**: arm B's readback matches arm A line
+for line and both reproduce FINDINGS 56 (6,627 B path chunk, 55 trapezoids,
+1024/1024 heights, env/sound verbatim, 5/5 props, spawn in one trapezoid);
+the server's own navmesh line named the same 55 on the unarmed second run,
+both arms. The partner was never touched by the client — after arm B's
+session, still 0x81B5000, still 1,316 B (33.4% of stored), still compression
+8 — and the head came back REBUILT at ArenaNet's own trapezoid count.
+Post-flight: the diff names exactly the two expected rows, `--assert-safe`
+clears everything. Full scoring of P1–P7, artifacts, and two honest caveats
+(the sheet's Gw.log capture is clobbered by the serve run's second client;
+the serve check's population half hit the server's benign no-rows line in
+both arms, orthogonal to compression and flagged as its own follow-up) are in
+`vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS.
 
-The run sheet, predictions P1–P5 registered before anything is armed, exact
-operator commands, and the fallback arm (`--stored-install`) are in
-`vault/research/worldmaps/WORLDMAPS-W2-RUN.md`. Two arms on the C2 archive
-copy: A = stored control, B = compressed treatment; the scorable claim is the
-client compiles B identically to A (readback row-for-row, navmesh served on
-the unarmed second run). Owner-driven.
+**What this closes**: the last place an authored map deviated from retail's
+own shape, and the in-place size cap — 32×32 before, at least 96×96 measured
+now. Scope travels with the witness: one map, one shape, one build.
 
 ## WORLDMAPS-W3 — an authored area under its OWN file id. LANDED 2026-08-20
 
