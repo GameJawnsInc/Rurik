@@ -505,6 +505,19 @@ terrain — lake beds, sunken ruins, a canyon floor below the waterline — via 
 content field. And it retires a silent tax: every authored map built here has
 been losing its deep ground to a rule nobody knew existed.
 
+**APPLIED to the deliverable areas, 2026-08-21.** , , 
+and  now carry , recovering 43.4%, 34.4%, 34.4% and
+**49.3%** of their cells respectively -- every map this project ships had been
+losing that ground silently. Two rows deliberately do NOT: , because
+gen_plaza(32) tops out 31 units down and the rule needs 40, so the flag is a
+no-op there AND it is WORLDMAPS-W2's byte-identity control; and the probe rows
+//, which exist to reproduce specific measurements
+(including two that crash the client) and would stop documenting them if
+changed.  is marked SUPERSEDED --  now carries the same shape.
+**Every mesh measurement recorded in this document for those four areas was
+taken at flags 0** and each row says so beside its own field; re-running them
+now will not reproduce those numbers, by design.
+
 **Scope**: one map, one shape, one build, one launch. What bit 0 does BESIDES
 ungating this rule is unmeasured. The 276 cells still outside the mesh are
 attributed to slope by their scatter across all 64 columns, not by a separate
