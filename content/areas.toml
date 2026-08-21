@@ -554,3 +554,114 @@ WHAT IS NOT VERIFIED, and it is the whole point of the run: whether bit 0 is the
 gate. It has never been read out of an installed map's bytes -- W10 inferred \
 flags = 0 from `stripbuild`'s default argument -- and the inverted branch has \
 never been exercised by anything. This row exercises it."""
+
+[area.sculpt_flags0]
+name = "Sculpted Vale (flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with map_flags OMITTED, so it defaults to 0. Same generator,
+# dims, seed, donors, prop count and environment -- the compiled map differs
+# from `sculpt`'s only by the Map Parameters flags dword. This is the twin
+# WORLDMAPS-W12 never had: W12 compared flags-1 areas against figures measured
+# on OTHER days and OTHER archive states, and a same-session twin is what makes
+# WORLDMAPS-W14's byte diff attributable to the bit rather than to the week.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.sculpt_flags0.provenance]
+source = "invented"
+verified = """Ours. It is `sculpt` with one field removed, and it exists so \
+that WORLDMAPS-W13's two arms are compiled by the same client, from the same \
+archive, in the same session -- differing in one bit. Every flags-0 figure this \
+project holds for this shape (WORLDMAPS-W8's 64 trapezoids / 2,582 of 4,096 \
+quad centres / 7,660 B path chunk) was measured on 2026-08-21 but against a \
+different archive state, and W12's comparisons leaned on them across days. \
+UNVERIFIED until this row runs: whether a same-session flags-0 compile \
+reproduces those figures at all. If it does not, W12's deltas were measured \
+against a moving baseline and the arithmetic in its results table needs redoing \
+-- which is exactly why the twin is worth a launch."""
+
+[area.sculpt_deep1]
+name = "Sculpted Vale (deep spawn)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt` with ONE field changed on each axis: the seed moves from the plaza
+# apron at the centre (3072) onto ground that exists ONLY because bit 0 is set.
+# At 96 units per cell, x=528 is the centre of column 5. The flags-0 mesh for
+# this shape starts at column 13 (x=1248), so this seed is 720 units inside the
+# excluded region -- eight columns clear of the boundary, not one.
+seed_x = 528.0
+seed_y = 528.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1
+
+[area.sculpt_deep1.provenance]
+source = "invented"
+verified = """Ours, and it is WORLDMAPS-W13's parameter-free half. \
+WORLDMAPS-W12 established that map_flags = 1 puts submerged ground INTO the \
+compiled navmesh -- 3,820 of 4,096 quad centres against 2,582 -- and said in \
+its own scope note that the recovered ground had not been stood on. \
+`deploy.readback` already asserts that the area's seed lands in exactly ONE \
+trapezoid of the CLIENT'S compiled mesh, so moving the seed into the recovered \
+region turns that existing assertion into the experiment: this row must PASS it \
+and `sculpt_deep0` must FAIL it, and the client is the referee for both. \
+MEASURED OFFLINE before staging: at flags 0 this shape's mesh spans x 1248.. \
+6144, so x=528 is outside it; at flags 1 it spans x 0..6144. What is NOT \
+established, and is the risk this row carries: whether the client will load a \
+map whose spawn is off-mesh at all. WORLDMAPS-W9 produced both a crash and a \
+hang from a map that varied one chunk, so `sculpt_deep0` may not fail cleanly."""
+
+[area.sculpt_deep0]
+name = "Sculpted Vale (deep spawn, flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt_deep1` with map_flags omitted. The SAME off-centre seed, on a map
+# where the water rule is still in force -- so the ground under the seed is not
+# in the mesh. This is the control that makes the deep-spawn arm mean something:
+# without it, a passing spawn check at flags 1 says only "the seed is on the
+# mesh", which is also true of every area this project has ever shipped.
+seed_x = 528.0
+seed_y = 528.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.sculpt_deep0.provenance]
+source = "invented"
+verified = """Ours, and it is the arm expected to FAIL -- which is the point. \
+`deploy.readback`'s spawn assertion is the discriminator, and a check only \
+discriminates if it can go both ways on the same rig. This row puts the seed \
+at (528, 528) with the water rule in force, where the compiled mesh starts at \
+x=1248, so the seed is 720 units outside the ground the client will mesh. \
+PREDICTED: readback's "the spawn lands in exactly one trapezoid" goes RED here \
+and GREEN for `sculpt_deep1`. UNVERIFIED and the reason this row is run rather \
+than argued: whether the client loads such a map cleanly, whether it relocates \
+the body to the nearest mesh (deploy's serve path mentions a placement nudge of \
+up to 480 units, which is LESS than this row's 720-unit margin -- chosen for \
+that reason), or whether it refuses outright."""

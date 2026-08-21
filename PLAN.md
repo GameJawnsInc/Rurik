@@ -1590,7 +1590,7 @@ first attempt: **locate on a constant the experiment never changes**, because a
 scan for the value under test can run before the probe sets it and lock onto
 hundreds of coincidences.
 
-### WORLDMAPS: the ladder landed, and the four shipped areas are verified at the client (2026-08-21)
+### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is stood on (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
@@ -1741,9 +1741,36 @@ STATEMENT, not the model: the band was written by clipping its upper edge at 99%
 (98.86 + 3 is not a coverage figure), making it -2.86/+0.14 rather than the +/-3
 it was registered as. Across all four the model held to +/-3.
 
-**What is STILL unmeasured, and it is the same gap W11 left**: what bit 0 does
-BESIDES ungating the depth rule. And none of these four runs passed `--serve`,
-so the recovered ground is IN the mesh and has not been walked.
+**WORLDMAPS-W13/W14 CLOSED BOTH OF W12'S RESIDUALS THE SAME DAY.** Four arms
+one field apart, six launches, one client and one archive in one session.
+
+**W13 -- the ground is STOOD ON.** A seed placed eight columns inside the
+excluded region, on the same 64x64 shape: at flags 0 **the client CRASHED
+compiling it** -- `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
+dest[-2].pos)`, `PathFlood.cpp(681)`, the same source file as W10's depth
+classifier -- and at flags 1 it compiled clean with the spawn landing in
+exactly one trapezoid. **One bit is the difference between a crash and a
+walkable spawn.** The second, unarmed run then made the SERVER pre-warm it:
+`[map] navmesh 0x287D3: 1 planes, 99 trapezoids`, matching what `pathmap` reads
+from the same bytes. First flags-1 mesh the server has ever read, and the first
+run in this arc without `collision is OFF`. A same-session flags-0 twin also
+reproduced every figure held for this shape, so **W12's deltas were not measured
+against a moving baseline**.
+
+**W14 -- bit 0 changes the Path chunk and NOTHING ELSE in the artifact.** Two
+compiled heads, one bit apart, compared by a raw slice walk: exactly two of
+twelve chunks differ, Map Parameters (one byte, offset +21) and Path
+(7,660 -> 10,988 B). Zones is byte-identical, and **Terrain is byte-identical at
+28,503 B** -- the determinism control that licenses reading the rest.
+
+**What remains out of reach, and one piece permanently**: our compiled heads
+carry 12 chunks against retail Kamadan's 24, and we emit no Sight, Shore, Water,
+VisData or Collision chunk in either arm, so no differential over our artifacts
+can see those branches. Runtime effects that are not persisted are invisible to
+a file diff. Traversal onto the ground from dry land was not tested. The server
+cannot see the bit at all (`map_flags`: zero occurrences under
+`toolkit/authsrv/`). `studies/worldmaps/FINDINGS.md` W13/W14,
+`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
