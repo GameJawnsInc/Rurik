@@ -3327,11 +3327,30 @@ Every one of these, in the order they were written:
   default survives by sending nothing at all. Every bracket is printed as
   `[match ON, match OFF]` and never as one arm, which replaces the drafted "skip
   the match test when chord p90 exceeds the radius" rule that fires on 4 of 4
-  counterfactual and 7 of 11 calibration captures. Floor **17**, the
-  bare-machine subset (§1's nine structural asserts and §2's eight refusals
-  build their own fixtures and read neither vault nor client), against a green
-  **57** with `captures/gamesrv`, `captures/movetap` and the pinned image
-  present; §3-§9 declare seven `LEDGER.skip`s without them and §6's heading arm
+  counterfactual and 7 of 11 calibration captures. **AND A MUTATION AUDIT PUT
+  FOUR MORE CHECKS IN**, each pinning something that had been printed rather
+  than asserted: §1(b)'s arrival tick now runs a SECOND leg of 150 u
+  (520.833 ms, so trunc 520 against round 521) with both expectations
+  HARD-CODED, because the old one recomputed `int(200000 / GS.COPY_SPEED)` --
+  the same expression and the same constant it was checking, which left
+  `COPY_RATE = 0.9` green; §2 pins the LEAD SPINE at 0 / 85.919968 / 766 u from
+  what each policy GRANTS, because handing P2 the 766 u lead used to pass all 57
+  checks while §9 printed "the match distance is 0 by IDENTITY" beside it; §3
+  asserts that NO pattern's table sqrt lands exactly on either cut below its
+  boundary (0 and 0, over the 2,048,001- and 2,560,001-pattern windows), which
+  is the fact -- not a theorem -- that lets one `> cut` scan serve gate
+  1's `> 300.0f` and the match test's strict `< 100.0`; and §5(d) pins the 2.0 s
+  ACTIVE-TIME threshold against `movesync.FREE_SILENCE`, 5.27x apart on
+  `20260820T182554`. §9's M1 bound moved from `2 * HISTORY_WINDOW` to
+  `HISTORY_WINDOW`, since `lag_age` cannot legitimately exceed it and the factor
+  of 2 was exactly the room its `lo` bound could be deleted in (4.55 s -> 7.42 s,
+  still green). Floor **19**, the bare-machine subset (§1's ten structural
+  asserts and §2's nine refusals build their own fixtures and read neither vault
+  nor client), RAISED to **61** once the fixture probes answer, because excess
+  over a floor is not an error and a bare floor protected none of the 42 checks
+  only a full machine runs -- deleting C2(a)'s three structural zeros on a
+  vaulted machine used to print ALL CHECKS PASSED and now names the shortfall.
+  §3-§9 declare seven `LEDGER.skip`s without the fixtures and §6's heading arm
   declares an eighth always. Reads only; sends nothing, writes nothing, and
   **does** import `authsrv.py` -- deliberately, see §6. No client. ~6 s),
   `toolkit/clientscan/test_probedoc.py` (THE PROCEDURE DOCUMENT QUOTES THE

@@ -93,12 +93,21 @@ snaps and are invisible offline. Every number this file prints is a lower bound
 on total harm.
 
 MATCH PROXY -- `q` against the client's own report track over
-`[max(armed_since, t - 5.0), t]` at `MATCH_RADIUS`, STRAIGHT-LINE ONLY. That is
-correct in this regime rather than a simplification: `0x00605AFF`/`0x00605B0C`
-route a degenerate segment into a point test whose success at
-`0x00605B5E je 0x605c60` jumps past the walkable query pushed at `0x00605C40`
-entirely, and segment 0 is degenerate exactly when `+0x48 == 0` at the recording
-instant -- which is the whole of keyboard movement.
+`[max(armed_since, t - 5.0), t]` at `MATCH_RADIUS`, STRAIGHT-LINE ONLY, and that
+IS a simplification. FINDINGS §2.2's predicate is a CONJUNCTION: straight-line
+`< 100.0` STRICT **and** a walkable path length `<= 100.0` INCLUSIVE, the second
+pushed at `0x00605C40`. This file implements the first conjunct alone. The
+exception is real and it is narrow: `0x00605AFF`/`0x00605B0C` route a DEGENERATE
+segment into a point test whose success at `0x00605B5E je 0x605c60` jumps past
+the walkable query entirely, and segment 0 is degenerate exactly when
+`+0x48 == 0` at the recording instant -- which is the whole of KEYBOARD movement
+(REALFIX-O1). It does not cover segments 1..n in any regime, and it does not
+cover segment 0 whenever the client holds a destination -- the click-driven
+regime of `145717` / `171153` / `182652` / `195137`, four of the eleven
+calibration captures. This note used to read "correct in this regime rather than
+a simplification", which over-read the exception onto the whole proxy. Dropping
+a conjunct can only make matching EASIER and snaps RARER, so the direction is
+optimistic and the inventory below now carries it.
 
 GATE-1 PROXY -- `sep >= GATE1_CUT` snaps. A true separation of exactly 300.0 u
 snaps, which is the check with no free parameter.
@@ -112,17 +121,55 @@ a polyline that starts there.
 THE THREE PROXY BIASES, direction stated, magnitude NOT FOUND for all three
 ----------------------------------------------------------------------------
 
-Optimistic (we under-predict): the real chain is truncated on a match
-(`lastMatch->next = NULL` at `0x00605746`), so the 5 s window is more generous
-than the client's; and the polyline is not client-only -- a world-0 agent with
-`clientControlled == 0` falls through at `0x00606103` and APPENDS, so our own
-sync-side writes push nodes during fence-closed windows.
+Optimistic (we under-predict): the match test is missing its SECOND CONJUNCT
+(the walkable path length above), and a test with one of two conditions dropped
+passes more often, so snaps are rarer here than in the client; the real chain is
+truncated on a match (`lastMatch->next = NULL` at `0x00605746`), so the 5 s
+window is more generous than the client's; and the polyline is not client-only
+-- a world-0 agent with `clientControlled == 0` falls through at `0x00606103`
+and APPENDS, so our own sync-side writes push nodes during fence-closed windows.
 Pessimistic (we over-predict): the client's history nodes are pushed at its own
 local-move rate, so our report track is a SUBSAMPLE -- our polyline lies
 chordally inside the true one and our distance-to-polyline is systematically
 over-estimated. Combined with `resyncscore.sync_track`'s own p90 30-41 u / max
 60 u error in the high-grant regime (REALFIX-C1 below), the two proxy errors are
 of the same order as the 99.92 u decision radius. Say so beside any number.
+
+----------------------------------------------------------------------------
+WHAT THE HEADLINE IS ACTUALLY SENSITIVE TO -- read this before quoting 69
+----------------------------------------------------------------------------
+The eleven-capture as-sent total (69 predicted against 60 measured) is INSENSITIVE
+to everything REALFIX-C0 measures and SENSITIVE to conventions nothing measured.
+OBSERVED 2026-08-21, one knob at a time against identical inputs, by re-running
+`assent_census()` under each variant -- through its `**kw` where `simulate()`
+already exposes the knob, and otherwise through an exec'd copy of this module
+with exactly one line changed:
+
+    match radius   99.6 / 99.919968 / 100.0 u ....... 69 / 69 / 69
+    ...and every integer radius 95..110 u .......... 69, except 68 at 101-104
+    gate-1 cut     299.0 / 299.332591 / 300.0 u .... 69 / 69 / 69
+    arrival tick   trunc vs round ................... 69 / 69
+    gate 1 taken at `>=` vs `>` ...................... 69 / 69
+
+    `client_at` STEP instead of linear ............... 81   (+17.4%)
+    polyline drops the pre-`lo` seed point ........... 79   (+14.5%)
+    polyline drops the trailing interpolated point ... 75    (+8.7%)
+    HISTORY_WINDOW 2.5 s / 5.0 s / 10.0 s ......... 75 / 69 / 70
+    extrapolate past the last report (deviation 5) ... 74    (+7.2%)
+    `armed` NOT moved on a reseed .................... 72    (+4.3%)
+    no class-B arrival instants ...................... 59   (-14.5%)
+
+So the number swings 59-81 on modelling conventions -- which BRACKETS round 5
+§6.2's own 69-vs-80 spread from the same written specification and names its
+cause -- while seven significant figures of measured client behaviour are worth
+zero to it. C0 is still the right kind of check (it re-derives a constant from
+the image with no free parameter, and it is the one thing here that CANNOT be
+tuned), but it is not what the calibration rests on, and a reader who takes 69
+as corroborated by it has been misled. In particular: this file agreeing with
+round 5's first reference implementation on the total AND on the per-capture
+vector is a PIN against one of the two implementations §6.2 recorded as
+irreconcilable -- not external corroboration. Deviation (3) says the same thing
+in the language of the fixture; this table is the measurement behind it.
 
 ----------------------------------------------------------------------------
 FOUR DELIBERATE DEVIATIONS FROM `REALFIX.md` §2, each with its ground
@@ -176,11 +223,26 @@ instants, never remove one, which leaves the instant count a FLOOR either way.
 
 ONE MORE MODELLING CHOICE, named because it is not in the spec's five lines.
 The bake SETTLES the copy before it re-aims: `+0x78` is brought forward to
-`read(now)` and `[+0x58] = now`. That is what `[+0x58] = now` requires for
-`read()` to stay continuous, and it is what `resyncscore.sync_track` and both
-round-5 reference implementations do. Whether `0x005FE950` itself writes `+0x78`
-on the glide arm is UNVERIFIED; if it does not, every leg would be measured from
-the previous leg's START and would be longer than modelled here.
+`read(now)` and `[+0x58] = now`. **OBSERVED**, and this note used to hedge it as
+UNVERIFIED because the settle is not in the bake's own body: `0x005FE950` writes
+`+0x78` exactly ONCE, at `0x005FEA92`, the `<= 1.0 u` arm, and never writes
+`+0x58` at all. The glide arm's re-pin is one frame out. `0x005FE9EA` calls
+`0x005FF880` unconditionally -- the only control transfer in
+`[0x005FE9C0, 0x005FE9EA)` is a two-byte `EB 02` inside an assert epilogue --
+and that helper does `8D 7E 78 lea edi,[esi+0x78]` (`0x005FF890`),
+`83 7E 48 00 cmp dword [esi+0x48],0` (`0x005FF89A`) with its `74 37 je`
+(`0x005FF8A8`) -- bring the position forward only while GLIDING -- then
+`E8 8A 02 00 00 call 0x005FFB40` (`0x005FF8B1`, the read function) and writes
+the four returned dwords into `+0x78..+0x84` (`89 0F` / `89 4F 04` / `89 4F 08`
+/ `89 47 0C` at `0x005FF8B9`/`BE`/`C4`/`CE`). Both paths join at
+`0x005FF932 89 46 58 mov [esi+0x58],eax`, so `+0x58 = now` is stamped whether
+the copy was gliding or parked. The bake then overwrites its own `now` PARAMETER
+with it -- `0x005FE9EF 8B 46 58` / `0x005FE9F3 89 45 08` -- and `[ebp+8]` is the
+slot the `<= 1.0` arm reads at `0x005FEAAF 8B 45 08` and the glide arm adds at
+`0x005FEB35 03 4D 08`. So `pos <- read(now); t58 <- now` is what the client
+does, and the alternative this note used to fear -- every leg measured from the
+previous leg's START, and therefore longer -- is REFUTED. Read out of the pinned
+image (build 38797) with a stdlib PE walk on 2026-08-21, byte patterns quoted.
 
 ORIGINS ARE NEVER POOLED. `track_of()` goes through `resyncscore.track_from_capture`,
 whose `origin=ours` refusal is the gate, and `require_ours()` raises
@@ -321,11 +383,28 @@ def _scan_boundary(lut, lo, hi, cut):
     enumerates every float in the interval exactly once. A sampled scan is what
     produced the "0 under-estimates in 20,000 samples" claim round 5 had to
     withdraw.
+
+    ONE PREDICATE FOR TWO ASYMMETRIC CLIENT TESTS, and `equal_at_cut` is why
+    that is safe rather than merely convenient. `> cut` is EXACT for gate 1,
+    whose own test is `> 300.0f` (FINDINGS §2.3). The match test is the other
+    strictness -- `< 100.0` STRICT (§2.2), so it fails at `>=` -- and the two
+    scans coincide only while no pattern's table sqrt lands EXACTLY on the cut.
+    That is a fact about this build's LUT and this window, not a theorem, so it
+    is COUNTED here and asserted in `test_grantsim.py` §C0 rather than asserted
+    in a comment: if a rebuild or a wider window ever makes it non-zero, the
+    match boundary moves by one pattern and the check goes red instead of the
+    number quietly changing meaning. The counted population is every pattern
+    BEFORE the boundary, which is exactly the population that decides it -- a
+    tie at or after `first` cannot move a first-crossing either way.
     """
     b_lo, b_hi = _bits(lo), _bits(hi)
     first = None
+    equal_at_cut = 0
     for b in range(b_lo, b_hi + 1):
-        if _float(approx_sqrt_bits(b, lut)) > cut:
+        v = _float(approx_sqrt_bits(b, lut))
+        if v == cut:
+            equal_at_cut += 1
+        if v > cut:
             first = b
             break
     scanned = b_hi - b_lo + 1
@@ -350,6 +429,7 @@ def _scan_boundary(lut, lo, hi, cut):
         "last_pass_true": math.sqrt(_float(prev)),
         "last_pass_approx": _float(approx_sqrt_bits(prev, lut)),
         "scanned": scanned,
+        "equal_at_cut": equal_at_cut,
         "cut": cut,
     }
 
@@ -1439,6 +1519,22 @@ def _say(text=""):
         print(text.encode(enc, "backslashreplace").decode(enc, "replace"))
 
 
+def _ratio(a, b):
+    """`a / b` for a PRINTED line, where a zero denominator must not kill the run.
+
+    Every ratio this file prints is a count over a count, and the degenerate
+    case -- no predicted snaps at all -- is exactly the state a reader most
+    needs printed. A `ZeroDivisionError` raised inside an f-string takes the
+    whole verdict with it, which is the same defect `checks.py`'s own printing
+    note is about: forcing the match test to always match killed
+    `test_grantsim.py` three sections before it could report the five checks
+    that had already gone red. `inf` and `nan` both format and both are honest.
+    """
+    if b:
+        return a / b
+    return float("nan") if not a else float("inf")
+
+
 def print_radius():
     m = derive_match_radius()
     g = derive_gate1_cut()
@@ -1454,6 +1550,10 @@ def print_radius():
         _say(f"    first failing distSq {row['first_fail_distsq']!r}"
              f"  true {row['true']:.7f}  approx {row['approx']:.8f}")
         _say(f"    -> effective TRUE threshold {row['true']:.6f} u")
+        _say(f"    patterns whose table sqrt lands EXACTLY on the cut: "
+             f"{row['equal_at_cut']} -- at 0 the strict and non-strict "
+             f"boundaries coincide, which is what lets one scan serve gate 1's "
+             f"`> 300.0f` and the match test's `< 100.0`")
     _say(f"\n  POSITIVE CONTROL: a true separation of exactly {GATE1_NOMINAL} u "
          f"reads {g['at_300']:.5f} through the table sqrt, so it "
          f"{'SNAPS' if g['snaps_at_300'] else 'does NOT snap'}.")
@@ -1492,7 +1592,7 @@ def print_calibration():
         _say(_row(r))
     pred = sum(r["bracket"][0] for r in rows)
     meas = sum(r["measured_hard"] for r in rows)
-    _say(f"  TOTAL predicted {pred}  measured {meas}  ratio {pred / meas:.2f}x"
+    _say(f"  TOTAL predicted {pred}  measured {meas}  ratio {_ratio(pred, meas):.2f}x"
          f"   (active-time threshold {ACTIVE_THRESHOLD:.1f} s, NAMED)")
     zeros = {r["short"]: r["bracket"][0] for r in rows if r["short"] in STRUCTURAL_ZEROS}
     _say(f"  C2(a) structural zeros: {zeros} -- the separation-only scorer said "
@@ -1641,14 +1741,14 @@ def print_nulls():
     _say(f"  base total {base} over {len(CALIBRATION_11)} `ours` captures, "
          f"measured {sum(n['measured'].values())}")
     _say(f"  MATCH TEST DELETED: {n['match_off']}  "
-         f"({n['match_off'] / base:.2f}x) -- the match test is load-bearing")
+         f"({_ratio(n['match_off'], base):.2f}x) -- the match test is load-bearing")
     _say("  ROTATE destinations (timestamps kept): "
          + "  ".join(f"k={k} {n['rotate'][k]} "
-                     f"({100.0 * (n['rotate'][k] - base) / base:+.1f}%)"
+                     f"({100.0 * _ratio(n['rotate'][k] - base, base):+.1f}%)"
                      for k in ROTATIONS))
     _say("  SHIFT timestamps (destinations kept):  "
          + "  ".join(f"{dt:+.2f}s {n['shift'][dt]} "
-                     f"({100.0 * (n['shift'][dt] - base) / base:+.1f}%)"
+                     f"({100.0 * _ratio(n['shift'][dt] - base, base):+.1f}%)"
                      for dt in SHIFTS))
     meas_total = sum(n["measured"].values())
     _say(f"  *** THE FAILURE, PRINTED: shifting every grant by +0.35 s destroys "
@@ -1660,8 +1760,8 @@ def print_nulls():
         _say(f"      {s}: base {n['per_base'][s]} -> "
              f"{n['shift_per'][SHIFT_GATED][s]} at {SHIFT_GATED:+.1f} s, "
              f"against a measured {n['measured'][s]}")
-    rot1 = 100.0 * (n["rotate"][1] - base) / base
-    sh = 100.0 * (n["shift"][-0.35] - base) / base
+    rot1 = 100.0 * _ratio(n["rotate"][1] - base, base)
+    sh = 100.0 * _ratio(n["shift"][-0.35] - base, base)
     _say(f"  MATCHED SCALE, and NO asymmetry is claimed: the smallest geometry "
          f"perturbation (rotate-1) moves the total {rot1:+.1f}% and the smallest "
          f"cadence perturbation (shift -0.35 s) moves it {sh:+.1f}%. The claim "

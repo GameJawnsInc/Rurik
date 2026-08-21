@@ -89,23 +89,32 @@ import vaultpath                                               # noqa: E402
 import grantsim as GS                                          # noqa: E402
 import movesync                                                # noqa: E402
 
-# FLOOR 17, MEASURED from a real green run on 2026-08-20 with RURIK_VAULT
-# pointing at a directory that does not exist: §1 (structural, 9) and §2
-# (refusals, 8) build their own fixtures and read neither the vault nor the
-# client, so they ARE the bare-machine subset and they are what this floor is.
-# That run scored `ALL CHECKS PASSED (17 checks, 8 declared skip(s))`.
+# TWO FLOORS, ONE PER FIXTURE CONFIGURATION, and BOTH MEASURED from a real
+# green run on 2026-08-21 rather than enumerated.
 #
-# A full run with the vault present scores 57 -- §C0 4, §C1 9, §C2 7, §C3 6,
-# §C4 8, §C5 4, §M 2 on top of the 17 -- and every one of those sections
-# declares `LEDGER.skip` when its fixture is absent, so a partial run says which
-# half it did not do rather than passing quietly for the wrong reason.
+# `FLOOR_BARE` 19 is what §1 (structural, 10) and §2 (refusals, 9) execute with
+# `RURIK_VAULT` pointing at a directory that does not exist: they build their own
+# fixtures and read neither the vault nor the client. That run scores
+# `ALL CHECKS PASSED (19 checks, 8 declared skip(s))`.
+#
+# `FLOOR_FULL` 61 is the vaulted total -- §C0 5, §C1 9, §C2 8, §C3 6, §C4 8,
+# §C5 4, §M 2 on top of the 19 -- and it is RAISED below once the fixture probes
+# have answered, because excess over a floor is not an error in `checks.py` and
+# a single bare-machine floor therefore protects none of the 42 checks that only
+# a full machine runs. That is not hypothetical: an audit replaced C2(a)'s
+# `for s in GS.STRUCTURAL_ZEROS:` with `for s in []:` on a machine with every
+# fixture present, deleting the three checks the whole calibration turns on, and
+# the run still printed ALL CHECKS PASSED. `test_bit31.py` raises its floor
+# mid-run for the same reason and after the same finding.
 #
 # Set from what a run PRODUCES and never from the enumeration: `REALFIX.md`
 # §2.7's own "~44" is an expectation and CLAUDE.md is explicit that shipping the
 # enumerated literal is the mistake. The real count came out higher than the
 # expectation because every refusal here carries a positive control beside it.
+FLOOR_BARE = 19
+FLOOR_FULL = 61
 LEDGER = checks.Ledger("grantsim: the offline grant-policy harness, "
-                       "and its refusal to rank", floor=17)
+                       "and its refusal to rank", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
 
 
@@ -123,6 +132,31 @@ try:
     HAVE_EXE = bool(GS.read_sqrt_lut()[0])
 except BaseException:                                          # noqa: BLE001
     HAVE_EXE = False
+
+# THE FLOOR FOLLOWS THE FIXTURES. Every section below either runs in full or
+# declares a skip, so with all three fixtures present the count is not variable
+# and 61 is a floor rather than a hope. Any other configuration keeps
+# `FLOOR_BARE`, which is the protection those configurations already had -- a
+# floor for a mixed machine would have to be set from a run of that machine, and
+# this one cannot produce it without hiding a fixture from itself.
+if HAVE_GAMESRV and HAVE_MOVETAP and HAVE_EXE:
+    LEDGER.floor = FLOOR_FULL
+
+
+def ratio(a, b):
+    """`a / b`, but a degenerate denominator PRINTS instead of killing the run.
+
+    A detail string is evaluated BEFORE `check()` records anything, so a bare
+    `a / b` inside one turns a failing check into a traceback with no verdict
+    banner and no floor evaluation -- the operator gets a stack instead of a
+    named failure, and `checks.py`'s whole rule stops applying to the run. That
+    is not hypothetical: forcing the match test to always match takes every
+    total to zero, and C2(c)'s `hi / lo` then died three sections before the
+    verdict. `inf` and `nan` format fine and both are honest.
+    """
+    if b:
+        return a / b
+    return float("nan") if not a else float("inf")
 
 
 def captured(fn, *a, **kw):
@@ -224,13 +258,35 @@ def main():
     # (b) THE COPY PARKS ON ARRIVAL. A 200 u leg at 288 u/s matures 694 ms
     #     later (trunc(200*1000/288) = 694), and the arrival is a class-B
     #     instant at exactly that time.
+    #
+    #     THE EXPECTATION IS HARD-CODED, and that is the whole point of the
+    #     line. It used to read `0.30 + int(200.0 * 1000.0 / GS.COPY_SPEED)`,
+    #     which restates the implementation with the same expression and the
+    #     same constant it is checking: an audit moved COPY_RATE from 1.0 to
+    #     0.9 -- a 1.11x error in the operand of BOTH tests -- and this check
+    #     stayed green, because its expectation moved with the defect. 0.994 s
+    #     is what 288.0 u/s produces and nothing else does.
     arr = [r for r in far["instants"] if r["kind"] == "arrival"]
-    want_t = 0.30 + int(200.0 * 1000.0 / GS.COPY_SPEED) / 1000.0
-    check(len(arr) == 1 and abs(arr[0]["t"] - want_t) < 1e-9
+    check(len(arr) == 1 and abs(arr[0]["t"] - 0.994) < 1e-9
           and abs(arr[0]["q"][0] - 200.0) < 1e-6,
           "the copy PARKS on arrival, at the destination and at +0x48",
           f"{[(round(r['t'], 4), [round(v, 2) for v in r['q']]) for r in arr]} "
-          f"want t={want_t:.4f} q=[200.0, 0.0]")
+          f"want t=0.9940 q=[200.0, 0.0] -- 0.30 s + trunc(200 u / 288.0 u/s), "
+          f"the literal the client's own [+0x60]*[+0x5C] produces")
+    #     ...and the tick TRUNCATES rather than rounding, which the 200 u leg
+    #     cannot see: 200,000/288 = 694.44 and trunc and round agree there by
+    #     luck. 150 u is 520.833 ms -- trunc 520, round 521 -- so this second
+    #     leg is the one that pins `0x005FEB2E`'s float->int helper against the
+    #     alternative. Swapping `int(...)` for `int(round(...))` in the bake
+    #     leaves every other check in this file green.
+    frac = GS.simulate(reps, [(0.30, (150.0, 0.0))])
+    arr2 = [r for r in frac["instants"] if r["kind"] == "arrival"]
+    check(len(arr2) == 1 and abs(arr2[0]["t"] - 0.820) < 1e-9,
+          "and the arrival tick TRUNCATES the millisecond: 150 u -> 520 ms, "
+          "never 521",
+          f"t={arr2[0]['t'] if arr2 else None} want 0.8200 = 0.30 + 0.520; "
+          f"150 u / 288.0 u/s = 520.833 ms, so rounding would land 0.821 and "
+          f"a 259.2 u/s copy would land 0.878")
 
     # (c) INSTANTS >= |{grants with |d| > 1}|. Every such grant bakes, and the
     #     arrivals are on top -- which is what makes the count a FLOOR.
@@ -252,34 +308,54 @@ def main():
     off_track = [(0.30, (0.0, 4000.0)), (1.20, (0.0, 4100.0)),
                  (1.60, (0.0, 4200.0))]
     snapped = GS.simulate(reps, off_track)
-    check(snapped["n_snaps"] >= 1 and snapped["snaps"][0]["kind"] == "bake",
+    check(snapped["snaps"] and snapped["snaps"][0]["kind"] == "bake",
           "a grant far off the client's track SNAPS, at a class-A instant",
           f"{[(round(s['t'], 2), s['kind'], round(s['sep'], 1)) for s in snapped['snaps']]}")
-    snap_t = snapped["snaps"][0]["t"]
-    before = [r for r in snapped["instants"] if r["t"] < snap_t]
-    after = [r for r in snapped["instants"] if r["t"] > snap_t]
-    check(after and all(abs(r["win_lo"] - snap_t) < 1e-9 for r in after)
-          and before and all(r["win_lo"] < snap_t for r in before),
-          "the reseed moves armed_since: every instant after a snap starts its "
-          "chain AT the snap",
-          f"before={[round(r['win_lo'], 3) for r in before]} "
-          f"after={[round(r['win_lo'], 3) for r in after]} snap at {snap_t:.2f} "
-          f"-- 0x006060A2/0x006060A9 zero every agent's history head "
-          f"unconditionally, so the whole roster's chain restarts here and the "
-          f"next test cannot match against ground walked before it")
-    #     ...and the OTHER half of the reseed: the copy lands on the client.
-    #     Without it the post-snap instant would still carry the runaway leg.
+    # AND THE TWO CHECKS BELOW REPORT THROUGH THE LEDGER WHEN THERE IS NO SNAP.
+    # `snapped["snaps"][0]` used to be indexed unconditionally: forcing the
+    # match test to always match fired the check above and then killed the run
+    # with an IndexError, five checks in, with no verdict banner and no floor
+    # evaluated. The exit code was still non-zero, so `run_suite.py` scored it
+    # red -- but the operator got a traceback instead of a named failure, and
+    # the floor rule cannot see a run that never reaches its verdict. Both
+    # branches spend the same two checks and the run continues either way, so
+    # neither the count nor the other eight sections depend on this one firing.
     kept = GS.simulate(reps, off_track, reseed=False)
-    a_on = [r for r in snapped["instants"] if r["t"] > snap_t][0]
-    a_off = [r for r in kept["instants"] if r["t"] > snap_t][0]
-    landed = GS.client_at(reps, [r[0] for r in reps], snap_t)
-    check(math.hypot(a_on["q"][0] - landed[0], a_on["q"][1] - landed[1]) < 1e-6
-          and a_on["sep"] < a_off["sep"],
-          "and the copy lands ON the client, not at the runaway point",
-          f"q at the next instant {[round(v, 1) for v in a_on['q']]} vs the "
-          f"client's position at the snap {[round(v, 1) for v in landed]}; "
-          f"separation {a_on['sep']:.1f} u with the reseed vs {a_off['sep']:.1f} "
-          f"u without it")
+    snap_t = snapped["snaps"][0]["t"] if snapped["snaps"] else None
+    after = ([r for r in snapped["instants"] if r["t"] > snap_t]
+             if snap_t is not None else [])
+    after_off = ([r for r in kept["instants"] if r["t"] > snap_t]
+                 if snap_t is not None else [])
+    if not (after and after_off):
+        why = (f"snaps={snapped['n_snaps']} instants after the snap={len(after)} "
+               f"-- there is no post-snap instant to read the reseed off, so "
+               f"both halves are unmeasurable; the check above names the cause")
+        check(False, "the reseed moves armed_since: every instant after a snap "
+                     "starts its chain AT the snap", why)
+        check(False, "and the copy lands ON the client, not at the runaway point",
+              why)
+    else:
+        before = [r for r in snapped["instants"] if r["t"] < snap_t]
+        check(all(abs(r["win_lo"] - snap_t) < 1e-9 for r in after)
+              and before and all(r["win_lo"] < snap_t for r in before),
+              "the reseed moves armed_since: every instant after a snap starts "
+              "its chain AT the snap",
+              f"before={[round(r['win_lo'], 3) for r in before]} "
+              f"after={[round(r['win_lo'], 3) for r in after]} snap at {snap_t:.2f} "
+              f"-- 0x006060A2/0x006060A9 zero every agent's history head "
+              f"unconditionally, so the whole roster's chain restarts here and the "
+              f"next test cannot match against ground walked before it")
+        #     ...and the OTHER half of the reseed: the copy lands on the client.
+        #     Without it the post-snap instant would still carry the runaway leg.
+        a_on, a_off = after[0], after_off[0]
+        landed = GS.client_at(reps, [r[0] for r in reps], snap_t)
+        check(math.hypot(a_on["q"][0] - landed[0], a_on["q"][1] - landed[1]) < 1e-6
+              and a_on["sep"] < a_off["sep"],
+              "and the copy lands ON the client, not at the runaway point",
+              f"q at the next instant {[round(v, 1) for v in a_on['q']]} vs the "
+              f"client's position at the snap {[round(v, 1) for v in landed]}; "
+              f"separation {a_on['sep']:.1f} u with the reseed vs {a_off['sep']:.1f} "
+              f"u without it")
 
     # (e) THE READERS STILL MATCH THE SHAPE OF A REAL CAPTURE.
     moves = GS.c2s_moves(SYNTHETIC)
@@ -327,6 +403,34 @@ def main():
           f"comfortable wrong answer this file can give")
     check(GS.policy_named("P2-zerolead") is GS.policy_p2_zerolead,
           "CONTROL: a known name resolves")
+
+    # THE LEAD SPINE, pinned by what each policy GRANTS rather than by the
+    # attribute it advertises. C5's whole band, M1's identity argument and M2's
+    # P3 number are all built on 0 / 86 / 766 u and NOTHING asserted it: an
+    # audit handed P2 the 766 u lead and handed P3 39.92 u (by moving the
+    # `- 14.0` in LEAD_FIXED) and all 57 checks stayed green -- while §9's M1
+    # check printed "the match distance is 0 by IDENTITY" as its own evidence
+    # beside a policy carrying a 766 u lead. The synthetic capture's six
+    # headings all report at unit (1, 0), so `D[0] - pos[0]` IS the lead, and
+    # 85.919968 is hard-coded because `MATCH_RADIUS - 14.0` is the arm of
+    # LEAD_FIXED's `min()` that wins and recomputing it here would pin nothing.
+    heads = [m for m in moves if m["op"] == GS.OP_HEADING and m["mt"]]
+    spine = []
+    for pol in (GS.policy_p2_zerolead, GS.policy_p3_shortlead, GS.policy_p_endpoint):
+        got = pol(moves)
+        offs = sorted({round(D[0] - m["pos"][0], 6)
+                       for (_t, D, _a, _b, _k), m in zip(got, heads)})
+        spine.append((pol.lead, offs, len(got)))
+    check(len(heads) == 6 and all(n == 6 for _l, _o, n in spine)
+          and spine[0][0] == 0.0 and spine[0][1] == [0.0]
+          and abs(spine[1][0] - 85.919968) < 5e-7 and spine[1][1] == [85.919968]
+          and spine[2][0] == 766.0 and spine[2][1] == [766.0],
+          "the lead spine is 0 / 85.919968 / 766 u and each policy GRANTS at "
+          "its own",
+          f"{[(round(l, 6), o, n) for l, o, n in spine]} over {len(heads)} "
+          f"moving headings -- P3's 85.919968 u is MATCH_RADIUS - 14.0, the "
+          f"arm of min(RUN_SPEED * 0.30, MATCH_RADIUS - 14.0) that wins, and "
+          f"the spine is the one axis C5's band varies")
 
     inverting = [{"cfg": {"match": True}, "totals": {0.0: 1, 766.0: 9}},
                  {"cfg": {"match": False}, "totals": {0.0: 9, 766.0: 1}}]
@@ -386,6 +490,21 @@ def main():
               "and a true separation of EXACTLY 300.0 u snaps",
               f"the table sqrt of 90000.0 reads {g['at_300']:.8f} > 300.0 -- the "
               f"check with no free parameter")
+        # ONE SCAN PREDICATE, TWO ASYMMETRIC CLIENT TESTS, and this is what
+        # makes that safe. `_scan_boundary` looks for the first pattern with
+        # `approx > cut`, which is exactly gate 1's `> 300.0f` but the OTHER
+        # strictness from the match test's `< 100.0` (which fails at `>=`).
+        # The two coincide only while no pattern's table sqrt lands exactly on
+        # a cut, which is a property of this build's LUT and these windows
+        # rather than a theorem -- so it is measured, in both windows, and a
+        # rebuild that broke it would redden here instead of moving the match
+        # boundary by one pattern in silence.
+        check(m["equal_at_cut"] == 0 and g["equal_at_cut"] == 0,
+              "no pattern's table sqrt lands EXACTLY on either cut, so strict "
+              "and non-strict agree",
+              f"match {m['equal_at_cut']} / gate 1 {g['equal_at_cut']} patterns "
+              f"equal to the cut below the boundary, over {m['scanned']:,} and "
+              f"{g['scanned']:,} scanned")
         # A constant that has drifted from the function that derived it is the
         # defect this whole section exists to catch.
         check(abs(GS.MATCH_RADIUS - m["true"]) < 5e-7
@@ -485,7 +604,8 @@ def main():
         lo = max(by[s]["per_min_span"] for s in GS.C2C_LOW)
         check(hi >= 3.0 * lo,
               "C2(c) the high-separation captures exceed the low by >= 3x",
-              f"min(high)={hi:.2f}/min vs max(low)={lo:.2f}/min = {hi / lo:.2f}x")
+              f"min(high)={hi:.2f}/min vs max(low)={lo:.2f}/min = "
+              f"{ratio(hi, lo):.2f}x")
         # ...and the order INSIDE the low pair inverts, which is printed rather
         # than gated, because gating on it would gate on a coin flip at n = 1.
         a, b = GS.C2C_LOW
@@ -496,6 +616,30 @@ def main():
               f"predicted {by[a]['per_min_span']:.2f} > {by[b]['per_min_span']:.2f} "
               f"while measured {by[a]['measured_per_min_span']:.2f} < "
               f"{by[b]['measured_per_min_span']:.2f}")
+        # (d) THE ACTIVE-TIME DENOMINATOR IS NAMED, and this is what pins it.
+        #     C2(c) gates on `per_min_span`, which is threshold-free, so
+        #     ACTIVE_THRESHOLD reaches only `active`, `coverage` and
+        #     `displaced_per_active_s` -- all print-only. An audit moved it to
+        #     `movesync.FREE_SILENCE` (1.042 s), the other denominator a reader
+        #     might assume, and all 57 checks stayed green with C2(c)'s numbers
+        #     bit-identical. `20260820T182554` is the capture where the two
+        #     denominators are furthest apart, so it is where the swap is
+        #     visible: the spread is MEASURED here rather than the literal
+        #     being asserted twice.
+        den = GS.track_of("20260820T182554")["den"]
+        a_used = movesync.active_time(den["gaps"], GS.ACTIVE_THRESHOLD)
+        a_free = movesync.active_time(den["gaps"], movesync.FREE_SILENCE)
+        check(GS.ACTIVE_THRESHOLD == 2.0
+              and abs(by["20260820T182554"]["active"] - a_used) < 1e-6
+              and a_used >= 4.0 * a_free,
+              "C2(d) the printed rates use the 2.0 s active-time threshold, and "
+              "the denominator it is NOT is a different measurement",
+              f"active {a_used:.1f} s at {GS.ACTIVE_THRESHOLD:.3f} s vs "
+              f"{a_free:.1f} s at movesync's own FREE_SILENCE "
+              f"({movesync.FREE_SILENCE:.3f} s) = "
+              f"{ratio(a_used, a_free):.2f}x on this capture -- every per-ACTIVE rate "
+              f"this file prints moves by that factor, which is why the "
+              f"threshold is printed beside its own value and never assumed")
         check(sum(r["measured_hard"] for r in rows) == C2_MEASURED_TOTAL,
               f"and the measured census is still {C2_MEASURED_TOTAL} hard jumps",
               f"{sum(r['measured_hard'] for r in rows)} over "
@@ -580,7 +724,7 @@ def main():
         base = n["base"]
         check(n["match_off"] >= 1.5 * base,
               "C4 deleting the match test inflates the total by >= 1.5x",
-              f"{n['match_off']} vs {base} = {n['match_off'] / base:.2f}x -- the "
+              f"{n['match_off']} vs {base} = {ratio(n['match_off'], base):.2f}x -- the "
               f"match test is genuinely load-bearing, which is the one thing "
               f"round 5's null suite established without qualification")
         rot = [n["rotate"][k] for k in GS.ROTATIONS]
@@ -610,14 +754,14 @@ def main():
               f"+0.35 s -> {n['shift'][0.35]}, measured {meas}. The TOTAL is not "
               f"discriminating on sub-report-interval timing and this file says "
               f"so above the number rather than below it")
-        rot1 = abs(n["rotate"][1] - base) / base
-        sh = abs(n["shift"][-0.35] - base) / base
+        rot1 = ratio(abs(n["rotate"][1] - base), base)
+        sh = ratio(abs(n["shift"][-0.35] - base), base)
         check(max(rot1, sh) <= 3.0 * max(min(rot1, sh), 1e-9)
               and "NO asymmetry is claimed" in text,
               "C4 at MATCHED perturbation scale, geometry and cadence are the "
               "same order -- no asymmetry is claimed",
               f"rotate-1 {100 * rot1:+.1f}% vs shift-(-0.35 s) {100 * sh:+.1f}% "
-              f"= {max(rot1, sh) / min(rot1, sh):.2f}x. The claimed asymmetry "
+              f"= {ratio(max(rot1, sh), min(rot1, sh)):.2f}x. The claimed asymmetry "
               f"set rotate-by-17 beside shift-by-+0.35 s and is manufactured")
 
     # =====================================================================
@@ -675,15 +819,24 @@ def main():
         p2 = GS.score(tr, GS.policy_p2_zerolead, c2s=moves)
         p3 = GS.score(tr, GS.policy_p3_shortlead, c2s=moves)
         m1 = p2["on"]["m1"]
+        # THE BOUND IS THE WINDOW, NOT TWICE IT. `lag_age` only inspects points
+        # with `t >= lo >= now - window`, so `now - t <= HISTORY_WINDOW` holds
+        # BY CONSTRUCTION and a factor of 2 is not slack, it is room for the
+        # construction to be deleted unnoticed: dropping `lag_age`'s `lo` bound
+        # -- the one modelling call this section's author flagged as a judgement
+        # call -- takes the max from 4.55 s to 7.42 s, which `<= 10.0` accepts.
+        # At `<= HISTORY_WINDOW` the check is an assertion the artifact can
+        # refute rather than a bound nothing can reach.
         check(m1["n"] >= 100 and math.isfinite(m1["p90"])
-              and m1["max"] <= GS.HISTORY_WINDOW * 2,
+              and m1["max"] <= GS.HISTORY_WINDOW + 1e-9,
               "REALFIX-M1 (lag age) is non-empty on P2 and bounded by the chain",
               f"n={m1['n']} p50={m1['p50']:.2f} p90={m1['p90']:.2f} "
-              f"max={m1['max']:.2f} s against a ~{GS.HISTORY_WINDOW:.0f} s "
-              f"block-recycle bound. Under zero lead the match distance is 0 by "
-              f"IDENTITY -- the proxy's polyline IS the report track -- so this "
-              f"age is the only thing about P2 that is measured rather than "
-              f"assumed")
+              f"max={m1['max']:.2f} s against the {GS.HISTORY_WINDOW:.1f} s "
+              f"window the metric is measured inside, itself a model of the "
+              f"~5,000 ms block-recycle bound. Under zero lead the match "
+              f"distance is 0 by IDENTITY -- the proxy's polyline IS the report "
+              f"track -- so this age is the only thing about P2 that is "
+              f"measured rather than assumed")
         m2 = p3["on"]["m2"]
         check(m2["n"] >= 50 and math.isfinite(m2["next_report"])
               and m2["next_report"] > 0.0,
