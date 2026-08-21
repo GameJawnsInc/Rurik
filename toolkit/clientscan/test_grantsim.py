@@ -138,8 +138,17 @@ import movesync                                                # noqa: E402
 # any vault to filter and was therefore dead source. All three are fixture-free,
 # so both floors move by the same 2: 24 -> 26 and 66 -> 68, each re-measured
 # from a green run of its own configuration.
-FLOOR_BARE = 26
-FLOOR_FULL = 68
+#
+# 2026-08-21, REALFIX-F1b: section 10 (the field-4 pre-screen) added 15 -- 2
+# fixture-free (the three policies driven against a hand-built grant stream,
+# proving the replay can tell them apart at all) and 13 that need both the
+# gamesrv captures and the movetap taps. So the floors move by DIFFERENT
+# amounts, which is the case the two-floor split exists for: 26 -> 28 bare,
+# 68 -> 81 vaulted. Both re-measured from green runs of their own configuration
+# -- 81 with every fixture present, 28 with `RURIK_VAULT` pointing at a
+# directory that does not exist, which also printed its 8 declared skips.
+FLOOR_BARE = 28
+FLOOR_FULL = 81
 LEDGER = checks.Ledger("grantsim: the offline grant-policy harness, "
                        "and its refusal to rank", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -1035,6 +1044,167 @@ def main():
               f"{100 * m2['next_report']:.1f}%. The two operands answer different "
               f"questions and both are printed: round 5 priced P3 at 45.7% on the "
               f"NEXT-REPORT operand, which is the one its pre-registration used")
+
+    # =====================================================================
+    print("\n10. REALFIX-F1b -- the field-4 pre-screen, and its calibration")
+    # =====================================================================
+    # WHAT THIS SECTION GUARDS. `--planecarry` is how every future field-4
+    # policy gets scored before it costs a live arm, and its answer for F1b is
+    # a NEGATIVE (3 residuals, not the predicted 0). A negative is exactly the
+    # kind of number that quietly becomes a positive when somebody adjusts a
+    # tolerance, so the calibration gate, the tautology label on the closed
+    # simulator and the refusal to fit a guard band are all pinned here.
+    #
+    # THE STRUCTURAL HALF RUNS EVERYWHERE. The queue's three cases are driven
+    # against a hand-built grant stream with no vault at all, so a bare machine
+    # still proves the replay can distinguish the policies.
+    fake_taps = [{"t": 1000.0 + 0.1 * i, "plane": 0, "pos": (0.0, 0.0),
+                  "sep": 0.0} for i in range(40)]
+    S_ = GS._authsrv().DEFAULT_RUN_SPEED
+    fake_grants = [
+        {"t": 1000.5, "dest": (0.0, 0.0), "w3": 0, "w4": 0},
+        {"t": 1001.0, "dest": (S_, 0.0), "w3": 18, "w4": 18},
+        {"t": 1002.5, "dest": (2 * S_, 0.0), "w3": 18, "w4": 18},
+    ]
+    f4 = {n: GS.field4_replay(fake_grants, p, 0, (0.0, 0.0))
+          for n, p in GS.FIELD4_POLICIES.items()}
+    sent = {n: [r["field4"] for r in v["rows"]] for n, v in f4.items()}
+    check(sent["shipped-zerolead"] == [0, 18, 18]
+          and sent["F1-planecarry"] == [0, 0, 18]
+          and sent["F1b-arrivalcarry"] == [0, 0, 18],
+          "the three policies are DISTINGUISHABLE on a driven stream -- "
+          "shipped echoes field 3, F1 and F1b both lag it here",
+          f"{sent} over grants at t+0.0 / +0.5 / +2.0 with a "
+          f"{S_:.0f} u second leg (1.000 s). Grant 3 comes 1.5 s after grant 2, "
+          f"so grant 2 HAS arrived and F1b agrees with F1 -- which is the whole "
+          f"point of the case below")
+    # THE CASE THAT SEPARATES THEM, and it is F1's named limit. Move grant 3 to
+    # 0.5 s after grant 2 and grant 2's 288 u leg is still in flight: F1 carries
+    # its 18 unreached, F1b holds the 0 the copy is standing on.
+    tight = list(fake_grants[:2]) + [
+        {"t": 1001.5, "dest": (2 * S_, 0.0), "w3": 18, "w4": 18}]
+    tight_sent = {n: [r["field4"] for r in
+                      GS.field4_replay(tight, p, 0, (0.0, 0.0))["rows"]]
+                  for n, p in GS.FIELD4_POLICIES.items()}
+    check(tight_sent["F1-planecarry"] == [0, 0, 18]
+          and tight_sent["F1b-arrivalcarry"] == [0, 0, 0],
+          "and they SEPARATE on the two-interval lag: with grant 2 still in "
+          "flight F1 carries its plane, F1b does not",
+          f"F1 {tight_sent['F1-planecarry']} vs F1b "
+          f"{tight_sent['F1b-arrivalcarry']} -- grant 3 lands 0.5 s into grant "
+          f"2's 1.000 s leg. This is the shape of all of F1's residuals and the "
+          f"whole reason F1b exists; a replay that could not tell the two apart "
+          f"would score them identically and say nothing")
+    if not (HAVE_GAMESRV and HAVE_MOVETAP):
+        LEDGER.skip("F1b the counterfactual against the L3 captures",
+                    "this vault has no captures/gamesrv or no captures/movetap; "
+                    "the calibration gate and the 3-policy table both need the "
+                    "two REALFIX-L3 arms and their taps")
+    else:
+        rows, gate_ok = captured(GS.print_planecarry)[0]
+        by = {r["stamp"]: r for r in rows}
+        check(gate_ok and len(rows) == 2,
+              "THE CALIBRATION GATE PASSES on both REALFIX-L3 arms",
+              f"gate={gate_ok} over {len(rows)} capture(s) -- replaying each "
+              f"capture's OWN arm has to reproduce its wire, or every "
+              f"counterfactual printed under it is arithmetic about nothing")
+        for stamp, want in GS.FIELD4_MEASURED.items():
+            c = by[stamp]["calibration"]
+            check(c["own_anchored"] == want and c["own_reproduces_wire"]
+                  and c["own_full_coverage"],
+                  f"  {stamp}: the own-arm replay reproduces field 4 on all "
+                  f"{by[stamp]['grants']} grants and scores {want}",
+                  f"anchored={c['own_anchored']} (want {want}), "
+                  f"reproduces_wire={c['own_reproduces_wire']}, "
+                  f"full_coverage={c['own_full_coverage']}. For the F1 arm this "
+                  f"is a real exercise of the policy: its slot advances only on "
+                  f"a SEND, so the rate-limit refusals in that capture have to "
+                  f"leave it alone or the whole stream drifts")
+            check(c["own_nearest"] == GS.FIELD4_PUBLISHED_NEAREST[stamp]
+                  and c["own_nearest"] < want,
+                  f"  and the PUBLISHED nearest-sample count "
+                  f"({GS.FIELD4_PUBLISHED_NEAREST[stamp]}) reproduces too, and "
+                  f"is lower",
+                  f"nearest={c['own_nearest']} anchored={want} -- pairing with "
+                  f"the NEAREST sample admits one taken AFTER the grant, which "
+                  f"reads the plane word the grant just wrote and scores a "
+                  f"genuine rewrite as a match. Both are kept so the correction "
+                  f"to FINDINGS is visible rather than silently applied")
+        # THE ARRIVAL MODEL IS THE FALSIFIABLE HALF, and only the F1 capture can
+        # test it -- under --zero-lead field 4 already equals the client's plane,
+        # so the client never has to correct us and never reveals its opinion.
+        arr = by["20260821T143411"]["calibration"]["arrival"]
+        p2_arr = by["20260821T132546"]["calibration"]["arrival"]
+        check(arr["n"] >= 17 and arr["miss"] == 0
+              and arr["dt_max"] <= GS.FIELD4_ARRIVAL_GATE,
+              "THE ARRIVAL MODEL: every client-authored plane write lands on a "
+              "modelled arrival, with no free parameter",
+              f"{arr['hit']} of {arr['n']}, |dt| median {arr['dt_median']:.3f}s "
+              f"max {arr['dt_max']:.3f}s against a "
+              f"{GS.FIELD4_ARRIVAL_GATE:.2f}s gate and a tap running at 9.5 Hz. "
+              f"These are writes up to 1.9 s from any grant, so the model had "
+              f"every opportunity to be refuted and was not")
+        check(p2_arr["n"] == 0,
+              "CONTROL: the P2 capture offers the model NOTHING to be tested "
+              "against, and the instrument says so rather than scoring 0 of 0 "
+              "as a pass",
+              f"n={p2_arr['n']} client-authored writes -- under --zero-lead "
+              f"field 4 IS the client's current plane, so the client never "
+              f"corrects us. Unfalsifiable there BY CONSTRUCTION; a reader who "
+              f"took the F1 capture's 17 of 17 as covering both would be "
+              f"claiming a validation this capture cannot supply")
+        f1b = by["20260821T143411"]["anchored"]["F1b-arrivalcarry"]
+        f1 = by["20260821T143411"]["anchored"]["F1-planecarry"]
+        check(f1b["mismatch"] == GS.FIELD4_F1B_EXPECTED
+              and f1b["mismatch"] > 0 and f1b["mismatch"] < f1["mismatch"],
+              "THE HEADLINE, AND IT IS A NEGATIVE: F1b does NOT reach 0 -- it "
+              "reaches 3, down from F1's 6",
+              f"F1b {f1b['mismatch']} of {f1b['scored']} scored "
+              f"({f1b['skipped']} refused as contaminated), F1 "
+              f"{f1['mismatch']} of {f1['scored']}. F1b's pre-registration was "
+              f"'the field-4 mismatch count reaches 0' -- the falsifier F1 "
+              f"failed -- and this screen says it would fail too. That is the "
+              f"result, and the flag's startup banner predicts 3 rather than 0 "
+              f"because of it")
+        races = GS.field4_race(f1b["rows"],
+                               by["20260821T143411"]["policies"]
+                               ["F1b-arrivalcarry"])
+        worst = max(r["since_arrival"] for r in races) if races else float("inf")
+        check(races and worst <= 0.050,
+              "and all three survivors are a SUB-FRAME RACE on `arrival <= "
+              "now`, not a logic error",
+              f"they land {', '.join('%.0f' % (r['since_arrival'] * 1000) for r in races)} "
+              f"ms after a modelled arrival the client had not yet acted on; "
+              f"worst {worst * 1000:.0f} ms. The model is right about the TICK "
+              f"and early about the ACT -- against the client's 17 unambiguous "
+              f"writes it is strictly early in {arr['early_n']} of "
+              f"{arr['hit']}, by at most {arr['early_max'] * 1000:.0f} ms, "
+              f"which is the size of a display frame")
+        # THE TAUTOLOGY IS LABELLED AND THE LABEL IS CHECKED. The closed
+        # simulator returns 0 for F1b because it derives the plane word from the
+        # same arrival model F1b's policy reads. It is printed BELOW the
+        # anchored table with that said out loud, and this pins both halves.
+        closed = by["20260821T143411"]["policies"]
+        _r, text = captured(GS.print_planecarry, rows)
+        check(closed["F1b-arrivalcarry"]["mismatch"] == 0
+              and closed["F1-planecarry"]["mismatch"] < f1["mismatch"]
+              and "BY CONSTRUCTION" in text and "TAUTOLOGY" in text,
+              "the CLOSED simulation returns 0 for F1b and UNDER-counts F1, and "
+              "the printer says both out loud",
+              f"closed F1b {closed['F1b-arrivalcarry']['mismatch']}, closed F1 "
+              f"{closed['F1-planecarry']['mismatch']} against the wire's "
+              f"{f1['mismatch']} -- a simulator that grades a policy with the "
+              f"policy's own model agrees with it by construction. It is kept "
+              f"because the OTHER two policies do not come out at zero under "
+              f"it, and it is printed under a label rather than in the table")
+        check("REFUSED as a fitted parameter" in text
+              and "does NOT reach 0" in text,
+              "and the printed report REFUSES the guard band that would close "
+              "the race",
+              "a ~40 ms eps closes all three survivors and has no derivation; "
+              "fitting it to the one capture that scores it is the free "
+              "parameter the house rule is about. If a frame-consumption term "
+              "is real it should be MEASURED, and then it is not free")
 
     return LEDGER.verdict()
 
