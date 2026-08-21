@@ -118,17 +118,33 @@ it); the create path overwrites an existing `<area>_alloc.json`; contentids'
 created-skip fires before the server side is consulted; two of `map_chain`'s
 four shape refusals are hand-verified but unexercised by the suite.
 
-## WORLDMAPS-W4 — the created chain meets the client. STAGED
+## WORLDMAPS-W4 — the created chain meets the client. RAN GREEN 2026-08-20
 
-Every "client compiles a map" result in the corpus reused a PRE-EXISTING file
-id; `studies/customarea` FINDINGS 36 item 4 names the born-new case untested,
-and `datalloc --map` has zero recorded uses against a client. The open
-survival questions: does re-bloat fire for a head that was BORN zero-length
-under a new id, does the compiled head land and survive Flush (A9's sweep
-pattern), and does the partner stay untouched as it does for retail rows
-(FINDINGS 35 + 39). The run sheet — throwaway-copy discipline, predictions
-registered with the UNCHANGED/Gw.log disambiguation built in, and what each
-red arm would mean (not-loaded vs loaded-not-compiled vs compiled-not-served)
-— is `vault/research/worldmaps/WORLDMAPS-W4-RUN.md`. Owner-driven; the safer
-sequencing is WORLDMAPS-W2 first, since the created chain's partner leans on
-the comp-8-partner witness.
+**OBSERVED (retail client, build 38797, one map, one launch cycle —
+agent-driven on the owner's go-ahead, mechanical readouts).** The client
+resolved a map chain born under file id 0x5F0B0 — an id nothing had ever
+bound — logged FINDINGS 35's exact re-bloat line naming it
+(`'0x05f0b0' failed to load.  Attempting to re-bloat.`), compiled our
+terrain from the 2,028 B compression-8 partner, wrote the head back REBUILT
+(0 -> 6,012 B comp 8, relocated, 64 trapezoids over 1 plane), left the
+partner byte-untouched across three sessions, and kept the registration
+through its own Flush — the diff names only our two created rows plus the
+client's scratch rows 8315/8316, nothing UNCLASSIFIED. Readback 6/6 including
+the spawn-in-one-trapezoid check [map.166] recorded as owed; the server's own
+navmesh line named the same 64. All ten predictions scored in
+`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS, which also records
+the run's two lessons: a fresh run directory needs its own firewall CAGE (the
+first launch was refused fail-closed — the cage is per-path; owner ran
+isolate_client.ps1 and the re-run proceeded), and the launch stages were
+split to keep the compile run's Gw.log from the serve sessions (W2's capture
+defect, fixed procedurally). The throwaway was delta-captured (PROVEN,
+`vault/deltas/worldmaps-w4`, 24,736 B) and deleted — datdelta's first real
+customer.
+
+**What this closes**: FINDINGS 36 item 4 (the born-armed, never-bound case);
+A9's witness extends from "a created chain is READ" to "a created chain is
+COMPILED"; and displacement is retired — the next authored area does not
+have to take rows 71496/71497 hostage. Still unestablished, per the sheet:
+survival across a client patch, more than one created map per archive (the
+C2-lineage MFT slack is exactly one chain), a second created chain in one
+session.

@@ -1366,10 +1366,15 @@ test_content 39→40, test_contentids 19→20.
 verdicts are mechanical): the client's re-bloat compiler read the partner WE
 compressed and built the identical map — readback line-for-line equal to the
 stored control, partner untouched at 1,316 B comp 8, navmesh served both
-arms. `vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS. **The
-remaining launch is WORLDMAPS-W4**
-(`vault/research/worldmaps/WORLDMAPS-W4-RUN.md` — does re-bloat fire for a
-head BORN zero-length under a created id; FINDINGS 36 item 4's untested case).
+arms. `vault/research/worldmaps/WORLDMAPS-W2-RUN.md` §RESULTS. **WORLDMAPS-W4 RAN
+GREEN the same day**: the client resolved a chain born under an id nothing had
+ever bound (0x5F0B0), logged the re-bloat line naming it, compiled our terrain
+from the created compression-8 partner (64 trapezoids, readback 6/6 including
+the owed spawn-in-one-trapezoid check), left the partner byte-untouched and
+kept the registration through Flush — FINDINGS 36 item 4 closed, A9's witness
+extended from READ to COMPILED, displacement retired. The throwaway was
+delta-captured (PROVEN, 24,736 B for 4.2 GB — datdelta's first real customer)
+and deleted. `vault/research/worldmaps/WORLDMAPS-W4-RUN.md` §RESULTS.
 Known deliberate gap: a compressed install SHRINKS the row, so small→large
 iteration relocates until `grow_to` is wired into the map path — its own
 change, costed separately.
