@@ -225,9 +225,11 @@ def main():
                   "then the delta, per player (0x00EE)",
                   f"{[hex(o) for o in ops]}")
         LEDGER.ok(ops[3:6] == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+                               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                                authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
-                  "then energy max, energy regen, health max",
+                  "then energy max, energy regen, health max -- the regen on "
+                  "0x00A2, the NO-target float, where all 52 corpus "
+                  "property-43s ride (zero ride 0x00A3)",
                   f"{[hex(o) for o in ops]}")
         by_op = {}
         for op, vals, _why in sent:
@@ -253,18 +255,29 @@ def main():
                   f"{maxima} -- our character carries the same 25 total over "
                   f"the same base 20, so this number IS ArenaNet's")
         regen = [v for v in by_op[
-            authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+            authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT]
             if v[0] == agents.PROP_ENERGY_REGEN]
-        rate = struct.unpack("<f", struct.pack("<I", regen[0][3]))[0]
+        rate = struct.unpack("<f", struct.pack("<I", regen[0][2]))[0]
+        # THE DEATH BATCH'S 43 IS 0.0 -- the capture's own value
+        # (20260817T183756 t=353.299: 0x00A2 [43, 27, 0.0]) and this study's
+        # own section-2 table ("energy regeneration -> 0 while dead"). This
+        # test briefly pinned a rescaled nonzero value here, drifting from the
+        # table one section above it; the energy-arc merge re-pinned it to the
+        # bytes. The RESCALED rate is the resurrect's, and the rescale
+        # arithmetic is still checked below on ArenaNet's own numbers.
+        LEDGER.ok(rate == 0.0,
+                  "the death batch's regen is ZERO -- a corpse regenerates "
+                  "nothing", f"{rate!r}")
         rescaled = morale.regen_fraction(OBS_REGEN_BEFORE, OBS_TOTAL_ENERGY,
                                          OBS_MAX_ENERGY)
         LEDGER.ok(abs(rescaled - OBS_REGEN_AFTER) < 1e-6,
                   "the rescale reproduces the capture's own 0.0528f -> 0.06f",
                   f"{rescaled:.6f} -- 1.32 energy/s on either side of the "
                   f"death, which is what named property 43 at all")
-        LEDGER.ok(abs(rate * ours_energy
+        book = authsrv.player_energy(state)
+        LEDGER.ok(abs(book.rate * ours_energy
                       - agents.PLAYER_FLOAT_43 * agents.PLAYER_ENERGY) < 1e-6,
-                  "and our own resend keeps the ABSOLUTE rate unchanged",
+                  "and the POOL'S BOOK keeps the ABSOLUTE rate unchanged",
                   f"{rate:.6f} x {ours_energy} = "
                   f"{rate * ours_energy:.4f}/s -- the property is a fraction "
                   f"OF the pool, so a silent 15% slowdown is what not resending "

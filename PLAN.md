@@ -1346,6 +1346,58 @@ the convention; reversing this ruling is the two-day migration it declines.
 
 ## 8. Immediate next actions
 
+### ENERGY AND ADRENALINE exist, and the client consumes both (2026-08-20, late)
+
+[studies/skills §23–§25](studies/skills/FINDINGS.md), `toolkit/authsrv/pools.py`,
+landed `68d9850`. NEXT item 1 of the entry below is DONE; this entry replaces it.
+
+**The wire model, measured** (five-agent recon workflow over the 14-capture live
+corpus, then a 4-agent build+skeptic workflow): max = int prop 41; regen RATE =
+float prop 43, **quantum f32(0.33)·pips/max — bit-exact on all five retail
+clusters while the wiki's nominal 1/3 fits zero**; spend = prop 62 =
+−cost/max, once per paid cast, BEFORE the prop-60 in the same batch (45/45),
+scoped to the observing agent alone (722 other-agent casts carry none); gain =
+prop 52 (n=1, resurrect, 1.0); **no absolute setter exists** (prop 33: 0 of
+13,378, control green). The sibling morale arc measured the same quantum blind
+from the death tick — two derivations, no shared code, same constant.
+
+**The server now**: gates every press and every enemy pick (the pool paces
+Restore Condition — §8's old item 4 heal-spam, closed by a resource rule);
+debits in retail's batch order; regenerates silently; grows adrenaline by GWW's
+rules (25/hit, 1 per 1% health lost floored, raw UNITS not displayed strikes);
+wipes on death and 25 s of quiet; sends the retail death (43=0.0) and resurrect
+(52=1.0 + 43=rate) batches.
+
+**Four runs, every prediction pre-registered**: the client displays
+floor(its own integration) and never drifts (15/15 frames); it draws one `›`
+arrow per pip and animates the climb at the sent rate; the orb empties at death
+and — NEW — **refills at revive** (prop 52's first render anywhere); the full
+adrenaline cycle runs charge→spend→Bleeding-through-the-substrate→reset. Two
+negatives worth as much: **the client does not gate presses** (it sent a
+25-energy skill with 7.7 energy and an uncharged adrenal skill — the server is
+the gate, both halves) and **the client does not self-animate the adrenal
+icon** (pixel-identical at 0 and at a spent 100 — the flames wait for an
+UNMAPPED message).
+
+**NEXT, in cost order:**
+
+1. **The adrenaline-display opcode.** GWCA's `SkillbarSkill.adrenaline_a`
+   (+0x00) is the store the icon draws from; nobody maps what fills it.
+   Clientscan target: find the writer, walk back to the RECV handler.
+2. **What answers a refused press.** Ours is silence and the client visibly
+   re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
+   Also: our client SENT both unaffordable presses — whether retail's client
+   gates locally (and on which store) is unknown; the answer likely rides the
+   same investigation.
+3. **The five unmodelled mechanics** (unchanged from the entry below): attack
+   speed, movement speed, damage negation, energy cost reduction (GoLE's
+   datum: the row needs an explicit amount — scale bit clear, endpoints 10/18
+   differ, refused per the resolve_duration precedent), arrow bonus damage.
+4. **Merge-time reconciliation with the morale arc** (landed on main while
+   this was in flight): route `EnergyPool.maximum` through
+   `player_max_energy()` — NOTE it scales BASE energy only, armour bonuses
+   ride unscaled (their §2.2) — and adopt the `PROP_ENERGY_REGEN` rename.
+5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
 ### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
 
 Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
@@ -1505,7 +1557,7 @@ each measured before it was built and three of them then watched at a client.
 | Enchantment (6) | Reversal of Fortune 307 | 8 s | ✗ damage negation | ✓ applied |
 | Signet (7) | Healing Signet 1 | — | ✓ **heals 88** | ✓ client health **54→100** |
 | Skill (10) | Charm Animal 411 | ✗ | ✗ a pet | ✗ |
-| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ no energy model | ✓ applied |
+| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ energy model EXISTS (2026-08-20 evening); the glyph's own discount is inert — its scale bit is clear with differing endpoints and the amount is refused, not invented | ✓ applied |
 | Attack (14) | Sever Artery 382 | Bleeding 9 s | ✓ **3 pips of degeneration** | ✓ **three arrows on screen** |
 | Preparation (19) | Ignite Arrows 431 | 24 s | ✗ fire damage on arrows | ✓ applied |
 
