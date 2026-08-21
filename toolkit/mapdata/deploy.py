@@ -1628,18 +1628,72 @@ def trapezoid_count(dat, file_id):
     return len(pm.trapezoids)
 
 
-def newest_harness_log(after):
-    """The gamesrv log of the newest harness run started after `after`."""
+def harness_source_dir():
+    """The `source:` line THIS tree's gamesrv prints. -> str
+
+    `authsrv.py` prints `source:    <its own directory>` at start-up, so the
+    line names the WORKTREE that produced a capture. deploy.py lives at
+    <tree>/toolkit/mapdata/, so the authsrv beside it is <tree>/toolkit/authsrv.
+    """
+    return os.path.normcase(os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     os.pardir, "authsrv")))
+
+
+def log_source(log, probe=8192):
+    """The directory named by a gamesrv log's `source:` line, or None.
+
+    Read from the HEAD of the file: the line is printed at start-up, and these
+    logs run to megabytes.
+    """
+    try:
+        with open(log, "r", encoding="utf-8", errors="replace") as fh:
+            head = fh.read(probe)
+    except OSError:
+        return None
+    m = re.search(r"^source:\s+(.+?)\s*$", head, re.M)
+    return os.path.normcase(os.path.abspath(m.group(1))) if m else None
+
+
+def newest_harness_log(after, source=None):
+    """The gamesrv log of the newest harness run started after `after`.
+
+    `source`, when given, RESTRICTS the search to captures this tree produced.
+
+    WHY, AND IT IS NOT HYPOTHETICAL. `vault/captures/harness/` is shared by
+    every session on this machine, and on 2026-08-21 THREE were running at
+    once. This function used to take the newest log by mtime across the whole
+    directory, so a peer session's run that happened to land inside our window
+    was indistinguishable from our own -- and `serve_run` would then score OUR
+    verdict off THEIR navmesh line. That is not a far-fetched race: the same
+    ambiguity misled a reader by hand the same day, and the fix they used by
+    hand is the one applied here -- `authsrv` prints `source: <its directory>`,
+    which names the worktree, and no two worktrees share one.
+
+    Passing `source=None` restores the old behaviour deliberately, for callers
+    with no tree to match against; it is not the default anywhere.
+    """
     root = os.path.join(vaultpath.require_dir(), "captures", "harness")
-    best, best_t = None, after
+    best, best_t, skipped = None, after, []
     for name in os.listdir(root):
         d = os.path.join(root, name)
         log = os.path.join(d, "gamesrv.log")
         if not os.path.isfile(log):
             continue
         t = os.path.getmtime(log)
-        if t > best_t:
-            best, best_t = log, t
+        if t <= best_t:
+            continue
+        if source is not None:
+            got = log_source(log)
+            if got != source:
+                skipped.append((name, got))
+                continue
+        best, best_t = log, t
+    if best is None and skipped:
+        # Say so. A silent None here reads as "the harness wrote nothing",
+        # which is a different diagnosis with a different fix.
+        print(f"  note: {len(skipped)} newer capture(s) skipped as another "
+              f"tree's: " + ", ".join(f"{n} ({s})" for n, s in skipped[:3]))
     return best
 
 
@@ -1697,8 +1751,8 @@ def spawn_row_count(world, area):
                if row.get("area") == area and row.get("enabled", True))
 
 
-def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
-              expect_rows=None):
+def serve_run(exe, session, dat, map_id, hold, expect_traps, file_id,
+              area=None, expect_rows=None):
     """A SECOND run, unarmed, that proves the SERVER read our mesh.
 
     WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
@@ -1723,9 +1777,20 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
     """
     t0 = time.time()
     rc = launch(exe, session, dat, map_id, hold, area=area)
-    log = newest_harness_log(t0)
+
+    # THE HARNESS RC IS A VERDICT, and this used to drop it into an f-string
+    # and carry on. A run whose harness failed has no evidence worth reading:
+    # whatever log turns up next is either truncated or somebody else's.
+    if rc != 0:
+        return SERVE_FAILED, (f"  harness rc {rc} -- the run itself failed, so "
+                              f"nothing below was measured. Look at the "
+                              f"harness output above before anything here.")
+
+    log = newest_harness_log(t0, source=harness_source_dir())
     if log is None:
-        return SERVE_FAILED, f"  harness rc {rc}, but no gamesrv log was written"
+        return SERVE_FAILED, (f"  harness rc {rc}, but no gamesrv log from THIS "
+                              f"tree ({harness_source_dir()}) was written after "
+                              f"the launch")
     with open(log, "r", encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     hits = NAVMESH_RE.findall(text)
@@ -1735,7 +1800,19 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
                else "no navmesh line at all")
         return SERVE_FAILED, (f"  harness rc {rc}; {where}: {why} -- the server "
                               f"served no collision")
-    fid, planes, traps = hits[0]
+    # WHICH MAP DID IT LOAD? `fid` used to reach only the note string, so a
+    # navmesh line for a DIFFERENT map scored this run as long as its trapezoid
+    # count matched -- and the biome donor 0x1B97D is pre-warmed at 6120
+    # trapezoids in every run of this harness. Select the line for OUR file id
+    # rather than reading hits[0] and hoping.
+    ours = [h for h in hits if int(h[0], 16) == int(file_id)]
+    if not ours:
+        got = ", ".join(f"0x{h[0]} ({h[2]} traps)" for h in hits[:4])
+        return SERVE_FAILED, (f"  harness rc {rc}; {where}: the server loaded "
+                              f"no navmesh for OUR map {file_id:#x} -- it "
+                              f"named {got}. A count that matches by accident "
+                              f"is not this map being served.")
+    fid, planes, traps = ours[0]
     traps = int(traps)
     mesh_ok = traps == expect_traps
     verdict = SERVE_PASS if mesh_ok else SERVE_FAILED
@@ -2099,7 +2176,8 @@ def main(argv=None):
         expect_rows = (None if args.repo_content_only
                        else spawn_row_count(world, args.area))
         verdict, note = serve_run(exe, session, dat, map_id, args.hold, traps,
-                                  area=args.area, expect_rows=expect_rows)
+                                  file_id, area=args.area,
+                                  expect_rows=expect_rows)
         print(note)
         if verdict == SERVE_FAILED:
             print("\nSERVE CHECK FAILED -- the client walked on our map and "
