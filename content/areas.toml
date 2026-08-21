@@ -327,3 +327,42 @@ crosses at Chebyshev ring 20 and 37% of the rect is gone; at 256x256 the same ri
 generator, not of the size, and the mechanism -- water from the borrowed \
 environment, a depth bound in the compiler, or the borrowed Zones chunk -- is \
 NOT established."""
+
+[area.shoals]
+name = "The Shoals"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field changed. Same generator, same dims, same seed,
+# same donors, same prop count, same map id, same rows -- so the only thing that
+# differs between the two compiled meshes is whether the map carries an
+# environment chunk at all.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false       # <- THE VARIABLE. `stripbuild`'s ENV pair is
+                          # all-or-nothing (OPTIONAL, FINDINGS 51), so this
+                          # emits a map with no 0x10000009 and no 0x11000009.
+sound = true
+trees = 8
+
+[area.shoals.provenance]
+source = "invented"
+verified = """Ours, and it exists to answer ONE question with ONE variable. \
+WORLDMAPS-W7 measured a DEPTH CUT on the client's own compiled meshes: ground at \
+or below a threshold bracketed in (43, 47] stored units is absent from the \
+navmesh -- 0 of 1,003 cells at +47 and deeper on the 64x64 mesh, against 63.6% \
+at +43 -- and the same boundary predicted the 256x256 mesh's coverage to 0.01 \
+of a point (50.55% modelled, 50.54% measured, cut at Chebyshev ring 20). The \
+MECHANISM was left UNVERIFIED with three readings: the borrowed environment \
+chunk's water plane (the donor is Pre-Searing Ascalon and FINDINGS 51 records \
+that payload as not understood), a depth bound in the compiler itself, or the \
+borrowed 34-byte Zones chunk. This row is `sculpt` with `environment = false` \
+and nothing else changed, so the two meshes differ by the ENV chunk alone. If \
+the left third of the mesh returns, the water reading is confirmed; if the mesh \
+is unchanged, the water reading is refuted and the other two survive."""
