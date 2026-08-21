@@ -1239,6 +1239,78 @@ CLIENT_ENDPOINT = False
 # SIZE while the harm arrived as FREQUENCY.
 ZERO_LEAD = False
 
+# --plane-carry. REALFIX-F1, "the plane echo fix", and it is a MODIFIER ON
+# --zero-lead rather than a policy of its own. OFF by default.
+# `studies/movement/REALFIX.md` §6.3 is the spec and REALFIX-L3 is the run it
+# is aimed at.
+#
+# WHAT IT CHANGES, and it is one wire field. Under --zero-lead the 0x0029
+# carries (reported_plane, reported_plane) in fields 3 and 4. Field 4 is what
+# the client writes to agent+0x80 on the SYNC copy -- and that copy is ~500 u
+# and one report behind the client (REALFIX-W2: the client's own 0x003D is
+# DISTANCE-triggered at ~515 u, so under zero lead the copy sits exactly one
+# chord back). So on a plane boundary we stamp the plane of where the CLIENT
+# is onto a copy standing somewhere else. F1 sends instead the plane that
+# arrived WITH the point the copy is standing on, which under zero lead is the
+# PREVIOUS GRANT'S point by construction -- no navmesh, no estimate, no
+# geometry. Field 3 is unchanged: it is the destination's plane and the
+# destination is the newest report.
+#
+# WHY THAT POINT AND NOT A COMPUTED ONE. The REJECTED variant is field 4 =
+# `plane_at(copy_estimate)` from our own navmesh. Refused with grounds:
+# `plane_at` is 189/198 and its 9 failures are EXACTLY bridge-over-ground,
+# which is this map's site, and the mesh is genuinely ambiguous there by
+# measurement ((10990, 5000) -> planes [0, 18]; (10990, 4600) -> [18] only).
+# Verify the operand, do not compute it from the one tool known to be wrong
+# about it. The previous grant's plane is a value we OBSERVED going out.
+#
+# WHAT EARNS IT -- REALFIX-L3, OBSERVED, `ours`, 20260821T132546 against the
+# P0 control 20260821T131938. Scored on REALFIX-E only (an `async_at` step
+# >= 150 u within <= 0.25 s): P0 0 events with 0 grants, P2 3 events at 476.8 /
+# 465.9 / 242.8 u. Every one of the three follows a grant by 0.05-0.11 s, every
+# one carries field 4 = 18 against a previous grant's 0, and every one lands on
+# a SYNC copy reading plane 0 while the client is on the deck. The grant-level
+# 2x2 from client memory: 8 plane-rewriting above-cut grants -> 3 events;
+# 28 above-cut grants with the plane word UNCHANGED -> 0 events. Fisher exact
+# on the above-cut row, 3/8 against 0/28: p = 0.0078. The control is the
+# finding -- P0 carried 7x the plane-mismatch samples and 97% of its run above
+# the gate-1 cut and its rendered copy never moved more than 43 u, so
+# separation and plane disagreement are not sufficient; what P0 lacks is the
+# GRANT.
+#
+# STILL NECESSARY-NOT-SUFFICIENT. 5 of the 8 plane-rewriting above-cut grants
+# did NOT warp, and whatever selects those 3 from those 8 is unmeasured. F1
+# removes the necessary condition; it does not claim to have identified the
+# sufficient one, and a null under F1 is therefore consistent with more than
+# one mechanism.
+#
+# !! THE GROUNDING IS NPC-HEAVY AND THE PLAYER-IDENTIFIED VERSION IS
+# UNVERIFIED. Retail's field 3 LEADS field 4: of 1,245 differing rows, 939
+# (75.4%) lead at delay p25/p50/p75 = 0.26 / 0.64 / 1.28 s, replicated at 80.3%
+# unbounded and 83.6% under a symmetric +-3.0 s window (n = 825), so the
+# asymmetry attack fails. But that is measured over retail's whole AGENT
+# population, which is overwhelmingly NPCs; under two different player
+# identification rules the same statistic reads 87% and 39%. F1 is a proposal
+# grounded in NPC grants and it is labelled so at startup.
+#
+# NAMED LIMIT, and it is structural rather than a caveat. F1 is a ONE-INTERVAL
+# correction for a one-interval lag. It UNDER-CORRECTS whenever the copy is
+# more than one grant interval behind -- after a rate-limit refusal (4 of 70
+# headings in REALFIX-L1's arm B) or a stall -- because the copy may still be
+# in transit between the grant before last and the last one, and if those two
+# straddle a boundary the carried plane is the wrong one of the pair. W2 says
+# one interval is exactly the lag zero lead produces at free-travel cadence,
+# and nothing more.
+#
+# INERT WITHOUT --zero-lead, AND THEREFORE REFUSED WITHOUT IT. There is no
+# other send site that reads this flag, so `--plane-carry` alone would run a
+# server that behaves exactly like the default while its operator's run log
+# says "F1 arm". That is the failure mode this file has already booked once --
+# `--zero-lead --stop-echo` was accepted SILENTLY for a day - and the direction
+# of the error is the same: a flag that does nothing quietly is worse than one
+# that refuses loudly. zero_lead_composition() refuses it and main() raises.
+PLANE_CARRY = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -3398,7 +3470,8 @@ ZERO_LEAD_REFUSED_ARMS = (
 
 def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
-                          resync=False, stop_echo=False, click_sweep=False):
+                          resync=False, stop_echo=False, click_sweep=False,
+                          plane_carry=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -3439,7 +3512,39 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     wrong, and a wrong plane writes a wrong map index into agent+0x80. On
     REALFIX-L1's own click-free protocol it is inert, and if it is NOT inert
     the run was not click-free. The note says both halves.
+
+    REFUSED IN THE OTHER DIRECTION: --plane-carry WITHOUT --zero-lead.
+    REALFIX-F1 is a MODIFIER on the zero-lead send site and has no send site of
+    its own, so with --zero-lead off it changes nothing whatsoever -- and that
+    is precisely why it refuses rather than shrugging. The choice was between
+    "refuse it" and "document it as inert", and the grounds for refusing are
+    this file's own history: `--zero-lead --stop-echo` was accepted SILENTLY
+    for a day while the spec forbade it in capitals, and the lesson booked
+    there was that a flag combination nobody refuses is a flag combination
+    somebody runs. An inert --plane-carry is worse than that one, not better:
+    the server would behave EXACTLY like the shipped default while the
+    operator's run log said "F1 arm", so the run would be scored as a fix that
+    was never applied and its null would be published against REALFIX-F1's
+    prediction. A refusal costs one restart and names the missing flag; an
+    inert flag costs a live session and a wrong entry in the record. The other
+    direction is deliberately NOT symmetric -- --zero-lead alone is the P2 arm
+    and is the control this fix is measured against, so it must keep running
+    alone.
     """
+    if plane_carry and not zero_lead:
+        return ("--plane-carry requires --zero-lead. REALFIX-F1 is a MODIFIER "
+                "on the zero-lead grant, not a policy of its own: it changes "
+                "ONE field of the 0x0029 that the --zero-lead block sends "
+                "(field 4, the plane written to agent+0x80 on the SYNC copy), "
+                "and there is no other send site in this file that reads it. "
+                "Passed alone it would change NOTHING, and a server behaving "
+                "exactly like the shipped default while the run log says 'F1 "
+                "arm' is how a fix gets credited with a null it never earned. "
+                "Refused loudly rather than documented as inert, because "
+                "--zero-lead --stop-echo was once accepted SILENTLY and that "
+                "is the failure this function exists for. Pass "
+                "--zero-lead --plane-carry for the F1 arm, or --zero-lead "
+                "alone for the P2 arm it is measured against."), []
     if not zero_lead:
         return None, []
     on_flags = {"--heading-grant": heading_grant,
@@ -11456,6 +11561,58 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # same plane and asserting it twice is the
                                 # honest answer rather than a 0 that would write
                                 # a wrong map index into agent+0x80.
+                                #
+                                # -- REALFIX-F1, --plane-carry, AND IT IS THE
+                                # ONE FIELD THIS MODIFIER MOVES. The paragraph
+                                # above is right about a zero-distance grant and
+                                # wrong about WHOSE zero it is. Field 4 is
+                                # written to agent+0x80 on the SYNC COPY, and
+                                # that copy is one report-chord (~515 u, W2)
+                                # behind the client -- so "the same plane" holds
+                                # only while both are on the same one. On a
+                                # boundary it is the client's plane stamped onto
+                                # a copy standing somewhere else, which
+                                # REALFIX-L3 measured as the trigger for all
+                                # three of its warps (8 plane-rewriting
+                                # above-cut grants -> 3 events; 28 unchanged
+                                # above-cut grants -> 0; Fisher p = 0.0078).
+                                #
+                                # F1 sends the plane that arrived WITH the point
+                                # the copy is standing on. Under zero lead that
+                                # point is the PREVIOUS GRANT'S, by construction
+                                # and with no navmesh: we granted `reported` and
+                                # the copy set off for it, so the plane that
+                                # came with it is the plane it is on. The
+                                # default when there is no previous grant is the
+                                # CURRENT plane, which is exactly today's
+                                # payload -- the first grant of a session has no
+                                # lagged copy to be wrong about.
+                                #
+                                # THE SLOT TRACKS SENDS, NOT EVALUATIONS. It is
+                                # written below the send and nowhere else, so a
+                                # rate-refused report does not advance it: no
+                                # grant went out, so the copy is still bound for
+                                # the point named by the last one that did. That
+                                # is also where the named limit bites -- the copy
+                                # may still be IN TRANSIT between the grant
+                                # before last and the last one, and if those two
+                                # straddle a boundary the carried plane is the
+                                # wrong one of the pair. F1 is a one-interval
+                                # correction for a one-interval lag; W2 says
+                                # that is the lag zero lead produces at
+                                # free-travel cadence and nothing more.
+                                #
+                                # The slot is updated whether or not the flag is
+                                # on, and it is read only when the flag is on.
+                                # With --plane-carry OFF the payload below is
+                                # `plane, plane` -- byte-identical to the
+                                # pre-F1 build, which is what makes F1 a
+                                # MODIFIER on this arm rather than a second
+                                # policy inside it.
+                                zl_plane_cur = plane
+                                if PLANE_CARRY:
+                                    zl_plane_cur = state.get(
+                                        "zl_last_grant_plane", plane)
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -11469,6 +11626,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # one capture carrying both arms can be
                                     # split by either field. grantsim's C3
                                     # replay reads these rows.
+                                    #
+                                    # THE PLANE WORDS AS SENT, so REALFIX-F1's
+                                    # own falsifier is scoreable FROM THE WIRE
+                                    # rather than re-derived. Its prediction is
+                                    # "the field-4 mismatch count goes to 0",
+                                    # and a count nobody records is a count
+                                    # somebody reconstructs later from a policy
+                                    # they assume was running. `plane_carry`
+                                    # names the arm in the row itself because
+                                    # the gamesrv jsonl header carries NO argv
+                                    # (REALFIX-Q8: three movetap pairs are
+                                    # unattributable for exactly that reason),
+                                    # so a capture that cannot say which arm
+                                    # produced it costs a later session a
+                                    # behavioural reconstruction.
+                                    #
+                                    # NULL ON A REFUSAL, not the value we would
+                                    # have sent. Nothing went on the wire, so
+                                    # there is no field 4; writing the
+                                    # counterfactual would put rows in the
+                                    # mismatch census for grants that never
+                                    # happened. The reason vocabulary is
+                                    # UNCHANGED -- "zero-lead"/"heading-rate" --
+                                    # because grantsim.HEADING_REASONS keys its
+                                    # replay filter on those two words and
+                                    # test_position_trust reads both sides back
+                                    # out of the shipped predicates.
                                     rec.event("grant_verdict", fired=zero_ok,
                                               reason=zero_why, arm="zero-lead",
                                               deferred=False,
@@ -11478,14 +11662,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                                      3)),
                                               direction=dir_src,
                                               dest=[float(reported[0]),
-                                                    float(reported[1])])
+                                                    float(reported[1])],
+                                              plane_carry=bool(PLANE_CARRY),
+                                              plane_dest=(plane if zero_ok
+                                                          else None),
+                                              plane_cur=(zl_plane_cur if zero_ok
+                                                         else None),
+                                              plane_differs=(
+                                                  bool(zl_plane_cur != plane)
+                                                  if zero_ok else None))
                                 if zero_ok:
                                     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                          [PLAYER_AGENT_ID, list(reported),
-                                          plane, plane],
+                                          plane, zl_plane_cur],
                                          f"ZERO LEAD ({reported[0]:.0f},"
-                                         f"{reported[1]:.0f}) plane {plane} "
-                                         f"[dir {dir_src}]")
+                                         f"{reported[1]:.0f}) plane {plane}"
+                                         + (f" carry {zl_plane_cur}"
+                                            if zl_plane_cur != plane else "")
+                                         + f" [dir {dir_src}]")
+                                    # AFTER THE SEND, and only after a send. See
+                                    # the block above: this slot is the plane
+                                    # that went out WITH the point the copy is
+                                    # now bound for, so it advances when a grant
+                                    # does and stays put when one is refused.
+                                    state["zl_last_grant_plane"] = plane
                                 # AND NO `else` HOLDING IT. A refused heading
                                 # grant is DROPPED; the next 0x003D supersedes
                                 # it in ~0.29 s by construction. See
@@ -13522,6 +13722,37 @@ def main():
                          "with --grant-suppress, --resync and --click-sweep, "
                          "each with a printed note. Its prediction is printed "
                          "at startup. This is REALFIX-L1's treatment arm.")
+    ap.add_argument("--plane-carry", action="store_true",
+                    help="REALFIX-F1, the plane echo fix, and a MODIFIER ON "
+                         "--zero-lead rather than a policy of its own: passed "
+                         "without it the server REFUSES to start, because it "
+                         "would otherwise be inert while the run log said 'F1 "
+                         "arm'. It changes ONE wire field. Under --zero-lead "
+                         "the 0x0029 carries (reported_plane, reported_plane); "
+                         "field 4 is what the client writes to agent+0x80 on "
+                         "the SYNC COPY, and that copy is one report-chord "
+                         "(~515 u, REALFIX-W2) behind the client -- so on a "
+                         "plane boundary we stamp the plane of where the CLIENT "
+                         "is onto a copy standing somewhere else. F1 sends "
+                         "instead the plane that arrived WITH the point the "
+                         "copy is standing on, which under zero lead is the "
+                         "PREVIOUS GRANT'S plane by construction, defaulting to "
+                         "the current plane when there is no previous grant. No "
+                         "navmesh: the rejected variant computes field 4 from "
+                         "plane_at(copy_estimate), and plane_at's 9 failures out "
+                         "of 198 are EXACTLY bridge-over-ground, which is this "
+                         "map's site. WHAT EARNS IT: REALFIX-L3 measured 8 "
+                         "plane-rewriting above-cut grants producing 3 warps "
+                         "against 28 unchanged above-cut grants producing 0, "
+                         "Fisher p=0.0078, with a P0 control that carried 7x "
+                         "the plane mismatch and never moved its rendered copy "
+                         "more than 43 u. Still NECESSARY-NOT-SUFFICIENT (5 of "
+                         "the 8 did not warp). GROUNDED IN NPC GRANTS: retail's "
+                         "field 3 leads field 4 in 75.4%% of 1,245 differing "
+                         "rows, but that population is overwhelmingly NPCs and "
+                         "the player-identified version is UNVERIFIED at 87%% "
+                         "vs 39%% under two identification rules. Its prediction "
+                         "and its named limit are printed at startup.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -14099,7 +14330,8 @@ def main():
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=a.zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
-        resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep)
+        resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
+        plane_carry=a.plane_carry)
     if _zl_refusal:
         raise SystemExit(_zl_refusal)
     if a.zero_lead:
@@ -14159,6 +14391,91 @@ def main():
               "--wire-only   (state the denominator)")
         for _note in _zl_notes:
             print(_note)
+
+    # REALFIX-F1. Printed in the same house style and for the same reason: the
+    # prediction goes out BEFORE the run so it cannot be rationalised after it.
+    # ASCII only -- see the --resync banner's own note, where a U+26A0 raised
+    # UnicodeEncodeError on a default Windows console and would have killed the
+    # run the flag exists to enable.
+    if a.plane_carry:
+        global PLANE_CARRY
+        PLANE_CARRY = True
+        print("[map] --plane-carry ON. REALFIX-F1, the plane echo fix, a "
+              "MODIFIER on --zero-lead and not a policy of its own.")
+        print("      SENDS     the same 0x0029 at the same point with the same "
+              "rate limit. ONE field changes: field 4 (the plane written to "
+              "agent+0x80 on the SYNC COPY) becomes the plane that arrived WITH "
+              "the point that copy is standing on -- under zero lead, the "
+              "PREVIOUS GRANT'S plane, by construction. Field 3 (the "
+              "destination's plane) is unchanged: the destination is the newest "
+              "report.")
+        print("      DEFAULT   with no previous grant on record, field 4 is the "
+              "CURRENT plane -- i.e. exactly today's payload. The first grant "
+              "of a session has no lagged copy to be wrong about.")
+        print("      GROUND    the SYNC copy is one report-chord (~515 u, "
+              "REALFIX-W2) behind the client, so on a boundary the shipped "
+              "payload stamps the CLIENT's plane onto a copy standing "
+              "elsewhere. REALFIX-L3: 8 plane-rewriting above-cut grants -> 3 "
+              "warps; 28 unchanged above-cut grants -> 0. Fisher p = 0.0078, "
+              "with a P0 control that carried 7x the plane mismatch and never "
+              "moved its rendered copy more than 43 u.")
+        print("      NOT      a navmesh computation. The REJECTED variant is "
+              "field 4 = plane_at(copy_estimate); plane_at is 189/198 and its 9 "
+              "failures are EXACTLY bridge-over-ground, which is this map's "
+              "site, and the mesh is ambiguous there by measurement. Verify the "
+              "operand, do not compute it from the tool known to be wrong about "
+              "it.")
+        print("      PREDICTION, stated before the run, REALFIX.md sec.6.3 "
+              "unedited:")
+        # CORRECTED 2026-08-21, and the correction is the point of the line.
+        # This used to read "(REALFIX-L3 observed 11 in X3, 3 in X1, 6 in X5)"
+        # and L3 observed no such thing: 11/3/6 are REALFIX.md sec.6.4.1's
+        # "instants planned" column for X3/X1/X5 -- SIMULATED, for a plan that
+        # then yielded 8 ("the plan yielded 8 above-cut plane-rewriting
+        # instants rather than the 11 simulated", FINDINGS's L3 entry). A
+        # prediction printed as an observation, inside the one artifact whose
+        # whole job is that the baseline cannot be rationalised after the run,
+        # would have scored this arm's PRIMARY falsifier against a number
+        # nothing ever measured -- and 11 against 8 makes any F1 result read as
+        # a larger improvement than it is.
+        print("        MISMATCH  grants whose field 4 differs from the SYNC "
+              "copy's agent+0x80 go to 0. BASELINE, from REALFIX-L3 itself: 8 "
+              "plane-rewriting grants ABOVE THE CUT and 2 below, 10 in the "
+              "whole run, of which the late X1 and X2a legs carry 3 and "
+              "produced 0 events. No finer per-cell split was recorded, so "
+              "the denominator is the run. The 11-in-X3 / 3-in-X1 / 6-in-X5 "
+              "triple this line used to quote is sec.6.4.1's SIMULATED "
+              "instants planned and was never observed.")
+        print("        SEPARATION p50 and p90 UNCHANGED within 5% -- F1 touches "
+              "no position, only a plane word")
+        print("        EVENTS    the REALFIX-X3 event count goes to 0 (it was "
+              "3: 476.8, 465.9, 242.8 u)")
+        print("      FAILS IF   any X3 event survives, OR separation p90 moves "
+              "more than 5%, OR the field-4 mismatch count is not 0.")
+        print("      NAMED LIMIT it UNDER-CORRECTS when the copy is more than "
+              "ONE grant interval behind -- after a rate-limit refusal (4 of 70 "
+              "headings in REALFIX-L1's arm B) or a stall -- because the copy "
+              "may still be in transit between the grant before last and the "
+              "last one, and if those straddle a boundary the carried plane is "
+              "the wrong one of the pair. It is a one-interval correction for a "
+              "one-interval lag; W2 says that is the lag zero lead produces at "
+              "free-travel cadence and nothing more.")
+        print("      !! NPC-GROUNDED, AND THE PLAYER VERSION IS UNVERIFIED. "
+              "Retail's field 3 LEADS field 4 in 939 of 1,245 differing rows "
+              "(75.4%, delay p25/p50/p75 = 0.26/0.64/1.28 s), replicated at "
+              "83.6% under a symmetric +-3.0 s window (n = 825). That is "
+              "measured over retail's whole AGENT population, which is "
+              "OVERWHELMINGLY NPCs; under two player-identification rules the "
+              "same statistic reads 87% and 39%. F1 is a proposal grounded in "
+              "NPC grants and must be reported as one.")
+        print("      !! NECESSARY, NOT SUFFICIENT. 5 of REALFIX-L3's 8 "
+              "plane-rewriting above-cut grants did NOT warp, and whatever "
+              "selects those 3 from those 8 is unmeasured. F1 removes the "
+              "necessary condition; a null under it does not identify the "
+              "sufficient one.")
+        print("      Score it with:  the grant_verdict rows' own plane_dest / "
+              "plane_cur / plane_differs fields, against movetap's agent+0x80 "
+              "on the SYNC copy   (state the denominator)")
 
     if a.resync:
         global RESYNC

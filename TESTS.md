@@ -3298,15 +3298,101 @@ Every one of these, in the order they were written:
   bounds changed no test, so §14 now requires the retraction, both units of the
   frequency/displacement bounds, the separation bound, the failure signature and
   the invariant-refuting condition to be present in the block's own string
-  constants, with a stripped block as the control. Floors **152** bare and
-  **160** with every capture present, **one per configuration** -- a single
-  bare floor protected none of the 8 checks only a vaulted machine runs, proved
-  by unhooking one §14 check: vaulted printed ALL CHECKS PASSED at 146 against a
-  floor of 139 while the bare run went red at 138. §10 and §13 are the two
-  fixture-bearing sections (4 checks each), each declaring `LEDGER.skip` without
-  its files, and the probe that raises the floor reads the same capture names
-  those sections use. §14 is entirely fixture-free, so all 47 of its checks land
-  in both totals. No client. ~2 s),
+  constants, with a stripped block as the control. **§15 IS `--plane-carry`
+  (REALFIX-F1), AND IT IS A MODIFIER ON §14's FLAG RATHER THAN A TENTH
+  CANDIDATE POLICY.** It changes ONE wire field: field 4 of the zero-lead
+  `0x0029`, which is what the client writes to `agent+0x80` on the **SYNC**
+  copy -- a copy one report-chord (~515 u, REALFIX-W2) behind the client, so on
+  a plane boundary the shipped payload stamps the *client's* plane onto a copy
+  standing somewhere else. **REALFIX-L3 measured that as the trigger for all
+  three of its warps**: 8 plane-rewriting above-cut grants produced 3 events
+  (476.8, 465.9, 242.8 u, each 0.05-0.11 s after its grant), 28 above-cut grants
+  with the plane word *unchanged* produced 0, Fisher exact **p = 0.0078** -- and
+  the P0 control carried **7x** the plane-mismatch samples and 97% of its run
+  above the gate-1 cut while never moving its rendered copy more than **43 u**,
+  so separation and plane disagreement are not sufficient and what P0 lacks is
+  the grant. F1 sends instead the plane that arrived **with** the point the copy
+  is standing on, which under zero lead is the previous grant's *by
+  construction* -- not from the navmesh, because the rejected variant computes
+  it as `plane_at(copy_estimate)` and `plane_at`'s 9 failures out of 198 are
+  **exactly bridge-over-ground**, which is this map's site. The section reuses
+  §14's lifted receive arm with a second module flag set and a per-report grant
+  clock, so a rate refusal can sit *between* two grants. It pins the three
+  payload cases the spec names -- first grant with no previous (field 4 falls
+  back to the current plane, and **not** to 0, which would write a wrong map
+  index into `agent+0x80`), a plane change (field 3 = the new plane, field 4 =
+  the previous grant's), and no change (both equal, so F1 is **inert off a
+  boundary**; without that case a flag rewriting field 4 on *every* grant would
+  pass "the payload changed" and be a different policy). **F1 OFF is asserted
+  against a hand-written literal** -- opcode, payload and console label for the
+  same plane-crossing pair -- rather than against a second run of the same code,
+  because code compared with itself agrees by construction. Most of the rest
+  exists to prove the delta is exactly one field: carry-ON and carry-OFF runs
+  must agree on every destination, on the `0x0025`, on `state["dest"]` and on
+  `sync_to`, and differ in field 4 alone, which is the mechanism behind the
+  pre-registered "separation p50/p90 unchanged within 5%" -- movetap measures
+  separation against `sync_to`, so a run where it moved would mean F1 had
+  reached a position. The **named limit** is driven rather than asserted: the
+  slot tracks *sends*, not evaluations, so a rate-refused report does not
+  advance it (no grant went out, so the copy is still bound for the point the
+  last one named) -- and that is also where F1 under-corrects, because the copy
+  may be in transit between the grant before last and the last one. Telemetry
+  carries `plane_dest` / `plane_cur` / `plane_differs` / `plane_carry` on the
+  same `grant_verdict` channel with the reason vocabulary **unchanged**, since
+  `plane_differs` *is* the pre-registered mismatch count and `grantsim`'s
+  `HEADING_REASONS` keys its replay filter on those two words; a refused
+  evaluation records `None` rather than the field 4 it would have sent, because
+  writing the counterfactual would put rows in the census that is the falsifier.
+  **The composition decision is REFUSE, not document-as-inert**, and both
+  directions are driven: `--plane-carry` alone raises at startup because F1 has
+  no send site of its own (checked, not argued -- a carry-ON run with
+  `--zero-lead` off produces byte-identical wire and no verdict row), so an
+  inert flag would run a server identical to the shipped default while the
+  operator's log said "F1 arm" and the fix would be credited with a null it
+  never earned; `--zero-lead` alone still runs, deliberately, because it is the
+  arm F1 is measured *against* and a symmetric refusal would delete the control.
+  Its banner is pinned the same way §14's is, on the prediction, all three
+  FAILS-IF bounds, the named limit and **the NPC-grounding caveat** -- retail's
+  field 3 leads field 4 in 75.4% of 1,245 differing rows, but that population is
+  overwhelmingly NPCs and the player-identified version is UNVERIFIED at 87% vs
+  39% -- with a stripped block and a present-but-never-printed block as its two
+  controls, plus the cp1252 scan — **including the baseline counts, which were
+  the one evidential string in that banner nobody pinned**: it read "REALFIX-L3
+  observed 11 in X3, 3 in X1, 6 in X5" and those are REALFIX.md §4.1's
+  *simulated* `instants planned`, never observed, standing where the primary
+  falsifier's baseline goes; L3 produced **8** plane-rewriting grants above the
+  cut and 2 below, and the banner now says so and is pinned on it. Floors
+  **175** bare and **183** with every capture present, **one per
+  configuration** -- a single bare floor protected none of the 8 checks only a
+  vaulted machine runs, proved by unhooking one §14
+  check: vaulted printed ALL CHECKS PASSED at 146 against a floor of 139 while
+  the bare run went red at 138. §10 and §13 are the two fixture-bearing sections
+  (4 checks each), each declaring `LEDGER.skip` without its files, and the probe
+  that raises the floor reads the same capture names those sections use. §14 and
+  §15 are entirely fixture-free, so all 47 and all 23 of their checks land in
+  both totals. **Every §15 check was proven able to go red**: 15 mutations
+  planted one at a time in `authsrv.py` -- field 4 never carrying, field 3
+  following it into the past, the slot advancing on a refusal, the default
+  becoming 0, the composition refusal deleted, the refusal telemetry recording
+  the counterfactual, `plane_differs` hard-coded, two banner lines removed or
+  turned into assignments, a `U+26A0` planted, the call site dropping the
+  kwarg, the flag shipping ON, the label drifting on the OFF path, a second
+  sending `if PLANE_CARRY:` block, and the zero-lead send made to require the
+  modifier -- **15 red, tree restored byte-identical after each**. **A second
+  adversarial pass then planted 23 (those 15 plus 13 more) and found ONE
+  survivor**: the slot write hoisted from after the `send()` to before it,
+  inside the same `if zero_ok:`. It is a no-op only for a send that RETURNS --
+  `send()` ends in `sock.sendall`, which raises, and the shipped `send()` says
+  so where it explains its own seq gaps -- so §15 now drives a `0x0029` through
+  a send that dies (`PcDeadWire`, faithful to the shipped order: the wire-move
+  hook before the bytes, the `sent` row after) and requires the slot to name the
+  last plane that reached the WIRE. That is the 23rd check. The same pass found
+  that dropping the `plane_differs` kwarg reddened by an uncaught `KeyError`
+  raised inside the check's own arguments, which aborts before
+  `LEDGER.verdict()` and leaves the floor unevaluated -- so the telemetry checks
+  read those four fields with `.get` and FAIL BY NAME, except the refused row,
+  where `None` is the answer and presence is asserted with `in`. No client.
+  ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
