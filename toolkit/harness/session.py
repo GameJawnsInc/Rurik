@@ -1204,6 +1204,13 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
                         "note": "no window"})
             print(f"  walk {label}: NO WINDOW", flush=True)
             continue
+        # REALFIX-T2. The three leg stamps below are whole-second strings, which
+        # is +/-0.5 s = +/-143 u at run speed on every leg-to-capture mapping --
+        # a systematic nobody had priced, on the same clock defect REALFIX-T1
+        # fixes on the wire side. The strings STAY (every existing reader of a
+        # walk row takes them); the `_unix` floats are the same instants at full
+        # resolution, read one line apart.
+        started_unix = time.time()
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if kind == "key":
             vk = dc.NAMED_KEYS.get(key) if key in dc.NAMED_KEYS else ord(key)
@@ -1250,14 +1257,17 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             did = 1.0 if dc.click(hwnd, proc.pid, fx, fy) else 0.0
         else:
             raise SystemExit(f"unknown walk step kind {kind!r}")
+        ended_unix = time.time()
         ended = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         # Let the client come to rest and send its stop before the next step
         # starts, so two steps cannot share one deceleration.
         time.sleep(settle)
+        settled_unix = time.time()
         settled = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         out.append({"kind": kind, "key": key, "asked": value,
                     "did": round(did, 2), "started": started, "ended": ended,
-                    "settled": settled})
+                    "settled": settled, "started_unix": started_unix,
+                    "ended_unix": ended_unix, "settled_unix": settled_unix})
         print(f"  walk {label}: {did:g} of {value:g} "
               f"({started} -> {ended})", flush=True)
         shot_if_foreground(hwnd, proc.pid,

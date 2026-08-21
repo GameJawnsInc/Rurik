@@ -231,6 +231,55 @@ OP_SET_HEADING = 61         # c2s 0x003D -- the client's position WHILE MOVING
 OP_CANCEL_REPORT = 71       # c2s 0x0047 -- the client's position at a STOP
 
 
+# --- REALFIX-T1: which clock the wire<->tap offset came from ----------------
+# Two estimators, never mixed. `authsrv.Recorder.event` stamped only the
+# truncated `wall` until 2026-08-21, so every capture in the vault older than
+# that has one source available and exactly one; captures written after it carry
+# `wall_unix` too and get an offset that is per row rather than bounded from
+# below across the whole file.
+OFFSET_SRC_UNIX = "wall_unix"
+OFFSET_SRC_TRUNC = "wall(truncated)"
+
+
+class WallStamps(list):
+    """The truncated per-row offsets, carrying the FLOAT ones alongside.
+
+    THIS IS A `list` ON PURPOSE. Every caller before REALFIX-T1 received a plain
+    list of `floor(unix) - t` values and does `max(walls)`, `len(walls)` or
+    `if not walls` on it, and every synthetic fixture in the suite hands
+    `offset_from_stamps` a hand-built list of floats. Subclassing keeps all of
+    that working unchanged and puts the new source in an attribute a plain list
+    simply does not have -- so `getattr(walls, "unix", ())` IS the fallback
+    test, and there is no version flag to get wrong.
+    """
+
+    def __init__(self, trunc=(), unix=()):
+        list.__init__(self, trunc)
+        self.unix = list(unix)
+
+
+def _wall_offsets(r, trunc, unix):
+    """Append this row's clock offsets to the two lists. One row, both sources.
+
+    Kept in one place because the two loaders below had already grown two copies
+    of the truncated half, and a third copy of the parsing is a third chance for
+    them to disagree about what a stamp means.
+    """
+    t = r.get("t")
+    if not isinstance(t, (int, float)):
+        return
+    wu = r.get("wall_unix")
+    # bool is an int; a `true` here would silently become an offset of 1 - t.
+    if isinstance(wu, (int, float)) and not isinstance(wu, bool):
+        unix.append(float(wu) - t)
+    if r.get("wall"):
+        try:
+            trunc.append(calendar.timegm(
+                time.strptime(r["wall"], "%Y-%m-%dT%H:%M:%SZ")) - t)
+        except ValueError:
+            pass
+
+
 def load_movetap(path):
     S = []
     for line in open(path, encoding="utf-8", errors="replace"):
@@ -256,21 +305,16 @@ def load_reports(path):
     stamped record, not just the position ones -- more stamps is a tighter bound
     on a truncated clock.
     """
-    reps, walls = [], []
+    reps, walls, walls_unix = [], [], []
     for line in open(path, encoding="utf-8", errors="replace"):
         try:
             r = json.loads(line)
         except ValueError:
             continue
-        if r.get("wall") and isinstance(r.get("t"), (int, float)):
-            try:
-                walls.append(calendar.timegm(
-                    time.strptime(r["wall"], "%Y-%m-%dT%H:%M:%SZ")) - r["t"])
-            except ValueError:
-                pass
+        _wall_offsets(r, walls, walls_unix)
         if r.get("kind") == "position_report" and r.get("reported"):
             reps.append((r["t"], list(r["reported"])))
-    return reps, walls
+    return reps, WallStamps(walls, walls_unix)
 
 
 def load_wire_reports(path):
@@ -294,19 +338,14 @@ def load_wire_reports(path):
     them to look at first. `steps()` accepts the two-element form too, because
     every synthetic fixture builds that one.
     """
-    reps, walls = [], []
+    reps, walls, walls_unix = [], [], []
     n_head = n_stop = n_pr = 0
     for line in open(path, encoding="utf-8", errors="replace"):
         try:
             r = json.loads(line)
         except ValueError:
             continue
-        if r.get("wall") and isinstance(r.get("t"), (int, float)):
-            try:
-                walls.append(calendar.timegm(
-                    time.strptime(r["wall"], "%Y-%m-%dT%H:%M:%SZ")) - r["t"])
-            except ValueError:
-                pass
+        _wall_offsets(r, walls, walls_unix)
         kind = r.get("kind")
         if kind == "position_report" and r.get("reported"):
             n_pr += 1
@@ -334,21 +373,89 @@ def load_wire_reports(path):
         else:
             n_stop += 1
     reps.sort(key=lambda row: row[0])
-    return reps, walls, {"heading": n_head, "stop": n_stop,
-                         "position_report": n_pr, "spliced": len(reps)}
+    return reps, WallStamps(walls, walls_unix), {
+        "heading": n_head, "stop": n_stop,
+        "position_report": n_pr, "spliced": len(reps)}
 
 
-def offset_from_stamps(walls):
-    """unix epoch of server t=0, estimated from truncated whole-second stamps.
+def offset_detail(walls):
+    """unix epoch of server t=0, and WHICH clock said so. REALFIX-T1.
 
-    Each stamp gives floor(unix) - t = true_offset - frac, frac in [0,1). The
-    MAXIMUM over many stamps therefore approaches the true offset from below,
-    and the spread is the residual uncertainty. Taking the mean instead would be
-    biased low by half a second -- 144 units at run speed.
+    Returns `{source, offset, spread, n, n_trunc}`. `spread` is the achieved
+    residual in seconds on the source that was actually used -- so it is
+    comparable across the two only in the sense that both are "how wrong the
+    pairing can be", which is the number a reader needs.
+
+    TWO ESTIMATORS, AND THEY ARE NEVER MIXED. A row carrying `wall_unix` gives
+    `wall_unix - t` = the true offset directly, to the system clock's own
+    resolution, so the estimator over many such rows is the MEDIAN and the
+    max-min spread measures perf_counter<->system-clock drift over the run. A
+    row carrying only the truncated `wall` gives `floor(unix) - t =
+    true_offset - frac` with frac in [0,1), so the estimator is the MAXIMUM --
+    which approaches the truth from below -- and the spread is ~1.0 s by
+    construction on any run longer than a second. Averaging the two families
+    together would produce a number that is neither, biased by the mix ratio;
+    pooling the max-estimator over float rows would throw away the resolution
+    that makes them worth having. So one family is chosen and the other is
+    counted, and `n` vs `n_trunc` is what tells a reader the file was mixed.
+
+    A mean over truncated stamps would sit half a second low -- 144 units at
+    run speed, the same size as the separation being measured -- which is why
+    the truncated arm takes the max and has since this file was written.
     """
+    unix = sorted(getattr(walls, "unix", ()) or ())
+    n_trunc = len(walls)
+    if unix:
+        return {"source": OFFSET_SRC_UNIX, "offset": unix[len(unix) // 2],
+                "spread": unix[-1] - unix[0], "n": len(unix),
+                "n_trunc": n_trunc}
     if not walls:
-        return None, None
-    return max(walls), max(walls) - min(walls)
+        return {"source": None, "offset": None, "spread": None,
+                "n": 0, "n_trunc": 0}
+    return {"source": OFFSET_SRC_TRUNC, "offset": max(walls),
+            "spread": max(walls) - min(walls), "n": n_trunc,
+            "n_trunc": n_trunc}
+
+
+def offset_line(d, indent=""):
+    """The one line REALFIX-T1 asks for: which estimator, and the residual.
+
+    Printed rather than returned-and-forgotten because the whole point of T1 is
+    that the residual stops being an assumption. A run that silently fell back
+    to the truncated stamps looks identical in every downstream number; this
+    line is the only place it says so.
+    """
+    if not d["n"]:
+        return (indent + "clock offset: NO STAMPS -- the two clocks cannot be "
+                         "aligned and nothing paired against them would mean "
+                         "anything")
+    mixed = ("" if d["n"] == d["n_trunc"] else
+             f"; {d['n_trunc']} row(s) carry only the truncated stamp and were "
+             f"NOT pooled in")
+    if d["source"] == OFFSET_SRC_UNIX:
+        return (indent + f"clock offset {d['offset']:.6f} from {d['n']} "
+                f"`wall_unix` row(s) [REALFIX-T1, float, median]: residual "
+                f"{d['spread'] * 1000.0:.3f} ms = "
+                f"{d['spread'] * RUN_SPEED:.2f} u at {RUN_SPEED:.0f} u/s"
+                + mixed)
+    return (indent + f"clock offset {d['offset']:.3f} from {d['n']} truncated "
+            f"`wall` stamp(s) [PRE-REALFIX-T1, max-estimator]: residual "
+            f"{d['spread']:.3f} s = {d['spread'] * RUN_SPEED:.0f} u at "
+            f"{RUN_SPEED:.0f} u/s -- this capture predates the float stamp")
+
+
+def offset_from_stamps(walls, announce=True):
+    """(offset, spread), the two-value contract every caller already unpacks.
+
+    Kept at two values deliberately: `pair()`, `resyncscore`, `grantsim` and the
+    tests all unpack exactly two, and REALFIX-T1 is an instrument change that
+    must not cost a rewrite of everything downstream of it. `offset_detail` is
+    where the third and fourth facts live for a caller that wants them.
+    """
+    d = offset_detail(walls)
+    if announce:
+        print(offset_line(d, "   "))
+    return d["offset"], d["spread"]
 
 
 def pair(S, reps, offset):
@@ -2896,13 +3003,15 @@ def main():
     # `position_report` row for row (max |dpos| 0.0 across three runs), and on a
     # legacy one it is the difference between 158 positions and 28.
     reps, walls, src = load_wire_reports(cap)
-    off, spread = offset_from_stamps(walls)
+    off, spread = offset_from_stamps(walls, announce=False)
     if off is None:
         print("the capture carries no wall stamp, so the two clocks cannot be "
               "aligned. Nothing here would mean anything.")
         return 2
-    print(f"clock offset {off:.3f} (from {len(walls)} whole-second stamps, "
-          f"spread {spread:.3f}s)")
+    # REALFIX-T1: the estimator names itself. This line used to say
+    # "whole-second stamps" unconditionally, which on a post-T1 capture would
+    # have been a confident lie about where the number came from.
+    print(offset_line(offset_detail(walls)))
     print(f"SOURCE {src['spliced']} spliced self-reports "
           f"({src['heading']} x 0x003D + {src['stop']} x 0x0047); "
           + (f"`position_report` agrees exactly"

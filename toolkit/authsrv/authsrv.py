@@ -9275,6 +9275,21 @@ class Recorder:
         kw["kind"] = kind
         kw["t"] = round(time.perf_counter() - self.t0, 6)
         kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # REALFIX-T1. `wall` is truncated to the second, so `wall - t` gives
+        # `true_offset - frac` with frac in [0,1) and the best any reader can do
+        # is bound the offset from below across many rows -- measured spread
+        # 0.999920 s (L1 arm A) and 0.999777 s (arm B), which at 288 u/s is 288
+        # units of slop on every wire<->movetap pairing in the whole arc.
+        # `wall_unix` is the SAME instant read two lines later at full
+        # resolution (`time.get_clock_info('time')` on this box reports
+        # GetSystemTimePreciseAsFileTime, resolution 1e-07 s), so the offset
+        # becomes PER ROW and its spread becomes a real diagnostic of
+        # perf_counter<->system-clock drift rather than an artefact of the
+        # format. `wall` STAYS: every existing consumer and every vault fixture
+        # reads it, and a capture written before today has only that one.
+        # Loader side: `movesync.offset_detail`, which prefers this and prints
+        # which estimator it used -- it never mixes the two.
+        kw["wall_unix"] = time.time()
         self.meta.write(json.dumps(kw) + "\n")
         self.meta.flush()
 

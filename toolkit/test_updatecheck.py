@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 135,
-          "and the class-(a) census rides along, at 135",
+    check(len(state["pins"]) == 156,
+          "and the class-(a) census rides along, at 156",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -252,7 +252,26 @@ if exe:
           f"99.919968 u threshold (and, as its positive control, gate 1's 299.332591 u). "
           f"It is the cheapest class of pin there is -- resolved through pinned.find(), "
           f"which verifies the image sha256, and re-derived from that image by "
-          f"test_grantsim.py rather than trusted. Both literals "
+          f"test_grantsim.py rather than trusted. 151 on 2026-08-21: +16 and NO "
+          f"new file, all of it REALFIX-I1's history-chain layout inside "
+          f"clientscan/movetap.py (28 -> 44) -- the node's next pointer, its "
+          f"time field, its four-dword point including the plane word, the "
+          f"0x2C stride, the 256-node block cap, the 5000 ms recycle, the "
+          f"2500 ms head-age rule, and four record-side displacements that "
+          f"refute movetap's own prior comment. Every one is encoded FROM the "
+          f"module constant and matched at its VA in the pinned image by "
+          f"movetap._selftest_fence_bytes, so a 38833 rebase reddens rather "
+          f"than reading a linked list at the wrong offsets. 156 the same day: "
+          f"+5, still movetap.py (44 -> 49), and every one of the five "
+          f"pins a sentence this file had been ASSERTING. The recycle "
+          f"comment named the block's OLDEST node; 0x00604BFF's operand "
+          f"is [eax+edi-0x28] with eax = count*0x2C, which is index "
+          f"count-1, the NEWEST -- and the existing pin encoded only the "
+          f"CONSTANT 5000, leaving the operand free to be wrong inside a "
+          f"green [PASS]. The other four pin the SEVER pass "
+          f"(0x00604C56, 0x00604CBB, 0x00604CC2, 0x00604C49), which is "
+          f"the real reason a chain cannot dangle into a recycled block "
+          f"and had never been written down anywhere. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")

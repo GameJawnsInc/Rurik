@@ -254,11 +254,171 @@ T_STATE_COUNT = 0x28       # cmp ebx,[esi+0x28]            (0x00605FDA)
 STATE_STRIDE = 0x1C        # [ebx*8]-ebx, scaled by 4      (0x00605FF9, 0x006060EB)
 S_CONTROLLED = 0x00        # cmp dword[rec],0              (0x00606002)
 S_HIST_HEAD = 0x04         # the history chain head        (0x00605F4F, 0x006056AF)
-# +0x08..+0x14 is a four-dword point on the chain NODES (0x0060571A..0x0060572F);
-# on the RECORD itself only +0x00 and +0x04 are touched by any code read so far,
-# and +0x18 is UNVERIFIED -- which is why the whole 28 bytes are stored raw
-# rather than named field by field.
+# +0x08..+0x14 is a four-dword point on the chain NODES (0x0060571A..0x0060572F).
+#
+# THE REST OF THIS COMMENT USED TO READ "on the RECORD itself only +0x00 and
+# +0x04 are touched by any code read so far, and +0x18 is UNVERIFIED". BOTH
+# HALVES ARE REFUTED BY THE BYTES, read 2026-08-21 out of the pinned build for
+# REALFIX-I1, and the bytes win. The appender at 0x00605840 WRITES all five of
+# +0x08..+0x18 on the record every time it runs (0x00605A0E `mov [esi+8],ebx`
+# through 0x00605A25 `mov [esi+0x18],eax`, and again on the allocating path at
+# 0x00605A38..0x00605A4D), and the walker READS +0x08..+0x14 back as the
+# polyline's FIRST vertex before it ever touches a node (0x0060569A..0x006056AC,
+# then 0x006056AF steps to the head). The appender's own head-match test
+# compares the incoming point against record +0x08 / +0x0C / +0x10
+# (0x00605948 / 0x0060595B / 0x0060596B). So:
+S_HIST_POINT = 0x08        # x f, y f, plane i, w i -- the polyline's vertex 0
+S_HIST_AT = 0x18           # the ms that vertex is dated to. Written from the
+                           # agent's m_timeStopMovement when it is parked
+                           # (0x00605904, off +0x48) and from the world clock
+                           # when it is not (0x0060591B) -- so "the epoch of the
+                           # cached point", RECONSTRUCTION for the semantics,
+                           # OBSERVED for the two write sites.
+# The whole 28 bytes are still stored raw as well: naming five of seven dwords
+# is not the same as having read the eighth.
 AGTRACK_MAX_AGENTS = 100000   # same sanity bound resolve() uses on the SYNC count
+
+# --- REALFIX-I1: the history chain the match test walks --------------------
+# EVERY DISPLACEMENT BELOW WAS READ OUT OF build 38797's OWN BYTES on
+# 2026-08-21 (vault/client/2026-07-29_221c13772c7a/Gw.exe), from the appender
+# 0x00605840-0x00605A93, its allocator 0x00604BB0-0x00604DD9 and the walker
+# 0x006056A0-0x00605737. Nothing here is inherited from a prior comment.
+#
+#   ALLOCATION (0x00604DBB-0x00604DD9). A block is `count` at +0x00 then nodes
+#   from +0x04 at a stride of 0x2C (`imul eax,ecx,0x2c` / `add eax,4` /
+#   `add eax,edi`). The new node's +0x00 is written from the allocator's own
+#   argument -- the world clock the appender passed (0x00604DCC) -- and its
+#   +0x04 is written to ZERO (0x00604DCE). A block holds at most 0x100 nodes
+#   (`cmp dword[edi],0x100`, 0x00604BD0; the allocation is 0x2c0c bytes).
+#
+#   RECYCLING, AND THIS COMMENT USED TO NAME THE WRONG NODE. It read "recycled
+#   when its OLDEST node is more than 5000 ms old", printed inside a green
+#   [PASS] line, and CONTRADICTED this repo's own FINDINGS.md:2894/:3674, which
+#   had it right. REFUTED at the bytes, re-read 2026-08-21 out of build 38797:
+#   the age test at 0x00604BFF is `sub ecx,[eax+edi-0x28]` with eax already
+#   `count * 0x2C` (0x00604BFC), so the address is `block + 0x2C*count - 0x28`
+#   = `block + 4 + (count-1)*0x2C` = node index count-1 -- the LAST APPENDED,
+#   i.e. the block's NEWEST node. The bump allocator two hundred bytes down
+#   (0x00604DBB) is what makes that identification: it takes `count`, forms
+#   `block + 4 + count*0x2C`, then increments, so the node just written is
+#   always index count-1. The SENSE was right and stays: `cmp ecx,0x1388` /
+#   `jle 0x604d04` allocates a fresh 0x2c0c block when the delta is <= 5000 ms,
+#   so recycling needs the newest node to be MORE than 5000 ms old -- a
+#   strictly stronger guarantee than the old sentence claimed. And it is
+#   reached ONLY when the current block is full (0x00604BD0's `jb 0x604dbb`
+#   short-circuits straight to the bump allocator otherwise), which is why a
+#   NODE may legitimately be minutes old: blocks turn over every 256 appends,
+#   not every 5 s. Any age bound on a node would refuse real data.
+#   The operand and the sense are both encoded into selftest section 5 now
+#   (HIST_RECYCLE_OPERAND), so this paragraph can go red.
+#
+#   AND WHY A CHAIN CANNOT DANGLE INTO A RECYCLED BLOCK -- the real mechanism,
+#   which was NOT in this file and is stronger than the 5 s bound it used to
+#   argue from. Before reusing a block the client SEVERS every reference into
+#   it. 0x00604C30-0x00604C77 walks every block's nodes and zeroes any
+#   `node+0x04` landing in [block+4, block+0x2C04) (`mov dword[eax+4],0` at
+#   0x00604C56, bound `lea ecx,[esi+0x2c04]` at 0x00604C49); 0x00604C89-
+#   0x00604CC7 then walks the record array at [this+0x20] with count [this+0x28]
+#   and stride 0x1C -- the SAME T_STATE_ARRAY / T_STATE_COUNT / STATE_STRIDE
+#   this file reads -- and zeroes any `record+0x04` in that range (0x00604CBB).
+#   So a walker that starts after the sever sees NULL, not garbage.
+#
+#   THE ONE HAZARD THAT SURVIVES THE SEVER, named because nothing else names it.
+#   0x00604CF9 resets only the block's COUNT; the node bytes are left alone
+#   (0x00605AA0, the call just above it, is a doubly-linked-list splice that
+#   moves the block between lists and writes no node), and the pool is shared by
+#   every agent's record -- which is exactly why the sever pass has to scan all
+#   of them. So a read of a parent's `next` that lands BEFORE the sever, with
+#   the target read landing AFTER the slot has been re-appended, yields another
+#   agent's node under our agent's id. TORN-READ TEST 2 catches the realistic
+#   form of this for free: a re-appended slot is stamped with the CURRENT world
+#   clock, which is newer than the parent that (staleley) links to it, and a
+#   node newer than its parent is `unread:node-time-inverted`. The residual
+#   window is a re-append landing in the SAME MILLISECOND as the parent's own
+#   stamp, which this walk cannot distinguish and does not claim to. Modelled in
+#   selftest section 13 rather than asserted here.
+#
+#   LINKAGE (0x00605A55-0x00605A5D). `mov ecx,[esi+4]` then
+#   `mov [edx+4],ecx` -- push-front, so +0x04 is the NEXT (older) node and the
+#   head is the newest. The allocator having just zeroed it means the FIRST node
+#   of a chain keeps next = 0, so THE TERMINATOR IS NULL. Confirmed from the
+#   consumer side too: the walker advances with `mov esi,[esi+4]` and loops on
+#   `test esi,esi / jne` (0x00605732-0x00605737).
+#
+#   POINT (0x00605A60-0x00605A75). Four consecutive dwords at +0x08, +0x0C,
+#   +0x10, +0x14 -- x, y, plane, w -- copied from the same four the appender
+#   read off the agent at +0x78..+0x84. The walker reads exactly those four
+#   back at 0x0060571A..0x0060572F and hands `&node+8` to the segment test at
+#   0x006056F5.
+#
+#   AND THE REST OF THE NODE, which this walk does NOT read and is recorded here
+#   so the stride is auditable rather than asserted: +0x18/+0x1C velocity
+#   (0x00605A81/0x00605A87, and the appender's own asserts 0x24d/0x24e require
+#   them zero when the agent is parked), +0x20 m_maxSpeed (0x00605A7B), +0x24
+#   m_moveSpeed (0x00605A8D), +0x28 the movement mode (0x00605A90). 0x2C total.
+N_TIME = 0x00
+N_NEXT = 0x04
+N_POINT = 0x08             # x f, y f, plane i, w i
+N_VEL = 0x18               # vx f, vy f      -- not read by this walk
+N_MAXSPEED = 0x20          # float           -- not read by this walk
+N_MOVESPEED = 0x24         # float           -- not read by this walk
+N_MODE = 0x28              # int             -- not read by this walk
+HIST_NODE_STRIDE = 0x2C
+HIST_NODE_SPAN = 0x18      # +0x00..+0x17: time, next and the point, ONE read.
+                           # OURS, not the client's: it is the read BUDGET the
+                           # whole gate argument is priced in, so it is pinned
+                           # to N_POINT+16 in section 13 rather than left free.
+HIST_BLOCK_MAX = 0x100     # cmp dword[edi],0x100        (0x00604BD0)
+HIST_BLOCK_RECYCLE_MS = 5000    # cmp ecx,0x1388         (0x00604C03), per BLOCK,
+                           # measured on the block's NEWEST node -- see above
+HIST_NODE_AGE_MS = 2500    # cmp eax,0x9c4 / jg          (0x0060593A), per node
+
+# HOW FAR INTO THE FUTURE A NODE MAY BE DATED, and this number used to be
+# HIST_NODE_AGE_MS on a ground that does not exist. The comment said the
+# tolerance was "world-0/world-1 clock skew"; it is not, because there is only
+# ONE clock in play. `sample()` reads `now` from
+# AGBASE + world*OFF_WORLD_STRIDE + OFF_WORLD_CLOCK with `world` = the agent's
+# own +0x24, and the appender stamps a node from the SAME slot -- 0x00605893
+# `imul eax,[esi+0x24],0x64` with esi the agent, then 0x006058A5
+# `mov edi,[eax+ecx-0x84]` with ecx the AgTrack `this` = AGBASE+0x1CC, and
+# 0x1CC-0x84 = 0x148 = OFF_WORLD_CLOCK. Same agent, same world, same int32.
+# THE REAL GROUND IS READ ORDERING: `sample()` reads the clock first and the
+# nodes last, so a node appended in between is legitimately dated after `now`.
+# The bound is therefore our own sample latency, not a client property -- 250 ms
+# is 5x the 50 ms period REALFIX-T3 requires at 20 Hz and ~3x the ~13 Hz this
+# reader sustains. A node further ahead than that means the sample straddled a
+# stall, which is worth naming rather than folding into the data.
+HIST_FUTURE_TOL_MS = 250
+
+# HOW MANY NODES, AND WHY THIS IS GATED. A full sample is ~20 cross-process
+# ReadProcessMemory calls and this reader sustains ~13 Hz; eight unconditional
+# node reads is ~+40% and would drop it to ~7 Hz, which fights REALFIX-T3's
+# residual budget directly (the sample phase IS the binding term after T1). The
+# match test only matters where gate 1 could fire, so the chain is read only
+# above 250 u -- comfortably below the 299.3326 u cut and below the 295 u edge
+# of GATE1_BAND, so no sample that could be classified `above` is ever skipped.
+# REALFIX.md section 2.4: "This conditional is a design requirement, not an
+# optimisation."
+HIST_MAX_NODES = 8
+HIST_SEP_GATE = 250.0
+
+# Pointer plausibility, on the same principle as the array/count refusals above:
+# a node address that cannot be a node must NAME that rather than be read.
+# LOW: the 64 KB null-guard region is never mapped in any Windows process.
+# HIGH: Gw.exe's PE Characteristics are 0x0122, so IMAGE_FILE_LARGE_ADDRESS_AWARE
+# (0x0020) is SET -- measured, not assumed -- which under WOW64 on 64-bit Windows
+# puts the ceiling at 0xFFFEFFFF rather than 0x7FFEFFFF. A bound of 0x7FFF0000
+# would therefore refuse legitimate high allocations. That sentence was true and
+# CHECKED BY NOTHING until 2026-08-21: section 5 now reads the Characteristics
+# word out of the pinned image, and section 13 walks a chain living ABOVE the
+# 2 GB line, so lowering this ceiling "for safety" goes red instead of silently
+# refusing real nodes. The old ceiling case planted its head AT PTR_MAX and so
+# refused whatever the constant was -- a check that cannot fail.
+# ALIGNMENT: nodes sit at block+4+i*0x2C and 0x2C is a multiple of 4, so every
+# node address is 4-aligned whatever the block is. An unaligned candidate is a
+# torn or mis-scaled pointer, not a node.
+PTR_MIN = 0x00010000
+PTR_MAX = 0xFFFF0000
 
 FENCE_OPEN = "open"        # clientControlled != 0 -- 0x006055E0 can be reached
 FENCE_SHUT = "shut"        # clientControlled == 0 -- the test is never evaluated
@@ -798,7 +958,178 @@ def gate1_read(read, agbase, aid, agent_block):
     return out
 
 
-def sample(handle, agbase, agent_ptr, aid=None):
+# --------------------------------------------------------------------------
+# REALFIX-I1 -- THE HISTORY CHAIN, WALKED.
+#
+# This is the measurement that turns round 6's elimination into observation.
+# The match test the client runs at 0x006055E0 does not ask where the client IS;
+# it asks whether the granted point lies within MATCH_RADIUS of the polyline the
+# client has been walking, and that polyline is `record+0x08` followed by the
+# chain. Every reading in this arc so far has had to INFER what was on it. This
+# reads it.
+#
+# WHAT IT REFUSES. Everything, loudly, into `hist_why` -- the file's own
+# `_fence_blank` idiom. A chain that does not terminate inside N, a node address
+# outside the plausibility bounds, a node that cannot be read, a cycle, and a
+# time sequence that could only come from a torn read all produce a named reason
+# and the nodes read BEFORE the failure, never a silent short chain. A short
+# chain and a refused chain look identical downstream unless the record says
+# which it was, and "the polyline had no node near q" is exactly the reading
+# candidate B is revived by.
+# --------------------------------------------------------------------------
+HIST_KEYS = ("hist", "hist_n", "hist_why", "hist_seed", "hist_seed_at",
+             "hist_sync_plane", "hist_async_plane", "hist_reads")
+
+HIST_OK = "ok"                      # walked to a null terminator inside N
+HIST_EMPTY = "empty:head-null"      # a REAL empty chain: armed or cleared
+
+
+def _hist_blank(why):
+    return {"hist": None, "hist_n": None, "hist_why": why, "hist_seed": None,
+            "hist_seed_at": None, "hist_sync_plane": None,
+            "hist_async_plane": None, "hist_reads": 0}
+
+
+def hist_is_complete(why):
+    """The chain was walked end to end. An EMPTY chain counts; a truncated one
+    does not, and neither does a refusal."""
+    return why in (HIST_OK, HIST_EMPTY)
+
+
+def _ptr_plausible(addr, span):
+    """Could this be a node? See PTR_MIN / PTR_MAX / the 4-alignment note."""
+    return (PTR_MIN <= addr and addr + span <= PTR_MAX and addr % 4 == 0)
+
+
+def history_chain(read, rec, sep, async_ptr, agent_block, now,
+                  max_nodes=None, gate=None):
+    """The AgTrack polyline for one agent, newest vertex first.
+
+    `read(addr, n) -> bytes|None`, so this is drivable from a fake memory and is
+    tested that way -- no client, no ReadProcessMemory, no vault.
+
+    `rec` is the 28 bytes `agtrack_fence` already fetched, so vertex 0 and the
+    head pointer cost NOTHING here. `sep` and `async_ptr` come from
+    `gate1_read`; `now` is the agent's own world clock, the same one the
+    appender stamps a node with (0x006058A5 reads it at
+    `[AgTrack + world*0x64 - 0x84]`, which is AGBASE + 0x148 + world*0x64).
+
+    GATED ON `sep > gate`. Above 250 u and nowhere else -- see HIST_SEP_GATE.
+    A sample below the gate is `not-attempted:below-gate`, which is a THIRD
+    thing again on this file's usual rule: not a chain we read, not a chain we
+    failed to read, and emphatically not an empty one.
+
+    `max_nodes` and `gate` default to None and are resolved HERE rather than in
+    the signature, because a default argument is bound at import: written
+    `gate=HIST_SEP_GATE` the module constant is a copy, and rebinding
+    `movetap.HIST_SEP_GATE` afterwards would change nothing while appearing to.
+    THE CLAIM ABOUT WHICH CHECK PROVES THIS WAS WRONG, and it is corrected
+    here: `test_movesync.py`'s three section-17 controls pass the parameters
+    EXPLICITLY, so they stayed green when this was moved back into the
+    signature. What proves it is section 13's own rebinding control, which
+    moves the module global and calls this function WITHOUT the argument.
+    """
+    if max_nodes is None:
+        max_nodes = HIST_MAX_NODES
+    if gate is None:
+        gate = HIST_SEP_GATE
+    if rec is None or len(rec) < STATE_STRIDE:
+        return _hist_blank("not-attempted:no-state-record")
+    if sep is None:
+        # gate 1 refused, so we do not know whether the gate would have fired.
+        # Reading the chain anyway would spend the budget exactly where the
+        # answer cannot be used.
+        return _hist_blank("not-attempted:sep-unread")
+    if not (sep > gate):
+        return _hist_blank("not-attempted:below-gate")
+
+    out = _hist_blank("no-attempt")
+    out["hist_seed"] = [round(f32(rec, S_HIST_POINT), 2),
+                        round(f32(rec, S_HIST_POINT + 4), 2),
+                        i32(rec, S_HIST_POINT + 8), i32(rec, S_HIST_POINT + 12)]
+    out["hist_seed_at"] = i32(rec, S_HIST_AT)
+    # BOTH COPIES' OWN PLANE WORDS, at every chain sample. Without the pair,
+    # grant #37 -- the only case separating "the plane echo CAUSES snaps" from
+    # "the plane echo PERMITS them" -- stays unadjudicable. These are the raw
+    # `agent+0x80` dwords and NOT `position_at`'s plane, which on the segment
+    # branch returns m_segmentPoint's +0x90 instead.
+    if agent_block is not None and len(agent_block) >= A_POINT + 12:
+        out["hist_sync_plane"] = i32(agent_block, A_POINT + 8)
+    if async_ptr and _ptr_plausible(async_ptr, A_POINT + 12):
+        ap = read(async_ptr + A_POINT + 8, 4)
+        out["hist_reads"] += 1
+        if ap and len(ap) >= 4:
+            out["hist_async_plane"] = i32(ap)
+
+    head = u32(rec, S_HIST_HEAD)
+    nodes = []
+    out["hist"], out["hist_n"] = nodes, 0
+    if not head:
+        # 0x00605F48/0x00605F4F arms a record as (controlled=1, head=0) and
+        # 0x006060A2/0x006060A9 clears it as (0, 0). An empty chain is a state
+        # the client really is in, not a failure, and calling it one would turn
+        # every re-arm into a fake refusal.
+        out["hist_why"] = HIST_EMPTY
+        return out
+
+    seen = set()
+    addr = head
+    prev_t = None
+    for _ in range(max_nodes):
+        if addr in seen:
+            out["hist_why"] = "unread:node-revisited"
+            return out
+        if not _ptr_plausible(addr, HIST_NODE_SPAN):
+            out["hist_why"] = "unread:node-pointer-implausible"
+            return out
+        seen.add(addr)
+        blk = read(addr, HIST_NODE_SPAN)
+        out["hist_reads"] += 1
+        if not blk or len(blk) < HIST_NODE_SPAN:
+            out["hist_why"] = "unread:node-unreadable"
+            return out
+        t = i32(blk, N_TIME)
+        # TORN-READ TEST 1: a node cannot be dated far into the future. THE
+        # TOLERANCE IS READ ORDERING AND NOTHING ELSE -- `sample()` reads `now`
+        # off the world clock before it reads any node, so an append that lands
+        # in between is legitimately ahead of it. It is NOT cross-world clock
+        # skew: the appender stamps from the agent's own world clock, the same
+        # slot `sample()` read (0x00605893 / 0x006058A5; see HIST_FUTURE_TOL_MS).
+        # That wrong ground shipped with a control fixture that could not
+        # measure it, which is a control with no referent.
+        if _s32(now - t) < -HIST_FUTURE_TOL_MS:
+            out["hist_why"] = "unread:node-time-future"
+            return out
+        # TORN-READ TEST 2: push-front means times are non-increasing down the
+        # chain. Equal is allowed -- two appends inside one millisecond are
+        # reachable when the movement command changes twice in a frame -- but a
+        # node NEWER than the one that links to it cannot happen. This is also
+        # the ONLY defence against the recycle hazard named at HIST_BLOCK_MAX:
+        # a slot re-appended under our read carries the current world clock, so
+        # it is newer than the stale parent that pointed at it.
+        if prev_t is not None and _s32(prev_t - t) < 0:
+            out["hist_why"] = "unread:node-time-inverted"
+            return out
+        prev_t = t
+        nodes.append({
+            "addr": addr, "t": t,
+            "p": [round(f32(blk, N_POINT), 2), round(f32(blk, N_POINT + 4), 2),
+                  i32(blk, N_POINT + 8), i32(blk, N_POINT + 12)],
+            "age_ms": _s32(now - t),
+        })
+        out["hist_n"] = len(nodes)
+        addr = u32(blk, N_NEXT)
+        if not addr:
+            out["hist_why"] = HIST_OK
+            return out
+    # Ran out of budget with the chain still going. NOT "ok" and not "empty":
+    # the oldest vertex we hold is not the oldest vertex there is, so "no node
+    # within MATCH_RADIUS of q" is not a conclusion this sample supports.
+    out["hist_why"] = "truncated:max-nodes"
+    return out
+
+
+def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
     """One agent snapshot plus the world clock it must be read against."""
     blk = keytap.read_handle(handle, agent_ptr, AGENT_SPAN)
     if not blk or len(blk) < AGENT_SPAN:
@@ -830,10 +1161,20 @@ def sample(handle, agbase, agent_ptr, aid=None):
     # rule as the fence: no id means no twin lookup, and that is not a failure.
     g1 = (gate1_read(rd, agbase, aid, blk)
           if aid is not None else _gate1_blank("no-agent-id-passed"))
+    # REALFIX-I1. Last, because it needs both of the above: the record for the
+    # head pointer and vertex 0 (already fetched -- free), and gate 1's `sep`
+    # for the gate and its `async_ptr` for the twin's plane word. The record
+    # comes back from `agtrack_fence` as hex, which is the form that goes in the
+    # file; decoding it here costs nothing and beats a second read of memory
+    # that has moved on since.
+    hist = history_chain(
+        rd, bytes.fromhex(fence["state_record"]) if fence["state_record"] else None,
+        g1["sep"], g1["async_ptr"], blk, now, gate=hist_gate)
     return {
         "now": now, "stop": i32(blk, A_STOP), "updated": updated,
         **fence,
         **g1,
+        **hist,
         **early_outs(blk),
         "flags": flags,
         "in_world": bool(flags & FLAG_IN_WORLD),
@@ -881,7 +1222,45 @@ def sample(handle, agbase, agent_ptr, aid=None):
 # ORIGIN, where hypot(sx-ay, sy-ax), hypot(ax, ay) and hypot(sx+ax, sy+ay) all
 # equal the right answer (section 10, 35 -> 38). Read off the run, not
 # predicted: 6+1+1+0+28+13+14+15+22+38+13+7.
-SELFTEST_FLOOR = 158
+# 158 -> 202 on 2026-08-21 with REALFIX-I1. Section 5 grew 28 -> 44 with the
+# sixteen node-layout displacements read out of the appender, its allocator and
+# the walker; section 12 grew 7 -> 8 (sample() must actually CALL
+# history_chain -- eight blank keys spliced from nowhere look identical in the
+# file); section 9's wiring table grew 22 -> 25 with the three rows that keep
+# REALFIX-I1's OUTPUT alive (`chain_cost` priced, `print_hist_summary` called
+# with its own three tallies, `hist_why` tallied at all), because an
+# output-only obligation is the class this file has already watched go missing
+# green twice; and section 13 is the new 28-check walk over a synthetic chain.
+# Read off the run, not predicted: 6+1+1+0+44+13+14+15+25+38+13+8+28.
+# 206 -> 230 on 2026-08-21 after a verifier lane re-derived the node layout from
+# the binary and a mutation lane opened 36 holes in this file and watched ten of
+# them stay green. The layout SURVIVED; what did not was the prose around it and
+# three fixtures that could not express the failure they named. Section 3 grew
+# 1 -> 2 (movetap must take no third-party import -- `import pefile` was planted
+# at the top of this file and the whole affected set stayed green, on a machine
+# where pefile happens to be installed). Section 5 grew 44 -> 50 with the recycle
+# OPERAND (the comment beside it named the wrong node), the two SEVER sites and
+# the block span that make "a chain cannot dangle into a recycled block" a
+# byte-level fact rather than an argument, and the COFF Characteristics word
+# PTR_MAX's ceiling rests on. Section 9 grew 25 -> 26: main() must PRINT the
+# chain cost, not merely call `chain_cost` -- a mutation kept the call, threw the
+# result away and ran 206/206. Section 13 grew 28 -> 44: a short read (the
+# `len(blk) <` half of its own refusal was unreachable), the sync copy's plane
+# word (the fixture's plane and w were both 0, so the two dwords were
+# interchangeable), a legitimate allocation above the 2 GB line (the old ceiling
+# case planted its head AT the constant and refused whatever it was), the
+# module-global rebinding control the landing commit wrongly credited to
+# test_movesync's section 17, the recycle hazard modelled end to end, the
+# future-tolerance bound pinned from both sides on its REAL ground, the read
+# budget itself, and six checks that read print_hist_summary's and
+# chain_cost_line's OUTPUT back out of stdout.
+# 230 -> 231: the future-tolerance block's own first draft wrote every case
+# as HIST_FUTURE_TOL_MS +/- 1, so all three scaled WITH the constant and
+# widening 250 back to 2500 ran green -- the self-referential defect this
+# round was closing, reproduced inside the fix for it. A FIXED 400 ms case
+# pins the tolerance into [40, 400).
+# Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+45.
+SELFTEST_FLOOR = 231
 
 
 def _say_check(ok, text):
@@ -929,6 +1308,29 @@ def selftest():
           f"nothing else. AgentView's +0x9C is the 0xDB type tag while AgAgent's "
           f"+0x9C is m_targetPoint.x, so resolving an agent through agentprobe's "
           f"array would pass a CHARACTER check on the wrong object")
+    # AND THIS MODULE TAKES NO THIRD-PARTY IMPORT. CLAUDE.md carve-out (1)
+    # scopes capstone/pefile to msghandler.py and codescan.py; movetap is
+    # neither, its reader is pure ctypes, and it has to load on a bare machine.
+    # NOTHING CHECKED THIS until 2026-08-21: `import pefile` was planted at the
+    # top of this file and movetap --selftest, test_srclint and test_bareimport
+    # were all green, because both packages happen to be installed on the
+    # machine that would have caught it. The pattern is lifted from
+    # test_worldmap.py's own guard. Asked of the tree for the same reason as
+    # above: a grep matches the grep's own literal.
+    imported = set()
+    for nd in ast.walk(ast.parse(src)):
+        if isinstance(nd, ast.Import):
+            imported |= {al.name.split(".")[0] for al in nd.names}
+        elif isinstance(nd, ast.ImportFrom) and nd.module:
+            imported.add(nd.module.split(".")[0])
+    banned = imported & {"capstone", "pefile", "PIL", "numpy"}
+    ok = not banned
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and movetap takes NO third-party "
+          f"import ({'clean' if ok else 'FOUND ' + str(sorted(banned))}) -- "
+          f"carve-out (1) names two files and this is not one of them; the "
+          f"reader is ctypes and must run on a bare machine")
     print("\n4. a client is present?")
     pids = agentprobe.gw_pids()
     print(f"   {'yes, pid(s) ' + str(pids) if pids else 'no Gw.exe running -- '
@@ -937,7 +1339,8 @@ def selftest():
     for section in (_selftest_fence_bytes, _selftest_fence_refuses,
                     _selftest_fence_verdict, _selftest_episodes,
                     _selftest_flip_denominator, _selftest_gate1,
-                    _selftest_early_outs, _selftest_naming):
+                    _selftest_early_outs, _selftest_naming,
+                    _selftest_chain):
         got = section()
         bad += got[0]
         ran += got[1]
@@ -987,6 +1390,20 @@ def _pe_sections(buf):
         vsz, va, rsz, raw = struct.unpack_from("<IIII", buf, o + 8)
         out.append((imgbase + va, max(vsz, rsz), raw))
     return imgbase, out
+
+
+IMAGE_FILE_LARGE_ADDRESS_AWARE = 0x0020
+
+
+def _pe_characteristics(buf):
+    """The COFF Characteristics word. Stdlib, same 16 lines as _pe_sections.
+
+    PTR_MAX's comment asserts this image is LARGE_ADDRESS_AWARE and therefore
+    that a 0x7FFF0000 ceiling would refuse legitimate allocations. That was
+    prose. This is the word itself.
+    """
+    pe = struct.unpack_from("<I", buf, 0x3C)[0]
+    return struct.unpack_from("<H", buf, pe + 22)[0]
 
 
 def _bytes_at(buf, secs, va, n):
@@ -1104,15 +1521,114 @@ def _fence_byte_cases():
         ("A_VEL (the integrator)", 0x005FFBAD,
          _modrm_disp(0xD9, eax << 3, esi, A_VEL),
          "fld dword[esi+vel.x] -- the velocity it integrates with"),
+
+        # --- REALFIX-I1's node layout, encoded FROM the constants ------------
+        # The committed comment at S_HIST_HEAD used to assert that only +0x00
+        # and +0x04 of the RECORD were ever touched. These cases are why that
+        # sentence is gone: the appender writes the record's own point and the
+        # walker reads it back as the polyline's first vertex, and both are
+        # here as bytes rather than as a claim.
+        ("HIST_NODE_STRIDE", 0x00604DBD,
+         b"\x6b\xc1" + bytes([HIST_NODE_STRIDE]),
+         f"imul eax,ecx,0x{HIST_NODE_STRIDE:X} -- the allocator's own stride, "
+         f"so a node is {HIST_NODE_STRIDE} bytes and not the 0x1C of a record"),
+        ("N_TIME", 0x00604DCC,
+         (b"\x89\x08" if N_TIME == 0
+          else b"\x89\x48" + bytes([N_TIME])),
+         "mov [eax],ecx in the allocator -- the node's time comes from the "
+         "argument the appender passed, and mod=00 IS the proof it is at +0x00"),
+        ("N_NEXT (allocator nulls it)", 0x00604DCE,
+         b"\xc7\x40" + bytes([N_NEXT]) + b"\x00\x00\x00\x00",
+         "mov dword[eax+next],0 -- so the FIRST node of a chain keeps next=0 "
+         "and THE TERMINATOR IS NULL"),
+        ("N_NEXT (push-front)", 0x00605A5D,
+         _modrm_disp(0x89, 1 << 3, 2, N_NEXT),
+         "mov [edx+next],ecx where ecx was [record+head] -- the new node points "
+         "at the OLD head, so +0x04 walks from newest to oldest"),
+        ("N_POINT.x", 0x00605A63, _modrm_disp(0x89, 1 << 3, 2, N_POINT),
+         "mov [edx+point.x],ecx -- the first of the four dwords"),
+        ("N_POINT.plane", 0x00605A6F,
+         _modrm_disp(0x89, 1 << 3, 2, N_POINT + 8),
+         "mov [edx+point.plane],ecx -- the PLANE WORD, which is the whole of "
+         "why REALFIX-I1 exists"),
+        ("N_POINT.w", 0x00605A75, _modrm_disp(0x89, eax << 3, 2, N_POINT + 12),
+         "mov [edx+point.w],eax -- the fourth dword, so the point is 0x10 wide"),
+        ("HIST_BLOCK_MAX", 0x00604BD0,
+         b"\x81\x3f" + struct.pack("<I", HIST_BLOCK_MAX),
+         f"cmp dword[edi],0x{HIST_BLOCK_MAX:X} -- a block holds at most "
+         f"{HIST_BLOCK_MAX} nodes"),
+        ("HIST_BLOCK_RECYCLE_MS", 0x00604C03,
+         b"\x81\xf9" + struct.pack("<I", HIST_BLOCK_RECYCLE_MS),
+         f"cmp ecx,{HIST_BLOCK_RECYCLE_MS} -- the ~5 s bound is per BLOCK, "
+         f"never per node"),
+        # THE OPERAND OF THAT COMPARE, which nothing pinned while the comment
+        # beside it named the wrong node for a day. `eax` is already
+        # count*HIST_NODE_STRIDE (0x00604BFC), so the displacement selects
+        # node index count-1 -- the NEWEST. Encoded FROM the stride: a belief
+        # that the client tests the OLDEST node would have to write +4 here.
+        ("HIST_RECYCLE_OPERAND", 0x00604BFF,
+         b"\x2b\x4c\x38" + struct.pack("<b", 4 - HIST_NODE_STRIDE),
+         f"sub ecx,[eax+edi{4 - HIST_NODE_STRIDE:+#x}] with eax = "
+         f"count*0x{HIST_NODE_STRIDE:X}: block+4+(count-1)*0x{HIST_NODE_STRIDE:X}"
+         f" is the LAST APPENDED node, so the 5 s test is on the block's NEWEST"),
+        # THE SEVER. This is the real reason a chain cannot dangle into a
+        # recycled block, and it was missing from this file entirely -- the
+        # comment argued safety from a 5 s bound instead.
+        ("HIST_SEVER_NODE", 0x00604C56,
+         b"\xc7\x40" + bytes([N_NEXT]) + b"\x00\x00\x00\x00",
+         "mov dword[eax+next],0 -- before reusing a block the client zeroes "
+         "every node NEXT pointing into it, so a stale walk sees NULL"),
+        ("HIST_BLOCK_SPAN", 0x00604C49,
+         b"\x8d\x8e" + struct.pack("<I",
+                                   HIST_NODE_STRIDE * HIST_BLOCK_MAX + 4),
+         f"lea ecx,[esi+0x{HIST_NODE_STRIDE * HIST_BLOCK_MAX + 4:X}] -- the "
+         f"sever's upper bound, and 0x{HIST_NODE_STRIDE:X}*"
+         f"0x{HIST_BLOCK_MAX:X}+4 is the block span both constants imply"),
+        ("HIST_SEVER_RECORD", 0x00604CBB,
+         b"\xc7\x42" + bytes([S_HIST_HEAD]) + b"\x00\x00\x00\x00",
+         "mov dword[edx+head],0 -- and the same pass zeroes the RECORD's head "
+         "across the array, so the record we read cannot dangle either"),
+        ("HIST_SEVER_STRIDE", 0x00604CC2,
+         b"\x83\xc2" + bytes([STATE_STRIDE]),
+         f"add edx,0x{STATE_STRIDE:X} -- the sever walks the record array at "
+         f"the SAME stride this file reads it at, which is what makes the "
+         f"array it protects the array we parse"),
+        ("HIST_NODE_AGE_MS", 0x0060593A,
+         b"\x3d" + struct.pack("<I", HIST_NODE_AGE_MS),
+         f"cmp eax,{HIST_NODE_AGE_MS} -- the head-age rule that forces a new "
+         f"node, and the 2.5 s REALFIX.md 4.4 prices the sagitta at"),
+        ("S_HIST_HEAD (the walker's entry)", 0x006056AF,
+         _modrm_disp(0x8B, esi << 3, esi, S_HIST_HEAD),
+         "mov esi,[esi+head] -- the consumer side of the same offset"),
+        ("N_NEXT (the walker's advance)", 0x00605732,
+         _modrm_disp(0x8B, esi << 3, esi, N_NEXT),
+         "mov esi,[esi+next] at the bottom of the loop, then `test esi,esi / "
+         "jne` -- null terminates, confirmed from BOTH ends of the chain"),
+        ("N_POINT (the walker's read)", 0x0060571A,
+         _modrm_disp(0x8B, eax << 3, esi, N_POINT),
+         "mov eax,[esi+point.x] with esi a NODE -- the four dwords read back"),
+        ("S_HIST_POINT (on the RECORD)", 0x0060569A,
+         _modrm_disp(0x8B, eax << 3, esi, S_HIST_POINT),
+         "mov eax,[esi+point.x] with esi the RECORD, BEFORE 0x006056AF steps "
+         "to the head -- the record's point is the polyline's vertex 0, which "
+         "the old comment said nothing touched"),
+        ("S_HIST_POINT (written)", 0x00605A0E,
+         _modrm_disp(0x89, ebx << 3, esi, S_HIST_POINT),
+         "mov [esi+point.x],ebx -- the appender caching the newest vertex on "
+         "the record itself"),
+        ("S_HIST_AT", 0x00605A25, _modrm_disp(0x89, eax << 3, esi, S_HIST_AT),
+         "mov [esi+at],eax -- record+0x18, which the old comment called "
+         "UNVERIFIED: the epoch the cached vertex is dated to"),
     ]
 
 
 def _selftest_fence_bytes():
     print("\n5. the AgTrack fence offsets, re-derived from the pinned binary")
     cases = _fence_byte_cases()
-    # +4: the STATE_STRIDE arithmetic, the two float constants read back out of
-    # the image, and the INVALID_POS bit-pattern check.
-    declared = len(cases) + 4
+    # +5: the STATE_STRIDE arithmetic, the two float constants read back out of
+    # the image, the INVALID_POS bit-pattern check, and the COFF Characteristics
+    # word PTR_MAX's ceiling rests on.
+    declared = len(cases) + 5
     try:
         path, why = pinned.find()
     except SystemExit as e:
@@ -1166,6 +1682,20 @@ def _selftest_fence_bytes():
         ran += 1
         print(f"   [{'PASS' if ok else 'FAIL'}] {name:24} 0x{va:08X} "
               f"= {got!r}, constant says {want!r}   {meaning}")
+    # PTR_MAX's CEILING, READ OUT OF THE COFF HEADER rather than asserted in a
+    # comment. If the flag is set the process address space runs to 0xFFFEFFFF
+    # under WOW64, so a 0x7FFF0000 bound would refuse real nodes silently.
+    ch = _pe_characteristics(buf)
+    laa = bool(ch & IMAGE_FILE_LARGE_ADDRESS_AWARE)
+    ok = laa and PTR_MAX > 0x7FFF0000
+    n += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] {'PTR_MAX / LARGE_ADDR':24} "
+          f"COFF Characteristics 0x{ch:04X}, "
+          f"IMAGE_FILE_LARGE_ADDRESS_AWARE {'SET' if laa else 'CLEAR'}, so the "
+          f"ceiling must sit above 0x7FFF0000 and PTR_MAX is 0x{PTR_MAX:08X} "
+          f"-- the 2 GB bound would refuse legitimate high allocations")
+
     ok = struct.unpack("<f", struct.pack("<I", INVALID_POS))[0] == math.inf
     n += not ok
     ran += 1
@@ -1995,8 +2525,39 @@ def _selftest_flip_denominator():
          "C7 and C8 measure nothing"),
         ("sample() calls agtrack_fence", bool(_calls(f_sample, "agtrack_fence")),
          "the fence lane measures nothing"),
+        # REALFIX-I1's printed obligations. All three are output-only, which is
+        # the class this arc has already watched go missing green twice:
+        # movesync's C5 printer deleted from `print_fence` and the whole
+        # section vanishing at 147/147, and five of PROBE-GATEFIRE.md 6's
+        # blocks wrong under a RECONSTRUCTION label that checked nothing.
+        ("main() prices the chain walk with `chain_cost`",
+         bool(_calls(f_main, "chain_cost")),
+         "REALFIX.md 2.4 requires the sample-rate impact to be MEASURED and "
+         "printed, not predicted -- without this call the ~+40%% figure stays "
+         "an argument in a comment"),
+        # ...AND PRINTS IT. The row above judges the CALL and nothing else,
+        # which a mutation proved by keeping the call, discarding the result
+        # and printing neither figure at 206/206 green. This one requires the
+        # cost to reach stdout: a `print(...)` whose arguments contain a
+        # `chain_cost_line(...)` call. Section 13 pins what that string SAYS.
+        ("main() PRINTS it -- `print(chain_cost_line(...))`",
+         any(any(isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                 and arg.func.id == "chain_cost_line" for arg in c.args)
+             for c in _calls(f_main, "print")),
+         "a measured cost nobody prints is the assumption it was supposed to "
+         "replace; the wiring row above keeps the CALL alive, not the OUTPUT"),
+        ("main() prints `print_hist_summary(hist_why, hist_reads, n)`",
+         any(_pos(c)[:3] == ["hist_why", "hist_reads", "n"]
+             for c in _calls(f_main, "print_hist_summary")),
+         "the refusal shares are the denominator every later claim about the "
+         "polyline rests on; a run that dropped them would still print a "
+         "confident chain"),
+        ("main() tallies `hist_why` per sample",
+         "hist_why" in tallied,
+         "an untallied vocabulary prints an empty table and reads as "
+         "\"nothing was refused\""),
     ]
-    ok = (len(rows) == 9 and None not in (f_main, f_fence, f_sample)
+    ok = (len(rows) == 13 and None not in (f_main, f_fence, f_sample)
           and len(tallied) > 0)
     bad += not ok
     ran += 1
@@ -2632,20 +3193,630 @@ def _selftest_naming():
     literal = [k.value for k in ret.value.keys
                if isinstance(k, ast.Constant) and isinstance(k.value, str)]
     groups = {"literal": literal, "fence": list(FENCE_KEYS),
-              "gate1": list(GATE1_KEYS), "early": list(EARLY_KEYS)}
+              "gate1": list(GATE1_KEYS), "early": list(EARLY_KEYS),
+              # REALFIX-I1's group, and the collision it was one character from
+              # making: the fence already ships `hist_head`, so a chain key
+              # spelled `hist_head` would have silently replaced the head
+              # pointer with something else in every stored row.
+              "hist": list(HIST_KEYS)}
     seen, dupes = set(), set()
     for keys in groups.values():
         dupes |= seen & set(keys)
         dupes |= {k for k in keys if keys.count(k) > 1}
         seen |= set(keys)
-    ok = not dupes and sum(k is None for k in ret.value.keys) == 3
+    ok = not dupes and sum(k is None for k in ret.value.keys) == 4
     bad += not ok
     ran += 1
     print(f"   [{'PASS' if ok else 'FAIL'}] the {len(seen)} fields a row "
-          f"carries are unique across all four groups "
+          f"carries are unique across all {len(groups)} groups "
           f"({', '.join(f'{g} {len(k)}' for g, k in groups.items())}) and "
-          f"sample() splices exactly 3 of them"
+          f"sample() splices exactly 4 of them"
           + (f" -- COLLIDING: {sorted(dupes)}" if dupes else ""))
+
+    # AND THE SPLICE REALLY IS THE FUNCTION'S OWN. `sample()` calling
+    # `history_chain` is what makes every I1 number a measurement of the client
+    # rather than of a fixture; a row could carry all eight `hist_*` keys from a
+    # blank and look identical in the file. Asked of the syntax tree for the
+    # same reason as the group check above -- C3's "a paraphrase that agrees
+    # with the predicate by construction" defect, one arc over.
+    calls = {nd.func.id for nd in ast.walk(fn)
+             if isinstance(nd, ast.Call) and isinstance(nd.func, ast.Name)}
+    ok = "history_chain" in calls
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and sample() actually CALLS "
+          f"history_chain (it calls {sorted(calls)}) -- eight blank hist_* "
+          f"keys spliced from nowhere would look the same in the file")
+    return bad, ran
+
+
+# --------------------------------------------------------------------------
+# 13. REALFIX-I1's WALK, DRIVEN OVER A CHAIN WE BUILT.
+#
+# No client, no vault, no ReadProcessMemory: the fixture is a bytearray and a
+# `read()` closure over it, which is the same trick sections 6 and 10 use. The
+# point is not that the parser can walk a healthy chain -- it is that every way
+# a chain can be WRONG produces a named reason and never a short chain that
+# reads as a finding. "No node within the radius of q" is the sentence that
+# revives candidate B, and a torn read produces it for free.
+# --------------------------------------------------------------------------
+CHAIN_BLOCK = 0x0B000000       # where the fixture's nodes live
+CHAIN_AGENT = 0x0C000000       # the ASYNC twin's block
+
+
+def _chain_mem(nodes, extra=None, async_plane=None, short=None):
+    """A `read(addr, n)` over a synthetic chain. -> (read, reads_list).
+
+    `nodes` is [(addr, time, x, y, plane, w, next_addr)] laid out verbatim, so a
+    test can build a chain the client could never produce -- which is the whole
+    point of the refusal cases.
+
+    `short` is {addr: bytes_to_return} and exists because WITHOUT IT THE SHORT
+    READ WAS UNREACHABLE. `history_chain` refuses on `len(blk) < HIST_NODE_SPAN`
+    as well as on `blk is None`, and every fixture here returned either a
+    full-span buffer or None -- so dropping the length half of that condition
+    and zero-padding the buffer ran green, fabricating a vertex at the origin
+    with next=0 that terminates the chain and reports `ok`. That is the exact
+    phantom the refusal vocabulary exists to prevent. (Live exposure today is
+    nil: `keytap.read_handle` returns None when ReadProcessMemory transfers
+    fewer bytes than asked -- keytap.py's `got.value != size`. The branch is a
+    contract of `history_chain`'s own `read(addr, n)` interface, which the
+    docstring advertises as drivable from any reader.)
+    """
+    mem = dict(extra or {})
+    cut = dict(short or {})
+    for addr, t, x, y, plane, w, nxt in nodes:
+        b = bytearray(HIST_NODE_SPAN)
+        struct.pack_into("<i", b, N_TIME, t)
+        struct.pack_into("<I", b, N_NEXT, nxt)
+        struct.pack_into("<ffii", b, N_POINT, x, y, plane, w)
+        mem[addr] = bytes(b)
+    if async_plane is not None:
+        mem[CHAIN_AGENT + A_POINT + 8] = struct.pack("<i", async_plane)
+    log = []
+
+    def read(addr, n):
+        log.append((addr, n))
+        got = mem.get(addr)
+        if got is None:
+            return None
+        return got[:min(n, cut[addr])] if addr in cut else got[:n]
+    return read, log
+
+
+CHAIN_AGBASE = 0x0A000000
+CHAIN_STATE_ARRAY = 0x0B100000
+CHAIN_ASYNC_ARRAY = 0x0B200000
+CHAIN_SYNC_PTR = 0x0D000000
+
+
+def _sample_mem(rec, nodes, sync, async_blk, clock=9000):
+    """A whole-sample memory: enough regions for `sample()` to run end to end.
+
+    Region-based rather than exact-address-keyed, because `gate1_read` reads
+    0x68 bytes spanning the world-0 clock, the ASYNC array pointer, its count
+    and the world-1 clock while `sample()` reads 4 bytes at the front of the
+    same span -- a dict keyed on (addr, n) cannot serve both, and pretending it
+    can is how a fixture ends up measuring itself.
+
+    -> (read, counter) where `counter` is a one-element list of read calls, so
+    the COST of the chain walk is a measurement rather than an estimate.
+    """
+    hdr = bytearray(GATE1_HDR_SPAN)
+    struct.pack_into("<i", hdr, 0, clock)
+    struct.pack_into("<I", hdr, OFF_ASYNC_ARRAY - OFF_WORLD_CLOCK,
+                     CHAIN_ASYNC_ARRAY)
+    struct.pack_into("<I", hdr, OFF_ASYNC_COUNT - OFF_WORLD_CLOCK, 64)
+    struct.pack_into("<i", hdr, OFF_WORLD1_CLOCK - OFF_WORLD_CLOCK, clock)
+    track = bytearray(T_STATE_ARRAY + 0x0C)
+    struct.pack_into("<I", track, T_ARMED_ID, 7)
+    struct.pack_into("<I", track, T_STATE_ARRAY, CHAIN_STATE_ARRAY)
+    struct.pack_into("<I", track, T_STATE_COUNT, 64)
+    regions = [
+        (CHAIN_AGBASE + OFF_WORLD_CLOCK, bytes(hdr)),
+        (CHAIN_AGBASE + OFF_AGTRACK, bytes(track)),
+        (CHAIN_STATE_ARRAY + 7 * STATE_STRIDE, rec),
+        (CHAIN_ASYNC_ARRAY + 7 * 4, struct.pack("<I", CHAIN_SYNC_PTR + 0x100000)),
+        (CHAIN_SYNC_PTR, sync),
+        (CHAIN_SYNC_PTR + 0x100000, async_blk),
+    ]
+    for addr, t, x, y, plane, w, nxt in nodes:
+        b = bytearray(HIST_NODE_SPAN)
+        struct.pack_into("<i", b, N_TIME, t)
+        struct.pack_into("<I", b, N_NEXT, nxt)
+        struct.pack_into("<ffii", b, N_POINT, x, y, plane, w)
+        regions.append((addr, bytes(b)))
+    count = [0]
+
+    def read(addr, n):
+        count[0] += 1
+        for base, blob in regions:
+            if base <= addr and addr + n <= base + len(blob):
+                return blob[addr - base:addr - base + n]
+        return None
+    return read, count
+
+
+def _chain_record(head, point=(11.0, 22.0, 18, 0), at=1000):
+    """The 28-byte AgTrack record: controlled, head, the cached vertex, its epoch."""
+    b = bytearray(STATE_STRIDE)
+    struct.pack_into("<I", b, S_CONTROLLED, 1)
+    struct.pack_into("<I", b, S_HIST_HEAD, head)
+    struct.pack_into("<ffii", b, S_HIST_POINT, point[0], point[1], point[2],
+                     point[3])
+    struct.pack_into("<i", b, S_HIST_AT, at)
+    return bytes(b)
+
+
+def _straight_chain(n, first=CHAIN_BLOCK + 4, t0=9000, dt=300):
+    """n nodes, push-front order (newest first), null-terminated."""
+    out = []
+    for i in range(n):
+        addr = first + i * HIST_NODE_STRIDE
+        nxt = 0 if i == n - 1 else first + (i + 1) * HIST_NODE_STRIDE
+        out.append((addr, t0 - i * dt, 100.0 * i, 200.0 * i, 18 if i else 0,
+                    0, nxt))
+    return out
+
+
+def _selftest_chain():
+    """13. the history-chain walk refuses rather than returning a short chain."""
+    import contextlib
+    import io
+    print("\n13. REALFIX-I1: the history chain, and every way it can refuse")
+    bad = ran = 0
+    NOW = 9000
+    # THE SYNC AGENT'S PLANE IS 19 AND ITS W WORD IS 77, and neither is an
+    # accident. This fixture used to be `_fake_agent(7, plane=0)`, where the
+    # plane dword and the w dword beside it were BOTH zero -- so reading
+    # A_POINT+12 instead of A_POINT+8 was invisible, and that is the half of
+    # the pair grant #37 turns on. Three distinct values (sync 19, w 77, async
+    # 3) make every substitution nameable.
+    _ag = bytearray(_fake_agent(7, plane=19))
+    struct.pack_into("<i", _ag, A_POINT + 12, 77)
+    AGENT = bytes(_ag)
+
+    def run(nodes, rec, sep=400.0, async_ptr=CHAIN_AGENT, extra=None,
+            async_plane=3, gate=HIST_SEP_GATE, agent=AGENT, short=None):
+        read, log = _chain_mem(nodes, extra, async_plane, short)
+        return history_chain(read, rec, sep, async_ptr, agent, NOW,
+                             gate=gate), log
+
+    def case(what, got, want_why, want_n, why_it_matters=""):
+        nonlocal bad, ran
+        ok = (got["hist_why"] == want_why
+              and (got["hist_n"] == want_n)
+              and set(got) == set(HIST_KEYS))
+        bad += not ok
+        ran += 1
+        print(f"   [{'PASS' if ok else 'FAIL'}] {what}\n"
+              f"          -> {got['hist_why']} / n={got['hist_n']}"
+              + ("" if ok else f"   WANTED {want_why} / n={want_n}")
+              + (f"\n          {why_it_matters}" if why_it_matters and not ok
+                 else ""))
+        return got
+
+    # --- the healthy walk -------------------------------------------------
+    good, log = run(_straight_chain(4), _chain_record(CHAIN_BLOCK + 4))
+    case("a 4-node chain walks to its null terminator", good, HIST_OK, 4)
+    want = [{"addr": CHAIN_BLOCK + 4 + i * HIST_NODE_STRIDE,
+             "t": 9000 - i * 300,
+             "p": [round(100.0 * i, 2), round(200.0 * i, 2), 18 if i else 0, 0],
+             "age_ms": i * 300} for i in range(4)]
+    ok = good["hist"] == want
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and every node carries its ADDRESS, "
+          f"its +0x00 time, its age, and the four-dword point INCLUDING the "
+          f"plane word -- {(good['hist'] or [])[:1]}...")
+    ok = (good["hist_seed"] == [11.0, 22.0, 18, 0] and good["hist_seed_at"] == 1000)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] the RECORD's own cached vertex is "
+          f"decoded too ({good['hist_seed']} at {good['hist_seed_at']}) -- it "
+          f"is the polyline's vertex 0 (0x0060569A reads it before 0x006056AF "
+          f"steps to the head) and it costs no read at all")
+    ok = (good["hist_sync_plane"] == 19 and good["hist_async_plane"] == 3)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] BOTH copies' own +0x80 plane words "
+          f"are recorded (sync {good['hist_sync_plane']}, async "
+          f"{good['hist_async_plane']}) -- without the pair, grant #37 stays "
+          f"unadjudicable, and that grant is the whole of 'causes' vs 'permits'")
+    ok = (good["hist_sync_plane"] == i32(AGENT, A_POINT + 8) == 19
+          and i32(AGENT, A_POINT + 12) == 77
+          and good["hist_sync_plane"] != i32(AGENT, A_POINT + 12)
+          and good["hist_sync_plane"] != good["hist_async_plane"])
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the SYNC read really is the "
+          f"plane word at +0x{A_POINT + 8:X} and not the w word at "
+          f"+0x{A_POINT + 12:X} beside it ({i32(AGENT, A_POINT + 8)} vs "
+          f"{i32(AGENT, A_POINT + 12)}, async {good['hist_async_plane']}) -- "
+          f"all three distinct, so no substitution reads as agreement")
+    ok = (good["hist_reads"] == 5 and len(log) == 5
+          and log[0] == (CHAIN_AGENT + A_POINT + 8, 4))
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and it spent exactly "
+          f"{good['hist_reads']} read(s): one per node plus one 4-byte read for "
+          f"the twin's plane. The budget is the whole reason for the gate, so "
+          f"it is asserted rather than assumed")
+
+    # --- the gate ---------------------------------------------------------
+    below, log = run(_straight_chain(4), _chain_record(CHAIN_BLOCK + 4),
+                     sep=HIST_SEP_GATE)
+    case(f"exactly at the gate ({HIST_SEP_GATE:.0f} u) is BELOW it",
+         below, "not-attempted:below-gate", None)
+    ok = not log
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and NO read was issued at all "
+          f"({len(log)}) -- the gate is a design requirement, not a filter on "
+          f"the output: 8 unconditional node reads is ~+40% of a sample and "
+          f"would fight REALFIX-T3's residual budget")
+    ok = HIST_SEP_GATE < GATE1_CUT - GATE1_BAND
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the gate ({HIST_SEP_GATE:.0f} u) "
+          f"sits below the bottom of GATE1_BAND "
+          f"({GATE1_CUT - GATE1_BAND:.0f} u), so no sample that could ever be "
+          f"classified `above` is skipped by it")
+    case("gate 1 could not read `sep`, so the walk does not guess",
+         run(_straight_chain(4), _chain_record(CHAIN_BLOCK + 4), sep=None)[0],
+         "not-attempted:sep-unread", None)
+    case("no state record is a THIRD thing, not an empty chain",
+         run(_straight_chain(4), None)[0],
+         "not-attempted:no-state-record", None)
+
+    # --- a real empty chain -----------------------------------------------
+    empty = case("head == 0 is EMPTY, which is a state the client is really in",
+                 run([], _chain_record(0))[0], HIST_EMPTY, 0)
+    ok = empty["hist"] == [] and hist_is_complete(empty["hist_why"])
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and it counts as COMPLETE -- "
+          f"0x00605F48/0x00605F4F arms a record as (1, 0) and "
+          f"0x006060A2/0x006060A9 clears it as (0, 0), so calling a re-arm a "
+          f"failure would manufacture a refusal on every one of them")
+
+    # --- the refusals -----------------------------------------------------
+    long_chain = _straight_chain(HIST_MAX_NODES + 3)
+    trunc = case(f"a chain longer than N={HIST_MAX_NODES} is TRUNCATED, not ok",
+                 run(long_chain, _chain_record(CHAIN_BLOCK + 4))[0],
+                 "truncated:max-nodes", HIST_MAX_NODES)
+    ok = (not hist_is_complete(trunc["hist_why"])
+          and len(trunc["hist"] or []) == HIST_MAX_NODES)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the {len(trunc['hist'] or [])} nodes "
+          f"it did read are kept while the reason says the walk is incomplete "
+          f"-- the oldest vertex held is not the oldest there is, so \"no node "
+          f"within the radius\" is not a conclusion this sample supports")
+
+    # THE CEILING CASE USED TO PLANT ITS HEAD AT PTR_MAX, so it refused whatever
+    # PTR_MAX was and could not tell 0xFFFF0000 from 0x7FFF0000 -- a check that
+    # cannot fail. It now uses a FIXED literal above any plausible ceiling, and
+    # the case under it walks a chain in the 2-4 GB band that a non-LARGE-
+    # ADDRESS-AWARE bound would wrongly refuse.
+    HIGH_BAD = 0xFFFFF000
+    for what, head, nodes in (
+            ("a head in the 64 KB null-guard region", 0x400,
+             [(0x400, NOW, 0.0, 0.0, 0, 0, 0)]),
+            (f"a head at 0x{HIGH_BAD:08X}, above any ceiling", HIGH_BAD,
+             [(HIGH_BAD, NOW, 0.0, 0.0, 0, 0, 0)]),
+            ("an unaligned head (nodes are block+4+i*0x2C, always 4-aligned)",
+             CHAIN_BLOCK + 5, [(CHAIN_BLOCK + 5, NOW, 0.0, 0.0, 0, 0, 0)])):
+        case(what, run(nodes, _chain_record(head))[0],
+             "unread:node-pointer-implausible", 0)
+
+    HIGH_OK = 0x90000000
+    high = case(f"but a chain at 0x{HIGH_OK:08X} -- above the 2 GB line -- is "
+                f"WALKED, not refused",
+                run(_straight_chain(2, first=HIGH_OK),
+                    _chain_record(HIGH_OK))[0], HIST_OK, 2)
+    ok = high["hist"] and high["hist"][0]["addr"] == HIGH_OK
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and it really read node 0 at "
+          f"0x{HIGH_OK:08X} -- Gw.exe's COFF Characteristics carry "
+          f"IMAGE_FILE_LARGE_ADDRESS_AWARE (section 5 reads the word), so a "
+          f"0x7FFF0000 ceiling would silently refuse legitimate allocations "
+          f"while every fixture that plants its head AT the constant stays "
+          f"green. PTR_MAX is 0x{PTR_MAX:08X}")
+
+    case("a node the reader cannot fetch",
+         run([], _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-unreadable", 0)
+    # THE OTHER HALF OF THAT REFUSAL, and it was unreachable until 2026-08-21.
+    # `not blk` and `len(blk) < HIST_NODE_SPAN` are two conditions; every
+    # fixture here could only produce the first. Dropping the length half and
+    # zero-padding the buffer ran 206/206 green while fabricating a vertex at
+    # (0, 0, 0, 0) with next=0 -- an `ok` chain that terminates on a node the
+    # client never wrote.
+    short = case(f"a node read that comes back SHORT (12 of "
+                 f"{HIST_NODE_SPAN} bytes) is unreadable, not zero-padded",
+                 run(_straight_chain(3), _chain_record(CHAIN_BLOCK + 4),
+                     short={CHAIN_BLOCK + 4 + HIST_NODE_STRIDE: 12})[0],
+                 "unread:node-unreadable", 1)
+    ok = len(short["hist"] or []) == 1 and short["hist"][0]["t"] == 9000
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the node ABOVE the short read "
+          f"survives ({short['hist_n']} of 3, t="
+          f"{(short['hist'] or [{}])[0].get('t')}) -- a partial transfer is a "
+          f"refusal, and a padded one would read as a real vertex at the origin")
+    # The SECOND node fails: a partial walk must keep what it read and still
+    # refuse, which is the case a blank-on-failure would silently zero.
+    partial = _straight_chain(3)
+    part = case("a node that fails PART WAY down keeps the nodes above it",
+                run(partial[:1], _chain_record(CHAIN_BLOCK + 4))[0],
+                "unread:node-unreadable", 1)
+    ok = part["hist"] and part["hist"][0]["addr"] == CHAIN_BLOCK + 4
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and node 0 survives in the row "
+          f"({part['hist_n']} of 3) -- a real measurement is not wiped by a "
+          f"later failure, it is labelled by one")
+
+    cyc = _straight_chain(2)
+    cyc[1] = (cyc[1][0], cyc[1][1], 0.0, 0.0, 0, 0, cyc[0][0])
+    case("a cycle terminates the walk instead of spinning",
+         run(cyc, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-revisited", 2)
+
+    inv = _straight_chain(3)
+    inv[1] = (inv[1][0], inv[0][1] + 1, 0.0, 0.0, 0, 0, inv[1][6])
+    case("a node NEWER than the node linking to it is a torn read",
+         run(inv, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-time-inverted", 1)
+
+    # THE RECYCLE HAZARD, MODELLED. A read of a parent's `next` that lands
+    # before the client severs the block, with the target read landing after the
+    # slot has been re-appended, yields ANOTHER AGENT'S node under our agent's
+    # id -- the pool is shared and 0x00604CF9 resets only the block's count, so
+    # the bytes are live rather than zeroed. The re-appended slot carries the
+    # CURRENT world clock, which is newer than the stale parent that points at
+    # it, so torn-read test 2 is what catches it. This is the only defence, and
+    # it is a real one; the residual window is a re-append landing in the same
+    # millisecond as the parent's own stamp, which this walk cannot see.
+    # The parent was appended a second ago (t0 = NOW-1000, which is what a real
+    # chain looks like); the slot below it has been re-appended just now and
+    # carries a stranger's point.
+    recyc = _straight_chain(3, t0=NOW - 1000)
+    recyc[1] = (recyc[1][0], NOW, 500.0, 600.0, 4, 0, recyc[1][6])
+    case("a node re-appended under the read (the recycle hazard) is caught as "
+         "a torn read, not attributed to our agent",
+         run(recyc, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-time-inverted", 1)
+
+    fut = _straight_chain(2)
+    fut[0] = (fut[0][0], NOW + HIST_FUTURE_TOL_MS + 1, 0.0, 0.0, 0, 0,
+              fut[0][6])
+    case(f"a node dated more than {HIST_FUTURE_TOL_MS} ms into the future is a "
+         f"torn read", run(fut, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-time-future", 0)
+
+    # AND THE TOLERANCE IS PINNED FROM BOTH SIDES. Its ground used to be named
+    # as "world-0/world-1 clock skew" with a 40 ms control beside it -- a
+    # control with no referent, because `sample()` and the appender read the
+    # SAME world clock (0x00605893 / 0x006058A5 vs A_WORLD; see
+    # HIST_FUTURE_TOL_MS). The real ground is read ordering: the clock is read
+    # before the nodes, so an append in between is legitimately ahead. With the
+    # case above and these two the constant cannot move without reddening.
+    # AND TWO OF THE THREE ARE FIXED LITERALS, WHICH IS THE WHOLE POINT. The
+    # first draft of this block wrote every case as `HIST_FUTURE_TOL_MS + 1` and
+    # `HIST_FUTURE_TOL_MS - 1`, so all of them scaled WITH the constant and
+    # widening 250 back to 2500 ran green -- the same self-referential defect
+    # this section was written to close in the PTR_MAX case, reproduced inside
+    # the fix for it. 40 and 400 do not move: together they pin the tolerance
+    # into [40, 400), and only the boundary pair below is relative.
+    for lag, want, n_want, why in (
+            (40, HIST_OK, 2, "one reader-latency's worth of append lag"),
+            (HIST_FUTURE_TOL_MS - 1, HIST_OK, 2, "and right up to the bound")):
+        lagged = _straight_chain(2)
+        lagged[0] = (lagged[0][0], NOW + lag, 0.0, 0.0, 0, 0, lagged[0][6])
+        case(f"but {lag} ms ahead does NOT redden -- {why}",
+             run(lagged, _chain_record(CHAIN_BLOCK + 4))[0], want, n_want)
+    wide = _straight_chain(2)
+    wide[0] = (wide[0][0], NOW + 400, 0.0, 0.0, 0, 0, wide[0][6])
+    case("and a FIXED 400 ms ahead still refuses -- the bound is a sample "
+         "latency, not the client's 2500 ms head-age rule it was borrowed from",
+         run(wide, _chain_record(CHAIN_BLOCK + 4))[0],
+         "unread:node-time-future", 0)
+
+    # --- the mirror of section 6's rule -----------------------------------
+    fails = [run(n, _chain_record(h))[0] for h, n in (
+        (0x400, [(0x400, NOW, 0.0, 0.0, 0, 0, 0)]),
+        (CHAIN_BLOCK + 4, []),
+        (CHAIN_BLOCK + 4, cyc),
+        (CHAIN_BLOCK + 4, inv),
+        (CHAIN_BLOCK + 4, fut),
+        (CHAIN_BLOCK + 4, long_chain))]
+    ok = all(not hist_is_complete(f["hist_why"]) for f in fails)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] none of the {len(fails)} failure "
+          f"modes reports a COMPLETE walk -- a short chain and a refused chain "
+          f"are indistinguishable downstream unless the row says which, and "
+          f"the refused one is exactly the shape that revives candidate B")
+    ok = all(f["hist_why"].startswith(("unread:", "truncated:"))
+             and set(f) == set(HIST_KEYS) for f in fails)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] ...and each names its reason in the "
+          f"`unread:`/`truncated:` vocabulary, with the full key set intact -- "
+          f"never a silent null, never a missing field")
+
+    # --- THE MODULE GLOBALS REALLY ARE RESOLVED IN THE BODY ----------------
+    # `history_chain` takes `max_nodes=None, gate=None` and resolves both from
+    # the module globals INSIDE the function. The commit that landed it said
+    # the three section-17 controls in test_movesync depended on that; they do
+    # not -- they pass both parameters explicitly and stayed green when the
+    # defaults were moved back into the signature. This is the control that
+    # actually proves it: rebind the global and call WITHOUT the argument, the
+    # way an operator or a later control would.
+    g = globals()
+    keep = (g["HIST_MAX_NODES"], g["HIST_SEP_GATE"])
+    try:
+        g["HIST_MAX_NODES"] = 2
+        read, _log = _chain_mem(_straight_chain(5), None, 3)
+        bound = history_chain(read, _chain_record(CHAIN_BLOCK + 4), 400.0,
+                              CHAIN_AGENT, AGENT, NOW)
+        g["HIST_MAX_NODES"] = keep[0]
+        g["HIST_SEP_GATE"] = 1.0e9
+        read, _log = _chain_mem(_straight_chain(3), None, 3)
+        shut = history_chain(read, _chain_record(CHAIN_BLOCK + 4), 400.0,
+                             CHAIN_AGENT, AGENT, NOW)
+    finally:
+        g["HIST_MAX_NODES"], g["HIST_SEP_GATE"] = keep
+    ok = (bound["hist_why"] == "truncated:max-nodes" and bound["hist_n"] == 2
+          and shut["hist_why"] == "not-attempted:below-gate")
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] both bounds are read from the "
+          f"MODULE at call time, not bound at import: with HIST_MAX_NODES "
+          f"moved to 2 a 5-node chain is {bound['hist_why']} at n="
+          f"{bound['hist_n']}, and with HIST_SEP_GATE moved to 1e9 a 400 u "
+          f"sample is {shut['hist_why']} -- as signature defaults both moves "
+          f"are silently ignored, which is a control that appears to work")
+    ok = (HIST_MAX_NODES, HIST_SEP_GATE) == keep
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] ...and the control RESTORED them "
+          f"({HIST_MAX_NODES}, {HIST_SEP_GATE:.0f}) -- a fixture that leaks a "
+          f"rebound global turns every later section into a different test")
+
+    # --- THE READ BUDGET THE WHOLE GATE ARGUMENT IS PRICED IN -------------
+    ok = (HIST_NODE_SPAN == N_POINT + 16 and HIST_NODE_SPAN <= HIST_NODE_STRIDE
+          and HIST_NODE_SPAN == 0x18)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] HIST_NODE_SPAN is "
+          f"0x{HIST_NODE_SPAN:X} = N_POINT + 16, the last dword this walk "
+          f"reads, and fits inside the 0x{HIST_NODE_STRIDE:X} stride -- it is "
+          f"OUR budget rather than a client constant, so no fence byte anchors "
+          f"it and both fixtures size themselves FROM it; widening it costs "
+          f"every node read and nothing else would notice")
+
+    # --- THE REPORT ITSELF, READ BACK OUT OF STDOUT -----------------------
+    # The section-9 wiring rows ask whether main() CALLS print_hist_summary.
+    # That is not the same as its printing anything: gutting the body to a bare
+    # `return`, and separately deleting the refusal warning, both ran 206/206
+    # green. This is movesync's `_selftest_print_fence` idiom -- capture the
+    # real output and require the numbers a reader acts on to be in it.
+    tally = {"not-attempted:below-gate": 60, HIST_OK: 25,
+             "truncated:max-nodes": 9, "unread:node-time-inverted": 6}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_hist_summary(tally, 240, 100)
+    text = buf.getvalue()
+    ok = ("walked on 40 of 100" in text and "40.0%" in text
+          and "25 complete" in text and "2.40 per sample" in text)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] print_hist_summary prints the "
+          f"denominator: 40 of 100 walked, 25 complete, 2.40 reads/sample "
+          f"-- attempted EXCLUDES `not-attempted:*` and complete excludes the "
+          f"truncation, so the three numbers are all different by construction")
+    present = [w for w in tally if w in text]
+    ok = (len(present) == len(tally)
+          and all(f"{100.0 * c / 100:5.1f}%" in text for c in tally.values()))
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and every reason in the vocabulary "
+          f"gets its own row with its own share ({len(present)} of "
+          f"{len(tally)} present) -- the shares are over n, not over the "
+          f"attempted subset, and all four differ")
+    ok = ("6 refusal(s) and 9 truncation(s)" in text
+          and "Do not pool them" in text)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the REFUSAL WARNING fires with "
+          f"its own counts -- \"6 refusal(s) and 9 truncation(s) ... Do not "
+          f"pool them\". Deleting that sentence is what turns a refused walk "
+          f"into \"no node near q\", which is the reading candidate B lives on")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_hist_summary({HIST_OK: 5}, 40, 5)
+    clean = buf.getvalue()
+    ok = "Do not pool them" not in clean and "walked on 5 of 5" in clean
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] ...and it does NOT fire on a run "
+          f"with nothing refused -- a warning that always prints is not a "
+          f"warning, it is a footer")
+
+    # --- AND main()'s TWO Hz FIGURES, WHICH ARE ALSO OUTPUT-ONLY ----------
+    line = chain_cost_line((13.1, 6.9), 40)
+    ok = ("13.1 Hz" in line and "6.9 Hz" in line and "-47%" in line
+          and f"sep > {HIST_SEP_GATE:.0f} u" in line and "2 x 40" in line)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] chain_cost_line prints BOTH "
+          f"figures and the delta: {line[:78]}... -- a mutation that kept the "
+          f"`chain_cost` call, discarded the result and printed nothing ran "
+          f"green against the wiring row, which judges the CALL")
+    none_line = chain_cost_line(None, 40)
+    ok = "UNMEASURED" in none_line
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and a run that could not price it "
+          f"says UNMEASURED rather than printing nothing -- a missing line "
+          f"reads as a run that did not need one")
+
+    # --- THE COST, MEASURED THROUGH `sample()` ITSELF ---------------------
+    # REALFIX.md section 2.4 argues the gate from "a full sample is ~20
+    # ReadProcessMemory calls; 8 unconditional node reads is ~+40%". The first
+    # half of that was never measured. This drives the REAL `sample()` over a
+    # whole-sample fake memory and counts the reads, with the gate at its
+    # shipped value and with it forced open -- so the multiplier is a number
+    # this file produces rather than one a comment asserts. (The Hz cost is a
+    # different quantity, needs a client, and is what `chain_cost()` measures
+    # before every run for main() to print.)
+    full = _straight_chain(HIST_MAX_NODES)
+    sync = _fake_agent(7, plane=0, point=(0.0, 0.0))
+    # The ONLY difference between the two runs is where the ASYNC twin stands:
+    # 100 u apart is below the gate, 4,000 u apart is above it. Same code path,
+    # same shipped gate, no flag -- so the delta is the chain walk and nothing
+    # else. Forcing the gate open instead would measure a configuration the run
+    # never uses.
+    costs = {}
+    old_read = keytap.read_handle
+    try:
+        for label, dx in (("below", 100.0), ("above", 4000.0)):
+            rd, count = _sample_mem(_chain_record(full[0][0]), full, sync,
+                                    _fake_agent(7, plane=3, point=(dx, 0.0)))
+            keytap.read_handle = lambda _h, a, n, _rd=rd: _rd(a, n)
+            s = sample(None, CHAIN_AGBASE, CHAIN_SYNC_PTR, 7)
+            costs[label] = (count[0], None if s is None else s["hist_why"])
+    finally:
+        keytap.read_handle = old_read
+    base_n, base_why = costs["below"]
+    full_n, full_why = costs["above"]
+    ok = (base_why == "not-attempted:below-gate" and full_why == HIST_OK
+          and base_n > 0 and full_n == base_n + HIST_MAX_NODES + 1)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] MEASURED through sample(): a "
+          f"below-gate sample costs {base_n} read(s) ({base_why}) and one that "
+          f"walks a full {HIST_MAX_NODES}-node chain costs {full_n} "
+          f"({full_why}), +{full_n - base_n} = "
+          f"+{100.0 * (full_n - base_n) / max(base_n, 1):.0f}% -- REALFIX.md "
+          f"2.4's \"+40%\" assumed a ~20-read sample; sample() issues "
+          f"{base_n}, so an UNGATED walk would roughly DOUBLE it. That makes "
+          f"the gate MORE load-bearing than the design note argued, not less")
+
+    # A stub that only ever refused would pass every check above, which is the
+    # defect section 6 records from the other side.
+    tail = (good["hist"] or [{}])[-1].get("t")
+    ok = (good["hist_why"] == HIST_OK and good["hist_n"] == 4
+          and tail == 9000 - 3 * 300)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] and the healthy walk really did "
+          f"produce {good['hist_n']} nodes ending at t={tail} "
+          f"-- a parser that refused everything would pass all the refusals")
     return bad, ran
 
 
@@ -2680,6 +3851,60 @@ def calibrate(handle, agbase, ptr, aid=None, reads=40):
     if dt <= 0 or got == 0:
         return None
     return got / dt
+
+
+def chain_cost(handle, agbase, ptr, aid=None, reads=40):
+    """REALFIX-I1's price, MEASURED on this machine rather than predicted.
+
+    -> (hz_gated, hz_forced) or None. The first is the run's real configuration
+    (the chain read only above HIST_SEP_GATE); the second forces the walk on
+    every sample by dropping the gate below zero, which is the worst case the
+    design note argued against (~+40% of reads, ~13 Hz -> ~7 Hz predicted).
+
+    Two passes rather than an arithmetic estimate because the prediction is the
+    thing being checked: 8 node reads is ~+40% of a ~20-read sample ONLY if a
+    node read costs what an agent-block read costs, and nothing had measured
+    that. REALFIX.md section 2.4 asks for the impact to be measured and printed,
+    not asserted.
+    """
+    out = []
+    for gate in (HIST_SEP_GATE, -1.0):
+        t0 = time.perf_counter()
+        got = 0
+        for _ in range(reads):
+            if sample(handle, agbase, ptr, aid, hist_gate=gate) is not None:
+                got += 1
+        dt = time.perf_counter() - t0
+        if dt <= 0 or got == 0:
+            return None
+        out.append(got / dt)
+    return tuple(out)
+
+
+def chain_cost_line(cost, reads):
+    """The two Hz figures as ONE string, so the OUTPUT can be pinned offline.
+
+    WHY THIS IS A FUNCTION. The wiring table in section 9 asks the syntax tree
+    whether `main()` CALLS `chain_cost` -- and that is all it ever asked. A
+    mutation that kept the call, threw the result away and printed neither
+    figure ran green at 206/206, which makes the wiring row's claim ("so the
+    chain walk's OUTPUT cannot vanish") false as written: it keeps the CALL from
+    vanishing. Moving the text here lets section 13 read the string back and
+    lets section 9 require the call to be an argument of a `print`, so both
+    halves are held. REALFIX.md 2.4 asks for the impact to be measured AND
+    printed; a measured number nobody prints is the assumption it replaced.
+    """
+    if cost is None:
+        return ("could not price the REALFIX-I1 chain walk (no sample "
+                "completed); its cost is UNMEASURED for this run")
+    gated, forced = cost
+    return (f"REALFIX-I1 chain walk: {gated:.1f} Hz gated at "
+            f"sep > {HIST_SEP_GATE:.0f} u vs {forced:.1f} Hz forced on every "
+            f"sample ({100.0 * (forced - gated) / max(gated, 1e-9):+.0f}% Hz "
+            f"if the gate were removed, {HIST_MAX_NODES} nodes max) -- measured "
+            f"here, 2 x {reads} samples. The read count behind it is pinned "
+            f"offline by movetap's section 13: 8 reads below the gate, 17 for "
+            f"a full walk")
 
 
 def main():
@@ -2751,6 +3976,8 @@ def main():
     g1why = {}                 # why an `undecided` was undecided
     early_a = {}               # early_out_a -> count: True / False / "unread:*"
     point_bad = {}             # point_invalid -> count, same three-valued domain
+    hist_why = {}              # REALFIX-I1: hist_why -> count, every value
+    hist_reads = 0             # and what the walk actually spent, in reads
     t_start = time.time()
     t_end = t_start + a.seconds
     period = 1.0 / a.hz
@@ -2769,6 +3996,11 @@ def main():
                       + (f" -- BELOW the requested {a.hz:.0f} Hz, so the floor "
                          f"is set from {target_hz:.1f}"
                          if cap_hz < a.hz * 0.95 else ""))
+            # REALFIX-I1's price on THIS machine, printed before the run so a
+            # reader can see what the chain walk cost the residual budget.
+            CAL_READS = 40
+            cost = chain_cost(handle, agbase, ptr, aid, reads=CAL_READS)
+            print(chain_cost_line(cost, CAL_READS))
             print(f"polling agent {aid} at {a.hz:.0f} Hz for {a.seconds:.0f}s "
                   f"-> {out}\n")
             while time.time() < t_end:
@@ -2802,6 +4034,8 @@ def main():
                 if s["gate1_why"]:
                     g1why[s["gate1_why"]] = g1why.get(s["gate1_why"], 0) + 1
                 early_a[s["early_out_a"]] = early_a.get(s["early_out_a"], 0) + 1
+                hist_why[s["hist_why"]] = hist_why.get(s["hist_why"], 0) + 1
+                hist_reads += s["hist_reads"]
                 point_bad[s["point_invalid"]] = point_bad.get(
                     s["point_invalid"], 0) + 1
                 # Print only what a human needs to see live: the arrival time
@@ -2869,12 +4103,44 @@ def main():
         return 1
     print(f"  floor {floor} met ({n} samples at half of {target_hz:.1f} Hz "
           f"over {elapsed:.1f}s).")
+    print_hist_summary(hist_why, hist_reads, n)
     flips, pairs = count_flips(seq)
     # Both lanes run, and both verdicts print, whichever of them refuses. A
     # gate-1 lane that could not read the twin says nothing about the fence, and
     # a refused fence share says nothing about gate 1's operands.
     rc = fence_verdict(reach, flips, pairs, n, rate, seq)
     return max(rc, gate1_verdict(g1, g1why, early_a, point_bad, n))
+
+
+def print_hist_summary(hist_why, hist_reads, n, indent="  "):
+    """REALFIX-I1's own report: how often the walk ran, and what it cost.
+
+    NOT a verdict. The chain walk is an instrument for the offline adjudication
+    in REALFIX-L2 section 2.4, so there is no bar it can fail here -- what this
+    prints is the denominator every later claim about the polyline rests on,
+    and the share of samples where the walk was REFUSED rather than short. A
+    reader who takes "no node within the radius" from a run whose chain reads
+    were 40% `unread:*` would be reading the reader, not the client.
+    """
+    if not n:
+        print(f"{indent}REALFIX-I1: no samples, so no chain was walked.")
+        return
+    attempted = sum(c for w, c in hist_why.items()
+                    if not w.startswith("not-attempted:"))
+    complete = sum(c for w, c in hist_why.items() if hist_is_complete(w))
+    print(f"{indent}REALFIX-I1 history chain: walked on {attempted} of {n} "
+          f"sample(s) ({100.0 * attempted / n:.1f}%, gated at "
+          f"sep > {HIST_SEP_GATE:.0f} u), {complete} complete, "
+          f"{hist_reads} extra read(s) = {hist_reads / n:.2f} per sample")
+    for why, c in sorted(hist_why.items(), key=lambda kv: (-kv[1], kv[0])):
+        print(f"{indent}  {why:34} {c:6}  {100.0 * c / n:5.1f}%")
+    refused = sum(c for w, c in hist_why.items() if w.startswith("unread:"))
+    trunc = hist_why.get("truncated:max-nodes", 0)
+    if refused or trunc:
+        print(f"{indent}  ^ {refused} refusal(s) and {trunc} truncation(s): "
+              f"neither supports \"no node near q\", which is the reading "
+              f"candidate B is revived by. Do not pool them with the "
+              f"complete walks.")
 
 
 def count_flips(seq):
