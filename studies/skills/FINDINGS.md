@@ -3103,3 +3103,83 @@ says why ArenaNet tears the overlay down in towns rather than leaving a stale
 ring, and the disassembly does not say either. Not worth a probe; worth not
 claiming.
 
+## 31. E9 — the blink warning, and we were already producing it
+
+**2026-08-21, run `20260821T141806`, loopback, build 38797, server at
+`dc1bbc8`.** Raised by the owner from GWW's Adrenaline page — *"A visual
+warning appears, with partially filled skills will begin blinking"* — a
+behaviour §§25–30 never tested and never mentioned. Predictions in
+`e9-predictions.md`.
+
+### 31.1 Why §29 was silent on it rather than negative
+
+Two independent reasons, either sufficient. **E7 capped every pool**, and the
+wiki's warning is for PARTIALLY filled skills, so nothing was eligible to
+blink. And **E7's frames were 5–8 s apart** through the warning window, where a
+blink is sub-second and aliases to nothing. A run can be clean, pass every
+prediction, and still be blind to a whole behaviour — which is the argument for
+reading the wiki against a finished result, not only before it.
+
+### 31.2 The mechanism was already in §26, unrecognised
+
+`0x00CF`'s handler fires UI event **`0x10000058`** carrying `{agent, f32}`,
+the float loaded from `.rdata` `0x009495B4` — **MEASURED bytes `0000c841` =
+25.0**, the timeout itself. `GmSkSlot` forwards it as msg `0x5A` to
+`GmCtlSkImage`, whose own assert names it:
+
+> `GmCtlSkImage:1483` — *"Clearing the adrenaline timer on a skill image is
+> currently not supported. Bug Austin about this."*
+
+The handler stores the float (`fstp [edx+0x10]`, `fstp [edx+0x14]`,
+`mov [edx+0x18],0`) and never accumulates. **So the countdown is CLIENT-side
+and armed by a message this server already sends.** §26 recorded that event as
+"the strike flash" with the 25.0 noted only as a fixed constant; it is the
+warning timer, and the constant is the timeout.
+
+### 31.3 The measurement
+
+Four gains left slot 3 **partial** (100/120) while slots 2 and 4 capped —
+so one frame holds all three categories. Mean luminance, 26 frames ~1 s apart;
+the wipe lands at `hold019`:
+
+| slot | state | range | direction changes | verdict |
+|---|---|---|---|---|
+| 1 | non-adrenal | **0** | 0 | flat |
+| 2 | **capped** | 87 | **1** (the wipe step) | flat |
+| **3** | **PARTIAL** | **20** | **9** | **OSCILLATES** |
+| 4 | **capped** | 61 | **1** (the wipe step) | flat |
+| 5 | non-adrenal | **0** | 0 | flat |
+
+**P21 CONFIRMED, P22 CONFIRMED** — the controls are flat to a range of *zero*,
+so the oscillation is not a global flicker.
+
+**And the blink goes fully OFF, not dim.** Slot 3's post-wipe luminance — ring
+gone — is 62. During the warning window slot 3 hits exactly 62 at `hold015` and
+`hold017` and returns to 74–75 between them. The warning hides the fill
+entirely and restores it, a square wave aliased at 1 s sampling.
+
+**A finding the wiki implies and this shows: capped skills do NOT blink.**
+Slots 2 and 4 sit rock-flat at 156 and 111 through the entire warning window,
+changing exactly once — at the wipe. Only the partially filled ring warns,
+which is GWW's sentence read strictly.
+
+### 31.4 Corroborated by the owner, watching
+
+**OBSERVED, owner, live during this run: "i watched it blink, seemed good."**
+That is worth more than it looks. Three times in this series a headline number
+came from a pixel metric that turned out to be wrong (§27.4's phantom anomaly,
+§28.4's withdrawn precision, §29.4's false 100%), and a human eye on the actual
+screen is the one witness that shares none of those failure modes.
+
+### 31.5 The answer to the question that prompted it
+
+**Yes — we capture it, and we were capturing it before anyone asked.** No
+server change was made for this section. The server sends nothing at all
+between the last `0x00CF` and the `0x00D0` 25 s later; the blink is the
+client's own timer, armed by the gain message, and it appeared the first time
+anyone sampled fast enough to see it. **P23 CONFIRMED.**
+
+Worth stating plainly because the opposite was equally possible: had the
+warning ridden its own opcode, this channel would have been incomplete and
+nothing in §§25–30 would have revealed it.
+
