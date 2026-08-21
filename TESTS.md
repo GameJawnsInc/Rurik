@@ -5911,7 +5911,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
   energy regen, health max — with the delta carrying the wire's own
   `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
-  encoding through the codec. Floor 47, against a green 48/47 across the two
+  encoding through the codec. §8 pins the other half of the original
+  question: `0x00E9` field 10 stopped being one of the zeros this server
+  sends, because retail carries 100 there in 43 of 43 sightings and 0 is
+  not a legal morale at all. Floor 49, against a green 50/49 across the two
   revive configurations. No vault, no socket, no client),
   `toolkit/mapdata/test_unitexport.py` (the UNIT body export, rung U5: FA0
   geometry + FA5 textures + the FA1 skeleton SIDECAR through the `.gwmodel`

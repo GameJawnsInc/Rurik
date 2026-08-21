@@ -11002,6 +11002,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # walk back.
                         player_attrs = [0] * PLAYER_ATTR_COUNT
                         player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
+                        # ...and field 10 stopped being one of the zeros on
+                        # 2026-08-20. Retail carries 100 here in 43 of 43
+                        # sightings across the whole live corpus, on level-1
+                        # and level-20 characters alike, and 0 is not a legal
+                        # morale at all -- the range is 40 to 110. Sending a
+                        # zero was not the cautious choice it looked like; it
+                        # was a value the game never sends, in a field whose
+                        # own probe once read the illegal "-100%" back.
+                        player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)
                         if _ps_row is not None:
                             player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
                             player_attrs[13] = _ps_row["skill_points"]

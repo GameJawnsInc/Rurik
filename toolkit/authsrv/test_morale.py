@@ -29,6 +29,7 @@ standard library only, no vault, no socket.
 
     python toolkit/authsrv/test_morale.py
 """
+import io
 import os
 import struct
 import sys
@@ -43,12 +44,12 @@ import checks  # noqa: E402
 import morale  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# 48 on a green run with the shipped `REVIVE_REFILL_DEFER`; 47 with
+# 50 on a green run with the shipped `REVIVE_REFILL_DEFER`; 49 with
 # `RURIK_REVIVE_DEFER=0`, because section 6's revive branch checks one thing
 # when the refill is immediate and two when it is deferred. The floor is the
 # smaller of the two REAL runs rather than the larger, since a floor above what
 # a healthy run produces is a test that fails for being configured differently.
-LEDGER = checks.Ledger("morale and death penalty", floor=47)
+LEDGER = checks.Ledger("morale and death penalty", floor=49)
 
 # THE OBSERVATION, pinned as literals so this file states what it is testing
 # against rather than deriving it from the code under test. Capture
@@ -338,8 +339,20 @@ def main():
     finally:
         authsrv.DEATH_PENALTY_FORCED = False
 
-    # ---- 8. the shipped world is unchanged ---------------------------------
-    print("\n8. nothing above moved the default world")
+    # ---- 8. the attribute set carries a legal morale ------------------------
+    print("\n8. field 10 of 0x00E9 is no longer a zero")
+    LEDGER.ok(authsrv.PLAYER_ATTR_MORALE == 10,
+              "the attribute set's morale field is index 10",
+              "GWCA PlayerAttrId::Morale_Percent, and the same attr id the "
+              "corpus's own 0x00EE carries")
+    src = io.open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    LEDGER.ok("player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)" in src,
+              "and the spawn burst fills it from the live morale value",
+              "43 of 43 retail sightings carry 100 in this field; we sent 0, "
+              "which is not a legal morale at all -- the range is 40..110")
+
+    # ---- 9. the shipped world is unchanged ---------------------------------
+    print("\n9. nothing above moved the default world")
     LEDGER.ok(authsrv.DEATH_PENALTY_FORCED is False,
               "the force switch is off again", "a test that leaks a global "
               "into the next test in the same process is a haunted suite")
