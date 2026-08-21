@@ -328,11 +328,28 @@ this skill does not scale."""
 # `data.attribValue[index] <= 12`, and CharData:202's bound of 13 on the
 # s_attribPoints lookup).
 #
-# THE POINT BUDGET IS NOT MODELLED -- said out loud rather than left implied.
-# We do not read the client's s_attribPoints cost table, we do not track spend,
-# and 0x0037 goes out as [0, 0] because that is what all 8 live samples carry.
-# Whether this spread is affordable at any level is a question this server
-# cannot currently ask.
+# THE POINT BUDGET IS MODELLED, since 2026-08-20 (84fd41d). This block is
+# rewritten rather than deleted because what it used to say was a list of four
+# limitations, and the same place is where their removal belongs: it said the
+# client's s_attribPoints cost table is not read, that spend is not tracked,
+# that 0x0037 goes out as [0, 0] on the strength of all 8 live samples, and
+# that whether this spread is affordable is a question this server cannot ask.
+#
+# All four have moved. The cost curve IS read -- content table
+# `attribute_cost`, extracted from the client's own s_attribPoints by
+# toolkit/clientscan/attribpoints.py. Spend IS tracked, per connection, by
+# toolkit/authsrv/attribspend.py. 0x0037 carries [available, points_total],
+# which for the ranks below is [27, 200] and not [0, 0]: the corpus grew to 13
+# captures and 48 sightings, and the eight [0, 0] samples turned out to be
+# eight LOW-LEVEL characters rather than a constant -- field 3 is what is LEFT
+# and field 4 is the LIFETIME total (studies/pvpui/FINDINGS.md 32.5).
+#
+# And the affordability question is not merely askable now, it is ASKED:
+# toolkit/authsrv/test_spawn_burst.py section 4 checks `available >= 0`, so
+# raising the ranks past what 200 buys goes red in the suite instead of putting
+# a negative balance on the attribute panel. The ranks below sink 173 of the
+# 200 (97+48+21+6+1), and NOTHING STORES THAT NUMBER -- it is recomputed from
+# the cost curve, so editing a rank moves the balance on its own.
 [player.attributes]
 ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
 points_total = 200
