@@ -567,3 +567,58 @@ in this run separates the two terms.
 The server did not path against any of these meshes (`--serve` not passed), so
 the recovered ground is IN the mesh and has not been walked. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md` §RESULTS.
+
+## WORLDMAPS-W13/W14 — the recovered ground is stood on, and bit 0 touches exactly one chunk. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four arms one field apart, six launches,
+same client and archive in one session).**
+
+**W13 — the ground.** A seed placed at (528, 528), eight columns inside the
+region the water rule excludes, on the same 64×64 shape:
+
+| arm | flags | outcome |
+|---|---|---|
+| `sculpt_deep0` | 0 | **the client CRASHED compiling it** |
+| `sculpt_deep1` | 1 | compiled clean; **the spawn lands in exactly one trapezoid** |
+
+The crash is `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
+dest[-2].pos)` at `PathFlood.cpp(681)` — **the same source file as W10's depth
+classifier**. It is a degenerate-vertex guard, and read with FINDINGS 34's flood
+(which starts from the seed) it says the flood began where no valid triangle
+exists and emitted a degenerate path. **One bit is the difference between a
+crash and a walkable spawn.** I registered this arm as failing `readback`'s
+spawn assertion; it never got that far, so the prediction is CONFIRMED on its
+discriminating claim and WRONG on its predicted failure mode.
+
+**The server read it, for the first time.** A second, unarmed run pre-warmed the
+map: `[map] navmesh 0x287D3: 1 planes, 99 trapezoids`, matching what `pathmap`
+reads from the same bytes — two independent readers — and the first run in this
+arc without `collision is OFF`. Every W12 run had served no mesh at all, which
+is structural: `--install` arms the head, so the run that PRODUCES a mesh can
+never serve it.
+
+**A same-session flags-0 twin was compiled for the first time** and reproduced
+every figure held for this shape (64 trapezoids, 7,660 B, 2,582/4,096 = 63.04%,
+column 13). **W12's deltas were not measured against a moving baseline.**
+
+**W14 — the bound.** Two compiled heads, same shape, one bit apart, compared by
+a raw slice walk over the wire format:
+
+**Exactly two of twelve chunks differ — Map Parameters (`0x2000000C`, at one
+byte, offset +21) and Path (`0x20000008`, 7,660 → 10,988 B).** Everything else
+is byte-identical, including **Zones** (42 B), which was the chunk to watch as a
+flags-reading branch whose output reaches our artifact. **Terrain is
+byte-identical at 28,503 B**, which is the determinism control that licenses
+reading the rest: had it moved, the diff would have been void rather than
+positive.
+
+**Within the compiled artifact, bit 0 changes the Path chunk and nothing else.**
+
+**Scope, and one piece of it is permanent.** Our compiled heads carry 12 chunks;
+retail Kamadan carries 24. We emit **no Sight, Shore, Water, VisData or
+Collision chunk in either arm**, so no differential over our artifacts can ever
+see those branches — a property of what we author, not of the flag. Runtime
+effects that are not persisted are likewise invisible here. Traversal onto the
+ground from dry land was not tested. The server cannot see the bit at all
+(`map_flags`: zero occurrences under `toolkit/authsrv/`). Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W13-RUN.md` §RESULTS.

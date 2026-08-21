@@ -1609,7 +1609,7 @@ first attempt: **locate on a constant the experiment never changes**, because a
 scan for the value under test can run before the probe sets it and lock onto
 hundreds of coincidences.
 
-### WORLDMAPS: the ladder landed, and the four shipped areas are verified at the client (2026-08-21)
+### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is stood on (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
@@ -1760,9 +1760,36 @@ STATEMENT, not the model: the band was written by clipping its upper edge at 99%
 (98.86 + 3 is not a coverage figure), making it -2.86/+0.14 rather than the +/-3
 it was registered as. Across all four the model held to +/-3.
 
-**What is STILL unmeasured, and it is the same gap W11 left**: what bit 0 does
-BESIDES ungating the depth rule. And none of these four runs passed `--serve`,
-so the recovered ground is IN the mesh and has not been walked.
+**WORLDMAPS-W13/W14 CLOSED BOTH OF W12'S RESIDUALS THE SAME DAY.** Four arms
+one field apart, six launches, one client and one archive in one session.
+
+**W13 -- the ground is STOOD ON.** A seed placed eight columns inside the
+excluded region, on the same 64x64 shape: at flags 0 **the client CRASHED
+compiling it** -- `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
+dest[-2].pos)`, `PathFlood.cpp(681)`, the same source file as W10's depth
+classifier -- and at flags 1 it compiled clean with the spawn landing in
+exactly one trapezoid. **One bit is the difference between a crash and a
+walkable spawn.** The second, unarmed run then made the SERVER pre-warm it:
+`[map] navmesh 0x287D3: 1 planes, 99 trapezoids`, matching what `pathmap` reads
+from the same bytes. First flags-1 mesh the server has ever read, and the first
+run in this arc without `collision is OFF`. A same-session flags-0 twin also
+reproduced every figure held for this shape, so **W12's deltas were not measured
+against a moving baseline**.
+
+**W14 -- bit 0 changes the Path chunk and NOTHING ELSE in the artifact.** Two
+compiled heads, one bit apart, compared by a raw slice walk: exactly two of
+twelve chunks differ, Map Parameters (one byte, offset +21) and Path
+(7,660 -> 10,988 B). Zones is byte-identical, and **Terrain is byte-identical at
+28,503 B** -- the determinism control that licenses reading the rest.
+
+**What remains out of reach, and one piece permanently**: our compiled heads
+carry 12 chunks against retail Kamadan's 24, and we emit no Sight, Shore, Water,
+VisData or Collision chunk in either arm, so no differential over our artifacts
+can see those branches. Runtime effects that are not persisted are invisible to
+a file diff. Traversal onto the ground from dry land was not tested. The server
+cannot see the bit at all (`map_flags`: zero occurrences under
+`toolkit/authsrv/`). `studies/worldmaps/FINDINGS.md` W13/W14,
+`vault/research/worldmaps/WORLDMAPS-W13-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
@@ -2384,13 +2411,21 @@ node counts.
 shell for profession 1.** The hardest write target in the archive is a player shell.
 
 
+### Movement — ★★ REALFIX-L4: THE FIX IS DEMONSTRATED — pooled 9 of 21 against 0 of 13, Fisher p = 0.0056 (2026-08-21)
+
+**`--zero-lead --plane-carry` removes the warp.** A shuttle-only plan built for exposure (the drifting wall cells dropped, that time spent on 8 crossing cycles instead of 3) put **13 treated grants** in the control arm against L3's 8. **Control: 6 events** (463.5 / 472.2 / 263.6 / 467.1 / 285.3 / 458.7 u, each collapsing separation from 297–515 u onto 13.8–27.1 u). **F1 arm: 0 events, max rendered step 60.7 u.** L4 alone p = 0.032; **pooled with L3, 9 of 21 against 0 of 13, p = 0.0056** — under the null, F1's 13 treated grants should have produced 5.6 events. **Not an exposure artifact, and the arithmetic runs the wrong way for one:** the F1 arm sent MORE grants (70 vs 61), spent MORE of its run above the gate-1 cut (**69% vs 56%**), and carried a HIGHER p50 separation (349 vs 303 u) — more of every precondition, zero warps. The chain is now measured end to end: field 4 → `agent+0x80` → `q`'s plane in the match test's walkable conjunct → no match → gate 1 → whole-roster reseed → ~460 u backward. ⚠ **Three limits, none load-bearing for the result:** F1 still does not zero its own proxy (field 4 disagreed on 8 of 70 — so the proxy is not the mechanism, which is why F1b would have bought nothing here); the regime is one map, keyboard-only, click-free, and the **round-4 spam-click regime is untouched** and remains the operator's run; and the tap ran at 8.4–9.5 Hz against 20 requested, so the headline rests on a **positive in the control** plus a null licensed by the control's own rate at matched exposure. **`--zero-lead` itself is still undemonstrated against the shipped default** — it is the substrate F1 is measured on. FINDINGS §"REALFIX-L4".
+
+### Movement — REALFIX-F1b BUILT AND REFUTED AT A DESK, and the offline screen corrected two of our own numbers (2026-08-21)
+
+**No client run — deliberately.** `--arrival-carry` sends field 4 = the plane of the grant the copy has **arrived** at, from the client's own bake formula over the SYNC model the server already keeps (no navmesh, no new constant), to close F1's named limit. **It was pre-screened against captures already in the vault, and the screen refuted its prediction before any arm ran**: F1b leaves **3 of 69** on the F1 capture, not the predicted 0. The three survivors land **8–35 ms after a modelled arrival the client had not yet performed** — a sub-frame race (the client consumes an arrival on a frame, not a tick), not a logic error; F1b's logic does close every genuine two-interval lag. **A ~40 ms guard band would close them and is REFUSED as a fitted parameter.** `python toolkit/clientscan/grantsim.py --planecarry` is the permanent screen and every future field-4 policy goes through it first. ⚠ **TWO CORRECTIONS TO OUR OWN PUBLISHED NUMBERS**: the field-4 baselines (8 of 88, 5 of 93) paired with the *nearest* movetap sample, which can be one taken **after** the grant — reading back the word that grant just wrote and scoring a rewrite as a match; **strictly-before pairing gives 10 and 6**, and the 10 is corroborated by L3's own "10 plane-word changes". And **"all five of F1's residuals are the named limit" is WRONG** — three are this arrival race, only two are two-interval lags. **Validated on the way past, with zero free parameters:** `agent+0x80` is also written by the *client* at arrival, and in the F1 capture **17 of 17** such client-authored writes land on a modelled arrival (|dt| median 0.070 s) — a prediction about a byte we do not write, 17 for 17; the control capture makes zero such writes and the check asserts `n == 0` rather than passing 0-of-0. **The binding constraint is no longer the policy, it is n**: F1's event reduction is still Fisher p = 0.196. **The next client time this arc spends should buy replicates (three arms × three runs), not a fourth policy.** FINDINGS §"REALFIX-F1b BUILT AND REFUTED AT A DESK".
+
 ### Movement — REALFIX-F1 (`--plane-carry`) BUILT AND RUN: zero warps, but its own falsifier fired and n=1 cannot carry the result (2026-08-21)
 
 Third arm on the identical L3 plan. **F1 sends field 4 = the plane that arrived with the point the copy stands on** (the previous grant's, by construction under zero lead — no navmesh). Built with a 23-mutation campaign (22 red; the one survivor proved a no-op from the source), and the mutation lane caught the banner quoting **simulated** L2 instants (11/3/6) as if they were L3's **observed** 8 grants / 3 events — the pre-registration the arm is scored against, corrected before the run. **Result: 0 REALFIX-E events (max rendered step 38.3 u, vs the P0 control's 43.0) against P2's 3, with MORE exposure — 93 grants vs 88, 24 plane-word changes vs 10, 38% of samples above the cut vs 29%.** The carry demonstrably fires: 24 grants sent field 4 ≠ field 3, against 0 in the control. ⚠ **But the primary falsifier FIRED**: field 4 still disagreed with the copy's own `agent+0x80` on **5 of 93 grants (8 of 88 in the control)**, not the predicted 0 — and **all five are the spec's own NAMED LIMIT**, two-interval lags where the previous grant was already on the new plane. ⚠⚠ **And the event reduction is NOT significant**: on the condition that matters (above cut AND field 4 wrong) the control had 8 grants/3 events, F1 had 5 grants/0 events, **Fisher p = 0.196** — zero in five is what chance gives about one run in five. Separation p90 held at 498→491 u (−1.4%, inside the ±5% predicted), but p50 moved 150→227 u and above-cut time 29%→38%, **which F1 cannot have caused** (it changes one 16-bit field, no coordinate) — that is run-to-run path variance on an identical script, and it is the same reason the 3-vs-0 cannot carry weight at n=1. **Next: REALFIX-F1b — carry the plane of the grant the copy has ARRIVED at rather than the last one sent** (the server already computes arrival; closes exactly the two-interval case all five residuals sit in, and predicts the mismatch count reaches 0 — the falsifier F1 just failed), **then repetition to n≈9 per arm.** FINDINGS §"REALFIX-F1 RAN".
 
 ### Movement — ★ REALFIX-L3: THE WARP IS REPRODUCED PROSPECTIVELY, and the plane rewrite is the trigger (2026-08-21)
 
-**The arc's first forward reproduction, with a control that carried more of every rival condition and produced nothing.** Corrected plan (`W5 = +0.75°` measured, `W4 = −0.080152` measured), identical scripted input both arms, both reaching the bridge (P0 48% of samples in the corridor, 555 on plane 18 — L2 had zero). Scored on **REALFIX-E only**. **P2 `--zero-lead`: 3 events (476.8 / 465.9 / 242.8 u, all backward onto the lagged copy, all on plane 18). P0 default: 0 events, max rendered step 43.0 u** — despite **2,461 samples (97%) above the gate-1 cut against P2's 29%, and 571 plane-mismatch samples against 137.** Separation and plane disagreement are not sufficient and not close; what P0 lacks is the grant, so the dispatcher is never entered. **Every event follows a grant by 0.05–0.11 s** (timed against REALFIX-T1's **0.354 ms** clock residual, not round 6's 1.00 s slop) **and every one of those grants rewrote the plane word 0 → 18.** The grant-level 2×2: **plane rewritten + above cut → 8 grants, 3 events; plane unchanged + above cut → 28 grants, 0 events** (Fisher **p = 0.0078**), against round 6's retrospective 3/4 vs 0/27. **Corner-cutting is REFUTED at the cell built to test it**: all 3 events are on X3 (straight perpendicular crossing, no wall), while X1/X2a's slide legs carry 55 grants, 15 above the cut, and produce **0** — direction met (X3=3, X2a=0), count under the predicted 6, and X2a's null carries its own power caveat. Still **necessary-not-sufficient**: 5 of the 8 treated grants did not warp, and REALFIX-I1's 709 chain walks in this capture are where that gets answered. ⚠ **The X5 falsifier did not cleanly fire** — event 3's pre-snap sep reads 294.66 u, below the cut, but movetap ran at **9.1 Hz against 20 requested** (~32 u of copy travel between samples), so the covariate cannot carry a falsifier. **The tap rate is now the binding instrument limit.** **Next: REALFIX-F1** — send the plane that came with the point the copy stands on (3 lines, spec'd, unbuilt) — which finally has a reproduction to be tested against, with its prediction already written: the three reseeds go to zero, separation unchanged within 5%. FINDINGS §"REALFIX-L3".
+**The arc's first forward reproduction, with a control that carried more of every rival condition and produced nothing.** Corrected plan (`W5 = +0.75°` measured, `W4 = −0.080152` measured), identical scripted input both arms, both reaching the bridge (P0 48% of samples in the corridor, 555 on plane 18 — L2 had zero). Scored on **REALFIX-E only**. **P2 `--zero-lead`: 3 events (476.8 / 465.9 / 242.8 u, all backward onto the lagged copy, all on plane 18). P0 default: 0 events, max rendered step 43.0 u** — despite **2,461 samples (97%) above the gate-1 cut against P2's 29%, and 571 plane-mismatch samples against 137.** Separation and plane disagreement are not sufficient and not close; what P0 lacks is the grant, so the dispatcher is never entered. **Every event follows a grant by 0.05–0.11 s** (timed against REALFIX-T1's **0.354 ms** clock residual, not round 6's 1.00 s slop) **and every one of those grants rewrote the plane word 0 → 18.** The grant-level 2×2: **plane rewritten + above cut → 8 grants, 3 events; plane unchanged + above cut → 28 grants, 0 events** (Fisher **p = 0.0078**), against round 6's retrospective 3/4 vs 0/27. **Corner-cutting is REFUTED** — ⚠ but NOT by X2a, whose null is **WITHDRAWN**: the operator noticed the character veering off the bridge, and **X2a never ran** (0 of 783 samples in its window are on the deck; the wall slides displace perpendicular to the heading while the plan's back-out reverses along it, so the reps drift off the deck). The refutation stands on the chain measurements instead — round 6's dense reconstruction (0 exceedances, max 72 u; 0.0 u at all three warps) and L3's own REALFIX-I1 walk (copy 0.0 u from the polyline in 698 of 698 samples). All 3 events are on X3 (straight crossing, no wall), count under the predicted 6. Still **necessary-not-sufficient**: 5 of the 8 treated grants did not warp, and REALFIX-I1's 709 chain walks in this capture are where that gets answered. ⚠ **The X5 falsifier did not cleanly fire** — event 3's pre-snap sep reads 294.66 u, below the cut, but movetap ran at **9.1 Hz against 20 requested** (~32 u of copy travel between samples), so the covariate cannot carry a falsifier. **The tap rate is now the binding instrument limit.** **Next: REALFIX-F1** — send the plane that came with the point the copy stands on (3 lines, spec'd, unbuilt) — which finally has a reproduction to be tested against, with its prediction already written: the three reseeds go to zero, separation unchanged within 5%. FINDINGS §"REALFIX-L3".
 
 ### Movement — REALFIX-T1/T2/I1 LANDED and L2 RAN, but it REACHED NO CELL: the plan's frame was 108° wrong (2026-08-21)
 

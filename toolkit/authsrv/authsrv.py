@@ -1311,6 +1311,125 @@ ZERO_LEAD = False
 # that refuses loudly. zero_lead_composition() refuses it and main() raises.
 PLANE_CARRY = False
 
+# --arrival-carry. REALFIX-F1b, and it exists because F1's OWN PRIMARY
+# FALSIFIER FIRED. A MODIFIER on --zero-lead, OFF by default, and mutually
+# exclusive with --plane-carry: the two write the same wire field.
+#
+# WHAT THE F1 RUN MEASURED, and it is the whole motivation. Capture
+# 20260821T143411 / movetap-...143429, `--zero-lead --plane-carry`, the third
+# arm on REALFIX-L3's plan. Zero REALFIX-E events -- but the pre-registered
+# falsifier was "grants whose field 4 differs from the SYNC copy's agent+0x80
+# go to 0", and it came in at 5 of 93 against the control's 8 of 88. FIVE IS
+# NOT ZERO. All five sit ABOVE the gate-1 cut, which is the exact combination
+# that produced 3 of 8 events in the control:
+#
+#     t= 50.21 (10950,4720) w3=18 w4=18 | copy plane 0 | sep 514
+#     t= 77.42 (10950,4708) w3=18 w4=18 | copy plane 0 | sep 511
+#     t=104.67 (10950,4699) w3=18 w4=18 | copy plane 0 | sep 511
+#     t=178.93 (11123,5249) w3=18 w4=18 | copy plane 0 | sep 366
+#     t=191.66 (10860,4816) w3=18 w4=18 | copy plane 0 | sep 429
+#
+# Every one is F1's OWN NAMED LIMIT, biting where the limit said it would:
+# "F1 under-corrects when the copy is more than one grant interval behind."
+# All five send w4 = 18 because the PREVIOUS grant was already on plane 18 --
+# the client had been on the deck for two grants while the copy was still back
+# on plane 0. F1 corrects a ONE-interval lag; these are TWO-interval lags.
+#
+# THE FIX, and it needs no navmesh and no new measurement. Field 4 becomes the
+# plane of the most recent grant the copy has ARRIVED at, rather than the plane
+# of the most recent grant SENT. The server can compute arrival with the
+# CLIENT'S OWN FORMULA, which is the destination bake at 0x005FE950
+# (FINDINGS round 5 sec.2.4):
+#
+#     d       = D - [+0x78]                 # measured from the COPY, 0x005FEB57
+#     S       = [+0x60] * [+0x5C]           # 1.0 * 288.0
+#     if |d|^2 <= 1.0:  [+0x48] = now + 1   # the short-circuit at 0x005FEA92
+#     else:             [+0x48] = now + trunc(|d| * 1000 / S), clamp >= 1
+#
+# and `[+0x78]` -- the copy's own current point -- is exactly what
+# `_sync_position()` already models, dead-reckoning along the granted leg at
+# DEFAULT_RUN_SPEED and PARKING on the point. So `arrival_carry_leg()` is that
+# formula over that model: no new state, no new constant, no navmesh.
+#
+# THE QUEUE, and the two things it holds. `arrival_carry_advance()` keeps
+# `ac_arrived` (the plane of the newest grant the copy has REACHED) and
+# `ac_queue` (the leg still in flight). On each SEND it folds any arrived entry
+# into `ac_arrived`, DISCARDS whatever is still in flight, and arms the entry
+# for the grant just sent -- so between sends the queue holds at most one row,
+# which is an invariant the test asserts rather than a coincidence.
+#
+# WHY THE DISCARD IS THE WHOLE DIFFERENCE FROM F1, and it is the case a naive
+# implementation gets wrong. When a grant supersedes a leg still in flight the
+# copy RE-AIMS mid-leg: it never reaches the superseded destination, so that
+# destination's plane must never become "the plane the copy arrived at". Left
+# in the queue its arrival time would quietly pass and the NEXT grant would
+# carry a plane the copy was never on -- a new way to stamp a wrong plane,
+# invented by the fix meant to stop stamping wrong planes. It is discarded.
+# The copy's position at that instant is likewise NOT the superseded
+# destination but a dead-reckon along the previous leg, which is precisely what
+# `_sync_position()` returns -- and it is why the leg is computed BEFORE
+# `send()`, since `_note_wire_move` rewrites sync_from/sync_to inside it.
+#
+# WHAT THE CLIENT DOES WITH THE TWO FIELDS, and this is a MEASUREMENT that
+# grounds F1b rather than an argument for it. OBSERVED offline over the L3 P2
+# and F1 captures (`grantsim.py --planecarry`): field 4 is written to
+# agent+0x80 at the GRANT, and field 3 is written to it again at ARRIVAL, when
+# the client consumes the destination into m_point. In the F1 capture the SYNC
+# copy's plane word changes 24 times and SEVENTEEN of those changes are NOT at
+# a grant -- they land on a modelled arrival, 17 of 17, |dt| median 0.070 s and
+# max 0.135 s against a tap running at 9.5 Hz (0.105 s a sample), i.e. inside
+# the sampling phase, with ZERO free parameters fitted. That is retail's own
+# lead/lag shape -- field 3 leads field 4 by the travel time -- and it says F1b
+# sends the value the client is going to write for itself anyway.
+#
+# THE DEFAULT, with no grant yet arrived: the CURRENT plane, which is exactly
+# today's payload and exactly F1's default. At the first grant of a session the
+# copy is co-located with the player at the spawn point, so there is no lagged
+# copy to be wrong about; and a 0 here would write a wrong map index into
+# agent+0x80, which is the defect the plane words exist to avoid. Same answer
+# when the SYNC model is UNSEEDED (`_sync_position` returns None): the leg's
+# arrival is None, that entry can never arrive, and it is discarded at the next
+# grant. Fail closed -- an unmeasurable leg never contributes a carried plane.
+#
+# THE SLOT TRACKS SENDS, NOT EVALUATIONS, exactly as F1's does. A rate-limit
+# refusal puts nothing on the wire, so it must not consume the queue and must
+# not discard the in-flight leg -- the copy is still bound for the point the
+# last GRANT named. `arrival_carry_field4()` is therefore PURE (it reads the
+# queue and mutates nothing, so a refused evaluation, a test and an offline
+# scorer can all call it freely) and `arrival_carry_advance()` is the single
+# mutation, called AFTER the send. A send that raises leaves both untouched.
+#
+# AND IT WAS PRE-SCREENED OFFLINE, WHICH CHANGED ITS PREDICTION. Before this
+# flag was armed at a client, all three field-4 policies were replayed over both
+# L3 captures (`grantsim.py --planecarry`), anchored on the plane word movetap
+# actually read. F1b DOES NOT REACH ZERO: it leaves 3 of 69 scorable grants on
+# the F1 capture. Those three are a sub-frame RACE on `arrival <= now` -- each
+# lands 8, 24 and 35 ms after a modelled arrival the client had not yet acted
+# on -- while all three of F1's genuine two-interval lags are closed. The
+# arrival model is right about the TICK and early about the ACT: against the
+# client's 17 unambiguous arrival writes it lands inside the observation bracket
+# in 13 and is strictly early by at most 20 ms in the other 4, which is the size
+# of a display frame. A ~40 ms guard band closes the race and is REFUSED -- eps
+# has no derivation and would be fitted to the one capture that scores it; if a
+# frame-consumption term is real it should be MEASURED. The startup banner
+# therefore predicts ~3 and not 0.
+#
+# THAT SCREEN ALSO CORRECTED THE PUBLISHED BASELINES. FINDINGS records 8 of 88
+# and 5 of 93, measured by pairing each grant with the NEAREST movetap sample --
+# which can be a sample taken AFTER the grant, and a sample after the grant
+# reads the plane word THE GRANT JUST WROTE, scoring a genuine rewrite as a
+# match. Pairing with the last sample STRICTLY BEFORE gives 10 and 6, and the 10
+# is corroborated by FINDINGS's own L3 table, which already reports "plane-word
+# changes 10" for that arm beside the 8.
+#
+# STILL NECESSARY-NOT-SUFFICIENT, and F1b inherits every caveat F1 carries.
+# 5 of REALFIX-L3's 8 plane-rewriting above-cut grants did NOT warp. And F1's
+# own event reduction was NOT SIGNIFICANT -- Fisher exact on 3/8 against 0/5
+# gives p = 0.196, so at those counts zero events in five exposures is what
+# chance produces about one time in five. Nobody may read an F1b null as proof
+# either; what would settle it is repetition, three arms by three runs.
+ARRIVAL_CARRY = False
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -3105,6 +3224,20 @@ def _note_wire_move(state, opcode, values, now):
         state["sync_from"] = point
         state["sync_to"] = None
         state["sync_at"] = now
+        # AND REALFIX-F1b's ARRIVAL QUEUE DIES WITH THE LEG. The binary is
+        # explicit that it must: 0x00602B20's ARMED arm hands off to the
+        # teleport primitive 0x006020B0, which CLEARS THE ARRIVAL TICK at
+        # 0x006021E6 (`mov dword [ebx+0x48], 0`). So no arrival write is ever
+        # going to happen for the outstanding grant, and an entry left here
+        # would come due on a leg the client has already abandoned -- exactly
+        # the stale-arrival defect the discard in arrival_carry_advance exists
+        # to prevent, arriving by a different door. The hard set carries its
+        # own plane in slot 2 and the client writes THAT to agent+0x80, so it
+        # becomes the reached plane. --resync is ALLOWED beside --arrival-carry
+        # (with a note), which is why this is wired rather than assumed.
+        state["ac_queue"] = []
+        if len(values) > 2 and isinstance(values[2], int):
+            state["ac_arrived"] = values[2]
 
 
 def _resync_verdict(state, now):
@@ -3451,6 +3584,123 @@ def _heading_grant_ok(state, now):
     return True, "zero-lead", since
 
 
+# ---------------------------------------------------------------------------
+# REALFIX-F1b -- `--arrival-carry`.  The flag's own comment block carries the
+# grounds, the F1 residual that motivates it and the caveats.  These three
+# functions are the whole of the mechanism, and they are split PURE / PURE /
+# MUTATING for the reason `_heading_grant_ok`'s own docstring gives: an offline
+# scorer has to be able to run THIS decision rather than a paraphrase of it
+# that agrees with it by construction.  `toolkit/clientscan/grantsim.py`
+# imports all three and REALFIX-F1b's counterfactual IS that import.
+# ---------------------------------------------------------------------------
+
+# The client's zero-distance short-circuit, squared, at 0x005FEA85
+# (`fcom` / `jp 0x5feae1`).  It compares |D - the SYNC COPY's +0x78|^2 against
+# 1.0 -- NOT |D - the client|; that misreading is REALFIX-P2's retracted
+# cheapness claim and it is written up at the ZERO_LEAD block.  Mirrored from
+# `grantsim.ZERO_DIST_SQ`, which reads it off the same instruction.
+ARRIVAL_ZERO_DIST_SQ = 1.0
+
+
+def arrival_carry_leg(state, now, dest):
+    """PURE: (arrival_time, distance) for a grant to `dest` sent at `now`.
+
+    The client's own destination bake at 0x005FE950 and nothing else:
+
+        d = |dest - the SYNC COPY's +0x78|
+        if |d|^2 <= 1.0:   [+0x48] = now + 1 ms      # 0x005FEA92, no dispatch
+        else:              [+0x48] = now + trunc(|d| * 1000 / S) ms, clamp >= 1
+
+    `[+0x78]` is the copy's own current point, which is what `_sync_position`
+    models -- a lerp along the granted leg at DEFAULT_RUN_SPEED, PARKING on the
+    point.  `S` is `[+0x60] * [+0x5C]` = moveSpeed * maxSpeed, and it is not a
+    free parameter: we send moveSpeed 1.0 in 621 of 621 sends and the client
+    holds maxSpeed 288.0 / moveSpeed 1.0 in 4,115 of 4,115 movetap samples.
+
+    MUST BE CALLED BEFORE `send()`.  `_note_wire_move` runs inside send() and
+    rewrites sync_from/sync_to/sync_at, so afterwards `_sync_position` answers
+    about the NEW leg and the distance would come out 0.  That ordering is the
+    in-flight supersede case and it is what separates F1b from F1.
+
+    (None, None) WHEN THE SYNC MODEL IS UNSEEDED.  `_sync_position` returns
+    None until the character is placed and every consumer fails closed on it;
+    inventing a start point here would arm an arrival built on a position
+    nobody measured.  The caller arms the entry with a None arrival, which can
+    never come due and is discarded at the next grant.
+    """
+    copy = _sync_position(state, now)
+    if copy is None:
+        return None, None
+    d = math.hypot(dest[0] - copy[0], dest[1] - copy[1])
+    if d * d <= ARRIVAL_ZERO_DIST_SQ:
+        # The short-circuit writes +0x78..+0x84 = D outright and sets the tick
+        # to now+1, so the copy is AT the destination one millisecond later.
+        return now + 0.001, d
+    ms = max(1, int(d * 1000.0 / DEFAULT_RUN_SPEED))
+    return now + ms / 1000.0, d
+
+
+def arrival_carry_field4(state, now, plane):
+    """PURE: (field 4, why) -- the plane of the newest grant the copy REACHED.
+
+    Reads `ac_arrived` and `ac_queue` and mutates NEITHER, which is what lets a
+    rate-refused evaluation call it harmlessly: no grant went out, so nothing
+    may be consumed and the in-flight leg must survive.  `arrival_carry_advance`
+    is the single mutation and it runs after the send.
+
+    `why` is one of:
+      first-grant   nothing granted yet -- the default, the CURRENT plane
+      in-flight     something is granted but nothing has ARRIVED yet, so there
+                    is still no reached plane; the default again
+      arrived       the copy is parked on a grant we sent, and this is its plane
+      superseding   the same, and there is ALSO a leg still in flight that this
+                    grant is about to discard
+    """
+    q = state.get("ac_queue") or ()
+    arrived = state.get("ac_arrived")
+    flight = 0
+    for at, pl, _dest in q:
+        if at is not None and at <= now:
+            arrived = pl
+        else:
+            flight += 1
+    if arrived is None:
+        return plane, ("in-flight" if q else "first-grant")
+    return arrived, ("superseding" if flight else "arrived")
+
+
+def arrival_carry_advance(state, now, arrival, plane, dest):
+    """The ONE mutation, and it runs AFTER the send. Consume, discard, arm.
+
+    Three steps, in this order:
+
+    1. CONSUME.  Any queued entry whose arrival has come due becomes the
+       reached plane.  This is the same walk `arrival_carry_field4` does, and
+       it is duplicated rather than shared so that the read stays pure.
+    2. DISCARD.  Anything still in flight is dropped on the floor.  The grant
+       just sent RE-AIMED the copy mid-leg, so it will never reach the
+       superseded destination and that destination's plane must never become
+       "the plane the copy arrived at".  Keeping it would let its arrival time
+       quietly pass and hand the NEXT grant a plane the copy was never on --
+       a new way to stamp a wrong plane, invented by the fix meant to stop
+       stamping wrong planes.
+    3. ARM.  The grant just sent becomes the single in-flight entry.
+
+    So between sends `ac_queue` holds at most ONE row.  That is a consequence
+    of steps 2 and 3 rather than a coincidence, and the test asserts it.
+
+    `arrival` may be None (the SYNC model was unseeded when the leg was
+    computed).  Such an entry can never come due at step 1 and is discarded at
+    step 2 by the next grant: an unmeasurable leg never contributes a plane.
+    """
+    arrived = state.get("ac_arrived")
+    for at, pl, _dest in (state.get("ac_queue") or ()):
+        if at is not None and at <= now:
+            arrived = pl
+    state["ac_arrived"] = arrived
+    state["ac_queue"] = [(arrival, plane, (float(dest[0]), float(dest[1])))]
+
+
 # The OTHER arms that put a player 0x0029 on the wire off the movement path.
 # Each row is (flag, the trigger it answers, the line its refutation is
 # recorded at, what it grants). The refusal below is built FROM this table, so
@@ -3471,7 +3721,7 @@ ZERO_LEAD_REFUSED_ARMS = (
 def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
                           resync=False, stop_echo=False, click_sweep=False,
-                          plane_carry=False):
+                          plane_carry=False, arrival_carry=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -3530,7 +3780,55 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     direction is deliberately NOT symmetric -- --zero-lead alone is the P2 arm
     and is the control this fix is measured against, so it must keep running
     alone.
+
+    REFUSED, AND THIS ONE IS SYMMETRIC: --plane-carry WITH --arrival-carry.
+    REALFIX-F1 and REALFIX-F1b are two policies for ONE wire field (field 4,
+    the plane written to agent+0x80 on the SYNC copy). Whichever the code ran,
+    the other would be silently inert, and the run would be scored against
+    whichever prediction the operator remembered -- the two flags print two
+    DIFFERENT pre-registered banners, so a run carrying both prints two
+    predictions and can satisfy neither honestly. F1b exists precisely because
+    F1's own falsifier fired at 5 of 93, so the pair is also the A/B that
+    matters most to keep clean. Refused before the --arrival-carry-needs-
+    --zero-lead check below, because "you passed two field-4 policies" is the
+    more useful thing to be told when someone passes all three.
+
+    REFUSED IN THE OTHER DIRECTION, same as F1: --arrival-carry WITHOUT
+    --zero-lead, for the identical reason and with the identical history behind
+    it -- F1b is a MODIFIER on the zero-lead send site with no send site of its
+    own, and an inert flag whose run log says "F1b arm" would publish a null
+    against F1b's prediction that the fix never earned.
     """
+    if plane_carry and arrival_carry:
+        return ("--plane-carry and --arrival-carry cannot run together. They "
+                "are TWO POLICIES FOR ONE WIRE FIELD -- field 4 of the "
+                "zero-lead 0x0029, the plane the client writes to agent+0x80 "
+                "on the SYNC copy. REALFIX-F1 carries the PREVIOUS GRANT'S "
+                "plane; REALFIX-F1b carries the plane of the grant the copy "
+                "has ARRIVED at. Whichever one the send site read, the other "
+                "would be inert -- and both print their own pre-registered "
+                "prediction at startup, so a server carrying both announces "
+                "two predictions and can honestly satisfy neither. F1b exists "
+                "BECAUSE F1's primary falsifier fired (5 of 93 grants still "
+                "mismatched, every one of them F1's own named two-interval "
+                "limit), so this is the one A/B in the arc that most needs to "
+                "stay clean. Pass --zero-lead --plane-carry for the F1 arm, "
+                "--zero-lead --arrival-carry for the F1b arm, or --zero-lead "
+                "alone for the P2 control both are measured against."), []
+    if arrival_carry and not zero_lead:
+        return ("--arrival-carry requires --zero-lead. REALFIX-F1b is a "
+                "MODIFIER on the zero-lead grant, not a policy of its own: it "
+                "changes ONE field of the 0x0029 that the --zero-lead block "
+                "sends (field 4, the plane written to agent+0x80 on the SYNC "
+                "copy), and there is no other send site in this file that "
+                "reads it. Passed alone it would change NOTHING, and a server "
+                "behaving exactly like the shipped default while the run log "
+                "says 'F1b arm' is how a fix gets credited with a null it "
+                "never earned -- the same refusal --plane-carry already "
+                "carries, for the same reason, after --zero-lead --stop-echo "
+                "was once accepted SILENTLY. Pass --zero-lead --arrival-carry "
+                "for the F1b arm, or --zero-lead alone for the P2 arm it is "
+                "measured against."), []
     if plane_carry and not zero_lead:
         return ("--plane-carry requires --zero-lead. REALFIX-F1 is a MODIFIER "
                 "on the zero-lead grant, not a policy of its own: it changes "
@@ -3591,7 +3889,14 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "HARD-SETS both copies) on a different trigger. But it is a second "
             "uncontrolled variable in an A/B built for one: a snap avoided "
             "cannot be attributed between them. Prefer one arm at a time for "
-            "REALFIX-L1.")
+            "REALFIX-L1."
+            + ("" if not arrival_carry else
+               " WITH --arrival-carry it also INVALIDATES the arrival queue, "
+               "which is wired rather than assumed: 0x00602B20's armed arm "
+               "clears the arrival tick at 0x006021E6, so the outstanding "
+               "grant never arrives and its entry would otherwise come due on "
+               "a leg the client abandoned. _note_wire_move drops the queue "
+               "and takes the hard set's own plane as the reached one."))
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -11609,10 +11914,46 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # pre-F1 build, which is what makes F1 a
                                 # MODIFIER on this arm rather than a second
                                 # policy inside it.
+                                #
+                                # -- REALFIX-F1b, --arrival-carry, THE SECOND
+                                # WRITER OF THE SAME FIELD, which is why the
+                                # two flags are mutually exclusive at startup
+                                # rather than layered. F1's residual is its own
+                                # NAMED LIMIT: it corrects a one-interval lag,
+                                # and the 5 grants of 93 it left mismatched in
+                                # capture 20260821T143411 are all TWO-interval
+                                # lags -- the client had been on the deck for
+                                # two grants while the copy was still back on
+                                # plane 0, so "the previous grant" was already
+                                # 18. F1b carries the plane of the grant the
+                                # copy has ARRIVED at instead, computed from
+                                # the client's own bake over our own SYNC
+                                # model. See the ARRIVAL_CARRY block.
+                                #
+                                # BOTH READS ARE PURE and are made on EVERY
+                                # evaluation, fired or refused, because a
+                                # refusal must not consume the queue: nothing
+                                # went on the wire, so the copy is still bound
+                                # for the point the last GRANT named. The one
+                                # mutation is arrival_carry_advance() below,
+                                # after the send. The leg is computed HERE, up
+                                # front, because send() runs _note_wire_move
+                                # and that rewrites the sync model out from
+                                # under `_sync_position`.
                                 zl_plane_cur = plane
+                                zl_carry, zl_carry_why = "off", None
+                                ac_arrival, ac_dist = None, None
                                 if PLANE_CARRY:
                                     zl_plane_cur = state.get(
                                         "zl_last_grant_plane", plane)
+                                    zl_carry = "plane-carry"
+                                elif ARRIVAL_CARRY:
+                                    zl_plane_cur, zl_carry_why = (
+                                        arrival_carry_field4(
+                                            state, now_z, plane))
+                                    ac_arrival, ac_dist = arrival_carry_leg(
+                                        state, now_z, reported)
+                                    zl_carry = "arrival-carry"
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -11670,7 +12011,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                          else None),
                                               plane_differs=(
                                                   bool(zl_plane_cur != plane)
-                                                  if zero_ok else None))
+                                                  if zero_ok else None),
+                                              # REALFIX-F1b. `carry` NAMES the
+                                              # arm in the row, because
+                                              # `plane_carry: false` reads
+                                              # identically for the P2 control
+                                              # and for an F1b run and the
+                                              # gamesrv jsonl header carries no
+                                              # argv (REALFIX-Q8: three movetap
+                                              # pairs are unattributable for
+                                              # exactly that reason). `why` and
+                                              # `arrival_in` are what let a
+                                              # later session check the arrival
+                                              # MODEL against movetap without
+                                              # re-deriving it -- the model is
+                                              # the claim, so it ships its own
+                                              # operands.
+                                              carry=zl_carry,
+                                              carry_why=zl_carry_why,
+                                              arrival_in=(
+                                                  None if (ac_arrival is None
+                                                           or not zero_ok)
+                                                  else round(ac_arrival - now_z,
+                                                             3)),
+                                              carry_dist=(
+                                                  None if (ac_dist is None
+                                                           or not zero_ok)
+                                                  else round(ac_dist, 1)))
                                 if zero_ok:
                                     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                          [PLAYER_AGENT_ID, list(reported),
@@ -11686,6 +12053,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # now bound for, so it advances when a grant
                                     # does and stays put when one is refused.
                                     state["zl_last_grant_plane"] = plane
+                                    # REALFIX-F1b's queue, on the same rule and
+                                    # for the same reason. CONSUME what arrived,
+                                    # DISCARD the leg this grant just superseded
+                                    # (the copy re-aimed mid-leg and will never
+                                    # reach it), ARM this grant's entry. It is
+                                    # the flag's ONLY mutation, so a send that
+                                    # raises leaves the copy's modelled state
+                                    # exactly as the last grant that really went
+                                    # out left it. `ac_arrival` was computed
+                                    # BEFORE the send, from the sync model this
+                                    # send has now moved.
+                                    if ARRIVAL_CARRY:
+                                        arrival_carry_advance(
+                                            state, now_z, ac_arrival, plane,
+                                            reported)
                                 # AND NO `else` HOLDING IT. A refused heading
                                 # grant is DROPPED; the next 0x003D supersedes
                                 # it in ~0.29 s by construction. See
@@ -13753,6 +14135,34 @@ def main():
                          "the player-identified version is UNVERIFIED at 87%% "
                          "vs 39%% under two identification rules. Its prediction "
                          "and its named limit are printed at startup.")
+    ap.add_argument("--arrival-carry", action="store_true",
+                    help="REALFIX-F1b, and it exists because F1's OWN PRIMARY "
+                         "FALSIFIER FIRED. Also a MODIFIER ON --zero-lead "
+                         "(refused without it), and MUTUALLY EXCLUSIVE with "
+                         "--plane-carry -- the two write the same wire field. "
+                         "F1 sends the PREVIOUS grant's plane, which corrects "
+                         "a ONE-interval lag; its run (20260821T143411) left 5 "
+                         "of 93 grants still mismatched against the SYNC "
+                         "copy's own agent+0x80, all 5 above the gate-1 cut, "
+                         "and every one is F1's own named limit -- a TWO-"
+                         "interval lag, where the client had been on the new "
+                         "plane for two grants while the copy was still on the "
+                         "old one. F1b sends the plane of the grant the copy "
+                         "has ARRIVED at, computed with the client's own bake "
+                         "(arrival = send time + |dest - copy| / 288 u/s, the "
+                         "0x005FE950 formula over our existing SYNC model) -- "
+                         "no navmesh, no new constant. A grant that supersedes "
+                         "a leg still in flight DISCARDS it, because the copy "
+                         "re-aims mid-leg and never reaches that destination. "
+                         "WHAT GROUNDS IT: in F1's own capture the SYNC copy's "
+                         "plane word changes 24 times and 17 of those are NOT "
+                         "at a grant -- all 17 land on a modelled ARRIVAL, "
+                         "median |dt| 0.070 s against a 9.5 Hz tap, zero free "
+                         "parameters. So field 3 is written to agent+0x80 at "
+                         "arrival and field 4 at the grant, which is retail's "
+                         "own lead/lag shape. Its prediction is printed at "
+                         "startup, and so is the fact that F1's event "
+                         "reduction was NOT significant (Fisher p = 0.196).")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -14331,7 +14741,7 @@ def main():
         zero_lead=a.zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
-        plane_carry=a.plane_carry)
+        plane_carry=a.plane_carry, arrival_carry=a.arrival_carry)
     if _zl_refusal:
         raise SystemExit(_zl_refusal)
     if a.zero_lead:
@@ -14476,6 +14886,127 @@ def main():
         print("      Score it with:  the grant_verdict rows' own plane_dest / "
               "plane_cur / plane_differs fields, against movetap's agent+0x80 "
               "on the SYNC copy   (state the denominator)")
+
+    # REALFIX-F1b. Same house style, same reason, and one addition F1's banner
+    # could not carry: this arm's predecessor ALREADY FAILED its own primary
+    # falsifier, and its event null was not significant. Both facts are printed
+    # so that neither this run's zero nor F1's can be read as proof after the
+    # fact. ASCII only -- see the --resync banner's note, where a U+26A0 raised
+    # UnicodeEncodeError on a default Windows console.
+    if a.arrival_carry:
+        global ARRIVAL_CARRY
+        ARRIVAL_CARRY = True
+        print("[map] --arrival-carry ON. REALFIX-F1b, the ARRIVED-plane fix, a "
+              "MODIFIER on --zero-lead and not a policy of its own. It "
+              "supersedes --plane-carry and cannot run beside it.")
+        print("      SENDS     the same 0x0029 at the same point with the same "
+              "rate limit. ONE field changes: field 4 (the plane written to "
+              "agent+0x80 on the SYNC COPY) becomes the plane of the most "
+              "recent grant that copy has ARRIVED at. Field 3 (the "
+              "destination's plane) is unchanged.")
+        print(f"      ARRIVAL   the CLIENT'S OWN bake at 0x005FE950, over our "
+              f"existing SYNC model and with no navmesh: arrival = send time + "
+              f"|dest - copy| / {DEFAULT_RUN_SPEED:.0f} u/s, truncated to whole "
+              f"ms and floored at 1, with the |d|^2 <= "
+              f"{ARRIVAL_ZERO_DIST_SQ:.1f} short-circuit arriving at once. The "
+              f"copy's position is _sync_position()'s dead reckon, which PARKS "
+              f"on the granted point.")
+        print("      SUPERSEDE a grant that lands while a leg is still in "
+              "flight DISCARDS that leg. The copy re-aims mid-leg, so it never "
+              "reaches the superseded destination and that plane must never "
+              "become 'the plane the copy arrived at'. This is the whole "
+              "difference from F1 and the case a naive queue gets wrong.")
+        print("      DEFAULT   with nothing arrived yet, field 4 is the CURRENT "
+              "plane -- exactly today's payload, and exactly F1's default. The "
+              "first grant of a session has no lagged copy to be wrong about. "
+              "Same answer if the SYNC model is unseeded: that leg's arrival is "
+              "unknown, so it never contributes a plane.")
+        print("      WHY NOT F1 -- ITS PRIMARY FALSIFIER FIRED. Run "
+              "20260821T143411 (--zero-lead --plane-carry) left 5 of 93 grants "
+              "whose field 4 still differed from the SYNC copy's agent+0x80, "
+              "against 8 of 88 in the P2 control. All 5 are above the gate-1 "
+              "cut and all 5 are F1's OWN NAMED LIMIT: two-interval lags, where "
+              "the client had been on plane 18 for two grants while the copy "
+              "was still on 0, so 'the previous grant' was already 18.")
+        print("      GROUND    OBSERVED offline, and it is the reason to "
+              "believe the arrival model rather than the fix. In that same "
+              "capture the SYNC copy's plane word changes 24 times and 17 of "
+              "those changes are NOT at a grant -- 17 of 17 land on a modelled "
+              "ARRIVAL, |dt| median 0.070 s and max 0.135 s against a tap "
+              "running at 9.5 Hz (0.105 s a sample), with ZERO free parameters "
+              "fitted. So the client writes field 3 to agent+0x80 at ARRIVAL "
+              "and field 4 at the GRANT, which is retail's own lead/lag shape.")
+        print("      PRE-SCREENED OFFLINE BEFORE THIS FLAG WAS EVER ARMED, and "
+              "the screen CHANGED the prediction. Replaying all three field-4 "
+              "policies over the two REALFIX-L3 captures "
+              "(grantsim.py --planecarry), anchored on the plane word movetap "
+              "actually read and refusing every grant the counterfactual's own "
+              "divergence contaminated:")
+        print("        shipped --zero-lead   10 of 88 | 18 of 36")
+        print("        F1 --plane-carry       0 of  8 |  6 of 93")
+        print("        F1b --arrival-carry    0 of  8 |  3 of 69")
+        print("      So F1b DOES NOT REACH ZERO, and this banner does not claim "
+              "it will. Its three survivors are a sub-frame RACE on "
+              "`arrival <= now` -- each grant lands 8, 24 and 35 ms after a "
+              "modelled arrival the client had not yet acted on -- while all "
+              "three of F1's genuine TWO-INTERVAL lags are closed. A ~40 ms "
+              "guard band would close the race and is REFUSED: eps has no "
+              "derivation and would be fitted to the one capture that scores "
+              "it.")
+        print("      PREDICTION, stated before the run, and it is the screened "
+              "one:")
+        print("        MISMATCH  grants whose field 4 differs from the SYNC "
+              "copy's agent+0x80 come in at ~3, DOWN FROM 6 under F1 and 10 "
+              "under the P2 control on those two captures -- and NOT at 0. "
+              "Baselines: score with the LAST SAMPLE BEFORE the grant, not the "
+              "nearest. The published 8 and 5 pair with the nearest sample, "
+              "which can be taken AFTER the grant and then reads the plane the "
+              "grant just wrote; corrected they are 10 and 6.")
+        print("        RESIDUAL  every surviving mismatch lands within ~40 ms "
+              "of a modelled arrival. A residual FURTHER OUT than that is a "
+              "logic error in the queue and not the known race.")
+        print("        EVENTS    REALFIX-E stays at 0, as it was under F1. It "
+              "was 3 under the P2 control (476.8, 465.9, 242.8 u).")
+        print("        SEPARATION p50 and p90 UNCHANGED within 5% -- F1b "
+              "touches no position, only a plane word. F1 came in at -1.4% on "
+              "p90 (498 -> 491 u).")
+        print("      FAILS IF   the field-4 mismatch count EXCEEDS F1's 6, OR "
+              "any surviving mismatch is more than ~40 ms from a modelled "
+              "arrival, OR any REALFIX-E event occurs, OR separation p90 moves "
+              "more than 5%.")
+        print("      !! F1's ZERO WAS NOT SIGNIFICANT AND NEITHER IS THIS ONE "
+              "ON ITS OWN. On the condition that matters -- above the cut AND "
+              "field 4 wrong -- the P2 control had 8 such grants and 3 events; "
+              "F1 had 5 such grants and 0. Fisher exact: p = 0.196. Zero events "
+              "in five exposures is what chance produces about one time in "
+              "five, so F1's null is consistent with the fix working and "
+              "equally consistent with it doing nothing to the events. What "
+              "settles it is REPETITION -- three arms by three runs -- not "
+              "another single arm. Read the MISMATCH count as this run's "
+              "result; read the event count as one more draw.")
+        print("      !! AND THE SUBSTRATE MOVES BETWEEN RUNS. F1's p50 "
+              "separation was 150 -> 227 u (+51%) and its above-cut time 29% "
+              "-> 38% against the control, and F1 CANNOT have caused either -- "
+              "it changes one 16-bit field and no coordinate. That is "
+              "run-to-run path variance on an identical script, the same "
+              "variance that made REALFIX-L1's two identical-play baselines "
+              "differ by 1.7x.")
+        print("      !! NPC-GROUNDED, AND THE PLAYER VERSION IS UNVERIFIED. "
+              "Inherited whole from F1: retail's field 3 LEADS field 4 in 939 "
+              "of 1,245 differing rows (75.4%, delay p25/p50/p75 = "
+              "0.26/0.64/1.28 s), replicated at 83.6% under a symmetric +-3.0 s "
+              "window (n = 825). That is measured over retail's whole AGENT "
+              "population, which is OVERWHELMINGLY NPCs; under two "
+              "player-identification rules the same statistic reads 87% and "
+              "39%.")
+        print("      !! NECESSARY, NOT SUFFICIENT. 5 of REALFIX-L3's 8 "
+              "plane-rewriting above-cut grants did NOT warp, and whatever "
+              "selects those 3 from those 8 is unmeasured. F1b removes the "
+              "necessary condition; a null under it does not identify the "
+              "sufficient one.")
+        print("      Score it with:  python toolkit/clientscan/grantsim.py "
+              "--planecarry   (the offline counterfactual that pre-screened "
+              "this policy, and the calibration gate it had to pass first)")
 
     if a.resync:
         global RESYNC

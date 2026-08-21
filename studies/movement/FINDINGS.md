@@ -4452,6 +4452,8 @@ where that question gets answered.
 
 ### 3. The crux cell resolves: corner-cutting is REFUTED
 
+⚠ **READ THE CORRECTION FIRST — "THE X2a CELL NEVER RAN" below.** X2a did not run (0 of 783 samples in its window are on the deck), so its null is not evidence and this section's X2a leg is WITHDRAWN; corner-cutting remains refuted on the chain measurements.
+
 All three events are on the **shuttle** — constant x ≈ 10,950, y sweeping
 4,113–4,929, i.e. **REALFIX-X3**, the straight perpendicular crossing with no wall
 contact. The wall cells ran and produced nothing: **the late legs (X1's parapet
@@ -4548,8 +4550,8 @@ the SYNC copy's `agent+0x80` go to 0 … FAILS IF the field-4 mismatch count is 
 
 | | grants | field 4 ≠ the copy's own plane |
 |---|---|---|
-| P2 `--zero-lead` | 88 | **8 (9%)** |
-| F1 `+ --plane-carry` | 93 | **5 (5%)** |
+| P2 `--zero-lead` | 88 | **8 (9%)** ⚠ undercount — strictly-before pairing gives **10**; see the F1b entry |
+| F1 `+ --plane-carry` | 93 | **5 (5%)** ⚠ undercount — strictly-before gives **6** |
 
 **Five is not zero, so the primary falsifier FIRED.** And all five sit **above the
 cut** — the exact combination that produced 3 of 8 events in the control:
@@ -4562,8 +4564,7 @@ t=178.93 (11123,5249) w3=18 w4=18 | copy plane 0 | sep 366
 t=191.66 (10860,4816) w3=18 w4=18 | copy plane 0 | sep 429
 ```
 
-**Every one is the spec's own NAMED LIMIT, biting exactly where it said it
-would**: *"F1 under-corrects when the copy is more than one grant interval
+⚠ **CORRECTED by the F1b offline screen below: THREE of these five are a sub-frame arrival race (F1 sent the right value ~24 ms early), and only `t=178.93` and `t=191.66` are two-interval lags.** As written this read: **the spec's own NAMED LIMIT, biting exactly where it said it would**: *"F1 under-corrects when the copy is more than one grant interval
 behind."* All five send `w4 = 18` because the **previous grant** was already on
 plane 18 — the client had been on the deck for two grants while the copy was
 still back on plane 0. F1 corrects a one-interval lag; these are two-interval
@@ -4607,3 +4608,221 @@ is explained by its own stated limit, and nothing contradicts round 6 or L3.
 2. **Repetition.** Three arms × three runs would put the event comparison on
    n = 9 per arm; at the control's 3-in-8 rate, that is enough for the Fisher
    test to separate a real zero from a lucky one.
+
+## 2026-08-21 — REALFIX-F1b BUILT AND REFUTED AT A DESK: the offline screen kills its prediction, corrects two published numbers, and validates the arrival model
+
+**No client run.** `--arrival-carry` sends field 4 = the plane of the grant the
+copy has **arrived** at, computed from the client's own bake formula
+(`arrival = send + trunc(|dest − copy|·1000/288)`, floored at 1) over the SYNC
+model the server already maintains — no navmesh, no new constant. Its point was
+to close F1's named limit. **It was pre-screened against captures already in the
+vault before any arm was run, and the screen refuted its prediction.**
+`python toolkit/clientscan/grantsim.py --planecarry` is the permanent screen.
+
+### 1. THE COUNTERFACTUAL — what each policy would have sent
+
+Field 4 scored against the plane word movetap **actually read in the sample
+strictly before each grant**, with grants dropped where the counterfactual's own
+divergence contaminates the trace (denominator printed, never hidden):
+
+| policy | `132546` (P2 control) | `143411` (F1 arm) |
+|---|---|---|
+| shipped `--zero-lead` | **10** of 88 | **18** of 36 |
+| F1 `--plane-carry` | 0 of 8 | **6** of 93 |
+| **F1b `--arrival-carry`** | 0 of 8 | **3** of 69 |
+
+**F1b does NOT reach 0, so its pre-registered prediction — the falsifier F1
+failed — would have failed too.** Recorded before a client was ever pointed at
+it, which is the entire reason the screen exists.
+
+**The three survivors are a sub-frame race, not a logic error.** All three land
+**8–35 ms after a modelled arrival the client had not yet performed**
+(`(10950,4720)`, `(10950,4708)`, `(10950,4699)`, all `w3=18 field4=18` against an
+observed plane 0, sep 510–514 u). The client consumes an arrival **on a frame**,
+not on the tick. **F1b's logic does close all of F1's genuine two-interval lags.**
+A ~40 ms guard band closes the rest and is **REFUSED**: `eps` has no derivation
+and would be fitted to the one capture that scores it.
+
+### 2. ⚠ TWO CORRECTIONS TO THIS DOCUMENT'S OWN PUBLISHED NUMBERS
+
+**(a) The field-4 baselines UNDERCOUNT.** FINDINGS's "8 of 88" and "5 of 93"
+paired each grant with the *nearest* movetap sample — which can be one taken
+**after** the grant, reading back the plane word that grant just wrote and
+scoring a genuine rewrite as a match (leads +0.044, +0.043, +0.016 s).
+**Strictly-before pairing gives 10 of 88 and 6 of 93.** The 10 is corroborated
+independently by this document's own L3 table, which counts **10** plane-word
+changes on that capture. Both conventions are kept in the code
+(`FIELD4_PUBLISHED_NEAREST` / `FIELD4_MEASURED`) so the correction cannot be
+silently re-lost. **F1's improvement is 10 → 6, not 8 → 5.**
+
+**(b) "All five of F1's residuals are the spec's NAMED LIMIT" is WRONG.** Written
+in the F1 entry above and merged; the screen shows **three of the five are the
+sub-frame arrival race** (F1 sent the right value ~24 ms early) and **only
+`178.93` and `191.66` are true two-interval lags**. The named limit is real and
+it bit — on two grants, not five.
+
+### 3. What the screen validated on its way past
+
+**The arrival model is falsifiable, and it survives with zero free parameters.**
+`agent+0x80` has two writers: our field 4 at the grant, and the client itself at
+**arrival**. In the F1 capture the word changes 24 times, **17 of them not at a
+grant — and all 17 land on a modelled arrival** (|dt| median 0.070 s, max
+0.135 s at a 9.5 Hz tap; strictly early in 4 of 17, by at most 20 ms). That is a
+prediction of *when the client will move a byte we do not write*, made from the
+bake formula alone, and it lands 17 for 17.
+**Control, and it is asserted rather than passed:** the P2 capture makes **zero**
+client-authored writes, so the model is unfalsifiable there **by construction** —
+the check requires `n == 0` instead of scoring 0-of-0 as a pass.
+
+**The closed simulation is printed BELOW the anchored table and labelled a
+tautology**: F1b returns 0 under it *by construction*, because that simulator
+derives the copy's plane from the same arrival model F1b's policy reads — and it
+**under-counts F1's own residual, 3 against the wire's 6**. Same discipline as
+round 5 §6.5, applied to a number that would have flattered this build.
+
+### 4. Where this leaves the fix
+
+**Nothing here is a live result and F1b's arm has not been run** — deliberately:
+its own screen says the headline it was built to produce is unavailable.
+
+- **The mechanism story is stronger than before this build**, on the arrival
+  model's 17-for-17 and on the corrected baselines.
+- **The fix is no closer to demonstrated.** F1 improves the exposure 10 → 6;
+  F1b would improve it to 3 with the residual explained but not removed; and
+  **F1's own event reduction remains non-significant (Fisher p = 0.196)**. The
+  binding constraint is not the policy any more, it is **n**.
+- **What settles it is repetition, not another flag**: three arms × three runs
+  puts the event comparison on n ≈ 9 per arm, where the control's 3-in-8 rate can
+  actually separate a real zero from a lucky one. **The next client time this arc
+  spends should buy replicates, not a fourth policy.**
+
+## 2026-08-21, later — ⚠ THE X2a CELL NEVER RAN: the slide legs walked off the deck, and one leg of the corner-cutting refutation is WITHDRAWN
+
+**Operator-reported and confirmed.** The operator watched the L3 runs and noted
+the character eventually veers off the bridge into a narrow corridor. It does,
+both arms, and the wall cells are the cause.
+
+**What is EXPECTED and worked**: the parapet contact itself. P0's wire shows
+textbook wall-slide at t+160–166 — **x pinned at exactly 11123.0 for eight
+consecutive reports** while y slides 5372 → 4595, speed **218–225 u/s** against
+the 285 u/s free-travel rate, report cadence tightened to **0.50 s**; and again
+at t+171–175 against the west parapet, **x = 10860.0**, 146–149 u/s. That is
+REALFIX-X1 doing exactly what it was built to do, and it is round 4's own
+contact signature reproduced.
+
+**What is NOT expected, and it is a defect in this plan**: the character never
+returns. At t+181 it leaves at 512.9 u per interval, full speed, southeast, and
+does not come back. **The cause is that a slide displaces the character
+PERPENDICULAR to its heading, while the plan's back-out (`S:4` / `S:1.5`)
+reverses along the HEADING.** The perpendicular component is never undone, so
+every rep starts further along the wall, and three X1 reps plus the X2a transit
+accumulate enough drift to leave the deck entirely.
+
+**THE COST, measured**: of the samples in the X2a window (t+195 onward),
+**0 of 782 (P0) and 0 of 783 (P2) are on the deck** (`10860 ≤ x ≤ 11123`,
+`4532 ≤ y ≤ 5579`). **REALFIX-X2a did not run at all.** Its instants were spent
+in open ground southeast of the bridge.
+
+### What this withdraws, and what survives
+
+**WITHDRAWN — the L3 entry's "corner-cutting is REFUTED at the cell built to test
+it".** That sentence rests on X2a returning zero events. X2a returned zero
+*instants of its own condition*, which is not the same thing and is not evidence.
+The cell is **NOT MEASURED**, exactly as `REALFIX.md` §6.1.5's own rule requires
+when the observed path leaves the intended one — the rule was written for this
+and this is the first time it has had to fire.
+
+**SURVIVES, on stronger evidence than X2a ever was.** Corner-cutting is still
+refuted, by two independent measurements that do not involve the wall cells at
+all:
+
+1. **Round 6's chain reconstruction**: a node at every wire report gives **0
+   exceedances** of the 99.92 u radius (max 72.4 u), and at all three of that
+   round's warps the copy-to-polyline distance is **0.0 / 0.0 / 0.0 u**.
+2. **L3's own REALFIX-I1 chain walk**, read from the client's own history nodes:
+   the sync copy is **0.0 u from the nearest chain segment in 698 of 698 scored
+   samples**, so the straight-line conjunct cannot be what fails.
+
+**So the conclusion stands and its X2a leg is amputated.** The distinction
+matters because a reader who takes "the wall cell came back empty" as support
+would be reading a cell that never happened.
+
+### The fix for the next plan
+
+Back out of a wall cell by **retracing the OBSERVED path**, not by reversing the
+heading — or re-anchor with an explicit transit after every slide rep, which the
+X1 legs already do between reps and the X2a legs do not. Cheapest correct form:
+one transit token before **each** slide rep, accepting ~8 s of walking per rep to
+buy a cell that is actually where it says it is. And the general rule this is the
+third instance of: **a plan's later legs are only where the plan says while
+nothing has touched geometry; after any wall contact, position is an observation,
+not a prediction.**
+
+## 2026-08-21 — ★★ REALFIX-L4: THE FIX IS DEMONSTRATED. Pooled 9 of 21 against 0 of 13, Fisher p = 0.0056
+
+**OBSERVED, `ours`.** Two arms, a **shuttle-only** plan built for exposure rather
+than coverage — the wall cells were dropped (they drift off the deck, and X2a
+never ran) and that time spent on **8 crossing cycles** instead of 3. Identical
+scripted input both arms; movetap attached after the map verdict.
+Control `20260821T161910` / `movetap-…161928`; F1 `20260821T162449` /
+`movetap-…162505`.
+
+| | **control `--zero-lead`** | **F1 `+ --plane-carry`** |
+|---|---|---|
+| **REALFIX-E events** | **6** | **0** |
+| max `async_at` step | 472.2 u | **60.7 u** |
+| grants | 61 | 70 |
+| field 4 ≠ the copy's own plane | 14 | **8** |
+| **…and above the cut (TREATED)** | **13** | **8** |
+| separation p50 / p90 / max | 303 / 513 / 529 | 349 / 515 / 529 |
+| samples above the cut | 56% | **69%** |
+
+The six control events: 463.5, 472.2, 263.6, 467.1, 285.3, 458.7 u, each
+collapsing separation from 297–515 u onto 13.8–27.1 u. **The design worked as
+intended** — 13 treated grants against L3's 8, at a consistent rate (6/13 = 0.46
+against L3's 3/8 = 0.375).
+
+### The statistics, and this run is why they close
+
+| comparison | control | F1 | Fisher (one-sided) |
+|---|---|---|---|
+| L3 alone | 3 of 8 | 0 of 5 | p = 0.196 |
+| **L4 alone** | **6 of 13** | **0 of 8** | **p = 0.032** |
+| **POOLED** | **9 of 21** | **0 of 13** | **p = 0.0056** |
+
+Under the null that F1 does nothing to events, its 13 pooled treated grants
+should have produced **5.6 events**. They produced **zero**.
+
+**And it is not an exposure artifact — the arithmetic runs the wrong way for
+that.** The F1 arm sent **more** grants (70 vs 61) and spent **more** of its run
+above the gate-1 cut (**69% vs 56%**) with a **higher** p50 separation (349 vs
+303 u). It had more of every condition that precedes a warp, and produced none.
+
+### What is now established, and in what terms
+
+**REALFIX-F1 removes the warp.** The mechanism was decoded (round 6), reproduced
+prospectively with a control that could not express it (L3), and is now removed
+by a three-line change at p = 0.0056 across two independent runs with 34 treated
+grants between them. The chain from wire to warp is measured end to end: field 4
+→ `agent+0x80` → `q`'s plane in the match test's walkable conjunct → no match →
+gate 1 at ~500 u → whole-roster reseed → the character yanked ~460 u backward.
+
+**What is still NOT established, and none of it is load-bearing for the above:**
+
+- **F1 does not zero its own mechanism proxy.** Field 4 still disagreed with the
+  copy's plane on **8 of 70** grants here (14 of 61 in the control), so the
+  primary falsifier from F1's own banner remains failed. Its offline screen says
+  why: some are two-interval lags, some are the sub-frame arrival race. **The
+  fix works despite an imperfect proxy, which means the proxy is not the
+  mechanism** — a distinction this arc should keep, because F1b was built to zero
+  the proxy and would have bought nothing measurable here.
+- **The regime is one map, one plan, keyboard-only, click-free.** The round-4
+  spam-click regime (11.49 hard rows/min under the shipped default) is untouched
+  by any of this and remains the operator's run.
+- **The instrument ran at 8.4–9.5 Hz against a 20 Hz request** in both arms.
+  Positives valid, nulls void — and the headline here rests on a **positive in
+  the control** (6 events) and a null in the treatment. The null is licensed by
+  the control's own rate at matched exposure, not by the tap.
+- **`--zero-lead` itself remains undemonstrated as a warp fix** against the
+  shipped default. It is the substrate F1 is measured on, not a proven
+  improvement over P0 — and P0 in this regime sends no grants at all.
