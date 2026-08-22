@@ -69,6 +69,7 @@ ADRENALINE_CLEAR = 0x00D0
 ADRENALINE_SPEND = 0x00D2
 
 PROP_MAX_ENERGY = 41        # SELF-SCOPED -- see whose_agent below
+PROP_MAX_HEALTH = 42        # re-sent on change -- see whose_max_health below
 PROP_MELEE_FINISHED = 1
 DAMAGE_PROPS = (16, 17)     # both carry a negative fraction of max health
 STRIKE_UNITS = 25
@@ -92,6 +93,38 @@ def f32(dw):
     integer for -0.0354.
     """
     return struct.unpack("<f", struct.pack("<I", int(dw) & 0xFFFFFFFF))[0]
+
+
+# PRINT NINE DECIMALS, AND THAT IS NOT FUSSINESS. The single most interesting
+# damage event in the corpus is 0xBC23D70A = -0.009999999776482582, which four
+# decimals render as "1.0000%" -- and 1.0% is exactly where the two surviving
+# rules AGREE. Read from the bytes it is 0.999999978%, just below, where they
+# do NOT. Three independent readers (this scanner and two replication agents)
+# printed it rounded and all three read past it. studies/skills 34.D.
+PCT_FMT = "%12.9f"
+
+
+def whose_max_health(msgs, me, before):
+    """The observer's maximum health IN FORCE at stream index `before`.
+
+    NOT the last one in the connection, and not any one of them. Property 42 is
+    re-sent when it changes -- a death penalty moves it, and so does a gear
+    change -- so a connection can carry 120 for its whole fight and 102 three
+    thousand messages later. Two replication agents both took a set of the
+    values and both assigned the WRONG maximum to two connections; the skeptic
+    pass caught it from the bytes. Immaterial to the rule as it happens (those
+    rows are excluded anyway, and all four ARMED connections carry only 480),
+    material as a method: a denominator read non-temporally is a denominator
+    that can be silently wrong.
+
+    The leading 1 is skipped: property 42 arrives as the PAIR (1, real_max) for
+    every own agent in the corpus, which `pools.py`'s header records as
+    unexplained and which nothing here depends on.
+    """
+    seen = [int(v[3]) for i, (_t, op, v) in enumerate(msgs)
+            if op == PROP_INT and len(v) > 3 and int(v[1]) == PROP_MAX_HEALTH
+            and int(v[2]) == me and i < before and int(v[3]) > 1]
+    return seen[-1] if seen else None
 
 
 def whose_agent(msgs):
@@ -207,6 +240,7 @@ def scan(costs=None):
                     rows.append({
                         "capture": stamp, "connection": conn, "arm": arm,
                         "index": di, "t": t, "prop": prop, "source": src,
+                        "max_health": whose_max_health(msgs, me, di),
                         "value": val, "pct": abs(val) * 100.0,
                         "units": (sub[0][1] if sub and clean else None),
                         "ambiguous": not clean,
@@ -271,8 +305,12 @@ def main():
               f"   granted {len(gained):3}   granted nothing {len(none):3}")
         if mine:
             print(f"       percentage range "
-                  f"{min(r['pct'] for r in mine):7.4f} .. "
-                  f"{max(r['pct'] for r in mine):7.4f}")
+                  f"{min(r['pct'] for r in mine):.9f} .. "
+                  f"{max(r['pct'] for r in mine):.9f}")
+            band = [r for r in mine if 0.5 <= r["pct"] < 1.0]
+            print(f"       in the band where round and ceil DISAGREE "
+                  f"[0.5%, 1.0%): {len(band)} rows"
+                  + (f" -- {[round(r['pct'], 9) for r in band]}" if band else ""))
         if gained:
             f = fits(mine)
             print(f"       over {f['n']} joined rows: floor {f['floor']}, "
@@ -282,13 +320,14 @@ def main():
         print()
 
     if args.rows:
-        print("   pct     units  floor ceil round  prop  arm    capture")
-        print("   " + "-" * 68)
+        print("       pct        units  floor ceil round  maxH  prop  arm   capture")
+        print("   " + "-" * 76)
         for r in sorted(rows, key=lambda r: (r["arm"], r["pct"])):
             pct = r["pct"]
-            print(f"   {pct:7.4f} {str(r['units']):>6}  "
+            print(f"   {pct:12.9f} {str(r['units']):>6}  "
                   f"{math.floor(pct):5} {math.ceil(pct):4} "
-                  f"{int(math.floor(pct + 0.5 + 1e-9)):5}  {r['prop']:4}  "
+                  f"{int(math.floor(pct + 0.5 + 1e-9)):5}  "
+                  f"{str(r['max_health']):>4}  {r['prop']:4}  "
                   f"{r['arm']:5}  {r['capture']}"
                   + ("  AMBIGUOUS" if r["ambiguous"] else ""))
     return 0

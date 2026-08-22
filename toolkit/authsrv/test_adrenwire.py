@@ -102,7 +102,7 @@ import checks  # noqa: E402
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 71 (55 until 12-13 landed), and a run with neither the
+# machine executes 72 (55 until 12-13 landed), and a run with neither the
 # captures nor the pinned image
 # executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
 # also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
@@ -116,7 +116,7 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 71 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 72 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
 # fixtures, one section quietly ceasing to run would still clear 10. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
@@ -230,6 +230,25 @@ ARMED_NUMERATORS = [12, 13, 14, 15, 17, 24, 29, 30, 34, 39, 53]
 FAMILY_K = {"floor": None,                        # empty: lo >= hi
             "round": (1.000000, 1.040000),
             "ceil":  (0.905660, 0.960000)}
+
+# THE NEAR MISS, and it is the whole reason the boundary is still open. The two
+# surviving families disagree only below ~1%. EXACTLY ONE damage event in the
+# entire corpus lands in that band -- capture 20260810T235916, connection
+# ...:49163, observer 31, wire bits 0xBC23D70A -- and its bar carries no
+# adrenal skill, so there was nothing to charge. Every other damage-taken event
+# is at or above 2.5%. The corpus came within one connection of answering the
+# question.
+#
+# AND ITS VALUE IS 0.999999978%, NOT 1%. Rounded to four decimals it reads
+# "1.0000", which is exactly where round and ceil AGREE; from the bytes it sits
+# just below, where they do not. Three independent readers printed it rounded
+# and all three read past it, which is why `adrenjoin` now prints nine.
+NEAR_MISS_BITS = 0xBC23D70A
+# DERIVED FROM THE BITS, not transcribed: a hand-typed 0.99999998 is one
+# fat-fingered zero away from 99.99999776, which is what the first cut of this
+# constant actually was and which the check caught immediately.
+NEAR_MISS_PCT = abs(struct.unpack("<f", struct.pack("<I", NEAR_MISS_BITS))[0]) * 100.0
+DISAGREEMENT_BAND = (0.5, 1.0)
 
 # The three skills retail spends adrenaline on in this corpus, and the number of
 # connections carrying 207 at all.
@@ -1241,6 +1260,22 @@ def section_bar_gate():
               f"character -- ceil 1 unit, round no message at all -- so one "
               f"light hit taken settles it. `pools.damage_units` implements "
               f"round; nothing here says it is right")
+
+    band = [r for r in rows if not r["ambiguous"]
+            and DISAGREEMENT_BAND[0] <= r["pct"] < DISAGREEMENT_BAND[1]]
+    LEDGER.ok(len(band) == 1 and band[0]["arm"] == "dark"
+              and abs(band[0]["pct"] - NEAR_MISS_PCT) < 1e-9,
+              f"THE NEAR MISS: exactly one damage event in the corpus lands in "
+              f"[{DISAGREEMENT_BAND[0]}%, {DISAGREEMENT_BAND[1]}%), and it is "
+              f"DARK",
+              f"{[(r['arm'], round(r['pct'], 9), r['capture']) for r in band]}. "
+              f"That band is the ONLY place round and ceil disagree, so this "
+              f"single row is what the whole question turns on -- and its "
+              f"observer's bar has no adrenal skill, so there was nothing to "
+              f"charge. Its value is {NEAR_MISS_PCT:.9f}%, from bits "
+              f"0x{NEAR_MISS_BITS:08X}: at four decimals it prints as 1.0000, "
+              f"which is exactly where the two rules AGREE. Three independent "
+              f"readers printed it rounded and all three read past it")
 
     LEDGER.ok(len(skipped) <= 1,
               f"{len(skipped)} connection skipped for having no unique self "
