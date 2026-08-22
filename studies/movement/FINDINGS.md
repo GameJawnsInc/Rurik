@@ -5650,3 +5650,69 @@ mechanism". The tap separates them:
    the registered headline number and it is suggestive-plus, not
    overwhelming — a replication arm run to ~15 escapes would put it beyond
    argument if one is ever wanted cheaply.
+
+## 2026-08-22, later — the composite PRICED on L9's own captures, and REALFIX-Q5's gate-free reseed is ATTRIBUTED
+
+**No client run.** Two desk passes over data already in the vault plus a static
+walk of the pristine 38797 image. Both feed the ship-the-default decision.
+
+### 1. The composite's server-side cost, measured where the decision needs it
+
+OBSERVED, `ours`, from L9's own captures plus L8's control as a third point
+(`position_report` rows; drift = |client report − server blended model|,
+self-reset per accepted report):
+
+| arm | drift p50 / p90 / max | model step p50 / interval | reports rejected | player `0x0029`/min |
+|---|---|---|---|---|
+| L9 control `--grant-suppress` | 9.8 / 30.8 / **2,649 u** | 74.0 u | 4 | 12.1 |
+| **L9 composite** | **11.1 / 30.7 / 853 u** | 76.6 u | **0** | **72.5** |
+| L8 control `--grant-suppress` | 12.6 / 33.2 / **5,260 u** | 72.9 u | 7 | 9.7 |
+
+**In the normal-play regime the composite costs nothing measurable on the
+server model**: drift and model motion are statistically identical (the
+controls' 2,600–5,260 u drift maxima ARE the warp episodes — the composite has
+none), and it is the only arm with zero rejected reports. The real cost is
+wire volume — 174 player `0x0029` in 143.9 s ≈ **72/min — which is HALF of
+retail's own cadence** (retail: 88.5% of 2,855 live player grants answer a
+`0x003D` at median gap 0.492 s ≈ 122/min). ⚠ **This does not erase L5's W7**
+(drift p50 66.7 u, model chasing at 192 u/s): those numbers belong to the
+hold-S-and-spam-click posture, where the copy chases hard; the figures above
+are the click-and-keyboard posture L9 ran. Regime-dependence, stated, both
+kept. Unpriced still: enemies present (every warp run used `--no-enemy` or the
+town), where the moving copy meets aggro — expected small (the server model
+these consumers read is measured identical), unmeasured.
+
+### 2. REALFIX-Q5 — the gate-free reseed is fired from LOCAL INPUT and GM tooling, not the receive path
+
+Static, pristine 38797, `codescan --xrefs` with the registered positive
+control passing first (`0x00605FC0` → its three known callers, exactly).
+
+- **`0x005FCAA0` — the gate-free snap route, THE candidate for no-message
+  snaps — has exactly 3 direct callers, and none is a message handler:**
+  `0x004E6E82` sits in a **GmView.cpp** function whose own asserts include
+  `MissionCliIsGameMaster()` (GmView:2874) — GM tooling, unreachable in
+  normal play; `0x00816499` and `0x0081655D` are two call sites inside one
+  **ChCliApi.cpp** function asserting `(rotation >= -1.0f) && (rotation <=
+  1.0f)` (ChCliApi:5562), `hotKey < CHAR_SKILL_HOTKEYS` (:5613) and
+  `character == context->playerControlledChar` (:5692) — **the local player's
+  own input API**. Caveat, per the registration: `--xrefs` sees direct
+  branches and stored VAs only; an indirect route stays possible and unfound.
+- The four never-examined sites are mid-function addresses (0 direct refs to
+  the address itself, as expected of call sites) and attribute by module:
+  `0x00604A50` → **AgTrack.cpp** (history machinery); `0x00606394` → the
+  **AgUpdate.cpp**/CtlLayout boundary region; `0x005FF74B` → **AgAgent.cpp**'s
+  position/dead-reckoning region (window carries AgAgent:974/:978, the
+  `m_point`/`m_timeStopMovement` asserts); `0x006028FF` → **AgAgent.cpp**'s
+  message-application region (window carries AgAgent:2369/:2438
+  `INTERNAL_FLAG_IN_WORLD`, beside the `0x0029` writer `0x00602A40`).
+  Function-entry recovery for these four is NOT done — and after L9 their
+  urgency is gone: the residue they were suspected of producing (L6's
+  lingering-destination warps) did not manifest under the composite (33
+  candidates, 0 events).
+
+**What Q5 now says:** under bare `--grant-suppress`, the unexplained snaps
+have one attributed no-message route (local input / GM through `0x005FCAA0`)
+and one message-timed route (arrival-class instants, already in `grantsim`'s
+model). Which of them fired in L6 remains runtime work — REALFIX-Q1's
+breakpoint, still the arc's one unrun instrument. Under the composite the
+question is moot on the evidence: zero residue firings in every composite run.
