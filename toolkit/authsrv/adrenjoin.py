@@ -68,6 +68,16 @@ ADRENALINE_GAIN = 0x00CF
 ADRENALINE_CLEAR = 0x00D0
 ADRENALINE_SPEND = 0x00D2
 
+# FIELD INDEXING, AND IT DIFFERS FROM moralescan.py ON PURPOSE. `decode_all`
+# returns values with THE OPCODE AT INDEX 0, so this module reads a 0x009F as
+# v[0]=159, v[1]=property, v[2]=agent, v[3]=value. `moralescan.py` slices it
+# off first (`v = vals[1:]`) and therefore reads the property at v[0]. BOTH ARE
+# CORRECT; they are not the same convention.
+#
+# Written down because on 2026-08-22 the two files were compared side by side,
+# the disagreement read as an off-by-one in one of them, and a false correction
+# against moralescan was one step away from being filed. If you are here to
+# reconcile them: check for the slice before concluding anything.
 PROP_MAX_ENERGY = 41        # SELF-SCOPED -- see whose_agent below
 PROP_MAX_HEALTH = 42        # re-sent on change -- see whose_max_health below
 PROP_MELEE_FINISHED = 1
@@ -125,6 +135,14 @@ def whose_max_health(msgs, me, before):
             if op == PROP_INT and len(v) > 3 and int(v[1]) == PROP_MAX_HEALTH
             and int(v[2]) == me and i < before and int(v[3]) > 1]
     return seen[-1] if seen else None
+
+
+# THE `> 1` IN THAT COMPREHENSION IS LOAD-BEARING, and it is the same trap on
+# property 41. Both maxima arrive as the PAIR (1, real_max) for every own agent
+# in the corpus. A scan that takes the FIRST match reads 1 every time: on
+# 2026-08-22 exactly that produced an observer max-energy census of "1" across
+# all 58 connections, which is uniform enough to be an obvious tell and was
+# nearly reported anyway. Skip the 1s, or take the last.
 
 
 def whose_agent(msgs):

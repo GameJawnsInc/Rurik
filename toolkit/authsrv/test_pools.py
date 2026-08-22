@@ -429,7 +429,15 @@ def section_corpus_oracle():
               f"one instrumented death (studies/morale) -- so 22 is "
               f"20*0.85 + 5 (a dervish or assassin) and 17 is 20*0.85 + 0 (a "
               f"warrior). Both now have their morale DIRECTLY OBSERVED: each "
-              f"of those two connections carries 0x009C [observer, 85]")
+              f"of those two connections carries 0x009C [observer, 85]. "
+              f"AND THE TWO ROWS ARE NOT EQUAL EVIDENCE, which the morale arc "
+              f"pointed out after this comment first shipped: only (4,22) "
+              f"DISCRIMINATES base-scaling from total-scaling, because "
+              f"25*0.85 = 21.25 dies and 20*0.85+5 = 22 lives. (2,17) is a "
+              f"level-20 warrior whose base EQUALS its total, so both models "
+              f"predict 17 and the row is merely CONSISTENT with the rule "
+              f"rather than evidence for it. The discriminating datum is still "
+              f"n=1")
 
     LEDGER.ok(seen.get((2, 20), 0) >= 30 and not any(
                   k[0] == 3 and k[1] == 30 for k in seen),
