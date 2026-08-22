@@ -7601,14 +7601,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # The cast animation, in the OBSERVED player shape: 0x00A0
     # [60, caster, target, skill], 4 of 4 player activations in the live
     # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
-    # supports). GV_SKILL_FINISHED (58) is still not sent, but the sentence
-    # that used to justify that here -- "it appears ZERO times in 21,543
-    # live messages" -- is REFUTED: a direct decode finds FIVE, each one
-    # [58, agent, 0] riding a cast-end instant (four at the necromancer's
-    # E5s, one on another connection -- studies/castmech 3b, 2026-08-22).
-    # Wiring it belongs to its own change, beside the prop-8 pairs (17 in
-    # the corpus, bracketing the press burst, meaning unread) and the
-    # queued-cast divergence noted below.
+    # supports). GV_SKILL_FINISHED (58) is SENT since 2026-08-22, at cast
+    # end in cast_tick's E5 branch where all five corpus instances ride --
+    # the "0 of 21,543" sentence that used to justify leaving it unsent
+    # here was a count from the wrong channel (studies/castmech 3b/3c).
+    # Still registered beside it: the prop-8 pairs (the press-burst
+    # bracket) and the queued-cast divergence noted below.
     #
     # AND THE INSTANT IS A DIVERGENCE FOR QUEUED CASTS, measured the same
     # day: retail sends this property (and the energy debit) at CAST-BEGIN
@@ -7722,16 +7720,31 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_RECHARGE(skill {cast['skill_id']}, "
                  f"{cast['recharge']}s)")
             cast["e5_sent"] = True
+            # THE FINISHED PROPERTY RIDES THE NEXT SLOT, and its position is
+            # MEASURED: all five [58, agent, 0] in the live corpus are the
+            # message IMMEDIATELY after a cast end -- four right behind the
+            # necromancer's spell E5s, same batch, and the fifth right before
+            # another agent's cast-end damage property in the same relative
+            # slot (studies/castmech 3c). NON-ATTACK ONLY: the ranger's two
+            # attack-skill E5s carry neither 58 nor 46 (the attack trio's
+            # finished id), 0 of 2, so an attack cast's completion stays
+            # silent here rather than borrowing the spell family's property.
+            # (This send spent a week refused on "0 of 21,543 live messages",
+            # a count from the wrong channel -- the refutation and the wiring
+            # are studies/castmech 3b/3c.)
+            if not cast["attack"]:
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     [agents.GV_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
+                     f"skill_finished: skill {cast['skill_id']} completes")
             # AND THE HIT LANDS HERE, at cast end rather than at the press.
             #
             # E5 is the cast completing -- it is what carries the recharge and
             # starts it -- so it is the phase a skill's effect belongs to. The
-            # ORDER within this instant (E5 before the damage) is OURS and
-            # UNMEASURED: the corpus shows the player's cast cycle and shows
-            # damage, but no capture pins which of the two the server writes
-            # first. The NPC precedent is the reverse of the intuitive one
-            # (FINISHED then damage, land_swing's docstring), so this is worth
-            # a capture rather than a guess.
+            # ORDER within this instant IS now measured on the necromancer's
+            # four spell cycles: the E5 opens its batch 4 of 4, the finished
+            # property is second, and the target-facing properties (20, the
+            # 55 pair) follow -- so E5, then 58, then the damage is retail's
+            # own order, not a guess (studies/castmech 3c).
             #
             # A skill aimed at something hostile still does what a click does,
             # PLUS its own "+ Damage" if it has one -- unchanged from the press

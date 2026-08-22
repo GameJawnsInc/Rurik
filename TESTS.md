@@ -7137,7 +7137,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
   seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
-  six. The section that earns the entry is the QUEUE LAW: skill 105's two
+  six. Since 2026-08-22 the E5 instant also carries `[58, agent, 0]`
+  (GV_SKILL_FINISHED) in the very next slot — the corpus position, 5 of 5,
+  castmech 3c — and §2 pins both the send and the slot, while §2b pins the
+  family boundary: an ATTACK skill's E5 (forced via a stubbed
+  `_is_attack_skill`, because a bare machine has no content rows) sends NO
+  finished property, matching the ranger's two Power Shot E5s which carry
+  neither 58 nor 46. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and

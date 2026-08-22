@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=13)
+LEDGER = checks.Ledger("cast cycle", floor=15)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -76,9 +76,8 @@ def section_press_shape():
         # sent[2], not [1]: the debit now sits between E4 and the animation
         check(sent[2][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 0, 42],
               "the animation carries the OBSERVED player shape (4/4 in the "
-              "live corpus); GV 58 is still unsent -- though its old 'zero "
-              "in the corpus' ground is refuted (5 at cast ends, castmech "
-              "3b) and wiring it is an open item, not a settled absence",
+              "live corpus); GV 58 belongs to the cast END, not the press "
+              "-- section 2 pins it riding the E5 (castmech 3c)",
               f"vals={sent[1][1]}")
         casts = state["pending_casts"]
         c = casts[0]
@@ -111,30 +110,65 @@ def section_tick_order():
 
         _rewind(state, 1.0)                      # activation over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5]
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F]
               and sent[0][1] == [PLAYER, 42, 7, 8],
               "E5 fires at cast end carrying [agent, skill, copy, recharge "
               "seconds]", f"{sent}")
+        check(sent[1][1] == [authsrv.agents.GV_SKILL_FINISHED, PLAYER, 0],
+              "and [58, agent, 0] rides the very next slot -- the corpus "
+              "position, 5 of 5, four of them right behind the "
+              "necromancer's spell E5s (castmech 3c)", f"{sent[1]}")
 
         _rewind(state, 0.75)                     # aftercast over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x00E3]
-              and sent[1][1] == [PLAYER, 42, 7],
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3]
+              and sent[2][1] == [PLAYER, 42, 7],
               "E3 fires an aftercast later, echoing the pending key",
-              f"{sent[1:]}")
+              f"{sent[2:]}")
 
         _rewind(state, 7.25)                     # recharge over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x00E3, 0x00E6]
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3, 0x00E6]
               and not state["pending_casts"],
               "E6 closes the cycle at E5+recharge and the entry is gone",
-              f"{sent[2:]}")
+              f"{sent[3:]}")
 
         authsrv.cast_tick(send, state, 0)
-        check(len(sent) == 3, "and a further tick fires NOTHING -- each "
+        check(len(sent) == 4, "and a further tick fires NOTHING -- each "
               "phase is once per cycle", f"{len(sent)} sends total")
     finally:
         authsrv.skill_timing = saved
+
+
+def section_attack_end_is_silent():
+    import authsrv
+
+    print("\n2b. an ATTACK skill's cast end carries no finished property")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}}
+    saved = authsrv.skill_timing
+    saved_attack = authsrv._is_attack_skill
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    # Stubbed rather than read from content: on a bare machine every id is
+    # "not attack" (no rows), so the family split is pinned by forcing it.
+    authsrv._is_attack_skill = lambda sid: True
+    try:
+        _press(authsrv, send, state, skill=394)
+        sent.clear()
+        _rewind(state, 1.0)
+        authsrv.cast_tick(send, state, 0)
+        fifty_eight = [vals for op, vals, _ in sent
+                       if op == 0x009F
+                       and vals[0] == authsrv.agents.GV_SKILL_FINISHED]
+        check([op for op, _, _ in sent][0] == 0x00E5 and not fifty_eight,
+              "the E5 fires and NO [58, agent, 0] follows -- the ranger's "
+              "two Power Shot E5s carry neither 58 nor 46, 0 of 2, so the "
+              "spell family's property is not borrowed (castmech 3c)",
+              f"{[(hex(op), vals) for op, vals, _ in sent]}")
+    finally:
+        authsrv.skill_timing = saved
+        authsrv._is_attack_skill = saved_attack
 
 
 def section_order_pinned_when_inverted():
@@ -154,12 +188,12 @@ def section_order_pinned_when_inverted():
         sent.clear()
         _rewind(state, 0.5)   # e5 and e6 both past due; e3 not yet
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5],
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F],
               "E6 is due but WAITS: the observed order outranks the clock",
               f"{[hex(op) for op, _, _ in sent]}")
         _rewind(state, 0.5)
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x00E3, 0x00E6],
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3, 0x00E6],
               "then E3 and E6 land together on the next tick, in order",
               f"{[hex(op) for op, _, _ in sent]}")
     finally:
@@ -222,6 +256,7 @@ def section_real_content():
 def main():
     section_press_shape()
     section_tick_order()
+    section_attack_end_is_silent()
     section_order_pinned_when_inverted()
     section_queue_law()
     section_real_content()

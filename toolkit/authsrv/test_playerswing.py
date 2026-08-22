@@ -280,8 +280,9 @@ def section_pause_and_resume():
 
         _rewind_casts(state, 2.0)                          # e5 and e3 past due
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x00E3],
-              "(the cast completes: E5 then E3)",
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3],
+              "(the cast completes: E5, then [58, agent, 0] in its measured "
+              "slot, then E3)",
               f"{[hex(o) for o, _, _ in sent]}")
         sent.clear()
         state["player_last_swing"] = 0.0

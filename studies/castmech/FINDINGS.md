@@ -277,6 +277,89 @@ are what `attack_tick` now reproduces.
 
 ---
 
+## 3c. The instants, message by message — added 2026-08-22, second pass
+
+Same method and same corpus as §3b (offline `decode_all` over both live
+captures, every player-visible connection framed to the last byte; census
+scripts scratchpad, castgaps.py's pattern). OBSERVED throughout. This pass
+was run to answer the wiring questions §3b registered, and it answers all
+of them.
+
+**Property 58's position is the slot immediately after the cast end, 5 of
+5.** All four necromancer spell E5s are followed — next message, same
+instant — by `[58, 31, 0]`; the fifth `[58, 36, 0]` (another agent, second
+connection, t=24.2587) sits in the same relative slot, immediately before
+that cast's target-facing property-20 message. The full E5 batch, 4 of 4
+on the necromancer:
+
+```
+0x00E5  [31, skill, 0, recharge]      E5 opens its own batch
+0x009F  [58, 31, 0]                   skill_finished, next slot
+0x00A0  [20, 40, 31, value]           the target-facing properties follow
+(0x009F [42, 31, 100], 0x00A3 [55, ...] pairs, skill-dependent)
+0x009F  [8, 31, 0]  then  [8, 31, 1]  the prop-8 pulse closes the batch
+```
+
+So "E5 before the damage", which `cast_tick`'s comment used to carry as
+OURS and UNMEASURED, is retail's own order — and 58 goes between them.
+
+**The attack-skill cast end is silent, 2 of 2.** Both Power Shot (394) E5
+instants carry: E5, one `0x00A4`, then E3 in the same batch (aftercast
+0.0) — **no 58, no 46** (the attack trio's own finished id), **no prop-8
+pulse**. 58 is the non-attack family's cast-end property; nothing in the
+corpus licenses a finished property for an attack skill's E5. Wired
+family-scoped in `cast_tick` the day this was measured.
+
+**The queued cast-begin burst is three messages, 2 of 2** (skill 105
+beginning at 153's E3 instants, t=10.4929 and 20.2689):
+
+```
+0x00E3  [31, 153, 0]                  the previous cast's aftercast ends
+0x00A2  [62, 31, f32]                 the queued cast's energy debit
+0x00A0  [60, 31, 40, 105]             its cast animation
+```
+
+No E4 (that went at the press), no prop 8, no 0x00D2. Debit before
+animation — the same relative order as the press burst.
+
+**The corpus's one terminated cast never paid.** The ranger's E4 at
+t=5.0269 is answered by the bare 0x00E2 at 5.912 with NOTHING between: no
+debit, no animation, no prop 8 — an accepted press whose cast never began
+and never cost anything. Together with the begin burst above this puts the
+payment at CAST-BEGIN, not at accept.
+
+**Property 8, all 30 player-agent events mapped, and it is a stateful
+transition wire.** Every event rides a context where an action takes or
+releases the agent, and a toggle to the value already held is never sent
+(the ranger's t=12.9508 press burst carries only `[8,31,1]` — the flag was
+still 0, so there was no →0 to send; every other accepted immediate press
+carries the full 0-then-1 bracket):
+
+- **→1 (an action takes hold):** the player's own ATTACK_STARTED instants
+  (`[4, 31, x, 0]`, 4 of 4 across three connections, each with the unnamed
+  one-dword `0x0028 [31]` in the same batch); the accepted immediate press
+  burst's end (4 of 4); the E5 pulse's second half (4 of 4 — GWCA's
+  "(aftercast)" note, the cast releasing and the aftercast taking hold in
+  one batch).
+- **→0 (the action releases):** the press burst right after E4, BEFORE the
+  GV_ATTACK_STOPPED when one fires (2 of 2 with a stop, order [8→0] then
+  [3, 31, 0]); the E5 pulse's first half; movement instants (heading +
+  move-to-point in the same batch, 4×); the standalone chain stops — §17c's
+  retarget cancel t=16.5783 and the capture-end stop t=23.8241 are both
+  `[8→0][3,31,0]` adjacent pairs; the target's death (t=20.1637, n=1); and
+  the attack skill's arrow landing its damage (t=14.4832, n=1 — the same
+  batch also carries movement, so those two contexts are confounded).
+- **Never on:** queued presses (2 of 2), queued cast-begins (2 of 2),
+  attack-skill E5s (2 of 2), the terminated cast's E2 (1 of 1).
+
+Other agents get the same wire: `[8, 725, 1]…[8, 725, 0]` and
+`[8, 176, 1]…[8, 176, 0]` bracket ~100 ms NPC actions on the second
+connections. What the CLIENT does with the property — a 1/0 flag on the
+type-1 agent-view object, view-local, animation-facing — is
+`studies/skillcast/FINDINGS.md` §16.2's read.
+
+---
+
 ## 4. Canceling: three doors in, one wire shape out
 
 **WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is
