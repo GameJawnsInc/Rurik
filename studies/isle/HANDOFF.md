@@ -38,8 +38,12 @@ the unrun rank-13 bench block; the first attempt (2026-08-21) aborted on a skill
 inferred from an ambient capture, and the re-staged plan
 (`vault/plans/isle_rung8d_recast_v2.txt`) is built on a wire readback of the operator's own
 bar instead (`studies/skills` §36.9–§36.10, PLAN §3's ladder addendum). After that,
-**rung 9, the scripted pass — BLOCKED on its respawn analyser** (keyed on definition slot +
-spawn position with a preceding-death bit; offline build first, PLAN §3.4's own rule).
+**rung 9, the scripted pass — its respawn analyser is BUILT (2026-08-22)**:
+`toolkit/authsrv/respawn.py`, keyed on (definition slot, spawn position) with the
+preceding-death bit, proved on the corpus (`test_respawn.py`, 46 checks). Read FINDINGS §10
+before designing the run — retail revives IN PLACE (never re-creates), the 30 s
+practice-target respawn is already measured n=15 from the rung-7 capture, and the sparring
+pit revives in waves that must not be pooled with timer bodies.
 
 ## 2. What will bite you, in the order it will bite
 

@@ -2178,6 +2178,17 @@ GAME_SMSG_AGENT_INITIAL_STATUS = 0x00F0
 # bitfield rather than an enum -- but it is enough to send: value 8 accompanies a
 # kill, value 9 accompanies a create, and no other value exists in 204 samples.
 #
+# THE "NO OTHER VALUE" WAS TRUE OF 204 SAMPLES AND IS FALSE OF THE GROWN CORPUS.
+# Re-measured 2026-08-22 (`toolkit/authsrv/respawn.py`, pinned by `test_respawn`
+# 15): the message is a LIFE-STATE with two tracks -- NPC dead/alive = 8/9,
+# PLAYER dead/alive = 4/5 (20260817T183756 agent 27: FLAGS 4 on the death tick,
+# FLAGS 5 on the revive 10.044 s later, 0x00F1's dead bit agreeing at both
+# ends). Value 9 is not only the create tail this comment knew: it is also the
+# NPC REVIVE -- retail resurrects the same agent in place (STATUS 0x0 + FLAGS 9;
+# practice targets at 30.0 s x9, a sparring Zaishen at 120.499 s), it does not
+# remove-and-recreate. Bit 0 reading as "alive" across all four values is
+# RECONSTRUCTION; the four values and both transitions are OBSERVED.
+#
 # Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
 # sends on BOTH channels, and they are different messages. Do not reuse either name.
 GAME_SMSG_AGENT_UPDATE_FLAGS = 0x0026

@@ -4661,6 +4661,29 @@ Every one of these, in the order they were written:
   assigned to the nearest step), and the float-in-a-dword trap (the duration is typed
   `dword` while the client does `fld`, so the broken reading is reproduced inline and
   required to differ). Needs `vault/captures/live/`; floor 36),
+  `toolkit/authsrv/test_respawn.py` (**the rung-9 respawn consumer, built before its
+  run per the arc's own consumer-before-run rule** — `respawn.py` keys death → revive
+  intervals on (definition slot, spawn position) with a preceding-death bit, the key
+  `studies/isle/PLAN.md` §3.4's skeptic demanded. Sections 1–14 fabricate streams that
+  commit each named trap and demand the analyser refuse it **while
+  `respawn.naive_intervals` still falls for it** (the `npcdefs.Intervals.last` pattern
+  — a sabotage that stops disagreeing has drifted): the recycled agent id (agent 38's
+  54.9 s "respawn" by a creature that never respawned), visibility churn, and the
+  corpse re-create — `WORLD_CREATE_AGENT` kind **8** is a DEAD NPC re-entering view
+  with health fraction 0.0, so a death→create join reads a corpse as a respawn; the
+  analyser reads it as a STILL-DEAD bound instead. §15 pins the real corpus
+  per-connection (per-connection so the pins survive corpus growth): agent 38 stays
+  OPEN while naive claims 54.867 s; slot 161's Zaishen revives **in place** at
+  **120.499 s** (GWW's "two minutes", measured) while naive joins the corpse and is
+  9 s wrong *even though the respawn is real*; the Isle sparring squad's 19 deaths all
+  corroborated by `0x00F1`'s dead bit; **nine practice-target revives in one
+  connection at 30.0 ± 0.011 s** (GWW's "30 seconds", measured); and the two-track
+  `0x0026` life-state reading — NPC dead/alive = 8/9, PLAYER dead/alive = **4/5**, a
+  pair the old 204-sample histogram in `authsrv.py` predated — holds with zero
+  value/tag mismatches and no fifth value corpus-wide. Also pinned: mixed-origin
+  pooling refuses (`refuse_mixed`), a corpse-first chain revives with an interval that
+  REFUSES to exist, and `--radius` merges print every merge. Needs
+  `vault/captures/live/` for §15, skips it declared if absent; floor 46),
   `toolkit/authsrv/test_effects.py` (**the effect channel's WRITER**, where
   `effects.py` meets the reader above. R4b's spine: `0x0042` opens an episode on an
   agent and `0x0044` closes it, and until 2026-08-20 this server modelled none of it

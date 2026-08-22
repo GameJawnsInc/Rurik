@@ -1789,3 +1789,67 @@ three**, and rank 6 in fact produced none. The step that mattered was rank 5, wh
 directions are decisive by 14.8% and 15.5%, and that is where the eleven 3s landed.
 **Predictions recomputed rather than copied is what turned a leg with one usable block
 into one with a decisive block and three corroborating ones.**
+
+## 10. The rung-9 respawn analyser is BUILT — and the vault already held half of rung 9's answer (2026-08-22, no client launched)
+
+The consumer §3.4's skeptic demanded exists: `toolkit/authsrv/respawn.py`, proved by
+`test_respawn.py` (46 checks: fourteen fabricated-stream sections that commit each
+named trap, plus per-connection pins on sealed captures). Keyed on **(definition
+slot, spawn position)** with the preceding-death bit required, exactly as ruled.
+Running it over the existing corpus produced results the rung-9 design must now
+absorb, three of them mechanisms nobody had described:
+
+**Retail respawn is a REVIVE IN PLACE, not a remove-and-recreate.** OBSERVED: the
+dead agent keeps its id and its corpse, and the respawn is the pair
+`0x00F1 status 0x0` + `0x0026 value 9` on one tick. No respawn anywhere in the
+corpus arrives as a fresh `WORLD_CREATE_AGENT`. Consequences: (a) the
+death→next-create join the naive analyser runs is wrong even when a respawn IS
+real — for the slot-161 Student below it reads 111.5 s against a true 120.5 s,
+because what it joins is the corpse re-entering view; (b) an id-recycle
+(agent 38's 54.9 s phantom, §3.4) and a corpse re-entry are the ONLY things that
+join, so every naive number is one of those two artifacts.
+
+**`0x0026` is a two-track life-state, and `WORLD_CREATE_AGENT` kind 8 is a corpse.**
+OBSERVED: NPC dead/alive = 8/9, PLAYER dead/alive = **4/5** (20260817T183756:
+FLAGS 4 on the player's death tick, FLAGS 5 on the revive 10.044 s later — the
+`authsrv.py` histogram comment predated the captures holding the player track and
+is corrected in place). A dead NPC re-entering visibility is re-created with
+**kind 8 and health fraction 0.0** (63 corpus-wide, zero exceptions) where a
+living one carries kind 9 — so the corpse-vs-respawn separation §3.4 asked for is
+a field read, not an inference. Bit 0 reading as "alive" across all four values
+is RECONSTRUCTION; the values and both transitions are OBSERVED. Zero value/tag
+mismatches and no fifth value over the whole corpus (pinned).
+
+**The 30-second respawn is already MEASURED, fifteen times, without a rung-9 run.**
+The rung-7 damage session (`20260818T132739`) killed its subject bodies
+repeatedly, and every witnessed revive of slots 152/153/154 lands on
+**30.0 s ± 0.011** (n=15 across three connections; nine in one connection span
+29.990–30.011 s). GWW's "Practice target" page says 30 seconds (WIKI); the wire
+now says it to the hundredth. Note the key's position term earning its place:
+TWO slot-152 bodies hold separate 30 s ladders at (−5915, 2079) and
+(−5483, 1751) — keyed on slot alone they would interleave.
+
+**The two-minute rule has one wire witness, and it is a Student, not a Master.**
+Student position 1 (slot 161, foe, the south end of the west line — §4's table)
+was killed in the west-walk capture (`20260817T231139` conn :63805) and revived
+in place at **120.499 s**, its corpse witnessed mid-interval by a kind-8
+re-create. GWW states the two-minute resurrect for the named Masters (UPSTREAM);
+this measures the same mechanic on a sibling body. n=1. Three other Students
+(slots 156/158/162, all allies) revived from corpse-first chains — death before
+the operator arrived, so the analyser reports their intervals as UNKNOWN rather
+than guessing.
+
+**One population does NOT fit a fixed timer.** The five sparring bodies of
+`20260817T231139` conn :54071 (slots 23, 114–117 — level 20, damaging each
+other) die 19 times and revive in place 15 times at intervals from **3.3 to
+29.5 s**, with revive ticks SHARED across bodies (149.779 carries three).
+Whatever script drives that pit revives in waves, not per-death timers. Rung 9
+must not pool these with timer-driven bodies, and the analyser's per-key output
+is what keeps them apart.
+
+**For the rung-9 plan**: the 30 s half of the exit criterion is closed from the
+vault; what a run still buys is the named Masters' two-minute claim (no Master
+death exists in any capture), the interrupt window diff, knockdown, and the
+deliberate player deaths — which the corpus already brackets at 10.044 s and
+12.168 s (n=2, disagreeing; measure, do not assume our `PLAYER_REVIVE_AFTER
+= 10.0` is retail's constant).

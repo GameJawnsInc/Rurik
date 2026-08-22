@@ -1390,15 +1390,21 @@ spend-clock run, which also banked the single-press control episode.
    pre-registered in the plan file (REPLACE is the prediction; STACK, SILENT
    EXTEND and press-refused each decisive). Afterwards `bufflog.py` arbitrates
    with no new code.
-2. **The respawn analyser** — the offline build that GATES RUNG 9
-   ([studies/isle/PLAN.md](studies/isle/PLAN.md) §3.4's consumer-before-run
-   rule). Key on **(definition slot, spawn position)** and require a
-   **preceding-death bit**: re-creates arrive under a different definition
-   slot (agent 38 went 1434 → 1343), visibility churn cycles one agent five
-   times in 135 s, and both realistic kill targets self-heal — so a naive
-   agent-id key manufactures a 54.9 s "respawn" for a creature that never
-   died. Build and prove it on the existing corpus before any rung-9 session
-   is designed.
+2. ~~**The respawn analyser**~~ **BUILT AND PROVED 2026-08-22**
+   (`toolkit/authsrv/respawn.py`, `test_respawn.py` 46 checks, keyed on
+   (definition slot, spawn position) + preceding-death bit as ruled; the naive
+   agent-id join is exported so the test demands the 54.9 s phantom stay a
+   phantom). The corpus run found more than the gate asked for —
+   [studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) §10: retail respawn is
+   a **revive in place** (`0x00F1 0x0` + `0x0026 9`, never a re-create; the
+   naive join is wrong even for REAL respawns), `0x0026` is a two-track
+   life-state (NPC 8/9, player **4/5** — `authsrv.py`'s 204-sample comment
+   corrected), a dead NPC re-enters view as a **kind-8 create at health 0.0**,
+   the **30 s practice-target respawn is measured n=15 at ±0.011 s** from the
+   rung-7 capture, and Student slot 161 revived at **120.499 s** (n=1). Rung 9
+   is unblocked; its run now targets the named Masters' two-minute claim, the
+   interrupt diff, knockdown, and deliberate player deaths (corpus brackets
+   those at 10.044/12.168 s, n=2 disagreeing).
 
 ### ENERGY AND ADRENALINE exist, and the client consumes both (2026-08-20, late)
 

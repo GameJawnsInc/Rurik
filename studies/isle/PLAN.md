@@ -1189,15 +1189,23 @@ pre-registers GWW's ten-damage early-end as the one false-REPLACE channel. **The
 the operator's**: RUNBOOK live procedure,
 `--minutes 20 --mode base --plan vault/plans/isle_rung8d_recast_v2.txt`.
 
-**Rung 9 — BLOCKED ON ITS ANALYSER, and that is this arc's own rule (2026-08-21).**
-§3.4's skeptic pass already ends *"Every step here needs an analyser that does not
-exist. Cost it that way."* Rungs 7 and 8 each built the consumer BEFORE the run
-(`damagepass.py`, `bufflog.py`) and both paid for it. Rung 9 has no consumer, and
-three named traps waiting: re-creates arrive under a **different definition slot**
-(agent 38 goes 1434 → 1343), **visibility churn** cycles one agent five times in
-135 s, and both realistic kill targets **self-heal**. The build task is a respawn
-analyser keyed on **(definition slot, spawn position) with a preceding-death bit**
-— that is what stands between the arc and its next rung, and it is offline work.
+**Rung 9 — ~~BLOCKED ON ITS ANALYSER~~ THE ANALYSER IS BUILT (2026-08-22), and the
+vault already held half the answer.** §3.4's skeptic pass ends *"Every step here
+needs an analyser that does not exist. Cost it that way."* Rungs 7 and 8 each built
+the consumer BEFORE the run (`damagepass.py`, `bufflog.py`) and both paid for it;
+rung 9's is `toolkit/authsrv/respawn.py` (`test_respawn.py`, 46 checks), keyed on
+**(definition slot, spawn position) with a preceding-death bit** as ruled. All three
+named traps are defeated on the real bytes with the naive answer exported so the
+test can demand the disagreement (agent 38's 54.9 s phantom stays a phantom).
+What the build found — FINDINGS §10, and the rung-9 design must absorb it: retail
+respawn is a **revive in place** (`0x00F1 0x0` + `0x0026 9` on one tick), never a
+re-create, so death→create joins are wrong even for real respawns; `0x0026` is a
+two-track life-state (NPC 8/9, player **4/5**); a dead NPC re-enters view as a
+**kind-8 create at health fraction 0.0** (the corpse/respawn separation is a field
+read); the **30 s practice-target respawn is already measured, n=15 at ±0.011 s**,
+from the rung-7 capture; and Student slot 161 revived at **120.499 s** (n=1, a
+sibling of the Masters' two-minute rule). The sparring pit (conn :54071) revives in
+shared-tick WAVES, 3.3–29.5 s — never pool it with timer bodies.
 
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because
