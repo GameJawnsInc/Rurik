@@ -1,5 +1,12 @@
 # AUTHORED AREAS -- rung G.
 #
+# WHAT THE CLIENT WILL AND WILL NOT ACCEPT is written down in
+# studies/worldmaps/AUTHORING.md -- the two map_flags levers and what each
+# costs, the THREE slope classes (a map made only of 41-45 degree slopes
+# compiles to its flat ground and nothing warns you), how to author a slope the
+# snap does not move, prop footprints, and the gotchas that have each cost a
+# run. Read it before adding a row.
+#
 # A `map` row in maps.toml says where a RETAIL map is and where you arrive in it.
 # An `area` row says how to BUILD one of ours: the geometry, the surface, the
 # weather, the ambience. `toolkit/mapdata/deploy.py` reads one of these rows and
@@ -731,3 +738,337 @@ its twin, which is what removes the need to calibrate the camera: the two arms \
 share a heading, so whatever direction the character actually faces, the arms \
 differ only in what ground is under it. A bearing model would be a free \
 parameter; sharing the plan is not."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W17
+# FINDINGS 48's ramp, twice, differing only in the flags dword's TOP BYTE.
+# The generator is that run's field carried over verbatim (deploy.gen_ramp,
+# verified 1024/1024 samples identical), so these two arms are measured with the
+# same ruler FINDINGS 48 used and are comparable to its result.
+#
+# NO PROPS on either arm. The instrument is the mesh; eight trees would be eight
+# more things that could differ between arms for a reason that is not the flag.
+
+[area.ramp_setA]
+name = "Ramp (slope set A)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# map_flags OMITTED, so 0 -- which is exactly what FINDINGS 48 ran. This arm is
+# a REPRODUCTION and its predicted pattern has no free parameter.
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.ramp_setA.provenance]
+source = "invented"
+verified = """Ours in construction, not in shape: the height field is \
+FINDINGS 48's ramp carried over verbatim from \
+`vault/research/e10e-threshold-2026-08-12/build_ramp.py` into \
+`deploy.gen_ramp`, and the port was accepted on BYTE EQUALITY of the field -- \
+1,024 of 1,024 stored samples identical -- rather than on reading. Five 6-cell \
+strips at design slopes 28.0 / 32.0 / 36.9 / 41.9 / 47.0 degrees bracket every \
+candidate cutoff of BOTH threshold sets the client carries. FINDINGS 48 \
+MEASURED this map at flags 0 and got pattern `WW...`: the 32.0 strip walkable, \
+the 36.9 strip not, which puts the cut in (32.0, 36.1) where 35 is the only \
+candidate. This arm re-runs it unchanged, so a disagreement is a fact about \
+drift between 2026-08-12 and today rather than about the flag."""
+
+[area.ramp_setB]
+name = "Ramp (slope set B)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# THE VARIABLE, and it is the top byte alone: 0x02000000. Bits 0..23 stay clear,
+# so the depth gate this arc spent W11-W16 on is untouched (and the ramp has no
+# submerged ground for it to act on anyway).
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.ramp_setB.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull a lever read out of the client \
+statically and never tested. TRACED 2026-08-21 in the pinned pristine 38797 \
+build, with both positive controls passing first and an adversarial pass that \
+strengthened rather than weakened it: the Map Parameters flags dword is copied \
+VERBATIM to state+0x10 by the parser at 0x0070D920; its TOP BYTE is extracted \
+at 0x00712681-0x0071269C (`mov eax,[ecx+0x10]` / `shr eax,0x18`) and carried \
+through seven hops, each with exactly one caller and no rewrite, to \
+`cmp dword ptr [ebp+8], 2` at 0x0072CA1C. Below 2 loads 15/35/30 degrees as \
+radians (0x0094E3CC = pi/12, 0x00A6F874 = 35 deg, 0x0094E3D8 = pi/6); 2 or \
+above loads 10/45/40 (0x0094DFA0 = pi/18, 0x0094E3E4 = pi/4, 0x00A6F878 = 40 \
+deg). The middle slot is the hard walkability cutoff.
+
+WHY 0x02 AND NOT 0x01: the parser NORMALISES a top byte of 0 to 1 \
+(0x0070D9B2 `cmp cl,1` / 0x0070D9B7 / 0x0070D9BE `or eax,0x1000000`), so a file \
+shipping 0 and a file shipping 1 both arrive at the selector as 1 and choose \
+the SAME set. The boundary is 1-vs-2, not 0-vs-nonzero. 0x02 also keeps the \
+`< 3` test at 0x0070D9DE on the same side as 0x00 does, so bit 5 of the \
+in-memory dword is set in both arms and is not a confound.
+
+WHAT IS NOT VERIFIED, and is the whole point of the run: every word above is \
+STATIC. No map has ever shipped a non-zero top byte, the inverted branch at \
+0x0072CA92 has never been exercised by anything this project built, and \
+studies/customarea FINDINGS 34 and 48 both record the mode flag's source as \
+NOT FOUND. This row is the first time the other slope set is asked for."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W20
+# The fine ramp, at cut 45 and at cut 35. Four strips of EXACTLY 43.78 / 45.00 /
+# 46.17 / 47.29 degrees -- zero snap spread, every interior column exact.
+
+[area.fine45]
+name = "Fine ramp (cut 45)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.fine45.provenance]
+source = "invented"
+verified = """Ours, and it exists to BISECT a cut that WORLDMAPS-W19 could only \
+bracket to [42.51, 46.45]. Its four strips snap to EXACTLY 43.78, 45.00, 46.17 \
+and 47.29 degrees -- MEASURED, worst sample moved 0, every interior column \
+identical -- because each dz is a multiple of 4 AND each strip is eight columns \
+aligned to the codec's 4x4 sub-blocks. `snap_block` projects each sub-block \
+independently, so `gen_ramp`'s 6-wide unaligned strips quantised by up to 1.4 \
+degrees and that spread, not the dz resolution, is what limited W19.
+
+THE MIDDLE STRIP IS EXACTLY 45.00 DEGREES, the threshold value itself. The \
+classifier excludes on `slope > array[1]`, strictly greater (0x0072D423-30: \
+`fld [edx+4]`, `fcomp st(1)`, `test ah,5`, `jnp`), so a slope sitting exactly \
+ON the cut should be WALKABLE. No map this project has built has ever put a \
+slope there, and nothing has ever tested whether that comparison is strict."""
+
+[area.fine35]
+name = "Fine ramp (cut 35)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.fine35.provenance]
+source = "invented"
+verified = """Ours: `fine45` with the top byte cleared, so the client selects \
+15/35/30 instead of 10/45/40. Every strip on this map is between 43.78 and \
+47.29 degrees, so ALL FOUR are above 35 and the whole ramp must be excluded -- \
+the mesh should be the apron alone. That is the control which proves the map's \
+strips are genuinely steep rather than that the flag turned classification off, \
+and it is the same shape of control WORLDMAPS-W19 used within one arm."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W21
+# Can an authored prop BLOCK a character? One flat map, one prop, two arms
+# differing only in whether that prop carries a footprint.
+
+[area.blocker]
+name = "One tree with a footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288       # <- THE VARIABLE. A 576x576 square footprint,
+                         #    prop-local, centred on the prop at (2928, 1488).
+
+[area.blocker.provenance]
+source = "invented"
+verified = """Ours. A FLAT map so nothing about terrain can enter the result, one prop, and the only difference from `noblocker` is `prop_outline`. `pick_tree_cells` is deterministic: on a flat 32x32 with seed cell (16,16) the first cell is (30,15), world (2928, 1488) -- 1,392 units due EAST of map 143's spawn at (1536, 1536), and 48 units off the eastward walk line, so a footprint of half-width 288 spans that line comfortably. MEASURED before staging.
+
+UNVERIFIED, and the point of the run: whether the client's collision reads an authored footprint at all. `Prop.outline` has always been encodable and deploy has always passed it empty, so no prop this project ever placed had one."""
+
+[area.noblocker]
+name = "One tree with no footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+
+[area.noblocker.provenance]
+source = "invented"
+verified = """Ours, and it is the CONTROL that carries this experiment. Same flat map, same single prop at the same (2928, 1488), `prop_outline` absent so the prop ships the empty outline every prop this project has ever placed. If a character is stopped HERE too, the stop is not the footprint and the treatment arm means nothing. This is also the arm that measures how far the walk gets with nothing in the way, which is what the treatment is compared against."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W22
+[area.notch]
+name = "One tree with an L-shaped footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288
+prop_outline_shape = "L"   # <- THE VARIABLE, against W21's `blocker` square
+
+[area.notch.provenance]
+source = "invented"
+verified = """Ours. Identical to WORLDMAPS-W21's `blocker` in every field but the outline SHAPE, so the two compiled meshes differ by the polygon alone. W21 established that an authored footprint is honoured 1:1 in world units -- a 288 half-width square put the mesh's last walkable x at 2640 against an authored edge at 2640 -- but a square cannot distinguish a POLYGON from its bounding box or its convex hull, because for a square all three are the same set.
+
+This ring is NON-CONVEX: the square with its north-west quadrant removed, so its convex hull is the full square. The notch is prop-local x -288..0, y 0..288, i.e. WORLD x 2640..2928, y 1488..1776. If that region is walkable, the client used the polygon; if it is a hole, the client used the hull or the bounds and this map cannot tell those two apart."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W23
+# Does class-2 ground need a class-0 ROUTE, or can the flood climb it directly?
+# ONE slope over the whole map -- no strips, no seams, no neighbours.
+
+[area.u42]
+name = "Uniform 42.51 deg ramp (class 2)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 88             # atan(88/96) = 42.51 deg exactly; class 2 at cut 45
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000   # cut 45, so 42.51 is BETWEEN array[0]=40 and array[1]=45
+
+[area.u42.provenance]
+source = "invented"
+verified = """Ours, and it exists because WORLDMAPS-W20's RECONSTRUCTION rests on a map that cannot carry it. W20 varied four strips at once and concluded class-2 ground meshes only where reachable through class-0 ground -- but its class-2 strips DID touch the flat class-0 apron and still did not mesh, which is not what that rule predicts, and the same map varied the steep lateral seams between strips at the same time. One slope over the whole map removes seams and neighbours together. MEASURED offline: dz 88 snaps to 42.51 deg exactly, worst sample moved 0, every quad in the ramp band identical."""
+
+[area.u18]
+name = "Uniform 18.43 deg ramp (class 0)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 32             # atan(32/96) = 18.43 deg; class 0 under both sets
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.u18.provenance]
+source = "invented"
+verified = """Ours, and it is the control that makes `u42` mean anything. Same generator, same bands, same flags, same seed -- one field different. 18.43 deg is class 0 under BOTH threshold sets, so this ramp must mesh. If it does not, the uniform generator is broken and `u42`'s result says nothing about classes."""
+
+[area.ashcoil]
+name = "Ashcoil Caldera"
+map_id = 167
+dims = 64
+heights = "caldera"
+# The 64x64 centre: the caldera floor, measured 0.0 deg under the classifier.
+# It doubles as the spawn -- map 167's row spawns at (3072, 3072) too.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 32
+map_flags = 0x02000001   # BOTH levers, and the top byte is REQUIRED, not taste:
+                         # the design's legality-by-construction argument runs
+                         # under the 10/45/40 set (top byte 2, WORLDMAPS-W17).
+                         # Its walkable staircases are 48-unit risers whose
+                         # worst triangle plane is 35.3 deg -- class 0 under
+                         # cut 45, but class TWO under the 15/35/30 set, which
+                         # is the band W20/W23 showed to be conditionally
+                         # meshed. Bit 0 keeps the sunken pool (floor -48,
+                         # one quantum under the water plane) walkable.
+
+[area.ashcoil.provenance]
+source = "invented"
+verified = """Ours -- the first area authored as a PLACE rather than as an \
+instrument, on the mod-platform framing (owner, 2026-08-21). The design is the \
+winner of a three-designer panel (vertical drama / enclosure-and-reveal / \
+natural coherence briefs) judged on coherence, drama and feasibility, with the \
+losing designs' grafts folded in; the judge re-implemented all three height \
+functions and re-measured every self-reported claim before scoring. The \
+surface obeys one master rule: walkable ground keeps its pre-quantization \
+gradient <= 40 units/cell (so after 48-quantization every axial step is 0 or \
+48 and no triangle plane exceeds 35.3 deg), walls are hard discontinuities \
+>= 192, and nothing between exists, so the 40-45 deg band WORLDMAPS-W20/W23 \
+showed to be conditionally meshed is unreachable by construction. Elevated \
+roads leave flat ground only through flanked slots (the mouth, the top-out \
+notch, the draw) because a tapering ledge always sweeps that band somewhere on \
+its flank. MEASURED offline before any install (scratchpad validate_design.py \
+against the deployed generator, byte-identical port): zero cells in the \
+forbidden band, flood(<=64 steps) == flood(<=111 steps) under 4- and \
+8-connected adjacency, every waypoint of the intended walk (pool, mouth slot, \
+shelf at four angles, exit rim, crown, draw, bowl) connected to the centre \
+seed, codec round-trip 4096/4096 exact, snap worst sample moved 4. What is \
+NOT verified is the CLIENT: no compile, no readback and no walk had happened \
+when this row was written, and the tree-placement y-flip fix in deploy.py \
+(grid row 0 renders at world maxY) is a RECONSTRUCTION from FINDINGS 4 plus \
+W23's flipped apron trapezoid, confirmed by no client run yet."""

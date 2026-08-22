@@ -42,10 +42,12 @@ import content  # noqa: E402
 #
 # The four checks added 2026-08-13 are the first here to read the REAL `vault/content/`
 # overlay, which is gitignored and machine-local -- so the floor is the VAULT-LESS score:
-# a bare machine declares one skip and scores 40 (MEASURED with RURIK_VAULT pointed at an
-# empty directory, 2026-08-20; it was 39 before map.166's row was named), a machine whose
-# overlay carries a row with a source in EXTRACTED scores 43, and one whose overlay has
-# rows but no such row scores 41 and declares the
+# a bare machine declares one skip and scores 42 (MEASURED with RURIK_VAULT pointed at an
+# empty directory, 2026-08-22; 40 on 2026-08-20, before map.165's and map.167's rows were
+# named -- W7's commit raised the score without re-measuring this note, the drift this
+# note's own first paragraph warns about), a machine whose
+# overlay carries a row with a source in EXTRACTED scores 45, and one whose overlay has
+# rows but no such row scores 43 and declares the
 # mutation skip. That last case is not hypothetical and is why the mutation target is
 # chosen by PARSING rather than by grepping for `extractor = "`: an extractor on a row
 # OUTSIDE `EXTRACTED` is inert -- `capture` rows carry the field and nothing validates
@@ -73,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=40)
+LEDGER = checks.Ledger("content store", floor=42)
 
 
 def write(dirpath, name, text):
@@ -128,9 +130,9 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 14,
-              "fourteen maps load (map.165, WORLDMAPS-W7's 256x256 created "
-              "chain, landed 2026-08-20 -- see the note beside ADDED)",
+    LEDGER.ok(world.census().get("map", 0) == 15,
+              "fifteen maps load (map.167, WORLDMAPS-W24's Ashcoil chain, "
+              "landed 2026-08-22 -- see the note beside ADDED)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -215,7 +217,14 @@ def main():
     # client has compiled for this project under compression and a created chain
     # together. Whether the client's compiler builds a mesh at that size is
     # WORLDMAPS-W7 and is not settled.
-    ADDED = {143, 144, 280, 27, 166, 165}
+    # 167 is WORLDMAPS-W24's created chain (Ashcoil Caldera): same KIND as
+    # 165/166 -- an id, 0x5F0B2, that binds nothing until deploy allocates it.
+    # It exists because W24's FIRST install attempt targeted map 166's chain
+    # and was REFUSED by map_chain's per-area journal check: 0x5F0B0 is
+    # frontier's, the journal is ashcoil_alloc.json-shaped, and two areas
+    # sharing one created chain would clobber each other on every re-install.
+    # The refusal's own advice -- own file, own row -- is this row.
+    ADDED = {143, 144, 280, 27, 166, 165, 167}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
@@ -232,6 +241,12 @@ def main():
               "166's, spawned at the centre of the 24,576-unit rect it authors, "
               "and `created = true` for the same reason 166 carries it",
               str(msc.get(165)))
+    LEDGER.ok(msc.get(167) == (0x5F0B2, (3072.0, 3072.0), 0, False)
+              and world.get("map", "167").get("created") is True,
+              "map 167 is WORLDMAPS-W24's CREATED row (Ashcoil): the id after "
+              "165's, spawned at the centre of the 64x64 rect it authors, and "
+              "`created = true` for the same reason 166 carries it",
+              str(msc.get(167)))
     LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
               "map 143 is C2's target row, spawned at the centre of the "
               "DELIVERED map's rect", str(msc.get(143)))

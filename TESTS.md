@@ -2229,24 +2229,24 @@ Every one of these, in the order they were written:
   compiled chunk existing. They are a different question -- nothing declares
   those optional, so the fix there is an unconditional assertion, and it needs
   its own evidence about what the compiler always emits.
-  Sections 0-1 and 3-13 need no vault and score 225 against a floor of 229 (both
+  Sections 0-1 and 3-13 need no vault and score 226 against a floor of 230 (both
   MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
   directory, which exits 1 naming the 4-check shortfall), so the floor still
   does what it was for. Per section, counted from the log rather than predicted:
-  {0: 3, 1: 2, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
-  10: 36, 11: 10, 12: 5, 13: 11}.
+  {0: 3, 1: 3, 2: 4, 3: 8, 4: 8, 5: 6, 6: 10, 6b: 20, 7: 15, 8: 36, 9: 55,
+  10: 36, 11: 10, 12: 5, 13: 11}. Section 1 is 3 since WORLDMAPS-W17 added the 'ramp' generator.
   **Count the log with the subprocess writers' own lines EXCLUDED, and note
   there are THREE producers rather than two**: an unanchored
-  `grep -c "\[PASS\]"` reads 246 where the ledger says 229, because
+  `grep -c "\[PASS\]"` reads 247 where the ledger says 230, because
   `datwrite --verify` prints a `file header crc` line AND an `MFT self-crc` line
   per run (6 runs, 12 lines) and `datmove` prints one `0 overlapping row pair(s)
-  afterwards` per move (5 moves, 5 lines). 246 - 17 = 229; anchoring the grep at
-  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 241 =
-  229 + datwrite's 12. An earlier version of this note said 162 from two
+  afterwards` per move (5 moves, 5 lines). 247 - 17 = 230; anchoring the grep at
+  `^  \[PASS\]` drops datmove's five, which carry no indent, and reads 242 =
+  230 + datwrite's 12. An earlier version of this note said 162 from two
   producers and was wrong on both counts, so re-measure these rather than
   adjusting them. Section 11 is the one place a check's DETAIL quotes another
   producer's row, and `verdict_of` strips the marker so both greps still agree:
-  MEASURED, `grep -o` and `grep -c` each read 246.
+  MEASURED, `grep -o` and `grep -c` each read 247.
   **Section 12 (WORLDMAPS-W12, 2026-08-21) is a failure that wore the wrong
   name.** `--install` arms a map's head to zero length so the client must
   recompile it; when the client never runs, the head stays 0 B, and `readback`
@@ -4848,7 +4848,13 @@ Every one of these, in the order they were written:
   client's own descriptors and the wiring pass wrote off the house naming rule with
   nothing forcing them together. Needs `vault/captures/live/`
   for §2, declared as a skip; needs the client-table content overlay for §§5–11, which
-  is NOT skippable and should go red without it; floor 105 of a 121-check green run
+  is NOT skippable and should go red without it; floor 108 of a 125-check green run.
+  **11j pins `--refusal-silent`, the A/B arm SKILLS-R2 rests on** — both directions,
+  plus an explicit third check that the two arms actually DIFFER. An arm that
+  silently stopped suppressing would make the next A/B compare two identical
+  configurations and report a clean null, which is the most convincing way to be
+  wrong (see `studies/skills` §37.5 for the session where exactly that shape of
+  null nearly shipped from a different cause)
   (was 82 of 98 before §11)),
   `toolkit/authsrv/test_adrenwire.py` (**adrenaline IS on the wire, and this is the
   file that stops us forgetting again**. Until 2026-08-21 `pools.py`'s header read
@@ -4869,16 +4875,17 @@ Every one of these, in the order they were written:
   25 is the GAIN PER STRIKE and not the quantum of the bar, which is why
   `pools.AdrenalinePool` holds RAW UNITS; the control is that eight other costs *are*
   multiples, because an all-off-grid column is what a wrong offset also produces. **§§4–7
-  are the corpus oracle**, `test_pools` §2's shape over all 14 live captures: 663 / 22 /
-  **0** / 39 across 49 connections and 114,985 messages framed with zero errors. The zero
+  are the corpus oracle**, `test_pools` §2's shape over all 20 live captures: 918 / 27 /
+  **0** / 40 across 59 connections and 143,408 messages framed with zero errors (663 /
+  22 / 0 / 39 over 49 connections when this entry was first written, at 14 captures). The zero
   is the one to read — **209 is a fully wired handler retail never sends**, the same shape
   as energy property 33, with its three neighbours (724) as the positive control that
-  makes a null mean something. §4b splits 207's amount into **631 at exactly 25 and a
+  makes a null mean something. §4b splits 207's amount into **886 at exactly 25 and a
   32-message tail below it**, and pins that **none exceeds 25 and none is 0** — the strike
   rule's own signature, since 25 is the largest single event the rule allows and the
-  opcode is unsigned so it cannot express a loss. The tail is labelled **INFERRED, not
-  measured**: GWW's *1 unit per 1% of maximum health lost* would produce exactly this
-  ragged shape, but nothing in the corpus joins it to health traffic yet. **§5 is the
+  opcode is unsigned so it cannot express a loss. The tail was labelled **INFERRED, not
+  measured** — GWW's *1 unit per 1% of maximum health lost* produces exactly this ragged
+  shape — and **§12 now joins it**, one row at a time, to the damage that caused it. **§5 is the
   check that refuted a wrong reading** — an earlier draft claimed retail broadcasts 207
   for other agents' bars, on the strength of ids 7/11/13/25 across the corpus. Those are
   four SESSIONS: every connection carrying 207 names **exactly one** agent and it is that
@@ -4889,7 +4896,9 @@ Every one of these, in the order they were written:
   the control that gives it teeth: the same lookup over everything the corpus shows being
   CAST finds **753 casts of 50 ZERO-adrenaline skills**, none of which ever gets a 210.
   **§7 is the answer the sender needs** — the spend leads its own activation by **exactly
-  one message**, 39 of 39, always property 50, same batch; the energy channel orders
+  one message**, 40 of 40, same batch (the FOLLOWER is property 50 for attack skills and
+  48 for instants — a live capture of a shout broke the "always 50" half and left the
+  half the sender uses intact); the energy channel orders
   itself the same way (property 62 then 60), so "debit before announce" is a rule of this
   protocol rather than a quirk. **§§8–11 read the pinned build-38797 image, stdlib only —
   no capstone, no pefile, so it keeps working on a bare machine.** §8 walks the dispatch
@@ -4912,10 +4921,43 @@ Every one of these, in the order they were written:
   evidence for one claim per CLAUDE.md's measurement boundary — `ChCliSkill:84`
   *"context->skillAdrenalineUpdateArray.Count()"* names the whole deferred chain, and
   `skillData.adrenaline` at **two independent files** promotes `skilltable.py`'s
-  `adrenaline_units` decode from our name for the column to the client's own. Needs
-  `vault/captures/live/` for §§4–7 and the pinned image for §§8–11, both declared as
-  skips; the content overlay is NOT skippable and §3 goes red without it. **Floor 10 of a
-  55-check green run**, and the file says plainly what that floor cannot catch — on a
+  `adrenaline_units` decode from our name for the column to the client's own.
+  **§12 is the sharpest refutable claim in the file, and it is a SERVER behaviour we do
+  not implement.** Split the 58 usable connections on a variable that has nothing to do
+  with adrenaline traffic — does the observer's own `SKILLBAR_UPDATE` ever name a skill
+  with a non-zero adrenaline cost — and the whole family falls on one side: **918 / 27 /
+  40 in the 36 ARMED connections and 0 / 0 / 0 across 44,982 messages in the 22 DARK
+  ones.** The control is inside the negative population and is what makes the zero mean
+  something: those dark connections carry **45 landed weapon hits and 13 completed melee
+  attacks**, every one of which GWW's rule says earns 25 units, and retail sent none. It
+  also re-fits the rounding rule on the armed rows alone — **round 32 of 32**, floor 15,
+  ceil 17 — and it does NOT stop there, because a two-candidate test would have hidden
+  the real result: fit the rule as a FAMILY, solving `units == f(pct·k)` for the k
+  interval that fits all 32 rows, and **floor is EMPTY under every rescale** (which
+  refutes GWW's "rounded down" *and* the pre-mitigation-damage repair of it in one
+  line) while **round and ceil both survive and disagree at the low end** — a 1-point
+  hit is 1 unit under ceil and no message at all under round. And it pins **the near
+  miss**: exactly ONE damage event in twenty captures lands in the band where those two
+  disagree, its observer's bar has no adrenal skill so there was nothing to charge, and
+  its value is **0.999999978%** — which four decimal places render as "1.0000", exactly
+  where the two rules agree. Three independent readers printed it rounded and all three
+  read past it. It also runs the check
+  with no free parameter: all eleven armed percentages are **k/480**, 480 is the smallest denominator that works, and the observer's int property
+  42 reads 480 on a message none of that arithmetic touched. What it deliberately does
+  NOT assert is WHICH variable gates: every dark connection is also a non-Warrior, so
+  bar-based and profession-based rules fit all 58 identically and the sender implements
+  neither. This section exists because running the damage → gain join WITHOUT the split
+  reports a confident, clean and absurd boundary at 7.5% of maximum health.
+  **§13 is why nobody saw §12 from the screen**, read as arithmetic on three addresses:
+  the charge worker does `xor edi,edi` before its slot loop, `mov edi,1` only where a
+  slot is written, and `test edi,edi` / `je` at `0x008219F8` — whose target is computed
+  from the displacement and lands PAST the `push 0x10000058` — so a 207 that no slot
+  accepted repaints nothing and arms no 25-second timer. Needs
+  `vault/captures/live/` for §§4–7 and §12 and the pinned image for §§8–11 and §13, both
+  declared as skips; the content overlay is NOT skippable and §3 goes red without it.
+  **Floor 10 of a
+  72-check green run** (55 before §§12–13), and the file says plainly what that floor
+  cannot catch — on a
   machine with both fixtures a dropped section would still clear 10, so §4's
   capture/connection/message pin and §8's printed image are the real "did it run" guards
   and the floor is the fixture-less backstop),
@@ -5138,6 +5180,44 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_typenames.py` (**WHAT THE CLIENT CALLS EACH SKILL
+  `type_code` — from the client's own switch, not from a wiki**.
+  `studies/presearing/MANIFEST.md` §8 named ten of the thirty codes by Rosetta
+  stone — pick skills whose type is known from outside, read their `+0x0C` —
+  and left **eleven UNKNOWN**; `PLAN.md` §8 item 5 singled out **16** because it
+  sits on this server's own default bar. None of that Rosetta work was
+  necessary: the namer at `0x004F9BF0` reads `[skillRecord+0x0C]` and hands it
+  to a 29-case switch at `0x004F9DD0` whose every case computes a **string id**,
+  and whose default arm logs ArenaNet's own sentence *"There is no string to
+  describe skill %u's type."* — which is the strongest single piece of evidence
+  that this is the type namer and not some other switch on some other field.
+  **§4 is the whole argument and it is a control, not an assertion.** The index
+  bias is the only free parameter in the derivation, and at `type_code - 1` all
+  **ten** independently-named codes resolve EXACTLY to the ten words that
+  document already used — then the same check is re-run at bias 0 and 2 and must
+  score **zero**, which it does. Without that second half the ten agreements
+  could be a table of plausible words meeting plausible guesses; with it, one
+  step either way breaks every known code at once. The exactness is load-bearing
+  and was learned the hard way: the first cut asked `expected in got`, and
+  `"Spell"` is a substring of `"Hex Spell"`, so the control leaked a false hit
+  and went red on its own weakness rather than on a real agreement. §3 reads the
+  switch as **arithmetic** — bias from `dec eax`, bound from `cmp eax,imm8`,
+  default from the `ja`'s rel32, table from the `jmp [eax*4+imm32]`'s imm32 —
+  then walks all 29 entries against the pins: 25 agree and exactly the four
+  special codes land on the default arm, each for a *different* reason (14 is
+  intercepted upstream because an attack's name depends on the weapon; 17 and
+  18 are refused on purpose and return the null record; 22's name is not a
+  constant at all). **§5 answers item 5**: type 16 is displayed as **"Skill"** —
+  and so is type 10, from a **different string record**. Both halves are
+  asserted, because same-id would mean our decode collided and a different word
+  would mean 16 is a type nobody has heard of. §5 also pins the *address* of
+  16's arithmetic, `0x004FA34B`, deliberately: the agent that first found this
+  cited `0x004FA2F9`, which is the tail of the type-20 case — right conclusion,
+  wrong citation, and a wrong citation is what makes a later reader's audit fail
+  and look like the claim failed. **IDS, NOT WORDS, ARE WHAT THE MODULE STORES**
+  — CLAUDE.md's "commit the id, resolve the string at run time from the owner's
+  own archive" — so §§1–2 run on a bare machine and the archive half declares a
+  skip. Floor 6 of a 16-check green run. ~4 s),
   `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
   and the numbering verdict it settles. `studies/combat/PLAN.md` carried
   "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —
@@ -6671,6 +6751,38 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_seclint.py` (an ACCUMULATION TRIPWIRE on SECTION-NUMBER collisions --
+  two headings that both took "the next number", so every later `§N` citation is
+  ambiguous. Written 2026-08-22 after `studies/skills/FINDINGS.md` did it TWICE: §26
+  first, resolved as §26.12/§26.13, then `## 32.` for both the silent-extend probe and
+  E10 on 2026-08-21, with `PLAN.md` §8's adrenaline entry citing "§32" and meaning E10.
+  Nothing caught either; a human reading PLAN.md caught the second. Disjoint from
+  `test_identlint.py` by construction -- that one's token must be letter-led
+  (`[A-Z]{1,2}-?\d{1,3}`), so a bare `## 32.` matches none of its definers, verified.
+  **The SCOPING is the whole design and it was measured, not assumed.** The naive rule
+  -- no number twice in a file -- reports **74 duplicates across 11 files** in this tree,
+  and nearly every one is correct house style: a dated pass that restarts at §1 under
+  its own `#` divider (skills, isle, review, character all do it), and `### N.` lists
+  under different `##` parents (`studies/movement/FINDINGS.md` has SEVEN `### 1.`
+  headings, all fine). A checker red on those is one nobody leaves switched on, which is
+  the lesson `test_provlint.py` records from the strict side. So a collision is two
+  headings with the same token, at the same level, under the same chain of enclosing
+  headings -- **6 in 2,102 numbered headings**, each named in `KNOWN` with its reason.
+  **Its POSITIVE CONTROL is the real defect, rebuilt from the live document**: it renames
+  today's `## 36.` heading back to `## 32.` in memory and asserts the collision is
+  caught, and that it is the ONLY thing reported about that file -- so the §1-§8 pair in
+  the same document stays green, which is the point of the scoping. A frozen fixture
+  would drift; this cannot. Section 2's four negative controls are load-bearing for the
+  same reason. Diverges from `test_identlint.py`'s count-CEILING posture deliberately:
+  53 collisions are too many to justify one by one, 6 are not, and inside a ceiling of 9
+  three could land unseen. The known list is checked in BOTH directions -- a new one, a
+  known pair gaining a third claimant, and a STALE entry the scanner no longer finds all
+  fail -- and each of those three verdicts has a control that doctors the list and proves
+  the verdict speaks. **The 6 are NOT a fix list**: `studies/idents/HANDOFF.md`'s star box
+  refuses a mass rename of existing tokens, section numbers are load-bearing in commit
+  subjects (`Skills 32.8`, `Isle 8.6`, `§27.4`), and one of the 6 -- heroes §35.2 -- is a
+  deliberate SUPERSEDED-BY banner above the heading it supersedes and must not be
+  "fixed". No vault, no socket, no client. ~1 s),
   `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
   same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
   §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc

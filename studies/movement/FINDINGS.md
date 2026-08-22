@@ -4759,6 +4759,7 @@ nothing has touched geometry; after any wall contact, position is an observation
 not a prediction.**
 
 ## 2026-08-21 — ★★ REALFIX-L4: THE FIX IS DEMONSTRATED. Pooled 9 of 21 against 0 of 13, Fisher p = 0.0056
+⚠ **SCOPE, added 2026-08-21 after REALFIX-L5: this result is REGIME-SPECIFIC and holds only where plane boundaries are crossed.** The spam-click regime has a SECOND mechanism — grant distance, no boundary involved — and `--plane-carry` has no purchase on it at all. See FINDINGS §"REALFIX-L5".
 
 **OBSERVED, `ours`.** Two arms, a **shuttle-only** plan built for exposure rather
 than coverage — the wall cells were dropped (they drift off the deck, and X2a
@@ -4826,3 +4827,544 @@ gate 1 at ~500 u → whole-roster reseed → the character yanked ~460 u backwar
 - **`--zero-lead` itself remains undemonstrated as a warp fix** against the
   shipped default. It is the substrate F1 is measured on, not a proven
   improvement over P0 — and P0 in this regime sends no grants at all.
+
+## 2026-08-21 — ⚠ REALFIX-L5: THE SPAM-CLICK REGIME IS A DIFFERENT MECHANISM, `--zero-lead` IS INERT IN IT, AND THE COMPOSITE'S ZERO IS NOT A FIX
+
+**OBSERVED, `ours`.** Four arms, map 148, build 38797, human-driven — hold `S`
+and spam-click, round 4's own trigger. Owner at the keyboard throughout: a held
+key with simultaneous clicks is not expressible in `walk_legs`
+(`REALFIX.md`:486) and world-anchored clicking is the operator's side of the
+boundary. Captures `20260821T172112` / `172338` / `172557` / `172947`, movetap
+on all four.
+
+**Arms recovered from BEHAVIOUR**, because the gamesrv jsonl header carries no
+argv (REALFIX-Q8) — and over-determined by three disjoint fingerprints: the
+`grant_verdict` reason vocabulary (`"off"` ⟺ `GRANT_SUPPRESS` off,
+`authsrv.py`:3306; `"locally-moving"` reachable only with it on, :3317), the
+`sent` label prefix, and the `plane_carry` / `carry` telemetry fields. **The
+flag labels are earned, not assumed**: `plane_carry = true` and
+`carry = "plane-carry"` appear on 180 (A2) and 192 (A3) verdict rows.
+
+| arm | flags | span | grants | **hard jumps** | rate |
+|---|---|---|---|---|---|
+| **A1** | shipped default | 53.7 s | 145 | **14** of 173 | 15.66/min |
+| **A2** | `--zero-lead --plane-carry` | 55.3 s | 193 | **10** of 182 | 10.85/min |
+| **A3** | + `--grant-suppress` | 61.3 s | 96 | **0** of 195 | **0.00/min** |
+| **A4** | shipped default (bracket) | 47.4 s | 94 | **12** of 152 | 15.17/min |
+
+Scored with `movesync.py --wire-only`, which needs no movetap — necessary
+because **A3's tap ran 12.5 s of a 61.3 s arm** (120 samples against 464–519),
+and "positives valid, nulls void" refuses a null over 17.7% of an arm. The
+paired and wire-only bars agree on A1/A2/A4 — ⚠ but that agreement is an
+ALGEBRAIC IDENTITY, not a check: `pair()` dropped zero reports there, so both
+ran the same predicate over the same list.
+
+### What survives
+
+**S1 — a clean bracketed P0 baseline in this regime: 15.66 and 15.17/min, a
+1.03× spread.** Round 4's two baselines on identical stated play differed
+**1.7×**; this is the tightest control pair the arc has. It is the single most
+reusable number here.
+
+**S2 — `--zero-lead` does NOT fix the click regime.** A2 is byte-identical to a
+bare `--zero-lead` arm on the wire (see W3 below), so it *is* the gap-(a) test:
+**RR 0.703, exact 95% CI [0.303, 1.507]** — the interval covers 1.000, i.e.
+inert. Power to detect its own pre-registered effect was **11.8%**. Do not read
+the 30% as an effect. Its value is structural: it is the arm that isolates
+`--grant-suppress`.
+
+**S3 — two confounds refuted by measurement, not by argument.** Warps are
+**under**-dispersed (Fano φ = 0.40 over 5 s bins, lower-tail p = 0.008; 0
+adjacent-jump pairs in 325 P0 intervals against 2.07 expected), so
+interval-level Fisher was conservative rather than optimistic. And the
+plane-crossing explanation dies on the cleanest possible control: **A4 crossed
+ZERO planes (153/153 reports on plane 0) and warped 12 times.**
+
+**S4 — A3's motion was never superhuman.** Max interval speed **278.31 u/s**
+over all 195 intervals, below the character's own 288 u/s run speed. Zero at
+every speed bar down to 279 u/s.
+
+### ⚠ WHAT IS WITHDRAWN, and this is most of the entry
+
+**W1 — WITHDRAWN: "the composite removes the warp."** A3 emitted **0 of 96
+grants capable of displacing the player** — every one named a point **≤ 0.7 u**
+(p50 0.4 u) from where the client had just said it was. On the mechanism's own
+denominator A3 contributes **zero trials**. The run cannot distinguish *the fix
+works* from *no-op packets are no-ops*. **Restate as:** `--grant-suppress`
+removed every displacing grant, and the residual zero-lead grants are incapable
+of displacing the client by construction.
+
+**W2 — WITHDRAWN: the attribution to the composite.** Replaying the SHIPPED
+`_grant_verdict` against each arm's own recorded `keyboard_age` — positive
+control passing, forcing the flag off reproduces every arm's fired count exactly
+(145→145, 155→155, 94→94, and A3 on→0) — **bare `--grant-suppress` would have
+left A1 with 1 grant of 145 and A4 with 0 of 94.** One already-shipped flag,
+already priced by round 4 as a palliative, removes the grants that produced all
+26 P0 warps. **L5 contains no contrast that separates the composite from
+`--grant-suppress` alone.**
+
+**W3 — WITHDRAWN: every `--plane-carry` claim.** The flag was demonstrably ON
+and had **zero opportunity to act**: the client reported **plane 0 on every
+single `0x003D`** in A2 (183/183), A3 (196/196) and A4 (153/153), and
+`plane_differs` is **0 on all 180 and 192 zero-lead rows**. A single plane means
+no plane can differ. **L5 carries no information about REALFIX-F1 whatsoever**,
+and A2 is therefore a `--zero-lead` arm for every purpose.
+
+**W4 — WITHDRAWN: p = 3.33e-06.** Correct arithmetic, wrong unit — it treats one
+arm as 195 independent runs, and report intervals ~0.3 s apart are not
+independent trials. ⚠ The published Poisson figure was separately wrong: it
+mixed span variables (capture-row spans where the rate column used movesync
+track spans).
+
+**REPLACED BY a bin-level permutation, exact by enumeration, carrying its own
+NULL CONTROL** — the same test run on two arms of the SAME condition must come
+out non-significant, or it is measuring run-to-run variance rather than
+treatment. One-sided, jumps binned per arm, bin labels permuted:
+
+| comparison | 5 s | **10 s** | 15 s | verdict |
+|---|---|---|---|---|
+| P0 pooled vs **A3** composite | ~0 | **2.0e-04** | 4.8e-03 | significant |
+| P0 pooled vs **L6** `--grant-suppress` alone | 5e-06 | **1.6e-04** | 2.2e-03 | significant, same size |
+| P0 pooled vs **A2** `--zero-lead` | 0.133 | **0.258** | 0.226 | **NOT significant** |
+| **L6 vs A3** | 0.186 | **0.154** | 0.119 | **NOT distinguishable** |
+| *null control:* A1 vs A4 | 0.408 | **0.286** | 0.500 | ✓ passes |
+
+**Publish the 10 s row, with the bin width attached** — the figure moves an order
+of magnitude between 5 s and 15 s and is not quotable without it. An
+independent arm-level random-effects model put the A3 contrast at **0.035**
+(0.106 Bonferroni ×3); that is the more conservative reading and this entry does
+not choose between them, because they answer different questions — the
+permutation asks whether these bins differ, the random-effects model asks
+whether ANOTHER P0 arm would have.
+
+**And the row that matters most is L6 vs A3 at p = 0.12–0.19: the composite is
+not distinguishable from the single shipped flag.** On the mechanism's own
+denominator — displacing grants — the table is P0 26/239 against A3 **0/0**,
+which is **p = 1**: no trials at all.
+
+**W5 — WITHDRAWN: "fixed, not quiet."** Three separate defects. It is
+**cross-metric**: `drift` is |client report − **server's** blended model|
+(`authsrv.py`:2714, emitted :2798), self-reset on every accepted report
+(A3 accepted 196/196), so it spans ~0.3 s; `separation` is |client report −
+**the client's own SYNC block**|. It is **mis-attributed**: `FINDINGS`:3958's
+4,402 u arm is `A --explorable (P0 control)`, a zero-grant default build, **not**
+`--grant-suppress` — and no separation measurement of the palliative exists
+anywhere in the vault. And **the instrument fails its own control**: pointed at
+the known-parked arm, `drift` reads p50 **52.6 u**, *better* than A3's 66.7.
+**Corrected wording:** A3 is not the L1 parked-copy failure — compared like with
+like, each arm cut to its own first 10.85 s, A3 reads separation p50 **40.4 u**
+where the zero-grant arm reads **6,229 u** in its first bucket. Limits: 17.7% of
+A3, and the comparison arm is a default build rather than the palliative.
+
+**W6 — WITHDRAWN: "96 grants vs 94, so it is not granting less."** Disjoint
+populations. A3's click arm granted **0 of 178**. And the two arms are coupled,
+not additive: `_grant_verdict` and `_heading_grant_ok` share one 0.5 s clock
+(`state["grant_at"]` is stamped in `send()`/`_note_wire_move` at :3005 for
+EVERY player `0x0029` whatever arm sent it; `GRANT_MIN_INTERVAL = 0.5` at
+:3252), so A3's 96 zero-lead grants **exist because of** its 178 suppressions.
+
+**W7 — a real cost, newly measured and not to be glossed.** A3 is the **worst**
+arm at drift p50 (66.7 u against 31.0–41.8) and p90 (124.8 u), best at max
+(175.1 u). The median regression is the treatment's own arithmetic: A3's client
+step per interval is 33.6 u, identical to the others, but the **server's model
+motion is 57.6 u/interval (≈192 u/s)** against A4's 14.5 — zero-lead re-anchors
+`state["dest"]` to a stale point and the integrator chases it at run speed.
+Against `ENEMY_DEST_RESEND = 120 u` that is 15.8% exceedance, worst of four; it
+buys 0.0% above `INTERACT_RANGE = 250 u` (against 5.5–9.2%) and 0 trust-guard
+firings (against 1/1 and 2/2).
+
+### ★ THE FINDING THAT REFRAMES THE ARC: THERE ARE TWO MECHANISMS, NOT ONE
+
+L3/L4 decoded the **plane echo** — field 4 stamping the client's plane onto a
+lagged copy at a boundary — and demonstrated `--plane-carry` removing it. **That
+mechanism has no exposure in this regime at all**, by the plane census above.
+
+What produces the warps here is **grant DISTANCE**, and it needs no boundary:
+
+| arm | granted destination's distance from the client | over the 299.33 u gate-1 cut |
+|---|---|---|
+| A1 | p50 1,644 u, max 5,025 u | **140 of 145 (97%)** |
+| A2 | p50 1,446 u, max 4,827 u | 152 of 193 (79%) |
+| A4 | p50 2,577 u, max 5,642 u | **94 of 94 (100%)** |
+| A3 | 0.0 u — by construction, not by measurement | 0 |
+
+The click arm grants a point the player clicked, 1,400–2,600 u away; the copy
+cannot match it against its own history; gate 1 (299.332591 u, REALFIX-C0)
+fires; the roster reseeds. A2's 79% is exactly its own composition — 38 of 193
+grants were zero-lead, and the rest are click grants.
+
+**Independently corroborated on round 4's own captures**, from the other side:
+the client never left plane 0 in any round-4 arm and **field 4 was `0` on all
+341 grants**, while every one of round 4's 13 hard rows is plane 0→0, follows a
+click grant by **0.08–0.23 s**, and several land on the granted point to the
+unit — `183311 t+19.64` reports `(10783, 5905)` against a grant of
+`(10784, 5905)`.
+
+**So `studies/movement`'s two regimes are two different failures wearing one
+symptom, and a fix for one is not a fix for the other.** L3/L4's result stands
+in its own regime and is untouched by this entry.
+
+### Why `--zero-lead`'s arm is starved here, measured
+
+`send()`/`_note_wire_move` stamps the ONE shared `grant_at` for every player
+`0x0029` whatever arm sent it; `_heading_grant_ok` refuses below
+`GRANT_MIN_INTERVAL = 0.5 s`; and the click arm has **no rate limit at all**
+with `--grant-suppress` off (`_grant_verdict` short-circuits, :3305). Replaying
+round 4's own streams through the imported predicate — positive control
+reproducing FINDINGS' published counts first — the zero-lead arm would fire
+**26 of 128** (`183311`) and **12 of 132** (`195137`) against 140 and 199 click
+grants, but **56 of 112** once `--grant-suppress` silences the click storm.
+Measured in the run itself: A2 fired 38 of 180, A3 **96 of 192**.
+
+### An unmeasured geometry fact that explains the whole arc's failure to see a click-side plane rewrite
+
+Probing our own navmesh across the bridge deck (`pathmap.PathingMap.load(0x1B97D)`,
+58 planes / 6,120 trapezoids), `containing()` returns **`[0, 18]` — ambiguous —
+through the entire middle of the deck**, and the click arm refuses unless our
+geometry places the player on exactly one plane and that the one the client named
+(`placed = here == {cur_plane}`, :11120). Only two narrow strips grant a click
+with plane 18: **y 4560–4760 and y 5320–5560**. 38% of on-mesh probes are
+ambiguous, and the ambiguity is exactly where a click-side plane rewrite would
+have to happen. ⚠ **Very nearly none, and the exact figure is worth having: of 601 grants
+attributable to the CLICK arm, field 4 is non-zero on 2 (0.3%) — against 108 of
+704 (15.3%) on the zero-lead arm, which is F1's own territory.** (2,711 further
+grants sit in pre-telemetry captures with no `grant_verdict` row to attribute them
+by; 39 of those carry a non-zero field 4, so the click-arm figure is a FLOOR over
+the attributable set, not a census of the arc.) An earlier draft of this sentence
+said **never**, which was overstated by two. **The geometry above is why it is so
+close to zero.**
+
+---
+
+## 2026-08-21 — ★ REALFIX-L6: bare `--grant-suppress` scores 7.6×, and round 4's UNEXPLAINED RESIDUE is finally explained
+
+**OBSERVED, `ours`, wire-only** (no movetap). Capture `20260821T183331`, harness
+report `vault/captures/harness/20260821T183254`, map 148, build 38797, same
+operator, same trigger. **The arm L5 named as deciding and did not run.**
+
+**484 clicks over 89.0 s → 2 grants → 3 hard jumps, 2.02/min**, against the L5
+P0 pool's 15.43/min. **A 7.6× reduction**, reproducing round 4's 8.3× on an
+independent run and settling W2 above from the other direction: the palliative
+alone does most of the work.
+
+### Why only two grants got through — the disarm window
+
+Both fired with **`keyboard_age = None`**. Rule 1 is
+`if age is not None and age <= GRANT_LOCAL_WINDOW` (:3316, the constant at
+:3230), so the latch was not
+STALE — it was **UNSET**, and rule 1 never evaluated. `kbd_moving_at` is armed
+by the `0x003D` arm and cleared by the `0x0047` arm (:10401, :11297), and the
+code's own comment already names the behaviour: *"THE PRIMARY DISARM of the
+locally-driving latch… in the 5 ordinary clicks of `authsrv-20260820T182934-c1`
+a 0x0047 had arrived before every single one, so rule 1 refused 0 of 5 there."*
+
+Both grants landed **0.22 s and 0.41 s after a stop report**, and both carried
+full lead: **1,758 u and 754 u**, each far over the 299.33 u cut.
+
+**This is not a bug in rule 1. It is rule 1 working as documented** — the same
+disarm that makes ordinary click-to-move work is what leaks during a spam-click
+session whenever the client emits a move-cancel.
+
+### Why two grants produced three warps — the destination LINGERS
+
+| warp | jump | landed | from | **lag** |
+|---|---|---|---|---|
+| 1 | 1,095 u | **27.9 u** from grant 1's dest | keyboarding throughout (`movementType=4`) | **8.8 s** |
+| 2 | 2,238 u | **114.2 u** from grant 1's dest | after a stop | **35.3 s** |
+| 3 | 1,210 u | **0.0 u** from grant 2's dest | — | **6.9 s** |
+
+**Grant 1 fired twice** — at +8.8 s and again at +35.3 s. Two of three landings
+are inside the client's own `MATCH_RADIUS` = 99.919968 u.
+
+**CONTROL, and the first version of it was contaminated**: a warp's landing is
+itself reported by the client, so drawing "random" points from the raw track
+lets the control pick the very point being fitted and score 0.0 u. Excluding
+every report within ±2 s of a warp: 200 random track points give **best fit
+189.0 u, p50 757 u, and 0 of 200 beat even the worst real grant fit (114.2 u).**
+
+**During warp 1 the player was keyboarding continuously**, `movementType = 4` on
+every report either side. The granted destination survived sustained local
+movement and fired anyway.
+
+**This is REALFIX-Q5's residue, with instances.** Round 4 measured 1.39 hard
+rows/min from 2 grants and never explained it; `REALFIX.md`:289 lists
+`0x005FCAA0`'s gate-free reseed as *"a candidate for the unexplained snaps 12–59 s
+after the last grant"*. The signature now has a shape: **the granted destination
+is not consumed, it lingers, and it re-applies seconds later.** Which site
+re-applies it is still UNVERIFIED — that needs a movetap on `+0x48`, which this
+run did not carry.
+
+### ⚠ The A3-vs-L6 comparison is confounded by exposure, and the confound is measurable
+
+| arm | stops | clicks | **clicks in a disarm window** | grants via that branch |
+|---|---|---|---|---|
+| A1 | 4 | 300 | 2 | 0 |
+| A2 | 3 | 317 | **0** | 0 |
+| A3 composite | 4 | 330 | **0** | 0 |
+| A4 | 1 | 262 | **0** | 0 |
+| **L6** | 7 | 484 | **9** | **2** |
+
+**A3's zero on this path is untested exposure, not a demonstrated fix** — it
+never met the branch once, exactly as L5's own limit 4 predicted. L6 met it nine
+times.
+
+**And `--zero-lead` does not touch the click arm**, so the same nine clicks under
+A3's flags would have produced the same lead-carrying grants. **PREDICTION,
+recorded before it is tested: the composite would NOT have prevented these three
+warps.** ⚠ **CONTESTED the same day by a desk screen — see §"REALFIX-F4 REFUTED AT A DESK": under `--zero-lead`, 137 overwrite grants would have fired, the first 0.91–2.13 s after each click grant and 6.0–33.2 s before each warp. Whether the client HONOURS an overwrite is UNVERIFIED, so the prediction is neither confirmed nor withdrawn — it is now the thing the next run decides.**
+
+### ★ AND IT SETTLES L5's OPEN QUESTION: THE COMPOSITE BOUGHT NOTHING MEASURABLE
+
+Bin-permutation, same test and same null control as L5's W4: **L6 vs A3 gives
+p = 0.186 / 0.154 / 0.119** at 5 / 10 / 15 s bins. **The composite
+(`--zero-lead --plane-carry --grant-suppress`) is NOT distinguishable from
+`--grant-suppress` alone**, while both separate from P0 at ~2e-04. Combined with
+W2's predicate replay, the ruling is: **the single shipped flag does the work,
+and the two extra flags add nothing to the warp count.** What they may still add
+is the bounded server model (L5 W5/W7) — that is a different claim on a
+different metric and is not established here.
+
+### What this names for the next build
+
+The lever is in the **click arm** and the constant is already measured: a grant
+whose destination lies within `MATCH_RADIUS` of the client's last report cannot
+reach gate 1. Both L6 grants carried 754 u and 1,758 u. Round 4 already priced
+the cost of refusing outright — with every click refused *"the client pathed
+itself to the clicked point anyway"*, cos 0.994–1.000, 5 of 5 — so the click
+grant is not load-bearing for click-to-move. **Needs a minted identifier and its
+own pre-registration before a line is written.**
+
+## 2026-08-21, later — REALFIX-F4 REFUTED AT A DESK BEFORE IT WAS BUILT, and the desk work undermines my own L6 prediction
+
+**No client run, no server code written.** Three offline screens over captures
+already in the vault. This is the second candidate the desk has killed
+(REALFIX-F1b was the first) and the pattern is now the arc's cheapest instrument.
+
+### 1. REALFIX-F4 — bound the click grant's lead — is REFUTED
+
+**The candidate**, minted here per `studies/idents/CONVENTION.md` (`F<n>` = fix
+candidates; F1/F1b/F2a/F2b/F3 taken): refuse a click grant whose destination
+lies further than a bound *B* from the client's own last reported position,
+since a grant inside `MATCH_RADIUS` cannot fail the match test and reach gate 1.
+
+**Its own refutation criterion, stated in the screen before it ran:** the bound
+earns its place only if it refuses the warp-causing grants while NOT refusing
+everything — otherwise it is `--grant-suppress` with extra steps.
+
+**Screened over the whole `origin = ours` corpus** — 2,445 grants, 82 warps
+attributable to a granted point within 150 u:
+
+| bound | BENEFIT: warp-causing grants refused | COST: all grants refused |
+|---|---|---|
+| `MATCH_RADIUS` 99.92 u | 81 / 82 (**99%**) | 2,299 / 2,445 (**94%**) |
+| `GATE1_CUT` 299.33 u | 77 / 82 (94%) | 2,129 / 2,445 (87%) |
+| 520 u | 72 / 82 (88%) | 1,979 / 2,445 (81%) |
+| 1,000 u | 29 / 82 (35%) | 1,102 / 2,445 (45%) |
+
+**The curves track each other, and at the loosest bound the ratio inverts
+(35% benefit at 45% cost — worse than indifferent).** There is no separation to
+find, and the reason is structural: **a click grant is far BY DEFINITION** —
+it names the point the player clicked. The population of "far grants" and the
+population of "all click grants" are the same population. **F4 is refused. Do
+not build it.**
+
+**What this rules out generally:** any click-arm policy keyed on the grant's own
+distance. The discriminator, if one exists, is not in the grant.
+
+### 2. Reseed-onto-our-model is REFUTED, and two of L6's three warps are clean
+
+The rival reading of L6's warps — gate 1 reseeds the whole roster onto the
+authoritative copy, so the landing is wherever the SERVER believed the player
+was, and its proximity to an old granted point is a coincidence of our own
+integration. **Tested against `position_report.ours`, the server's own belief,
+strictly before each warp:**
+
+| warp | to the nearest GRANTED point | to OUR MODEL | to the client's OWN past track |
+|---|---|---|---|
+| 1 | **27.9 u** | 966.6 u | 591.1 u |
+| 2 | 114.2 u | **2,224.9 u** | **105.2 u** |
+| 3 | **0.0 u** | 1,324.6 u | 422.7 u |
+
+**Reseed-onto-our-model is dead** — warp 2 sits 2,225 u from our model. **Warps
+1 and 3 are unambiguously the granted destination**, held **8.82 s** and
+**6.88 s** and then applied.
+
+⚠ **Warp 2 is UNRESOLVABLE and is withdrawn as evidence for anything**: 114.2 u
+to grant 1's destination against 105.2 u to a position the client itself held
+26.2 s earlier. At n = 1 that difference cannot be called. **In particular it
+must NOT be read as showing that grants QUEUE rather than replace** — that was
+this session's first reading of it (grant 2 was already sent when warp 2 fired
+on grant 1's point) and the own-past column takes it away.
+
+### 3. ⚠ MY OWN L6 PREDICTION IS UNDERMINED — the overwrite arrives in time
+
+L6 recorded: *"the composite would NOT have prevented these three warps"*,
+reasoning that `--zero-lead` does not touch the click arm so the same
+lead-carrying grant goes out. **That is true about the GRANT and ignores what
+happens 0.5 s later.**
+
+Replaying L6's real report stream through the SHIPPED `_heading_grant_ok`, with
+L6's real click grants stamping the shared clock: **137 zero-lead grants would
+have fired**, each naming the client's own position. Per warp:
+
+| warp | its grant | overwrites available before it | first one lands |
+|---|---|---|---|
+| 1 | t+37.06 | **11** | 2.13 s after the grant, **6.69 s before** the warp |
+| 2 | t+37.06 | **53** | 2.13 s after the grant, **33.22 s before** the warp |
+| 3 | t+71.49 | **10** | 0.91 s after the grant, **5.97 s before** the warp |
+
+**Every warp had an overwrite available, with seconds to spare.**
+
+⚠ **This is NOT a demonstration that the composite works.** It shows the
+overwrite would be **sent** in time; it does not show the client **honours** it.
+Whether a second `AGENT_MOVE_TO_POINT` clears a pending destination or is held
+behind it is **UNVERIFIED** — nothing here reads `+0x48`, and §2's warp 2 can no
+longer be used to argue either way. **The prediction is downgraded from
+"recorded before it is tested" to CONTESTED, and the run below decides it.**
+
+### What to run, and why it is now cheap
+
+**`--zero-lead --grant-suppress`, in a regime that DELIBERATELY produces
+cold-latch clicks.** L6 taught the recipe: rule 1 disarms on a `0x0047` stop, so
+**release the movement key for ~0.5 s, click somewhere far, then resume
+keyboarding.** L6 produced 9 such windows by accident in 484 clicks; a protocol
+aimed at them produces dozens.
+
+**The two outcomes are both informative and they are opposite:** warps → 0 means
+the overwrite is honoured and the composite closes the residue `--grant-suppress`
+leaves; warps at L6's ~2/min means the destination survives an overwrite, which
+sends the arc to the client-side question — which of the 13 SetPosition sites
+re-applies a destination seconds later (REALFIX-Q5) — and needs a movetap on
+`+0x48`, which L6 did not carry. **Carry one this time.**
+
+**The control is already banked**: L6 itself, `--grant-suppress` alone, 3 warps
+in 89 s at 2.02/min, same operator, same map, same day.
+
+## 2026-08-21 — ★ REALFIX-L7: the cold-latch branch reproduced ON PURPOSE, the palliative's parked copy finally MEASURED, and the overwrite hypothesis is still untested
+
+**OBSERVED, `ours`.** Two arms, map 148, build 38797, owner-driven under a
+**deliberate cold-latch protocol** — walk, release the key ~1 s, click far,
+resume — designed from L6's diagnosis to produce the branch that leaks past
+`--grant-suppress`. Control `20260821T210131`, treatment `20260821T210620`.
+**Both movetaps ran the full 199.9 s at 12.0 and 13.3 Hz** — against 8.4–9.5 in
+every earlier run and 12.5 s of coverage in L5's A3 — so for the first time in
+this regime **REALFIX-E on the rendered copy is admissible and carries the
+verdict**, which matters because the protocol's standing-still leaves the
+control's wire only **17% actively reported**.
+
+| | **control `--grant-suppress`** | **treatment `+ --zero-lead`** |
+|---|---|---|
+| **REALFIX-E events** | **1** | **0** |
+| max rendered step | **3,437.3 u** | **52.1 u** |
+| grants | 1 | 116 |
+| stops (`0x0047`) | 41 | 44 |
+| clicks | 25 | 33 |
+| clicks on a cold latch | 1 | 4 |
+| **cold-latch grants that ESCAPED** | **1** | **0** |
+| **separation p50 / p90 / max** | **1,970 / 3,914 / 4,718 u** | **369 / 514 / 2,034 u** |
+| samples above the gate-1 cut | 93% | 67% |
+
+`--plane-carry` was correctly **excluded** this run (`plane_carry = false` on all
+116 zero-lead rows), so the treatment is cleanly `--zero-lead --grant-suppress`. ⚠ **And the scorer said otherwise for a while.** The behavioural arm-identifier printed "COMPOSITE `--zero-lead --plane-carry` `--grant-suppress`" from a HARDCODED label string whenever the zero-lead and suppress vocabularies both appeared — it never read `plane_carry`, which the capture records on every verdict row. That is the exact hazard L5's review named ("`--plane-carry` vs `--arrival-carry` indistinguishable; the `carry` field separates them and is not read"), and it is the `vaultpath.require_dir()` principle in another costume: **a fixture that names a thing without reading it turns every claim behind it into a no-op.** Fixed to read the field and to PRINT what it read, so the label can be audited rather than trusted.
+
+### 0. Instrument note — the tap's sample rate is ONE SYSCALL, and it is fixable
+
+Three runs have now recorded a movetap rate (8.4–9.5 Hz, then 12.0–13.3 Hz) as a
+bare fact with no cause, and "positives valid, nulls void" has been paid twice
+because of it. **Measured 2026-08-22: `_threads_of()` costs 51.7 ms per call on
+this machine** (n=20, warm; an independent lane on the same tree measured
+39.7–57.7 ms, so it is load-dependent — quote the range) — **which caps the tap
+at 19.3 Hz on that call alone**, before a single `ReadProcessMemory`.
+
+The cause is at `movetap.py:514`: `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD,
+0)` takes a **system-wide** thread snapshot and the owner filter is then applied
+in Python at `:519`. Passing our own pid would not help — `TH32CS_SNAPTHREAD`
+ignores `th32ProcessID` by design — so **the fix is to CACHE the thread list**,
+which changes rarely for a running client, rather than to re-snapshot per sample.
+The `ctypes.WinDLL("kernel32")` construction inside the same function is only
+0.013 ms and is not worth touching.
+
+**Nothing here has been changed** — this is a measurement and a costing, not a
+patch, and `movetap.py` is a pinned instrument whose edit needs its own test
+floor. But the next arc that needs 20 Hz should know the ceiling is one cached
+list away, not a rewrite. OBSERVED, `toolkit/clientscan/movetap.py:500-524`.
+
+### 1. The protocol worked, and the conversion is now 3 for 3
+
+The control's single event is **3,437.3 u**, and its next largest rendered step
+is **42.9 u** — one discontinuity, nothing marginal. Anchored on REALFIX-T1 at a
+**0.218 ms** clock residual, it lands **0.0 u from the granted destination,
+10.1 s after the grant**, and the grant fired with **`keyboard_age = None`** —
+the cold-latch branch, produced deliberately rather than stumbled into.
+
+**Across L6 and L7 the cold-latch conversion is 3 of 3 clean instances**
+(L6 warps 1 and 3 at 27.9 u / 8.82 s and 0.0 u / 6.88 s; L7 at 0.0 u / 10.1 s).
+**A grant that escapes rule 1 lands the player on its destination 6.9–10.1 s
+later.** That is a reproducible, prospectively-triggered defect.
+
+**And it reconciles L6's ambiguous warp 2.** At the event, separation collapses
+**3,418.97 → 0.0 u** while the landing sits 0.0 u from the granted point: the
+SYNC copy had *walked to* the granted destination over those 10 s, and the
+rendered character was reseeded **onto the copy**. Landing-on-the-grant and
+landing-on-our-model are not rival readings — they are the same point, because
+the copy integrates toward what we granted. L6's warp 2 was ambiguous for
+exactly this reason and stays withdrawn.
+
+### 2. ★ THE PALLIATIVE'S PARKED COPY, MEASURED — and it supplies what L5's W5 said did not exist
+
+L5 withdrew "fixed, not quiet" partly because *"no separation measurement of the
+palliative exists anywhere in the vault."* **It exists now, on the same metric,
+same instrument, same run, same operator, both arms:**
+
+**bare `--grant-suppress` parks the authoritative copy at p50 1,970 u
+(p90 3,914, max 4,718). Adding `--zero-lead` pulls it to p50 369 u — 5.3× —
+while events go 1 → 0.**
+
+This is the L1 quantity (SYNC copy against the client's own report — what aggro,
+interact range and `clip_to_walkable` actually read), so it is comparable to
+L1's 4,402 u parked default, and it is **not** the cross-metric `drift`
+comparison W5 struck. **The composite's claim is no longer "fewer warps" — which
+this run cannot power — it is "the same silence without the parked copy", and
+that contrast is large and well sampled (2,406 and 2,661 samples).**
+
+**A second cost of parking, newly visible: the parked copy sets the warp's
+SIZE.** The control's event magnitude (3,437 u) is its separation (3,419 u).
+`--grant-suppress` trades warp frequency for warp magnitude, because the copy
+drifts further before the reseed lands on it.
+
+### 3. ⚠ THE RUN DID NOT TEST WHAT IT WAS BUILT TO TEST
+
+**The overwrite hypothesis remains UNTESTED, and this is the second run in a row
+to fail on exposure rather than on effect.** The treatment let **no** cold-latch
+grant out at all, so no lingering destination ever existed for an overwrite to
+race. The warp contrast is **1 against 0** — n = 1 per arm, statistically
+nothing, and the composite's zero is again *untested exposure* rather than a
+demonstrated save.
+
+**What DID appear is a different protective mechanism, caught once in the act.**
+At **t+211.41** a click landed on a cold latch, passed rule 1 — and was refused
+`rate-limited` by **rule 2**, because a zero-lead grant had stamped the shared
+`grant_at` **0.40 s earlier** (`t+211.015`). **`--zero-lead` protects by
+PREEMPTING the click grant on the shared clock, not by overwriting a destination
+after the fact.** The other three cold-latch clicks were refused upstream by the
+geometry/staleness gates and never reached a verdict.
+
+**Preemption is arguably the better mechanism** — it stops the packet at source
+rather than racing it — but **n = 1**, and it is not what was pre-registered.
+**My L6 prediction stays CONTESTED**: nothing here shows whether the client
+honours an overwrite, because no overwrite ever had a target.
+
+### 4. What the next run must do differently
+
+The exposure problem is now the binding constraint two runs running, and its
+cause is measurable: **of 58 clicks across both arms, only 5 landed on a cold
+latch and only 1 escaped**. The deliberate protocol produced plenty of stops
+(41 and 44) but too few clicks, and most clicks died upstream in the click arm's
+geometry gates ("not a straight shot", "cannot place them").
+
+**To test the overwrite specifically, the click must be allowed OUT and the
+overwrite must be the only thing standing between it and the warp.** That means
+an arm where rule 2 cannot preempt it — i.e. the shared clock must be free at
+the moment of the click. **Neither this run nor L5 can be re-analysed into that;
+it needs a build change or a protocol that clicks immediately after a heading
+grant's floor expires, and it should be priced before it is run.**
