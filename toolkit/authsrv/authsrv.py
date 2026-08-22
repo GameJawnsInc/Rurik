@@ -4443,6 +4443,22 @@ GAME_CMSG_ROTATE_PLAYER = 0x0040
 GAME_CMSG_CHAT_SEND = 0x0064
 GAME_SMSG_CHAT_MESSAGE_CORE = 0x005D
 GAME_SMSG_CHAT_MESSAGE_SERVER = 0x005E
+# 0x00E2 RELEASES A PENDING PRESS, and it is unnamed in every catalog we hold
+# -- messages.json, overrides.json and GWCA's Opcodes.h all pass over it. Named
+# here from two witnesses: retail sends it 43 times and only ever to answer a
+# declined press (0 of 53 name another agent, 0 of 53 carry a nonzero third
+# field), and the client's own worker walks it to
+# `add dword ptr [edi+4], -1` -- the pending-cast refcount -- and removes the
+# entry at zero.
+#
+# THE OPCODE CANNOT CARRY THE REASON, and that is measured rather than assumed:
+# 0x00E2 and 0x00E3 share one dispatch stub at 0x0091F650, which forwards three
+# payload dwords and NOT the opcode, so the worker cannot tell them apart. The
+# reason travels in the chat line instead. (0x00E4 and 0x00E5 have distinct
+# stubs in the same table, which is the contrast that proves the sharing is
+# real and not an artifact of how we read the table.) Retail answers a refusal
+# with 0x00E2 43 times and with 0x00E3 zero times, so this is the one to send.
+GAME_SMSG_SKILL_REFUSED = 0x00E2
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
@@ -7111,6 +7127,43 @@ def handle_item_sale(values, send, state, conn_id, rec):
           f"{price} gold credited", flush=True)
 
 
+def refuse_press(send, skill_id, copy, conn_id, reason_id=None):
+    """Answer a declined press the way retail does: a sentence, then a release.
+
+    ORDER IS MEASURED -- the chat pair goes out BEFORE the 0x00E2, 40 of 40,
+    with nothing between the 0x005D and its 0x005E. That adjacency is not
+    cosmetic: the commit tag renders whatever is in the client's accumulator,
+    so a message landing between them would consume the wrong body and a bare
+    0x005D renders nothing at all.
+
+    THE ECHO MUST BE EXACT. The client keys its pending-cast table on
+    `(skill_id << 16) | copy` and binary-searches it; a wrong echo finds no
+    entry, releases nothing, and says so in its own log (`Pending skill %u
+    copy %d not found`). So `skill_id` and `copy` are passed straight back
+    from the press rather than recomputed.
+
+    NEVER BROADCAST. All 53 corpus 0x00E2 name the connection's own agent.
+
+    `reason_id=None` sends the bare release with no sentence, which is what
+    retail does 3 times of 43 -- the shape for a refusal whose reason we cannot
+    name. Guessing a string id there would be inventing traffic.
+    """
+    if reason_id is not None:
+        send(GAME_SMSG_CHAT_MESSAGE_CORE,
+             [chatdefs.refusal_body(reason_id)],
+             f"CHAT_MESSAGE_CORE[refusal #{reason_id}]")
+        send(GAME_SMSG_CHAT_MESSAGE_SERVER,
+             [PLAYER_NUMBER, chatdefs.CHANNEL_WARNING],
+             f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, Warning)")
+    send(GAME_SMSG_SKILL_REFUSED,
+         [PLAYER_AGENT_ID, skill_id, copy],
+         f"SKILL_REFUSED(skill {skill_id} copy {copy})")
+    print(f"[c{conn_id}] refusal answered: "
+          + (f"#{reason_id} on the warning panel, then the slot release"
+             if reason_id is not None else
+             "the bare slot release, no reason named"), flush=True)
+
+
 def handle_skill_press(values, send, state, conn_id, opcode):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -7141,13 +7194,26 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # a cast cycle on the wire and a recharge burning on a skill that never
     # fired.
     #
-    # THE SHAPE OF THE REFUSAL IS OURS -- RECONSTRUCTION, and it is the one
-    # thing in this block that is not measured. What retail's server does when a
-    # client presses an unaffordable skill is UNOBSERVED on our corpus: the
-    # client may well swallow the press itself and never send `0x0046` at all,
-    # in which case this branch is unreachable in a real session and the log
-    # line below is how a run finds that out. Either way the server must not
-    # cast for free.
+    # THE SHAPE OF THE REFUSAL IS NOW MEASURED -- this comment used to say it
+    # was ours and unobserved, and both halves were wrong.
+    #
+    # Retail declines 43 of 143 presses in the corpus and answers every one of
+    # them, within 26-62 ms, with the same three messages:
+    #
+    #     0x005D CHAT_MESSAGE_CORE   [the reason's string id, coded]
+    #     0x005E CHAT_MESSAGE_SERVER [playerId, channel 7 = the warning panel]
+    #     0x00E2                     [agent, skill, copy] -- releases the slot
+    #
+    # 40 of 40 in that order with those exact neighbours; the other 3 send the
+    # bare 0x00E2 with no line, so the sentence and the release are separable
+    # and a refusal we cannot name a reason for should send the release alone.
+    #
+    # The old comment also guessed the client might swallow the press and never
+    # send it, "in which case this branch is unreachable in a real session".
+    # REFUTED twice over: E2 watched our client send a 25-energy press with
+    # 7.70 energy, and retail's own clients send 43 declined presses across the
+    # corpus -- including one INSIDE a live recharge window. The gate is the
+    # server's, and this branch is the hot path rather than a dead one.
     cost, glyph_ep, discount, units = 0, None, 0, 0
     pool = None
     if ENERGY:
@@ -7173,10 +7239,21 @@ def handle_skill_press(values, send, state, conn_id, opcode):
                      if have is not None else
                      f"adrenal ({units} units) but NOT ON THE BAR, no pool"),
                   flush=True)
+            # 1960 is OBSERVED, 39 of 39 -- see chatdefs. The off-bar case
+            # sends the same line: retail has no separate string for it and
+            # inventing one is exactly what this repo refuses to do.
+            refuse_press(send, skill_id, copy, conn_id,
+                         chatdefs.REFUSE_NOT_ENOUGH_ADRENALINE)
             return
         if cost > 0 and not pool.can_pay(cost):
             print(f"[c{conn_id}] REFUSED skill {skill_id}: needs {cost} "
                   f"energy, has {pool.current:.2f}", flush=True)
+            # 1961 is a RECONSTRUCTION -- the text is in the archive next door
+            # to 1960's, and the corpus contains ZERO energy refusals to check
+            # it against. A loopback run that reads the sentence off the screen
+            # settles it, and a different sentence refutes this constant.
+            refuse_press(send, skill_id, copy, conn_id,
+                         chatdefs.REFUSE_NOT_ENOUGH_ENERGY)
             return
 
     # The queue law from the constants' comment: E4 at accept, the cast

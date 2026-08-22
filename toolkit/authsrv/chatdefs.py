@@ -53,9 +53,38 @@ import questdefs                                            # noqa: E402
 # 2 (fragment cap), 7 (the /bow exchange).
 CHANNEL_ALL = 3
 CHANNEL_EMOTE = 6
+# CHANNEL 7 IS THE ON-SCREEN WARNING PANEL, and both halves are measured.
+# IMAGE: the GmView frame `0x1000007F` dispatches to 0x004E4EFC, whose first
+# instruction is `cmp dword ptr [edi],7` -- channel 7 is the only value that
+# body accepts, and the panel it draws is named `TxtError` (UTF-16 at
+# 0x0094D83C). WIRE: 40 channel-7 tags in the corpus and every one of them sits
+# in a skill-refusal batch, while 96 channel-10 and 1 channel-6 tag in the same
+# captures never do. That contrast is the discriminating negative -- a channel
+# byte that appeared in both populations would prove nothing.
+CHANNEL_WARNING = 7
 ALL_BODY_WRAPPER = 0x0108      # string id 8, the All-chat body wrapper word
 FRAGMENT_UNITS = 121           # declared(122) - 1, measured on both live splits
 BOW_TEMPLATE = 1687            # "%player% bows." -- id measured, text ArenaNet's
+
+# THE REFUSAL REASONS. Ids, not words -- the text lives in the owner's archive
+# and `textrec.py` resolves it; this is the same "commit the id, resolve the
+# string at run time" rule `mapbuild.py` and `typenames.py` follow.
+#
+# 1960 IS OBSERVED, 39 of 39. Every channel-7 line in the corpus that is not
+# the single target-0 case carries coded word 0x8A8, which is exactly
+# `codedstr.encode_id(1960)`, and 1960 resolves to the adrenaline refusal.
+# Replayed against a pool model with no free parameter it lands on 39 of 39
+# pool-short declines and 0 of 4 others.
+REFUSE_NOT_ENOUGH_ADRENALINE = 1960
+# 1961 IS A RECONSTRUCTION AND MUST NOT BE PROMOTED WITHOUT A RUN. The TEXT is
+# observed -- record 937 of file 1, immediately adjacent to 1960's record 936 --
+# but THE WIRE HAS ZERO ENERGY REFUSALS: all 43 declines in the corpus are
+# 0x0027 attack-skill presses, and 0 of 49 0x0046 casts was ever refused. The
+# operator never ran out of energy. So this id rests on the text plus its
+# position in the block, and the cheapest thing that settles it is a loopback
+# run that reads the sentence off the screen. If the client shows something
+# else, this constant is refuted and that is a finding, not a build failure.
+REFUSE_NOT_ENOUGH_ENERGY = 1961
 PLAYER_ARG_SLOT = 13           # arg slot rendering a playerId as a name (n=2)
 
 assert codedstr.decode_id([ALL_BODY_WRAPPER]) == (8, 1)
@@ -105,6 +134,16 @@ def bow_body(player_number):
              + codedstr.encode_id(PLAYER_ARG_SLOT)
              + codedstr.encode_id(player_number))
     return "".join(chr(w) for w in words)
+
+
+def refusal_body(string_id):
+    """A bare coded string -- one word, no arguments -- for the warning panel.
+
+    Retail's refusal lines take no substitutions: the whole payload is the
+    string id, which is why the observed wire word is a single 0x8A8 rather
+    than a template plus argument slots the way `bow_body` builds one.
+    """
+    return "".join(chr(w) for w in codedstr.encode_id(string_id))
 
 
 def fragments(body):

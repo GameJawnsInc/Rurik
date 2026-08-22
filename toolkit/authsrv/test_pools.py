@@ -144,6 +144,32 @@ def bits_to_f32(b):
 # ---------------------------------------------------------------------------
 
 
+# The cast cycle the two refusal checks exist to forbid. Resolved lazily
+# inside the helper because this module imports `authsrv` further down.
+def refusal_shape(sent):
+    """(ops sent, whether they are exactly retail's measured refusal batch).
+
+    THE BATCH IS MEASURED, not chosen: 43 of 143 corpus presses are declined,
+    43 of 43 are answered, and 40 of 40 carry
+    [0x005D CHAT_MESSAGE_CORE, 0x005E CHAT_MESSAGE_SERVER ch7, 0x00E2] in that
+    order with nothing between them. The other 3 send the bare 0x00E2.
+    """
+    import authsrv
+    ops = [op for op, _v, _w in sent]
+    return ops, ops == [authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
+                        authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER,
+                        authsrv.GAME_SMSG_SKILL_REFUSED]
+
+
+def cast_cycle_ops():
+    """A refusal may send the refusal batch and NOTHING from this set."""
+    import authsrv
+    return {authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,   # 0x00E4
+            authsrv.GAME_SMSG_SKILL_ACTIVATED,             # 0x00E3
+            authsrv.GAME_SMSG_SKILL_RECHARGE,              # 0x00E5
+            authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT} # the 62 debit
+
+
 def section_quantum():
     """THE QUANTUM: 0.33 as an f32, against the 1/3 every source states.
 
@@ -857,12 +883,18 @@ def section_gate():
     authsrv.player_energy(state).current = 1.0
     authsrv.handle_skill_press([0, 194, 0, 0], send, state, 0,
                                authsrv.GAME_CMSG_USE_SKILL)
-    LEDGER.ok(sent == [],
-              "no E4, no cast animation, no property 62 -- not one message",
-              f"{sent}. The refusal shape is RECONSTRUCTION (retail's answer "
-              f"to an unaffordable press is unobserved on our corpus and the "
-              f"client may swallow it locally), but a HALF-refusal would be "
-              f"wrong under every reading: an E4 with no spend is a free cast")
+    ops, shaped = refusal_shape(sent)
+    LEDGER.ok(shaped and not (set(ops) & cast_cycle_ops()),
+              "no E4, no cast animation, no property 62 -- and retail's "
+              "refusal batch instead",
+              f"{ops}. RE-PINNED 2026-08-21: this said the refusal shape was "
+              f"RECONSTRUCTION and retail's answer unobserved. It is OBSERVED "
+              f"-- 43 declines of 143 corpus presses, 43 answered, 40 of 40 as "
+              f"[0x005D, 0x005E ch7, 0x00E2] in that order. What the check "
+              f"really defends is unchanged: a HALF-refusal is wrong under "
+              f"every reading, because an E4 with no spend is a free cast. So "
+              f"the assertion is no longer 'nothing was sent' but 'exactly the "
+              f"refusal batch, and nothing from the cast cycle'")
     LEDGER.ok(not state.get("pending_casts"),
               "and no cast is pending, so no recharge burns for it either",
               f"{state.get('pending_casts')} -- the guard runs before the "
@@ -960,9 +992,14 @@ def section_adrenaline_glue():
 
         authsrv.handle_skill_press([0, 382, 0, 7], send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
-        LEDGER.ok(sent == [],
-                  "pressing it on an EMPTY pool is refused as totally as energy",
-                  f"{sent} -- no E4, no animation, no pending cast")
+        ops, shaped = refusal_shape(sent)
+        LEDGER.ok(shaped and not (set(ops) & cast_cycle_ops()),
+                  "pressing it on an EMPTY pool is refused as totally as "
+                  "energy, and answered the same way",
+                  f"{ops} -- no E4, no animation, no pending cast, and the "
+                  f"same three-message answer the energy branch sends. The "
+                  f"reason id differs (1960 adrenaline, 1961 energy) and only "
+                  f"1960 is observed on the wire")
 
         for _ in range(4):
             state["agents"][7]["last_hit"] = 0.0     # skip the swing timer

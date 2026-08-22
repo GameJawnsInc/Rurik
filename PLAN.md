@@ -1600,11 +1600,42 @@ UNMAPPED message).
    warrior — and what separates the two gate rules is a second capture, the
    Warrior in an explorable with every adrenal skill off the bar. Both are
    runs, not queries.
-2. **What answers a refused press.** Ours is silence and the client visibly
-   re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
-   Also: our client SENT both unaffordable presses — whether retail's client
-   gates locally (and on which store) is unknown; the answer likely rides the
-   same investigation.
+2. ~~**What answers a refused press.**~~ **CLOSED 2026-08-22, wire and screen**
+   (SKILLS-R1, [studies/skills §36](studies/skills/FINDINGS.md), run
+   `20260822T105929`). Retail answers with **three** messages, not one:
+   `0x005D CHAT_MESSAGE_CORE` carrying the reason's string id, `0x005E
+   CHAT_MESSAGE_SERVER [playerId, channel 7]`, then **`0x00E2`** which releases
+   the slot. **43 of 143 corpus presses are declined and 43 of 43 are
+   answered**; 40 of 40 carry the full batch in that order, the other 3 send the
+   bare `0x00E2`, so sentence and release are separable. Channel 7 is the
+   `TxtError` panel from both sides — the client's own `cmp dword ptr [edi],7`
+   at `0x004E4EFC`, and 40 channel-7 tags all in refusal batches against 96
+   channel-10 tags in none. **`0x00E2` cannot carry the reason** (it shares
+   dispatch stub `0x0091F650` with `0x00E3` and the stub forwards no opcode),
+   which is why the reason rides the chat line; it is unnamed in every catalog
+   we hold and is named here `GAME_SMSG_SKILL_REFUSED`.
+   **The server sends it and the client draws it.** One run, three presses, with
+   an accepted cast between them as the in-frame control: *"Not enough
+   Adrenaline."*, then "Order of Apostasy" casting with the orb at 0, then
+   *"Not enough Energy."* at 7.83 energy. **String 1961 was a RECONSTRUCTION
+   and is now OBSERVED** — the corpus holds zero energy refusals (all 43
+   declines are attack-skill presses; the operator never ran out), so it rested
+   on the archive text and its position next to 1960's until this run.
+   **One prediction REFUTED and it is a refinement:** the sentence appears
+   ONLY as the floating panel, never in the chat log — channel 7 is a panel
+   channel the log ignores.
+   **AND THE INSTRUMENT WOULD HAVE MISSED IT.** The text renders at ~(880–1060,
+   520–540), dead centre of the screenshot scorer's player-body mask
+   `(850,300)-(1120,760)`. Scored the usual way this run reports a null. Fifth
+   metric trap in the series and **the first caught in advance**, by declining
+   the instrument before the run rather than by an in-frame control afterwards.
+   **Still open:** what ends the ~10 s slot re-animation E2 saw (the only
+   release in the image is `0x00E2`'s refcount decrement — either an unread
+   client-side timeout or that is simply how long the operator watched), and
+   the reason ids for the rest of the 1934–1993 block, which live server-side.
+   On the second half of the old item: our client SENT both unaffordable
+   presses and retail's clients send 43 declined ones — including one inside a
+   live recharge window — so the client does not gate on cost.
 3. **The five unmodelled mechanics** (unchanged from the entry below): attack
    speed, movement speed, damage negation, energy cost reduction (GoLE's
    datum: the row needs an explicit amount — scale bit clear, endpoints 10/18

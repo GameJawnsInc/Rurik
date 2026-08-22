@@ -4433,3 +4433,152 @@ worth more than it looks: a wrong citation makes a later reader's audit fail and
 look like the claim failed. Everything published here was re-read from the image
 before it was written down, and the test pins `0x004FA34B` specifically.
 
+## 36. SKILLS-R1 — what answers a refused press, on the wire and on screen
+
+**2026-08-22.** Closes `PLAN.md` §8 item 2, which had been open since E2 on
+2026-08-20. Three blind recon routes (image / corpus / our own catalog), a
+judge, then a build and a loopback run: `20260822T105929`.
+
+### 36.1 Retail's answer is three messages, not one
+
+```
+0x005D CHAT_MESSAGE_CORE    [coded string = the reason's string id]
+0x005E CHAT_MESSAGE_SERVER  [playerId, channel 7]
+0x00E2                      [agent, skill, copy]     <- releases the slot
+```
+
+**OBSERVED.** Of 143 skill presses in the 20-capture corpus, **43 are declined
+and 43 are answered** — none is met with silence. 40 of 40 carry the full
+batch in exactly that order with those exact neighbours; the other 3 send the
+bare `0x00E2` with no sentence, so **the sentence and the release are
+separable**.
+
+I reproduced every number independently before writing any code: the `0x005E`
+channel census `{6: 1, 7: 40, 10: 96}`, the 40/40 adjacency, `0x00E2` at 53
+occurrences with third field 0 in **53/53**, and `codedstr.encode_id(1960)` =
+`0x8A8`, matching the observed wire word bit for bit.
+
+**Channel 7 is the warning panel, from two sides.** The image: GmView frame
+`0x1000007F` dispatches to `0x004E4EFC`, whose first instruction is
+`cmp dword ptr [edi],7` — channel 7 is the only value that body accepts, and
+the panel is named `TxtError`. The wire: all 40 channel-7 tags sit in refusal
+batches, while 96 channel-10 and 1 channel-6 tag in the same captures never do.
+That contrast is the discriminating negative; a channel byte appearing in both
+populations would have proved nothing.
+
+**`0x00E2` cannot carry the reason, and that is measured.** It shares dispatch
+stub `0x0091F650` with `0x00E3`, and the stub forwards three payload dwords and
+**not the opcode** — the worker literally cannot tell them apart. So the reason
+rides the chat line and the opcode only releases the slot. (`0x00E4` and
+`0x00E5` have distinct stubs in the same table, which is the contrast proving
+the sharing is real rather than an artifact of how we read the table.) Retail
+answers a refusal with `0x00E2` **43 times** and with `0x00E3` **zero**.
+
+`0x00E2` is unnamed in `messages.json`, in `overrides.json` and in GWCA's
+`Opcodes.h`. It is named here as `GAME_SMSG_SKILL_REFUSED`.
+
+### 36.2 The run. P19 and P20 CONFIRMED
+
+Bar `317,863,318,319,320,321,322,323`. Skill 863 was chosen for one property:
+**recharge 0**, which removes the recharge confound entirely.
+
+| frame | press | server | on screen | orb |
+|---|---|---|---|---|
+| `2-key` | 317, adrenal, 0 units | REFUSED, #1960 | **"Not enough Adrenaline."** | 25 |
+| `3-key` | 863, 25 energy, have 25 | **ACCEPTED** | "Order of Apostasy" cast bar, glyph, sparkles | **0** |
+| `4-key` | 863, have 7.83 | REFUSED, #1961 | **"Not enough Energy."** | 8 |
+
+**The middle row is the in-frame control and it is what makes the other two
+interpretable** — it separates "presses are being seen" from "the refusal did
+something", and it fired unambiguously.
+
+**P20 is the one that mattered. 1961 was a RECONSTRUCTION and is now OBSERVED.**
+The corpus contains **zero** energy refusals — all 43 declines are `0x0027`
+attack-skill presses and 0 of 49 `0x0046` casts was ever refused, because the
+operator never ran out of energy. So 1961 rested on the archive text plus its
+position one record after 1960's. A different sentence on screen would have
+refuted it. The right one appeared.
+
+### 36.3 P21 REFUTED, and it is a real refinement
+
+I predicted the sentence would appear **both** as a panel and as a chat-log
+line. It does not. **The chat log is empty in all three frames** — the
+channel-7 line renders only as the floating red text above the character and
+never enters the log. So channel 7 is not "a chat channel that also draws a
+panel"; it is a panel channel that the log ignores.
+
+### 36.4 THE INSTRUMENT WOULD HAVE MISSED THIS ENTIRELY
+
+The pre-registration named this as the trap most likely to kill the run, and it
+was right. The refusal text renders at roughly **(880–1060, 520–540)** — and
+the harness screenshot scorer masks the player-body rect
+`~(850,300)-(1120,760)` to suppress idle animation. **The sentence lands dead
+centre of the mask.**
+
+Measured 2026-08-18 against the `0x00B9` callout, that mask ate 53% of a known
+UI element's changed pixels and would have scored a lone banner at 95 scattered
+anti-aliased pixels — noise under any threshold. Had this run been scored the
+usual way it would have reported a null, and the null would have been read as
+"the message does nothing."
+
+**This is the fifth metric trap in this series and the first one caught in
+advance** — §§27, 29, 30 and 32 each caught theirs with an in-frame control
+*after* the fact. What caught this one was declining the instrument before the
+run, on the strength of a measurement someone had already written down.
+
+### 36.5 Two corrections the routes needed
+
+**The judge corrected the corpus route on the single anomalous line.** It had
+filed the one non-1960 channel-7 message as a recharge refusal. Resolving the
+text settles it the other way: that press is **the only one in the corpus with
+target == 0** — 1 of 1 against 0 of 42 — and 1934 is *"Invalid attack target."*
+The genuine recharge refusal is a **different** press 0.66 s earlier, and it is
+**silent**; 1964 ("That skill is still recharging.") never appears on any wire
+we hold. Neither route could have caught this alone — the corpus route
+deliberately refused to resolve text, the image route had no wire.
+
+**And the schema route had the right fact with the wrong conclusion.** It found
+that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
+disqualified as a carrier of "refused". That sharing is exactly *why* the
+design works, and its own standing warning — "a survey keyed on a name cannot
+find a thing nobody named" — predicted the miss, because `0x00E2` is unnamed.
+
+### 36.6 The code's own comment was wrong about itself
+
+`authsrv.py`'s resource gate carried this, and both halves are now refuted:
+
+> *"What retail's server does when a client presses an unaffordable skill is
+> UNOBSERVED on our corpus: the client may well swallow the press itself and
+> never send `0x0046` at all, in which case this branch is unreachable in a
+> real session."*
+
+It is observed, 43 times. And the branch is the hot path rather than a dead
+one: E2 watched our client send a 25-energy press with 7.70 energy, and
+retail's own clients send 43 declined presses — including one **inside a live
+recharge window**, which also means `ChCliApiUseSkill`'s recharge bail does not
+cover the attack-skill send path.
+
+### 36.7 A third test that had grown up around our silence
+
+Two `test_pools` checks asserted `sent == []` on a refusal. That was right about
+the cast cycle and wrong about the wire. **This is the third time in this arc a
+test defended a shape retail never produces** — the energy debit order and the
+adrenaline gain order were the first two.
+
+The intent survives and is sharper: not "nothing was sent" but "exactly the
+refusal batch, and nothing from the cast cycle", with `cast_cycle_ops()` naming
+what a refusal may never emit. Same argument as the other two: pin a shape
+against a census, not against whatever the sender happened to do first.
+
+### 36.8 What is still open
+
+- **What ends the ~10 s slot re-animation E2 saw**, and whether ~10 s is real
+  at all. The only release in the image is the `0x00E2` refcount decrement.
+  Either there is an unread client-side timeout or 10 s is simply how long the
+  operator watched. **NOT FOUND**; all three routes left it open.
+- **The reason ids for the rest of the 1934–1993 block.** They live server-side
+  and are not derivable from a client that only renders what it is handed.
+- **Two silent skill-384 declines** (pool exactly == cost, no recharge window)
+  may be a fourth refusal class. Recorded, not fitted.
+- **String ids 1928–1933** are RC4-encrypted archive records and unreadable.
+
