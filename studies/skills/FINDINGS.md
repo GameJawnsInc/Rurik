@@ -4526,6 +4526,42 @@ advance** — §§27, 29, 30 and 32 each caught theirs with an in-frame control
 *after* the fact. What caught this one was declining the instrument before the
 run, on the strength of a measurement someone had already written down.
 
+### 36.4b THE HARNESS RETRACTED THIS RUN'S VERDICT, and it is recorded here
+
+`RUN VERDICT RETRACTED: the run passed its checkpoints, then the client died
+during the hold.` The same machinery that voided E5 fired again, and a run whose
+verdict was retracted must say so in its own write-up rather than in a summary
+somewhere else.
+
+**It does not touch the readings, and the timestamps are why:**
+
+| | time |
+|---|---|
+| adrenaline refusal frame `2-key` | 11:00:26 |
+| control frame `3-key` | 11:00:35 |
+| energy refusal frame `4-key` | 11:00:43 |
+| **94 further hold frames** | 11:00:44 → **11:04:19** |
+| client exits, code **0**, no error dialog | ~11:04:20 |
+
+The three measured frames precede the exit by about **three and a half
+minutes**, the gamesrv log carries all three complete press/answer exchanges
+before them, and the harness's own crash check says it plainly: *"no error
+dialog within 12 s — the client exited WITHOUT one, which is a clean exit
+rather than a silent crash."* The last frames before the exit are logged
+`skipped: client not foreground`, so the window lost focus first.
+
+**And it is worth stating what this rules out, because it is the obvious
+worry:** the new messages did not destabilise the client. A client killed by a
+malformed `0x00E2` or a bad coded string dies AT the press, with a dialog or a
+nonzero code; this one drew both sentences correctly, kept running for 94 more
+frames with normal effect traffic (`effect 863 on agent 1 expired, 5.03s of
+5.0s`), and then exited cleanly.
+
+**What is NOT explained is why it exited at all.** Nothing asked it to. It is
+recorded as unexplained rather than dismissed, and the retraction stands as
+written — the verdict machinery is deliberately conservative because it cannot
+know what a run was measuring.
+
 ### 36.5 Two corrections the routes needed
 
 **The judge corrected the corpus route on the single anomalous line.** It had
