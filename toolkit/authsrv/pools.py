@@ -513,10 +513,28 @@ def damage_units(fraction_of_max_health):
     which would refute this function outright. It is an artifact: every one of
     those 32 rows is in a connection whose player carries NO ADRENAL SKILL ON
     THE BAR, and retail sends that connection no adrenaline message at all.
-    Stratify and the armed rows are 27 of 27 for round() -- and run 2.50% to
+    Stratify and the armed rows are 32 of 32 for round() -- and run 2.50% to
     11.04%, so there is still no sample under 1% anywhere in the corpus. The
     same percentage appearing twice with two different answers (2.5000 granting
     3 units and nothing) is what gave the artifact away.
+
+    AND THE CORPUS DOES NOT PIN THE ROUNDING EITHER, WHICH IS WHY THIS
+    FUNCTION'S CHOICE IS PROVISIONAL. Fit the rule as a family -- solve
+    `units == f(pct * k)` for the k interval fitting all 32 armed rows -- and:
+
+        floor(pct*k)    k in [1.200000, 1.086792)    EMPTY
+        round(pct*k)    k in [1.000000, 1.040000)    survives
+        ceil (pct*k)    k in (0.905660, 0.960000]    survives
+
+    Flooring is dead under EVERY rescale, so GWW's "rounded down" is refuted
+    along with the obvious repair of it (charging on pre-mitigation damage).
+    But CEIL SURVIVES, and it disagrees with round exactly where we care: a
+    1-point hit on the 480-health character in the corpus is 0.208%, where ceil
+    grants 1 unit and round grants nothing at all. `max(1, round(pct))` and
+    `max(3, round(pct))` survive too. This function implements round; nothing
+    measured says it is right at the low end, and one light hit TAKEN by a
+    character carrying an adrenal skill settles it -- a 0x00CF either arrives
+    or it does not. `test_adrenwire` 12 pins all three intervals.
 
     A MODULE FUNCTION AND NOT A METHOD, because two callers need the same
     number for two different purposes and neither may compute it its own way:

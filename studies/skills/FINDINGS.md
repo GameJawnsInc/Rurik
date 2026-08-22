@@ -4012,7 +4012,9 @@ goes red on the number it changes.
   reason.** 32 of them, and not one is sub-threshold.
 - **P29 — "a single threshold, `max(pct | no gain) < 0.5`." VOID.** The
   prediction assumed the population was homogeneous. It is two populations, and
-  the "boundary" it would have reported is 7.5%.
+  the "boundary" it would have reported is 7.5%. Worse for the prediction than
+  that: §34.C shows the corpus does not pin the rule's FAMILY either, so 0.5
+  was never the only candidate it was being scored against.
 - **P30 — "`units == round(pct)` on every joined pair." CONFIRMED**, re-fitted
   on the armed rows alone: **round 32/32**, ceil 17, floor 15. The floor→round
   correction survives the stratification that destroyed the boundary claim, and
@@ -4024,7 +4026,8 @@ goes red on the number it changes.
 
 **The sub-1% boundary therefore stays UNVERIFIED**, and now for a known reason
 rather than an absence. It was called the cheapest open item on this channel; it
-is not one, and this is what it cost to find that out.
+is not one — but it is now the best-specified one, because §34.C reduces it to
+a single light hit with two named rules predicting opposite outcomes.
 
 ### 34.A The blind replication, and the two rows it recovered
 
@@ -4086,21 +4089,49 @@ fraction, which makes the percentage reading natural, but that is an argument
 and not a measurement. **Any second maximum health in a granting connection
 settles it**, and that is a cheaper capture than the boundary one.
 
-### 34.C The error bar on the rule, and the wiki is outside it
+### 34.C The error bar, and the rival family that changes the experiment
 
-The replication fitted the rule as a family rather than testing two candidates,
-which is the shape this repo asks for:
+Both agents fitted the rule as a FAMILY rather than testing two candidates,
+which is the shape this repo asks for — and the second one found a survivor
+neither I nor the first had considered. Re-derived here from the bytes rather
+than taken on report, all three over the same 32 armed rows:
 
-- `units = floor(a·pct + 0.5)` fits all 32 rows for **a ∈ [1.000, 1.039]** and
-  nothing outside. The slope is 1 to within 4%.
-- `units = floor(pct + b)` fits all 32 for **b ∈ [0.500, 0.749]**. **b = 0 —
-  which is floor(), and which is what GWW states — is excluded by 17 rows.**
+```
+floor(pct.k) == units     k in [1.200000, 1.086792)     EMPTY
+round(pct.k) == units     k in [1.000000, 1.040000)     survives
+ceil (pct.k) == units     k in (0.905660, 0.960000]     survives
+```
 
-Taken at face value the family puts the smallest granting damage between 0.251%
-and 0.500%, and at the canonical b = 0.5 exactly where `pools.damage_units`
-already puts it. **That is INFERRED, not observed**, and the honest limit is
-sharp: a rule that is round() above some hand-set threshold would look identical
-in this corpus. The fit narrows the question; it does not close it.
+**The floor family is empty under EVERY rescale**, which is a much stronger
+statement than "floor fits 15 of 32": no charging rule of the form
+`floor(k x damage-fraction)` can produce this wire, whatever `k` is — so
+"retail charges on pre-mitigation damage and then floors" is refuted too, not
+just the plain reading. GWW is explicit and is outside it: *"rounded down, so
+taking less than 1% of your maximum health causes you to gain no adrenaline"*
+— **and the threshold in that sentence is a consequence of the rounding, so
+with the rounding refuted the threshold cannot be imported either.**
+
+**The two survivors disagree about exactly the thing we went looking for.**
+`round` grants nothing below ~0.5%; `ceil` grants **one unit for any damage at
+all**. Same 32 rows, opposite answers at the low end. Also surviving, and worth
+naming because they read like the same rule and are not: `max(1, round(pct))`
+and `max(3, round(pct))`.
+
+**So the experiment is now one observation wide.** One point of damage on the
+480-health character in the corpus is 0.208%:
+
+| damage taken | `ceil` predicts | `round` predicts |
+|---|---|---|
+| 1 point (0.208%) | **1 unit** | **0 — no message at all** |
+| 2 points (0.417%) | 1 unit | 0 |
+| 4 points (0.833%) | 1 unit | 1 unit |
+
+One light hit taken by a character carrying an adrenal skill separates them, and
+a `0x00CF` either arrives or it does not. That is a far better-specified probe
+than the one §33's live plan asked for — it said only "light hits taken", and
+got 255 gains of exactly 25 — and it is what belongs in the next live plan.
+`pools.damage_units` implements `round`; if `ceil` is right, our server is
+silent where retail sends a unit.
 
 ### 34.9 The lesson, which is the series' fourth of the same shape
 

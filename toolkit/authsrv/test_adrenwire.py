@@ -102,7 +102,7 @@ import checks  # noqa: E402
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 68 (55 until 12-13 landed), and a run with neither the
+# machine executes 71 (55 until 12-13 landed), and a run with neither the
 # captures nor the pinned image
 # executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
 # also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
@@ -116,7 +116,7 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 68 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 71 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
 # fixtures, one section quietly ceasing to run would still clear 10. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
@@ -217,6 +217,19 @@ ARMED_DAMAGE_TAKEN = 32
 # other: a wrong denominator has no reason to produce 11 integers.
 ARMED_MAX_HEALTH = 480
 ARMED_NUMERATORS = [12, 13, 14, 15, 17, 24, 29, 30, 34, 39, 53]
+
+# THE RULE IS A FAMILY, NOT A CANDIDATE, and the corpus does not pin which
+# family. Fit `units == f(pct * k)` for each rounding f and solve for the k
+# interval that fits ALL 32 armed rows. floor comes out EMPTY -- no rescale of
+# the damage fraction can produce this wire under flooring, which refutes the
+# wiki AND the "retail floors pre-mitigation damage" repair in one line. round
+# and ceil both survive, and they DISAGREE at the low end: round grants nothing
+# under ~0.5%, ceil grants one unit for any damage at all. `pools.damage_units`
+# implements round. Endpoints are exact rationals over the observed rows, so
+# this is arithmetic and not a fit with slack. studies/skills 34.C.
+FAMILY_K = {"floor": None,                        # empty: lo >= hi
+            "round": (1.000000, 1.040000),
+            "ceil":  (0.905660, 0.960000)}
 
 # The three skills retail spends adrenaline on in this corpus, and the number of
 # connections carrying 207 at all.
@@ -1201,6 +1214,33 @@ def section_bar_gate():
               f"what the corpus can say about the RULE: one max health cannot "
               f"separate 'one unit per 1% of maximum' from 'one unit per "
               f"{ARMED_MAX_HEALTH / 100.0} raw points'")
+
+    # units == f(pct * k): solve each family for the k interval fitting all rows
+    bands = {}
+    for name, half in (("floor", 0.0), ("round", 0.5), ("ceil", 1.0)):
+        lo, hi = 0.0, float("inf")
+        for r in armed_rows:
+            u, pct = r["units"], r["pct"]
+            lo = max(lo, (u - half) / pct)
+            hi = min(hi, (u + 1.0 - half) / pct)
+        bands[name] = (lo, hi) if lo < hi else None
+    ok = (bands["floor"] is None
+          and all(bands[n] is not None
+                  and abs(bands[n][0] - FAMILY_K[n][0]) < 1e-5
+                  and abs(bands[n][1] - FAMILY_K[n][1]) < 1e-5
+                  for n in ("round", "ceil")))
+    LEDGER.ok(ok,
+              "the rule is a FAMILY: floor is empty under every rescale, "
+              "round and ceil both survive and disagree at the low end",
+              f"{ {n: (None if b is None else (round(b[0], 6), round(b[1], 6))) for n, b in bands.items()} } "
+              f"against {FAMILY_K}. Solving `units == f(pct*k)` for k over all "
+              f"{len(armed_rows)} rows: FLOOR IS EMPTY, which refutes GWW's "
+              f"'rounded down' AND the pre-mitigation-damage repair of it in "
+              f"one line, rather than merely fitting worse. The two survivors "
+              f"predict OPPOSITE things for a 1-point hit on this 480-health "
+              f"character -- ceil 1 unit, round no message at all -- so one "
+              f"light hit taken settles it. `pools.damage_units` implements "
+              f"round; nothing here says it is right")
 
     LEDGER.ok(len(skipped) <= 1,
               f"{len(skipped)} connection skipped for having no unique self "
