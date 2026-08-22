@@ -439,7 +439,7 @@ class EffectTable:
         coarse sweep and make the long holds real.
 
         ~~SO THIS TABLE EMITS A SHAPE RETAIL DOES NOT.~~ **SCOPE-CORRECTED
-        2026-08-21 (studies/skills 32.8), and the correction is the owner's:
+        2026-08-21 (studies/skills 36.8), and the correction is the owner's:
         the silent extension is ENVIRONMENTAL-ONLY and says nothing about casts.**
         Scored across the whole vault, all 15 late closures are the Isle's torches
         and Students, from the two runs where the operator deliberately stood in
@@ -458,7 +458,7 @@ class EffectTable:
         cannot judge it. What is NOT settled is the half that
         decides whether we may copy it: between `apply + duration` and the late
         removal, is the effect still DRAWN? A wire capture cannot see a screen.
-        `--probe effect_silent_extend` RAN 2026-08-21 (studies/skills 32) and the
+        `--probe effect_silent_extend` RAN 2026-08-21 (studies/skills 36) and the
         answer is a third thing neither reading proposed: **the client owns the
         expiry but does not forget the effect.** The live icon vanishes on the
         client's own timer with no packet -- ~9 s against a 10.0 s duration, some
