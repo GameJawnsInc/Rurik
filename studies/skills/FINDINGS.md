@@ -3755,6 +3755,77 @@ these the operator actually owns is not knowable from a capture.** The next plan
 must be built around a skill the operator reads off their own bar, with the
 tooltip's recharge and duration quoted back.
 
+*(2026-08-22: what the bar held IS knowable from a capture — by a different
+message than the one this section rightly refused. §36.10 reads it back, and it
+settles the pick: 348, on the bar, in the newest capture, put there by the
+operator themselves.)*
+
+### 36.10 The bar READ FROM THE WIRE: the pick is measured, and the plan is re-staged
+
+**2026-08-22.** §36.9 refused to infer the bar from ambient effect episodes, and
+was right to — but retail sends one message that is *about* our own bar:
+`0x00DA SKILLBAR_UPDATE`, **self-scoped** on live connections (measured 9/9 in
+the `0x00CF` schema row: every connection's GAIN agent is that same connection's
+own 0x00DA agent), with the observer resolved by `adrenjoin.whose_agent`'s
+property-41 rule. An effect row is ambient; a 0x00DA naming our own agent is
+not. The query is now `python toolkit/authsrv/adrenjoin.py --bars` — 58
+own-agent bar updates across the corpus, one per census connection (36 ARMED +
+22 DARK = 58, a cross-check against §34's own count).
+
+**The readback doubles §36.9's refutation before repairing it:**
+
+- The town capture the aborted plan leaned on, `20260819T132414`, shows its own
+  character's bar as `[814, 783, 2, 858, 780, 952, 0, 0]` — **no 348 anywhere on
+  it**. The three 348 episodes there were other players', exactly as §36.9
+  argued; now measured rather than reasoned.
+- Every Isle session from rung 6 through the 18:47 abort ran one Warrior bar,
+  `[382, 384, 385, 364, 1, 0, 0, 2]` — three Swordsmanship attack skills
+  (type 14), `"Charge!"`, Healing Signet, Resurrection Signet. **None of
+  §36.9's six candidates was on it.** The abort was over-determined: 348 was
+  not the bar's shout, and nothing else on the bar could have run the block
+  either.
+- **Capture `20260821T205552` — §33's spend-clock run, two hours *after* the
+  abort — is the repair, and it was already in the vault.** Temple connection
+  (map 248): the old bar. Isle connection (map 280):
+  `[`**`348`**`, 384, 385, 364, 1, 0, 0, 2]`. The operator swapped slot 1
+  (382 → 348) at the Temple to arm §33's spend — so the operator **owns**
+  `"Watch Yourself!"`, can bar it at will, and had it on the bar in the most
+  recent live session.
+
+**The same capture already banks the single-press control.** §33's spend left
+one 348 episode on the Isle connection: `field3 10 / dur 10.0`, closed
+**expired**, residual under 14 ms (bufflog) — the first operator-cast 348
+episode, closing exact at the table's flat 10 s, Tactics 10 in field 3.
+
+**GWW cross-check, joined on ArenaNet's own `id` field**: WIKI (GWW,
+`'"Watch Yourself!"'` infobox + §Note, rev. 2026-07-05): id **348**, Core
+Warrior Tactics **Shout**, **adrenaline 4, recharge 4**, armor +5…25 **for 10
+seconds**, *"exactly requires 80 units of adrenaline"* — agreeing with
+CLIENT-DATA on every shared field, including the raw 80 at `+0x38`. **And it
+carries one term the client record does not**: *"This shout ends after 10
+incoming attacks"*, corrected by the page's own anomaly note to ten
+**armor-respecting damage events on the ally**. That is the re-cast
+experiment's one false-positive channel — an early `0x0044` from damage wears
+exactly prediction (c)'s REPLACE signature — so it is pre-registered in the
+plan: the Suits deal no damage, and an early close is attributable to damage
+only if ≥ 10 hits landed on the operator inside that episode (countable on
+`0x00A3` afterwards). A single stray hit ends nothing and voids nothing.
+
+**Re-staged: `vault/plans/isle_rung8d_recast_v2.txt`**, sha256 `5821fa75…` as
+staged (the binding seal is taken at launch), 9 steps. Two design changes from
+the aborted file, both lessons paid for: the **rank-13 bench block comes
+first**, so a skill surprise can never again zero the whole run; and the
+re-cast block **rides the bench swings** — 348's adrenaline cost means every
+press is its own `0x00D2` wire event (self-timestamping, independent of the
+marks), and four hits (~6 s at sword speed) recharge it inside the 10 s
+duration by construction. The tooltip step stays and gates only the re-cast
+steps: this section says what the bar WAS on 2026-08-21, never what it is at
+the next launch.
+
+*Label: OBSERVED for every wire read (the bars, the 348 episode, the 58/58
+cross-check); WIKI for the GWW fields; the ten-damage early end is WIKI only
+until an episode shows it.*
+
 ## 32. E10 — the recharge gate, read from the residue
 
 **2026-08-21, run `20260821T190847`, loopback, build 38797, server at
