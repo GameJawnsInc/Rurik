@@ -1427,15 +1427,24 @@ with `test_morale.py` §9 pinning both ends of the boundary, requiring the FIRST
 death of a session never to be free, and controlling on the revive path
 stamping the window itself. Floor 60, green 61.
 
-**OWED: a real death with the penalty armed** — an enemy killing the player,
-the corner reading −15%, the bars at 85/22, and a second death inside the
-window costing nothing (`--enemy --death-penalty --enemy-hit 0.35`; at the
-default hit fraction a death takes ~17 s, so a second one can never land inside
-a 14 s window). The first attempt was lost to a parallel session's
-`session.py --replace` stopping this session's live webgate and authsrv — the
-client answered `Code=058` and nothing about morale was measured. Worth fixing
-at the source: `--replace` refuses anything that is not python, and should also
-refuse a python listener whose argv resolves to a DIFFERENT worktree.
+**A REAL DEATH RAN 2026-08-22 AND BOTH ARMS ARE GREEN** —
+[studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 3, captures
+`20260822T140922` and `20260822T141510`. Nothing was put on the wire by hand:
+an enemy killed the player and the mechanic did the rest. Arm A watched the
+**waiver** hold — one charged death, then four waived at 12.6 s from each
+resurrection, the corner sitting at −15% for 81 s while they happened. Arm B
+watched the **expiry and the whole ladder** at 16.1 s per death:
+−15% → −30% → −45% → −60%, health 85 → 70 → 55 → 40, energy 22 → 19 → 16 → 13,
+and the corner then holding at −60% — the cap watched rather than asserted. The
+energy ladder is §2.2's discriminating claim four more times: −3 a rung is 15%
+of BASE 20, and total-scaling matches at no rung.
+
+An earlier attempt was lost to a parallel session's `session.py --replace`
+stopping this session's live webgate and authsrv (client `Code=058`). Worth
+fixing at the source: `--replace` refuses anything that is not python, and
+should also refuse a python listener whose argv or cwd resolves to a DIFFERENT
+worktree. The energy/adrenaline session has filed that as a task chip; this
+session deliberately did not file a duplicate.
 
 `toolkit/clientscan/moralestore.py` is the reader (read-only by construction —
 `PROCESS_VM_READ`, never `WRITE`), and it carries the lesson that cost the

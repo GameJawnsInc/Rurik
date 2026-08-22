@@ -152,3 +152,80 @@ value under test, ran while the client was still loading, and locked onto ~900
 coincidental `77`s that no later step could rescue. **Locate on a constant the
 experiment never changes, then watch a window around it** — there is no race in
 that shape, and it is what the anchor mode does now.
+
+---
+
+## Run 3 — a REAL death, penalty armed, 2026-08-22, GREEN (two arms)
+
+The runs above put morale on the wire by hand. This one lets the game do it: an
+enemy kills the player, `kill_player` charges the penalty, and the client is
+never told anything except what the mechanic itself produces.
+
+```bash
+# arm A -- the grace window HOLDS
+python toolkit/harness/session.py --keep-open --hold 105 --shots 3 --warn 8 --enemy \
+    --game-args "--death-penalty --enemy-hit 0.35 --map 146"
+# arm B -- the grace window EXPIRES
+python toolkit/harness/session.py --keep-open --hold 125 --shots 3 --warn 8 --enemy \
+    --game-args "--death-penalty --enemy-skills 276 --map 146"
+```
+
+Captures `20260822T140922` (A) and `20260822T141510` (B). Agent-piloted, no
+operator input, loopback, ours-DH client, cage verified. Both PASS to the map
+verdict, and every death below is in the gamesrv log before a pixel was read.
+
+### Arm A — the waiver, watched
+
+Four deaths, ~12.6 s apart from each resurrection. The first charged; **every
+later one was waived**, and the log says so in as many words:
+
+```
+[c1] morale 100 -> 85 (-15%, died): max health 85, max energy 22
+[c1] death penalty WAIVED: 12.6s since the resurrection, inside the 14s grace window
+[c1] death penalty WAIVED: 12.7s since the resurrection, inside the 14s grace window
+[c1] death penalty WAIVED: 12.6s since the resurrection, inside the 14s grace window
+```
+
+On screen: the corner goes from empty to `−15%` about 3 s after the death and
+**stays −15% for the remaining 27 frames (81 s)** across four more deaths. The
+health bar reads `85` at a full bar after each revive, where the same bar read
+`100` before the first death — the penalty as a number the client itself prints.
+
+**`--enemy-hit` was not what set that cadence, and the run says so.** The kills
+came from the hostile's *skill* (46 damage a cast), not its swing, so the flag
+scaled a channel that never landed the killing blow. It is still the right knob
+for arm A's purpose — a fast death — but the honest reading is that arm A
+demonstrates the waiver at a 12.6 s cadence that the SKILL produced.
+
+### Arm B — the expiry, and the whole ladder
+
+Limiting the hostile to a self-heal (`--enemy-skills 276`) leaves only the melee
+swing, which needs eight hits: deaths land **16.1 s** after each resurrection,
+just outside the window. So every death charges, and the run walks the entire
+mechanic:
+
+| death | t | since revive | morale | max health | max energy |
+|---|---|---|---|---|---|
+| 1 | 17.9 s | — (first) | −15% | 85 | 22 |
+| 2 | 44.1 s | 16.1 s | −30% | 70 | 19 |
+| 3 | 70.4 s | 16.1 s | −45% | 55 | 16 |
+| 4 | ~96 s | 16.1 s | **−60%** | 40 | 13 |
+
+The corner draws each rung in turn — `−15%`, `−30%`, `−45%`, `−60%` — and then
+**stops at −60% for the last 27 s and eight frames**, which is the cap holding,
+watched rather than asserted. The health bar reads `85` and `70` at a full bar
+after revives 1 and 2, and 47/55 and 34/40 mid-fight later.
+
+**The energy ladder is the discriminating measurement, four times over.**
+25 → 22 → 19 → 16 → 13 is −3 per rung: 15% of BASE energy 20, not of the 25
+total. Total-scaling predicts 21.25 / 18.06 / 15.35 / 13.05 and matches at no
+rung. §2.2 rested on one retail observation; it now has four of our own, and the
+client accepted every one.
+
+### One thing this run does not explain
+
+The player's ENERGY readout drains on its own — 25 → 10 → 0 in arm A, and it
+does not track the maxima we send. This server sends no energy debit at all, so
+the drain is the client's own model reacting to something else in the session.
+It is not this arc's question and is not counted against it; it is the
+energy/adrenaline arc's, and it has been passed to that session.

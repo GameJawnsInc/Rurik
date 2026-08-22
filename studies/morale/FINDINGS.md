@@ -360,23 +360,34 @@ us visibly. It showed 14. Morale is a *display* to the client and an
 *arithmetic* to the server, and a server that sends the percentage without the
 recomputed pools ships a death penalty that costs the player nothing.
 
-### 7.1 Owed: a real death, with the penalty armed
+### 7.1 A real death, with the penalty armed — RAN 2026-08-22, GREEN
 
-The probe runs above put morale on the wire by hand. What has not been watched
-at a client is the whole path firing from a **real death** — an enemy killing
-the player, `kill_player` charging the penalty, the corner showing `−15%`, the
-bars shrinking to 85/22, and a second death inside the 14 s window costing
-nothing. The server side is implemented and unit-tested (`test_morale.py` §5,
-§6, §9); the run needs `--enemy --death-penalty`, and `--enemy-hit 0.35` to make
-the second death land inside the grace window at all (at the default 0.10 a
-death takes ~17 s, so a second one can never be free and the rule cannot be
-seen).
+Two arms, both agent-piloted on loopback: [RUNS.md](RUNS.md) §Run 3, captures
+`20260822T140922` and `20260822T141510`. Nothing was placed on the wire by hand
+— an enemy killed the player and `kill_player` did the rest.
 
-The first attempt at that run died for a reason unrelated to any of this: a
-parallel session's `session.py --replace` pre-flight stopped what it took to be
-stale python listeners on 6601 and 6112, which were this session's live webgate
-and authsrv, and the client answered with `Code=058`. Nothing was learned about
-morale and nothing about the code is in doubt; the run is simply still owed.
+- **The waiver holds.** Deaths 12.6 s apart from each resurrection: the first
+  charged, the next four were waived, the log naming the window each time, and
+  the corner sat at `−15%` for 81 s and 27 frames while four more deaths
+  happened. The rule the owner remembered is on screen.
+- **The expiry, and the whole ladder.** With the hostile limited to a self-heal
+  the melee swing needs 16.1 s per death — just outside the window — so every
+  death charges: `−15% → −30% → −45% → −60%`, health 85 → 70 → 55 → 40, energy
+  22 → 19 → 16 → 13, and then **the corner holds at −60% for the last 27 s**.
+  The cap is watched rather than asserted.
+- **§2.2's discriminating claim, four more times.** The energy ladder falls by
+  exactly 3 a rung — 15% of BASE energy 20, never of the 25 total, which would
+  have given 21.25 / 18.06 / 15.35 / 13.05 and matched at no rung.
+
+One honest correction the run forced: `--enemy-hit` scales the melee swing, and
+in the first arm the killing blows came from the hostile's SKILL (46 damage a
+cast). The flag still produced the fast death it was added for, but it was not
+the channel doing the killing, and the run sheet says so.
+
+An earlier attempt at this run was lost to a parallel session's
+`session.py --replace` stopping this session's live webgate and authsrv
+(client `Code=058`). Nothing was measured that time and nothing about the code
+was in doubt.
 
 **What the earlier runs also cost, worth writing down.** The indicator sits at
 (10,32)–(60,82) — above the party window, under the title bar. The first crop
