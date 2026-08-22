@@ -85,6 +85,11 @@ EXPECT = {
     # the VALUE is the filter": here that is the ONLY thing separating the two
     # images, and the read still lands on exactly one in-range candidate.
     "2026-08-13_64fae3b1369b": dict(number=38833, va=0x004729E0, shapes=54),
+    # 38849, MEASURED 2026-08-22 off the freshly snapshotted pristine. Third
+    # build running with the SAME getter VA and the same 54 shapes, so the note
+    # above holds harder: across 38797/38833/38849 the only thing that moves is
+    # the immediate, and the in-range filter still lands on exactly one.
+    "2026-08-20_21511009c460": dict(number=38849, va=0x004729E0, shapes=54),
 }
 EXPECT_CALLERS = 16
 

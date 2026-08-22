@@ -5748,3 +5748,52 @@ shadow it).
 client reads **build 38849** against a 2026-08-20 key file — byte-identical
 red on `main` before the flip, i.e. a peer session's in-flight new-build work,
 not this change (the parallel-sessions rule: attribute before you touch).
+
+## 2026-08-22, late — BUILD 38849 REGISTERED, closing test_handshake's red, and the census pair moved for a peer's work as well as ours
+
+**Not a movement finding; booked here because this arc's own test run surfaced
+it.** `test_handshake` had been red on "the exe's build matches the key file
+the server will load" — exe 38849 against key file `2026-08-20_21511009c460`,
+`_build_of_keyfile()` returning None. The drift itself was dealt with on
+2026-08-21 (the skills arc rebuilt on 38849, ran its probe there and closed the
+build gap, `d21ac05`; the RUNBOOK gained its two mid-run-update entries), but
+the REGISTRATION half never happened: no `pinned.BUILDS` row and no
+`vault/client/` pristine snapshot, so the newest patched client was
+unrepresentable — the same shape as the 38833 gap of 2026-08-19.
+
+**What landed, all measured rather than typed:** `snapshot_client.py` wrote
+`vault/client/2026-08-20_21511009c460/` and verified every file byte-identical
+to source (Gw.exe sha256 `21511009c460…`, 10,483,904 B; Gw.dat included). A
+`Build` row followed with both patched copies read off disk — loopback
+`4cc5bc98…` (145 B vs pristine, `dhbuild` says `ours`) and live-capture
+`2ff730c7…` (57 B, `stock`). `test_buildid`'s EXPECT row is measured too: **54
+`mov eax,imm32; ret` shapes, exactly one in the build range, getter at
+`0x004729E0` with 16 callers** — the third build running with the same getter
+VA and the same shape count, so only the immediate moves and the in-range
+filter still lands on one. **The pin stays 38797** (`PINNED` is an explicit
+`number == 38797` lookup, not `BUILDS[-1]`, so a fourth row cannot move it).
+
+**The census pair, and the honest split.** Registering a build costs pins, as
+the 2026-08-14 registration also paid: `pinned.py` 12 → 13, **+1, ours**. The
+literal was 156 and the tree measured **188 before this arc touched anything**
+— `clientscan/typenames.py` 0 → **32**, an 18th file, from a parallel session's
+SKILLS-T1 (`326f439`) that moved neither literal. Both literals are now 189 and
+the note records which 32 are not ours, because leaving the pair red for a
+peer's work is how it goes blind to the next real drift — the 86-vs-113 failure
+already recorded there, now twice.
+
+**Green after:** `test_handshake` 23 · `test_buildid` 51 · `test_buildpins` 40 ·
+`test_updatecheck` 30.
+
+**⚠ ONE RED LEFT STANDING ON PURPOSE, and it is not ours to clear.**
+`test_pinned` fails "run-live/2026-08-13_64fae3b1369b/Gw.exe verifies too" —
+that file is byte-identical to 38849's PRISTINE: an unpatched current-build exe
+sitting under the previous build's DH tag, which is exactly the wreckage
+`RUNBOOK.md` already names ("the old run-live directory is now a trap worth
+knowing about… it classifies `stock` and sits in the right folder while having
+no cave"), left by the updater overwriting the patched live build in place.
+**Red on `main` before this arc, identical text.** It is guarded at the point of
+use — `livesession.py` refuses it at preflight on `key_tapped` false — so the
+check is reporting a real hazard, and making it green would delete a signal
+rather than a problem. Clearing it means removing or renaming a 4 GB directory
+in the owner's vault, which is the owner's call, not a test edit.
