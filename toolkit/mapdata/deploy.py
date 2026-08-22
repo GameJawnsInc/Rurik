@@ -195,7 +195,75 @@ def gen_ramp(dim, base=-13):
     return out
 
 
-GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp}
+# WORLDMAPS-W20's ramp: the same field as `gen_ramp` with five different
+# slopes, chosen to BISECT the 45-degree cut rather than bracket it.
+#
+# Every dz is a MULTIPLE OF 4, and that is not cosmetic. MEASURED 2026-08-21:
+# the codec's lattice snap leaves a multiple-of-4 dz EXACT (spread 0.00 across
+# the whole ramp band), while the odd values between them spread 0.3-0.6 deg --
+# and a strip whose own slope is uncertain by half a degree cannot bisect a cut
+# to better than that. `gen_ramp`'s strips spread by up to 1.4 deg for exactly
+# this reason, which is why WORLDMAPS-W19 could only bracket the cut to
+# [42.51, 46.45].
+#
+# STRIPS CHOSEN 2026-08-21 AFTER A FAILED POSITIVE CONTROL. The first fine
+# map ran 43.78/45.00/46.17/47.29 and compiled to the APRON ALONE -- pattern
+# '....', 2 trapezoids -- because 43.78 was assumed to be comfortably below
+# a 45-degree cut and is not: WORLDMAPS-W17 measured 41.52-42.51 WALKABLE and
+# this map measured 43.78 EXCLUDED, so the cut sits in (42.51, 43.78) and the
+# control was above it. These four now bracket that interval from BELOW, with
+# two strips W17 already proved walkable.
+#
+# The last strip is dz 96 = atan(96/96) = EXACTLY 45.00 degrees, the threshold
+# value itself. The classifier excludes on `slope > array[1]` -- strictly
+# greater -- so a slope sitting exactly on the cut should be WALKABLE, and no
+# map this project has built has ever put a slope there.
+# FOUR strips of EIGHT columns, aligned to the codec's 4x4 sub-blocks.
+# `snap_block` projects each 4x4 sub-block independently, so a strip boundary
+# falling INSIDE one quantises the whole block: the first draft used five
+# 6-wide strips at gx 1..30, every boundary landed mid-sub-block, worst sample
+# moved 3, and only ONE column of the 45.00 strip survived exact -- its
+# neighbours reached 45.59 and would have been excluded, which is precisely
+# the ambiguity this map exists to remove. Aligned: worst sample moved 0 and
+# EVERY interior column is exact.
+RAMP_FINE_STRIPS = (
+    ("18.43 deg", 32, (0, 7)),       # <- CANNOT-FAIL CONTROL: below BOTH cuts
+                                     #    (35 and 45). If this is excluded the
+                                     #    map is broken, not the threshold.
+    ("42.51 deg", 88, (8, 15)),       # <- W17 strip 4's top value, walkable there
+    ("43.78 deg", 92, (16, 23)),      # <- MEASURED EXCLUDED at cut 45, 2026-08-21
+    ("45.00 deg", 96, (24, 31)),      # <- exactly the threshold float
+)
+
+
+def gen_ramp_fine(dim, base=-13):
+    """`gen_ramp`'s shape with five slopes straddling 45.00 degrees exactly."""
+    if dim != 32:
+        raise Refused(
+            f"the fine ramp is 32x32 by construction, not {dim}x{dim}: its band "
+            f"rows and its five 6-cell strips are cell indices, and rescaling "
+            f"them would move the angles the map exists to resolve")
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            dz = 0
+            for _label, d, (a, b) in RAMP_FINE_STRIPS:
+                if a <= gx <= b:
+                    dz = d
+                    break
+            if gy >= RAMP_APRON_TOP:
+                lift = 0
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells
+            out[gy * dim + gx] = base - lift
+    return out
+
+
+GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp,
+              "ramp_fine": gen_ramp_fine}
 
 
 def heights_from_blend(blend, dim, blender=None, workdir=None):

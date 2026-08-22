@@ -881,3 +881,57 @@ consistent but unconfirmed. Class 2 ground (between 40 and 45 under set B) is no
 known walkable and traversable, but whether it differs from class 0 in cost or
 behaviour was not measured. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W19-RUN.md` §RESULTS.
+
+## WORLDMAPS-W20 — the cut is (43.78, 45.00], and a SECOND threshold governs whether ground meshes at all. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four compiles, one shape, exact-slope
+strips).** Built to bisect the 45° cut W19 bracketed to [42.51, 46.45]. It did
+that — and turned up something not predicted.
+
+**The instrument.** `deploy.gen_ramp_fine`: strips whose snapped slopes are
+EXACT, worst sample moved **0**. Two properties buy that and both were measured:
+each `dz` is a multiple of 4, and each strip is eight columns aligned to the
+codec's **4×4 sub-blocks** (`snap_block` projects each sub-block independently,
+so a boundary inside one quantises the whole block — the first draft's 6-wide
+unaligned strips spread by up to 1.4°, which is what limited W19).
+
+**THE HEADLINE, and it was not predicted.** Three runs at cut 45 differing only
+in the shallowest strip:
+
+| strips | trapezoids | result |
+|---|---|---|
+| 43.78 / 45.00 / 46.17 / 47.29 | 2 | apron only |
+| **41.19** / 42.51 / 43.78 / 45.00 | 2 | apron only |
+| **18.43** / 42.51 / 43.78 / 45.00 | 11 | **`WWW.`** |
+
+**42.51° and 43.78° mesh only when a much shallower strip is present.** The
+classifier emits THREE classes from the array at flood-object`+0x90` — `< array[0]`
+→ class 0, `> array[1]` → class 1, between → class 2 — and under set B that array
+is {40, 45, …}. Every strip in runs 1 and 2 was ≥41.19°, hence **all class 2 and
+no class 0 anywhere**, and nothing beyond the apron meshed. **RECONSTRUCTION:
+class-2 ground is meshed only where reachable through class-0 ground; adjacency
+to the flat (class-0) apron is evidently not enough.**
+
+**The cut**: 43.78° meshed, 45.00° not → **(43.78, 45.00]**, the tightest bracket
+held. The cut-35 control on the same map gives `W...` — only the 18.43° strip,
+the rest being class 1 outright.
+
+**It does NOT settle strict vs non-strict**, which is what it was built for. Strip
+D is 45.00° in OUR measure (doubles, max of two triangles); the client computes
+its own float32 per-triangle value. A slope sitting exactly on the threshold is
+decided by that difference rather than by the comparison operator — a design
+fault, since a value ON a boundary cannot test the boundary's inclusivity unless
+both sides compute it identically.
+
+**THIS REINTERPRETS W17 AND W19.** `gen_ramp`'s first three strips (26.6–37.6°)
+are class 0 and its strip 4 (41.5–42.5°) is class 2, so W17's `WWWW.` and W19's
+climb of strip 4 both occurred **with class-0 strips beside them**. Their
+findings about the top byte and about traversability stand; what does not stand
+is the reading — mine — that a 41–42° slope is walkable *on its own*. Run 2 says
+it is not.
+
+**Process note, recorded because it cost the run its predictions**: I mutated the
+strips twice mid-run after a failed positive control, so P1–P4 do not apply
+cleanly to the configuration that produced the result and P5 is stale rather than
+refuted. The headline was not predicted at all. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W20-RUN.md` §RESULTS.

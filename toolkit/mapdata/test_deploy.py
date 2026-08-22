@@ -162,7 +162,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=230)
+LEDGER = checks.Ledger("test_deploy", floor=231)
 check = checks.adopt(LEDGER)
 
 
