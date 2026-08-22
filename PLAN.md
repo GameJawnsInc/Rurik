@@ -1601,7 +1601,7 @@ UNMAPPED message).
    Warrior in an explorable with every adrenal skill off the bar. Both are
    runs, not queries.
 2. ~~**What answers a refused press.**~~ **CLOSED 2026-08-22, wire and screen**
-   (SKILLS-R1, [studies/skills §36](studies/skills/FINDINGS.md), run
+   (SKILLS-R1, [studies/skills §38](studies/skills/FINDINGS.md), run
    `20260822T105929`). Retail answers with **three** messages, not one:
    `0x005D CHAT_MESSAGE_CORE` carrying the reason's string id, `0x005E
    CHAT_MESSAGE_SERVER [playerId, channel 7]`, then **`0x00E2`** which releases

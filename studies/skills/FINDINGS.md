@@ -4433,13 +4433,26 @@ worth more than it looks: a wrong citation makes a later reader's audit fail and
 look like the claim failed. Everything published here was re-read from the image
 before it was written down, and the test pins `0x004FA34B` specifically.
 
-## 36. SKILLS-R1 — what answers a refused press, on the wire and on screen
+## 38. SKILLS-R1 — what answers a refused press, on the wire and on screen
+
+> **Numbering note, 2026-08-22 — this section was written as §36, and so was
+> §36 above.** Two `## 36.` headings collide as one markdown anchor, which is
+> the append collision `toolkit/seclint.py` was written for a day earlier — and
+> it caught this one, red on `test_seclint.py`. **This** one moved, because §36
+> above is the `effect_silent_extend` probe, which had ALREADY been renumbered
+> once (out of its own `## 32.` collision) and is cited from `studies/isle`
+> §36/§36.7/§36.8, `effects.EffectTable.apply`'s docstring and this file's
+> own positive control. §38 is the next free number; §37 below is SKILLS-R2
+> and keeps its number, so the R1/R2 pair reads 38 then 37 in file order — this
+> document is already non-monotonic (§26.12/§26.13 and §36 all sit before
+> §32) and renumbering a section that does NOT collide is churn with no gate
+> behind it. Old references resolve here: `PLAN.md` §8 item 2 now says §38.
 
 **2026-08-22.** Closes `PLAN.md` §8 item 2, which had been open since E2 on
 2026-08-20. Three blind recon routes (image / corpus / our own catalog), a
 judge, then a build and a loopback run: `20260822T105929`.
 
-### 36.1 Retail's answer is three messages, not one
+### 38.1 Retail's answer is three messages, not one
 
 ```
 0x005D CHAT_MESSAGE_CORE    [coded string = the reason's string id]
@@ -4477,7 +4490,7 @@ answers a refusal with `0x00E2` **43 times** and with `0x00E3` **zero**.
 `0x00E2` is unnamed in `messages.json`, in `overrides.json` and in GWCA's
 `Opcodes.h`. It is named here as `GAME_SMSG_SKILL_REFUSED`.
 
-### 36.2 The run. P19 and P20 CONFIRMED
+### 38.2 The run. P19 and P20 CONFIRMED
 
 Bar `317,863,318,319,320,321,322,323`. Skill 863 was chosen for one property:
 **recharge 0**, which removes the recharge confound entirely.
@@ -4499,7 +4512,7 @@ operator never ran out of energy. So 1961 rested on the archive text plus its
 position one record after 1960's. A different sentence on screen would have
 refuted it. The right one appeared.
 
-### 36.3 P21 REFUTED, and it is a real refinement
+### 38.3 P21 REFUTED, and it is a real refinement
 
 I predicted the sentence would appear **both** as a panel and as a chat-log
 line. It does not. **The chat log is empty in all three frames** — the
@@ -4507,7 +4520,7 @@ channel-7 line renders only as the floating red text above the character and
 never enters the log. So channel 7 is not "a chat channel that also draws a
 panel"; it is a panel channel that the log ignores.
 
-### 36.4 THE INSTRUMENT WOULD HAVE MISSED THIS ENTIRELY
+### 38.4 THE INSTRUMENT WOULD HAVE MISSED THIS ENTIRELY
 
 The pre-registration named this as the trap most likely to kill the run, and it
 was right. The refusal text renders at roughly **(880–1060, 520–540)** — and
@@ -4526,7 +4539,7 @@ advance** — §§27, 29, 30 and 32 each caught theirs with an in-frame control
 *after* the fact. What caught this one was declining the instrument before the
 run, on the strength of a measurement someone had already written down.
 
-### 36.4b THE HARNESS RETRACTED THIS RUN'S VERDICT, and it is recorded here
+### 38.4b THE HARNESS RETRACTED THIS RUN'S VERDICT, and it is recorded here
 
 `RUN VERDICT RETRACTED: the run passed its checkpoints, then the client died
 during the hold.` The same machinery that voided E5 fired again, and a run whose
@@ -4588,10 +4601,10 @@ energy had regenerated to 25 and the cast drained it to 0 again — and it came
 **after two refusals on that same bar**. So a slot that has just been refused
 still takes a fresh press: the `0x00E2` release does not leave the slot
 unusable, and it is a HUMAN-driven confirmation rather than another
-harness-scripted one. That is a small piece of evidence on §36.8's open
+harness-scripted one. That is a small piece of evidence on §38.8's open
 question about the ~10 s re-animation, and it arrived by accident.
 
-### 36.5 Two corrections the routes needed
+### 38.5 Two corrections the routes needed
 
 **The judge corrected the corpus route on the single anomalous line.** It had
 filed the one non-1960 channel-7 message as a recharge refusal. Resolving the
@@ -4608,7 +4621,7 @@ disqualified as a carrier of "refused". That sharing is exactly *why* the
 design works, and its own standing warning — "a survey keyed on a name cannot
 find a thing nobody named" — predicted the miss, because `0x00E2` is unnamed.
 
-### 36.6 The code's own comment was wrong about itself
+### 38.6 The code's own comment was wrong about itself
 
 `authsrv.py`'s resource gate carried this, and both halves are now refuted:
 
@@ -4623,7 +4636,7 @@ retail's own clients send 43 declined presses — including one **inside a live
 recharge window**, which also means `ChCliApiUseSkill`'s recharge bail does not
 cover the attack-skill send path.
 
-### 36.7 A third test that had grown up around our silence
+### 38.7 A third test that had grown up around our silence
 
 Two `test_pools` checks asserted `sent == []` on a refusal. That was right about
 the cast cycle and wrong about the wire. **This is the third time in this arc a
@@ -4635,7 +4648,7 @@ refusal batch, and nothing from the cast cycle", with `cast_cycle_ops()` naming
 what a refusal may never emit. Same argument as the other two: pin a shape
 against a census, not against whatever the sender happened to do first.
 
-### 36.8 What is still open
+### 38.8 What is still open
 
 - **What ends the ~10 s slot re-animation E2 saw**, and whether ~10 s is real
   at all. The only release in the image is the `0x00E2` refcount decrement.
@@ -4649,7 +4662,7 @@ against a census, not against whatever the sender happened to do first.
 
 ## 37. SKILLS-R2 — the "~10 second" re-animation is a 1-second loop that never stops
 
-**2026-08-22.** §36.8's first open bullet, and the last thing `PLAN.md` §8
+**2026-08-22.** §38.8's first open bullet, and the last thing `PLAN.md` §8
 item 2 was waiting on. Two routes that share no method: an A/B loopback pair
 (`20260822T114025` released, `20260822T114206` silent) and a static hunt through
 the pinned image. **Both answer the same way, and the answer is a negative.**
@@ -4662,7 +4675,7 @@ client-side timeout expires the pending-cast entry, or **(b)** nothing does, and
 the ~10 s is something else.
 
 Until 2026-08-22 our server *was* the silent case, so (b) had no contrast to be
-measured against. §36 put `0x00E2` on the wire, and `--refusal-silent`
+measured against. §38 put `0x00E2` on the wire, and `--refusal-silent`
 reproduces the old server exactly — **one flag, one difference**, which is the
 arm the recon judge asked for and the only reason this is a measurement rather
 than an argument.
@@ -4686,7 +4699,7 @@ animation did.** Nothing was observed to stop it.
 skill, same map, same script; the only difference is whether the release went
 out. An idle shimmer in the icon art would have moved in arm A too, and arm A
 is flat zero in all 32 frames. And `0x00E2` stopping it within a single frame is
-an independent confirmation that the release does what §36 says.
+an independent confirmation that the release does what §38 says.
 
 ### 37.3 The static route: (b), with a positive control that could have refuted it
 
