@@ -5836,6 +5836,19 @@ def begin_attack(send, state, target_id, conn_id):
         state["attacking"] = None
         return
     if state.get("attacking") != target_id:
+        # A RETARGET STOPS THE SWING IN FLIGHT. The corpus's one candidate
+        # cancel (studies/combat 17c) is exactly this shape: two c2s
+        # target-selects, then 57-90 ms later the standalone stop pair with
+        # GV_ATTACK_STOPPED [3, agent, 0] and no damage for the opened swing
+        # (ranger t=16.578). n=1 and the cause is a reading, not a proof --
+        # but the alternative is the OLD swing landing on the NEW schedule,
+        # which retail visibly does not do. The tick drops the entry; this
+        # only asks, and sends the close the corpus shows.
+        if state.get("attacking") and state.get("player_swing"):
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+                 f"attack_stopped: retarget to agent {target_id}")
+            state["player_swing_cancel"] = "retarget"
         state["attacking"] = target_id
         # Swing immediately on the first click, then let the tick keep time.
         # Waiting a full interval makes the click feel ignored. Both timers:
@@ -6077,6 +6090,15 @@ def attack_tick(send, state, conn_id):
     `player_swing_cancel` and never touches the entry itself -- the same
     single-writer split `pending_casts`/`cast_tick` already prove.
     """
+    # A CANCEL REQUEST IS RESOLVED FIRST, whoever asked and whatever else
+    # holds. The connection thread (a skill press, a movement arm, a
+    # retarget) has already sent the GV_ATTACK_STOPPED that closes the chain
+    # on the wire -- the measured shape, [3, agent, 0] -- so the only work
+    # here is dropping the in-flight swing so its damage never lands. Clear
+    # the flag even when nothing is armed: a press between swings still asked.
+    if state.get("player_swing_cancel"):
+        state["player_swing"] = None
+        state["player_swing_cancel"] = None
     if state.get("player_dead"):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
@@ -6111,6 +6133,15 @@ def attack_tick(send, state, conn_id):
         if now >= swing["lands_at"]:
             state["player_swing"] = None
             hit_enemy(send, state, swing["target"], conn_id, armed=True)
+        return
+    # NO NEW SWING WHILE A CAST IS SHORT OF ITS E3. Retail pauses the auto
+    # attack for the cast plus its aftercast and resumes it the instant the
+    # aftercast ends -- ATTACK_STARTED rides the E3 instant on both of skill
+    # 105's live cycles (studies/castmech 3b). `e3_sent` is the tick's own
+    # bookkeeping (cast_tick runs earlier in the same tick), so this reads
+    # nothing the connection thread owns -- deliberately NOT cast_busy_until,
+    # which belongs to the press path alone.
+    if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
         return
     if now - state.get("player_last_swing", 0.0) < ATTACK_INTERVAL:
         return
@@ -7383,6 +7414,38 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
          f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # ---- THE PRESS STOPS THE AUTO-ATTACK, and its position is measured ---
+    #
+    # OBSERVED, 2 of 2 presses that landed while a chain was running (necro
+    # t=18.5110, ranger t=21.5433, studies/castmech 3b): retail's press burst
+    # is E4, then [prop 8 -> 0], then GV_ATTACK_STOPPED [3, agent, 0], then
+    # the debit, the animation, [prop 8 -> 1]. This sends the STOPPED in that
+    # slot -- immediately after E4 -- and leaves property 8 unsent: its
+    # meaning is UNVERIFIED (GWCA guesses "disabled"; 17 value-pairs in the
+    # corpus, unread) and inventing a semantic for it is the thing this repo
+    # refuses. The chain itself SURVIVES the press: retail resumes the auto
+    # swing at the aftercast's end (ATTACK_STARTED rides the E3 instant, both
+    # 105 cycles), which attack_tick reproduces by pausing starts while a
+    # cast is short of its E3 and owning the restart afterwards. The armed
+    # swing is DROPPED through the flag -- attack_tick owns the entry; this
+    # thread only asks.
+    #
+    # ONLY WHEN THE CHAIN IS ACTUALLY LIVE, and the negative half of that is
+    # measured too: the necromancer's presses at t=8.74 and t=9.85 carry NO
+    # STOPPED -- the first because no auto attack had ever started, the
+    # second because press 1 had already paused the chain. A press during a
+    # cast (any pending entry short of its E3, i.e. the pause that press
+    # already bought) must therefore stay silent, or this server sends a
+    # close retail does not. Evaluated BEFORE this press appends its own
+    # pending entry, or every press would read as mid-cast.
+    chain_live = (state.get("attacking") or state.get("player_swing")) \
+        and not any(not c["e3_sent"]
+                    for c in state.get("pending_casts") or ())
+    if chain_live:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             f"attack_stopped: skill {skill_id} ends the swing")
+        state["player_swing_cancel"] = "skill press"
     # ---- AND THE DEBIT, in the same breath as the announcement -----------
     #
     # RETAIL FIRES PROPERTY 62 0.03-0.7 SECONDS AFTER THE USE_SKILL, mostly

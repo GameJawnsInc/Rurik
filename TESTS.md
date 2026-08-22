@@ -7163,6 +7163,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   regression guard for the other callers: a default `hit_enemy` call still
   opens with its own STARTED, lands in one instant, and respects the interval
   gate — the attack-skill path's recorded divergence, deliberately unchanged.
+  §5–§7 are the cancel half: a skill press puts GV_ATTACK_STOPPED [3, agent,
+  0] immediately after E4 — retail's own burst slot, 2 of 2 live presses with
+  a chain running — drops the armed swing through the tick-owned flag, keeps
+  the TARGET (retail resumes the chain), and stays silent when the chain is
+  already paused (the necro's press 2 carries no STOPPED); the chain pauses
+  while any pending cast is short of its E3 and the next swing opens on the
+  first tick after it — ATTACK_STARTED rides the E3 instant on both live 105
+  cycles; and a retarget stops the swing in flight with the corpus's
+  standalone-stop shape (17c, n=1) and opens on the new target the same tick.
   Timing by rewinding the armed swing and the start gate, never by sleeping),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —

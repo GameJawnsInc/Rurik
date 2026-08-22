@@ -27,8 +27,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 13, from the green run of 2026-08-22 that landed this file.
-LEDGER = checks.Ledger("player swing windup", floor=13)
+# FLOOR 23, from the green run of 2026-08-22 that landed sections 5-7
+# (was 13 when the file carried only the windup split).
+LEDGER = checks.Ledger("player swing windup", floor=23)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -194,11 +195,146 @@ def section_direct_calls_unchanged():
           f"sent={sent!r}")
 
 
+def _press(authsrv, send, state, skill=42, copy=7, target=0):
+    authsrv.handle_skill_press([0, skill, copy, target], send, state, 0,
+                               authsrv.GAME_CMSG_USE_SKILL)
+
+
+def _rewind_casts(state, seconds):
+    for cast in state.get("pending_casts", ()):
+        for k in ("e5_at", "e3_at", "e6_at"):
+            cast[k] -= seconds
+
+
+def section_press_stops_swing():
+    import authsrv
+
+    print("\n5. a skill press stops the live chain: STOPPED right after E4, "
+          "and the armed swing never lands")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = _state()
+    authsrv.begin_attack(send, state, 10, 0)
+    authsrv.attack_tick(send, state, 0)                    # arm the swing
+    sent.clear()
+    saved = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    try:
+        _press(authsrv, send, state)
+        ops = [op for op, _, _ in sent]
+        check(ops[:2] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
+              and sent[1][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
+              "the press burst carries GV_ATTACK_STOPPED [3, agent, 0] "
+              "immediately after E4 -- retail's own slot, 2 of 2 live "
+              "presses with a chain running (necro t=18.511, ranger "
+              "t=21.543)", f"ops={[hex(o) for o in ops]}, "
+              f"second={sent[1][1] if len(sent) > 1 else None}")
+        check(state.get("player_swing_cancel") == "skill press",
+              "and asks the tick to drop the armed swing -- the entry itself "
+              "is the tick's to touch", f"{state.get('player_swing_cancel')}")
+
+        sent.clear()
+        _rewind(state, 10.0)
+        authsrv.attack_tick(send, state, 0)
+        check(state["player_swing"] is None
+              and state["agents"][10]["health"] == 100.0 and sent == [],
+              "the swing in flight is dropped, its damage never lands",
+              f"swing={state['player_swing']}, "
+              f"health={state['agents'][10]['health']}, sent={sent!r}")
+        check(state.get("attacking") == 10,
+              "and the CHAIN survives the press -- retail resumes it after "
+              "the aftercast, so the target must not be forgotten",
+              f"attacking={state.get('attacking')}")
+
+        sent.clear()
+        _press(authsrv, send, state)
+        check(all(v != [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]
+                  for _, v, _ in sent),
+              "a press while the chain is ALREADY paused stays silent -- the "
+              "necro's own press 2 (t=9.85) carries no STOPPED",
+              f"{[(hex(o), v) for o, v, _ in sent]}")
+    finally:
+        authsrv.skill_timing = saved
+
+
+def section_pause_and_resume():
+    import authsrv
+
+    print("\n6. the chain pauses for cast + aftercast and resumes at E3 -- "
+          "the observed instant")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = _state()
+    authsrv.begin_attack(send, state, 10, 0)
+    saved = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    try:
+        _press(authsrv, send, state)
+        sent.clear()
+        state["player_last_swing"] = 0.0                   # gate wide open
+        authsrv.attack_tick(send, state, 0)
+        check(sent == [] and state.get("player_swing") is None,
+              "no swing starts while the cast is short of its E3",
+              f"sent={[(hex(o), v) for o, v, _ in sent]}")
+
+        _rewind_casts(state, 2.0)                          # e5 and e3 past due
+        authsrv.cast_tick(send, state, 0)
+        check([op for op, _, _ in sent] == [0x00E5, 0x00E3],
+              "(the cast completes: E5 then E3)",
+              f"{[hex(o) for o, _, _ in sent]}")
+        sent.clear()
+        state["player_last_swing"] = 0.0
+        authsrv.attack_tick(send, state, 0)
+        started = [v for op, v, _ in sent
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                   and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+        check(started == [[authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]],
+              "and the first tick after E3 opens the next swing -- "
+              "ATTACK_STARTED rides the E3 instant on both of skill 105's "
+              "live cycles", f"{[(hex(o), v) for o, v, _ in sent]}")
+    finally:
+        authsrv.skill_timing = saved
+
+
+def section_retarget():
+    import authsrv
+
+    print("\n7. a retarget stops the swing in flight and opens on the new "
+          "target")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = _state()
+    state["agents"][11] = _fresh_agent()
+    authsrv.begin_attack(send, state, 10, 0)
+    authsrv.attack_tick(send, state, 0)                    # arm at 10
+    sent.clear()
+    authsrv.begin_attack(send, state, 11, 0)
+    stops = [v for op, v, _ in sent
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]],
+          "the retarget sends one STOPPED -- the corpus's candidate cancel "
+          "(17c): two target-selects, then the standalone stop 57-90 ms "
+          "later, no damage for the opened swing", f"{stops}")
+    sent.clear()
+    authsrv.attack_tick(send, state, 0)
+    swing = state.get("player_swing")
+    check(swing is not None and swing["target"] == 11
+          and state["agents"][10]["health"] == 100.0,
+          "the old swing is dropped unlanded and the new one opens on the "
+          "new target in the same tick",
+          f"swing={swing}, old health={state['agents'][10]['health']}")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
     section_lost_target()
     section_direct_calls_unchanged()
+    section_press_stops_swing()
+    section_pause_and_resume()
+    section_retarget()
     return LEDGER.verdict()
 
 
