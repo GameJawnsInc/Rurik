@@ -4227,3 +4227,171 @@ evidence. The blind replication chased it and
 found a whole message channel. An orphan in a ledger is a lead, and the ledger
 closing at 918 of 918 is the only thing that says there are no more.
 
+## 35. SKILLS-T1 — the client names its own skill types
+
+**2026-08-21, no client launched, no wiki consulted.** Closes `PLAN.md` §8
+item 5 and `studies/presearing/MANIFEST.md` §8's eleven-code follow-up.
+Tool: `toolkit/clientscan/typenames.py`; pins: `test_typenames.py` (16 checks).
+
+### 35.1 The question, and the method that was not needed
+
+`MANIFEST.md` §8 named ten of the client's skill `type_code` values by **Rosetta
+stone**: take skills whose type is independently known, read their `+0x0C`, take
+the majority. It left **eleven UNKNOWN** — 9, 11, 16, 20, 21, 22, 24, 25, 26,
+27, 28 — and called naming them "a bounded follow-up using the same method, two
+or three known-name skills per code". `PLAN.md` §8 item 5 singled out **16**,
+because it is on this server's own default bar and named nowhere.
+
+That method would have worked, and it would have needed an outside source for
+every code. It was not necessary. **The client names its own types**, in one
+switch, and the whole derivation is arithmetic on its bytes.
+
+```
+0x004F9BF0   the namer     mov eax,[edi+0x0C]     <- the type_code field
+                           cmp eax,0x0E           <- type 14 leaves here
+                           ...                    <- 17, 18, 22 leave here
+                           push eax ; call 0x004F9DD0
+0x004F9DD0   the switch    mov eax,[ebp+8] ; dec eax ; cmp eax,0x1C
+                           ja  0x004FA7A0         <- the default arm
+                           jmp [eax*4+0x004FA7BC] <- 29 entries
+```
+
+Every case body computes a **string id**. And the default arm carries the single
+strongest piece of evidence that this is the *type* namer rather than some other
+switch on some other field — ArenaNet's own sentence, at `.rdata 0x0094E614`:
+
+> "There is no string to describe skill %u's type."
+
+### 35.2 The control, which is the whole argument
+
+The jump-table index is `type_code - 1`, and **the bias is the only free
+parameter in the entire derivation**. At that bias, all ten codes `MANIFEST.md`
+named years earlier — by a completely different method, against outside sources
+— resolve through the owner's archive to exactly the ten words it used:
+
+```
+ 3 Stance      4 Hex Spell   5 Spell     6 Enchantment Spell   7 Signet
+ 8 Condition  10 Skill      12 Glyph    15 Shout             19 Preparation
+```
+
+**Ten of ten.** Then the same check is re-run at bias 0 and bias 2 and scores
+**zero and zero**. That second half is what makes the first mean anything: one
+step either way breaks every known code at once, so the agreements cannot be a
+table of plausible words meeting plausible guesses.
+
+**The exactness in that check is load-bearing, and it was learned by breaking
+it.** The first cut asked `expected in got` — and "Spell" is a substring of
+"Hex Spell", so the shifted control scored 1 instead of 0 and went red on its
+own leak. A weaker comparison leaves the headline check looking fine while
+quietly poisoning the control meant to falsify it.
+
+### 35.3 The table. OBSERVED
+
+Ids, with the case body that computes each. **The ids are what the repo commits;
+the words are resolved at run time from the owner's own archive**, per
+CLAUDE.md's rule for authored text.
+
+| code | case body | base | elite | word | previously |
+|---|---|---|---|---|---|
+| 1 | `0x004F9E37` | 34036 | — | Blessing | not in our mirror |
+| 2 | `0x004F9F3C` | 931 | — | Party Bonus | not in our mirror |
+| 9 | `0x004FA74E` | 32224 | 32225 | **Well Spell** | UNKNOWN |
+| 11 | `0x004FA6FC` | 32222 | 32223 | **Ward Spell** | UNKNOWN |
+| 13 | `0x004FA59B` | 52243 | — | Title | not in our mirror |
+| **16** | `0x004FA30B` | **942** | 943 | **Skill** | **UNKNOWN — item 5** |
+| 20 | `0x004FA2B9` | 938 | 939 | **Pet Attack** | UNKNOWN |
+| 21 | `0x004FA602` | 958 | 959 | **Trap** | UNKNOWN |
+| 23 | `0x004FA100` | 32219 | — | Environment Effect | not in our mirror |
+| 24 | `0x004F9FA3` | 32220 | 32221 | **Item Spell** | UNKNOWN |
+| 25 | `0x004FA549` | 954 | 955 | **Weapon Spell** | UNKNOWN |
+| 26 | `0x004FA167` | 38863 | **39729** | **Form** | UNKNOWN |
+| 27 | `0x004F9FF5` | 36382 | 36383 | **Chant** | UNKNOWN |
+| 28 | `0x004FA0AE` | 18450 | 18451 | **Echo** | UNKNOWN |
+| 29 | `0x004FA047` | 51773 | — | Disguise | not in our mirror |
+
+Type 26's elite is **not** base+1 — its body is `and eax,0x362; add eax,0x97CF`
+rather than the usual `or imm; shr 2` — and the test pins that as the one
+documented exception, so a later reader does not "fix" 39729 to 38864.
+
+### 35.4 Item 5's answer is a genuine oddity
+
+**`type_code` 16 is displayed as "Skill" — and so is `type_code` 10, from a
+DIFFERENT string record.** 942 and 960 are two rows of the archive carrying the
+same English word (and the same word in French, German and Italian). Two enum
+values ArenaNet chose to label identically: not an alias, and not a collision in
+our decode. The test asserts **both** halves, because either alone reads wrong.
+
+The bodies differ, and that is where the distinction lives:
+
+- **10** branches on the touch and half-range flags and has variant names for
+  each.
+- **16** has no variants and instead **asserts both flags are clear** — two
+  `GmSkHelpers.cpp:139` sites at `0x004FA30B..0x004FA34B`.
+
+**Why the engine needs two enum values for one word is NOT ANSWERED.** Nothing
+here read the code that *consumes* the distinction, only the code that names it.
+That is the honest residue of item 5, and it is a different and much smaller
+question than the one that was open this morning.
+
+It also explains the structural profile that made 16 puzzling before the switch
+turned up. Its 21 rows are **100% instant, 100% self-targeted, 100% carrying a
+duration** — perfectly homogeneous, which is not what a catch-all looks like;
+type 10's 55 rows are 13% / 31% / 38%, which is. Two "Skill" codes, one of them
+the untargeted-self-buff case, fits both shapes.
+
+### 35.5 What the client refuses to name, on purpose
+
+Three refusals, each read from the bytes, and each recorded as a **fact** rather
+than a gap in our work:
+
+- **17 and 18** short-circuit in the namer (`sub ecx,0x11; je` then
+  `sub ecx,1; je`) to string id 1, the null record. The client has **no word**
+  for them. They are also the two largest populations in the full 3,443-row
+  client table, so this is the largest thing still unnamed — and it is unnamed
+  *by ArenaNet*, not by us.
+- **14** never reaches the switch: `cmp eax,0x0E` intercepts it and tail-calls
+  `0x004FAE60` with the weapon and combo fields, because an attack's displayed
+  name depends on the weapon and the chain slot ("Sword Attack", "Off-Hand
+  Attack"). Its jump-table slot is the default arm.
+- **22**'s name is not a constant either. It is resolved in the namer from title
+  track `+0x2A` and profession `+0x28`: `0x28` gives one string, else profession
+  2 gives another and 8 a third, and anything else logs a failure at
+  `0x0094E728` naming the family. ArenaNet's own internal word for it is
+  **"global skill"**.
+
+### 35.6 What is NOT promoted, and why
+
+- **Type 2, "Party Bonus".** The image says it plainly and the constant is
+  verified, but its members are not in our mirror and no second witness exists.
+  The tool carries the id; nothing calls it settled.
+- **The flag-conditioned variants** — "Touch Hex Spell", "Flash Enchantment
+  Spell", "Half Range Spell". Those strings are reachable from the case bodies
+  (OBSERVED) but **which flag bit selects which was not verified**, so
+  `TYPE_STRING_ID` deliberately holds only the unflagged name. A mapping nobody
+  checked is the thing this repo keeps getting burned by.
+- **Type 14's weapon sub-table.** A second switch at `0x004FAE60` that nobody
+  walked to the end. Treat any list of its returns as a floor.
+- **`effects.py`'s `EFFECT_TYPES`.** Several newly-named codes — Well Spell,
+  Ward Spell, Item Spell, Weapon Spell, Form, Chant, Echo — are plainly timed
+  effects, and adding them is a *behaviour* change that needs its own evidence
+  and its own run. Named here as a follow-on, not done.
+
+### 35.7 How it was found, which is the transferable part
+
+Three agents, three routes, none seeing the others: the image, the skill table's
+structure calibrated on the ten known codes, and the live wire corpus. **The
+image route won outright** — it went at the code rather than hunting for arrays,
+found the accessor by cross-reference, and scanned for MSVC compressed switches
+whose bound sits in 20..36. The structural route independently derived the
+two-name split for type 22 from nothing but the corpus composition, which is the
+strongest cross-route agreement in the set; the wire route contributed a witness
+for 16 and a partition of the activation properties.
+
+**And the judge caught the image route citing the wrong address for its own
+correct conclusion** — `0x004FA2F9` where the arithmetic is at `0x004FA34B`;
+the earlier address is the tail of the *type-20* case and holds `or esi,0x0EA8`
+→ 938. The number was right, the citation was one case body early. That is
+worth more than it looks: a wrong citation makes a later reader's audit fail and
+look like the claim failed. Everything published here was re-read from the image
+before it was written down, and the test pins `0x004FA34B` specifically.
+

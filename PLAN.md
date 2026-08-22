@@ -1617,7 +1617,43 @@ UNMAPPED message).
    spelling everywhere, with `PROP_UNKNOWN_FLOAT_43` kept as an alias so no call
    site had to break for a rename. Nothing to do; the line was the list
    outliving the work, which is the failure the top of `CLAUDE.md` is about.
-5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
+5. ~~**`type_code` 16 is on our own bar and named nowhere.**~~ **CLOSED
+   2026-08-21, and it closed ten other codes with it** (SKILLS-T1,
+   [studies/skills §35](studies/skills/FINDINGS.md), `clientscan/typenames.py`,
+   `test_typenames.py` 16 checks). **The client names its own types.** The namer
+   at `0x004F9BF0` reads `[skillRecord+0x0C]` and hands it to a 29-case switch
+   at `0x004F9DD0` whose every case computes a **string id**, and whose default
+   arm logs ArenaNet's own *"There is no string to describe skill %u's type."*
+   The index is `type_code - 1`, the bias is the derivation's only free
+   parameter, and at that bias all **ten** codes `studies/presearing` §8 named
+   independently — by Rosetta stone, years earlier, against outside sources —
+   resolve EXACTLY to the ten words it used; re-run at bias 0 and 2 the same
+   check scores **zero**. So the eleven UNKNOWN codes are named without needing
+   a second Rosetta pass: 9 Well Spell, 11 Ward Spell, 20 Pet Attack, 21 Trap,
+   22 "global skill" (a *computed* name — Nature Ritual / Binding Ritual / Ebon
+   Vanguard Ritual, from profession and title track), 24 Item Spell, 25 Weapon
+   Spell, 26 Form, 27 Chant, 28 Echo — **and 16 is "Skill"**.
+
+   **Item 5's answer is an oddity worth keeping:** 16 displays as "Skill" and so
+   does **10**, from a *different* string record (942 vs 960, same word in four
+   languages). Two enum values ArenaNet chose to label identically. The bodies
+   differ — 10 branches on the touch and half-range flags, 16 has no variants
+   and instead ASSERTS both are clear — so the distinction is real, but **why
+   the engine needs it is NOT answered**: nothing read the code that *consumes*
+   it, only the code that names it. That is the residue, and it is a much
+   smaller question than the one that was open.
+
+   Three refusals are recorded as facts rather than gaps: **17 and 18 have no
+   type word at all** (the namer short-circuits both to the null record) and
+   they are the two largest populations in the full 3,443-row table, so the
+   biggest unnamed thing here is unnamed *by ArenaNet*; **14** is intercepted
+   upstream because an attack's name depends on the weapon and chain slot; and
+   **22**'s name is computed rather than constant. Ids are committed, words
+   resolve at run time from the owner's archive.
+   **Follow-on, not done:** several newly-named codes are plainly timed effects
+   (Well/Ward/Item/Weapon Spell, Form, Chant, Echo) and `effects.py`'s
+   `EFFECT_TYPES` still lists five. That is a behaviour change and needs its own
+   evidence.
 ### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
 
 Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
