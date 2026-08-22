@@ -1018,3 +1018,57 @@ map_flags = 0x02000000
 [area.u18.provenance]
 source = "invented"
 verified = """Ours, and it is the control that makes `u42` mean anything. Same generator, same bands, same flags, same seed -- one field different. 18.43 deg is class 0 under BOTH threshold sets, so this ramp must mesh. If it does not, the uniform generator is broken and `u42`'s result says nothing about classes."""
+
+[area.ashcoil]
+name = "Ashcoil Caldera"
+map_id = 166
+dims = 64
+heights = "caldera"
+# The 64x64 centre: the caldera floor, measured 0.0 deg under the classifier.
+# It doubles as the spawn -- map 166's row spawns at (3072, 3072) too.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 32
+map_flags = 0x02000001   # BOTH levers, and the top byte is REQUIRED, not taste:
+                         # the design's legality-by-construction argument runs
+                         # under the 10/45/40 set (top byte 2, WORLDMAPS-W17).
+                         # Its walkable staircases are 48-unit risers whose
+                         # worst triangle plane is 35.3 deg -- class 0 under
+                         # cut 45, but class TWO under the 15/35/30 set, which
+                         # is the band W20/W23 showed to be conditionally
+                         # meshed. Bit 0 keeps the sunken pool (floor -48,
+                         # one quantum under the water plane) walkable.
+
+[area.ashcoil.provenance]
+source = "invented"
+verified = """Ours -- the first area authored as a PLACE rather than as an \
+instrument, on the mod-platform framing (owner, 2026-08-21). The design is the \
+winner of a three-designer panel (vertical drama / enclosure-and-reveal / \
+natural coherence briefs) judged on coherence, drama and feasibility, with the \
+losing designs' grafts folded in; the judge re-implemented all three height \
+functions and re-measured every self-reported claim before scoring. The \
+surface obeys one master rule: walkable ground keeps its pre-quantization \
+gradient <= 40 units/cell (so after 48-quantization every axial step is 0 or \
+48 and no triangle plane exceeds 35.3 deg), walls are hard discontinuities \
+>= 192, and nothing between exists, so the 40-45 deg band WORLDMAPS-W20/W23 \
+showed to be conditionally meshed is unreachable by construction. Elevated \
+roads leave flat ground only through flanked slots (the mouth, the top-out \
+notch, the draw) because a tapering ledge always sweeps that band somewhere on \
+its flank. MEASURED offline before any install (scratchpad validate_design.py \
+against the deployed generator, byte-identical port): zero cells in the \
+forbidden band, flood(<=64 steps) == flood(<=111 steps) under 4- and \
+8-connected adjacency, every waypoint of the intended walk (pool, mouth slot, \
+shelf at four angles, exit rim, crown, draw, bowl) connected to the centre \
+seed, codec round-trip 4096/4096 exact, snap worst sample moved 4. What is \
+NOT verified is the CLIENT: no compile, no readback and no walk had happened \
+when this row was written, and the tree-placement y-flip fix in deploy.py \
+(grid row 0 renders at world maxY) is a RECONSTRUCTION from FINDINGS 4 plus \
+W23's flipped apron trapezoid, confirmed by no client run yet."""
