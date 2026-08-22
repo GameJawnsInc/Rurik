@@ -6739,6 +6739,16 @@ def restore_player_energy(send, state, conn_id, why):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
          f"energy refilled to {pool.maximum:.0f} ({why})")
+    # THE "+N" THE PLAYER SEES, and retail sends it right after the gain:
+    # int property 54 is a floating energy callout and writes no store --
+    # MEASURED 2026-08-22, static walk + `--probe prop54` (agents.py has the
+    # full account). The capture's value, 22, is the whole refilled pool, so
+    # the amount here is the maximum: the client zeroed its pool at the death
+    # and the 1.0 gain above hands all of it back.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_ENERGY_GAIN_CALLOUT, PLAYER_AGENT_ID,
+          int(pool.maximum)],
+         f"float a +{pool.maximum:.0f} energy callout ({why})")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(pool.rate)],
          f"energy regeneration back to {pool.pips} pip(s) ({why})")

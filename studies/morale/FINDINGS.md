@@ -72,7 +72,7 @@ are removed in the same tick:
 | 88.857 | `0x00F1` | `[27, 0]` | the death bit clears |
 | 88.857 | `0x00A2` | `[43, 27, 0.06f]` | energy regeneration back — **rescaled**, see §2.3 |
 | 88.857 | `0x00A2` | `[52, 27, 1.0f]` | energy gain, full pool |
-| 88.857 | `0x009F` | `[54, 27, 22]` | int 54 = the new maximum energy again. UNVERIFIED |
+| 88.857 | `0x009F` | `[54, 27, 22]` | int 54 = a floating **"+22"** energy callout, display-only; equals the maximum because a refill from the death-zeroed pool gains all of it. MEASURED 2026-08-22, §2.5 |
 | 88.857 | `0x00A2` | `[55, 27, 1.0f]` | armor-ignoring heal, full pool |
 | 88.857 | `0x0026` | `[27, 5]` | flags on the revived player |
 
@@ -303,6 +303,50 @@ The wire's `attr_id` is an index into that array. `studies/character/STORAGE.md`
 this checks it against numbers of ours, at three predicted offsets, with nothing
 else in ±0x80 moving.
 
+### 2.5 The death tick's last two unknowns — MEASURED 2026-08-22
+
+Both remaining message-level questions from §1's tables closed in one session,
+each by a static walk plus one probe run ([RUNS.md](RUNS.md) Runs 5 and 6).
+
+**Property 43's channel (MORALE-Q3): `0x00A2` and `0x00A3` are two doors to
+one store.** Three independent legs, strongest last:
+
+- SOURCED: both opcodes funnel to the float dispatcher `0x00818210`, whose
+  case 3 is property 43 (`studies/agentprops` §1d/§3).
+- OBSERVED, in a death batch: Run 3 arm A's frames, re-read against its wire,
+  show the client drawing three regen arrows for a rate it only ever heard on
+  `0x00A3` and integrating at exactly that rate (10 → 13 → 17 → 20 at 0.99/s
+  after the first revive).
+- OBSERVED, in isolation: `--probe regen_channel` zeroed the rate on `0x00A2`
+  (flat bar at 3, five frames), sent six pips on `0x00A3` (climb at 1.94/s
+  against the 1.98 sent, arrow count 0 → six), and stopped it again from
+  `0x00A2`. One store, written from either channel, in both directions.
+
+Two corollaries. Retail's 52-of-52 preference for `0x00A2` is a fidelity fact
+about retail, not a constraint the client enforces — the spawn-burst move to
+`0x00A2` stays correct and stays cosmetic. And Run 3's energy "drain" was
+never a drain: the client's own death path kills regeneration, that tree's
+grace-waived deaths re-armed nothing and its revives refilled nothing, so the
+readout showed one re-armed climb window and then flat zero. **The cure in
+the energy-arc merge was the handling — the death-zero, the revive refill,
+the rate re-send — and the channel move was never load-bearing** (Run 4's
+open question, closed).
+
+**Property 54 (MORALE-Q4): a floating "+N" energy callout, and nothing else.**
+The int path's pool dispatch ignores 54; its real arm (`0x00812E57`, in a
+third dispatch the 2026-08-11 walk under-read — correction filed in
+`studies/agentprops`) writes no store and queues AgentView EFFECT event kind
+0x0D, whose drain posts UI event `0x1000000F` with the value
+(`avevents.py --id 54`). At a live client, `[54, player, 13]` floated a
+magenta **"+13"** over the player's head for under ~2 s, `[54, player, 5]`
+floated **"+5"**, four sends moved no bar, no maximum and no corner — and the
+property-41 positive control moved the maximum on cue. So retail's
+`[54, 27, 22]` at the resurrect (§1) is the **"+22" the shrine refill draws**:
+the value equals the new maximum only because the client zeroed its pool at
+the death and the property-52 gain of 1.0 hands all of it back.
+`restore_player_energy` now sends it in retail's position, and
+`test_pools.py` §8b pins the batch.
+
 ---
 
 ## 3. The rules layer — WIKI
@@ -393,7 +437,7 @@ Test: `toolkit/authsrv/test_morale.py`, catalogued in
 | `character/FINDINGS.md` §1 field table | field 10 "**REFUTED as morale**" | The refutation is of the *display*, not the field: sending `0x00E9` with field 10 = 0/40/100/110 moved no indicator. The field IS morale (`0x00EE` attr 10 = −15 on the death tick, GWCA `Morale_Percent`), and the top-left indicator is driven by something else — `0x009C` is the candidate, MORALE-P2 |
 | `combat/PLAN.md` §13, `authsrv.py` `GAME_SMSG_AGENT_KILL_REWARD` | `0x009C [agent, 100]` — "n=1, first-witness, uncatalogued", a marker for a non-kill broadcast burst | 83 sightings, one of them 85 on the death tick. `0x009C` = **per-agent morale percentage**. The burst finding stands (the `[10,0]`+`[0,X]` pair is not a kill shape); what changes is that attr 10 is no longer unknown — `[10, 0]` is a morale no-op riding an XP award |
 | `agents.py` `PROP_UNKNOWN_FLOAT_43` | "Energy regeneration is the obvious reading and is a GUESS" | Energy regen as a fraction of max per second, OBSERVED by the rescale in §2.3. Renamed |
-| `authsrv.py` spawn burst | sends property 43 on `0x00A3` (float-target) | retail sends it on `0x00A2` (plain float). Left alone for now — MORALE-Q3 |
+| `authsrv.py` spawn burst | sends property 43 on `0x00A3` (float-target) | retail sends it on `0x00A2` (plain float). Moved by the energy arc; MORALE-Q3 then measured the two channels equivalent (§2.5), so the move is fidelity, not function |
 | `authsrv.py` `player_revive_due` docstring | "no PLAYER death was found in either live capture, so this is our agent-death path pointed at PLAYER_AGENT_ID" | There is one now, in the 2026-08-17 capture, and the revive it shows is a **shrine respawn**: position moves, out-of-range agents are removed, pools refill through `0x00A2` 52/55 rather than through property 34 |
 
 ---
@@ -404,8 +448,8 @@ Test: `toolkit/authsrv/test_morale.py`, catalogued in
 |---|---|---|
 | ~~MORALE-Q1~~ | Which message drives the top-left DP indicator: `0x009C`, `0x00EE`, or both? | **ANSWERED 2026-08-20 — `0x009C`.** `[player, 70]` alone drew a red `−30%` chevron at (10,32)–(60,82); `0x00EE [10, −15]` alone drew nothing over three frames and 9.2 s. RUNS.md §Run 1 |
 | ~~MORALE-Q2~~ | Does the client recompute the maxima itself from morale, or only display what the server sends? | **ANSWERED 2026-08-20 — it displays ours.** One frame carries it: at t+16.4 the corner reads `−30%` while the bars still read 100 and 25. Properties 41/42 then set them, and the energy bar showed the **14** we sent rather than the 19 its own arithmetic would give |
-| MORALE-Q3 | `0x00A2` vs `0x00A3` for property 43 | retail uses the plain channel; we use the target channel and the client has never complained. Both may be accepted |
-| MORALE-Q4 | int property 54 at the revive (= 22, the new max energy) | one sighting, no second value, no upstream name |
+| ~~MORALE-Q3~~ | `0x00A2` vs `0x00A3` for property 43 | **ANSWERED 2026-08-22 — two doors, one store.** Statically both opcodes funnel to dispatcher `0x00818210` case 3; Run 3 arm A's own frames show the client integrating at an A3-sent rate (0.99/s, three arrows); and `--probe regen_channel` walked it in isolation — a `0x00A2` zero flattens the bar, six pips on `0x00A3` restart the climb at 1.94/s with six arrows, a `0x00A2` zero stops it again. The "drain" the energy arc's merge cured was the merge's HANDLING (revive refill + rate re-send), never the channel. §2.5, RUNS.md Run 5 |
+| ~~MORALE-Q4~~ | int property 54 at the revive (= 22, the new max energy) | **ANSWERED 2026-08-22 — a floating "+N" energy callout, display-only.** The int path writes no store for 54: its arm queues AgentView EFFECT kind 0x0D → UI event `0x1000000F`. `--probe prop54` sent 13 then 5 and a magenta "+13" / "+5" floated over the player for under ~2 s each, while four sends moved no bar and the property-41 control did. The 22 was the refill amount, equal to the maximum because the client zeroes its pool at death. §2.5, RUNS.md Run 6 |
 | MORALE-Q5 | Morale BOOSTS | zero sightings in the corpus. +10% is WIKI only, and the `[40, 110]` range is UPSTREAM (GWCA) |
 | MORALE-Q6 | Does DP survive a map change on the wire, and what resets it? | our corpus has no death followed by a zone. WIKI says an outpost resets it; the ATTR_SET at every login carries 100, which is consistent but is not the same claim |
 | ~~MORALE-Q7~~ | Does `0x00EE`'s delta update the client's stored morale without repainting? | **ANSWERED 2026-08-20 — yes, it writes.** Read out of the client's own memory: `66 → 53` on a `−13` and `53 → 60` on a `+7`, within one 0.5 s sample each, while `0x009C [player, 41]` moved that slot not at all. Two channels, two stores. RUNS.md §Run 2, §2.4 below |

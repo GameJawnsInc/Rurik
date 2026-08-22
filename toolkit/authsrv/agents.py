@@ -1052,6 +1052,20 @@ PROP_ENERGY_REGEN = 43
 # The old spelling, kept because renaming a constant is not a reason to break a
 # call site, and because "unknown" is exactly what it was for four months.
 PROP_UNKNOWN_FLOAT_43 = PROP_ENERGY_REGEN
+
+# Property 54 on the INT channel: a floating "+N" energy callout over the
+# agent, and NOTHING else -- it writes no store. MEASURED 2026-08-22, both
+# halves (studies/morale/FINDINGS.md section 2.5, RUNS.md Run 6): statically,
+# the int path's pool dispatch returns for 54 and its real arm
+# (0x00812E57 -> AvApi 0x007E0290) only queues AgentView EFFECT event kind
+# 0x0D, whose drain posts UI event 0x1000000F with the value; behaviourally,
+# `--probe prop54` sent 13 and then 5 at a live client and a magenta "+13" /
+# "+5" floated over the player's head for under ~2 s each, while the pools,
+# their maxima and the whole HUD held still across four sends. Retail's one
+# sighting -- [54, player, 22] in the 20260817T183756 resurrect batch -- is
+# therefore the "+22" a shrine refill draws, and its value equalled the new
+# maximum only because a refill from an empty pool gains exactly the maximum.
+PROP_ENERGY_GAIN_CALLOUT = 54
 _PLAYER = WORLD.get("player", "defaults")
 PLAYER_ENERGY = _PLAYER["energy"]
 PLAYER_HEALTH = _PLAYER["health"]

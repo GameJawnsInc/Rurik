@@ -1707,18 +1707,24 @@ UNMAPPED message).
 ### MORALE: the death penalty is read, modelled, watched and CLOSED (2026-08-22)
 
 **Status for a cold session: nothing here is owed.** Landed on `main`, arc doc
-[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md), four run sheets in
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md), six run sheets in
 [studies/morale/RUNS.md](studies/morale/RUNS.md), `test_morale.py` floor 60 and
 green at 62. The mechanic is on the wire, in content, gated per map, and watched
-at a client from a real death. What is still OPEN is small and named: MORALE-Q3
-(`0x00A2` vs `0x00A3` for property 43 — the energy arc moved us to `0x00A2` and
-which of its two changes cured the drain is unseparated), MORALE-Q4 (int
-property 54 at the revive, one sighting), MORALE-Q5 (morale BOOSTS — zero
-sightings in the corpus; only `0x009C [player, 110]` at our own client), and
-MORALE-Q6 (what resets a penalty on a map change — the wiki says an outpost,
-the corpus cannot show it). The one thing a future run could add cheaply is a
-GIF-rate capture of a killing blow's floating damage number, which is n=1 and
-watched live rather than filmed.
+at a client from a real death. **MORALE-Q3 and Q4 closed 2026-08-22**
+(FINDINGS §2.5, Runs 5–6, one desk pass + two probe runs): property 43 is
+accepted on **both** `0x00A2` and `0x00A3` — one store, two doors, proven by a
+slope the client integrated from each channel in turn — so the energy-arc
+channel move was fidelity, and the drain it was suspected of curing was
+actually cured by the merge's death-zero/revive-refill handling; and int
+property 54 is a **floating "+N" energy-gain callout**, display-only (magenta
+"+13"/"+5" on camera, no store moved, property-41 control live), which
+`restore_player_energy` now sends in retail's position with `test_pools` §8b
+pinning it. What is still OPEN is Q5 and Q6, both needing retail contexts the
+corpus lacks: MORALE-Q5 (morale BOOSTS — zero sightings; only
+`0x009C [player, 110]` at our own client) and MORALE-Q6 (what resets a penalty
+on a map change — the wiki says an outpost, the corpus cannot show it). The one
+thing a future run could add cheaply is a GIF-rate capture of a killing blow's
+floating damage number, which is n=1 and watched live rather than filmed.
 
 The entry below is the arc as it was written, kept for its reasoning.
 

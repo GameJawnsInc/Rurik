@@ -263,3 +263,113 @@ regeneration on death and restores it at the revive ("energy regeneration stops:
 the player is dead" / "back to 3 pip(s) (revived, deferred)"). Either could
 account for the difference, and this run cannot separate them. What is settled
 is that the behaviour Run 3 flagged is not present in the tree we ship.
+
+**SEPARATED 2026-08-22, at the desk, from Run 3's own artifacts** — see Run 5's
+preamble. The handling was the cure; the channel was never the disease.
+
+---
+
+## Run 5 — `--probe regen_channel`, 2026-08-22, GREEN: both channels write one store
+
+**MORALE-Q3.** Before this run, the desk work re-read Run 3 arm A
+(`20260822T140922`) against its own wire, and the "drain" dissolved:
+
+- That tree sent property 43 **only** on `0x00A3` (0.0396 at spawn; 0.045,
+  nonzero, inside death 1's batch) and **no revive ever refilled energy** —
+  no property 52, nothing.
+- The frames, joined to the capture by mtime: energy **25 with three regen
+  arrows** through the pre-death window — three arrows for a 3-pip rate the
+  client only ever heard on `0x00A3`. After revive 1 the readout **climbed
+  10 → 13 → 17 → 20** across four frames, slope 0.99/s — exactly the
+  A3-sent 0.045 × 22. After death 2 (grace-waived, so no batch, so no fresh
+  property 43) the readout is **0 in every later alive window**: the client's
+  own death path kills regeneration and nothing ever re-armed it.
+- So Run 3's "25 → 10 → 0" was never a drain. It was a full pool, then the one
+  re-armed climb sampled at 3.4 s cadence, then flat zero — **cured by the
+  merge's handling (revive refill + rate re-send), not by the channel move.**
+  The channel had demonstrably delivered its value the whole time.
+
+That consumption was observed inside a death batch, and the context is part of
+the claim — so the probe asked the same question with no death anywhere near
+it, one variable at a time:
+
+```bash
+python toolkit/harness/session.py --keep-open --hold 70 --shots 2 --warn 8 \
+    --game-args "--probe regen_channel --map 146"
+```
+
+Harness `20260822T160301`, gamesrv `authsrv-20260822T160333-c1.jsonl`,
+`RUN VERDICT: PASS`, all five steps in the log before a pixel was read.
+Sends at t=4.8 (43 = 0.0 on `0x00A2`), 10.8 (62 = −0.88), 20.8
+(**43 = 0.0792 on `0x00A3`**, 6 pips), 32.8 (43 = 0.0 on `0x00A2`), 40.9
+(43 = 0.0396 restore). Frames every 2.3 s; the strip is
+`vault/research/morale/q3_energy_series.png`.
+
+| id | predicted | result |
+|---|---|---|
+| Q3-P1 | zeroing the rate on `0x00A2` clears the arrows | **CONFIRMED** — `>>>` at t 2.5–4.8, gone by 7.2 |
+| Q3-P2 | drained bar sits flat at zero rate | **CONFIRMED** — **3**, five consecutive frames, 11.8–21.1 |
+| Q3-P3 | 6 pips on `0x00A3` restarts the climb at ~2/s | **CONFIRMED** — **6 → 11 → 15 → 20 → 24** over 9.3 s = **1.94/s** against the 1.98 sent, with the arrow count jumping 0 → **six** |
+| Q3-P4 | a `0x00A2` zero stops what `0x00A3` started | **CONFIRMED** — arrows gone at 35.0 (the bar had already capped at 25, so the freeze itself is invisible; the arrows carry this one) |
+
+**MORALE-Q3 is answered: `0x00A2` and `0x00A3` are two doors to the same
+regeneration store.** The client's shared dispatcher (`0x00818210` case 3,
+studies/agentprops) said so statically; arm A's frames said so in a death
+batch; this run says so in isolation, both directions, with the arrow count
+tracking the sent pip value. Retail's exclusive use of `0x00A2` (52 of 52) is
+a fidelity fact about retail, not a functional constraint on the client — the
+spawn-burst move to `0x00A2` stays correct and stays cosmetic. Scope: the one
+field this run does not vary is `0x00A3`'s cause slot (sent = target = player).
+
+Honest residue: hold025/026 were skipped ("client not foreground") — after
+step 5, nothing unmeasured.
+
+---
+
+## Run 6 — `--probe prop54`, 2026-08-22, GREEN: property 54 is a floating "+N"
+
+**MORALE-Q4.** The desk half came first and changed the prediction: the int
+path's pool dispatch (`0x00818170`) returns for 54, but the shim behind it
+carries **two more property switches** the 2026-08-11 walk did not read, and
+54 has a real arm in the third (`0x00812E57`). The arm writes **no store**: it
+calls AvApi `0x007E0290`, which queues AgentView EFFECT event kind **0x0D**
+`{which=0, value}` (`avevents.py --id 54` reproduces this), whose drain
+(`0x007FA42B → 0x007EBD30`) posts **UI event `0x1000000F`** with the value,
+behind three gates (a global, an FP screen-space check, `byte [char+0x71] > 1`).
+A notification, not state — but whether its face is a floating number, an orb
+flash or a swallowed event, only a client can say.
+
+```bash
+python toolkit/harness/session.py --keep-open --hold 70 --shots 2 --warn 8 \
+    --game-args "--probe prop54 --map 146"
+```
+
+Harness `20260822T160555`, gamesrv `authsrv-20260822T160628-c1.jsonl`,
+`RUN VERDICT: PASS`, all six steps logged. `0x009F [54, player, 13]` at t=4.8
+and 12.8, `[54, player, 5]` at 20.8 and 28.8, then the control pair
+`[41, player, 19]` at 36.9 and `[41, player, 25]` at 42.9. Frames every 2.3 s;
+strips in `vault/research/morale/q4_bars_series.png` and
+`q4_body_region.png`.
+
+- **The face: a magenta floating "+13"** above the player's head at t=14.0 —
+  1.2 s after the second send — and a **"+5"** at t=30.3, 1.5 s after the
+  fourth. The number tracks the payload exactly. Each callout is **gone by the
+  next frame** (~2.3 s later), which is why every value was sent twice: the
+  first "+13" died entirely inside the 2.3 s between the send and its frame.
+- **No store moves.** Both bars, both numbers, the arrows, the corner and the
+  chat hold pixel-still through all four sends — the adjacent-frame diff
+  census puts every hot cell on the player's idle animation, present in
+  send-free windows too.
+- **The instrument was live.** Property 41 = 19 moved the energy maximum to
+  **19** on the very next frame window and the restore put back 25. A null
+  from a dead channel would have been unreadable; this null has a positive
+  control.
+
+**MORALE-Q4 is answered: int property 54 is the floating energy-gain callout,
+display-only.** Retail's one sighting — `[54, 27, 22]` in the resurrect
+batch — is the "+22" a shrine refill draws, and the value equalled the new
+maximum because a refill from the client's death-zeroed pool gains exactly the
+maximum. The server now sends it in `restore_player_energy`, in retail's
+position after the property-52 gain (`test_pools.py` §8b pins it). The gates
+pass for the player in an explorable; which of them retail's other contexts
+can fail is not probed here.
