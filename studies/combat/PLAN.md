@@ -908,8 +908,13 @@ load-bearing.
 > pending cast with the bare 0x00E2 and no recharge, per the wiki contract
 > and the corpus's one terminated cast; and the chain pauses for
 > cast+aftercast, resuming at the E3 instant retail resumes it. Item 2 was
-> already closed by §18. Still open: the burrow stale-timer bug below, and
-> the E5-instant properties (8, 45, 58) §3b of castmech registers.
+> already closed by §18. **The E5-instant property register closed
+> 2026-08-22 (castmech §3c):** 58 rides the cast end (non-attack family),
+> the attack-skill press animates with 50 not 60, the queued cast's debit
+> and animation moved to CAST-BEGIN, and property 8 is wired as the view's
+> action-hold flag after the client-handler read (skillcast §16.2) — 45
+> alone stays unsent, one occurrence, nothing names it. Still open: the
+> burrow stale-timer bug below.
 
 **And a real bug found by code reading, not by a run:** nothing clears
 `swing_lands_at` / `cast_lands_at` across a burrow removal-and-recreate cycle.

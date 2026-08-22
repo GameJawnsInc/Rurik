@@ -5829,6 +5829,36 @@ ENEMY_SKILLS = tuple(tuple(row) for row in
                      _ENEMY.get("skills", ENEMY_SKILL_BAR))
 
 
+def action_hold(send, state, value, why):
+    """Property 8 for the player: the view-layer action-hold flag, 1 while
+    an action (a swing, a cast, the aftercast) holds the agent, 0 when it
+    releases. TRANSITION-ONLY, which is retail's own economy: the ranger's
+    t=12.9508 press burst carries no ->0 because the flag was still 0,
+    while every press that found it set clears it first (castmech 3c maps
+    all 30 player events; not one is a repeat of the value already held).
+
+    WHAT THE CLIENT DOES WITH IT is read, not guessed (skillcast 16.2): the
+    int-agentview dispatcher sets/clears bit 0 of the type-1 view object's
+    +0x64 flags and calls a view-local follow-up either way -- animation
+    plumbing, no gameplay state, silently ignored for agents without a
+    resident view. GWCA names it `disabled`; OpenTyria's `FreezePlayer` is
+    unspecific rather than wrong.
+
+    The mirror lives in state and is flipped from both threads (the press
+    on the connection thread, the tick's E5/begin/swing sites) -- the same
+    cross-thread residency the pools already have, and a plain int flip
+    under the GIL. PLAYER ONLY: the corpus shows other agents' actions
+    bracketed by the same property, and our NPC paths do not send it --
+    recorded in castmech 3c rather than wired past the evidence.
+    """
+    if state.get("action_hold", 0) == value:
+        return
+    state["action_hold"] = value
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_DISABLED, PLAYER_AGENT_ID, value],
+         f"action {'holds' if value else 'released'}: {why}")
+
+
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
 
@@ -5852,6 +5882,9 @@ def begin_attack(send, state, target_id, conn_id):
         # which retail visibly does not do. The tick drops the entry; this
         # only asks, and sends the close the corpus shows.
         if state.get("attacking") and state.get("player_swing"):
+            # The corpus's stop pair is [8 -> 0] THEN the STOPPED -- the
+            # t=16.578 retarget is exactly that adjacency (castmech 3c).
+            action_hold(send, state, 0, f"retarget to agent {target_id}")
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                  [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
                  f"attack_stopped: retarget to agent {target_id}")
@@ -5908,6 +5941,12 @@ def cancel_on_move(send, state, conn_id):
     behind a ghost of the cancelled cast.
     """
     now = time.time()
+    # MOVEMENT RELEASES THE HOLD whether or not a stop goes with it: the
+    # corpus's movement instants carry [8, 31, 0] four times, twice with no
+    # STOPPED anywhere near (the chain was already idle), and where a stop
+    # does fire the ->0 PRECEDES it (castmech 3c). Transition-only, so a
+    # flag already 0 sends nothing here.
+    action_hold(send, state, 0, "the player moves")
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
@@ -6182,6 +6221,11 @@ def attack_tick(send, state, conn_id):
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
+        # The swing itself drops silently (retail's own truncation), but
+        # the HOLD releases on the wire: the one live target-death close
+        # carries [8, 31, 0] ~0.25 s after the death messages (t=20.1637,
+        # n=1, castmech 3c).
+        action_hold(send, state, 0, f"target {target_id} is gone")
         state["attacking"] = None
         state["player_swing"] = None
         return
@@ -6221,6 +6265,13 @@ def attack_tick(send, state, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    # The hold follows the START, in that order -- every player [8, 31, 1]
+    # outside a press burst rides immediately behind its own
+    # ATTACK_STARTED (4 of 4 across three connections, castmech 3c).
+    # Transition-only means consecutive swings do not re-toggle, which is
+    # also measured: the ranger's chain sets it once per release, not once
+    # per swing.
+    action_hold(send, state, 1, f"the swing at {target_id}")
     state["player_swing"] = {"target": target_id,
                              "lands_at": now + swing_windup(ATTACK_INTERVAL)}
 
@@ -6332,6 +6383,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
              f"attack_started: player swings at {target_id}")
+        # And the hold follows the START, as at attack_tick's site -- one
+        # rule for every player swing open (castmech 3c).
+        action_hold(send, state, 1, f"the swing at {target_id}")
 
     agent["health"] = max(0.0, agent["health"] - dealt)
 
@@ -7510,11 +7564,15 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # OBSERVED, 2 of 2 presses that landed while a chain was running (necro
     # t=18.5110, ranger t=21.5433, studies/castmech 3b): retail's press burst
     # is E4, then [prop 8 -> 0], then GV_ATTACK_STOPPED [3, agent, 0], then
-    # the debit, the animation, [prop 8 -> 1]. This sends the STOPPED in that
-    # slot -- immediately after E4 -- and leaves property 8 unsent: its
-    # meaning is UNVERIFIED (GWCA guesses "disabled"; 17 value-pairs in the
-    # corpus, unread) and inventing a semantic for it is the thing this repo
-    # refuses. The chain itself SURVIVES the press: retail resumes the auto
+    # the debit, the animation, [prop 8 -> 1]. Both property-8 halves are
+    # SENT since 2026-08-22 -- the ->0 here, before the STOPPED, and the ->1
+    # after the animation below -- now that the client handler is read
+    # (skillcast 16.2: the view's action-hold bit) and the corpus's 30
+    # player events are mapped to their contexts (castmech 3c).
+    # `action_hold` is transition-only, so a press that finds the flag
+    # already 0 elides the ->0 exactly as the ranger's t=12.9508 burst did.
+    # A QUEUED press sends NEITHER half (2 of 2 live queued presses).
+    # The chain itself SURVIVES the press: retail resumes the auto
     # swing at the aftercast's end (ATTACK_STARTED rides the E3 instant, both
     # 105 cycles), which attack_tick reproduces by pausing starts while a
     # cast is short of its E3 and owning the restart afterwards. The armed
@@ -7529,6 +7587,8 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # already bought) must therefore stay silent, or this server sends a
     # close retail does not. Evaluated BEFORE this press appends its own
     # pending entry, or every press would read as mid-cast.
+    if not queued:
+        action_hold(send, state, 0, f"the press of skill {skill_id}")
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
@@ -7669,6 +7729,9 @@ def handle_skill_press(values, send, state, conn_id, opcode):
               PLAYER_AGENT_ID, target or 0, skill_id],
              f"cast animation: player "
              f"{'strikes with' if is_attack else 'casts'} {skill_id}")
+        # [8 -> 1] closes the burst: the cast now holds the agent. Last in
+        # the batch, 3 of 3 live bursts (castmech 3b/3c).
+        action_hold(send, state, 1, f"the cast of skill {skill_id}")
 
 
     state.setdefault("pending_casts", []).append({
@@ -7972,6 +8035,20 @@ def cast_tick(send, state, conn_id):
                            effects.effect_recipient(row, PLAYER_AGENT_ID,
                                                     target),
                            PLAYER_AGENT_ID, healed, conn_id)
+            # THE HOLD PULSE CLOSES THE E5 INSTANT for a non-attack cast:
+            # [8 -> 0] then [8 -> 1] at the batch's end, after the
+            # target-facing properties, 4 of 4 spell E5s -- the cast
+            # releasing and the aftercast taking hold in one breath, which
+            # is GWCA's "(aftercast)" note made concrete (castmech 3c).
+            # The attack-skill E5s carry no pulse, 2 of 2, so `attack`
+            # gates it. The flag is 1 here for any begun cast (the press
+            # or the previous pulse set it), so transition-only emits both
+            # halves.
+            if not cast["attack"]:
+                action_hold(send, state, 0,
+                            f"skill {cast['skill_id']} completes")
+                action_hold(send, state, 1,
+                            f"the aftercast of skill {cast['skill_id']}")
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],

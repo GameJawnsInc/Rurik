@@ -112,7 +112,9 @@ def section_hit_enemy():
     # batch [159/prop1, 207, 163/prop16, 30], n=425. This check first shipped
     # asserting the gain was LAST "because a hit has to land before it earns
     # one", which is a plausible story about a sequence ArenaNet does not send.
-    check(len(sent) == 4
+    # 5 since 2026-08-22: the [8 -> 1] action hold rides behind the STARTED
+    # (castmech 3c), joining the trio and the 0x00CF.
+    check(len(sent) == 5
           and ops.index(authsrv.AGENT_ADRENALINE_GAIN)
               == ops.index(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET) - 1,
           "control: the in-range path still sends the swing, gain before damage",
@@ -175,10 +177,12 @@ def section_skill_press():
     # absent, which is the whole subject of this section.
     check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
-          "the press sends E4, the energy debit, then the cast animation "
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
+          "the press sends E4, the energy debit, the cast animation "
           "(retail's batch order: spend before the skill-naming property, "
-          "45 of 45) -- and NO damage",
+          "45 of 45), and the [8 -> 1] hold closing the burst -- and NO "
+          "damage",
           f"ops={ops} -- until 2026-08-15 this also sent the swing trio, so a "
           f"two-second spell dealt its damage before its own casting "
           f"animation began")
@@ -533,14 +537,15 @@ def section_overkill():
     agent = state["agents"][10]
     damage_vals = [vals for op, vals, _ in sent
                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
-    # 7 = the swing trio, the 0x00CF the landing earns, then the kill window's
+    # 8 = the swing trio, the [8 -> 1] hold behind the STARTED (2026-08-22),
+    # the 0x00CF the landing earns, then the kill window's
     # three (status, reward, flags). It was 4 until step 9 gave a death its
     # reward and flags messages, and 6 until 2026-08-21 put adrenaline on the
     # wire; the count is spelled out rather than left as a bare literal so the
     # next change to the kill window names itself here. NOTHING is sent for
     # the dying AGENT's own adrenaline -- retail is self-scoped 9 of 9 -- and
     # the count is what would catch a later session "fixing" that asymmetry.
-    check(len(sent) == 7 and agent["dead"] is True and
+    check(len(sent) == 8 and agent["dead"] is True and
           damage_vals and damage_vals[0][3] == F32_MINUS_ONE,
           "an overkill swing sends -1.0 and the target dies",
           f"{len(sent)} messages (swing trio + kill window), "

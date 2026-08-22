@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=19)
+LEDGER = checks.Ledger("cast cycle", floor=20)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -66,11 +66,15 @@ def section_press_shape():
         # rides the press burst rather than the tick. Still an exact op list,
         # and it still says what this section is about: none of E5/E3/E6 and no
         # damage leaves at the press. test_pools sections 6-6c own the debit.
-        check(ops == [0x00E4, 0x00A2, 0x00A0],
-              "the press sends E4, the energy debit, then the 0x00A0 "
-              "[60, caster, target, skill] animation -- retail's own batch "
-              "order, spend before the property that names the skill "
-              "(45 of 45, test_pools section 2c) -- and nothing else yet",
+        check(ops == [0x00E4, 0x00A2, 0x00A0, 0x009F]
+              and sent[3][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1],
+              "the press sends E4, the energy debit, the 0x00A0 "
+              "[60, caster, target, skill] animation, then [8 -> 1] closing "
+              "the burst -- retail's own batch order, spend before the "
+              "property that names the skill (45 of 45, test_pools 2c), "
+              "hold last (3 of 3 bursts, castmech 3c). NO [8 -> 0] opens "
+              "it here: the flag was still 0, the ranger's t=12.9508 "
+              "elision -- and nothing else yet",
               f"ops={[hex(o) for o in ops]} -- E5/E3/E6 belong to the tick; "
               f"the old immediate 0x00E3 is gone from the press")
         # sent[2], not [1]: the debit now sits between E4 and the animation
@@ -110,7 +114,7 @@ def section_tick_order():
 
         _rewind(state, 1.0)                      # activation over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F]
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x009F, 0x009F]
               and sent[0][1] == [PLAYER, 42, 7, 8],
               "E5 fires at cast end carrying [agent, skill, copy, recharge "
               "seconds]", f"{sent}")
@@ -118,23 +122,34 @@ def section_tick_order():
               "and [58, agent, 0] rides the very next slot -- the corpus "
               "position, 5 of 5, four of them right behind the "
               "necromancer's spell E5s (castmech 3c)", f"{sent[1]}")
+        check([v[1] for v in (sent[2][1], sent[3][1])] == [PLAYER, PLAYER]
+              and (sent[2][1][0], sent[2][1][2]) == (8, 0)
+              and (sent[3][1][0], sent[3][1][2]) == (8, 1),
+              "and the hold pulse closes the instant: [8 -> 0] then "
+              "[8 -> 1], the cast releasing and the aftercast taking hold "
+              "-- 4 of 4 spell E5s, always at the batch's end "
+              "(castmech 3c)", f"{sent[2:]}")
 
         _rewind(state, 0.75)                     # aftercast over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3]
-              and sent[2][1] == [PLAYER, 42, 7],
-              "E3 fires an aftercast later, echoing the pending key",
-              f"{sent[2:]}")
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3]
+              and sent[4][1] == [PLAYER, 42, 7],
+              "E3 fires an aftercast later, echoing the pending key -- and "
+              "carries NO hold release: the corpus's E3 instants never "
+              "toggle property 8 (the flag rides until something else "
+              "frees it)", f"{sent[4:]}")
 
         _rewind(state, 7.25)                     # recharge over
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3, 0x00E6]
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6]
               and not state["pending_casts"],
               "E6 closes the cycle at E5+recharge and the entry is gone",
-              f"{sent[3:]}")
+              f"{sent[5:]}")
 
         authsrv.cast_tick(send, state, 0)
-        check(len(sent) == 4, "and a further tick fires NOTHING -- each "
+        check(len(sent) == 6, "and a further tick fires NOTHING -- each "
               "phase is once per cycle", f"{len(sent)} sends total")
     finally:
         authsrv.skill_timing = saved
@@ -156,10 +171,11 @@ def section_attack_family():
     authsrv._is_attack_skill = lambda sid: True
     try:
         _press(authsrv, send, state, skill=394)
-        check([op for op, _, _ in sent] == [0x00E4, 0x00A2, 0x00A0]
+        check([op for op, _, _ in sent] == [0x00E4, 0x00A2, 0x00A0, 0x009F]
               and sent[2][1] == [authsrv.agents.GV_ATTACK_SKILL_ACTIVATED,
                                  PLAYER, 0, 394],
-              "the burst keeps its shape and the animation carries 50 "
+              "the burst keeps its shape (the [8 -> 1] hold closes it, as "
+              "every family's does) and the animation carries 50 "
               "(CastAttackSkill) -- both live Power Shot presses, and all "
               "39 adrenal 0x00D2s ride into a property-50, never a 60 "
               "(castmech 3b/3c)",
@@ -167,13 +183,15 @@ def section_attack_family():
         sent.clear()
         _rewind(state, 1.0)
         authsrv.cast_tick(send, state, 0)
-        fifty_eight = [vals for op, vals, _ in sent
-                       if op == 0x009F
-                       and vals[0] == authsrv.agents.GV_SKILL_FINISHED]
-        check([op for op, _, _ in sent][0] == 0x00E5 and not fifty_eight,
-              "the E5 fires and NO [58, agent, 0] follows -- the ranger's "
-              "two Power Shot E5s carry neither 58 nor 46, 0 of 2, so the "
-              "spell family's property is not borrowed (castmech 3c)",
+        borrowed = [vals for op, vals, _ in sent
+                    if op == 0x009F
+                    and vals[0] in (authsrv.agents.GV_SKILL_FINISHED,
+                                    authsrv.agents.GV_DISABLED)]
+        check([op for op, _, _ in sent][0] == 0x00E5 and not borrowed,
+              "the E5 fires with NO [58, agent, 0] and NO hold pulse -- "
+              "the ranger's two Power Shot E5s carry neither 58 nor 46 "
+              "nor property 8, 0 of 2 each, so nothing of the spell "
+              "family's cast end is borrowed (castmech 3c)",
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
     finally:
         authsrv.skill_timing = saved
@@ -197,12 +215,13 @@ def section_order_pinned_when_inverted():
         sent.clear()
         _rewind(state, 0.5)   # e5 and e6 both past due; e3 not yet
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F],
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x009F, 0x009F],
               "E6 is due but WAITS: the observed order outranks the clock",
               f"{[hex(op) for op, _, _ in sent]}")
         _rewind(state, 0.5)
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x00E3, 0x00E6],
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6],
               "then E3 and E6 land together on the next tick, in order",
               f"{[hex(op) for op, _, _ in sent]}")
     finally:
@@ -242,19 +261,21 @@ def section_queue_law():
         _rewind(state, 2.75)   # first's E5+E3 due; second's begin due
         authsrv.cast_tick(send, state, 0)
         check([op for op, _, _ in sent] ==
-              [0x00E5, 0x009F, 0x00E3, 0x00A2, 0x00A0],
-              "the first cast completes and the queued burst rides its E3: "
-              "the debit then the animation, retail's own order at both of "
-              "153's E3 instants (E3, property 62, property 60 -- 2 of 2)",
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00A2, 0x00A0],
+              "the first cast completes (E5, 58, the hold pulse) and the "
+              "queued burst rides its E3: the debit then the animation, "
+              "retail's own order at both of 153's E3 instants (E3, "
+              "property 62, property 60 -- 2 of 2), with NO property 8 at "
+              "the begin (2 of 2 there too)",
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
-        check(sent[3][1][0] == authsrv.agents.GV_ENERGY_SPENT
-              and sent[4][1] == [authsrv.agents.GV_SKILL_ACTIVATED,
+        check(sent[5][1][0] == authsrv.agents.GV_ENERGY_SPENT
+              and sent[6][1] == [authsrv.agents.GV_SKILL_ACTIVATED,
                                  PLAYER, 0, 105]
               and second["begun"],
               "the debit names the energy property and the animation names "
               "the queued skill -- [60, 31, 40, 105] rode 153's E3 on the "
               "live wire, deferred to the moment the caster freed",
-              f"debit={sent[3][1]}, animation={sent[4][1]}")
+              f"debit={sent[5][1]}, animation={sent[6][1]}")
     finally:
         authsrv.skill_timing = saved
 

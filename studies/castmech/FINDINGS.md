@@ -255,7 +255,10 @@ channel or value). Wiring it is registered work, not a settled absence.
 **Property 8 pairs — 17 `[8, agent, 0]` and 17 `[8, agent, 1]` — bracket
 the press burst** (0 right after E4, 1 at the burst's end). GWCA's name for
 8 is `disabled`; the client dispatches it through `int-agentview`
-(skillcast §16.1); what it means is UNREAD and it stays unsent.
+(skillcast §16.1). *(This paragraph closed "what it means is UNREAD and it
+stays unsent" — both halves ended 2026-08-22: the handler and its follow-up
+calls are read in skillcast §16.2, the full trigger census is §3c below,
+and `authsrv.action_hold` now sends it in the measured contexts.)*
 
 **Property 45 appears exactly once in the corpus** — `[45, agent, 0]`
 immediately before the terminated cast's E2 (§3). It is not in the cast
@@ -568,6 +571,16 @@ server-side would be modeling a fiction.
 > §3b's registered follow-up, not silent additions. Win 3 was honoured by
 > writing no code. Tests: `test_playerswing.py` (floor 23),
 > `test_castcancel.py` (floor 15).
+>
+> **THE §3b REGISTER CLOSED 2026-08-22, same day, second pass (§3c).** 58 is
+> sent at the cast end (non-attack, the measured slot); the attack-skill
+> press animates with 50; the queued cast pays and animates at CAST-BEGIN;
+> and property 8 is wired as the view's action-hold flag, transition-only,
+> in its measured contexts, after the client handler read (skillcast §16.2).
+> **Property 45 alone stays unsent** — one corpus occurrence, no catalog
+> name, no handler read; still registered, not silent. Tests:
+> `test_castcycle.py` (floor 20), `test_playerswing.py` (floor 24),
+> `test_castcancel.py` (floor 15), `test_pools.py` 9/11e.
 
 ---
 

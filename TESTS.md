@@ -7152,7 +7152,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   animates with property 50, CastAttackSkill — both live Power Shot presses,
   and all 39 adrenal 0x00D2s ride into a 50 — and its E5 sends NO finished
   property, matching the ranger's two Power Shot E5s which carry neither 58
-  nor 46. The section that earns the entry is the QUEUE LAW: skill 105's two
+  nor 46 — nor property 8. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
+  the client-handler read, skillcast 16.2) is pinned through the same
+  sections: `[8 → 1]` closes every immediate press burst with the `→ 0` half
+  ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,
+  transition-only), the spell E5's instant ends with the `[8→0][8→1]` pulse
+  (4 of 4 live), the E3 toggles nothing, and the queued press and begin carry
+  no property 8 at all. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and
@@ -7174,29 +7180,39 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   later — where until 2026-08-22 it was one instant, the last attacker in the
   file with no mid-animation window (studies/combat 17e item 1; the windup
   constant's three independent legs are studies/castmech M1). §1 pins the
-  split: the first tick sends the START alone, the landing a windup later is
-  gain/damage/FINISHED with NO second START. §2 pins the gate as
+  split: the first tick sends the START with the `[8 → 1]` action hold riding
+  behind it (4 of 4 live, castmech 3c), the landing a windup later is
+  gain/damage/FINISHED with NO second START and no hold toggle — the chain
+  still holds. §2 pins the gate as
   START-to-START — right after a landing nothing fires, because the backswing
   half of the interval is a wait with no wire event, and the next START opens
   one interval after the previous one. §3 drops an armed swing whose target
   died, left reach, or whose owner died — silently, ArenaNet's own truncation
-  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event). §4 is the
+  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event), except that
+  a DEAD target also releases the hold on the wire (t=20.1637, n=1) where
+  out-of-range, unwitnessed, stays fully silent. §4 is the
   regression guard for the other callers: a default `hit_enemy` call still
   opens with its own STARTED, lands in one instant, and respects the interval
   gate — the attack-skill path's recorded divergence, deliberately unchanged.
-  §5–§7 are the cancel half: a skill press puts GV_ATTACK_STOPPED [3, agent,
-  0] immediately after E4 — retail's own burst slot, 2 of 2 live presses with
+  §5–§7 are the cancel half: a skill press puts `[8 → 0]` then
+  GV_ATTACK_STOPPED [3, agent,
+  0] immediately after E4 — retail's own burst order, the release preceding
+  the stop, 2 of 2 live presses with
   a chain running — drops the armed swing through the tick-owned flag, keeps
   the TARGET (retail resumes the chain), and stays silent when the chain is
   already paused (the necro's press 2 carries no STOPPED); the chain pauses
   while any pending cast is short of its E3 and the next swing opens on the
   first tick after it — ATTACK_STARTED rides the E3 instant on both live 105
   cycles; and a retarget stops the swing in flight with the corpus's
-  standalone-stop shape (17c, n=1) and opens on the new target the same tick.
+  standalone-stop shape (17c, n=1 — now pinned as the full `[8→0][3,agent,0]`
+  pair) and opens on the new target the same tick.
   Timing by rewinding the armed swing and the start gate, never by sleeping),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
-  only MARKS (`cancel_on_move`), the tick releases with the bare `0x00E2`
+  MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
+  release (4 of 4 movement instants in the corpus — during aftercast too,
+  where retail's client refuses the input and the general rule inherits),
+  the tick releases with the bare `0x00E2`
   [agent, skill, copy] — the corpus's own terminated-cast shape, E4 t=5.027
   answered at t=5.912 with no E5 between or ever after — and then §1's
   60-second rewind proves no E5/E3/E6 ever follows: no recharge started, no

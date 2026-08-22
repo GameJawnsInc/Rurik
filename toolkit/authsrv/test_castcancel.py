@@ -54,11 +54,16 @@ def section_move_cancels():
         _press(authsrv, send, state)
         sent.clear()
         authsrv.cancel_on_move(send, state, 0)
-        check(sent == [] and state["pending_casts"][0].get("cancelled"),
-              "the connection thread only MARKS -- the release belongs to "
-              "the tick, like every other phase",
+        check([(op, vals) for op, vals, _ in sent] ==
+              [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0])]
+              and state["pending_casts"][0].get("cancelled"),
+              "the connection thread MARKS the cast and releases only the "
+              "HOLD -- [8, agent, 0] rides the movement instant (4 of 4 in "
+              "the corpus, castmech 3c) while the E2 release still belongs "
+              "to the tick, like every other phase",
               f"sent={[(hex(o), v) for o, v, _ in sent]}, "
               f"cancelled={state['pending_casts'][0].get('cancelled')}")
+        sent.clear()
         check(state.get("cast_busy_until", 1e18) <= time.time(),
               "and the busy window is rolled back: the next press begins "
               "now, not behind the ghost of a cast that will never complete",
@@ -106,9 +111,15 @@ def section_aftercast_uncancellable():
               f"{state['pending_casts'][0]}")
         _rewind(state, 10.0)
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E3, 0x00E6],
+        # sent[0] is the movement's own [8, agent, 0]: the hold releases on
+        # ANY movement (the measured rule -- retail's client refuses input
+        # during aftercast, so the mid-aftercast case has no wire witness
+        # and inherits the general one). The CYCLE is untouched by it.
+        check([op for op, _, _ in sent] == [0x009F, 0x00E3, 0x00E6]
+              and sent[0][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0],
               "and the cycle closes normally: E3, then E6 -- the recharge "
-              "was already running and keeps running",
+              "was already running and keeps running (the movement released "
+              "the hold, nothing more)",
               f"{[hex(o) for o, _, _ in sent]}")
     finally:
         authsrv.skill_timing = saved
