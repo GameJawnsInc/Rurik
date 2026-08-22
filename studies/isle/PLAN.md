@@ -1165,6 +1165,16 @@ met branch rather than an in-run reference — add one effective-13 block next t
 old draft (4..5, actually 3..5) that would have read an ordinary result as a refutation
 of both models.
 
+**Rung 9 — BLOCKED ON ITS ANALYSER, and that is this arc's own rule (2026-08-21).**
+§3.4's skeptic pass already ends *"Every step here needs an analyser that does not
+exist. Cost it that way."* Rungs 7 and 8 each built the consumer BEFORE the run
+(`damagepass.py`, `bufflog.py`) and both paid for it. Rung 9 has no consumer, and
+three named traps waiting: re-creates arrive under a **different definition slot**
+(agent 38 goes 1434 → 1343), **visibility churn** cycles one agent five times in
+135 s, and both realistic kill targets **self-heal**. The build task is a respawn
+analyser keyed on **(definition slot, spawn position) with a preceding-death bit**
+— that is what stands between the arc and its next rung, and it is offline work.
+
 **Rung 9 — LIVE #4, the scripted pass.** Respawn timers (30 s targets, 120 s Masters),
 Master of Interrupts, Master of Hammers for knockdown, **deliberate deaths LAST** because
 death penalty moves the denominator of every fraction measured earlier in the same session.

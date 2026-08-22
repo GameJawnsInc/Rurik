@@ -3646,3 +3646,59 @@ CLIENT, which receives one `0x0042` and a late `0x0044` and cannot know what
 applied them. §32.7's conclusion that a retail player in a Student's ring watches
 a ghost also stands — that is the environmental case, measured on its own build.
 Only the generalisation to combat is withdrawn.
+
+### 32.9 The re-cast run ABORTED on a bad skill pick, and the pick was a scope error
+
+Run `20260821T184758`, plan `isle_rung8d_recast.txt` (sha256 `beb5ba72...`), seals
+AGREE, 3 keys, 2 connections. **Aborted by the operator at the tooltip step, and
+correctly.** The plan named skill **348** as "a Warrior SHOUT, recharge 4 s against
+a duration observed at 10.0 s ... already on the operator's bar". The bar skill is
+**364 = `"Charge!"`**, and the operator read its tooltip: **5 energy, 20 s
+recharge** against a 10-12 s duration. Recharge exceeds duration, so it can never
+overlap itself and the block cannot run.
+
+**THE ERROR IS WORTH MORE THAN THE RUN, and it is a scope error of the same family
+as §32.8's.** The plan's basis for "already on the operator's bar" was that 348
+appears three times in capture `20260819T132414`. **That capture is a TOWN
+DISTRICT (map 238)**, where other players are casting constantly — an effect
+landing in a capture means somebody nearby cast it, not that it is ours. The
+capture cannot distinguish the two, and the plan treated an ambient observation as
+a fact about our own character. *Appearing in a capture is not the same as being
+on our bar*, and nothing in the effect channel carries a source agent to say
+otherwise (§8.6's own premise, used here against itself).
+
+**What the aborted run still banked.** Six `skill 160` episodes (Windborne Speed,
+the Master of Winds control) and one `skill 364` at `field3 10 / dur 10.0`, all
+closing exact — and the operator's tooltip read is the **first operator-confirmed
+check of the `364 = "Charge!"` binding**, which [studies/isle §"Rung 8 prep"] had
+from GWW alone. The energy column agrees at 5. The rank-13 damage block never ran.
+
+**The requirement, stated mechanically so no one has to guess a name again.** The
+block needs a **self-targeted effect whose RECHARGE is shorter than its DURATION**
+— both numbers readable off the tooltip by the operator. Measured from the
+client's own `s_skill` table via `toolkit/clientscan/skilltable.py`, **build
+38849**, filtered to self-target (`target == 0`), profession common-or-Warrior,
+playable:
+
+| recharge | duration r0 → r15 | id | type | cost |
+|---|---|---|---|---|
+| 10 | 10 → 20 | **316** | **Shout** | 5 energy |
+| 4 | 10 (flat) | 348 | Shout | 4 adrenaline |
+| 4 | 1 → 15 | 366 | Shout | 4 adrenaline |
+| 4 | 8 (flat) | 346 | Stance | 5 energy |
+| 4 | 10 (flat) | 1701 | Stance | 5 energy |
+| 2 | 8 (flat) | 1142 | Stance | 1 adrenaline |
+
+**Prefer a SHOUT over a stance, and the reason is not aesthetic.** WIKI (GWW,
+"Stance"): *"Only one Stance can be active at any time … using a new Stance will
+replace the previous one."* Re-casting a stance is therefore governed by stance
+exclusivity and would answer *"how does a stance replace itself"*, which is not
+the question §32.8 left open. Shouts carry no such rule. **316** is the cleanest
+candidate — energy cost, and at the operator's Tactics ~10 its duration is ~16-17 s
+against a 10 s recharge. An adrenaline shout (348, 366) is also fine and has one
+advantage: adrenaline charges by hitting, so the block can ride on top of the
+rank-13 bench swings instead of needing its own setup.
+
+**Which of these the operator actually owns is UNKNOWN to us and is not knowable
+from a capture** — that is the whole point above. The next plan must be built
+around a skill the operator names from their own bar.
