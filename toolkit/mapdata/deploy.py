@@ -488,9 +488,21 @@ def assemble(area, heights, donor, dim, verbose=True):
         # first point repeated last, as 37,505 of retail's 37,548 outlined
         # props do.
         r = int(area.get("prop_outline", 0) or 0)
+        shape = str(area.get("prop_outline_shape", "square"))
         ring = ()
-        if r:
+        if r and shape == "square":
             ring = ((-r, -r), (r, -r), (r, r), (-r, r), (-r, -r))
+        elif r and shape == "L":
+            # A NON-CONVEX ring: the square with its north-west quadrant cut
+            # out. Its convex hull is the full square, so a mesh hole that
+            # fills the notch means the client used the hull or the bounding
+            # box, and one that leaves the notch walkable means it used the
+            # POLYGON. That is the only distinction one compile can draw here.
+            ring = ((-r, -r), (r, -r), (r, r), (0, r), (0, 0), (-r, 0),
+                    (-r, -r))
+        elif r:
+            raise Refused(
+                f"unknown prop_outline_shape {shape!r}; known: square, L")
         props = []
         for gx, gy in cells:
             z = float(heights[trn_mod.Terrain.index(gx, gy, dim)])
