@@ -64,7 +64,11 @@ refutation (W17).
 `0x03` and above cross a `< 3` test at `0x0070D9DE` and move another bit;
 untested, don't.
 
-**To set both levers: `map_flags = 0x02000001`.**
+**To set both levers: `map_flags = 0x02000001`.** W24 shipped exactly that
+and the compiled head read it back intact, with bit 0 demonstrably in force
+(a below-water pool meshed). Whether the top byte's SET was honoured in the
+same compile is UNVERIFIED -- W24's mesh failure was geometric, and a
+floor-only mesh discriminates nothing about thresholds.
 
 ## 3. Slopes — there are THREE classes, not two
 
@@ -134,6 +138,15 @@ stating because it makes the forbidden band impossible rather than avoided:
   forbidden band somewhere, always). Ashcoil hit this three separate times
   (the mouth, the top-out, the draw's uphill bank); the fix was a slot each
   time, and the third was caught only by the offline validator.
+
+**And one W24 lesson the master rule does NOT cover: a narrow gate can fail
+to flood even when every local slope is legal.** Ashcoil's coil entrance --
+~3 cells wide between a 1008-unit wall and the flank ridge, wobbled and
+snapped -- never admitted the flood, and connectivity pruning then deleted
+the entire elevated system. The pool's circular 48-riser staircase on the
+same map meshed fine, so the staircases were not the problem; the GATE was.
+Every surface this arc walked before W24 was wide open. Until clearance is
+measured, treat anything under ~5 cells of walkable width as unproven.
 
 ### Authoring an EXACT slope
 

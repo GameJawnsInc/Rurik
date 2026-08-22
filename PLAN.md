@@ -2149,7 +2149,22 @@ at world maxY (FINDINGS 4; W23's apron trapezoid confirms), so trees now
 stand at their cell's RENDER position -- a latent defect every flat or
 y-symmetric treed map masked. RECONSTRUCTION until a client run; the run is
 staged with predictions registered and waits on a free harness.
-`vault/research/worldmaps/WORLDMAPS-W24-RUN.md`.
+
+**RAN 2026-08-22, and the verdict is SPLIT.** Mechanically green end to
+end on a fresh chain (0x5F0B2, map row 167 -- the map-166 attempt was
+rightly REFUSED by the per-area journal check): 23 trapezoids, heights
+4096/4096, both flag levers carried into the compiled head. **But the
+owner walked it live and called it a complete failure, correctly.** The
+mesh is the crater floor ONLY -- the coil's ~3-cell entrance gate never
+flooded and pruning deleted everything above it (the pool's circular
+48-riser staircase DID mesh, so staircases are fine and CLEARANCE of
+narrow gates is the unmeasured variable). The donor's prop model 0 is a
+monumental building, not a tree -- 32 of them loom backface-culled over
+the bowl. No water surface renders, steep faces smear the donor texture,
+no minimap exists for created maps. **The engine half of the mod-platform
+framing is ahead of the content half, and the gap is what a player hits
+in the first thirty seconds.** Owner's call: not ready -- arc paused here.
+`vault/research/worldmaps/WORLDMAPS-W24-RUN.md` (predictions AND results).
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
