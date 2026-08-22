@@ -5838,8 +5838,11 @@ def begin_attack(send, state, target_id, conn_id):
     if state.get("attacking") != target_id:
         state["attacking"] = target_id
         # Swing immediately on the first click, then let the tick keep time.
-        # Waiting a full interval makes the click feel ignored.
+        # Waiting a full interval makes the click feel ignored. Both timers:
+        # last_hit gates the attack-skill path, player_last_swing gates the
+        # two-phase auto swing (attack_tick).
         agent["last_hit"] = 0.0
+        state["player_last_swing"] = 0.0
         print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
               flush=True)
 
@@ -6048,31 +6051,88 @@ def handle_perf_report(values, send, state, conn_id):
 
 
 def attack_tick(send, state, conn_id):
-    """Keep swinging at whatever the player last clicked."""
+    """Keep swinging at whatever the player last clicked -- in TWO phases.
+
+    The player's swing is the agent model's now: ATTACK_STARTED opens it, the
+    damage lands `swing_windup(ATTACK_INTERVAL)` later, and the gate between
+    swings runs START to START -- `state["player_last_swing"]`, the same shape
+    as the agents' `last_swing`. Until 2026-08-22 the player was the one
+    attacker with no mid-animation window at all (STARTED + damage + FINISHED
+    in one call, studies/combat/PLAN.md 17e item 1), which meant nothing could
+    ever cancel a swing because no swing was ever in flight.
+
+    THE CONSTANT NOW HAS THREE INDEPENDENT LEGS (studies/castmech M1): NPC
+    swings 0.4540 (n=41), the player's own clean auto-attacks 0.4583/0.4669,
+    and Power Shot's E4->E5 at 0.4601/0.4595 of the declared bow speed -- all
+    of them the wiki's "half-way through the interval" measured. The second
+    half of the interval -- the backswing -- has NO wire event and gets no
+    code: damage and the close are one instant (40 of 40 live), and the next
+    START is what the interval gates.
+
+    An armed swing that loses its target -- death, removal, out of range --
+    is DROPPED, silently, which is retail's own truncation: ArenaNet's 7th
+    Lakeside swing ended 0.24 s in when the target died, with no closing
+    event. `state["player_swing"]` is owned by THIS thread: armed here,
+    landed here, dropped here. The connection thread asks for a drop through
+    `player_swing_cancel` and never touches the entry itself -- the same
+    single-writer split `pending_casts`/`cast_tick` already prove.
+    """
     if state.get("player_dead"):
-        # A dead player does not keep hitting things. Cheap, but it is the
-        # difference between a death and a pause in the animation.
+        # A dead player does not keep hitting things, and does not land the
+        # swing it was mid-way through either.
+        state["player_swing"] = None
         return
     target_id = state.get("attacking")
     if not target_id:
+        state["player_swing"] = None
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         state["attacking"] = None
+        state["player_swing"] = None
         return
     px, py = state.get("pos", (0.0, 0.0))
     ax, ay = agent["pos"]
     if math.hypot(ax - px, ay - py) > ATTACK_RANGE:
         # Out of range. Real Guild Wars would walk the player into range; we do
         # not move the player, so the swing simply stops and resumes when they
-        # walk back. Keep the target so it picks up again without re-clicking.
+        # walk back. Keep the target so it picks up again without re-clicking
+        # -- but the swing IN FLIGHT whiffs, exactly as the agent loop drops
+        # `swing_lands_at` when the player leaves reach.
+        state["player_swing"] = None
         return
-    hit_enemy(send, state, target_id, conn_id)
+    now = time.time()
+    swing = state.get("player_swing")
+    if swing is not None:
+        # TWO PHASES, same discipline as the agent loop: a landing that is due
+        # is always resolved before a new swing starts, so a slow tick cannot
+        # start twice and land once. The landing goes to the target the swing
+        # OPENED on -- hit_enemy re-reads it from state and refuses a corpse.
+        if now >= swing["lands_at"]:
+            state["player_swing"] = None
+            hit_enemy(send, state, swing["target"], conn_id, armed=True)
+        return
+    if now - state.get("player_last_swing", 0.0) < ATTACK_INTERVAL:
+        return
+    state["player_last_swing"] = now
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+         f"attack_started: player swings at {target_id}")
+    state["player_swing"] = {"target": target_id,
+                             "lands_at": now + swing_windup(ATTACK_INTERVAL)}
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
-              exact=None, swing=True, label="one swing"):
+              exact=None, swing=True, label="one swing", armed=False):
     """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `armed` TRUE means this call is the SECOND half of a swing attack_tick
+    already opened: the START was gated by `player_last_swing` and announced
+    with its own ATTACK_STARTED a windup ago, so this call skips both the
+    interval gate and the STARTED send and lands the damage + close. FALSE
+    (the default) is the one-instant shape every other caller keeps -- the
+    attack-skill path deliberately stays one-instant, its timing rides the
+    weapon and is a recorded divergence (studies/combat step 3).
 
     `bonus_damage` is an attack skill's "+ Damage", in health points, added to
     the swing this call already lands. ONE damage number, not two, because
@@ -6102,7 +6162,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if agent is None or agent["dead"]:
         return
     now = time.time()
-    if now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
+    if not armed and now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
@@ -6165,7 +6225,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
     # is the agent swinging. Same shape, different roles per value id, which is
     # exactly what GWCA's per-id note was trying to warn about.
-    if swing:
+    if swing and not armed:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
              f"attack_started: player swings at {target_id}")

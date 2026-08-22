@@ -7148,6 +7148,22 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   real-content section presses skill 153 and requires E5 to carry recharge 8,
   the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
   vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_playerswing.py` (the player's auto swing is TWO
+  phases — ATTACK_STARTED, then the damage `swing_windup(ATTACK_INTERVAL)`
+  later — where until 2026-08-22 it was one instant, the last attacker in the
+  file with no mid-animation window (studies/combat 17e item 1; the windup
+  constant's three independent legs are studies/castmech M1). §1 pins the
+  split: the first tick sends the START alone, the landing a windup later is
+  gain/damage/FINISHED with NO second START. §2 pins the gate as
+  START-to-START — right after a landing nothing fires, because the backswing
+  half of the interval is a wait with no wire event, and the next START opens
+  one interval after the previous one. §3 drops an armed swing whose target
+  died, left reach, or whose owner died — silently, ArenaNet's own truncation
+  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event). §4 is the
+  regression guard for the other callers: a default `hit_enemy` call still
+  opens with its own STARTED, lands in one instant, and respects the interval
+  gate — the attack-skill path's recorded divergence, deliberately unchanged.
+  Timing by rewinding the armed swing and the start gate, never by sleeping),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
