@@ -1552,8 +1552,16 @@ def section_adrenaline_wire():
             state["agents"][7]["last_hit"] = 0.0
             authsrv.hit_enemy(send, state, 7, 0)
         sent.clear()
-        authsrv.handle_skill_press([0, 382, 0, 7], send, state, 0,
-                                   authsrv.GAME_CMSG_USE_SKILL)
+        # 382 IS an attack skill (type_code 14) -- the 39 corpus 0x00D2s are
+        # all warrior attack skills -- but a bare machine has no row to say
+        # so, so the family is forced rather than read.
+        saved_attack = authsrv._is_attack_skill
+        authsrv._is_attack_skill = lambda sid: True
+        try:
+            authsrv.handle_skill_press([0, 382, 0, 7], send, state, 0,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+        finally:
+            authsrv._is_attack_skill = saved_attack
         ops = [op for op, _v, _w in sent]
         spends = adrenaline_msgs(sent, authsrv.AGENT_ADRENALINE_SPEND)
         LEDGER.ok(spends == [[authsrv.PLAYER_AGENT_ID, 382, 0]],
@@ -1566,15 +1574,17 @@ def section_adrenaline_wire():
         i = ops.index(authsrv.AGENT_ADRENALINE_SPEND)
         after = sent[i + 1]
         LEDGER.ok(after[0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
-                  and after[1][0] == agents.GV_SKILL_ACTIVATED
+                  and after[1][0] == agents.GV_ATTACK_SKILL_ACTIVATED
                   and after[1][3] == 382,
                   "and the NEXT message is the property naming the same skill",
                   f"{[hex(o) for o in ops]} -- MEASURED 39 of 39: every "
                   f"opcode-210 in the 14 live captures is followed at index "
                   f"+1, same timestamp, by the int property naming that agent "
-                  f"and that skill. Zero the other way round. Retail's is "
-                  f"property 50 (attack-skill) and ours is 60, which is a "
-                  f"pre-existing divergence and not this one")
+                  f"and that skill. Zero the other way round. The property is "
+                  f"50 in all 39 -- the attack-skill flavour -- and since "
+                  f"2026-08-22 the press picks 50 for that family, so the "
+                  f"whole measured adjacency is pinned here, property id "
+                  f"included")
         LEDGER.ok(props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                         agents.GV_ENERGY_SPENT) == [],
                   "and NO property 62 rides with it, which is ArenaNet's rule",

@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=15)
+LEDGER = checks.Ledger("cast cycle", floor=16)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -140,10 +140,11 @@ def section_tick_order():
         authsrv.skill_timing = saved
 
 
-def section_attack_end_is_silent():
+def section_attack_family():
     import authsrv
 
-    print("\n2b. an ATTACK skill's cast end carries no finished property")
+    print("\n2b. the ATTACK family: property 50 at the press, silence at "
+          "the cast end")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = {"agents": {}}
@@ -155,6 +156,14 @@ def section_attack_end_is_silent():
     authsrv._is_attack_skill = lambda sid: True
     try:
         _press(authsrv, send, state, skill=394)
+        check([op for op, _, _ in sent] == [0x00E4, 0x00A2, 0x00A0]
+              and sent[2][1] == [authsrv.agents.GV_ATTACK_SKILL_ACTIVATED,
+                                 PLAYER, 0, 394],
+              "the burst keeps its shape and the animation carries 50 "
+              "(CastAttackSkill) -- both live Power Shot presses, and all "
+              "39 adrenal 0x00D2s ride into a property-50, never a 60 "
+              "(castmech 3b/3c)",
+              f"{[(hex(op), vals) for op, vals, _ in sent]}")
         sent.clear()
         _rewind(state, 1.0)
         authsrv.cast_tick(send, state, 0)
@@ -256,7 +265,7 @@ def section_real_content():
 def main():
     section_press_shape()
     section_tick_order()
-    section_attack_end_is_silent()
+    section_attack_family()
     section_order_pinned_when_inverted()
     section_queue_law()
     section_real_content()

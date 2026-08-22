@@ -4830,7 +4830,10 @@ Every one of these, in the order they were written:
   and the target is 100 health precisely so its own pool clears the 1% floor, because
   the first cut used a 5,000-health dummy and the silence was vacuous); a sub-1% gain
   sends nothing with an 11% control at the same call site that does; the spend lands
-  **immediately before the property naming the skill**, 39 of 39 in the corpus, and
+  **immediately before the property naming the skill**, 39 of 39 in the corpus —
+  property 50 in all 39, the attack-skill flavour, which the press has picked for
+  that family since 2026-08-22, so §11e pins the id too (family forced via a
+  stubbed `_is_attack_skill`, bare machines having no rows) — and
   carries **no property 62** — which is ArenaNet's own
   `!(energyCost && skillData.adrenaline)` asserting at two independent sites that a
   skill cannot carry both costs, so that order never has to be decided. **§11f is the
@@ -7140,10 +7143,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   six. Since 2026-08-22 the E5 instant also carries `[58, agent, 0]`
   (GV_SKILL_FINISHED) in the very next slot — the corpus position, 5 of 5,
   castmech 3c — and §2 pins both the send and the slot, while §2b pins the
-  family boundary: an ATTACK skill's E5 (forced via a stubbed
-  `_is_attack_skill`, because a bare machine has no content rows) sends NO
-  finished property, matching the ranger's two Power Shot E5s which carry
-  neither 58 nor 46. The section that earns the entry is the QUEUE LAW: skill 105's two
+  family boundary from both ends: an ATTACK skill's press (family forced via a
+  stubbed `_is_attack_skill`, because a bare machine has no content rows)
+  animates with property 50, CastAttackSkill — both live Power Shot presses,
+  and all 39 adrenal 0x00D2s ride into a 50 — and its E5 sends NO finished
+  property, matching the ranger's two Power Shot E5s which carry neither 58
+  nor 46. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and

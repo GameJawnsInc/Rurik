@@ -7399,6 +7399,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     skill_id, copy, target = values[1], values[2], values[3]
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
+    # The skill's FAMILY, read once: it picks the animation property below
+    # (50 vs 60) and rides the pending entry for the movement-cancel
+    # asymmetry and the cast-end property. From the content row's type code,
+    # not from which of the two press opcodes carried it -- the table is the
+    # authority on what the skill IS, and both opcodes land here.
+    is_attack = _is_attack_skill(skill_id)
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
     #
@@ -7552,8 +7558,9 @@ def handle_skill_press(values, send, state, conn_id, opcode):
             # property naming the same skill on the same agent. Zero
             # exceptions and zero occurrences the other way round. (The
             # property is 50 in all 39, the attack-skill flavour; these are
-            # warrior sword adrenal skills. This server sends 60 for every
-            # cast, which is a pre-existing divergence and not this one.)
+            # warrior sword adrenal skills -- and since 2026-08-22 the
+            # animation send below picks 50 for exactly that family, so the
+            # adjacency this measured is now what our wire produces too.)
             #
             # So the spend PRECEDES the naming property, which is the SAME
             # answer the energy arc measured for property 62 (45 of 45, same
@@ -7599,14 +7606,18 @@ def handle_skill_press(values, send, state, conn_id, opcode):
                   + f": {pool.current:.2f}/{pool.maximum:.0f} left", flush=True)
 
     # The cast animation, in the OBSERVED player shape: 0x00A0
-    # [60, caster, target, skill], 4 of 4 player activations in the live
-    # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
-    # supports). GV_SKILL_FINISHED (58) is SENT since 2026-08-22, at cast
+    # [prop, caster, target, skill] -- and THE PROPERTY IS THE FAMILY'S.
+    # A spell's press carries 60, 4 of 4 player activations in the live
+    # corpus; an ATTACK skill's carries 50 (GWCA CastAttackSkill): both
+    # Power Shot presses ([50, 31, 278, 394] at t=12.9508 and 21.5433,
+    # studies/castmech 3b/3c), and all 39 adrenal 0x00D2s are followed by a
+    # property-50 naming the same skill -- warrior sword attack skills,
+    # every one. This sent 60 for every cast until 2026-08-22.
+    # (The NPC path above sends the 3-slot 0x009F form its own n=1
+    # supports.) GV_SKILL_FINISHED (58) is SENT since the same day, at cast
     # end in cast_tick's E5 branch where all five corpus instances ride --
     # the "0 of 21,543" sentence that used to justify leaving it unsent
     # here was a count from the wrong channel (studies/castmech 3b/3c).
-    # Still registered beside it: the prop-8 pairs (the press-burst
-    # bracket) and the queued-cast divergence noted below.
     #
     # AND THE INSTANT IS A DIVERGENCE FOR QUEUED CASTS, measured the same
     # day: retail sends this property (and the energy debit) at CAST-BEGIN
@@ -7615,8 +7626,11 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # send both at the press always; for a queued cast that is early by the
     # rest of the previous cast's aftercast.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
-         f"cast animation: player casts {skill_id}")
+         [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
+          else agents.GV_SKILL_ACTIVATED,
+          PLAYER_AGENT_ID, target or 0, skill_id],
+         f"cast animation: player {'strikes with' if is_attack else 'casts'} "
+         f"{skill_id}")
 
 
     state.setdefault("pending_casts", []).append({
@@ -7627,12 +7641,13 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # revived or removed by the time the cast completes, and hit_enemy
         # re-reads it from state and refuses a corpse.
         "target": target,
-        # `begin_at` and `attack` exist for the movement cancel and nothing
-        # else: WIKI (GWW "Quarterstepping") says movement cannot cancel an
-        # attack skill mid-activation, but a skill still QUEUED -- its begin
-        # not yet reached -- is droppable whatever its type. cancel_on_move
-        # is the only reader.
-        "begin_at": begin, "attack": _is_attack_skill(skill_id),
+        # `begin_at` exists for the movement cancel: WIKI (GWW
+        # "Quarterstepping") says movement cannot cancel an attack skill
+        # mid-activation, but a skill still QUEUED -- its begin not yet
+        # reached -- is droppable whatever its type. `attack` serves that
+        # same asymmetry AND the cast end, where the finished property is
+        # the non-attack family's alone (cast_tick's E5 branch).
+        "begin_at": begin, "attack": is_attack,
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
