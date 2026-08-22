@@ -132,15 +132,25 @@ FLOAT_OPS = (0x00A2, 0x00A3)
 CAST_PROPS = {48, 50, 60}           # instant, attack-skill, skill activated
 PROP_ATTACK_SKILL_ACTIVATED = 50    # the one §7 finds behind every spend
 
-# MEASURED 2026-08-21 over all 14 capture directories under
-# vault/captures/live. 20260817T175358 has no wire.jsonl and contributes zero
-# connections, which is correct and is why the capture count and the connection
-# count are pinned separately.
-CORPUS_CAPTURES = 14
-CORPUS_CONNECTIONS = 49
-CORPUS_MESSAGES = 114985
-CENSUS = {SMSG_ADRENALINE_CHARGE: 663, SMSG_ADRENALINE_CLEAR: 22,
-          SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 39}
+# MEASURED 2026-08-21 over all capture directories under vault/captures/live.
+# 20260817T175358 has no wire.jsonl and contributes zero connections, which is
+# correct and is why the capture count and the connection count are pinned
+# separately.
+#
+# RE-PINNED THE SAME DAY, 14 captures -> 20, when the campaign's own live runs
+# landed. Everything scaled the way a bigger corpus should and nothing changed
+# shape: 209 is STILL zero (its "nothing on retail" reading now rests on 143,408
+# messages rather than 114,985), and the sub-25 tail did NOT move at all -- all
+# 255 new gains carry exactly 25, so they are landed weapon hits and not damage
+# taken. That last fact is worth stating because a live plan explicitly asked for
+# light hits TAKEN, to put a sample under 1% of maximum health and settle the
+# rounding boundary `pools.damage_units` extrapolates. None arrived; the boundary
+# is still extrapolated.
+CORPUS_CAPTURES = 20
+CORPUS_CONNECTIONS = 59
+CORPUS_MESSAGES = 143408
+CENSUS = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
+          SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 40}
 
 # 207's amount, split into the two populations §4b is about. A STRIKE is 25 --
 # GWW ("Adrenaline", rev. 2026-07-02) gives one per successful weapon hit -- and
@@ -148,13 +158,18 @@ CENSUS = {SMSG_ADRENALINE_CHARGE: 663, SMSG_ADRENALINE_CLEAR: 22,
 # health lost, floored. NOTHING JOINS THE TAIL TO HEALTH TRAFFIC YET, so the 25s
 # are OBSERVED as a value and the reading of the tail is not a measurement.
 STRIKE_UNITS = 25
-STRIKE_COUNT = 631
+STRIKE_COUNT = 886
 SUB_STRIKE = {3: 6, 4: 12, 5: 1, 6: 5, 7: 1, 8: 3, 11: 4}
 
 # The three skills retail spends adrenaline on in this corpus, and the number of
 # connections carrying 207 at all.
-SPEND_SKILLS = {382: 20, 384: 11, 385: 8}
-SELF_SCOPED_CONNECTIONS = 9
+# 348 is OURS -- capture 20260821T205552, the live run that settled the timeout
+# anchor. It is the first spend in this corpus that is not a sword attack skill:
+# a self-targeted adrenal skill (type_code 15, target 0, 80 units), chosen for
+# that plan precisely because it lands no hit. It broadened the model on arrival;
+# see ACTIVATION_FOLLOWER below.
+SPEND_SKILLS = {348: 1, 382: 20, 384: 11, 385: 8}
+SELF_SCOPED_CONNECTIONS = 11
 
 # ---------------------------------------------------------------------------
 # THE CLIENT, build 38797. Every VA below was read out of the pinned pristine
@@ -613,8 +628,23 @@ def section_order(agg):
               f"{dict(order)} as (stream delta, property id) -> n. Joined on "
               f"BOTH adjacency and simultaneity, so a coincidence has to "
               f"satisfy two conditions")
-    LEDGER.ok(set(order) == {(1, PROP_ATTACK_SKILL_ACTIVATED)},
-              f"and the 210 comes FIRST, by exactly one message, "
+    # THE FOLLOWER IS NOT ALWAYS PROPERTY 50, and this check said it was until
+    # 2026-08-21. It asserted `set(order) == {(1, 50)}` -- delta exactly +1, and
+    # "never 48 or 60" in its own detail string -- on a corpus whose every spend
+    # was a sword ATTACK skill. Our own live capture (20260821T205552) spent
+    # skill 348, a SELF-TARGETED adrenal skill, and it follows with property 48
+    # (instant_skill_activated) at delta +2. The claim that survives is the one
+    # the sender actually needs, and it is unbroken 40 of 40: THE SPEND COMES
+    # FIRST. Which property announces the cast, and how many messages behind,
+    # depends on the kind of skill -- an attack skill takes 50, an instant takes
+    # 48 -- so the sender must not key on the follower's identity.
+    #
+    # Worth keeping as the shape of the error: the old assertion was true of
+    # every observation it had and false about the protocol, and the thing that
+    # exposed it was one capture of a deliberately DIFFERENT kind of skill.
+    LEDGER.ok(all(delta >= 1 for delta, _prop in order)
+              and set(p for _d, p in order) <= {PROP_ATTACK_SKILL_ACTIVATED, 48},
+              f"and the 210 comes FIRST in every case, by one message or two, "
               f"{total} of {total}",
               f"{dict(order)} -- delta +1 in every case, and the follower is "
               f"always property {PROP_ATTACK_SKILL_ACTIVATED} "

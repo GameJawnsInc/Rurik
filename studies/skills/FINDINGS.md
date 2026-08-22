@@ -3728,3 +3728,96 @@ corpus cannot arbitrate — no spend sits inside any of the 15 sampled clear
 windows. That needs a **live** capture of a spend followed by 25 quiet seconds,
 which is a human-driven run under `PLAN.md` §6.2, not a loopback one.
 
+## 33. The timeout anchors on the last GAIN — a live capture, by 7 ms
+
+**2026-08-21, capture `20260821T205552`, LIVE against the real service**, plan
+`adren_spend_clock.txt` sealed before launch (sha `0e73d3ae…`, `plan_sealed:
+true`, 3 keys tapped). The last question on this channel, and the only one a
+loopback run could not answer.
+
+### 33.1 The question, and why only a live run could settle it
+
+Our server drops a charged bar 25 s after the last GAIN, and `AdrenalinePool.use`
+deliberately does not restart that clock. GWW says adrenaline is lost after 25 s
+"out of combat" and casting is plainly combat, so the rival reading was at least
+as intuitive. **The corpus could not arbitrate**: not one of the 15 isolated
+`0x00D0` clears had a `0x00D2` spend anywhere in its window. Only a session that
+*creates* that case could decide it, and only retail's own server could be the
+witness.
+
+### 33.2 The design, and the one thing it had to avoid
+
+The discriminator is a **gap between the last hit and the spend** — without it
+both hypotheses predict the same instant and the run measures nothing. And the
+trap: **the spend had to land no hit**, because a landed hit is +25 adrenaline
+and would restart the very clock being timed. The plan called for a
+self-targeted adrenal skill; the operator spent **skill 348** (type_code 15,
+target 0, 80 units), and the wire confirms it worked — **zero `0x00CF` after the
+spend**, so the interval is clean.
+
+### 33.3 The measurement
+
+```
+last GAIN   t = 18.939
+SPEND       t = 36.746      (17.807 s after the last gain)
+CLEAR       t = 43.932
+```
+
+| anchor | predicts | Δ from measured |
+|---|---|---|
+| **the last GAIN** (our rule) | 43.939 | **−0.007 s** |
+| the SPEND (the rival) | 61.746 | −17.814 s |
+
+**Retail anchors on the last gain, by 7 milliseconds against an alternative
+17.8 seconds away.** `AdrenalinePool.use` is correct as written and the
+divergence is closed in our favour. n=1 — one episode — but the discrimination
+is three orders of magnitude wider than the residual.
+
+### 33.4 What the operator's experience says about the plan
+
+The run worked; the *instructions* were poor, and the operator said so. Two real
+defects, recorded because live sessions are expensive and the next plan should
+not repeat them:
+
+- **The plan never said the 25 s clock is already running during the pause.**
+  From the operator's seat "wait 10 s, spend, now wait 40 more" reads as nonsense
+  when the bar is visibly about to drop in 7. The 40 s instruction was
+  *experimentally* right — it is what makes a clear at 43.9 meaningful, since a
+  spend-anchored clock would not have fired until 61.7 — but an unexplained
+  correct instruction is indistinguishable from a wrong one.
+- **The pause eats the window, and the plan never bounded it.** The gap came out
+  at 17.8 s of a 25 s budget. Eight seconds slower and the bar would have dropped
+  *before* the spend and the run would have measured nothing. The plan should
+  have said: keep the pause short enough that the spend lands with at least 5 s
+  to spare, and if the bar drops first that is a failed attempt, not a result.
+
+The irony worth keeping: the operator's "too slow" execution produced **better**
+data than the plan asked for. 17.8 s of separation put the hypotheses nearly
+18 s apart instead of 10.
+
+### 33.5 What the same capture cost and gave elsewhere
+
+**Gave, unasked:** the corpus grew 14 → 20 captures, and the energy oracle in
+`test_pools` went red on it — correctly. A new property-43 rate,
+`0.038823530077934265`, joins to **(2 pips, 17 max)**, and **17 = 20 × 0.85**: a
+Warrior's base pool under a −15 death penalty, carrying its 2 pips unchanged.
+That is a **second** death-penalty witness for the `f32(0.33)·pips ÷ max`
+quantum, from a different capture and a different base than §23's original
+(25 → 22), and it arrived *as a test failure* because the armour table had no
+17-energy row. The table was too narrow and the model was right.
+
+**Also gave:** a second property-52 resurrect witness, both exactly 1.0.
+
+**And refuted one of our own claims.** `test_adrenwire` §7 asserted the spend's
+follower is "always property 50, never 48 or 60", at delta exactly +1 — true of
+every spend it had, all of them sword attack skills. Skill 348 follows with
+**property 48** (`instant_skill_activated`) at delta **+2**. What survives, 40 of
+40, is the half the sender actually needs: **the spend comes first**. The
+follower's identity depends on the kind of skill and must not be keyed on.
+
+**Cost, honestly:** the plan asked for light hits TAKEN as a free harvest, to put
+a sample under 1% of maximum health and settle the boundary
+`pools.damage_units` extrapolates. All 255 new gains carry exactly 25 — they are
+landed hits, not damage taken. **The sub-1% boundary is still extrapolated**, and
+it is now the cheapest open item on this channel.
+

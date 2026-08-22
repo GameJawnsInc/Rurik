@@ -1527,11 +1527,29 @@ UNMAPPED message).
    being spent to zero and then *fell* with nothing on the wire; the answer came
    from the residue after the sweep cleared. Fourth metric trap in this series,
    fourth one caught by an in-frame control rather than by re-reading code.
-   **WHAT REMAINS IS NOT LOOPBACK-TESTABLE:** whether a spend restarts retail's
-   25 s clock. Ours does not, the corpus cannot arbitrate (no spend sits inside
-   any of the 15 sampled clear windows), and settling it needs a **live**
-   capture of a spend followed by 25 quiet seconds — human-driven under §6.2,
-   not something a loopback run can answer. What remains static-only is
+   **AND THE LAST QUESTION IS SETTLED, LIVE (2026-08-21, capture
+   `20260821T205552`, §33).** Whether a spend restarts the 25 s clock: **it does
+   not.** Sealed plan, self-targeted spend so no hit could restart the clock
+   (zero `0x00CF` after it), and a 17.8 s gap between the last gain and the
+   spend to separate the hypotheses — last gain 18.939, spend 36.746, clear
+   43.932, against **43.939 predicted for a gain-anchored clock and 61.746 for a
+   spend-anchored one. Off by 7 ms.** `AdrenalinePool.use` is correct as written
+   and the divergence is closed. n=1, but the alternative is 17.8 s away.
+   **THE CHANNEL IS NOW CLOSED**, wire and screen.
+   **Three things that capture gave for free**, all from the corpus growing
+   14 → 20: a **second death-penalty witness** for the energy quantum —
+   rate 0.0388235 joins to (2 pips, **17** max) and 17 = 20 × 0.85, a Warrior's
+   base under −15 morale with its pips unchanged, which arrived as a `test_pools`
+   FAILURE because the armour table had no 17-energy row (the table was narrow,
+   the model was right); a second property-52 resurrect witness; and a
+   **refutation of one of our own claims** — `test_adrenwire` said the spend's
+   follower is "always property 50, never 48", true of every sword attack skill
+   it had, and our self-targeted skill 348 follows with property **48** at delta
+   +2. What survives 40 of 40 is the half the sender needs: the spend comes
+   first. **What it did NOT give:** the plan asked for light hits TAKEN to settle
+   the sub-1% rounding boundary, and all 255 new gains are exactly 25 — landed
+   hits, not damage taken. That boundary stays extrapolated and is now the
+   cheapest open item here. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
 2. **What answers a refused press.** Ours is silence and the client visibly

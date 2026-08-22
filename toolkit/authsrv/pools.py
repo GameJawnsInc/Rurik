@@ -627,16 +627,33 @@ class AdrenalinePool:
     def use(self, skill_id):
         """Spend it: own pool to zero, every OTHER pool down one strike.
 
-        THIS DOES NOT RESTART THE 25-SECOND CLOCK, and that is a refusal to
-        guess rather than an oversight. GWW says adrenaline is lost after 25
-        seconds "out of combat" and casting is plainly combat, so restarting it
-        here is the intuitive move -- but the only evidence we have is the 15
-        isolated clears in `tick`, and NONE of them has a spend in its window,
-        so retail could anchor either way and the corpus cannot tell us which.
-        The consequence is small and worth stating: after a spend that leaves
-        another pool charged, our 0x00D0 goes out 25 s after the last HIT, which
-        may be earlier than retail's. Named as a divergence rather than papered
-        over; one capture of a spend followed by 25 quiet seconds settles it.
+        THIS DOES NOT RESTART THE 25-SECOND CLOCK, and since 2026-08-21 that
+        is MEASURED on ArenaNet's own wire rather than a refusal to guess.
+
+        It shipped as a named divergence: GWW says adrenaline is lost after 25
+        seconds "out of combat" and casting is plainly combat, so restarting the
+        clock here is the intuitive move -- but none of the 15 isolated clears
+        in the corpus had a spend in its window, so retail could anchor either
+        way and nothing we held could tell us which.
+
+        A LIVE CAPTURE WAS MADE FOR EXACTLY THIS (capture 20260821T205552, plan
+        `adren_spend_clock.txt`, sealed before launch). The operator charged,
+        disengaged, stood still, and only then spent a SELF-TARGETED adrenal
+        skill -- so the spend landed no hit and the interval is clean (zero
+        0x00CF after it). The gap came out at 17.8 s, which put the two
+        hypotheses nearly 18 s apart:
+
+            last gain   t = 18.939
+            spend       t = 36.746
+            clear       t = 43.932
+
+            anchor = last GAIN  predicts 43.939   ->  off by 0.007 s
+            anchor = the SPEND  predicts 61.746   ->  off by 17.814 s
+
+        **Retail anchors on the last GAIN, by 7 milliseconds.** A spend does not
+        re-arm the clock, so this method is correct as written and the
+        divergence is closed in our favour. n=1 -- one episode, but the
+        discrimination is three orders of magnitude wider than the residual.
 
         WIKI, same page, and the second half is the part that gets forgotten:
         the cross-cost applies "whether or not the skill is interrupted or
@@ -694,8 +711,12 @@ class AdrenalinePool:
         own last **0x00CF gain**. Two sources that could not have been fitted
         to each other, agreeing to about a millisecond.
 
-        THE ANCHOR IS THE LAST GAIN, AND ONLY THE LAST GAIN, because that is
-        all 15 samples can support: not one of them has a 0x00D2 spend anywhere
+        THE ANCHOR IS THE LAST GAIN, AND ONLY THE LAST GAIN -- measured twice
+        over. The 15 isolated clears fix the DURATION; a live capture made on
+        2026-08-21 fixes the ANCHOR, catching retail 7 ms from the last-gain
+        prediction and 17.8 s from the spend-anchored rival (see `use`). This
+        paragraph shipped saying the corpus could not arbitrate, which was true
+        of the corpus and is no longer true of the evidence: not one of them has a 0x00D2 spend anywhere
         in its 25-second window, so the corpus is SILENT on whether spending
         adrenaline restarts retail's clock. This docstring briefly claimed the
         anchor was "the last 207-or-210" while `use()` below did not touch the
