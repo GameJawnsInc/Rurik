@@ -118,7 +118,9 @@ CANDIDATE_PIPS = ((2, 20), (3, 25), (3, 30), (4, 25), (4, 30),
 # sixth. That sixth is the interesting one: 0.0388235 joins to (2 pips, 17 max),
 # and 17 is 20 * 0.85 -- a Warrior's base pool under a -15 death penalty, with
 # the SAME 2 pips. It is the second death-penalty witness for the quantum, from
-# a different capture and a different base than the first ((4, 22), 25 -> 22),
+# a different capture and a different base than the first ((4, 22), 20*0.85+5),
+# and CONFIRMED 2026-08-22 rather than inferred: its connection carries
+# 0x009C [observer, 85], so the morale is observed and not deduced from the 17.
 # and it arrived as a test FAILURE: the armour-table check refused it because
 # 17 is not an armour row. It was right to refuse and the model was right too --
 # the pair is real, the quantum predicts it exactly, and what needed widening was
@@ -418,9 +420,16 @@ def section_corpus_oracle():
               f"Dervish and Assassin +2/+5, casters +2/+10. (2,20) is a "
               f"warrior, (3,25) a ranger, (4,25) a dervish or assassin, (4,30) "
               f"a caster. The zero-pip rows are deaths, and (4,22) and (2,17) "
-              f"are DEATH-PENALTY maxima -- 25*0.85 and 20*0.85 -- carrying "
-              f"their base pip count unchanged, which is why the denominator "
-              f"has to be current max rather than base max")
+              f"are DEATH-PENALTY maxima carrying their base pip count "
+              f"unchanged, which is why the denominator has to be current max "
+              f"rather than base max. THE ARITHMETIC WAS WRONG HERE UNTIL "
+              f"2026-08-22: this said 25*0.85 for the 22, which is 21.25 and "
+              f"not an integer. Morale scales the BASE pool only and armour "
+              f"bonuses ride unscaled -- the morale arc's own rule, from the "
+              f"one instrumented death (studies/morale) -- so 22 is "
+              f"20*0.85 + 5 (a dervish or assassin) and 17 is 20*0.85 + 0 (a "
+              f"warrior). Both now have their morale DIRECTLY OBSERVED: each "
+              f"of those two connections carries 0x009C [observer, 85]")
 
     LEDGER.ok(seen.get((2, 20), 0) >= 30 and not any(
                   k[0] == 3 and k[1] == 30 for k in seen),
