@@ -364,15 +364,112 @@ contradicting the section it shares a document with — the exact staleness fail
 of `CLAUDE.md` is about, found by an operator following this file to set up a live run.
 
 Which live build to use is a question about the ACCOUNT's client, not about the vault:
-`run-live/2026-07-29_221c13772c7a` is **build 38797** and
-`run-live/2026-08-13_64fae3b1369b` is **build 38833** (`buildid.py --exe <path>`, which
-since 2026-08-17 reads the binary you hand it rather than the pin). The updater is LIVE on
+`run-live/2026-07-29_221c13772c7a` is **build 38797**, and as of 2026-08-21
+**`run-live/2026-08-20_21511009c460` is build 38849 and is the one to use**
+(`buildid.py --exe <path>`, which since 2026-08-17 reads the binary you hand it rather
+than the pin). **`run-live/2026-08-13_64fae3b1369b` no longer holds what its name says:**
+it was build 38833 until the updater rewrote it in place mid-run, and it now holds an
+**unpatched 38849** — right directory, right classification, no key-tap. Read the build
+and the patches, never the directory name. The updater is LIVE on
 both by design, so a build older than what ArenaNet currently serves will update itself —
 and the key-tap cave is patched at a build-specific address, so an exe replaced by the
 updater loses its tap. `livesession.py` refuses an untapped build at preflight and again
 when it reads the slot, so this fails loudly rather than producing unrecoverable
 ciphertext; the fix is `make_custom_client.py --no-dh-patch --key-tap` then
 `make_run_dir.py --live` against the current build.
+
+**IT UPDATED MID-RUN, AND `updatecheck.py` CANNOT SEE IT. Observed 2026-08-21**,
+capture `20260821T145437`, and the recovery is NOT the one-time setup above.
+ArenaNet published **38849** while a live run was in progress. The updater is LIVE
+on `run-live/` by design, so it rewrote **that copy's `Gw.exe` in place** — all four
+patches gone (`mutex=intact name=stock`), the key-tap cave with them, **0 keys
+tapped**, and 336 KiB of real ciphertext that nothing can decrypt. The driver's
+before/after binary hash is what named it; it is why that check exists.
+
+Three things make this different from the documented update path, and each one
+blocks the obvious move:
+
+1. **`C:\gw` was NOT touched** — it is the owner's install and nothing launched it,
+   so it stays at the old build. `updatecheck.py --before/--after` reads `C:\gw`
+   and has no target override, so it compares a build that did not move and
+   truthfully reports **nothing changed**. The update is real and the tool is blind
+   to it. Diagnose against the binary instead:
+   `buildid.py --exe <run-live exe>`, `dump_dh_params.py <exe>`, and a hit count for
+   `keytap_patch.TAP_SIG` (**1** means the cave still has its anchor).
+2. **Rebuild FROM THE UPDATED BINARY, not from `C:\gw`.** `C:\gw` is now the *older*
+   build, so patching it produces a client that auto-updates on the next live run and
+   loses the cave again — today's failure, repeated. The updater leaves a clean stock
+   exe of the current build, which is exactly the right `--input`. There is no full
+   `vault/client/<tag>/` snapshot of a build acquired this way; do not fabricate a
+   partial one, and do not let `pinned.py` acquire a row implying otherwise.
+3. **Register the rotated stock parameters FIRST or the patcher refuses.**
+   `make_custom_client.py` cross-checks its own output with `dhbuild.classify` and
+   requires `stock` for a `--no-dh-patch` build. A rotated prime matches nothing in
+   `vault/keys/`, classifies `unknown`, and the build **fails verification** — which
+   is the guard working, not a bug. Write `vault/keys/dh_params_<tag>.txt` with
+   `root`/`generator`/`prime`/`server_public` (read them with `dhbuild.read_params`),
+   note in its header that the source was the updater rather than a snapshot, then
+   build. Vault only — never commit.
+
+The sequence that recovered it, in full:
+
+```bash
+python toolkit/clientpatch/make_custom_client.py --input <updated run-live exe> --no-dh-patch --key-tap --no-updater-patch
+```
+
+```bash
+python toolkit/clientpatch/make_run_dir.py --live --patched <the Gw.live.<tag>.exe it wrote>
+```
+
+**Pass `--patched` explicitly.** Once a build is added there are three stock exes in
+`client-patched-live/` and selection among equals is the `sorted(...)[-1]` defect this
+repo has already been bitten by three times in three files. Then `dhbuild.py` must
+show the new directory `stock` / `updater=LIVE` / key-tapped, and the **old** run-live
+directory is now a trap worth knowing about: it holds an *unpatched* current-build exe
+under a directory named for the *previous* build's DH tag, so it classifies `stock` and
+sits in the right folder while having no cave. `livesession.py` refuses it at preflight
+for exactly that (`key_tapped` false) — which is the only reason a wrong pick is loud
+instead of another zero-key run.
+
+**AND THE BUILD GATE'S "SERVICE" IS A PROXY THAT ONLY YOU CAN REFRESH. Observed
+2026-08-21, immediately after the above.** `check_build_matches_service` compares the
+launch exe against `service_build()`, whose docstring calls `C:\gw` *"the owner's
+auto-updating install"*. **It does not auto-update — it updates when it is LAUNCHED**,
+and the standing rule is that we never launch it. So the moment ArenaNet ships a build,
+the proxy is stale until the owner personally opens their own client, and the gate is
+comparing against a build the service stopped serving.
+
+What that looked like: a correct, freshly-built **38849** client was refused with
+*"the launch client is build 38849; the live service is serving 38833"* — the exact
+reverse of the truth. The service was serving 38849; `C:\gw` was the stale one.
+
+**FOLLOWING THE REFUSAL'S OWN ADVICE REPRODUCES THE FAILURE IT EXISTS TO PREVENT**,
+and this is the part worth reading twice. It says *"NO staged live build is 38833.
+Rebuild."* Rebuilding against a stale `C:\gw` yields a **38833** client; its updater is
+LIVE by design; it self-updates to 38849 on login; the build-specific key-tap cave is
+lost in the copy that runs; **0 keys tapped**. That is precisely the failure documented
+in the section above, arrived at by obeying the guard.
+
+**The fix is to refresh the proxy, and it is the owner's action, not a tool's.** Launch
+the owner's own install once and let it patch. Adding `-image` fetches the full content
+image while you are there, which is worth doing: `make_run_dir.py` sources `Gw.dat` from
+`C:\gw`, so a current install also means the live run starts with complete content
+instead of streaming during the session. Then re-run `make_run_dir.py --live --patched
+<exe>` so the staged directory picks the refreshed archive up — it re-copies on a size
+change and skips otherwise.
+
+**Check it is really the same build before trusting the agreement**, because "both read
+38849" is weaker than it looks — a build number is 5 digits and the exe is 10 MB. Compare
+the **sha256 of `C:\gw\Gw.exe` against the source the patched build was made from**; on
+2026-08-21 they were byte-identical (`21511009c460a2a9...`), which is what actually
+established that the staged client is the binary the service serves. The `-image` content
+files land in `Gw.dat` and do not touch the exe, so they cannot change that answer.
+
+**A cheap tightening nobody has built yet:** if any staged `run-live/` binary reads a
+HIGHER build than `C:\gw`, the install is provably stale — the only way a `run-live` copy
+reaches a higher build is the service having served it. That inference needs no network
+and would turn today's misleading refusal into "your install is behind; launch it once".
+Unbuilt as of 2026-08-21, and deliberately not written minutes before a live run.
 
 **4. Cage the patched client** (elevated PowerShell, one time per patched exe):
 
@@ -427,6 +524,8 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 | Roster empty but login succeeded | Campaign gate | Try the all-campaigns bitmask `b'\x3f' + b'\x00'*7` in `ACCOUNT_INFO` |
 | `undecodable` in terminal 2 | Unknown opcode, framing stopped | Correct behaviour — it refuses to guess. The printed leading bytes are the next thing to identify |
 | Anything at all after an ArenaNet update | Parameters rotated | `python toolkit/updatecheck.py --after <baseline>` first — it names what moved and what still resolves — then redo the one-time setup in full |
+| `the launch client is build N; the live service is serving M`, where **M is older than N** | The gate's "service" is `C:\gw`, which updates only when LAUNCHED -- so it is stale, not the service. Do **not** follow the refusal's advice to rebuild against it: that yields a client older than the service, which self-updates mid-run and loses the key-tap cave | Launch the owner's own install once (add `-image` to fetch full content), then re-run `make_run_dir.py --live --patched <exe>`. Confirm by sha256 that `C:\gw\Gw.exe` matches the source the patched build was made from |
+| A live run ends `0 distinct session key(s) tapped` **and** `THE CLIENT BINARY CHANGED DURING THIS RUN` | ArenaNet published a build mid-session; the LIVE updater rewrote `run-live/`'s exe and the key-tap cave went with it | **Not** the row above — `updatecheck.py` reads `C:\gw`, which the update did not touch, and will report nothing moved. See §"IT UPDATED MID-RUN" above: rebuild from the *updated* binary, and register the rotated stock params before the patcher will accept it |
 
 **Never point a patched client at the real service.** It carries our DH values, so
 it cannot key with ArenaNet's — and the attempt is exactly the kind of malformed

@@ -14,16 +14,26 @@ commits cannot tell you: the traps, and the things a cold session predictably ge
 
 ## 1. The one-paragraph state
 
-**Rungs 1–7 are done.** The Isle is mapped: two live captures (`20260817T231139` west and
+**Rungs 1–8 are done.** The Isle is mapped: two live captures (`20260817T231139` west and
 centre, `20260818T094648` east) give an agent-id ↔ definition-slot ↔ model ↔ `enc_name` ↔
 coordinate table for ~110 stations, the range ladder is closed to ±12.4 u, and the east
 holds the skill-bar foe Masters with their pets and spirits. **Rung 7 landed 2026-08-18**
 (`20260818T132739`, 495 damage events): the whole outbound damage formula is measured and
 adversarially verified, `GV_CRITICAL = 17` is CONFIRMED after months CONTESTED, and gate
 1's attribute channel came free with it. Read `FINDINGS.md` "Rung 7, LIVE #2" — especially
-its corrections, because three of that pass's own claims were overturned by review. What
-is **not** done: no body on the island has a *name* we can prove. Next is **rung 8, the
-effects pass**, whose channel question is already answered once (see §4).
+its corrections, because three of that pass's own claims were overturned by review. ~~What
+is **not** done: no body on the island has a *name* we can prove.~~ **That fell 2026-08-21:
+an operator screenshot of the Students' line renders ten nameplates, each Student named for
+the condition it applies, which is the `enc_name` route working — see FINDINGS §7.2. Bodies
+on this island now have provable names.**
+
+**Rung 8 landed 2026-08-21 across THREE short runs**, and the reason it was three is the
+lesson: the 27-step design was unfollowable mid-session and the operator read F9 as "go to
+the next condition" rather than "advance one step" (FINDINGS §7.8). Skill **999** observed,
+the **condition map is complete** (all ten, 482 = Deep Wound by elimination, 2077 = Cracked
+Armor corroborated by GWW's own `<!--id:2077-->`), and the rank ladder closed rung 7's
+unmet-requirement defect: **the penalty SCALES with rank**, PINNED refuted at `5.5e-10` by
+the distributions rather than a fit. Next is **rung 9, the scripted pass**.
 
 ## 2. What will bite you, in the order it will bite
 

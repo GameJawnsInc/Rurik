@@ -42,6 +42,14 @@ WHAT IT DOES, in order, refusing rather than continuing at each step:
      one -- two rows under a new id via `datalloc`, the head born empty. That is
      WORLDMAPS-W3; whether a retail client compiles a map from a chain it has
      never seen is WORLDMAPS-W4 and is a client question, not an offline one.
+     An area may also declare `reserve_bytes`, the reservation its row is
+     entitled to: creation asks the allocator for that many blocks instead of
+     just enough, and a later install into THAT row -- the one we created --
+     that outgrows its current reservation grows back into them in place
+     rather than relocating (WORLDMAPS-W5). The archive records no such number
+     anywhere, which is why the AREA states it and every run prints it; and a
+     row ArenaNet made is never grown on the strength of it, because what that
+     row was given is not ours to state.
   6. LAUNCH (`--launch`).  The harness, pointed at the area's own map id --
      which is a thing worth writing down, because a harness PASS means "the
      client reached A map", and pointing it at the wrong one produced two runs
@@ -54,7 +62,9 @@ install, and it cannot -- `datwrite` refuses anything but a copy.
 """
 
 import argparse
+import inspect
 import json
+import math
 import os
 import re
 import struct
@@ -66,11 +76,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
-from archive import (Archive, file_id_table,  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
                      COMPRESSION_HUFFMAN, COMPRESSION_STORED, FILE_ID_HIGH_BIT)
 import content as content_mod  # noqa: E402
 import datalloc  # noqa: E402  -- the third verb: rows that did not exist
 import datcheck  # noqa: E402  -- the launch-side archive gate
+import datwrite  # noqa: E402  -- for the grow gate's TOKEN, never to write
 import envchunk  # noqa: E402
 import gwenc  # noqa: E402  -- the compression-8 encoder
 import mapchunks  # noqa: E402
@@ -129,7 +140,307 @@ def gen_plaza(dim, base=-13):
     return out
 
 
-GENERATORS = {"flat": gen_flat, "plaza": gen_plaza}
+# FINDINGS 48's ramp, carried over verbatim from the run that measured the
+# slope boundary (`vault/research/e10e-threshold-2026-08-12/build_ramp.py`,
+# 2026-08-12). It is here rather than in the vault because WORLDMAPS-W17 varies
+# the slope SET and needs the same ruler FINDINGS 48 used -- a re-derived ramp
+# would make the two runs incomparable for a reason that has nothing to do with
+# the flag.
+#
+# Five 6-cell strips whose snapped interior slopes bracket every candidate
+# cutoff of BOTH threshold sets (10/45/40 and 15/35/30), so the pattern of which
+# strips compile walkable names the set outright. A flat apron carries the seed
+# and spawn; a flat plateau sits atop each strip -- and the plateau is not
+# decoration: FINDINGS 48's second result is that walkable area is
+# CONNECTIVITY-PRUNED from the flood seed, so a plateau above a too-steep ramp
+# vanishes from the mesh entirely and repeats its ramp's verdict.
+RAMP_APRON_TOP = 14      # gy >= this is flat apron at the base height
+RAMP_TOP = 4             # gy in [RAMP_TOP, RAMP_APRON_TOP) rises northward
+RAMP_STRIPS = (          # (label, dz per 96-unit cell, gx range inclusive)
+    ("28.0 deg", 51, (1, 6)),
+    ("32.0 deg", 60, (7, 12)),
+    ("36.9 deg", 72, (13, 18)),
+    ("41.9 deg", 86, (19, 24)),
+    ("47.0 deg", 103, (25, 30)),
+)
+
+
+def gen_ramp(dim, base=-13):
+    """Five ramps of increasing slope, an apron, and a plateau on each.
+
+    32x32 only. The band rows and the strip columns are tuned to that size --
+    APRON_TOP 14 and RAMP_TOP 4 are cell indices, not fractions -- and silently
+    rescaling them would change the angles, which are the whole measurement.
+    """
+    if dim != 32:
+        raise Refused(
+            f"the ramp field is 32x32 by construction, not {dim}x{dim}: its "
+            f"band rows (apron at gy>=14, ramp over gy 4..13) and its five "
+            f"6-cell strips are cell indices from FINDINGS 48, and rescaling "
+            f"them would move the very angles the map exists to measure")
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            dz = 0
+            for _label, d, (a, b) in RAMP_STRIPS:
+                if a <= gx <= b:
+                    dz = d
+                    break
+            if gy >= RAMP_APRON_TOP:
+                lift = 0                       # the apron, flat, holds the seed
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells         # the plateau atop the strip
+            out[gy * dim + gx] = base - lift   # more negative is HIGHER
+    return out
+
+
+# WORLDMAPS-W20's ramp: the same field as `gen_ramp` with five different
+# slopes, chosen to BISECT the 45-degree cut rather than bracket it.
+#
+# Every dz is a MULTIPLE OF 4, and that is not cosmetic. MEASURED 2026-08-21:
+# the codec's lattice snap leaves a multiple-of-4 dz EXACT (spread 0.00 across
+# the whole ramp band), while the odd values between them spread 0.3-0.6 deg --
+# and a strip whose own slope is uncertain by half a degree cannot bisect a cut
+# to better than that. `gen_ramp`'s strips spread by up to 1.4 deg for exactly
+# this reason, which is why WORLDMAPS-W19 could only bracket the cut to
+# [42.51, 46.45].
+#
+# STRIPS CHOSEN 2026-08-21 AFTER A FAILED POSITIVE CONTROL. The first fine
+# map ran 43.78/45.00/46.17/47.29 and compiled to the APRON ALONE -- pattern
+# '....', 2 trapezoids -- because 43.78 was assumed to be comfortably below
+# a 45-degree cut and is not: WORLDMAPS-W17 measured 41.52-42.51 WALKABLE and
+# this map measured 43.78 EXCLUDED, so the cut sits in (42.51, 43.78) and the
+# control was above it. These four now bracket that interval from BELOW, with
+# two strips W17 already proved walkable.
+#
+# The last strip is dz 96 = atan(96/96) = EXACTLY 45.00 degrees, the threshold
+# value itself. The classifier excludes on `slope > array[1]` -- strictly
+# greater -- so a slope sitting exactly on the cut should be WALKABLE, and no
+# map this project has built has ever put a slope there.
+# FOUR strips of EIGHT columns, aligned to the codec's 4x4 sub-blocks.
+# `snap_block` projects each 4x4 sub-block independently, so a strip boundary
+# falling INSIDE one quantises the whole block: the first draft used five
+# 6-wide strips at gx 1..30, every boundary landed mid-sub-block, worst sample
+# moved 3, and only ONE column of the 45.00 strip survived exact -- its
+# neighbours reached 45.59 and would have been excluded, which is precisely
+# the ambiguity this map exists to remove. Aligned: worst sample moved 0 and
+# EVERY interior column is exact.
+RAMP_FINE_STRIPS = (
+    ("18.43 deg", 32, (0, 7)),       # <- CANNOT-FAIL CONTROL: below BOTH cuts
+                                     #    (35 and 45). If this is excluded the
+                                     #    map is broken, not the threshold.
+    ("42.51 deg", 88, (8, 15)),       # <- W17 strip 4's top value, walkable there
+    ("43.78 deg", 92, (16, 23)),      # <- MEASURED EXCLUDED at cut 45, 2026-08-21
+    ("45.00 deg", 96, (24, 31)),      # <- exactly the threshold float
+)
+
+
+def gen_ramp_fine(dim, base=-13):
+    """`gen_ramp`'s shape with five slopes straddling 45.00 degrees exactly."""
+    if dim != 32:
+        raise Refused(
+            f"the fine ramp is 32x32 by construction, not {dim}x{dim}: its band "
+            f"rows and its five 6-cell strips are cell indices, and rescaling "
+            f"them would move the angles the map exists to resolve")
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            dz = 0
+            for _label, d, (a, b) in RAMP_FINE_STRIPS:
+                if a <= gx <= b:
+                    dz = d
+                    break
+            if gy >= RAMP_APRON_TOP:
+                lift = 0
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells
+            out[gy * dim + gx] = base - lift
+    return out
+
+
+def gen_ramp_uniform(dim, base=-13, area=None):
+    """`gen_ramp`'s bands with ONE slope everywhere -- no strips, no seams.
+
+    The area declares `ramp_dz`, the height change per 96-unit cell. Keep it a
+    multiple of 4 and the lattice snap moves nothing (WORLDMAPS-W20); the slope
+    is then exactly atan(dz / 96).
+
+    This exists because W20's four-strip map confounds two things at once. Its
+    class-2 strips DID touch the flat class-0 apron and still did not mesh,
+    which is not what "class 2 needs a class-0 neighbour" predicts, and the same
+    map also varied the steep lateral seams between strips. One slope over the
+    whole map removes the seams and the neighbours together, so what is left is
+    the only question that matters: can the flood climb this slope out of a flat
+    apron, on its own?
+    """
+    if dim != 32:
+        raise Refused(f"the uniform ramp is 32x32 by construction, not "
+                      f"{dim}x{dim}: its band rows are cell indices")
+    dz = int((area or {}).get("ramp_dz", 88))
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            if gy >= RAMP_APRON_TOP:
+                lift = 0
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells
+            out[gy * dim + gx] = base - lift
+    return out
+
+
+# Ashcoil Caldera -- WORLDMAPS showcase map, authored 2026-08-22. The design
+# is the winner of a three-designer panel (vertical drama / enclosure and
+# reveal / natural coherence) with the judge's grafts folded in; the geometry
+# was validated OFFLINE before any compile: zero cells in the forbidden
+# 40-45 degree band, flood(<=64 steps) == flood(<=111 steps) under 4- and
+# 8-connected adjacency, every waypoint of the intended walk connected to the
+# seed, exact codec round-trip, snap worst 4.
+#
+# MASTER RULE (what makes the whole surface legal by construction, under the
+# cut-45 slope set -- the area row MUST carry top byte 2):
+#   - walkable ground keeps its pre-quantization gradient <= 40 units/cell,
+#     so after 48-quantization every axial step is 0 or 48 (30.2 deg) and no
+#     triangle plane exceeds 35.3 deg;
+#   - walls are hard discontinuities >= 192 (>= 144 after the snap, 56.3 deg);
+#   - nothing between 48 and 144 ever appears, so the 40-45 band W20/W23
+#     showed to be conditionally meshed is unreachable by construction;
+#   - elevated roads leave flat ground only through SLOTS flanked by high
+#     rock that terminates abruptly -- a tapering ledge always sweeps the
+#     forbidden band somewhere on its flank; a slot never does.
+ASH_TAU = 2.0 * math.pi
+ASH_Q = 48.0
+ASH_FLOOR = 48.0
+ASH_CLIMB = 1008.0          # 21 risers of 48 over one full turn
+ASH_RIM = ASH_FLOOR + ASH_CLIMB
+ASH_FLANK = 432.0           # mouth-slot inner ridge (top is pruned)
+ASH_KNOB = 1248.0           # top-out outer knob
+ASH_BANK = 1248.0           # draw flanks
+ASH_BOWL = 480.0            # terminal bowl floor
+ASH_VALLEY = 672.0          # sealed remainder of the ring valley
+ASH_CROWN = 288.0           # crown peak = rim + 288 = 1344
+ASH_THETA0 = -0.25          # the seam (great scarp) angle
+ASH_P_ENTER = 0.035         # open entrance arc (S - FLOOR <= 48)
+ASH_P_SLOT = 4.0 / 21.0     # mouth slot ends where S - FLOOR = 192
+ASH_P_KNOB = 17.0 / 21.0    # knob starts where RIM - S = 192
+ASH_P_EXIT = 0.97           # knob ends; the road merges onto the rim
+ASH_P_CROWN = 0.10          # crown centre angle (fraction of a turn)
+ASH_P_DRAW = 0.50           # draw entrance angle
+ASH_DRAW_LEN = 0.16         # draw arc length (fraction of a turn)
+ASH_DRAW_GAP = 0.012        # bank gap at the draw entrance
+ASH_POOL = (27.0, 27.0, 4.6, 1.3)   # cx, cy, outer radius, flat core
+
+
+def _ash_sstep(t):
+    t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _ash_elevation(gx, gy):
+    """Elevation in world units, positive UP, in 64x64 design space."""
+    dx = gx - 31.5
+    dy = gy - 31.5
+    r = math.hypot(dx, dy)
+    theta = math.atan2(dy, dx)
+    p = ((theta - ASH_THETA0) % ASH_TAU) / ASH_TAU   # coil progress from seam
+
+    # strata crinkle: every radial boundary wobbles in lockstep, so band
+    # widths -- and therefore every jump -- are preserved
+    wob = (0.7 * math.sin(3.0 * theta + 1.7)
+           + 0.4 * math.sin(7.0 * theta - 0.4))
+    rw = r + wob
+
+    S = ASH_FLOOR + ASH_CLIMB * p                    # the coil's profile
+
+    if rw <= 11.0:
+        # crater floor; the mouth-slot flank ridge; the sunken pool
+        if 9.5 < rw and ASH_P_ENTER <= p <= ASH_P_SLOT:
+            return ASH_FLANK
+        f = ASH_FLOOR
+        pcx, pcy, pro, prf = ASH_POOL
+        dpool = math.hypot(gx - pcx, gy - pcy)
+        if dpool < pro:
+            # to -48: one quantum below the water plane, in case it renders
+            f = ASH_FLOOR - 96.0 * _ash_sstep((pro - dpool) / (pro - prf))
+        return f
+
+    if rw <= 14.5:
+        return S                                     # the coil shelf
+
+    if rw <= 21.0:
+        # rim plateau; the top-out knob; the crown cone
+        if rw <= 16.5 and ASH_P_KNOB <= p <= ASH_P_EXIT:
+            return ASH_KNOB
+        # the draw's UPHILL bank is carved out of the rim annulus -- without
+        # it the descending draw floor sits directly against the plateau and
+        # their difference sweeps through the forbidden band (caught by the
+        # offline validator as two 45.0-degree cells at the rw = 21 seam)
+        dp = (p - ASH_P_DRAW) % 1.0
+        if ASH_DRAW_GAP < dp <= ASH_DRAW_LEN and rw > 20.0:
+            return ASH_BANK
+        f = ASH_RIM
+        tc = ASH_THETA0 + ASH_P_CROWN * ASH_TAU
+        dc = math.hypot(gx - (31.5 + 17.75 * math.cos(tc)),
+                        gy - (31.5 + 17.75 * math.sin(tc)))
+        if dc < 11.0:
+            f += ASH_CROWN * _ash_sstep(1.0 - dc / 11.0)
+        return f
+
+    if rw <= 26.0:
+        # ring valley: the draw, its banks, the bowl, the sealed remainder
+        dp = (p - ASH_P_DRAW) % 1.0
+        if dp <= ASH_DRAW_LEN and 21.0 < rw <= 23.5:
+            if dp <= ASH_DRAW_GAP:
+                return ASH_RIM               # entrance gap: step off the rim
+            t = (dp - ASH_DRAW_GAP) / (ASH_DRAW_LEN - ASH_DRAW_GAP)
+            return ASH_RIM - (ASH_RIM - ASH_BOWL) * t
+        if dp <= ASH_DRAW_LEN and 23.5 < rw <= 24.5:
+            return ASH_BANK                  # downhill bank; top is pruned
+        if ((p - (ASH_P_DRAW - 0.02)) % 1.0) <= 0.32:
+            return ASH_BOWL                  # terminal bowl
+        return ASH_VALLEY
+
+    # edge bulwark: chunky 192-quantum terraces, serrated, capped at 1248 so
+    # the crown (1344) stays the highest silhouette on the map
+    db = min(gx, gy, 63.0 - gx, 63.0 - gy)
+    ser = (0.5 * math.sin(0.9 * gx + 1.3 * gy)
+           + 0.5 * math.sin(1.7 * gx - 0.7 * gy))
+    k = max(0, min(4, int(round(2.0 + 2.0 * (1.0 - db / 7.0) + ser))))
+    return ASH_BOWL + 192.0 * k
+
+
+def gen_caldera(dim, base=None):
+    """Ashcoil Caldera. Designed at 64x64; other dims sample the design.
+
+    At any dim other than 64 the cell pitch changes and every slope with it,
+    so ONLY dims = 64 is the map -- other sizes exist so the suite's lattice
+    section can run every generator at its fixture's dims.
+
+    Stored heights are negated elevation ("more negative is HIGHER") and are
+    written through Terrain.index: at 64x64 the array is four tiles and a
+    flat gy*dim+gx write would scramble the quadrants.
+    """
+    scale = 63.0 / (dim - 1) if dim > 1 else 1.0
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            e = _ash_elevation(gx * scale, gy * scale)
+            out[trn_mod.Terrain.index(gx, gy, dim)] = -int(round(e))
+    return out
+
+
+GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp,
+              "ramp_fine": gen_ramp_fine,
+              "ramp_uniform": gen_ramp_uniform,
+              "caldera": gen_caldera}
 
 
 def heights_from_blend(blend, dim, blender=None, workdir=None):
@@ -343,17 +654,63 @@ def assemble(area, heights, donor, dim, verbose=True):
         cells = pick_tree_cells(heights, dim, n_trees, seed_cell)
         if len(cells) < n_trees:
             raise Refused(f"only {len(cells)} flat cells for {n_trees} trees")
+        # An area may give its props a FOOTPRINT. `outline` is prop-LOCAL
+        # (i16 dx, i16 dy); the compiler rewrites it into the Bloated stream in
+        # world coordinates. Absent, it is empty -- which is what every prop
+        # this project placed before 2026-08-21 carried, and which is also what
+        # the MAJORITY of retail props carry (Kamadan: 516 props, 280 outline
+        # points between them). A square is used rather than a circle because
+        # the footprint is a closed ring of integer offsets and four corners
+        # plus the repeat is the smallest honest one; `Prop.closed` wants the
+        # first point repeated last, as 37,505 of retail's 37,548 outlined
+        # props do.
+        r = int(area.get("prop_outline", 0) or 0)
+        shape = str(area.get("prop_outline_shape", "square"))
+        ring = ()
+        if r and shape == "square":
+            ring = ((-r, -r), (r, -r), (r, r), (-r, r), (-r, -r))
+        elif r and shape == "L":
+            # A NON-CONVEX ring: the square with its north-west quadrant cut
+            # out. Its convex hull is the full square, so a mesh hole that
+            # fills the notch means the client used the hull or the bounding
+            # box, and one that leaves the notch walkable means it used the
+            # POLYGON. That is the only distinction one compile can draw here.
+            ring = ((-r, -r), (r, -r), (r, r), (0, r), (0, 0), (-r, 0),
+                    (-r, -r))
+        elif r:
+            raise Refused(
+                f"unknown prop_outline_shape {shape!r}; known: square, L")
         props = []
         for gx, gy in cells:
             z = float(heights[trn_mod.Terrain.index(gx, gy, dim)])
-            props.append(Prop(model=0, x=gx * 96.0 + 48.0, y=gy * 96.0 + 48.0,
+            # Grid row 0 renders at world maxY (Terrain.index's docstring;
+            # FINDINGS 4's argmax on 345/346 maps -- and WORLDMAPS-W23
+            # confirmed it at the client: u42's apron, authored at gy >= 14,
+            # compiled to a mesh covering world y 0..1728, the FLIPPED
+            # image). This line used to place the tree at y = gy*96+48,
+            # UNFLIPPED, while sampling z from the authored cell -- so on a
+            # y-asymmetric map the tree stood at a world position whose
+            # terrain came from a DIFFERENT grid row, floating or buried.
+            # Flat and y-symmetric maps masked it, which is every treed map
+            # before the caldera. The prop's world x/y must name the cell
+            # the CLIENT renders this grid cell at.
+            wy = (dim - 1 - gy) * 96.0 + 48.0
+            props.append(Prop(model=0, x=gx * 96.0 + 48.0, y=wy,
                               z=z, rot=(0, 0, 0), scale=0x7F, flags=0,
-                              outline=()))
+                              outline=ring))
         kw["props"] = StrippedProps(props=props, refs4=[], refs6=None)
         kw["prop_dep_ids"] = [donor.prop_model_ids[0]]
         if verbose:
-            print(f"  props: {len(props)} at {cells}")
+            print(f"  props: {len(props)} at {cells}"
+                  + (f", each with a {2 * r}x{2 * r} footprint "
+                     f"({len(ring)} points)" if r else ", no footprint"))
 
+    # The area may state the Map Parameters flags dword. Absent, it is 0 --
+    # which is what every area before WORLDMAPS-W11 shipped. See
+    # stripbuild.build's own note: bit 0 gates the navmesh depth bound, and the
+    # top byte selects the slope set, so a row setting one must not disturb the
+    # other.
+    kw["map_flags"] = int(area.get("map_flags", 0) or 0)
     return sb.build(dim, dim, heights, seed, **kw)
 
 
@@ -493,8 +850,151 @@ def spill_stream(here, tag, stream, compression):
     return path
 
 
+# THE FALLBACK JOIN, and only the fallback since 2026-08-20. A fragment of each
+# of `_grow_gate`'s four sentences, in its order. `datwrite` now names its own
+# refusals -- `GrowGateRefused`, carrying a `condition`, and one
+# `GROW-GATE-REFUSED condition=<name>` line per refusal on the CLI -- so this
+# list is what recognises an OLDER writer: a vault copy, a bisect, a subprocess
+# resolved off a stale worktree. Keep it in step with the sentences; do not add
+# to it as a way of recognising anything new. See `grow_gate_refusal`.
+GROW_GATE_MARKERS = (
+    "is CLAIMED by",                            # condition 1: other claimants
+    "PAST THE END",                             # condition 2: EOF
+    "LIVE MASTER FILE TABLE",                   # condition 3: the live MFT
+    "datplan WITHHOLDS",                        # condition 4: a withheld run
+)
+
+
+def grow_gate_refusal(text):
+    """The `_grow_gate` refusal inside a writer's output, or None.
+
+    THE POINT IS TO TELL TWO FAILURES APART, and the reason it matters is that
+    only one of them may be followed by a relocation. `datwrite --replace
+    --grow-to` exits non-zero for the grow gate (some other row claims the
+    blocks this one freed; the range runs past EOF, into the live MFT, or into a
+    container generation `datplan` withholds) and ALSO for every ordinary
+    reason -- a bad declaration, a missing file, a refused archive. Falling back
+    to `datmove` on the first kind is correct and is what the row's own budget
+    is for; falling back on the second would turn "these bytes are not what you
+    declared" into a relocation that quietly succeeds.
+
+    THE JOIN IS NOW TYPED, and this paragraph used to explain why it could not
+    be. It said: "the recogniser is a fixed list of the gate's own four
+    sentences rather than `rc != 0` ... Matching on message text is a weak join
+    and it is named as one: if `datwrite`'s wording moves, this returns None and
+    the install REFUSES, which is the safe direction." The direction was right
+    and the join was still prose -- a reworded sentence turned every claimant
+    conflict on this path into a refused install, silently, for a reason that
+    has nothing to do with the archive. `datwrite._grow_gate` now raises
+    `GrowGateRefused`, a `SystemExit` carrying a `condition`, and its CLI prints
+    ONE machine-readable line per refusal: `GROW-GATE-REFUSED condition=<name>`.
+    That line is what this joins on.
+
+    THE FOUR SENTENCES REMAIN, DOCUMENTED AS THE FALLBACK. An older `datwrite`
+    -- a vault copy, a bisect, a subprocess resolved off a stale worktree --
+    prints no token at all, and a fallback that refused there would be this
+    function's own failure mode in the other direction. So: token present is the
+    verdict; token absent falls back to `GROW_GATE_MARKERS`; neither is None and
+    the caller raises. The line RETURNED is the human sentence whenever there is
+    one, because it is what gets printed and what an operator has to read; the
+    token is the decision, not the report.
+    """
+    lines = [ln.strip() for ln in text.splitlines()]
+    worded = next((ln for ln in lines
+                   if any(m in ln for m in GROW_GATE_MARKERS)), None)
+    typed = next((ln for ln in lines
+                  if datwrite.GROW_GATE_TOKEN in ln), None)
+    if typed is None and worded is None:
+        return None
+    return worded or typed
+
+
+def area_reserve(area):
+    """The area row's `reserve_bytes`, or 0. -> int
+
+    WHERE CONTENT BECOMES A NUMBER, which is the place to refuse a bad one. The
+    field is optional and absent means 0 -- every area row said that before
+    WORLDMAPS-W5 and three of them still do. What it may NOT be is almost a
+    number: TOML will hand back `2048.5` or `-512` as happily as `8192`, and
+    both of those travel a long way before anything notices. `int()` on the
+    first truncates silently, so the run would reserve 2,048 while the row says
+    2,048.5; the second is falsely truthy and would print "past the -512 B this
+    area declares".
+
+    `datalloc.Stream` refuses both, but only on the CREATE path -- the install
+    path never builds a Stream, so a fraction there would reach `--grow-to` as
+    an argparse type error out of a subprocess. Asking here covers both
+    directions and names the file the operator has to edit.
+    """
+    raw = area.get("reserve_bytes", 0)
+    if raw is None:
+        return 0
+    # BOOLS BOTH WAYS. `True` is an int in Python and would sail through as a
+    # 1-byte budget; refusing only that one would leave `false` meaning 0, which
+    # is a second spelling of absent and one more thing to read.
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise Refused(
+            f"this area's `reserve_bytes` is {raw!r}, which is not a whole "
+            f"number of bytes.\n"
+            f"  A reservation is counted in bytes and rounded up to whole "
+            f"512-byte blocks by the allocator. Edit the row in "
+            f"content/areas.toml, or drop the field to state no budget.")
+    if raw < 0:
+        raise Refused(
+            f"this area's `reserve_bytes` is {raw}, and a negative reservation "
+            f"is not a budget.\n"
+            f"  Drop the field from the row in content/areas.toml to state no "
+            f"budget: absent is 0, which is the behaviour every area row had "
+            f"before WORLDMAPS-W5.")
+    return raw
+
+
+def budget_note(size, reservation, reserve, created=False):
+    """What a DECLARED budget does to the verb `verify` just predicted. -> str|None
+
+    `verify` compares the stream against the row's CURRENT reservation and says
+    "fits" or "will RELOCATE", which is the whole truth for a row with no
+    declared entitlement. For a row that has one, the middle case exists and the
+    two lines would otherwise contradict each other: the preview would announce
+    a relocation and the install would grow the row back in place.
+
+    Printed from `main` rather than folded into `verify`, deliberately. `verify`
+    is about the map -- does it round-trip, does the seed stand up, does it fit
+    -- and the budget is about the archive; a run that prints one line about the
+    map and one about the row can be read against a prediction, where a single
+    sentence hedged three ways cannot.
+
+    `created` MIRRORS `install_partner`'S OWN GATE and defaults to False for the
+    same reason it does there: a budget is only spent on a row this toolkit
+    allocated. A preview that promised a grow for a displaced retail row would
+    be predicting a verb the install will not pick, which is worse than saying
+    nothing.
+    """
+    if not reserve:
+        return None
+    if not created:
+        return (f"budget: {reserve} B declared, but this area's map row does "
+                f"not carry `created = true` -- the budget is only spent on a "
+                f"row this toolkit allocated, so an install here fits or "
+                f"RELOCATES exactly as it did before the field existed")
+    if reservation is None:
+        return (f"budget: this area declares {reserve} B of reservation, which "
+                f"the CREATE path will ask the allocator for")
+    if size <= reservation:
+        return (f"budget: {reserve} B declared, and the row's current "
+                f"{reservation} B already holds this stream -- the budget is "
+                f"not needed on this install")
+    if size <= reserve:
+        return (f"budget: {reserve} B declared, so the install will ask "
+                f"datwrite to GROW the row back to its stated entitlement "
+                f"rather than relocate it -- subject to the grow gate "
+                f"(claimants, EOF, the live MFT, datplan's withheld runs)")
+    return (f"budget: {reserve} B declared and this stream is {size} B, which "
+            f"is past it -- the budget cannot help and the row RELOCATES")
+
+
 def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
-                    reservation, tag):
+                    reservation, tag, *, reserve=0, created=False):
     """Put `stream` in the Stripped partner row and PROVE the row holds it.
 
     `out` is the file already holding `plain`, and `plain` is the payload a
@@ -515,17 +1015,47 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     What is gone is the asymmetry -- we compress now too, so the comparison is
     between like and like.
 
-    NOT GROWN BACK, and this is the case the next change is about. `replace`
+    GROWN BACK, SINCE WORLDMAPS-W5, AND ONLY WHEN THE AREA SAID SO. `replace`
     writes the size field, so a compressed install SHRINKS the row's reservation
     (map 143's partner: 4,608 B -> 1,536 B after a 1,316 B plaza). The next,
     larger authored map is then past a ceiling the row's own freed blocks sit
-    behind, and this function relocates rather than growing in place.
-    `datwrite`'s `grow_to` is exactly the flag for it and is deliberately NOT
-    wired here: it is a separate change with its own claimant/EOF/withheld-run
-    gate, and folding it into this one would make a failed install ambiguous
-    between the two.
+    behind. `datwrite`'s `grow_to` is the flag for it and this function now
+    passes it -- but only up to `reserve`, the entitlement the area row declares
+    in `content/areas.toml`, because the archive records no such number anywhere
+    and `grow_to` is defined as a STATEMENT about what a row was given rather
+    than a request for more. With no budget declared, this is byte-for-byte the
+    old behaviour: fit, or relocate.
 
-    Returns the verb that ran: "replace" or "relocate".
+    THREE OUTCOMES NOW, AND EACH ONE IS PRINTED. The middle one is the whole
+    change and it is invisible from the outside -- a row that grew back in place
+    and a row that never needed to grow both read as "replace" afterwards, and a
+    row that relocated is only distinguishable by its offset. So the run says
+    which of the three happened, in the run's own log, at the moment it happens.
+
+    A REFUSED GROW IS NEVER SWALLOWED. `_grow_gate` refuses for four reasons
+    (claimants, EOF, the live MFT, a withheld container run) and the first of
+    them means another row has taken the blocks this one freed -- which is a
+    real fact about the archive that a silent relocation would erase. So the
+    gate's own sentence is printed, then the relocation runs and says it is
+    running BECAUSE of it. An unrecognised failure is not a grow-gate refusal
+    and is raised, exactly as before: see `grow_gate_refusal`.
+
+    ONLY INTO A ROW WE MADE, and `created` is the second half of the gate rather
+    than a courtesy. `grow_to` is defined as a statement about what a row was
+    GIVEN, and for a row THIS toolkit allocated, the area's `reserve_bytes` IS
+    that statement -- `create_chain` asked the allocator for exactly it. For a
+    displaced RETAIL row it is not: ArenaNet gave that row whatever it gave it,
+    our recipe's budget says nothing about it, and annexing the blocks behind it
+    on the strength of a number from `content/areas.toml` would be inventing an
+    entitlement. So a displaced row keeps the pre-WORLDMAPS-W5 behaviour exactly
+    -- fit, or relocate -- however large a budget its area declares. `created`
+    is the maps.toml row's own claim, threaded from `main`; hardening THAT claim
+    against a retail chain that happens to bind the id is the R2 residual
+    (`resolve_or_create`'s fall-through is shape-only) and is not this gate's
+    job. Default False, because the safe direction for a caller who did not
+    think about it is the old behaviour.
+
+    Returns the verb that ran: "replace", "grow" or "relocate".
     """
     here = os.path.dirname(out)
     # ONE FILE ON THE STORED ARM, deliberately: --data and --expect naming the
@@ -534,31 +1064,81 @@ def install_partner(dat, out, plain, stream, compression, head_row, partner_row,
     # returns None there for exactly that reason.
     data_path = spill_stream(here, tag, stream, compression) or out
 
-    if len(stream) <= reservation:
-        verb = "replace"
-        print(f"  {len(stream)} B fits the {reservation} B reservation "
-              f"-- replacing in place")
+    def replace_argv(grow_to=None):
+        # A SEPARATE JOURNAL FOR THE GROW ARM. A grow the gate refuses and the
+        # relocation that follows it are two runs against one row, and a journal
+        # file is the only way back from either of them.
+        which = "grow" if grow_to else "replace"
         argv = [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
                 "--replace", str(partner_row), "--data", data_path,
                 "--compression", str(compression), "--expect", out,
-                "--journal", os.path.join(here, f"{tag}_replace.json"),
-                "--verify"]
-    else:
-        verb = "relocate"
-        print(f"  {len(stream)} B does NOT fit the {reservation} B "
-              f"reservation -- RELOCATING the row")
+                "--journal", os.path.join(here, f"{tag}_{which}.json")]
+        if grow_to:
+            argv += ["--grow-to", str(grow_to)]
+        return argv + ["--verify"]
+
+    def relocate_argv():
         # NO --check-overlaps here: it is a READ-ONLY verb that returns
         # before any move, so passing it got rc 0 with nothing written and
         # this function reported "installed". datmove runs the overlap
         # check itself after a real move.
-        argv = [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
+        return [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
                 "--row", str(partner_row), "--data", data_path, "--move",
                 "--confirm", "--compression", str(compression),
                 "--expect", out,
                 "--journal", os.path.join(here, f"{tag}_move.json")]
-    rc = subprocess.run(argv, text=True).returncode
-    if rc != 0:
-        raise Refused(f"the archive writer refused (rc {rc})")
+
+    def run(argv):
+        rc = subprocess.run(argv, text=True).returncode
+        if rc != 0:
+            raise Refused(f"the archive writer refused (rc {rc})")
+
+    if len(stream) <= reservation:
+        verb = "replace"
+        print(f"  FITS: {len(stream)} B in the {reservation} B reservation "
+              f"-- replacing in place")
+        run(replace_argv())
+    elif reserve and created and len(stream) <= reserve:
+        verb = "grow"
+        print(f"  GROWS BACK: {len(stream)} B is past the row's current "
+              f"{reservation} B, and this area declares a {reserve} B "
+              f"entitlement -- asking datwrite to annex the blocks this row "
+              f"freed rather than relocating it")
+        # CAPTURED, not inherited, because the decision below is made from what
+        # the writer SAID. Both streams are re-printed first so nothing the
+        # operator would have seen is lost -- only its ordering changes.
+        proc = subprocess.run(replace_argv(grow_to=reserve), text=True,
+                              capture_output=True)
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+        if proc.returncode != 0:
+            gate = grow_gate_refusal(proc.stdout + proc.stderr)
+            if gate is None:
+                raise Refused(f"the archive writer refused (rc "
+                              f"{proc.returncode})")
+            print(f"  THE GROW GATE REFUSED: {gate}")
+            print(f"  RELOCATING instead, and saying so: the row could not take "
+                  f"its own freed blocks back, which is a fact about this "
+                  f"archive and not a detail of this install")
+            verb = "relocate"
+            run(relocate_argv())
+    else:
+        verb = "relocate"
+        if not reserve:
+            why = "and no entitlement is declared for this area"
+        elif not created:
+            # NAMED, because this is the one relocation whose cause is a rule
+            # rather than a size: the budget would have covered this stream and
+            # was not spent, and an operator reading the run would otherwise be
+            # left comparing two numbers that fit.
+            why = (f"and the {reserve} B this area declares is NOT spendable "
+                   f"here -- this row was not created by us, so what it was "
+                   f"given is ArenaNet's statement and not ours")
+        else:
+            why = f"past the {reserve} B this area declares"
+        print(f"  RELOCATES: {len(stream)} B does NOT fit the {reservation} B "
+              f"reservation, {why} -- moving the row")
+        run(relocate_argv())
     prove_partner(dat, head_row, plain, compression)
     return verb
 
@@ -728,7 +1308,167 @@ def map_chain(ar, file_id):
     return head, partner
 
 
-def resolve_or_create(ar, file_id, created):
+def alloc_journal_path(here, tag):
+    """Where `create_chain` writes an area's allocation journal. ONE expression.
+
+    Named rather than spelled out at each of its three call sites, because the
+    three now disagree about what they want from it and would drift: the create
+    path REFUSES to write over one (R3), the install path READS one as evidence
+    that a chain is ours (R2), and both have to be talking about the same file
+    for either to mean anything.
+    """
+    return os.path.join(here, f"{tag}_alloc.json")
+
+
+def archive_carries(dat, offset, blob):
+    """Is `blob` sitting at `offset` in `dat` RIGHT NOW? -> bool
+
+    Eight bytes and a seek, and it is the whole of what makes an allocation
+    journal evidence about the copy in front of us rather than about a filename
+    (`allocation_recorded`). Any read failure is a False rather than a raise:
+    the caller is deciding whether something is evidence, and an archive it
+    cannot read has not shown it anything.
+
+    AN EMPTY `blob` IS A FALSE, not a vacuous True. Every file carries zero
+    bytes at every offset, so the one-line version of this would hand a caller a
+    check that cannot fail -- which is the failure this pass exists to close,
+    one function smaller.
+    """
+    if not blob:
+        return False
+    try:
+        with open(dat, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(len(blob)) == blob
+    except OSError:
+        return False
+
+
+def allocation_recorded(journal, dat, file_id, head_row, partner_row):
+    """Does `journal` record US allocating THIS chain in THIS archive? -> bool
+
+    READ STRUCTURALLY, NOT AS PROSE, and that is deliberate after the grow
+    gate's four-sentence join (see `grow_gate_refusal`). `datalloc.alloc` writes
+    the journal's `what` strings for a human; what is checked here is BYTES:
+
+      * one edit's `after` is exactly `<II` (file_id, head_row) -- the file-id
+        record going live, which is step 4 of the allocation and the moment the
+        chain acquires its name;
+      * the edit at `mft_offset + head_row * 24` writes a 24-byte row whose
+        flags are the map head's and whose `nextStream` is `partner_row`;
+      * the edit at `mft_offset + partner_row * 24` writes the partner's flags;
+      * and the archive in front of us is the archive that file-id record went
+        into.
+
+    All four together say "this file recorded binding this id to this head,
+    chained to this partner, in this archive". `mft_offset` is read from the
+    JOURNAL rather than from the archive on purpose: the client relocates the
+    master file table during ordinary play (`datwrite.Journal` records it for
+    exactly that reason), so an offset compared against today's table would
+    stop matching for a reason that says nothing about who made the rows.
+
+    THE LAST CONJUNCT IS NOT A PATH COMPARE ANY MORE, and the fix is the same
+    lesson as the one above it. `datalloc` records an ABSOLUTE path, and
+    archives in this project are COPIED WHOLE as a matter of routine --
+    `overlay.py` copies manifest archives with `shutil.copyfile`,
+    `make_run_dir.py` stages one per run directory, and RUNBOOK's own procedure
+    copies `run-live/<build>/Gw.dat` over `run/<build>/Gw.dat`. A copy that
+    carries its journal beside it is OUR chain, described byte-exactly, and the
+    path compare refused it -- with a closing remedy ("allocate under a fresh
+    id") that is actively wrong advice in exactly that state. So the archive is
+    asked DIRECTLY instead: does it carry, at the offset the journal recorded,
+    the file-id record the journal says it wrote there? That survives a copy, a
+    rename, an `--out` that moved the build products, and a later relocation of
+    the partner. The path compare is KEPT as the FIRST route, cheap and not
+    weaker than it was, for the archive that stayed where it was while the
+    client rewrote the id table underneath it.
+
+    THE ROWS ARE THE CALLER'S CURRENT ONES, and that is what keeps this from
+    degenerating into "a journal exists": `resolve_or_create` reads
+    `head_row`/`partner_row` out of the archive in front of it, so a journal
+    describing some other allocation fails the `<II` conjunct before the archive
+    is opened at all.
+
+    A journal that will not parse is not evidence and is not an error here --
+    `datwrite.read_journal` refuses an empty or malformed one by name, and the
+    caller's job is to say what IS there rather than to re-raise.
+    """
+    try:
+        doc, _dropped = datwrite.read_journal(journal)
+    except (SystemExit, OSError, ValueError):
+        return False
+    if not isinstance(doc, dict):
+        return False
+    mft = doc.get("mft_offset")
+    if not isinstance(mft, int):
+        return False
+    named = struct.pack("<II", file_id, head_row)
+    rows_seen = {}
+    id_offsets = []
+    for ed in doc.get("edits", []):
+        try:
+            after = bytes.fromhex(ed.get("after", ""))
+            off = int(ed["offset"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if after == named:
+            id_offsets.append(off)
+        if len(after) != ENTRY_SIZE:
+            continue
+        for row in (head_row, partner_row):
+            if off == mft + row * ENTRY_SIZE:
+                rows_seen[row] = struct.unpack("<QIHHII", after)
+    head = rows_seen.get(head_row)
+    partner = rows_seen.get(partner_row)
+    if not (id_offsets
+            and head is not None and partner is not None
+            and head[3] == MAP_HEAD_FLAGS_U16 and head[4] == partner_row
+            and partner[3] == MAP_PARTNER_FLAGS_U16):
+        return False
+    # The binding, either way round: the name it was written under, or the
+    # bytes it was written as. The second is the one that survives a copy.
+    named_path = os.path.normcase(os.path.abspath(str(doc.get("dat", ""))))
+    if named_path == os.path.normcase(os.path.abspath(dat)):
+        return True
+    return any(archive_carries(dat, off, named) for off in id_offsets)
+
+
+def created_evidence(dat, here, tag, file_id, head_row, partner_row):
+    """The journal proving we made this chain, or None. -> path|None
+
+    Looks BESIDE THE ARCHIVE as well as in `here`, because those are the same
+    directory on every default invocation and differ only when `--out` moves the
+    build products somewhere else. Widening the search does not weaken the
+    check: whichever file is found still has to describe this id and these two
+    rows AND be bound to this archive by one of `allocation_recorded`'s two
+    routes, so a journal from another area is not evidence about this one.
+
+    A COPY OF THE ARCHIVE IS FOUND BY WHICHEVER JOURNAL TRAVELLED WITH IT. That
+    is the case this pair exists to serve and the case the path compare used to
+    refuse: copy `Gw.dat` and `<area>_alloc.json` into a fresh run directory --
+    which is what `make_run_dir.py` and RUNBOOK's `Copy-Item` step do -- and the
+    chain is still ours, because the copy carries the file-id record the journal
+    recorded. What does NOT travel is nothing: a journal left behind is a
+    refusal, and its remedy is to bring it along rather than to allocate again.
+    """
+    if not here or not tag:
+        return None
+    seen, out = set(), []
+    for d in (here, os.path.dirname(os.path.abspath(dat))):
+        if not d:
+            continue
+        p = os.path.abspath(alloc_journal_path(d, tag))
+        if os.path.normcase(p) not in seen:
+            seen.add(os.path.normcase(p))
+            out.append(p)
+    for p in out:
+        if os.path.isfile(p) and allocation_recorded(p, dat, file_id, head_row,
+                                                     partner_row):
+            return p
+    return None
+
+
+def resolve_or_create(ar, file_id, created, *, here=None, tag=None):
     """(rows, create). `rows` is None exactly when the chain must be CREATED.
 
     `created` is the maps.toml row's own `created = true` -- an area that asked
@@ -736,6 +1476,36 @@ def resolve_or_create(ar, file_id, created):
     id does not resolve" is also what a WRONG id looks like, and until 2026-08-20
     that was this command's loudest refusal. A row that does not claim to be
     created keeps that refusal.
+
+    AND THE FALL-THROUGH IS NOT SHAPE-ONLY ANY MORE (R2, WORLDMAPS residuals).
+    `map_chain` checks that a chain LOOKS like a map -- head flags 259, a
+    non-zero `nextStream`, a partner carrying flags 1 -- and 349 retail maps in
+    the owner's own archive look exactly like that. So for a `created = true`
+    row whose id already binds, this branch fired identically for OUR chain and
+    for a genuine ArenaNet map that happens to sit under the id, and the second
+    case installed our geometry over somebody's live area with no line of output
+    to distinguish it. The claim "this file is ours" came from `content/`, which
+    knows nothing about which copy is in front of it.
+
+    So the claim now has to be EVIDENCED against the archive: the allocation
+    journal `create_chain` wrote, describing this id and these exact two rows
+    and bound to the copy in front of us (`created_evidence`). No journal, or
+    one that describes something else, and this REFUSES naming what is actually
+    there -- the rows, their flags and their sizes -- because the remedy depends
+    on what a person makes of them.
+
+    THE CASE THIS MUST NOT BREAK is the idempotent re-deploy, which is the loop
+    an author actually runs: build, install, look, change the shape, install
+    again. That run finds its own journal beside the archive and passes, and
+    `test_deploy.py` section 10 drives exactly it. SO IS THE SAME LOOP ON A COPY
+    of the archive -- staged into a run directory, or copied from `run-live/` --
+    which the first version of this guard refused, because it joined on the
+    absolute path `datalloc` records rather than on the bytes the allocation put
+    in the file. `allocation_recorded` reads the archive now.
+
+    `here`/`tag` say where to look and default to None, which for a `created`
+    row means NO evidence can be found and the refusal fires. Fail-closed on
+    purpose: a caller that did not think about it is the caller this is for.
     """
     chain = map_chain(ar, file_id)
     if chain is not None:
@@ -743,7 +1513,45 @@ def resolve_or_create(ar, file_id, created):
         # map row, and re-deploying an area is the normal iterating loop -- the
         # second run replaces the partner in place and finds the head already
         # armed. Nothing about a row's origin survives into how it is written.
-        return resolve_rows(ar, file_id), False
+        rows = resolve_rows(ar, file_id)
+        if created and created_evidence(ar.path, here, tag, file_id,
+                                        rows[0], rows[1]) is None:
+            head, partner = chain
+            raise Refused(
+                f"file id {file_id:#x} ALREADY BINDS a map chain in this "
+                f"archive -- head row {head.index} ({head.size} B, flags "
+                f"0x{head.flags:04X}), partner row {partner.index} "
+                f"({partner.size} B, flags 0x{partner.flags:04X}, compression "
+                f"{partner.compression}) -- and nothing here shows that WE made "
+                f"it.\n"
+                f"  This area's maps.toml row says `created = true`, which is a "
+                f"claim about where the file came from and is made in "
+                f"content/, against no archive in particular. `map_chain` "
+                f"checks the SHAPE, and 349 retail maps in the owner's own copy "
+                f"have exactly this shape -- so installing here would displace "
+                f"a live ArenaNet area while every line of output said the "
+                f"word 'created'.\n"
+                f"  The evidence this wants is the allocation journal "
+                f"`{tag or '<area>'}_alloc.json`, beside the archive or beside "
+                f"--out, describing THIS id and THESE two rows. It is written "
+                f"by the run that allocated the chain and it is the only record "
+                f"that survives; the 24-byte MFT row has no field for who made "
+                f"it.\n"
+                f"  THE JOURNAL TRAVELS WITH THE ARCHIVE, so start there. A "
+                f"whole-file copy of a Gw.dat -- a staged run directory, or "
+                f"RUNBOOK's `Copy-Item run-live\\<build>\\Gw.dat "
+                f"run\\<build>\\Gw.dat` -- carries this chain with it and is "
+                f"still ours; the check follows it, because it asks whether "
+                f"THIS file holds the file-id record the journal recorded "
+                f"rather than what the file is called. What does not follow is "
+                f"a journal left behind in the directory the archive was copied "
+                f"FROM. Copy `{tag or '<area>'}_alloc.json` next to this "
+                f"archive (or next to --out) and run it again.\n"
+                f"  If the journal is genuinely gone, that is not recoverable "
+                f"from here: allocate under a fresh id (`datalloc.py "
+                f"--next-id`, which skips both spellings) and point the "
+                f"maps.toml row at it.")
+        return rows, False
     if not created:
         raise Refused(
             f"file id {file_id:#x} does not resolve in this archive, and its "
@@ -801,7 +1609,7 @@ def create_note(file_id, size, bound, created, install):
             f"nowhere is also what a WRONG id looks like")
 
 
-def create_streams(plain, stream, compression):
+def create_streams(plain, stream, compression, reserve=0):
     """The two rows of a NEW map chain, HEAD FIRST. -> [Stream, Stream].
 
     Separated from the write so the SHAPE can be inspected without an archive,
@@ -828,14 +1636,22 @@ def create_streams(plain, stream, compression):
     everywhere -- FINDINGS C-6). For a stored row the bytes ARE the payload, so
     passing it is the caller stating that positively, exactly as
     `install_partner` does.
+
+    `reserve` GOES ON THE PARTNER AND ONLY THE PARTNER, and `datalloc.Stream`
+    refuses it on the head rather than accepting it silently -- an empty row owns
+    no extent, so a budget there would buy nothing. The partner is the row that
+    holds the geometry and the row a later, larger authored map has to grow. 0
+    is "no budget stated", which is what every area row said before
+    WORLDMAPS-W5 and what the three that ride map 143 still say.
     """
     extra = 8 if compression == COMPRESSION_HUFFMAN else 0
     return [datalloc.Stream(b"", MAP_HEAD_FLAGS_U16),
             datalloc.Stream(stream, MAP_PARTNER_FLAGS_U16,
-                            extra_bytes=extra, expect=plain)]
+                            extra_bytes=extra, expect=plain, reserve=reserve)]
 
 
-def create_chain(dat, file_id, plain, stream, compression, here, tag):
+def create_chain(dat, file_id, plain, stream, compression, here, tag,
+                 reserve=0):
     """Allocate a map's two rows under an id nothing binds yet. -> (head, partner).
 
     THE PLAN IS PRINTED AND THEN THROWN AWAY. `alloc(plan=...)` exists and is not
@@ -860,17 +1676,85 @@ def create_chain(dat, file_id, plain, stream, compression, here, tag):
     copy -- see `spill_stream`, and WORLDMAPS-W4's capture list, which names the
     file. It happens BEFORE the plan so that a chain the allocator refuses still
     leaves behind the thing that was refused.
+
+    `reserve` IS THE ONE CHANCE TO CHOOSE THIS ROW'S CEILING, which is why the
+    number is printed rather than merely passed. A created partner's reservation
+    used to be exactly the first install's own length, so the second, larger
+    authored map was already past a bound nobody had picked; the area's
+    `reserve_bytes` picks it, once, here. It is stated in the run's own log
+    because nothing on disk records it afterwards -- the 24-byte MFT row has no
+    entitlement field, and `deploy.resolve_rows` recomputes a row's ceiling from
+    its CURRENT size on every later run.
+
+    AN EXISTING JOURNAL IS REFUSED, FIRST, BEFORE ANY FILE IS TOUCHED (R3).
+    `datalloc`'s own CLI has refused this since it was written -- and this path
+    never went through it. `create_chain` calls the `alloc()` API directly, so
+    `_journal_path`'s check (`datalloc.py`, `_main`) was bypassed and a second
+    create with the same area name truncated the first one's journal at its
+    first record, then printed the file it had just destroyed as the way back.
+    The reasoning is `datalloc`'s and is quoted rather than paraphrased: A
+    JOURNAL IS THE ONLY WAY BACK FROM AN ALLOCATION. Overwriting one leaves the
+    edits it recorded applied forever, and a later `--revert` of the new file
+    would report success having restored none of them.
+
+    It is checked FIRST -- before the spill, before the plan -- because a run
+    that cannot be made revertible has not begun. That is a deliberate exception
+    to the spill-before-plan ordering below: the spill exists so that a chain
+    the ALLOCATOR refuses still leaves behind the bytes it refused, and this
+    refusal is about the operator's directory rather than about the chain.
     """
+    journal = alloc_journal_path(here, tag)
+    if os.path.exists(journal):
+        raise Refused(
+            f"{journal} already exists, and this will not write over it.\n"
+            f"  A journal is the only way back from an allocation. Overwriting "
+            f"one leaves the edits it recorded applied forever, and a later "
+            f"--revert of the new file would report success having restored "
+            f"none of them.\n"
+            f"  That is `datalloc`'s own refusal (its `_journal_path`), and it "
+            f"has always been CLI-only -- this command calls `alloc()` "
+            f"directly, so it was bypassed until 2026-08-20.\n"
+            f"  It is also the record `resolve_or_create` reads to prove a "
+            f"created chain is ours, so a clobbered one costs both the undo and "
+            f"the evidence. Move or delete it deliberately, or deploy with "
+            f"--out pointing somewhere else.")
     spill_stream(here, tag, stream, compression)
-    streams = create_streams(plain, stream, compression)
+    # INSIDE A REFUSAL, because building the streams is now a place that can
+    # refuse. `create_streams` puts `reserve` on a `datalloc.Stream`, and
+    # `datalloc` checks the number there -- a fraction, a negative, a budget
+    # under its own payload. That is an authoring mistake in
+    # `content/areas.toml`, and an authoring mistake must reach the operator as
+    # this command's own REFUSED line rather than as a traceback: `__main__`
+    # catches `deploy.Refused` and nothing else, so a raw `datalloc.Refused`
+    # from three lines above the try below exits 1 with a stack instead of 2
+    # with a remedy.
+    try:
+        streams = create_streams(plain, stream, compression, reserve=reserve)
+    except datalloc.Refused as exc:
+        raise Refused(
+            f"this area's declared reservation is not one the allocator will "
+            f"take:\n  {exc}\n"
+            f"  The number is `reserve_bytes` in content/areas.toml, so the "
+            f"remedy is a content edit and not an archive one.") from exc
     try:
         with Archive(dat) as ar:
             preview = datalloc.plan_alloc(ar, streams, file_id)
     except datalloc.Refused as exc:
         raise Refused(f"the allocator will not plan this chain:\n  {exc}") from exc
     preview.show()
+    part = preview.rows[1]
+    if reserve:
+        print(f"  reservation: {part.reservation} B for a {part.size} B "
+              f"stream, from this area's declared {reserve} B entitlement -- "
+              f"{part.reservation - part.size} B of headroom, so an authored "
+              f"map up to {part.reservation} B compressed replaces this row in "
+              f"place instead of relocating it")
+    else:
+        print(f"  reservation: {part.reservation} B for a {part.size} B "
+              f"stream, {part.reservation - part.size} B of headroom -- this "
+              f"area declares no `reserve_bytes`, so the row gets what the "
+              f"payload needs and a larger map later will relocate it")
 
-    journal = os.path.join(here, f"{tag}_alloc.json")
     try:
         plan = datalloc.alloc(dat, streams, file_id, journal, confirm=True)
     except datalloc.Refused as exc:
@@ -937,7 +1821,10 @@ def readback(dat, file_id, staged_blob, area):
 
     The whole verdict is mechanical, which is the point: nobody has to look at
     or listen to anything for this to be a result. Every row here is a thing the
-    compiler could have contradicted.
+    compiler could have contradicted -- and that sentence was FALSE of the
+    optional-chunk loop until 2026-08-21, which is what its comment is about: a
+    row that does not print because the case it covers did not arise is not a
+    row the compiler could have contradicted, it is a row nobody asked for.
     """
     import terrain as trn_bloated
     from props import BloatedProps
@@ -947,6 +1834,23 @@ def readback(dat, file_id, staged_blob, area):
         row = file_id_table(ar)[file_id]        # re-resolve; the head RELOCATES
         head = next(e for e in ar.entries if e.index == row)
         blob = ar.read(head)
+
+    # The head is still ARMED -- zero length -- so the client never re-bloated
+    # it. Say that, rather than letting the decoder raise three layers down
+    # about a 0-byte FFNA: on 2026-08-21 a harness that could not bind its
+    # ports (another session held them) surfaced here as a ValueError about a
+    # file header, which names neither the cause nor the thing that failed.
+    # An empty head is a RESULT -- "the compiler never ran" -- not a corrupt
+    # file, and it is the single most likely outcome of any launch that did
+    # not happen.
+    if not blob:
+        return ([f"  [FAIL] the client never re-bloated {file_id:#08x} -- "
+                 f"its head is still 0 B, exactly as --install armed it. "
+                 f"The map was never compiled, so there is nothing to check "
+                 f"it against. Look at the harness rc above and at "
+                 f"Gw.log before looking at anything here."],
+                ["head still armed"])
+
     hm = mfile.MapFile.decode(blob, strict=False)
 
     out, bad = [], []
@@ -976,11 +1880,30 @@ def readback(dat, file_id, staged_blob, area):
              "the compiled height field equals the one we authored",
              f"{same}/{len(st.heights)} samples")
 
+    # THE OPTIONAL CHUNKS, BOTH WAYS -- and the absent way is the one worth
+    # having. This loop used to read `if want is None: continue`, which made the
+    # absent case a CHECK THAT CANNOT FIRE. WORLDMAPS-W8 installed a map with
+    # `environment = false`, readback printed a clean 6/6, and it had asserted
+    # NOTHING about the environment; the fact that actually mattered -- that the
+    # client's COMPILED map carries no 0x20000009 either, so there was no donor,
+    # global or cached environment to fall back on -- had to be established by
+    # hand afterwards, out of the allocation journal. That fact is what makes
+    # "we removed X and nothing changed" mean "X was not the cause"; without it
+    # the null is a statement about an instrument that never looked. So an
+    # omitted chunk INVERTS the assertion rather than skipping it.
     for cid, scid, what in ((0x20000009, ENV, "environment"),
                             (0x20000012, SOUND, "sound")):
         want = staged.find(scid)
         got = hm.find(cid)
         if want is None:
+            row_(got is None,
+                 f"our map carries no {what}, and the compiled map carries "
+                 f"none either",
+                 f"nothing to fall back on -- no donor, global or cached "
+                 f"{what}" if got is None else
+                 f"but the compiler produced {len(got.payload())} B of "
+                 f"{what} we did not author, so anything this arm concludes "
+                 f"from its absence is about a chunk that was THERE")
             continue
         row_(got is not None and got.payload() == want.payload(),
              f"our {what} payload carried VERBATIM", f"{len(want.payload())} B")
@@ -991,11 +1914,18 @@ def readback(dat, file_id, staged_blob, area):
         row_(len(BloatedProps.decode(bp.payload()).records) == n_want,
              f"our {n_want} prop(s) are in the compiled map")
 
-    # the spawn test every maps.toml row carries, against the CLIENT's mesh
+    # THE AREA'S FLOOD SEED, against the CLIENT's mesh. NOT the player's
+    # spawn -- that comes from the MAP row, and is what content.py's
+    # map_static_config() hands the server. This comment used to read "the
+    # spawn test every maps.toml row carries" while the code below reads
+    # area["seed_x"], and on 2026-08-21 that wording put a claim into
+    # WORLDMAPS-W13's write-up which the run had not measured: it moved a
+    # flood seed and was reported as having moved the character. seed_x has
+    # three consumers in this tree and none of them is the player.
     if pm is not None:
         sx, sy = float(area["seed_x"]), float(area["seed_y"])
         n = sum(1 for t in pm.trapezoids if t.contains(sx, sy))
-        row_(n == 1, f"the spawn ({sx:.0f}, {sy:.0f}) lands in exactly one "
+        row_(n == 1, f"the flood seed ({sx:.0f}, {sy:.0f}) lands in exactly one "
                      f"trapezoid of the compiled mesh", f"{n}")
     return out, bad
 
@@ -1047,18 +1977,72 @@ def trapezoid_count(dat, file_id):
     return len(pm.trapezoids)
 
 
-def newest_harness_log(after):
-    """The gamesrv log of the newest harness run started after `after`."""
+def harness_source_dir():
+    """The `source:` line THIS tree's gamesrv prints. -> str
+
+    `authsrv.py` prints `source:    <its own directory>` at start-up, so the
+    line names the WORKTREE that produced a capture. deploy.py lives at
+    <tree>/toolkit/mapdata/, so the authsrv beside it is <tree>/toolkit/authsrv.
+    """
+    return os.path.normcase(os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     os.pardir, "authsrv")))
+
+
+def log_source(log, probe=8192):
+    """The directory named by a gamesrv log's `source:` line, or None.
+
+    Read from the HEAD of the file: the line is printed at start-up, and these
+    logs run to megabytes.
+    """
+    try:
+        with open(log, "r", encoding="utf-8", errors="replace") as fh:
+            head = fh.read(probe)
+    except OSError:
+        return None
+    m = re.search(r"^source:\s+(.+?)\s*$", head, re.M)
+    return os.path.normcase(os.path.abspath(m.group(1))) if m else None
+
+
+def newest_harness_log(after, source=None):
+    """The gamesrv log of the newest harness run started after `after`.
+
+    `source`, when given, RESTRICTS the search to captures this tree produced.
+
+    WHY, AND IT IS NOT HYPOTHETICAL. `vault/captures/harness/` is shared by
+    every session on this machine, and on 2026-08-21 THREE were running at
+    once. This function used to take the newest log by mtime across the whole
+    directory, so a peer session's run that happened to land inside our window
+    was indistinguishable from our own -- and `serve_run` would then score OUR
+    verdict off THEIR navmesh line. That is not a far-fetched race: the same
+    ambiguity misled a reader by hand the same day, and the fix they used by
+    hand is the one applied here -- `authsrv` prints `source: <its directory>`,
+    which names the worktree, and no two worktrees share one.
+
+    Passing `source=None` restores the old behaviour deliberately, for callers
+    with no tree to match against; it is not the default anywhere.
+    """
     root = os.path.join(vaultpath.require_dir(), "captures", "harness")
-    best, best_t = None, after
+    best, best_t, skipped = None, after, []
     for name in os.listdir(root):
         d = os.path.join(root, name)
         log = os.path.join(d, "gamesrv.log")
         if not os.path.isfile(log):
             continue
         t = os.path.getmtime(log)
-        if t > best_t:
-            best, best_t = log, t
+        if t <= best_t:
+            continue
+        if source is not None:
+            got = log_source(log)
+            if got != source:
+                skipped.append((name, got))
+                continue
+        best, best_t = log, t
+    if best is None and skipped:
+        # Say so. A silent None here reads as "the harness wrote nothing",
+        # which is a different diagnosis with a different fix.
+        print(f"  note: {len(skipped)} newer capture(s) skipped as another "
+              f"tree's: " + ", ".join(f"{n} ({s})" for n, s in skipped[:3]))
     return best
 
 
@@ -1116,8 +2100,8 @@ def spawn_row_count(world, area):
                if row.get("area") == area and row.get("enabled", True))
 
 
-def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
-              expect_rows=None):
+def serve_run(exe, session, dat, map_id, hold, expect_traps, file_id,
+              area=None, expect_rows=None):
     """A SECOND run, unarmed, that proves the SERVER read our mesh.
 
     WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
@@ -1142,9 +2126,20 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
     """
     t0 = time.time()
     rc = launch(exe, session, dat, map_id, hold, area=area)
-    log = newest_harness_log(t0)
+
+    # THE HARNESS RC IS A VERDICT, and this used to drop it into an f-string
+    # and carry on. A run whose harness failed has no evidence worth reading:
+    # whatever log turns up next is either truncated or somebody else's.
+    if rc != 0:
+        return SERVE_FAILED, (f"  harness rc {rc} -- the run itself failed, so "
+                              f"nothing below was measured. Look at the "
+                              f"harness output above before anything here.")
+
+    log = newest_harness_log(t0, source=harness_source_dir())
     if log is None:
-        return SERVE_FAILED, f"  harness rc {rc}, but no gamesrv log was written"
+        return SERVE_FAILED, (f"  harness rc {rc}, but no gamesrv log from THIS "
+                              f"tree ({harness_source_dir()}) was written after "
+                              f"the launch")
     with open(log, "r", encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     hits = NAVMESH_RE.findall(text)
@@ -1154,7 +2149,19 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
                else "no navmesh line at all")
         return SERVE_FAILED, (f"  harness rc {rc}; {where}: {why} -- the server "
                               f"served no collision")
-    fid, planes, traps = hits[0]
+    # WHICH MAP DID IT LOAD? `fid` used to reach only the note string, so a
+    # navmesh line for a DIFFERENT map scored this run as long as its trapezoid
+    # count matched -- and the biome donor 0x1B97D is pre-warmed at 6120
+    # trapezoids in every run of this harness. Select the line for OUR file id
+    # rather than reading hits[0] and hoping.
+    ours = [h for h in hits if int(h[0], 16) == int(file_id)]
+    if not ours:
+        got = ", ".join(f"0x{h[0]} ({h[2]} traps)" for h in hits[:4])
+        return SERVE_FAILED, (f"  harness rc {rc}; {where}: the server loaded "
+                              f"no navmesh for OUR map {file_id:#x} -- it "
+                              f"named {got}. A count that matches by accident "
+                              f"is not this map being served.")
+    fid, planes, traps = ours[0]
     traps = int(traps)
     mesh_ok = traps == expect_traps
     verdict = SERVE_PASS if mesh_ok else SERVE_FAILED
@@ -1210,6 +2217,34 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None,
                      f"the server never got as far as evaluating the area "
                      f"(look for a traceback in {where}/gamesrv.log)")
     return verdict, note
+
+
+def head_is_armed(dat, head_row):
+    """Is this map head ALREADY the zero-length re-bloat trigger? -> bool
+
+    ASKED OF THE ARCHIVE, WHICH IS THE WHOLE POINT (R1). `rebloat --arm` refuses
+    a zero-length head -- rightly, since it cannot record a baseline mesh from a
+    row that has none, and a second arm would overwrite the first journal with
+    nothing. But "already armed" is not an error to `deploy`: the client
+    recompiles on load either way, and this command is meant to be run
+    repeatedly while iterating on a shape. The version before this guard turned
+    every re-run after an interrupted one into a dead end.
+
+    A CREATED HEAD IS BORN ARMED and lands here already zero length, so it takes
+    the same branch for the same reason. The archive is asked rather than
+    `create` ON PURPOSE: "we just made it empty" is our word for it, and
+    `head.size == 0` is the row's -- the stronger of the two, and the one that
+    still holds if a create half-ran, if a client rewrote the head between two
+    deploys, or if the caller threaded the wrong flag.
+
+    Factored out of `main` in 2026-08-20's residual pass for one reason: the
+    guard was live and untestable, three lines inside a function that needs a
+    vault, an archive, a donor and a content row to reach. It is the same
+    predicate, on the same field, asked at the same moment.
+    """
+    with Archive(dat) as ar:
+        head = next(e for e in ar.entries if e.index == head_row)
+        return head.size == 0
 
 
 def resolve_rows(archive, file_id):
@@ -1274,9 +2309,18 @@ def main(argv=None):
     # says this area owns its file rather than displacing a retail one. Whether
     # the file exists yet is the archive's answer and is asked below.
     created_row = bool(map_row.get("created", False))
+    # `reserve_bytes` is the AREA's claim, not the map's: it says how much room
+    # this recipe wants for the geometry it produces, and the archive records no
+    # such number anywhere (see `content/areas.toml`'s header and
+    # `install_partner`). Absent means "no budget" and reproduces every run of
+    # this command before WORLDMAPS-W5 exactly. It is only SPENDABLE on a row
+    # this toolkit created -- `created_row` above -- which is why the two are
+    # read together and threaded together.
+    reserve = area_reserve(area)
     print(f"area {args.area!r}: {area['name']} -- map {map_id}, "
           f"{dim}x{dim}, file id {file_id:#x}"
-          + ("  (created: this area owns its file)" if created_row else ""))
+          + ("  (created: this area owns its file)" if created_row else "")
+          + (f"  (reserve {reserve} B)" if reserve else ""))
 
     # 1. geometry
     if args.blend:
@@ -1290,13 +2334,28 @@ def main(argv=None):
         if gen not in GENERATORS:
             raise Refused(f"unknown generator {gen!r}; "
                           f"known: {', '.join(sorted(GENERATORS))}")
-        heights = GENERATORS[gen](dim)
+        gen_fn = GENERATORS[gen]
+        # A generator may declare an `area` parameter when its shape is
+        # parameterised by the row (gen_ramp_uniform reads `ramp_dz`).
+        # Passed only when accepted, so the other generators keep their
+        # one-argument signature and nothing has to know which is which.
+        if "area" in inspect.signature(gen_fn).parameters:
+            heights = gen_fn(dim, area=area)
+        else:
+            heights = gen_fn(dim)
         print(f"  geometry: generator {gen!r}")
     heights, worst = stx.snap_field(heights, dim, dim)
     print(f"  lattice snap: worst sample moved {worst}")
 
     # 2. borrow
     dat = args.dat or os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
+    # HOISTED ABOVE THE ARCHIVE, and it used to be computed just before the
+    # write. `resolve_or_create` now needs the directory this run's build
+    # products live in, because that is where `<area>_alloc.json` -- the record
+    # that a created chain is OURS -- was written by the run that allocated it.
+    # The expression is unchanged and depends on nothing the archive says.
+    out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
+    here = os.path.dirname(out)
     with Archive(dat) as ar:
         biome_row = _donor_row(ar, area, "biome donor",
                                "donor_file_id", "donor_row")
@@ -1322,7 +2381,8 @@ def main(argv=None):
         # not distinguish the case it was run to preview. See create_note().
         bound = file_id_table(ar, raw=True).get(file_id)
         rows, create = ((None, False) if not args.install
-                        else resolve_or_create(ar, file_id, created_row))
+                        else resolve_or_create(ar, file_id, created_row,
+                                               here=here, tag=args.area))
 
     # 3. assemble
     report = assemble(area, heights, donor, dim)
@@ -1344,8 +2404,15 @@ def main(argv=None):
     row_note = create_note(file_id, len(stream), bound, created_row, args.install)
     if row_note:
         print(f"  {row_note}")
+    # AFTER `verify`'s reservation line and never inside it. That line predicts
+    # a verb from the row's CURRENT reservation, which is the whole truth for a
+    # row with no declared entitlement and a contradiction for one that has --
+    # see `budget_note`.
+    bud = budget_note(len(stream), rows[2] if rows else None, reserve,
+                      created=created_row)
+    if bud:
+        print(f"  {bud}")
 
-    out = args.out or os.path.join(os.path.dirname(dat), f"{args.area}.bin")
     if args.out or args.install:
         with open(out, "wb") as fh:
             fh.write(report.blob)
@@ -1356,19 +2423,20 @@ def main(argv=None):
         return 0
 
     if args.install:
-        here = os.path.dirname(out)
         if create:
             print(f"\ncreating file id {file_id:#x} in {dat}: nothing binds it, "
                   f"and this area's map row asked to own its file")
             head_row, partner_row = create_chain(
-                dat, file_id, report.blob, stream, compression, here, args.area)
+                dat, file_id, report.blob, stream, compression, here,
+                args.area, reserve=reserve)
         else:
             head_row, partner_row, reservation = rows
             print(f"\ninstalling into {dat}: head {head_row}, "
                   f"partner {partner_row}")
             verb = install_partner(dat, out, report.blob, stream, compression,
                                    head_row, partner_row, reservation,
-                                   args.area)
+                                   args.area, reserve=reserve,
+                                   created=created_row)
             print(f"  the partner row was written by {verb}")
         # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
         # zero-length head -- rightly, since it cannot record a baseline mesh
@@ -1381,10 +2449,9 @@ def main(argv=None):
         # A CREATED HEAD IS BORN ARMED and lands here already zero length, so
         # this takes the same branch for the same reason. It is asked of the
         # ARCHIVE rather than of `create` on purpose: "we just made it empty" is
-        # our word for it, and `head_now.size == 0` is the row's.
-        with Archive(dat) as ar:
-            head_now = next(e for e in ar.entries if e.index == head_row)
-            already = head_now.size == 0
+        # our word for it, and `head.size == 0` is the row's. See
+        # `head_is_armed`, which is that question and nothing else.
+        already = head_is_armed(dat, head_row)
         if already:
             print("  the head is already zero length -- already armed, so the "
                   "client will recompile; not arming twice")
@@ -1466,7 +2533,8 @@ def main(argv=None):
         expect_rows = (None if args.repo_content_only
                        else spawn_row_count(world, args.area))
         verdict, note = serve_run(exe, session, dat, map_id, args.hold, traps,
-                                  area=args.area, expect_rows=expect_rows)
+                                  file_id, area=args.area,
+                                  expect_rows=expect_rows)
         print(note)
         if verdict == SERVE_FAILED:
             print("\nSERVE CHECK FAILED -- the client walked on our map and "

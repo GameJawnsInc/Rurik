@@ -1,5 +1,12 @@
 # AUTHORED AREAS -- rung G.
 #
+# WHAT THE CLIENT WILL AND WILL NOT ACCEPT is written down in
+# studies/worldmaps/AUTHORING.md -- the two map_flags levers and what each
+# costs, the THREE slope classes (a map made only of 41-45 degree slopes
+# compiles to its flat ground and nothing warns you), how to author a slope the
+# snap does not move, prop footprints, and the gotchas that have each cost a
+# run. Read it before adding a row.
+#
 # A `map` row in maps.toml says where a RETAIL map is and where you arrive in it.
 # An `area` row says how to BUILD one of ours: the geometry, the surface, the
 # weather, the ambience. `toolkit/mapdata/deploy.py` reads one of these rows and
@@ -31,6 +38,48 @@
 # `map_id` points at a maps.toml row, which is what the SERVER serves. The two
 # tables are deliberately separate: a map row is a fact about where something
 # is, an area row is a recipe for making one.
+#
+# `reserve_bytes` -- OPTIONAL, AND IT IS THE ONE FIELD HERE THAT IS ABOUT THE
+# ARCHIVE RATHER THAN ABOUT THE MAP (WORLDMAPS-W5, 2026-08-20). It is the
+# reservation `deploy.py --install` asks `datalloc` for when it CREATES this
+# area's chain: how many bytes of contiguous blocks the Stripped partner row is
+# GIVEN, as against the `size` it HOLDS. The placement rounds it up to whole
+# 512-byte blocks.
+#
+# WHY IT HAS TO BE STATED HERE AND NOT COMPUTED. A 24-byte MFT row is offset,
+# size, extraBytes, flags, nextStream and crc -- there is no entitlement field,
+# so once a row is written "what this row was given" survives nowhere on disk
+# (`datwrite.py`'s `_grow_gate`: the bound "has to come from GEOMETRY").
+# `deploy.resolve_rows` therefore recomputes a row's ceiling from its CURRENT
+# size, and a created row's first install set that ceiling to exactly its own
+# length -- zero headroom -- so the next, larger authored map was already past
+# it and relocated. The area declares the budget once, and both directions of
+# `deploy.py` honour it: creation asks for the blocks, and a later install that
+# outgrows the row's current reservation grows back into them in place
+# (`datwrite --grow-to`) instead of moving the row.
+#
+# IT IS ONLY SPENDABLE ON A ROW THIS TOOLKIT MADE, so it belongs on an area
+# whose maps.toml row carries `created = true` and does nothing on any other.
+# The reason is what `--grow-to` means: a statement about what a row was GIVEN.
+# For a chain `deploy.py` allocated, this field IS that statement -- creation
+# asked the allocator for exactly this many bytes. For a retail row we are
+# displacing, ArenaNet gave that row whatever it gave it, and annexing the
+# blocks behind it because OUR recipe declares a number would be inventing an
+# entitlement rather than restating one. So `install_partner` requires both the
+# budget and `created`, a displaced row fits-or-relocates exactly as it did
+# before this field existed, and a run that declares a budget it cannot spend
+# says so on the line where it relocates.
+#
+# IT IS AN AUTHORING BUDGET AND NOT A CLAIM ABOUT THE CLIENT. The client reads
+# `size`, which is the payload and is unchanged; the reserved tail is zeroes,
+# indistinguishable from the padding every block-rounded reservation has always
+# carried. Nothing in this repo has ever observed the client caring, and this
+# field asserts nothing about it. What it does cost is real: a contiguous free
+# run that big has to exist in the target archive at creation time, and
+# `datplan.classify_runs` is what decides that, per copy, on the day.
+#
+# Omit it and creation behaves exactly as it did before: reservation = the
+# first install's own length, and the next larger map relocates.
 
 [area.plaza]
 name = "Plaza"
@@ -69,6 +118,12 @@ sound = true         # 0x10000012 + deps: ambient audio
 
 # Props: how many trees to scatter, and the donor model to use. 0 disables.
 trees = 5
+# NO map_flags HERE, DELIBERATELY. WORLDMAPS-W11's water rule cannot touch this
+# area: gen_plaza(32) tops out 31 units down and the rule needs 40, so 0 of its
+# 1,024 cells are affected and the flag would be a no-op. It is also the control
+# map for WORLDMAPS-W2's byte-identity witness, and setting a field that changes
+# nothing about the mesh would still change the partner's bytes and stop that
+# comparison reproducing. Left at 0 on purpose.
 
 [area.plaza.provenance]
 source = "invented"
@@ -106,6 +161,14 @@ sun = true
 environment = true
 sound = true
 trees = 12
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 4,001 of 9,216 cells (43.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # FINDINGS 57's 88 trapezoids for this area was a flags-0, stored-install figure.
 
 [area.vale.provenance]
 source = "invented"
@@ -141,6 +204,14 @@ sun = true
 environment = true
 sound = true
 trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W8/W11 measured this area at flags 0 -- 64 trapezoids, mesh x 1248..6144, 2,582/4,096 = 63.04% -- twice on the probe copy.
 
 [area.sculpt.provenance]
 source = "invented"
@@ -187,6 +258,31 @@ environment = true
 sound = true
 trees = 8
 
+# THE HEADROOM THIS ROW IS GIVEN, and the header above is the whole rationale.
+# 8,192 B is 16 blocks. WHERE THE NUMBER COMES FROM, said plainly because it is
+# a choice rather than a measurement of this map: `deploy.install_bytes`' own
+# measured series on build 38797's donors (2026-08-20) puts a 96x96 gen_plaza
+# partner at 2,828 B of compression-8 stream -- 32x32 1,316 B, 64x64 2,012 B,
+# 96x96 2,828 B -- so 8,192 is that largest measured figure with a 2.9x margin,
+# and it comfortably holds a 96x96 compressed partner. It is NOT taken from a
+# measured ladder above 96x96: no such series existed when this row was written
+# (that is WORLDMAPS-W6), and `install_bytes` refuses to extrapolate its three
+# points on principle -- the ratio is a property of the generator and the donor,
+# not of the format. This area itself is 64x64 and installs 2,028 B, so the row
+# is created with roughly 6.1 kB it does not yet use. It is spendable because
+# this area's map row (166) carries `created = true` -- see the header: the
+# three areas that ride map 143 are displacing a retail row and could declare
+# this field to no effect.
+reserve_bytes = 8192
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 1,409 of 4,096 cells (34.4%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W4's witness -- 64 trapezoids from a created chain -- was at flags 0.
+
 [area.frontier.provenance]
 source = "invented"
 verified = """Ours, chosen rather than observed, like every area row -- and what \
@@ -200,7 +296,779 @@ map's. Verified offline 2026-08-20 by `deploy.py --area frontier` against \
 the seed measures 0.0 degrees under the 15/35/30 slope classifier from FINDINGS 48 \
 -- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client would \
 build no navmesh for. The borrowed halves are named per field and read from the \
-owner's own archive at run time, never stored here. What is NOT verified is the \
+owner's own archive at run time, never stored here. `reserve_bytes` is an \
+AUTHORING budget and is verified only as arithmetic: it is the largest measured \
+compression-8 partner in `install_bytes`' 32/64/96 series (2,828 B at 96x96, build \
+38797 donors, 2026-08-20) with a stated 2.9x margin, and no client has been asked \
+anything about it -- the row it sizes declares `size`, the payload, exactly as it \
+did before the field existed. It is spendable only because this area's map row is \
+`created = true`: a budget declared on an area that DISPLACES a retail row buys \
+nothing, deliberately, since what that row was given is ArenaNet's statement rather \
+than ours. What is NOT verified is the \
 CLIENT, twice over: the spawn-in-one-trapezoid test needs the mesh the client \
 compiles (`deploy.readback`), and no retail client has ever read a created map chain \
 at all. Both are WORLDMAPS-W4, which is a run rather than a check."""
+
+[area.expanse]
+name = "The Expanse"
+map_id = 165
+dims = 256
+heights = "plaza"
+# The rect's centre. default_rect(256,256) is (0,0,24576,24576), so the centre is
+# (12288, 12288) -- grid cell (128,128), MEASURED at 0.0 degrees, which is the
+# plaza generator's dead-flat apron. The same rule `sculpt` and `frontier` use,
+# and for the same reason: the generator has a seam at gx == mid that steepens
+# with distance (86.3 degrees at the rect edge at this size), and only the centre
+# is guaranteed clear of it.
+seed_x = 12288.0
+seed_y = 12288.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1            # WORLDMAPS-W11: bit 0 ungates the navmesh water
+                         # rule. Without it the client drops every triangle whose
+                         # three corners are all 40+ units under water (the
+                         # constant 40.0 at 0x0094DE30, tested at 0x0072D3ED),
+                         # which costs this area 32,321 of 65,536 cells (49.3%).
+                         # The top byte stays 0, so the 15/35/30 slope set
+                         # FINDINGS 48 measured stays in force.
+                         # WORLDMAPS-W7's witness -- 60 trapezoids, 33,120/65,536 = 50.54% coverage -- was at flags 0, and that run's whole coverage model describes the flags-0 world.
+# NO `reserve_bytes`, ON PURPOSE. W5's authoring budget is the obvious next thing
+# to spend here and this row deliberately does not: a created row with a reserved
+# zero tail has never been read by a client, and declaring one would make a red
+# result at this size ambiguous between the size and the tail. The row takes its
+# payload's own reservation -- 10 blocks, 5,120 B for a 4,912 B stream -- and
+# `deploy` prints that it did.
+
+[area.expanse.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row -- and what \
+this one adds over `frontier` is SIZE and nothing else: same generator, same two \
+donors by file id, same prop count, same centre-seed rule, same created chain, \
+same compression. 64x64 -> 256x256 is 16x the cells and 64x the 32x32 baseline. \
+Verified offline 2026-08-20 against `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat`: \
+65,536/65,536 samples round-trip exactly after the lattice snap (worst sample \
+moved 3), the assembled map is 142,374 B compressing to 4,912 B of compression-8 \
+stream, assemble+compress is 0.74 s in CPython, and the seed measures 0.0 degrees \
+-- `stripbuild` refuses `UnwalkableSeed` rather than emitting a map the client \
+would build no navmesh for (FINDINGS 43, PathData:365). The borrowed halves are \
+named per field and read from the owner's own archive at run time, never stored \
+here.
+
+WHAT THIS ROW'S SHAPE MEANS FOR ITS MESH, said here because it will otherwise \
+read as a failure: `gen_plaza`'s dip side descends 4 units per cell without limit, \
+and MEASURED 2026-08-20 on the client's own compiled 64x64 mesh, ground at or \
+below a depth bracketed in (43, 47] stored units is ABSENT from the compiled \
+navmesh -- 0 of 1,003 cells at +47 and deeper, against 63.6% at +43. At 32x32 the \
+dip never reaches that depth and the mesh covers the whole rect; at 64x64 it \
+crosses at Chebyshev ring 20 and 37% of the rect is gone; at 256x256 the same ring \
+20 leaves roughly half the rect outside the mesh. That is a property of this \
+generator, not of the size, and the mechanism -- water from the borrowed \
+environment, a depth bound in the compiler, or the borrowed Zones chunk -- is \
+NOT established."""
+
+# RENAMED 2026-08-21: was `shoals` ("The Shoals"). The vault run note for
+# WORLDMAPS-W8 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.env_off]
+name = "Environment Off"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field changed. Same generator, same dims, same seed,
+# same donors, same prop count, same map id, same rows -- so the only thing that
+# differs between the two compiled meshes is whether the map carries an
+# environment chunk at all.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false       # <- THE VARIABLE. `stripbuild`'s ENV pair is
+                          # all-or-nothing (OPTIONAL, FINDINGS 51), so this
+                          # emits a map with no 0x10000009 and no 0x11000009.
+sound = true
+trees = 8
+
+[area.env_off.provenance]
+source = "invented"
+verified = """Ours, and it exists to answer ONE question with ONE variable. \
+WORLDMAPS-W7 measured a DEPTH CUT on the client's own compiled meshes: ground at \
+or below a threshold bracketed in (43, 47] stored units is absent from the \
+navmesh -- 0 of 1,003 cells at +47 and deeper on the 64x64 mesh, against 63.6% \
+at +43 -- and the same boundary predicted the 256x256 mesh's coverage to 0.01 \
+of a point (50.55% modelled, 50.54% measured, cut at Chebyshev ring 20). The \
+MECHANISM was left UNVERIFIED with three readings: the borrowed environment \
+chunk's water plane (the donor is Pre-Searing Ascalon and FINDINGS 51 records \
+that payload as not understood), a depth bound in the compiler itself, or the \
+borrowed 34-byte Zones chunk. This row is `sculpt` with `environment = false` \
+and nothing else changed, so the two meshes differ by the ENV chunk alone. If \
+the left third of the mesh returns, the water reading is confirmed; if the mesh \
+is unchanged, the water reading is refuted and the other two survive."""
+
+# RENAMED 2026-08-21: was `rills` ("The Rills"). The vault run note for
+# WORLDMAPS-W9 arm 1 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_largest]
+name = "Zones Largest"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x85DE   # <- THE VARIABLE. Coastal Gate's partner (row
+                             # 32681) carries a 15,870 B Zones against the
+                             # 34 B our template donor ships -- the largest
+                             # contrast in the archive.
+constants_row = 32680        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.zones_largest.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the largest of those (Coastal Gate, head row 32680 / partner 32681) for maximum \
+contrast: if a Zones chunk 466 times larger, carrying real zone definitions, \
+changes nothing about the compiled navmesh, the Zones reading is dead."""
+
+# RENAMED 2026-08-21: was `brooks` ("The Brooks"). The vault run note for
+# WORLDMAPS-W9 arm 2 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.zones_smallest]
+name = "Zones Smallest"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `env_off`'s row with ONE field changed: the CONSTANTS donor, which is the only
+# thing that selects the borrowed Zones chunk. Environment stays FALSE so this
+# arm differs from WORLDMAPS-W8's treatment in exactly one place.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # biome donor, UNCHANGED -- terrain deps come from here
+constants_file_id = 0x28F32   # <- THE VARIABLE. Sparring Basics' partner (row
+                             # 71586) carries a 2,030 B Zones against the
+                             # 34 B our template donor ships -- the SMALLEST
+                             # rich zone table in the archive, after a 15,870 B
+                             # one CRASHED the client (WORLDMAPS-W9 arm 1).
+constants_row = 71585        # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = false
+sound = true
+trees = 8
+
+[area.zones_smallest.provenance]
+source = "invented"
+verified = """Ours, and it exists to vary the ONE thing no authored area in this \
+project has ever varied. Every map this toolkit has built borrows its Header and \
+Zones chunks from the same 32x32 template partner (file id 0x22E2C, row 46196), \
+whose Zones is the MINIMAL 34-byte form. MEASURED 2026-08-21 across all 349 map \
+heads in `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: the HEADER chunk has \
+exactly ONE distinct payload archive-wide (2411873903000000, 349 of 349), while \
+ZONES has 308 distinct payloads -- so changing `constants_file_id` changes the \
+Zones chunk and nothing else, which is what makes this a single variable. Our \
+template's 34-byte form is shared by 25 maps; real maps carry zone material \
+definitions with .ini paths and float arrays up to 15,870 B. This row points at \
+the SMALLEST of those that is still a real table (Sparring Basics, head row \
+71585 / partner 71586, 2,030 B) -- 60x our template's 34 B, but a fourteenth of \
+the 15,870 B one that `zones_largest` pointed at. It exists because that arm \
+CRASHED the client (WORLDMAPS-W9 arm 1, c0000005 on an unwritable page), so \
+this arm asks the same question with the smallest dose that still carries real \
+zone definitions. CORRECTED 2026-08-21: this paragraph was copy-pasted from \
+`zones_largest`'s row and described Coastal Gate / 15,870 B, which is not what \
+the fields above it select."""
+
+# SUPERSEDED 2026-08-21, kept as the record. This row was WORLDMAPS-W11's
+# registered treatment arm -- `sculpt` plus bit 0 -- and it did its job: the
+# excluded ground returned, 63.04% -> 93.26%. `sculpt` now carries `map_flags`
+# itself, so deploying this row and deploying `sculpt` produce the same map.
+# Kept because WORLDMAPS-W11's run note cites it -- under its old name, `deeps`.
+# RENAMED 2026-08-21: was `deeps` ("The Deeps"). The vault run note for
+# WORLDMAPS-W11 and its command logs cite the OLD name; they are dated records of a
+# run that happened and were left as written.
+[area.flags_bit0]
+name = "Flags Bit 0"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with ONE field added. Same generator, dims, seed, donors, prop
+# count and environment -- so the compiled mesh differs from sculpt's only by
+# the Map Parameters flags dword.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1            # <- THE VARIABLE. Bit 0 only; the TOP BYTE stays 0 so
+                         # the slope set stays the 15/35/30 that FINDINGS 48
+                         # measured in force.
+
+[area.flags_bit0.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull the lever WORLDMAPS-W10 found. W10 \
+located the navmesh depth bound statically in the pinned pristine 38797 client: \
+at 0x0072D3ED, inside PathFlood.cpp's per-triangle classifier 0x0072D2E0, the \
+code loads float32 40.0 from 0x0094DE30 and compares it against all three corner \
+z of a terrain triangle; all three deeper writes class 1 and RETURNS, skipping \
+the slope comparison entirely. That rule runs only when the dword tested at \
+0x0072D3C6 is CLEAR, and that dword is the Map Parameters flags field -- \
+identified structurally, since the ctx builder at 0x007249A0-B7 copies the four \
+rect floats off state+0x00..0x0C and `mapbuild.encode_map_parameters` packs \
+rect-then-flags, making state+0x10 the next field. Every map this toolkit has \
+built shipped flags = 0, because `stripbuild.build` never offered the argument \
+until now.
+
+VERIFIED OFFLINE 2026-08-21 before any client saw it: `encode_map_parameters` \
+puts the dword at payload offset +21, and it reads 0x00000000 with the default \
+and 0x00000001 with this row's value. Bit 0 only -- the same dword's TOP BYTE \
+selects the slope set at 0x0072CA1C, and FINDINGS 48 measured the 15/35/30 set \
+in force with it at zero, so this row must not disturb it.
+
+WHAT IS NOT VERIFIED, and it is the whole point of the run: whether bit 0 is the \
+gate. It has never been read out of an installed map's bytes -- W10 inferred \
+flags = 0 from `stripbuild`'s default argument -- and the inverted branch has \
+never been exercised by anything. This row exercises it."""
+
+[area.sculpt_flags0]
+name = "Sculpted Vale (flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt`'s row with map_flags OMITTED, so it defaults to 0. Same generator,
+# dims, seed, donors, prop count and environment -- the compiled map differs
+# from `sculpt`'s only by the Map Parameters flags dword. This is the twin
+# WORLDMAPS-W12 never had: W12 compared flags-1 areas against figures measured
+# on OTHER days and OTHER archive states, and a same-session twin is what makes
+# WORLDMAPS-W14's byte diff attributable to the bit rather than to the week.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.sculpt_flags0.provenance]
+source = "invented"
+verified = """Ours. It is `sculpt` with one field removed, and it exists so \
+that WORLDMAPS-W13's two arms are compiled by the same client, from the same \
+archive, in the same session -- differing in one bit. Every flags-0 figure this \
+project holds for this shape (WORLDMAPS-W8's 64 trapezoids / 2,582 of 4,096 \
+quad centres / 7,660 B path chunk) was measured on 2026-08-21 but against a \
+different archive state, and W12's comparisons leaned on them across days. \
+UNVERIFIED until this row runs: whether a same-session flags-0 compile \
+reproduces those figures at all. If it does not, W12's deltas were measured \
+against a moving baseline and the arithmetic in its results table needs redoing \
+-- which is exactly why the twin is worth a launch."""
+
+[area.sculpt_deep1]
+name = "Sculpted Vale (deep spawn)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt` with ONE field changed on each axis: the seed moves from the plaza
+# apron at the centre (3072) onto ground that exists ONLY because bit 0 is set.
+# At 96 units per cell, x=528 is the centre of column 5. The flags-0 mesh for
+# this shape starts at column 13 (x=1248), so this seed is 720 units inside the
+# excluded region -- eight columns clear of the boundary, not one.
+seed_x = 528.0
+seed_y = 528.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1
+
+[area.sculpt_deep1.provenance]
+source = "invented"
+verified = """Ours, and it is WORLDMAPS-W13's parameter-free half. \
+WORLDMAPS-W12 established that map_flags = 1 puts submerged ground INTO the \
+compiled navmesh -- 3,820 of 4,096 quad centres against 2,582 -- and said in \
+its own scope note that the recovered ground had not been stood on. \
+`deploy.readback` already asserts that the area's seed lands in exactly ONE \
+trapezoid of the CLIENT'S compiled mesh, so moving the seed into the recovered \
+region turns that existing assertion into the experiment: this row must PASS it \
+and `sculpt_deep0` must FAIL it, and the client is the referee for both. \
+MEASURED OFFLINE before staging: at flags 0 this shape's mesh spans x 1248.. \
+6144, so x=528 is outside it; at flags 1 it spans x 0..6144. What is NOT \
+established, and is the risk this row carries: whether the client will load a \
+map whose spawn is off-mesh at all. WORLDMAPS-W9 produced both a crash and a \
+hang from a map that varied one chunk, so `sculpt_deep0` may not fail cleanly."""
+
+[area.sculpt_deep0]
+name = "Sculpted Vale (deep spawn, flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `sculpt_deep1` with map_flags omitted. The SAME off-centre seed, on a map
+# where the water rule is still in force -- so the ground under the seed is not
+# in the mesh. This is the control that makes the deep-spawn arm mean something:
+# without it, a passing spawn check at flags 1 says only "the seed is on the
+# mesh", which is also true of every area this project has ever shipped.
+seed_x = 528.0
+seed_y = 528.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.sculpt_deep0.provenance]
+source = "invented"
+verified = """Ours, and it is the arm expected to FAIL -- which is the point. \
+`deploy.readback`'s spawn assertion is the discriminator, and a check only \
+discriminates if it can go both ways on the same rig. This row puts the seed \
+at (528, 528) with the water rule in force, where the compiled mesh starts at \
+x=1248, so the seed is 720 units outside the ground the client will mesh. \
+PREDICTED: readback's "the spawn lands in exactly one trapezoid" goes RED here \
+and GREEN for `sculpt_deep1`. UNVERIFIED and the reason this row is run rather \
+than argued: whether the client loads such a map cleanly, whether it relocates \
+the body to the nearest mesh (deploy's serve path mentions a placement nudge of \
+up to 480 units, which is LESS than this row's 720-unit margin -- chosen for \
+that reason), or whether it refuses outright."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W16
+# The traversal pair. Same shape as `sculpt`, seeded 48 units EAST of the
+# flags-0 mesh edge so that walking west is the experiment.
+
+[area.walkedge1]
+name = "Sculpted Vale (walk from the edge)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# Seed at (1296, 4272): column 13, row 44. MEASURED offline against the two
+# WORLDMAPS-W13 head dumps -- this point is on ground in BOTH arms, and walking
+# west from it there are 48 units of ground at flags 0 and 1,296 at flags 1.
+seed_x = 1296.0
+seed_y = 4272.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+map_flags = 1
+
+[area.walkedge1.provenance]
+source = "invented"
+verified = """Ours. The seed is chosen, the ground under it is not: (1296, \
+4272) is inside a trapezoid of BOTH meshes WORLDMAPS-W13 compiled -- arm A at \
+flags 0 and arm B at flags 1, same client, same archive, same session -- which \
+is what makes it a fair start line rather than a start line that only exists in \
+one arm. MEASURED OFFLINE by stepping west in 24-unit increments through each \
+compiled mesh: 48 units of contiguous ground at flags 0, 1,296 at flags 1. \
+UNVERIFIED and the point of the run: whether the CLIENT lets a character walk \
+that ground. The mesh containing it (W12), the spawn standing on it (W13) and \
+the server placing bodies on it (W15) are all established; traversal is not, \
+and none of the three implies it."""
+
+[area.walkedge0]
+name = "Sculpted Vale (walk from the edge, flags 0)"
+map_id = 143
+dims = 64
+heights = "plaza"
+# `walkedge1` with map_flags omitted. Same seed, same shape, same donors.
+seed_x = 1296.0
+seed_y = 4272.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.walkedge0.provenance]
+source = "invented"
+verified = """Ours, and it is the arm that should hit a wall. Same seed as \
+`walkedge1`, on the map where the water rule still applies, so the compiled \
+mesh stops 48 units west of the start line. It carries the SAME walk plan as \
+its twin, which is what removes the need to calibrate the camera: the two arms \
+share a heading, so whatever direction the character actually faces, the arms \
+differ only in what ground is under it. A bearing model would be a free \
+parameter; sharing the plan is not."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W17
+# FINDINGS 48's ramp, twice, differing only in the flags dword's TOP BYTE.
+# The generator is that run's field carried over verbatim (deploy.gen_ramp,
+# verified 1024/1024 samples identical), so these two arms are measured with the
+# same ruler FINDINGS 48 used and are comparable to its result.
+#
+# NO PROPS on either arm. The instrument is the mesh; eight trees would be eight
+# more things that could differ between arms for a reason that is not the flag.
+
+[area.ramp_setA]
+name = "Ramp (slope set A)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# map_flags OMITTED, so 0 -- which is exactly what FINDINGS 48 ran. This arm is
+# a REPRODUCTION and its predicted pattern has no free parameter.
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.ramp_setA.provenance]
+source = "invented"
+verified = """Ours in construction, not in shape: the height field is \
+FINDINGS 48's ramp carried over verbatim from \
+`vault/research/e10e-threshold-2026-08-12/build_ramp.py` into \
+`deploy.gen_ramp`, and the port was accepted on BYTE EQUALITY of the field -- \
+1,024 of 1,024 stored samples identical -- rather than on reading. Five 6-cell \
+strips at design slopes 28.0 / 32.0 / 36.9 / 41.9 / 47.0 degrees bracket every \
+candidate cutoff of BOTH threshold sets the client carries. FINDINGS 48 \
+MEASURED this map at flags 0 and got pattern `WW...`: the 32.0 strip walkable, \
+the 36.9 strip not, which puts the cut in (32.0, 36.1) where 35 is the only \
+candidate. This arm re-runs it unchanged, so a disagreement is a fact about \
+drift between 2026-08-12 and today rather than about the flag."""
+
+[area.ramp_setB]
+name = "Ramp (slope set B)"
+map_id = 143
+dims = 32
+heights = "ramp"
+# THE VARIABLE, and it is the top byte alone: 0x02000000. Bits 0..23 stay clear,
+# so the depth gate this arc spent W11-W16 on is untouched (and the ramp has no
+# submerged ground for it to act on anyway).
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.ramp_setB.provenance]
+source = "invented"
+verified = """Ours, and it exists to pull a lever read out of the client \
+statically and never tested. TRACED 2026-08-21 in the pinned pristine 38797 \
+build, with both positive controls passing first and an adversarial pass that \
+strengthened rather than weakened it: the Map Parameters flags dword is copied \
+VERBATIM to state+0x10 by the parser at 0x0070D920; its TOP BYTE is extracted \
+at 0x00712681-0x0071269C (`mov eax,[ecx+0x10]` / `shr eax,0x18`) and carried \
+through seven hops, each with exactly one caller and no rewrite, to \
+`cmp dword ptr [ebp+8], 2` at 0x0072CA1C. Below 2 loads 15/35/30 degrees as \
+radians (0x0094E3CC = pi/12, 0x00A6F874 = 35 deg, 0x0094E3D8 = pi/6); 2 or \
+above loads 10/45/40 (0x0094DFA0 = pi/18, 0x0094E3E4 = pi/4, 0x00A6F878 = 40 \
+deg). The middle slot is the hard walkability cutoff.
+
+WHY 0x02 AND NOT 0x01: the parser NORMALISES a top byte of 0 to 1 \
+(0x0070D9B2 `cmp cl,1` / 0x0070D9B7 / 0x0070D9BE `or eax,0x1000000`), so a file \
+shipping 0 and a file shipping 1 both arrive at the selector as 1 and choose \
+the SAME set. The boundary is 1-vs-2, not 0-vs-nonzero. 0x02 also keeps the \
+`< 3` test at 0x0070D9DE on the same side as 0x00 does, so bit 5 of the \
+in-memory dword is set in both arms and is not a confound.
+
+WHAT IS NOT VERIFIED, and is the whole point of the run: every word above is \
+STATIC. No map has ever shipped a non-zero top byte, the inverted branch at \
+0x0072CA92 has never been exercised by anything this project built, and \
+studies/customarea FINDINGS 34 and 48 both record the mode flag's source as \
+NOT FOUND. This row is the first time the other slope set is asked for."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W20
+# The fine ramp, at cut 45 and at cut 35. Four strips of EXACTLY 43.78 / 45.00 /
+# 46.17 / 47.29 degrees -- zero snap spread, every interior column exact.
+
+[area.fine45]
+name = "Fine ramp (cut 45)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.fine45.provenance]
+source = "invented"
+verified = """Ours, and it exists to BISECT a cut that WORLDMAPS-W19 could only \
+bracket to [42.51, 46.45]. Its four strips snap to EXACTLY 43.78, 45.00, 46.17 \
+and 47.29 degrees -- MEASURED, worst sample moved 0, every interior column \
+identical -- because each dz is a multiple of 4 AND each strip is eight columns \
+aligned to the codec's 4x4 sub-blocks. `snap_block` projects each sub-block \
+independently, so `gen_ramp`'s 6-wide unaligned strips quantised by up to 1.4 \
+degrees and that spread, not the dz resolution, is what limited W19.
+
+THE MIDDLE STRIP IS EXACTLY 45.00 DEGREES, the threshold value itself. The \
+classifier excludes on `slope > array[1]`, strictly greater (0x0072D423-30: \
+`fld [edx+4]`, `fcomp st(1)`, `test ah,5`, `jnp`), so a slope sitting exactly \
+ON the cut should be WALKABLE. No map this project has built has ever put a \
+slope there, and nothing has ever tested whether that comparison is strict."""
+
+[area.fine35]
+name = "Fine ramp (cut 35)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.fine35.provenance]
+source = "invented"
+verified = """Ours: `fine45` with the top byte cleared, so the client selects \
+15/35/30 instead of 10/45/40. Every strip on this map is between 43.78 and \
+47.29 degrees, so ALL FOUR are above 35 and the whole ramp must be excluded -- \
+the mesh should be the apron alone. That is the control which proves the map's \
+strips are genuinely steep rather than that the flag turned classification off, \
+and it is the same shape of control WORLDMAPS-W19 used within one arm."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W21
+# Can an authored prop BLOCK a character? One flat map, one prop, two arms
+# differing only in whether that prop carries a footprint.
+
+[area.blocker]
+name = "One tree with a footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288       # <- THE VARIABLE. A 576x576 square footprint,
+                         #    prop-local, centred on the prop at (2928, 1488).
+
+[area.blocker.provenance]
+source = "invented"
+verified = """Ours. A FLAT map so nothing about terrain can enter the result, one prop, and the only difference from `noblocker` is `prop_outline`. `pick_tree_cells` is deterministic: on a flat 32x32 with seed cell (16,16) the first cell is (30,15), world (2928, 1488) -- 1,392 units due EAST of map 143's spawn at (1536, 1536), and 48 units off the eastward walk line, so a footprint of half-width 288 spans that line comfortably. MEASURED before staging.
+
+UNVERIFIED, and the point of the run: whether the client's collision reads an authored footprint at all. `Prop.outline` has always been encodable and deploy has always passed it empty, so no prop this project ever placed had one."""
+
+[area.noblocker]
+name = "One tree with no footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+
+[area.noblocker.provenance]
+source = "invented"
+verified = """Ours, and it is the CONTROL that carries this experiment. Same flat map, same single prop at the same (2928, 1488), `prop_outline` absent so the prop ships the empty outline every prop this project has ever placed. If a character is stopped HERE too, the stop is not the footprint and the treatment arm means nothing. This is also the arm that measures how far the walk gets with nothing in the way, which is what the treatment is compared against."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W22
+[area.notch]
+name = "One tree with an L-shaped footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288
+prop_outline_shape = "L"   # <- THE VARIABLE, against W21's `blocker` square
+
+[area.notch.provenance]
+source = "invented"
+verified = """Ours. Identical to WORLDMAPS-W21's `blocker` in every field but the outline SHAPE, so the two compiled meshes differ by the polygon alone. W21 established that an authored footprint is honoured 1:1 in world units -- a 288 half-width square put the mesh's last walkable x at 2640 against an authored edge at 2640 -- but a square cannot distinguish a POLYGON from its bounding box or its convex hull, because for a square all three are the same set.
+
+This ring is NON-CONVEX: the square with its north-west quadrant removed, so its convex hull is the full square. The notch is prop-local x -288..0, y 0..288, i.e. WORLD x 2640..2928, y 1488..1776. If that region is walkable, the client used the polygon; if it is a hole, the client used the hull or the bounds and this map cannot tell those two apart."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W23
+# Does class-2 ground need a class-0 ROUTE, or can the flood climb it directly?
+# ONE slope over the whole map -- no strips, no seams, no neighbours.
+
+[area.u42]
+name = "Uniform 42.51 deg ramp (class 2)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 88             # atan(88/96) = 42.51 deg exactly; class 2 at cut 45
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000   # cut 45, so 42.51 is BETWEEN array[0]=40 and array[1]=45
+
+[area.u42.provenance]
+source = "invented"
+verified = """Ours, and it exists because WORLDMAPS-W20's RECONSTRUCTION rests on a map that cannot carry it. W20 varied four strips at once and concluded class-2 ground meshes only where reachable through class-0 ground -- but its class-2 strips DID touch the flat class-0 apron and still did not mesh, which is not what that rule predicts, and the same map varied the steep lateral seams between strips at the same time. One slope over the whole map removes seams and neighbours together. MEASURED offline: dz 88 snaps to 42.51 deg exactly, worst sample moved 0, every quad in the ramp band identical."""
+
+[area.u18]
+name = "Uniform 18.43 deg ramp (class 0)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 32             # atan(32/96) = 18.43 deg; class 0 under both sets
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.u18.provenance]
+source = "invented"
+verified = """Ours, and it is the control that makes `u42` mean anything. Same generator, same bands, same flags, same seed -- one field different. 18.43 deg is class 0 under BOTH threshold sets, so this ramp must mesh. If it does not, the uniform generator is broken and `u42`'s result says nothing about classes."""
+
+[area.ashcoil]
+name = "Ashcoil Caldera"
+map_id = 167
+dims = 64
+heights = "caldera"
+# The 64x64 centre: the caldera floor, measured 0.0 deg under the classifier.
+# It doubles as the spawn -- map 167's row spawns at (3072, 3072) too.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 32
+map_flags = 0x02000001   # BOTH levers, and the top byte is REQUIRED, not taste:
+                         # the design's legality-by-construction argument runs
+                         # under the 10/45/40 set (top byte 2, WORLDMAPS-W17).
+                         # Its walkable staircases are 48-unit risers whose
+                         # worst triangle plane is 35.3 deg -- class 0 under
+                         # cut 45, but class TWO under the 15/35/30 set, which
+                         # is the band W20/W23 showed to be conditionally
+                         # meshed. Bit 0 keeps the sunken pool (floor -48,
+                         # one quantum under the water plane) walkable.
+
+[area.ashcoil.provenance]
+source = "invented"
+verified = """Ours -- the first area authored as a PLACE rather than as an \
+instrument, on the mod-platform framing (owner, 2026-08-21). The design is the \
+winner of a three-designer panel (vertical drama / enclosure-and-reveal / \
+natural coherence briefs) judged on coherence, drama and feasibility, with the \
+losing designs' grafts folded in; the judge re-implemented all three height \
+functions and re-measured every self-reported claim before scoring. The \
+surface obeys one master rule: walkable ground keeps its pre-quantization \
+gradient <= 40 units/cell (so after 48-quantization every axial step is 0 or \
+48 and no triangle plane exceeds 35.3 deg), walls are hard discontinuities \
+>= 192, and nothing between exists, so the 40-45 deg band WORLDMAPS-W20/W23 \
+showed to be conditionally meshed is unreachable by construction. Elevated \
+roads leave flat ground only through flanked slots (the mouth, the top-out \
+notch, the draw) because a tapering ledge always sweeps that band somewhere on \
+its flank. MEASURED offline before any install (scratchpad validate_design.py \
+against the deployed generator, byte-identical port): zero cells in the \
+forbidden band, flood(<=64 steps) == flood(<=111 steps) under 4- and \
+8-connected adjacency, every waypoint of the intended walk (pool, mouth slot, \
+shelf at four angles, exit rim, crown, draw, bowl) connected to the centre \
+seed, codec round-trip 4096/4096 exact, snap worst sample moved 4. What is \
+NOT verified is the CLIENT: no compile, no readback and no walk had happened \
+when this row was written, and the tree-placement y-flip fix in deploy.py \
+(grid row 0 renders at world maxY) is a RECONSTRUCTION from FINDINGS 4 plus \
+W23's flipped apron trapezoid, confirmed by no client run yet."""

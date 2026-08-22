@@ -128,7 +128,15 @@ import test_datmove as tdm  # noqa: E402
 # most: with the pre-write refusal removed the write LANDS, which is the only
 # way `datmove.overlaps` can ever be made to fire. Sections 11 and 12 add no
 # vault dependency and cost about a second.
-LEDGER = checks.Ledger("dat writer", floor=199)
+#
+# RAISED 199 -> 212 on 2026-08-20 with section 13, the grow gate's TYPED
+# refusal. MEASURED from a green run, not projected: 212. The section needs no
+# vault and cannot skip -- it builds its own fixtures the way section 11 does.
+# The load-bearing checks in it are the two NEGATIVES: an ordinary refusal
+# carries no token and is not a `GrowGateRefused`, which is what makes the type
+# worth joining on at all. A token on every failure would be worse than none,
+# and that is the shape a careless version of this change would have.
+LEDGER = checks.Ledger("dat writer", floor=212)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -2121,6 +2129,185 @@ def section_journal(tmp):
           "one-record-per-line buys when a write is torn")
 
 
+def section_grow_typed(tmp):
+    """13. THE GROW GATE'S REFUSAL HAS A TYPE, and the four conditions a name.
+
+    WHAT THIS IS FOR, and it is a defect in a CONSUMER rather than in this file.
+    `deploy.py` drives `--replace --grow-to` as a subprocess and has to tell two
+    non-zero exits apart, because only one of them may be followed by a
+    relocation: the gate refusing (another row took the blocks this one freed --
+    a fact about the archive that a silent datmove would erase) and every
+    ordinary refusal (a bad declaration, a missing file, a refused archive).
+    Until 2026-08-20 it told them apart by looking for four fixed fragments of
+    the sentences below -- "is CLAIMED by", "PAST THE END", "LIVE MASTER FILE
+    TABLE", "datplan WITHHOLDS". That join fails safe if this module rewords
+    anything, which is the right direction and is still a join on prose.
+
+    So the refusal now carries its own name: `GrowGateRefused`, a `SystemExit`
+    subclass with a `condition`, and one machine-readable line printed beside
+    (never inside) the message. THE LOGIC DID NOT MOVE -- this section's job is
+    to prove that twice over: every sentence is still the sentence, and an
+    ordinary refusal still carries no token at all. That last one is the check
+    that matters, because a token on everything would be worse than no token.
+    """
+    print("\n13. the grow gate refuses BY NAME, not by wording")
+    off = ROWS[ROW_SHRINK][0]
+    pristine_res = reservation(ROWS[ROW_SHRINK][1])           # 1024
+    small = spill(tmp, "t-small.bin", pattern(9, 100))
+    big = spill(tmp, "t-big.bin", pattern(77, 1000))
+    mid = spill(tmp, "t-mid.bin", pattern(31, 600))
+
+    check(issubclass(datwrite.GrowGateRefused, SystemExit),
+          "GrowGateRefused is a SystemExit -- every caller in the tree and the "
+          "vault catches that or lets it exit, so the type is ADDED and nothing "
+          "existing has to learn about it",
+          f"{datwrite.GrowGateRefused.__mro__[1].__name__}")
+    check(datwrite.GROW_GATE_CONDITIONS
+          == ("claimants", "eof", "live-mft", "withheld-run"),
+          "and the four conditions are named in the gate's own order",
+          f"{datwrite.GROW_GATE_CONDITIONS}")
+
+    def shrunk(name):
+        """A fresh archive whose ROW_SHRINK has been taken to 100 B. -> path."""
+        path, _ = fresh(tmp, name)
+        with quiet():
+            run_cli("--dat", path, "--journal",
+                    os.path.join(tmp, f"{name}.j0.json"),
+                    "--replace", str(ROW_SHRINK), "--data", small)
+        return path
+
+    def grow(path, row, data, to, stub_claimants=False):
+        """One in-process grow. -> the exception it raised, or None."""
+        real = datwrite.claimants
+        if stub_claimants:
+            datwrite.claimants = lambda ar, lo, hi, exclude: []
+        w = datwrite.Writer(path, os.path.join(tmp, "t-unused.json"))
+        try:
+            with quiet():
+                w.replace(row, open(data, "rb").read(), grow_to=to)
+            return None
+        except SystemExit as exc:
+            return exc
+        finally:
+            w.close()
+            datwrite.claimants = real
+
+    # (a) CONDITION 1, claimants. The same shape 11e drives through the CLI,
+    # asked in-process so the TYPE is what is read rather than the output.
+    p = shrunk("typed-claimed.dat")
+    body = row_bytes(p, ROW_SMALL, ROWS[ROW_SMALL][1])
+    with open(p, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(body)
+    mft_field(p, ROW_SMALL, 0x00, "<Q", off + 512)
+    exc = grow(p, ROW_SHRINK, big, 1000)
+    check(isinstance(exc, datwrite.GrowGateRefused)
+          and exc.condition == "claimants",
+          "a grow into blocks another row now owns raises GrowGateRefused with "
+          "condition 'claimants' -- the one refusal a caller MAY follow with a "
+          "relocation, and the only one that is a fact about the archive",
+          f"{type(exc).__name__}, condition "
+          f"{getattr(exc, 'condition', None)!r}")
+    check(exc is not None and "is CLAIMED by" in str(exc)
+          and "datmove" in str(exc),
+          "and its sentence is unchanged, datmove remedy and all -- the type is "
+          "the change and the message is not",
+          str(exc).splitlines()[0][:90] if exc else "nothing raised")
+    check(exc is not None and datwrite.GROW_GATE_TOKEN not in str(exc),
+          "and the machine-readable token is NOT inside the message: the "
+          "refusal text is what readers and greps already know, so the token "
+          "goes beside it")
+
+    # (b) CONDITION 2, EOF. Row 7 moved to the last byte of the file, exactly
+    # 11f's setup -- reached without any stub, since claimants cannot see EOF.
+    p, _ = fresh(tmp, "typed-eof.dat")
+    mft_field(p, ROW_SMALL, 0x00, "<Q", FILE_SIZE)
+    exc = grow(p, ROW_SMALL, mid, 600)
+    check(isinstance(exc, datwrite.GrowGateRefused) and exc.condition == "eof"
+          and "PAST THE END" in str(exc),
+          "a grow past EOF raises condition 'eof', message unchanged -- and it "
+          "is reached with claimants intact, which is the point of it being a "
+          "separate condition at all",
+          f"{type(exc).__name__}, {getattr(exc, 'condition', None)!r}")
+
+    # (c) CONDITION 3, the live MFT. Needs 11g's stub: on this fixture row 3
+    # happens to describe the table, so claimants refuses first.
+    p, _ = fresh(tmp, "typed-mft.dat")
+    exc = grow(p, ROW_SMALL, mid, 600, stub_claimants=True)
+    check(isinstance(exc, datwrite.GrowGateRefused)
+          and exc.condition == "live-mft"
+          and "LIVE MASTER FILE TABLE" in str(exc),
+          "with claimants stubbed out the MFT check still names itself: "
+          "condition 'live-mft', message unchanged",
+          f"{type(exc).__name__}, {getattr(exc, 'condition', None)!r}")
+
+    # (d) CONDITION 4, a withheld container run. 11h's four bytes of setup.
+    p = shrunk("typed-withheld.dat")
+    with open(p, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(MFT_MAGIC + b"\x00" * 8 + struct.pack("<I", ENTRY_COUNT))
+    exc = grow(p, ROW_SHRINK, big, 1000)
+    check(isinstance(exc, datwrite.GrowGateRefused)
+          and exc.condition == "withheld-run"
+          and "datplan WITHHOLDS" in str(exc),
+          "and a grow into a run datplan withholds raises condition "
+          "'withheld-run', message unchanged",
+          f"{type(exc).__name__}, {getattr(exc, 'condition', None)!r}")
+
+    # (e) THE NEGATIVE CONTROL, AND IT IS THE CHECK. Two refusals the gate did
+    # not give: the stated-entitlement ceiling (which is `replace`'s own rule,
+    # decided before the gate runs) and a plain SystemExit out of the CLI. A
+    # consumer that treated either as a gate refusal would relocate around a
+    # caller error -- which is exactly what "these bytes are not what you
+    # declared, so datmove them instead" looks like.
+    p = shrunk("typed-ceiling.dat")
+    exc = grow(p, ROW_SHRINK, big, 512)
+    check(exc is not None and not isinstance(exc, datwrite.GrowGateRefused)
+          and "entitled" in str(exc),
+          "a payload past the entitlement the CALLER stated is an ordinary "
+          "SystemExit, NOT a GrowGateRefused -- it is replace()'s own ceiling "
+          "and the gate never ran",
+          f"{type(exc).__name__}")
+
+    # (f) AND THE CLI PRINTS THE TOKEN, which is the half that crosses a
+    # subprocess boundary -- `deploy.py` reads bytes, not exceptions.
+    p = shrunk("typed-cli.dat")
+    body = row_bytes(p, ROW_SMALL, ROWS[ROW_SMALL][1])
+    with open(p, "r+b") as fh:
+        fh.seek(off + 512)
+        fh.write(body)
+    mft_field(p, ROW_SMALL, 0x00, "<Q", off + 512)
+    before = blob(p)
+    code, out = run_cli("--dat", p, "--journal", os.path.join(tmp, "t1.json"),
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "1000")
+    check(code != 0 and blob(p) == before
+          and f"{datwrite.GROW_GATE_TOKEN} condition=claimants" in out,
+          "the command line prints one machine-readable line naming the "
+          "condition, and still refuses with nothing written -- an exception "
+          "class does not cross a subprocess boundary and bytes do",
+          next((ln.strip() for ln in out.splitlines()
+                if datwrite.GROW_GATE_TOKEN in ln), "said nothing"))
+    check("is CLAIMED by" in out,
+          "and the human sentence is still there beside it, unchanged -- the "
+          "token is an ADDITION, so a reader who never learns about it loses "
+          "nothing")
+    p = shrunk("typed-cli-ceiling.dat")
+    code, out = run_cli("--dat", p, "--journal", os.path.join(tmp, "t2.json"),
+                        "--replace", str(ROW_SHRINK), "--data", big,
+                        "--grow-to", "512")
+    check(code != 0 and datwrite.GROW_GATE_TOKEN not in out,
+          "CONTROL: the ordinary refusal prints NO token, so a consumer joining "
+          "on it cannot mistake a caller error for a claimant conflict -- a "
+          "token on every failure would be worse than no token",
+          f"exit {code}")
+    code, out = run_cli("--dat", p, "--journal", os.path.join(tmp, "t3.json"),
+                        "--replace", str(ROW_SHRINK))
+    check(code != 0 and datwrite.GROW_GATE_TOKEN not in out,
+          "and neither does --replace with no --data, which is the other shape "
+          "of non-zero exit a subprocess caller sees", f"exit {code}")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
@@ -2133,6 +2320,7 @@ def main():
         section_c6_guard(tmp)
         section_growback(tmp)
         section_journal(tmp)
+        section_grow_typed(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

@@ -167,21 +167,32 @@ party members in this very window).
 **Two points is a reading, not a law, so the whole corpus was asked the sharper
 question** (`moralescan.py --pips`): join every property-43 sighting to that
 agent's own property-41 maximum, and ask whether the value is bit-exactly
-`f32(f32(q) · pips / max)` for an INTEGER pip count. 47 sightings join, 7
+`f32(f32(q) · pips / max)` for an INTEGER pip count. 59 sightings join, 9
 distinct `(max, value)` pairs:
 
 | max | value | bits | n | 0.33 | 1/3 |
 |---|---|---|---|---|---|
-| 20 | 0.033 | `0x3D072B02` | 26 | **2 pips, exact** | no fit |
+| 17 | 0.03882353 | `0x3D1F056C` | 1 | **2 pips, exact** | no fit |
+| 20 | 0.033 | `0x3D072B02` | 36 | **2 pips, exact** | no fit |
 | 22 | 0.06 | `0x3D75C290` | 1 | **4 pips, exact** | no fit |
 | 25 | 0.0396 | `0x3D22339C` | 4 | **3 pips, exact** | no fit |
 | 25 | 0.0528 | `0x3D5844D1` | 10 | **4 pips, exact** | no fit |
 | 30 | 0.044 | `0x3D343959` | 4 | **4 pips, exact** | no fit |
-| 22, 25 | 0.0 | `0x00000000` | 2 | 0 pips | 0 pips |
+| 17, 22, 25 | 0.0 | `0x00000000` | 3 | 0 pips | 0 pips |
 
-**Five of five non-zero values are exact at 0.33 and none fits 1/3**, on the
+**Six of six non-zero values are exact at 0.33 and none fits 1/3**, on the
 bits rather than on a tolerance, with the pip count constrained to a whole
-number. The two zeroes are the death tick suspending regeneration.
+number. The three zeroes are regeneration suspended while dead, and they fit
+both quanta trivially at 0 pips — which is why the score above is stated over
+the non-zero rows and the tool prints the caveat next to its own total.
+
+**Re-run it rather than trusting this table.** These counts moved once already:
+the first pass over this corpus joined 47 sightings and 7 pairs, and the merged
+scanner joins 59 and 9 — same conclusion, different denominators. The `max 17`
+row is new and NOT claimed as anything here; 17 is what a 20-energy character at
+−15% would carry, but the census in §1.1 found only one non-baseline morale in
+the corpus, so a second DP-affected agent is a *hypothesis this data does not
+settle*.
 
 **And the pip counts are the wiki's own table, read back off the wire.** GWW
 ("Energy" §Basic armor) gives 20 energy / 2 pips for a Warrior, 25 / 3 for a
@@ -309,6 +320,19 @@ in the content.
   idiom, a switch rather than a lie in the content.
 - `toolkit/authsrv/moralescan.py` — the corpus census, because "the only −15 in
   fourteen captures" is a claim that decays the moment a fifteenth is taken.
+  **CORRECTED 2026-08-21, by the adrenaline arc, and the census claims are
+  UNAFFECTED.** This scanner identified the receiving player by taking the
+  FIRST `0x0059` and calling its agent ours, with a comment asserting that is
+  what field 2 means. `0x0059` is `AGENT_CREATE_PLAYER`, broadcast for **every**
+  player in the instance (16–56 in a busy outpost), so the first one is whoever
+  the server sent first: MEASURED, **wrong on 20 of 44 connections**. It now
+  anchors on property 41 (MAX ENERGY), which
+  [studies/skills](../skills/FINDINGS.md) §23 measured as self-scoped over 97
+  sightings, and it does not fall back — no property 41 leaves the flag unset.
+  **The two census numbers above are unchanged** (40 `0x00EE` attr-10 sightings
+  with only the −15 non-zero; 83 `0x009C` with only the 85), because they count
+  values across all agents and never consulted the `mine` flag. A latent defect
+  fixed before it was relied on. Full account: `studies/skills` §26.13.
 
 Test: `toolkit/authsrv/test_morale.py`, catalogued in
 [TESTS.md](../../TESTS.md).

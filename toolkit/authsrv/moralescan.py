@@ -48,13 +48,17 @@ AGENT_MORALE = 0x009C           # [agent_id, percent] -- per AGENT, absolute
 PROP_INT = 0x009F               # [prop, agent, value]  41 = energy, 42 = health
 PROP_FLOAT = 0x00A2             # [prop, agent, f32]    43 = energy regen
 PROP_FLOAT_TARGET = 0x00A3      # the same properties, three-field form
-PROP_ENERGY_MAX = 41
 PROP_ENERGY_REGEN = 43
 # GWW ("Energy", Regeneration and degeneration) calls a pip "1 Energy every 3
 # seconds". The game's own constant is not 1/3 but 0.33 -- see `--pips`.
 PIP_NOMINAL = 1.0 / 3.0
 PIP_MEASURED = 0.33
-PLAYER_INFO = 0x0059            # field 2 is the receiving player's own agent id
+PLAYER_INFO = 0x0059            # AGENT_CREATE_PLAYER -- see WHOSE_AGENT below
+# ONE NAME for property 41, deliberately. This merge arrived with two -- main's
+# PROP_MAX_ENERGY and the branch's PROP_ENERGY_MAX, same number, same message --
+# and two spellings of one constant in one file is how a later reader ends up
+# believing there are two properties.
+PROP_MAX_ENERGY = 41            # property 41 on 0x009F: SELF-SCOPED (see below)
 ATTR_MORALE = 10
 MORALE_BASELINE = 100
 
@@ -108,11 +112,35 @@ def scan(codec_obj):
                 continue
             stats["connections"] += 1
             stats["messages"] += len(msgs)
-            # Whose agent id is the receiving player's, so a per-agent value can
-            # say whether it is about US or about a party member.
+            # WHOSE AGENT IS OURS, so a per-agent value can say whether it is
+            # about US or about a party member.
+            #
+            # CORRECTED 2026-08-21, and the old rule was wrong 20 times in 44.
+            # This used to take the FIRST 0x0059 and call its agent id ours,
+            # with a comment asserting "field 2 is the receiving player's own
+            # agent id". 0x0059 is AGENT_CREATE_PLAYER and the server
+            # broadcasts one for EVERY player in the instance -- 16 to 56 of
+            # them in a busy outpost -- so the first one is whoever the server
+            # happened to send first. MEASURED over the live corpus: the two
+            # rules agree on 24 connections and DISAGREE on 20, e.g. this rule
+            # said agent 16 where the observer is 767.
+            #
+            # PROPERTY 41 (MAX ENERGY) IS THE SOUND ANCHOR because it is
+            # self-scoped: studies/skills/FINDINGS.md 23 measured 97 of them in
+            # the corpus and every one names the observing player's own agent.
+            # An independent second route -- 0x0199 INSTANCE_LOAD_INFO's player
+            # number mapped through 0x0059's (player_number, agent_id) pairs --
+            # agrees with it on every connection where both resolve.
+            #
+            # NO FALLBACK TO THE OLD RULE. A connection with no property 41
+            # leaves `me` None and its rows unflagged, which is the honest
+            # answer; guessing would put the label back on the 45% that were
+            # wrong. Nothing published from this scanner depended on `mine` --
+            # studies/morale's census claims count VALUES across all agents --
+            # so this corrects a latent defect rather than a wrong result.
             me = None
             for _t, op, vals in msgs:
-                if op == PLAYER_INFO:
+                if op == PROP_INT and len(vals) > 2 and int(vals[1]) == PROP_MAX_ENERGY:
                     me = int(vals[2])
                     break
             for t, op, vals in msgs:
@@ -189,7 +217,7 @@ def pip_join(codec_obj):
             emax = {}
             for _t, op, vals in msgs:
                 v = vals[1:]
-                if op == PROP_INT and int(v[0]) == PROP_ENERGY_MAX:
+                if op == PROP_INT and int(v[0]) == PROP_MAX_ENERGY:
                     emax[int(v[1])] = int(v[2])
                 elif (op in (PROP_FLOAT, PROP_FLOAT_TARGET)
                       and int(v[0]) == PROP_ENERGY_REGEN):

@@ -2067,7 +2067,20 @@ client and all twelve live captures:
 | property 52 | identical -- **0 / 0 / 0** |
 | property 62 (the only energy-moving float observed) | **6 occurrences, all NEGATIVE** |
 
-**Nobody has ever observed energy GAIN on a Guild Wars wire**, ours or ArenaNet's. Every
+**Nobody has ever observed energy GAIN on a Guild Wars wire**, ours or ArenaNet's.
+
+> **[Addendum 2026-08-20.** The table above was true against its corpus —
+> twelve live captures. The vault has since grown to 14, five stamps postdating
+> this section, and a full rescan moves two rows: **property 62 is n=45**, all
+> still negative, now cross-validated as −(cost/max) against the client table
+> on five skill ids; and **property 52 is n=1** — a resurrect, value exactly
+> 1.0, in capture `20260817T183756` — so the bolded sentence directly above is
+> no longer true: energy gain has now been observed once, and it is a
+> full-pool refill riding the death/revive mechanism, not a skill’s `+N`.
+> **The verdict on property 33 stands**: still 0 occurrences in the enlarged
+> corpus, positive control green. §24.1’s S1 conclusion survives — the
+> floating `+N`/bar-move levers remain unwitnessed — but the inventory is
+> superseded by [studies/skills §23](../skills/FINDINGS.md).] Every
 argument for property 33 is structural inference from an arm nothing has exercised. And
 §20.4's premise for 52 -- *"52 alone draws a number and refills nothing"* -- has **no
 citation anywhere in this repo**; `studies/agentprops/FINDINGS.md` §418's "what it does"

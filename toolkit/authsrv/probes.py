@@ -3439,6 +3439,82 @@ def _condition_render_steps(agent_id):
     ]
 
 
+def _effect_silent_extend_steps(agent_id):
+    """Does the client self-expire an effect, or does it wait for `0x0044`?
+
+    THIS QUESTION IS RETAIL'S, and the Isle arc is what raised it.
+    `studies/isle/FINDINGS.md` 8.6 measured ArenaNet extending a live effect by
+    sending NOTHING: across two live captures, 15 episodes closed LATE -- by
+    +1.25 s to +55.0 s against their own stated duration -- with no intervening
+    `0x0042`, no `0x0044`, and no other traffic in the window. The seven
+    episodes that were NOT being refreshed closed within +/-0.042 s of
+    `apply + duration`, over three different durations and both captures, which
+    is what rules out a coarse sweep and makes the long holds real.
+
+    OUR SERVER DOES SOMETHING RETAIL DOES NOT. `effects.EffectTable.apply`'s own
+    docstring ends "how retail refreshes one is NOT FOUND", and
+    `studies/skills` concluded from OUR implementation that a longer
+    re-application "extends as REMOVE-then-APPLY -- the only replacement shape
+    the client honours". Retail plainly does not do that here. But 8.6 is a
+    WIRE measurement and cannot see the screen, so it leaves the half that
+    decides what our server may emit: between `apply + duration` and the late
+    `0x0044`, IS THE EFFECT STILL DRAWN?
+
+    The probe sends raw messages and keeps no server-side effect table, which is
+    the point -- it isolates the CLIENT's own timer from ours.
+    """
+    return [
+        Step(2.0, 0x0042, [agent_id, 478, 0, 1, _f32(10.0)],
+             "CONTROL apply: skill 478 (Bleeding), duration 10.0",
+             "the effects area above the skill bar. Icon appears with a brown "
+             "down-arrow. Note the timer bar -- it should start full."),
+        Step(10.0, 0x0044, [agent_id, 1],
+             "CONTROL remove: 0x0044 at exactly apply + duration",
+             "the icon goes. This is the shape our server emits today and the "
+             "rig's positive control: it proves a removal removes, so a "
+             "persisting icon later cannot be blamed on a dead channel."),
+
+        Step(4.0, 0x0042, [agent_id, 480, 0, 2, _f32(10.0)],
+             "TREATMENT apply: skill 480 (Burning), duration 10.0 -- and then "
+             "NOTHING is sent for 25 s",
+             "icon appears, bar full. From here the server goes silent, which "
+             "is exactly what retail does while you stand in a Student's ring."),
+        Step(13.0, 0x0000, [],
+             "WATCH at apply + 13 s -- THREE SECONDS PAST THE STATED DURATION. "
+             "This is the measurement the whole probe exists for.",
+             "IS THE ICON STILL THERE? Say yes or no out loud before anything "
+             "else, then describe the timer bar: full, empty, drained, absent, "
+             "or refilled. PREDICTION: the icon is STILL DRAWN and the bar has "
+             "drained to empty, because retail holds effects far past their "
+             "stated duration with no traffic and a client that self-expired "
+             "would leave ArenaNet rendering nothing while the condition is "
+             "still costing health. THE RIVAL OUTCOME IS THE BIGGER RESULT: if "
+             "the icon is GONE, the client runs its own authoritative timer, "
+             "retail's silent extension is invisible to the player, and our "
+             "server cannot extend silently for anything that must be SEEN.",
+             sends=False),
+        Step(7.0, 0x0000, [],
+             "WATCH at apply + 20 s -- twice the stated duration",
+             "same two questions. A yes here rules out a slow fade or a "
+             "one-frame lag at the boundary being mistaken for persistence.",
+             sends=False),
+        Step(5.0, 0x0044, [agent_id, 2],
+             "TREATMENT remove: the late 0x0044, at apply + 25 s",
+             "does the icon go NOW? If it was still drawn and this removes it, "
+             "the client is server-authoritative on expiry and a silent "
+             "extension is legal -- our substrate can stop emitting the "
+             "REMOVE-then-APPLY pair retail never sends. If the icon had "
+             "already gone, watch for anything odd here: a removal for an "
+             "effect the client has forgotten is a shape we would be emitting "
+             "blind."),
+        Step(6.0, 0x0000, [],
+             "END: quiet frames",
+             "the final state of the effects area, and whether the client is "
+             "still alive.",
+             sends=False),
+    ]
+
+
 def _lone_p17_steps(agent_id, origin):
     """Isle rung 4: what does a LONE property 17 draw, and does the orb move?
 
@@ -5961,6 +6037,37 @@ PROBES = {
              "value is discarded silently. UNRUN. The 65 toggles are there "
              "because 66's setter calls no refresh and 65's does; step 1 "
              "establishes what a bare toggle does so it can be discounted.",
+    ),
+    "effect_silent_extend": lambda a, o: Probe(
+        question="Between apply+duration and a LATE 0x0044, is the effect still "
+                 "drawn? Retail extends effects by sending nothing; does the "
+                 "client self-expire, or wait to be told?",
+        predicts="THE ICON IS STILL DRAWN AT +13 s AND +20 s on a 10 s "
+                 "duration, with the timer bar drained to empty, and it goes "
+                 "only when the late 0x0044 lands at +25 s. That is what "
+                 "retail's own traffic requires: studies/isle 8.6 measured 15 "
+                 "episodes closing +1.25 s to +55.0 s late with NO intervening "
+                 "traffic, against 7 un-refreshed ones closing within 42 ms of "
+                 "their own duration -- so the durations are honest, the close "
+                 "is precise, and something held those effects open silently. "
+                 "THE RIVAL OUTCOME IS THE MORE VALUABLE ONE: if the icon "
+                 "vanishes at +10 s unprompted, the client owns the timer, "
+                 "retail's silent extension never reaches the player's eye, "
+                 "and our server may NOT extend silently for any effect the "
+                 "player has to see -- which would make effects.py's "
+                 "REMOVE-then-APPLY correct after all, for a reason nobody has "
+                 "stated.",
+        steps=_effect_silent_extend_steps(a),
+        note="Cross-arc: the Isle arc measured the wire, this reads the screen, "
+             "and neither half decides it alone. effects.EffectTable.apply's "
+             "docstring currently ends 'how retail refreshes one is NOT FOUND' "
+             "-- studies/isle 8.6 answers the wire half (retail sends nothing "
+             "and delays the removal) and this probe answers whether that is "
+             "renderable. FIXED-POSITION UI ONLY: the whole readout is the "
+             "effects area above the skill bar, so no aiming and no world "
+             "click is involved. Run with --shots so the boundary at +10 s is "
+             "caught in frames rather than from memory; the two sends=False "
+             "steps are observation points and deliberately transmit nothing.",
     ),
     "condition_render": lambda a, o: Probe(
         question="Does 0x0042 carrying a CONDITION skill id (type_code 8) "
