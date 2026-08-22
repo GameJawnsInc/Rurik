@@ -566,6 +566,17 @@ readers (0a says t=21.543, 0b says t=5.027 on conn `:49163`); 0b's pairing gives
 uniform ~1.1 s E4→E5 gaps and is the better reading, but the disagreement is
 recorded rather than resolved.
 
+> **RESOLVED 2026-08-22 (`studies/castmech/FINDINGS.md` §3, `castgaps.py`): it
+> is t=5.027 — 0b was right; t=21.543 opens a complete cycle — and it is not an
+> orphan: it is answered at t=5.912 by the corpus's one `0x00E2`, with no E5
+> between or ever after. A cast attempt terminated before completing, no
+> recharge started — the cancel shape (GWW "Cancel": no recharge, no
+> aftercast). The same pass measured the live E5→E3 gap on all six complete
+> cycles: it is the client table's per-skill aftercast (`+0x40`) — 0.748–0.765 s
+> on the four spell cycles, 0.000 on both Power Shot cycles — so `0x00E3` marks
+> the AFTERCAST ending, and step 3's `e3_at = e5_at + aftercast` is OBSERVED
+> retail behaviour rather than a modelling choice.**
+
 **0b — E6−E5 == recharge on ALL complete cycles, and n is 6, not 14 (C2 CLOSED).**
 The corpus holds exactly **6 complete cycles** — H1's "six plus 8 Necromancer" was
 wrong; the Necromancer cycles ARE four of the six (skills 153×2, 105×2, cap

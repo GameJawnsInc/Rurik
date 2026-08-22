@@ -1,0 +1,428 @@
+# Cast and attack animation mechanics: canceling, damage timing, quarterstepping, backswing
+
+**2026-08-22.** The question, as the owner put it: how do cast animations,
+animation canceling, damage actually being applied, movement during the attack
+animation (the wiki's word is **quarterstepping**), and the backswing interact?
+
+Method: a GWW pass through the browser (ten mechanics pages plus two skill
+pages, per `browse-gw-wiki`), one new offline measurement over the two live
+captures (`castgaps.py`, below — no client run, no new capture), and
+reconciliation against what `studies/combat/PLAN.md` §17–§19,
+`studies/skillcast/FINDINGS.md` and `studies/reconstruction/FINDINGS.md`
+already measured. Labels per [studies/character/FINDINGS.md](../character/FINDINGS.md),
+plus **WIKI** per the skill's labeling rule: strong for what a player could see
+from the game window, weak for internals, and — because GWW shares no ancestry
+with the code lineages — wiki + wire agreeing is real CORROBORATION.
+
+**Identifiers.** `CASTMECH-M<n>` = a model claim this study makes.
+`CASTMECH-P<n>` = a probe or capture item registered before it is run.
+Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+---
+
+## The answer in one page
+
+**One timing model covers auto-attacks, attack skills and spells, and the wiki
+and the wire tell the same story from opposite sides.**
+
+- **An attack is one interval with the hit just before the middle.** The wiki
+  says an attack connects "half-way through the interval" and the rest is
+  "return to a neutral state"; the wire, measured three independent ways, puts
+  the connect point at **0.45–0.47** of the declared interval — NPC swings
+  0.4540 (n=41), the player's clean auto-attacks 0.4583/0.4669 (n=2), and now
+  the player's bow attack skill 0.4601/0.4595 (n=2, §2). The second half of the
+  interval — the wiki's "return to neutral", the owner's **backswing** — has
+  **no wire event of its own**: damage and `MELEE_ATTACK_FINISHED` are one
+  instant, 40 of 40 (§17b), and nothing follows until the next
+  `ATTACK_STARTED`. The backswing is client-side animation filling a
+  server-side wait. (CASTMECH-M1, §2.)
+- **The ¾ s aftercast is on ArenaNet's wire, per skill, as the E5→E3 gap.**
+  NEW MEASUREMENT (§3): in all four Necromancer spell cycles E3 trails E5 by
+  0.749–0.765 s — the client table's `+0x40 = 0.75` plus milliseconds of
+  latency — and in both Ranger attack-skill cycles E5 and E3 share one
+  timestamp, matching that skill's `+0x40 = 0.0`. So `0x00E3` is not "skill
+  activated"; it is **the busy state ending** — aftercast over, character free.
+  Our emitter's `e3_at = e5_at + aftercast` (`authsrv.py:7431`) is therefore
+  OBSERVED retail behaviour, not an invention. (CASTMECH-M2.)
+- **Cancel and interrupt are one client mechanism and two server timings.**
+  Opcodes 226 (`0x00E2`) and 227 (`0x00E3`) share a dispatch pointer — the
+  client cannot tell them apart (skillcast §5); both release the pending-cast
+  entry. What distinguishes a cancel from an interrupt from a normal
+  completion is **which other messages come with the release**: completion is
+  E5-then-E3 an aftercast apart; the corpus's one terminated cast (§4) is an
+  E4 answered by a lone E2 **with no E5 ever** — busy ended, no recharge
+  started — which is exactly GWW's cancel contract: costs paid, **no
+  recharge, no aftercast**. An interrupt should be a release **plus** a
+  recharge-start (wiki: interrupted skills go on full recharge); no interrupt
+  exists in the corpus to confirm the wire shape. (CASTMECH-M3, -P1.)
+- **Quarterstepping is legal because the swing gate and the animation are
+  different things.** The wiki technique — move in the window after the hit
+  lands, re-order the attack in time, lose nothing — works precisely because
+  the next swing's start is governed by a server-side interval from the last
+  swing's start, while the backswing being canceled is client animation the
+  server never hears about. Movement before the hit cancels an auto-attack
+  (the swing dies, no damage); movement cannot cancel an attack skill at all.
+  (§5, CASTMECH-M4.)
+- **The skill queue the wiki documents is the queue law the wire fit.** GWW
+  (2012): a queued skill "will begin activating as soon as activation
+  completes for the first skill or after any aftercast delay ends". The
+  emitter's QUEUE LAW (2026-08-14): E4 at accept, cast begins when the caster
+  frees — fits 4/4 Necromancer cycles ≤14 ms. Same sentence, fourteen years
+  apart, independent witnesses. CORROBORATED. (§6.)
+
+---
+
+## 1. Vocabulary: the wiki's words for the owner's words
+
+| Owner's term | GWW's term and page | Note |
+|---|---|---|
+| cast animation | activation ("Activation time") | driven on our wire by agent property 60, §16a of combat/PLAN |
+| animation canceling | cancel ("Cancel", "Auto attack") | movement key or Esc; weapon swap for the rest |
+| damage actually applied | "the attack will connect" ("Activation time") | mid-interval; projectiles add flight time |
+| quarterstepping | **"Quarterstepping"** — the page exists | rev. 2011-05-03; PvP glossary |
+| backswing | "return to a neutral state" / "animation delay" | **GWW has no page or occurrence of "backswing"** — searched, zero hits. The concept is the second half of the attack interval ("Activation time") and the "Animation delay" section of "Aftercast delay" |
+
+Pages read, with revision dates for the citations below: Aftercast delay
+(2026-08-03), Activation time (2026-04-30), Attack speed (2026-07-03), Cancel
+(2014-08-16), Auto attack (2020-08-12), Quarterstepping (2011-05-03),
+Quarterknocking (2012-07-10), Skill queue (2012-07-25), Interrupt
+(2025-10-25), Knock down (2026-08-05), Power Shot (2026-06-28), Troll Unguent
+(2026-07-05).
+
+---
+
+## 2. The attack cycle: where the hit lands, and what the backswing is
+
+**WIKI (GWW, "Attack speed" §Attack durations, rev. 2026-07-03).** Attack
+speed is a property of the weapon or creature type, and the page publishes the
+exact intervals "used by the game": axe/daggers/sword 1.33, scythe/spear 1.5,
+**hammer/staff/wand 1.75**, bone fiend 1.86, pet/attack-spirit 2.0,
+flatbow/shortbow 2.025, **longbow/recurve 2.475**, hornbow 2.7, melee minion
+3.1. IAS/DAS scale the *duration* of each attack (so stated percentages
+understate/overstate the rate change: +33% IAS ≈ +49% DPS), capped at +33%
+and −50%.
+
+Two of those table rows are already **CORROBORATED against our wire from the
+other side**: the live player's declared attack speeds are 1.75 (Necromancer
+session — wand/staff) and 2.475 (Ranger session — longbow/recurve), noted in
+combat/PLAN §17b before anyone had looked at this table. And the client-side
+IAS multipliers `studies/enemy/PLAN.md` §"+0xF0 modifier" measured — 0.75 for
++25%, 0.67 for +33% — are this page's numbers as duration factors.
+
+**WIKI (GWW, "Activation time" §Attack skills, rev. 2026-04-30).** The damage
+application rule, stated by players from twenty years of watching:
+
+> "half-way through the interval, a melee attack will connect with its target
+> and a ranged attack will launch its projectile; the remaining half will be
+> used to return the character to a neutral state."
+
+Attack skills **without** a stated activation take "the first half of the
+character's next attack interval" to connect. Attack skills **with** a stated
+activation connect at half the *stated* time (Savage Shot ½ s → fires at
+¼ s) — and they "bypass the return-to-neutral delay from the previous attack",
+which is the sanctioned form of backswing-canceling and the reason chained
+attack skills compress damage. Attack-skill activation scales with IAS/DAS and
+is untouched by cast-time effects (Fast Casting, Migraine).
+
+**The wire's number for "half-way" is 0.45–0.47, five ways** (CASTMECH-M1):
+
+| witness | value | n | where |
+|---|---|---|---|
+| NPC swings, windup ÷ declared speed | mean 0.4540, sd 0.0520 | 41 | combat/PLAN §17b |
+| our server's published constant, fit earlier | `SWING_WINDUP_RATIO = 0.4458` | — | independent pass, §17b |
+| player auto-attacks, cleaned of skill damage | 0.4583, 0.4669 | 2 | combat/PLAN §19 |
+| player bow attack skill: E4→E5 ÷ 2.475 | **0.4601, 0.4595** | 2 | **NEW, §3 below** |
+| WIKI, "half-way through the interval" | 0.5 | — | "Activation time" |
+
+The wiki says half; every measured value sits just under half, tightly. Do
+**not** silently resolve this to 0.5: the measured constant is the one the
+corpus supports, the wiki's "half" is the idealized player statement of the
+same quantity, and the two agreeing to within 10% from unrelated methods is
+the corroboration. (The client itself holds no landing fraction at all —
+combat/PLAN §17d: attack duration is `modifier × base`, one float handed to a
+queueing call, and no windup constant exists in the image. The landing moment
+is **server-authored**, which is why the corpus is the only exact witness.)
+
+**What the backswing is, then.** The second half of the interval exists on the
+wire only as silence: damage and `GV_MELEE_ATTACK_FINISHED` are the same
+instant (40/40, §17b), and nothing else arrives until the next
+`ATTACK_STARTED`. For ranged attacks the projectile launches at the connect
+point and damage lands at projectile arrival — `0x00A4`'s f32 flight time
+predicts the damage message to mean |err| 9.3 ms, 13/13
+(`studies/isle/FINDINGS.md` B5). The backswing is the client animating the
+wait; the server's only clock is the interval.
+
+---
+
+## 3. NEW: the aftercast is on the wire, per skill — the E5→E3 gap
+
+**OBSERVED, 2026-08-22**, by `toolkit/authsrv/castgaps.py` over both live
+captures, all game connections, `decode_all` strict (framed to the last byte;
+the two cast-bearing connections carry 3,604 and 1,246 messages). Prediction
+stated first, in the tool's docstring: if `0x00E3` marks aftercast end, the
+Necromancer's spell cycles (skills 153 and 105, client table `+0x40 = 0.75`)
+show E5→E3 ≈ 0.75 s and the Ranger's attack-skill cycles (394 Power Shot,
+`+0x40 = 0.0`) show ≈ 0; if E3 is instead a fixed follow-on, all six show the
+same gap; if E3 rides milliseconds behind E5 everywhere, the model in our
+emitter is an invention.
+
+| conn | skill | E4 | E5 | E3 | E6 | E4→E5 | **E5→E3** | E5→E6 |
+|---|---|---|---|---|---|---|---|---|
+| necro `:64103` | 153 (act 1.0) | 8.741 | 9.744 | 10.493 | 17.747 | 1.003 | **0.749** | 8.003 |
+| necro | 105 (act 2.0) | 9.850 | 12.493 | 13.240 | 18.492 | 2.643 † | **0.748** | 6.000 |
+| necro | 153 | 18.511 | 19.511 | 20.269 | 27.525 | 1.000 | **0.758** | 8.014 |
+| necro | 105 | 19.690 | 22.261 | 23.026 | 28.270 | 2.571 † | **0.765** | 6.009 |
+| ranger `:49163` | 394 (act 0.0) | 12.951 | 14.0895 | 14.0895 | 17.093 | 1.1387 | **0.000** | 3.003 |
+| ranger | 394 | 21.543 | 22.6807 | 22.6807 | 25.684 | 1.1374 | **0.000** | 3.003 |
+
+† the queue-law cycles: E4 accepted during the previous cast's aftercast, and
+E5 lands activation + *remaining aftercast* after E4 (12.493 − 10.493 = 2.000;
+22.261 − 20.269 = 1.992). The other numbers re-derive `authsrv.py:4374`'s
+E6 = E5 + recharge (8/6/3 s, all six within 14 ms).
+
+Three results (CASTMECH-M2):
+
+1. **E5→E3 is the client table's own `+0x40`, per skill, 6/6** — 0.75 within
+   +2% for the spells (a few ms of the same server latency every other gap
+   carries), and exactly zero for the attack skill, where E5 and E3 share a
+   timestamp (one segment). The per-skill discrimination is what kills the
+   rival "fixed 0.75 constant" reading — Power Shot refutes it.
+2. **`0x00E3`'s meaning is therefore "the caster is free"** — aftercast over —
+   not "skill activated". The name `SKILL_ACTIVATED` (carried from the
+   catalogs into `schema/overrides.json`) describes the client's *handler*
+   (release the pending entry, skillcast §5); the *timing* is the busy state
+   ending. Our emitter already schedules it this way from the content row's
+   `aftercast` field; that choice is now OBSERVED rather than inherited.
+3. **The Ranger's E4→E5 gap is the windup of §2.** Power Shot has **no stated
+   activation** (WIKI, "Power Shot", id 394 — the infobox carries no
+   activation key; energy 10, recharge 3), so by the wiki's rule it takes the
+   first half of the bow's interval to connect. Measured: 1.1387 and 1.1374 s
+   against a declared 2.475 — **0.4601 / 0.4595** of the interval, identical
+   to the NPC windup band. The wiki's rule, the client table's 0.0, and the
+   corpus's windup constant lock together on one number measured to 1.3 ms
+   consistency across two presses eight seconds apart.
+
+**Corrections to `studies/combat/PLAN.md` this measurement lands** (noted
+there, dated today):
+
+- **§0a's CONTESTED orphan is resolved, and it is not an orphan.** The two
+  readers disagreed on which Ranger E4 lacks a tail (t=21.543 vs t=5.027).
+  It is t=5.027 — 21.543 opens a complete cycle (row 6 above) — and it is
+  not tailless: it is answered at t=5.912 by the corpus's single **`0x00E2`**,
+  0.885 s after accept. 0b's pairing was right.
+- **P4's `0x00E2` is one half of a two-message arc**: E4 accept → E2 release,
+  with **no E5 between and no E5 ever after** — a cast attempt that ended
+  without completing and without starting a recharge. See §4.
+
+---
+
+## 4. Canceling: three doors in, one wire shape out
+
+**WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is
+canceled by **a movement key** or by **Cancel Action** (default Esc, "usually
+faster and more reliable"). The contract:
+
+> the skill does not activate; **initial costs are still incurred** (energy,
+> adrenaline, overcast — health sacrifice normally is not); **the skill does
+> not need to recharge; the aftercast delay will not activate.**
+
+Most *quick attack skills* resist Esc — but **swapping weapons from within the
+inventory cancels them** mid-use ("most commonly seen in higher level GvG
+ranger duels"). And WIKI (GWW, "Auto attack", rev. 2020-08-12): auto-attacking
+is canceled by moving or by Cancel Action; a single deliberate basic attack is
+"begin auto attacking, wait for the attack to end, and move or press this
+key".
+
+**WIKI (GWW, "Quarterstepping", rev. 2011-05-03)** adds the asymmetry that
+matters for a server: keyboard movement mid-swing "increases the risk of
+accidentally cancelling an attack before it lands", and the technique "works
+in exactly the same manner with attack skills as autoattacks, **except that
+attack skills can not be accidentally cancelled by moving prematurely**". So:
+
+| action under way | movement | Esc | weapon swap |
+|---|---|---|---|
+| spell / other activated skill | cancels | cancels | (unrecorded) |
+| auto-attack swing, before the hit | cancels the swing | cancels | — |
+| attack skill, before the hit | **does not cancel** | mostly refused | cancels |
+| aftercast | impossible — cannot move (§6) | — | — |
+
+**Cancel vs interrupt vs knockdown — three different endings, WIKI:**
+
+| | recharge? | aftercast? | anti-interrupt protects? | queued skill |
+|---|---|---|---|---|
+| cancel ("Cancel") | **no** | no | n/a | (kept — nothing says otherwise) |
+| interrupt ("Interrupt", rev. 2025-10-25) | **yes, full** | no | yes (Mantra of Resolve etc.) | **un-queued** |
+| knockdown / death / disable ("Interrupt", "Knock down") | stops the action, "technically different game mechanics" | — | **no** — KD interrupts through Mantra of Concentration | — |
+
+Interrupts can hit "any skill with an activation time and all attacks" — but
+not aftercast, running, emotes, or zero-activation skills. Attack skills'
+effects trigger half-way in (§2), so their interrupt window is only the first
+half. Dazed makes every successful attack an interrupt of spells.
+
+**The wire shape (CASTMECH-M3).** The client physically cannot distinguish
+cancel from interrupt: 226 and 227 share one dispatch pointer whose whole job
+is releasing the pending-cast entry (skillcast §5). The distinctions above are
+carried by **what else the server sends**:
+
+- **completion**: E5 (recharge starts) … E3 (busy ends) an aftercast later;
+- **cancel**: the release alone — §3's E4→E2 pair, with no E5 ever, matches
+  GWW's "does not need to recharge / no aftercast" exactly. n=1, and the
+  *cause* of that termination is UNVERIFIED (P4 called it burrow-correlated;
+  a self-cancel fits the shape equally well);
+- **interrupt** (predicted, UNVERIFIED): the release **plus** a recharge
+  start — E2 followed by an E5-shaped message carrying the full recharge, or
+  by `0x00E7`/`0x00E8` (both zero occurrences in the corpus). No interrupt has
+  ever been captured; CASTMECH-P1 below.
+
+The animation half of a cancel is the property channel, same as the cast
+itself: property 60 starts the cast animation (combat/PLAN §16a, operator-
+confirmed both ways), property 59 is `InterruptSkill` with its own AgentView
+path (skillcast §6), and the client's internal event trios end in
+started/finished/**stopped** for all three families (skillcast §16.3). Our
+server sends none of the stop/interrupt properties today.
+
+---
+
+## 5. Quarterstepping and the backswing: why free movement is free
+
+**WIKI (GWW, "Quarterstepping", rev. 2011-05-03).** The technique: "Attack the
+target and, just before the hit lands, click to move in the direction of
+desired repositioning, then click the attack key … just in time to initiate
+the attack again without losing a beat." It "exploits the game mechanic which
+allows a small amount of movement after each attack". Because it ends the
+attack, the freed window can also be spent on weapon swaps or pre-positioning
+toward the next target. Best practiced on the Isle of the Nameless dummies;
+prime use is body-blocking and skills that want a moving target (Bull's
+Strike, Protector's Strike).
+
+**The model that makes all of it consistent (CASTMECH-M4, INFERRED):**
+
+1. the server gates **swing starts** on the attack interval measured from the
+   previous swing's start;
+2. the hit lands at ~0.46 into the swing (§2), after which the swing's work
+   is done;
+3. the backswing is client animation, cancelable by anything (movement, the
+   next queued action) with **no wire consequence**;
+4. moving before the hit kills the in-flight swing (its damage never
+   happens); moving after the hit costs nothing **provided the re-ordered
+   attack is pressed before the gate opens**, so the next swing starts on
+   schedule.
+
+Two rival readings and why they lose: *(a) a persistent cooldown with a grace
+period* would make the re-press timing irrelevant, against the wiki's
+insistence on "just in time"; *(b) no gate at all* — a fresh swing started the
+moment the previous hit lands would land its hit at ~0.92 of the natural
+interval, i.e. quarterstep-spamming would be a universal ~8% IAS, which two
+decades of PvP would not have missed. The sanctioned compression exception is
+explicit and different: attack skills **with stated activation** bypass the
+previous attack's backswing (§2) — WIKI, "Activation time" §Notes:
+Executioner's after Eviscerate lands 1.33 s later, Agonizing Chop lands ½ s
+later "which is almost three times as fast", and ranger interrupts were given
+aftercast precisely "to hinder damage compression".
+
+**What our server does today, against this** (divergences, mostly already on
+record in combat/PLAN §17e): the player's swing has no windup at all
+(STARTED + damage + FINISHED in one call); nothing can cancel an in-flight
+swing or cast; `GV_ATTACK_STOPPED` is defined and never sent; and movement
+during a swing/cast/aftercast is not policed at all — our client-driven
+movement messages are applied whenever they arrive. A quarterstep against our
+server currently *works trivially* (nothing to cancel, no gate to miss),
+which is fidelity by coincidence, not by model.
+
+---
+
+## 6. The queue, the aftercast, and knockdown
+
+**WIKI (GWW, "Aftercast delay", rev. 2026-08-03).** Aftercast is "the period
+after successfully activating certain skills, during which players **cannot
+move or activate other skills**" — and cannot auto-attack. Almost always ¾ s.
+Who has it: all spells, signets (except Dolyak), chants, echoes, glyphs,
+rituals, forms (except the elite Norn three), five listed zero-activation
+skills — and **not**: zero-activation skills generally (stances, shouts,
+flash enchantments), attack skills with stated activation ("noticeably
+interrupts and some dagger skills" — though ranged ones DO carry it, §2),
+Prophecies/Core preparations (Factions/Nightfall preparations DO), most
+non-foe-targeted shadow steps. Named exceptions in both directions on the
+page. Fast Casting does not touch it; "there are no other known mechanisms to
+reduce or cancel aftercast delay" beyond situational triggers like a form
+change. Attack skills without activation have instead an **animation delay**
+(bow/dagger/hammer ¾ s, other weapons ½ s) already folded into the attack
+interval. Trivia: before 2008-03-06, PBAoE spells carried 1.75 s.
+
+The per-skill reality of "almost always ¾, sometimes 0" is exactly what the
+client table's `+0x40` float encodes (0.75/0.75/0.0 for 153/105/394 —
+`studies/skills` §the-struct, `studies/reconstruction` row 10), and §3 put it
+on the wire. A skill-by-skill sweep of `+0x40` against this page's exception
+lists is a free third-witness check the next time `skilltable.py` output is
+regenerated (CASTMECH-P4).
+
+**WIKI (GWW, "Skill queue", rev. 2012-07-25).** One slot; a second attempt
+replaces the first; "queued skills will begin activating as soon as
+activation completes for the first skill **or after any aftercast delay
+ends**"; out-of-range use queues the skill and walks you into range; shouts
+fail instead of queueing. This is the QUEUE LAW verbatim (combat/PLAN step 3:
+E4 at accept, cast begins when the caster frees, 4/4 cycles ≤14 ms) — the
+2012 sentence and the 2026 fit are independent, and the two queue-law cycles
+in §3's table († rows) are the wire's own copy. An interrupt un-queues the
+queued skill ("Interrupt"); a plain cancel is not said to.
+
+**WIKI (GWW, "Knock down", rev. 2026-08-05; "Quarterknocking", rev.
+2012-07-10).** A knocked-down character (2 s; 3 with Stonefist; up to 4)
+cannot move, cannot switch weapons, and cannot activate anything with an
+activation time **or an aftercast delay** — which is why aftercast-bearing
+skills "must be queued" (Aftercast page) and why a skill pressed during the
+KD activates at a predictable instant after getting up. Quarterknocking is
+timing the *next* knockdown or interrupt onto that instant — the queue law
+weaponized. A target can be re-knocked "the instant they begin to rise".
+Anomaly recorded on the page: a foe knocked down mid-cast "often keep[s]
+casting for 1-2 seconds more … then it spontaneously fails", and a mid-flight
+projectile from a knocked-down creature stalls until the KD ends.
+
+---
+
+## 7. What is settled, what is ours, what is next
+
+**Settled by this pass** (wiki + wire + client table in agreement):
+
+- the connect point at ~0.46 of the interval, all attacker classes (M1);
+- E3 = aftercast end, per skill from `+0x40`; the four-opcode cycle now has
+  every gap named: E4→E5 activation (via queue law), E5→E3 aftercast,
+  E5→E6 recharge (M2);
+- the queue law is retail's documented skill queue (§6);
+- cancel-no-recharge as a wire shape (E4→E2, no E5), n=1 (M3);
+- quarterstepping's existence and rules; backswing = interval second half,
+  client-side only (M4).
+
+**Still OURS / UNVERIFIED**, in rough order of value:
+
+| id | question | how to settle |
+|---|---|---|
+| CASTMECH-P1 | the interrupt wire shape: does E2 come with a recharge-start (E5? E7/E8?) when a cast is genuinely interrupted, vs alone for a cancel? | live capture, shopping-list item 5 of combat/PLAN §3 (engineered interrupts, n≥2 causes) — or loopback: send E2 mid-sweep and watch whether the client's bar treats the skill as recharging |
+| CASTMECH-P2 | does the client *predict* a movement-cancel (stop the cast bar on a move press) or wait for the server's E2? | loopback: begin a cast, script a move press, send no E2 — does the bar keep filling? Settles who owns cancel detection |
+| CASTMECH-P3 | the swing gate model (M4's three-way): does a re-press after a quarterstep land the next hit on the original schedule? | capture: operator quarterstepping the Isle dummies at fixed cadence vs mashing — hit-to-hit deltas discriminate gate-from-start (1.33 I) from no-gate (0.92 I) |
+| CASTMECH-P4 | `+0x40` sweep vs the Aftercast page's exception lists (Dolyak 0? Ranger interrupts 0.75? Factions preparations 0.75?) | offline, next `skilltable.py` regeneration; pure client-table read with WIKI as the cross-witness |
+| CASTMECH-P5 | movement lockout during aftercast on OUR wire: retail refuses movement for 0.75 s post-cast; our server applies move messages whenever they arrive | decide and label: either police `cast_busy_until` in the move handler or record the divergence beside §17e's |
+| CASTMECH-P6 | the player's windup at scale (n=2 clean auto-attack samples) | the §19 NEEDS-CAPTURE stands: 20+ swings, in range, no skills |
+
+**For the server, the cheap wins in order:** (1) arm the player's swing with
+the same windup the agents already have (§17e item 1 — M1 now gives the
+constant three independent legs); (2) a cancel path — accept a move/cancel
+c2s during an in-flight cast or swing, drop the scheduled hit, emit E2 and
+`GV_ATTACK_STOPPED`/property 59, charge no recharge (M3's shape); (3) the
+backswing needs **nothing** — it is client animation, and modeling it
+server-side would be modeling a fiction.
+
+---
+
+## 8. Reproducing this
+
+```bash
+python toolkit/authsrv/castgaps.py
+```
+
+reads both live captures through `vaultpath`/`tape.resolve_capture` (worktree-
+safe), decodes every game connection whole, refuses partial frames, prints
+§3's event list and gap table, and states its prediction in the docstring
+before the numbers. Wiki pages were read through the browser per
+`browse-gw-wiki` (the in-app browser passes GWW's WAF; scripted HTTP does
+not), with revision timestamps pulled once via the on-page MediaWiki API.
