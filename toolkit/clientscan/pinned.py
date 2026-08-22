@@ -309,6 +309,29 @@ BUILDS = (
                   "key-tap. 57 B in 7 runs. vault/run-live/<stamp>/ and "
                   "vault/client-patched-live/"),
           )),
+    # ArenaNet updated mid-run 2026-08-20; the skills arc rebuilt on 38849 and
+    # closed the build gap (identical ghost behaviour, studies/skills 32.7,
+    # commit d21ac05), but the pinned row lagged, so test_handshake's build-vs-
+    # keyfile check reddened -- 38849 exe against a keyfile no BUILDS row named.
+    # Snapshotted here 2026-08-22 (snapshot_client.py, MANIFEST verified byte-
+    # identical). The PIN stays 38797 (below); this row only lets the newest
+    # patched client be recognised rather than rejected.
+    Build(stamp="2026-08-20_21511009c460", number=38849, size=10_483_904,
+          pristine="21511009c460a2a9d9ddb84a63c1f0d0dba0e5fb6e120b550633ed4fdf15ac56",
+          pristine_via=VIA_SNAPSHOT,
+          patched=(
+              PatchedCopy(
+                  "4cc5bc989aeff8d42e13bad323b899e41a6c3b937edb7107a1cfd7fbd7c23d67",
+                  "loopback build -- OUR DH, updater off, multi-instance, key-tap. "
+                  "145 B vs pristine, dhbuild classifies `ours`. vault/run/<stamp>/ "
+                  "and vault/client-patched/; this is the copy test_handshake "
+                  "selects as the newest server-keyed client"),
+              PatchedCopy(
+                  "2ff730c7de42052a5f8971e3a8b89d9a7b3d49d39eae1e9fc52f1faccc185c98",
+                  "LIVE-CAPTURE build -- stock DH, updater off, multi-instance, "
+                  "key-tap. 57 B vs pristine, dhbuild classifies `stock`. "
+                  "vault/run-live/<stamp>/ and vault/client-patched-live/"),
+          )),
 )
 
 # THE PIN DOES NOT FOLLOW THE NEWEST BUILD, and this line used to read
