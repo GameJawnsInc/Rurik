@@ -4557,10 +4557,39 @@ nonzero code; this one drew both sentences correctly, kept running for 94 more
 frames with normal effect traffic (`effect 863 on agent 1 expired, 5.03s of
 5.0s`), and then exited cleanly.
 
-**What is NOT explained is why it exited at all.** Nothing asked it to. It is
-recorded as unexplained rather than dismissed, and the retraction stands as
-written — the verdict machinery is deliberately conservative because it cannot
-know what a run was measuring.
+**AND THE EXIT IS EXPLAINED — THE OPERATOR CLOSED IT, because I gave them no
+reason not to.** This was written as "unexplained" for about ten minutes until
+the owner said so: *"i exited since you left it on my screen without a timeout
+or indication when it would finish."*
+
+That is a defect in how the run was invoked, not in the client. `--keep-open`
+**without `--hold`** means exactly this, and `session.py` says so in the flag's
+own help — *"Without `--hold` it holds until you close the client."* So the run
+parked a live game window on the owner's screen with no end condition and no
+progress indication, and then the harness logged their reasonable response to
+it as a client death. The retraction is real, its cause is a badly chosen flag,
+and the lesson is that **an agent-driven run must bound its own hold**:
+`--keep-open --hold N`, with N sized to the action script plus a margin.
+
+This is the same failure as the live-capture plan of 2026-08-21 (§33.4), from a
+different direction: **a wait that is not bounded and not announced.** Twice in
+two days, once in prose and once in a flag.
+
+**AND THERE WAS A FOURTH PRESS, THE OPERATOR'S — it is accounted for and it is
+a free witness.** While the window sat open the owner pressed slot 2 once. The
+log carries four `0x8046 USE_SKILL`, not three, and the extra one is at line
+**214**, after every measured event (lines 141–169) and after frame `4-key`.
+So the readings above are clean; this is stated because a run with unlogged
+operator input is a run whose readings cannot be trusted, and the check is
+cheap.
+
+What it adds is worth more than the tidiness. That press was **ACCEPTED** —
+energy had regenerated to 25 and the cast drained it to 0 again — and it came
+**after two refusals on that same bar**. So a slot that has just been refused
+still takes a fresh press: the `0x00E2` release does not leave the slot
+unusable, and it is a HUMAN-driven confirmation rather than another
+harness-scripted one. That is a small piece of evidence on §36.8's open
+question about the ~10 s re-animation, and it arrived by accident.
 
 ### 36.5 Two corrections the routes needed
 
