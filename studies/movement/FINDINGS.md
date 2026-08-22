@@ -5534,3 +5534,119 @@ bridges), so per-landing verdicts are our mesh's word, not the client's.
    A fix ladder that addresses one and not the other will keep scoring
    "mystery" residue from the other; L5's two-regime framing is re-confirmed
    from inside one session.
+
+## 2026-08-22 — ★★ REALFIX-L9: EXPOSURE ACHIEVED AT LAST, AND THE COMPOSITE'S PROTECTION IS DEMONSTRATED — 33 full-lead click grants escaped under `--zero-lead --grant-suppress` and NOT ONE became a warp
+
+**OBSERVED, `ours`.** Two arms, map 148, build 38797, owner-driven under the
+pre-registered L9 protocol (`REALFIX.md` §"REALFIX-L9", committed before the
+run at `8e160b7`). Control `20260822T165425` + `movetap-20260822T165434`
+(1,207 samples, 124.1 s, 9.7 Hz); treatment `20260822T165910` +
+`movetap-20260822T165918` (1,133 samples, 134.0 s, 8.5 Hz — 93% of the
+capture span, over the registration's 90% null-license floor). Arms earned
+from the verdict vocabulary: the control carries `locally-moving` and zero
+zero-lead rows; the treatment carries 141 fired `arm = "zero-lead"` rows, all
+plane words (0, 0), `--plane-carry` correctly absent. Both taps pass the
+artifact gate; **neither has a single adjacent pair over 0.25 s**.
+
+**One protocol deviation, recorded with its purpose met.** Both arms were
+played in the spawn-north field (track spans y ≈ 6,000–10,400), not the
+registered arena south of the bridge. The arena rule's purpose — one plane, no
+boundary — held completely: **every client report (306 and 356), every tap
+sample (1,207 and 1,133) and every zero-lead plane word (141) is plane 0**, so
+the mechanism-A contamination guard passes and the invariant-falsifier
+sharpness (one plane, no plane-word excuse available) holds. Four clicks were
+aimed AT the bridge aprons (dests y 5,300–5,800); the player never followed
+them and no copy reached them.
+
+### The control: gate passed, conversion measured again
+
+11 escaping cold-latch grants (staging gate ≥ 8 ✓) + 16 `deferred-grant`
+fires = 27 full-lead click grants, leads p50 1,290 / 1,385 u, **27/27 over the
+299.33 u cut** → **7 REALFIX-E events** (555–3,575 u; largest non-event step
+38.3 u), i.e. **0.26 events per fired grant**, inside the registered
+0.15–0.5. Every event is a fence-clearing reseed onto the copy (landing
+0–27.9 u from `sync_at`; three land exactly 0 u from a clicked destination —
+the parked-copy tail, four land 22–602 u away — mid-glide, reproducing L8's
+finding). Wire beside it: 6 hard rows, 3.08/min of span, magnitude p50
+1,067 u max 2,821 u. Separation p50 621 / p90 1,669 / max 3,555 u. ⚠ The
+registered secondary "control separation p50 ≥ 1,000 u" **missed** (621): a
+27-grant control keeps the copy moving far more than L7's single-grant
+control, which is what the 1,970 u figure came from. Printed, not a verdict
+axis, and the miss is the prediction's error, not the instrument's.
+
+### ★★ The treatment: the decision cell, reached on the fourth attempt, and it is the PROTECTED cell
+
+**Exposure first, because three runs died on it: 8 escaping cold-latch grants
+(abort < 3 NOT triggered) plus 25 `deferred-grant` fires — 33 full-lead click
+grants launched during cold windows**, leads p50 1,539 / 1,676 u (784–2,821),
+**33/33 over the gate-1 cut**. The spread-clicks refinement did the work
+through the click arm's own deferral channel: a rate-limited cold click is
+HELD by `grant_flush_tick` and fired ~0.3–0.5 s later with the latch still
+unset — **the deferral is L7's feared rule-2 preemption converted from a
+suppressor into a ~0.5 s delay**, which is precisely why no REALFIX-I2 build
+change was needed. (34 `rate-limited` rows show rule 2 still working between
+those fires.)
+
+**REALFIX-E events: 0.** Largest rendered step in 1,133 samples: **51.0 u**.
+Wire agrees: **0 hard rows on both arms of the bar, from 174 player grants**.
+
+**Against the registration's own arithmetic:** the pre-registered binomial at
+the conservative per-escape conversion (p = 1/3) gives **P(0 | 8 escapes) =
+(2/3)⁸ = 0.039** — the registration pre-stated that a zero under 10 escapes is
+suggestive rather than decisive, and this is that case, printed as promised.
+On the registered per-fired-grant axis the contrast is stronger: control
+**7 of 27** fired grants converted, treatment **0 of 33** — Fisher exact
+one-sided **p = 0.0023**; at the control's own conversion the treatment
+expected **8.6 events** and produced none. Same operator, same day, minutes
+apart, and the contrast is on the mechanism's own denominator (per fired
+grant), which is insensitive to the run-level rate confounds L5 warned about.
+
+### The mechanism, and the data distinguishes more than the pooled cell asked
+
+The registered PROTECTED cell pooled "overwrite honoured" with "any in-band
+mechanism". The tap separates them:
+
+- **The overwrite is honoured mid-flight.** Every cold escape was followed by
+  its first zero-lead overwrite **1.18–3.02 s** later (9–115 more each).
+  Separation never exceeded **954 u** against click leads of 1,500–2,800 u —
+  the copy launched toward the clicked point and was pulled back before
+  arriving. Closest approach of the copy to each clicked destination: p50
+  **216 u** in the treatment against p50 **37 u (min 0.0)** in the control,
+  whose copies walk all the way and park — that parked state is where the
+  control's exact-landing warps come from, and the treatment never enters it.
+- **The zero-lead invariant is observed protecting, per sample.** 92 of 1,133
+  treatment samples sat ABOVE the gate-1 cut while zero-lead bakes ran the
+  desync test continuously — and nothing snapped, because the copy chases the
+  player's own reported track and therefore sits on the history polyline the
+  match test consults. Lag on the polyline, exactly as REALFIX-O1 argued.
+- **L6's lingering-destination residue did not manifest under overwrites**: 33
+  lingering candidates, 40+ s of watched window each, 0 events — against
+  L6/L7's measured 5–35 s re-application under bare `--grant-suppress` (3-of-3
+  conversion there). Whatever re-applies a stale destination, a fresher
+  destination defuses it.
+
+### What this settles, and what it does not
+
+1. **The composite's zero is no longer untested exposure — it is a
+   demonstrated save.** L5's W1 withdrawal ("the run cannot distinguish *the
+   fix works* from *no-op packets are no-ops*") is answered on its own terms:
+   33 displacement-capable grants entered the mechanism and none displaced the
+   player. The missing contrast from L5/L6 ("the composite is not
+   distinguishable from `--grant-suppress` alone") now exists on the
+   mechanism's denominator: bare suppress converts escapes at 0.26/grant
+   (this run) and 3-of-3 (L6/L7); the composite converts **0/33**.
+2. **The residue `--grant-suppress` leaves (L6: 2.02/min) is closed by
+   `--zero-lead` in this regime**, and the parked-copy cost (L7 §2) is already
+   measured as improved 5.3×. The click-regime lever the arc went looking for
+   after L5 turns out to be the composite it already had — what was missing
+   for three runs was only the exposure to prove it.
+3. **Not settled:** which client mechanism honours the re-aim (the bake
+   rewrites the destination on every `0x0029`; whether `+0x48`/arrival
+   machinery still holds a stale copy in some path is REALFIX-Q5's question,
+   now with 0 observed firings under overwrite pressure); which gate fires
+   when protection fails (REALFIX-Q1, breakpoint still unrun — five rounds);
+   and the non-movement costs of the composite (aggro/interact against the
+   moving copy) which no run has priced. The escape-arm binomial at 0.039 is
+   the registered headline number and it is suggestive-plus, not
+   overwhelming — a replication arm run to ~15 escapes would put it beyond
+   argument if one is ever wanted cheaply.
