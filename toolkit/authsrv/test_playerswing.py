@@ -27,9 +27,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 23, from the green run of 2026-08-22 that landed sections 5-7
-# (was 13 when the file carried only the windup split).
-LEDGER = checks.Ledger("player swing windup", floor=23)
+# FLOOR 24, from the green run of 2026-08-22 that pinned the property-8
+# action hold beside the swing paths (23 when sections 5-7 landed, 13 when
+# the file carried only the windup split).
+LEDGER = checks.Ledger("player swing windup", floor=24)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -63,10 +64,13 @@ def section_two_phases():
     authsrv.attack_tick(send, state, 0)
 
     ops = [op for op, _, _ in sent]
-    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET]
-          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0],
-          "the first tick sends ATTACK_STARTED alone -- the observed player "
-          "shape [4, attacker, target, 0] -- and no damage",
+    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
+          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]
+          and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1],
+          "the first tick sends ATTACK_STARTED, then [8 -> 1] -- the hold "
+          "rides immediately behind its own START, 4 of 4 in the corpus "
+          "(castmech 3c) -- and no damage",
           f"sent={[(hex(o), v) for o, v, _ in sent]}")
     swing = state.get("player_swing")
     expect = authsrv.swing_windup(authsrv.ATTACK_INTERVAL)
@@ -80,18 +84,20 @@ def section_two_phases():
           f"lands in {swing['lands_at'] - _t.time():.3f}s" if swing else "none")
 
     authsrv.attack_tick(send, state, 0)
-    check(len(sent) == 1, "an undue swing does not land early",
+    check(len(sent) == 2, "an undue swing does not land early",
           f"{len(sent)} sends")
 
     _rewind(state, expect + 0.01)
     authsrv.attack_tick(send, state, 0)
     ops = [op for op, _, _ in sent]
     check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                   authsrv.AGENT_ADRENALINE_GAIN,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
-          "the landing is gain, damage, FINISHED -- and NO second STARTED: "
-          "the one from the arm-phase was the swing's own",
+          "the landing is gain, damage, FINISHED -- and NO second STARTED "
+          "and NO hold toggle: the one from the arm-phase was the swing's "
+          "own, and a landing releases nothing (the chain still holds)",
           f"ops={[hex(o) for o in ops]}")
     check(state["player_swing"] is None
           and state["agents"][10]["health"] < 100.0,
@@ -151,9 +157,17 @@ def section_lost_target():
         wreck(state)
         _rewind(state, 10.0)                              # long past due
         authsrv.attack_tick(send, state, 0)
-        check(state["player_swing"] is None and sent == [],
-              f"target {name}: the swing whiffs with nothing on the wire -- "
-              f"ArenaNet's own truncation (the Lakeside 7th swing, 0.24 s in)",
+        # The SWING drops silently either way (retail's truncation), but a
+        # DEAD target also releases the hold on the wire -- the one live
+        # target-death close carries [8, 31, 0] (t=20.1637, n=1, castmech
+        # 3c). Out-of-range has no witness and stays fully silent.
+        expected = ([(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0])]
+                    if name == "dies" else [])
+        check(state["player_swing"] is None
+              and [(op, v) for op, v, _ in sent] == expected,
+              f"target {name}: the swing whiffs -- ArenaNet's own "
+              f"truncation (the Lakeside 7th swing, 0.24 s in) -- and only "
+              f"a death releases the hold",
               f"swing={state['player_swing']}, sent={sent!r}")
 
     sent = []
@@ -181,10 +195,12 @@ def section_direct_calls_unchanged():
     ops = [op for op, _, _ in sent]
     check(ops[0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
           and sent[0][1][0] == authsrv.agents.GV_ATTACK_STARTED
-          and len(sent) == 4,
-          "a default (unarmed) call still opens with its own STARTED and "
-          "lands in one instant -- the attack-skill path's recorded "
-          "divergence, unchanged",
+          and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1]
+          and len(sent) == 5,
+          "a default (unarmed) call still opens with its own STARTED (the "
+          "hold riding behind it, as at every swing open) and lands in one "
+          "instant -- the attack-skill path's recorded divergence, "
+          "unchanged",
           f"ops={[hex(o) for o in ops]}")
     sent.clear()
     state["agents"][10] = _fresh_agent()
@@ -222,13 +238,16 @@ def section_press_stops_swing():
     try:
         _press(authsrv, send, state)
         ops = [op for op, _, _ in sent]
-        check(ops[:2] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+        check(ops[:3] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                           authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
-              and sent[1][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
-              "the press burst carries GV_ATTACK_STOPPED [3, agent, 0] "
-              "immediately after E4 -- retail's own slot, 2 of 2 live "
-              "presses with a chain running (necro t=18.511, ranger "
-              "t=21.543)", f"ops={[hex(o) for o in ops]}, "
+              and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
+              and sent[2][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
+              "the press burst carries [8 -> 0] then GV_ATTACK_STOPPED "
+              "[3, agent, 0] immediately after E4 -- retail's own order, "
+              "2 of 2 live presses with a chain running (necro t=18.511, "
+              "ranger t=21.543: the release PRECEDES the stop)",
+              f"ops={[hex(o) for o in ops]}, "
               f"second={sent[1][1] if len(sent) > 1 else None}")
         check(state.get("player_swing_cancel") == "skill press",
               "and asks the tick to drop the armed swing -- the entry itself "
@@ -280,8 +299,10 @@ def section_pause_and_resume():
 
         _rewind_casts(state, 2.0)                          # e5 and e3 past due
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x00E3],
-              "(the cast completes: E5 then E3)",
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3],
+              "(the cast completes: E5, then [58, agent, 0], then the hold "
+              "pulse, then E3)",
               f"{[hex(o) for o, _, _ in sent]}")
         sent.clear()
         state["player_last_swing"] = 0.0
@@ -317,6 +338,13 @@ def section_retarget():
           "the retarget sends one STOPPED -- the corpus's candidate cancel "
           "(17c): two target-selects, then the standalone stop 57-90 ms "
           "later, no damage for the opened swing", f"{stops}")
+    check([(op, v) for op, v, _ in sent[:2]] ==
+          [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+           (0x009F, [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
+          "and the stop is the corpus's PAIR: [8 -> 0] immediately before "
+          "the [3, agent, 0] -- the t=16.578 retarget's own adjacency "
+          "(castmech 3c)",
+          f"{[(hex(op), v) for op, v, _ in sent[:2]]}")
     sent.clear()
     authsrv.attack_tick(send, state, 0)
     swing = state.get("player_swing")

@@ -1371,6 +1371,28 @@ with a different follow-up call each way. **GWCA's `disabled`, documented as
 "(aftercast) value 1/0", is CORROBORATED** — the binary shows precisely a 1/0
 flag. OpenTyria's `FreezePlayer` is not contradicted so much as unspecific.
 
+**EXTENDED 2026-08-22 — the follow-up calls read, and the wiring decision
+taken.** Both callees gate the same way before doing anything: bit 4 of
+`+0x10C` must be clear, **bit 0 of `+0x64` (this property's own bit) must be
+CLEAR and bit 1 SET**. `0x0081C090` (the value-0 path) then sets a state bit
+in `+0x110`, computes a due-time into `+0x114` (`0x006044E0()` + 0xFA = 250
+of whatever unit that clock ticks), and registers it through `0x009217C0` on
+the same object; `0x0081BE90` (the value-1 path, called with a literal
+`0.0f`) stores its float to `+0x100` and no-ops past the gate when the bit it
+was just set to is set. Everything is view-object-local — no gameplay state,
+no store the game logic reads back, and the whole switch is skipped for an
+agent that does not resolve to a resident type-1 view. So property 8 is
+**animation plumbing: an action-hold bit whose CLEAR schedules a deferred
+view action (a return-to-ready of some flavour) and whose SET holds it.**
+
+The wire half of the read — all 30 player-agent events mapped to their
+trigger contexts, transition-only, →1 at action starts and →0 at releases —
+is `studies/castmech/FINDINGS.md` §3c, and the two halves agree. On that
+combined evidence the server now SENDS it, player-only, in exactly the
+measured contexts (the press bracket, the spell E5 pulse, behind
+ATTACK_STARTED, before the chain stops, at movement and target-death
+releases); `authsrv.action_hold` is the sender and carries the map.
+
 ### Properties 5 and 51 — `float-agentview`, and they are 61's siblings
 
 The whole switch is three compares and one body (`0x0081BD80`):
