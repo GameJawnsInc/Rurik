@@ -5368,3 +5368,169 @@ an arm where rule 2 cannot preempt it — i.e. the shared clock must be free at
 the moment of the click. **Neither this run nor L5 can be re-analysed into that;
 it needs a build change or a protocol that clicks immediately after a heading
 grant's floor expires, and it should be priced before it is run.**
+
+## 2026-08-22 — ★⚠ REALFIX-L8: the exposure protocol WORKS (32 cold-latch escapes in the control), the treatment's ABORT CONDITION FIRED — and the OTHER mechanism wedged the operator inside the bridge
+
+**OBSERVED, `ours`.** Two arms, map 148, build 38797 (each movetap head records
+the exe: `vault/run/2026-07-29_221c13772c7a/Gw.exe`), owner-driven under the L8
+protocol (`REALFIX.md` §"REALFIX-L8": turn while moving, release out of a turn,
+click immediately, 3–4 rapid clicks 400–800 u along open ground, resume).
+Control `20260822T161838` + `movetap-20260822T161918` (2,443 samples, 254.1 s,
+9.6 Hz); treatment `20260822T162502` + `movetap-20260822T162513` (396 samples,
+41.6 s, 9.5 Hz). **Arm labels are earned, not assumed**: the control carries
+`locally-moving` rows (reachable only with `GRANT_SUPPRESS` on) and zero
+zero-lead rows; the treatment carries 86 `arm = "zero-lead"` rows with
+`plane_carry = false` and `carry = "off"` on every one — cleanly
+`--zero-lead --grant-suppress`, no `--plane-carry`, as L7's design requires.
+Two same-day captures (`160333`, `160626`, 75 s each) carry no verdict rows and
+no tap: setup, excluded. **Both taps pass the REALFIX-E artifact gate**
+(`async_ptr`/`async_id`/`async_count`/`async_world` single-valued) and **neither
+tap has a single adjacent pair over 0.25 s**, so every pair is inside the E
+definition's interval bound; the control tap covers 254.1 s of a 297.3 s
+capture span, so its event count is a FLOOR.
+
+**New verdict vocabulary, for the next session that fingerprints arms.** The
+shipped click arm now HOLDS a rate-limited click instead of dropping it
+(`grant_flush_tick`, `authsrv.py` — "the coalescing half of rule 2": newest
+click wins, fired when the floor opens, dropped if the keyboard resumes or the
+hold expires). Its rows are `deferred-grant` (fired) and `pending-expired`
+(dropped); the zero-lead arm's refusal is `heading-rate`. None of these appear
+in L5's fingerprint recipe, which should be read with this addendum.
+
+### The control: the exposure problem that voided two runs is solved
+
+344 clicks, 55 stops, 687 headings over 297.3 s. Upstream of the verdict (server
+stdout, harness report `20260822T161814`): 148 × "not a straight shot", 60 ×
+"cannot place them", 70 held by the floor, 8 deferred clicks dropped on keyboard
+resume. At the verdict: **32 × `grant` — every single one with
+`keyboard_age = None`, i.e. 32 escaping cold-latch grants** (pre-registered
+prediction: ≥ 8; L7 managed 1) — plus **16 × `deferred-grant`** (keyboard_age
+not recorded at fire time; counted beside, never pooled), 24 `locally-moving`,
+70 `rate-limited`. Every fired grant carried full lead: cold-latch p50
+**1,994 u** (626–4,151), deferred p50 2,495 u (1,303–4,098), **48 of 48 over the
+299.33 u gate-1 cut**.
+
+**REALFIX-E: 16 events** (steps 310–5,439 u; largest non-event step 52.6 u).
+The pre-registered band was 5–15: **measured 16, one above the top** — the band
+was drawn from L6+L7's 3-of-3 parked-copy conversion, and that model did not
+generalise to spam cadence (below). Wire bar beside it, per the registration
+(`movesync --wire-only`): 12 hard rows, 3.07/min of span, 3.80/min of active
+time (1.042 s threshold named), magnitude p50 1,139 u max 5,236 u, grant age at
+the jump p50 0.93 s max 10.34 s, landing on the granted path 4/5 non-degenerate,
+2 of 12 straddling a plane flip. Separation (tap): p50 515 / p90 2,661 / max
+5,472 u, 66% of samples over the cut.
+
+**The conversion model needs restating.** All 16 events are reseeds onto the
+SYNC copy — every landing sits 0–27 u from the contemporaneous `sync_at` — but
+only **6 of 16 land ≤ 33 u from a fired grant's destination** (two at exactly
+0.0 u: the copy had walked to the click and parked — L6/L7's signature). The
+other **10 land 116–434 u from any destination: the snap fired mid-glide**, at
+one of the next grants' bakes, wherever the copy happened to be. L6/L7's
+"destination lingers 7–10 s, then fires" is the PARKED tail of the
+distribution, not the rule; at spam cadence 48 fired grants → 16 events (≈ 1:3,
+not 1:1).
+
+### The treatment: the abort condition fired — for a NEW reason
+
+44 clicks, 6 stops, 86 headings, 53.5 s span, ended early with the operator
+wedged inside the bridge abutment (operator report with screenshot; the wire
+agrees — from t+34.8 to t+39.4 the client reported the same position while the
+zero-lead arm granted it straight back: **six identical fired destinations at
+(10788, 5596) plane 18**, the wire signature of walking-in-place against
+collision). Zero-lead: 37 fired, 49 `heading-rate` refused. Click arm: **zero
+verdict rows — 0 fired, 0 escaping cold-latch grants.** Upstream: 25 × "not a
+straight shot", 16 × "cannot place them — geometry says off-mesh".
+
+**Fewer than 3 escaping grants in the treatment is the pre-registered abort
+condition, and it fired: this is the third consecutive exposure failure, the
+run answers nothing about the overwrite, and it is NOT scored as a null.** The
+overwrite hypothesis (L6/F4 desk screen) remains UNTESTED. But the cause is
+not L7's: no click was preempted by rule 2 (none ever reached it), and no click
+was mistimed. The arm was derailed in its first half-minute by the arc's OTHER
+mechanism, and everything after that is the derailment's shadow — the operator
+was off-mesh inside the bridge, so the geometry gates correctly refused every
+click from there.
+
+### ★ The plane echo, caught mid-act at 9.5 Hz
+
+The treatment's single REALFIX-E event is the cleanest per-sample record of
+mechanism A (L3/L4's plane echo) the arc has:
+
+| world clock | `async_at` (rendered) | `sync_at` (copy) | sep | fence |
+|---|---|---|---|---|
+| 30.808 | (10846.6, 5617.9) **pl0** | (10556.0, 5751.2) pl0 | 319.7 | 1 |
+| 30.908 | (10855.6, 5591.8) pl0 | (10583.1, 5741.5) pl0 | 310.9 | 1 |
+| 31.009 | (10862.3, 5564.5) **pl18** | (10610.5, 5731.8) pl0 | 302.3 | 1 |
+| 31.110 | (10869.6, 5533.1) pl18 | (10637.9, 5722.0) pl0 | 299.0 | 1 |
+| **31.210** | **(10676.9, 5694.6) pl18** | **(10662.2, 5707.6) pl18** | **19.6** | **0** |
+
+The client walks south onto the deck and its reports flip to plane 18
+(31.009); the zero-lead grants follow suit — plane-word census over the 37
+fired: (0,0) × 23, **(18,18) × 14** — and a grant stamps 18 onto a copy
+standing ~300 u behind at **(10662, 5707), a point our mesh places on plane 0
+and ONLY plane 0** (`pathmap.containing`, map file `0x1B97D`). In one 100 ms
+window the copy's plane flips 0→18, the fence clears 1→0 (`clear_record` on the
+snap path), and the rendered player is yanked **251.5 u backward onto the
+copy**. Both copies then glide together, plane 18, over plane-0-only ground —
+the operator's "floating run" — until the client wedges inside the abutment.
+`--plane-carry` was OFF; this is precisely the event class L3/L4 demonstrated
+F1 removing, occurring unstaged in the click-regime's own arena.
+
+**Which gate fired is UNDECIDABLE from this tap, and the entry does not pick.**
+The last pre-snap sep reads 299.0 u against the 299.332591 u cut, falling
+~3 u per 100 ms — but the tap dead-reckons both copies on a 50 ms-quantised
+world clock (~±14 u per copy at run speed), so gate 1 (marginally) and gate 2
+(the copy's (x, y, plane-18) start unresolvable where plane 18 has no geometry)
+are both live. If gate 2, it would be its **first observed firing** (n = 0 to
+date) — do not claim it. REALFIX-Q1's ride-along breakpoint
+(`0x0060580D`/`0x00605820`, `rec.clientControlled` beside separation) is still
+the decider and is still unrun — **four rounds now**.
+
+**This is NOT the invariant falsifier.** `REALFIX.md`:238 requires a P2-arm
+snap with the copy behind the player *on ground already walked*. The ground was
+walked **at plane 0**, and our own grant had just rewritten the copy's plane
+word to 18 — the walkable term had a legitimate reason to fail. The invariant
+stands; what fired is the known poison in field 4.
+
+**The wire cannot see this event.** `movesync --wire-only` scores the treatment
+**0 hard rows on both arms of the bar** — the client's post-snap report step
+was ~102 u. REALFIX-E on the rendered copy was the only instrument that could
+carry this verdict, which is what the L8 registration chose it for.
+
+### The floating runs are the plane echo's rendered signature — both arms
+
+The operator's report ("floating, height interpolated straight from A to B",
+in the first run too) is located: a reseed that lands the rendered agent
+carrying a plane word with **no geometry at its coordinates** leaves the client
+resolving height against the wrong (or no) surface. Checked against our own
+mesh, per landing: the treatment's event (plane 18 at a plane-0-only point) and
+**three control landings** — t=69.685 (10814.5, 4430.7) **pl18**, south-west of
+the deck footprint, mesh finds NO plane; t=154.315 (10684.9, 1345.2) **pl22**,
+mesh finds none; t=196.109 (9906.8, 578.1) pl0, mesh finds none. The other 13
+control landings are plane-consistent. ⚠ The referee here is our own
+`pathmap` (measured 189/198 on plane membership, ambiguous exactly at
+bridges), so per-landing verdicts are our mesh's word, not the client's.
+
+### What this changes
+
+1. **The L8 choreography is proven and keeps.** 32 escapes against L7's 1,
+   from the same build — the protocol changes (click-on-release, rapid
+   multi-click, moderate open-ground leads, turning cadence) did exactly what
+   they were priced to do. 148 "not a straight shot" refusals and 48 grants
+   still escaped: placement volume beats placement perfection.
+2. **The overwrite question still has zero exposure after three runs.** The
+   pre-registered remedy — price a click-arm exemption from rule 2 — stands,
+   but L8 adds a second requirement discovered the hard way: **any L9 must be
+   staged OUT of the plane-ambiguous bridge area** (the open plane-0 field at
+   x 10700–12300, y ~2700–4300, `REALFIX.md` §L2's own site list — no plane
+   boundaries, clear straight runs), and its treatment arm must pre-register a
+   decision on `--plane-carry`: without it mechanism A can derail the arm in
+   half a minute (measured here); with it the arm carries one more variable.
+   That is a pre-registration decision, not a default to assume.
+3. **The two mechanisms are now both visible in a single run pair.** Control:
+   grant DISTANCE (48 full-lead click grants → 16 reseeds, no plane boundary
+   needed — 13 of 16 landings plane-consistent). Treatment: the plane word
+   (zero click grants, one reseed, plane rewrite onto off-plane ground).
+   A fix ladder that addresses one and not the other will keep scoring
+   "mystery" residue from the other; L5's two-regime framing is re-confirmed
+   from inside one session.
