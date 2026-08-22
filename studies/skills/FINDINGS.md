@@ -961,7 +961,7 @@ re-skinning, not a technical obstacle.
 | Energy, adrenaline, health cost | PE row `0x34-0x38` | **No** |
 | Activation, aftercast, recharge | PE row `0x3c`, `0x40`, `0x4c` | **No** |
 | Attribute, profession, type, elite flag | PE row `0x28`, `0x29`, `0x0c`, `0x10` | **No** |
-| Rank-0/rank-15 scaling shown in the tooltip | PE row `0x44`-`0x68` | **Yes, 2026-08-14** — `skilltable.py`, whole window bar `+0x50` (§4) |
+| Rank-0/rank-15 scaling shown in the tooltip | PE row `0x44`-`0x68` | **Yes, 2026-08-14** — `skilltable.py`, whole window bar `+0x50` (§4 of the 2026-08-05 block) |
 | Animation ids | PE row `0x74`-`0x88` | **No** |
 | Whether the id exists at all | PE table length at row 0 `+0x2c` | **No** |
 
@@ -1294,6 +1294,33 @@ that would settle it against a real client.
 
 # OBSERVED, 2026-08-05: the first results measured against our own client
 
+> **This block RESTARTS the section count at 1, so §1–§8 exist twice in this
+> document — once above, once below.** Nothing else collides: §9 onward is a single
+> run that never resets. **The resolver, and it is what the citations already do:
+> a bare §1–§8 means the DESK pass above.** Every one of the nineteen citations
+> from outside this document — `studies/profession` ×8, `studies/skillcast` ×4,
+> `studies/combat/PLAN.md` ×3, `studies/profession/MODDABLE.md`,
+> `WORKAROUNDS.md`, `studies/review` ×2 — resolves that way, and not one of them
+> means a section of this block. **This block's own §1–§8 are cited as "§N of the
+> 2026-08-05 block"** (or "of this section", which §10 already uses), and the four
+> places that needed it now say so.
+>
+> The numbers themselves are NOT being migrated. `studies/idents/HANDOFF.md`'s
+> ★ box rules on exactly this — *"a mass rename of existing tokens is out of scope
+> and should be refused... the deliverable is a convention for NEW identifiers plus
+> a resolver, not a migration"* — and section numbers here are load-bearing in
+> commit messages (`Skills 32.8`, `Isle 8.6`, `§27.4` are all commit subjects).
+> A renumber buys a cold reader a few seconds and costs everyone else their index.
+>
+> **Two bare references in this document are NOT covered by the rule, because the
+> sweep could not settle them and guessing is worse than saying so.** §25's
+> *"the answer to §8's question"* has three live candidates — this document's desk
+> §8, `PLAN.md` §8's old heal-spam item, and `studies/isle` rung 8 — and the
+> paragraph cites isle three lines earlier. §36's *"a scope error of exactly the
+> kind [§4](#) warns about elsewhere"* was committed with an EMPTY href (`12ce246`)
+> and names no document; neither §4 in this file is about scope. Whoever wrote
+> them can close them in a line; nobody else should.
+
 Everything above this line was written without launching a client. This section
 was produced by running §3's "concrete first experiment" and then a follow-up,
 against build 38797 on our own server. It is the only part of this document
@@ -1580,9 +1607,10 @@ non-zero values in the table are not (20, 60, 75, 130, 140, 160, 220, 240 among
 them). A threshold can sit anywhere; the strike count rounds up.
 
 **The probe.** Both `ceil(raw/25)` and `floor(raw/25)+1` fit the three skills
-observed in §5, because they diverge only on exact multiples of 25 and none of
-those three was one. A bar was built from four Warrior skills whose raw values
-*are* exact multiples, so the two rules predict different numbers in every slot:
+observed in §5 of this block, because they diverge only on exact multiples of
+25 and none of those three was one. A bar was built from four Warrior skills
+whose raw values *are* exact multiples, so the two rules predict different
+numbers in every slot:
 
 | Slot | id | raw `+0x38` | `ceil` predicts | `floor+1` predicts | **OBSERVED** |
 |---|---|---|---|---|---|
@@ -1631,18 +1659,18 @@ mechanic, the client supplied the encoding, and neither alone would have produce
 
 The effect substrate (`toolkit/authsrv/effects.py`, R4b) needed one number the
 table does not hand over cleanly: **how long does this skill's effect last?**
-§4 answered which values *render green*; this is about which values are *real*,
-which turns out not to be the same question. Three findings and one
-corroboration, all from the
-1,333-skill player corpus plus the 102 `0x0042` applies in the live captures.
+§4 of the 2026-08-05 block answered which values *render green*; this is about
+which values are *real*, which turns out not to be the same question. Three
+findings and one corroboration, all from the 1,333-skill player corpus plus
+the 102 `0x0042` applies in the live captures.
 
 ## 12. `skill_arguments` bit 1 means the duration SCALES, not that the slot is meaningful
 
-§4 established that a value renders green when its `args` bit is set **and** its
-endpoints differ, and that reading endpoints without the bit invents a
-progression the game never draws — Rush's scale slot holds a constant 25 with
-its bit clear. `authsrv.skill_scale_value` therefore **raises** on a disabled
-set, which is right for the scale.
+§4 of the 2026-08-05 block established that a value renders green when its
+`args` bit is set **and** its endpoints differ, and that reading endpoints
+without the bit invents a progression the game never draws — Rush's scale slot
+holds a constant 25 with its bit clear. `authsrv.skill_scale_value` therefore
+**raises** on a disabled set, which is right for the scale.
 
 **It is too strong for the duration, and retail says so.** Skills **984 (Torch
 Enchantment)** and **998 (Torch Hex)** have `skill_arguments = 0` — the duration
