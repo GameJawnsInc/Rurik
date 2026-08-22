@@ -604,6 +604,25 @@ Skip the grant when the newest report's position deviates from the straight extr
 **The run it changes: the X1 and X2a legs.** Under B it removes the event; under A it does nothing. Cost: one skipped grant per deflection = **+1 chord (~515 u) of separation exactly at contact**, which is the worst moment to add lag if B is *wrong*.
 **Label:** this is not derived from any measurement in the record and has no retail grounding. **Do not build it before X2a returns a positive.**
 
+#### REALFIX-L8 · the overwrite test — PRE-REGISTERED 2026-08-21, before the run
+
+**The question L7 failed to reach twice:** when a lead-carrying click grant DOES escape, does a following zero-lead grant stop it becoming a warp? L5's A3 and L7's treatment both produced **zero** escaping grants, so the composite's zero has never been a demonstrated save.
+
+**No build change is needed, and that was measured rather than assumed.** The three gates a cold-latch click must pass together are rule 1 (`kbd_moving_at is None`, from a `0x0047` stop until the next moving `0x003D`), freshness (`now - pos_seen <= 1.0`, `authsrv.py:12273` — and the STOP refreshes `pos_seen` too, `:12528`), and rule 2 (`now - grant_at > 0.5`, shared clock). Measured over L7's own captures: the window is **non-empty at 41 of 41 stops (control) and 41 of 44 (treatment)**, opens at **stop + 0.00 s** (p90 +0.22 s in the treatment) and is **p50 0.83–1.00 s wide**. Clicks landed inside it 11 and 14 times and were then killed **downstream by the geometry gate** — "not a straight shot" x26, "cannot place them" x1 of 58 clicks. **L7's exposure failure was PLACEMENT, not timing, and not the shared clock.**
+
+**Protocol changes from L7, each keyed to a measured cause:**
+1. **Click IMMEDIATELY on release, not after a beat** — L7's "wait ~1 s" put 21 of 58 clicks past the 1.0 s freshness bound. The window opens at the stop.
+2. **Three or four rapid clicks per release**, so a human is not aiming at a sub-second target by hand.
+3. **Click 400–800 u along OPEN GROUND**, not maximum distance across buildings. Corpus-wide, **48 of 78 warp-causing grants carried a lead under 1,000 u and 8 under 600 u**, so a moderate clear-line click both passes the clip test and clears the 299.33 u cut.
+4. **Watch the server terminal** — it prints each refusal reason live, so a bad direction is visible within a second.
+
+**PREDICTIONS, numeric and falsifiable:**
+- **Control `--grant-suppress`:** ≥ 8 escaping cold-latch grants, and at the 3-of-3 conversion measured across L6+L7, **5–15 REALFIX-E events**.
+- **Treatment `--zero-lead --grant-suppress`:** a comparable count of escaping grants. **If the overwrite is honoured → 0 events despite ≥ 5 escaping grants.** If it is not → an event rate statistically indistinguishable from the control's.
+- **ABORT CONDITION, named in advance so it cannot be rationalised afterwards: if the TREATMENT again produces fewer than 3 escaping grants, this is the third consecutive exposure failure and the run answers nothing** — do not score it as a null, and price the build change (a click-arm exemption from rule 2) instead.
+
+**Instrument:** movetap on both arms, full-length; L7 achieved 12.0–13.3 Hz and REALFIX-E on the rendered copy is the verdict, with `--wire-only` printed beside it.
+
 #### REALFIX-F4 · bound the click grant's lead — **REFUTED AT A DESK 2026-08-21, never built**
 
 **Site (had it been built):** the click send at `authsrv.py:11253` — refuse a grant whose destination lies further than a bound *B* from the client's own last report.
