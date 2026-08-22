@@ -5716,3 +5716,35 @@ and one message-timed route (arrival-class instants, already in `grantsim`'s
 model). Which of them fired in L6 remains runtime work — REALFIX-Q1's
 breakpoint, still the arc's one unrun instrument. Under the composite the
 question is moot on the evidence: zero residue firings in every composite run.
+
+## 2026-08-22, evening — THE DEFAULT FLIP SHIPPED (PLAN §7 Q9), and the pipe lesson that came with it
+
+**Owner's ruling, same day as REALFIX-L9: `--zero-lead --grant-suppress
+--plane-carry` are the shipped default**, with `--no-zero-lead` /
+`--no-grant-suppress` / `--no-plane-carry` kept for A/B work. Implementation in
+`authsrv.py`'s `main()` only — the module globals still default False, so
+nothing that imports the module sees a change; argparse resolves three-state
+flags (absent = ON, `--no-*` = off, `--plane-carry` follows `--zero-lead` so
+opting out of the policy does not strand the modifier), and the refuted-arm
+refusals (`--heading-grant` etc.) now append a hint naming `--no-zero-lead`.
+
+**The one defect the flip surfaced was not in the policy.** With all three
+banners printing by default, server startup emitted **9,751 bytes** before the
+listening line — past the pipe buffer of any consumer that spawns the server
+over an undrained `subprocess.PIPE` — and `test_handshake` wedged mid-handshake
+(server blocked in `print()`, recv timed out) within the hour. Fixed at the
+source: **the full pre-registration banners print only when a flag is passed
+EXPLICITLY**; the default path prints one line per flag (startup now 2,165
+bytes). The banners' evidential strings still reach `print()` calls inside
+their blocks, so `test_position_trust`'s §14/§15 source pins hold — its three
+banner-block anchors were taught the resolved-local shape (`if zero_lead:` as
+Name, not `a.zero_lead` as Attribute; the module-walking one scoped to
+`main()`, because `zero_lead_composition` now holds bare-name tests that would
+shadow it).
+
+**Test state after the flip:** `test_position_trust` 216 green ·
+`test_grantsim` 86 · `test_grantsuppress` 85 · `test_srclint` 22 ·
+`test_handshake` red on ONE pre-existing check — the vault's newest patched
+client reads **build 38849** against a 2026-08-20 key file — byte-identical
+red on `main` before the flip, i.e. a peer session's in-flight new-build work,
+not this change (the parallel-sessions rule: attribute before you touch).
