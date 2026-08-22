@@ -4930,7 +4930,12 @@ Every one of these, in the order they were written:
   interval that fits all 32 rows, and **floor is EMPTY under every rescale** (which
   refutes GWW's "rounded down" *and* the pre-mitigation-damage repair of it in one
   line) while **round and ceil both survive and disagree at the low end** — a 1-point
-  hit is 1 unit under ceil and no message at all under round. It also runs the check
+  hit is 1 unit under ceil and no message at all under round. And it pins **the near
+  miss**: exactly ONE damage event in twenty captures lands in the band where those two
+  disagree, its observer's bar has no adrenal skill so there was nothing to charge, and
+  its value is **0.999999978%** — which four decimal places render as "1.0000", exactly
+  where the two rules agree. Three independent readers printed it rounded and all three
+  read past it. It also runs the check
   with no free parameter: all eleven armed percentages are **k/480**, 480 is the smallest denominator that works, and the observer's int property
   42 reads 480 on a message none of that arithmetic touched. What it deliberately does
   NOT assert is WHICH variable gates: every dark connection is also a non-Warrior, so
@@ -4945,7 +4950,7 @@ Every one of these, in the order they were written:
   `vault/captures/live/` for §§4–7 and §12 and the pinned image for §§8–11 and §13, both
   declared as skips; the content overlay is NOT skippable and §3 goes red without it.
   **Floor 10 of a
-  71-check green run** (55 before §§12–13), and the file says plainly what that floor
+  72-check green run** (55 before §§12–13), and the file says plainly what that floor
   cannot catch — on a
   machine with both fixtures a dropped section would still clear 10, so §4's
   capture/connection/message pin and §8's printed image are the real "did it run" guards

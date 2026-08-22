@@ -4133,6 +4133,72 @@ got 255 gains of exactly 25 — and it is what belongs in the next live plan.
 `pools.damage_units` implements `round`; if `ceil` is right, our server is
 silent where retail sends a unit.
 
+### 34.D The skeptic pass, and the row the corpus nearly answered with
+
+A third agent was given both derivations and told to break them, not to
+summarise them. It re-ran the whole corpus itself. Both headline sets survived
+— the census, the gate, the 32/32 fit, the self-identification — and it
+corrected both agents on something neither had checked, then found the row that
+matters most in this whole section.
+
+**THE NEAR MISS.** The two surviving families disagree only below about 1%.
+**Exactly one damage event in the entire corpus lands in that band** — capture
+`20260810T235916`, connection `…:49163`, observer 31, one hit for 1 point of
+100 maximum health — **and that observer's bar carries no adrenal skill**, so
+there was nothing to charge. Every other damage-taken event anywhere in twenty
+captures is at or above 2.5%. The corpus came within one connection of settling
+the question and did not.
+
+**And its value is 0.999999978%, not 1%.** The wire bits are `0xBC23D70A`,
+which is `-0.009999999776482582`. At four decimal places it prints as
+`1.0000` — *exactly the value where round and ceil agree*. From the bytes it
+sits just below, where they do not. **Three independent readers printed it
+rounded and all three read past it**: both replication agents, and my own
+scanner, whose `%7.4f` did the hiding. `adrenjoin.py` now prints nine decimals
+and calls the band out by name, and `test_adrenwire` §12 pins the row.
+
+**A CORRECTION TO BOTH AGENTS, and it is a method note rather than a number.**
+Both read the observer's maximum health as a *set* of the property-42 values in
+the connection. Property 42 is re-sent **on change**, so the value in force at a
+damage event is not the last one in the stream: connection `…:52294` fights its
+whole session at **120** and receives 102 some 1,197 messages later, and
+`…:52606` fights at 120 and receives 140 three thousand messages later. The
+in-force set across the eight damage connections is **{100, 120, 480}**, not
+the {100, 102, 120, 140, 480} one agent published — and that agent's own
+integrality control is arithmetically impossible as stated (2.5% × 140 = 3.5
+points). Re-run with the temporally correct denominator the control *holds*,
+64 rows of 64. **Its conclusion survived; its stated evidence did not**, which
+is a distinction worth keeping. Nothing in §34 moves: those rows are excluded
+anyway, and all four ARMED connections carry only 480. `adrenjoin.whose_max_health`
+now reads it temporally.
+
+**THE SHARPEST THING IT SAID ABOUT §34.3's OWN LOGIC.** The bar split is
+justified by an outcome-independent variable, and it is still true that *of the
+64 damage rows the gate removes 32, and all 32 removed rows are nulls while 0
+of the 32 kept rows are nulls.* A gate whose removals are 100% single-valued in
+the outcome can only ever delete nulls and never grants — so **any boundary
+read off the gated population is void by construction**, not merely
+under-powered. §34 does not read one off it. That is the difference between a
+declared limit and a concealed defect, and it is why the boundary line in
+§34.8 says UNVERIFIED rather than a number.
+
+**Two things it got wrong, checked from the bytes rather than taken on report.**
+Its closing recommendation — and the first agent's too — was to read the
+rounding constant out of the client's charge worker and promote the boundary to
+OBSERVED without a capture. **There is no such constant.** `0x00CF` carries the
+units already computed; the worker does `add eax,[ebp+0xc]`, the message's own
+field (§26.2, `test_adrenwire` §9). The conversion happens on ArenaNet's server.
+Two agents proposed it independently, which makes it worth writing down as a
+dead end rather than leaving for a third to rediscover. And one agent's ceil
+interval had both endpoints inverted, `[0.905660, 0.960000)` for
+`(0.905660, 0.960000]`; the skeptic caught it and §34.C already has it right.
+
+**One denominator worth stating so §34.3 is not over-read.** Of the 36 ARMED
+connections, **25 saw no combat at all** — no damage dealt, none taken. The 918
+gains come from 11. The split in §34.3 is a *bar* split over every usable
+connection; the control in §34.4 is scoped to the 17 connections that fought,
+where it is 11 armed with gains and 6 dark without, 17 of 17.
+
 ### 34.9 The lesson, which is the series' fourth of the same shape
 
 §27, §28, §29 and §32 each caught a metric that lied, every time by an in-frame
@@ -4150,9 +4216,14 @@ the comment there is load-bearing: identifying the observer by "the agent a
 deleted the entire dark population from the denominator — hiding the finding
 rather than producing a wrong number, which is worse.
 
-**And a second lesson, which is mine to wear.** My scan printed an unexplained
-row — one gain with no damage in its batch — and I read past it because the
-finding I was chasing was already large. The blind replication chased it and
+**And a second lesson, which is mine to wear twice.** My scan printed an
+unexplained row — one gain with no damage in its batch — and I read past it
+because the finding I was chasing was already large. Then my scan printed the
+single most decisive row in the corpus as `1.0000%`, at a precision that landed
+it exactly on the value where the rival rules agree, and I read past that too.
+**Neither was a reasoning error; both were display and scope choices made
+before there was anything to see.** A scanner's output format is part of its
+evidence. The blind replication chased it and
 found a whole message channel. An orphan in a ledger is a lead, and the ledger
 closing at 918 of 918 is the only thing that says there are no more.
 
