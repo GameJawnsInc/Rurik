@@ -4647,3 +4647,139 @@ against a census, not against whatever the sender happened to do first.
   may be a fourth refusal class. Recorded, not fitted.
 - **String ids 1928–1933** are RC4-encrypted archive records and unreadable.
 
+## 37. SKILLS-R2 — the "~10 second" re-animation is a 1-second loop that never stops
+
+**2026-08-22.** §36.8's first open bullet, and the last thing `PLAN.md` §8
+item 2 was waiting on. Two routes that share no method: an A/B loopback pair
+(`20260822T114025` released, `20260822T114206` silent) and a static hunt through
+the pinned image. **Both answer the same way, and the answer is a negative.**
+
+### 37.1 The question, and why it was only answerable today
+
+E2 (2026-08-20) watched a refused press re-animate its slot for *"about 10
+seconds"* against a server that answered with nothing. Two candidates: **(a)** a
+client-side timeout expires the pending-cast entry, or **(b)** nothing does, and
+the ~10 s is something else.
+
+Until 2026-08-22 our server *was* the silent case, so (b) had no contrast to be
+measured against. §36 put `0x00E2` on the wire, and `--refusal-silent`
+reproduces the old server exactly — **one flag, one difference**, which is the
+arm the recon judge asked for and the only reason this is a measurement rather
+than an argument.
+
+### 37.2 The run. P22 and P23 CONFIRMED
+
+One press per arm, identical scripts, 1.27 s frames, 39.2 s hold. Slot 1
+changed-pixel count against the previous frame; slot 8 is an in-frame control
+that was never pressed.
+
+| | arm A, released | arm B, silent |
+|---|---|---|
+| slot 1, every frame after the press | **0** | **still animating at 39.2 s** |
+| slot 8 control, all 32 frames | 0 | **0** |
+| `0x8046` presses vs a 1-action script | 1 | 1 |
+
+**Arm B was still changing in its final frame — the hold ended before the
+animation did.** Nothing was observed to stop it.
+
+**The cross-arm control is what makes this attributable.** Same slot, same
+skill, same map, same script; the only difference is whether the release went
+out. An idle shimmer in the icon art would have moved in arm A too, and arm A
+is flat zero in all 32 frames. And `0x00E2` stopping it within a single frame is
+an independent confirmation that the release does what §36 says.
+
+### 37.3 The static route: (b), with a positive control that could have refuted it
+
+Three structural facts, each re-read from the image by me before publication:
+
+1. **The removal path has exactly one root.** Every link in the release chain
+   has a single caller and zero data words holding its VA, closing to the RECV
+   table: `0x00823090` ← `0x00822B70` ← `0x008148C0` ← stub `0x0091F650`, which
+   both `0x00E2` and `0x00E3` resolve to. **Only a received message reaches the
+   decrement.**
+2. **The entry has nowhere to keep a deadline.** It is 8 bytes and both dwords
+   are spoken for — `mov [eax+edi*8],ebx` writes the key
+   `(skillId<<16)|copy` at +0, `mov [eax+edi*8+4],1` writes the refcount at +4.
+   ArenaNet names the second itself: **`ChCliSkill:955  pending->refCount`**.
+   No timestamp, no float, so a per-entry expiry is structurally impossible
+   without a parallel store — and only three code sites in the whole image
+   compute `&pendingSkills` (insert, release, and an `rtl::Array` destructor),
+   none of them time-driven.
+3. **The overlay loop has no terminating condition.** The casting overlay is
+   created and destroyed solely by GmCtlSkImage msg `0x62`, whose value is the
+   entry's existence copied verbatim through UI event `0x1000005B`. Its tick
+   accumulates dt, advances a counter every **0.0625 s**
+   (`.rdata 0x00951030 = 00 00 80 3d`) and **wraps at 16**
+   (`0x008CF93B cmp eax,0x10`). No countdown, no self-destruction.
+
+**THE POSITIVE CONTROL IS WHAT MAKES THE NEGATIVE WORTH ANYTHING.** A search
+that has never found a timeout cannot be trusted to report their absence, so
+the same method was pointed at a timer we already knew existed — and it
+recovered the adrenaline blink end to end: the arm (`fld dword [0x009495B4]`,
+raw `0000c841` = **25.0**, broadcast `0x10000058`), the route through
+GmSkSlot to GmCtlSkImage msg `0x5A`, and the store's **per-frame float
+subtraction** `fsub dword [edi]` with its latch at zero. That idiom is not a
+wall-clock read at all, so it would have been invisible to a clock-xref sweep —
+the method found it anyway, and applied to the pending array it returns nothing.
+
+**A free correction to §31 came with it:** the blink window is the last
+**4.0 seconds** (`.rdata 0x00941B98 = 00 00 80 40`), which is why §31.3 saw the
+oscillation only near the end of the 25 s and never earlier.
+
+### 37.4 The answer, and where the operator's number came from
+
+**There is no client-side timeout. The "~10 seconds" is not a duration the
+client enforces** — against a silent server the entry persists and the overlay
+loops indefinitely. E2's number was how long the operator watched.
+
+And both routes independently landed on the same explanation for *why ten*:
+**the overlay loop is exactly 1.000 s** (16 × 0.0625). "About ten seconds" is
+about ten cycles of a loop that looks the same every time — which is precisely
+what a repeating animation with no endpoint looks like to someone deciding when
+to stop watching. **Labelled RECONSTRUCTION**, because nobody asked the operator
+to count cycles and the run cannot distinguish "watched ten loops" from "watched
+for ten seconds".
+
+### 37.5 MY MEASUREMENT WAS GARBAGE FIRST, AND ITS OUTPUT SAID SO
+
+`png.read` returns `(pixels, width, height, COLOUR TYPE)` — the fourth value is
+the PNG colour type, **not** the channel count. I used it as a stride, so a
+truecolour image (type 2, three bytes a pixel) was read three bytes at a stride
+of **two**: every index wrong, every comparison a comparison of overlapping
+garbage.
+
+**The tell was in the first output and I did not act on it.** Two *separate
+runs* produced byte-identical numbers — 2906 and 3079, twice. Two independent
+runs of a live game agreeing to the byte is not a result, it is a diagnostic,
+and I read past it and went looking at the crop geometry instead. `png._CHANNELS`
+is the real mapping.
+
+**Its second effect was worse than the first**, and is the reason this is
+written up rather than quietly fixed: with the wrong stride, *both arms read
+zero for every frame*. That is a NULL — and it is the exact null the
+pre-registration had named as "the rig is wrong, neither arm is interpretable."
+The plan's own stopping rule caught it. Had the plan not named that null in
+advance, "no change in either arm" is a perfectly publishable-looking finding
+that would have said the opposite of the truth.
+
+**A period claim was declined at the right moment, for the wrong reason.** After
+the fix I measured the cycle at lag 11 (14.0 s) or lag 16 (20.3 s), both weak,
+and refused to publish a period from 32 aliased samples. The static route then
+gave the true period: **1.000 s.** I sampled a 1 s signal at 1.27 s — far past
+Nyquist — so both candidates were aliasing artifacts. The refusal was correct;
+the reason I gave for it ("the sampling cannot resolve it") happened to be
+exactly right, which is luckier than it should have been.
+
+### 37.6 What is still not established
+
+- **The character's own cast animation in AgentView.** Property 60 queues action
+  event kind `0x19` with two payload dwords and **no duration argument**; where
+  its length comes from, and whether AvChar retires it independently, is
+  **NOT FOUND**. If anything ends *visibly* on its own, this is where it lives.
+- **A second path that could clear the overlay while the entry lives**, flagged
+  and explicitly not settled: GmSkSlot's full refresh at `0x00543020` sends msg
+  `0x62` with a hard-coded false when its cached slot pointer is null, without
+  consulting `IsSlotCasting`. What would put a slot in that state is unknown.
+  **UNVERIFIED**, and it is the one candidate that could still make a slot
+  appear to stop on its own.
+
