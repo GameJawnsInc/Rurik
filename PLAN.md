@@ -1625,7 +1625,7 @@ first attempt: **locate on a constant the experiment never changes**, because a
 scan for the value under test can run before the probe sets it and lock onto
 hundreds of coincidences.
 
-### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is stood on (2026-08-21)
+### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is walked (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per

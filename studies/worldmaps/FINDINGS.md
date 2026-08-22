@@ -568,7 +568,14 @@ The server did not path against any of these meshes (`--serve` not passed), so
 the recovered ground is IN the mesh and has not been walked. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md` §RESULTS.
 
-## WORLDMAPS-W13/W14 — the recovered ground is stood on, and bit 0 touches exactly one chunk. 2026-08-21
+## WORLDMAPS-W13/W14 — one bit is a crash or a map, and bit 0 touches exactly one chunk. 2026-08-21
+
+> **CORRECTED 2026-08-21.** This rung was written up as standing the
+> PLAYER's spawn on the recovered ground. It did not: `seed_x` is the
+> compiler's FLOOD SEED, and the character arrived at map 143's spawn
+> (1536, 1536) in both arms. The mechanism below — crash at flags 0, clean
+> compile at flags 1 — is unaffected. Full correction at the end of this
+> document.
 
 **OBSERVED (retail client, build 38797; four arms one field apart, six launches,
 same client and archive in one session).**
@@ -579,7 +586,7 @@ region the water rule excludes, on the same 64×64 shape:
 | arm | flags | outcome |
 |---|---|---|
 | `sculpt_deep0` | 0 | **the client CRASHED compiling it** |
-| `sculpt_deep1` | 1 | compiled clean; **the spawn lands in exactly one trapezoid** |
+| `sculpt_deep1` | 1 | compiled clean; **the flood seed lands in exactly one trapezoid** |
 
 The crash is `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
 dest[-2].pos)` at `PathFlood.cpp(681)` — **the same source file as W10's depth
@@ -627,7 +634,7 @@ ground from dry land was not tested. The server cannot see the bit at all
 
 **OBSERVED (retail client + our server, build 38797; two arms one bit apart,
 same session, same archive).** WORLDMAPS-W12 put the submerged floor into the
-navmesh and W13 stood the player's own spawn on it. Placing a **body** is a
+navmesh and W13 put the compiler's flood seed on it. Placing a **body** is a
 separate gate with its own code — `authsrv.place_on_mesh` re-checks every spawn
 and refuses one it cannot find ground for — and every placement this project had
 made until now stood on ground the client would have meshed either way.
@@ -797,3 +804,36 @@ name WHERE, not just how much.**
 start line, since arm A shows how readily a walk wanders between strips. How a
 character looks or animates on a 37° slope is the owner's verdict. Full scoring
 in `vault/research/worldmaps/WORLDMAPS-W18-RUN.md` §RESULTS.
+
+## CORRECTION 2026-08-21 — W13 measured the FLOOD SEED, not the player's spawn
+
+**An area's `seed_x`/`seed_y` is the compiler's flood seed. It is NOT where the
+character arrives.** The arrival point comes from the MAP row:
+`content.map_static_config()` builds `id -> (file_id, (spawn_x, spawn_y), plane,
+explorable)` from `rows("map")` only, and `seed_x` has exactly three consumers
+in `toolkit/` — `deploy.py:374` (passed to `stripbuild.build` as the flood
+seed), `deploy.py:1634` (the readback assert) and `mapscale.py`. None is the
+player. `authsrv` has no `--spawn` override.
+
+So `sculpt_deep0` and `sculpt_deep1` moved the **flood seed** to (528, 528);
+the character arrived at map 143's spawn, **(1536, 1536)**, in BOTH arms — on
+ground walkable either way.
+
+**The mechanism finding is untouched and is still the point of W13**: at flags 0
+a flood seed on submerged ground crashes the compiler at `PathFlood.cpp(681)`;
+at flags 1 the identical seed compiles clean. One bit, crash versus map.
+
+**What was overstated is the framing.** "The player's own spawn stands on it"
+was not measured there. That claim is carried by **W15** — bodies placed at
+(56, 6006), (380, 652) and (44, 2764), refused at those same points with the bit
+clear — and by **W16**, where a character walked to x = 0. Both measured a body
+or a character; W13 measured the seed.
+
+**How it was caught, and it is the fourth of these.** W19's two arms were to
+differ only in `seed_x`, which would have spawned the character in the same
+place twice and produced a fabricated result — P1 refuted and P2 confirmed from
+one non-event. An adversarial design review found it before the run, unlike
+W12's clipped band, W16's short leg and W18's ambiguous window, which were all
+caught after. `deploy.readback`'s row was reworded from "the spawn" to "the
+flood seed" in the same commit, because that wording is what made the error easy
+to make.
