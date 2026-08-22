@@ -3724,7 +3724,7 @@ playable:
 | recharge | duration r0 → r15 | id | type | cost |
 |---|---|---|---|---|
 | 10 | 10 → 20 | **316** | **Shout** | 5 energy |
-| 4 | 10 (flat) | 348 | Shout | 4 adrenaline |
+| 4 | 10 (flat) | **348** | **Shout** | 4 adrenaline |
 | 4 | 1 → 15 | 366 | Shout | 4 adrenaline |
 | 4 | 8 (flat) | 346 | Stance | 5 energy |
 | 4 | 10 (flat) | 1701 | Stance | 5 energy |
@@ -3740,9 +3740,20 @@ against a 10 s recharge. An adrenaline shout (348, 366) is also fine and has one
 advantage: adrenaline charges by hitting, so the block can ride on top of the
 rank-13 bench swings instead of needing its own setup.
 
-**Which of these the operator actually owns is UNKNOWN to us and is not knowable
-from a capture** — that is the whole point above. The next plan must be built
-around a skill the operator names from their own bar.
+**348 HAS A NAME as of the same day, from a different arc: it is
+`"Watch Yourself!"`** (§33.6, reported by the operator after another run and
+agreeing with the client's table on profession, attribute and every checkable
+field). That makes it the strongest starting suggestion here — a core Warrior
+Tactics shout, 10 s flat against a 4 s recharge, and its adrenaline cost is an
+ADVANTAGE rather than a nuisance because the rank-13 bench block already has the
+operator swinging: adrenaline charges by hitting, so the re-cast test can ride on
+top of the swings instead of needing its own setup.
+
+**But confirm it on the bar before sealing a plan around it** — that is the whole
+point of this section, and 348 being named does not make it owned. **Which of
+these the operator actually owns is not knowable from a capture.** The next plan
+must be built around a skill the operator reads off their own bar, with the
+tooltip's recharge and duration quoted back.
 
 ## 32. E10 — the recharge gate, read from the residue
 
