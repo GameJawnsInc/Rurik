@@ -62,6 +62,7 @@ install, and it cannot -- `datwrite` refuses anything but a copy.
 """
 
 import argparse
+import inspect
 import json
 import os
 import re
@@ -262,8 +263,42 @@ def gen_ramp_fine(dim, base=-13):
     return out
 
 
+def gen_ramp_uniform(dim, base=-13, area=None):
+    """`gen_ramp`'s bands with ONE slope everywhere -- no strips, no seams.
+
+    The area declares `ramp_dz`, the height change per 96-unit cell. Keep it a
+    multiple of 4 and the lattice snap moves nothing (WORLDMAPS-W20); the slope
+    is then exactly atan(dz / 96).
+
+    This exists because W20's four-strip map confounds two things at once. Its
+    class-2 strips DID touch the flat class-0 apron and still did not mesh,
+    which is not what "class 2 needs a class-0 neighbour" predicts, and the same
+    map also varied the steep lateral seams between strips. One slope over the
+    whole map removes the seams and the neighbours together, so what is left is
+    the only question that matters: can the flood climb this slope out of a flat
+    apron, on its own?
+    """
+    if dim != 32:
+        raise Refused(f"the uniform ramp is 32x32 by construction, not "
+                      f"{dim}x{dim}: its band rows are cell indices")
+    dz = int((area or {}).get("ramp_dz", 88))
+    rise_cells = RAMP_APRON_TOP - RAMP_TOP
+    out = [0] * (dim * dim)
+    for gy in range(dim):
+        for gx in range(dim):
+            if gy >= RAMP_APRON_TOP:
+                lift = 0
+            elif gy >= RAMP_TOP:
+                lift = dz * (RAMP_APRON_TOP - gy)
+            else:
+                lift = dz * rise_cells
+            out[gy * dim + gx] = base - lift
+    return out
+
+
 GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp,
-              "ramp_fine": gen_ramp_fine}
+              "ramp_fine": gen_ramp_fine,
+              "ramp_uniform": gen_ramp_uniform}
 
 
 def heights_from_blend(blend, dim, blender=None, workdir=None):
@@ -2145,7 +2180,15 @@ def main(argv=None):
         if gen not in GENERATORS:
             raise Refused(f"unknown generator {gen!r}; "
                           f"known: {', '.join(sorted(GENERATORS))}")
-        heights = GENERATORS[gen](dim)
+        gen_fn = GENERATORS[gen]
+        # A generator may declare an `area` parameter when its shape is
+        # parameterised by the row (gen_ramp_uniform reads `ramp_dz`).
+        # Passed only when accepted, so the other generators keep their
+        # one-argument signature and nothing has to know which is which.
+        if "area" in inspect.signature(gen_fn).parameters:
+            heights = gen_fn(dim, area=area)
+        else:
+            heights = gen_fn(dim)
         print(f"  geometry: generator {gen!r}")
     heights, worst = stx.snap_field(heights, dim, dim)
     print(f"  lattice snap: worst sample moved {worst}")

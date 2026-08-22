@@ -1028,3 +1028,42 @@ tolerates them, but what it does with them is unknown. Whether the prop MODEL
 contributes collision of its own is untested (all `model=0`). Vertical extent is
 not a question a flat map can ask. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W22-RUN.md` §RESULTS.
+
+## WORLDMAPS-W23 — class-2 ground cannot be climbed out of flat ground. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two compiles, one field apart, scored
+offline).** W20 concluded as a RECONSTRUCTION that class-2 ground meshes only
+where reachable through class-0 ground — but on a map that could not carry the
+claim, because its class-2 strips DID touch the flat class-0 apron and still did
+not mesh, and it varied the steep lateral seams between strips at the same time.
+
+A **uniform** ramp removes strips, seams and neighbours together.
+
+| arm | slope | class | ramp band |
+|---|---|---|---|
+| `u18` | 18.43° | 0 | **288 / 288 walkable** |
+| `u42` | **42.51°** | **2** | **0 / 288** — the mesh stops at y = 1728, the apron's last row |
+
+Same generator, same bands, same flags, same seed, one field different.
+**A uniform 42.51° slope rising out of flat ground is not meshed at all.**
+W20's rule holds.
+
+**And the rule is now sharper than W20 could state it.** `u42`'s apron IS
+class-0 ground and IS adjacent to the ramp, so the condition is neither
+"class-0 exists" nor "class-0 adjacent". The one thing W20's run 3 had — where
+class-2 strips DID mesh — that neither failing run had is **class-0 ground that
+RISES**, carrying the flood to the heights the class-2 ramps occupy.
+**HYPOTHESIS, untested: the flood accepts class-2 ground only at heights it has
+already reached through class-0 ground.** Falsifiable by a map whose class-0 and
+class-2 ramps are separated so the flood cannot cross between them.
+
+**For an author the rule is simple and unchanged: a steep region needs a gentle
+approach that climbs with it.** A flat plaza at the foot of a 42° face buys
+nothing — the map compiles without the face, and nothing warns you.
+
+**Recorded because it nearly cost the run**: `u18` reported **2 trapezoids**, and
+on the fine-ramp maps 2 trapezoids meant "apron only". I read it that way and
+called the control failed. A *uniform* ramp decomposes trivially and those two
+trapezoids covered the **entire map**. Sixth instrument fault of this arc's
+family, second time a summary number stood in for a region check. W20's runs 1
+and 2 are unaffected — they were scored by region, not by count.
