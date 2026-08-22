@@ -177,6 +177,16 @@ PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum; see below.
 # floors the DISPLAY at 1, and the arithmetic survives the excursion intact.
 # The "floors at 1: cannot kill" on PROP_DAMAGE above is therefore at least
 # partly a display floor; what the STORE does under prop 16 is unmeasured.
+#
+# THE DISPLAY FLOOR AND THE DAMAGE NUMBER DISAGREE, and that is the client's
+# own doing rather than ours. OBSERVED 2026-08-22 (owner, watching a death run
+# where the server sent a known 46 into 39 remaining): the floating number read
+# **-39** -- the damage APPLIED, capped at the pool -- while the bar dropped to
+# **1**, the display floor. So the same hit is reported as 39 by the text and as
+# 38 by the bar, and the store underneath holds -7. Nothing here is a server
+# decision: retail sends the raw roll too (4 of 4 reconstructible kills overshoot
+# -- see `_damage_fraction` in authsrv.py), so a faithful server sends 46 and the
+# client does the rest. n=1 and watched live rather than filmed.
 
 # The agent effects bitfield, carried by GAME_SMSG 0x00F1. Bit 4 is death:
 # setting it kills, clearing it revives. OBSERVED both directions.
