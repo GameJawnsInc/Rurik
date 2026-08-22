@@ -1021,11 +1021,11 @@ verified = """Ours, and it is the control that makes `u42` mean anything. Same g
 
 [area.ashcoil]
 name = "Ashcoil Caldera"
-map_id = 166
+map_id = 167
 dims = 64
 heights = "caldera"
 # The 64x64 centre: the caldera floor, measured 0.0 deg under the classifier.
-# It doubles as the spawn -- map 166's row spawns at (3072, 3072) too.
+# It doubles as the spawn -- map 167's row spawns at (3072, 3072) too.
 seed_x = 3072.0
 seed_y = 3072.0
 donor_file_id = 0x1B97D

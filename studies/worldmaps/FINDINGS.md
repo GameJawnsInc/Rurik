@@ -1067,3 +1067,48 @@ called the control failed. A *uniform* ramp decomposes trivially and those two
 trapezoids covered the **entire map**. Sixth instrument fault of this arc's
 family, second time a summary number stood in for a region check. W20's runs 1
 and 2 are unaffected — they were scored by region, not by count.
+
+## WORLDMAPS-W24 — the engine loop is ahead of the experience. 2026-08-22
+
+**OBSERVED (retail client, build 38797; full install-compile-serve run on a
+fresh created chain, plus the owner walking the map live).** Ashcoil
+Caldera — the first area authored as a PLACE (a 64x64 caldera with a spiral
+shelf road, designed by a judged panel, offline-validated to zero
+forbidden-band cells and full flood connectivity) — compiled and served
+mechanically green: chain 0x5F0B2 allocated, 23 trapezoids, heights
+4096/4096, seed in one trapezoid, both map_flags levers carried into the
+compiled head (`0x02000001` read back).
+
+**And the owner's live verdict was "complete failure", on five fronts,
+every one of which reproduces or diagnoses:**
+
+1. **The mesh is the crater floor and nothing else.** Every waypoint above
+   the floor scored NOT walkable (14/28 offline samples against the
+   compiled pathmap). The failure is LOCAL: the pool's circular 48-riser
+   staircase — contour rings at every orientation — MESHED, so quantized
+   staircases are walkable per se. What never flooded is the coil's
+   ~3-cell entrance gate between the scarp and the flank ridge; FINDINGS
+   48's connectivity pruning then deleted the whole elevated system.
+   **CLEARANCE of narrow gates is an unmeasured variable** — every surface
+   this arc ever walked was wide open.
+2. **Props: the biome donor's model 0 is a monumental building, not a
+   tree.** 32 of them scattered like shrubs loom one-sided (backface
+   culled) over the bowl. The W24 tree-placement y-flip fix stays
+   CONTESTED — alignment cannot be judged through an absurd model.
+3. **No water surface renders** (Water/Shore unemitted — now visibly so);
+   a sunken pool is a walkable dark disc.
+4. **Steep faces smear textures** — kilometre near-vertical walls stretch
+   the donor ground texture into streaks; the terrain arc's known UV gap
+   made fatal by real relief, plus no material variation by slope.
+5. **No minimap is authored** for created maps; the client pastes
+   placeholder content.
+
+The run also proved the per-area allocation journal refusal in anger: the
+first install targeted map 166's chain (frontier's) and `map_chain` refused
+for exactly the right reason; Ashcoil owns map row 167 / file 0x5F0B2.
+
+**The finding, stated plainly: the engine half of the mod-platform framing
+(compile, serve, walk, on chains ArenaNet never shipped) is ahead of the
+content half (water, props, materials, minimap), and the gap is what a
+player hits in the first thirty seconds.** Run note with the full scoring:
+`vault/research/worldmaps/WORLDMAPS-W24-RUN.md` §RESULTS.
