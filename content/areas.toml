@@ -935,3 +935,29 @@ trees = 1
 [area.noblocker.provenance]
 source = "invented"
 verified = """Ours, and it is the CONTROL that carries this experiment. Same flat map, same single prop at the same (2928, 1488), `prop_outline` absent so the prop ships the empty outline every prop this project has ever placed. If a character is stopped HERE too, the stop is not the footprint and the treatment arm means nothing. This is also the arm that measures how far the walk gets with nothing in the way, which is what the treatment is compared against."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W22
+[area.notch]
+name = "One tree with an L-shaped footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288
+prop_outline_shape = "L"   # <- THE VARIABLE, against W21's `blocker` square
+
+[area.notch.provenance]
+source = "invented"
+verified = """Ours. Identical to WORLDMAPS-W21's `blocker` in every field but the outline SHAPE, so the two compiled meshes differ by the polygon alone. W21 established that an authored footprint is honoured 1:1 in world units -- a 288 half-width square put the mesh's last walkable x at 2640 against an authored edge at 2640 -- but a square cannot distinguish a POLYGON from its bounding box or its convex hull, because for a square all three are the same set.
+
+This ring is NON-CONVEX: the square with its north-west quadrant removed, so its convex hull is the full square. The notch is prop-local x -288..0, y 0..288, i.e. WORLD x 2640..2928, y 1488..1776. If that region is walkable, the client used the polygon; if it is a hole, the client used the hull or the bounds and this map cannot tell those two apart."""

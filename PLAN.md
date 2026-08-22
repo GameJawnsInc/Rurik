@@ -2060,6 +2060,21 @@ cannot tell *blocked* from *blocked and walked around*, and the raw trace held
 a stronger result than it could see. Fifth instrument fault of this family.
 Untested: whether the footprint's SHAPE is used or only its bounding box.
 `vault/research/worldmaps/WORLDMAPS-W21-RUN.md`.
+
+**WORLDMAPS-W22 CLOSED THE SHAPE QUESTION: the client uses the POLYGON.**
+W21 noted a square cannot distinguish a polygon from its bounding box or
+convex hull, since for a square all three are the same set. `area.notch` is
+`blocker` with the ring made NON-CONVEX -- the same square with its
+north-west quadrant removed, whose convex hull is the full square. The notch
+is **walkable, 29 of 36 samples**, while all three solid quadrants are
+complete holes (0/18, 0/36, 0/18). The 7 exceptions all sit within 24 units
+of a notch boundary, a one-sample margin along the cut.
+
+**With W21 the prop-collision question is closed**: an authored footprint is
+honoured 1:1 in world units, its shape is the polygon including non-convex
+shapes, and a prop with no footprint blocks nothing. **Authored maps can have
+obstacles of arbitrary planar shape**, via two content fields.
+`vault/research/worldmaps/WORLDMAPS-W22-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

@@ -983,3 +983,40 @@ walk into one edge cannot distinguish; a non-convex outline would. Whether the
 prop MODEL contributes collision of its own is untested (all props here are
 `model=0`, and the control shows it blocking nothing alone). Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W21-RUN.md` §RESULTS.
+
+## WORLDMAPS-W22 — the footprint is a POLYGON, not a bounding box. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one compile, scored offline).** W21
+proved an authored prop footprint is honoured and honoured 1:1 in world units,
+but noted that a **square cannot distinguish a polygon from its bounding box or
+its convex hull** — for a square all three are the same set.
+
+`area.notch` is W21's `blocker` with one field changed: the ring becomes the
+same 576×576 square with its **north-west quadrant removed**, 7 points, closed,
+and **non-convex**, so its convex hull is the full square.
+
+| region | walkable samples |
+|---|---|
+| **the NOTCH** (world x 2640–2928, y 1488–1776) | **29 / 36 — walkable** |
+| solid NE / SW / SE quadrants | **0 / 18, 0 / 36, 0 / 18 — holes** |
+| outside, west of the prop | 88 / 88 |
+
+**The client used the polygon.** The notch is walkable while every solid
+quadrant is a complete hole, and the notch's hull is the full square — so
+neither the bounding box nor the convex hull is what the compiler read.
+
+The notch's 7 non-walkable samples all sit **within 24 units of a notch
+boundary** (six 24 u inside the east edge, one 24 u inside the north edge), so
+the notch is walkable throughout bar a one-sample margin along the cut.
+
+**With W21, this closes the prop-collision question**: an authored footprint is
+honoured to the unit, its shape is the polygon including non-convex shapes, and
+a prop with no footprint blocks nothing. **Authored maps can have obstacles of
+arbitrary planar shape.**
+
+**Scope.** Self-intersecting or open rings are untested — `Prop.closed` records
+that 43 of retail's 37,548 outlined props are not closed, so the client
+tolerates them, but what it does with them is unknown. Whether the prop MODEL
+contributes collision of its own is untested (all `model=0`). Vertical extent is
+not a question a flat map can ask. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W22-RUN.md` §RESULTS.
