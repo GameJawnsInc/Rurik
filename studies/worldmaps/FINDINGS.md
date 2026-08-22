@@ -17,6 +17,14 @@ never bare `W1`–`W9`, which collide with `studies/profession` among others.
 
 Labels per [studies/character/FINDINGS.md](../character/FINDINGS.md).
 
+**READ [AUTHORING.md](AUTHORING.md) FIRST if you are here to build a map**, not
+to audit a rung. It is the distilled operational half of this document and it
+carries the corrections in place; this file is chronological, so a cold reader
+meets W17 and W19 several screens before W20 reinterprets them, and meets W13
+before the correction that it measured the FLOOD SEED rather than the player's
+spawn. Both are recorded here in full -- but in the order they happened, which
+is the wrong order to learn them in.
+
 ## WORLDMAPS-W1 — deploy installs compressed. LANDED 2026-08-20
 
 **OBSERVED (offline; the client witness is WORLDMAPS-W2's question).**

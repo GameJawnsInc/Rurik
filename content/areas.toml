@@ -1,5 +1,12 @@
 # AUTHORED AREAS -- rung G.
 #
+# WHAT THE CLIENT WILL AND WILL NOT ACCEPT is written down in
+# studies/worldmaps/AUTHORING.md -- the two map_flags levers and what each
+# costs, the THREE slope classes (a map made only of 41-45 degree slopes
+# compiles to its flat ground and nothing warns you), how to author a slope the
+# snap does not move, prop footprints, and the gotchas that have each cost a
+# run. Read it before adding a row.
+#
 # A `map` row in maps.toml says where a RETAIL map is and where you arrive in it.
 # An `area` row says how to BUILD one of ours: the geometry, the surface, the
 # weather, the ambience. `toolkit/mapdata/deploy.py` reads one of these rows and
