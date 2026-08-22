@@ -5259,7 +5259,7 @@ control's wire only **17% actively reported**.
 | samples above the gate-1 cut | 93% | 67% |
 
 `--plane-carry` was correctly **excluded** this run (`plane_carry = false` on all
-116 zero-lead rows), so the treatment is cleanly `--zero-lead --grant-suppress`.
+116 zero-lead rows), so the treatment is cleanly `--zero-lead --grant-suppress`. ⚠ **And the scorer said otherwise for a while.** The behavioural arm-identifier printed "COMPOSITE `--zero-lead --plane-carry` `--grant-suppress`" from a HARDCODED label string whenever the zero-lead and suppress vocabularies both appeared — it never read `plane_carry`, which the capture records on every verdict row. That is the exact hazard L5's review named ("`--plane-carry` vs `--arrival-carry` indistinguishable; the `carry` field separates them and is not read"), and it is the `vaultpath.require_dir()` principle in another costume: **a fixture that names a thing without reading it turns every claim behind it into a no-op.** Fixed to read the field and to PRINT what it read, so the label can be audited rather than trusted.
 
 ### 1. The protocol worked, and the conversion is now 3 for 3
 
