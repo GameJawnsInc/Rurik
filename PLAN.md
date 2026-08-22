@@ -1943,6 +1943,24 @@ that each cost a run, and the five instrument faults this arc made. It exists
 because FINDINGS.md is chronological: a cold reader meets W17 and W19 well
 before W20 reinterprets them, and meets W13 before its correction. The guide
 carries the corrections in place and cites the rung behind every claim.
+
+**WORLDMAPS-W23 then upgraded the arc's one RECONSTRUCTION to an OBSERVATION.**
+W20 concluded class-2 ground meshes only where reachable through class-0
+ground, on a map that could not carry the claim -- its class-2 strips DID touch
+the flat class-0 apron and still did not mesh, and it varied the steep lateral
+seams at the same time. A UNIFORM ramp removes strips, seams and neighbours
+together: at 18.43 deg the ramp band is **288/288 walkable**, at 42.51 deg it is
+**0/288** and the mesh stops at the apron's last row. One field apart.
+
+**And the rule is sharper than W20 could state it.** That ramp's apron IS
+class-0 and IS adjacent, so the condition is neither "class-0 exists" nor
+"class-0 adjacent". The one thing W20's successful run had is class-0 ground
+that RISES. Hypothesis, untested and falsifiable: the flood accepts class-2
+ground only at heights it already reached through class-0 ground.
+
+For an author: **a steep region needs a gentle approach that CLIMBS WITH IT** --
+a flat plaza at the foot of a 42-degree face buys nothing and nothing warns you.
+`vault/research/worldmaps/WORLDMAPS-W23-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

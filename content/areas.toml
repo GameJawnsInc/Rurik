@@ -968,3 +968,53 @@ source = "invented"
 verified = """Ours. Identical to WORLDMAPS-W21's `blocker` in every field but the outline SHAPE, so the two compiled meshes differ by the polygon alone. W21 established that an authored footprint is honoured 1:1 in world units -- a 288 half-width square put the mesh's last walkable x at 2640 against an authored edge at 2640 -- but a square cannot distinguish a POLYGON from its bounding box or its convex hull, because for a square all three are the same set.
 
 This ring is NON-CONVEX: the square with its north-west quadrant removed, so its convex hull is the full square. The notch is prop-local x -288..0, y 0..288, i.e. WORLD x 2640..2928, y 1488..1776. If that region is walkable, the client used the polygon; if it is a hole, the client used the hull or the bounds and this map cannot tell those two apart."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W23
+# Does class-2 ground need a class-0 ROUTE, or can the flood climb it directly?
+# ONE slope over the whole map -- no strips, no seams, no neighbours.
+
+[area.u42]
+name = "Uniform 42.51 deg ramp (class 2)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 88             # atan(88/96) = 42.51 deg exactly; class 2 at cut 45
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000   # cut 45, so 42.51 is BETWEEN array[0]=40 and array[1]=45
+
+[area.u42.provenance]
+source = "invented"
+verified = """Ours, and it exists because WORLDMAPS-W20's RECONSTRUCTION rests on a map that cannot carry it. W20 varied four strips at once and concluded class-2 ground meshes only where reachable through class-0 ground -- but its class-2 strips DID touch the flat class-0 apron and still did not mesh, which is not what that rule predicts, and the same map varied the steep lateral seams between strips at the same time. One slope over the whole map removes seams and neighbours together. MEASURED offline: dz 88 snaps to 42.51 deg exactly, worst sample moved 0, every quad in the ramp band identical."""
+
+[area.u18]
+name = "Uniform 18.43 deg ramp (class 0)"
+map_id = 143
+dims = 32
+heights = "ramp_uniform"
+ramp_dz = 32             # atan(32/96) = 18.43 deg; class 0 under both sets
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.u18.provenance]
+source = "invented"
+verified = """Ours, and it is the control that makes `u42` mean anything. Same generator, same bands, same flags, same seed -- one field different. 18.43 deg is class 0 under BOTH threshold sets, so this ramp must mesh. If it does not, the uniform generator is broken and `u42`'s result says nothing about classes."""

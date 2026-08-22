@@ -6,7 +6,7 @@ measured it; where a claim is a RECONSTRUCTION rather than an observation it
 says so. Nothing here is new evidence — read FINDINGS for the runs, the
 controls, and what each one could not settle.
 
-It exists because the arc is twenty-two rungs deep, its evidence lives in
+It exists because the arc is twenty-three rungs deep, its evidence lives in
 gitignored vault run notes, and **a reader arriving at FINDINGS cold will meet
 W17 and W19 before meeting W20's reinterpretation of them.**
 
@@ -80,13 +80,25 @@ The classifier reads a three-float array and emits **three** classes:
 
 Under the cut-35 set that array is {30, 35, …}; under cut-45 it is {40, 45, …}.
 
-**RECONSTRUCTION (W20, one map): class-2 ground is meshed only where it can be
-reached through class-0 ground.** Three runs at cut 45 differing only in the
+**OBSERVED (W23, and it is not a reconstruction any more): class-2 ground
+cannot be climbed out of flat ground.** A uniform 42.51° ramp rising from a flat
+apron meshes **0 of 288** ramp cells; the identical map at 18.43° meshes
+**288 of 288**. One field apart, no strips, no seams, no neighbours.
+
+**And the condition is sharper than "needs a class-0 neighbour".** That ramp's
+apron IS class-0 and IS adjacent. The one thing W20's successful run had is
+class-0 ground that **RISES**, carrying the flood to the heights the class-2
+ground occupies. *Hypothesis, untested: the flood accepts class-2 ground only at
+heights it already reached through class-0 ground.*
+
+The original, weaker form of the same observation (W20, four strips varied at
+once): three runs at cut 45 differing only in the
 shallowest strip: with 43.78° or 41.19° as the shallowest, the map compiled to
 **the flat apron alone**; adding an 18.43° strip made the 42.51° and 43.78°
 strips appear. Being *adjacent* to the flat apron was not enough.
 
-**So: a steep region needs a gentle approach.** A map made only of 41–45° slopes
+**So: a steep region needs a gentle approach THAT CLIMBS WITH IT.** A map made
+only of 41–45° slopes
 will compile to nothing but its flat ground, and nothing in the toolchain warns
 you.
 
