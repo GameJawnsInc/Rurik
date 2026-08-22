@@ -1621,7 +1621,7 @@ honours"*. Retail does not do that here: no remove/apply pair exists in the wind
 the client kept rendering the condition regardless. **So our server emits wire traffic
 retail does not** for THIS source type, and the client evidently tolerates a
 silent extension. **SCOPE, added 2026-08-21 and it matters** — see
-[studies/skills §32.8](../skills/FINDINGS.md): every late closure in the vault is
+[studies/skills §36.8](../skills/FINDINGS.md): every late closure in the vault is
 environmental (these torches and Students), and **no cast- or attack-applied
 effect has ever closed late** in 78 episodes over five skills. The Isle is a
 training area; this paragraph is about its props and must not be read as a claim
@@ -1656,7 +1656,7 @@ remained in range after the first application. The torch that held longest, skil
 `+55.0` against a 5.0 s duration, is a fifty-five-second stand.
 
 **AND THE SCREEN HALF IS NOW ANSWERED TOO** — `--probe effect_silent_extend`,
-2026-08-21, [studies/skills §32](../skills/FINDINGS.md). Our client **owns the
+2026-08-21, [studies/skills §36](../skills/FINDINGS.md). Our client **owns the
 expiry**: the live icon goes at the stated duration with no packet, and the slot
 then holds a static, heavily faded GHOST of it until the removal lands. So a
 silent extension keeps the server's bookkeeping but not the player's view. Which
@@ -1664,7 +1664,7 @@ raises the question this section cannot answer and one screenshot can: **for the
 15 late episodes above, was the operator looking at a live icon or a ghost?** The
 Disease that killed them outlasted its 10.0 s duration many times over.
 
-**ANSWERED 2026-08-21 without a live run** — [studies/skills §32.7](../skills/FINDINGS.md).
+**ANSWERED 2026-08-21 without a live run** — [studies/skills §36.7](../skills/FINDINGS.md).
 Retail's Student `0x0042` and our probe's are field-for-field identical (same
 target slot, `field3 0`, same `10.0` f32, condition ids both sides), so the client
 cannot tell them apart; and the probe was re-run on a purpose-built **38849**

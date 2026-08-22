@@ -17,6 +17,14 @@ never bare `W1`–`W9`, which collide with `studies/profession` among others.
 
 Labels per [studies/character/FINDINGS.md](../character/FINDINGS.md).
 
+**READ [AUTHORING.md](AUTHORING.md) FIRST if you are here to build a map**, not
+to audit a rung. It is the distilled operational half of this document and it
+carries the corrections in place; this file is chronological, so a cold reader
+meets W17 and W19 several screens before W20 reinterprets them, and meets W13
+before the correction that it measured the FLOOD SEED rather than the player's
+spawn. Both are recorded here in full -- but in the order they happened, which
+is the wrong order to learn them in.
+
 ## WORLDMAPS-W1 — deploy installs compressed. LANDED 2026-08-20
 
 **OBSERVED (offline; the client witness is WORLDMAPS-W2's question).**
@@ -568,7 +576,14 @@ The server did not path against any of these meshes (`--serve` not passed), so
 the recovered ground is IN the mesh and has not been walked. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md` §RESULTS.
 
-## WORLDMAPS-W13/W14 — the recovered ground is stood on, and bit 0 touches exactly one chunk. 2026-08-21
+## WORLDMAPS-W13/W14 — one bit is a crash or a map, and bit 0 touches exactly one chunk. 2026-08-21
+
+> **CORRECTED 2026-08-21.** This rung was written up as standing the
+> PLAYER's spawn on the recovered ground. It did not: `seed_x` is the
+> compiler's FLOOD SEED, and the character arrived at map 143's spawn
+> (1536, 1536) in both arms. The mechanism below — crash at flags 0, clean
+> compile at flags 1 — is unaffected. Full correction at the end of this
+> document.
 
 **OBSERVED (retail client, build 38797; four arms one field apart, six launches,
 same client and archive in one session).**
@@ -579,7 +594,7 @@ region the water rule excludes, on the same 64×64 shape:
 | arm | flags | outcome |
 |---|---|---|
 | `sculpt_deep0` | 0 | **the client CRASHED compiling it** |
-| `sculpt_deep1` | 1 | compiled clean; **the spawn lands in exactly one trapezoid** |
+| `sculpt_deep1` | 1 | compiled clean; **the flood seed lands in exactly one trapezoid** |
 
 The crash is `Assertion: (dest == vertices + 1) || (dest[-1].pos !=
 dest[-2].pos)` at `PathFlood.cpp(681)` — **the same source file as W10's depth
@@ -627,7 +642,7 @@ ground from dry land was not tested. The server cannot see the bit at all
 
 **OBSERVED (retail client + our server, build 38797; two arms one bit apart,
 same session, same archive).** WORLDMAPS-W12 put the submerged floor into the
-navmesh and W13 stood the player's own spawn on it. Placing a **body** is a
+navmesh and W13 put the compiler's flood seed on it. Placing a **body** is a
 separate gate with its own code — `authsrv.place_on_mesh` re-checks every spawn
 and refuses one it cannot find ground for — and every placement this project had
 made until now stood on ground the client would have meshed either way.
@@ -701,3 +716,399 @@ nothing here measures swimming, drowning or how any of it looks, which is a
 visual verdict for the owner. One start line, one heading, and the walk was
 one-way. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W16-RUN.md` §RESULTS.
+
+## WORLDMAPS-W17 — the flags dword's TOP BYTE selects the slope set, 35 -> 45 degrees. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms one byte apart, same session,
+same archive, scored by FINDINGS 48's own ruler).**
+
+`studies/customarea` FINDINGS 48 measured the slope set in force and closed by
+naming what it could not settle: *"whether the mode flag can select the other
+set on some map kind"*, with that flag's source recorded as **NOT FOUND** by
+both FINDINGS 34 and 48. It is found, and the client obeys it.
+
+| | arm A (`0x00000000`) | arm B (`0x02000000`) |
+|---|---|---|
+| top byte / what the client saw | `0x00` -> **1** | `0x02` -> **2** |
+| trapezoids | 7 | **14** |
+| ramp pattern | **`WW...`** | **`WWWW.`** |
+| verdict | cut 35 — set 15/35/30 | **cut 45 — set 10/45/40** |
+
+**Arm A reproduces FINDINGS 48 exactly**, two weeks later with no free
+parameter, so arm B's difference is the flag. **Arm B moved the walkability
+boundary from 35° to 45°**: strips at 36.1–37.6° and 41.5–41.9° flipped to
+walkable, and the 46.5–47.8° strip correctly stayed out.
+
+**This confirms the whole static chain at the client** — the parser at
+`0x0070D920` copying the dword verbatim to `state+0x10`, the top-byte extraction
+at `0x00712681`, seven single-caller hops, and `cmp dword ptr [ebp+8], 2` at
+`0x0072CA1C`. It also settles **which slot the classifier tests**: arm B landed
+on 45, not 40, so the hard cutoff is `+0x94` as read, not `+0x90`.
+
+**The parser's 0→1 normalisation is what made the run work.** Arm A's file byte
+is 0 and the client saw 1. Had the treatment used `0x01000000`, the client would
+have seen 1 in both arms and produced a clean null that looked like a
+refutation. The boundary is 1-vs-2, not 0-vs-nonzero — found before the run.
+
+**Plateau tracks ramp in both arms**, so FINDINGS 48's connectivity-pruning
+result holds under the other threshold set too.
+
+**What it gives the project: authored terrain can be steep to 45° by one content
+field** — cliff paths, canyon walls, steep valley sides. Bit 0 and bits 24..31
+are disjoint fields of one dword, read once, meeting in the same function, so
+the water line and the slope set compose.
+
+**Scope.** Top byte 3+ is unvaried (it crosses the `< 3` test at `0x0070D9DE`).
+Nothing here WALKS a character up a 42° ramp — W16 established that meshed and
+walkable are different questions. The `+0x90` (30→40) companion reading remains
+static rather than measured. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W17-RUN.md` §RESULTS.
+
+## WORLDMAPS-W18 — the recovered ground is WALKED, and the measurement needed fixing. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms one byte apart, identical walk
+plan, same session).** WORLDMAPS-W17 moved the walkability boundary 35° → 45°
+with the flags dword's top byte, and closed on W16's distinction: **meshed and
+walkable are different questions.**
+
+The ramp map's spawn (1536, 1536) sits directly under **strip 3**, the
+36.1–37.6° ramp that flips between the two threshold sets, so walking north
+walks up the strip under test.
+
+| measured within | arm A (cut 35) | arm B (cut 45) | separation |
+|---|---|---|---|
+| whole map (as registered) | 2,686 | 3,072 | 386 u |
+| **strip 3's band, x 1248..1824** | **1,728** | **3,072** | **1,344 u** |
+
+**Arm B climbed the 36.9° ramp to y = 3,072**, the far edge, crossing ramp and
+plateau. **Arm A stopped at y = 1,728 — the last apron row, to the unit** —
+which is exactly where the mesh ends when strip 3 is excluded.
+
+**The registered prediction was REFUTED as written, and the fault was the
+measurement.** I registered "max y over the whole trace, separation ≥ 700"; the
+unconstrained answer is 386. Arm A's trace reaches x = 1144, inside **strip 2's**
+band — the 32.0° ramp, walkable under *both* sets — so the character drifted out
+of the strip under test and climbed one that was never in question. Max-y-anywhere
+cannot isolate strip 3 when a walkable ramp adjoins it. The corrected band is not
+post-hoc: strip 3 is x 1248..1824 by construction of the generator and appears in
+the run note's design table written before the run, and **arm A answers 1,728 for
+both the wide band and a tight interior**, so the number does not move with the
+window.
+
+**Both characters walked far** — 5,238 u and 5,048 u of traced path against a
+1,500 u void guard — so arm A's failure to climb is not a failure to move.
+
+**So both levers in this dword recover ground that is genuinely traversable**,
+not merely present in the file: the water line (W16) and the slope set (W18).
+
+**The instrument lesson, third of its kind.** W12 clipped a band against a wall,
+W16's first plan ran out of leg, W18's measurement could be satisfied by the
+wrong feature. All three were faults in how the result was to be READ, caught
+only because the arms shared everything but the variable. The rule: **when a map
+has more than one feature that could produce the signal, the measurement must
+name WHERE, not just how much.**
+
+**Scope.** Strip 4 (41.5–41.9°) also flips and was not walked — it needs its own
+start line, since arm A shows how readily a walk wanders between strips. How a
+character looks or animates on a 37° slope is the owner's verdict. Full scoring
+in `vault/research/worldmaps/WORLDMAPS-W18-RUN.md` §RESULTS.
+
+## CORRECTION 2026-08-21 — W13 measured the FLOOD SEED, not the player's spawn
+
+**An area's `seed_x`/`seed_y` is the compiler's flood seed. It is NOT where the
+character arrives.** The arrival point comes from the MAP row:
+`content.map_static_config()` builds `id -> (file_id, (spawn_x, spawn_y), plane,
+explorable)` from `rows("map")` only, and `seed_x` has exactly three consumers
+in `toolkit/` — `deploy.py:374` (passed to `stripbuild.build` as the flood
+seed), `deploy.py:1634` (the readback assert) and `mapscale.py`. None is the
+player. `authsrv` has no `--spawn` override.
+
+So `sculpt_deep0` and `sculpt_deep1` moved the **flood seed** to (528, 528);
+the character arrived at map 143's spawn, **(1536, 1536)**, in BOTH arms — on
+ground walkable either way.
+
+**The mechanism finding is untouched and is still the point of W13**: at flags 0
+a flood seed on submerged ground crashes the compiler at `PathFlood.cpp(681)`;
+at flags 1 the identical seed compiles clean. One bit, crash versus map.
+
+**What was overstated is the framing.** "The player's own spawn stands on it"
+was not measured there. That claim is carried by **W15** — bodies placed at
+(56, 6006), (380, 652) and (44, 2764), refused at those same points with the bit
+clear — and by **W16**, where a character walked to x = 0. Both measured a body
+or a character; W13 measured the seed.
+
+**How it was caught, and it is the fourth of these.** W19's two arms were to
+differ only in `seed_x`, which would have spawned the character in the same
+place twice and produced a fabricated result — P1 refuted and P2 confirmed from
+one non-event. An adversarial design review found it before the run, unlike
+W12's clipped band, W16's short leg and W18's ambiguous window, which were all
+caught after. `deploy.readback`'s row was reworded from "the spawn" to "the
+flood seed" in the same commit, because that wording is what made the error easy
+to make.
+
+## WORLDMAPS-W19 — 45 degrees is a BOUNDARY, positive and negative in one arm. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two walks, ONE compiled map, one
+threshold set, one spawn).** W17 moved the walkability cut 35° → 45° and W18
+walked the ground it recovered — but both tested slopes **below** the new cut,
+so neither could distinguish "the boundary moved" from "the classifier stopped
+excluding things".
+
+| arm | strip | snapped slopes | max y in band | verdict |
+|---|---|---|---|---|
+| **S4** | 4 | 41.52–42.51° | **3,064** | climbs to the plateau |
+| **S5** | 5 | 46.45–47.84° | **1,728** | stopped at the apron top, to the unit |
+
+**Separation 1,336 u inside a single threshold set.** Both arms served the same
+`14 trapezoids` map, so there was no fall-back to the cut-35 blob — which would
+have failed P1 and passed P2 exactly as a real "boundary is 40" result would.
+Both bands were populated (10 and 8 samples), so S5's refusal is measured rather
+than an empty window read as a negative.
+
+**Every prediction confirmed as registered** — the first rung in this arc with
+no caveat, and that is because the design was adversarially reviewed BEFORE it
+ran rather than diagnosed after.
+
+**The review caught a fatal.** The first draft moved the start line with
+`seed_x`, which is the compiler's FLOOD SEED and not the player's spawn: both
+arms would have started at (1536, 1536), both scoring bands would have been
+empty, and P1-refuted/P2-confirmed would have been fabricated from one
+non-event. It also caught that `gen_ramp` blends `dz` per column, so every strip
+boundary is a wall (gx 18 = 42–59°, gx 24 = 47–63°, gx 30 = 68–85°) and the
+draft's bands each contained one. Corrected bands are the uniform-slope spans,
+x ∈ [1824, 2304] and [2400, 2880].
+
+**The corrected design needed no new content at all**: the apron is one flat
+slab (x 0..3072, y 0..1728), so the start line moves by WALKING EAST before
+turning north — one install, two walks, byte-identical archive state, which
+dissolves the "are these the same map" question instead of arguing it.
+
+**Scope.** Where between 42.51° and 46.45° the cut actually sits is not settled;
+the strips bracket it without bisecting it, and the static read's 45.0 is
+consistent but unconfirmed. Class 2 ground (between 40 and 45 under set B) is now
+known walkable and traversable, but whether it differs from class 0 in cost or
+behaviour was not measured. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W19-RUN.md` §RESULTS.
+
+## WORLDMAPS-W20 — the cut is (43.78, 45.00], and a SECOND threshold governs whether ground meshes at all. 2026-08-21
+
+**OBSERVED (retail client, build 38797; four compiles, one shape, exact-slope
+strips).** Built to bisect the 45° cut W19 bracketed to [42.51, 46.45]. It did
+that — and turned up something not predicted.
+
+**The instrument.** `deploy.gen_ramp_fine`: strips whose snapped slopes are
+EXACT, worst sample moved **0**. Two properties buy that and both were measured:
+each `dz` is a multiple of 4, and each strip is eight columns aligned to the
+codec's **4×4 sub-blocks** (`snap_block` projects each sub-block independently,
+so a boundary inside one quantises the whole block — the first draft's 6-wide
+unaligned strips spread by up to 1.4°, which is what limited W19).
+
+**THE HEADLINE, and it was not predicted.** Three runs at cut 45 differing only
+in the shallowest strip:
+
+| strips | trapezoids | result |
+|---|---|---|
+| 43.78 / 45.00 / 46.17 / 47.29 | 2 | apron only |
+| **41.19** / 42.51 / 43.78 / 45.00 | 2 | apron only |
+| **18.43** / 42.51 / 43.78 / 45.00 | 11 | **`WWW.`** |
+
+**42.51° and 43.78° mesh only when a much shallower strip is present.** The
+classifier emits THREE classes from the array at flood-object`+0x90` — `< array[0]`
+→ class 0, `> array[1]` → class 1, between → class 2 — and under set B that array
+is {40, 45, …}. Every strip in runs 1 and 2 was ≥41.19°, hence **all class 2 and
+no class 0 anywhere**, and nothing beyond the apron meshed. **RECONSTRUCTION:
+class-2 ground is meshed only where reachable through class-0 ground; adjacency
+to the flat (class-0) apron is evidently not enough.**
+
+**The cut**: 43.78° meshed, 45.00° not → **(43.78, 45.00]**, the tightest bracket
+held. The cut-35 control on the same map gives `W...` — only the 18.43° strip,
+the rest being class 1 outright.
+
+**It does NOT settle strict vs non-strict**, which is what it was built for. Strip
+D is 45.00° in OUR measure (doubles, max of two triangles); the client computes
+its own float32 per-triangle value. A slope sitting exactly on the threshold is
+decided by that difference rather than by the comparison operator — a design
+fault, since a value ON a boundary cannot test the boundary's inclusivity unless
+both sides compute it identically.
+
+**THIS REINTERPRETS W17 AND W19.** `gen_ramp`'s first three strips (26.6–37.6°)
+are class 0 and its strip 4 (41.5–42.5°) is class 2, so W17's `WWWW.` and W19's
+climb of strip 4 both occurred **with class-0 strips beside them**. Their
+findings about the top byte and about traversability stand; what does not stand
+is the reading — mine — that a 41–42° slope is walkable *on its own*. Run 2 says
+it is not.
+
+**Process note, recorded because it cost the run its predictions**: I mutated the
+strips twice mid-run after a failed positive control, so P1–P4 do not apply
+cleanly to the configuration that produced the result and P5 is stale rather than
+refuted. The headline was not predicted at all. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W20-RUN.md` §RESULTS.
+
+## WORLDMAPS-W21 — authored props CAN block, and the footprint is honoured to the unit. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one flat map, one prop, two arms one
+field apart).** Every prop this project has ever placed was scenery a character
+walks through: `Prop.outline` — the prop's footprint, which
+`StrippedProps.encode` has always written — was passed as `()` by `deploy` and
+never set by anything.
+
+**MEASURED first, offline**: retail props carry footprints only sparsely.
+Kamadan's **516 props share 280 outline points**; the biome donor's **864 share
+252**. So outline-free props are the retail majority and ours were not
+anomalous — what this project could not do was author the *other* kind.
+
+**It can now.** A prop given a 576×576 footprint:
+
+| | control (no footprint) | treatment (576×576) |
+|---|---|---|
+| mesh inside the footprint | — | **0 of 108 samples walkable** |
+| identical box beside it | — | 108 of 108 walkable |
+| character max x | **3072**, the map edge | 2846, having gone *around* |
+| trapezoids | 10 | 9 |
+
+Scanning the walk line at 2-unit resolution, **the last walkable x is 2640 and
+the hole begins at 2642** — authored half-width 288, observed 286. The footprint
+is honoured **1:1 in world units**; the `scale` byte does not scale it.
+
+**The character's own path confirms both authored edges to the unit.** It walked
+east, stopped with **x pinned at 2640.0** — 2928 − 288, the west edge — for five
+consecutive reports while sliding north, then rounded the corner at
+**y = 1776** — 1488 + 288, the north edge — and resumed east. That is collision
+and slide against the authored polygon.
+
+**The registered prediction was REFUTED because the statistic was wrong**, not
+the finding: I registered "max x ≤ 2700", and `max x` cannot distinguish
+*blocked* from *blocked and walked around*. The raw trace contains a far stronger
+result than the statistic could see. **Fifth instrument fault of this family in
+this arc**, and the first where the better answer was already sitting in the data.
+
+**What it gives the project**: authored maps can have obstacles, via one content
+field (`prop_outline`).
+
+**Scope.** Whether the footprint's SHAPE is used or only its bounding box is not
+settled — a square was authored and a square-consistent hole appeared, which one
+walk into one edge cannot distinguish; a non-convex outline would. Whether the
+prop MODEL contributes collision of its own is untested (all props here are
+`model=0`, and the control shows it blocking nothing alone). Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W21-RUN.md` §RESULTS.
+
+## WORLDMAPS-W22 — the footprint is a POLYGON, not a bounding box. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one compile, scored offline).** W21
+proved an authored prop footprint is honoured and honoured 1:1 in world units,
+but noted that a **square cannot distinguish a polygon from its bounding box or
+its convex hull** — for a square all three are the same set.
+
+`area.notch` is W21's `blocker` with one field changed: the ring becomes the
+same 576×576 square with its **north-west quadrant removed**, 7 points, closed,
+and **non-convex**, so its convex hull is the full square.
+
+| region | walkable samples |
+|---|---|
+| **the NOTCH** (world x 2640–2928, y 1488–1776) | **29 / 36 — walkable** |
+| solid NE / SW / SE quadrants | **0 / 18, 0 / 36, 0 / 18 — holes** |
+| outside, west of the prop | 88 / 88 |
+
+**The client used the polygon.** The notch is walkable while every solid
+quadrant is a complete hole, and the notch's hull is the full square — so
+neither the bounding box nor the convex hull is what the compiler read.
+
+The notch's 7 non-walkable samples all sit **within 24 units of a notch
+boundary** (six 24 u inside the east edge, one 24 u inside the north edge), so
+the notch is walkable throughout bar a one-sample margin along the cut.
+
+**With W21, this closes the prop-collision question**: an authored footprint is
+honoured to the unit, its shape is the polygon including non-convex shapes, and
+a prop with no footprint blocks nothing. **Authored maps can have obstacles of
+arbitrary planar shape.**
+
+**Scope.** Self-intersecting or open rings are untested — `Prop.closed` records
+that 43 of retail's 37,548 outlined props are not closed, so the client
+tolerates them, but what it does with them is unknown. Whether the prop MODEL
+contributes collision of its own is untested (all `model=0`). Vertical extent is
+not a question a flat map can ask. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W22-RUN.md` §RESULTS.
+
+## WORLDMAPS-W23 — class-2 ground cannot be climbed out of flat ground. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two compiles, one field apart, scored
+offline).** W20 concluded as a RECONSTRUCTION that class-2 ground meshes only
+where reachable through class-0 ground — but on a map that could not carry the
+claim, because its class-2 strips DID touch the flat class-0 apron and still did
+not mesh, and it varied the steep lateral seams between strips at the same time.
+
+A **uniform** ramp removes strips, seams and neighbours together.
+
+| arm | slope | class | ramp band |
+|---|---|---|---|
+| `u18` | 18.43° | 0 | **288 / 288 walkable** |
+| `u42` | **42.51°** | **2** | **0 / 288** — the mesh stops at y = 1728, the apron's last row |
+
+Same generator, same bands, same flags, same seed, one field different.
+**A uniform 42.51° slope rising out of flat ground is not meshed at all.**
+W20's rule holds.
+
+**And the rule is now sharper than W20 could state it.** `u42`'s apron IS
+class-0 ground and IS adjacent to the ramp, so the condition is neither
+"class-0 exists" nor "class-0 adjacent". The one thing W20's run 3 had — where
+class-2 strips DID mesh — that neither failing run had is **class-0 ground that
+RISES**, carrying the flood to the heights the class-2 ramps occupy.
+**HYPOTHESIS, untested: the flood accepts class-2 ground only at heights it has
+already reached through class-0 ground.** Falsifiable by a map whose class-0 and
+class-2 ramps are separated so the flood cannot cross between them.
+
+**For an author the rule is simple and unchanged: a steep region needs a gentle
+approach that climbs with it.** A flat plaza at the foot of a 42° face buys
+nothing — the map compiles without the face, and nothing warns you.
+
+**Recorded because it nearly cost the run**: `u18` reported **2 trapezoids**, and
+on the fine-ramp maps 2 trapezoids meant "apron only". I read it that way and
+called the control failed. A *uniform* ramp decomposes trivially and those two
+trapezoids covered the **entire map**. Sixth instrument fault of this arc's
+family, second time a summary number stood in for a region check. W20's runs 1
+and 2 are unaffected — they were scored by region, not by count.
+
+## WORLDMAPS-W24 — the engine loop is ahead of the experience. 2026-08-22
+
+**OBSERVED (retail client, build 38797; full install-compile-serve run on a
+fresh created chain, plus the owner walking the map live).** Ashcoil
+Caldera — the first area authored as a PLACE (a 64x64 caldera with a spiral
+shelf road, designed by a judged panel, offline-validated to zero
+forbidden-band cells and full flood connectivity) — compiled and served
+mechanically green: chain 0x5F0B2 allocated, 23 trapezoids, heights
+4096/4096, seed in one trapezoid, both map_flags levers carried into the
+compiled head (`0x02000001` read back).
+
+**And the owner's live verdict was "complete failure", on five fronts,
+every one of which reproduces or diagnoses:**
+
+1. **The mesh is the crater floor and nothing else.** Every waypoint above
+   the floor scored NOT walkable (14/28 offline samples against the
+   compiled pathmap). The failure is LOCAL: the pool's circular 48-riser
+   staircase — contour rings at every orientation — MESHED, so quantized
+   staircases are walkable per se. What never flooded is the coil's
+   ~3-cell entrance gate between the scarp and the flank ridge; FINDINGS
+   48's connectivity pruning then deleted the whole elevated system.
+   **CLEARANCE of narrow gates is an unmeasured variable** — every surface
+   this arc ever walked was wide open.
+2. **Props: the biome donor's model 0 is a monumental building, not a
+   tree.** 32 of them scattered like shrubs loom one-sided (backface
+   culled) over the bowl. The W24 tree-placement y-flip fix stays
+   CONTESTED — alignment cannot be judged through an absurd model.
+3. **No water surface renders** (Water/Shore unemitted — now visibly so);
+   a sunken pool is a walkable dark disc.
+4. **Steep faces smear textures** — kilometre near-vertical walls stretch
+   the donor ground texture into streaks; the terrain arc's known UV gap
+   made fatal by real relief, plus no material variation by slope.
+5. **No minimap is authored** for created maps; the client pastes
+   placeholder content.
+
+The run also proved the per-area allocation journal refusal in anger: the
+first install targeted map 166's chain (frontier's) and `map_chain` refused
+for exactly the right reason; Ashcoil owns map row 167 / file 0x5F0B2.
+
+**The finding, stated plainly: the engine half of the mod-platform framing
+(compile, serve, walk, on chains ArenaNet never shipped) is ahead of the
+content half (water, props, materials, minimap), and the gap is what a
+player hits in the first thirty seconds.** Run note with the full scoring:
+`vault/research/worldmaps/WORLDMAPS-W24-RUN.md` §RESULTS.

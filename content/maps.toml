@@ -346,6 +346,19 @@ instance family (flag bit 17); the PvP twin 784 shares the footprint and is NOT
 this row on purpose -- skills convert and the Flux applies there.
 """
 
+[map.167]
+name = "Ashcoil Caldera (a created chain -- WORLDMAPS-W24)"
+file_id = 0x5F0B2
+created = true
+spawn_x = 3072.0
+spawn_y = 3072.0
+plane = 0
+explorable = false
+
+[map.167.provenance]
+source = "invented"
+verified = """OURS: it names a file that exists in no archive until `deploy.py --area ashcoil --install` allocates it. The id was chosen against ONE archive generation and this row says which, per [map.148]'s correction: `datalloc.next_free_file_id(ar, 0x5F0B2)` returned 0x5F0B2 on 2026-08-22 against `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat` (the archive holding the W3/W6 created chains 0x5F0B0/0x5F0B1). The map id is a COSMETIC LABEL, exactly as [map.143], [map.144], [map.165] and [map.166] say of theirs. The first install attempt targeted map 166's chain and was REFUSED by `map_chain`'s journal check -- 0x5F0B0 binds frontier's chain and the journal is per-area -- which is that refusal doing its job: two areas sharing one created chain would silently clobber each other on every re-install. Ashcoil owns its file instead."""
+
 [map.166]
 name = "Frontier (a created chain -- WORLDMAPS-W3)"
 file_id = 0x5F0B0

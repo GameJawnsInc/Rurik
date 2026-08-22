@@ -1515,23 +1515,176 @@ UNMAPPED message).
    it asks which sites COMPUTE a value and a constant zero computes nothing.
    Sideways find: `moralescan.py` identified the observer by the first
    `0x0059` and was **wrong on 20 of 44 connections**; corrected to the
-   self-scoped property 41, with the morale census numbers unchanged. What remains static-only is
+   self-scoped property 41, with the morale census numbers unchanged.
+   **AND THE RECHARGE GATE IS SEEN (2026-08-21, §32)** — the last
+   loopback-testable item. A 120-cost skill on a 12 s recharge ends at **40.4%
+   against a predicted 41.7%** for "the 4 in-window gains were skipped, the 2
+   after expiry landed", where no gate at all predicts 100%; the matched
+   120-cost control with no recharge refilled from the same messages. Two
+   witnesses now, where §26.2's rule 2 had one line of disassembly. **The run's
+   designed readout was CONFOUNDED and says so itself** — the recharge sweep
+   draws in the same rectangle as the fill, so slot 2 read 100% right after
+   being spent to zero and then *fell* with nothing on the wire; the answer came
+   from the residue after the sweep cleared. Fourth metric trap in this series,
+   fourth one caught by an in-frame control rather than by re-reading code.
+   **AND THE LAST QUESTION IS SETTLED, LIVE (2026-08-21, capture
+   `20260821T205552`, §33).** Whether a spend restarts the 25 s clock: **it does
+   not.** Sealed plan, self-targeted spend so no hit could restart the clock
+   (zero `0x00CF` after it), and a 17.8 s gap between the last gain and the
+   spend to separate the hypotheses — last gain 18.939, spend 36.746, clear
+   43.932, against **43.939 predicted for a gain-anchored clock and 61.746 for a
+   spend-anchored one. Off by 7 ms.** `AdrenalinePool.use` is correct as written
+   and the divergence is closed. n=1, but the alternative is 17.8 s away.
+   **THE CHANNEL IS NOW CLOSED**, wire and screen.
+   **Three things that capture gave for free**, all from the corpus growing
+   14 → 20: a **second death-penalty witness** for the energy quantum —
+   rate 0.0388235 joins to (2 pips, **17** max) and 17 = 20 × 0.85, a Warrior's
+   base under −15 morale with its pips unchanged, which arrived as a `test_pools`
+   FAILURE because the armour table had no 17-energy row (the table was narrow,
+   the model was right); a second property-52 resurrect witness; and a
+   **refutation of one of our own claims** — `test_adrenwire` said the spend's
+   follower is "always property 50, never 48", true of every sword attack skill
+   it had, and our self-targeted skill 348 follows with property **48** at delta
+   +2. What survives 40 of 40 is the half the sender needs: the spend comes
+   first. **What it did NOT give:** the plan asked for light hits TAKEN to settle
+   the sub-1% rounding boundary, and all 255 new gains are exactly 25 — landed
+   hits, not damage taken. That boundary stays extrapolated and is now the
+   cheapest open item here. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
-2. **What answers a refused press.** Ours is silence and the client visibly
-   re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
-   Also: our client SENT both unaffordable presses — whether retail's client
-   gates locally (and on which store) is unknown; the answer likely rides the
-   same investigation.
+
+   **THAT LAST SENTENCE WAS WRONG ABOUT THE COST, AND FINDING OUT WHY IS THE
+   RESULT (SKILLS-B1, 2026-08-21, no client launched,
+   [§34](studies/skills/FINDINGS.md)).** The boundary was called the cheapest
+   open item because the corpus looked one query away from it: the join that
+   measured `round()` runs GAIN → DAMAGE and is therefore selected on the
+   outcome, so running it DAMAGE → GAIN should have supplied the no-gain rows
+   by construction. It does, and they are worthless: **32 damage events
+   granting nothing, the largest 7.5% of maximum health**, with 2.5000%
+   granting 3 units in one row and nothing in another — a "boundary" an order
+   of magnitude above the wiki's, from a population that is not one population.
+
+   **Every no-gain row is in a connection whose bar carries no adrenal skill,
+   and retail sends those connections NOTHING.** Split the 58 usable
+   connections on that variable and the whole family lands on one side —
+   **918 gains / 27 clears / 40 spends in the 36 ARMED connections, 0 / 0 / 0
+   across 44,982 messages in the 22 DARK ones** — through 45 landed weapon hits
+   and 13 completed melee attacks that GWW's own rule says earn 25 units each.
+   The ARMED column reproduces §4's census exactly from an unrelated query.
+   **The gate is a server behaviour nobody had described, and ours does not
+   have it.** Its variable is CONFOUNDED, though: every dark connection is also
+   a non-Warrior, so "the bar carries an adrenal skill" and "the profession uses
+   adrenaline" fit all 58 identically. **The sender is deliberately NOT
+   changed** — picking a side on no evidence — and both errors are invisible
+   anyway, because the charge worker clears EDI before its slot loop and
+   `test edi,edi` / `je` at `0x008219F8` jumps past the UI event, so a `0x00CF`
+   no slot accepted repaints nothing and arms no timer.
+
+   Landed: `toolkit/authsrv/adrenjoin.py` (the extractor), `test_adrenwire`
+   §12–§13 (55 → 70 checks), and the divergence recorded at
+   `player_gains_adrenaline`, whose docstring had decided this exact case in
+   writing on an empirical premise that is now measured false.
+   **A blind replication settled it** — two agents, rival hypotheses, neither
+   shown the other — and the floor-side agent reached the same gate by its own
+   route AND recovered two rows my scan lost: damage also rides `0x00A2` (once,
+   6.25% granting 6, which my scan printed as an orphan and I read past), and
+   two symmetric batches attribute rather than staying ambiguous. Round now fits
+   **32 of 32**, floor 15, ceil 17, and the ledger closes at 918 of 918. It also
+   supplied the check with no free parameter: all eleven armed percentages are
+   `k/480`, 480 is the smallest denominator that works, and the observer's own
+   property 42 reads 480 on the same wire.
+
+   **The boundary itself is still UNVERIFIED and is no longer cheap.** No armed
+   row sits below 2.50%. What settles it is a capture of a light hit TAKEN by a
+   character with an adrenal skill equipped — 3 to 5 raw points on a 480-health
+   warrior — and what separates the two gate rules is a second capture, the
+   Warrior in an explorable with every adrenal skill off the bar. Both are
+   runs, not queries.
+2. ~~**What answers a refused press.**~~ **CLOSED 2026-08-22, wire and screen**
+   (SKILLS-R1, [studies/skills §36](studies/skills/FINDINGS.md), run
+   `20260822T105929`). Retail answers with **three** messages, not one:
+   `0x005D CHAT_MESSAGE_CORE` carrying the reason's string id, `0x005E
+   CHAT_MESSAGE_SERVER [playerId, channel 7]`, then **`0x00E2`** which releases
+   the slot. **43 of 143 corpus presses are declined and 43 of 43 are
+   answered**; 40 of 40 carry the full batch in that order, the other 3 send the
+   bare `0x00E2`, so sentence and release are separable. Channel 7 is the
+   `TxtError` panel from both sides — the client's own `cmp dword ptr [edi],7`
+   at `0x004E4EFC`, and 40 channel-7 tags all in refusal batches against 96
+   channel-10 tags in none. **`0x00E2` cannot carry the reason** (it shares
+   dispatch stub `0x0091F650` with `0x00E3` and the stub forwards no opcode),
+   which is why the reason rides the chat line; it is unnamed in every catalog
+   we hold and is named here `GAME_SMSG_SKILL_REFUSED`.
+   **The server sends it and the client draws it.** One run, three presses, with
+   an accepted cast between them as the in-frame control: *"Not enough
+   Adrenaline."*, then "Order of Apostasy" casting with the orb at 0, then
+   *"Not enough Energy."* at 7.83 energy. **String 1961 was a RECONSTRUCTION
+   and is now OBSERVED** — the corpus holds zero energy refusals (all 43
+   declines are attack-skill presses; the operator never ran out), so it rested
+   on the archive text and its position next to 1960's until this run.
+   **One prediction REFUTED and it is a refinement:** the sentence appears
+   ONLY as the floating panel, never in the chat log — channel 7 is a panel
+   channel the log ignores.
+   **AND THE INSTRUMENT WOULD HAVE MISSED IT.** The text renders at ~(880–1060,
+   520–540), dead centre of the screenshot scorer's player-body mask
+   `(850,300)-(1120,760)`. Scored the usual way this run reports a null. Fifth
+   metric trap in the series and **the first caught in advance**, by declining
+   the instrument before the run rather than by an in-frame control afterwards.
+   **Still open:** what ends the ~10 s slot re-animation E2 saw (the only
+   release in the image is `0x00E2`'s refcount decrement — either an unread
+   client-side timeout or that is simply how long the operator watched), and
+   the reason ids for the rest of the 1934–1993 block, which live server-side.
+   On the second half of the old item: our client SENT both unaffordable
+   presses and retail's clients send 43 declined ones — including one inside a
+   live recharge window — so the client does not gate on cost.
 3. **The five unmodelled mechanics** (unchanged from the entry below): attack
    speed, movement speed, damage negation, energy cost reduction (GoLE's
    datum: the row needs an explicit amount — scale bit clear, endpoints 10/18
    differ, refused per the resolve_duration precedent), arrow bonus damage.
-4. **Merge-time reconciliation with the morale arc** (landed on main while
-   this was in flight): route `EnergyPool.maximum` through
-   `player_max_energy()` — NOTE it scales BASE energy only, armour bonuses
-   ride unscaled (their §2.2) — and adopt the `PROP_ENERGY_REGEN` rename.
-5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
+4. ~~**Merge-time reconciliation with the morale arc.**~~ **DONE, and this
+   entry was stale — checked 2026-08-21.** Both halves are in the tree and have
+   been: `player_energy_pool` builds through `player_max_energy(state)`
+   (`authsrv.py`, with the "morale scales BASE energy only, armour bonuses ride
+   unscaled" note at the call site), and `agents.PROP_ENERGY_REGEN` is the
+   spelling everywhere, with `PROP_UNKNOWN_FLOAT_43` kept as an alias so no call
+   site had to break for a rename. Nothing to do; the line was the list
+   outliving the work, which is the failure the top of `CLAUDE.md` is about.
+5. ~~**`type_code` 16 is on our own bar and named nowhere.**~~ **CLOSED
+   2026-08-21, and it closed ten other codes with it** (SKILLS-T1,
+   [studies/skills §35](studies/skills/FINDINGS.md), `clientscan/typenames.py`,
+   `test_typenames.py` 16 checks). **The client names its own types.** The namer
+   at `0x004F9BF0` reads `[skillRecord+0x0C]` and hands it to a 29-case switch
+   at `0x004F9DD0` whose every case computes a **string id**, and whose default
+   arm logs ArenaNet's own *"There is no string to describe skill %u's type."*
+   The index is `type_code - 1`, the bias is the derivation's only free
+   parameter, and at that bias all **ten** codes `studies/presearing` §8 named
+   independently — by Rosetta stone, years earlier, against outside sources —
+   resolve EXACTLY to the ten words it used; re-run at bias 0 and 2 the same
+   check scores **zero**. So the eleven UNKNOWN codes are named without needing
+   a second Rosetta pass: 9 Well Spell, 11 Ward Spell, 20 Pet Attack, 21 Trap,
+   22 "global skill" (a *computed* name — Nature Ritual / Binding Ritual / Ebon
+   Vanguard Ritual, from profession and title track), 24 Item Spell, 25 Weapon
+   Spell, 26 Form, 27 Chant, 28 Echo — **and 16 is "Skill"**.
+
+   **Item 5's answer is an oddity worth keeping:** 16 displays as "Skill" and so
+   does **10**, from a *different* string record (942 vs 960, same word in four
+   languages). Two enum values ArenaNet chose to label identically. The bodies
+   differ — 10 branches on the touch and half-range flags, 16 has no variants
+   and instead ASSERTS both are clear — so the distinction is real, but **why
+   the engine needs it is NOT answered**: nothing read the code that *consumes*
+   it, only the code that names it. That is the residue, and it is a much
+   smaller question than the one that was open.
+
+   Three refusals are recorded as facts rather than gaps: **17 and 18 have no
+   type word at all** (the namer short-circuits both to the null record) and
+   they are the two largest populations in the full 3,443-row table, so the
+   biggest unnamed thing here is unnamed *by ArenaNet*; **14** is intercepted
+   upstream because an attack's name depends on the weapon and chain slot; and
+   **22**'s name is computed rather than constant. Ids are committed, words
+   resolve at run time from the owner's archive.
+   **Follow-on, not done:** several newly-named codes are plainly timed effects
+   (Well/Ward/Item/Weapon Spell, Form, Chant, Echo) and `effects.py`'s
+   `EFFECT_TYPES` still lists five. That is a behaviour change and needs its own
+   evidence.
 ### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
 
 Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
@@ -1609,7 +1762,7 @@ first attempt: **locate on a constant the experiment never changes**, because a
 scan for the value under test can run before the probe sets it and lock onto
 hundreds of coincidences.
 
-### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is stood on (2026-08-21)
+### WORLDMAPS: the ladder landed, the four shipped areas are verified, and the recovered ground is walked (2026-08-21)
 
 Branch `claude/world-maps`: `97cb389`, `78dc3be`. Arc doc and identifier mint:
 [studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md) (per
@@ -1818,6 +1971,200 @@ stands on it (W13), bit 0 touches only the Path chunk (W14), bodies are placed o
 it (W15), and a character walks out onto it (W16). `studies/worldmaps/FINDINGS.md`
 W13/W14, W15 and W16, `vault/research/worldmaps/WORLDMAPS-W13-RUN.md`,
 `...-W15-RUN.md`, `...-W16-RUN.md`.
+
+**WORLDMAPS-W17 THEN FOUND A SECOND LEVER IN THE SAME 41-BYTE CHUNK.**
+`studies/customarea` FINDINGS 48 measured the slope set in force (15/35/30,
+boundary 35) and closed by naming what it could not settle -- "whether the mode
+flag can select the other set on some map kind" -- with that flag's source
+recorded NOT FOUND by both FINDINGS 34 and 48. It is the **TOP BYTE** of the
+same Map Parameters flags dword, traced statically through seven single-caller
+hops to `cmp dword ptr [ebp+8], 2` at `0x0072CA1C`, and the client obeys it:
+arm A (`0x00000000`) reproduced FINDINGS 48's `WW...` exactly, arm B
+(`0x02000000`) produced **`WWWW.`** -- **the walkability boundary moved from 35
+to 45 degrees**, 7 trapezoids to 14. It also settles which slot the classifier
+tests (`+0x94`, since the answer was 45 and not 40).
+
+**The parser's 0-to-1 normalisation is what made it work**: a file byte of 0
+arrives as 1, so `0x01000000` would have produced a clean null in both arms and
+looked like a refutation. Found before the run, not after. A corollary is that
+**W11-W16 were never at risk** -- 0 and 1 select the same set, so every bit-0
+experiment did vary exactly one thing.
+
+**Authored terrain can now be steep to 45 degrees by one content field**, and
+the two levers compose: bit 0 is the depth gate, bits 24..31 the slope selector,
+disjoint fields of one dword read once. Untested: top byte 3+ (it crosses the
+`< 3` test), and whether a character can WALK a 42-degree ramp -- W16 established
+that meshed and walkable are different questions.
+`vault/research/worldmaps/WORLDMAPS-W17-RUN.md`.
+
+**WORLDMAPS-W18 THEN WALKED IT.** The ramp map's spawn sits directly under the
+36.9-degree strip that flips, so walking north walks up the strip under test.
+Constrained to that strip's own column band, arm B (cut 45) climbed to
+**y = 3,072**, the far edge, crossing ramp and plateau; arm A (cut 35) stopped
+at **y = 1,728 -- the last apron row, to the unit** -- exactly where the mesh
+ends when the strip is excluded. Separation **1,344 u**. So both levers in this
+dword recover ground that is genuinely TRAVERSABLE, not merely present in the
+file: the water line (W16) and the slope set (W18).
+
+**The registered prediction was REFUTED as written and the fault was the
+MEASUREMENT.** "Max y over the whole trace" gave only 386 u, because arm A's
+character drifted west into the 32-degree strip -- walkable under BOTH sets --
+and climbed a ramp that was never in question. The corrected band is not
+post-hoc (the generator fixes strip 3 at x 1248..1824, and it is in the run
+note's pre-run design table), and arm A answers 1,728 for both a wide band and
+a tight interior. **Third instrument fault of this kind** after W12's clipped
+band and W16's short leg -- all three in how the result was to be READ, all
+three caught only because the arms shared everything but the variable.
+`vault/research/worldmaps/WORLDMAPS-W18-RUN.md`.
+
+**WORLDMAPS-W19 SHOWED 45 IS A BOUNDARY, not an absence of one.** W17 and W18
+both tested slopes BELOW the new cut, so neither could tell "the boundary
+moved" from "the classifier stopped excluding things". W19 put a POSITIVE and
+a NEGATIVE in ONE arm -- one compiled map, one threshold set, one spawn: strip
+4 (41.52-42.51 deg) climbed to **y = 3,064**, the plateau; strip 5
+(46.45-47.84 deg) stopped at **y = 1,728**, the apron's last row, to the unit.
+Separation 1,336 u. Both bands populated (10 and 8 samples), so the negative is
+measured rather than an empty window. Every prediction confirmed as registered.
+
+**That is the first rung here with no caveat, and the reason is that the design
+was adversarially reviewed BEFORE it ran.** The review caught a FATAL: the
+draft moved the start line with `seed_x`, which is the compiler's flood seed
+and NOT the player's spawn, so both arms would have started in the same place
+with both scoring bands empty -- a fabricated P1-refuted/P2-confirmed from one
+non-event. It also caught that `gen_ramp` blends `dz` per column, making every
+strip boundary a wall (gx 18 = 42-59 deg, gx 24 = 47-63, gx 30 = 68-85) that
+the draft's bands each contained. **Four instrument faults in this arc, and this
+is the first caught before it cost launches** rather than after.
+
+Untested: where between 42.51 and 46.45 degrees the cut actually sits -- the
+strips bracket it without bisecting it.
+`vault/research/worldmaps/WORLDMAPS-W19-RUN.md`.
+
+**WORLDMAPS-W20 BISECTED THE CUT AND FOUND A SECOND THRESHOLD.** A ramp whose
+snapped slopes are EXACT (worst sample moved 0 -- each dz a multiple of 4, each
+strip eight columns aligned to the codec's 4x4 sub-blocks) brackets the cut to
+**(43.78, 45.00]**, against W19's [42.51, 46.45].
+
+**The unpredicted result matters more.** Three runs at cut 45 differing only in
+the SHALLOWEST strip: with 43.78 or 41.19 as the shallowest, the map compiled
+to the APRON ALONE; with 18.43 added, the 42.51 and 43.78 strips appeared. The
+classifier emits THREE classes from the array at flood-object+0x90 -- below
+array[0] is class 0, above array[1] class 1, between is class 2 -- and under
+set B that array is {40, 45}. Every strip in the first two runs was class 2 and
+there was NO class-0 ground anywhere. **RECONSTRUCTION: class-2 ground meshes
+only where reachable through class-0 ground, and adjacency to the flat apron is
+not enough.**
+
+**THIS REINTERPRETS W17 AND W19.** `gen_ramp`'s first three strips are class 0
+and its strip 4 (41.5-42.5 deg) is class 2, so W17's `WWWW.` and W19's climb of
+strip 4 both happened WITH class-0 strips beside them. The top-byte finding and
+the traversability findings stand; what does not stand is the reading -- mine --
+that a 41-42 degree slope is walkable on its own.
+
+W20 did NOT settle strict-vs-non-strict at the boundary, which is what it was
+built for: a strip authored at exactly 45.00 in OUR measure is decided by
+float32-vs-double differences rather than by the comparison operator. And I
+mutated the strips twice mid-run after a failed control, so its registered
+predictions do not apply cleanly to the configuration that produced the result.
+`vault/research/worldmaps/WORLDMAPS-W20-RUN.md`.
+
+**WORLDMAPS-W21: AUTHORED MAPS CAN NOW HAVE OBSTACLES.** Every prop this
+toolkit ever placed was scenery a character walks through -- `Prop.outline`,
+the footprint `StrippedProps.encode` has always written, was passed as `()` by
+`deploy` and set by nothing. MEASURED first: retail props carry footprints only
+sparsely (Kamadan's 516 props share 280 outline points), so outline-free props
+are the retail MAJORITY and ours were not anomalous -- what we could not do was
+author the other kind.
+
+One flat map, one prop, two arms one field apart. With a 576x576 footprint the
+client carves a hole in its own compiled navmesh: **0 of 108 samples walkable**
+inside it against 108 of 108 in an identical box beside it, and scanning at 2u
+the last walkable x is **2640** against an authored edge at 2928-288 = 2640.
+**The footprint is honoured 1:1 in world units.** The character's own path
+confirms both edges to the unit: x PINNED at 2640.0 for five consecutive
+reports while sliding north, then rounding the corner at y = 1776 (= 1488+288)
+and resuming east -- collision and slide against the authored polygon. The
+control, same prop with no footprint, walked clean past it to the map edge.
+
+The registered prediction was REFUTED because the STATISTIC was wrong -- max x
+cannot tell *blocked* from *blocked and walked around*, and the raw trace held
+a stronger result than it could see. Fifth instrument fault of this family.
+Untested: whether the footprint's SHAPE is used or only its bounding box.
+`vault/research/worldmaps/WORLDMAPS-W21-RUN.md`.
+
+**WORLDMAPS-W22 CLOSED THE SHAPE QUESTION: the client uses the POLYGON.**
+W21 noted a square cannot distinguish a polygon from its bounding box or
+convex hull, since for a square all three are the same set. `area.notch` is
+`blocker` with the ring made NON-CONVEX -- the same square with its
+north-west quadrant removed, whose convex hull is the full square. The notch
+is **walkable, 29 of 36 samples**, while all three solid quadrants are
+complete holes (0/18, 0/36, 0/18). The 7 exceptions all sit within 24 units
+of a notch boundary, a one-sample margin along the cut.
+
+**With W21 the prop-collision question is closed**: an authored footprint is
+honoured 1:1 in world units, its shape is the polygon including non-convex
+shapes, and a prop with no footprint blocks nothing. **Authored maps can have
+obstacles of arbitrary planar shape**, via two content fields.
+`vault/research/worldmaps/WORLDMAPS-W22-RUN.md`.
+
+**THE ARC IS NOW DISTILLED IN [studies/worldmaps/AUTHORING.md]
+(studies/worldmaps/AUTHORING.md)** -- what the client accepts, the two
+`map_flags` levers, the THREE slope classes and the class-0-route rule, how to
+author a slope the lattice snap does not move, prop footprints, the gotchas
+that each cost a run, and the five instrument faults this arc made. It exists
+because FINDINGS.md is chronological: a cold reader meets W17 and W19 well
+before W20 reinterprets them, and meets W13 before its correction. The guide
+carries the corrections in place and cites the rung behind every claim.
+
+**WORLDMAPS-W23 then upgraded the arc's one RECONSTRUCTION to an OBSERVATION.**
+W20 concluded class-2 ground meshes only where reachable through class-0
+ground, on a map that could not carry the claim -- its class-2 strips DID touch
+the flat class-0 apron and still did not mesh, and it varied the steep lateral
+seams at the same time. A UNIFORM ramp removes strips, seams and neighbours
+together: at 18.43 deg the ramp band is **288/288 walkable**, at 42.51 deg it is
+**0/288** and the mesh stops at the apron's last row. One field apart.
+
+**And the rule is sharper than W20 could state it.** That ramp's apron IS
+class-0 and IS adjacent, so the condition is neither "class-0 exists" nor
+"class-0 adjacent". The one thing W20's successful run had is class-0 ground
+that RISES. Hypothesis, untested and falsifiable: the flood accepts class-2
+ground only at heights it already reached through class-0 ground.
+
+For an author: **a steep region needs a gentle approach that CLIMBS WITH IT** --
+a flat plaza at the foot of a 42-degree face buys nothing and nothing warns you.
+`vault/research/worldmaps/WORLDMAPS-W23-RUN.md`.
+
+**WORLDMAPS-W24 STAGED: Ashcoil Caldera, the first area authored as a PLACE**
+(owner's ask 2026-08-22: a coherent, visually striking map to walk, no NPCs).
+A 64x64 caldera on map 166's created chain: spiral shelf road climbing one
+full turn floor-to-rim, slot-cut mouth, notched top-out, crown at 1344, a
+bank-flanked draw into a sealed bowl, 32 scattered trees. Design by a
+three-designer panel + verifying judge; geometry legal BY CONSTRUCTION under
+the cut-45 set (every axial step 0/48 or >=144, so W20/W23's conditional
+40-45 band cannot occur) and MEASURED offline: zero forbidden cells, flood
+invariance under both adjacencies, full journey connectivity, round-trip
+4096/4096, snap worst 4, 4,100 B compressed. New `gen_caldera` in deploy.py
+(byte-identical port), plus a tree-placement Y-FLIP FIX: grid row 0 renders
+at world maxY (FINDINGS 4; W23's apron trapezoid confirms), so trees now
+stand at their cell's RENDER position -- a latent defect every flat or
+y-symmetric treed map masked. RECONSTRUCTION until a client run; the run is
+staged with predictions registered and waits on a free harness.
+
+**RAN 2026-08-22, and the verdict is SPLIT.** Mechanically green end to
+end on a fresh chain (0x5F0B2, map row 167 -- the map-166 attempt was
+rightly REFUSED by the per-area journal check): 23 trapezoids, heights
+4096/4096, both flag levers carried into the compiled head. **But the
+owner walked it live and called it a complete failure, correctly.** The
+mesh is the crater floor ONLY -- the coil's ~3-cell entrance gate never
+flooded and pruning deleted everything above it (the pool's circular
+48-riser staircase DID mesh, so staircases are fine and CLEARANCE of
+narrow gates is the unmeasured variable). The donor's prop model 0 is a
+monumental building, not a tree -- 32 of them loom backface-culled over
+the bowl. No water surface renders, steep faces smear the donor texture,
+no minimap exists for created maps. **The engine half of the mod-platform
+framing is ahead of the content half, and the gap is what a player hits
+in the first thirty seconds.** Owner's call: not ready -- arc paused here.
+`vault/research/worldmaps/WORLDMAPS-W24-RUN.md` (predictions AND results).
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

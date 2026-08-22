@@ -140,7 +140,14 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # `grep -c` both read 230, so the occurrence count and the line count agree and
 # either grep gives the same answer.)
 #
-# Was 218 before section 13 (WORLDMAPS-W13 recon: `serve_run` could reach a
+# Was 231 before the 'caldera' generator (Ashcoil, the WORLDMAPS showcase
+# map, 2026-08-22) joined GENERATORS -- MEASURED 233 on the green run that
+# added it. (That run found the floor already one stale: WORLDMAPS-W23's
+# commit added 'ramp_uniform' and its section-1 check without moving 231.)
+# 229 before WORLDMAPS-W17 added the 'ramp' generator, which section 1
+# picks up automatically -- it iterates GENERATORS, so a new field costs no
+# test-writing and cannot be added without its lattice round-trip being
+# checked. 218 before section 13 (WORLDMAPS-W13 recon: `serve_run` could reach a
 # verdict from another SESSION's log, about another MAP, after a harness that
 # FAILED -- three holes that composed, all three live on 2026-08-21 with three
 # worktrees driving one harness), 213 before section 12 (WORLDMAPS-W12: an armed head that was never
@@ -159,7 +166,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=229)
+LEDGER = checks.Ledger("test_deploy", floor=233)
 check = checks.adopt(LEDGER)
 
 
