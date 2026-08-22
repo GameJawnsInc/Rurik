@@ -4925,8 +4925,13 @@ Every one of these, in the order they were written:
   something: those dark connections carry **45 landed weapon hits and 13 completed melee
   attacks**, every one of which GWW's rule says earns 25 units, and retail sent none. It
   also re-fits the rounding rule on the armed rows alone — **round 32 of 32**, floor 15,
-  ceil 17 — and runs the check with no free parameter: all eleven armed percentages are
-  **k/480**, 480 is the smallest denominator that works, and the observer's int property
+  ceil 17 — and it does NOT stop there, because a two-candidate test would have hidden
+  the real result: fit the rule as a FAMILY, solving `units == f(pct·k)` for the k
+  interval that fits all 32 rows, and **floor is EMPTY under every rescale** (which
+  refutes GWW's "rounded down" *and* the pre-mitigation-damage repair of it in one
+  line) while **round and ceil both survive and disagree at the low end** — a 1-point
+  hit is 1 unit under ceil and no message at all under round. It also runs the check
+  with no free parameter: all eleven armed percentages are **k/480**, 480 is the smallest denominator that works, and the observer's int property
   42 reads 480 on a message none of that arithmetic touched. What it deliberately does
   NOT assert is WHICH variable gates: every dark connection is also a non-Warrior, so
   bar-based and profession-based rules fit all 58 identically and the sender implements
@@ -4940,7 +4945,7 @@ Every one of these, in the order they were written:
   `vault/captures/live/` for §§4–7 and §12 and the pinned image for §§8–11 and §13, both
   declared as skips; the content overlay is NOT skippable and §3 goes red without it.
   **Floor 10 of a
-  70-check green run** (55 before §§12–13), and the file says plainly what that floor
+  71-check green run** (55 before §§12–13), and the file says plainly what that floor
   cannot catch — on a
   machine with both fixtures a dropped section would still clear 10, so §4's
   capture/connection/message pin and §8's printed image are the real "did it run" guards
