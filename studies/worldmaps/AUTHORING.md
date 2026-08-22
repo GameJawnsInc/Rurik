@@ -115,6 +115,26 @@ happened *with class-0 strips beside them*. Their findings about the top byte
 and about traversability stand; the reading that **a 41–42° slope is walkable on
 its own does not**.
 
+### The master rule (how Ashcoil authors a whole landscape legally)
+
+W24's showcase map composes the numbers above into one construction, worth
+stating because it makes the forbidden band impossible rather than avoided:
+
+- **Walkable ground: pre-quantization gradient <= 40 units/cell.**
+- **Walls: hard discontinuities >= 192 units in one cell.**
+- **Quantize everything to 48.** Then every axial step is 0 or 48 (30.2 deg,
+  class 0 under cut-45 with the worst triangle plane at 35.3 deg), every wall
+  is >= 144 after the snap (56.3 deg, class 1), and **no step can land in the
+  conditionally-meshed 40-45 deg band at all**. Requires `map_flags` top
+  byte 2 -- under the 15/35/30 set the same 35.3 deg planes are class 2.
+- **An elevated road leaves flat ground only through a SLOT** -- flanked by
+  rock >= 192 above both the road and the ground beside it, the flanks
+  terminating ABRUPTLY (an abrupt end presents a >= 144 face, legal; a
+  TAPERING flank sweeps its height difference continuously through the
+  forbidden band somewhere, always). Ashcoil hit this three separate times
+  (the mouth, the top-out, the draw's uphill bank); the fix was a slot each
+  time, and the third was caught only by the offline validator.
+
 ### Authoring an EXACT slope
 
 The terrain codec's `snap_block` projects each **4×4 sub-block independently**.
@@ -167,6 +187,13 @@ contributes collision; vertical extent.
   **second, unarmed** run (W13).
 - **The server cannot see `map_flags`** — zero occurrences under
   `toolkit/authsrv/`. No flag effect is ever server-side.
+- **Terrain grid row 0 renders at world maxY** (FINDINGS 4's argmax on
+  345/346 maps; W23's apron trapezoid -- authored at gy >= 14, meshed at
+  world y 0..1728 -- confirms it against the client). Props are placed in
+  world coordinates and do NOT flip, so anything positioned from a grid cell
+  must convert: world y = (dims-1-gy)*96+48. `deploy.assemble` does this for
+  trees as of 2026-08-22; every earlier treed map was flat or y-symmetric,
+  which masked the mismatch. RECONSTRUCTION until W24's client run scores it.
 - **Agent ids 1, 30 and 200–206 are reserved** (player, henchman, heroes), as
   are definitions 9 and 10–16. `area_population` RAISES rather than filters, so
   one bad id refuses the whole area at start-up and nothing runs (W15).

@@ -1961,6 +1961,23 @@ ground only at heights it already reached through class-0 ground.
 For an author: **a steep region needs a gentle approach that CLIMBS WITH IT** --
 a flat plaza at the foot of a 42-degree face buys nothing and nothing warns you.
 `vault/research/worldmaps/WORLDMAPS-W23-RUN.md`.
+
+**WORLDMAPS-W24 STAGED: Ashcoil Caldera, the first area authored as a PLACE**
+(owner's ask 2026-08-22: a coherent, visually striking map to walk, no NPCs).
+A 64x64 caldera on map 166's created chain: spiral shelf road climbing one
+full turn floor-to-rim, slot-cut mouth, notched top-out, crown at 1344, a
+bank-flanked draw into a sealed bowl, 32 scattered trees. Design by a
+three-designer panel + verifying judge; geometry legal BY CONSTRUCTION under
+the cut-45 set (every axial step 0/48 or >=144, so W20/W23's conditional
+40-45 band cannot occur) and MEASURED offline: zero forbidden cells, flood
+invariance under both adjacencies, full journey connectivity, round-trip
+4096/4096, snap worst 4, 4,100 B compressed. New `gen_caldera` in deploy.py
+(byte-identical port), plus a tree-placement Y-FLIP FIX: grid row 0 renders
+at world maxY (FINDINGS 4; W23's apron trapezoid confirms), so trees now
+stand at their cell's RENDER position -- a latent defect every flat or
+y-symmetric treed map masked. RECONSTRUCTION until a client run; the run is
+staged with predictions registered and waits on a free harness.
+`vault/research/worldmaps/WORLDMAPS-W24-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
