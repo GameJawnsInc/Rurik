@@ -1704,7 +1704,23 @@ UNMAPPED message).
    (Well/Ward/Item/Weapon Spell, Form, Chant, Echo) and `effects.py`'s
    `EFFECT_TYPES` still lists five. That is a behaviour change and needs its own
    evidence.
-### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
+### MORALE: the death penalty is read, modelled, watched and CLOSED (2026-08-22)
+
+**Status for a cold session: nothing here is owed.** Landed on `main`, arc doc
+[studies/morale/FINDINGS.md](studies/morale/FINDINGS.md), four run sheets in
+[studies/morale/RUNS.md](studies/morale/RUNS.md), `test_morale.py` floor 60 and
+green at 62. The mechanic is on the wire, in content, gated per map, and watched
+at a client from a real death. What is still OPEN is small and named: MORALE-Q3
+(`0x00A2` vs `0x00A3` for property 43 — the energy arc moved us to `0x00A2` and
+which of its two changes cured the drain is unseparated), MORALE-Q4 (int
+property 54 at the revive, one sighting), MORALE-Q5 (morale BOOSTS — zero
+sightings in the corpus; only `0x009C [player, 110]` at our own client), and
+MORALE-Q6 (what resets a penalty on a map change — the wiki says an outpost,
+the corpus cannot show it). The one thing a future run could add cheaply is a
+GIF-rate capture of a killing blow's floating damage number, which is n=1 and
+watched live rather than filmed.
+
+The entry below is the arc as it was written, kept for its reasoning.
 
 Branch `claude/death-penalty-d14bab`. Arc doc and identifier mint:
 [studies/morale/FINDINGS.md](studies/morale/FINDINGS.md).
@@ -1751,6 +1767,21 @@ refuted:
   ships a penalty that costs nothing.
 - The control held: retail's own `0x00EE [10, 0]` no-op changed nothing over
   eleven frames.
+
+**AND THE REST OF THE ARC, in the order it happened.** The corpus census was
+re-run on 2026-08-22 and found a SECOND player death (`20260821T152147`, agent
+25, level 20): morale 100 → 85, max health **480 → 408**, max energy **20 → 17**,
+both exact under the same rule at a 24× larger pool — and the 480 at login puts
+the far endpoint of GWW's level curve on ArenaNet's wire. The 0.33 energy-pip
+quantum was checked across the corpus after the energy arc reached it
+independently (6 of 6 non-zero values bit-exact; 1/3 fits none). The
+resurrection grace window landed (GWW: 14 s in PvE) and both halves were watched:
+one charged death then four WAIVED at 12.6 s, and — with the hostile slowed —
+the whole ladder −15/−30/−45/−60 with health 85/70/55/40 and energy 22/19/16/13,
+the corner then holding at the cap. Finally, retail's own killing blows were
+shown to OVERSHOOT (4 of 4 reconstructible kills), so `_damage_fraction`'s
+overkill decision has the corpus behind it, and the client prints the APPLIED
+damage while flooring the bar at 1 over a store that goes negative.
 
 Two things measured in passing and worth reusing: the indicator is at
 (10,32)–(60,82) at 1936×1040 — a crop starting at y=100 misses it and reads as
