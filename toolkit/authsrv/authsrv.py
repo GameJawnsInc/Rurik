@@ -896,6 +896,15 @@ GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
 # OBJECT but never the by-id entry. Retail sends value = percent<<24 (100<<24
 # the mode, 38-connection census); the NAME IS OURS, from the mechanism -- no
 # ArenaNet string names this opcode. studies/pvpui/FINDINGS.md 27.
+#
+# THE PERCENT IS THE MODEL SCALE, and the schema now names the opcode for its
+# consumer: AGENT_SET_MODEL_SCALE (overrides 154, studies/smsgnames FINDINGS 9,
+# 2026-08-22). The +0x30 readers are CpsMonster -- (value >> 24) * f32(0.01)
+# applied to the composite unless the byte is 100 -- and CpsTex's s_scaleR
+# resolution pick, with a fallback to the 0x0056 definition record's slot +8
+# when the char record is invalid. 965/965 corpus values are a pure top-byte
+# percent, span 8..115 (town children 43, giants 115). This constant keeps the
+# mechanism name it was minted under; new call sites may prefer the schema's.
 GAME_SMSG_CHAR_TABLE_VALUE = 0x009A
 # The equipped-items bag: type 2, model 21, nine slots, weapon in slot 0.
 # CORROBORATED across ldufr (GmInventory.c:21-27, GmInventory.h:6-10) and

@@ -3280,14 +3280,21 @@ the frame bus — `0x00F4`'s frame `0x10000064` and `0x00F5 TITLE_UPDATE`'s `0x1
 same CtlText panel (`toolkit/clientscan/framebus.py` post/subscribe scan, closing the open lead at
 `studies/character/RUNS.md:203`). That shared-panel technique generalizes to any UPSTREAM display opcode.
 
-**NEXT: the 13 held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
+**NEXT: the held PARTIALs, in cost order** (all mechanism-OBSERVED, name not yet earned —
 deliberately OUT of the schema; full ledger and each held-reason at `studies/smsgnames` §4/§5):
-1. **`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL`** — the critic's strongest withheld pair:
-   a genuine two-witness MESSAGE identity (fileId SOURCED at `ItCliApi:2410`/`:2505`), held only
-   because fields 4–10 are unread. Cheapest: read the shared item builder `0x848450`'s field writes;
-   fix `0x0161`'s off-by-one field indices first (critic flagged: name is wire field 12, code[] field 13).
-2. **`0x009A`** — the char-record `+0x30` dword store keyed by agent id that PAIRS with the now-named
-   `0x009B AGENT_SET_NAME` at `+0x34` (same `0x38`-stride ChCli record). Read what consumes `+0x30`.
+1. ~~**`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL`**~~ **EARNED 2026-08-22**
+   (`studies/smsgnames` §9, invariants `test_itemdetail.py`): the shared builder `0x848450` was
+   read — fields 1–9 mapped to item-record offsets, the installer `0x848250` sets the bit
+   `ItCliApi:66` asserts as `baseItem->IsDetailHigh()`, the off-by-one corrected (name IS field
+   12), and ItemCode:516 REFUSES a wire terminator — the client appends its own, 0 of 6,806
+   corpus code words carry it. Field 14 is declared and never sent (0 of 2,235).
+2. ~~**`0x009A`**~~ **EARNED 2026-08-22 as `AGENT_SET_MODEL_SCALE` [medium]** (§9): the `+0x30`
+   consumer is the composite pipeline — CpsMonster scales the model by (value >> 24) × f32(0.01)
+   unless it is 100, CpsTex picks texture resolution from it, and the getter falls back to the
+   `0x0056` definition record's slot +8 — which settles `studies/smsg`'s "is field 4 a scale
+   percentage" open question STATICALLY (a probe had been priced for it) and lifts the
+   gw-preservation `scale` gloss UPSTREAM → CORROBORATED. 965/965 wire values are a pure
+   top-byte percent, town children at 43%, giants at 115%.
 3. ~~**`0x005D`** — candidate `CHAT_MESSAGE`: needs the sender/body cross-check~~ **EARNED
    2026-08-19, and the cross-check ran OFFLINE** — the corpus already held it
    ([studies/chat/FINDINGS.md](studies/chat/FINDINGS.md)). The whole family landed at once:
@@ -3304,9 +3311,13 @@ deliberately OUT of the schema; full ledger and each held-reason at `studies/sms
    `/bow` rendered its emote line, and the `#test` control rendered NOTHING — which also
    proves the echo is the only render path (no client-local copy). Chat is DONE as a
    mechanism; what remains is breadth (other sigils/channels need labelled captures first).
-4. **`0x0147`/`0x0148`** — the equip-set pair, already asserting `ITEM_PLAYER_EQUIP_SETS`
-   (`ItCliInv:375`/`:329`); then the player-record pair `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0` and the
-   marker `0x008D`.
+4. ~~**`0x0147`/`0x0148`**~~ **EARNED 2026-08-22 as `ITEM_UPDATE_EQUIP_SET` /
+   `ITEM_SET_ACTIVE_EQUIP_SET` [high/high]** (§9): `ITEM_PLAYER_EQUIP_SETS = 4`, a set is a PAIR
+   of slots at `inventory+0x64+set*8` with the active index at `+0x84`, and the server streams
+   the COMPLETE four-set table — 236 corpus updates = 59 × all four indices, item refs
+   null-or-declared 472/472. **What remains held**: the player-record pair
+   `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0`, the marker `0x008D`, and the critic's `0x003E`
+   narrowing — consumers unread, nothing new this pass.
 
 ### Unit setup — the pipeline is one document, ALL 11 questions ran, and the fixes landed (2026-08-17)
 

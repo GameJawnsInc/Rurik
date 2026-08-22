@@ -134,3 +134,68 @@ This **elevates 0x00F3/0x00F4 from UPSTREAM to OBSERVED** and closes the open le
 Tool: `toolkit/clientscan/framebus.py`'s post/subscribe scan (POST 0x00633D70 / SUBSCRIBE
 0x00633BD0), extended to arbitrary frame ids. Confidence is medium, not high: the shared-panel
 chain and town-binding wire are strong, but the panel's exact per-frame scope carries some inference.
+
+## 9. Follow-up: five more PARTIALs earned names (2026-08-22)
+
+Worked §4's remaining priced items — the item-detail pair, the equip-set pair, and
+`0x009A` — by reading the code the 2026-08-18 pass had priced but not read. GAME_SMSG
+named entries 115 → 120. No client launched; every reading is static disassembly of
+the pinned 38797 build plus the live corpus (now 4,210 / 2,235 / 236 / 59 / 965
+messages on the five opcodes). Wire invariants that can take each name back are
+pinned by `toolkit/authsrv/test_itemdetail.py` (19 checks); the field detail lives in
+each opcode's `schema/overrides.json` why. What the reads found, beyond the names:
+
+**`0x015E ITEM_LOW_DETAIL` / `0x0161 ITEM_HIGH_DETAIL` [medium/high].** The split IS
+the client's own vocabulary: the shared builder `0x848450` consumes fields 1–9 (the
+complete `0x015E` payload — fileId masked `0x7FFFFFFF` → +0x1C, type → +0x20, f4 →
++0x21, f5 → +0x22, f6−1 → +0x48 word (default 0x5DD when f6=0) with f7 → +0x4A, flags
+→ +0x28, value → +0x24), while `0x0161`'s installer `0x848250` adds model_id → +0x2C,
+quantity → +0x4C, the name (wire field TWELVE) → +0x34, code[] (field THIRTEEN) →
++0x10, and then sets `[item+0x40] |= 2` — the bit `test byte [item+0x40], 2` reads
+under the assert `baseItem->IsDetailHigh()` (ItCliApi:66, `0x0084816B`). The critic's
+off-by-one (name/code as fields 11/12) is corrected in the promoted entries. Three
+sharp edges for our own sender: the code[] must arrive WITHOUT its terminator —
+ItemCode:516 asserts `!count || code[count - 1] != ITEM_CODE_TERMINATOR` and the
+client appends its own `0xC0000000` (prediction passed with no free parameter: 0
+terminators in 6,806 corpus code words); declared field 14 never arrives (0 of 2,235
+— the format table declares a slot retail never fills, settling `studies/smsg`'s open
+question); and the fileId TOP BIT is a deferred-fetch request (`0x84be50`) that rides
+only the high-detail stream (697/2,235 vs 0/4,210).
+
+**`0x0147 ITEM_UPDATE_EQUIP_SET` / `0x0148 ITEM_SET_ACTIVE_EQUIP_SET` [high/high].**
+`ITEM_PLAYER_EQUIP_SETS = 4` (both workers `cmp` against the literal under
+`set < ITEM_PLAYER_EQUIP_SETS`, ItCliInv:375/:329). A set is a PAIR of item slots at
+`inventory+0x64+set*8`; membership mirrors into a per-item bitmask at `item+0x4E`
+(`!(setMask & ~ITEM_EQUIP_SET_MASK)`, ItCliInv:348); the active-set index lives at
+`inventory+0x84`, change-detected, UI events 0x100000F0/0x100000E9. On the wire the
+server streams the COMPLETE table: 236 updates = 59 × all four indices, plus one
+active-set select each; 472/472 item refs null-or-declared, 295/295 inventory keys
+declared. A-only pairs occur 17 times, B-only never (reported, not asserted).
+
+**`0x009A AGENT_SET_MODEL_SCALE` [medium, name INFERRED].** Reconciled with
+`studies/pvpui` FINDINGS §27, which had already identified the table, measured the
+percent<<24 value shape over 38 connections, shown that the ensure runs BEFORE the
+bounds check (one send REGISTERS an id — the `--hero-char` arm depends on that), and
+found `GmAgentDoll`'s `CharBy` indexing the same table for the commander paperdoll;
+its interim mechanism-name `GAME_SMSG_CHAR_TABLE_VALUE` stands grandfathered in
+`authsrv.py`. What was missing was WHO READS `+0x30`, and the answer earns the
+consumer-name: the `+0x30` consumer §4 asked for is the COMPOSITE pipeline. Getter `0x0080CD00` (ChCliApi:3804
+`targetDef == GW_AGENTDEF_CHAR`) resolves the agent's char record — the message's key
+is an agent id BY THE CLIENT'S OWN TYPING (msgshape recovers `[agent_id, u32]`) —
+and falls back to the `0x0056`/`0x0057` definition record's slot +8 when the char
+record is invalid. Caller `0x0082F520` (CpsMonster.cpp) takes the value >> 24,
+multiplies by f32(0.01) from `.rdata 0x946e58`, and applies it to the composite
+unless the byte is 100; `0x00831D30` (CpsTex.cpp) picks texture resolution from it
+(`s_scaleR`). Wire: 965/965 values are a pure top-byte percent (low 24 bits zero),
+span 8..115, 100 × 908 — town children at 43%, giants at 115%. **This also settles a
+question another study priced at a client launch**: `studies/smsg` FINDINGS' 0x0056
+row left "is field 4's 100/120/150 a scale percentage" open pending a
+photograph-the-model probe; the ×0.01 on the composite answers it statically, and the
+gw-preservation `scale` gloss (UPSTREAM at `studies/enemy/PLAN.md` §"dword 4") is now
+CORROBORATED by the binary. Caveat carried in the entry: the definition-side sibling
+dword packs hue/sat/lightness below the scale octet (UPSTREAM); retail has never sent
+those bits on THIS message, and if one ever arrives, SCALE under-names the payload.
+
+**Still held, and why:** `0x003C`/`0x00B0` (the player-record pair) and `0x008D`
+(the marker store) — mechanisms in §4, consumers unread; nothing new this pass.
+`0x003E`'s narrowing to a view-unlink name (critic §6) also remains open.

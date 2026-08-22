@@ -2987,6 +2987,205 @@
     "name": "AGENT_ADRENALINE_SPEND",
     "name_confidence": "high",
     "why": "OBSERVED static + MEASURED live (pinned pristine build 38797), studies/skills/FINDINGS.md 26. THE SPEND, AND THE CROSS-POOL TAX. Wire [agent_id, u16 skill_id, u32 skill_copy], 12 B -- no amount, because the amounts are the client's own two constants. SHAPE CROSS-CHECKED against the client's recovered descriptor: msgshape.py 210 -> cmds ['0xd2', '0x10', '0x204', '0x404'] = [agent_id, u16, u32], wire 12 bytes, identical to the imported catalog, so this row changes NO field list and cannot affect decoding. DISPATCH, one caller per link: RECV table 0x00BC8F68 -> stub 0x0091F460 -> thunk 0x00814570 (`add ecx,0x6F0`, hotKeyState) -> worker 0x00821C00. SOURCED at the entry: assert ChCliSkill.cpp:463 'skill' at 0x00821C16 guards `test edi,edi` on field 2. THE WORKER walks all 8 slots and skips ONLY EMPTY ones (0x00821C45 `mov eax,[edx+0xC] / test / je`) -- unlike 0x00CF it does NOT skip a RECHARGING slot, so a pool on a recharging skill is taxed too. The slot matching (skillId, skillCopy) is driven to 0; every other occupied slot runs `mov esi,[eax+edx] / cmp esi,0x19 / jbe -> 0 / else add esi,-0x19` (0x19 = 25 decimal) over BOTH halves in a two-iteration inner loop -- 0x00821C63 `lea eax,[ecx*4]`, 0x00821C7E `mov [edx+eax],esi`, 0x00821C81 `cmp ecx,2` -- and one repaint 0x10000059 covers the whole pass. That is GWW's on-use rule word for word (Adrenaline, rev 2026-07-02): the used skill's pool resets to zero and every other adrenal skill loses one strike, floored at zero. LIVE: 39 occurrences over 49 GAME_SMSG connections and 114,985 messages, skill ids {382: 20, 384: 11, 385: 8}. HIGH: the chain is single-caller, the arithmetic is read instruction by instruction, ArenaNet's own assert names field 2, and the behaviour reproduces a twenty-year-old player-visible rule that nothing here was tuned against. THE NAME IS INFERRED -- no ArenaNet string names this message; SPEND is our summary of what the handler does."
+   },
+   "154": {
+    "opcode": 154,
+    "table": "GAME_SMSG_0154",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 154
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SET_MODEL_SCALE",
+    "name_confidence": "medium",
+    "why": "OBSERVED mechanism, INFERRED name -- no ArenaNet string names this MESSAGE; 'model' and the arithmetic are the client's words. Handler 0x0091ec40 -> 0x00812640: ensures the ChCli char record table (ctx+0x2C +0x7CC, count +0x7D4, stride 0x38) to field1+1 and stores field2 at record+0x30 -- the slot beside 0x009B AGENT_SET_NAME's +0x34, same record. KEY IS AN AGENT ID BY THE CLIENT'S OWN TYPING: msgshape recovers cmds ['0x9a','0x10','0x404'] = [agent_id, u32]. THE CONSUMER CHAIN IS READ, and it is the composite pipeline: getter 0x0080CD00 (ChCliApi:3803 'result' / :3804 'targetDef == GW_AGENTDEF_CHAR') resolves the agent's char reference (obj+0x1C, fallback +0x18; class tag 0x2), returns record+0x30, and FALLS BACK to the 0x0056/0x0057 definition record's slot +8 when the char record's validity byte +0x33 is clear -- so this message is the per-agent OVERRIDE of the definition's packed visual-adjust dword (0x0056 field 4, whose top octet gw-preservation sends as 0x64000000 and names 'scale', UPSTREAM). Two callers: 0x0082F520 in CpsMonster.cpp takes the value >> 24, multiplies by .rdata double 0.009999999776482582 = f32(0.01) at 0x946e58, and applies the product to the composite unless the byte equals 100 (cmp al,0x64); 0x00831D30 in CpsTex.cpp (s_scaleR, 'resolution < arrsize(s_scaleR)' CpsTex:199) picks texture resolution. That arithmetic settles studies/smsg FINDINGS' open question on 0x0056 field 4 ('is 100/120/150 a scale percentage') statically -- the probe it priced is no longer needed. LIVE: 965 messages over the corpus; every value is a pure top-byte percent (low 24 bits zero in 965/965), range 8..115, 100 in 908 -- town children at 43, giants at 115. CAVEAT the name carries: the definition-side sibling dword packs signed hue/sat/lightness in the low bytes (UPSTREAM); retail has never sent them on THIS message, and if one ever arrives SCALE under-names the payload. PRIOR WORK this promotion stands on: studies/pvpui FINDINGS 27 had already identified the table, measured percent<<24 over 38 connections, shown the ensure runs BEFORE the bounds check (one send REGISTERS an id -- the --hero-char arm uses that), and found GmAgentDoll's CharBy indexing the same table for the commander paperdoll; its interim name GAME_SMSG_CHAR_TABLE_VALUE (authsrv.py constant, grandfathered) named the mechanism, this entry names the consumer. studies/smsgnames FINDINGS 9."
+   },
+   "327": {
+    "opcode": 327,
+    "table": "GAME_SMSG_0327",
+    "declared_unpack_size": 13,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 327
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_UPDATE_EQUIP_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED, and the set bound is ArenaNet's own assert. Fields [inventory key u16, set u8, item id u32, item id u32]. Handler 0x008463c0 resolves the inventory by hashed key (ItCliApi:2077 'inventory', table ctx+0xD4) and each item id in the item table (ctx+0xB8) with 0 = null accepted without assert, then worker 0x0084A560 asserts set < ITEM_PLAYER_EQUIP_SETS = 4 (ItCliInv:375 'set < ITEM_PLAYER_EQUIP_SETS', cmp edx,4) and stores the PAIR into the per-set two-pointer slot at inventory+0x64+set*8. Each displaced/installed item's membership bitmask at item+0x4E is maintained with btr/bts (the mask ItCliInv:348 names: '!(setMask & ~ITEM_EQUIP_SET_MASK)') and UI frame event 0x100000F0 fires per change. The 4-set array ends at +0x84, exactly where 0x0148 keeps the ACTIVE set index. LIVE: 236 messages over the corpus = 59 complete four-set tables (set indices 0,1,2,3 each x59 -- the server streams ALL FOUR per character load), zero out-of-bounds sets; 472 item refs = 383 null + 89 declared by a prior 0x015E/0x0161 in the same connection, 0 undeclared; 236/236 inventory keys declared by a prior 0x0144; pair asymmetry: A-only occurs 17 times, B-only never -- A is the weapon hand. studies/smsgnames FINDINGS 9."
+   },
+   "328": {
+    "opcode": 328,
+    "table": "GAME_SMSG_0328",
+    "declared_unpack_size": 5,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 328
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_SET_ACTIVE_EQUIP_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED, same assert vocabulary as 0x0147. Fields [inventory key u16, set u8]. Handler 0x00846450 resolves the inventory (ItCliApi:2095 'inventory'), worker 0x0084A340 asserts set < ITEM_PLAYER_EQUIP_SETS = 4 (ItCliInv:329) and, ONLY when inventory+0x84 differs from the message's set, stores it and posts UI frame event 0x100000E9 with {old, new} -- a change-detected active-weapon-set switch, the client half of F1-F4. Both workers early-out when inventory+0x8C bit 0 is set (a lock/suppression bit, unread further). LIVE: 59 messages, one per 0x0147 four-set table, every one set 0 and every key declared by a prior 0x0144. studies/smsgnames FINDINGS 9."
+   },
+   "350": {
+    "opcode": 350,
+    "table": "GAME_SMSG_0350",
+    "declared_unpack_size": 25,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 350
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_LOW_DETAIL",
+    "name_confidence": "medium",
+    "why": "OBSERVED, and the name is the client's own vocabulary read off a bit this handler DOESN'T set: ItCliApi asserts 'IsDetailHigh()' 20+ times, the accessor is test byte [item+0x40], 2 (read at 0x0084816B under ItCliApi:66 'baseItem->IsDetailHigh()'), 0x0161's installer SETS that bit and this message's path never does. Handler 0x00846fa0 (fileId guard ItCliApi:2410 'msg.fileId') passes fields 1-9 to the shared builder 0x00848450 -- the COMPLETE payload of this message and exactly the subset 0x0161 shares -- then raises refresh 0x848b70 only if the item already existed (the builder's out-flag; a fresh declare draws nothing). BUILDER FIELD MAP (msg field -> item record): f2 fileId & 0x7FFFFFFF -> +0x1C, stored with its top bit split off -- top bit set requests a deferred fetch via 0x0084BE50(ctx+0x60, id, 1) unless bit 2 of the masked id is set; f3 -> byte +0x20 (type); f4 -> byte +0x21; f5 -> word +0x22; f6 -> word +0x48 stored as f6-1 with 0x5DD=1501 the f6==0 default, paired with f7 -> byte +0x4A (only written when f6 != 0); f8 -> +0x28 (flags); f9 -> +0x24 (value). Re-declare of an existing id preserves +0x44 and flag bit 2 only; +0x4F is initialised to 0xB (the 0x015A row's constant). LIVE: 4,210 messages; the fileId top bit is 0/4,210 here vs 697/2,235 on 0x0161; id domains overlap 0x0161's by only 86 of ~3,100 -- the low-detail stream declares OTHER agents' visible items, the high-detail one your own. f4/f5/f6/f7 SEMANTICS remain unnamed by any assert (our sender's dye_tint/dye_colors/materials/unk1 vocabulary is UPSTREAM); the store offsets above are what the binary gives. studies/smsgnames FINDINGS 9."
+   },
+   "353": {
+    "opcode": 353,
+    "table": "GAME_SMSG_0353",
+    "declared_unpack_size": 425,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 353
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 64
+     },
+     {
+      "type": "nested_struct",
+      "length": 64
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_HIGH_DETAIL",
+    "name_confidence": "high",
+    "why": "OBSERVED, the client's own bit vocabulary: handler 0x00846d70 (fileId guard ItCliApi:2505) runs the SAME builder 0x00848450 on fields 1-9 as 0x015E, then installer 0x00848250 (ItCliApi:240 'item') adds the high-detail payload -- f10 model_id -> +0x2C, f11 quantity word -> +0x4C (over the builder's default 1), f12 name (wire field TWELVE, string16(64)) wcslen-copied to +0x34, f13 code[] (field THIRTEEN, nested) reallocated at +0x10 with count+1 at +0x14 -- and then ors [item+0x40] |= 2, THE IsDetailHigh BIT (test byte [item+0x40],2 under ItCliApi:66 'baseItem->IsDetailHigh()'). Field indices 12/13 corrected per msgshape from an earlier 11/12 draft (smsgnames critic). THE TERMINATOR IS REFUSED ON THE WIRE: ItemCode:516 asserts '!count || code[count-1] != ITEM_CODE_TERMINATOR' -- the message must arrive WITHOUT 0xC0000000 and the client appends its own; a server that sends the sentinel trips the assert. Prediction confirmed with no free parameter: 0 terminator dwords in all corpus code[] entries. LIVE: 2,235 messages; quantity is 1 x2,234 and 3 x1; the name string is near-empty (length 1) in 1,651 -- standard items resolve names from the code words, only named items carry text; declared field 14 (trailing u32) is ABSENT from every retail message (0/2,235), settling studies/smsg FINDINGS' open question -- the client's format table declares a slot retail never fills. The last of the 66 functions question: the installer itself walks the code words and interprets exactly one identifier family (bits 29-20 == 647) inline, consistent with studies/itemmods 4.1's sixteen-site census. studies/smsgnames FINDINGS 9."
    }
   }
  }

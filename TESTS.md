@@ -5177,6 +5177,25 @@ Every one of these, in the order they were written:
   raw they make the angle check compare garbage to pi AND make the turn-rate check pass
   vacuously — and the third conflated "arrives before its create" with "names an agent
   never created", which are different facts),
+  `toolkit/authsrv/test_itemdetail.py` (**the five GAME_SMSG names of the 2026-08-22
+  static pass — ITEM_LOW_DETAIL/ITEM_HIGH_DETAIL, the equip-set pair, and
+  AGENT_SET_MODEL_SCALE — held to what a `.raw` can arbitrate**, so the corpus can take
+  a name back; the binary-side claims (the builder `0x848450`'s field map, the
+  IsDetailHigh bit, assert text) live in `studies/smsgnames` §9 and each overrides why,
+  not here. The invariants: ZERO `ITEM_CODE_TERMINATOR` dwords arrive across all corpus
+  code[] words — ItemCode:516 REFUSES a wire terminator and the client appends its own,
+  a prediction with no free parameter; `0x0161`'s declared field 14 is absent from every
+  retail message (the format table declares a slot retail never fills); the fileId
+  deferred-fetch top bit rides ONLY the high-detail stream; the server streams the
+  COMPLETE four-set equip table (four indices in equal counts, never partial) with every
+  set index under the client's own `ITEM_PLAYER_EQUIP_SETS = 4` bound, every inventory
+  key declared by a prior 0x0144 and every non-null item ref by a prior declare; and
+  every `0x009A` value is a pure top-byte scale percent — the packed word's UPSTREAM
+  hue/sat/lightness low bytes never arrive on retail, 100% dominant (CpsMonster's no-op
+  case). Counts are pinned as floors so the pins survive corpus growth; the A-only/
+  B-only pair asymmetry is printed, deliberately not asserted. Also ties the names to
+  the invariants: section 1 goes red if `schema/overrides.json` renames or drops any of
+  the five. Needs `vault/captures/live/`, skips declared if absent; floor 19),
   `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the
   three ways it answered confidently about a corpus it had not read: it took the
   newest **6 of 439** gamesrv captures, it read the c2s direction off the server's

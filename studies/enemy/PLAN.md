@@ -161,7 +161,7 @@ same message. The result:
 | dword 1 | NPC model id (definition index) | Fournux + gw-pres (which calls it `agentId` and passes `definitionIndex` — a stale name) |
 | dword 2 | **model file id** — the `Gw.dat` resource | both |
 | dword 3 | skin file id | Fournux names it; gw-pres sends 0 |
-| dword 4 | packed visual adjustment: signed hue, sat, lightness, then **unsigned scale %** | Fournux's decode; gw-pres sends `0x64000000` and calls the field `scale` — `0x64` = 100 % in the high byte, which independently confirms both the meaning and the byte order |
+| dword 4 | packed visual adjustment: signed hue, sat, lightness, then **unsigned scale %** | Fournux's decode; gw-pres sends `0x64000000` and calls the field `scale` — `0x64` = 100 % in the high byte, which independently confirms both the meaning and the byte order. **Scale octet UPSTREAM → CORROBORATED 2026-08-22** (`studies/smsgnames` §9): our own disassembly shows CpsMonster reading this slot (via getter `0x0080CD00`'s fallback), taking the top byte × f32(0.01), and applying it to the composite unless it is 100 — the client's own arithmetic, no launch needed. The per-agent override is `0x009A AGENT_SET_MODEL_SCALE`. |
 | dword 5 | appearance value | Fournux names it; gw-pres sends 0 |
 | dword 6 | NPC flags | both; gw-pres sends `0x20C` |
 | byte 1 | primary profession | both |

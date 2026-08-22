@@ -973,13 +973,22 @@ def item_template(key):
 def named_item(item_id, item):
     """GAME_SMSG 0x0161 CREATE_NAMED_ITEM -- declares an item's bytes.
 
+    (The schema's earned name is ITEM_HIGH_DETAIL as of 2026-08-22 -- the
+    handler runs 0x015E's builder and then installs name/code[]/model/quantity
+    and sets the bit ItCliApi:66 asserts as IsDetailHigh(). This helper keeps
+    the name it was minted under; studies/smsgnames FINDINGS 9 has the map.)
+
     Declares only. Nothing is placed in a bag and nothing is worn: those are
     ITEM_MOVED_TO_LOCATION and the equipment messages respectively. See
     studies/character/FINDINGS.md section 2.
 
     The trailing modifier list is the client's field type 12, whose element
     layout is the schema tail and whose wire count is ONE byte -- so each
-    modifier is passed as a single-element row.
+    modifier is passed as a single-element row. NEVER append the 0xC0000000
+    ITEM_CODE_TERMINATOR: ItemCode:516 asserts the wire list arrives WITHOUT
+    it ('!count || code[count - 1] != ITEM_CODE_TERMINATOR') and the client
+    appends its own -- a server that sends the sentinel trips the assert.
+    Retail: 0 terminators in 6,806 corpus code words (test_itemdetail).
     """
     return [item_id, item["file_id"], item["item_type"], item["dye_tint"],
             item["dye_colors"], item["materials"], item["unk1"], item["flags"],
