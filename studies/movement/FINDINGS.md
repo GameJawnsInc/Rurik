@@ -5233,3 +5233,110 @@ re-applies a destination seconds later (REALFIX-Q5) — and needs a movetap on
 
 **The control is already banked**: L6 itself, `--grant-suppress` alone, 3 warps
 in 89 s at 2.02/min, same operator, same map, same day.
+
+## 2026-08-21 — ★ REALFIX-L7: the cold-latch branch reproduced ON PURPOSE, the palliative's parked copy finally MEASURED, and the overwrite hypothesis is still untested
+
+**OBSERVED, `ours`.** Two arms, map 148, build 38797, owner-driven under a
+**deliberate cold-latch protocol** — walk, release the key ~1 s, click far,
+resume — designed from L6's diagnosis to produce the branch that leaks past
+`--grant-suppress`. Control `20260821T210131`, treatment `20260821T210620`.
+**Both movetaps ran the full 199.9 s at 12.0 and 13.3 Hz** — against 8.4–9.5 in
+every earlier run and 12.5 s of coverage in L5's A3 — so for the first time in
+this regime **REALFIX-E on the rendered copy is admissible and carries the
+verdict**, which matters because the protocol's standing-still leaves the
+control's wire only **17% actively reported**.
+
+| | **control `--grant-suppress`** | **treatment `+ --zero-lead`** |
+|---|---|---|
+| **REALFIX-E events** | **1** | **0** |
+| max rendered step | **3,437.3 u** | **52.1 u** |
+| grants | 1 | 116 |
+| stops (`0x0047`) | 41 | 44 |
+| clicks | 25 | 33 |
+| clicks on a cold latch | 1 | 4 |
+| **cold-latch grants that ESCAPED** | **1** | **0** |
+| **separation p50 / p90 / max** | **1,970 / 3,914 / 4,718 u** | **369 / 514 / 2,034 u** |
+| samples above the gate-1 cut | 93% | 67% |
+
+`--plane-carry` was correctly **excluded** this run (`plane_carry = false` on all
+116 zero-lead rows), so the treatment is cleanly `--zero-lead --grant-suppress`.
+
+### 1. The protocol worked, and the conversion is now 3 for 3
+
+The control's single event is **3,437.3 u**, and its next largest rendered step
+is **42.9 u** — one discontinuity, nothing marginal. Anchored on REALFIX-T1 at a
+**0.218 ms** clock residual, it lands **0.0 u from the granted destination,
+10.1 s after the grant**, and the grant fired with **`keyboard_age = None`** —
+the cold-latch branch, produced deliberately rather than stumbled into.
+
+**Across L6 and L7 the cold-latch conversion is 3 of 3 clean instances**
+(L6 warps 1 and 3 at 27.9 u / 8.82 s and 0.0 u / 6.88 s; L7 at 0.0 u / 10.1 s).
+**A grant that escapes rule 1 lands the player on its destination 6.9–10.1 s
+later.** That is a reproducible, prospectively-triggered defect.
+
+**And it reconciles L6's ambiguous warp 2.** At the event, separation collapses
+**3,418.97 → 0.0 u** while the landing sits 0.0 u from the granted point: the
+SYNC copy had *walked to* the granted destination over those 10 s, and the
+rendered character was reseeded **onto the copy**. Landing-on-the-grant and
+landing-on-our-model are not rival readings — they are the same point, because
+the copy integrates toward what we granted. L6's warp 2 was ambiguous for
+exactly this reason and stays withdrawn.
+
+### 2. ★ THE PALLIATIVE'S PARKED COPY, MEASURED — and it supplies what L5's W5 said did not exist
+
+L5 withdrew "fixed, not quiet" partly because *"no separation measurement of the
+palliative exists anywhere in the vault."* **It exists now, on the same metric,
+same instrument, same run, same operator, both arms:**
+
+**bare `--grant-suppress` parks the authoritative copy at p50 1,970 u
+(p90 3,914, max 4,718). Adding `--zero-lead` pulls it to p50 369 u — 5.3× —
+while events go 1 → 0.**
+
+This is the L1 quantity (SYNC copy against the client's own report — what aggro,
+interact range and `clip_to_walkable` actually read), so it is comparable to
+L1's 4,402 u parked default, and it is **not** the cross-metric `drift`
+comparison W5 struck. **The composite's claim is no longer "fewer warps" — which
+this run cannot power — it is "the same silence without the parked copy", and
+that contrast is large and well sampled (2,406 and 2,661 samples).**
+
+**A second cost of parking, newly visible: the parked copy sets the warp's
+SIZE.** The control's event magnitude (3,437 u) is its separation (3,419 u).
+`--grant-suppress` trades warp frequency for warp magnitude, because the copy
+drifts further before the reseed lands on it.
+
+### 3. ⚠ THE RUN DID NOT TEST WHAT IT WAS BUILT TO TEST
+
+**The overwrite hypothesis remains UNTESTED, and this is the second run in a row
+to fail on exposure rather than on effect.** The treatment let **no** cold-latch
+grant out at all, so no lingering destination ever existed for an overwrite to
+race. The warp contrast is **1 against 0** — n = 1 per arm, statistically
+nothing, and the composite's zero is again *untested exposure* rather than a
+demonstrated save.
+
+**What DID appear is a different protective mechanism, caught once in the act.**
+At **t+211.41** a click landed on a cold latch, passed rule 1 — and was refused
+`rate-limited` by **rule 2**, because a zero-lead grant had stamped the shared
+`grant_at` **0.40 s earlier** (`t+211.015`). **`--zero-lead` protects by
+PREEMPTING the click grant on the shared clock, not by overwriting a destination
+after the fact.** The other three cold-latch clicks were refused upstream by the
+geometry/staleness gates and never reached a verdict.
+
+**Preemption is arguably the better mechanism** — it stops the packet at source
+rather than racing it — but **n = 1**, and it is not what was pre-registered.
+**My L6 prediction stays CONTESTED**: nothing here shows whether the client
+honours an overwrite, because no overwrite ever had a target.
+
+### 4. What the next run must do differently
+
+The exposure problem is now the binding constraint two runs running, and its
+cause is measurable: **of 58 clicks across both arms, only 5 landed on a cold
+latch and only 1 escaped**. The deliberate protocol produced plenty of stops
+(41 and 44) but too few clicks, and most clicks died upstream in the click arm's
+geometry gates ("not a straight shot", "cannot place them").
+
+**To test the overwrite specifically, the click must be allowed OUT and the
+overwrite must be the only thing standing between it and the warp.** That means
+an arm where rule 2 cannot preempt it — i.e. the shared clock must be free at
+the moment of the click. **Neither this run nor L5 can be re-analysed into that;
+it needs a build change or a protocol that clicks immediately after a heading
+grant's floor expires, and it should be priced before it is run.**
