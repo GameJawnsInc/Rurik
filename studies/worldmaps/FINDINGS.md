@@ -837,3 +837,47 @@ W12's clipped band, W16's short leg and W18's ambiguous window, which were all
 caught after. `deploy.readback`'s row was reworded from "the spawn" to "the
 flood seed" in the same commit, because that wording is what made the error easy
 to make.
+
+## WORLDMAPS-W19 — 45 degrees is a BOUNDARY, positive and negative in one arm. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two walks, ONE compiled map, one
+threshold set, one spawn).** W17 moved the walkability cut 35° → 45° and W18
+walked the ground it recovered — but both tested slopes **below** the new cut,
+so neither could distinguish "the boundary moved" from "the classifier stopped
+excluding things".
+
+| arm | strip | snapped slopes | max y in band | verdict |
+|---|---|---|---|---|
+| **S4** | 4 | 41.52–42.51° | **3,064** | climbs to the plateau |
+| **S5** | 5 | 46.45–47.84° | **1,728** | stopped at the apron top, to the unit |
+
+**Separation 1,336 u inside a single threshold set.** Both arms served the same
+`14 trapezoids` map, so there was no fall-back to the cut-35 blob — which would
+have failed P1 and passed P2 exactly as a real "boundary is 40" result would.
+Both bands were populated (10 and 8 samples), so S5's refusal is measured rather
+than an empty window read as a negative.
+
+**Every prediction confirmed as registered** — the first rung in this arc with
+no caveat, and that is because the design was adversarially reviewed BEFORE it
+ran rather than diagnosed after.
+
+**The review caught a fatal.** The first draft moved the start line with
+`seed_x`, which is the compiler's FLOOD SEED and not the player's spawn: both
+arms would have started at (1536, 1536), both scoring bands would have been
+empty, and P1-refuted/P2-confirmed would have been fabricated from one
+non-event. It also caught that `gen_ramp` blends `dz` per column, so every strip
+boundary is a wall (gx 18 = 42–59°, gx 24 = 47–63°, gx 30 = 68–85°) and the
+draft's bands each contained one. Corrected bands are the uniform-slope spans,
+x ∈ [1824, 2304] and [2400, 2880].
+
+**The corrected design needed no new content at all**: the apron is one flat
+slab (x 0..3072, y 0..1728), so the start line moves by WALKING EAST before
+turning north — one install, two walks, byte-identical archive state, which
+dissolves the "are these the same map" question instead of arguing it.
+
+**Scope.** Where between 42.51° and 46.45° the cut actually sits is not settled;
+the strips bracket it without bisecting it, and the static read's 45.0 is
+consistent but unconfirmed. Class 2 ground (between 40 and 45 under set B) is now
+known walkable and traversable, but whether it differs from class 0 in cost or
+behaviour was not measured. Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W19-RUN.md` §RESULTS.
