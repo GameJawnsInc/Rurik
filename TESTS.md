@@ -5174,6 +5174,44 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_typenames.py` (**WHAT THE CLIENT CALLS EACH SKILL
+  `type_code` — from the client's own switch, not from a wiki**.
+  `studies/presearing/MANIFEST.md` §8 named ten of the thirty codes by Rosetta
+  stone — pick skills whose type is known from outside, read their `+0x0C` —
+  and left **eleven UNKNOWN**; `PLAN.md` §8 item 5 singled out **16** because it
+  sits on this server's own default bar. None of that Rosetta work was
+  necessary: the namer at `0x004F9BF0` reads `[skillRecord+0x0C]` and hands it
+  to a 29-case switch at `0x004F9DD0` whose every case computes a **string id**,
+  and whose default arm logs ArenaNet's own sentence *"There is no string to
+  describe skill %u's type."* — which is the strongest single piece of evidence
+  that this is the type namer and not some other switch on some other field.
+  **§4 is the whole argument and it is a control, not an assertion.** The index
+  bias is the only free parameter in the derivation, and at `type_code - 1` all
+  **ten** independently-named codes resolve EXACTLY to the ten words that
+  document already used — then the same check is re-run at bias 0 and 2 and must
+  score **zero**, which it does. Without that second half the ten agreements
+  could be a table of plausible words meeting plausible guesses; with it, one
+  step either way breaks every known code at once. The exactness is load-bearing
+  and was learned the hard way: the first cut asked `expected in got`, and
+  `"Spell"` is a substring of `"Hex Spell"`, so the control leaked a false hit
+  and went red on its own weakness rather than on a real agreement. §3 reads the
+  switch as **arithmetic** — bias from `dec eax`, bound from `cmp eax,imm8`,
+  default from the `ja`'s rel32, table from the `jmp [eax*4+imm32]`'s imm32 —
+  then walks all 29 entries against the pins: 25 agree and exactly the four
+  special codes land on the default arm, each for a *different* reason (14 is
+  intercepted upstream because an attack's name depends on the weapon; 17 and
+  18 are refused on purpose and return the null record; 22's name is not a
+  constant at all). **§5 answers item 5**: type 16 is displayed as **"Skill"** —
+  and so is type 10, from a **different string record**. Both halves are
+  asserted, because same-id would mean our decode collided and a different word
+  would mean 16 is a type nobody has heard of. §5 also pins the *address* of
+  16's arithmetic, `0x004FA34B`, deliberately: the agent that first found this
+  cited `0x004FA2F9`, which is the tail of the type-20 case — right conclusion,
+  wrong citation, and a wrong citation is what makes a later reader's audit fail
+  and look like the claim failed. **IDS, NOT WORDS, ARE WHAT THE MODULE STORES**
+  — CLAUDE.md's "commit the id, resolve the string at run time from the owner's
+  own archive" — so §§1–2 run on a bare machine and the archive half declares a
+  skip. Floor 6 of a 16-check green run. ~4 s),
   `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
   and the numbering verdict it settles. `studies/combat/PLAN.md` carried
   "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —
