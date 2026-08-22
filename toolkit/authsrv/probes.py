@@ -2132,6 +2132,126 @@ def _morale_store_steps(agent_id):
     ]
 
 
+def _regen_channel_steps(agent_id):
+    """MORALE-Q3: does property 43 on 0x00A3 write the same regen store as 0x00A2?
+
+    WHAT IS ALREADY KNOWN, and why this probe still runs. Statically, 0x00A2 and
+    0x00A3 funnel to one dispatcher (0x00818210, case 3 for property 43 --
+    studies/agentprops FINDINGS 1d/3), so the channels should be equivalent. And
+    Run 3 arm A's own frames (20260822T140922, read 2026-08-22) show the client
+    INTEGRATING at the A3-sent rate: after the first revive the energy readout
+    climbed 10 -> 13 -> 17 -> 20 at 0.99/s, exactly the 0.045 x 22 this server
+    had sent on 0x00A3, with three regen arrows drawn for a 3-pip rate it only
+    ever heard on 0x00A3. But that consumption was observed inside a death
+    batch; per the house rule the trigger context is part of the claim, so this
+    probe asks the same question with no death anywhere near it, one variable
+    at a time, with the flat state as its own control.
+
+    THE SIGNAL IS A SLOPE, not a pixel: the readout either climbs ~2 energy per
+    second (unmistakable across 2 s frames) or sits flat. Change of shape, not
+    of timing. Fixed-position HUD only -- agent-pilotable.
+
+    THE DRAIN COMES FIRST, then the rate games, so every climb starts from a
+    nearly empty bar and has ~11 s of visible travel. Values are chosen to be
+    nothing the session already shows: 6 pips (0.0792) is double the spawn rate
+    and no armour row; the drain leaves ~3 energy, a number the pool never
+    otherwise holds here.
+    """
+    REGEN, SPEND = 43, 62
+
+    return [
+        # Q3-P1 -- the plain channel can zero the rate (also the A2 control)
+        Step(4.0, 0x00A2, [REGEN, agent_id, _f32(0.0)],
+             "property 43 = 0.0 on 0x00A2 -- kill the rate on the PLAIN channel",
+             "the three regen arrows right of the energy number. They should "
+             "vanish. This is the A2 half of the control pair: the plain "
+             "channel demonstrably reaches the store."),
+        # the drain, so a climb has somewhere to go
+        Step(6.0, 0x00A2, [SPEND, agent_id, _f32(-0.88)],
+             "property 62 = -0.88 -- spend 22 of the 25 pool",
+             "the energy readout drops to ~3. With the rate at zero it must "
+             "then sit FLAT: two consecutive frames at ~3 are the null "
+             "baseline every later step is read against."),
+        # Q3-P2 -- flat across the wait; nothing sent here
+        Step(10.0, 0x00A3, [REGEN, agent_id, agent_id, _f32(0.0792)],
+             "property 43 = 0.0792 (6 pips over 25) on 0x00A3 -- THE QUESTION",
+             "the readout and the arrows. If the TARGET channel writes the "
+             "same store, the number starts climbing at ~2.0/s -- roughly +4 "
+             "per 2 s frame, from ~3 toward 25 -- and the arrow count jumps. "
+             "If the client ignores property 43 on 0x00A3, nothing moves for "
+             "the next 12 s and the pre-merge server was feeding a dead "
+             "channel, which arm A's frames already argue against."),
+        # Q3-P4 -- the plain channel can stop what the target channel started
+        Step(12.0, 0x00A2, [REGEN, agent_id, _f32(0.0)],
+             "property 43 = 0.0 on 0x00A2 -- stop the climb from the OTHER channel",
+             "the climb freezes and the arrows vanish again. One store, both "
+             "channels writing it, is the reading that makes retail's A2 and "
+             "our historical A3 interchangeable in fact."),
+        Step(8.0, 0x00A2, [REGEN, agent_id, _f32(0.0396)],
+             "property 43 = 0.0396 -- restore the shipped 3-pip rate",
+             "three arrows return and the bar walks back to full at ~1/s. The "
+             "client is left in the state the server believes it is in."),
+    ]
+
+
+def _prop54_steps(agent_id):
+    """MORALE-Q4: what does int property 54 -- retail's revive rider -- do?
+
+    THE ONE SIGHTING is `0x009F [54, 27, 22]` in the 20260817T183756 revive
+    batch, value equal to the (penalised) maximum energy the same batch
+    restores. The obvious reading -- "another max-energy channel" -- is
+    statically DEAD on this build: the int path's pool dispatch (0x00818170)
+    returns for everything but 32/41/42, and property 54's real arm
+    (0x00812E57, third dispatch) writes no store at all. It queues AgentView
+    EFFECT event kind 0x0D, whose drain (0x007FA42B -> 0x007EBD30) posts UI
+    event 0x1000000F carrying the value -- behind three gates (a global, an
+    FP screen-space check, `byte [char+0x71] > 1`). Property 54 is a
+    NOTIFICATION, not state, and the notification's face is what this probe
+    is for.
+
+    VALUES ARE CHOSEN TO BE NOTHING ON SCREEN: 13 and 5 match no pool, no
+    maximum, no level. If any transient renders a number, the number names its
+    own source. Each value goes out twice ~8 s apart because a callout can
+    live shorter than the 2 s frame cadence -- and the player-body mask trap
+    (screenshot scorer) does not apply: these frames are read by eye, whole.
+
+    THE CONTROL IS PROPERTY 41 at the end: the same opcode, same agent, must
+    move the energy maximum 25 -> 19 -> back, or the whole run measured a
+    dead channel rather than a silent property.
+    """
+    P54, ENERGY_MAX = 54, 41
+
+    return [
+        Step(4.0, 0x009F, [P54, agent_id, 13],
+             "int property 54 = 13 on 0x009F -- retail's revive rider, alone",
+             "everything: both bars and their numbers, the corner, chat, and "
+             "any TRANSIENT over the character or the HUD. Statically this "
+             "posts UI event 0x1000000F with the 13; whether that draws a "
+             "floating number, flashes the orb, or is swallowed by a gate is "
+             "exactly what a frame can say."),
+        Step(8.0, 0x009F, [P54, agent_id, 13],
+             "int property 54 = 13 again -- a transient needs two chances",
+             "same watch. A callout shorter than the frame cadence gets a "
+             "second shot at landing inside one."),
+        Step(8.0, 0x009F, [P54, agent_id, 5],
+             "int property 54 = 5 -- a different value",
+             "if anything rendered for 13, it must now render 5. A readout "
+             "that tracks our value is measurement; one that does not is "
+             "coincidence."),
+        Step(8.0, 0x009F, [P54, agent_id, 5],
+             "int property 54 = 5 again",
+             "same watch."),
+        # the instrument control -- same opcode, same agent, known-live property
+        Step(8.0, 0x009F, [ENERGY_MAX, agent_id, 19],
+             "property 41 = 19 -- POSITIVE CONTROL on the same channel",
+             "the energy maximum must read 19. If it does not, nothing above "
+             "counts as a null: the channel itself was dead."),
+        Step(6.0, 0x009F, [ENERGY_MAX, agent_id, 25],
+             "property 41 = 25 -- restore",
+             "the maximum back at 25, the state the server believes."),
+    ]
+
+
 def _title_track_steps(agent_id):
     """The title cluster 0x00F3-0x00F6, on our client for the first time.
 
@@ -6879,6 +6999,50 @@ PROBES = {
              "corner, which sits at (10,32)-(60,82) and which a crop starting "
              "at y=100 misses entirely. The HUD repaints on a ~1-4 s delay, "
              "so leave >=5 s between a send and its screenshot.",
+    ),
+    "regen_channel": lambda a, o: Probe(
+        question="MORALE-Q3: does property 43 on 0x00A3 (float-target) write "
+                 "the same regeneration store as retail's 0x00A2, outside a "
+                 "death batch?",
+        predicts="Q3-P1: zeroing the rate on 0x00A2 clears the regen arrows. "
+                 "Q3-P2: with the rate at zero a drained bar sits FLAT at ~3 "
+                 "across consecutive frames. Q3-P3, the question: 6 pips sent "
+                 "on 0x00A3 restarts the climb at ~2.0/s with the arrow count "
+                 "jumping -- favoured, because the two opcodes share dispatcher "
+                 "0x00818210 case 3 and because Run 3 arm A's frames already "
+                 "show a climb at an A3-sent rate. Q3-P4: a 0x00A2 zero stops "
+                 "the A3-started climb -- one store, two doors. A flat line at "
+                 "step 3 instead refutes the equivalence and makes the energy "
+                 "arc's channel move load-bearing after all.",
+        steps=_regen_channel_steps(a),
+        note="Runs with no enemy and no deaths on purpose: arm A's A3 "
+             "consumption was observed inside a death batch, and the context "
+             "is part of the claim. ~40 s of steps; pass --hold 70 --shots 2. "
+             "Read the energy readout as a SLOPE across frames, never as one "
+             "pixel.",
+    ),
+    "prop54": lambda a, o: Probe(
+        question="MORALE-Q4: int property 54, retail's revive rider (= 22, "
+                 "the restored maximum, in its one sighting) -- state or "
+                 "notification, and does anything draw?",
+        predicts="No store moves: the bars and maxima hold through four "
+                 "property-54 sends, because the int path's pool dispatch "
+                 "ignores 54 and its real arm only posts UI event 0x1000000F "
+                 "(AgentView EFFECT kind 0x0D) with the value. If the gates "
+                 "pass, some transient draws 13 and then 5 -- a floating "
+                 "number or orb flash naming its own trigger; if nothing "
+                 "draws, the UI arm is gated (byte [char+0x71] or the "
+                 "screen-space check) and 54 stays display-only with an "
+                 "unwitnessed face. Property 41 at the tail MUST move the "
+                 "maximum or the run is void.",
+        steps=_prop54_steps(a),
+        note="Statically walked 2026-08-22 on the pinned 38797: 0x00812E57 -> "
+             "0x007E0290 -> 0x007F7770 queues EFFECT kind 0x0D {which=0, "
+             "value}; drain case 0x0D at 0x007FA42B calls 0x007EBD30, which "
+             "posts UI event 0x1000000F -- and writes NOTHING. avevents.py "
+             "--id 54 reproduces the kind. ~42 s of steps; pass --hold 70 "
+             "--shots 2 and read the frames whole, by eye -- a transient can "
+             "die inside the shot cadence.",
     ),
     "faction_max": lambda a, o: Probe(
         question="Do the four one-dword messages 0x00EA-0x00ED set the "

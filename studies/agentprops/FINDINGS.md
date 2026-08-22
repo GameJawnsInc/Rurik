@@ -236,6 +236,23 @@ consistent with the OBSERVED behaviour in `studies/enemy/PLAN.md` §6g, where in
 property 42 set the maximum and refilled the bar, and it explains why int
 property 42 was the only one of four death candidates that visibly did anything.
 
+> **UNDER-SCOPED, and the scoping clause is what saved it — noted 2026-08-22.**
+> "To this record" was doing all the work in that sentence: `0x008128F0` does
+> not stop at `0x00818170`. Past the pool dispatch it runs a player-gated call
+> (`0x0081BC60`) and **two further property switches** — ids 4..64 over the
+> byte table at `0x00812EE0` (arms for 4/10/50/60/64), and ids 0..66 over the
+> byte table at `0x00812FE0`, where almost every id has a real arm. A reader
+> who dropped the scoping clause would have called int property 54 a no-op;
+> its arm is `0x00812E57`, it queues AgentView EFFECT event kind 0x0D, and at
+> a live client it draws a floating magenta "+N" energy callout over the agent
+> (`avevents.py --id 54`; `studies/morale/FINDINGS.md` §2.5, RUNS.md Run 6 —
+> the probe also re-confirmed 41 moving the maximum from the same channel).
+> The third dispatch is also where properties 41/42 reach the AgentView copy
+> of the maxima (`0x007E0310`), and its kind-0x03/0x08 arms write the
+> `+0x1B4`/`+0x1B5` allegiance/attackability bytes the allegiance arc measured
+> — the same record, met from the wire side. A handler list is a floor, not a
+> census: this file's own §1d default-arm lesson, replayed one dispatch deeper.
+
 ---
 
 ## 3. The jump table, exactly — SOURCED

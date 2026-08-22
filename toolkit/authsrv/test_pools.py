@@ -1141,6 +1141,16 @@ def section_death_and_revive():
     LEDGER.ok(state["energy"].current == state["energy"].maximum,
               "and the server's own pool is full again",
               f"{state['energy'].current}/{state['energy'].maximum}")
+    callouts = props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     agents.PROP_ENERGY_GAIN_CALLOUT)
+    LEDGER.ok(len(callouts) == 1
+              and callouts[0][2] == int(state["energy"].maximum),
+              "and int property 54 floats the whole refill as a '+N' callout",
+              f"{callouts} -- MEASURED 2026-08-22 (studies/morale RUNS.md Run "
+              f"6): 54 writes no store, it draws a magenta floating '+N' over "
+              f"the agent for ~2 s, so retail's [54, 27, 22] at the resurrect "
+              f"was the '+22' of a full refill. The value is the maximum "
+              f"because the client zeroed its pool at the death")
 
     print("\n8c. the DEATH PENALTY shape, which is why the rate is recomputed")
     pool = pools.EnergyPool(25, 4)
