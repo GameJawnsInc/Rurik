@@ -477,16 +477,32 @@ def assemble(area, heights, donor, dim, verbose=True):
         cells = pick_tree_cells(heights, dim, n_trees, seed_cell)
         if len(cells) < n_trees:
             raise Refused(f"only {len(cells)} flat cells for {n_trees} trees")
+        # An area may give its props a FOOTPRINT. `outline` is prop-LOCAL
+        # (i16 dx, i16 dy); the compiler rewrites it into the Bloated stream in
+        # world coordinates. Absent, it is empty -- which is what every prop
+        # this project placed before 2026-08-21 carried, and which is also what
+        # the MAJORITY of retail props carry (Kamadan: 516 props, 280 outline
+        # points between them). A square is used rather than a circle because
+        # the footprint is a closed ring of integer offsets and four corners
+        # plus the repeat is the smallest honest one; `Prop.closed` wants the
+        # first point repeated last, as 37,505 of retail's 37,548 outlined
+        # props do.
+        r = int(area.get("prop_outline", 0) or 0)
+        ring = ()
+        if r:
+            ring = ((-r, -r), (r, -r), (r, r), (-r, r), (-r, -r))
         props = []
         for gx, gy in cells:
             z = float(heights[trn_mod.Terrain.index(gx, gy, dim)])
             props.append(Prop(model=0, x=gx * 96.0 + 48.0, y=gy * 96.0 + 48.0,
                               z=z, rot=(0, 0, 0), scale=0x7F, flags=0,
-                              outline=()))
+                              outline=ring))
         kw["props"] = StrippedProps(props=props, refs4=[], refs6=None)
         kw["prop_dep_ids"] = [donor.prop_model_ids[0]]
         if verbose:
-            print(f"  props: {len(props)} at {cells}")
+            print(f"  props: {len(props)} at {cells}"
+                  + (f", each with a {2 * r}x{2 * r} footprint "
+                     f"({len(ring)} points)" if r else ", no footprint"))
 
     # The area may state the Map Parameters flags dword. Absent, it is 0 --
     # which is what every area before WORLDMAPS-W11 shipped. See

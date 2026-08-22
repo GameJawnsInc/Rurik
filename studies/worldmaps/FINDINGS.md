@@ -935,3 +935,51 @@ strips twice mid-run after a failed positive control, so P1–P4 do not apply
 cleanly to the configuration that produced the result and P5 is stale rather than
 refuted. The headline was not predicted at all. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W20-RUN.md` §RESULTS.
+
+## WORLDMAPS-W21 — authored props CAN block, and the footprint is honoured to the unit. 2026-08-21
+
+**OBSERVED (retail client, build 38797; one flat map, one prop, two arms one
+field apart).** Every prop this project has ever placed was scenery a character
+walks through: `Prop.outline` — the prop's footprint, which
+`StrippedProps.encode` has always written — was passed as `()` by `deploy` and
+never set by anything.
+
+**MEASURED first, offline**: retail props carry footprints only sparsely.
+Kamadan's **516 props share 280 outline points**; the biome donor's **864 share
+252**. So outline-free props are the retail majority and ours were not
+anomalous — what this project could not do was author the *other* kind.
+
+**It can now.** A prop given a 576×576 footprint:
+
+| | control (no footprint) | treatment (576×576) |
+|---|---|---|
+| mesh inside the footprint | — | **0 of 108 samples walkable** |
+| identical box beside it | — | 108 of 108 walkable |
+| character max x | **3072**, the map edge | 2846, having gone *around* |
+| trapezoids | 10 | 9 |
+
+Scanning the walk line at 2-unit resolution, **the last walkable x is 2640 and
+the hole begins at 2642** — authored half-width 288, observed 286. The footprint
+is honoured **1:1 in world units**; the `scale` byte does not scale it.
+
+**The character's own path confirms both authored edges to the unit.** It walked
+east, stopped with **x pinned at 2640.0** — 2928 − 288, the west edge — for five
+consecutive reports while sliding north, then rounded the corner at
+**y = 1776** — 1488 + 288, the north edge — and resumed east. That is collision
+and slide against the authored polygon.
+
+**The registered prediction was REFUTED because the statistic was wrong**, not
+the finding: I registered "max x ≤ 2700", and `max x` cannot distinguish
+*blocked* from *blocked and walked around*. The raw trace contains a far stronger
+result than the statistic could see. **Fifth instrument fault of this family in
+this arc**, and the first where the better answer was already sitting in the data.
+
+**What it gives the project**: authored maps can have obstacles, via one content
+field (`prop_outline`).
+
+**Scope.** Whether the footprint's SHAPE is used or only its bounding box is not
+settled — a square was authored and a square-consistent hole appeared, which one
+walk into one edge cannot distinguish; a non-convex outline would. Whether the
+prop MODEL contributes collision of its own is untested (all props here are
+`model=0`, and the control shows it blocking nothing alone). Full scoring in
+`vault/research/worldmaps/WORLDMAPS-W21-RUN.md` §RESULTS.

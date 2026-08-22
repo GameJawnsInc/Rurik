@@ -1895,6 +1895,30 @@ float32-vs-double differences rather than by the comparison operator. And I
 mutated the strips twice mid-run after a failed control, so its registered
 predictions do not apply cleanly to the configuration that produced the result.
 `vault/research/worldmaps/WORLDMAPS-W20-RUN.md`.
+
+**WORLDMAPS-W21: AUTHORED MAPS CAN NOW HAVE OBSTACLES.** Every prop this
+toolkit ever placed was scenery a character walks through -- `Prop.outline`,
+the footprint `StrippedProps.encode` has always written, was passed as `()` by
+`deploy` and set by nothing. MEASURED first: retail props carry footprints only
+sparsely (Kamadan's 516 props share 280 outline points), so outline-free props
+are the retail MAJORITY and ours were not anomalous -- what we could not do was
+author the other kind.
+
+One flat map, one prop, two arms one field apart. With a 576x576 footprint the
+client carves a hole in its own compiled navmesh: **0 of 108 samples walkable**
+inside it against 108 of 108 in an identical box beside it, and scanning at 2u
+the last walkable x is **2640** against an authored edge at 2928-288 = 2640.
+**The footprint is honoured 1:1 in world units.** The character's own path
+confirms both edges to the unit: x PINNED at 2640.0 for five consecutive
+reports while sliding north, then rounding the corner at y = 1776 (= 1488+288)
+and resuming east -- collision and slide against the authored polygon. The
+control, same prop with no footprint, walked clean past it to the map edge.
+
+The registered prediction was REFUTED because the STATISTIC was wrong -- max x
+cannot tell *blocked* from *blocked and walked around*, and the raw trace held
+a stronger result than it could see. Fifth instrument fault of this family.
+Untested: whether the footprint's SHAPE is used or only its bounding box.
+`vault/research/worldmaps/WORLDMAPS-W21-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
