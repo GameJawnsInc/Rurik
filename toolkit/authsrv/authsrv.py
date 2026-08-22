@@ -7594,10 +7594,21 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # The cast animation, in the OBSERVED player shape: 0x00A0
     # [60, caster, target, skill], 4 of 4 player activations in the live
     # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
-    # supports). GV_SKILL_FINISHED (58) is deliberately NOT sent: it appears
-    # ZERO times in 21,543 live messages, so emitting it would be invention
-    # -- if the loopback run shows the animation never ends, that absence
-    # becomes the next measured question, not a pre-answered one.
+    # supports). GV_SKILL_FINISHED (58) is still not sent, but the sentence
+    # that used to justify that here -- "it appears ZERO times in 21,543
+    # live messages" -- is REFUTED: a direct decode finds FIVE, each one
+    # [58, agent, 0] riding a cast-end instant (four at the necromancer's
+    # E5s, one on another connection -- studies/castmech 3b, 2026-08-22).
+    # Wiring it belongs to its own change, beside the prop-8 pairs (17 in
+    # the corpus, bracketing the press burst, meaning unread) and the
+    # queued-cast divergence noted below.
+    #
+    # AND THE INSTANT IS A DIVERGENCE FOR QUEUED CASTS, measured the same
+    # day: retail sends this property (and the energy debit) at CAST-BEGIN
+    # -- the press when the caster is free, the E3 instant when the cast
+    # was queued (skill 105's property 60 rides 153's E3, both cycles). We
+    # send both at the press always; for a queued cast that is early by the
+    # rest of the previous cast's aftercast.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
          f"cast animation: player casts {skill_id}")

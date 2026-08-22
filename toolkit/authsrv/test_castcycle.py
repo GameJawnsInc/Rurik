@@ -76,7 +76,9 @@ def section_press_shape():
         # sent[2], not [1]: the debit now sits between E4 and the animation
         check(sent[2][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 0, 42],
               "the animation carries the OBSERVED player shape (4/4 in the "
-              "live corpus); GV 58 is deliberately absent (0 of 21,543)",
+              "live corpus); GV 58 is still unsent -- though its old 'zero "
+              "in the corpus' ground is refuted (5 at cast ends, castmech "
+              "3b) and wiring it is an open item, not a settled absence",
               f"vals={sent[1][1]}")
         casts = state["pending_casts"]
         c = casts[0]

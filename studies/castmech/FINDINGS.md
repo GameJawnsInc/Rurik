@@ -216,6 +216,67 @@ there, dated today):
 
 ---
 
+## 3b. The press burst, the stop shapes, and three properties — added 2026-08-22
+
+Measured while implementing §7's wins, same method (offline decode of both
+live captures, `decode_all` strict). OBSERVED throughout.
+
+**The press burst is six messages in a fixed byte order, 2 of 2** (necro
+t=18.5110 pressing 153, ranger t=21.5433 pressing 394 — both with a live
+auto-attack chain):
+
+```
+0x00E4  [agent, skill, copy]            press accepted
+0x009F  [8,  agent, 0]                  property 8 -> 0
+0x009F  [3,  agent, 0]                  GV_ATTACK_STOPPED -- the chain closes
+0x00A2  [62, agent, f32]                the energy debit
+0x00A0  [60|50, agent, target, skill]   the cast animation -- 60 for the
+                                        spell, 50 (CastAttackSkill) for
+                                        Power Shot: the family split is real
+0x009F  [8,  agent, 1]                  property 8 -> 1
+```
+
+**And the negative is measured too:** the necro's presses at t=8.741 (no
+chain had ever started) and t=9.850 (press 1 had already paused it) carry
+no STOPPED. A press stops the chain only when the chain is live.
+
+**Property 3 corpus-wide: 7 occurrences, all `[3, agent, 0]`.** Two are the
+press-burst instances above; one (ranger t=16.5783, the `[8→0, 3]` pair
+standing alone) lands 57–90 ms after two c2s target-selects — §17c's cancel
+candidate, now with its wire shape; the rest close NPC chains.
+
+**Property 58 (`skill_finished`) is on the live wire — five times, every
+one `[58, agent, 0]` at a cast-end instant** (all four necromancer E5s plus
+one other-agent cast end). This REFUTES the "0 of 21,543" premise under
+which our server deliberately leaves it unsent (`authsrv.py`, the cast-
+animation comment; the count presumably came from a search of the wrong
+channel or value). Wiring it is registered work, not a settled absence.
+
+**Property 8 pairs — 17 `[8, agent, 0]` and 17 `[8, agent, 1]` — bracket
+the press burst** (0 right after E4, 1 at the burst's end). GWCA's name for
+8 is `disabled`; the client dispatches it through `int-agentview`
+(skillcast §16.1); what it means is UNREAD and it stays unsent.
+
+**Property 45 appears exactly once in the corpus** — `[45, agent, 0]`
+immediately before the terminated cast's E2 (§3). It is not in the cast
+trios (attack-skill = 50/46/49, skill = 60/58/59), no catalog names it, and
+one attack-skill sample does not license sending it for spell cancels — it
+stays unsent, recorded here.
+
+**The queued cast's animation and debit fire at CAST-BEGIN, not at the
+press.** At both of 153's E3 instants (10.4929, 20.2689) the wire carries
+`[60, 31, 40, 105]` and the property-62 debit — skill 105's press burst,
+deferred to the moment the caster freed. Our server sends both at the press
+always; for a queued cast that is early by the previous cast's remaining
+aftercast. Recorded divergence.
+
+**The auto-attack resumes at the aftercast's end, on the wire:** `[4, 31,
+40, 0]` (ATTACK_STARTED) rides the E3 instant on both of skill 105's cycles
+(13.2404, 23.0259). The pause-for-cast-plus-aftercast and the restart at E3
+are what `attack_tick` now reproduces.
+
+---
+
 ## 4. Canceling: three doors in, one wire shape out
 
 **WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is
@@ -411,6 +472,19 @@ c2s during an in-flight cast or swing, drop the scheduled hit, emit E2 and
 `GV_ATTACK_STOPPED`/property 59, charge no recharge (M3's shape); (3) the
 backswing needs **nothing** — it is client animation, and modeling it
 server-side would be modeling a fiction.
+
+> **WINS 1 AND 2 LANDED 2026-08-22** (`002f20f`, `2c8d3ba`, `3dcf9d5`), and
+> the §3b measurements sharpened win 2 on the way: the STOPPED rides the
+> press burst immediately after E4 (2/2, with the measured negative — no
+> close when no chain is live), a retarget stops the swing in flight (the
+> 16.578 shape), movement cancels the cast with the bare E2 and the wiki's
+> attack-skill asymmetry per entry, the chain pauses while a cast is short
+> of its E3 and resumes on the first tick after it (retail's own instant),
+> and property 59 is deliberately NOT sent — zero corpus occurrences stands,
+> and the properties the corpus does show at these instants (8, 45, 58) are
+> §3b's registered follow-up, not silent additions. Win 3 was honoured by
+> writing no code. Tests: `test_playerswing.py` (floor 23),
+> `test_castcancel.py` (floor 15).
 
 ---
 
