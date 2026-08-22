@@ -604,6 +604,34 @@ Skip the grant when the newest report's position deviates from the straight extr
 **The run it changes: the X1 and X2a legs.** Under B it removes the event; under A it does nothing. Cost: one skipped grant per deflection = **+1 chord (~515 u) of separation exactly at contact**, which is the worst moment to add lag if B is *wrong*.
 **Label:** this is not derived from any measurement in the record and has no retail grounding. **Do not build it before X2a returns a positive.**
 
+#### REALFIX-L8 · the overwrite test — PRE-REGISTERED 2026-08-21, before the run
+
+**The question L7 failed to reach twice:** when a lead-carrying click grant DOES escape, does a following zero-lead grant stop it becoming a warp? L5's A3 and L7's treatment both produced **zero** escaping grants, so the composite's zero has never been a demonstrated save.
+
+**No build change is needed, and that was measured rather than assumed.** The three gates a cold-latch click must pass together are rule 1 (`kbd_moving_at is None`, from a `0x0047` stop until the next moving `0x003D`), freshness (`now - pos_seen <= 1.0`, `authsrv.py:12273` — and the STOP refreshes `pos_seen` too, `:12528`), and rule 2 (`now - grant_at > 0.5`, shared clock). Measured over L7's own captures: the window is **non-empty at 41 of 41 stops (control) and 41 of 44 (treatment)**, opens at **stop + 0.00 s** (p90 +0.22 s in the treatment) and is **p50 0.83–1.00 s wide**. Clicks landed inside it 11 and 14 times and were then killed **downstream by the geometry gate** — "not a straight shot" x26, "cannot place them" x1 of 58 clicks. **L7's exposure failure was PLACEMENT, not timing, and not the shared clock.**
+
+**Protocol changes from L7, each keyed to a measured cause:**
+1. **Click IMMEDIATELY on release, not after a beat** — L7's "wait ~1 s" put 21 of 58 clicks past the 1.0 s freshness bound. The window opens at the stop.
+2. **Three or four rapid clicks per release**, so a human is not aiming at a sub-second target by hand.
+3. **Click 400–800 u along OPEN GROUND**, not maximum distance across buildings. Corpus-wide, **48 of 78 warp-causing grants carried a lead under 1,000 u and 8 under 600 u**, so a moderate clear-line click both passes the clip test and clears the 299.33 u cut.
+5. **KEEP TURNING — do not walk in a straight line.** Measured per `movementType` over every `ours` capture: straight forward running (type 1, 283 u/s) has an inter-report gap **p90 of 1.80 s**, and 515 u / 283 u/s = **1.82 s** — REALFIX-W2's distance trigger exactly — so **25% of its intervals leave the 1.0 s freshness gate already CLOSED** before a click can land. Every maneuvering type sits at **0–4%** (types 2/3 at 282 u/s: 3–4%; types 7/8 at 210 u/s: 1–3%; types 5/6 at 186 u/s: 0%) — and those per-type speeds **corroborate `FINDINGS`:1201's families independently** (forward {1,2,3} 284.96 u/s, backward {4,5,6} 187.89, side {7,8} ~215) on a larger corpus. ⚠ The one figure NOT to reuse from this sweep is its type-4 p50 of 126 u/s: it is unfiltered and includes wall-slides and stalls, where :1201's 187.89 is the careful number. Those are SLOWER, so the ~512 u distance trigger alone predicts SPARSER reports and the opposite is observed. ⚠ **The mechanism is NOT established here and this block should not be read as establishing it**: `FINDINGS`:1218 already records `0x003D` as distance-triggered at a ~512 u chord **with a ~0.5 s heartbeat fallback**, and every maneuvering type's gap p90 (0.50–0.58 s) is that heartbeat rather than anything about turning. Type 1's p90 of 1.80 s is the chord. Why sustained cruise does not also show the heartbeat is UNVERIFIED and is the open question here; the protocol advice below stands on the measured gap distribution either way. Arc or feather A/D through every leg, and release out of a turn rather than out of a sprint. ⚠ Types 5 and 6 record **zero** following stops in the corpus, which would mean releasing from them never opens the window — but at n = 50 and 77 that is too thin to act on, and the 368 + 286 stops that do exist come from types 1 and 4, so release from a normal forward or moderate-speed leg.
+
+4. **Watch the server terminal** — it prints each refusal reason live, so a bad direction is visible within a second.
+
+**PREDICTIONS, numeric and falsifiable:**
+- **Control `--grant-suppress`:** ≥ 8 escaping cold-latch grants, and at the 3-of-3 conversion measured across L6+L7, **5–15 REALFIX-E events**.
+- **Treatment `--zero-lead --grant-suppress`:** a comparable count of escaping grants. **If the overwrite is honoured → 0 events despite ≥ 5 escaping grants.** If it is not → an event rate statistically indistinguishable from the control's.
+- **ABORT CONDITION, named in advance so it cannot be rationalised afterwards: if the TREATMENT again produces fewer than 3 escaping grants, this is the third consecutive exposure failure and the run answers nothing** — do not score it as a null, and price the build change (a click-arm exemption from rule 2) instead.
+
+**Instrument:** movetap on both arms, full-length; L7 achieved 12.0–13.3 Hz and REALFIX-E on the rendered copy is the verdict, with `--wire-only` printed beside it.
+
+#### REALFIX-F4 · bound the click grant's lead — **REFUTED AT A DESK 2026-08-21, never built**
+
+**Site (had it been built):** the click send at `authsrv.py:11253` — refuse a grant whose destination lies further than a bound *B* from the client's own last report.
+**Why it looked right:** the spam-click regime's warps are gate 1 firing on a granted point 1,400–2,600 u away, and a grant inside `MATCH_RADIUS` cannot reach gate 1.
+**Why it is refused, measured over the whole `ours` corpus (2,445 grants, 82 attributable warps):** at `MATCH_RADIUS` it refuses **99% of warp-causing grants at a cost of 94% of ALL grants**; at 1,000 u the ratio INVERTS (35% benefit, 45% cost). **The bound does not separate, because a click grant is far BY DEFINITION** — "far grants" and "all click grants" are one population. That makes F4 `--grant-suppress` with extra steps, and the arc already ships that.
+**What it rules out generally:** any click-arm policy keyed on the grant's own distance. FINDINGS §"REALFIX-F4 REFUTED AT A DESK".
+
 #### The finding that constrains the whole ladder
 
 At keyboard cadence, **the chord length is set by the client's own 515 u report trigger (W2), not by our grant floor.** We cannot grant more often than reports arrive. So if candidate B fires in X2a, **P2 has no cheap dial** — F2a costs the separation win outright, F2b is inert in this regime, and F3 is invention. That makes X2a the ladder-deciding cell: a positive there sends the arc to P3/§2.2, not to a P2 parameter.
