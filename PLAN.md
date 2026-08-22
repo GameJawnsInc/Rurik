@@ -1859,6 +1859,26 @@ disjoint fields of one dword read once. Untested: top byte 3+ (it crosses the
 `< 3` test), and whether a character can WALK a 42-degree ramp -- W16 established
 that meshed and walkable are different questions.
 `vault/research/worldmaps/WORLDMAPS-W17-RUN.md`.
+
+**WORLDMAPS-W18 THEN WALKED IT.** The ramp map's spawn sits directly under the
+36.9-degree strip that flips, so walking north walks up the strip under test.
+Constrained to that strip's own column band, arm B (cut 45) climbed to
+**y = 3,072**, the far edge, crossing ramp and plateau; arm A (cut 35) stopped
+at **y = 1,728 -- the last apron row, to the unit** -- exactly where the mesh
+ends when the strip is excluded. Separation **1,344 u**. So both levers in this
+dword recover ground that is genuinely TRAVERSABLE, not merely present in the
+file: the water line (W16) and the slope set (W18).
+
+**The registered prediction was REFUTED as written and the fault was the
+MEASUREMENT.** "Max y over the whole trace" gave only 386 u, because arm A's
+character drifted west into the 32-degree strip -- walkable under BOTH sets --
+and climbed a ramp that was never in question. The corrected band is not
+post-hoc (the generator fixes strip 3 at x 1248..1824, and it is in the run
+note's pre-run design table), and arm A answers 1,728 for both a wide band and
+a tight interior. **Third instrument fault of this kind** after W12's clipped
+band and W16's short leg -- all three in how the result was to be READ, all
+three caught only because the arms shared everything but the variable.
+`vault/research/worldmaps/WORLDMAPS-W18-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

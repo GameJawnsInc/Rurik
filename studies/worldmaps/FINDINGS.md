@@ -748,3 +748,52 @@ Nothing here WALKS a character up a 42° ramp — W16 established that meshed an
 walkable are different questions. The `+0x90` (30→40) companion reading remains
 static rather than measured. Full scoring in
 `vault/research/worldmaps/WORLDMAPS-W17-RUN.md` §RESULTS.
+
+## WORLDMAPS-W18 — the recovered ground is WALKED, and the measurement needed fixing. 2026-08-21
+
+**OBSERVED (retail client, build 38797; two arms one byte apart, identical walk
+plan, same session).** WORLDMAPS-W17 moved the walkability boundary 35° → 45°
+with the flags dword's top byte, and closed on W16's distinction: **meshed and
+walkable are different questions.**
+
+The ramp map's spawn (1536, 1536) sits directly under **strip 3**, the
+36.1–37.6° ramp that flips between the two threshold sets, so walking north
+walks up the strip under test.
+
+| measured within | arm A (cut 35) | arm B (cut 45) | separation |
+|---|---|---|---|
+| whole map (as registered) | 2,686 | 3,072 | 386 u |
+| **strip 3's band, x 1248..1824** | **1,728** | **3,072** | **1,344 u** |
+
+**Arm B climbed the 36.9° ramp to y = 3,072**, the far edge, crossing ramp and
+plateau. **Arm A stopped at y = 1,728 — the last apron row, to the unit** —
+which is exactly where the mesh ends when strip 3 is excluded.
+
+**The registered prediction was REFUTED as written, and the fault was the
+measurement.** I registered "max y over the whole trace, separation ≥ 700"; the
+unconstrained answer is 386. Arm A's trace reaches x = 1144, inside **strip 2's**
+band — the 32.0° ramp, walkable under *both* sets — so the character drifted out
+of the strip under test and climbed one that was never in question. Max-y-anywhere
+cannot isolate strip 3 when a walkable ramp adjoins it. The corrected band is not
+post-hoc: strip 3 is x 1248..1824 by construction of the generator and appears in
+the run note's design table written before the run, and **arm A answers 1,728 for
+both the wide band and a tight interior**, so the number does not move with the
+window.
+
+**Both characters walked far** — 5,238 u and 5,048 u of traced path against a
+1,500 u void guard — so arm A's failure to climb is not a failure to move.
+
+**So both levers in this dword recover ground that is genuinely traversable**,
+not merely present in the file: the water line (W16) and the slope set (W18).
+
+**The instrument lesson, third of its kind.** W12 clipped a band against a wall,
+W16's first plan ran out of leg, W18's measurement could be satisfied by the
+wrong feature. All three were faults in how the result was to be READ, caught
+only because the arms shared everything but the variable. The rule: **when a map
+has more than one feature that could produce the signal, the measurement must
+name WHERE, not just how much.**
+
+**Scope.** Strip 4 (41.5–41.9°) also flips and was not walked — it needs its own
+start line, since arm A shows how readily a walk wanders between strips. How a
+character looks or animates on a 37° slope is the owner's verdict. Full scoring
+in `vault/research/worldmaps/WORLDMAPS-W18-RUN.md` §RESULTS.
