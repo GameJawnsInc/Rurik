@@ -6745,6 +6745,38 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
+  `toolkit/test_seclint.py` (an ACCUMULATION TRIPWIRE on SECTION-NUMBER collisions --
+  two headings that both took "the next number", so every later `§N` citation is
+  ambiguous. Written 2026-08-22 after `studies/skills/FINDINGS.md` did it TWICE: §26
+  first, resolved as §26.12/§26.13, then `## 32.` for both the silent-extend probe and
+  E10 on 2026-08-21, with `PLAN.md` §8's adrenaline entry citing "§32" and meaning E10.
+  Nothing caught either; a human reading PLAN.md caught the second. Disjoint from
+  `test_identlint.py` by construction -- that one's token must be letter-led
+  (`[A-Z]{1,2}-?\d{1,3}`), so a bare `## 32.` matches none of its definers, verified.
+  **The SCOPING is the whole design and it was measured, not assumed.** The naive rule
+  -- no number twice in a file -- reports **74 duplicates across 11 files** in this tree,
+  and nearly every one is correct house style: a dated pass that restarts at §1 under
+  its own `#` divider (skills, isle, review, character all do it), and `### N.` lists
+  under different `##` parents (`studies/movement/FINDINGS.md` has SEVEN `### 1.`
+  headings, all fine). A checker red on those is one nobody leaves switched on, which is
+  the lesson `test_provlint.py` records from the strict side. So a collision is two
+  headings with the same token, at the same level, under the same chain of enclosing
+  headings -- **6 in 2,102 numbered headings**, each named in `KNOWN` with its reason.
+  **Its POSITIVE CONTROL is the real defect, rebuilt from the live document**: it renames
+  today's `## 36.` heading back to `## 32.` in memory and asserts the collision is
+  caught, and that it is the ONLY thing reported about that file -- so the §1-§8 pair in
+  the same document stays green, which is the point of the scoping. A frozen fixture
+  would drift; this cannot. Section 2's four negative controls are load-bearing for the
+  same reason. Diverges from `test_identlint.py`'s count-CEILING posture deliberately:
+  53 collisions are too many to justify one by one, 6 are not, and inside a ceiling of 9
+  three could land unseen. The known list is checked in BOTH directions -- a new one, a
+  known pair gaining a third claimant, and a STALE entry the scanner no longer finds all
+  fail -- and each of those three verdicts has a control that doctors the list and proves
+  the verdict speaks. **The 6 are NOT a fix list**: `studies/idents/HANDOFF.md`'s star box
+  refuses a mass rename of existing tokens, section numbers are load-bearing in commit
+  subjects (`Skills 32.8`, `Isle 8.6`, `§27.4`), and one of the 6 -- heroes §35.2 -- is a
+  deliberate SUPERSEDED-BY banner above the heading it supersedes and must not be
+  "fixed". No vault, no socket, no client. ~1 s),
   `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
   same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
   §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc
