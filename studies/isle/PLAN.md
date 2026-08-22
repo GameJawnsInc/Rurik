@@ -1165,6 +1165,30 @@ met branch rather than an in-run reference — add one effective-13 block next t
 old draft (4..5, actually 3..5) that would have read an ordinary result as a refutation
 of both models.
 
+**Rung 8d — the re-cast shape, ABORTED ONCE, re-staged (2026-08-21 → 08-22).**
+`studies/skills` §36.8 left one question open on this channel: what retail emits when a
+live CAST effect is deliberately re-applied — our REMOVE-then-APPLY is unwitnessed
+either way. The first run (`20260821T184758`, plan `isle_rung8d_recast.txt`) was
+**aborted by the operator at the tooltip step, correctly**: the plan's "348, recharge
+4 s, already on the bar" had been inferred from ambient town-capture episodes, and the
+bar's actual shout was 364 = `"Charge!"` — 20 s recharge against a 10-12 s duration,
+which can never overlap itself (`studies/skills` §36.9; the same scope-error family as
+§36.8). The rank-13 bench block — the met-branch in-run reference, the "one cheap gap"
+above — died with it. **Re-staged 2026-08-22 as `vault/plans/isle_rung8d_recast_v2.txt`**
+(9 steps, sha256 `5821fa75…` as staged; the binding seal is taken at launch) around a
+pick that is now MEASURED rather than guessed: the operator's own `0x00DA` in the newest
+live capture (`20260821T205552`, §33's spend-clock run) reads slot 1 = **348 =
+`"Watch Yourself!"`** — the operator put it there themselves that evening — recharge
+4 s < duration 10 s (CLIENT-DATA and WIKI agreeing on every shared field by ArenaNet's
+own id join), and the same capture already banks the single-press control episode
+(expired, 10.0 s, 14 ms residual). Readback: `python toolkit/authsrv/adrenjoin.py
+--bars`; the full record is `studies/skills` §36.10. The v2 plan runs the **bench block
+first** so a skill surprise cannot zero the run twice, rides the re-casts on the bench
+swings (adrenaline: every press is its own `0x00D2`, self-timestamping), and
+pre-registers GWW's ten-damage early-end as the one false-REPLACE channel. **The run is
+the operator's**: RUNBOOK live procedure,
+`--minutes 20 --mode base --plan vault/plans/isle_rung8d_recast_v2.txt`.
+
 **Rung 9 — BLOCKED ON ITS ANALYSER, and that is this arc's own rule (2026-08-21).**
 §3.4's skeptic pass already ends *"Every step here needs an analyser that does not
 exist. Cost it that way."* Rungs 7 and 8 each built the consumer BEFORE the run

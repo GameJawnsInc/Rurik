@@ -172,6 +172,45 @@ def adrenal_costs():
             for k, r in content.load().rows("skills").items()}
 
 
+def bars():
+    """Every connection's OWN skill bar: (capture, connection, agent, bar).
+
+    This is a DIRECT READ of the 0x00DA addressed to the observing player --
+    the observer resolved by `whose_agent`'s property-41 rule, the bar being
+    the one message retail sends about our own slots. It exists because the
+    other route was tried and refuted: `studies/skills/FINDINGS.md` 36.9
+    aborted a live run whose plan inferred "on the operator's bar" from a
+    skill's effect episodes in a town capture, where anyone nearby could have
+    cast it. An effect row is ambient; a 0x00DA naming our own agent is not.
+    36.10 is this query's first result. The bar can still change between
+    sessions, so a plan built on this read must have the operator confirm the
+    tooltip at run time -- this answers "what WAS the bar", never "what is".
+    """
+    live = vaultpath.require_dir("captures", "live", why="the bar readback")
+    codec = Codec()
+    out = []
+    for stamp in sorted(os.listdir(live)):
+        cap = os.path.join(live, stamp)
+        if not os.path.isdir(cap):
+            continue
+        for chan in tape.channel_files(cap):
+            conn = chan["connection"]
+            try:
+                _info, events = tape.load_tape(cap, conn)
+                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
+            except Exception:                                  # noqa: BLE001
+                continue
+            me = whose_agent(msgs)
+            if me is None:
+                continue
+            for _t, op, v in msgs:
+                if op == SKILLBAR_UPDATE and len(v) > 2 and int(v[1]) == me:
+                    out.append({"capture": stamp, "connection": conn,
+                                "agent": me,
+                                "bar": [int(x) for x in v[2]]})
+    return out
+
+
 def scan(costs=None):
     """Walk the live corpus once. Returns (stats, rows, skipped)."""
     costs = adrenal_costs() if costs is None else costs
@@ -287,8 +326,21 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true",
                     help="print every damage-to-self row, sorted by percentage")
+    ap.add_argument("--bars", action="store_true",
+                    help="print every connection's OWN 0x00DA bar (see bars())")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    if args.bars:
+        found = bars()
+        if args.json:
+            print(json.dumps(found, indent=2))
+            return 0
+        for b in found:
+            print(f"{b['capture']}  {b['connection']}  agent {b['agent']:4}  "
+                  f"{b['bar']}")
+        print(f"\n{len(found)} own-agent bar updates")
+        return 0
 
     stats, rows, skipped = scan()
     if args.json:

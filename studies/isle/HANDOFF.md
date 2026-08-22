@@ -33,7 +33,13 @@ the next condition" rather than "advance one step" (FINDINGS §7.8). Skill **999
 the **condition map is complete** (all ten, 482 = Deep Wound by elimination, 2077 = Cracked
 Armor corroborated by GWW's own `<!--id:2077-->`), and the rank ladder closed rung 7's
 unmet-requirement defect: **the penalty SCALES with rank**, PINNED refuted at `5.5e-10` by
-the distributions rather than a fit. Next is **rung 9, the scripted pass**.
+the distributions rather than a fit. Next is **rung 8d's re-run** — the re-cast shape plus
+the unrun rank-13 bench block; the first attempt (2026-08-21) aborted on a skill pick
+inferred from an ambient capture, and the re-staged plan
+(`vault/plans/isle_rung8d_recast_v2.txt`) is built on a wire readback of the operator's own
+bar instead (`studies/skills` §36.9–§36.10, PLAN §3's ladder addendum). After that,
+**rung 9, the scripted pass — BLOCKED on its respawn analyser** (keyed on definition slot +
+spawn position with a preceding-death bit; offline build first, PLAN §3.4's own rule).
 
 ## 2. What will bite you, in the order it will bite
 
