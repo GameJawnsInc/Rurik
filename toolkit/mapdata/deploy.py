@@ -1629,11 +1629,18 @@ def readback(dat, file_id, staged_blob, area):
         row_(len(BloatedProps.decode(bp.payload()).records) == n_want,
              f"our {n_want} prop(s) are in the compiled map")
 
-    # the spawn test every maps.toml row carries, against the CLIENT's mesh
+    # THE AREA'S FLOOD SEED, against the CLIENT's mesh. NOT the player's
+    # spawn -- that comes from the MAP row, and is what content.py's
+    # map_static_config() hands the server. This comment used to read "the
+    # spawn test every maps.toml row carries" while the code below reads
+    # area["seed_x"], and on 2026-08-21 that wording put a claim into
+    # WORLDMAPS-W13's write-up which the run had not measured: it moved a
+    # flood seed and was reported as having moved the character. seed_x has
+    # three consumers in this tree and none of them is the player.
     if pm is not None:
         sx, sy = float(area["seed_x"]), float(area["seed_y"])
         n = sum(1 for t in pm.trapezoids if t.contains(sx, sy))
-        row_(n == 1, f"the spawn ({sx:.0f}, {sy:.0f}) lands in exactly one "
+        row_(n == 1, f"the flood seed ({sx:.0f}, {sy:.0f}) lands in exactly one "
                      f"trapezoid of the compiled mesh", f"{n}")
     return out, bad
 
