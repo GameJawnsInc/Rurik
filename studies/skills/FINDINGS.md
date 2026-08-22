@@ -3821,3 +3821,32 @@ a sample under 1% of maximum health and settle the boundary
 landed hits, not damage taken. **The sub-1% boundary is still extrapolated**, and
 it is now the cheapest open item on this channel.
 
+### 33.6 Skill 348 is "Watch Yourself!" — and it checks our own `ceil`
+
+**Reported by the operator after the run** (GWW, `"Watch Yourself!"`), and the
+client's own table agrees on every field that can be checked:
+
+| | client's record | GWW |
+|---|---|---|
+| profession | 1 (Warrior) | Warrior |
+| attribute | 21 = **Tactics** (`test_attribspend.py:50`) | Tactics |
+| displayed adrenaline | **4** | **4 Adrenaline** |
+| activation / target | 0.0, target 0 | instant, non-targeted |
+
+**And the displayed 4 is OURS, not the client's.** The record stores only the raw
+**80** at `+0x38`; `skilltable.displayed_adrenaline` computes the 4 as
+`ceil(80 / 25)`, a RECONSTRUCTION from "a strike is a flat 25, so the displayed
+cost is the number of hits needed". GWW saying **4** is therefore an independent
+check of that rule — **and on the case that discriminates**, since 80 is not a
+multiple of 25 (80/25 = 3.2, where floor gives 3 and ceil gives 4). §26.8's
+census found 151 adrenal skills and many of their costs are not multiples of 25;
+this is the first time one of them has had its displayed value confirmed from
+outside our own decode.
+
+It also explains §33.5's refutation rather than leaving it as an oddity: a
+**shout** (`type_code` 15, target 0, instant) is exactly the kind of skill whose
+activation would be announced by property **48**, `instant_skill_activated`,
+rather than 50, `attack_skill_activated`. The thing that broke the old claim and
+the thing that made the run safe are the same property of the same skill —
+picking a shout meant no hit could land, and a shout is not an attack skill.
+
