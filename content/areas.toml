@@ -885,3 +885,53 @@ verified = """Ours: `fine45` with the top byte cleared, so the client selects \
 the mesh should be the apron alone. That is the control which proves the map's \
 strips are genuinely steep rather than that the flag turned classification off, \
 and it is the same shape of control WORLDMAPS-W19 used within one arm."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W21
+# Can an authored prop BLOCK a character? One flat map, one prop, two arms
+# differing only in whether that prop carries a footprint.
+
+[area.blocker]
+name = "One tree with a footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+prop_outline = 288       # <- THE VARIABLE. A 576x576 square footprint,
+                         #    prop-local, centred on the prop at (2928, 1488).
+
+[area.blocker.provenance]
+source = "invented"
+verified = """Ours. A FLAT map so nothing about terrain can enter the result, one prop, and the only difference from `noblocker` is `prop_outline`. `pick_tree_cells` is deterministic: on a flat 32x32 with seed cell (16,16) the first cell is (30,15), world (2928, 1488) -- 1,392 units due EAST of map 143's spawn at (1536, 1536), and 48 units off the eastward walk line, so a footprint of half-width 288 spans that line comfortably. MEASURED before staging.
+
+UNVERIFIED, and the point of the run: whether the client's collision reads an authored footprint at all. `Prop.outline` has always been encodable and deploy has always passed it empty, so no prop this project ever placed had one."""
+
+[area.noblocker]
+name = "One tree with no footprint"
+map_id = 143
+dims = 32
+heights = "flat"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 1
+
+[area.noblocker.provenance]
+source = "invented"
+verified = """Ours, and it is the CONTROL that carries this experiment. Same flat map, same single prop at the same (2928, 1488), `prop_outline` absent so the prop ships the empty outline every prop this project has ever placed. If a character is stopped HERE too, the stop is not the footprint and the treatment arm means nothing. This is also the arm that measures how far the walk gets with nothing in the way, which is what the treatment is compared against."""
