@@ -1251,14 +1251,37 @@ def section_glyph():
                   and [v for op, v, _w in sent
                        if op == authsrv.GAME_SMSG_EFFECT_REMOVE]
                   == [[authsrv.PLAYER_AGENT_ID, ep["buff"]]],
-                  "and the SECOND press closes it with a real 0x0044",
+                  "and the SECOND press closes it with a real 0x0044 -- the "
+                  "charge burns at the PRESS even though this press is "
+                  "QUEUED and its debit is deferred, so a third stacked "
+                  "press cannot be quoted a discount the glyph no longer "
+                  "has",
                   f"{[hex(op) for op, _v, _w in sent]} -- not a silent drop: "
                   f"re-sending or quietly retiring an episode leaves its icon "
                   f"on the client's screen, which is measured (a repeat 0x0042 "
                   f"for a live (agent, skill) is DISCARDED, twice)")
+
+        # The queued press pays at its BEGIN (castmech 3c), so fire it
+        # before pressing again: rewind every pending phase and tick.
+        def _fire_pending():
+            for cast in state.get("pending_casts", ()):
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            authsrv.cast_tick(send, state, 0)
+        sent.clear()
+        _fire_pending()
+        spends = props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                       agents.GV_ENERGY_SPENT)
+        LEDGER.ok(len(spends) == 1
+                  and abs(authsrv._f32_of(spends[0][2]) - (-0.08)) < 1e-7,
+                  "the second cast's deferred debit still pays the "
+                  "discounted 2 at its begin -- the price was fixed by the "
+                  "press-time gate, the payment by the begin",
+                  f"{authsrv._f32_of(spends[0][2])!r}")
         sent.clear()
         authsrv.handle_skill_press([0, 194, 0, 0], send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
+        _fire_pending()
         spends = props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                        agents.GV_ENERGY_SPENT)
         LEDGER.ok(len(spends) == 1
@@ -1552,8 +1575,16 @@ def section_adrenaline_wire():
             state["agents"][7]["last_hit"] = 0.0
             authsrv.hit_enemy(send, state, 7, 0)
         sent.clear()
-        authsrv.handle_skill_press([0, 382, 0, 7], send, state, 0,
-                                   authsrv.GAME_CMSG_USE_SKILL)
+        # 382 IS an attack skill (type_code 14) -- the 39 corpus 0x00D2s are
+        # all warrior attack skills -- but a bare machine has no row to say
+        # so, so the family is forced rather than read.
+        saved_attack = authsrv._is_attack_skill
+        authsrv._is_attack_skill = lambda sid: True
+        try:
+            authsrv.handle_skill_press([0, 382, 0, 7], send, state, 0,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+        finally:
+            authsrv._is_attack_skill = saved_attack
         ops = [op for op, _v, _w in sent]
         spends = adrenaline_msgs(sent, authsrv.AGENT_ADRENALINE_SPEND)
         LEDGER.ok(spends == [[authsrv.PLAYER_AGENT_ID, 382, 0]],
@@ -1566,15 +1597,17 @@ def section_adrenaline_wire():
         i = ops.index(authsrv.AGENT_ADRENALINE_SPEND)
         after = sent[i + 1]
         LEDGER.ok(after[0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
-                  and after[1][0] == agents.GV_SKILL_ACTIVATED
+                  and after[1][0] == agents.GV_ATTACK_SKILL_ACTIVATED
                   and after[1][3] == 382,
                   "and the NEXT message is the property naming the same skill",
                   f"{[hex(o) for o in ops]} -- MEASURED 39 of 39: every "
                   f"opcode-210 in the 14 live captures is followed at index "
                   f"+1, same timestamp, by the int property naming that agent "
-                  f"and that skill. Zero the other way round. Retail's is "
-                  f"property 50 (attack-skill) and ours is 60, which is a "
-                  f"pre-existing divergence and not this one")
+                  f"and that skill. Zero the other way round. The property is "
+                  f"50 in all 39 -- the attack-skill flavour -- and since "
+                  f"2026-08-22 the press picks 50 for that family, so the "
+                  f"whole measured adjacency is pinned here, property id "
+                  f"included")
         LEDGER.ok(props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                         agents.GV_ENERGY_SPENT) == [],
                   "and NO property 62 rides with it, which is ArenaNet's rule",

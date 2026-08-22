@@ -4839,7 +4839,11 @@ Every one of these, in the order they were written:
   CLEAR and `resolve_duration` already sets the precedent that bit-clear DIFFERING
   endpoints have zero witnesses; the discount, the two charges and the closing
   `0x0044` are then exercised against a stubbed amount, with an ATTACK skill at the
-  same cost as the control. §10 is the enemy's gate, which rate-limits the
+  same cost as the control — and since 2026-08-22 the section also pins the
+  queued-press split: the CHARGE burns at the press (so a third stacked press
+  cannot be quoted a discount the glyph no longer has) while the queued press's
+  DEBIT waits for its cast-begin, fired by rewinding the pending entries through
+  `cast_tick`, and still pays the press-quoted discounted price. §10 is the enemy's gate, which rate-limits the
   heal-spam PLAN.md §8 item 4 names without touching the round robin, and requires
   **no property 62 for it** — 0 of 722. **§11 is the ADRENALINE FAMILY ON THE WIRE
   (2026-08-21)**, and the paragraph it replaced is the reason it is worth reading:
@@ -4853,7 +4857,10 @@ Every one of these, in the order they were written:
   and the target is 100 health precisely so its own pool clears the 1% floor, because
   the first cut used a 5,000-health dummy and the silence was vacuous); a sub-1% gain
   sends nothing with an 11% control at the same call site that does; the spend lands
-  **immediately before the property naming the skill**, 39 of 39 in the corpus, and
+  **immediately before the property naming the skill**, 39 of 39 in the corpus —
+  property 50 in all 39, the attack-skill flavour, which the press has picked for
+  that family since 2026-08-22, so §11e pins the id too (family forced via a
+  stubbed `_is_attack_skill`, bare machines having no rows) — and
   carries **no property 62** — which is ArenaNet's own
   `!(energyCost && skillData.adrenaline)` asserting at two independent sites that a
   skill cannot carry both costs, so that order never has to be decided. **§11f is the
@@ -7179,12 +7186,32 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
   seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
-  six. The section that earns the entry is the QUEUE LAW: skill 105's two
+  six. Since 2026-08-22 the E5 instant also carries `[58, agent, 0]`
+  (GV_SKILL_FINISHED) in the very next slot — the corpus position, 5 of 5,
+  castmech 3c — and §2 pins both the send and the slot, while §2b pins the
+  family boundary from both ends: an ATTACK skill's press (family forced via a
+  stubbed `_is_attack_skill`, because a bare machine has no content rows)
+  animates with property 50, CastAttackSkill — both live Power Shot presses,
+  and all 39 adrenal 0x00D2s ride into a 50 — and its E5 sends NO finished
+  property, matching the ranger's two Power Shot E5s which carry neither 58
+  nor 46 — nor property 8. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
+  the client-handler read, skillcast 16.2) is pinned through the same
+  sections: `[8 → 1]` closes every immediate press burst with the `→ 0` half
+  ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,
+  transition-only), the spell E5's instant ends with the `[8→0][8→1]` pulse
+  (4 of 4 live), the E3 toggles nothing, and the queued press and begin carry
+  no property 8 at all. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and
   +0.57 s residuals in the corpus, and the test drives two back-to-back
-  presses through exactly that schedule. Timing is tested by REWINDING the
+  presses through exactly that schedule — and since 2026-08-22 through the
+  DEFERRAL that rides it: the queued press sends E4 ALONE (both live queued
+  presses carry nothing after their E4), and rewinding to the begin fires the
+  first cast's E5+E3 with the queued cast's debit-then-animation right behind
+  the E3, the order retail shows at both of 153's E3 instants; a cast that
+  never begins never pays, which is the terminated cast's missing debit.
+  Timing is tested by REWINDING the
   pending entries, never by sleeping; the zero-recharge inversion pins that
   E6 waits for its E3 because the corpus never shows them inverted; and the
   real-content section presses skill 153 and requires E5 to carry recharge 8,
@@ -7195,33 +7222,45 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   later — where until 2026-08-22 it was one instant, the last attacker in the
   file with no mid-animation window (studies/combat 17e item 1; the windup
   constant's three independent legs are studies/castmech M1). §1 pins the
-  split: the first tick sends the START alone, the landing a windup later is
-  gain/damage/FINISHED with NO second START. §2 pins the gate as
+  split: the first tick sends the START with the `[8 → 1]` action hold riding
+  behind it (4 of 4 live, castmech 3c), the landing a windup later is
+  gain/damage/FINISHED with NO second START and no hold toggle — the chain
+  still holds. §2 pins the gate as
   START-to-START — right after a landing nothing fires, because the backswing
   half of the interval is a wait with no wire event, and the next START opens
   one interval after the previous one. §3 drops an armed swing whose target
   died, left reach, or whose owner died — silently, ArenaNet's own truncation
-  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event). §4 is the
+  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event), except that
+  a DEAD target also releases the hold on the wire (t=20.1637, n=1) where
+  out-of-range, unwitnessed, stays fully silent. §4 is the
   regression guard for the other callers: a default `hit_enemy` call still
   opens with its own STARTED, lands in one instant, and respects the interval
   gate — the attack-skill path's recorded divergence, deliberately unchanged.
-  §5–§7 are the cancel half: a skill press puts GV_ATTACK_STOPPED [3, agent,
-  0] immediately after E4 — retail's own burst slot, 2 of 2 live presses with
+  §5–§7 are the cancel half: a skill press puts `[8 → 0]` then
+  GV_ATTACK_STOPPED [3, agent,
+  0] immediately after E4 — retail's own burst order, the release preceding
+  the stop, 2 of 2 live presses with
   a chain running — drops the armed swing through the tick-owned flag, keeps
   the TARGET (retail resumes the chain), and stays silent when the chain is
   already paused (the necro's press 2 carries no STOPPED); the chain pauses
   while any pending cast is short of its E3 and the next swing opens on the
   first tick after it — ATTACK_STARTED rides the E3 instant on both live 105
   cycles; and a retarget stops the swing in flight with the corpus's
-  standalone-stop shape (17c, n=1) and opens on the new target the same tick.
+  standalone-stop shape (17c, n=1 — now pinned as the full `[8→0][3,agent,0]`
+  pair) and opens on the new target the same tick.
   Timing by rewinding the armed swing and the start gate, never by sleeping),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
-  only MARKS (`cancel_on_move`), the tick releases with the bare `0x00E2`
+  MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
+  release (4 of 4 movement instants in the corpus — during aftercast too,
+  where retail's client refuses the input and the general rule inherits),
+  the tick releases with the bare `0x00E2`
   [agent, skill, copy] — the corpus's own terminated-cast shape, E4 t=5.027
   answered at t=5.912 with no E5 between or ever after — and then §1's
   60-second rewind proves no E5/E3/E6 ever follows: no recharge started, no
-  aftercast served, costs staying paid because the press paid them. §2 pins
+  aftercast served, costs staying paid for any cast that BEGAN (a queued cast
+  dropped before its begin never paid, which is that same terminated cast's
+  missing debit — castmech 3c). §2 pins
   the boundary: past its E5 a cast is aftercast and is NOT marked — E3 and E6
   close normally. §3 is the wiki's attack-skill asymmetry: mid-activation an
   attack skill shrugs movement off, but one still QUEUED (its begin never
