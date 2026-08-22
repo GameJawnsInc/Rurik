@@ -5,9 +5,22 @@
 setting it moves nothing on screen, and the server has shipped it as a zero ever
 since with a comment saying so. What "100%" means was nobody's answer.
 
-It is answered now, and not by reasoning: **the live corpus contains exactly one
-player death**, and it is fully instrumented. Everything in §1 and §2 is read off
-that tick.
+It is answered now, and not by reasoning: **the live corpus contains player
+deaths, fully instrumented**. §1 and §2 are read off them.
+
+> **UPDATED 2026-08-22 — there are TWO, and the second was found by a peer.**
+> This document said "exactly one" from 2026-08-20, over a 14-capture corpus. The
+> corpus reached 20 captures on 2026-08-21 and the count is now two: the second
+> is `20260821T152147` conn `63150`, agent 25, t=490.312 — a **level 20**
+> character, where the first was level 2. The energy/adrenaline session hit it
+> from the other side (an unexplained `max 17` row in a pool census) and told us.
+> The tick is identical, and the arithmetic holds at a completely different
+> scale: max health **480 → 408**, max energy **20 → 17**. §1.2 has it.
+>
+> The lesson is one this repo already wrote down and then walked into anyway:
+> `moralescan.py`'s own docstring says a claim of the form *"the only X in the
+> corpus"* decays the moment a capture is added. It decayed in two days. Re-run
+> the census before quoting it.
 
 **And as of 2026-08-20 the client half is measured too**, over two runs
 ([RUNS.md](RUNS.md)). `--probe morale` answered what reaches the screen:
@@ -71,7 +84,33 @@ sends `0x009C [27, 100]`, then `0x00E9` with field 10 = 100, then the pools:
 `0x009F [41, 27, 25]`, `0x00A2 [43, 27, 0.0528f]`, `0x009F [42, 27, 120]`.
 So 100 is the neutral value, sent explicitly, on both channels.
 
-### 1.1 Why one sighting is enough here
+### 1.2 The second death — level 20, same tick, same arithmetic
+
+`vault/captures/live/20260821T152147`, conn `10.0.0.210:63150->52.55.104.238:80`,
+5,960 messages. Agent 25 is the player, level 20, morale 100 at login.
+
+| t | what | value |
+|---|---|---|
+| 0.482 | login: `0x009C`, `0x00E9` field 10 | morale **100** |
+| 0.482 | `0x009F` prop 41 / prop 42 | max energy **20**, max health **480** |
+| 490.312 | `0x009C [25, 85]` + `0x00EE [10, −15]` | morale **85** |
+| 490.312 | `0x009F` prop 41 / prop 42 | max energy **17**, max health **408** |
+| 490.312 | `0x00A2` prop 43, prop 44 | both regen rates → **0** while dead |
+| 490.312 | `0x00F1 [25, 16]`, `0x0026 [25, 4]` | the death bit, then flags 4 |
+
+**Both maxima are exact under §2's rule.** Level 20 → base health 480, less 15%
+= 72, is 408. Base energy 20 less 15% = 3 is 17. And 480 at login is the level
+curve's far endpoint, which §2.1 previously had from the wiki alone — it is now
+on ArenaNet's wire.
+
+**What this row does NOT do is discriminate base-from-total**, and saying so
+matters more than the confirmation. This character carries 20 total energy, so
+base *equals* total and both models predict 17; likewise health, where no
+equipment bonus is in play. The discriminating datum is still the first death's
+25 → 22 (§2.2), and it is still n=1. What the second death adds is the tick
+shape at n=2, the arithmetic at a 24× larger pool, and the level-20 endpoint.
+
+### 1.1 Why one sighting was enough even before the second
 
 n=1 is normally where this repo stops. Three things make this one carry:
 
@@ -81,11 +120,14 @@ n=1 is normally where this repo stops. Three things make this one carry:
 - **Both maxima move by exactly the predicted amount** (§2), computed from a
   rule written down independently by players (WIKI) and from base values that
   the same tape states (level 2 → 120 health; 25 energy).
-- **The corpus-wide census refuses the alternative.** Across all 14 live
-  captures and 43 game connections: `0x00EE` carries attr 10 forty times and
-  **the only non-zero value in the corpus is this −15**; `0x009C` fires 83 times
-  and **the only value that is not 100 is this 85**. Scanner:
-  `toolkit/authsrv/moralescan.py`.
+- **The corpus-wide census refuses the alternative.** Re-run 2026-08-22 over
+  20 live captures and 53 game connections (139,660 messages): `0x00EE` carries
+  attr 10 forty-one times and **every non-zero value is a −15** (two of them);
+  `0x009C` fires 94 times and **every value that is not 100 is an 85** (the same
+  two); `0x00E9` field 10 is 100 in all 53 sightings. The two departures are the
+  two deaths, each landing on both channels in one tick. Scanner:
+  `toolkit/authsrv/moralescan.py` — re-run it rather than quoting these
+  numbers, which have already moved once (43 connections → 53).
 
 ---
 
@@ -121,6 +163,11 @@ equipment bonus in sight:
 Which is a second, free confirmation that **field 9 is the level** — that was
 OBSERVED against our own client in 2026-08-05 and has now been watched on
 ArenaNet's wire agreeing with ArenaNet's own health arithmetic.
+
+**Both endpoints of that curve are now OBSERVED rather than sourced.** The
+level-2 character above carries 120; the second death's level-20 character
+carries **480** at login (§1.2). GWW published both numbers, and retail's wire
+now agrees with the wiki at each end of a 19-level span.
 
 ### 2.2 Energy — 25 → 22, and this is the discriminating one
 

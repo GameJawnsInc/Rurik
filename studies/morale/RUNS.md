@@ -222,10 +222,44 @@ total. Total-scaling predicts 21.25 / 18.06 / 15.35 / 13.05 and matches at no
 rung. §2.2 rested on one retail observation; it now has four of our own, and the
 client accepted every one.
 
-### One thing this run does not explain
+### One thing this run does not explain — ANSWERED in Run 4
 
 The player's ENERGY readout drains on its own — 25 → 10 → 0 in arm A, and it
 does not track the maxima we send. This server sends no energy debit at all, so
 the drain is the client's own model reacting to something else in the session.
-It is not this arc's question and is not counted against it; it is the
-energy/adrenaline arc's, and it has been passed to that session.
+It was passed to the energy/adrenaline arc, which supplied the difference: these
+two arms sent property 43 on `0x00A3`, and the fix to `0x00A2` landed at 14:24,
+*after* both. **Run 4 re-ran arm A on the fixed tree and the drain is gone** —
+energy reads 0 while dead and the full 22 while alive. Which of the two changes
+in that merge fixed it is not established; see Run 4.
+
+---
+
+## Run 4 — does the energy readout still drain? 2026-08-22, ANSWERED: no
+
+Run 3 recorded one thing it could not explain: the player's ENERGY readout fell
+to 10 and then 0 while alive, and did not track the maxima we send. The
+energy/adrenaline session supplied the difference — **Run 3 sent property 43 on
+`0x00A3`, and the channel fix to `0x00A2` landed in `b788ac1` at 14:24, after
+both arms had run** — and asked for the decisive re-run.
+
+```bash
+python toolkit/harness/session.py --keep-open --hold 105 --shots 3 --warn 8 --enemy \
+    --game-args "--death-penalty --enemy-hit 0.35 --map 146"
+```
+
+Capture `20260822T143508`, current `main`, arm A's command verbatim so the two
+runs differ in the tree and nothing else. Every property-43 send in the log is
+now `(0x00a2, 14B)`.
+
+**It does not reproduce.** The energy readout across 32 frames is only ever two
+values: **0 while the player is dead**, and **22 — the full penalised maximum —
+whenever they are alive**, at t+23, t+53, t+74 and t+104, spanning four
+death/revive cycles. Run 3's 10 and 13 at equivalent points are gone.
+
+**What that does NOT establish is which change fixed it.** The energy arc's
+merge carried two things at once: the channel move, and new handling that stops
+regeneration on death and restores it at the revive ("energy regeneration stops:
+the player is dead" / "back to 3 pip(s) (revived, deferred)"). Either could
+account for the difference, and this run cannot separate them. What is settled
+is that the behaviour Run 3 flagged is not present in the tree we ship.
