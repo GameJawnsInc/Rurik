@@ -1342,6 +1342,29 @@ cheap-to-reverse direction, and both PLAN rows carried a "not yet recorded" note
 this row closed it. [studies/idents/CONVENTION.md](studies/idents/CONVENTION.md) is
 the convention; reversing this ruling is the two-day migration it declines.
 
+**Q9. Does the movement composite become the shipped default?** ✅ **CLOSED
+2026-08-22, by the owner: YES — `--zero-lead --grant-suppress --plane-carry` are ON
+by default, with `--no-*` opt-outs kept for A/B work.** Asked and ruled the same day
+REALFIX-L9 demonstrated the save (33 escaping full-lead click grants under the
+composite, 0 warps; per-fired-grant Fisher 0.0023 against the control's 7/27) and the
+costs were priced on L9's own captures (drift and model motion statistically identical
+to the control, zero rejected reports, wire at half retail's own grant cadence).
+`--plane-carry` rides the ruling on REALFIX-L4's demonstration and L8's counter-case
+(its absence let the plane echo fire at a boundary). The one unpriced cell, stated at
+the asking: enemies present — every warp run used `--no-enemy` or the town; the
+position model those consumers read is measured identical, and normal play will
+surface any residue immediately. Implementation: module globals still default False;
+`main()`'s argparse layer resolves three-state flags (absent → ON, `--no-*` → off,
+`--plane-carry` follows `--zero-lead`), the full pre-registration banners print only
+when a flag is passed EXPLICITLY (the default path prints one line each — the
+9.8 KB of banner text was wedging any consumer that spawns the server over an
+undrained pipe, which `test_handshake` found within the hour), and the refuted-arm
+refusals now name `--no-zero-lead` in their hint. Tests: `test_position_trust` 216
+green with its three banner anchors taught the resolved-local shape;
+`test_grantsim`/`test_grantsuppress`/`test_srclint` green;
+`test_handshake`'s residual red is the pre-existing build-38849 vault drift,
+byte-identical on `main`, not this change.
+
 ---
 
 ## 8. Immediate next actions
@@ -2867,7 +2890,7 @@ shell for profession 1.** The hardest write target in the archive is a player sh
 
 ### Movement — ★★ REALFIX-L9: THE PROTECTED CELL — 33 full-lead click grants escaped under the composite and not one became a warp (2026-08-22)
 
-**The fourth attempt reached the decision cell, and it decided.** Owner-driven per the pre-registration (`REALFIX.md` §"REALFIX-L9", committed at `8e160b7` before the run), arms earned from the verdict vocabulary, both taps artifact-clean with zero >0.25 s pairs. Control `--grant-suppress` (`20260822T165425`): 11 cold-latch escapes + 16 deferred = 27 full-lead click grants → **7 REALFIX-E events, 0.26 per fired grant** (inside the registered 0.15–0.5), every one a fence-clearing reseed onto the copy, three landing exactly on clicked destinations. Treatment `--zero-lead --grant-suppress` (`20260822T165910`): **8 cold escapes + 25 deferred = 33 full-lead grants, 33/33 over the gate-1 cut — and ZERO REALFIX-E events** (largest rendered step 51.0 u in 1,133 samples; wire 0 hard rows from 174 grants; null licensed at 93% coverage). Registered binomial (2/3)⁸ = **0.039**; per-fired-grant Fisher 7/27 vs 0/33 = **0.0023**; expected events at the control's own conversion 8.6, observed 0. **The mechanism is visible, not inferred**: every escape's first zero-lead overwrite lands 1.18–3.02 s after it, separation never exceeds 954 u against 1,500–2,800 u leads (the copy is re-aimed MID-FLIGHT — closest approach to clicked destinations p50 216 u vs the control's parked p50 37 u/min 0.0), and 92 above-cut samples under continuous bakes produce no snap because the copy rides the player's own history polyline — REALFIX-O1 observed working. L6's lingering-destination residue never fired under overwrite pressure (33 candidates, 0 events). **Exposure was solved with no build change**: spread clicks plus the click arm's own deferral channel — rule-2 preemption arrives as a ~0.5 s delay, not a suppressor — so REALFIX-I2 stays unbuilt. **What this settles: the composite's zero is a demonstrated save, and the residue bare `--grant-suppress` leaves (L6: 2.02/min, 3-of-3 conversion) is closed by `--zero-lead` in the click regime.** Still open: REALFIX-Q1 (which gate, breakpoint five rounds unrun), Q5 (what re-applies a stale destination — now with 0 firings under overwrites), the composite's non-movement costs (aggro/interact against a moving copy, unpriced), and the 0.039 escape-arm binomial would take a ~15-escape replication to put beyond argument if ever wanted. One deviation recorded: both arms played the spawn-north field, not the registered arena — the rule's purpose held (every report, tap sample and plane word is plane 0). FINDINGS §"REALFIX-L9".
+**The fourth attempt reached the decision cell, and it decided.** Owner-driven per the pre-registration (`REALFIX.md` §"REALFIX-L9", committed at `8e160b7` before the run), arms earned from the verdict vocabulary, both taps artifact-clean with zero >0.25 s pairs. Control `--grant-suppress` (`20260822T165425`): 11 cold-latch escapes + 16 deferred = 27 full-lead click grants → **7 REALFIX-E events, 0.26 per fired grant** (inside the registered 0.15–0.5), every one a fence-clearing reseed onto the copy, three landing exactly on clicked destinations. Treatment `--zero-lead --grant-suppress` (`20260822T165910`): **8 cold escapes + 25 deferred = 33 full-lead grants, 33/33 over the gate-1 cut — and ZERO REALFIX-E events** (largest rendered step 51.0 u in 1,133 samples; wire 0 hard rows from 174 grants; null licensed at 93% coverage). Registered binomial (2/3)⁸ = **0.039**; per-fired-grant Fisher 7/27 vs 0/33 = **0.0023**; expected events at the control's own conversion 8.6, observed 0. **The mechanism is visible, not inferred**: every escape's first zero-lead overwrite lands 1.18–3.02 s after it, separation never exceeds 954 u against 1,500–2,800 u leads (the copy is re-aimed MID-FLIGHT — closest approach to clicked destinations p50 216 u vs the control's parked p50 37 u/min 0.0), and 92 above-cut samples under continuous bakes produce no snap because the copy rides the player's own history polyline — REALFIX-O1 observed working. L6's lingering-destination residue never fired under overwrite pressure (33 candidates, 0 events). **Exposure was solved with no build change**: spread clicks plus the click arm's own deferral channel — rule-2 preemption arrives as a ~0.5 s delay, not a suppressor — so REALFIX-I2 stays unbuilt. **What this settles: the composite's zero is a demonstrated save, and the residue bare `--grant-suppress` leaves (L6: 2.02/min, 3-of-3 conversion) is closed by `--zero-lead` in the click regime.** Still open: REALFIX-Q1 (which gate, breakpoint five rounds unrun), Q5 (what re-applies a stale destination — now with 0 firings under overwrites), the composite's non-movement costs (aggro/interact against a moving copy, unpriced), and the 0.039 escape-arm binomial would take a ~15-escape replication to put beyond argument if ever wanted. One deviation recorded: both arms played the spawn-north field, not the registered arena — the rule's purpose held (every report, tap sample and plane word is plane 0). FINDINGS §"REALFIX-L9". **SHIPPED same day: §7 Q9, owner's ruling — the composite plus `--plane-carry` is the default; `--no-*` flags revert for A/B work.**
 
 ### Movement — ★⚠ REALFIX-L8: the exposure protocol finally WORKS (32 cold-latch escapes), and the treatment was derailed by the OTHER mechanism (2026-08-22)
 

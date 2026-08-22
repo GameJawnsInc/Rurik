@@ -1576,11 +1576,19 @@ def main():
           f"writers -- a list here would send all 196 of the reproduction's "
           f"clicks half a second later instead of 140 of them now")
 
-    # THE FLAG'S BANNER MUST BE PRINTABLE, same reason as --resync's.
-    banner = next((n for n in ast.walk(src)
+    # THE FLAG'S BANNER MUST BE PRINTABLE, same reason as --resync's. Since
+    # the 2026-08-22 default flip the banner block tests the RESOLVED local
+    # (`if grant_suppress:`), so the matcher accepts Name or Attribute -- and
+    # it walks main() only, because zero_lead_composition() now holds bare-name
+    # `if grant_suppress:` tests of its own that would shadow the banner.
+    _gs_main = next(n for n in ast.walk(src)
+                    if isinstance(n, ast.FunctionDef) and n.name == "main")
+    banner = next((n for n in ast.walk(_gs_main)
                    if isinstance(n, ast.If)
-                   and isinstance(n.test, ast.Attribute)
-                   and n.test.attr == "grant_suppress"), None)
+                   and ((isinstance(n.test, ast.Attribute)
+                         and n.test.attr == "grant_suppress")
+                        or (isinstance(n.test, ast.Name)
+                            and n.test.id == "grant_suppress"))), None)
     check(banner is not None and unprintable(banner) == [],
           "and every string the --grant-suppress banner prints survives a "
           "cp1252 console",
@@ -2290,8 +2298,10 @@ def main():
     # because pinning the prose would make every wording fix a red test.
     zl_arg = next((n for n in ast.walk(main_fn)
                    if isinstance(n, ast.If)
-                   and isinstance(n.test, ast.Attribute)
-                   and n.test.attr == "zero_lead"), None)
+                   and ((isinstance(n.test, ast.Attribute)
+                         and n.test.attr == "zero_lead")
+                        or (isinstance(n.test, ast.Name)
+                            and n.test.id == "zero_lead"))), None)
 
     def printed_text(node):
         """Only strings that reach a `print(...)`, because only those are seen.
@@ -2823,8 +2833,10 @@ def main():
     # assignment, the text in the file and no operator ever seeing it.
     pc_arg = next((n for n in ast.walk(main_fn)
                    if isinstance(n, ast.If)
-                   and isinstance(n.test, ast.Attribute)
-                   and n.test.attr == "plane_carry"), None)
+                   and ((isinstance(n.test, ast.Attribute)
+                         and n.test.attr == "plane_carry")
+                        or (isinstance(n.test, ast.Name)
+                            and n.test.id == "plane_carry"))), None)
     pc_banner = printed_text(pc_arg)
     # THE BASELINE COUNTS ARE PINNED TOO, and they were not until 2026-08-21.
     # Every other evidential string here was pinned -- "87% and 39%", the 5%

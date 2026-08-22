@@ -1181,7 +1181,10 @@ HEADING_GRANT = False
 CLIENT_ENDPOINT = False
 
 # --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
-# been run. OFF by default. `studies/movement/REALFIX.md` §1 is the spec and
+# been run. The module global defaults False and main()'s argparse layer flips
+# it ON BY DEFAULT since 2026-08-22 -- owner's ruling after REALFIX-L9 (33
+# escaping full-lead click grants under the composite, 0 warps);
+# --no-zero-lead reverts. `studies/movement/REALFIX.md` §1 is the spec and
 # §4's REALFIX-L1 is the run it exists for.
 #
 # WHAT IT SENDS, on every 0x003D while moving -- and "every" is the second
@@ -1264,7 +1267,9 @@ CLIENT_ENDPOINT = False
 ZERO_LEAD = False
 
 # --plane-carry. REALFIX-F1, "the plane echo fix", and it is a MODIFIER ON
-# --zero-lead rather than a policy of its own. OFF by default.
+# --zero-lead rather than a policy of its own. The module global defaults
+# False; main() resolves it ON whenever zero-lead is on (default since
+# 2026-08-22, owner's ruling; --no-plane-carry reverts).
 # `studies/movement/REALFIX.md` §6.3 is the spec and REALFIX-L3 is the run it
 # is aimed at.
 #
@@ -3352,7 +3357,9 @@ def _maybe_resync(send, state, rec, now=None):
 
 
 # ---------------------------------------------------------------------------
-# GRANT SUPPRESSION -- `--grant-suppress`.  OFF by default.
+# GRANT SUPPRESSION -- `--grant-suppress`.  Module global defaults False;
+# main()'s argparse layer flips it ON BY DEFAULT since 2026-08-22 (owner's
+# ruling after REALFIX-L9; --no-grant-suppress reverts).
 #
 # WHAT EARNED IT, three captures taken on the owner's own machine 2026-08-20.
 # These are primary evidence, not a reconstruction:
@@ -14247,9 +14254,10 @@ def main():
                          "answer a heading, so this is the shape we were "
                          "missing rather than a workaround. Score it with "
                          "toolkit/clientscan/movetap.py.")
-    ap.add_argument("--zero-lead", action="store_true",
-                    help="REALFIX-P2, and the only candidate in the lead family "
-                         "that has NEVER been run. Answer every keyboard "
+    ap.add_argument("--zero-lead", action="store_true", default=None,
+                    help="REALFIX-P2. ON BY DEFAULT since 2026-08-22 (owner's "
+                         "ruling after REALFIX-L9; --no-zero-lead reverts). "
+                         "Answer every keyboard "
                          "heading while moving with 0x0025 (unit direction, the "
                          "client's own movementType) and a 0x0029 at the "
                          "client's REPORTED POSITION VERBATIM -- no lead, no "
@@ -14283,7 +14291,13 @@ def main():
                          "with --grant-suppress, --resync and --click-sweep, "
                          "each with a printed note. Its prediction is printed "
                          "at startup. This is REALFIX-L1's treatment arm.")
-    ap.add_argument("--plane-carry", action="store_true",
+    ap.add_argument("--no-zero-lead", action="store_false", dest="zero_lead",
+                    help="Revert --zero-lead to the pre-2026-08-22 default "
+                         "(no heading-arm grants). Also drops --plane-carry "
+                         "unless that flag is passed explicitly, in which case "
+                         "the composition check refuses -- the modifier cannot "
+                         "run without its policy.")
+    ap.add_argument("--plane-carry", action="store_true", default=None,
                     help="REALFIX-F1, the plane echo fix, and a MODIFIER ON "
                          "--zero-lead rather than a policy of its own: passed "
                          "without it the server REFUSES to start, because it "
@@ -14313,7 +14327,14 @@ def main():
                          "rows, but that population is overwhelmingly NPCs and "
                          "the player-identified version is UNVERIFIED at 87%% "
                          "vs 39%% under two identification rules. Its prediction "
-                         "and its named limit are printed at startup.")
+                         "and its named limit are printed at startup. ON BY "
+                         "DEFAULT since 2026-08-22 whenever --zero-lead is on "
+                         "(owner's ruling; --no-plane-carry reverts).")
+    ap.add_argument("--no-plane-carry", action="store_false", dest="plane_carry",
+                    help="Revert --plane-carry: send (reported_plane, "
+                         "reported_plane) under --zero-lead, the pre-F1 wire "
+                         "shape. The plane-echo warp class (REALFIX-L3/L4/L8) "
+                         "comes back with it at plane boundaries.")
     ap.add_argument("--arrival-carry", action="store_true",
                     help="REALFIX-F1b, and it exists because F1's OWN PRIMARY "
                          "FALSIFIER FIRED. Also a MODIFIER ON --zero-lead "
@@ -14373,7 +14394,7 @@ def main():
                          "sentence and release -- because a half-suppressed "
                          "refusal is a third behaviour retail never produces "
                          "and would answer neither question.")
-    ap.add_argument("--grant-suppress", action="store_true",
+    ap.add_argument("--grant-suppress", action="store_true", default=None,
                     help="EIGHTH candidate, and the first that acts by SAYING "
                          "LESS. Two refusals on the click grant: (1) never send "
                          "0x0029 while the player is driving with the keyboard "
@@ -14388,9 +14409,17 @@ def main():
                          "against run 20260820T183311: 196 clicks -> 140 grants "
                          "in 44 s and 5 hard jumps, four of them 0.10-0.23 s "
                          "after a grant. Rule 1 refuses 196 of those 196 and 0 "
-                         "of the 5 ordinary clicks in run 20260820T182934. OFF "
-                         "by default; independent of every other movement flag."
+                         "of the 5 ordinary clicks in run 20260820T182934. ON "
+                         "BY DEFAULT since 2026-08-22 (owner's ruling after "
+                         "REALFIX-L9; --no-grant-suppress reverts); independent "
+                         "of every other movement flag."
                          % GRANT_MIN_INTERVAL)
+    ap.add_argument("--no-grant-suppress", action="store_false",
+                    dest="grant_suppress",
+                    help="Revert --grant-suppress: click grants go out while "
+                         "the player keyboards and with no rate floor -- the "
+                         "spam-click warp regime (round 4, REALFIX-L5) comes "
+                         "back with it.")
     ap.add_argument("--stop-echo", action="store_true",
                     help="REFUTED 2026-08-19, kept only so the negative result "
                          "is reproducible -- do not reach for this as a fix. On "
@@ -14929,68 +14958,87 @@ def main():
     # their banners by the time we get here, and that is harmless only because
     # SystemExit follows immediately -- the process ends before the listener
     # binds a socket. Do not read this block as a general two-phase parse.
+    # THE DEFAULT FLIP -- owner's ruling 2026-08-22, after REALFIX-L9
+    # (FINDINGS section "REALFIX-L9": 33 escaping full-lead click grants under
+    # the composite, 0 warps; costs priced the same day -- drift identical to
+    # the control, wire at half retail's own grant cadence). The three flags
+    # are three-state: None means "not stated", which resolves ON, and the
+    # --no-* forms revert. plane-carry's default FOLLOWS zero-lead, so
+    # --no-zero-lead alone does not strand a modifier that (correctly)
+    # refuses to run without its policy; --plane-carry stated explicitly
+    # alongside --no-zero-lead still reaches the composition refusal, which
+    # is the loud failure that combination deserves.
+    zero_lead = a.zero_lead if a.zero_lead is not None else True
+    grant_suppress = a.grant_suppress if a.grant_suppress is not None else True
+    plane_carry = a.plane_carry if a.plane_carry is not None else zero_lead
     _zl_refusal, _zl_notes = zero_lead_composition(
-        zero_lead=a.zero_lead, heading_grant=a.heading_grant,
-        client_endpoint=a.client_endpoint, grant_suppress=a.grant_suppress,
+        zero_lead=zero_lead, heading_grant=a.heading_grant,
+        client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
-        plane_carry=a.plane_carry, arrival_carry=a.arrival_carry)
+        plane_carry=plane_carry, arrival_carry=a.arrival_carry)
+    if _zl_refusal and a.zero_lead is None:
+        _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
+                        "pass --no-zero-lead to run this arm without it.)")
     if _zl_refusal:
         raise SystemExit(_zl_refusal)
-    if a.zero_lead:
+    if zero_lead:
         global ZERO_LEAD
         ZERO_LEAD = True
-        print("[map] --zero-lead ON. REALFIX-P2, the treatment arm of "
-              "REALFIX-L1, and the only candidate in the lead family never run.")
-        print(f"      SENDS     on EVERY 0x003D while moving, at most one per "
-              f"{GRANT_MIN_INTERVAL:.2f}s: 0x0025 (unit direction + the "
-              f"client's own movementType) then 0x0029 at the client's REPORTED "
-              f"POSITION VERBATIM. No lead, no clip, no staleness gate, no "
-              f"straight-shot gate. Exactly one 0x0025 per burst.")
-        print("      GROUND    the client's history polyline extends only "
-              "BACKWARDS while it holds no destination, so LAG is on it by "
-              "construction and LEAD is not (REALFIX-O1/O3). Both dead "
-              "candidates in this family granted 766 u AHEAD.")
-        print("      NOT       the stop arm (that is --stop-echo, REFUTED, and "
-              "REFUSED in combination with this flag) and not the click arm. "
-              "state['dest'] keeps our own clipped leg -- but the grant DOES "
-              "move the SYNC model and the shared grant clock through send(), "
-              "so 'only the wire changes' is too strong.")
-        print("      ADVISORY  a report the position-trust guard REFUSED is "
-              "still granted VERBATIM, and sync_to follows it. The client says "
-              "it is STANDING there, so the point is on its own history "
-              "polyline whatever we believe; granting state['pos'] instead "
-              "would grant a point the player has already left.")
-        print("      RETRACTED, and do not re-quote it: 'a zero-distance grant "
-              "takes the <=1.0 u short-circuit and dispatches nothing' is FALSE "
-              "of these grants -- that compare measures from the SYNC COPY, and "
-              "5 of 358 synthesized grants take it. The dropped `turned` gate "
-              "costs real cadence; price it on the numbers.")
-        print("      PREDICTION, stated before the run, REALFIX.md sec.4 "
-              "unedited, in BOTH units because this arc has already lost a "
-              "candidate that bounded SIZE while harm arrived as FREQUENCY:")
-        print("        FREQUENCY <= 1.0 hard rows per minute of ACTIVE time "
-              "(P0 arm 3-6/min, bracketing the measured 4.19)")
-        print("        DISPLACED <= 40 u per active second (P0 arm 100-170, "
-              "bracketing 137.8)")
-        print("        SEPARATION movetap-measured SYNC vs the client's own "
-              "report: p50 <= 150 u and p90 <= 520 u (P0 arm p50 >= 800 u)")
-        print("      FAILURE SIGNATURE, pre-registered: if it fails it must "
-              "fail as FREQUENT SMALL displacements at report-chord scale "
-              "(33-70 u fine cadence, ~500 u on a keyboard hold), NOT as a rare "
-              "large teleport. A P2-arm displacement p50 above 520 u REFUTES "
-              "the 'lag is on the polyline' reading and sends the arc back to "
-              "REALFIX.md sec.2.2.")
-        print("      WOULD REFUTE THE INVARIANT ITSELF: a snap recorded while "
-              "movetap shows separation under 299.33 u and the copy behind the "
-              "player on ground already walked. That is gate 2, gate 3 or the "
-              "gate-free ResyncAllAsync, and it would make every policy in "
-              "REALFIX.md beside the point.")
-        print("      RUN IT    click-free, keyboard held through the WHOLE "
-              "waiting period, one deliberate sustained backpedal leg "
-              "(REALFIX-U4), movetap.py running throughout, arms alternated at "
-              "fixed intervals against the shipped default.")
-        print("      Score it with:  python toolkit/clientscan/movesync.py "
-              "--wire-only   (state the denominator)")
+        if a.zero_lead is None:
+            print("[map] --zero-lead ON by default -- owner's ruling 2026-08-22 after REALFIX-L9. --no-zero-lead reverts; pass --zero-lead explicitly for the full pre-registration banner.")
+        else:
+            print("[map] --zero-lead ON. REALFIX-P2, the treatment arm of "
+                  "REALFIX-L1, and the only candidate in the lead family never run.")
+            print(f"      SENDS     on EVERY 0x003D while moving, at most one per "
+                  f"{GRANT_MIN_INTERVAL:.2f}s: 0x0025 (unit direction + the "
+                  f"client's own movementType) then 0x0029 at the client's REPORTED "
+                  f"POSITION VERBATIM. No lead, no clip, no staleness gate, no "
+                  f"straight-shot gate. Exactly one 0x0025 per burst.")
+            print("      GROUND    the client's history polyline extends only "
+                  "BACKWARDS while it holds no destination, so LAG is on it by "
+                  "construction and LEAD is not (REALFIX-O1/O3). Both dead "
+                  "candidates in this family granted 766 u AHEAD.")
+            print("      NOT       the stop arm (that is --stop-echo, REFUTED, and "
+                  "REFUSED in combination with this flag) and not the click arm. "
+                  "state['dest'] keeps our own clipped leg -- but the grant DOES "
+                  "move the SYNC model and the shared grant clock through send(), "
+                  "so 'only the wire changes' is too strong.")
+            print("      ADVISORY  a report the position-trust guard REFUSED is "
+                  "still granted VERBATIM, and sync_to follows it. The client says "
+                  "it is STANDING there, so the point is on its own history "
+                  "polyline whatever we believe; granting state['pos'] instead "
+                  "would grant a point the player has already left.")
+            print("      RETRACTED, and do not re-quote it: 'a zero-distance grant "
+                  "takes the <=1.0 u short-circuit and dispatches nothing' is FALSE "
+                  "of these grants -- that compare measures from the SYNC COPY, and "
+                  "5 of 358 synthesized grants take it. The dropped `turned` gate "
+                  "costs real cadence; price it on the numbers.")
+            print("      PREDICTION, stated before the run, REALFIX.md sec.4 "
+                  "unedited, in BOTH units because this arc has already lost a "
+                  "candidate that bounded SIZE while harm arrived as FREQUENCY:")
+            print("        FREQUENCY <= 1.0 hard rows per minute of ACTIVE time "
+                  "(P0 arm 3-6/min, bracketing the measured 4.19)")
+            print("        DISPLACED <= 40 u per active second (P0 arm 100-170, "
+                  "bracketing 137.8)")
+            print("        SEPARATION movetap-measured SYNC vs the client's own "
+                  "report: p50 <= 150 u and p90 <= 520 u (P0 arm p50 >= 800 u)")
+            print("      FAILURE SIGNATURE, pre-registered: if it fails it must "
+                  "fail as FREQUENT SMALL displacements at report-chord scale "
+                  "(33-70 u fine cadence, ~500 u on a keyboard hold), NOT as a rare "
+                  "large teleport. A P2-arm displacement p50 above 520 u REFUTES "
+                  "the 'lag is on the polyline' reading and sends the arc back to "
+                  "REALFIX.md sec.2.2.")
+            print("      WOULD REFUTE THE INVARIANT ITSELF: a snap recorded while "
+                  "movetap shows separation under 299.33 u and the copy behind the "
+                  "player on ground already walked. That is gate 2, gate 3 or the "
+                  "gate-free ResyncAllAsync, and it would make every policy in "
+                  "REALFIX.md beside the point.")
+            print("      RUN IT    click-free, keyboard held through the WHOLE "
+                  "waiting period, one deliberate sustained backpedal leg "
+                  "(REALFIX-U4), movetap.py running throughout, arms alternated at "
+                  "fixed intervals against the shipped default.")
+            print("      Score it with:  python toolkit/clientscan/movesync.py "
+                  "--wire-only   (state the denominator)")
         for _note in _zl_notes:
             print(_note)
 
@@ -14999,85 +15047,88 @@ def main():
     # ASCII only -- see the --resync banner's own note, where a U+26A0 raised
     # UnicodeEncodeError on a default Windows console and would have killed the
     # run the flag exists to enable.
-    if a.plane_carry:
+    if plane_carry:
         global PLANE_CARRY
         PLANE_CARRY = True
-        print("[map] --plane-carry ON. REALFIX-F1, the plane echo fix, a "
-              "MODIFIER on --zero-lead and not a policy of its own.")
-        print("      SENDS     the same 0x0029 at the same point with the same "
-              "rate limit. ONE field changes: field 4 (the plane written to "
-              "agent+0x80 on the SYNC COPY) becomes the plane that arrived WITH "
-              "the point that copy is standing on -- under zero lead, the "
-              "PREVIOUS GRANT'S plane, by construction. Field 3 (the "
-              "destination's plane) is unchanged: the destination is the newest "
-              "report.")
-        print("      DEFAULT   with no previous grant on record, field 4 is the "
-              "CURRENT plane -- i.e. exactly today's payload. The first grant "
-              "of a session has no lagged copy to be wrong about.")
-        print("      GROUND    the SYNC copy is one report-chord (~515 u, "
-              "REALFIX-W2) behind the client, so on a boundary the shipped "
-              "payload stamps the CLIENT's plane onto a copy standing "
-              "elsewhere. REALFIX-L3: 8 plane-rewriting above-cut grants -> 3 "
-              "warps; 28 unchanged above-cut grants -> 0. Fisher p = 0.0078, "
-              "with a P0 control that carried 7x the plane mismatch and never "
-              "moved its rendered copy more than 43 u.")
-        print("      NOT      a navmesh computation. The REJECTED variant is "
-              "field 4 = plane_at(copy_estimate); plane_at is 189/198 and its 9 "
-              "failures are EXACTLY bridge-over-ground, which is this map's "
-              "site, and the mesh is ambiguous there by measurement. Verify the "
-              "operand, do not compute it from the tool known to be wrong about "
-              "it.")
-        print("      PREDICTION, stated before the run, REALFIX.md sec.6.3 "
-              "unedited:")
-        # CORRECTED 2026-08-21, and the correction is the point of the line.
-        # This used to read "(REALFIX-L3 observed 11 in X3, 3 in X1, 6 in X5)"
-        # and L3 observed no such thing: 11/3/6 are REALFIX.md sec.6.4.1's
-        # "instants planned" column for X3/X1/X5 -- SIMULATED, for a plan that
-        # then yielded 8 ("the plan yielded 8 above-cut plane-rewriting
-        # instants rather than the 11 simulated", FINDINGS's L3 entry). A
-        # prediction printed as an observation, inside the one artifact whose
-        # whole job is that the baseline cannot be rationalised after the run,
-        # would have scored this arm's PRIMARY falsifier against a number
-        # nothing ever measured -- and 11 against 8 makes any F1 result read as
-        # a larger improvement than it is.
-        print("        MISMATCH  grants whose field 4 differs from the SYNC "
-              "copy's agent+0x80 go to 0. BASELINE, from REALFIX-L3 itself: 8 "
-              "plane-rewriting grants ABOVE THE CUT and 2 below, 10 in the "
-              "whole run, of which the late X1 and X2a legs carry 3 and "
-              "produced 0 events. No finer per-cell split was recorded, so "
-              "the denominator is the run. The 11-in-X3 / 3-in-X1 / 6-in-X5 "
-              "triple this line used to quote is sec.6.4.1's SIMULATED "
-              "instants planned and was never observed.")
-        print("        SEPARATION p50 and p90 UNCHANGED within 5% -- F1 touches "
-              "no position, only a plane word")
-        print("        EVENTS    the REALFIX-X3 event count goes to 0 (it was "
-              "3: 476.8, 465.9, 242.8 u)")
-        print("      FAILS IF   any X3 event survives, OR separation p90 moves "
-              "more than 5%, OR the field-4 mismatch count is not 0.")
-        print("      NAMED LIMIT it UNDER-CORRECTS when the copy is more than "
-              "ONE grant interval behind -- after a rate-limit refusal (4 of 70 "
-              "headings in REALFIX-L1's arm B) or a stall -- because the copy "
-              "may still be in transit between the grant before last and the "
-              "last one, and if those straddle a boundary the carried plane is "
-              "the wrong one of the pair. It is a one-interval correction for a "
-              "one-interval lag; W2 says that is the lag zero lead produces at "
-              "free-travel cadence and nothing more.")
-        print("      !! NPC-GROUNDED, AND THE PLAYER VERSION IS UNVERIFIED. "
-              "Retail's field 3 LEADS field 4 in 939 of 1,245 differing rows "
-              "(75.4%, delay p25/p50/p75 = 0.26/0.64/1.28 s), replicated at "
-              "83.6% under a symmetric +-3.0 s window (n = 825). That is "
-              "measured over retail's whole AGENT population, which is "
-              "OVERWHELMINGLY NPCs; under two player-identification rules the "
-              "same statistic reads 87% and 39%. F1 is a proposal grounded in "
-              "NPC grants and must be reported as one.")
-        print("      !! NECESSARY, NOT SUFFICIENT. 5 of REALFIX-L3's 8 "
-              "plane-rewriting above-cut grants did NOT warp, and whatever "
-              "selects those 3 from those 8 is unmeasured. F1 removes the "
-              "necessary condition; a null under it does not identify the "
-              "sufficient one.")
-        print("      Score it with:  the grant_verdict rows' own plane_dest / "
-              "plane_cur / plane_differs fields, against movetap's agent+0x80 "
-              "on the SYNC copy   (state the denominator)")
+        if a.plane_carry is None:
+            print("[map] --plane-carry ON by default -- owner's ruling 2026-08-22 after REALFIX-L9. --no-plane-carry reverts; pass --plane-carry explicitly for the full pre-registration banner.")
+        else:
+            print("[map] --plane-carry ON. REALFIX-F1, the plane echo fix, a "
+                  "MODIFIER on --zero-lead and not a policy of its own.")
+            print("      SENDS     the same 0x0029 at the same point with the same "
+                  "rate limit. ONE field changes: field 4 (the plane written to "
+                  "agent+0x80 on the SYNC COPY) becomes the plane that arrived WITH "
+                  "the point that copy is standing on -- under zero lead, the "
+                  "PREVIOUS GRANT'S plane, by construction. Field 3 (the "
+                  "destination's plane) is unchanged: the destination is the newest "
+                  "report.")
+            print("      DEFAULT   with no previous grant on record, field 4 is the "
+                  "CURRENT plane -- i.e. exactly today's payload. The first grant "
+                  "of a session has no lagged copy to be wrong about.")
+            print("      GROUND    the SYNC copy is one report-chord (~515 u, "
+                  "REALFIX-W2) behind the client, so on a boundary the shipped "
+                  "payload stamps the CLIENT's plane onto a copy standing "
+                  "elsewhere. REALFIX-L3: 8 plane-rewriting above-cut grants -> 3 "
+                  "warps; 28 unchanged above-cut grants -> 0. Fisher p = 0.0078, "
+                  "with a P0 control that carried 7x the plane mismatch and never "
+                  "moved its rendered copy more than 43 u.")
+            print("      NOT      a navmesh computation. The REJECTED variant is "
+                  "field 4 = plane_at(copy_estimate); plane_at is 189/198 and its 9 "
+                  "failures are EXACTLY bridge-over-ground, which is this map's "
+                  "site, and the mesh is ambiguous there by measurement. Verify the "
+                  "operand, do not compute it from the tool known to be wrong about "
+                  "it.")
+            print("      PREDICTION, stated before the run, REALFIX.md sec.6.3 "
+                  "unedited:")
+            # CORRECTED 2026-08-21, and the correction is the point of the line.
+            # This used to read "(REALFIX-L3 observed 11 in X3, 3 in X1, 6 in X5)"
+            # and L3 observed no such thing: 11/3/6 are REALFIX.md sec.6.4.1's
+            # "instants planned" column for X3/X1/X5 -- SIMULATED, for a plan that
+            # then yielded 8 ("the plan yielded 8 above-cut plane-rewriting
+            # instants rather than the 11 simulated", FINDINGS's L3 entry). A
+            # prediction printed as an observation, inside the one artifact whose
+            # whole job is that the baseline cannot be rationalised after the run,
+            # would have scored this arm's PRIMARY falsifier against a number
+            # nothing ever measured -- and 11 against 8 makes any F1 result read as
+            # a larger improvement than it is.
+            print("        MISMATCH  grants whose field 4 differs from the SYNC "
+                  "copy's agent+0x80 go to 0. BASELINE, from REALFIX-L3 itself: 8 "
+                  "plane-rewriting grants ABOVE THE CUT and 2 below, 10 in the "
+                  "whole run, of which the late X1 and X2a legs carry 3 and "
+                  "produced 0 events. No finer per-cell split was recorded, so "
+                  "the denominator is the run. The 11-in-X3 / 3-in-X1 / 6-in-X5 "
+                  "triple this line used to quote is sec.6.4.1's SIMULATED "
+                  "instants planned and was never observed.")
+            print("        SEPARATION p50 and p90 UNCHANGED within 5% -- F1 touches "
+                  "no position, only a plane word")
+            print("        EVENTS    the REALFIX-X3 event count goes to 0 (it was "
+                  "3: 476.8, 465.9, 242.8 u)")
+            print("      FAILS IF   any X3 event survives, OR separation p90 moves "
+                  "more than 5%, OR the field-4 mismatch count is not 0.")
+            print("      NAMED LIMIT it UNDER-CORRECTS when the copy is more than "
+                  "ONE grant interval behind -- after a rate-limit refusal (4 of 70 "
+                  "headings in REALFIX-L1's arm B) or a stall -- because the copy "
+                  "may still be in transit between the grant before last and the "
+                  "last one, and if those straddle a boundary the carried plane is "
+                  "the wrong one of the pair. It is a one-interval correction for a "
+                  "one-interval lag; W2 says that is the lag zero lead produces at "
+                  "free-travel cadence and nothing more.")
+            print("      !! NPC-GROUNDED, AND THE PLAYER VERSION IS UNVERIFIED. "
+                  "Retail's field 3 LEADS field 4 in 939 of 1,245 differing rows "
+                  "(75.4%, delay p25/p50/p75 = 0.26/0.64/1.28 s), replicated at "
+                  "83.6% under a symmetric +-3.0 s window (n = 825). That is "
+                  "measured over retail's whole AGENT population, which is "
+                  "OVERWHELMINGLY NPCs; under two player-identification rules the "
+                  "same statistic reads 87% and 39%. F1 is a proposal grounded in "
+                  "NPC grants and must be reported as one.")
+            print("      !! NECESSARY, NOT SUFFICIENT. 5 of REALFIX-L3's 8 "
+                  "plane-rewriting above-cut grants did NOT warp, and whatever "
+                  "selects those 3 from those 8 is unmeasured. F1 removes the "
+                  "necessary condition; a null under it does not identify the "
+                  "sufficient one.")
+            print("      Score it with:  the grant_verdict rows' own plane_dest / "
+                  "plane_cur / plane_differs fields, against movetap's agent+0x80 "
+                  "on the SYNC copy   (state the denominator)")
 
     # REALFIX-F1b. Same house style, same reason, and one addition F1's banner
     # could not carry: this arm's predecessor ALREADY FAILED its own primary
@@ -15250,40 +15301,43 @@ def main():
         print("      Pair it with a DEFAULT run, same action script, and read "
               "the difference. A run of this arm alone measures nothing.")
 
-    if a.grant_suppress:
+    if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True
-        print("[map] --grant-suppress ON. Two refusals on the click grant, and "
-              "nothing new goes on the wire.")
-        print(f"      RULE 1    no 0x0029 while the player is keyboarding -- a "
-              f"0x003D with a non-zero movementType arms it, a 0x0047 clears "
-              f"it, and it lapses after {GRANT_LOCAL_WINDOW:.1f}s without one.")
-        print(f"      RULE 2    and never more often than one per "
-              f"{GRANT_MIN_INTERVAL:.2f}s; a click inside the floor is HELD, "
-              f"newest destination only, and dropped unsent after "
-              f"{GRANT_PENDING_MAX_AGE:.2f}s.")
-        print("      WHY       0x0029 is SYNC-ONLY (0x0025's async arm is gated "
-              "shut for the client-controlled agent at 0x005FD5D3), so a grant "
-              "sent mid-keyboard moves the authoritative copy away from the one "
-              "the player sees AND re-runs the desync test that snaps them "
-              "together past 299.332591 u.")
-        print("      COST      measured, not assumed: on the capture where we "
-              "answered NO click at all, 5 of 5 clicks still walked the "
-              "character toward the clicked point (cos 0.994-1.000, closing 90 "
-              "to 3,224 u). Click-to-move is the CLIENT's feature.")
-        print("      PREDICTION, stated before the run, in BOTH units because "
-              "this arc has already had a candidate bound the size while the "
-              "harm arrived as frequency:")
-        print("        FREQUENCY hard rows per minute on movesync's bar fall to "
-              "0.00, matching the two clean captures. ANY hard row within "
-              "0.30 s of a grant REFUTES it.")
-        print("        SIZE      no client displacement above gate 1's "
-              "299.332591 u attributable to a grant.")
-        print("      CONTROL   and this one decides nothing without it: with "
-              "the player NOT keyboarding, clicking must still walk the "
-              "character. If click-to-move is dead the run is void, not a pass.")
-        print("      Score it with:  python toolkit/clientscan/movesync.py "
-              "--wire-only   (state the denominator)")
+        if a.grant_suppress is None:
+            print("[map] --grant-suppress ON by default -- owner's ruling 2026-08-22 after REALFIX-L9. --no-grant-suppress reverts; pass --grant-suppress explicitly for the full pre-registration banner.")
+        else:
+            print("[map] --grant-suppress ON. Two refusals on the click grant, and "
+                  "nothing new goes on the wire.")
+            print(f"      RULE 1    no 0x0029 while the player is keyboarding -- a "
+                  f"0x003D with a non-zero movementType arms it, a 0x0047 clears "
+                  f"it, and it lapses after {GRANT_LOCAL_WINDOW:.1f}s without one.")
+            print(f"      RULE 2    and never more often than one per "
+                  f"{GRANT_MIN_INTERVAL:.2f}s; a click inside the floor is HELD, "
+                  f"newest destination only, and dropped unsent after "
+                  f"{GRANT_PENDING_MAX_AGE:.2f}s.")
+            print("      WHY       0x0029 is SYNC-ONLY (0x0025's async arm is gated "
+                  "shut for the client-controlled agent at 0x005FD5D3), so a grant "
+                  "sent mid-keyboard moves the authoritative copy away from the one "
+                  "the player sees AND re-runs the desync test that snaps them "
+                  "together past 299.332591 u.")
+            print("      COST      measured, not assumed: on the capture where we "
+                  "answered NO click at all, 5 of 5 clicks still walked the "
+                  "character toward the clicked point (cos 0.994-1.000, closing 90 "
+                  "to 3,224 u). Click-to-move is the CLIENT's feature.")
+            print("      PREDICTION, stated before the run, in BOTH units because "
+                  "this arc has already had a candidate bound the size while the "
+                  "harm arrived as frequency:")
+            print("        FREQUENCY hard rows per minute on movesync's bar fall to "
+                  "0.00, matching the two clean captures. ANY hard row within "
+                  "0.30 s of a grant REFUTES it.")
+            print("        SIZE      no client displacement above gate 1's "
+                  "299.332591 u attributable to a grant.")
+            print("      CONTROL   and this one decides nothing without it: with "
+                  "the player NOT keyboarding, clicking must still walk the "
+                  "character. If click-to-move is dead the run is void, not a pass.")
+            print("      Score it with:  python toolkit/clientscan/movesync.py "
+                  "--wire-only   (state the denominator)")
 
     if a.stop_echo:
         global STOP_ECHO
