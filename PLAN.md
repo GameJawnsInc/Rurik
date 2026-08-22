@@ -1629,10 +1629,29 @@ UNMAPPED message).
    `(850,300)-(1120,760)`. Scored the usual way this run reports a null. Fifth
    metric trap in the series and **the first caught in advance**, by declining
    the instrument before the run rather than by an in-frame control afterwards.
-   **Still open:** what ends the ~10 s slot re-animation E2 saw (the only
-   release in the image is `0x00E2`'s refcount decrement — either an unread
-   client-side timeout or that is simply how long the operator watched), and
-   the reason ids for the rest of the 1934–1993 block, which live server-side.
+   **AND THE ~10 s IS ANSWERED — nothing ends it** (SKILLS-R2, 2026-08-22,
+   [§37](studies/skills/FINDINGS.md)). Two routes, no shared method. **The run:**
+   an A/B one flag apart (`--refusal-silent` reproduces the pre-2026-08-22
+   server), and the silent arm's slot was **still animating at 39.2 s** while
+   the released arm read 0 in all 32 frames and the never-pressed control slot
+   read 0 in both. **The image:** the removal path closes to a single root (only
+   a received `0x00E2`/`0x00E3` reaches the decrement), the entry is 8 bytes
+   with both dwords spoken for — key at +0, `ChCliSkill:955 pending->refCount`
+   at +4, **no timestamp field** — and the overlay loop wraps at 16 steps of
+   0.0625 s with no terminating condition. **So the ~10 s is not a duration the
+   client enforces**; the overlay is exactly a **1.000 s loop**, and "about ten
+   seconds" is about ten cycles of it (RECONSTRUCTION — nobody asked the
+   operator to count). The static negative carries a **positive control that
+   could have refuted it**: the same method recovered the adrenaline blink timer
+   end to end, including a free correction to §31 — the blink window is the last
+   **4.0 s** (`.rdata 0x00941B98`), which is why §31.3 only ever saw the
+   oscillation near the end.
+   **Still open:** the reason ids for the rest of the 1934–1993 block, which
+   live server-side; the character's own cast animation in AgentView (property
+   60 queues action kind `0x19` with **no duration argument** — NOT FOUND); and
+   one UNVERIFIED path that could clear the overlay while the entry lives,
+   GmSkSlot's refresh at `0x00543020` sending msg `0x62` hard-coded false on a
+   null slot pointer.
    On the second half of the old item: our client SENT both unaffordable
    presses and retail's clients send 43 declined ones — including one inside a
    live recharge window — so the client does not gate on cost.

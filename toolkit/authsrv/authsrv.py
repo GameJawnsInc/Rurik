@@ -4459,6 +4459,12 @@ GAME_SMSG_CHAT_MESSAGE_SERVER = 0x005E
 # real and not an artifact of how we read the table.) Retail answers a refusal
 # with 0x00E2 43 times and with 0x00E3 zero times, so this is the one to send.
 GAME_SMSG_SKILL_REFUSED = 0x00E2
+
+# Set from --refusal-silent. OFF by default: retail answers 43 of 43 declined
+# presses, so silence is the DIVERGENCE and the default has to be the measured
+# behaviour. A channel that only exists behind a flag is a channel nobody
+# watches -- test_pools section 11i makes the same argument about ENERGY.
+REFUSAL_SILENT = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
@@ -7148,6 +7154,14 @@ def refuse_press(send, skill_id, copy, conn_id, reason_id=None):
     retail does 3 times of 43 -- the shape for a refusal whose reason we cannot
     name. Guessing a string id there would be inventing traffic.
     """
+    if REFUSAL_SILENT:
+        # THE A/B ARM. Not a fallback and not an error path -- this is the
+        # server we were until 2026-08-22, kept reachable on purpose so the
+        # ~10 s re-animation E2 saw can be measured against the released case.
+        print(f"[c{conn_id}] refusal NOT answered (--refusal-silent): "
+              f"skill {skill_id} refused in silence, the pre-2026-08-22 "
+              f"behaviour", flush=True)
+        return
     if reason_id is not None:
         send(GAME_SMSG_CHAT_MESSAGE_CORE,
              [chatdefs.refusal_body(reason_id)],
@@ -14281,6 +14295,19 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--refusal-silent", action="store_true",
+                    help="answer a refused skill press with NOTHING, which is "
+                         "what this server did until 2026-08-22. It is an A/B "
+                         "ARM, not a fallback: E2 watched a refused slot "
+                         "re-animate for about 10 seconds against a silent "
+                         "server, nobody established whether that duration is "
+                         "real, and once 0x00E2 releases the slot immediately "
+                         "the old behaviour is unreachable. Pair a run of this "
+                         "with a default run, same script, and the difference "
+                         "is the answer. It suppresses the WHOLE batch -- "
+                         "sentence and release -- because a half-suppressed "
+                         "refusal is a third behaviour retail never produces "
+                         "and would answer neither question.")
     ap.add_argument("--grant-suppress", action="store_true",
                     help="EIGHTH candidate, and the first that acts by SAYING "
                          "LESS. Two refusals on the click grant: (1) never send "
@@ -15145,6 +15172,18 @@ def main():
               "player described'. If the character WALKS rather than being "
               "corrected, that regression is back and the payload is the "
               "first thing to read.")
+
+    if a.refusal_silent:
+        global REFUSAL_SILENT
+        REFUSAL_SILENT = True
+        print("[map] --refusal-silent ON. A refused press is answered with "
+              "NOTHING -- no sentence, no slot release.")
+        print("      THIS IS A DIVERGENCE ON PURPOSE. Retail answers 43 of 43 "
+              "declined presses (studies/skills 36); this arm reproduces the "
+              "server we were until 2026-08-22 so the ~10 s slot "
+              "re-animation E2 saw can be measured against the released case.")
+        print("      Pair it with a DEFAULT run, same action script, and read "
+              "the difference. A run of this arm alone measures nothing.")
 
     if a.grant_suppress:
         global GRANT_SUPPRESS
