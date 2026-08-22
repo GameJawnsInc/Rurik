@@ -3850,3 +3850,278 @@ rather than 50, `attack_skill_activated`. The thing that broke the old claim and
 the thing that made the run safe are the same property of the same skill —
 picking a shout meant no hit could land, and a shout is not an attack skill.
 
+## 34. SKILLS-B1 — the boundary the corpus cannot answer, and the gate it hid
+
+**2026-08-21, no client launched.** `studies/skills` mints `SKILLS-` per
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md) §1 — the arc's own
+`FINDINGS.md` takes the arc name. Predictions **P28–P31** were sealed before
+any scan ran (session scratchpad, sha256 `0b3d6ee7…`); the extractor is
+`toolkit/authsrv/adrenjoin.py` and the pins are `test_adrenwire.py` §12–§13.
+
+### 34.1 The question, and why the evidence in hand could not answer it
+
+§33 closed the adrenaline channel except for one line, which `PLAN.md` §8 called
+the cheapest thing left: **where does the damage-taken rule stop granting?**
+`pools.damage_units` grants `round(pct)` units for `pct` percent of maximum
+health lost, and the rounding is measured — 32 sub-25 `0x00CF`s in the live
+corpus, 31 joinable to their damage, round fits **31 of 31** where floor fits 14.
+But the docstring's own last paragraph names the hole: "A hit for under 0.5% now
+grants nothing (it rounds to zero) where the floored reading put that boundary
+at 1%. Nothing in the corpus sits in that band."
+
+**That population is selected on the outcome.** It starts from the gains and
+looks back at the damage, so every row in it is a damage event that DID grant.
+It cannot contain the band where the rule stops. The repair is obvious: run the
+join the other way, from every `0x00A3` naming the observer as target, and the
+no-gain rows arrive by construction.
+
+### 34.2 The naive answer, and it is spectacularly wrong
+
+Run that inverse census with no other thought and it is clean, large and
+completely misleading:
+
+```
+damage-to-self events, unambiguous batches   64
+  granted something                          32
+  granted NOTHING                            32
+  largest percentage that granted nothing   7.5000
+  smallest percentage that granted           2.5000
+```
+
+Read at face value that says retail grants no adrenaline for a hit taking 7.5%
+of maximum health — an order of magnitude above the wiki's 1% and above every
+granting row in the same table. It also puts **2.5000% granting 3 units in one
+row and nothing in another**, which is not a threshold at all: it means the
+grant is not a function of the damage.
+
+### 34.3 SKILLS-B1 — the split, and it is total. OBSERVED
+
+The variable is one nobody had stratified on, and it has nothing to do with
+adrenaline traffic: **does the observer's own `SKILLBAR_UPDATE` ever name a
+skill with a non-zero `adrenaline_units`?**
+
+| | connections | messages | `0x00CF` | `0x00D0` | `0x00D2` |
+|---|---|---|---|---|---|
+| **ARMED** — ≥1 adrenal skill on the bar | 36 | 98,338 | **918** | **27** | **40** |
+| **DARK** — no adrenal skill, ever | 22 | 44,982 | **0** | **0** | **0** |
+
+Not "few" — none. Across 44,982 messages the entire family is absent, spends
+and clears included, which is self-consistent in a way that matters: no gain
+means no 25-second clock means nothing to clear, and §33 measured that clock at
+25.00 s after the last gain.
+
+**The armed column reproduces §4's census exactly** — 918/27/40, and the 886/32
+strike split too. That census counts opcodes over the whole corpus; this one
+counts them per connection after a skillbar join. Two unrelated queries landing
+on the same six numbers is the cross-check that says the stratifier did not
+quietly drop traffic.
+
+**Every one of §34.2's 32 no-gain rows is DARK.** Restrict to ARMED and there is
+no no-gain row at all: 32 damage events, 32 grants.
+
+### 34.4 The control, because a negative needs a positive
+
+A filtered search that finds nothing proves nothing until it has found something
+it should, and here the positive lives inside the negative population. **The
+dark connections fought:**
+
+```
+DARK   hits landed (damage where the observer is the SOURCE)   45
+       completed melee attacks (int property 1, self)          13
+       damage taken                                            32
+       0x00CF received                                          0
+```
+
+GWW's rule is 25 units per successful weapon hit. Thirteen completed melee
+attacks earned **zero** messages. Compare the armed side, where the match is
+one-for-one: capture `20260818T132739` carries 280 completed attacks and
+**280** gains, `20260821T163511` 251 and **251**.
+
+So the silence is a **gate**, not a quiet capture. That distinction is the whole
+check — without §34.4 the claim in §34.3 is unfalsifiable.
+
+### 34.5 The gate's variable is CONFOUNDED, and saying so is the finding's other half
+
+Two rules fit all 58 connections identically:
+
+- **Gate A** — the server sends `0x00CF` only when the observer's bar carries an
+  adrenal skill.
+- **Gate B** — the server sends `0x00CF` only for professions that use
+  adrenaline.
+
+Every dark connection is *also* a non-Warrior: bars of profession-7 skills
+(814/783/858), profession-4 (153/105), profession-2 (394/446), and two empty
+bars. Every armed connection is the *same* Warrior bar (382/384/385 + 364/1/2,
+and 348 in the live run). The corpus holds one adrenaline-using character and
+three that are not, so it cannot separate A from B and neither may be promoted.
+
+**What separates them is one capture**: the Warrior, in an explorable, with
+every adrenal skill taken off the bar, landing hits. Gate A predicts silence;
+Gate B predicts 25s. It is a live run and it is cheap, but it is a run — this is
+recorded as the experiment, not performed.
+
+### 34.6 Why nobody saw this from the screen. OBSERVED, from the bytes
+
+The charge worker gates its own repaint on whether any slot actually moved, and
+that is arithmetic on three addresses rather than a reading:
+
+```
+0x008219B3   33 ff                  xor edi,edi          ; before the loop
+0x008219C0   ...                    loop top
+0x008219EA   89 0e                  mov [esi],ecx        ; the only slot store
+0x008219EC   bf 01 00 00 00         mov edi,1            ; INSIDE the loop
+0x008219F6   75 c8                  jne 0x008219C0       ; back-edge
+0x008219F8   85 ff                  test edi,edi
+0x008219FA   0f 84 ed 00 00 00      je  0x00821AED       ; the shared exit
+0x00821A03   d9 05 b4 95 94 00      fld dword [0x009495B4]   ; 25.0f
+0x00821A12   68 58 00 00 10         push 0x10000058          ; the UI event
+```
+
+The flag starts clear, is set only where a slot is written, and is tested
+**after** the loop — and the `je` lands past both the 25.0 and the UI event
+push. So a `0x00CF` that no slot accepted repaints nothing, fires no
+`0x10000058`, and arms no 25-second timer. §31's blink warning never starts.
+
+It cuts both ways. It is why our own extra traffic is harmless on screen, and it
+is why six captures of retail sending nothing at all sat unread for a day.
+
+### 34.7 What this does to the sender: a divergence, deliberately not fixed
+
+`authsrv.player_gains_adrenaline` decided this exact case, in writing:
+
+> A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though — full pools, **a bar
+> with no adrenal skill on it**, everything recharging.
+
+The argument for it is sound and is about our own clock. The **empirical
+premise** underneath it is now measured false: retail does not send one. And
+retail's silence is deeper than the gain — it sends no `0x00D0` either, so there
+is no clock to keep honest, which is the half the docstring's reasoning could not
+have known.
+
+**The sender is NOT changed, and that is a ruling rather than an omission.**
+Implementing Gate A means picking one side of §34.5's confound on zero evidence,
+and the two errors are symmetric and both invisible: §34.6 shows the client
+no-ops on an unaccepted 207, and §30 shows an unarmed bar has no overlay to
+repaint. What lands is the record — the docstring now names the divergence, and
+`test_adrenwire` §12 pins the measurement so the capture that separates A from B
+goes red on the number it changes.
+
+### 34.8 P28–P31, scored
+
+- **P28 — "there exist damage-to-self events with no gain." CONFIRMED, wrong
+  reason.** 32 of them, and not one is sub-threshold.
+- **P29 — "a single threshold, `max(pct | no gain) < 0.5`." VOID.** The
+  prediction assumed the population was homogeneous. It is two populations, and
+  the "boundary" it would have reported is 7.5%.
+- **P30 — "`units == round(pct)` on every joined pair." CONFIRMED**, re-fitted
+  on the armed rows alone: **round 32/32**, ceil 17, floor 15. The floor→round
+  correction survives the stratification that destroyed the boundary claim, and
+  the ledger closes: 886 strikes beside damage DEALT plus 32 grants beside
+  damage TAKEN accounts for all 918 gains with no residue.
+- **P31 — "1- and 2-unit gains exist if the corpus holds damage in
+  [0.5, 2.5)." VACUOUS.** No armed row sits below 2.5000%. The armed range is
+  2.50–11.04%.
+
+**The sub-1% boundary therefore stays UNVERIFIED**, and now for a known reason
+rather than an absence. It was called the cheapest open item on this channel; it
+is not one, and this is what it cost to find that out.
+
+### 34.A The blind replication, and the two rows it recovered
+
+Run as `studies/review`'s pattern: two agents over the same corpus, each handed
+one rival hypothesis and told to **refute it**, neither shown the other's answer
+or mine. One got `round`, cutoff 0.5%; one got `floor`, cutoff 1.0% — GWW's own
+rule. The floor agent returned `hypothesis_survives: false` and reached the bar
+gate independently, by its own route and with its own scanner: *"the split is
+exact: 11/11 connections with an adrenal bar carry 207; 0/4 without one do, and
+those 4 are where all 32 nulls sit."* Two derivations, no shared code.
+
+It also found **two rows my scan lost**, and both are corrections to this
+document rather than footnotes:
+
+1. **Damage arrives on `0x00A2` as well as `0x00A3`.** The sourceless
+   three-field float channel carries exactly ONE damage event at the observer in
+   the whole corpus — a 6.25% hit granting 6 units. My scan read only `0x00A3`,
+   which left that gain as an orphan with no damage anywhere near it. **My scan
+   printed the orphan and I moved on.** The replication chased it instead, and
+   that is the difference between 31 joined and 32.
+2. **Two batches carry two identical hits and two identical gains.** I excluded
+   them as ambiguous; identical values make every assignment the same pair, so
+   they attribute by symmetry and excluding them was over-caution.
+
+**The ledger closing is what says nothing else is left**: 886 + 32 = 918, every
+gain in the corpus explained by exactly one partner, no residue.
+
+One thing in its report is wrong and is worth naming rather than quietly
+dropping: it proposed reading the rounding constant out of the client's charge
+worker to promote the boundary from INFERRED to OBSERVED. There is no such
+constant to read. `0x00CF` carries the units already computed, and the worker
+does `add eax,[ebp+0xc]` — the message's own field (§26.2, `test_adrenwire` §9).
+The damage→units conversion happens on ArenaNet's server, which we cannot
+disassemble, and that is precisely why this question needs a capture.
+
+### 34.B The check with no free parameter, which the replication supplied
+
+Every one of the eleven distinct armed percentages is an exact integer over 480:
+
+```
+ 2.500000037%  = 12/480      6.041666493%  = 29/480
+ 2.708333358%  = 13/480      6.250000000%  = 30/480
+ 2.916666679%  = 14/480      7.083333284%  = 34/480
+ 3.125000000%  = 15/480      8.124999702%  = 39/480
+ 3.541666642%  = 17/480     11.041666567%  = 53/480
+ 5.000000075%  = 24/480
+```
+
+**480 is the smallest denominator that does it** — searched 1..2000, and the
+only others are 960, 1440 and 1920. And the observer's **int property 42**, its
+maximum health, reads **480** on the same wire, from a message none of that
+arithmetic touched. Two independent witnesses to the same number; a wrong
+denominator has no reason to produce eleven integers.
+
+**What it also bounds, honestly:** every granting row in the corpus is that one
+character at 480 health. So the corpus cannot separate "one unit per 1% of
+maximum health" from "one unit per 4.8 raw damage points" — the wire sends the
+fraction, which makes the percentage reading natural, but that is an argument
+and not a measurement. **Any second maximum health in a granting connection
+settles it**, and that is a cheaper capture than the boundary one.
+
+### 34.C The error bar on the rule, and the wiki is outside it
+
+The replication fitted the rule as a family rather than testing two candidates,
+which is the shape this repo asks for:
+
+- `units = floor(a·pct + 0.5)` fits all 32 rows for **a ∈ [1.000, 1.039]** and
+  nothing outside. The slope is 1 to within 4%.
+- `units = floor(pct + b)` fits all 32 for **b ∈ [0.500, 0.749]**. **b = 0 —
+  which is floor(), and which is what GWW states — is excluded by 17 rows.**
+
+Taken at face value the family puts the smallest granting damage between 0.251%
+and 0.500%, and at the canonical b = 0.5 exactly where `pools.damage_units`
+already puts it. **That is INFERRED, not observed**, and the honest limit is
+sharp: a rule that is round() above some hand-set threshold would look identical
+in this corpus. The fit narrows the question; it does not close it.
+
+### 34.9 The lesson, which is the series' fourth of the same shape
+
+§27, §28, §29 and §32 each caught a metric that lied, every time by an in-frame
+control rather than by re-reading code. This is the fifth, and the first with no
+pixels in it: **the stratifier was a variable the question never mentioned.**
+The reading that survived was not the careful one — a careful reader gets 7.5%
+and a clean-looking table of 59 rows — it was the one that noticed 2.5000%
+appearing twice with two different answers and refused to average them.
+
+Worth naming for the next session: the defence that worked here was **checking
+whether the population could contain the answer at all** before believing what
+it reported. `adrenjoin.whose_agent` carries the same rule one level down, and
+the comment there is load-bearing: identifying the observer by "the agent a
+`0x00CF` names" is right on every connection that has one, and would have
+deleted the entire dark population from the denominator — hiding the finding
+rather than producing a wrong number, which is worse.
+
+**And a second lesson, which is mine to wear.** My scan printed an unexplained
+row — one gain with no damage in its batch — and I read past it because the
+finding I was chasing was already large. The blind replication chased it and
+found a whole message channel. An orphan in a ledger is a lead, and the ledger
+closing at 918 of 918 is the only thing that says there are no more.
+

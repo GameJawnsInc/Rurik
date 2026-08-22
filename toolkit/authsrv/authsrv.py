@@ -6456,12 +6456,35 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     0x008219EC) clear and repaints nothing, so it is a message that does
     nothing and that retail has no reason to produce.
 
-    A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though -- full pools, a bar
-    with no adrenal skill on it, everything recharging. The client's handler is
-    a no-op in exactly those cases too, so nothing is misdrawn; and it is what
-    keeps the 25-second clock honest, because retail's own clears are MEASURED
-    at 25.00 s after the last 207 ON THE WIRE (15 of 15, spread 42 ms) rather
-    than after the last slot that actually moved.
+    A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though -- full pools,
+    everything recharging. The client's handler is a no-op in exactly those
+    cases, so nothing is misdrawn; and it is what keeps the 25-second clock
+    honest, because retail's own clears are MEASURED at 25.00 s after the last
+    207 ON THE WIRE (15 of 15, spread 42 ms) rather than after the last slot
+    that actually moved.
+
+    THAT SENTENCE USED TO INCLUDE "a bar with no adrenal skill on it", AND FOR
+    THAT CASE IT IS A MEASURED DIVERGENCE (2026-08-21, studies/skills 34).
+    Split the 58 usable live connections on whether the observer's own skillbar
+    ever names a skill with a non-zero adrenaline cost and the whole family
+    falls on one side: 918 gains, 27 clears and 40 spends in the 36 ARMED
+    connections, and 0/0/0 across 44,982 messages in the 22 DARK ones -- through
+    45 landed weapon hits and 13 completed melee attacks that GWW's own rule
+    says earn 25 units each. Retail sends this family NOTHING to a bar that
+    cannot hold it, clears included, so the clock argument above does not even
+    arise there: no gain, no clock, nothing to keep honest.
+
+    NOT IMPLEMENTED, AND THAT IS A RULING RATHER THAN AN OVERSIGHT. The gate's
+    variable is CONFOUNDED -- every dark connection is also a non-Warrior, so
+    "the bar carries an adrenal skill" and "the profession uses adrenaline" fit
+    all 58 connections identically and the corpus cannot separate them. Gating
+    on either would be picking a side on no evidence. The two errors are also
+    symmetric and both invisible: the charge worker clears EDI before its slot
+    loop, sets it only where a slot is written, and `test edi,edi` / `je` at
+    0x008219F8 jumps past the UI event, so a 207 no slot accepted repaints
+    nothing and arms no timer (test_adrenwire 13). One capture separates the
+    two rules -- the Warrior, explorable, adrenal skills OFF the bar, landing
+    hits -- and test_adrenwire 12 pins the numbers it would move.
     """
     if not ENERGY or units <= 0:
         return

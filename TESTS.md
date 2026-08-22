@@ -4869,16 +4869,17 @@ Every one of these, in the order they were written:
   25 is the GAIN PER STRIKE and not the quantum of the bar, which is why
   `pools.AdrenalinePool` holds RAW UNITS; the control is that eight other costs *are*
   multiples, because an all-off-grid column is what a wrong offset also produces. **§§4–7
-  are the corpus oracle**, `test_pools` §2's shape over all 14 live captures: 663 / 22 /
-  **0** / 39 across 49 connections and 114,985 messages framed with zero errors. The zero
+  are the corpus oracle**, `test_pools` §2's shape over all 20 live captures: 918 / 27 /
+  **0** / 40 across 59 connections and 143,408 messages framed with zero errors (663 /
+  22 / 0 / 39 over 49 connections when this entry was first written, at 14 captures). The zero
   is the one to read — **209 is a fully wired handler retail never sends**, the same shape
   as energy property 33, with its three neighbours (724) as the positive control that
-  makes a null mean something. §4b splits 207's amount into **631 at exactly 25 and a
+  makes a null mean something. §4b splits 207's amount into **886 at exactly 25 and a
   32-message tail below it**, and pins that **none exceeds 25 and none is 0** — the strike
   rule's own signature, since 25 is the largest single event the rule allows and the
-  opcode is unsigned so it cannot express a loss. The tail is labelled **INFERRED, not
-  measured**: GWW's *1 unit per 1% of maximum health lost* would produce exactly this
-  ragged shape, but nothing in the corpus joins it to health traffic yet. **§5 is the
+  opcode is unsigned so it cannot express a loss. The tail was labelled **INFERRED, not
+  measured** — GWW's *1 unit per 1% of maximum health lost* produces exactly this ragged
+  shape — and **§12 now joins it**, one row at a time, to the damage that caused it. **§5 is the
   check that refuted a wrong reading** — an earlier draft claimed retail broadcasts 207
   for other agents' bars, on the strength of ids 7/11/13/25 across the corpus. Those are
   four SESSIONS: every connection carrying 207 names **exactly one** agent and it is that
@@ -4889,7 +4890,9 @@ Every one of these, in the order they were written:
   the control that gives it teeth: the same lookup over everything the corpus shows being
   CAST finds **753 casts of 50 ZERO-adrenaline skills**, none of which ever gets a 210.
   **§7 is the answer the sender needs** — the spend leads its own activation by **exactly
-  one message**, 39 of 39, always property 50, same batch; the energy channel orders
+  one message**, 40 of 40, same batch (the FOLLOWER is property 50 for attack skills and
+  48 for instants — a live capture of a shout broke the "always 50" half and left the
+  half the sender uses intact); the energy channel orders
   itself the same way (property 62 then 60), so "debit before announce" is a rule of this
   protocol rather than a quirk. **§§8–11 read the pinned build-38797 image, stdlib only —
   no capstone, no pefile, so it keeps working on a bare machine.** §8 walks the dispatch
@@ -4912,10 +4915,33 @@ Every one of these, in the order they were written:
   evidence for one claim per CLAUDE.md's measurement boundary — `ChCliSkill:84`
   *"context->skillAdrenalineUpdateArray.Count()"* names the whole deferred chain, and
   `skillData.adrenaline` at **two independent files** promotes `skilltable.py`'s
-  `adrenaline_units` decode from our name for the column to the client's own. Needs
-  `vault/captures/live/` for §§4–7 and the pinned image for §§8–11, both declared as
-  skips; the content overlay is NOT skippable and §3 goes red without it. **Floor 10 of a
-  55-check green run**, and the file says plainly what that floor cannot catch — on a
+  `adrenaline_units` decode from our name for the column to the client's own.
+  **§12 is the sharpest refutable claim in the file, and it is a SERVER behaviour we do
+  not implement.** Split the 58 usable connections on a variable that has nothing to do
+  with adrenaline traffic — does the observer's own `SKILLBAR_UPDATE` ever name a skill
+  with a non-zero adrenaline cost — and the whole family falls on one side: **918 / 27 /
+  40 in the 36 ARMED connections and 0 / 0 / 0 across 44,982 messages in the 22 DARK
+  ones.** The control is inside the negative population and is what makes the zero mean
+  something: those dark connections carry **45 landed weapon hits and 13 completed melee
+  attacks**, every one of which GWW's rule says earns 25 units, and retail sent none. It
+  also re-fits the rounding rule on the armed rows alone — **round 32 of 32**, floor 15,
+  ceil 17 — and runs the check with no free parameter: all eleven armed percentages are
+  **k/480**, 480 is the smallest denominator that works, and the observer's int property
+  42 reads 480 on a message none of that arithmetic touched. What it deliberately does
+  NOT assert is WHICH variable gates: every dark connection is also a non-Warrior, so
+  bar-based and profession-based rules fit all 58 identically and the sender implements
+  neither. This section exists because running the damage → gain join WITHOUT the split
+  reports a confident, clean and absurd boundary at 7.5% of maximum health.
+  **§13 is why nobody saw §12 from the screen**, read as arithmetic on three addresses:
+  the charge worker does `xor edi,edi` before its slot loop, `mov edi,1` only where a
+  slot is written, and `test edi,edi` / `je` at `0x008219F8` — whose target is computed
+  from the displacement and lands PAST the `push 0x10000058` — so a 207 that no slot
+  accepted repaints nothing and arms no 25-second timer. Needs
+  `vault/captures/live/` for §§4–7 and §12 and the pinned image for §§8–11 and §13, both
+  declared as skips; the content overlay is NOT skippable and §3 goes red without it.
+  **Floor 10 of a
+  70-check green run** (55 before §§12–13), and the file says plainly what that floor
+  cannot catch — on a
   machine with both fixtures a dropped section would still clear 10, so §4's
   capture/connection/message pin and §8's printed image are the real "did it run" guards
   and the floor is the fixture-less backstop),

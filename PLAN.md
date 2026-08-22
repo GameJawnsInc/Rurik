@@ -1552,6 +1552,54 @@ UNMAPPED message).
    cheapest open item here. What remains static-only is
    the *reason* for the gate, which nothing observed explains and which is not
    worth a probe.
+
+   **THAT LAST SENTENCE WAS WRONG ABOUT THE COST, AND FINDING OUT WHY IS THE
+   RESULT (SKILLS-B1, 2026-08-21, no client launched,
+   [§34](studies/skills/FINDINGS.md)).** The boundary was called the cheapest
+   open item because the corpus looked one query away from it: the join that
+   measured `round()` runs GAIN → DAMAGE and is therefore selected on the
+   outcome, so running it DAMAGE → GAIN should have supplied the no-gain rows
+   by construction. It does, and they are worthless: **32 damage events
+   granting nothing, the largest 7.5% of maximum health**, with 2.5000%
+   granting 3 units in one row and nothing in another — a "boundary" an order
+   of magnitude above the wiki's, from a population that is not one population.
+
+   **Every no-gain row is in a connection whose bar carries no adrenal skill,
+   and retail sends those connections NOTHING.** Split the 58 usable
+   connections on that variable and the whole family lands on one side —
+   **918 gains / 27 clears / 40 spends in the 36 ARMED connections, 0 / 0 / 0
+   across 44,982 messages in the 22 DARK ones** — through 45 landed weapon hits
+   and 13 completed melee attacks that GWW's own rule says earn 25 units each.
+   The ARMED column reproduces §4's census exactly from an unrelated query.
+   **The gate is a server behaviour nobody had described, and ours does not
+   have it.** Its variable is CONFOUNDED, though: every dark connection is also
+   a non-Warrior, so "the bar carries an adrenal skill" and "the profession uses
+   adrenaline" fit all 58 identically. **The sender is deliberately NOT
+   changed** — picking a side on no evidence — and both errors are invisible
+   anyway, because the charge worker clears EDI before its slot loop and
+   `test edi,edi` / `je` at `0x008219F8` jumps past the UI event, so a `0x00CF`
+   no slot accepted repaints nothing and arms no timer.
+
+   Landed: `toolkit/authsrv/adrenjoin.py` (the extractor), `test_adrenwire`
+   §12–§13 (55 → 70 checks), and the divergence recorded at
+   `player_gains_adrenaline`, whose docstring had decided this exact case in
+   writing on an empirical premise that is now measured false.
+   **A blind replication settled it** — two agents, rival hypotheses, neither
+   shown the other — and the floor-side agent reached the same gate by its own
+   route AND recovered two rows my scan lost: damage also rides `0x00A2` (once,
+   6.25% granting 6, which my scan printed as an orphan and I read past), and
+   two symmetric batches attribute rather than staying ambiguous. Round now fits
+   **32 of 32**, floor 15, ceil 17, and the ledger closes at 918 of 918. It also
+   supplied the check with no free parameter: all eleven armed percentages are
+   `k/480`, 480 is the smallest denominator that works, and the observer's own
+   property 42 reads 480 on the same wire.
+
+   **The boundary itself is still UNVERIFIED and is no longer cheap.** No armed
+   row sits below 2.50%. What settles it is a capture of a light hit TAKEN by a
+   character with an adrenal skill equipped — 3 to 5 raw points on a 480-health
+   warrior — and what separates the two gate rules is a second capture, the
+   Warrior in an explorable with every adrenal skill off the bar. Both are
+   runs, not queries.
 2. **What answers a refused press.** Ours is silence and the client visibly
    re-animates the slot for ~10 s; retail shows "Not enough Energy" feedback.
    Also: our client SENT both unaffordable presses — whether retail's client
@@ -1561,10 +1609,14 @@ UNMAPPED message).
    speed, movement speed, damage negation, energy cost reduction (GoLE's
    datum: the row needs an explicit amount — scale bit clear, endpoints 10/18
    differ, refused per the resolve_duration precedent), arrow bonus damage.
-4. **Merge-time reconciliation with the morale arc** (landed on main while
-   this was in flight): route `EnergyPool.maximum` through
-   `player_max_energy()` — NOTE it scales BASE energy only, armour bonuses
-   ride unscaled (their §2.2) — and adopt the `PROP_ENERGY_REGEN` rename.
+4. ~~**Merge-time reconciliation with the morale arc.**~~ **DONE, and this
+   entry was stale — checked 2026-08-21.** Both halves are in the tree and have
+   been: `player_energy_pool` builds through `player_max_energy(state)`
+   (`authsrv.py`, with the "morale scales BASE energy only, armour bonuses ride
+   unscaled" note at the call site), and `agents.PROP_ENERGY_REGEN` is the
+   spelling everywhere, with `PROP_UNKNOWN_FLOAT_43` kept as an alias so no call
+   site had to break for a rename. Nothing to do; the line was the list
+   outliving the work, which is the failure the top of `CLAUDE.md` is about.
 5. **`type_code` 16 is on our own bar and named nowhere** (unchanged).
 ### MORALE: the death penalty is read, modelled and one probe short (2026-08-20)
 
