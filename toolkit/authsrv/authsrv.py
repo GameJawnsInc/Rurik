@@ -785,6 +785,30 @@ def _damage_fraction(dealt, pool_max, prop, what):
     come out the far side as a heal on the damage property, and a NaN would
     ride the `>` comparison past the clamp (both are exercised in
     test_guards section 9).
+
+    AND RETAIL DOES THE SAME, which C4 decided without knowing. MEASURED
+    2026-08-22 over the live corpus: integrate every prop-16 damage on an agent
+    from its own CREATE (where the pool is known to be full) to its death bit,
+    and read the last blow against what was left. Four kills are reconstructible
+    that way -- the same four the combat study pins -- and **all four overshoot**:
+
+        20260807T143055  agent  38   last hit  9.0 into  3.0 left  (max  8)
+        20260807T143055  agent  40   last hit 22.0 into 19.0 left  (max 96)
+        20260810T235916  agent  43   last hit  4.0 into  2.0 left  (max  8)
+        20260810T235916  agent 278   last hit 25.0 into  7.0 left  (max 40)
+
+    So ArenaNet's server puts the RAW roll on the wire and lets the client
+    absorb it; it does not clamp the killing blow to what the target can take.
+    Sending 46 into 39 remaining is retail's shape, not ours. (The corpus's
+    later PvP-arena deaths are NOT evidence here -- the same integration loses
+    health for those agents and reports hundreds remaining at the death tick,
+    which means the model is missing a channel, not that the blows were small.)
+
+    WHAT THE CLIENT PRINTS is a different question and the answer is the OTHER
+    one: OBSERVED 2026-08-22 by the owner, watching a run where this server sent
+    46 into 39 remaining -- the floating number read **-39**, the applied damage
+    rather than the raw. n=1, watched live rather than captured, so it is worth
+    a filmed confirmation before anything depends on it.
     """
     if not pool_max > 0.0:
         raise ValueError(
