@@ -900,6 +900,17 @@ load-bearing.
 3. **`GV_ATTACK_STOPPED` is defined and never sent** (`agents.py:599`, zero uses
    in `authsrv.py`), so we cannot express a cancel even where we detect one.
 
+> **ITEMS 1 AND 3 CLOSED 2026-08-22** (`002f20f`, `2c8d3ba`, `3dcf9d5`;
+> `studies/castmech/FINDINGS.md` §3b/§7). The player's swing is two-phase
+> with the agents' own windup arithmetic; GV_ATTACK_STOPPED goes out in
+> retail's measured slots (the press burst right after E4 — 2/2 live, with
+> the measured negative — a retarget, and movement); movement cancels a
+> pending cast with the bare 0x00E2 and no recharge, per the wiki contract
+> and the corpus's one terminated cast; and the chain pauses for
+> cast+aftercast, resuming at the E3 instant retail resumes it. Item 2 was
+> already closed by §18. Still open: the burrow stale-timer bug below, and
+> the E5-instant properties (8, 45, 58) §3b of castmech registers.
+
 **And a real bug found by code reading, not by a run:** nothing clears
 `swing_lands_at` / `cast_lands_at` across a burrow removal-and-recreate cycle.
 `remove_agent` pops the entry untouched, `burrow_tick` never touches those keys,

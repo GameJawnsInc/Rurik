@@ -7148,6 +7148,48 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   real-content section presses skill 153 and requires E5 to carry recharge 8,
   the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
   vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_playerswing.py` (the player's auto swing is TWO
+  phases — ATTACK_STARTED, then the damage `swing_windup(ATTACK_INTERVAL)`
+  later — where until 2026-08-22 it was one instant, the last attacker in the
+  file with no mid-animation window (studies/combat 17e item 1; the windup
+  constant's three independent legs are studies/castmech M1). §1 pins the
+  split: the first tick sends the START alone, the landing a windup later is
+  gain/damage/FINISHED with NO second START. §2 pins the gate as
+  START-to-START — right after a landing nothing fires, because the backswing
+  half of the interval is a wait with no wire event, and the next START opens
+  one interval after the previous one. §3 drops an armed swing whose target
+  died, left reach, or whose owner died — silently, ArenaNet's own truncation
+  shape (the Lakeside 7th swing, cut 0.24 s in, no closing event). §4 is the
+  regression guard for the other callers: a default `hit_enemy` call still
+  opens with its own STARTED, lands in one instant, and respects the interval
+  gate — the attack-skill path's recorded divergence, deliberately unchanged.
+  §5–§7 are the cancel half: a skill press puts GV_ATTACK_STOPPED [3, agent,
+  0] immediately after E4 — retail's own burst slot, 2 of 2 live presses with
+  a chain running — drops the armed swing through the tick-owned flag, keeps
+  the TARGET (retail resumes the chain), and stays silent when the chain is
+  already paused (the necro's press 2 carries no STOPPED); the chain pauses
+  while any pending cast is short of its E3 and the next swing opens on the
+  first tick after it — ATTACK_STARTED rides the E3 instant on both live 105
+  cycles; and a retarget stops the swing in flight with the corpus's
+  standalone-stop shape (17c, n=1) and opens on the new target the same tick.
+  Timing by rewinding the armed swing and the start gate, never by sleeping),
+  `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
+  contract is the wiki's expressed as wire SILENCE: the connection thread
+  only MARKS (`cancel_on_move`), the tick releases with the bare `0x00E2`
+  [agent, skill, copy] — the corpus's own terminated-cast shape, E4 t=5.027
+  answered at t=5.912 with no E5 between or ever after — and then §1's
+  60-second rewind proves no E5/E3/E6 ever follows: no recharge started, no
+  aftercast served, costs staying paid because the press paid them. §2 pins
+  the boundary: past its E5 a cast is aftercast and is NOT marked — E3 and E6
+  close normally. §3 is the wiki's attack-skill asymmetry: mid-activation an
+  attack skill shrugs movement off, but one still QUEUED (its begin never
+  reached) drops whatever its type — a spell activating and an attack skill
+  queued behind it both release, two E2s, no recharge for either. §4 proves
+  the busy-window rollback: a press after a cancel schedules its E5 one
+  activation out, not behind the cancelled cast's ghost. §5 is the chain
+  half: one GV_ATTACK_STOPPED and the target forgotten (a move REPLACES the
+  attack order), the armed swing dropped unlanded — and the negative, no
+  second STOPPED when the chain was already paused by a press. Floor 15),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

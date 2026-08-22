@@ -5836,12 +5836,88 @@ def begin_attack(send, state, target_id, conn_id):
         state["attacking"] = None
         return
     if state.get("attacking") != target_id:
+        # A RETARGET STOPS THE SWING IN FLIGHT. The corpus's one candidate
+        # cancel (studies/combat 17c) is exactly this shape: two c2s
+        # target-selects, then 57-90 ms later the standalone stop pair with
+        # GV_ATTACK_STOPPED [3, agent, 0] and no damage for the opened swing
+        # (ranger t=16.578). n=1 and the cause is a reading, not a proof --
+        # but the alternative is the OLD swing landing on the NEW schedule,
+        # which retail visibly does not do. The tick drops the entry; this
+        # only asks, and sends the close the corpus shows.
+        if state.get("attacking") and state.get("player_swing"):
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+                 f"attack_stopped: retarget to agent {target_id}")
+            state["player_swing_cancel"] = "retarget"
         state["attacking"] = target_id
         # Swing immediately on the first click, then let the tick keep time.
-        # Waiting a full interval makes the click feel ignored.
+        # Waiting a full interval makes the click feel ignored. Both timers:
+        # last_hit gates the attack-skill path, player_last_swing gates the
+        # two-phase auto swing (attack_tick).
         agent["last_hit"] = 0.0
+        state["player_last_swing"] = 0.0
         print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
               flush=True)
+
+
+def cancel_on_move(send, state, conn_id):
+    """Movement input cancels what is in flight: the cast, and the chain.
+
+    Runs on the CONNECTION thread, from the two arms that mean "the player is
+    moving" -- 0x003E (a click) and 0x003D with its movementType set (the
+    keyboard; every one of 7,988 corpus records carries 1..8, so any 0x003D
+    is movement). 0x0047 is a STOP report and deliberately not a trigger.
+
+    THE CONTRACT IS THE WIKI'S, and half of it is already on the live wire.
+    WIKI (GWW "Cancel", rev. 2014-08-16): a cancelled skill does not
+    activate, its initial costs ARE still incurred, it does NOT recharge, and
+    no aftercast follows. Our debit already happens at the press, so "costs
+    stay paid" is free; "no recharge" is expressed by releasing the pending
+    entry with a bare 0x00E2 and never sending its E5 -- which is byte-for-
+    byte the corpus's one terminated cast (E4 t=5.027 answered by E2 t=5.912,
+    no E5 between or ever after, studies/castmech 3/4). WIKI (GWW
+    "Quarterstepping"): an attack skill mid-activation is NOT movement-
+    cancellable -- but one still QUEUED (begin not reached) is droppable
+    whatever its type, so the test is per entry. Past its E5 a cast is in
+    aftercast, which nothing cancels; those entries are left alone.
+
+    The chain half: WIKI (GWW "Auto attack") -- moving cancels auto-attacking.
+    The close is GV_ATTACK_STOPPED [3, agent, 0], sent only while the chain
+    is LIVE (the same negative rule the press path measured: a chain already
+    paused by a cast gets no second close), the armed swing is dropped
+    through the tick-owned flag, and the TARGET is forgotten -- a move
+    replaces the attack order, and re-clicking is what restarts it (0x0026
+    is on the wire for exactly that).
+
+    Ownership: this thread marks; the world tick releases. `cancelled` is a
+    write-once key on entries the tick alone removes, `player_swing_cancel`
+    is the same channel the press uses, and `cast_busy_until` is this
+    thread's own -- rolled back so the next press begins now rather than
+    behind a ghost of the cancelled cast.
+    """
+    now = time.time()
+    chain_live = (state.get("attacking") or state.get("player_swing")) \
+        and not any(not c["e3_sent"]
+                    for c in state.get("pending_casts") or ())
+    if chain_live:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             "attack_stopped: the player moves")
+        state["player_swing_cancel"] = "movement"
+    if state.get("attacking"):
+        state["attacking"] = None
+    dropped = 0
+    for cast in list(state.get("pending_casts") or ()):
+        if cast["e5_sent"] or cast.get("cancelled"):
+            continue
+        if cast["attack"] and now >= cast["begin_at"]:
+            continue                       # mid-activation attack skill
+        cast["cancelled"] = "movement"
+        dropped += 1
+    if dropped:
+        state["cast_busy_until"] = now
+        print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
+              f"no recharge, costs stay paid", flush=True)
 
 
 def hero_late_tick(send, state, conn_id):
@@ -6048,31 +6124,106 @@ def handle_perf_report(values, send, state, conn_id):
 
 
 def attack_tick(send, state, conn_id):
-    """Keep swinging at whatever the player last clicked."""
+    """Keep swinging at whatever the player last clicked -- in TWO phases.
+
+    The player's swing is the agent model's now: ATTACK_STARTED opens it, the
+    damage lands `swing_windup(ATTACK_INTERVAL)` later, and the gate between
+    swings runs START to START -- `state["player_last_swing"]`, the same shape
+    as the agents' `last_swing`. Until 2026-08-22 the player was the one
+    attacker with no mid-animation window at all (STARTED + damage + FINISHED
+    in one call, studies/combat/PLAN.md 17e item 1), which meant nothing could
+    ever cancel a swing because no swing was ever in flight.
+
+    THE CONSTANT NOW HAS THREE INDEPENDENT LEGS (studies/castmech M1): NPC
+    swings 0.4540 (n=41), the player's own clean auto-attacks 0.4583/0.4669,
+    and Power Shot's E4->E5 at 0.4601/0.4595 of the declared bow speed -- all
+    of them the wiki's "half-way through the interval" measured. The second
+    half of the interval -- the backswing -- has NO wire event and gets no
+    code: damage and the close are one instant (40 of 40 live), and the next
+    START is what the interval gates.
+
+    An armed swing that loses its target -- death, removal, out of range --
+    is DROPPED, silently, which is retail's own truncation: ArenaNet's 7th
+    Lakeside swing ended 0.24 s in when the target died, with no closing
+    event. `state["player_swing"]` is owned by THIS thread: armed here,
+    landed here, dropped here. The connection thread asks for a drop through
+    `player_swing_cancel` and never touches the entry itself -- the same
+    single-writer split `pending_casts`/`cast_tick` already prove.
+    """
+    # A CANCEL REQUEST IS RESOLVED FIRST, whoever asked and whatever else
+    # holds. The connection thread (a skill press, a movement arm, a
+    # retarget) has already sent the GV_ATTACK_STOPPED that closes the chain
+    # on the wire -- the measured shape, [3, agent, 0] -- so the only work
+    # here is dropping the in-flight swing so its damage never lands. Clear
+    # the flag even when nothing is armed: a press between swings still asked.
+    if state.get("player_swing_cancel"):
+        state["player_swing"] = None
+        state["player_swing_cancel"] = None
     if state.get("player_dead"):
-        # A dead player does not keep hitting things. Cheap, but it is the
-        # difference between a death and a pause in the animation.
+        # A dead player does not keep hitting things, and does not land the
+        # swing it was mid-way through either.
+        state["player_swing"] = None
         return
     target_id = state.get("attacking")
     if not target_id:
+        state["player_swing"] = None
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         state["attacking"] = None
+        state["player_swing"] = None
         return
     px, py = state.get("pos", (0.0, 0.0))
     ax, ay = agent["pos"]
     if math.hypot(ax - px, ay - py) > ATTACK_RANGE:
         # Out of range. Real Guild Wars would walk the player into range; we do
         # not move the player, so the swing simply stops and resumes when they
-        # walk back. Keep the target so it picks up again without re-clicking.
+        # walk back. Keep the target so it picks up again without re-clicking
+        # -- but the swing IN FLIGHT whiffs, exactly as the agent loop drops
+        # `swing_lands_at` when the player leaves reach.
+        state["player_swing"] = None
         return
-    hit_enemy(send, state, target_id, conn_id)
+    now = time.time()
+    swing = state.get("player_swing")
+    if swing is not None:
+        # TWO PHASES, same discipline as the agent loop: a landing that is due
+        # is always resolved before a new swing starts, so a slow tick cannot
+        # start twice and land once. The landing goes to the target the swing
+        # OPENED on -- hit_enemy re-reads it from state and refuses a corpse.
+        if now >= swing["lands_at"]:
+            state["player_swing"] = None
+            hit_enemy(send, state, swing["target"], conn_id, armed=True)
+        return
+    # NO NEW SWING WHILE A CAST IS SHORT OF ITS E3. Retail pauses the auto
+    # attack for the cast plus its aftercast and resumes it the instant the
+    # aftercast ends -- ATTACK_STARTED rides the E3 instant on both of skill
+    # 105's live cycles (studies/castmech 3b). `e3_sent` is the tick's own
+    # bookkeeping (cast_tick runs earlier in the same tick), so this reads
+    # nothing the connection thread owns -- deliberately NOT cast_busy_until,
+    # which belongs to the press path alone.
+    if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
+        return
+    if now - state.get("player_last_swing", 0.0) < ATTACK_INTERVAL:
+        return
+    state["player_last_swing"] = now
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+         f"attack_started: player swings at {target_id}")
+    state["player_swing"] = {"target": target_id,
+                             "lands_at": now + swing_windup(ATTACK_INTERVAL)}
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
-              exact=None, swing=True, label="one swing"):
+              exact=None, swing=True, label="one swing", armed=False):
     """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `armed` TRUE means this call is the SECOND half of a swing attack_tick
+    already opened: the START was gated by `player_last_swing` and announced
+    with its own ATTACK_STARTED a windup ago, so this call skips both the
+    interval gate and the STARTED send and lands the damage + close. FALSE
+    (the default) is the one-instant shape every other caller keeps -- the
+    attack-skill path deliberately stays one-instant, its timing rides the
+    weapon and is a recorded divergence (studies/combat step 3).
 
     `bonus_damage` is an attack skill's "+ Damage", in health points, added to
     the swing this call already lands. ONE damage number, not two, because
@@ -6102,7 +6253,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if agent is None or agent["dead"]:
         return
     now = time.time()
-    if now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
+    if not armed and now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
@@ -6165,7 +6316,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
     # is the agent swinging. Same shape, different roles per value id, which is
     # exactly what GWCA's per-id note was trying to warn about.
-    if swing:
+    if swing and not armed:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
              f"attack_started: player swings at {target_id}")
@@ -7323,6 +7474,38 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
          f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # ---- THE PRESS STOPS THE AUTO-ATTACK, and its position is measured ---
+    #
+    # OBSERVED, 2 of 2 presses that landed while a chain was running (necro
+    # t=18.5110, ranger t=21.5433, studies/castmech 3b): retail's press burst
+    # is E4, then [prop 8 -> 0], then GV_ATTACK_STOPPED [3, agent, 0], then
+    # the debit, the animation, [prop 8 -> 1]. This sends the STOPPED in that
+    # slot -- immediately after E4 -- and leaves property 8 unsent: its
+    # meaning is UNVERIFIED (GWCA guesses "disabled"; 17 value-pairs in the
+    # corpus, unread) and inventing a semantic for it is the thing this repo
+    # refuses. The chain itself SURVIVES the press: retail resumes the auto
+    # swing at the aftercast's end (ATTACK_STARTED rides the E3 instant, both
+    # 105 cycles), which attack_tick reproduces by pausing starts while a
+    # cast is short of its E3 and owning the restart afterwards. The armed
+    # swing is DROPPED through the flag -- attack_tick owns the entry; this
+    # thread only asks.
+    #
+    # ONLY WHEN THE CHAIN IS ACTUALLY LIVE, and the negative half of that is
+    # measured too: the necromancer's presses at t=8.74 and t=9.85 carry NO
+    # STOPPED -- the first because no auto attack had ever started, the
+    # second because press 1 had already paused the chain. A press during a
+    # cast (any pending entry short of its E3, i.e. the pause that press
+    # already bought) must therefore stay silent, or this server sends a
+    # close retail does not. Evaluated BEFORE this press appends its own
+    # pending entry, or every press would read as mid-cast.
+    chain_live = (state.get("attacking") or state.get("player_swing")) \
+        and not any(not c["e3_sent"]
+                    for c in state.get("pending_casts") or ())
+    if chain_live:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             f"attack_stopped: skill {skill_id} ends the swing")
+        state["player_swing_cancel"] = "skill press"
     # ---- AND THE DEBIT, in the same breath as the announcement -----------
     #
     # RETAIL FIRES PROPERTY 62 0.03-0.7 SECONDS AFTER THE USE_SKILL, mostly
@@ -7411,10 +7594,21 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # The cast animation, in the OBSERVED player shape: 0x00A0
     # [60, caster, target, skill], 4 of 4 player activations in the live
     # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
-    # supports). GV_SKILL_FINISHED (58) is deliberately NOT sent: it appears
-    # ZERO times in 21,543 live messages, so emitting it would be invention
-    # -- if the loopback run shows the animation never ends, that absence
-    # becomes the next measured question, not a pre-answered one.
+    # supports). GV_SKILL_FINISHED (58) is still not sent, but the sentence
+    # that used to justify that here -- "it appears ZERO times in 21,543
+    # live messages" -- is REFUTED: a direct decode finds FIVE, each one
+    # [58, agent, 0] riding a cast-end instant (four at the necromancer's
+    # E5s, one on another connection -- studies/castmech 3b, 2026-08-22).
+    # Wiring it belongs to its own change, beside the prop-8 pairs (17 in
+    # the corpus, bracketing the press burst, meaning unread) and the
+    # queued-cast divergence noted below.
+    #
+    # AND THE INSTANT IS A DIVERGENCE FOR QUEUED CASTS, measured the same
+    # day: retail sends this property (and the energy debit) at CAST-BEGIN
+    # -- the press when the caster is free, the E3 instant when the cast
+    # was queued (skill 105's property 60 rides 153's E3, both cycles). We
+    # send both at the press always; for a queued cast that is early by the
+    # rest of the previous cast's aftercast.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
          f"cast animation: player casts {skill_id}")
@@ -7428,6 +7622,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # revived or removed by the time the cast completes, and hit_enemy
         # re-reads it from state and refuses a corpse.
         "target": target,
+        # `begin_at` and `attack` exist for the movement cancel and nothing
+        # else: WIKI (GWW "Quarterstepping") says movement cannot cancel an
+        # attack skill mid-activation, but a skill still QUEUED -- its begin
+        # not yet reached -- is droppable whatever its type. cancel_on_move
+        # is the only reader.
+        "begin_at": begin, "attack": _is_attack_skill(skill_id),
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
@@ -7492,6 +7692,22 @@ def cast_tick(send, state, conn_id):
     now = time.time()
     finished = []
     for cast in list(pending):
+        # A CANCELLED CAST RELEASES AND NOTHING ELSE. The bare 0x00E2 is the
+        # corpus's own shape for a cast that ended before completing (E4
+        # t=5.027 -> E2 t=5.912, no E5 between or ever after) and the wiki's
+        # cancel contract falls out of the silence: no E5 means no recharge
+        # started and no damage landed, no E3 means no aftercast -- the
+        # caster is free the moment the release goes out. The costs stay
+        # paid because the press paid them. The one live cancel rode a
+        # property 45 the corpus shows once and nothing names; it is left
+        # unsent rather than guessed at (studies/castmech 3b).
+        if cast.get("cancelled") and not cast["e5_sent"]:
+            send(GAME_SMSG_SKILL_REFUSED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"cast cancelled by {cast['cancelled']}: E2 releases skill "
+                 f"{cast['skill_id']}, no recharge")
+            finished.append(cast)
+            continue
         if not cast["e5_sent"] and now >= cast["e5_at"]:
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
@@ -11692,6 +11908,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
+                        if moving:
+                            # Keyboard movement cancels the same things a
+                            # click does. Guarded on the enum being set even
+                            # though 0 never appears in 7,988 corpus records
+                            # -- if a build ever sends a pure turn this way,
+                            # a turn must not cancel a cast (WIKI: only
+                            # movement does).
+                            cancel_on_move(send, state, conn_id)
                         # NO `state["plane"] = plane` HERE. It used to sit on
                         # this line, unconditional, 28 lines above the position
                         # guard -- so a refused report left us holding the
@@ -12253,6 +12477,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # _heading_grant_ok for why the click arm's hold
                                 # would be wrong here.
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
+                        # A click to move is movement: it cancels the cast in
+                        # flight and the auto-attack chain BEFORE the move is
+                        # granted, so the cancel's wire close precedes the
+                        # movement echo -- the corpus's own order at the one
+                        # live cancel (E2, then the mover's 0x0025/0x0029 in
+                        # the same instant).
+                        cancel_on_move(send, state, conn_id)
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
                         # reports where it got to. Answering MOVE_TO_POINT and
