@@ -821,3 +821,67 @@ STATIC. No map has ever shipped a non-zero top byte, the inverted branch at \
 0x0072CA92 has never been exercised by anything this project built, and \
 studies/customarea FINDINGS 34 and 48 both record the mode flag's source as \
 NOT FOUND. This row is the first time the other slope set is asked for."""
+
+# ---------------------------------------------------------------- WORLDMAPS-W20
+# The fine ramp, at cut 45 and at cut 35. Four strips of EXACTLY 43.78 / 45.00 /
+# 46.17 / 47.29 degrees -- zero snap spread, every interior column exact.
+
+[area.fine45]
+name = "Fine ramp (cut 45)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+map_flags = 0x02000000
+
+[area.fine45.provenance]
+source = "invented"
+verified = """Ours, and it exists to BISECT a cut that WORLDMAPS-W19 could only \
+bracket to [42.51, 46.45]. Its four strips snap to EXACTLY 43.78, 45.00, 46.17 \
+and 47.29 degrees -- MEASURED, worst sample moved 0, every interior column \
+identical -- because each dz is a multiple of 4 AND each strip is eight columns \
+aligned to the codec's 4x4 sub-blocks. `snap_block` projects each sub-block \
+independently, so `gen_ramp`'s 6-wide unaligned strips quantised by up to 1.4 \
+degrees and that spread, not the dz resolution, is what limited W19.
+
+THE MIDDLE STRIP IS EXACTLY 45.00 DEGREES, the threshold value itself. The \
+classifier excludes on `slope > array[1]`, strictly greater (0x0072D423-30: \
+`fld [edx+4]`, `fcomp st(1)`, `test ah,5`, `jnp`), so a slope sitting exactly \
+ON the cut should be WALKABLE. No map this project has built has ever put a \
+slope there, and nothing has ever tested whether that comparison is strict."""
+
+[area.fine35]
+name = "Fine ramp (cut 35)"
+map_id = 143
+dims = 32
+heights = "ramp_fine"
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982
+constants_file_id = 0x22E2C
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0
+
+[area.fine35.provenance]
+source = "invented"
+verified = """Ours: `fine45` with the top byte cleared, so the client selects \
+15/35/30 instead of 10/45/40. Every strip on this map is between 43.78 and \
+47.29 degrees, so ALL FOUR are above 35 and the whole ramp must be excluded -- \
+the mesh should be the apron alone. That is the control which proves the map's \
+strips are genuinely steep rather than that the flag turned classification off, \
+and it is the same shape of control WORLDMAPS-W19 used within one arm."""

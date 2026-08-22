@@ -1867,6 +1867,34 @@ is the first caught before it cost launches** rather than after.
 Untested: where between 42.51 and 46.45 degrees the cut actually sits -- the
 strips bracket it without bisecting it.
 `vault/research/worldmaps/WORLDMAPS-W19-RUN.md`.
+
+**WORLDMAPS-W20 BISECTED THE CUT AND FOUND A SECOND THRESHOLD.** A ramp whose
+snapped slopes are EXACT (worst sample moved 0 -- each dz a multiple of 4, each
+strip eight columns aligned to the codec's 4x4 sub-blocks) brackets the cut to
+**(43.78, 45.00]**, against W19's [42.51, 46.45].
+
+**The unpredicted result matters more.** Three runs at cut 45 differing only in
+the SHALLOWEST strip: with 43.78 or 41.19 as the shallowest, the map compiled
+to the APRON ALONE; with 18.43 added, the 42.51 and 43.78 strips appeared. The
+classifier emits THREE classes from the array at flood-object+0x90 -- below
+array[0] is class 0, above array[1] class 1, between is class 2 -- and under
+set B that array is {40, 45}. Every strip in the first two runs was class 2 and
+there was NO class-0 ground anywhere. **RECONSTRUCTION: class-2 ground meshes
+only where reachable through class-0 ground, and adjacency to the flat apron is
+not enough.**
+
+**THIS REINTERPRETS W17 AND W19.** `gen_ramp`'s first three strips are class 0
+and its strip 4 (41.5-42.5 deg) is class 2, so W17's `WWWW.` and W19's climb of
+strip 4 both happened WITH class-0 strips beside them. The top-byte finding and
+the traversability findings stand; what does not stand is the reading -- mine --
+that a 41-42 degree slope is walkable on its own.
+
+W20 did NOT settle strict-vs-non-strict at the boundary, which is what it was
+built for: a strip authored at exactly 45.00 in OUR measure is decided by
+float32-vs-double differences rather than by the comparison operator. And I
+mutated the strips twice mid-run after a failed control, so its registered
+predictions do not apply cleanly to the configuration that produced the result.
+`vault/research/worldmaps/WORLDMAPS-W20-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
