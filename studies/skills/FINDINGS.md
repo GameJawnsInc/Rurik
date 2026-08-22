@@ -3402,7 +3402,17 @@ resolves to the wrong thing turns every assertion behind it into a no-op, and
 the defence is an anchor the artifact can refute rather than a plausible-looking
 first element.
 
-## 32. The client runs its OWN expiry timer — but it does not forget the effect (`--probe effect_silent_extend`, 2026-08-21)
+## 36. The client runs its OWN expiry timer — but it does not forget the effect (`--probe effect_silent_extend`, 2026-08-21)
+
+> **Numbering note, 2026-08-21 — this section was written as §32, and so was
+> §32 below.** Two `## 32.` headings collide as one markdown anchor, which made
+> every cross-reference to "§32" ambiguous, including `PLAN.md` §8's adrenaline
+> entry. **This** one moved, because §32 below is E10 and `§27`–`§32` = E5–E10 is
+> a run `PLAN.md` cites by position. Old references resolve here: `studies/isle`
+> §32/§32.7/§32.8 and `effects.EffectTable.apply`'s docstring now say §36. The
+> section keeps its place in the file rather than moving to the end — this
+> document is already non-monotonic (§26.12/§26.13 sit after §31) and a 248-line
+> move is a worse diff than an out-of-order number.
 
 **Answers the question `effects.EffectTable.apply` had left open** — its docstring
 ended *"how retail refreshes one is NOT FOUND"*, and
@@ -3417,7 +3427,7 @@ opened (`0x0042` 20 B, `0x0044` 10 B, three declared refusals silent).
 skill 480 for 10.0 s, then **25 seconds of server silence**, then a late
 `0x0044`. Screenshots every ~2.35 s throughout.
 
-### 32.1 The prediction was half right, and the half it got wrong is the finding
+### 36.1 The prediction was half right, and the half it got wrong is the finding
 
 Pre-registered: *"the icon is STILL DRAWN at +13 s and +20 s with the timer bar
 drained to empty, and it goes only when the late `0x0044` lands."* What happened:
@@ -3435,7 +3445,7 @@ drained to empty, and it goes only when the late `0x0044` lands."* What happened
 a pixel diff answers *yes*. The state is a third thing: **presented as expired,
 still slotted.**
 
-### 32.2 Why the ghost is a measurement and not my eye
+### 36.2 Why the ghost is a measurement and not my eye
 
 | comparison | slot region | control region elsewhere on the same HUD row |
 |---|---|---|
@@ -3449,7 +3459,7 @@ global render change. And the seven state-B frames spanning **+25.8 s to +39.9 s
 are byte-identical to each other**, so this is a held static state, not a fade
 still in progress.
 
-### 32.3 What this decides for our own substrate
+### 36.3 What this decides for our own substrate
 
 **`REMOVE-then-APPLY` is NOT required, and silence is NOT free.** The late
 removal landed correctly on an effect the client had already expired visually —
@@ -3463,7 +3473,7 @@ player at its stated duration**. So:
 - `effects.py` is still not changed behaviourally on the strength of this — what
   changed is that the cost of each option is now measured rather than assumed.
 
-### 32.4 The question this opens, and it is cheap
+### 36.4 The question this opens, and it is cheap
 
 **Do retail players see the ghost too?** §8.6's Isle episodes ran +1.25 s to
 +55.0 s past their stated durations on ONE apply each, so by this client's rule
@@ -3475,9 +3485,9 @@ a Student's ring taken 20 s after entry settles it**, and it costs nothing on th
 next Isle trip. Until then, this section describes OUR client's response to OUR
 messages, which is exactly what it was built to measure — and no further.
 
-### 32.5 Does this apply to RETAIL? The message shapes are identical, and the only gap left is the build
+### 36.5 Does this apply to RETAIL? The message shapes are identical, and the only gap left is the build
 
-§32.4 asked whether retail players see the ghost too, and said one live screenshot
+§36.4 asked whether retail players see the ghost too, and said one live screenshot
 would settle it. That overstated the cost: **most of it settles offline**, because
 the client is the referee and the question is whether it can tell the two servers
 apart.
@@ -3502,10 +3512,10 @@ so it should take the same path.
 retail capture is **38849**; the probe above ran on the loopback client, which was
 **38797** — 52 builds apart. Effect rendering is unlikely to have moved, but
 "unlikely" is not a measurement, and this repo has been wrong about a version
-assumption before. **CLOSED in §32.7 by rebuilding the loopback client at 38849
+assumption before. **CLOSED in §36.7 by rebuilding the loopback client at 38849
 and re-running: identical to three decimals.**
 
-### 32.6 Closing the build gap meant building a 38849 loopback client, and a guard stopped the first attempt
+### 36.6 Closing the build gap meant building a 38849 loopback client, and a guard stopped the first attempt
 
 **The gap was closeable offline** — the retail build is on disk, since the
 operator's own install auto-updated to 38849 (`RUNBOOK` §"the build gate's
@@ -3554,10 +3564,10 @@ cleanly, because Stage A completes first with whatever credential the client
 autofills. Caging is an **elevated** step by design (`isolate_client.ps1`, no
 arguments, which enumerates every client under `vault/run` rather than the single
 hardcoded path that once left one uncaged for a day). **So the 38849 re-run is
-staged and blocked on one elevated command, and the build gap in §32.5 stands
+staged and blocked on one elevated command, and the build gap in §36.5 stands
 until it runs.** Everything else about the rebuild is done and verified.
 
-### 32.7 The gap is CLOSED: 38849 behaves identically, so retail players see the ghost
+### 36.7 The gap is CLOSED: 38849 behaves identically, so retail players see the ghost
 
 Same probe, same plan, the **38849** loopback client — the exact build the Isle
 capture came from. Run `20260821T180010`, verdict PASS, all seven steps confirmed
@@ -3577,7 +3587,7 @@ arrives.
 
 **So the chain closes without a live run**, and each link is measured rather than
 assumed: retail's Student application and our probe's are field-for-field the same
-`0x0042` (§32.5); the client cannot tell them apart; and the client's behaviour is
+`0x0042` (§36.5); the client cannot tell them apart; and the client's behaviour is
 now measured on retail's own build. **A retail player standing in a Student's ring
 sees a live condition icon for its stated ~10 s and a dead-looking faded one for
 the rest of the stay, while the condition keeps costing health the whole time.**
@@ -3593,7 +3603,7 @@ one" is weaker than "there is none". A single retail screenshot 20 s into a ring
 would convert the last link from inference to observation, and it is now worth
 exactly that one frame and no more.
 
-### 32.8 SCOPE CORRECTION: the silent extension is ENVIRONMENTAL-ONLY, and §32.3 overreached
+### 36.8 SCOPE CORRECTION: the silent extension is ENVIRONMENTAL-ONLY, and §36.3 overreached
 
 **Raised by the owner, 2026-08-21: "any credence to thinking these condition
 circles are some sort of hard-coded exception that combat doesn't follow?"**
@@ -3617,10 +3627,10 @@ what rules out "those skill ids are special": skill 480 at `-0.00` and `+0.00`,
 in the rung-8 run itself once the operator had stepped away. **The variable is
 standing in the source's radius, not the skill.**
 
-**SO §32.3's HANDOFF WAS WRONG IN SCOPE.** It said this table "emits a shape
+**SO §36.3's HANDOFF WAS WRONG IN SCOPE.** It said this table "emits a shape
 retail does not", reasoning from the silent extension to how our server should
 refresh a cast effect. Those are two different mechanisms and the corpus separates
-them cleanly. Worse, the cast side does not say what §32.3 implied either:
+them cleanly. Worse, the cast side does not say what §36.3 implied either:
 `effects.EffectTable.apply` already records that retail's 15 overlapping
 re-applications are **all under 0.5 s — same-instant doubles, not re-casts** —
 each carrying a NEW buff id while the first episode still closes on its own
@@ -3635,7 +3645,7 @@ duration. So retail **stacks** those; it does not extend them.
   deliberately extended at all.** Not silently, not by REMOVE-then-APPLY, not by a
   refreshing re-apply. The 15 overlaps are simultaneity, not extension. **Our
   REMOVE-then-APPLY is therefore unwitnessed either way — it is neither confirmed
-  nor refuted**, and §32.3 should not have leaned on the Isle to judge it.
+  nor refuted**, and §36.3 should not have leaned on the Isle to judge it.
 
 **And the Isle is a training area**, which is the general form of the owner's
 point and worth carrying beyond this section: its torches and Students are
@@ -3643,10 +3653,10 @@ pedagogical props built to apply one condition on contact. Generalising from the
 to combat is a scope error of exactly the kind [§4](#) warns about elsewhere, and
 this section exists because it was made here.
 
-**What survives unchanged.** §32.1-32.2's client behaviour (self-expiry at the
+**What survives unchanged.** §36.1-36.2's client behaviour (self-expiry at the
 stated duration, then a held faded ghost until the removal) is a fact about the
 CLIENT, which receives one `0x0042` and a late `0x0044` and cannot know what
-applied them. §32.7's conclusion that a retail player in a Student's ring watches
+applied them. §36.7's conclusion that a retail player in a Student's ring watches
 a ghost also stands — that is the environmental case, measured on its own build.
 Only the generalisation to combat is withdrawn.
 
