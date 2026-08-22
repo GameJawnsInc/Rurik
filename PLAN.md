@@ -1596,10 +1596,20 @@ UNMAPPED message).
 
    **The boundary itself is still UNVERIFIED and is no longer cheap.** No armed
    row sits below 2.50%. What settles it is a capture of a light hit TAKEN by a
-   character with an adrenal skill equipped — 3 to 5 raw points on a 480-health
-   warrior — and what separates the two gate rules is a second capture, the
+   character with an adrenal skill equipped — **1 to 2 raw points on a
+   480-health warrior**. (This line said "3 to 5" until 2026-08-22, and that
+   band is 0.63–1.04%, where §34.C's own table has every surviving rule
+   answering "1 unit" — an operator collecting exactly what it asked for would
+   have measured nothing. The discriminating band is below 0.5% of maximum
+   health under every surviving rescale; 3-point hits only discriminate at
+   640+ maximum.) What separates the two gate rules is a second capture, the
    Warrior in an explorable with every adrenal skill off the bar. Both are
-   runs, not queries.
+   runs, not queries, **and both are staged (2026-08-22,
+   [§34.10](studies/skills/FINDINGS.md))**: `vault/plans/adren_boundary.txt`
+   (band table per max health, in-run calibration, full-hit positive control,
+   the §34.B rune-swap rider riding free) and `vault/plans/adren_gate.txt`
+   (bare Warrior bar; an armed second connection as the positive control).
+   Readout for either capture: `python toolkit/authsrv/adrenjoin.py --rows`.
 2. ~~**What answers a refused press.**~~ **CLOSED 2026-08-22, wire and screen**
    (SKILLS-R1, [studies/skills §38](studies/skills/FINDINGS.md), run
    `20260822T105929`). Retail answers with **three** messages, not one:
@@ -1712,7 +1722,9 @@ UNMAPPED message).
 green at 62. The mechanic is on the wire, in content, gated per map, and watched
 at a client from a real death. What is still OPEN is small and named: MORALE-Q3
 (`0x00A2` vs `0x00A3` for property 43 — the energy arc moved us to `0x00A2` and
-which of its two changes cured the drain is unseparated), MORALE-Q4 (int
+which of its two changes cured the drain is unseparated; the separating arm is
+designed and **ruled not owed** 2026-08-22, since both changes are retail-pinned
+independently — [studies/morale/RUNS.md](studies/morale/RUNS.md) §Run 4), MORALE-Q4 (int
 property 54 at the revive, one sighting), MORALE-Q5 (morale BOOSTS — zero
 sightings in the corpus; only `0x009C [player, 110]` at our own client), and
 MORALE-Q6 (what resets a penalty on a map change — the wiki says an outpost,

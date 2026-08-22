@@ -263,3 +263,23 @@ regeneration on death and restores it at the revive ("energy regeneration stops:
 the player is dead" / "back to 3 pip(s) (revived, deferred)"). Either could
 account for the difference, and this run cannot separate them. What is settled
 is that the behaviour Run 3 flagged is not present in the tree we ship.
+
+### The separation arm, assessed 2026-08-22 — designed, and ruled not owed
+
+Nothing downstream consumes the answer. The channel move is pinned to retail's
+own wire — every corpus sighting of property 43 rides `0x00A2`, zero ride
+`0x00A3` (`authsrv.py`'s channel note at the death batch) — and the death-stop
+/ revive-restore is retail-corroborated from the same batches (43 = 0.0 in the
+death tick, the rate re-sent at the resurrect). Neither change would be
+reverted whichever of them cured the drain, and no open item — MORALE-Q4–Q6,
+`PLAN.md` §8's list — depends on knowing which. What the arm would buy is one
+fact about the client's `0x00A3` parser, with no consumer waiting for it.
+
+The arm itself, recorded so nobody re-derives it: re-run this run's command on
+a tree with ONLY the channel hunk of `b788ac1` reverted — property 43 back on
+`0x00A3`, the death/revive regen handling kept. Drain reproduces → the channel
+was the cure (and the client's `0x00A3` handler mis-takes a property retail
+never sends it on that opcode); readout stays 0-dead / 22-alive → the regen
+handling was. One flag apart if anyone ever builds it, per the
+`--refusal-silent` precedent. MORALE-Q3 stays open as a client-behaviour
+question, not as debt.

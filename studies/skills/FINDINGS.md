@@ -4332,6 +4332,30 @@ evidence. The blind replication chased it and
 found a whole message channel. An orphan in a ledger is a lead, and the ledger
 closing at 918 of 918 is the only thing that says there are no more.
 
+### 34.10 Both experiments are staged (2026-08-22) — and §8's band was wrong
+
+The two runs this section reduces to are written and waiting on an operator
+live session: `vault/plans/adren_boundary.txt` (the sub-percent boundary) and
+`vault/plans/adren_gate.txt` (Gate A vs Gate B). Neither has run; both go out
+via RUNBOOK's live procedure with `--plan`, sealed at launch as usual.
+
+Staging caught a defect worth its own paragraph: `PLAN.md` §8 specified the
+boundary hit as "3 to 5 raw points on a 480-health warrior", and by §34.C's own
+table that band is 0.63–1.04%, where **every surviving family answers
+"1 unit"** — an operator collecting exactly what the plan asked for would have
+measured nothing, and nothing on screen or in the log would have said so. The
+discriminating band is **1–2 points at 480 health** — damage below 0.5% of
+maximum under every surviving rescale (the round family's grant threshold is
+0.4807% at its interval's worst k) — and 3-point hits only join it at 640+
+maximum health. §8 is corrected in place, and the plan file carries the band as
+a table over max health so a rune-swapped session computes its own.
+
+The boundary plan folds in §34.B's rider — any granting hit at a maximum
+health other than 480 separates "% of maximum health" from "per 4.8 raw
+points", and a +health mitigation build may supply the second denominator for
+free — and both plans carry an in-run positive control, because §34.4 is the
+measurement that says silence without one is void.
+
 ## 35. SKILLS-T1 — the client names its own skill types
 
 **2026-08-21, no client launched, no wiki consulted.** Closes `PLAN.md` §8
