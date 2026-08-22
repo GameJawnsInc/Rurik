@@ -59,9 +59,23 @@ a check:
       the slot's SECOND dword (+0x04), not the first. PLAN.md said +0x00.
   §11 ARENANET'S OWN WORDS, four assert sites, each cited singly as the evidence
       for one claim -- CLAUDE.md's own boundary for a measurement.
+  §12 THE BAR GATE, which is the sharpest refutable claim in this file: split
+      the corpus on whether the observer's bar carries ANY adrenal skill and
+      the whole family lands on one side of the split -- 918/27/40 in the
+      armed connections, 0/0/0 in the dark ones. Its control is that the dark
+      connections are NOT quiet: 45 landed weapon hits and 13 completed melee
+      attacks, every one of which GWW's own rule says earns 25 units. It also
+      re-fits round() on the armed rows alone (32 of 32) and checks the eleven
+      percentages against a denominator it never fitted -- the observer's own
+      maximum health, read off a different property.
+  §13 THE REPAINT GATE, from the bytes, which is why nobody noticed §12 from
+      the screen: the charge worker clears EDI before its slot loop, sets it
+      only where a slot is actually written, and `test edi,edi` / `je` at
+      0x008219F8 jumps past the UI event. A 207 no slot accepted repaints
+      nothing and arms no timer.
 
-Sections 1-3 need no captures and no client; 4-7 need `vault/captures/live/`;
-8-11 need the pinned build-38797 image. The last two groups declare skips, the
+Sections 1-3 need no captures and no client; 4-7 and 12 need
+`vault/captures/live/`; 8-11 and 13 need the pinned build-38797 image. The last two groups declare skips, the
 first does not, which is `test_pools`' split: the content overlay regenerates
 from the owner's install and a machine without it should go RED.
 
@@ -88,7 +102,8 @@ import checks  # noqa: E402
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 55, and a run with neither the captures nor the pinned image
+# machine executes 68 (55 until 12-13 landed), and a run with neither the
+# captures nor the pinned image
 # executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
 # also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
 # in the skippable half. That is `test_pools`' split and the reason for it: the
@@ -101,7 +116,7 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 55 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 68 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
 # fixtures, one section quietly ceasing to run would still clear 10. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
@@ -161,6 +176,48 @@ STRIKE_UNITS = 25
 STRIKE_COUNT = 886
 SUB_STRIKE = {3: 6, 4: 12, 5: 1, 6: 5, 7: 1, 8: 3, 11: 4}
 
+# THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
+# whether the observing player's skillbar ever carried a skill with a non-zero
+# adrenaline cost, and the ENTIRE family lands on one side. These numbers are
+# the reason the sub-1% rounding boundary is still unverified rather than
+# answered: run the damage -> gain join without this split and 32 damage events
+# "grant nothing", the largest of them 7.5% of maximum health, which read
+# straight would put retail's cutoff an order of magnitude above the wiki's.
+# `toolkit/authsrv/adrenjoin.py` is the extractor; studies/skills 34 is the
+# finding. The ARMED column reproduces CENSUS above from an unrelated query,
+# which is this pair's own cross-check.
+ARMED_CONNECTIONS = 36
+DARK_CONNECTIONS = 22
+ARMED_FAMILY = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
+                SMSG_ADRENALINE_SPEND: 40}
+# The control that makes the dark zero mean something: those connections FOUGHT.
+DARK_HITS_LANDED = 45
+DARK_MELEE_FINISHED = 13
+DARK_DAMAGE_TAKEN = 32
+# And the rounding rule, re-fitted on the armed rows alone -- the population
+# that is not selected on the outcome AND not contaminated by the gate.
+#
+# 32 AND NOT 27, which is where the first cut of this landed. Two rows the first
+# scan lost, both recovered by a blind replication run against the same corpus
+# with the rival hypothesis: damage ALSO arrives on `0x00A2`, the sourceless
+# float channel, exactly ONCE at the observer (a 6.25% hit granting 6) -- the
+# first scan read only `0x00A3`, reported that gain as an orphan with no damage
+# near it, and moved on. And two batches carry TWO identical hits with TWO
+# identical gains, which the first scan refused as ambiguous; identical values
+# make every assignment the same pair, so they attribute by symmetry.
+ARMED_JOINED = 32
+ARMED_FITS = {"round": 32, "ceil": 17, "floor": 15}
+ARMED_DAMAGE_TAKEN = 32
+
+# THE CHECK WITH NO FREE PARAMETER. All 11 distinct percentages in the armed
+# population are k/480 to within f32 precision, and 480 is the SMALLEST integer
+# that does it (only its own multiples follow, to 2000). The observer's int
+# property 42 -- maximum health -- reads 480 on the same wire, and nothing in
+# the fraction arithmetic touched property 42. Two witnesses not fitted to each
+# other: a wrong denominator has no reason to produce 11 integers.
+ARMED_MAX_HEALTH = 480
+ARMED_NUMERATORS = [12, 13, 14, 15, 17, 24, 29, 30, 34, 39, 53]
+
 # The three skills retail spends adrenaline on in this corpus, and the number of
 # connections carrying 207 at all.
 # 348 is OURS -- capture 20260821T205552, the live run that settled the timeout
@@ -196,6 +253,13 @@ VA_CHARGE_THRESH  = 0x008219D6      # movzx ecx,word [eax+0x38]
 VA_CHARGE_ADD     = 0x008219DF      # mov eax,[esi] / add eax,[ebp+0xc]
 VA_FLD_25F        = 0x00821A03      # fld dword [0x009495B4]; operand at +2
 VA_25F_CONST      = 0x009495B4      # .rdata, 25.0f
+VA_CHARGE_FLAGCLR = 0x008219B3      # xor edi,edi -- before the slot loop
+VA_CHARGE_FLAGSET = 0x008219EC      # mov edi,1 -- inside it, after the store
+VA_CHARGE_FLAGTST = 0x008219F8      # test edi,edi / je past the repaint
+VA_CHARGE_LOOPTOP = 0x008219C0      # where 0x008219F6's jne goes back to
+VA_UI_EVENT_PUSH  = 0x00821A12      # push 0x10000058
+VA_CHARGE_EPILOG  = 0x00821AED      # where the je lands: the shared exit
+UI_EVENT_ADREN    = 0x10000058
 VA_CLEAR_BOTH     = 0x00821B30      # mov [eax],0 / mov [eax+4],0
 VA_SET_BOTH       = 0x00821BD7      # mov [ecx],eax / mov [ecx+4],eax
 VA_SPEND_25       = 0x00821C71      # cmp esi,0x19 / jbe / add esi,-0x19
@@ -1019,6 +1083,199 @@ def section_arenanet_words(img):
 # ---------------------------------------------------------------------------
 
 
+def section_bar_gate():
+    """THE FAMILY IS DARK FOR A BAR THAT CANNOT HOLD ADRENALINE.
+
+    The most refutable claim here, and the one that matters most to the sender.
+    Split the corpus on a variable that has nothing to do with adrenaline
+    traffic -- does the observer's SKILLBAR_UPDATE ever name a skill with a
+    non-zero `adrenaline_units` -- and every 207, every 208 and every 210 falls
+    on one side. One counterexample kills it.
+
+    THE CONTROL IS THE HALF THAT MAKES THE ZERO MEAN SOMETHING. A filtered
+    search that finds nothing proves nothing until the same search has found
+    something it should, and here the positive is inside the negative
+    population: those 22 connections carry 45 landed weapon hits and 13
+    completed melee attacks. GWW's rule grants 25 units per successful weapon
+    hit; retail granted none. So the silence is a gate and not an absence of
+    combat, which is exactly what a quiet capture would look like.
+
+    THE GATE'S VARIABLE IS CONFOUNDED AND THIS DOES NOT PRETEND OTHERWISE.
+    Every dark connection is also a non-Warrior character, so "the bar carries
+    an adrenal skill" and "the profession uses adrenaline" fit all 58
+    connections identically. What is asserted is the SPLIT, which is observed;
+    which side of the confound causes it is not, and the sender implements
+    neither (see `authsrv.player_gains_adrenaline`).
+    """
+    print("\n12. the family is dark for a bar with no adrenal skill on it")
+    import adrenjoin
+    stats, rows, skipped = adrenjoin.scan()
+    armed, dark = stats["arms"]["armed"], stats["arms"]["dark"]
+
+    LEDGER.ok(armed["connections"] == ARMED_CONNECTIONS
+              and dark["connections"] == DARK_CONNECTIONS,
+              f"the split is {armed['connections']} armed / "
+              f"{dark['connections']} dark connections",
+              f"expected {ARMED_CONNECTIONS}/{DARK_CONNECTIONS}. The variable "
+              f"is the observer's own SKILLBAR_UPDATE against content's "
+              f"`adrenaline_units` column -- nothing about adrenaline TRAFFIC "
+              f"enters it, which is what lets the next check discriminate")
+
+    got = {op: dark[k] for op, k in
+           ((SMSG_ADRENALINE_CHARGE, "gain"), (SMSG_ADRENALINE_CLEAR, "clear"),
+            (SMSG_ADRENALINE_SPEND, "spend"))}
+    LEDGER.ok(set(got.values()) == {0},
+              f"a dark connection carries NO adrenaline message at all: "
+              f"{ {hex(o): n for o, n in got.items()} }",
+              f"over {dark['messages']} messages in {dark['connections']} "
+              f"connections. Not 'few' -- none. The whole lifecycle is absent, "
+              f"clears and spends included, which is self-consistent: no gain "
+              f"means no 25-second clock means nothing to clear")
+
+    LEDGER.ok(all(armed[k] == ARMED_FAMILY[op] for op, k in
+                  ((SMSG_ADRENALINE_CHARGE, "gain"),
+                   (SMSG_ADRENALINE_CLEAR, "clear"),
+                   (SMSG_ADRENALINE_SPEND, "spend"))),
+              f"and the armed side carries ALL of it: "
+              f"{armed['gain']}/{armed['clear']}/{armed['spend']}",
+              f"expected {ARMED_FAMILY}. THIS IS ALSO A CROSS-CHECK ON 4: "
+              f"the census there counts opcodes over the whole corpus and this "
+              f"counts them per connection after a skillbar join, so the two "
+              f"agreeing is two queries and not one number read twice")
+
+    LEDGER.ok(dark["hits_landed"] >= DARK_HITS_LANDED
+              and dark["melee_finished"] >= DARK_MELEE_FINISHED,
+              f"POSITIVE CONTROL: those dark connections FOUGHT -- "
+              f"{dark['hits_landed']} landed hits, "
+              f"{dark['melee_finished']} completed melee attacks",
+              f"expected at least {DARK_HITS_LANDED} and "
+              f"{DARK_MELEE_FINISHED}. WIKI (GWW, 'Adrenaline'): one successful "
+              f"weapon hit is 25 units. Retail sent none for any of them, so "
+              f"the zero above is a GATE and not a quiet capture. Without this "
+              f"line the previous check is unfalsifiable")
+
+    LEDGER.ok(armed["damage_taken"] == ARMED_DAMAGE_TAKEN,
+              f"the armed side took {armed['damage_taken']} damage messages, "
+              f"and every one of them granted",
+              f"expected {ARMED_DAMAGE_TAKEN}. The two populations happen to "
+              f"be the same size, which is a coincidence and not a check -- "
+              f"what matters is that one is 32 grants of 32 and the other is "
+              f"0 of 32")
+
+    LEDGER.ok(dark["damage_taken"] == DARK_DAMAGE_TAKEN,
+              f"and they took {dark['damage_taken']} damage messages, every "
+              f"one of which granted nothing",
+              f"expected {DARK_DAMAGE_TAKEN}. THESE ARE THE ROWS THAT LOOK "
+              f"LIKE A ROUNDING BOUNDARY and are not: unstratified they say "
+              f"'damage of up to 7.5% of maximum health grants no adrenaline', "
+              f"which is absurd and would refute `pools.damage_units` outright")
+
+    fits = adrenjoin.fits([r for r in rows if r["arm"] == "armed"])
+    LEDGER.ok(fits["n"] == ARMED_JOINED
+              and fits["round"] == ARMED_FITS["round"] == fits["n"],
+              f"re-fitted on the armed rows alone, round() fits "
+              f"{fits['round']} of {fits['n']}",
+              f"expected {ARMED_FITS} over {ARMED_JOINED}. floor "
+              f"{fits['floor']}, ceil {fits['ceil']} -- so the 2026-08-21 "
+              f"correction from floor to round survives the stratification "
+              f"that killed the boundary claim. Note what it does NOT survive "
+              f"into: the armed rows run 2.50%..11.04% and there is no armed "
+              f"row below 2.5%, so the sub-1% boundary is still UNVERIFIED")
+
+    armed_rows = [r for r in rows if r["arm"] == "armed" and not r["ambiguous"]]
+    pcts = sorted({r["pct"] for r in armed_rows})
+    ks = [round(p / 100.0 * ARMED_MAX_HEALTH) for p in pcts]
+    integral = all(abs(p / 100.0 * ARMED_MAX_HEALTH - k) < 1e-4
+                   for p, k in zip(pcts, ks))
+    smaller = [h for h in range(1, ARMED_MAX_HEALTH)
+               if all(abs(p / 100.0 * h - round(p / 100.0 * h)) < 1e-4
+                      for p in pcts)]
+    LEDGER.ok(integral and ks == ARMED_NUMERATORS and not smaller,
+              f"NO FREE PARAMETER: all {len(pcts)} armed percentages are "
+              f"k/{ARMED_MAX_HEALTH}, k = {ks}",
+              f"expected {ARMED_NUMERATORS}, and no denominator below "
+              f"{ARMED_MAX_HEALTH} works (found {smaller}). The observer's int "
+              f"property 42 reads {ARMED_MAX_HEALTH} on the same wire and none "
+              f"of this arithmetic looked at it, so the two are independent "
+              f"witnesses to the same maximum health. It is also the limit of "
+              f"what the corpus can say about the RULE: one max health cannot "
+              f"separate 'one unit per 1% of maximum' from 'one unit per "
+              f"{ARMED_MAX_HEALTH / 100.0} raw points'")
+
+    LEDGER.ok(len(skipped) <= 1,
+              f"{len(skipped)} connection skipped for having no unique self "
+              f"agent",
+              f"the self agent is int property 41, self-scoped, with NO "
+              f"fallback (`adrenjoin.whose_agent`). The one skip is a 6112 "
+              f"auth channel, which carries no agent properties at all. "
+              f"Identifying the observer by 'the agent a 207 names' would "
+              f"delete the ENTIRE dark population from the denominator -- the "
+              f"outcome-selection defect one level down")
+
+
+def section_repaint_gate(img):
+    """WHY NOBODY SAW 12 FROM THE SCREEN: a 207 no slot accepted is a no-op.
+
+    Read as arithmetic on the charge worker's own bytes rather than compared
+    with a transcription. EDI is cleared before the slot loop, set only on the
+    path that writes a slot, and tested immediately after the loop's back-edge;
+    the `je` skips the UI event that carries the 25.0 timer. So a 207 delivered
+    to a bar with no adrenal skill leaves the flag at zero and exits.
+
+    This is what makes 12's divergence invisible, and it cuts both ways: it is
+    why our sender's extra 207s are harmless on screen, and it is why six
+    captures of retail sending none went unnoticed for a day.
+    """
+    print("\n13. the charge worker's repaint is gated on 'a slot moved'")
+    b = img.read(VA_CHARGE_FLAGCLR, 3)
+    LEDGER.ok(b[:2] == b"\x33\xff",
+              f"0x{VA_CHARGE_FLAGCLR:08x} is `xor edi,edi`, before the loop",
+              f"read {b[:2].hex()}, expected 33ff. The flag starts clear, so "
+              f"the default outcome of the loop is 'nothing moved'")
+
+    b = img.read(VA_CHARGE_FLAGSET, 5)
+    LEDGER.ok(b == b"\xbf\x01\x00\x00\x00",
+              f"0x{VA_CHARGE_FLAGSET:08x} is `mov edi,1`, INSIDE the loop",
+              f"read {b.hex()}, expected bf01000000. It sits immediately after "
+              f"the only arithmetic store to a slot (0x{VA_CHARGE_STORE:08x}), "
+              f"so it is set per SLOT WRITTEN and not per message received")
+
+    # the loop's back-edge, as arithmetic: jne rel8 at 0x008219F6 -> the top
+    j = img.read(0x008219F6, 2)
+    back = (0x008219F6 + 2 + struct.unpack("<b", j[1:2])[0]) & 0xFFFFFFFF
+    LEDGER.ok(j[0] == 0x75 and back == VA_CHARGE_LOOPTOP,
+              f"the loop closes: `jne` at 0x008219F6 goes back to "
+              f"0x{back:08x}",
+              f"expected 0x{VA_CHARGE_LOOPTOP:08x}. Computed from the "
+              f"displacement, so a wrong address gives a wrong sum rather than "
+              f"agreeing with a label we chose")
+
+    b = img.read(VA_CHARGE_FLAGTST, 8)
+    target = (VA_CHARGE_FLAGTST + 8
+              + struct.unpack("<i", b[4:8])[0]) & 0xFFFFFFFF
+    LEDGER.ok(b[:2] == b"\x85\xff" and b[2:4] == b"\x0f\x84",
+              f"0x{VA_CHARGE_FLAGTST:08x} is `test edi,edi` then `je`, AFTER "
+              f"the loop",
+              f"read {b.hex()}. This is the whole finding: the test is outside "
+              f"the loop and the jump is taken when NO slot moved")
+
+    LEDGER.ok(VA_CHARGE_FLAGTST < VA_UI_EVENT_PUSH < target,
+              f"and the `je` lands at 0x{target:08x}, PAST the UI event push "
+              f"at 0x{VA_UI_EVENT_PUSH:08x}",
+              f"an ordering claim, checkable by three addresses: the push is "
+              f"between the test and the jump's target, so taking the jump "
+              f"skips it. A 207 that moved nothing fires no 0x{UI_EVENT_ADREN:08x} "
+              f"and arms no 25-second timer")
+
+    b = img.read(VA_UI_EVENT_PUSH, 5)
+    LEDGER.ok(b == b"\x68" + struct.pack("<I", UI_EVENT_ADREN),
+              f"the skipped push is the adrenaline UI event, "
+              f"0x{UI_EVENT_ADREN:08x}",
+              f"read {b.hex()}. Same event 11 names from the other end -- the "
+              f"blink warning's timer. Skipping it is what makes an unaccepted "
+              f"207 invisible rather than merely harmless")
+
+
 def main():
     declared = section_schema()
     section_pin_consistency()
@@ -1045,6 +1302,7 @@ def main():
         section_self_scope(agg)
         section_spend_join(agg)
         section_order(agg)
+        section_bar_gate()
 
     try:
         img = Image()
@@ -1061,6 +1319,7 @@ def main():
         section_workers(img)
         section_display(img)
         section_arenanet_words(img)
+        section_repaint_gate(img)
 
     return LEDGER.verdict()
 

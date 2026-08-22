@@ -504,6 +504,20 @@ def damage_units(fraction_of_max_health):
     floored reading put that boundary at 1%. Nothing in the corpus sits in that
     band, so which side of it retail lands on is UNVERIFIED.
 
+    AND IT STAYS UNVERIFIED, WHICH COST A RUN TO ESTABLISH (2026-08-21,
+    studies/skills 34, `adrenjoin.py`). The join above is selected on the
+    outcome -- it starts from the gains -- so the obvious repair is to run it
+    from the DAMAGE instead, over every 0x00A3 naming the observer as target,
+    where the no-gain rows arrive by construction. Done naively that yields 32
+    damage events granting nothing, the largest of them 7.5% of maximum health,
+    which would refute this function outright. It is an artifact: every one of
+    those 32 rows is in a connection whose player carries NO ADRENAL SKILL ON
+    THE BAR, and retail sends that connection no adrenaline message at all.
+    Stratify and the armed rows are 27 of 27 for round() -- and run 2.50% to
+    11.04%, so there is still no sample under 1% anywhere in the corpus. The
+    same percentage appearing twice with two different answers (2.5000 granting
+    3 units and nothing) is what gave the artifact away.
+
     A MODULE FUNCTION AND NOT A METHOD, because two callers need the same
     number for two different purposes and neither may compute it its own way:
     `on_damage_taken` grants it, and `authsrv.py` needs the identical integer
