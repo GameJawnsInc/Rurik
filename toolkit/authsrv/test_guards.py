@@ -474,14 +474,17 @@ def section_player_refill_due():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.player_refill_due(send, state, 0)
-    # FOUR HALVES SINCE 2026-08-20, not two: the health pair (max, then the
-    # property-34 fraction) followed by the ENERGY pair (property 52 = 1.0 and
-    # property 43 back to the rate), which is the resurrect batch retail sends
-    # -- 52, 43 and 55 in one instant, OBSERVED in capture 20260817T183756. The
+    # FIVE MESSAGES SINCE c4d1161 (2026-08-22), four since 2026-08-20: the
+    # health pair (max, then the property-34 fraction), then the ENERGY trio --
+    # property 52 = 1.0, the int property 54 "+N" callout c4d1161 added in
+    # retail's position, and property 43 back to the rate. The batch is retail's
+    # resurrect instant, OBSERVED in capture 20260817T183756 (52/43/55) plus
+    # retail's [54, 27, 22] callout; test_pools 8b pins its composition, so
+    # this count follows restore_player_energy rather than re-pinning it. The
     # contract this section is about is unchanged and still checked: a refused
     # value sends nothing and leaves the timer armed; an accepted one disarms.
-    check(len(sent) == 4 and state["player_refill_due_at"] is None,
-          "control: in-range sends both refill halves and disarms",
+    check(len(sent) == 5 and state["player_refill_due_at"] is None,
+          "control: in-range sends the full refill batch and disarms",
           f"ops={[op for op, _, _ in sent]}, "
           f"due={state['player_refill_due_at']!r}")
 
