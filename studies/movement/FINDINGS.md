@@ -5025,8 +5025,14 @@ geometry places the player on exactly one plane and that the one the client name
 (`placed = here == {cur_plane}`, :11120). Only two narrow strips grant a click
 with plane 18: **y 4560–4760 and y 5320–5560**. 38% of on-mesh probes are
 ambiguous, and the ambiguity is exactly where a click-side plane rewrite would
-have to happen. **No click grant in this arc has ever carried one, and this is
-why.**
+have to happen. ⚠ **Very nearly none, and the exact figure is worth having: of 601 grants
+attributable to the CLICK arm, field 4 is non-zero on 2 (0.3%) — against 108 of
+704 (15.3%) on the zero-lead arm, which is F1's own territory.** (2,711 further
+grants sit in pre-telemetry captures with no `grant_verdict` row to attribute them
+by; 39 of those carry a non-zero field 4, so the click-arm figure is a FLOOR over
+the attributable set, not a census of the arc.) An earlier draft of this sentence
+said **never**, which was overstated by two. **The geometry above is why it is so
+close to zero.**
 
 ---
 
@@ -5260,6 +5266,28 @@ control's wire only **17% actively reported**.
 
 `--plane-carry` was correctly **excluded** this run (`plane_carry = false` on all
 116 zero-lead rows), so the treatment is cleanly `--zero-lead --grant-suppress`. ⚠ **And the scorer said otherwise for a while.** The behavioural arm-identifier printed "COMPOSITE `--zero-lead --plane-carry` `--grant-suppress`" from a HARDCODED label string whenever the zero-lead and suppress vocabularies both appeared — it never read `plane_carry`, which the capture records on every verdict row. That is the exact hazard L5's review named ("`--plane-carry` vs `--arrival-carry` indistinguishable; the `carry` field separates them and is not read"), and it is the `vaultpath.require_dir()` principle in another costume: **a fixture that names a thing without reading it turns every claim behind it into a no-op.** Fixed to read the field and to PRINT what it read, so the label can be audited rather than trusted.
+
+### 0. Instrument note — the tap's sample rate is ONE SYSCALL, and it is fixable
+
+Three runs have now recorded a movetap rate (8.4–9.5 Hz, then 12.0–13.3 Hz) as a
+bare fact with no cause, and "positives valid, nulls void" has been paid twice
+because of it. **Measured 2026-08-22: `_threads_of()` costs 51.7 ms per call on
+this machine** (n=20, warm; an independent lane on the same tree measured
+39.7–57.7 ms, so it is load-dependent — quote the range) — **which caps the tap
+at 19.3 Hz on that call alone**, before a single `ReadProcessMemory`.
+
+The cause is at `movetap.py:514`: `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD,
+0)` takes a **system-wide** thread snapshot and the owner filter is then applied
+in Python at `:519`. Passing our own pid would not help — `TH32CS_SNAPTHREAD`
+ignores `th32ProcessID` by design — so **the fix is to CACHE the thread list**,
+which changes rarely for a running client, rather than to re-snapshot per sample.
+The `ctypes.WinDLL("kernel32")` construction inside the same function is only
+0.013 ms and is not worth touching.
+
+**Nothing here has been changed** — this is a measurement and a costing, not a
+patch, and `movetap.py` is a pinned instrument whose edit needs its own test
+floor. But the next arc that needs 20 Hz should know the ceiling is one cached
+list away, not a rewrite. OBSERVED, `toolkit/clientscan/movetap.py:500-524`.
 
 ### 1. The protocol worked, and the conversion is now 3 for 3
 
