@@ -1897,6 +1897,29 @@ a tight interior. **Third instrument fault of this kind** after W12's clipped
 band and W16's short leg -- all three in how the result was to be READ, all
 three caught only because the arms shared everything but the variable.
 `vault/research/worldmaps/WORLDMAPS-W18-RUN.md`.
+
+**WORLDMAPS-W19 SHOWED 45 IS A BOUNDARY, not an absence of one.** W17 and W18
+both tested slopes BELOW the new cut, so neither could tell "the boundary
+moved" from "the classifier stopped excluding things". W19 put a POSITIVE and
+a NEGATIVE in ONE arm -- one compiled map, one threshold set, one spawn: strip
+4 (41.52-42.51 deg) climbed to **y = 3,064**, the plateau; strip 5
+(46.45-47.84 deg) stopped at **y = 1,728**, the apron's last row, to the unit.
+Separation 1,336 u. Both bands populated (10 and 8 samples), so the negative is
+measured rather than an empty window. Every prediction confirmed as registered.
+
+**That is the first rung here with no caveat, and the reason is that the design
+was adversarially reviewed BEFORE it ran.** The review caught a FATAL: the
+draft moved the start line with `seed_x`, which is the compiler's flood seed
+and NOT the player's spawn, so both arms would have started in the same place
+with both scoring bands empty -- a fabricated P1-refuted/P2-confirmed from one
+non-event. It also caught that `gen_ramp` blends `dz` per column, making every
+strip boundary a wall (gx 18 = 42-59 deg, gx 24 = 47-63, gx 30 = 68-85) that
+the draft's bands each contained. **Four instrument faults in this arc, and this
+is the first caught before it cost launches** rather than after.
+
+Untested: where between 42.51 and 46.45 degrees the cut actually sits -- the
+strips bracket it without bisecting it.
+`vault/research/worldmaps/WORLDMAPS-W19-RUN.md`.
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 
