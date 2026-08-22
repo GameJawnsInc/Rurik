@@ -4848,7 +4848,13 @@ Every one of these, in the order they were written:
   client's own descriptors and the wiring pass wrote off the house naming rule with
   nothing forcing them together. Needs `vault/captures/live/`
   for §2, declared as a skip; needs the client-table content overlay for §§5–11, which
-  is NOT skippable and should go red without it; floor 105 of a 121-check green run
+  is NOT skippable and should go red without it; floor 108 of a 125-check green run.
+  **11j pins `--refusal-silent`, the A/B arm SKILLS-R2 rests on** — both directions,
+  plus an explicit third check that the two arms actually DIFFER. An arm that
+  silently stopped suppressing would make the next A/B compare two identical
+  configurations and report a clean null, which is the most convincing way to be
+  wrong (see `studies/skills` §37.5 for the session where exactly that shape of
+  null nearly shipped from a different cause)
   (was 82 of 98 before §11)),
   `toolkit/authsrv/test_adrenwire.py` (**adrenaline IS on the wire, and this is the
   file that stops us forgetting again**. Until 2026-08-21 `pools.py`'s header read

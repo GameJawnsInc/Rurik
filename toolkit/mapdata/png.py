@@ -43,6 +43,27 @@ BIT_DEPTH = 8
 _CHANNELS = {COLOUR_RGB: 3, COLOUR_RGBA: 4}
 
 
+def channels(colour):
+    """Bytes per pixel for a colour type. PUBLIC, and it exists because the
+    private map was a trap.
+
+    `decode`/`read` return the COLOUR TYPE as their fourth value, not a channel
+    count -- and truecolour's colour type is **2** while its stride is **3**.
+    On 2026-08-22 that value was used directly as a stride: every pixel index
+    landed mid-pixel, and the comparison it fed returned ZERO CHANGED PIXELS
+    for two arms of an A/B that actually differed enormously. A null is the
+    most dangerous thing a broken measurement can return, because it looks
+    like a finding. `studies/skills` 37.5 carries the full account.
+
+    The tell, for anyone who hits this again: two SEPARATE runs of a live
+    system produced byte-identical numbers. That is a diagnostic, not a result.
+    """
+    if colour not in _CHANNELS:
+        raise BadPNG(f"colour type {colour} has no channel count here; "
+                     f"this reader handles {sorted(_CHANNELS)}")
+    return _CHANNELS[colour]
+
+
 class BadPNG(ValueError):
     """A PNG that cannot be read, with the reason. Never a silent partial."""
 
@@ -202,6 +223,11 @@ def decode(data):
 
 
 def read(path):
-    """`decode` from a file."""
+    """`decode` from a file -> `(pixels, width, height, COLOUR TYPE)`.
+
+    THE FOURTH VALUE IS THE COLOUR TYPE, NOT THE CHANNEL COUNT. Pass it through
+    `channels()` to get the stride; see that function for what happens when you
+    do not.
+    """
     with open(path, "rb") as fh:
         return decode(fh.read())
