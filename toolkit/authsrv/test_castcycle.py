@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=16)
+LEDGER = checks.Ledger("cast cycle", floor=19)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -43,7 +43,7 @@ def _press(authsrv, send, state, skill=42, copy=7, target=0):
 def _rewind(state, seconds):
     """Move every pending phase due-time into the past by `seconds`."""
     for cast in state.get("pending_casts", ()):
-        for k in ("e5_at", "e3_at", "e6_at"):
+        for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
             cast[k] -= seconds
 
 
@@ -222,6 +222,7 @@ def section_queue_law():
     try:
         _press(authsrv, send, state, skill=105)
         first = state["pending_casts"][0]
+        sent.clear()
         _press(authsrv, send, state, skill=105)
         second = state["pending_casts"][1]
         gap = second["e5_at"] - first["e5_at"]
@@ -230,6 +231,30 @@ def section_queue_law():
               "first's -- skill 105's own two live cycles, generalized",
               f"gap={gap:.3f}s (the naive press+activation model is refuted "
               f"by +0.64s and +0.57s residuals in the corpus)")
+        check([op for op, _, _ in sent] == [0x00E4]
+              and first["begun"] and not second["begun"],
+              "and the QUEUED press sends E4 ALONE -- no debit, no "
+              "animation: both live queued presses (t=9.8501, 19.6902) "
+              "carry nothing after their E4, and the burst tail belongs "
+              "to the begin (castmech 3b/3c)",
+              f"{[(hex(op), vals) for op, vals, _ in sent]}")
+        sent.clear()
+        _rewind(state, 2.75)   # first's E5+E3 due; second's begin due
+        authsrv.cast_tick(send, state, 0)
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x00E3, 0x00A2, 0x00A0],
+              "the first cast completes and the queued burst rides its E3: "
+              "the debit then the animation, retail's own order at both of "
+              "153's E3 instants (E3, property 62, property 60 -- 2 of 2)",
+              f"{[(hex(op), vals) for op, vals, _ in sent]}")
+        check(sent[3][1][0] == authsrv.agents.GV_ENERGY_SPENT
+              and sent[4][1] == [authsrv.agents.GV_SKILL_ACTIVATED,
+                                 PLAYER, 0, 105]
+              and second["begun"],
+              "the debit names the energy property and the animation names "
+              "the queued skill -- [60, 31, 40, 105] rode 153's E3 on the "
+              "live wire, deferred to the moment the caster freed",
+              f"debit={sent[3][1]}, animation={sent[4][1]}")
     finally:
         authsrv.skill_timing = saved
 

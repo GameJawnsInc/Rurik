@@ -5878,10 +5878,15 @@ def cancel_on_move(send, state, conn_id):
     THE CONTRACT IS THE WIKI'S, and half of it is already on the live wire.
     WIKI (GWW "Cancel", rev. 2014-08-16): a cancelled skill does not
     activate, its initial costs ARE still incurred, it does NOT recharge, and
-    no aftercast follows. Our debit already happens at the press, so "costs
-    stay paid" is free; "no recharge" is expressed by releasing the pending
+    no aftercast follows. "Costs stay paid" holds for any cast that BEGAN --
+    the press (a free caster) or cast_tick's begin branch (a queued one)
+    already paid -- while a queued cast dropped before its begin never paid
+    at all, which is the corpus's own arithmetic: its one terminated cast
+    is an E4 with NO debit ever after (castmech 3c), and the wiki clause is
+    about a skill in activation, which a never-begun queue entry is not.
+    "No recharge" is expressed by releasing the pending
     entry with a bare 0x00E2 and never sending its E5 -- which is byte-for-
-    byte the corpus's one terminated cast (E4 t=5.027 answered by E2 t=5.912,
+    byte that same terminated cast (E4 t=5.027 answered by E2 t=5.912,
     no E5 between or ever after, studies/castmech 3/4). WIKI (GWW
     "Quarterstepping"): an attack skill mid-activation is NOT movement-
     cancellable -- but one still QUEUED (begin not reached) is droppable
@@ -7483,6 +7488,19 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     begin = max(now, state.get("cast_busy_until", 0.0))
     e5_at = begin + activation
     state["cast_busy_until"] = e5_at + aftercast
+    # A QUEUED PRESS DEFERS ITS WHOLE BURST TAIL TO CAST-BEGIN. Measured
+    # from both directions (studies/castmech 3b/3c): skill 105's debit and
+    # animation ride 153's E3 instant -- the moment the caster freed -- on
+    # both live cycles, 2 of 2, in the order E3, property 62, property 60;
+    # and the queued presses themselves (t=9.8501, 19.6902) carry NOTHING
+    # after their E4. The corpus's one terminated cast says the same thing
+    # about the money: an E4 answered by the bare E2 with no debit ever
+    # between, so a cast that never begins never pays. The gate above still
+    # runs at the PRESS -- retail answers all 43 declined presses within
+    # 26-62 ms of the press, never at the would-be begin -- so acceptance
+    # is judged now and paid later, and cast_tick's begin branch owns the
+    # paying (the payment fields ride the pending entry below).
+    queued = begin > now
 
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
@@ -7545,9 +7563,26 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # (WIKI, GWW "Adrenaline", rev. 2026-07-02), so it is paid at USE and not
     # at completion -- the opposite of the energy spend, which the corpus shows
     # landing once per COMPLETED cast.
-    if ENERGY:
-        if glyph_ep is not None and discount:
-            spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
+    #
+    # `not queued` SINCE 2026-08-22: a queued press pays nothing here -- the
+    # whole tail (glyph, 0x00D2, property 62, the animation below) fires at
+    # cast-begin in cast_tick, where retail fires it. The adrenal half of
+    # that deferral is RECONSTRUCTION by adjacency rather than measurement
+    # (no queued adrenal cast in the corpus): the one adrenal invariant we
+    # do have -- 0x00D2 immediately before the naming property, 39 of 39 --
+    # survives only if the two defer together.
+    if ENERGY and glyph_ep is not None and discount:
+        # THE GLYPH CHARGE BURNS AT THE PRESS even for a queued cast, unlike
+        # everything below. Deliberate, and it is bookkeeping consistency
+        # rather than a measurement -- the corpus has zero glyphed casts.
+        # The discounted `cost` was quoted by the gate above from the charge
+        # state at THIS instant; burning the charge in the same instant is
+        # what keeps a third stacked press from being quoted a discount the
+        # glyph no longer has. (Corner accepted and named: a queued glyphed
+        # cast cancelled before its begin has consumed a charge for a spell
+        # that never began. Unmeasured either way; revisit on a capture.)
+        spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
+    if ENERGY and not queued:
         if units > 0:
             player_adrenaline(state).use(skill_id)
             # ---- AND 0x00D2 GOES OUT HERE, WHICH IS MEASURED --------------
@@ -7619,22 +7654,31 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # the "0 of 21,543" sentence that used to justify leaving it unsent
     # here was a count from the wrong channel (studies/castmech 3b/3c).
     #
-    # AND THE INSTANT IS A DIVERGENCE FOR QUEUED CASTS, measured the same
-    # day: retail sends this property (and the energy debit) at CAST-BEGIN
-    # -- the press when the caster is free, the E3 instant when the cast
-    # was queued (skill 105's property 60 rides 153's E3, both cycles). We
-    # send both at the press always; for a queued cast that is early by the
-    # rest of the previous cast's aftercast.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
-          else agents.GV_SKILL_ACTIVATED,
-          PLAYER_AGENT_ID, target or 0, skill_id],
-         f"cast animation: player {'strikes with' if is_attack else 'casts'} "
-         f"{skill_id}")
+    # AND THE INSTANT IS THE FAMILY OF THE PRESS: retail sends this
+    # property (and the energy debit) at CAST-BEGIN -- the press when the
+    # caster is free, the E3 instant when the cast was queued (skill 105's
+    # property 60 rides 153's E3, both cycles). `not queued` is that rule:
+    # a free caster's animation goes out here, a queued cast's goes out in
+    # begin_cast at the instant the caster frees. (This sent at the press
+    # always until 2026-08-22 -- early, for a queued cast, by the rest of
+    # the previous cast's aftercast.)
+    if not queued:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
+              else agents.GV_SKILL_ACTIVATED,
+              PLAYER_AGENT_ID, target or 0, skill_id],
+             f"cast animation: player "
+             f"{'strikes with' if is_attack else 'casts'} {skill_id}")
 
 
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
+        # `begun` False is a queued cast whose burst tail -- payment and
+        # animation -- still belongs to its begin instant; cast_tick's
+        # begin branch fires it and flips this. `cost` (glyph discount
+        # already priced in) and `units` are what that branch pays with;
+        # both inert for a cast that began at the press.
+        "begun": not queued, "cost": cost, "units": units,
         # The target rides the pending entry so the DAMAGE can land at cast
         # end rather than at the press -- see cast_tick's E5 branch. Storing
         # the id rather than the agent is deliberate: the agent may be dead,
@@ -7654,7 +7698,9 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     })
     print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
           f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
-          f"recharge {recharge:.0f}s", flush=True)
+          f"recharge {recharge:.0f}s"
+          + (f" -- QUEUED, begins (and pays) in {begin - now:.2f}s"
+             if queued else ""), flush=True)
 
     # NO DAMAGE HERE. It lands at cast end, in cast_tick's E5 branch.
     #
@@ -7687,6 +7733,87 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # something still does.
 
 
+def begin_cast(send, state, cast, conn_id):
+    """Fire a queued cast's deferred burst tail: pay, then animate.
+
+    Called from cast_tick at the entry's `begin_at` -- the instant the
+    caster frees, where the live wire puts the queued cast's debit and
+    animation (right behind the previous cast's E3, 2 of 2, studies/castmech
+    3b/3c). The payment order is the press burst's own: the adrenal 0x00D2,
+    the property-62 energy fraction, then the animation -- the
+    0x00D2-before-naming adjacency (39 of 39) and the 62-before-60 order
+    (both begin instants) survive the deferral intact. The GLYPH charge is
+    not here: it burned at the press (the press path says why), and
+    `cast["cost"]` already carries its discount.
+
+    Returns True when the cast began, False when the begin-time recheck
+    refused it -- the caller releases the entry, and nothing was ever paid
+    or shown for it.
+
+    THE RECHECK IS OURS, not retail's, and it exists because this server
+    stacks queued presses where retail replaces the queue: two accepted
+    presses can promise the same energy, and the press gate (which retail
+    answers at the press, 43 of 43 declines within 26-62 ms) cannot see the
+    earlier promise because nothing has been paid yet. The refusal reuses
+    the measured press-refusal shape -- the sentence, then the 0x00E2
+    release the client needs to free the slot. One divergence is accepted
+    and named: `cast_busy_until` belongs to the connection thread alone, so
+    a begin-time refusal leaves its ghost in the busy window and a
+    follow-up press schedules behind it. Self-limiting (the window passes),
+    and cheaper than a second writer on a single-writer key.
+    """
+    skill_id, copy = cast["skill_id"], cast["copy"]
+    cast["begun"] = True
+    if ENERGY:
+        cost, units = cast["cost"], cast["units"]
+        pool = player_energy(state)
+        pool.tick(time.time())
+        bar = player_adrenaline(state)
+        if units > 0 and not bar.charged(skill_id):
+            print(f"[c{conn_id}] REFUSED skill {skill_id} at cast-begin: "
+                  f"needs {units} adrenaline, has {bar.units.get(skill_id)} "
+                  f"-- a stacked queue outran the bar", flush=True)
+            refuse_press(send, skill_id, copy, conn_id,
+                         chatdefs.REFUSE_NOT_ENOUGH_ADRENALINE)
+            return False
+        if cost > 0 and not pool.can_pay(cost):
+            print(f"[c{conn_id}] REFUSED skill {skill_id} at cast-begin: "
+                  f"needs {cost} energy, has {pool.current:.2f} -- a "
+                  f"stacked queue promised it twice", flush=True)
+            refuse_press(send, skill_id, copy, conn_id,
+                         chatdefs.REFUSE_NOT_ENOUGH_ENERGY)
+            return False
+        if units > 0:
+            bar.use(skill_id)
+            send(AGENT_ADRENALINE_SPEND, [PLAYER_AGENT_ID, skill_id, copy],
+                 f"adrenaline spend: skill {skill_id} (copy {copy}), "
+                 f"at cast-begin")
+            print(f"[c{conn_id}] skill {skill_id} spends {units} adrenaline "
+                  f"at cast-begin; every other pool loses a strike",
+                  flush=True)
+        frac = (None if cost <= 0 else
+                _fraction(pools.spend_fraction(cost, pool.maximum),
+                          agents.GV_ENERGY_SPENT,
+                          f"the energy for skill {skill_id}"))
+        pool.spend(cost)
+        if frac is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                 [agents.GV_ENERGY_SPENT, PLAYER_AGENT_ID, frac],
+                 f"energy -{cost} of {pool.maximum:.0f} for skill "
+                 f"{skill_id}, at cast-begin")
+            print(f"[c{conn_id}] skill {skill_id} costs {cost} energy at "
+                  f"cast-begin: {pool.current:.2f}/{pool.maximum:.0f} left",
+                  flush=True)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
+          else agents.GV_SKILL_ACTIVATED,
+          PLAYER_AGENT_ID, cast.get("target") or 0, skill_id],
+         f"cast animation: player "
+         f"{'strikes with' if cast['attack'] else 'casts'} {skill_id}, "
+         f"at cast-begin")
+    return True
+
+
 def cast_tick(send, state, conn_id):
     """Fire the timed three quarters of every pending cast cycle.
 
@@ -7698,7 +7825,10 @@ def cast_tick(send, state, conn_id):
 
     Phase order within a cycle is pinned to the observed one: E5, then E3,
     then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
-    waits for its E3 rather than closing the cycle early.
+    waits for its E3 rather than closing the cycle early. SINCE 2026-08-22
+    a QUEUED cast has a fourth, earlier phase here: `begin_cast` pays and
+    animates at `begin_at`, the instant the previous cast's aftercast ends
+    (its E3 -- fired earlier in the same pass by the earlier entry).
 
     SINCE 2026-08-15 THIS ALSO LANDS THE DAMAGE, in the E5 branch. It used to
     happen at the press, which put a spell's hit before its own casting
@@ -7718,7 +7848,10 @@ def cast_tick(send, state, conn_id):
         # cancel contract falls out of the silence: no E5 means no recharge
         # started and no damage landed, no E3 means no aftercast -- the
         # caster is free the moment the release goes out. The costs stay
-        # paid because the press paid them. The one live cancel rode a
+        # paid for a cast that BEGAN (the press or the begin branch paid
+        # them); one cancelled still queued never paid and never will,
+        # which is what that terminated cast's missing debit shows
+        # (castmech 3c). The one live cancel rode a
         # property 45 the corpus shows once and nothing names; it is left
         # unsent rather than guessed at (studies/castmech 3b).
         if cast.get("cancelled") and not cast["e5_sent"]:
@@ -7728,6 +7861,21 @@ def cast_tick(send, state, conn_id):
                  f"{cast['skill_id']}, no recharge")
             finished.append(cast)
             continue
+        # A QUEUED CAST BEGINS HERE: payment and animation at the instant
+        # the caster frees, which the wire puts right behind the previous
+        # cast's E3 -- E3, property 62, property 60, in that order, both of
+        # skill 105's live cycles (studies/castmech 3b/3c). The loop order
+        # delivers that for free: the previous cast's entry precedes this
+        # one, so its E3 branch has already run this pass. The pools are
+        # world-tick residents already (energy_tick regenerates, the hit
+        # paths grant adrenaline), so paying from this thread joins an
+        # existing pattern rather than opening a new one.
+        if not cast.get("begun", True) and now >= cast["begin_at"]:
+            if not begin_cast(send, state, cast, conn_id):
+                # The begin-time recheck refused it (see begin_cast). The
+                # entry releases and dies; nothing was ever paid or shown.
+                finished.append(cast)
+                continue
         if not cast["e5_sent"] and now >= cast["e5_at"]:
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],

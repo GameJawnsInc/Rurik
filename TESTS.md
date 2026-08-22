@@ -4816,7 +4816,11 @@ Every one of these, in the order they were written:
   CLEAR and `resolve_duration` already sets the precedent that bit-clear DIFFERING
   endpoints have zero witnesses; the discount, the two charges and the closing
   `0x0044` are then exercised against a stubbed amount, with an ATTACK skill at the
-  same cost as the control. §10 is the enemy's gate, which rate-limits the
+  same cost as the control — and since 2026-08-22 the section also pins the
+  queued-press split: the CHARGE burns at the press (so a third stacked press
+  cannot be quoted a discount the glyph no longer has) while the queued press's
+  DEBIT waits for its cast-begin, fired by rewinding the pending entries through
+  `cast_tick`, and still pays the press-quoted discounted price. §10 is the enemy's gate, which rate-limits the
   heal-spam PLAN.md §8 item 4 names without touching the round robin, and requires
   **no property 62 for it** — 0 of 722. **§11 is the ADRENALINE FAMILY ON THE WIRE
   (2026-08-21)**, and the paragraph it replaced is the reason it is worth reading:
@@ -7153,7 +7157,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and
   +0.57 s residuals in the corpus, and the test drives two back-to-back
-  presses through exactly that schedule. Timing is tested by REWINDING the
+  presses through exactly that schedule — and since 2026-08-22 through the
+  DEFERRAL that rides it: the queued press sends E4 ALONE (both live queued
+  presses carry nothing after their E4), and rewinding to the begin fires the
+  first cast's E5+E3 with the queued cast's debit-then-animation right behind
+  the E3, the order retail shows at both of 153's E3 instants; a cast that
+  never begins never pays, which is the terminated cast's missing debit.
+  Timing is tested by REWINDING the
   pending entries, never by sleeping; the zero-recharge inversion pins that
   E6 waits for its E3 because the corpus never shows them inverted; and the
   real-content section presses skill 153 and requires E5 to carry recharge 8,
@@ -7190,7 +7200,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   [agent, skill, copy] — the corpus's own terminated-cast shape, E4 t=5.027
   answered at t=5.912 with no E5 between or ever after — and then §1's
   60-second rewind proves no E5/E3/E6 ever follows: no recharge started, no
-  aftercast served, costs staying paid because the press paid them. §2 pins
+  aftercast served, costs staying paid for any cast that BEGAN (a queued cast
+  dropped before its begin never paid, which is that same terminated cast's
+  missing debit — castmech 3c). §2 pins
   the boundary: past its E5 a cast is aftercast and is NOT marked — E3 and E6
   close normally. §3 is the wiki's attack-skill asymmetry: mid-activation an
   attack skill shrugs movement off, but one still QUEUED (its begin never

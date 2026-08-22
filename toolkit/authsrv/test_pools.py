@@ -1251,14 +1251,37 @@ def section_glyph():
                   and [v for op, v, _w in sent
                        if op == authsrv.GAME_SMSG_EFFECT_REMOVE]
                   == [[authsrv.PLAYER_AGENT_ID, ep["buff"]]],
-                  "and the SECOND press closes it with a real 0x0044",
+                  "and the SECOND press closes it with a real 0x0044 -- the "
+                  "charge burns at the PRESS even though this press is "
+                  "QUEUED and its debit is deferred, so a third stacked "
+                  "press cannot be quoted a discount the glyph no longer "
+                  "has",
                   f"{[hex(op) for op, _v, _w in sent]} -- not a silent drop: "
                   f"re-sending or quietly retiring an episode leaves its icon "
                   f"on the client's screen, which is measured (a repeat 0x0042 "
                   f"for a live (agent, skill) is DISCARDED, twice)")
+
+        # The queued press pays at its BEGIN (castmech 3c), so fire it
+        # before pressing again: rewind every pending phase and tick.
+        def _fire_pending():
+            for cast in state.get("pending_casts", ()):
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            authsrv.cast_tick(send, state, 0)
+        sent.clear()
+        _fire_pending()
+        spends = props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                       agents.GV_ENERGY_SPENT)
+        LEDGER.ok(len(spends) == 1
+                  and abs(authsrv._f32_of(spends[0][2]) - (-0.08)) < 1e-7,
+                  "the second cast's deferred debit still pays the "
+                  "discounted 2 at its begin -- the price was fixed by the "
+                  "press-time gate, the payment by the begin",
+                  f"{authsrv._f32_of(spends[0][2])!r}")
         sent.clear()
         authsrv.handle_skill_press([0, 194, 0, 0], send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
+        _fire_pending()
         spends = props(sent, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                        agents.GV_ENERGY_SPENT)
         LEDGER.ok(len(spends) == 1
