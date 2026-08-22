@@ -7173,6 +7173,23 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   cycles; and a retarget stops the swing in flight with the corpus's
   standalone-stop shape (17c, n=1) and opens on the new target the same tick.
   Timing by rewinding the armed swing and the start gate, never by sleeping),
+  `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
+  contract is the wiki's expressed as wire SILENCE: the connection thread
+  only MARKS (`cancel_on_move`), the tick releases with the bare `0x00E2`
+  [agent, skill, copy] — the corpus's own terminated-cast shape, E4 t=5.027
+  answered at t=5.912 with no E5 between or ever after — and then §1's
+  60-second rewind proves no E5/E3/E6 ever follows: no recharge started, no
+  aftercast served, costs staying paid because the press paid them. §2 pins
+  the boundary: past its E5 a cast is aftercast and is NOT marked — E3 and E6
+  close normally. §3 is the wiki's attack-skill asymmetry: mid-activation an
+  attack skill shrugs movement off, but one still QUEUED (its begin never
+  reached) drops whatever its type — a spell activating and an attack skill
+  queued behind it both release, two E2s, no recharge for either. §4 proves
+  the busy-window rollback: a press after a cancel schedules its E5 one
+  activation out, not behind the cancelled cast's ghost. §5 is the chain
+  half: one GV_ATTACK_STOPPED and the target forgotten (a move REPLACES the
+  attack order), the armed swing dropped unlanded — and the negative, no
+  second STOPPED when the chain was already paused by a press. Floor 15),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

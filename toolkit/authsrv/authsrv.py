@@ -5860,6 +5860,66 @@ def begin_attack(send, state, target_id, conn_id):
               flush=True)
 
 
+def cancel_on_move(send, state, conn_id):
+    """Movement input cancels what is in flight: the cast, and the chain.
+
+    Runs on the CONNECTION thread, from the two arms that mean "the player is
+    moving" -- 0x003E (a click) and 0x003D with its movementType set (the
+    keyboard; every one of 7,988 corpus records carries 1..8, so any 0x003D
+    is movement). 0x0047 is a STOP report and deliberately not a trigger.
+
+    THE CONTRACT IS THE WIKI'S, and half of it is already on the live wire.
+    WIKI (GWW "Cancel", rev. 2014-08-16): a cancelled skill does not
+    activate, its initial costs ARE still incurred, it does NOT recharge, and
+    no aftercast follows. Our debit already happens at the press, so "costs
+    stay paid" is free; "no recharge" is expressed by releasing the pending
+    entry with a bare 0x00E2 and never sending its E5 -- which is byte-for-
+    byte the corpus's one terminated cast (E4 t=5.027 answered by E2 t=5.912,
+    no E5 between or ever after, studies/castmech 3/4). WIKI (GWW
+    "Quarterstepping"): an attack skill mid-activation is NOT movement-
+    cancellable -- but one still QUEUED (begin not reached) is droppable
+    whatever its type, so the test is per entry. Past its E5 a cast is in
+    aftercast, which nothing cancels; those entries are left alone.
+
+    The chain half: WIKI (GWW "Auto attack") -- moving cancels auto-attacking.
+    The close is GV_ATTACK_STOPPED [3, agent, 0], sent only while the chain
+    is LIVE (the same negative rule the press path measured: a chain already
+    paused by a cast gets no second close), the armed swing is dropped
+    through the tick-owned flag, and the TARGET is forgotten -- a move
+    replaces the attack order, and re-clicking is what restarts it (0x0026
+    is on the wire for exactly that).
+
+    Ownership: this thread marks; the world tick releases. `cancelled` is a
+    write-once key on entries the tick alone removes, `player_swing_cancel`
+    is the same channel the press uses, and `cast_busy_until` is this
+    thread's own -- rolled back so the next press begins now rather than
+    behind a ghost of the cancelled cast.
+    """
+    now = time.time()
+    chain_live = (state.get("attacking") or state.get("player_swing")) \
+        and not any(not c["e3_sent"]
+                    for c in state.get("pending_casts") or ())
+    if chain_live:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             "attack_stopped: the player moves")
+        state["player_swing_cancel"] = "movement"
+    if state.get("attacking"):
+        state["attacking"] = None
+    dropped = 0
+    for cast in list(state.get("pending_casts") or ()):
+        if cast["e5_sent"] or cast.get("cancelled"):
+            continue
+        if cast["attack"] and now >= cast["begin_at"]:
+            continue                       # mid-activation attack skill
+        cast["cancelled"] = "movement"
+        dropped += 1
+    if dropped:
+        state["cast_busy_until"] = now
+        print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
+              f"no recharge, costs stay paid", flush=True)
+
+
 def hero_late_tick(send, state, conn_id):
     """Flush the held party/hero roster once, N seconds after the load finished.
 
@@ -7551,6 +7611,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # revived or removed by the time the cast completes, and hit_enemy
         # re-reads it from state and refuses a corpse.
         "target": target,
+        # `begin_at` and `attack` exist for the movement cancel and nothing
+        # else: WIKI (GWW "Quarterstepping") says movement cannot cancel an
+        # attack skill mid-activation, but a skill still QUEUED -- its begin
+        # not yet reached -- is droppable whatever its type. cancel_on_move
+        # is the only reader.
+        "begin_at": begin, "attack": _is_attack_skill(skill_id),
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
@@ -7615,6 +7681,22 @@ def cast_tick(send, state, conn_id):
     now = time.time()
     finished = []
     for cast in list(pending):
+        # A CANCELLED CAST RELEASES AND NOTHING ELSE. The bare 0x00E2 is the
+        # corpus's own shape for a cast that ended before completing (E4
+        # t=5.027 -> E2 t=5.912, no E5 between or ever after) and the wiki's
+        # cancel contract falls out of the silence: no E5 means no recharge
+        # started and no damage landed, no E3 means no aftercast -- the
+        # caster is free the moment the release goes out. The costs stay
+        # paid because the press paid them. The one live cancel rode a
+        # property 45 the corpus shows once and nothing names; it is left
+        # unsent rather than guessed at (studies/castmech 3b).
+        if cast.get("cancelled") and not cast["e5_sent"]:
+            send(GAME_SMSG_SKILL_REFUSED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"cast cancelled by {cast['cancelled']}: E2 releases skill "
+                 f"{cast['skill_id']}, no recharge")
+            finished.append(cast)
+            continue
         if not cast["e5_sent"] and now >= cast["e5_at"]:
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
@@ -11815,6 +11897,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
+                        if moving:
+                            # Keyboard movement cancels the same things a
+                            # click does. Guarded on the enum being set even
+                            # though 0 never appears in 7,988 corpus records
+                            # -- if a build ever sends a pure turn this way,
+                            # a turn must not cancel a cast (WIKI: only
+                            # movement does).
+                            cancel_on_move(send, state, conn_id)
                         # NO `state["plane"] = plane` HERE. It used to sit on
                         # this line, unconditional, 28 lines above the position
                         # guard -- so a refused report left us holding the
@@ -12376,6 +12466,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # _heading_grant_ok for why the click arm's hold
                                 # would be wrong here.
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
+                        # A click to move is movement: it cancels the cast in
+                        # flight and the auto-attack chain BEFORE the move is
+                        # granted, so the cancel's wire close precedes the
+                        # movement echo -- the corpus's own order at the one
+                        # live cancel (E2, then the mover's 0x0025/0x0029 in
+                        # the same instant).
+                        cancel_on_move(send, state, conn_id)
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
                         # reports where it got to. Answering MOVE_TO_POINT and
