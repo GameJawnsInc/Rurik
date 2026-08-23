@@ -1460,7 +1460,21 @@ pinned both ways; a type-2-with-no-type-1 run still refutes and returns
 non-zero. Three free corroborations: the client's live record count is **3,803**,
 the same number `cpsdata.py` parses off disk; face **11** / hair **13** confirm
 the sex-keyed pairs live; and **type 9 is never requested** on a plain
-character load, sharpening §4.6's open question. Prior status follows.
+character load, sharpening §4.6's open question.
+**SECOND PROFESSION RUN, §9.7**: a Necromancer (`--spawn-profession 4`) with every
+record index **PREDICTED FROM THE DISK PARSE BEFORE THE RUN — 13 of 13
+exactly**, none missing and nothing unpredicted (shells 276/277, face 289,
+hair 307, base pieces 315–318, armour 90–94). Three results: the appearance
+dword's bits 20–23 **drive the composite pipeline, confirmed at runtime** —
+every lookup carries `prof = 4` where the Warrior carried 1 and only that
+dword changed, so §1.11's field mapping stops being a static inference;
+`cpsdata.py`'s grammar is validated by *which record the client fetches*
+across eight triples and two professions, which is a far harder test than
+residue-0 closure; and **the armour records are WEARER-INDEPENDENT** — a
+Necromancer in the Warrior starter set resolves the same 90–94 to the same 14–18,
+so `test_wearmap.py`'s static table holds for any wearer rather than only the
+one it was measured on. Type 9 is now unrequested across two professions.
+Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
 `studies/playercomposite` §9.5): two sites (`0x008332E0` the base lookup and

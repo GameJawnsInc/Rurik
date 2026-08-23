@@ -729,3 +729,73 @@ score a confirmation as a refutation.
    base type 9 is already §4.6's open question ("never worn in 3,225 wear
    events"); it is now also never *looked up* on a plain character load. That
    sharpens the question rather than answering it.
+
+## 9.7 A second profession: our parse predicts the client's own lookups, 13 for 13 (2026-08-23)
+
+§9.6 watched one identity (group 0 / prof 1 / sex 0). This runs **profession
+4 — a NECROMANCER**, per the repo's own `attribtable.PROFESSION_NAMES`
+(1 Warrior, 2 Ranger, 3 Monk, 4 Necromancer). The id is spelled out because
+the first draft of this section called it a Ranger and the owner caught it:
+a wrong profession NAME on a correct profession NUMBER is the kind of error
+that survives review, since every figure below still checks out. All the
+measurements are keyed on the number 4 and none is affected.
+`--spawn-profession 4` moves the `0x0059` appearance dword's profession
+nibble through `appearance_for()`, and **every record index was predicted
+from `cpsdata.py`'s disk parse BEFORE the run** and checked against the
+client's own table in its own memory.
+
+**NO VISUAL EVIDENCE EXISTS FOR THIS RUN, and none is claimed.** The harness
+takes two frames at fixed points and both landed on the Ascalon City load
+screen (`1-play.png` at "Connecting 0%", `final.png` at "Loading 100%") —
+there is no character-select frame and no in-world avatar in the capture.
+Everything below is memory-side: what the client ASKED ITS OWN TABLE FOR.
+What the composited Necromancer looked like on screen is **NOT OBSERVED**,
+and a run that wanted that would need the frame cadence changed.
+
+**Predicted → observed, all of it:**
+
+| type | what | predicted record | observed |
+|---|---|---|---|
+| 1 | shell (in-world) | 276 | **276** |
+| 2 | shell (preview) | 277 | **277** |
+| 11 | face, sex 0 | 289 | **289** |
+| 13 | hair, sex 0 | 307 | **307** |
+| 3, 4, 5, 6 | base pieces | 315, 316, 317, 318 | **315, 316, 317, 318** |
+| 9 | component 7 | 278 | **never requested** |
+
+Thirteen distinct indices reached `0x00833420`; every one was predicted, none
+was missing, and nothing unpredicted appeared. The prof-1 run's own indices
+(11, 12, 25, 1, 46–49) match the same table's prof-1 column identically, so
+the check holds across **two** professions.
+
+**Three results, in rising order of value.**
+
+1. **The appearance dword drives the composite pipeline — CONFIRMED AT
+   RUNTIME.** §1.11 read bits 20–23 as profession out of `s_appearanceSlot`
+   statically; every base lookup in this run carries `prof = 4` where the
+   Warrior run carried 1, and the only thing that changed is that dword. The
+   field mapping is no longer an inference from a bitfield table.
+2. **`cpsdata.py`'s grammar is validated far harder than by residue.**
+   §1.18's closure argument is that the walk lands on the exact final byte —
+   true, but a tolerant parser can close. This predicts *which record the
+   client will fetch* for eight different (group, profession, type) triples
+   and is right eight times, twice over. Disk parse and live client agree on
+   the contents, not just the size.
+3. **The armour records are WEARER-INDEPENDENT, measured.** A Necromancer wearing
+   the Warrior starter set resolves the same indices 90–94 to the same
+   composite types 14–18 as the Warrior did. §9.2 established that the record
+   decides the component; this shows the record does not depend on who wears
+   it — the profession changed underneath and the equipment mapping did not
+   move. (`test_wearmap.py`'s static table therefore holds for any wearer, not
+   just the one it was measured on.)
+
+**And type 9 is now unrequested across TWO professions**, so §4.6's open
+question ("never worn in 3,225 wear events") gains a second negative: it is
+never *looked up* on a plain character load either, for either identity. That
+still does not say what component 7 is — it narrows where to look for who asks.
+
+**Reproduction.** `python toolkit/harness/session.py --keep-open --hold 110
+--exe vault/run/2026-07-29_221c13772c7a-probe/Gw.exe
+--game-args='--map 148 --spawn-profession 4'` with
+`compositetrap.py --wait` armed first. Capture the predictions with
+`cpsdata.CompositeTable.load(...).lists[(0, prof, type)][0]`.
