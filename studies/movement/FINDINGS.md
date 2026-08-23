@@ -6022,3 +6022,60 @@ related is UNVERIFIED" is now **answered: unrelated.** And the withdrawn
 headline two entries up is confirmed wrong a second way — ArenaNet's client does
 have a per-agent position-desync line, it is `0x0023`'s, and it is one we have
 never given it the chance to print.
+
+### 2026-08-23 — REALFIX-I3's first unknown is CLOSED: `ecx` is the SYNC copy, and that is the good answer
+
+**Static, pristine 38797, no client run.** The `0x0023` handler read from its
+entry rather than from the middle:
+
+```
+005FD3F0  push ebp / mov ebp,esp / push ebx,esi,edi
+005FD3F6  call 0x0047F660
+005FD3FB  mov edi,[ebp+8]          ; edi = the message
+005FD3FE  mov esi,[eax+8]          ; esi = the AGENT MANAGER
+005FD401  mov ebx,[edi+4]          ; ebx = message field 1 = AGENT ID
+005FD404  cmp ebx,[esi+0xF0]       ; bounds vs the array's count
+005FD40A  jb  0x005FD420           ;   else assert Array.h:587 `index < m_count`
+005FD420  mov eax,[esi+0xE8]       ; <<< THE ARRAY
+005FD426  mov ebx,[eax+ebx*4]      ; ebx = array[agent_id]
+005FD429  test ebx,ebx / jne       ;   else assert AgMsg.cpp:370 `ptr`
+005FD441  mov ecx,ebx              ; ecx = THAT agent
+005FD443  call 0x005FEEA0          ; the five-field XOR
+```
+
+**`[agentMgr+0xE8]` is the SYNC array** — this arc's own `HANDOFF.md`:153 names
+it, "ArenaNet's own name via `AgMsg.cpp` asserts", and this handler is that
+AgMsg.cpp. The count at `+0xF0` sits at the same `+0x8` spacing as the async
+pair's `+0x14C`/`+0x154`. Both asserts are ArenaNet's own and are quoted as
+single-citation measurements: `Array.h:587 'index < m_count'` and
+`AgMsg.cpp:370 'ptr'`. **`ecx` is the server-authoritative copy — the one our
+`0x0029` grants steer — not the rendered one.** Message shape is confirmed from
+the code as well as the schema: field 1 `[edi+4]` = agent id (it is also what
+the `%u` prints), field 2 `[edi+8]` = the checksum.
+
+**Why this is the outcome REALFIX-I3 needed.** The instrument would compare the
+client's SYNC state against ours, and the sync copy is precisely the object our
+server already models — `state["dest"]`, the integrator, and every
+`state["pos"]` consumer. Had it resolved to the async copy the instrument would
+have been near-useless, because we cannot see or steer that copy at all
+(`0x0025`'s async arm is gated shut for the client-controlled agent).
+
+**And bit-exactness moves from "probably fatal" to "plausible", on the arc's own
+prior work.** All five fields are piecewise-constant between our own messages:
+`+0x78`/`+0x7C` and `+0xB0`/`+0xB4` are written by the grant bake `0x005FE950`
+(`velocity = unit(d)·speed`), and the dead-reckoner `0x005FFB40` only READS
+`+0x78` to compute a position — it never writes it. So the checksum's inputs
+change on our grants, not continuously, and `grantsim.py` already reproduces
+that bake — including the client's LUT sqrt, derived exhaustively for
+REALFIX-C0. Reproducing five dwords bit-exactly is the same class of work that
+gate 1's 299.332591 u boundary already came from.
+
+**Still UNVERIFIED, and the list is now two rather than three:** the handler
+only logs and returns 1, so the readout is `Gw.log` rather than the wire (an
+instrument whose output needs the client's own log file, per-agent, unformatted
+beyond `%u`); and nothing here says what the SERVER is supposed to put in field
+2 — that it is this XOR is inferred from the compare, which is strong but is a
+RECONSTRUCTION of retail's sender, not an observation of one. **Measured, not assumed: retail sends `0x0023` ZERO times in the live corpus**
+(137 capture files across 20 live sessions), so there is nothing to check the
+sender against, so the field-2 semantics stay
+inferred until retail sends one or a probe makes the line fire.
