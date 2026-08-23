@@ -51,7 +51,7 @@ import compositetrap as t  # noqa: E402
 # slot-cache half landed the same day; 49 with the _report
 # regression guard and the S2/S4/S8 restatements the first live
 # run earned).
-LEDGER = checks.Ledger("composite trap", floor=59)
+LEDGER = checks.Ledger("composite trap", floor=60)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -278,6 +278,26 @@ if data is not None:
           "the wire is LEGS -- so S2 has to establish the index vocabulary "
           "before S7's value can be read",
           f"bytes {slot4.hex()}")
+    # WRITER_CALLERS is a RETURN-address map, so every key must be the byte
+    # after a `call rel32` whose target is the writer. Checked from the image
+    # rather than trusted: a return address off by one names the wrong caller
+    # confidently, and the whole point of the field is to name callers.
+    bad = {}
+    for va, why in sorted(t.WRITER_CALLERS.items()):
+        ins = at(va - 5, 5)
+        if not ins or ins[0] != 0xE8:
+            bad[hex(va)] = f"not a call: {ins.hex() if ins else None}"
+            continue
+        rel = struct.unpack_from("<i", ins, 1)[0]
+        if va + rel != 0x0082EDA0:
+            bad[hex(va)] = f"targets 0x{va + rel:08X}"
+    check(not bad and len(t.WRITER_CALLERS) == 6,
+          f"all {len(t.WRITER_CALLERS)} entries of WRITER_CALLERS are the "
+          f"byte after a `call 0x0082EDA0` in the pinned image -- and there "
+          f"are exactly six, which is what `codescan --xrefs` finds and what "
+          f"makes an UNLISTED return address a result rather than a gap",
+          f"{bad}")
+
     orins = at(0x0082EFD4, 6)
     repl = at(0x0082EFDA, 3)
     check(orins[0] == 0x81 and orins[1] == 0xCA

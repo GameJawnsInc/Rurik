@@ -232,6 +232,29 @@ CPS_OVERRIDE = 0xD8
 #: `or edx,0x20000006` at 0x0082EFD4 -- what an overridden row must carry.
 COSTUME_FLAG_BITS = 0x20000006
 
+#: RETURN ADDRESS -> the call site that produced the write. The writer has
+#: exactly SIX direct callers (`codescan --xrefs 0x0082EDA0`: 6 rel32, and
+#: **0 words anywhere in the image hold the VA**, so it is not virtual and not
+#: reached through a table). Five are inside `0x0082EA10`, the COSTUME
+#: RE-DRESS -- `__thiscall f(slot)`, which returns immediately unless the slot
+#: is 7 or 8, re-dresses CpsBase slots 5, 3, 6, 2 for a body costume plus 4
+#: behind a conditional, and slot 4 alone for a head costume. The sixth is
+#: inside `CpsApi::SetSlotItem` (`0x0082D6A0`, named by its own asserts
+#: `CpsApi:649 composite` and `CpsApi:84 ptr`), which resolves the agent's
+#: `'comp'` component and forwards its caller's slot VERBATIM.
+#:
+#: So a return address names the path with no ambiguity -- and an address
+#: NOT in this table is itself a result, because the six are supposed to be
+#: all of them.
+WRITER_CALLERS = {
+    0x0082EA35: "costume re-dress(7) -> CpsBase 5",
+    0x0082EA46: "costume re-dress(7) -> CpsBase 3",
+    0x0082EA57: "costume re-dress(7) -> CpsBase 6",
+    0x0082EA68: "costume re-dress(7) -> CpsBase 2",
+    0x0082EA99: "costume re-dress(7 or 8) -> CpsBase 4",
+    0x0082D6F6: "CpsApi::SetSlotItem -- slot is its own caller's",
+}
+
 #: authsrv.py's own numbering, MIRRORED here (a clientscan tool does not import
 #: the server) and cross-checked against that file's source by
 #: test_compositetrap §6, so drift goes red rather than quiet: equip slot ->
@@ -370,10 +393,21 @@ def _cap_slotcache(ctx, reader):
     # "item id" label because this read started one dword early. It was
     # self-consistently wrong, which is the kind that survives a glance.
     args = ct._dw(reader, ctx.Ebp + 8, 2)          # [ebp+8], [ebp+0xc]
+    # [ebp+4] is the SAVED RETURN ADDRESS -- the frame is intact at both
+    # exits, so it names the caller for free. §9.11 ended on "what those two
+    # wire-ordered instances are is NOT identified"; this is the field that
+    # identifies them, and it was one read away the whole time. `[cps]` is the
+    # vtable, which names the CLASS rather than the path.
+    ret = ct._dw(reader, ctx.Ebp + 4, 1)
+    vt = ct._dw(reader, cps, 1)
     if not row or not ids or not ovr:
         out["VERDICT"] = f"CpsBase 0x{cps:08X} unreadable"
         return out
     out["item id"] = args[1] if args else None
+    if ret:
+        out["caller (VA)"] = ct.unslide(ret[0])
+    if vt:
+        out["vtable (VA)"] = ct.unslide(vt[0])
     out["file id"] = row[0]
     out["record"] = row[0] & ~FILE_ID_RESERVED_BIT
     out["type byte"] = row[1] & 0xFF
@@ -515,6 +549,20 @@ def _analyse_cache(sites, hits):
     for cps, cs in sorted(inst.items()):
         L.append(f"  0x{cps:08X}: {len(cs)} write(s), final m_slotItemId="
                  f"{cs[-1]['m_slotItemId']}")
+        vts = sorted({c["vtable (VA)"] for c in cs if "vtable (VA)" in c})
+        if vts:
+            L.append(f"      vtable(s) {[hex(v) for v in vts]}"
+                     + ("  <-- MORE THAN ONE CLASS in one instance, which "
+                        "should be impossible" if len(vts) > 1 else ""))
+        seen_ret = {}
+        for c in cs:
+            if "caller (VA)" in c:
+                seen_ret.setdefault(c["caller (VA)"], []).append(c["slot"])
+        for va, slots in sorted(seen_ret.items()):
+            who = WRITER_CALLERS.get(
+                va, "<-- NOT one of the six direct callers")
+            L.append(f"      from 0x{va:08X} x{len(slots)} slots {slots}"
+                     f"  {who}")
 
     # Every table below is OURS, keyed by WIRE slot, re-keyed once into
     # CpsBase's own order. S2 is what licenses the re-key, so it is scored
