@@ -179,6 +179,33 @@ leaving one off would make a silent path look like an absent one.
       so n is small and the report says so — but without it, "every overridden
       row changed" has nothing to be measured against.
 
+THE TWO EXTRA INSTANCES: A TRIGGER, REGISTERED BEFORE THE RUN THAT TESTS IT
+--------------------------------------------------------------------------
+§9.11 recorded two further CpsBase instances at +93.9 s that index by the WIRE
+slot, and said what they are is not identified. The caller field above is the
+instrument for it, but they have now appeared in exactly ONE of four runs, so
+the first problem is reproducing them at all.
+
+Four runs' server logs name one difference and only one: **the run that
+produced them is the only run whose character MOVED** — 281 log lines carrying
+`MOVE_SET_HEADING`, `AGENT_MOVE_DIRECTION` and `ZERO LEAD`, against 187 and
+none in a 170 s hold that produced nothing. n=1 and correlational; movement is
+a hypothesis here, not a finding.
+
+  C1  Driving movement (`session.py --walk`) reproduces them: two additional
+      CpsBase instances, ~5 writes each, wire-ordered.
+  C2  Their writes carry return addresses, which names the caller and answers
+      §9.11's open question. An address outside WRITER_CALLERS would mean a
+      seventh caller the rel32 scan cannot see — a result either way.
+  C3  If movement produces no extra instance, movement is REFUTED as the
+      trigger and the question stays open with one candidate excluded. That
+      is a real outcome and is not to be reported as an inconclusive run.
+
+Already narrowed from §9.11's own record timeline, and it rules out the
+cheapest guess: the +93.93 burst fetches index 11 → composite **type 1**, the
+ANIMATED shell, plus face 25, hair 1 and base pieces 46–49. So they are full
+IN-WORLD composites, not the character-select preview dolls §7 describes.
+
 THE CONTROL, and it is `commandertrap.py`'s lesson wired in rather than
 restated: **the base lookup MUST fire.** It runs for every composited
 character the client draws, ours included. If it never hits, the instrument is
