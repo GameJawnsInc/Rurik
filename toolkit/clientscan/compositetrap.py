@@ -183,6 +183,34 @@ SITES = {
 DEFAULT_SITES = ("getids", "record")
 
 
+def _timeline(sites, hits, limit=80):
+    """Every record fetch in TIME order: `+t  index -> composite type`.
+
+    `commandertrap._report` summarises any site with more than a dozen hits
+    into a census, which is the right call for a repeated event and the wrong
+    one for this question -- an EQUIP CHANGE rebuilds the composite seconds
+    after the load burst, and telling the two apart needs the clock the
+    census drops. So this prints the record site's hits with their offsets
+    and nothing else, and it is the only place the rebuild is visible.
+    """
+    order = [s.name for s in sites]
+    rows = [h for h in hits
+            if order[h["slot"]] == "record" and h.get("cap")]
+    if not rows:
+        return []
+    t0 = min(h.get("t", 0.0) for h in hits)
+    out = ["", "RECORD FETCHES, in time order "
+           f"({len(rows)}; a fetch well after the load burst is a REBUILD)"]
+    for h in rows[:limit]:
+        c = h["cap"]
+        out.append(f"  +{h.get('t', 0.0) - t0:7.2f}s  index "
+                   f"{c.get('index')!s:>5}  -> composite type "
+                   f"{c.get('composite type')}")
+    if len(rows) > limit:
+        out.append(f"  ... {len(rows) - limit} more not listed")
+    return out
+
+
 def _analyse(sites, hits):
     """Score the five predictions from the hits. Returns (lines, verdict)."""
     order = [s.name for s in sites]
@@ -347,6 +375,9 @@ def main(argv=None):
         print("detached, debug registers cleared")
 
     ct._report(sites, trap.hits, base, trap=trap)
+    tl = _timeline(sites, trap.hits)
+    for ln in tl:
+        print(ln)
     lines, rc = _analyse(sites, trap.hits)
     print("\n" + "=" * 72 + "\nPREDICTIONS\n" + "=" * 72)
     for ln in lines:
@@ -354,6 +385,8 @@ def main(argv=None):
     if a.out:
         with open(a.out, "w", encoding="utf-8") as fh:
             ct._report(sites, trap.hits, base, out=fh, trap=trap)
+            for ln in tl:
+                fh.write(ln + "\n")
             fh.write("\nPREDICTIONS\n")
             for ln in lines:
                 fh.write("  " + ln + "\n")

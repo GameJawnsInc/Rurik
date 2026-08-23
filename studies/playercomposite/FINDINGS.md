@@ -799,3 +799,69 @@ still does not say what component 7 is — it narrows where to look for who asks
 --game-args='--map 148 --spawn-profession 4'` with
 `compositetrap.py --wait` armed first. Capture the predictions with
 `cpsdata.CompositeTable.load(...).lists[(0, prof, type)][0]`.
+
+## 9.8 An equip change REBUILDS the composite, and the slot never moves the record (2026-08-23)
+
+§9.2 established from retail's corpus that the equip **slot is a hanger** —
+the record decides the component, and retail itself wears three leggings-class
+items in the Boots, Legs and Gloves slots of one agent. That was a counting
+argument over captures. This tests it **on our own wire, in the client's
+memory, with the slot as the only variable**: the `armor_slots` probe hangs
+the SAME leggings in position 3, then in position 5, then in an array arm
+alongside boots, with resets between.
+
+**The timeline** (`compositetrap.py` gained `_timeline`, because
+`commandertrap._report` summarises a hot site into a census and drops the
+clock — and the clock is the whole measurement here). Trap t0 is the load
+burst; the probe's steps are spawn-relative:
+
+| trap t | probe step | fetched |
+|---|---|---|
+| +0.00 | — | shell **type 2** (12), base pieces, face 25, hair 1 |
+| +4.58 | spawn | shell **type 1** (11), base pieces, face, hair |
+| +4.75 | starter armour | 90→14, 91→15, 92→16, 93→17, 94→18 |
+| +12.63 | 3: leggings → **position 3** | **94 → 18**, 90 → 14 |
+| +18.64 | 4: reset (nine zeros) | 90, 94, 94, 92, 93 |
+| +23.65 | 6: leggings → **position 5** | **94 → 18** ×3 |
+| +29.67 | 7: reset | 94 → 18 |
+| +34.68 | 9: array, leggings@3 + boots@5 | **94 → 18** ×3 **and 90 → 14** ×3 |
+
+Steps 3/4/6/7/9 are scripted at spawn +8/+14/+19/+25/+30; observed at
++12.63/+18.64/+23.65/+29.67/+34.68 against a spawn of +4.58 — every one
+inside 0.1 s. The attribution is the clock's, not a guess.
+
+**Three results.**
+
+1. **An equip change re-enters the record resolver.** Fetches land 8 to 30
+   seconds after the load burst, so the composite is rebuilt through
+   `0x00833420` on `0x006E`/`0x006F` — §2 step E's path, exercised live
+   rather than inferred from the handler.
+2. **THE SLOT IS A HANGER, now measured with the slot as the only variable.**
+   The same leggings resolve **index 94 → composite type 18** hung at position
+   3, hung at position 5, and inside the nine-dword array. Three placements,
+   one index, one type; the boots are likewise always 90 → 14. Nothing about
+   the slot reached the record. §9.2's corpus claim now has an experimental
+   twin on our own traffic.
+3. **The array arm dresses both pieces** — 94→18 and 90→14 in the same
+   rebuild, which is the `0x006E` half of the same claim.
+
+**Reported and NOT interpreted:** the two reset arms also produce fetches
+(+18.64 reads five indices, +29.67 one). A nine-zero `0x006E` wears nothing,
+so why the rebuild re-reads records at all is not something this run can say —
+it would need a site inside the cache-build path (`0x0082EFAA`) rather than
+the resolver. Recorded so the next reader sees it rather than rediscovering it.
+
+**A free corroboration of §9.6's restated P2.** The type-2 shell is built at
++0.00 and the type-1 shell at +4.58 — **4.5 seconds apart, on the clock**.
+§9.6 argued from §7's call sites that the two composites are the character-
+select preview and the world agent; here they are separated by the load
+itself, which is an argument from a different kind of evidence.
+
+**The costume half of §9.2 is NOT tested and cannot be yet.** The override
+path (slots 7/8 replacing armour rows at `m_slotItemData` build time, flags
+|= 0x20000006) needs a wire type 44/45 item, and `content/items.toml` has
+none — our five rows are armour types 4/7/13/16/19. Authoring a costume row
+is the precondition, and it is a content decision rather than a probe.
+
+**No visual evidence**, same as §9.7: both harness frames land on the load
+screen. Everything here is what the client asked its own table for.

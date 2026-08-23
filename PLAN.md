@@ -1474,6 +1474,20 @@ residue-0 closure; and **the armour records are WEARER-INDEPENDENT** — a
 Necromancer in the Warrior starter set resolves the same 90–94 to the same 14–18,
 so `test_wearmap.py`'s static table holds for any wearer rather than only the
 one it was measured on. Type 9 is now unrequested across two professions.
+**EQUIP-CHANGE RUN, §9.8**: the `armor_slots` probe hangs the SAME leggings in
+position 3, then position 5, then an array arm, with resets between —
+**an equip change re-enters the record resolver** (fetches 8–30 s after the
+load burst, every step inside 0.1 s of its scripted time), and **the leggings
+resolve index 94 → composite type 18 in all three placements**, the boots
+always 90 → 14. So §9.2's corpus-only "the slot is a hanger" now has an
+experimental twin on our own wire with the slot as the only variable. Free
+corroboration of §9.6's restated P2: the type-2 shell builds at +0.00 and the
+type-1 at +4.58, **4.5 s apart on the clock** — preview then world, argued
+from timing rather than call sites. Reported and NOT interpreted: the reset
+arms also fetch records, which needs a site inside the cache-build path
+(`0x0082EFAA`) to explain. **The costume half of §9.2 stays untested** — it
+needs a wire type 44/45 item and `content/items.toml` has none, which is a
+content decision rather than a probe.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
