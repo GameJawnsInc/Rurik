@@ -925,3 +925,57 @@ question for a site inside the build path, not the record site.
 **No assert fired**, and no visual: both harness frames land on the load
 screen as before, so what the costumed character LOOKED like is **NOT
 OBSERVED**. Capture `20260823T16*`, build 38797, `--map 148 --costume`.
+
+## 9.10 The head half, and the control that separates the two readings (2026-08-23)
+
+§9.9 left two things open: the costume HEAD slot was never worn, and the
+body's four fetches admitted two readings — *the client walks run members
+0..3 and stops*, or *it walks the whole run and something else suppressed the
+head*. Wearing both costumes settles it, because `costume_head` is
+deliberately **member 4 of a DIFFERENT run** (record 2654, run base 2650)
+from `costume_body` (2806, run base 2805).
+
+**All three predictions, registered before the run, confirmed** (capture
+`20260823T165102`, both items on the wire, **zero asserts**):
+
+| # | prediction | result |
+|---|---|---|
+| H1 | the head record is fetched | **2654 → type 17, ×4**, beside armour head 93 → 17 |
+| H2 | the head does NOT expand into a run | **2650, 2651, 2652, 2653 — 0 fetches each** |
+| H3 | **2809 stays unfetched** — the discriminator | **0 fetches** |
+
+**H3 is the one that matters.** 2809 is the type-17 head member of the run the
+body costume walked. The body took 2805, 2806, 2807, 2808 out of that run and
+**never touched 2809**, while the head component was overridden from an
+entirely different run. So "the body walks the whole run and the head was
+suppressed" is REFUTED: the body's walk genuinely stops at member 3, and the
+head comes strictly from the head item. Two slots, two runs, five components.
+
+**The mechanism, whole:**
+
+- a costume **BODY** (wire type 44) names the **type-15 chest** member of a
+  five-record run `(14, 15, 16, 18, 17)` and overrides members **0..3** —
+  boots, chest, gloves, legs;
+- a costume **HEAD** (wire type 45) names its own record and overrides that
+  one component only;
+- together they cover all five armour components, and the armour record for
+  each is still fetched immediately before its costume replacement.
+
+That accounts for the corpus regularity §9.2 recorded without explaining: wire
+type 44 pairs only with record type 15 because a body costume is *named by its
+chest*, and wire type 45 carries 17 or 19 because a head costume is named by
+its own head record — of the seven distinct type-45 ids in the vault,
+2654/2784/3673 are member 4 of a run, 2817 and 3350 are standalone type 19
+(component 1, the second head slot), and 3663/1887 are type 17 outside any
+run. **Only the member-4 kind is tested here**; what the type-19 kind does is
+still unmeasured.
+
+**Reported, not interpreted:** the fetch counts are lopsided — 2806 ×11 and
+2808 ×10 against 2805 ×3 and 2807 ×3, with 2654 ×4. The record site cannot
+say why one component is re-resolved more often than another; that is a
+question for the texture/blit path, not the resolver.
+
+**Still not settled**, and unchanged from §9.9: whether the override REPLACES
+the armour row or merges with it. Both records are fetched for every
+component, and which one survives into the atlas needs a site inside
+`0x0082EFAA` rather than at the record fetch. And no visual, as before.

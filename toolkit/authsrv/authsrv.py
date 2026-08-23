@@ -1549,6 +1549,16 @@ EQUIP_COSTUME = False
 COSTUME_ITEM_ID = 8
 COSTUME_SLOT = 7
 COSTUME_KEY = "costume_body"
+# THE HEAD HALF, and it carries 9.9's control. The body costume names the
+# type-15 member of the run at 2805 and overrode members 0..3, leaving the
+# head. `costume_head` is record 2654 -- member 4 of a DIFFERENT run (2650) --
+# so with both worn, 2809 (the body run's OWN head member) must stay
+# unfetched. That is what separates "the body walks members 0..3" from "the
+# body walks the whole run and the head was suppressed for another reason".
+EQUIP_COSTUME_HEAD = False
+COSTUME_HEAD_ITEM_ID = 9
+COSTUME_HEAD_SLOT = 8
+COSTUME_HEAD_KEY = "costume_head"
 # The 0x006E nine-dword array, filled from STARTER_ARMOUR. Position 0 is the
 # weapon and 1 is the offhand; 7 and 8 are the costume slots retail leaves at
 # zero on all thirty-one players observed in one town.
@@ -12367,6 +12377,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   COSTUME_SLOT],
                                  f"ITEM_MOVED_TO_LOCATION({COSTUME_KEY} -> "
                                  f"equipped {COSTUME_SLOT})")
+                        if EQUIP_COSTUME_HEAD:
+                            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                                 agents.named_item(
+                                     COSTUME_HEAD_ITEM_ID,
+                                     agents.item_template(COSTUME_HEAD_KEY)),
+                                 f"CREATE_NAMED_ITEM({COSTUME_HEAD_KEY})")
+                            send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                                 [1, COSTUME_HEAD_ITEM_ID, EQUIPPED_BAG_ID,
+                                  COSTUME_HEAD_SLOT],
+                                 f"ITEM_MOVED_TO_LOCATION({COSTUME_HEAD_KEY}"
+                                 f" -> equipped {COSTUME_HEAD_SLOT})")
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
@@ -14460,13 +14481,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Positions 1..8 are all zero here, so this send never
                         # depended on the dispute; anything that DRESSES a body
                         # must use the measured order above.
-                        if EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME:
+                        if (EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME
+                                or EQUIP_COSTUME_HEAD):
                             worn = [0] * VISUAL_EQUIPMENT_SLOTS
                             if EQUIP_WEAPON:
                                 worn[0] = WEAPON_ITEM_ID
                             if EQUIP_ARMOUR:
                                 for item_id, _key, slot in STARTER_ARMOUR:
                                     worn[slot] = item_id
+                            if EQUIP_COSTUME_HEAD:
+                                worn[COSTUME_HEAD_SLOT] = COSTUME_HEAD_ITEM_ID
                             if EQUIP_COSTUME:
                                 # Slot 7, the costume BODY cell. The whole
                                 # point is that this slot is not additive:
@@ -15713,6 +15737,14 @@ def main():
                          "with clientscan/compositetrap.py: the prediction is "
                          "that the chest rebuild stops fetching record 91 and "
                          "fetches the costume's 2806 instead.")
+    ap.add_argument("--costume-head", action="store_true",
+                    dest="costume_head",
+                    help="Wear `costume_head` (wire type 45) in equip slot 8. "
+                         "The other half of 9.9: the body costume overrode "
+                         "run members 0..3 and left the head. This row is "
+                         "member 4 of a DIFFERENT run, so with both worn "
+                         "record 2809 -- the body run's own head member -- "
+                         "must stay unfetched.")
     ap.add_argument("--no-weapon", action="store_true",
                     help="Log in with empty weapon slots, as every session before "
                          "2026-08-06 did. Attacking and weapon skills were both "
@@ -16689,6 +16721,16 @@ def main():
         EQUIP_ARMOUR = False
         print("NO ARMOUR: the character wears nothing and the paper doll's "
               "five armour slots stay empty.")
+
+    if a.costume_head:
+        global EQUIP_COSTUME_HEAD
+        EQUIP_COSTUME_HEAD = True
+        _hrow = agents.item_template(COSTUME_HEAD_KEY)
+        wearmap.check_content_row(COSTUME_HEAD_SLOT, _hrow)
+        print(f"COSTUME HEAD: wearing {COSTUME_HEAD_KEY} (wire type "
+              f"{_hrow['item_type']}, record "
+              f"{_hrow['file_id'] & 0x7FFFFFFF}) in equip slot "
+              f"{COSTUME_HEAD_SLOT}.")
 
     if a.costume:
         global EQUIP_COSTUME

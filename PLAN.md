@@ -1501,9 +1501,17 @@ why §9.2's census only ever saw type 44 paired with record type 15, and why
 type 45 (the head slot) carries 17/19 instead. The four fetches and the run
 structure are OBSERVED; that the client walks from a computed run base rather
 than doing a component-keyed lookup is RECONSTRUCTION off one identity.
-Untested: the costume HEAD slot, and whether the override replaces or merges
-(the resolver sees both records; which survives into the atlas needs a site
-inside `0x0082EFAA`).
+**THE HEAD HALF RAN TOO, §9.10, and it carried the control**:
+`costume_head` is record 2654 — member 4 of a **different** run (2650) — so
+with both worn, three pre-registered predictions all held: 2654 → type 17 is
+fetched beside the armour head 93; the head does NOT expand (2650–2653, zero
+fetches each); and **2809, the body run's own head member, stays unfetched**.
+That REFUTES "the body walks the whole run and the head was suppressed" — the
+body's walk genuinely stops at member 3 and the head comes strictly from the
+head item. Two slots, two runs, five components, zero asserts. Still untested:
+whether the override REPLACES the armour row or merges with it (both records
+are fetched for every component; which survives into the atlas needs a site
+inside `0x0082EFAA`), and the standalone type-19 kind of head costume.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,

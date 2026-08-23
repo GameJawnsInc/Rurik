@@ -299,3 +299,48 @@ capture = "20260807T143055"
 origin = "live"
 verified = "25 declares of this item across five live captures (20260807T143055, 20260810T235916, 20260817T231139 x2, 20260818T132739); file_id, item_type, dye_tint, materials, unk1, flags and value identical in all five, dye_colors the only variable. Its record 2806 resolves to composite type 15 through cpsdata (toolkit/mapdata/cpsdata.py), which is what test_wearmap 4 pins for wire type 44"
 note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E), which carries none of the four. The row exists to fire the 9.2 override path, not to reproduce a retail costume."
+
+# THE COSTUME HEAD, and it is the OTHER half of 9.9's run question.
+#
+# 9.9 measured that a costume BODY (wire type 44) names the type-15 CHEST
+# member of a five-record run ordered (14, 15, 16, 18, 17) and overrides
+# members 0..3 -- boots, chest, gloves, legs -- leaving the head alone. This
+# row is the head. Record 2654 is member 4 (type 17) of the run based at
+# 2650, and it is deliberately a DIFFERENT run from costume_body's (2805):
+# with both worn, the body's siblings and the head's must come from their own
+# runs, so 2809 -- costume_body's own head member -- must NOT be fetched. That
+# is the control that separates "the body walks members 0..3" from "the body
+# walks the whole run and something else suppressed the head".
+#
+# THE CORPUS SPLITS TYPE 45 IN TWO and this row is the commoner kind: of the
+# seven distinct type-45 ids in the vault, 2654/2784/3673 are member 4 of a
+# run (record type 17, the hair/headgear component), while 2817 and 3350 are
+# standalone type 19 records (component 1, the second head slot) and 3663/1887
+# are type 17 outside any run. Only the member-4 kind is authored here; what
+# the type-19 kind does is untested.
+#
+# Measured like its sibling: 12 declares in SIX captures, every field
+# identical except dye_colors (10, 11, 9). Note dye_tint is 35 here where the
+# body's is 0. The same four fields are OURS for the same reason -- retail
+# declares it low-detail.
+[item.costume_head]
+name = "costume head (wire type 45) -- the run's member 4"
+file_id = 0x00000A5E        # record 2654, composite type 17, run 2650 member 4
+item_type = 45              # worn slot 8, n=150 in the corpus (test_wearmap 3)
+dye_tint = 35
+dye_colors = 10
+materials = 0
+unk1 = 0
+flags = 0x20001006          # bit 2 set: ITEM_FLAG_COMPOSITE
+value = 0
+model_id = 0
+quantity = 1
+enc_name = []
+modifiers = []
+
+[item.costume_head.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+verified = "12 declares across six live captures (20260807T143055, 20260810T235916, 20260817T231139, 20260818T094648, 20260818T132739, 20260821T205552); file_id, item_type, dye_tint, materials, unk1, flags and value identical in all twelve, dye_colors the only variable. Record 2654 resolves to composite type 17 through cpsdata, which test_wearmap 4 pins as one of wire type 45's two record types"
+note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E). Chosen from a DIFFERENT run than costume_body on purpose: see the family note above."
