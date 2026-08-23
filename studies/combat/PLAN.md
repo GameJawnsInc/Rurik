@@ -308,7 +308,13 @@ single-agent read-modify-write. Needs a test, not a capture.
 ### Polish
 
 **P1.** Weapon-swap `0x0032`, empty-payload `0x0028`, inventory-move `0x004F` fall
-through D9(a) silently — shapes observed once each, names UNVERIFIED. **P2.** The
+through D9(a) silently — shapes observed once each, names UNVERIFIED.
+> **`0x0028` NAMED AND WIRED 2026-08-23**: it is the CANCEL ACTION request —
+> nine in one operator-narrated loopback run, all inside held actions, three
+> exactly at the operator's cancel presses during a cast whose window carries
+> no movement c2s at all. The client cannot cancel a cast any other way, so a
+> server that drops it has uncancellable casts. `studies/castmech/FINDINGS.md`
+> §3d; name INFERRED pending the re-run. **P2.** The
 c2s game-channel handshake constant (130 bytes, 10/10 connections — OBSERVED)
 deserves a named constant in tape/cmsgstream tooling. **P3.** Death-tick fidelity:
 live kills pair `0x00F1` (bit 0x10) with same-tick `0x0026` value=8 (3/3, the only

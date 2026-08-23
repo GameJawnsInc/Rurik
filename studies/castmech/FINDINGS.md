@@ -363,6 +363,97 @@ type-1 agent-view object, view-local, animation-facing — is
 
 ---
 
+## 3d. The cancel opcode is `0x0028`, and the first operator run found it — 2026-08-23
+
+The §7 wins' loopback acceptance ran (operator-driven, caged, run
+`20260823T101329`, 4,455 records) and split clean: the windup, the
+press-stop and the chain rules passed on screen — the auto-attack resume
+even landed **at the same wire instant as the E3**, t=118.630, exactly the
+retail template — while **checklist item 1 failed**: no input could cancel
+a cast. The capture names the reason, and it closes CASTMECH-P2 on the way:
+
+- **The client sends NO movement c2s while it holds a cast.** During the
+  run's one 2.0 s cast (105 at t=58.787), the operator pressed all three
+  cancel inputs — WASD, a ground click, Esc — and the window carries zero
+  `0x003D`/`0x003E`. So `cancel_on_move`, wired to the movement arms, is
+  **unreachable mid-cast by construction**, and the client does not
+  predict a cancel either (the activation ran to completion on screen):
+  it ASKS, and waits. That answers P2's "who owns cancel detection" — the
+  server does, through a message we were dropping.
+- **What the client sends instead is `0x0028`**, header-only, previously
+  seen once corpus-wide and unnamed (combat/PLAN P1). This run has NINE,
+  every one inside a held action: three during the cast at the operator's
+  three cancel presses, the rest during swing windups. OBSERVED; the name
+  **CANCEL_ACTION is INFERRED** from that context and goes to
+  `schema/overrides.json` only after a re-run shows the grant working.
+- **The double-press the operator reported** — a movement key cancels but
+  does not move; the second press moves — is the same mechanism seen from
+  the outside: press 1 becomes the `0x0028` request (no movement is sent
+  with it), and with the request dropped on the floor, press 2's movement
+  is the first message that does anything. Stock is one press
+  (operator-verified against retail the same day), because retail grants
+  the request.
+
+**Wired the same day**: `GAME_CMSG_CANCEL_ACTION = 0x0028` and
+`cancel_action()` — every pre-E5 pending entry marked (no attack-skill
+exemption through this door: the wiki's "most quick attack skills cannot
+be canceled" is the *client withholding the request*, so one that arrived
+is granted), the hold released `[8→0]` only when something was actually
+cancelled (an aftercast keeps holding), the live chain closed with the
+`[8→0]`-then-STOPPED pair, the attack order forgotten, the tick answering
+each mark with the bare E2. `test_castcancel` §6, floor 20.
+
+**Still open after the re-run confirms or refutes:** whether granting the
+`0x0028` also collapses the double-press (the client may move on its own
+next input once released, or may need the movement re-pressed — stock
+needs one press, so a surviving double-press means the client is waiting
+on something we still do not send, with the live cancel's unnamed
+property 45 the first suspect); and whether the cast **animation** stops
+at the E2 alone or plays out (we still send no property 59 — zero corpus
+occurrences — and no 45).
+
+---
+
+## 3e. The cancel-family live capture — predictions registered 2026-08-23, BEFORE the run
+
+Run 2 of the loopback acceptance (`20260823T102742`) moved the failure into
+the client: every cast cancel now fires server-side (two by the movement
+door, two by the `0x0028` door — hold release + bare E2, `Gw.log` clean, no
+pending-lookup failure), the movement grants go out in the same instant
+(0x0025 + 0x0029, `grant_verdict fired`), **and the client plays the
+activation to completion anyway** — while the swing cancels, whose burst
+carries the attack family's stop (property 3), visibly stop on screen. The
+symmetric candidate for casts is property 59 (`skill_stopped`, same trio as
+the screen-proven 60/58, SOURCED dispatch into AvApi) — but it has zero wire
+occurrences, the corpus's one cancel released property 45 instead, and
+**re-reading that cancel's c2s side shows it is not a precedent at all**:
+aligned clocks (offset 271.67 s) put the press mid-run — the skill QUEUED,
+never began, the client was never held, and the "cancel" was a steering
+change. **No cancel of a BEGUN action exists in any capture.** So the
+release burst for a begun cast gets measured, not guessed: shopping-list
+item 5 of `studies/combat/PLAN.md` §3, focused. Plan
+`vault/plans/cancel_family.txt` (9 steps, sha256 `9e8a241c…`).
+
+Predictions, stated first:
+
+- **CASTMECH-P7** — W once, mid-cast, on retail: the client walks on that
+  single press (operator-confirmed stock behaviour), and the server's
+  same-batch answer carries the release burst for a begun cast. WHICH
+  property rides beside the E2 is the question: 59 (structural), 45 (the
+  queued precedent), 8→0, some combination, or none. No prediction is
+  privileged; whatever appears gets wired verbatim.
+- **CASTMECH-P8** — Esc mid-cast: the client sends `0x0028` (as ours does),
+  retail answers it, and the answer's shape tells us what our `0x0028`
+  grant is missing. If retail's client instead sends nothing and
+  self-cancels, the 0x0028 reading needs revisiting.
+- **CASTMECH-P9** — W once mid-windup: one press walks; the answer's stop
+  burst against ours ([8→0, 3] + grants). If retail's differs, the delta
+  names why our client freezes for a press after a stopped swing.
+- **CASTMECH-P10** — the completion control re-witnesses the E5 burst
+  (58, the 8-pulse) on a second account/build for free.
+
+---
+
 ## 4. Canceling: three doors in, one wire shape out
 
 **WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is

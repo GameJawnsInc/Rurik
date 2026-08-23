@@ -13,6 +13,15 @@ numbered by candidate. `REALFIX-H<n>` = harness builds. `REALFIX-L<n>` = live ru
 `REALFIX-E` = the admissible event definition. `REALFIX-X<n>` = L2 protocol cells.
 `REALFIX-W<n>` = L2's measured walk facts. `REALFIX-T<n>` = timing/tooling deltas.
 `REALFIX-I<n>` = instrument changes. `REALFIX-F<n>` = fix candidates.
+Minted 2026-08-22/23: **`REALFIX-I2`** = a click-arm exemption from rule 2,
+priced and DEFERRED (L9's pre-registration ruling 1; mandatory only if a run
+aborts on exposure a fourth time). **`REALFIX-I3`** = sending `GAME_SMSG 0x0023`,
+ArenaNet's own movement-state checksum. ✅ **BUILT AND RUN 2026-08-23**:
+positive control 26 of 26 at a client, model arm 25 of 26 — the channel
+works and our five-field model is NOT bit-exact, with one match showing the
+oracle can say yes. `--checksum-probe {wrong,model}`,
+`test_poschecksum.py` floor 20. FINDINGS §"REALFIX-I3 IS BUILT AND THE CLIENT
+SPOKE".
 Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 ## REALFIX — the buildable spec

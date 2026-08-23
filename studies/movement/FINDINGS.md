@@ -5797,3 +5797,362 @@ use — `livesession.py` refuses it at preflight on `key_tapped` false — so th
 check is reporting a real hazard, and making it green would delete a signal
 rather than a problem. Clearing it means removing or renaming a 4 GB directory
 in the owner's vault, which is the owner's call, not a test edit.
+
+### 2026-08-23 — the stale run-live directory is GONE, and test_pinned is green
+
+`vault/run-live/2026-08-13_64fae3b1369b/` deleted (owner's instruction), 3.93 GB
+across 8 files. Verified before removal, not after: its `Gw.exe` was
+**byte-identical to 38849's pristine** — the copy now held at
+`vault/client/2026-08-20_21511009c460/` — so nothing unique died with it; its
+`Gw.log` carried **no `webgate.ncplatform.net` lines at all**, i.e. no live
+session ever ran there after the updater overwrote it, so its `Gw.dat` held no
+live-fetched content; and no code, document or capture depends on the path. The
+three live captures whose manifests NAME it (`20260817T183323`, `183756`,
+`231139`) anchor provenance on the **exe sha256 `7237b620…`**, which is
+committed in `pinned.BUILDS` under the 38833 row — and that binary was already
+gone, replaced in place by the updater on 2026-08-21, so their chain is no
+worse off than it was. `test_pinned` **150 checks, green**; `dhbuild.py` audits
+the whole vault clean with both surviving live builds key-tapped
+(`mutex=nopped name=renamed`), which the deleted one was not.
+
+**Affected-set state after the registration and the deletion, re-run on a
+CURRENT tree:** `test_handshake` 23 · `test_pinned` 150 · `test_buildid` 51 ·
+`test_buildpins` 40 · `test_updatecheck` 30, all green.
+
+⚠ **Two things that are NOT this arc's and are live on `main` right now**, both
+found by re-running against an up-to-date tree and both worth a peer session's
+attention. (1) `toolkit/authsrv/authsrv.py:12567` raises **`NameError: conn_id`**
+— the heading arm's new `cancel_on_move(send, state, conn_id)` from commit
+`3dcf9d5` ("Movement cancels the cast"), which `test_position_trust`'s extracted
+`_arm` closure cannot satisfy; **red identically on `main`**, so it is a real
+fault in that arc rather than a stale checker. (2) This worktree was **38
+commits behind `main`** and could not load content at all — a peer had written
+`vault/content/composite.toml` into the SHARED vault citing
+`toolkit/clientscan/composite.py`, which exists on `main` and did not exist
+here. The provenance gate refused exactly as designed; the cure was to
+fast-forward the worktree. **Both are the parallel-session hazard CLAUDE.md
+names, arriving through the vault rather than through git.**
+
+### 2026-08-23 — ⚠ WITHDRAWN THE SAME DAY — "retail's own client logs the warp"
+
+> **Do not quote this section's headline. It was tested within the hour and it is
+> WRONG** — the string is a `Map.cpp` pathing-DATA check, absent from all 29
+> loopback logs including warp-heavy ones. The refutation, the count and the
+> decode are in the next section. The text below is kept unedited as the
+> claim that was made.
+
+#### (as written) RETAIL'S OWN CLIENT LOGS THE WARP, against ArenaNet's own server
+
+**OBSERVED, `live`, and found incidentally while verifying the vault deletion —
+this is a calibration datum the whole arc has never had.**
+`vault/run-live/2026-08-20_21511009c460/Gw.log` is a real live session (its
+`Gc::BeginRequest` lines hit `webgate.ncplatform.net` for
+`session/create`, `users/login`, `game_accounts` and `token`, and the build is
+stock-DH, which `cage`/`dhbuild` permit to point ONLY at ArenaNet). Twice in
+that session the client wrote:
+
+> `Error: Client pathing data out of sync with server.  You may observe your character 'warping' during movement.`
+
+**What this establishes:** the phenomenon this arc has spent nine runs on is a
+named, logged condition in ArenaNet's own client, and it fires against
+ArenaNet's own server. The warp is not purely an artifact of our server —
+retail desyncs too, and the client has a string for it.
+
+**What it does NOT establish, and the limits are severe:** n = **2 lines in one
+session**, with no rate, no denominator, no separation measurement, and no
+movetap beside it — nothing here touches our own measured rates, and it must
+not be quoted as "retail warps as much as we do". The trigger is unknown; the
+line may report the client's own reaction rather than a rendered teleport (our
+own REALFIX-E events are what a rendered teleport looks like, and no such
+instrument was running). It is also not new evidence about any candidate fix.
+
+**Why it is worth writing down anyway:** every rate this arc quotes is measured
+against an implicit baseline of "retail does not do this", and that baseline is
+now known to be **not zero**. The cheap follow-up is already in reach — the
+live corpus is six captures deep, and `Gw.log` is one file per run directory:
+count these lines across the live sessions and pair them against the wire, which
+is desk work needing no client run.
+
+### 2026-08-23 — ⚠ COUNTED, AND IT REFUTES THE ENTRY ABOVE: the pathing-desync line is a MAP-DATA check, not the warp
+
+**The count, every surviving client log in the vault, `Gw.log` and every rotated
+`.prev`/`.pre`/`.run` sibling — 31 files:**
+
+| substrate | logs | logs carrying the line | occurrences |
+|---|---|---|---|
+| **live** (`run-live/*`, webgate login lines present) | 2 | **2** | **6** (4 + 2) |
+| **loopback** (`run/*`, `research/*`, our own server) | 29 | **0** | **0** |
+
+Fisher one-sided on logs-carrying, **p = 0.00215**. ⚠ The denominators are logs,
+not sessions: `Gw.log` is rewritten per run, so each file speaks only for the
+last session in its directory, and 29-vs-2 is an artifact of how many run
+directories exist rather than of how much play each substrate saw.
+
+**THE HEADLINE OF THE ENTRY ABOVE IS WITHDRAWN.** It read *"retail's own client
+logs the warp… the phenomenon this arc has spent nine runs on is a named, logged
+condition."* **That does not survive its own first test.** Our loopback runs
+produce the decoded warp constantly — REALFIX-L5 measured 15.66/min, L8 scored
+16 REALFIX-E events in one control arm — and **not one of the 29 loopback logs
+contains the string.** If it were emitted by the resync path, those logs would
+be full of it. The correct reading of the 6-vs-0 split is the opposite of the
+one I published: the line tracks **being connected to ArenaNet**, not warping.
+
+**And the binary says what it actually is.** The string is **UTF-16LE** (an
+ASCII search finds nothing, which is why it had never turned up in a scan) at
+file `0x7963F8` → **VA `0x00B973F8`**, and exactly one instruction stores that
+address:
+
+```
+0084E0DA  call 0x7081D0        ; predicate -- Map.cpp   (asserts Map:2144 `bits`, Map:2191)
+0084E0DF  test eax, eax
+0084E0E1  jne  0x84E0F7        ; NON-ZERO = fine, skip the whole block
+0084E0E3  push 0xB973F8        ; the string
+0084E0E8  push 2               ; log level
+0084E0EA  call 0x46EE30        ; the logger -- Log.cpp
+0084E0F2  call 0x5FC2F0        ; and ONLY on this path -- AgApi.cpp (AgApi:1260)
+```
+
+Module attribution is ArenaNet's own, via `asserts.py --at`: the predicate is
+**`Map.cpp`**, the logger is **`Base/Rtl/Log.cpp`**, the failure-path call is
+**`Engine/Agent/AgApi.cpp`**. It is **not** `0x00605FC0` (the desync test), not
+`0x006022B0` (the snap), and not any of the three message-driven callers this
+arc decoded. A `Map.cpp` predicate is a statement about the **pathing DATA the
+map file carries versus what the server declares** — which is what the string
+says in plain English and what this arc read past.
+
+**What survives, and it is smaller but real:** ArenaNet ships a named condition
+for client/server pathing disagreement, it fires against their own service, and
+its failure branch calls into `AgApi.cpp` — the same module as `0x005FCAA0`, the
+gate-free SetPosition route REALFIX-Q5 has been unable to attribute. **Whether
+those two are related is UNVERIFIED** and `asserts.py --at`'s span is a
+heuristic, so do not read the shared module as a link; the cheap test is
+`--xrefs 0x005FC2F0` and a read of its body, and it is desk work.
+
+**What this costs the arc: nothing.** No rate, no baseline, no candidate moves.
+The implicit assumption the entry above tried to overturn — that our measured
+warp rates are ours — stands untouched, because the one instrument that could
+have contradicted it turns out to be measuring a different thing entirely.
+
+**The lesson is the one this repo already has a rule for**, and it took under an
+hour to pay: *"before quoting a zero, ask what a non-zero would have looked
+like."* The inverse applies to a positive. I quoted six occurrences as evidence
+for a mechanism without first asking what the substrate that DOES warp would
+show — and it shows zero.
+
+### 2026-08-23 — ★★ THE CHAIN IS FULLY DECODED, AND IT ENDS ON AN INSTRUMENT: `0x0023` IS ARENANET'S OWN MOVEMENT-STATE CHECKSUM (REALFIX-I3)
+
+**Static, pristine 38797, no client run.** The `--xrefs 0x005FC2F0` follow-up the
+entry above called desk work. Every address below is OBSERVED; the labels are
+ArenaNet's own, via `asserts.py --at`.
+
+**The whole mechanism, end to end:**
+
+```
+Map.cpp predicate 0x007081D0 returns 0
+  0084E0E3  push "Client pathing data out of sync with server..."   (UTF-16, VA 0x00B973F8)
+  0084E0EA  call 0x0046EE30          ; Base/Rtl/Log.cpp, level 2
+  0084E0F2  call 0x005FC2F0          ; <- ONE caller image-wide, this one
+
+0x005FC2F0  (AgApi.cpp) -- four instructions, complete:
+  call 0x0047F660 / mov eax,[eax+8] / mov dword [eax+0x1C8], 1 / ret
+
+0x005FD44D  (AgMsg.cpp, inside the 0x0023 handler at 0x005FD3F0):
+  call 0x005FEEA0            ; the checksum, below
+  cmp  eax, [edi+8]          ; against the message's second dword
+  je   epilogue              ; agree -> nothing
+  cmp  dword [esi+0x1C8], 0
+  jne  epilogue              ; THE LATCH -- already warned, stay quiet
+  push [edi+4] / push "Agent %u position out of sync with server" / push 2
+  call 0x0046ED40
+```
+
+**`agentMgr+0x1C8` is a LOG-SPAM LATCH AND NOTHING ELSE.** Its only writer is
+the four-instruction function above; its only reader on this struct is the
+`jne` that skips a `printf`. It changes no movement behaviour, gates no branch
+in the mechanism this arc decoded, and is **not a lever**. That closes the
+"shared module with `0x005FCAA0`" thread the previous entry left open: same
+module, no relationship. (`[ctx+8]` is the agent manager on the neighbouring
+function's own evidence — `0x005FC310` reads `+0x14C` and `+0x154` off it, this
+arc's async array and its count.)
+
+**★ AND THE COMPARED VALUE IS THE FINDING.** `0x005FEEA0` is five instructions
+and a `ret`:
+
+```
+mov eax,[ecx+0xB4] / xor eax,[ecx+0xB0] / xor eax,[ecx+0x80]
+xor eax,[ecx+0x7C] / xor eax,[ecx+0x78] / ret
+```
+
+A raw-dword XOR over **exactly the five fields this arc has spent nine runs
+on**: `+0x78`/`+0x7C` position (the dead-reckoned operand of the match test),
+**`+0x80` the plane word** (REALFIX-F1's whole subject), and `+0xB0`/`+0xB4`
+velocity (what the grant bake writes). **`GAME_SMSG 0x0023` is a movement-state
+checksum message** — `{agent_id, checksum}`, `declared_unpack_size` 10, shape
+`msg_header + dword + dword`, already in `schema/messages.json` and named
+`UNKNOWN_8023` in `authsrv.py:4699`. ArenaNet built a desync detector into the
+protocol and we have been carrying its schema row, unnamed, the whole time.
+
+**REALFIX-I3 — the instrument this hands us, and its price.** A server that
+computes the same XOR over its authoritative copy and sends `0x0023` gets the
+**client's own verdict** on whether its state matches ours, per agent, with **no
+movetap, no breakpoint and no second process** — the cheapest desync witness in
+the arc, and ArenaNet's own. Before anyone builds it, three things are
+UNVERIFIED and two of them can kill it:
+1. **Which copy is `ecx`.** The handler passes `ebx`, and whether that resolves
+   to the SYNC or the ASYNC agent is not read yet. This decides everything: the
+   arc's entire subject is that the two differ.
+2. **It is BIT-EXACT.** The XOR is over raw float dwords, so any difference in
+   any of five fields — a 1-ulp position, a velocity we never modelled — reads
+   as mismatch. It is a "did our writes apply exactly" check, not a "are we
+   close" check, and our server models velocity nowhere near bit-exactly.
+3. **It logs and returns 1.** It is a DIAGNOSTIC: no snap, no correction, no
+   behaviour. Its value is that it makes the client speak, and its output is a
+   log line — which means reading it needs `Gw.log`, not the wire.
+
+**Why the line never fires in our runs, measured rather than assumed:** across
+1,114 gamesrv captures our server has sent `0x0023` **six times, all on
+2026-08-12, all from `PROBE[smsgsweep]`, and all with a zero body**
+(`23000000000000000000` — agent 0, checksum 0). Never in normal play. So the
+per-agent line cannot fire, and the 0-of-31 count in the entry above is
+explained at the source rather than left as an anomaly.
+
+**Corrections this closes.** The previous entry's "the failure branch calls into
+AgApi.cpp, the same module as the gate-free SetPosition route — whether they are
+related is UNVERIFIED" is now **answered: unrelated.** And the withdrawn
+headline two entries up is confirmed wrong a second way — ArenaNet's client does
+have a per-agent position-desync line, it is `0x0023`'s, and it is one we have
+never given it the chance to print.
+
+### 2026-08-23 — REALFIX-I3's first unknown is CLOSED: `ecx` is the SYNC copy, and that is the good answer
+
+**Static, pristine 38797, no client run.** The `0x0023` handler read from its
+entry rather than from the middle:
+
+```
+005FD3F0  push ebp / mov ebp,esp / push ebx,esi,edi
+005FD3F6  call 0x0047F660
+005FD3FB  mov edi,[ebp+8]          ; edi = the message
+005FD3FE  mov esi,[eax+8]          ; esi = the AGENT MANAGER
+005FD401  mov ebx,[edi+4]          ; ebx = message field 1 = AGENT ID
+005FD404  cmp ebx,[esi+0xF0]       ; bounds vs the array's count
+005FD40A  jb  0x005FD420           ;   else assert Array.h:587 `index < m_count`
+005FD420  mov eax,[esi+0xE8]       ; <<< THE ARRAY
+005FD426  mov ebx,[eax+ebx*4]      ; ebx = array[agent_id]
+005FD429  test ebx,ebx / jne       ;   else assert AgMsg.cpp:370 `ptr`
+005FD441  mov ecx,ebx              ; ecx = THAT agent
+005FD443  call 0x005FEEA0          ; the five-field XOR
+```
+
+**`[agentMgr+0xE8]` is the SYNC array** — this arc's own `HANDOFF.md`:153 names
+it, "ArenaNet's own name via `AgMsg.cpp` asserts", and this handler is that
+AgMsg.cpp. The count at `+0xF0` sits at the same `+0x8` spacing as the async
+pair's `+0x14C`/`+0x154`. Both asserts are ArenaNet's own and are quoted as
+single-citation measurements: `Array.h:587 'index < m_count'` and
+`AgMsg.cpp:370 'ptr'`. **`ecx` is the server-authoritative copy — the one our
+`0x0029` grants steer — not the rendered one.** Message shape is confirmed from
+the code as well as the schema: field 1 `[edi+4]` = agent id (it is also what
+the `%u` prints), field 2 `[edi+8]` = the checksum.
+
+**Why this is the outcome REALFIX-I3 needed.** The instrument would compare the
+client's SYNC state against ours, and the sync copy is precisely the object our
+server already models — `state["dest"]`, the integrator, and every
+`state["pos"]` consumer. Had it resolved to the async copy the instrument would
+have been near-useless, because we cannot see or steer that copy at all
+(`0x0025`'s async arm is gated shut for the client-controlled agent).
+
+**And bit-exactness moves from "probably fatal" to "plausible", on the arc's own
+prior work.** All five fields are piecewise-constant between our own messages:
+`+0x78`/`+0x7C` and `+0xB0`/`+0xB4` are written by the grant bake `0x005FE950`
+(`velocity = unit(d)·speed`), and the dead-reckoner `0x005FFB40` only READS
+`+0x78` to compute a position — it never writes it. So the checksum's inputs
+change on our grants, not continuously, and `grantsim.py` already reproduces
+that bake — including the client's LUT sqrt, derived exhaustively for
+REALFIX-C0. Reproducing five dwords bit-exactly is the same class of work that
+gate 1's 299.332591 u boundary already came from.
+
+**Still UNVERIFIED, and the list is now two rather than three:** the handler
+only logs and returns 1, so the readout is `Gw.log` rather than the wire (an
+instrument whose output needs the client's own log file, per-agent, unformatted
+beyond `%u`); and nothing here says what the SERVER is supposed to put in field
+2 — that it is this XOR is inferred from the compare, which is strong but is a
+RECONSTRUCTION of retail's sender, not an observation of one. **Measured, not assumed: retail sends `0x0023` ZERO times in the live corpus**
+(137 capture files across 20 live sessions), so there is nothing to check the
+sender against, so the field-2 semantics stay
+inferred until retail sends one or a probe makes the line fire.
+
+### 2026-08-23 — ★★ REALFIX-I3 IS BUILT AND THE CLIENT SPOKE: 26 of 26 on the positive control, 25 of 26 on the model
+
+**OBSERVED, `ours`, two agent-driven loopback runs**, map 148 default, build
+38797 (`vault/run/2026-07-29_221c13772c7a/Gw.exe`, named explicitly), identical
+scripted walk both arms (`W:5 S:5` x3, ~30 s of movement, no clicks, no aiming),
+each bounded by `--hold` and torn down automatically. Captures
+`20260823T104522` (wrong) and `20260823T104823` (model); harness reports
+`20260823T104456` / `20260823T104757`.
+
+**The readout is the CLIENT'S OWN LOG**, `vault/run/<build>/Gw.log`, which is
+rewritten per run — so each arm's count is that arm's alone.
+
+| arm | `0x0023` sent | `Agent 1 position out of sync with server` logged |
+|---|---|---|
+| **`wrong`** (model XOR `0x5EED0FF5`) | **26** | **26** |
+| **`model`** (parked-at-report) | **26** | **25** |
+| pathing latch `agentMgr+0x1C8` | — | **0 lines, both arms — clear** |
+
+**THE POSITIVE CONTROL PASSED 26 OF 26, EXACTLY 1:1**, and that is the result
+that licenses everything else. It establishes, at a client, all of: the opcode
+is `0x0023`; field 1 is the agent id and field 2 the checksum, in that order
+(the client's `%u` printed **Agent 1**, our `PLAYER_AGENT_ID`); the id resolves
+in the SYNC array without tripping `Array.h:587`; the compare at `0x005FD448`
+runs; the log fires at level 2; and the suppression latch was clear throughout.
+**The message decoded statically on 2026-08-23 does what the decode said it
+does.** First send on the wire: `230001000000f5ef085d` — 10 bytes, opcode,
+agent 1, `0x5D08EFF5`.
+
+**THE MODEL ARM FIRED 25 OF 26, which is what its own banner predicted** ("the
+line appears ANYWAY... our velocity model is not the client's bake"). So **we do
+NOT reproduce the client's five SYNC fields bit-exactly**, and REALFIX-I3 as a
+routine desync monitor would be a smoke alarm that is always on. That is a
+result about OUR MODEL, not about the client and not about the warp.
+
+**★ AND ONE SEND MATCHED, which is the interesting number.** Exactly one of 26
+produced no line, meaning the client's XOR over its own SYNC copy equalled ours
+to the dword on that one occasion — five fields, four of them float bits, all
+five right at once. That is not a coincidence a wrong model produces.
+
+⚠ **WHICH send matched is UNPAIRED and must not be asserted.** The log line
+carries no timestamp, no position and no sequence — only `Agent 1` — so counts
+are all it yields, and nothing here pairs the silence to a send. The strong
+candidate is the FIRST send, at spawn `(9826.0, 8077.0)` plane 0, before any
+grant had ever been baked: that is precisely the domain
+`authsrv.checksum_model` states it is true in ("parked-at-report... TRUE only
+between an arrival and the next bake"), and at spawn the copy is parked with
+zero velocity by construction. **That is an inference from the model's stated
+domain, not a measurement**, and the cheap discriminator is a second model run
+with a walk carrying more stop-bounded legs: if the silence count stays 1 it is
+the spawn, and if it scales with leg starts it is every parked moment.
+
+**What this hands the arc, stated at its real size.** A working, byte-verified
+channel for asking the client whether its authoritative copy matches ours,
+costing one 10-byte message and reading out in a log file. Its value is NOT
+routine monitoring — 25 of 26 says so — it is as a **bit-exactness oracle for a
+model**: any future reconstruction of the client's bake (`grantsim`'s, or a
+server-side one) can be scored against the client itself rather than against our
+own replay, and a run that goes quiet has proven something no offline harness
+can. The one match already shows the oracle can say yes.
+
+**Costs and limits, none of them hidden.** It logs and returns 1 — no snap, no
+correction, no reply, so it cannot fix anything and cannot be read off the wire.
+The compare is integer equality over float bits, so `-0.0` versus `0.0` reads
+like a teleport (pinned in `test_poschecksum.py` §1). The sender is still a
+RECONSTRUCTION: retail sends `0x0023` zero times in 137 live capture files, so
+what a real server would put in field 2 remains inferred from the compare — the
+runs above show the client ACCEPTS our reading, which is evidence for it and not
+proof. And the latch means any run that hears nothing must check for the
+pathing line before claiming a match; both runs above were checked and clear.
+
+**What landed:** `agents.agent_position_checksum` + `agents.CHECKSUM_FIELDS`,
+`authsrv.GAME_SMSG_AGENT_POSITION_CHECKSUM` / `CHECKSUM_PROBE` /
+`CHECKSUM_WRONG_SENTINEL` / `checksum_model` / `_send_position_checksum`, the
+`--checksum-probe {wrong,model}` flag with its prediction printed at startup,
+and `toolkit/authsrv/test_poschecksum.py` (20 checks, floor 20, zero headroom)
+with its `TESTS.md` entry in the same commit.

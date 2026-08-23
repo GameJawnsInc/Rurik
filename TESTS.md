@@ -3103,6 +3103,36 @@ Every one of these, in the order they were written:
   second interact cancels it, and an agent that leaves the world drops it. Floor
   19, measured — it was written as 18 from a count in the author's head and
   corrected against the run. No vault, no client. ~1 s),
+  `toolkit/authsrv/test_poschecksum.py` (**GAME_SMSG 0x0023, ArenaNet's own
+  movement-state checksum — and the guard is unusual because the message's
+  whole output is a line in the CLIENT'S OWN LOG.** Nothing it does reaches the
+  wire, a capture, or any state this repo reads back, so there is no round trip
+  to assert: every check is either our builder against the client's own
+  arithmetic re-derived from `struct` alone, or a refusal that stops a broken
+  probe reporting a comfortable silence. §1 recomputes the five-dword XOR at
+  `0x005FEEA0` — velocity `+0xB4`/`+0xB0`, plane `+0x80`, position
+  `+0x7C`/`+0x78` — WITHOUT calling the module under test, because a builder
+  compared against itself is not a check, and pins that `-0.0` and `0.0` give
+  different checksums, which is the whole hazard of a bit-exact compare. **§3
+  is the one that matters: it is the positive control's own control.** The
+  `wrong` arm exists so the client's line appears at least once, and its value
+  is that its prediction cannot come true by accident — so the sentinel is
+  asserted non-zero, asserted to change field 2, asserted NOT to touch the
+  agent id (which the client indexes the SYNC array with, and a corrupt one
+  asserts inside the client at `Array.h:587` instead of logging), and its
+  XOR-is-an-involution property is stated so it cannot be applied twice. Were
+  the sentinel ever zero, the positive control would silently become the model
+  arm and a silent run would read as "we match the client bit-exactly" — the
+  strongest claim this arc could make, and false. §4 pins the wire: 10 bytes,
+  opcode first, then id, then checksum, because the handler reads `[edi+4]` and
+  `[edi+8]` and swapping them indexes an array with a checksum. §5 holds the
+  probe OFF by default and requires the model to NAME the assumption it is
+  wrong under. **What it deliberately does not claim:** that field 2 is what a
+  real server would send — retail sends this opcode 0 times in 137 live capture
+  files, so the sender is a RECONSTRUCTION inferred from the client's compare —
+  or that the client agrees with us, which needs a client and is what the probe
+  run is for. Floor 20, read off a real green run and set AT it, zero headroom.
+  No vault, no client. ~1 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from
@@ -7409,7 +7439,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   activation out, not behind the cancelled cast's ghost. §5 is the chain
   half: one GV_ATTACK_STOPPED and the target forgotten (a move REPLACES the
   attack order), the armed swing dropped unlanded — and the negative, no
-  second STOPPED when the chain was already paused by a press. Floor 15),
+  second STOPPED when the chain was already paused by a press. §6 is the
+  `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
+  client sends NO movement c2s while it holds a cast — the operator's three
+  cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),
+  so the movement door alone left casts uncancellable on screen. The section
+  pins the grant: the request marks the cast and releases the hold ([8→0],
+  the E2 staying the tick's), reaches the mid-activation attack skill that
+  movement spares (the client withholds Esc for skills that resist it, so an
+  arrived request is granted), leaves an aftercast holding and unmarked
+  through this door too, and closes a live chain with the [8→0]-then-STOPPED
+  pair while forgetting the attack order — Esc means stop, not pause.
+  Floor 20),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
