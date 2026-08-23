@@ -23,8 +23,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 15, from the green run of 2026-08-22 that landed this file.
-LEDGER = checks.Ledger("cast cancel", floor=15)
+# FLOOR 20, from the green run of 2026-08-23 that landed section 6 (the
+# 0x0028 door; 15 when the file carried the movement door alone).
+LEDGER = checks.Ledger("cast cancel", floor=20)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -255,12 +256,110 @@ def section_chain_half():
         authsrv.skill_timing = saved
 
 
+def section_cancel_action_door():
+    import authsrv
+
+    print("\n6. the 0x0028 door: the one that reaches a held cast")
+    # The run that forced this arm: 20260823T101329, where the operator's
+    # three cancel inputs during the one 2.0 s cast each arrived as a
+    # header-only 0x0028 and NO movement c2s at all -- so cancel_on_move,
+    # wired to the movement arms, could never fire and checklist item 1
+    # failed on screen. The client asks through THIS opcode while casting.
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}}
+    saved = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (2.0, 0.75, 8.0)
+    try:
+        _press(authsrv, send, state)
+        sent.clear()
+        authsrv.cancel_action(send, state, 0)
+        check(state["pending_casts"][0].get("cancelled") == "cancel action"
+              and [(op, v) for op, v, _ in sent] ==
+              [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                [authsrv.agents.GV_DISABLED, PLAYER, 0])],
+              "the request marks the cast and releases the hold the press "
+              "set -- [8 -> 0] and nothing else from this thread; the E2 "
+              "is the tick's",
+              f"cancelled={state['pending_casts'][0].get('cancelled')}, "
+              f"sent={[(hex(o), v) for o, v, _ in sent]}")
+        authsrv.cast_tick(send, state, 0)
+        e2 = [v for op, v, _ in sent
+              if op == authsrv.GAME_SMSG_SKILL_REFUSED]
+        check(e2 == [[PLAYER, 42, 7]] and not state["pending_casts"],
+              "and the tick answers with the bare E2 -- no recharge, the "
+              "same release shape as the movement door", f"{e2}")
+    finally:
+        authsrv.skill_timing = saved
+
+    # Esc reaches the mid-activation attack skill that movement spares:
+    # the client withholds the request for skills that resist it, so a
+    # request that arrived is granted whatever the type.
+    sent = []
+    state = {"agents": {}}
+    saved_t, saved_a = authsrv.skill_timing, authsrv._is_attack_skill
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    authsrv._is_attack_skill = lambda sid: True
+    try:
+        _press(authsrv, send, state, skill=394)
+        authsrv.cancel_action(send, state, 0)
+        check(state["pending_casts"][0].get("cancelled") == "cancel action",
+              "an attack skill mid-activation IS cancelled through this "
+              "door -- section 3's movement exemption is the wiki's rule "
+              "about movement, not about Esc",
+              f"{state['pending_casts'][0].get('cancelled')}")
+    finally:
+        authsrv.skill_timing, authsrv._is_attack_skill = saved_t, saved_a
+
+    # An aftercast stays uncancellable through EVERY door, and its hold
+    # keeps riding: past the E5 nothing is marked and nothing is sent.
+    sent = []
+    state = {"agents": {}}
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    try:
+        _press(authsrv, send, state)
+        _rewind(state, 1.0)
+        authsrv.cast_tick(send, state, 0)                  # E5: aftercast now
+        sent.clear()
+        authsrv.cancel_action(send, state, 0)
+        check(sent == [] and not state["pending_casts"][0].get("cancelled"),
+              "cancel-action during the aftercast: nothing marked, nothing "
+              "sent -- the hold is the aftercast's own and keeps riding",
+              f"sent={[(hex(o), v) for o, v, _ in sent]}")
+    finally:
+        authsrv.skill_timing = saved
+
+    # And the chain half: Esc closes a live chain with the measured pair
+    # and forgets the attack order.
+    sent = []
+    agent = {"name": "target", "dead": False, "last_hit": 0.0,
+             "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}
+    state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
+    authsrv.begin_attack(send, state, 10, 0)
+    authsrv.attack_tick(send, state, 0)                    # arm the swing
+    sent.clear()
+    authsrv.cancel_action(send, state, 0)
+    pair = [(op, v) for op, v, _ in sent]
+    check(pair == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                    [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+                   (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                    [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])]
+          and state.get("attacking") is None
+          and state.get("player_swing_cancel") == "cancel action",
+          "a live chain closes with the stop pair -- [8 -> 0] then "
+          "STOPPED, the t=16.578 adjacency -- and the attack order is "
+          "forgotten: Esc means stop, not pause",
+          f"{[(hex(o), v) for o, v in pair]}, "
+          f"attacking={state.get('attacking')}")
+
+
 def main():
     section_move_cancels()
     section_aftercast_uncancellable()
     section_attack_skills()
     section_clean_restart()
     section_chain_half()
+    section_cancel_action_door()
     return LEDGER.verdict()
 
 
