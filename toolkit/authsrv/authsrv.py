@@ -1864,6 +1864,40 @@ def skill_scale_value(skill_id, rank, which="scale"):
     return max(0, int(math.floor(exact + 0.5)))
 
 
+def skill_flat_constant(skill_id, which="scale"):
+    """A skill's bit-clear FLAT constant, or a refusal. The other half of
+    `skill_scale_value`'s rule.
+
+    That function refuses any disabled set, which is right for a PROGRESSION --
+    but a disabled slot with EQUAL endpoints is a different shape with real
+    witnesses: Rush's scale holds 25/25 ("move 25% faster"), Frenzy's 33/33
+    ("attack 33% faster"), Faintheartedness's 50/50 ("attack 50% slower"), the
+    glyph's bonus 2/2 ("your next 2 spells") -- each a flat number from the
+    skill's own description, sitting in a slot the bitfield does not enable
+    because there is nothing to interpolate. `effects.resolve_duration` already
+    honours the same shape for the duration slot, forced by retail (984/998).
+
+    Refused: a bit-SET slot (that is a progression -- use skill_scale_value at
+    a rank, not this) and bit-clear with DIFFERING endpoints (zero witnesses
+    anywhere; the glyph's 10..18 scale is the canonical case and its amount
+    enters through an explicit content field instead).
+    """
+    row = agents.WORLD.get("skills", str(skill_id))
+    bit = {"scale": 2, "bonus_scale": 4, "duration": 1}[which]
+    if int(row["skill_arguments"]) & bit:
+        raise ValueError(
+            f"skill {skill_id}'s {which} set is ENABLED -- it is a "
+            f"progression, not a flat constant. skill_scale_value is the "
+            f"reader for it.")
+    lo, hi = int(row[f"{which}0"]), int(row[f"{which}15"])
+    if lo != hi:
+        raise ValueError(
+            f"skill {skill_id}'s {which} slots differ ({lo} vs {hi}) with the "
+            f"bit clear -- not a constant, not an enabled progression, and no "
+            f"corpus witness says what such a pair means. Refusing.")
+    return lo
+
+
 def skill_damage(skill_id, rank):
     """(amount, mode) if this skill's scale IS damage, else None.
 
@@ -1893,17 +1927,20 @@ def skill_heal(skill_id, rank):
     GWW's progression variable name, sourced per skill in
     `content/world.toml`'s `skill_effect` block.
 
-    "Maximum heal" (Reversal of Fortune) is carried as a plain heal, and that
-    is a KNOWN SIMPLIFICATION rather than a reading: the skill actually heals
-    for the damage it prevents, capped at that number, and this server models
-    no damage prevention to cap. It therefore heals the cap. Named here because
-    the number on screen will be right at the ceiling and wrong below it.
+    ~~"Maximum heal" (Reversal of Fortune) is carried as a plain heal~~ -- that
+    KNOWN SIMPLIFICATION is RETIRED (2026-08-22). A row carrying
+    `prevents_damage` heals nothing at cast: its healing is the conversion's,
+    paid when the hit it converts arrives (`taker_damage`), for the amount it
+    actually prevented. The old behaviour healed the cap at cast -- right at
+    the ceiling, wrong below it, and wrong to fire before any damage existed.
     """
     try:
         row = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
         return None
     if row.get("scale_means") not in SCALE_MEANS_HEAL:
+        return None
+    if row.get("prevents_damage"):
         return None
     if not _resolves_at_cast(skill_id):
         return None
@@ -2568,6 +2605,12 @@ GLYPH_TYPE_CODE = 12
 # 15 seconds are already the episode's own duration -- the client's duration
 # slot for skill 200 carries a flat 15 and `effects.resolve_duration` already
 # sends it. What was missing is the two.
+#
+# CORROBORATED 2026-08-22 by the client's own table: skill 200's bonus slot
+# holds 2/2 with its bit clear -- the flat-constant shape
+# (`skill_flat_constant`), agreeing with the wiki's "next 2" from a source
+# that shares no author with it. The constant stays a constant (one glyph
+# exists); the day a second glyph carries a different count, read the slot.
 GLYPH_SPELL_CHARGES = 2
 
 # The switch, the same shape as --no-effects and for the same reason. ON by
@@ -2576,6 +2619,22 @@ GLYPH_SPELL_CHARGES = 2
 # no gate, no debit, no regeneration, no adrenaline -- which makes it a real
 # control for anything a run sees on the orb or the skill icons.
 ENERGY = True
+
+# THE ONE MECHANIC THAT IS OFF BY DEFAULT, and the reason is the movement
+# composite. A speed stance (Rush's "move 25% faster") has exactly one wire
+# channel: GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at
+# agent+0x5C -- retail's own boost witness is 383.04 = 288 x 1.33 riding it,
+# and 0x002B cannot carry a buff (the client asserts its float into
+# [0.01, 1.0], 163/163 corpus samples obey). But every REALFIX fence, gate
+# cut and copy-model constant was measured with the client walking at 288 u/s
+# (gate 1's 299.332591 u cut is literally derived from it), so declaring a
+# faster base UNDER THE COMPOSITE is an unmeasured interaction with the most
+# carefully measured mechanism in this repo. `--move-speed-effects` is the
+# deliberate lever; turning it on by default would be reusing a measured
+# value outside its trigger context. The episode itself (icon, duration,
+# replacement) is on regardless -- only the DECLARED SPEED is gated.
+MOVE_SPEED_EFFECTS = False
+GAME_SMSG_AGENT_UPDATE_SPEED_BASE = 0x0027   # [agent, f32 maxSpeed] -- schema's earned name
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
 SKILLBAR_SLOTS = 8
@@ -6279,7 +6338,14 @@ def attack_tick(send, state, conn_id):
     # which belongs to the press path alone.
     if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
         return
-    if now - state.get("player_last_swing", 0.0) < ATTACK_INTERVAL:
+    # THE STANCE SPEAKS HERE: an open attack-speed episode scales the whole
+    # attack DURATION -- the start-to-start gate and the windup both, because
+    # GWW's exact table scales the one number they are both fractions of
+    # (hammer 1.75 -> 1.1725 under Frenzy; attack_interval_factor has the
+    # arithmetic and the citation). Read fresh each swing so an episode
+    # expiring mid-fight changes the NEXT swing, not a cached copy.
+    interval = ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID)
+    if now - state.get("player_last_swing", 0.0) < interval:
         return
     state["player_last_swing"] = now
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
@@ -6293,7 +6359,7 @@ def attack_tick(send, state, conn_id):
     # per swing.
     action_hold(send, state, 1, f"the swing at {target_id}")
     state["player_swing"] = {"target": target_id,
-                             "lands_at": now + swing_windup(ATTACK_INTERVAL)}
+                             "lands_at": now + swing_windup(interval)}
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
@@ -6374,6 +6440,16 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = float(random.randint(lo, hi)) + bonus_damage
     else:
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
+    # A PREPARATION RIDES THE SWING, if the weapon fires arrows -- see
+    # swing_preparation_bonus for the gate and the named AoE gap. Folded into
+    # the same damage number, not sent as a second one, exactly as an attack
+    # skill's "+ Damage" is: one swing, one number on screen.
+    if swing and exact is None:
+        prep_bonus, prep_skill = swing_preparation_bonus(
+            state, agents.STARTER_HAMMER, PLAYER_AGENT_ID)
+        if prep_bonus:
+            dealt += prep_bonus
+            label += f" +{prep_bonus:.0f} (preparation {prep_skill})"
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
                             ("one critical" if critical else label)
@@ -6805,16 +6881,15 @@ def glyph_energy_amount(skill_id, rank):
     with DIFFERING endpoints has zero witnesses anywhere in the corpus and is
     refused. 10 and 18 differ.
 
-    SO WHAT THE ROW NEEDS, precisely, is an explicit amount that does not go
-    through the bitfield -- a field beside `scale_means` in
-    `[skill_effect.200]` carrying the number (GWW's progression is 10..18 at
-    Energy Storage 0..15, and the row's own provenance already records that the
-    wiki and the bitfield disagree about whether it scales) -- or a second
-    witness that says the bit-clear slot is meaningful here. Until then the hook
-    below is live but INERT against today's content: an unreadable amount makes
-    `energy_cost_for` skip the episode entirely, so no discount is applied AND
-    no charge is counted -- the glyph does nothing at all, which is the
-    direction that cannot invent a number.
+    ~~SO WHAT THE ROW NEEDS, precisely, is an explicit amount~~ -- AND SINCE
+    2026-08-22 THE ROW CARRIES IT: `energy_reduction0/15` in
+    `[skill_effect.200]`, the wiki's own `Energy reduction` 10..18 progression
+    (GWW rev. 2024-02-27), interpolated below by the client's own formula at
+    the episode's rank. The number enters through a field whose provenance is
+    the wiki rather than through a slot the client itself does not enable --
+    the bitfield read stays as the fallback for any future glyph whose bit IS
+    set, and its refusal still means "no discount, no charge burnt" for a row
+    with neither.
     """
     try:
         row = agents.WORLD.get("skill_effect", str(skill_id))
@@ -6822,6 +6897,11 @@ def glyph_energy_amount(skill_id, rank):
         return None
     if row.get("scale_means") != "Energy":
         return None
+    lo, hi = row.get("energy_reduction0"), row.get("energy_reduction15")
+    if lo is not None and hi is not None:
+        import math
+        exact = float(lo) + (float(hi) - float(lo)) * rank / 15.0
+        return max(0, int(math.floor(exact + 0.5)))
     try:
         return int(skill_scale_value(skill_id, rank, "scale"))
     except ValueError as ex:
@@ -8477,6 +8557,246 @@ def degen_tick(send, state, conn_id):
             agent["health"] = max(0.0, agent["health"] - lost)
 
 
+# ------------------------------------------------- taker-side damage modifiers
+#
+# What an OPEN EPISODE does to the damage its wearer takes. Two shapes today,
+# both per-skill content rows on the substrate that landed 2026-08-20:
+#
+#   * `damage_taken_multiplier` -- Frenzy's "take double damage", a number with
+#     NO client slot (WIKI only, GWW "Frenzy" rev. 2023-02-17). Multiplied in
+#     BEFORE any reduction: GWW's own note says reduction "will be taken into
+#     account after Frenzy, therefore mitigating the double damage".
+#   * `prevents_damage` -- Reversal of Fortune's conversion. GWW's Notes (rev.
+#     2023-05-02) give the arithmetic exactly: cap X reduces up to X AND heals
+#     up to X ("at rank 12 it can negate up to 134 damage (67 damage reduced
+#     and 67 damage healed)"), the healing lands before the damage, and the
+#     enchantment ends on the one packet. GWW's "Order of damage modifiers"
+#     (rev. 2025-05-06 -- a page that flags its own errors, cited with that
+#     caveat) puts the conversion group LAST, after Frenzy's group, which is
+#     the order below.
+#
+# Computation and wire are SPLIT: `taker_damage` is pure (testable with a bare
+# state) and returns what should happen; `resolve_taker_conversion` performs
+# the sends. The split exists for the same reason `energy_cost_for` is split
+# from the debit -- the caller has to know the outcome before choosing what to
+# put on the wire, and a conversion resolved twice would heal twice.
+
+def taker_damage(state, agent_id, dealt):
+    """(final_damage, conversion) after the taker's open episodes have spoken.
+
+    `conversion` is None or {"episode", "heal", "reduced", "cap"} -- decided
+    but NOT performed. Only the FIRST prevention episode fires (one packet,
+    one conversion; a second RoF would need its own packet), and it fires on
+    the post-multiplier number -- Frenzy's doubling is what RoF sees.
+    """
+    table = state.get("effects")
+    if not table or dealt <= 0:
+        return dealt, None
+    conversion = None
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        mult = row.get("damage_taken_multiplier")
+        if mult is not None:
+            dealt *= float(mult)
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if not row.get("prevents_damage"):
+            continue
+        try:
+            cap = float(skill_scale_value(ep["skill"], ep.get("rank", 0),
+                                          "scale"))
+        except ValueError as ex:
+            # An unreadable cap converts NOTHING -- the glyph's rule from the
+            # other side: refusing is the direction that cannot invent.
+            print(f"[effects] {ep['skill']} prevents damage but its cap is "
+                  f"UNREADABLE, so the hit lands whole: {ex}", flush=True)
+            continue
+        reduced = min(dealt, cap)
+        conversion = {"episode": ep, "heal": min(dealt, cap),
+                      "reduced": reduced, "cap": cap}
+        dealt = max(0.0, dealt - reduced)
+        break
+    return dealt, conversion
+
+
+def resolve_taker_conversion(send, state, conversion, conn_id):
+    """Perform a conversion `taker_damage` decided: heal, then close the episode.
+
+    The heal goes FIRST -- GWW: "the healing occurs before damage" -- and the
+    close goes out as a real 0x0044 through the same door an expiry uses,
+    because a silently-retired episode leaves its icon on screen (measured,
+    2026-08-20, twice).
+    """
+    ep = conversion["episode"]
+    heal_agent(send, state, ep["agent"], ep["agent"], conversion["heal"],
+               conn_id)
+    effect_table(state).close(ep["buff"])
+    send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+         f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, CONVERTED "
+         f"{conversion['reduced']:.0f} damage, healed "
+         f"{conversion['heal']:.0f})")
+    print(f"[c{conn_id}] skill {ep['skill']} converts the hit: "
+          f"{conversion['reduced']:.0f} prevented, {conversion['heal']:.0f} "
+          f"healed (cap {conversion['cap']:.0f}), enchantment ends", flush=True)
+
+
+def attack_interval_factor(state, agent_id):
+    """What the agent's open episodes do to its attack DURATION. 1.0 = nothing.
+
+    THE PERCENT CUTS THE DURATION; IT DOES NOT DIVIDE THE RATE. GWW's "Attack
+    speed" article (rev. 2026-07-03) publishes the exact values the game uses:
+    a hammer's 1.75 becomes 1.1725 under +33% -- that is 1.75 x (1 - 0.33),
+    where the rate reading (1.75 / 1.33 = 1.3158) misses by 0.14 s a swing.
+    Increases multiply by (1 - p/100), decreases by (1 + p/100), and the same
+    table's -50% row (1.75 -> 2.625) pins the decrease side.
+
+    The percent itself comes from the skill's own flat scale slot
+    (`skill_flat_constant`), or from the progression at the episode's rank if
+    the slot's bit is set -- no skill today scales its IAS, but the reader
+    should not decide that. Unreadable percents modify nothing and say so.
+    """
+    table = state.get("effects")
+    if not table:
+        return 1.0
+    factor = 1.0
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        means = row.get("scale_means")
+        if means not in ("Attack speed increase", "Attack speed decrease"):
+            continue
+        try:
+            pct = skill_flat_constant(ep["skill"])
+        except ValueError:
+            try:
+                pct = skill_scale_value(ep["skill"], ep.get("rank", 0))
+            except ValueError as ex:
+                print(f"[effects] {ep['skill']} names an attack-speed change "
+                      f"but its percent is UNREADABLE, so the swing keeps its "
+                      f"base interval: {ex}", flush=True)
+                continue
+        if means == "Attack speed increase":
+            factor *= 1.0 - pct / 100.0
+        else:
+            factor *= 1.0 + pct / 100.0
+    return factor
+
+
+def swing_preparation_bonus(state, weapon_row, agent_id):
+    """(bonus damage, preparation skill id) an open PREPARATION adds to one
+    swing, or (0.0, None).
+
+    WIKI (GWW, "Preparation", rev. 2020-06-18): "preparations generally alter
+    bow attacks, allowing the fired arrows to cause additional effects" --
+    which is why Ignite Arrows' `Fire damage` 3..18 shares Flare's label and
+    does not mean the same thing (SCALE_MEANS_DAMAGE's own comment). The
+    bonus therefore rides a swing, and ONLY a swing the equipped weapon fires
+    as an arrow: the gate is the weapon row's `fires_arrows` field, declared
+    per item in content rather than through a bow type-code enum this repo has
+    no witnessed value for. Today's starter hammer does not carry it, so this
+    is live-but-inert against current content -- the glyph's old shape, and
+    like it, the refusing direction invents nothing.
+
+    KNOWN GAP, named: Ignite Arrows' damage is "to target and all adjacent
+    foes" -- the adjacency splash is not modelled, only the on-target bonus.
+    """
+    if not weapon_row or not weapon_row.get("fires_arrows"):
+        return 0.0, None
+    table = state.get("effects")
+    if not table:
+        return 0.0, None
+    for ep in table.on_agent(agent_id):
+        # 19 = preparation, effects.EFFECT_TYPES' own vocabulary.
+        if effects.EFFECT_TYPES.get(int(ep.get("type_code", 0))) != "preparation":
+            continue
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if row.get("scale_means") not in SCALE_MEANS_DAMAGE:
+            continue
+        try:
+            return (float(skill_scale_value(ep["skill"], ep.get("rank", 0))),
+                    ep["skill"])
+        except ValueError as ex:
+            print(f"[effects] preparation {ep['skill']}'s bonus is "
+                  f"UNREADABLE, so the arrow flies plain: {ex}", flush=True)
+    return 0.0, None
+
+
+def move_speed_percent(state, agent_id):
+    """The LARGEST open movement-speed boost on this agent, in percent.
+
+    Largest rather than a product: GW speed boosts famously do not stack (the
+    strongest applies), and stances -- today's only carriers -- are exclusive
+    per type anyway, so the max and the product cannot differ against current
+    content. Recorded as max so the day two sources coexist, the modelled rule
+    is the game's rather than an accident of arithmetic.
+    """
+    table = state.get("effects")
+    if not table:
+        return 0.0
+    best = 0.0
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if row.get("scale_means") != "Movement speed increase":
+            continue
+        try:
+            pct = skill_flat_constant(ep["skill"])
+        except ValueError:
+            try:
+                pct = skill_scale_value(ep["skill"], ep.get("rank", 0))
+            except ValueError as ex:
+                print(f"[effects] {ep['skill']} names a speed boost with an "
+                      f"UNREADABLE percent, so the base stays: {ex}",
+                      flush=True)
+                continue
+        best = max(best, float(pct))
+    return best
+
+
+def speed_tick(send, state, conn_id):
+    """Reconcile the player's DECLARED speed base with the open episodes.
+
+    A per-tick reconciler rather than sends at the open/close sites, because
+    an episode ends four ways (expiry, replacement, strip, glyph-style spend)
+    and a base restored at three of them is a stuck 360 waiting to be found on
+    film. One comparison per tick, one message per CHANGE -- the 0x0027 goes
+    out only when the desired base differs from the declared one, which is
+    also retail's own economy (52 property-43 events in the whole corpus,
+    every one a change, none a stream -- the pattern energy_tick documents).
+
+    Behind MOVE_SPEED_EFFECTS, default OFF: see the flag's comment for why
+    declaring a non-288 base under the movement composite is a lever and not
+    a default.
+    """
+    if not MOVE_SPEED_EFFECTS:
+        return
+    pct = move_speed_percent(state, PLAYER_AGENT_ID)
+    desired = DEFAULT_RUN_SPEED * (1.0 + pct / 100.0)
+    declared = state.get("declared_speed_base", DEFAULT_RUN_SPEED)
+    if abs(desired - declared) < 1e-9:
+        return
+    send(GAME_SMSG_AGENT_UPDATE_SPEED_BASE, [PLAYER_AGENT_ID, desired],
+         f"AGENT_UPDATE_SPEED_BASE({desired:.2f} u/s"
+         + (f", +{pct:.0f}%)" if pct else ", base restored)"))
+    state["declared_speed_base"] = desired
+    print(f"[c{conn_id}] the player's declared speed base is now "
+          f"{desired:.2f} u/s" + (f" (+{pct:.0f}%)" if pct else " (restored)"),
+          flush=True)
+
+
 def heal_agent(send, state, target_id, caster_id, amount, conn_id):
     """Put health BACK, and draw the number. Returns what actually landed.
 
@@ -8916,7 +9236,11 @@ def enemy_attack_tick(send, state, conn_id):
         # whose declared attack speed is 0 is exactly what took the client down on
         # m_attackInterval (hit_enemy's comment). Falling back to a real interval
         # keeps a mis-declared agent from swinging every tick forever.
-        interval = agent.get("attack_speed") or ENEMY_ATTACK_SPEED
+        # An open episode on THIS agent scales its duration the same way the
+        # player's does (attack_interval_factor) -- no enemy bar carries an
+        # attack-speed skill today, so this reads 1.0 every tick until one does.
+        interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
+                    * attack_interval_factor(state, agent_id))
         if not agent.get("swinging"):
             agent["swinging"] = True
             # Swing on arrival rather than after a full interval -- the same call
@@ -9253,11 +9577,21 @@ def land_swing(send, state, agent_id, agent, conn_id):
         armour = player_armour_at(location, physical=True)
         if armour is not None:
             dealt *= armour_multiplier(armour)
-    frac = _damage_fraction(dealt, player_max_health(state),
-                            agents.PROP_DAMAGE, "an enemy swing")
+    # THE TAKER'S OWN EPISODES SPEAK LAST -- Frenzy's doubling, then a
+    # conversion (Reversal of Fortune), per GWW's modifier order. Decided
+    # here, before the first send, so the guard below sees the number that
+    # actually lands; performed after MELEE_ATTACK_FINISHED so the measured
+    # [finished, gain, damage] batch keeps its shape when nothing is open.
+    dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
+    frac = None
+    if dealt > 0:
+        frac = _damage_fraction(dealt, player_max_health(state),
+                                agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
+    if conversion is not None:
+        resolve_taker_conversion(send, state, conversion, conn_id)
 
     # THE GAIN PRECEDES THE DAMAGE, and that is measured rather than tidy.
     # Over the 49 live connections the message immediately BEFORE a 0x00CF is
@@ -9275,14 +9609,22 @@ def land_swing(send, state, agent_id, agent, conn_id):
     if ENERGY:
         _now = time.time()
         agent_adrenaline(agent).on_hit_landed(_now)   # SILENT: self-scoped, 9/9
+        # The gain reads the damage that LANDS -- WIKI puts the one-unit-per-1%
+        # rule on health lost, and a fully converted hit loses none (a 0-unit
+        # gain sends nothing and grants nothing, so the converted case costs
+        # no extra branch here).
         player_gains_adrenaline(
             send, state,
             pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
             _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
-         f"damage {dealt:.0f} to the player")
+    if frac is not None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
+             f"damage {dealt:.0f} to the player")
+    else:
+        print(f"[c{conn_id}] the swing from agent {agent_id} was fully "
+              f"converted -- no damage message goes out", flush=True)
     # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
     # a strike for a successful weapon hit; the player gets one unit per 1% of
     # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
@@ -9445,6 +9787,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
                   f"content/world.toml skill_effect)", flush=True)
         return
     dealt = float(damage[0])
+    # THE TAKER'S EPISODES, same pipeline as land_swing: Frenzy's "take double
+    # damage" doubles ALL damage received (WIKI, not melee-only), and a
+    # conversion catches a skill hit exactly as it catches a swing.
+    dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
+    if conversion is not None:
+        resolve_taker_conversion(send, state, conversion, conn_id)
+    if dealt <= 0:
+        agent["casting"] = None
+        print(f"[c{conn_id}] skill {skill_id}'s hit was fully converted -- "
+              f"no damage message goes out", flush=True)
+        return
     # Guard before ANY mutation. This function's damage send was already its
     # first send (the gate map's template for the others), but the cast slot
     # and the player's health were consumed before the guard could refuse --
@@ -11491,6 +11844,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after `apply` wrote `expires_at`, and a zero-length
                         # episode is refused at the table rather than here.
                         effect_tick(send, state, conn_id)
+                        # The declared speed base, right behind the expiries
+                        # so a stance ending this tick restores 288 on the
+                        # same tick. No-op unless --move-speed-effects.
+                        speed_tick(send, state, conn_id)
                         # Degeneration AFTER the expiries, so a condition that
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
@@ -14992,6 +15349,14 @@ def main():
                          "the same reason: changing what the enemy casts "
                          "should not need a content edit. Ids must exist in "
                          "the build being launched.")
+    ap.add_argument("--move-speed-effects", action="store_true",
+                    help="declare the player's speed base (GAME_SMSG 0x0027) "
+                         "from open movement-speed episodes -- Rush's +25%% "
+                         "becomes a 360 u/s base while the stance is up. OFF "
+                         "by default because every REALFIX fence and copy "
+                         "model was measured at 288 u/s; see "
+                         "MOVE_SPEED_EFFECTS' comment before flipping it "
+                         "under the movement composite.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "
@@ -15908,6 +16273,13 @@ def main():
         ENEMY_SKILLS = tuple(bar)
         print(f"ENEMY BAR: {[row[0] for row in bar]} "
               f"(activation and recharge from the client's own table)")
+
+    if a.move_speed_effects:
+        global MOVE_SPEED_EFFECTS
+        MOVE_SPEED_EFFECTS = True
+        print("MOVE SPEED EFFECTS: open movement-speed episodes declare the "
+              "player's 0x0027 base (Rush = 360 u/s). The REALFIX fences were "
+              "measured at 288 -- watch the movement instruments.")
 
     if a.no_effects:
         global EFFECTS

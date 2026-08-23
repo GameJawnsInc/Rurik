@@ -4782,6 +4782,29 @@ Every one of these, in the order they were written:
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
+  `toolkit/authsrv/test_mechanics.py` (**the episodes finally DO something** — the
+  2026-08-22 layer over the substrate: Frenzy's attack speed and doubled damage,
+  Reversal of Fortune's conversion, the glyph's discount live, the preparation
+  bonus, the gated movement base. Its pins are numbers GWW itself publishes, so
+  neither the rule nor the row can drift silently: **the +33% hammer must land on
+  exactly 1.1725 s** — GWW's "Attack speed" table lists the exact values the game
+  uses, the percent CUTS the attack duration (×0.67), and the check's own detail
+  text carries how far the plausible /1.33 reading misses (0.14 s a swing — a
+  formula this arc nearly shipped); **rank-12 RoF must convert GWW's own worked
+  example exactly** (a 67 hit under Frenzy doubles to 134, cap 67: 67 reduced, 67
+  healed, 67 lands), the heal goes out BEFORE the episode closes, and a second
+  hit lands whole — one packet, one conversion. `skill_flat_constant` is the
+  bit-clear-EQUAL rule (Rush's 25, Frenzy's 33, the glyph's charge count 2 from
+  the client's own bonus slot) with both refusal directions checked; the retired
+  at-cast cap-heal is pinned retired (`skill_heal(307)` is None while Healing
+  Signet still heals); the glyph pipeline runs Flare to a floored-at-zero cost
+  and spends exactly two charges into one real 0x0044; the preparation bonus
+  gates on the weapon row's `fires_arrows` (no bow type-code enum has a witnessed
+  value) and stays inert on the starter hammer; and the movement lever is pinned
+  OFF by default, with ON declaring 360 once, deduplicating, and RESTORING 288
+  when the stance ends. §9 drives `land_swing` end to end: control, doubled, and
+  fully-converted swings, with MELEE_ATTACK_FINISHED still opening the batch and
+  NO damage message after a full conversion. Offline, no vault; floor 39),
   `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — R4b's other half, where
   `effects.py` models what a cast puts ON somebody and `pools.py` models what it
   takes. Until 2026-08-20 this server took nothing: two harness runs that day pressed

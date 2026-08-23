@@ -144,16 +144,22 @@ on property 55 positive -- the health-GAIN direction, measured from the corpus
 
 [skill_effect.307]
 scale_means = "Maximum heal"
+prevents_damage = true
 [skill_effect.307.provenance]
 source = "wiki"
 page = 'GWW, "Reversal of Fortune", {{Skill progression}}, rev. 2023-05-02'
 verified = """Client scale 15->80, args = 2. Wiki var1 `Maximum heal` 15->80.
-KNOWN SIMPLIFICATION, carried in skill_heal's docstring: the skill heals for the
-damage it prevents, capped at this number, and this server models no damage
-prevention -- so it heals the cap. Right at the ceiling, wrong below it."""
+THE SIMPLIFICATION IS RETIRED (2026-08-22): `prevents_damage` routes the skill
+through the taker-side conversion instead of an at-cast heal. The mechanism is
+GWW's own Notes (same page, same revision): "this spell converts damage to
+healing, up to the stated maximum. For example, at rank 12 it can negate up to
+134 damage (67 damage reduced and 67 damage healed)" -- so a hit of D under cap
+X lands max(0, D - X) and heals min(D, X), and "the healing occurs before
+damage". One packet, then the enchantment ends. WIKI for the mechanism; the cap
+endpoints are the client's own scale slot, which agrees with the wiki's."""
 
 [skill_effect.135]
-scale_means = "none"
+scale_means = "Attack speed decrease"
 bonus_scale_means = "Health degeneration"
 [skill_effect.135.provenance]
 source = "wiki"
@@ -161,8 +167,12 @@ page = 'GWW, "Faintheartedness", {{Skill progression}}, rev. 2024-05-16'
 verified = """args = 5 (duration | bonus). Wiki gives exactly two variables and
 the client carries exactly those two slots: `Duration` 3->16 in duration0/15 and
 `Health degeneration` 0->3 in bonus_scale0/15. The scale slot's 50 has its bit
-CLEAR and is the "attack 50% slower" from the description. Degeneration is not
-modelled -- the row records what the number IS, not that we send it."""
+CLEAR with EQUAL endpoints and is the "attack 50% slower" from the description
+-- the same flat-constant shape as Rush's 25 and Frenzy's 33, and since
+2026-08-22 `scale_means` names it so the taker's swing interval reads it: a
+decrease of p% multiplies the attack duration by (1 + p/100), which is GWW's
+own exact table (hammer 1.75 -> 2.625 at -50%; "Attack speed", rev. 2026-07-03).
+Degeneration went live 2026-08-20 with the condition join."""
 
 [skill_effect.431]
 scale_means = "Fire damage"
@@ -178,14 +188,22 @@ resolve damage for any episode-opening skill for exactly this reason."""
 
 [skill_effect.200]
 scale_means = "Energy"
+energy_reduction0 = 10
+energy_reduction15 = 18
 [skill_effect.200.provenance]
 source = "wiki"
 page = 'GWW, "Glyph of Lesser Energy", {{Skill progression}}, rev. 2024-02-27'
 verified = """Client scale 10->18, args = 0 -- BOTH endpoints present with the
 bit clear, and the wiki lists the progression, so this is one of the rows where
-the two disagree about whether it scales. Not resolved here: the server sends
-the 15 s glyph episode and models no energy, so nothing reads this number yet.
-Recorded so the disagreement is on file rather than discovered later."""
+the two disagree about whether it scales. THE AMOUNT IS NOW CARRIED EXPLICITLY
+(2026-08-22): `energy_reduction0/15` are the wiki's `Energy reduction` 10..18
+progression at Energy Storage 0..15, which `glyph_energy_amount` interpolates by
+the client's own formula -- the bitfield read stays refused (bit clear with
+differing endpoints has zero corpus witnesses), so the number enters through a
+field whose provenance is the wiki rather than through a slot the client itself
+does not enable. The charge count is NOT here: the client's own bonus slot holds
+a flat 2/2 (bit clear, EQUAL endpoints), agreeing with the wiki's "your next 2
+spells" -- GLYPH_SPELL_CHARGES carries it with that corroboration noted."""
 
 [skill_effect.382]
 bonus_scale_means = "Bleeding"
@@ -197,7 +215,8 @@ variable, `Bleeding` 5->25. The bitfield picked the slot before the wiki was
 read. Costs 4 adrenaline, which this server does not model."""
 
 [skill_effect.346]
-scale_means = "none"
+scale_means = "Attack speed increase"
+damage_taken_multiplier = 2.0
 [skill_effect.346.provenance]
 source = "wiki"
 page = 'GWW, "Frenzy", rev. 2023-02-17'
@@ -205,7 +224,16 @@ verified = """NO {{Skill progression}} template on the page, and the client
 agrees: args = 0. The scale slot's 33 is the "attack 33% faster" of the
 description and the duration slot's flat 8 is the real duration -- which is the
 row that shows the duration bit means SCALES rather than MEANINGFUL, since the
-server sends 8 s and the client draws an 8 s bar."""
+server sends 8 s and the client draws an 8 s bar.
+MODELLED 2026-08-22: `scale_means` names the flat 33 so the swing interval
+reads it (`skill_flat_constant` + `attack_interval_factor`). THE PERCENT CUTS
+THE ATTACK DURATION, it does not divide the rate: GWW's "Attack speed" table
+(rev. 2026-07-03) lists the exact values the game uses -- hammer 1.75 ->
+1.1725 at +33%, which is x(1 - 33/100) and refutes the /1.33 reading by
+0.14 s a swing. `damage_taken_multiplier` is the description's "take double
+damage" -- a number with NO client slot, WIKI only -- applied to ALL damage
+received, before any reduction (GWW "Frenzy" section Notes: reduction "will be
+taken into account after Frenzy")."""
 
 [skill_effect.312]
 scale_means = "Holy damage"
@@ -282,13 +310,22 @@ page = 'GWW, "Defy Pain", {{Skill progression}}, rev. 2026-07-05'
 verified = "Client scale 90->300, bonus 1->10, args = 7. Wiki lists both."
 
 [skill_effect.319]
-scale_means = "Duration"
+scale_means = "Movement speed increase"
 [skill_effect.319.provenance]
 source = "wiki"
 page = 'GWW, "Rush", {{Skill progression}}, rev. 2023-03-03'
 verified = """args = 1; the scale slot holds a constant 25 -- the "move 25%
 faster" in the description -- with its bit clear. THE row that proves reading
-endpoints without the bitfield invents scaling the game does not draw."""
+endpoints without the bitfield invents scaling the game does not draw.
+RE-LABELLED 2026-08-22: `scale_means` describes the SCALE slot, and Rush's
+scale slot is the flat 25 -- the old value "Duration" named the wiki's var1,
+which lives in the duration slot and needs no label to be sent. The mechanic
+is GATED OFF by default (--move-speed-effects): the boost channel is
+GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE (retail's own 383.04 = 288 x 1.33
+boost witness rides it; 0x002B is asserted into [0.01, 1.0] and cannot carry
+a buff), but every REALFIX fence and copy-model constant was measured at
+288 u/s, so declaring a faster base inside the movement composite is
+UNMEASURED and stays a deliberate lever."""
 
 [skill_effect.320]
 scale_means = "Crippled duration"

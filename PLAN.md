@@ -1369,6 +1369,50 @@ byte-identical on `main`, not this change.
 
 ## 8. Immediate next actions
 
+### The effects DO SOMETHING — five mechanics modelled, one refuted formula, one deliberate lever (2026-08-22)
+
+The R4b tally's MECHANIC column went from 3 of 9 to **8 of 9** in one desk arc
+(`test_mechanics.py`, 39 checks, all offline; the tally table in the R4b entry
+below carries the per-family detail). The pieces: **Frenzy** (+33% attack speed
+AND double damage taken, the doubling applied before any reduction per GWW's own
+note), **Faintheartedness** (the taker attacks 50% slower — free once the
+attack-speed machinery existed), **Reversal of Fortune** (the conversion: cap X
+reduces up to X AND heals up to X, healing before damage, one packet, then the
+enchantment ends — retiring the at-cast cap-heal simplification `skill_heal`'s
+docstring had carried since 2026-08-20), **Glyph of Lesser Energy** (the
+already-built hook goes LIVE: the row carries GWW's `Energy reduction` 10..18
+explicitly, the client's bit-clear slot stays refused, and the client's own
+bonus slot 2/2 corroborates the charge count), and the **preparation bonus**
+(rides any swing whose weapon row declares `fires_arrows`; no such weapon
+exists in content, so inert-but-live — the glyph's old shape).
+
+**The catch worth more than the features: "attacks 33% faster" does NOT mean
+interval/1.33.** GWW's "Attack speed" article (rev. 2026-07-03) publishes the
+exact values the game uses — hammer 1.75 → **1.1725** at +33% — and that is
+`× (1 − 33/100)`, a duration CUT, off from the rate reading by 0.14 s a swing.
+The arc had the /1.33 formula drafted before the wiki page was read;
+`test_mechanics` §2 pins the exact table value so the wrong reading cannot
+return. New reader beside `skill_scale_value`: `skill_flat_constant`, the
+bit-clear-EQUAL rule (Rush's 25, Frenzy's 33, the glyph's 2) with both refusal
+directions tested.
+
+**Movement speed is built and OFF by default** (`--move-speed-effects`). The
+boost channel is `0x0027 AGENT_UPDATE_SPEED_BASE` — retail's own 383.04 =
+288 × 1.33 witness rides it, and `0x002B` is asserted into [0.01, 1.0] so a
+buff cannot — but every REALFIX fence, gate cut and copy-model constant was
+measured at 288 u/s, so declaring 360 under the movement composite is an
+unmeasured interaction with the most carefully measured mechanism in the repo.
+The lever exists, reconciles per tick (declare once, dedupe, restore on
+expiry), and waits for a movement-instrumented run.
+
+**NEXT, in cost order:** (1) a loopback run that WATCHES the new mechanics —
+Frenzy's faster swing cadence and doubled incoming numbers, RoF's converted
+hit, the glyph cheapening two casts on the orb — all four screen-observable;
+(2) a `--move-speed-effects` run under `movetap`/`warpscan` to price the
+composite interaction the flag's comment names; (3) the two R4b remainders —
+Charm Animal's pet (out of scope by design) and the Ignite Arrows AoE splash
+(named gap in `swing_preparation_bonus`).
+
 ### CASTMECH: the §3b property register is CLOSED — read first, wired second (2026-08-22)
 
 Status is §3's R4a row (the 2026-08-22 stamp); the census that settled every
@@ -2360,15 +2404,15 @@ each measured before it was built and three of them then watched at a client.
 
 | family | exemplar | effect | MECHANIC | watched |
 |---|---|---|---|---|
-| Stance (3) | Frenzy 346 | 8 s | ✗ +33% attack speed | ✓ icon, timer, expiry, **replacement** |
-| Hex (4) | Faintheartedness 135 | 3 s on the foe | ✗ | ✓ applied |
+| Stance (3) | Frenzy 346 | 8 s | ✓ **+33% attack speed AND double damage taken** (2026-08-22 — the percent cuts the duration, ×0.67, GWW's exact table) | ✓ icon, timer, expiry, **replacement** |
+| Hex (4) | Faintheartedness 135 | 3 s on the foe | ✓ **the taker attacks 50% slower** (2026-08-22, ×1.5 on the interval) + 0..3 pips (2026-08-20) | ✓ applied |
 | Spell (5) | Flare 194 | — | ✓ **20 fire damage** | ✓ dealt exactly 20 |
-| Enchantment (6) | Reversal of Fortune 307 | 8 s | ✗ damage negation | ✓ applied |
+| Enchantment (6) | Reversal of Fortune 307 | 8 s | ✓ **the conversion** (2026-08-22): cap X reduces up to X AND heals up to X, one packet, then the enchantment ends — the at-cast cap-heal simplification is retired | ✓ applied |
 | Signet (7) | Healing Signet 1 | — | ✓ **heals 88** | ✓ client health **54→100** |
 | Skill (10) | Charm Animal 411 | ✗ | ✗ a pet | ✗ |
-| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✗ energy model EXISTS (2026-08-20 evening); the glyph's own discount is inert — its scale bit is clear with differing endpoints and the amount is refused, not invented | ✓ applied |
+| Glyph (12) | Glyph of Lesser Energy 200 | 15 s | ✓ **the discount is LIVE** (2026-08-22): the row carries GWW's 10..18 explicitly, the bitfield stays refused, two charges (client's own bonus slot 2/2 corroborates), floored at zero | ✓ applied |
 | Attack (14) | Sever Artery 382 | Bleeding 9 s | ✓ **3 pips of degeneration** | ✓ **three arrows on screen** |
-| Preparation (19) | Ignite Arrows 431 | 24 s | ✗ fire damage on arrows | ✓ applied |
+| Preparation (19) | Ignite Arrows 431 | 24 s | ✓ machinery live, weapon-gated (2026-08-22): +3..18 rides any swing whose weapon row declares `fires_arrows` — no such weapon in content yet, so inert-but-live, the glyph's old shape; the adjacency splash is a named gap | ✓ applied |
 
 **8 of 9 resolve something at the client; 3 of 9 resolve their MECHANIC.** The
 one that resolves nothing is Charm Animal, whose effect is a pet — no table data
@@ -2427,10 +2471,20 @@ on `type_code` now — only type 14 rides a swing.
    default bar's two stances cost adrenaline so a run has to swap them out to
    press one. Whether the client greys an uncharged adrenaline skill and
    swallows the keypress is still untested.
-2. **The five unmodelled mechanics** — attack speed (Frenzy, Rush), movement
-   speed (Rush), damage negation (Reversal of Fortune), energy cost reduction
-   (glyphs), and bonus damage on arrows (preparations). Each is a per-skill wiki
-   row on machinery that now exists.
+2. ~~**The five unmodelled mechanics**~~ **ALL FIVE MODELLED 2026-08-22**
+   (`test_mechanics.py`, 39 checks; the tally table above carries each one) —
+   attack speed (Frenzy ×0.67, Faintheartedness ×1.5 — the percent CUTS the
+   duration per GWW's exact table, hammer 1.75 → 1.1725, refuting the /1.33
+   reading this arc nearly shipped), damage taken (Frenzy's ×2, before
+   reduction), damage conversion (RoF: reduce up to cap AND heal up to cap,
+   GWW's own rank-12 example pinned exactly), energy cost reduction (the
+   glyph's row carries GWW's 10..18 explicitly; the bitfield stays refused),
+   and the preparation bonus (weapon-gated on `fires_arrows`; inert until a
+   bow row exists). **Movement speed is built and GATED OFF by default**
+   (`--move-speed-effects`): the boost channel is `0x0027` (retail's 383.04
+   witness), but every REALFIX fence was measured at 288 u/s, so declaring a
+   faster base under the movement composite is an unmeasured interaction and
+   stays a deliberate lever.
 3. **Does the client draw anything for a heal?** Property 55 is applied and
    unannotated. Worth one probe.
 4. **The enemy AI now heals itself to full every few seconds**, because Restore
@@ -2513,11 +2567,12 @@ would land.
 
 **NEXT, in cost order:**
 
-1. **The effects do nothing yet.** Frenzy's icon appears; its *+33% attack speed and
-   double damage taken* are not modelled, and neither is any other. This is the
-   `scale_means` pattern again — one wiki-sourced row per skill — and it is what decides
-   whether R4b's criterion reads "the episode resolves" or "the mechanic resolves"
-   (see §3's R4b row, which now scores both).
+1. ~~**The effects do nothing yet.**~~ **THEY DO NOW (2026-08-22).** Frenzy's +33%
+   and double damage, Faintheartedness's slow, RoF's conversion, the glyph's
+   discount and the preparation bonus all resolve — the `scale_means` pattern as
+   predicted, one wiki-sourced row per skill (`test_mechanics.py`, 39 checks; the
+   R4b entry above carries the updated tally: **8 of 9 mechanics resolve**, Charm
+   Animal's pet the honest remainder).
 2. **Energy and adrenaline are still unmodelled, and adrenaline now has a concrete
    cost.** The default bar's only two stances (Battle Rage 317, Rush 319) cost 4
    adrenaline, so the run had to swap in the 5-energy Frenzy via `--skills` to press a

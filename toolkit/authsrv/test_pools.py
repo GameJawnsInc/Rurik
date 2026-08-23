@@ -1187,16 +1187,20 @@ def section_glyph():
               "GWW's own progression-variable name, quoted verbatim in "
               "content/world.toml, which is how every other magnitude in this "
               "server gets its MEANING")
-    LEDGER.ok(authsrv.glyph_energy_amount(200, 12) is None,
-              "and its AMOUNT is REFUSED, because the scale bit is clear",
-              "the client gives 200 scale0 = 10, scale15 = 18 with "
-              "skill_arguments = 0. `effects.resolve_duration` already sets "
-              "the precedent for that shape: bit clear with EQUAL endpoints is "
-              "a flat constant we have witnesses for; bit clear with DIFFERING "
-              "endpoints has zero witnesses anywhere and is refused. 10 and 18 "
-              "differ. WHAT THE ROW NEEDS is an explicit amount beside "
-              "`scale_means` in [skill_effect.200] -- its own provenance "
-              "already records that the wiki and the bitfield disagree")
+    # THIS CHECK PINNED THE REFUSAL, and on 2026-08-22 the refusal was retired
+    # on its own stated terms: the row now carries the explicit amount this
+    # check's old detail text asked for (`energy_reduction0/15 = 10/18`, GWW's
+    # own `Energy reduction` progression, rev. 2024-02-27), so the amount
+    # RESOLVES -- through the wiki field, never through the still-refused
+    # bitfield slot. test_mechanics section 6 owns the full pipeline; what this
+    # keeps is the boundary: the value must be the ROW's, interpolated by the
+    # client's own formula, and rank 12 is 10 + 8*12/15 = 16.4 -> 16.
+    LEDGER.ok(authsrv.glyph_energy_amount(200, 12) == 16,
+              "and its AMOUNT now resolves from the row's explicit wiki field",
+              "round(10 + (18-10)*12/15) = 16. The client's own scale slot "
+              "(10..18, bit clear) stays refused -- the number enters through "
+              "[skill_effect.200] energy_reduction0/15, whose provenance is "
+              "the wiki, exactly as the old refusal's detail text demanded")
 
     print("\n9b. with an amount in hand, the discount and the two charges")
     # The amount source is stubbed HERE and only here: the hook, the charge
