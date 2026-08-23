@@ -1106,7 +1106,14 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         for h in hits:
             if h["slot"] != i or not h.get("cap"):
                 continue
-            key = tuple((k, v) for k, v in h["cap"].items()
+            # Sequences are coerced, not assumed away. A capture that returns
+            # an ARRAY -- compositetrap's slot-cache sites read CpsBase's
+            # nine-slot tables -- made this line raise `unhashable type` and
+            # took the whole report with it, AFTER a real run had completed:
+            # every hit was in memory and none of it reached the page. The
+            # report must not be the thing that loses a run.
+            key = tuple((k, tuple(v) if isinstance(v, (list, tuple)) else v)
+                        for k, v in h["cap"].items()
                         if not isinstance(v, str))
             rows[key] = rows.get(key, 0) + 1
         w("\n" + "=" * 72 + f"\nCENSUS: {order[i]} -- {len(rows)} distinct, "
@@ -1116,6 +1123,15 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
                 f"{k}=0x{v:08X}" if isinstance(v, int) else f"{k}={v}"
                 for k, v in key) + "\n")
 
+    # COUNTED BEFORE THE SKIP. This loop used to increment `counts` inside
+    # the per-hit body, which the bulky-site `continue` skips -- so a run
+    # whose sites were ALL summarised printed "TOTALS: cache 0" directly
+    # under "CENSUS: cache -- 13 hits". Contradicting itself on the same
+    # page is worse than being terse.
+    for h in hits:
+        name = order[h["slot"]] if h["slot"] < len(order) else "?"
+        counts[name] = counts.get(name, 0) + 1
+
     w("\n" + "=" * 72 + "\nHITS, in order\n" + "=" * 72 + "\n")
     if not hits:
         w("  none\n")
@@ -1123,8 +1139,6 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
     for h in hits:
         if h["slot"] in bulky:
             continue
-        name = order[h["slot"]] if h["slot"] < len(order) else "?"
-        counts[name] = counts.get(name, 0) + 1
         site = sites[h["slot"]]
         w(f"\n  +{h['t'] - t0:7.3f}s  {name:9} "
           f"va 0x{site.va:08X}  tid {h['tid']}\n")

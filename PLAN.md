@@ -1508,10 +1508,46 @@ fetched beside the armour head 93; the head does NOT expand (2650–2653, zero
 fetches each); and **2809, the body run's own head member, stays unfetched**.
 That REFUTES "the body walks the whole run and the head was suppressed" — the
 body's walk genuinely stops at member 3 and the head comes strictly from the
-head item. Two slots, two runs, five components, zero asserts. Still untested:
-whether the override REPLACES the armour row or merges with it (both records
-are fetched for every component; which survives into the atlas needs a site
-inside `0x0082EFAA`), and the standalone type-19 kind of head costume.
+head item. Two slots, two runs, five components, zero asserts.
+~~Still untested: whether the override REPLACES the armour row or merges with
+it~~ **ANSWERED 2026-08-23, and the question had no one-word answer to give**
+(§9.11, `test_compositetrap` 18 → 53 checks). Two sites at the
+`m_slotItemData` writer's own exits, predictions committed at `f522aaf`
+**before** either run, and the row read back out of CpsBase as the client
+wrote it. **The override is per FIELD: the file id is REPLACED outright, the
+dye is REPLACED from the costume slot's own cache row, the type byte is
+CARRIED THROUGH untouched, and the flags are OR-merged** — which is exactly
+why the record resolver could never produce an answer. The before/after is
+visible on one slot inside a 20 ms burst: boots go `90 / type 4 / tint 19` →
+`2805 / type 4 / tint 0`. Three structural results ride with it. **(1)**
+CpsBase's three nine-slot arrays are CONTIGUOUS and the arithmetic CLOSES —
+`0x24 + 9×16 = 0xB4` (`m_slotItemId`, ArenaNet's own name from `CpsBase:173`)
+and `0xB4 + 9×4 = 0xD8` (the override array) — each offset read from a
+different instruction's own operand, which also re-reads §9.2's "+0x99/+0xA9
+dye bytes" as `m_slotItemData[7]+5` and `[8]+5`, the costume slots' own rows.
+**(2)** The override array holds **five DISTINCT ids**, one per body part, so
+§9.9's RECONSTRUCTION is SITED rather than refuted: the five-record run
+expands UPSTREAM of the cache build, already component-keyed. **(3) S2 was
+REFUTED and the refutation is the finding** — CpsBase does not index by the
+wire slot but by a permutation (weapon, offhand, chest, **LEGS, HEAD, BOOTS**,
+gloves, costumes), agreed on by THREE independent fields, under which the dye
+branch's `cmp esi,4` is the **HEAD** and reads exactly right. S4 printed
+REFUTED in run 1 for that reason alone — the claim held on every slot, the
+indexing did not — the second mis-specified prediction in this arc after
+§9.6's P2, and both smuggled their assumption into the prediction's FRAME
+rather than its content. ⚠ **And the permutation is NOT a property of
+CpsBase**: run 2's longer hold caught two more instances at +93.9 s that index
+by the WIRE slot (their slot 3 took record 90, boots, where the world agent's
+took 94, legs), so the ordering belongs to the CALLER and is scoped to the
+in-world dressing path. What those two instances are is **NOT identified** and
+no guess is recorded. Free: the row's file id has bit 31 CLEARED (consistent
+with §9.4); `cachesame` fired ZERO times in both runs and says so; the weapon
+is an n=1 null control that keeps its own declared bytes. Two tool defects the
+runs paid for are fixed and pinned — `_report` died on an unhashable capture
+AFTER a completed run had collected everything, and TOTALS printed 0 beside a
+census of 13. **Still open**: the flags OR-vs-assign (needs an armour row with
+a bit outside `0x20001006`), what the two wire-ordered instances are, and the
+standalone type-19 kind of head costume.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,

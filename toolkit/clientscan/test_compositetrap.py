@@ -23,7 +23,7 @@ WITHOUT one, and it is two different things:
 prediction cannot quietly drift away from the rows the server actually sends.
 
 §6-§8 do the same three jobs for the SLOT-CACHE half (the `cache`/`cachesame`
-sites, S2..S7). §6 is the one worth reading: it does not merely check the
+sites, S2..S8). §6 is the one worth reading: it does not merely check the
 three CpsBase offsets, it checks that they CLOSE -- `0x24 + 9*16 = 0xB4` and
 `0xB4 + 9*4 = 0xD8`, three contiguous nine-slot arrays -- and that §9.2's
 "+0x99/+0xA9 dye bytes" land inside the first of them, on rows 7 and 8 at byte
@@ -48,8 +48,10 @@ import checks             # noqa: E402
 import compositetrap as t  # noqa: E402
 
 # Floor set from a real green run (18 checks 2026-08-23; 48 after the
-# slot-cache half landed the same day).
-LEDGER = checks.Ledger("composite trap", floor=48)
+# slot-cache half landed the same day; 49 with the _report
+# regression guard and the S2/S4/S8 restatements the first live
+# run earned).
+LEDGER = checks.Ledger("composite trap", floor=53)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -291,14 +293,19 @@ if data is not None:
 print("== 7. the cache analyser, and the sabotages it must redden on ==")
 CSITES = [t.SITES["getids"], t.SITES["record"],
           t.SITES["cache"], t.SITES["cachesame"]]
-GOOD_IDS = [0, 0, 3, 4, 5, 6, 7, 8, 9]
-#: The body costume's run expanded per slot, plus the head costume at slot 6
-#: and each costume slot's own entry. This is ONE of S6's two branches; the
-#: other is exercised below and is not a failure.
-GOOD_OVR = [0, 0, 2806, 2805, 2808, 2807, 2654, 2806, 2654]
-GOOD_ROWS = {2: (2806, 7, 0), 3: (2805, 4, 0), 4: (2808, 19, 35),
-             5: (2807, 13, 0), 6: (2654, 16, 0),
+#: THE FIXTURE IS THE FIRST RUN'S OWN READING, verbatim: CpsBase's measured
+#: order (weapon, offhand, chest, LEGS, HEAD, BOOTS, gloves, costume body,
+#: costume head), the item ids it held, the override array it held, and the
+#: rows it wrote. Synthesising a tidier arrangement would let the analyser
+#: pass on a shape the client does not produce -- and the tidier arrangement
+#: is exactly what S2's first form assumed and the client refuted.
+GOOD_IDS = [1, 0, 3, 5, 7, 4, 6, 8, 9]
+GOOD_OVR = [0, 0, 2806, 2808, 2654, 2805, 2807, 2806, 2654]
+GOOD_ROWS = {0: (39776, 15, 6),                      # the weapon, untouched
+             2: (2806, 7, 0), 3: (2808, 19, 0), 4: (2654, 16, 35),
+             5: (2805, 4, 0), 6: (2807, 13, 0),
              7: (2806, 44, 0), 8: (2654, 45, 35)}
+CPS_ITEM = t._by_cps(t.OUR_SLOT_ITEM)
 
 
 def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
@@ -310,7 +317,7 @@ def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
         rec, tb, tint = rows[slot]
         out.append({"slot": site, "t": float(slot), "cap": {
             "CpsBase": cps, "slot": slot, "edx (slot*16)": slot * 16,
-            "item id (arg1)": t.OUR_SLOT_ITEM.get(slot),
+            "item id": CPS_ITEM.get(slot),
             "file id": rec, "record": rec & 0x7FFFFFFF, "type byte": tb,
             "dye tint": tint, "dye colors": 11, "row+8": 0,
             "flags": 0x20001006, "m_slotItemId": list(ids),
@@ -320,7 +327,7 @@ def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
 
 lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS))
 blob = "\n".join(lines)
-check(rc == 0 and "S2 m_slotItemId is the WIRE slot: PASS" in blob,
+check(rc == 0 and "S2 m_slotItemId in CpsBase's measured order: PASS" in blob,
       "the predicted-good run scores rc 0 and S2 PASS", blob)
 check("S3 REPLACE on the file id: PASS" in blob,
       "S3 PASSES when every overridden row carries the costume record -- the "
@@ -341,6 +348,11 @@ check("the body half, NOT decisive" in blob,
       "and it refuses to claim the body half, because `costume_body` declares "
       "tint 0 and so does an unwritten row -- the one place this rig agrees "
       "with itself for free")
+check("S8 the null control (unoverridden slots): PASS" in blob
+      and "n=1, which is small and is said rather than smoothed" in blob,
+      "S8 PASSES on the weapon -- the one worn slot no costume covers -- and "
+      "prints its own n, because a control of size one is still a control and "
+      "is not improved by leaving the size out")
 
 lines, rc = t._analyse_cache(CSITES, [])
 check(rc is None and "never fired" in "\n".join(lines)
@@ -362,19 +374,33 @@ check(rc == 1 and "S4 CARRY-THROUGH on the type byte: REFUTED"
       "S4 SABOTAGE: a costume wire type reaching an armour slot's type byte "
       "refutes the carry-through")
 
-bad7 = {**GOOD_ROWS, 4: (2808, 19, t.TINT_ARMOUR)}
+bad7 = {**GOOD_ROWS, 4: (2654, 16, t.TINT_ARMOUR)}
 lines, rc = t._analyse_cache(CSITES, chits(bad7))
 check(rc == 1 and "S7 the dye tint: REFUTED" in "\n".join(lines),
-      "S7 SABOTAGE: slot 4 keeping the armour tint refutes the dye "
+      "S7 SABOTAGE: the head slot keeping the armour tint refutes the dye "
       "replacement in the one slot where the value is unambiguous")
 
+bad8 = {**GOOD_ROWS, 0: (39776, 15, 99)}
+lines, rc = t._analyse_cache(CSITES, chits(bad8))
+check(rc == 1 and "S8 the null control" in "\n".join(lines)
+      and "REFUTED" in "\n".join(lines),
+      "S8 SABOTAGE: a slot with a ZERO override whose row moved anyway "
+      "refutes the null control -- without which 'every overridden row "
+      "changed' has nothing to be measured against")
+
 lines, rc = t._analyse_cache(
-    CSITES, chits(GOOD_ROWS, ids=[0, 0, 7, 6, 5, 4, 3, 8, 9]))
-check(rc == 1 and "S2 m_slotItemId is the WIRE slot: REFUTED"
-      in "\n".join(lines),
-      "S2 SABOTAGE: our item ids appearing at slots we did not send them to "
-      "means CpsBase re-indexes, and S7's slot-4 reading would then be about "
-      "a different body part")
+    CSITES, chits(GOOD_ROWS, ids=[1, 0, 3, 4, 5, 6, 7, 8, 9]))
+check(rc == 1 and "REFUTED the other way" in "\n".join(lines),
+      "S2 SABOTAGE, the IDENTITY direction: a later run indexing by the WIRE "
+      "slot would mean the measured permutation was a fluke of one load, and "
+      "the restatement has to be able to lose that way too")
+
+lines, rc = t._analyse_cache(
+    CSITES, chits(GOOD_ROWS, ids=[1, 0, 7, 6, 5, 4, 3, 8, 9]))
+check(rc == 1 and "a THIRD arrangement" in "\n".join(lines),
+      "S2 SABOTAGE, the OTHER direction: an arrangement that is neither the "
+      "wire identity nor the measured permutation refutes it as well, and is "
+      "reported as its own case rather than folded into either")
 
 lines, rc = t._analyse_cache(
     CSITES, chits(GOOD_ROWS, ovr=[0, 0, 2806, 2806, 2806, 2806, 2806,
@@ -399,6 +425,34 @@ check(rc == 0 and "2 CpsBase instance(s)" in "\n".join(lines)
       "build in one session, so the analyser picks the instance wearing our "
       "items instead of scoring the doll's empty slots as a refutation")
 
+# REGRESSION, and it cost a completed run. `_report` keys its census on the
+# captured values, and these captures hold CpsBase's nine-slot ARRAYS. The
+# first live run trapped everything it was built to trap and then died in the
+# census with `unhashable type: 'list'` -- after the client had exited, so
+# every hit was in memory and none of it reached the page. Both sides are
+# fixed (tuples here, coercion in `_report`); this proves the report survives
+# the shape either way, because a formatting bug that eats a run is worse than
+# a wrong number.
+import io as _io                                                # noqa: E402
+_bulk = []
+for i in range(3):
+    for h in chits(GOOD_ROWS):
+        h["cap"]["m_slotItemId"] = list(h["cap"]["m_slotItemId"])
+        h["cap"]["override"] = list(h["cap"]["override"])
+        h.update(tid=1000 + i, dr6_agrees=True, dr6_slot=2)
+        _bulk.append(h)
+try:
+    t.ct._report(CSITES, _bulk, t.IMAGE_BASE, out=_io.StringIO())
+    _survived = True
+except TypeError:
+    _survived = False
+check(_survived and len(_bulk) > 12,
+      f"REGRESSION: _report survives a capture holding LIST values over the "
+      f"census threshold ({len(_bulk)} hits) -- the exact shape that killed "
+      f"the first live run of these sites after it had already collected "
+      f"everything",
+      f"{len(_bulk)} synthetic hits")
+
 # ---------------------------------------------------------------- section 8
 print("== 8. the slot tables are authsrv's and content's, not a hand-copy ==")
 import re                                                     # noqa: E402
@@ -412,21 +466,23 @@ try:
     citem = int(re.search(r"^COSTUME_ITEM_ID = (\d+)", src, re.M).group(1))
     hslot = int(re.search(r"^COSTUME_HEAD_SLOT = (\d+)", src, re.M).group(1))
     hitem = int(re.search(r"^COSTUME_HEAD_ITEM_ID = (\d+)", src, re.M).group(1))
+    witem = int(re.search(r"^WEAPON_ITEM_ID = (\d+)", src, re.M).group(1))
 except Exception as exc:                                      # noqa: BLE001
     LEDGER.skip("the authsrv slot cross-check", f"unreadable: {exc}")
 else:
     want = {s: i for s, (i, _k) in armour.items()}
-    want[cslot], want[hslot] = citem, hitem
+    want[cslot], want[hslot], want[0] = citem, hitem, witem
     check(want == t.OUR_SLOT_ITEM,
           "OUR_SLOT_ITEM is exactly authsrv.py's STARTER_ARMOUR plus its two "
-          "costume constants -- S2 compares the client's array against what "
-          "the SERVER sends, so a slot renumbered on one side has to redden "
-          "here rather than quietly refute a prediction",
+          "costume constants and the weapon -- S2 compares the client's array "
+          "against what the SERVER sends, so a slot renumbered on one side "
+          "has to redden here rather than quietly refute a prediction",
           f"authsrv says {want}, module says {t.OUR_SLOT_ITEM}")
     try:
         import agents
         keys = {s: k for s, (_i, k) in armour.items()}
         keys[cslot], keys[hslot] = "costume_body", "costume_head"
+        keys[0] = "starter_hammer"
         rows = {s: agents.item_template(k) for s, k in keys.items()}
     except Exception as exc:                                  # noqa: BLE001
         LEDGER.skip("the content slot cross-check", f"unavailable: {exc}")
@@ -443,6 +499,12 @@ else:
               "and both record tables are the content's masked file ids",
               f"content {recs} / {cost}, module {t.OUR_SLOT_RECORD} / "
               f"{t.OUR_COSTUME_RECORD}")
+        alltints = {s: r["dye_tint"] for s, r in rows.items()}
+        check(alltints == t.OUR_SLOT_TINT,
+              "and OUR_SLOT_TINT is the content's own dye_tint per slot -- "
+              "S8's null control compares an unoverridden row against it, so "
+              "a hand-copied value would make the control agree by accident",
+              f"content says {alltints}, module says {t.OUR_SLOT_TINT}")
         tints = (rows[2]["dye_tint"], rows[cslot]["dye_tint"],
                  rows[hslot]["dye_tint"])
         check(tints == (t.TINT_ARMOUR, t.TINT_COSTUME_BODY,

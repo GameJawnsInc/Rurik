@@ -491,6 +491,12 @@ own dye bytes (CpsBase+0x99/+0xA9) replacing the armour's — while the type
 byte is copied through untouched. §2 step E's "an item does not add a
 component" stands; the refinement is that a costume item EDITS OTHER SLOTS'
 cache rows rather than winning any ordering.
+**CONFIRMED AT RUNTIME 2026-08-23, §9.11** — the rows were read back out of
+CpsBase as the client wrote them, and this paragraph is right in every clause,
+including the one it was least sure of (the type byte copied through). Two
+refinements it could not have had: the "+0x99/+0xA9 dye bytes" are
+`m_slotItemData[7]+5` and `[8]+5`, the costume slots' own rows; and the flag
+change is an `or`, so it merges rather than replacing.
 
 **One measurement corrected in passing:** the 2026-08-22 wear census counted
 5,710 joins; one was a `0x006F` UNEQUIP (item id 0) misread by an
@@ -850,6 +856,10 @@ inside 0.1 s. The attribution is the clock's, not a guess.
 so why the rebuild re-reads records at all is not something this run can say —
 it would need a site inside the cache-build path (`0x0082EFAA`) rather than
 the resolver. Recorded so the next reader sees it rather than rediscovering it.
+**That site now EXISTS** (`compositetrap.py`'s `cache`/`cachesame`, §9.11) but
+has not been pointed at this question: neither §9.11 run drove the
+`armor_slots` probe, so the reset arms were never exercised. It is a run, not
+a build.
 
 **A free corroboration of §9.6's restated P2.** The type-2 shell is built at
 +0.00 and the type-1 shell at +4.58 — **4.5 seconds apart, on the clock**.
@@ -975,7 +985,183 @@ still unmeasured.
 say why one component is re-resolved more often than another; that is a
 question for the texture/blit path, not the resolver.
 
-**Still not settled**, and unchanged from §9.9: whether the override REPLACES
-the armour row or merges with it. Both records are fetched for every
-component, and which one survives into the atlas needs a site inside
-`0x0082EFAA` rather than at the record fetch. And no visual, as before.
+~~**Still not settled**, and unchanged from §9.9: whether the override
+REPLACES the armour row or merges with it.~~ **ANSWERED 2026-08-23, §9.11** —
+and the question had no one-word answer to give, which is why the record site
+could not produce one: the file id is REPLACED, the dye is REPLACED, the type
+byte is CARRIED THROUGH, and the flags are OR-merged. No visual, as before.
+
+## 9.11 REPLACE, MERGE and CARRY-THROUGH — the override is per FIELD, and the row is read back (2026-08-23)
+
+§9.9 and §9.10 both closed on the same sentence: *whether the override replaces
+the armour row or merges with it needs a site inside `0x0082EFAA` rather than
+at the record fetch.* This is that site. Two loopback runs, both costumes worn,
+predictions committed at `f522aaf` **before** either ran.
+
+### The function, and three arrays that close to the byte
+
+`0x0082EDA0` is `CpsBase::__thiscall f(slot, itemId, arg2)`, `ret 0xc`, and it
+asserts its own bound: **`CpsBase:173  slot < arrsize(m_slotItemId)`**, with
+`cmp esi,9` at `0x0082EDAE` giving the value. It owns three parallel nine-slot
+arrays, and they are contiguous:
+
+| offset | array | evidence |
+|---|---|---|
+| `+0x24 .. +0xB3` | `m_slotItemData[9]`, 16 B rows | the store displacement at `0x0082F0E0` + `shl edx,4` |
+| `+0xB4 .. +0xD7` | `m_slotItemId[9]` | `lea ecx,[esi+0x2d]`, `0x2d*4 = 0xB4` |
+| `+0xD8 .. +0xFB` | the costume override file ids[9] | `mov edx,0x36`, `0x36*4 = 0xD8` |
+
+Each offset is read from a **different** instruction's own operand, and then
+required to close: `0x24 + 9×16 = 0xB4` and `0xB4 + 9×4 = 0xD8`. Both joints
+land exactly (`test_compositetrap` §6). **OBSERVED.**
+
+That identity also re-reads §9.2's "+0x99/+0xA9 dye bytes": `0x99` is
+`m_slotItemData[7] + 5` and `0xA9` is `m_slotItemData[8] + 5` — byte 1 of each
+costume slot's **own cache row**, i.e. its dye tint. The costume's dye is not
+a loose pair of fields; it is read back out of the row the costume slot
+already built. The run confirms the ordering that requires: slot 7's row is
+written immediately before the four body overrides, and slot 8's immediately
+before the head override.
+
+### The answer, and it is per-field rather than one word
+
+The row's four dwords are `+0x00` file id, `+0x04` (byte 0 type, byte 1 dye
+tint, bytes 2–3 dye colours), `+0x08`, `+0x0C` flags. What the override does
+to each, MEASURED on the world composite of both runs:
+
+| field | what happens | witness |
+|---|---|---|
+| file id | **REPLACED** outright | `mov [ebp-8],eax`; every overridden row carries the costume record |
+| dye tint / colours | **REPLACED** from the costume slot's own row | head slot reads tint **35**, colours **10** |
+| type byte | **CARRIED THROUGH** untouched | every row keeps the ARMOUR's wire type |
+| flags | **MERGED** (`or edx,0x20000006`) | opcode `0x81 /1`, not a `mov` — **but see the limit** |
+
+So "replace or merge" had no single answer to give, which is why neither
+earlier run could produce one from the resolver.
+
+### The thirteen writes, in the order the client made them
+
+One 20 ms burst at +4.85 s (run 2, capture `20260823T173517`; run 1
+`20260823T172510` is identical field for field):
+
+```
+slot 0  item 1  record 39776  type 15  tint  6   flags 0x22201000   the weapon
+slot 2  item 3  record    91  type  7  tint 19   the armour goes in first,
+slot 5  item 4  record    90  type  4  tint 19   every slot, tint 19
+slot 3  item 5  record    94  type 19  tint 19
+slot 6  item 6  record    92  type 13  tint 19
+slot 4  item 7  record    93  type 16  tint 19
+slot 7  item 8  record  2806  type 44  tint  0   the costume BODY's own row
+slot 5  item 4  record  2805  type  4  tint  0   boots  <- overridden
+slot 3  item 5  record  2808  type 19  tint  0   legs
+slot 6  item 6  record  2807  type 13  tint  0   gloves
+slot 2  item 3  record  2806  type  7  tint  0   chest
+slot 8  item 9  record  2654  type 45  tint 35   the costume HEAD's own row
+slot 4  item 7  record  2654  type 16  tint 35   head   <- overridden
+```
+
+Read the before/after on any one slot and the per-field answer is visible
+without any disassembly: slot 5 goes `90 / type 4 / tint 19` to
+`2805 / type 4 / tint 0`. **The record changed, the tint changed, the type
+byte did not.**
+
+### S2 was REFUTED, and the refutation is the finding
+
+The prediction as written said `m_slotItemId` would hold our item ids at our
+**wire** slots, and reasoned that otherwise the dye branch's `cmp esi,4` would
+be about LEGS and make no sense. The client refuted it and supplied the
+alternative. `m_slotItemId = (1, 0, 3, 5, 7, 4, 6, 8, 9)`, i.e.
+
+| wire slot | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| | weapon | offhand | chest | boots | legs | gloves | head | cos. body | cos. head |
+| **CpsBase slot** | 0 | 1 | 2 | **5** | **3** | **6** | **4** | 7 | 8 |
+
+**THREE independent fields agree on that permutation** — the item ids, the
+armour record each slot resolved, and the row's type byte — which is what
+makes it a measurement rather than a rescue. And it dissolves the puzzle the
+prediction was built around: **CpsBase slot 4 is the HEAD**, so
+`0x0082EFEA`'s `cmp esi,4` reads exactly right — the head takes the head
+costume's dye, every other slot takes the body costume's.
+
+S4 was printed as REFUTED by run 1 for the same reason and nothing else: the
+CLAIM held on every slot, the INDEXING did not, and one wrong table made five
+right rows look wrong. Re-keyed, it passes 7 of 7. **This is the second
+mis-specified prediction in this arc** (§9.6's P2 was the first) and both were
+mis-specified the same way — an assumption smuggled into the prediction's
+*frame* rather than into its content.
+
+### ⚠ AND THE PERMUTATION IS NOT A PROPERTY OF CpsBase
+
+Run 2 held its client 90 s longer and caught something run 1 did not. At
+**+93.93 s and +93.99 s**, two further CpsBase instances built five slots each
+— `0x27348538` and `0x1C56E7A0`, `m_slotItemId = (1, 0, 3, 4, 0, 6, 7, 0, 0)`
+— and **they index by the WIRE slot**: their slot 3 took record **90**
+(boots), where the world agent's slot 3 took 94 (legs). Records and item ids
+agree with each other on the wire ordering, so this is not noise.
+
+`slot` is an **argument**, so the ordering belongs to the CALLER, not to
+CpsBase. What can be said: the **in-world dressing path** uses the permutation
+above, and it is the path every result in §9.9–§9.11 comes from — it is the
+only instance carrying costumes, an override array, or the legs item at all.
+**What those two late instances ARE is NOT identified**, and no guess is
+recorded here: five slots, no legs, no costumes, 0.06 s apart, 89 s into an
+idle hold. Naming them is the next question, and until it is answered the
+permutation is scoped to the in-world path rather than stated of the class.
+
+### The rest, scored
+
+- **S3 REPLACE — PASS.** Every overridden slot's row carries the costume
+  record: chest 2806, legs 2808, head 2654, boots 2805, gloves 2807, and each
+  costume slot its own. The armour record that was there 10 ms earlier is gone.
+- **S5 flags — PASS, with its limit printed by the tool itself.** The row
+  carries `0x20000006`. **This run cannot separate the OR from an assignment**,
+  because our armour rows and our costume rows both declare `0x20001006` and
+  both readings predict the same dword. The `or` at `0x0082EFD4` is static
+  evidence only; the discriminator would be an armour row carrying a bit
+  outside `0x20001006`.
+- **S6 — the run expands AT REGISTRATION.** The override array holds **five
+  distinct ids**, each the right component for its body part:
+  `[_, _, 2806, 2808, 2654, 2805, 2807, 2806, 2654]`. So §9.9's RECONSTRUCTION
+  ("the client walks from a computed run base") is sited **upstream** of this
+  function — by the time the cache is built the expansion is already done and
+  component-keyed. It is not refuted; it is placed.
+- **S7 dye — PASS, decisively on the head half.** The head slot reads tint
+  **35** and colours **10**, both unique to `costume_head`. **The body half is
+  NOT decisive and the tool says so**: `costume_body` declares tint 0, which is
+  also what an unwritten row holds, so slots reading 0 agree without proving.
+- **S8 the null control — PASS, n=1.** The weapon is the only worn slot no
+  costume covers; its override entry is zero and its row keeps its own type
+  (15), tint (6), colours (0) and flags (`0x22201000`) — `starter_hammer`'s
+  declared bytes exactly. Without it, "every overridden row changed" has
+  nothing to be measured against. n is one and is printed rather than smoothed.
+
+### Free, and worth recording
+
+- **The row's file id has bit 31 CLEARED.** Our armour rows go on the wire as
+  `0x8000005B`; the cache row holds `0x0000005B`. The client strips the
+  reserved bit before storing, which is consistent with §9.4 and closes a loose
+  end nothing had looked at.
+- **`cachesame` (`0x0082F0A3`, the re-set exit) fired ZERO times in both
+  runs.** Armed precisely so a path that does not run is reported as not
+  running rather than as absent.
+- **`row+0x08` is zero on all 23 writes** across every instance. Unread.
+
+### Two tool defects the runs paid for
+
+1. `_report` keys its census on the captured values and these captures hold
+   arrays. The **first live run trapped everything it was built to trap and
+   then died with `unhashable type: 'list'`** — after the client had exited,
+   so every hit was in memory and none reached the page. Fixed on both sides
+   (tuples in the capture, coercion in `_report`) and pinned by a regression
+   check, because a formatting bug that eats a run is worse than a wrong number.
+2. `TOTALS` counted inside the per-hit loop, which the bulky-site `continue`
+   skips — so a run whose sites were all summarised printed `TOTALS: cache 0`
+   directly under `CENSUS: cache -- 13 hits`. Counted before the skip now.
+
+### Still open
+
+Whether the flags are OR-ed or assigned (needs an armour row with a bit
+outside `0x20001006`); what the two wire-ordered CpsBase instances are; and
+`row+0x08`, which nothing in this arc has ever seen non-zero. No visual: both
+runs' harness frames land on the load screen, as before.

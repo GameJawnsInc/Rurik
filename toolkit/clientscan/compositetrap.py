@@ -107,13 +107,18 @@ and the four dwords land in the row at `[edx+edi+0x24]` at one of two exits:
 still 0) and `0x0082F0A3` when the same item was re-set. Both are armed;
 leaving one off would make a silent path look like an absent one.
 
-  S2  `m_slotItemId` holds OUR wire item ids at OUR wire slots — 3..7 in
-      slots 2..6, 8 in slot 7, 9 in slot 8. A different arrangement means
-      CpsBase re-indexes the wire slot and §9.2's slot vocabulary needs a
-      second column. This is not bookkeeping: the dye branch above singles out
-      **slot 4**, which on the wire is LEGS, and reads the costume HEAD's row
-      for it. Either that is what the client does, or the index is not the
-      wire slot, and S2 is what tells them apart.
+  S2  **RESTATED after the first run, 2026-08-23, and the restatement is the
+      finding.** The original form said `m_slotItemId` holds our wire item ids
+      at OUR WIRE SLOTS, and reasoned that if it did not, the dye branch's
+      `slot == 4` would be about LEGS and make no sense. The run refuted the
+      identity and supplied the alternative: **CpsBase re-indexes**, to
+      `CPS_SLOT_OF_WIRE` below — weapon, offhand, chest, legs, head, boots,
+      gloves — under which slot 4 is the **HEAD** and the branch reads
+      exactly right. It is a measurement rather than a rescue because THREE
+      independent fields agree on the same permutation (item ids, the armour
+      record resolved per slot, and the row's type byte), and it stays
+      refutable both ways for later runs: an identity arrangement refutes it,
+      and so does any other permutation.
   S3  REPLACE, on the file id: an overridden slot's row carries the COSTUME's
       record (2805..2808 / 2654), never the armour's (90..94). This is the one
       §9.9 and §9.10 could not reach.
@@ -121,6 +126,10 @@ leaving one off would make a silent path look like an absent one.
       ARMOUR's wire type (7/4/19/13/16), never the costume's 44/45. The
       sharpest of the set, because it is the single field where the armour
       wins — and it is what makes the answer per-field rather than one word.
+      **Scored through S2's permutation**, which the first run's report
+      printed as a refutation for exactly that reason: the CLAIM held on every
+      slot, the INDEXING did not, and one wrong table made five right rows
+      look wrong.
   S5  The flags carry 0x20000006. **Stated with its own limit: this run
       CANNOT separate the OR from an assignment**, because our armour rows and
       our costume rows both declare 0x20001006, so both readings predict the
@@ -139,6 +148,11 @@ leaving one off would make a silent path look like an absent one.
       also what an unwritten row holds**, so slots reading 0 are ambiguous
       between "the costume's tint" and "row 7 not built yet". The head half
       carries S7 alone.
+  S8  The NULL CONTROL, added after the first run supplied one for free: a
+      slot whose override entry is ZERO keeps its own item's type byte AND its
+      own dye tint. With both costumes worn the weapon is the only such slot,
+      so n is small and the report says so — but without it, "every overridden
+      row changed" has nothing to be measured against.
 
 THE CONTROL, and it is `commandertrap.py`'s lesson wired in rather than
 restated: **the base lookup MUST fire.** It runs for every composited
@@ -198,11 +212,38 @@ COSTUME_FLAG_BITS = 0x20000006
 #: test_compositetrap §6, so drift goes red rather than quiet: equip slot ->
 #: the wire item id our server puts in it. 3..7 are STARTER_ARMOUR; 8 and 9
 #: arrive only with --costume / --costume-head.
-OUR_SLOT_ITEM = {2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9}
+OUR_SLOT_ITEM = {0: 1, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9}
 #: The same slots -> the masked composite record content/items.toml declares.
 OUR_SLOT_RECORD = {2: 91, 3: 90, 4: 94, 5: 92, 6: 93}
 #: ... and the wire item type, which S4 says survives the override untouched.
-OUR_SLOT_TYPE = {2: 7, 3: 4, 4: 19, 5: 13, 6: 16, 7: 44, 8: 45}
+OUR_SLOT_TYPE = {0: 15, 2: 7, 3: 4, 4: 19, 5: 13, 6: 16, 7: 44, 8: 45}
+#: ... and the declared dye tint, which S8 says an UNOVERRIDDEN slot keeps.
+OUR_SLOT_TINT = {0: 6, 2: 19, 3: 19, 4: 19, 5: 19, 6: 19, 7: 0, 8: 35}
+
+#: MEASURED 2026-08-23 (§9.11). S2's original form assumed CpsBase indexed by
+#: the WIRE equip slot; the first run refuted that, and this permutation is
+#: what it read instead -- wire slot -> CpsBase slot. It is a MEASUREMENT and
+#: not a rescue because THREE independent fields agree on it: the item ids in
+#: `m_slotItemId`, the armour record each slot resolved, and the row's type
+#: byte. CpsBase's own order is weapon, offhand, chest, LEGS, HEAD, BOOTS,
+#: GLOVES, costume body, costume head.
+#:
+#: It also explains the branch that made S2 worth stating at all. The dye
+#: selector at 0x0082EFEA tests `slot == 4`, which on the wire is legs and
+#: read as nonsense; in CpsBase's order slot 4 is the **HEAD**, so the rule is
+#: simply "the head takes the head costume's dye, everything else takes the
+#: body costume's."
+#:
+#: For any LATER run this is a prediction and stays refutable in both
+#: directions: an identity arrangement refutes it (the permutation would have
+#: been a fluke of one load), and so does any other permutation.
+CPS_SLOT_OF_WIRE = {0: 0, 1: 1, 2: 2, 3: 5, 4: 3, 5: 6, 6: 4, 7: 7, 8: 8}
+
+
+def _by_cps(d):
+    """Re-key a WIRE-slot table into CpsBase's own slot order."""
+    return {CPS_SLOT_OF_WIRE[w]: v for w, v in d.items()
+            if w in CPS_SLOT_OF_WIRE}
 #: The two costume records we wear, by the slot that names them.
 OUR_COSTUME_RECORD = {7: 2806, 8: 2654}
 #: content/items.toml's declared dye tints. Three distinct values is what
@@ -289,11 +330,16 @@ def _cap_slotcache(ctx, reader):
     row = ct._dw(reader, cps + CPS_ITEMDATA + slot * CPS_ROW, 4)
     ids = ct._dw(reader, cps + CPS_ITEMID, CPS_SLOTS)
     ovr = ct._dw(reader, cps + CPS_OVERRIDE, CPS_SLOTS)
-    args = ct._dw(reader, ctx.Ebp + 4, 3)      # [ebp+8], [ebp+0xc], [ebp+0x10]
+    # [ebp+8] and [ebp+0x10] are SCRATCH by the time either exit is reached
+    # (0x0082F079 stores slot*16 and slot+0x2d over them); only [ebp+0xc] --
+    # the item id -- survives, and the first run printed the scratch under an
+    # "item id" label because this read started one dword early. It was
+    # self-consistently wrong, which is the kind that survives a glance.
+    args = ct._dw(reader, ctx.Ebp + 8, 2)          # [ebp+8], [ebp+0xc]
     if not row or not ids or not ovr:
         out["VERDICT"] = f"CpsBase 0x{cps:08X} unreadable"
         return out
-    out["item id (arg1)"] = args[1] if args else None
+    out["item id"] = args[1] if args else None
     out["file id"] = row[0]
     out["record"] = row[0] & ~FILE_ID_RESERVED_BIT
     out["type byte"] = row[1] & 0xFF
@@ -301,8 +347,12 @@ def _cap_slotcache(ctx, reader):
     out["dye colors"] = (row[1] >> 16) & 0xFFFF
     out["row+8"] = row[2]
     out["flags"] = row[3]
-    out["m_slotItemId"] = list(ids)
-    out["override"] = list(ovr)
+    # Tuples, not lists: `_report` keys its census on the captured values and
+    # a list is unhashable, which cost one completed run before this line said
+    # so. `commandertrap._report` now coerces as well -- belt and braces,
+    # because the failure only shows up after the client has exited.
+    out["m_slotItemId"] = tuple(ids)
+    out["override"] = tuple(ovr)
     over = ovr[slot]
     mark = ""
     if over:
@@ -312,7 +362,7 @@ def _cap_slotcache(ctx, reader):
                 else f"  <-- override 0x{over:08X} SET but the row kept "
                      f"0x{row[0]:08X} (S3 REFUTED)")
     out["VERDICT"] = (
-        f"slot {slot} item {out['item id (arg1)']} -> file 0x{row[0]:08X} "
+        f"slot {slot} item {out['item id']} -> file 0x{row[0]:08X} "
         f"(record {out['record']}) type {out['type byte']} "
         f"tint {out['dye tint']} flags 0x{row[3]:08X}{mark}")
     return out
@@ -395,7 +445,7 @@ def _cache_timeline(sites, hits, limit=60):
         out.append(
             f"  +{h.get('t', 0.0) - t0:7.2f}s  [{order[h['slot']]:9}] "
             f"cps 0x{c['CpsBase']:08X} slot {c['slot']}  item "
-            f"{c.get('item id (arg1)')!s:>4}  record {c['record']!s:>6}  "
+            f"{c.get('item id')!s:>4}  record {c['record']!s:>6}  "
             f"type {c['type byte']:>3}  tint {c['dye tint']:>3}  "
             f"flags 0x{c['flags']:08X}")
     if len(rows) > limit:
@@ -432,16 +482,25 @@ def _analyse_cache(sites, hits):
         L.append(f"  0x{cps:08X}: {len(cs)} write(s), final m_slotItemId="
                  f"{cs[-1]['m_slotItemId']}")
 
+    # Every table below is OURS, keyed by WIRE slot, re-keyed once into
+    # CpsBase's own order. S2 is what licenses the re-key, so it is scored
+    # first and everything after it is explicitly downstream of that.
+    cps_item = _by_cps(OUR_SLOT_ITEM)
+    cps_record = _by_cps(OUR_SLOT_RECORD)
+    cps_type = _by_cps(OUR_SLOT_TYPE)
+    cps_tint = _by_cps(OUR_SLOT_TINT)
+    cps_head = CPS_SLOT_OF_WIRE[6]
+
     # The instance that wears OUR items. There can be two -- §9.6 saw the
     # character-select doll and the world agent build in one session -- and
     # scoring the doll's empty slots as a refutation would be a rig error.
     def worn(cs):
         ids = cs[-1]["m_slotItemId"]
-        return sum(1 for s, i in OUR_SLOT_ITEM.items()
+        return sum(1 for s, i in cps_item.items()
                    if s < len(ids) and ids[s] == i)
     best = max(sorted(inst), key=lambda k: worn(inst[k]))
     L.append(f"  scoring 0x{best:08X} -- it carries {worn(inst[best])} of our "
-             f"{len(OUR_SLOT_ITEM)} slots")
+             f"{len(cps_item)} slots")
 
     final, ids = {}, inst[best][-1]["m_slotItemId"]
     for c in inst[best]:
@@ -449,12 +508,21 @@ def _analyse_cache(sites, hits):
     ovr = inst[best][-1]["override"]
 
     got = {s: ids[s] for s in range(min(CPS_SLOTS, len(ids))) if ids[s]}
-    mis = {s: v for s, v in got.items() if OUR_SLOT_ITEM.get(s) != v}
-    s2 = (f"REFUTED -- CpsBase re-indexes the wire slot: {mis} against our "
-          f"{OUR_SLOT_ITEM}" if mis else
-          f"PASS -- slots {sorted(got)} hold our own item ids at our own "
-          f"wire slots")
-    L.append(f"S2 m_slotItemId is the WIRE slot: {s2}")
+    mis = {s: v for s, v in got.items() if cps_item.get(s) != v}
+    identity = all(OUR_SLOT_ITEM.get(s) == v for s, v in got.items())
+    if not mis:
+        s2 = (f"PASS -- slots {sorted(got)} hold our item ids in CpsBase's "
+              f"MEASURED order {CPS_SLOT_OF_WIRE} (wire -> CpsBase)")
+    elif identity:
+        s2 = (f"REFUTED the other way -- this run indexes by the WIRE slot, "
+              f"so the measured permutation was a fluke of one load: {got}")
+    else:
+        s2 = (f"REFUTED -- a THIRD arrangement: {mis} against the measured "
+              f"{cps_item}")
+    L.append(f"S2 m_slotItemId in CpsBase's measured order: {s2}")
+    if mis:
+        L.append("   S3..S8 are scored through that order, so treat them as "
+                 "unkeyed until this line is resolved.")
 
     overridden = [s for s in sorted(final) if s < len(ovr) and ovr[s]]
     L.append(f"   override array (CpsBase+0xD8) = "
@@ -469,7 +537,7 @@ def _analyse_cache(sites, hits):
             for s in overridden
             if final[s]["record"] != (ovr[s] & ~FILE_ID_RESERVED_BIT)}
     kept = {s: final[s]["record"] for s in overridden
-            if OUR_SLOT_RECORD.get(s) == final[s]["record"]}
+            if cps_record.get(s) == final[s]["record"]}
     if bad3:
         s3 = f"REFUTED -- row != override at {bad3} (got, wanted)"
     elif kept:
@@ -482,9 +550,9 @@ def _analyse_cache(sites, hits):
     L.append(f"S3 REPLACE on the file id: {s3}")
 
     bad4 = {s: final[s]["type byte"] for s in sorted(final)
-            if s in OUR_SLOT_TYPE and final[s]["type byte"] != OUR_SLOT_TYPE[s]}
-    seen4 = {s: final[s]["type byte"] for s in overridden if s in OUR_SLOT_TYPE}
-    s4 = (f"REFUTED -- {bad4} against our declared {OUR_SLOT_TYPE}" if bad4
+            if s in cps_type and final[s]["type byte"] != cps_type[s]}
+    seen4 = {s: final[s]["type byte"] for s in overridden if s in cps_type}
+    s4 = (f"REFUTED -- {bad4} against our declared {cps_type}" if bad4
           else f"PASS -- the armour's own wire type survives the override "
                f"({seen4}); no row carries 44/45 in a slot we did not wear "
                f"a costume in")
@@ -501,7 +569,7 @@ def _analyse_cache(sites, hits):
              "is static evidence only.")
 
     vals = {s: ovr[s] & ~FILE_ID_RESERVED_BIT for s in overridden}
-    armour_over = [s for s in overridden if s in OUR_SLOT_RECORD]
+    armour_over = [s for s in overridden if s in cps_record]
     distinct = sorted({vals[s] for s in armour_over})
     if not armour_over:
         s6 = ("only the costume slots themselves carry an override -- the run "
@@ -516,31 +584,49 @@ def _analyse_cache(sites, hits):
               f"'walks from a computed run base' is sited past this function")
     L.append(f"S6 where the five-record run expands: {s6}")
 
-    head = [s for s in overridden if s == 4]
+    head = [s for s in overridden if s == cps_head]
     tints = {s: final[s]["dye tint"] for s in overridden}
-    if head and tints.get(4) == TINT_COSTUME_HEAD:
-        s7 = (f"PASS, and DECISIVELY -- slot 4 reads tint "
-              f"{TINT_COSTUME_HEAD}, which only `costume_head` declares, so "
-              f"the +0xA9 branch is m_slotItemData[8] byte 5")
-    elif head and tints.get(4) == TINT_ARMOUR:
-        s7 = (f"REFUTED -- slot 4 kept the ARMOUR tint {TINT_ARMOUR}; the dye "
-              f"is not replaced")
+    if head and tints.get(cps_head) == TINT_COSTUME_HEAD:
+        s7 = (f"PASS, and DECISIVELY -- the HEAD slot (CpsBase {cps_head}) "
+              f"reads tint {TINT_COSTUME_HEAD}, which only `costume_head` "
+              f"declares, so the +0xA9 branch is m_slotItemData[8] byte 5")
+    elif head and tints.get(cps_head) == TINT_ARMOUR:
+        s7 = (f"REFUTED -- the head slot kept the ARMOUR tint {TINT_ARMOUR}; "
+              f"the dye is not replaced")
     elif head:
-        s7 = (f"UNEXPECTED -- slot 4 reads tint {tints.get(4)}, neither the "
-              f"armour's {TINT_ARMOUR} nor the head costume's "
+        s7 = (f"UNEXPECTED -- the head slot reads tint {tints.get(cps_head)}, "
+              f"neither the armour's {TINT_ARMOUR} nor the head costume's "
               f"{TINT_COSTUME_HEAD}")
     else:
-        s7 = ("NO VERDICT -- slot 4 carries no override, and it is the only "
-              "slot whose tint value is unambiguous")
+        s7 = (f"NO VERDICT -- CpsBase slot {cps_head} (the head) carries no "
+              f"override, and it is the only slot whose tint is unambiguous")
     L.append(f"S7 the dye tint: {s7}")
-    others = {s: t for s, t in tints.items() if s != 4 and s in OUR_SLOT_RECORD}
+    others = {s: v for s, v in tints.items()
+              if s != cps_head and s in cps_record}
     if others:
         L.append(f"   the body half, NOT decisive: {others} against "
                  f"`costume_body`'s {TINT_COSTUME_BODY} -- which is also what "
                  f"an unwritten row holds, so these agree without proving.")
 
-    bad = bool(mis or bad3 or kept or bad4 or bad5
-               or (head and tints.get(4) != TINT_COSTUME_HEAD))
+    quiet = [s for s in sorted(final) if s < len(ovr) and not ovr[s]]
+    bad8 = {s: (final[s]["type byte"], final[s]["dye tint"])
+            for s in quiet if s in cps_type
+            and (final[s]["type byte"] != cps_type[s]
+                 or final[s]["dye tint"] != cps_tint[s])}
+    if not quiet:
+        s8 = ("NO CONTROL -- every written slot carries an override, so "
+              "nothing in this run shows an untouched row")
+    elif bad8:
+        s8 = (f"REFUTED -- {bad8} moved without an override, so the row is "
+              f"not a verbatim copy of the item's own bytes")
+    else:
+        s8 = (f"PASS -- CpsBase slot(s) {quiet} have a zero override and keep "
+              f"their own item's type AND tint. n={len(quiet)}, which is "
+              f"small and is said rather than smoothed")
+    L.append(f"S8 the null control (unoverridden slots): {s8}")
+
+    bad = bool(mis or bad3 or kept or bad4 or bad5 or bad8
+               or (head and tints.get(cps_head) != TINT_COSTUME_HEAD))
     return L, (1 if bad else 0)
 
 

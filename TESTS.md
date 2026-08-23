@@ -6172,26 +6172,37 @@ Every one of these, in the order they were written:
   `[8]+5` — byte 1 of each costume slot's own row — and that the override
   `or edx,0x20000006` really is opcode 0x81 /1 rather than a MOV, next to the
   `mov [ebp-8],eax` that overwrites the file id, which is why "replace or
-  merge" is a per-field question. §7 scores `_analyse_cache` on synthetic hits
-  and breaks it eight ways: no cache hit at all (rc **None**, NO VERDICT — an
-  unwatched row and an unwritten row are one picture); a row keeping the
-  ARMOUR record with its override set (refutes S3, the single result the run
-  exists for); a costume wire type reaching an armour slot's type byte
-  (refutes S4); slot 4 keeping tint 19 (refutes S7 in the only slot whose
-  value is unambiguous); our item ids at slots we never sent them to (refutes
-  S2, after which S7's slot-4 reading would be about a different body part);
-  one override id repeated (S6's OTHER branch — a result that moves §9.9's
+  merge" is a per-field question. **§7's fixture is the first live run's own
+  reading, verbatim** — CpsBase's measured slot order, the override array it
+  held, the thirteen rows it wrote — because synthesising a tidier arrangement
+  would let the analyser pass on a shape the client does not produce, and the
+  tidier arrangement is precisely what S2's first form assumed and the client
+  refuted. It then breaks the analyser ten ways: no cache hit at all (rc
+  **None**, NO VERDICT — an unwatched row and an unwritten row are one
+  picture); a row keeping the ARMOUR record with its override set (refutes S3,
+  the single result the run exists for); a costume wire type reaching an armour
+  slot's type byte (refutes S4); the head slot keeping tint 19 (refutes S7 in
+  the only slot whose value is unambiguous); an unoverridden row that moved
+  anyway (refutes S8, the null control); **both** S2 directions — the wire
+  identity, which would mean the measured permutation was a fluke of one load,
+  and a third arrangement that is neither, each reported as its own case; one
+  override id repeated (S6's OTHER branch — a result that moves §9.9's
   reconstruction downstream rather than a failure); an all-zero override array
-  (NO VERDICT on S3–S7, because a run without `--costume` and a costume path
+  (NO VERDICT on S3–S8, because a run without `--costume` and a costume path
   that never fired look identical); and two CpsBase instances, where the
   analyser must score the one wearing our items rather than the
-  character-select doll's empty slots. §8 pins `OUR_SLOT_ITEM` to
-  `authsrv.py`'s own `STARTER_ARMOUR` source and the slot types, records and
-  dye tints to `content/items.toml`, including the deliberately awkward line:
+  character-select doll's empty slots. One more guard sits beside them and was
+  earned the hard way: `_report` keys its census on captured values, and the
+  FIRST live run of these sites trapped everything it was built to trap and
+  then died with `unhashable type: 'list'` after the client had exited, losing
+  the lot — so the check drives real `_report` over list-valued captures past
+  the census threshold. §8 pins `OUR_SLOT_ITEM` to `authsrv.py`'s own
+  `STARTER_ARMOUR` source and the slot types, records and dye tints to
+  `content/items.toml`, including the deliberately awkward line:
   `costume_body`'s tint is **0**, which is also what an unwritten row holds,
   so the pin exists to stop the module claiming the body half of S7 decides
   anything. Needs the pinned exe for §§1-2/§6 and the vault for §5, all
-  SKIP-declared; floor 48),
+  SKIP-declared; floor 53),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
