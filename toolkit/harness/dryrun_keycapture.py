@@ -235,8 +235,22 @@ def main():
 
         print("\n3. bring up the stack and drive to the handshake")
         since = time.time()
+        # `--map 90` PINS THE CONTENT-ID PRE-FLIGHT, and it is a narrowing
+        # rather than a bypass. This run stops at LOGIN and never loads a map,
+        # so with no `--map` session.served_maps returns None -- "check every
+        # content row" -- and the dry-run is refused by a divergence on a map
+        # it was never going to open. That is not hypothetical: on 2026-08-23
+        # it failed here on Ascalon City (0x1B97D), whose file the loopback
+        # client had rewritten in its OWN archive during an earlier run --
+        # documented behaviour ("the client WRITES to Gw.dat when it patches
+        # content", make_run_dir.py's header), diverging it from the frozen
+        # dat_study copy the server reads. Naming the map this run would serve
+        # is exactly what `contentids.preflight(served=...)` is for, and map 90
+        # keeps a real check in scope: it is the map the loopback probes use,
+        # so a divergence THERE still refuses this launch.
         sess = subprocess.Popen(PY + [os.path.join(HERE, "session.py"),
-                                      "--until", "login", "--keep-open"],
+                                      "--until", "login", "--keep-open",
+                                      "--game-args", "--map 90"],
                                 stdout=sess_log, stderr=subprocess.STDOUT, text=True)
         procs.append(sess)
 
