@@ -5280,6 +5280,35 @@ Every one of these, in the order they were written:
   B-only pair asymmetry is printed, deliberately not asserted. Also ties the names to
   the invariants: section 1 goes red if `schema/overrides.json` renames or drops any of
   the five. Needs `vault/captures/live/`, skips declared if absent; floor 19),
+  `toolkit/authsrv/test_wearmap.py` (**the wear mapping — equip slot / wire item type /
+  composite record, and WHICH of the three places a piece on a body**,
+  studies/playercomposite §9.2's answer to §2 step E, proved four ways. §1 exercises
+  `wearmap.py`'s own tables and EVERY refusal direction — a composite flag in a hand
+  slot, an armour type in a hand slot, an unprecedented (slot, type) pair, a
+  non-composite body piece, a record type the wire type never pairs with — plus the
+  accepts that matter (a non-composite head item IS legal: the 132 festival masks; the
+  measured legs-on-Boots anomaly IS legal). §2 is the exe cross-witness in
+  `test_playerassembly` §7's pattern: `wearmap`'s transcribed 42-entry attach-class
+  table and per-class attach codes must EQUAL `composite.py`'s anchor-located
+  extraction (`_attach_class`, one image-wide parse or a refusal), and Head's two
+  record types must land on two distinct components through the exe's own
+  `s_components` — the shape a type→record function could never express. §3 is the
+  wire census: ≥6,445 declares / ≥5,709 worn joins with every worn item declared
+  first, every body-slot (slot, type) pair inside `WORN_TYPES` (the table IS the
+  corpus), every hand wear an attachable type — the classifier read from the exe
+  holding against wire it never saw — slots 2–5 composite in 100% of wears, the head
+  slot splitting ≥658 composite / ≥132 attach under ONE wire type (the flag
+  discriminates, never the type), and the three-leggings anomaly pinned (slots 3/4/5
+  of one agent, capture 20260817T231139 — the slot is a hanger). §4 is the archive
+  join: flags bit 2 ⇔ fileId-indexes-the-CpsData-table with ZERO mixed cells
+  (5,528/181), wire-type→record-type sets EQUAL `RECORD_TYPES_OF_WIRE` both ways, the
+  many-to-many counting proof (16→{17,19} at ≥435/≥223; 15←{7,44} at ≥1,153/≥97), and
+  the five STARTER_ARMOUR rows passing the full triple check — the same validation
+  `authsrv.py` runs at import so an authored row that would draw on the wrong body
+  part dies at the desk. The 5,709 floor carries its own correction: an earlier census
+  said 5,710, having misread a `0x006F` UNEQUIP through an order-probing heuristic;
+  the field order is now the handler's own. Needs `vault/captures/live/` for §3–§4 and
+  the study archive for §4, skips declared; floor 36),
   `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the
   three ways it answered confidently about a corpus it had not read: it took the
   newest **6 of 439** gamesrv captures, it read the c2s direction off the server's

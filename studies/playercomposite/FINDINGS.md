@@ -199,7 +199,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 **D. The table itself.** `s_type[race].count[prof][type]` (base `[0x010877E8]`, race bound `[0x010877F0]`, both .bss) → u16 id list → `s_items[id]` (base `[0x00BF9804]`, count `[0x00BF980C]`, stride 48). Both bases are runtime loads, not immediates — populated from **Gw.dat file `0x33EA`**, whose grammar is fully parsed (§1.18). For one player's base identity this yields a concrete manifest; e.g. group 0 / profession 1 needs 27 `(type, slot, file)` refs across both sexes — `type1 slot0 15018`, `type3 slot0 13279`, `type3 slot3 72506`, `type9 slot0 88850`, `type11 slot4 259753`, and so on.
 
 **E. Equipment overrides.** `0x015E`/`0x0161` declares an item; `0x006E`/`0x006F` puts its **item id** in one of 9 equip slots; the client caches a 16-byte `ItemData` at `CpsBase+0x24+16*slot`. For an item with `ITEM_FLAG_COMPOSITE` (`test byte [edi+0xC],4`), `ItemData.fileId` is **an index into `s_items`**, not a Gw.dat file id (`CpsPlayer 0x008302A0` passes it unmodified to `0x00833420`). The record's `hdr>>22` is its composite type; `s_components[type]` names the component it **replaces**. An item does not add a component.
-☒ **The wire item-type enum is not the composite type enum.** Observed wire types on `0x015E` (Body 7, Boots 4, Legs 19, Gloves 13, Head 16) do not line up with composite types 14–19. Whether the client derives one from the other or the composite type is purely a property of the record is unresolved — and it matters, because *our server picks the wire type*.
+~~☒ **The wire item-type enum is not the composite type enum.**~~ **ANSWERED 2026-08-23, §9.2: neither derives the other** (wire 16 → record types 17 AND 19; record 15 ← wire 7 AND 44 — many-to-many both ways), the composite type is purely a property of the record, and the wire type's only dressing-path consumers are the attach classifier (weapons/shields/masks), the slot-0 weapon-class cache and the bundle checks. `toolkit/authsrv/wearmap.py` is the mapping + the refusals; the server validates its armour rows against it at import.
 
 **F. Manifest.** `CpsApi 0x0082D7D0` walks each record's 11 slots and appends every non-zero id. The header's bit 17 (`0x20000`) skips a record; the top-10-bit gate (`>= 0x3800000`) only logs `Non-item composite %u requested for manifest` and falls through. `0x00833490` (`CpsData:479`, `:484 !(id & FILE_ID_RESERVED_BIT)` at 0x008334C5) is a **pure assert routine** — every exit is `xor eax,eax`, so it filters nothing.
 ~~☒ `FILE_ID_RESERVED_BIT` is unmeasured.~~ **MEASURED 2026-08-22: it is bit 31
@@ -250,7 +250,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 ## 4. Honest unknowns, ranked by how much they block authoring a player model
 
 1. **What is `arg0` of the resolver, whose bit 0 picks skeleton type 1 vs type 2?** Two complete twenty-shell sets exist (§1.22): fully animated (seq 220–289) and near-static (seq 10–17) on identical skeletons. Authoring against the wrong one produces a character that cannot animate. Trace `this+0x3E4` back through 0x0082DBB0/0x0082DBA0's callers. **Highest blocker — it is a one-bit decision with a total consequence.**
-2. **The wire item-type ↔ composite-type mapping.** Our server picks the wire type; if it does not induce the right composite type, every equipped piece lands on the wrong component or none. §2 step E.
+2. ~~**The wire item-type ↔ composite-type mapping.**~~ **ANSWERED 2026-08-23, §9.2 — the type induces NOTHING on the composite path** (many-to-many both ways; the record is authoritative; the type feeds the attach classifier, the weapon cache and the UI). `wearmap.py` + `test_wearmap.py` (36 checks).
 3. ~~**`FILE_ID_RESERVED_BIT` (CpsData:484, 0x008334C5).**~~ **MEASURED 2026-08-22, §9.1 — bit 31, and it is a real second id namespace.**
 4. **Whether the twenty type-1 shells and their component sets round-trip through our own writers.** `modelwrite.py`/`skelwrite.py` are proven byte-identical on monster geometry (6846/6846, 14571/14571) but no player component file has ever been walked, let alone re-emitted.
 5. **What group 3 is** — armour types 14–19 for all ten professions, no base identity, and unreachable from `CpsPlayer`'s `race < 3` (§1.24). Reserved, heroes, or a fourth armour campaign.
@@ -419,3 +419,85 @@ refuses such a file id before it becomes a seed (`FILE_ID_RESERVED_BIT`,
 pinned by `test_playerassembly` §8). What the reserved namespace is FOR — a
 computed/virtual id class, a second archive — is not settled here; what is
 settled is the bit, that it is real, and that authored ids must avoid it.
+
+## 9.2 The wire item-type ↔ composite-type question is ANSWERED: neither derives the other, and each vocabulary's real consumer is now read (2026-08-23)
+
+§4.2's blocker and §2 step E's ☒, resolved from both ends — the corpus by
+counting, the binary by reading every consumer on the dressing path. The
+module is `toolkit/authsrv/wearmap.py` (the ruling and the refusals),
+`test_wearmap.py` (36 checks, four witnesses) is the proof, and
+`authsrv.py` now validates `STARTER_ARMOUR` against it at import.
+
+**The counting proof (OBSERVED, 6,445 declares / 5,709 worn joins over the
+13 wire-bearing live captures).** Joining `0x015E`/`0x0161` declares to
+`0x006E`/`0x006F` wears and resolving composite fileIds through the CpsData
+table: wire type 16 (Head) pairs with record types **17 AND 19** (435/223);
+record type 15 is reached from wire types **7 AND 44** (1,153/97 — armour
+chest and costume). Many-to-many in BOTH directions, so the client cannot
+derive the composite type from the wire type nor the reverse. The composite
+type is a property of the RECORD the fileId names, exactly as step E's
+`hdr>>22 → s_components` path said. Corollaries measured exact: flags bit 2
+⇔ fileId-indexes-the-table (5,528 / 181 wears, zero mixed cells); slots 2–5
+composite 100%; the head slot goes both ways under ONE wire type (658
+composite vs 132 attach wears — the festival masks), discriminated by the
+FLAG, never by the type.
+
+**The binary side: the wire type's complete consumer list on the dressing
+path (OBSERVED).** ArenaNet's own name for the 16-byte cache is
+**`m_slotItemData`** (`CpsBase.cpp:147/:156` asserts) — and it is a verbatim
+copy of item bytes `+0x1C..+0x2B`, so the type byte rides at `+0x04`. Its
+readers:
+
+1. **The attach classifier** — CpsBase `0x0082E750`, the composite module's
+   ONLY reader of the cached type: `movzx type; dec; cmp 0x29; ja fail` into
+   a 42-entry class table (`0x0082E840`) and a 6-case switch (`0x0082E828`)
+   whose non-fail cases write one attach code each (1 / 0 / 2 / 3 / −1).
+   Type 16 (Head) and 24 (Shield) each have a class of their OWN; type 32's
+   is the one negative code; **all four armour body types (4, 7, 13, 19) are
+   the fail class BY DESIGN** — they are composited through the record, not
+   attached. Caller shape: `if classify(slot, &out) hang(out, slot)` — the
+   code is an attach-point index (RECONSTRUCTION as to which bone each
+   names; the fail/non-fail split is OBSERVED). Now extracted anchor-located
+   by `composite.py` `_attach_class` (refusing, one image-wide parse or
+   nothing) and transcribed in `wearmap.py` with transcription == extraction
+   pinned.
+2. **The weapon-class cache** — the equip store `0x0081BE10` reads the type
+   byte for **slot 0 only** and caches it at agent+0x48. Consumer of +0x48:
+   NOT FOUND here (plausibly attack animation selection; not needed for
+   step E).
+3. **The bundle checks** — both equip workers `cmp type, 6` (slot 0 only) to
+   raise pickup/putdown UI events `0x10000031`/`0x10000032`.
+
+That is the whole list. The armour path never reads it — placement flows
+`fileId → record → hdr>>22 → s_components`, full stop.
+
+**The slot is a hanger, and retail proves it itself (OBSERVED).** One agent
+in capture `20260817T231139` wears THREE DISTINCT leggings-class items
+(wire 19, record type 18 → legs component) in the Boots, Legs and Gloves
+slots simultaneously — five `0x006E` re-sends, slots 7/8 empty. If the slot
+placed the piece, two of the three would draw on feet and hands.
+
+**How a costume actually covers armour (OBSERVED, and it replaces a guess
+this arc almost carried).** Not walk order. Slots 7/8 feed a costume
+registry BY FILE ID (`0x8EE1D0`/`0x8EE2B0`); at `m_slotItemData` build time
+(`0x0082EFAA`) a per-armour-slot override array (CpsBase+0xD8) REPLACES the
+armour slot's fileId and forces `flags |= 0x20000006`, with the costume's
+own dye bytes (CpsBase+0x99/+0xA9) replacing the armour's — while the type
+byte is copied through untouched. §2 step E's "an item does not add a
+component" stands; the refinement is that a costume item EDITS OTHER SLOTS'
+cache rows rather than winning any ordering.
+
+**One measurement corrected in passing:** the 2026-08-22 wear census counted
+5,710 joins; one was a `0x006F` UNEQUIP (item id 0) misread by an
+order-probing heuristic. The order is now read from the handler itself
+(`0x008110F0` indexes the equip array with its second argument: agent,
+slot, item), and the true count is 5,709.
+
+**For the server** (`wearmap.py`, enforced at `authsrv` import): pick the
+three vocabularies CONSISTENTLY — the slot from the measured layout, the
+wire type from the corpus pairs (the UI and the classifier read it), flags
+bit 2 for every composited piece, and the record whose `hdr>>22` names the
+component you mean. The five starter rows pass the full triple check
+(record types 15/14/18/16/17). What `check_wear` refuses is exactly the
+combinations retail never produced — an unprecedented pair is an
+experiment, not content.

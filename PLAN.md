@@ -1399,9 +1399,22 @@ rect-records live in it, and a naive reader returns the NEXT section's bytes),
 and the study's own §1.22 "10–17 sequences" summary hid an outlier — the (0,5)
 sex-1 type-2 shell carries **115**, recorded in FINDINGS.
 
-**NEXT, in cost order:** (1) the wire item-type ↔ composite-type mapping
-(§4's number 2 — our server picks the wire type, and a wrong induction lands
-every equipped piece on the wrong component); ~~(2) `FILE_ID_RESERVED_BIT`~~
+**NEXT, in cost order:** ~~(1) the wire item-type ↔ composite-type mapping~~
+**ANSWERED 2026-08-23** (`studies/playercomposite` §9.2, `wearmap.py` +
+`test_wearmap.py` 36 checks): **neither enum derives the other** — wire type
+16 pairs with record types 17 AND 19, record type 15 with wire types 7 AND
+44, many-to-many both ways over 5,709 worn joins — so the composite type is
+purely a property of the RECORD (`hdr>>22 → s_components`), the equip slot
+is a hanger (retail wears three leggings-class items in Boots/Legs/Gloves
+slots of one agent), and the wire type's only dressing-path consumers are
+the CpsBase ATTACH CLASSIFIER (a 42-entry class table, extracted
+anchor-located by `composite.py`: shields, masks and weapons get attach
+codes; all four armour body types are the fail class by design), the slot-0
+weapon-class cache (agent+0x48) and the bundle events. Costumes cover
+armour by a registry that REPLACES the armour slots' `m_slotItemData` rows
+at build time (`flags |= 0x20000006`), not by any ordering. `authsrv.py`
+validates STARTER_ARMOUR against the mapping at import — an authored row
+that would draw on the wrong body part dies at the desk; ~~(2) `FILE_ID_RESERVED_BIT`~~
 **DONE 2026-08-22** (`studies/playercomposite` §9.1, `test_playerassembly` §8):
 it is **bit 31 (`0x80000000`)** — CpsData:468/:484 each `shr 0x1f; not; test
 al,1`, both pure asserts (authoring gate, not a runtime filter). Not
@@ -3065,8 +3078,10 @@ node counts.
    identities CLOSE** — group 0 / prof 1 / sex 0 resolves shell 15018 (the archivewrite wall)
    in a 173-file closure — and §5's two-witness acceptance criterion is institutionalised in
    `test_playerassembly.py`.
-4. **The wire item-type ↔ composite-type mapping** (§2 step E). Our server picks the wire type; if
-   it does not induce the right composite type, every equipped piece lands on the wrong component.
+4. ~~**The wire item-type ↔ composite-type mapping** (§2 step E).~~ **ANSWERED
+   2026-08-23** — it induces nothing: the record is authoritative, the type feeds the
+   attach classifier and the UI. The 2026-08-22 entry above carries the detail
+   (`studies/playercomposite` §9.2, `wearmap.py`).
 5. ~~**`npcdefs.py` refuses on the full 14-capture pool**~~ **FIXED 2026-08-22.** The
    guess was right: field 9 is the agent's speed AT THE CREATE TICK, not a definition
    constant. Measured on the full 15-capture pool — 9 of 2,931 creates over 2 of 189

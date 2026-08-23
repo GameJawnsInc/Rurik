@@ -36,6 +36,14 @@ WHAT IS EXTRACTED, each with the anchor that verifies it:
     and the eight (shift, width) fields tile all 32 bits with no gap and no
     overlap (FINDINGS 1.11). The closure picks the base among candidates;
     zero or two candidates is a refusal, never a guess.
+  * The ITEM-TYPE ATTACH CLASSIFIER (FINDINGS 9.2) -- CpsBase's only reader
+    of the wire item type: `movzx type; dec; cmp <max>; ja` into a byte
+    class table and a case switch whose non-fail cases each write one
+    attach code. Located from the `GetSlotItemData(slot).fileId` assert
+    the classifier itself raises, then parsed from its own instructions
+    (the cmp bound, the class-table operand, the jump-table operand) --
+    never from a hardcoded address. Exactly one image-wide parse or a
+    refusal; exactly one fail case; distinct attach codes.
 
 EVERY MISS REFUSES, NAMING THE BUILD. The addresses above are 38797's; the
 DISCOVERY is by string and instruction anchor, so on another build the
@@ -68,6 +76,7 @@ CONSTCOMPOSITE_FILE = b"P:\\Code\\Gw\\Const\\Tool\\ConstComposite.cpp\x00"
 CPSDATA_FILE = b"P:\\Code\\Gw\\Composite\\Data\\CpsData.cpp\x00"
 RACE_BOUND_EXPR = b"race < CHAR_APPEARANCE_RACES\x00"
 APPEARANCE_EXPR = b"slot < arrsize(s_appearanceSlot)\x00"
+SLOT_ITEM_EXPR = b"GetSlotItemData(slot).fileId\x00"
 
 N_CELLS = 132        # blitId + 6*sex + 12*profession: 6 * 2 * 11
 N_COMPONENTS = 8
@@ -209,6 +218,82 @@ def _appearance_slot(img, build):
     return closed[0], [img.dwords(closed[0] + 12 * i, 3) for i in range(8)]
 
 
+def _attach_class(img, build):
+    """The item-type attach classifier: (class table, out-per-class, VAs).
+
+    CpsBase's per-slot classifier is the composite module's ONLY reader of
+    the wire item type (FINDINGS 9.2): it asserts `slot <
+    arrsize(m_slotItemData)` and `GetSlotItemData(slot).fileId`, reads the
+    cached type byte at m_slotItemData+0x04, and runs
+
+        movzx eax, byte [slot_row + 0x28] ; dec eax
+        cmp eax, MAX ; ja <fail>
+        movzx eax, byte [eax + CLASS_TABLE]
+        jmp [eax*4 + JUMP_TABLE]
+
+    Every operand is parsed from the site itself. The anchor is the
+    `GetSlotItemData(slot).fileId` assert-expression load (`mov ecx, imm`),
+    because that expression names this function's own precondition; among
+    its load sites, exactly ONE must carry the cmp/movzx/jmp tail, or the
+    build gets a refusal.
+    """
+    expr_va = img.va_of(SLOT_ITEM_EXPR, "the GetSlotItemData(slot).fileId "
+                        "assert expr")
+    sig = b"\xB9" + struct.pack("<I", expr_va)          # mov ecx, <expr>
+    parses = []
+    pos = img.data.find(sig)
+    while pos >= 0:
+        w = img.data[pos:pos + 0x80]
+        c = w.find(b"\x83\xF8")                          # cmp eax, imm8
+        while c >= 0:
+            max_m1 = w[c + 2]
+            # ja rel8, then movzx eax, byte [eax+disp32], jmp [eax*4+disp32]
+            if w[c + 3:c + 4] == b"\x77" and w[c + 5:c + 8] == b"\x0F\xB6\x80" \
+                    and w[c + 12:c + 15] == b"\xFF\x24\x85":
+                table_va = struct.unpack_from("<I", w, c + 8)[0]
+                jt_va = struct.unpack_from("<I", w, c + 15)[0]
+                parses.append((max_m1, table_va, jt_va))
+                break
+            c = w.find(b"\x83\xF8", c + 1)
+        pos = img.data.find(sig, pos + 1)
+    if len(parses) != 1:
+        raise CompositeError(
+            f"the attach classifier parsed at {len(parses)} site(s) on build "
+            f"{build} (need exactly 1) -- the compiler idiom moved; re-derive "
+            f"before trusting any attach class")
+    max_m1, table_va, jt_va = parses[0]
+    n_types = max_m1 + 1                                 # types 1..n_types
+    class_of = list(img.read(table_va, n_types))
+    n_class = max(class_of) + 1
+    if sorted(set(class_of)) != list(range(n_class)):
+        raise CompositeError(
+            f"attach class table on build {build} skips a class: "
+            f"{sorted(set(class_of))} -- the table read is misaligned")
+    out_of = []
+    fails = 0
+    for i in range(n_class):
+        case_va = struct.unpack_from("<I", img.read(jt_va + 4 * i, 4), 0)[0]
+        body = img.read(case_va, 10)
+        if body[:2] == b"\x33\xC0":                      # xor eax, eax
+            out_of.append(None)
+            fails += 1
+        elif body[:5] == b"\x8B\x45\x0C\xC7\x00":        # mov eax,[ebp+0xc];
+            out_of.append(struct.unpack_from("<i", body, 5)[0])   # mov [eax],i
+        else:
+            raise CompositeError(
+                f"attach case {i} at 0x{case_va:08X} decodes to neither a "
+                f"value write nor the fail return on build {build}")
+    if fails != 1:
+        raise CompositeError(
+            f"{fails} fail classes in the attach switch on build {build} "
+            f"(the classifier has exactly one 'no attach' answer)")
+    real = [o for o in out_of if o is not None]
+    if len(set(real)) != len(real):
+        raise CompositeError(
+            f"attach codes repeat across classes on build {build}: {out_of}")
+    return class_of, out_of, {"attach_class": table_va, "attach_jump": jt_va}
+
+
 def extract(exe=None):
     """Read every table, verify every closure, return one dict. Or refuse."""
     if exe is None:
@@ -299,16 +384,21 @@ def extract(exe=None):
     # -- s_appearanceSlot, by its own closure ------------------------------
     app_va, app_rows = _appearance_slot(img, build)
 
+    # -- the item-type attach classifier, off its own assert ---------------
+    attach_class, attach_out, attach_vas = _attach_class(img, build)
+
     return {
         "exe": exe, "build": build,
         "vas": {"s_components": s_components_va, "s_format": s_format_va,
                 "s_dims": s_dims_va, "table_a": table_a_va,
                 "table_b": table_b_va, "s_file_flags": cps_va - 44,
-                "base_types": race_va - 16, "s_appearance_slot": app_va},
+                "base_types": race_va - 16, "s_appearance_slot": app_va,
+                **attach_vas},
         "s_components": s_components, "s_format": s_format,
         "s_dims": s_dims, "s_file_flags": s_file_flags,
         "geometry_slots": geometry_slots, "base_types": base_types,
         "appearance_slot": app_rows,
+        "attach_class": attach_class, "attach_out": attach_out,
         "cells": cells, "rects_checked": checked, "rects_degenerate": degenerate,
     }
 
@@ -335,6 +425,14 @@ def emit_content(tables, out_path):
         f"geometry_slots = {tables['geometry_slots']}",
         f"base_types = {tables['base_types']}",
         "[composite.tables.provenance]", *prov, "",
+        "[item_attach.classifier]",
+        "# class_of_type[i] is wire item type i+1's class; out_of_class is",
+        "# the attach code each class writes, -99 standing for the fail case",
+        "# (TOML has no null). studies/playercomposite/FINDINGS.md 9.2.",
+        f"class_of_type = {tables['attach_class']}",
+        f"out_of_class = "
+        f"{[-99 if o is None else o for o in tables['attach_out']]}",
+        "[item_attach.classifier.provenance]", *prov, "",
     ]
     for self_ix, shift, width in tables["appearance_slot"]:
         lines += [f"[appearance_slot.{self_ix}]",
@@ -387,6 +485,14 @@ def main():
     print(f"  atlas cells      {live} of {N_CELLS} content-bearing, "
           f"{t['rects_checked']} rects (+{t['rects_degenerate']} degenerate "
           f"zero-records), all LTRB-closed")
+    by_class = {}
+    for ty, cl in enumerate(t["attach_class"], start=1):
+        by_class.setdefault(cl, []).append(ty)
+    print(f"  attach classes   @0x{t['vas']['attach_class']:08X}  "
+          f"(types 1..{len(t['attach_class'])})")
+    for cl, out in enumerate(t["attach_out"]):
+        print(f"      class {cl} -> {'FAIL' if out is None else out}: "
+              f"types {by_class.get(cl, [])}")
     if args.emit_content:
         n = emit_content(t, args.emit_content)
         print(f"wrote {n} rows -> {args.emit_content}")

@@ -58,6 +58,7 @@ import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 import effects  # noqa: E402
 import pools  # noqa: E402
+import wearmap  # noqa: E402
 import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
@@ -1513,6 +1514,17 @@ STARTER_ARMOUR = (
     (6, "warrior_gloves", 5),
     (7, "warrior_head", 6),
 )
+# Every armour row must keep its three vocabularies consistent -- equip slot,
+# wire type, composite flag -- because the client draws a contradiction
+# rather than correcting it (the record picks the component, the type feeds
+# the attach classifier and the UI; wearmap.py's docstring is the ruling,
+# studies/playercomposite/FINDINGS.md 9.2 the evidence). Checked at import so
+# an authored row that would land on the wrong body part dies HERE, not as a
+# silent mis-render thirty seconds into a run.
+for _iid, _armour_key, _armour_slot in STARTER_ARMOUR:
+    wearmap.check_content_row(_armour_slot,
+                              agents.item_template(_armour_key))
+del _iid, _armour_key, _armour_slot
 # The 0x006E nine-dword array, filled from STARTER_ARMOUR. Position 0 is the
 # weapon and 1 is the offhand; 7 and 8 are the costume slots retail leaves at
 # zero on all thirty-one players observed in one town.
