@@ -5797,3 +5797,70 @@ use — `livesession.py` refuses it at preflight on `key_tapped` false — so th
 check is reporting a real hazard, and making it green would delete a signal
 rather than a problem. Clearing it means removing or renaming a 4 GB directory
 in the owner's vault, which is the owner's call, not a test edit.
+
+### 2026-08-23 — the stale run-live directory is GONE, and test_pinned is green
+
+`vault/run-live/2026-08-13_64fae3b1369b/` deleted (owner's instruction), 3.93 GB
+across 8 files. Verified before removal, not after: its `Gw.exe` was
+**byte-identical to 38849's pristine** — the copy now held at
+`vault/client/2026-08-20_21511009c460/` — so nothing unique died with it; its
+`Gw.log` carried **no `webgate.ncplatform.net` lines at all**, i.e. no live
+session ever ran there after the updater overwrote it, so its `Gw.dat` held no
+live-fetched content; and no code, document or capture depends on the path. The
+three live captures whose manifests NAME it (`20260817T183323`, `183756`,
+`231139`) anchor provenance on the **exe sha256 `7237b620…`**, which is
+committed in `pinned.BUILDS` under the 38833 row — and that binary was already
+gone, replaced in place by the updater on 2026-08-21, so their chain is no
+worse off than it was. `test_pinned` **150 checks, green**; `dhbuild.py` audits
+the whole vault clean with both surviving live builds key-tapped
+(`mutex=nopped name=renamed`), which the deleted one was not.
+
+**Affected-set state after the registration and the deletion, re-run on a
+CURRENT tree:** `test_handshake` 23 · `test_pinned` 150 · `test_buildid` 51 ·
+`test_buildpins` 40 · `test_updatecheck` 30, all green.
+
+⚠ **Two things that are NOT this arc's and are live on `main` right now**, both
+found by re-running against an up-to-date tree and both worth a peer session's
+attention. (1) `toolkit/authsrv/authsrv.py:12567` raises **`NameError: conn_id`**
+— the heading arm's new `cancel_on_move(send, state, conn_id)` from commit
+`3dcf9d5` ("Movement cancels the cast"), which `test_position_trust`'s extracted
+`_arm` closure cannot satisfy; **red identically on `main`**, so it is a real
+fault in that arc rather than a stale checker. (2) This worktree was **38
+commits behind `main`** and could not load content at all — a peer had written
+`vault/content/composite.toml` into the SHARED vault citing
+`toolkit/clientscan/composite.py`, which exists on `main` and did not exist
+here. The provenance gate refused exactly as designed; the cure was to
+fast-forward the worktree. **Both are the parallel-session hazard CLAUDE.md
+names, arriving through the vault rather than through git.**
+
+### 2026-08-23 — ★ RETAIL'S OWN CLIENT LOGS THE WARP, against ArenaNet's own server
+
+**OBSERVED, `live`, and found incidentally while verifying the vault deletion —
+this is a calibration datum the whole arc has never had.**
+`vault/run-live/2026-08-20_21511009c460/Gw.log` is a real live session (its
+`Gc::BeginRequest` lines hit `webgate.ncplatform.net` for
+`session/create`, `users/login`, `game_accounts` and `token`, and the build is
+stock-DH, which `cage`/`dhbuild` permit to point ONLY at ArenaNet). Twice in
+that session the client wrote:
+
+> `Error: Client pathing data out of sync with server.  You may observe your character 'warping' during movement.`
+
+**What this establishes:** the phenomenon this arc has spent nine runs on is a
+named, logged condition in ArenaNet's own client, and it fires against
+ArenaNet's own server. The warp is not purely an artifact of our server —
+retail desyncs too, and the client has a string for it.
+
+**What it does NOT establish, and the limits are severe:** n = **2 lines in one
+session**, with no rate, no denominator, no separation measurement, and no
+movetap beside it — nothing here touches our own measured rates, and it must
+not be quoted as "retail warps as much as we do". The trigger is unknown; the
+line may report the client's own reaction rather than a rendered teleport (our
+own REALFIX-E events are what a rendered teleport looks like, and no such
+instrument was running). It is also not new evidence about any candidate fix.
+
+**Why it is worth writing down anyway:** every rate this arc quotes is measured
+against an implicit baseline of "retail does not do this", and that baseline is
+now known to be **not zero**. The cheap follow-up is already in reach — the
+live corpus is six captures deep, and `Gw.log` is one file per run directory:
+count these lines across the live sessions and pair them against the wire, which
+is desk work needing no client run.
