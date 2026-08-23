@@ -674,18 +674,29 @@ def _analyse_clear(sites, hits):
           f"clear path was read as jumping past both write exits")
     L.append(f"R3 a clear is not a write: {r3}")
 
+    # SYMMETRIC, and the first run earned the correction. The notify is
+    # `call [eax+0x10]` at 0x0082EF4B -- THREE BYTES BEFORE the trap point --
+    # so a clear's own record fetches land just BEFORE its hit, not after. A
+    # forward-only window scored the first burst's five and missed the second
+    # burst's one entirely, printing 5 where the timeline shows 5 + 1.
     near = [h for h in recs
-            if any(0.0 <= h.get("t", 0.0) - c.get("t", 0.0) < 2.0
+            if any(abs(h.get("t", 0.0) - c.get("t", 0.0)) < 2.0
                    for c in clears)]
+    per = []
+    for b in burst:
+        lo = min(h.get("t", 0.0) for h in b) - 2.0
+        hi = max(h.get("t", 0.0) for h in b) + 2.0
+        per.append(sum(1 for h in recs if lo <= h.get("t", 0.0) <= hi))
     if near:
         idx = sorted({h["cap"].get("index") for h in near
                       if h.get("cap")})
-        r4 = (f"PASS -- {len(near)} record fetch(es) follow a clear within 2 s "
-              f"(indices {idx}), and no row was written in that window, so "
-              f"§9.8's reset-arm fetches come from the vtable notify at "
-              f"0x0082EF4B, not from the cache being refilled")
+        r4 = (f"PASS -- {len(near)} record fetch(es) sit within 2 s of a "
+              f"clear (indices {idx}; per burst {per}), and no row was "
+              f"written in those windows, so §9.8's reset-arm fetches come "
+              f"from the vtable notify at 0x0082EF4B rather than from the "
+              f"cache being refilled")
     else:
-        r4 = ("NOT SEEN -- no record fetch follows a clear, which contradicts "
+        r4 = ("NOT SEEN -- no record fetch near a clear, which contradicts "
               "§9.8's own timeline and would mean the two runs differ")
     L.append(f"R4 what the reset actually re-reads: {r4}")
     bad = bool(in_burst or (ids and ids != {0}))

@@ -6209,8 +6209,21 @@ Every one of these, in the order they were written:
   that can only recognise the answer it expects is not a scorer — and because
   the first statement of S5's limit was wrong in a way none of the other
   checks could catch (it claimed the run separated nothing, when the surviving
-  out-of-mask bit had already killed the assignment reading). Needs the pinned
-  exe for §§1-2/§6 and the vault for §5, all SKIP-declared; floor 59),
+  out-of-mask bit had already killed the assignment reading).
+  **§7b is the CLEAR analyser** (R1-R4, §9.8's reset arms): a clear never
+  reaches either row-write exit, so it needed its own site, and the analyser
+  is broken five ways -- no clear at all is **NO VERDICT** ("no reset reached
+  the client" and "the path is not what was read" are one picture); a row
+  write inside a clear burst REFUTES the static reading; an absent record
+  fetch reports NOT SEEN rather than passing on an absence; a single burst
+  DECLINES the already-empty control instead of scoring it; and with no clear
+  site armed the analyser prints nothing at all, so a run that never asked the
+  question does not emit a section implying it did. One check pins an ordering
+  the first live run earned: R4's window is SYMMETRIC because the notify sits
+  three bytes before the trap point, so a clear's own fetches land *before*
+  its hit, and a forward-only window silently dropped a whole burst's worth.
+  Needs the pinned exe for §§1-2/§6 and the vault for §5, all SKIP-declared;
+  floor 71),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

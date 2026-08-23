@@ -51,7 +51,7 @@ import compositetrap as t  # noqa: E402
 # then 48 / 49 / 52 / 53 / 59 / 60 / 70 as the slot-cache half, the _report
 # regression guard, the S2/S4/S8 restatements, S5's three readings, the
 # caller map and the CLEAR analyser landed the same day.
-LEDGER = checks.Ledger("composite trap", floor=70)
+LEDGER = checks.Ledger("composite trap", floor=71)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -560,6 +560,13 @@ check("R4 what the reset actually re-reads: PASS" in blob
       "R4 places §9.8's reset-arm fetches on the vtable notify rather than on "
       "the cache being refilled, and only when writes are absent from the "
       "same window")
+lines, _rc = t._analyse_clear(
+    RSITES, rhits(GOOD_CLEAR, recs=[(18.55, 90), (18.58, 94), (29.55, 90)]))
+check("per burst [2, 1]" in "\n".join(lines),
+      "R4's window is SYMMETRIC, and the first live run earned it: the notify "
+      "is `call [eax+0x10]` THREE BYTES before the trap point, so a clear's "
+      "own fetches land just BEFORE its hit. A forward-only window scored the "
+      "first burst's five and silently dropped the second burst's one")
 
 lines, rc = t._analyse_clear(RSITES, rhits([], recs=[(18.7, 90)]))
 check(rc is None and "never fired" in "\n".join(lines)

@@ -856,10 +856,13 @@ inside 0.1 s. The attribution is the clock's, not a guess.
 so why the rebuild re-reads records at all is not something this run can say —
 it would need a site inside the cache-build path (`0x0082EFAA`) rather than
 the resolver. Recorded so the next reader sees it rather than rediscovering it.
-**That site now EXISTS** (`compositetrap.py`'s `cache`/`cachesame`, §9.11) but
-has not been pointed at this question: neither §9.11 run drove the
-`armor_slots` probe, so the reset arms were never exercised. It is a run, not
-a build.
+~~**That site now EXISTS but has not been pointed at this question.**~~
+**ANSWERED 2026-08-23, §9.14, and the site had to be a THIRD one**: a clear
+never reaches either row-write exit, so the `cache` sites are blind to it by
+construction. With a `clear` site at `0x0082EF4E` the counts reproduce exactly
+— five fetches then one — and **the fetches are the RESIDUE rather than a
+re-dress**: each clear's notify rebuilds from the rows still populated, so the
+set shrinks as the clears proceed.
 
 **A free corroboration of §9.6's restated P2.** The type-2 shell is built at
 +0.00 and the type-1 shell at +4.58 — **4.5 seconds apart, on the clock**.
@@ -1378,3 +1381,100 @@ composites, not the character-select preview dolls of §7.
 
 What the two instances are, with movement excluded and operator input the
 standing candidate; and `row+0x08`, still zero everywhere.
+
+## 9.14 The reset arms explained: a clear is not a write, and its fetches are the RESIDUE (2026-08-23)
+
+§9.8 reported and refused to interpret: the `armor_slots` probe's two RESET
+arms — `0x006E` with nine zeros, which wears nothing — still produced record
+fetches, **five indices at +18.64 and one at +29.67**. It said the answer
+needed a site inside the cache-build path rather than the resolver. Run
+`20260823T185745`, build 38797, PASS, zero asserts, predictions R1–R4
+committed at `3223e42` before it ran.
+
+### The clear path, read first
+
+With `itemId == 0` the writer compares `m_slotItemId[slot]` against zero at
+`0x0082EF35`. An **already-empty** slot returns at `0x0082EF40` having done
+nothing. A **populated** one notifies through the vtable (`call [eax+0x10]`,
+`0x0082EF4B`), zeroes the 16-byte row (`0x0082EF5D`), zeroes
+`m_slotItemId[slot]`, and jumps to `0x0082F101` — **past both row-write
+exits**. So a clear is not a write, and the `cache` sites are blind to it by
+construction. The new `clear` site traps just before the memset, so the row
+being destroyed is still readable.
+
+### All four held
+
+| | prediction | result |
+|---|---|---|
+| R1 | the clear fires per POPULATED slot; a second reset clears strictly fewer | **6 → 1** |
+| R2 | every clear carries item id 0 | PASS |
+| R3 | no row write inside a clear burst | PASS |
+| R4 | fetches accompany the clears with no write in the window | PASS |
+
+**R1's numbers are the finding.** The first reset clears **six** slots —
+`[0, 2, 5, 3, 6, 4]`, the weapon plus all five armour pieces the login
+dressed. The second clears **exactly one, slot 6** — and between the resets
+the probe wore its leggings into wire position 5, which is CpsBase 6. So the
+second reset destroys precisely what the intervening `0x006F` built, at the
+permuted index, and nothing else. The already-empty control is not a separate
+arm; it is five slots' worth of silence inside the same message.
+
+### §9.8's counts reproduced, and now explained
+
+| clock | event | record fetches |
+|---|---|---|
+| +12.62 | `0x006F` leggings → wire 3 = **CpsBase 5** | 90, 94, 94 |
+| **+18.63** | **reset, 6 clears** | **90, 94, 94, 92, 93 — five** |
+| +23.65 | `0x006F` leggings → wire 5 = **CpsBase 6** | 94 ×3 |
+| **+29.66** | **reset, 1 clear (slot 6)** | **94 — one** |
+| +34.68 | array arm: legs@3 + boots@5 | 94 ×3, 90 ×3 |
+
+Five then one, matching §9.8 to the count. **The mechanism is that the fetches
+are the RESIDUE, not a re-dress**: each clear's notify rebuilds the composite
+from the rows still populated, so the set shrinks as the clears proceed. Note
+what is absent — **record 91, the chest, is never fetched during the reset**,
+though it was there at +4.73. The rows are zeroed one at a time and the
+rebuild reads what survives; a re-dress would have read all five.
+
+### An ordering correction the run earned
+
+The analyser's R4 window was forward-only, and it printed **5** where the
+timeline shows **5 + 1**. The reason is exact: the notify is
+`call [eax+0x10]` at `0x0082EF4B`, **three bytes before the trap point at
+`0x0082EF4E`**, so a clear's own record fetches land just *before* its hit.
+The forward window scored the first burst (whose later clears follow earlier
+clears' notifies) and silently dropped the second burst's single fetch. The
+window is symmetric now and the test pins the shape. **The run itself is
+unaffected** — it was scored by the pre-registered analyser, and the corrected
+per-burst accounting comes from the same timeline the report already printed.
+
+### The slot-is-a-hanger claim gets a third witness
+
+§9.8 argued it from the record site. The built rows now show it directly: the
+**same leggings (item 2)** produce record **94 → type 19** at CpsBase 5
+(+12.62), at CpsBase 6 (+23.65), and again in the array arm (+34.68) — three
+placements, one record, one type byte. And the array arm's second piece lands
+correctly too: item 3 → record 90 → type 4 at CpsBase 6. This run wore **no
+costume at all**, so it is an independent re-confirmation of §9.11's wire →
+CpsBase permutation from a third kind of event.
+
+### Free
+
+- **The class is named.** The vtable every run has measured is `0xA96B5C`, and
+  the virtual at `+0x1C` carries ArenaNet's own `CpsPlayer:255 ptr` and
+  `CpsPlayer:256 count`. The thing being dressed is a **CpsPlayer**. If
+  §9.11's two wire-ordered instances reappear, the report now says in one line
+  whether they are the same class.
+- **Reported and NOT chased**: the clear's notify (`0x00830540`) is
+  slot-7-specific and compares against a hardcoded composite record
+  `0xAF1 = 2801`, a costume-range id that appears nowhere in our data.
+- **`cachesame` has now fired zero times in six runs.** It was dropped from
+  this run's site list to make room for `clear` — a measured zero is what
+  makes a debug register spendable.
+
+### Still open
+
+What §9.11's two wire-ordered instances are (movement refuted, operator input
+the standing candidate); `row+0x08`, still zero everywhere; and why record 91
+in particular never appears in the reset residue, which this run reports
+rather than explains.

@@ -1483,9 +1483,11 @@ always 90 → 14. So §9.2's corpus-only "the slot is a hanger" now has an
 experimental twin on our own wire with the slot as the only variable. Free
 corroboration of §9.6's restated P2: the type-2 shell builds at +0.00 and the
 type-1 at +4.58, **4.5 s apart on the clock** — preview then world, argued
-from timing rather than call sites. Reported and NOT interpreted: the reset
-arms also fetch records, which needs a site inside the cache-build path
-(`0x0082EFAA`) to explain. ~~**The costume half of §9.2 stays untested**~~ **TESTED 2026-08-23, §9.9 —
+from timing rather than call sites. ~~Reported and NOT interpreted: the reset
+arms also fetch records~~ **EXPLAINED 2026-08-23, §9.14** -- and it needed a
+THIRD site, because a clear never reaches either row-write exit. With
+`compositetrap`'s `clear` site the counts reproduce exactly (five fetches then
+one) and **the fetches are the RESIDUE, not a re-dress**. ~~**The costume half of §9.2 stays untested**~~ **TESTED 2026-08-23, §9.9 —
 and it is bigger than the static read.** `content/items.toml` gained
 `costume_body` (every identity field measured off **25 declares in five live
 captures**; four fields marked OURS because retail declares it low-detail) and
@@ -1598,9 +1600,33 @@ agent-driven run cannot make -- which moves this to the owner's side. Already
 narrowed and it kills the cheapest guess: their record burst fetches index 11
 -> composite **type 1**, the animated shell, so they are full IN-WORLD
 composites, not §7's preview dolls.
+**AND §9.8's RESET ARMS ARE EXPLAINED (§9.14, R1-R4 registered at `3223e42`,
+all four held).** A clear is not a write: with `itemId 0` a populated slot
+notifies through the vtable (`0x0082EF4B`), zeroes its 16-byte row and jumps
+PAST both write exits, while an already-empty slot returns at `0x0082EF40`
+having done nothing. So the `cache` sites were blind to it by construction and
+a third site was needed. **R1's numbers are the finding**: the first reset
+clears SIX slots (weapon + all five armour), the second clears **exactly one,
+CpsBase 6** -- precisely what the intervening `0x006F` built, at the permuted
+index. The already-empty control is not a separate arm, it is five slots'
+worth of silence inside the same message. §9.8's counts reproduce to the
+number (five fetches at +18.63, one at +29.66) and **the fetches are the
+RESIDUE**: each clear's notify rebuilds from the rows still populated, so the
+set shrinks as the clears proceed -- record 91 is never fetched at all, which
+a re-dress could not produce. Free: the class is NAMED -- the vtable every run
+measured is `0xA96B5C` and its `+0x1C` virtual carries `CpsPlayer:255 ptr`, so
+the thing being dressed is a **CpsPlayer**; and the same leggings resolve
+record 94 -> type 19 at CpsBase 5, at CpsBase 6 and in the array arm, a THIRD
+witness for "the slot is a hanger" and an independent re-confirmation of
+§9.11's permutation from a run wearing no costume. One correction the run
+earned: R4's window was forward-only and printed 5 where the timeline shows
+5+1, because the notify sits THREE BYTES before the trap point so a clear's
+own fetches land just before its hit; symmetric now, pinned, and the run's
+verdict is unaffected. `test_compositetrap` 60 -> 71.
 **Still open**: what the two wire-ordered instances are (movement excluded,
 operator input the standing candidate), `row+0x08` which is still zero
-everywhere, and the standalone type-19 kind of head costume.
+everywhere, why record 91 in particular never appears in the reset residue,
+and the standalone type-19 kind of head costume.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
