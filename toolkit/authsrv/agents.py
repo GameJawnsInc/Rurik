@@ -362,6 +362,59 @@ def agent_update_flags(agent_id, flags):
     return [agent_id, flags]
 
 
+#: The five agent fields the client XORs at `0x005FEEA0`, as raw dwords, in the
+#: order the instructions read them. MEASURED, build 38797, pristine:
+#: `mov eax,[ecx+0xB4] / xor [ecx+0xB0] / xor [ecx+0x80] / xor [ecx+0x7C] /
+#: xor [ecx+0x78] / ret`. Four are float32 and one -- the plane at +0x80 -- is
+#: an int, which is why this is a dword XOR and not arithmetic on positions.
+CHECKSUM_FIELDS = (0xB4, 0xB0, 0x80, 0x7C, 0x78)
+
+
+def agent_position_checksum(agent_id, pos, plane, velocity=(0.0, 0.0)):
+    """GAME_SMSG 0x0023 -- ArenaNet's OWN movement-state checksum for one agent.
+
+    The client resolves `agent_id` in the SYNC array (`[agentMgr+0xE8]`, bounds
+    `+0xF0`, `Array.h:587 'index < m_count'`), XORs five raw dwords off that
+    agent at `0x005FEEA0` -- velocity y/x, the plane word, position y/x -- and
+    compares the result against field 2 (`0x005FD448 cmp eax,[edi+8]`). On a
+    MISMATCH it logs `Agent %u position out of sync with server` at level 2,
+    and on a match it says nothing. Handler `0x005FD3F0`, `AgMsg.cpp`.
+
+    THREE THINGS THIS IS NOT, and each one has cost an arc somewhere:
+
+    * It is NOT a correction. The handler logs and returns 1 -- no snap, no
+      SetPosition, no reply. It is a DIAGNOSTIC, and its whole output is a line
+      in the player's own `Gw.log`.
+    * It is NOT tolerant. The compare is integer equality over reinterpreted
+      float bits, so a 1-ulp position or an unmodelled velocity reads exactly
+      like a 3,000 u teleport. Use it to ask "did our writes apply EXACTLY",
+      never "are we close".
+    * It is NOT guaranteed to be heard. `agentMgr+0x1C8` suppresses the line
+      once the map-level pathing warning has fired (`0x005FC2F0`, called only
+      from the `Map.cpp` failure at `0x0084E0F2`). That latch is measured CLEAR
+      on loopback -- 0 of 29 loopback `Gw.log`s carry the pathing line -- but a
+      probe that hears nothing must check for it before claiming a match.
+
+    THE SENDER IS A RECONSTRUCTION AND THE NAME IS OURS. Retail sends this
+    opcode ZERO times in our live corpus (137 capture files, 20 sessions), so
+    what a real server puts in field 2 is inferred from the client's compare
+    rather than observed. The name comes from ArenaNet's own log string
+    ("position out of sync"); the client's own word for the message is unknown.
+    Full derivation: studies/movement/FINDINGS.md, 2026-08-23.
+    """
+    if len(pos) != 2:
+        raise ValueError(f"pos must be (x, y), got {pos!r}")
+    if len(velocity) != 2:
+        raise ValueError(f"velocity must be (vx, vy), got {velocity!r}")
+    plane = int(plane)
+    if not 0 <= plane <= 0xFFFFFFFF:
+        raise ValueError(f"plane {plane} is not a dword")
+    # XOR is commutative, so the client's read ORDER does not matter here --
+    # but the FIELD SET does, and CHECKSUM_FIELDS is what documents it.
+    return [agent_id, (_as_u32(pos[0]) ^ _as_u32(pos[1]) ^ plane
+                       ^ _as_u32(velocity[0]) ^ _as_u32(velocity[1]))]
+
+
 def agent_set_profession(agent_id, primary, secondary=0, custom=False):
     """GAME_SMSG 0x00A6 -- the profession pair: icons, roster, nameplate.
 

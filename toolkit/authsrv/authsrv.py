@@ -992,6 +992,15 @@ GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
 # agent_id + allegiance byte. The field that decides whether a click is an
 # attack or a conversation; the team token only decides colour.
 GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+# agent_id + a dword CHECKSUM of five fields off the agent's SYNC copy --
+# ArenaNet's own desync detector, decoded 2026-08-23 and never sent by retail in
+# our corpus. The client XORs +0xB4/+0xB0 velocity, +0x80 plane and +0x7C/+0x78
+# position (0x005FEEA0) and logs `Agent %u position out of sync with server`
+# when field 2 disagrees (handler 0x005FD3F0, AgMsg.cpp). IT ONLY LOGS: no snap,
+# no correction, return 1 -- the readout is the player's Gw.log, not the wire.
+# OFF unless --checksum-probe names a mode. See agents.agent_position_checksum
+# for the three ways this can mislead, and studies/movement/FINDINGS.md.
+GAME_SMSG_AGENT_POSITION_CHECKSUM = 0x0023
 # agent_id + float base + float modifier. The ONLY way to give an agent an
 # attack speed: without it the client's AvChar keeps the 0.0 its constructor
 # wrote and asserts m_attackInterval the moment a swing would animate. Unnamed
@@ -3409,6 +3418,46 @@ def _resync_verdict(state, now):
     return True, "resync", pos, plane, age, sep
 
 
+def checksum_model(state, reported, plane):
+    """Our best reconstruction of the client's five SYNC fields, as it sums them.
+
+    Pure, so the model is a test rather than a paragraph. Returns
+    `(pos, plane, velocity, why)`; `why` names the modelling choice so a run
+    can print the assumption it is being scored against instead of implying
+    there was not one.
+
+    THE HONEST STATE OF THIS MODEL: the client's `+0x78` is not the player's
+    position, it is the ORIGIN OF THE COPY'S CURRENT LEG, rewritten by the
+    grant bake at `0x005FE950`, and its velocity is `unit(dest - origin) * S`
+    from that same bake. We hold neither exactly. What we do hold is what the
+    client just REPORTED, which under `--zero-lead` is also the point we are
+    about to grant -- so the model below is "the copy is parked where the
+    player says they are", which is true only between an arrival and the next
+    bake. Everywhere else it is wrong on purpose and the `wrong` arm is what
+    proves the channel works regardless.
+    """
+    return (tuple(reported), int(plane), (0.0, 0.0),
+            "parked-at-report: pos = the client's own newest report, velocity "
+            "zero. TRUE only between an arrival and the next bake")
+
+
+def _send_position_checksum(send, state, reported, plane):
+    """Send one GAME_SMSG 0x0023 for the player's own agent. Logs, never snaps.
+
+    `wrong` XORs a sentinel into field 2 so the compare CANNOT succeed: that
+    arm's whole job is to make the client's line appear at least once, and it
+    is the licence for reading silence in the `model` arm as evidence.
+    """
+    pos, pl, vel, _why = checksum_model(state, reported, plane)
+    fields = agents.agent_position_checksum(PLAYER_AGENT_ID, pos, pl, vel)
+    if CHECKSUM_PROBE == "wrong":
+        fields = [fields[0], fields[1] ^ CHECKSUM_WRONG_SENTINEL]
+    send(GAME_SMSG_AGENT_POSITION_CHECKSUM, fields,
+         f"POSITION CHECKSUM [{CHECKSUM_PROBE}] agent {PLAYER_AGENT_ID} "
+         f"= {fields[1]:#010x} over ({pos[0]:.1f},{pos[1]:.1f}) plane {pl} "
+         f"vel ({vel[0]:.1f},{vel[1]:.1f})")
+
+
 def _maybe_resync(send, state, rec, now=None):
     """Send one 0x002C if the policy says so. Returns whether it did.
 
@@ -3532,6 +3581,16 @@ def _maybe_resync(send, state, rec, now=None):
 # a STOP, where rule 1 never fires. What a click does while the keyboard is held
 # and we stay silent has not been observed.
 GRANT_SUPPRESS = False
+
+# --checksum-probe. None, "wrong" or "model". Sends GAME_SMSG 0x0023, the
+# client's OWN movement-state checksum, so the client says out loud whether its
+# SYNC copy matches what we believe. Off by default and it changes nothing
+# else: the handler logs and returns 1.
+CHECKSUM_PROBE = None
+#: XORed into the `wrong` arm's field 2 so the compare CANNOT succeed. Any
+#: non-zero dword does; this one is legible in a log and in a hexdump, and the
+#: point of the arm is that its prediction cannot come true by accident.
+CHECKSUM_WRONG_SENTINEL = 0x5EED0FF5
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -12634,6 +12693,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # grant arms below so a fire and a grant in the same
                         # packet are ordered the way the client will apply them.
                         _maybe_resync(send, state, rec)
+                        # REALFIX-I3. Ask the CLIENT whether its authoritative
+                        # copy matches ours, using ArenaNet's own checksum. It
+                        # sits here -- after the take, before the grant arms --
+                        # because the report in hand is the newest thing we know
+                        # about the player, and because a grant sent below
+                        # REBAKES the very fields being summed: asking after it
+                        # would compare our pre-grant model against a copy the
+                        # client has just re-aimed, and every answer would be a
+                        # mismatch we caused a line earlier.
+                        #
+                        # It changes nothing else. The handler logs and returns
+                        # 1, so a wrong answer here costs a line in Gw.log and
+                        # never a snap. That is also the limit: the readout is
+                        # the log file, so nothing in this capture will show
+                        # whether the client agreed.
+                        if CHECKSUM_PROBE and moving:
+                            _send_position_checksum(send, state, reported, plane)
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -15297,6 +15373,29 @@ def main():
                          "REALFIX-L9; --no-grant-suppress reverts); independent "
                          "of every other movement flag."
                          % GRANT_MIN_INTERVAL)
+    ap.add_argument("--checksum-probe", choices=("wrong", "model"),
+                    metavar="MODE",
+                    help="Send GAME_SMSG 0x0023, ArenaNet's own movement-state "
+                         "checksum, on every 0x003D while the player moves, and "
+                         "make the client's OWN desync verdict appear in its "
+                         "Gw.log. The client XORs five raw dwords off its SYNC "
+                         "copy (velocity +0xB4/+0xB0, plane +0x80, position "
+                         "+0x7C/+0x78, at 0x005FEEA0) and logs `Agent %%u "
+                         "position out of sync with server` when field 2 "
+                         "disagrees -- it LOGS ONLY, so the readout is the log "
+                         "file and never the wire. TWO MODES, and the first is "
+                         "the positive control: `wrong` sends a value that "
+                         "CANNOT match (our model XOR a nonzero sentinel), so "
+                         "the line MUST appear -- if it does not, the fault is "
+                         "the opcode, the field order, the agent id or the "
+                         "suppression latch, and no silence anywhere else in "
+                         "this probe means anything until it does. `model` "
+                         "sends our own best reconstruction of the client's "
+                         "five fields, where SILENCE is the result and means we "
+                         "reproduce the sync copy bit-exactly. Expect `model` "
+                         "to fire too: the compare is integer equality over "
+                         "float bits, and our velocity model is not the "
+                         "client's bake. Off by default; needs no other flag.")
     ap.add_argument("--no-grant-suppress", action="store_false",
                     dest="grant_suppress",
                     help="Revert --grant-suppress: click grants go out while "
@@ -16192,6 +16291,44 @@ def main():
         print("      Pair it with a DEFAULT run, same action script, and read "
               "the difference. A run of this arm alone measures nothing.")
 
+    if a.checksum_probe:
+        global CHECKSUM_PROBE
+        CHECKSUM_PROBE = a.checksum_probe
+        print(f"[map] --checksum-probe {CHECKSUM_PROBE} ON. Sending GAME_SMSG "
+              f"0x0023 on every 0x003D while moving.")
+        print("      READOUT    the CLIENT'S OWN Gw.log, not the wire. This "
+              "message logs and returns 1 -- no snap, no correction, no reply. "
+              "Watch vault/run/<build>/Gw.log for `Agent 1 position out of "
+              "sync with server`.")
+        print("      MECHANISM  the client XORs five raw dwords off its SYNC "
+              "copy at 0x005FEEA0 (velocity +0xB4/+0xB0, plane +0x80, position "
+              "+0x7C/+0x78) and compares against field 2 at 0x005FD448. "
+              "AgMsg.cpp handler 0x005FD3F0; SYNC array [agentMgr+0xE8].")
+        if CHECKSUM_PROBE == "wrong":
+            print(f"      PREDICTION, stated before the run: the line MUST "
+                  f"appear, because field 2 is our model XOR the sentinel "
+                  f"{CHECKSUM_WRONG_SENTINEL:#x} and therefore cannot equal "
+                  f"any XOR the client computes.")
+            print("      REFUTED IF it does not appear. That names the opcode, "
+                  "the field order, the agent id, or the suppression latch at "
+                  "agentMgr+0x1C8 -- and until this arm prints, SILENCE IN THE "
+                  "`model` ARM MEANS NOTHING.")
+        else:
+            print("      PREDICTION, stated before the run: the line appears "
+                  "ANYWAY. Silence would mean we reproduce the client's five "
+                  "fields BIT-EXACTLY, and our velocity model is not the "
+                  "client's bake -- the compare is integer equality over float "
+                  "bits, so a 1-ulp difference reads like a teleport.")
+            print("      RUN THE `wrong` ARM FIRST. A null here is only a "
+                  "result if the positive control has printed.")
+        print("      LATCH      if the client has already logged `Client "
+              "pathing data out of sync with server`, agentMgr+0x1C8 is set "
+              "and this line is SUPPRESSED for the whole session. Measured "
+              "clear on loopback (0 of 29 logs) -- check before believing a "
+              "null.")
+        print("      RECONSTRUCTION: retail sends 0x0023 zero times in our "
+              "live corpus (137 files), so what a real server puts in field 2 "
+              "is inferred from the client's compare, not observed.")
     if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True
