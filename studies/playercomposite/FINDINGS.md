@@ -1101,7 +1101,9 @@ Run 2 held its client 90 s longer and caught something run 1 did not. At
 agree with each other on the wire ordering, so this is not noise.
 
 `slot` is an **argument**, so the ordering belongs to the CALLER, not to
-CpsBase. What can be said: the **in-world dressing path** uses the permutation
+CpsBase. (**§9.13 captures the caller and names every path on the world
+instance — but the two below have appeared in one of five runs and did not
+recur, so they are still unnamed. Movement is refuted as their trigger.**) What can be said: the **in-world dressing path** uses the permutation
 above, and it is the path every result in §9.9–§9.11 comes from — it is the
 only instance carrying costumes, an override array, or the legs item at all.
 **What those two late instances ARE is NOT identified**, and no guess is
@@ -1288,3 +1290,91 @@ applied to my own predictions instead of to the client's.
 armour row already contains the whole mask, which is the reason the flag has
 to exist at all. If a future content row lacks a mask bit, that line reddens
 and somebody can retire the flag.
+
+## 9.13 The caller is captured and the path is named — but the two wire-ordered instances are NOT, and movement is refuted as their trigger (2026-08-23)
+
+§9.11 ended on "what those two wire-ordered CpsBase instances ARE is NOT
+identified". This builds the instrument that would identify them, proves it,
+kills one hypothesis, and **still does not identify them**. Recorded that way
+rather than as a win.
+
+### The instrument, and it was one read away
+
+The writer's frame is intact at both exits, so `[ebp+4]` is the saved return
+address and names the caller for free; `[cps]` is the vtable and names the
+class. Both are now captured.
+
+The map was built statically first, so an address means something the moment
+it arrives. `codescan --xrefs 0x0082EDA0` finds **six** direct rel32 callers
+and **zero words anywhere in the image holding the VA** — the writer is not
+virtual and not reached through a table, so six is supposed to be all of them
+and an unlisted return address would be a result rather than a gap.
+
+| return | caller |
+|---|---|
+| `0x0082EA35 / EA46 / EA57 / EA68` | `0x0082EA10`, the COSTUME RE-DRESS → CpsBase 5, 3, 6, 2 |
+| `0x0082EA99` | the same, → CpsBase 4 (head) |
+| `0x0082D6F6` | `CpsApi::SetSlotItem`, which forwards its caller's slot verbatim |
+
+`0x0082EA10` is `__thiscall f(slot)`: it returns immediately unless the slot is
+**7 or 8**, re-dresses CpsBase slots **5, 3, 6, 2** for a body costume (plus 4
+behind a conditional at `0x84d530`), and slot **4 alone** for a head costume.
+That is exactly §9.11's measured override order — boots, legs, gloves, chest,
+then head — so the second phase of that timeline is now explained by name
+rather than inferred, and it is why the head is separable. **The writer calls
+it from its own tail** (`0x0082F106`, gated on `ebx`), so the mechanism is
+self-contained: writing slot 7 or 8 triggers the armour re-dress, which
+re-enters the writer, which now finds `override[slot]` set.
+
+`0x0082D6A0` is named by its own asserts — `CpsApi:649 composite` and
+`CpsApi:84 ptr` — resolves the agent's `'comp'` component and passes its
+caller's slot through untouched. It has **40** callers of its own; a
+seven-call cluster at `0x004B18xx` passes a variable slot and gates on
+**4 / 7 / 8**, the same vocabulary CpsBase's dye branch uses. So the wire→
+CpsBase permutation happens upstream of *both* of these, not in either.
+
+### Proven at runtime, twice
+
+Two runs (`20260823T182941`, `20260823T183553`), 13 writes each, one instance
+each: **8 from `CpsApi::SetSlotItem`** (slots 0, 2, 5, 3, 6, 4, 7, 8 — the
+load phase) and **5 from the re-dress sites, one each, at exactly the slots
+the static read predicts**. 13 of 13 attributed, 6 of 6 known callers, **no
+unlisted return address**. The vtable is a single value, `0xA96B5C`.
+
+### C1 REFUTED: movement is not the trigger
+
+The two instances have now appeared in exactly **one of five runs**, so the
+problem is reproducing them before naming them. Four server logs named one
+difference and only one: the run that produced them is the only run whose
+character MOVED. Registered at `abb8439` before the test:
+
+| run | `MOVE_SET_HEADING` | `AGENT_MOVE_DIRECTION` | `ZERO LEAD` | extra instances |
+|---|---|---|---|---|
+| `20260823T173517` | 40 | 38 | 26 | **2** |
+| `20260823T182941` (170 s still hold) | 0 | 0 | 0 | 0 |
+| `20260823T183553` (`--walk`, 11 legs) | **60** | **57** | **56** | **0** |
+
+**Exposure was exceeded, not merely met** — more heading changes, more
+direction grants and more than twice the zero-lead grants than the run that
+produced them — so this is a null with a floor rather than a null by absence.
+C3's clause applies as written: movement is excluded and the question stays
+open. **The instrument is in place and will name them the moment they appear.**
+
+### The lead that replaces it
+
+**Run `173517`'s movement was not harness-driven.** No `--walk` was passed
+that run, so something outside the harness drove the client — operator input,
+most likely a click in the world, which is a different input path from the key
+holds `--walk` produces and one the harness does not generate. That re-scopes
+the question: the trigger looks like an input class an agent-driven run cannot
+make, which puts it on the owner's side rather than this rig's.
+
+Already narrowed, from §9.11's own record timeline, and it kills the cheapest
+guess: the +93.93 burst fetches index **11 → composite type 1**, the ANIMATED
+shell, plus face 25, hair 1 and base pieces 46–49. They are full **in-world**
+composites, not the character-select preview dolls of §7.
+
+### Still open
+
+What the two instances are, with movement excluded and operator input the
+standing candidate; and `row+0x08`, still zero everywhere.

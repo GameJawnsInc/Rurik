@@ -1570,8 +1570,37 @@ one branch apart. Method note, twice in one arc: §9.11's S5 limit was wrong the
 same way §9.6's P2 and §9.11's S2 were — the error was in the prediction's
 FRAME rather than its content, caught by re-reading the operand instead of the
 claim. `test_compositetrap` 53 -> 59; all three readings exercised by name.
-**Still open**: what the two wire-ordered instances are, and the standalone
-type-19 kind of head costume.
+**THE CALLER IS NOW CAPTURED, AND THE PATH IS NAMED (§9.13) -- but the two
+wire-ordered instances are NOT, and that is the honest headline.** The
+writer's frame is intact at both exits, so `[ebp+4]` names the caller and
+`[cps]` the class; the map was built statically FIRST (`codescan --xrefs
+0x0082EDA0`: six direct rel32 callers and ZERO words anywhere holding the VA,
+so it is neither virtual nor table-reached and six is supposed to be all of
+them). Five are inside `0x0082EA10`, the **costume re-dress** -- returns
+immediately unless the slot is 7 or 8, re-dresses CpsBase slots **5, 3, 6, 2**
+for a body costume plus 4 behind a conditional, or slot **4 alone** for a head
+costume, which is EXACTLY §9.11's measured override order -- and the writer
+calls it from its own tail (`0x0082F106`), so the mechanism is self-contained.
+The sixth is `CpsApi::SetSlotItem` (`0x0082D6A0`, named by `CpsApi:649
+composite` / `CpsApi:84 ptr`), which forwards its caller's slot verbatim and
+has 40 callers of its own, a seven-call cluster at `0x004B18xx` gating on
+4/7/8 -- the same vocabulary CpsBase uses, so the permutation is upstream of
+both. **Proven twice at runtime: 13 of 13 writes attributed, 6 of 6 known
+callers, no unlisted return address.** ⚠ **C1 REFUTED, and the exposure makes
+it a null with a floor**: the two instances have now appeared in ONE of five
+runs, the only difference across four server logs was that that run's
+character MOVED, and a `--walk` run registered at `abb8439` before it ran
+produced **more** movement than the original (60/57/56 headings, grants and
+zero-leads against 40/38/26) and **zero** extra instances. Movement is
+excluded. The lead that replaces it: that run's movement was NOT harness-driven
+(no `--walk` was passed), so the trigger looks like an operator input class an
+agent-driven run cannot make -- which moves this to the owner's side. Already
+narrowed and it kills the cheapest guess: their record burst fetches index 11
+-> composite **type 1**, the animated shell, so they are full IN-WORLD
+composites, not §7's preview dolls.
+**Still open**: what the two wire-ordered instances are (movement excluded,
+operator input the standing candidate), `row+0x08` which is still zero
+everywhere, and the standalone type-19 kind of head costume.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
