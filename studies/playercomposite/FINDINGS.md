@@ -202,7 +202,9 @@ From a player's identity to the set of archive files the client loads. **Cold po
 ☒ **The wire item-type enum is not the composite type enum.** Observed wire types on `0x015E` (Body 7, Boots 4, Legs 19, Gloves 13, Head 16) do not line up with composite types 14–19. Whether the client derives one from the other or the composite type is purely a property of the record is unresolved — and it matters, because *our server picks the wire type*.
 
 **F. Manifest.** `CpsApi 0x0082D7D0` walks each record's 11 slots and appends every non-zero id. The header's bit 17 (`0x20000`) skips a record; the top-10-bit gate (`>= 0x3800000`) only logs `Non-item composite %u requested for manifest` and falls through. `0x00833490` (`CpsData:479`, `:484 !(id & FILE_ID_RESERVED_BIT)` at 0x008334C5) is a **pure assert routine** — every exit is `xor eax,eax`, so it filters nothing.
-☒ `FILE_ID_RESERVED_BIT` is unmeasured. This gates authoring any player file id.
+~~☒ `FILE_ID_RESERVED_BIT` is unmeasured.~~ **MEASURED 2026-08-22: it is bit 31
+(`0x80000000`)** — see §9.1. Authoring a player file id must keep bit 31 clear
+(all 16,567 composite ids do).
 
 **G. Build.** File ids become models through `MdlBuild 0x0077E210` (`fileName`) or `0x0077E2E0` (`fileName` + `skelFileName`). Geometry is slots {0,5,10} (`ffna`), textures are the other eight (`ATEX`).
 
@@ -249,7 +251,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 
 1. **What is `arg0` of the resolver, whose bit 0 picks skeleton type 1 vs type 2?** Two complete twenty-shell sets exist (§1.22): fully animated (seq 220–289) and near-static (seq 10–17) on identical skeletons. Authoring against the wrong one produces a character that cannot animate. Trace `this+0x3E4` back through 0x0082DBB0/0x0082DBA0's callers. **Highest blocker — it is a one-bit decision with a total consequence.**
 2. **The wire item-type ↔ composite-type mapping.** Our server picks the wire type; if it does not induce the right composite type, every equipped piece lands on the wrong component or none. §2 step E.
-3. **`FILE_ID_RESERVED_BIT` (CpsData:484, 0x008334C5).** Which bit, and what a reserved id means. Directly gates authoring a *new* file id.
+3. ~~**`FILE_ID_RESERVED_BIT` (CpsData:484, 0x008334C5).**~~ **MEASURED 2026-08-22, §9.1 — bit 31, and it is a real second id namespace.**
 4. **Whether the twenty type-1 shells and their component sets round-trip through our own writers.** `modelwrite.py`/`skelwrite.py` are proven byte-identical on monster geometry (6846/6846, 14571/14571) but no player component file has ever been walked, let alone re-emitted.
 5. **What group 3 is** — armour types 14–19 for all ten professions, no base identity, and unreachable from `CpsPlayer`'s `race < 3` (§1.24). Reserved, heroes, or a fourth armour campaign.
 6. **What component 7 / base type 9 is.** Never worn in 3,225 wear events, present in every home-group profession cell, and the sole occupant of the degenerate blits 2–5 (which declare a real 256×128 atlas for blit 2 and 0×0 for blits 3–5).
@@ -390,3 +392,30 @@ type-2 has fewer sequences than its type-1 twin", 20/20) and the reading
 ("near-static preview set") both stand — but the RANGE claim needed the
 outlier named, and `test_playerassembly` §4 now pins it by identity so a
 second outlier, or this one moving, goes red. OBSERVED.
+
+## 9.1 FILE_ID_RESERVED_BIT is bit 31, and it is a real second id namespace (2026-08-22)
+
+§4.3's blocker measured. The two asserts `!(id & FILE_ID_RESERVED_BIT)` —
+**CpsData:468** (`0x008332ac`) and **CpsData:484** (`0x008334c5`) — each feed
+the tested value through the identical idiom `shr eax, 0x1f; not eax; test
+al, 1; jne ok`, so the guarded bit is `id >> 31`: **`FILE_ID_RESERVED_BIT =
+0x80000000` (bit 31)**. Both routines are pure asserts (every exit is `xor
+eax,eax; ret`, as the §2 step F correction and skeptic §5 already established),
+so the bit gates AUTHORING/debug rather than filtering anything at runtime.
+
+**It is not hypothetical — the bit tags a distinct id namespace.** The study
+archive's raw `file_id_table` (171,023 ids) carries **25 ids with bit 31 set**
+(0x8001B97D … 0x8005E728), each resolving to a real MFT row, and the rows they
+name are **disjoint from every ordinary (bit-31-clear) id's row** — no reserved
+id is an alias of an ordinary one, and a few rows (7982, 20118, 44714…) are
+reachable under *two* different reserved ids. So the ordinary file id and the
+reserved id are two separate reference spaces, and the client's asserts guard
+the ordinary-id code paths against being handed one of the reserved kind.
+
+**For authoring:** every one of the 16,567 composite file ids clears bit 31
+(max 375,810), so assembling a player from the composite table never trips the
+assert. A mint that ever set bit 31 would, and `playerassembly.manifest`
+refuses such a file id before it becomes a seed (`FILE_ID_RESERVED_BIT`,
+pinned by `test_playerassembly` §8). What the reserved namespace is FOR — a
+computed/virtual id class, a second archive — is not settled here; what is
+settled is the bit, that it is real, and that authored ids must avoid it.

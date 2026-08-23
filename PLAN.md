@@ -1401,8 +1401,14 @@ sex-1 type-2 shell carries **115**, recorded in FINDINGS.
 
 **NEXT, in cost order:** (1) the wire item-type ↔ composite-type mapping
 (§4's number 2 — our server picks the wire type, and a wrong induction lands
-every equipped piece on the wrong component); (2) `FILE_ID_RESERVED_BIT`
-(CpsData:484), which gates authoring a NEW file id; (3) whether the twenty
+every equipped piece on the wrong component); ~~(2) `FILE_ID_RESERVED_BIT`~~
+**DONE 2026-08-22** (`studies/playercomposite` §9.1, `test_playerassembly` §8):
+it is **bit 31 (`0x80000000`)** — CpsData:468/:484 each `shr 0x1f; not; test
+al,1`, both pure asserts (authoring gate, not a runtime filter). Not
+hypothetical: 25 ids in the raw file-id table carry it, mapping to real MFT
+rows disjoint from the ordinary id space — a distinct namespace. All 16,567
+composite ids clear it, so authoring is safe; `playerassembly.manifest`
+refuses a reserved-bit id before it becomes a seed. (3) whether the twenty
 type-1 shells round-trip through `modelwrite.py`/`skelwrite.py` (proven on
 monster geometry, never on a player component); (4) the runtime confirmation
 priced in §4.12 — a breakpoint on `0x00833420` during a character load.

@@ -61,6 +61,20 @@ BASE_PIECE_TYPES = (3, 4, 5, 6)
 TYPE_UNKNOWN9 = 9
 GEOMETRY_SLOTS = frozenset(cpsdata.SEX_BASE_SLOT) | {cpsdata.SHARED_SLOT}
 
+# Bit 31 of a Gw.dat file id is RESERVED -- the client asserts
+# `!(id & FILE_ID_RESERVED_BIT)` on the ordinary-id path, twice: CpsData:468
+# (0x008332ac) and CpsData:484 (0x008334c5), each `shr eax,0x1f; not eax;
+# test al,1`. Both routines are pure asserts (every exit `xor eax,eax`), so
+# they gate AUTHORING, not runtime filtering. MEASURED 2026-08-22
+# (studies/playercomposite 4.3): the bit marks a DISTINCT id namespace --
+# 25 ids in the study archive's raw file-id table carry it (max 0x8005E728),
+# mapping to real MFT rows and disjoint from the ordinary space -- so an
+# authored file id must keep bit 31 clear or it collides with the client's
+# reserved references. All 16,567 composite file ids do (max 375,810), so
+# authoring a player from the composite table never trips it; a mint that
+# ever set the bit would, and `manifest` refuses one before it reaches a seed.
+FILE_ID_RESERVED_BIT = 0x80000000
+
 
 class PlayerAssemblyError(Exception):
     """A refusal: the identity does not resolve to a buildable manifest."""
@@ -147,6 +161,16 @@ def manifest(table, player, include_type9=True):
             fid = rec.files.get(slot)
             if not fid or fid in seen:
                 continue
+            if fid & FILE_ID_RESERVED_BIT:
+                # The client asserts !(id & FILE_ID_RESERVED_BIT) on this path
+                # (CpsData:468/:484); a reserved-bit id is a different id
+                # namespace, not a file to seed. No composite id sets it, so
+                # this is a tripwire for a corrupt table or a bad mint, not an
+                # expected branch.
+                raise PlayerAssemblyError(
+                    f"{player!r}: file id 0x{fid:08X} has the reserved bit 31 "
+                    f"set -- the client would assert !(id & FILE_ID_RESERVED_"
+                    f"BIT). It is the client's own id namespace, not authorable.")
             seen.add(fid)
             if slot in GEOMETRY_SLOTS:
                 role = (unitassembly.ROLE_SHELL if fid == shell_fid

@@ -20,8 +20,8 @@ import cpsdata       # noqa: E402
 import playerassembly  # noqa: E402
 import unitassembly  # noqa: E402
 
-# Floor set from a real green run (29 checks, 2026-08-22).
-LEDGER = checks.Ledger("player assembly", floor=29)
+# Floor set from a real green run (34 checks, 2026-08-22).
+LEDGER = checks.Ledger("player assembly", floor=34)
 check = checks.adopt(LEDGER)
 
 MONSTER_SHELLS = (116228, 116703, 116377, 116366)   # FINDINGS 5 sabotage 5
@@ -166,5 +166,57 @@ else:
     build = composite.build_of(open(t["exe"], "rb").read())
     check(build == 38797, "the extractor derived build 38797 from the hash, "
                           "never a typed stamp", f"build={build}")
+
+print("== 8. FILE_ID_RESERVED_BIT (bit 31) gates authoring a file id ==")
+check(playerassembly.FILE_ID_RESERVED_BIT == 0x80000000,
+      "the reserved bit is 0x80000000 (bit 31) -- CpsData:468/:484's "
+      "`shr eax,0x1f; not; test al,1`")
+# Every composite file id an authored player could reference clears it, so
+# authoring is safe by construction.
+ids = table.distinct_file_ids()
+reserved = [i for i in ids if i & playerassembly.FILE_ID_RESERVED_BIT]
+check(not reserved and max(ids) < playerassembly.FILE_ID_RESERVED_BIT,
+      "all composite file ids clear bit 31 -- authoring never trips the assert",
+      f"n={len(ids)} max={max(ids)} reserved={len(reserved)}")
+# But the archive's raw id table DOES carry reserved-bit ids: the bit is a
+# real, distinct namespace, not merely hypothetical.
+raw = archive.file_id_table(ar, raw=True)
+raw_reserved = [i for i in raw if i & playerassembly.FILE_ID_RESERVED_BIT]
+check(raw_reserved,
+      "the raw file-id table carries reserved-bit ids -- a distinct id "
+      "namespace the client's asserts guard the ordinary path against",
+      f"{len(raw_reserved)} such ids, max 0x{max(raw_reserved):08X}")
+res_rows = {raw[i] for i in raw_reserved}
+ord_rows = {raw[i] for i in raw if not (i & playerassembly.FILE_ID_RESERVED_BIT)}
+check(all(isinstance(raw[i], int) and raw[i] >= 0 for i in raw_reserved)
+      and not (res_rows & ord_rows),
+      "they resolve to real MFT rows DISJOINT from the ordinary id space -- a "
+      "separate namespace, not aliases", f"e.g. row {raw[raw_reserved[0]]}")
+# The authoring guard fires: a manifest whose record carries a reserved-bit
+# file id is refused before it becomes a seed.
+import cpsdata as _cps
+
+
+class _FakeRec:
+    def __init__(self):
+        self.hdr = 0
+        self.files = {0: 0x80001234, 5: 0x80001234, 10: 0}
+
+    def base_file(self, sex):
+        return self.files.get(_cps.SEX_BASE_SLOT[sex])
+
+
+saved = table.record
+try:
+    table.record = lambda g, p, t: _FakeRec()  # every pick returns the reserved id
+    raised = False
+    try:
+        playerassembly.manifest(table, playerassembly.PlayerDef(0, 1, 0))
+    except playerassembly.PlayerAssemblyError as ex:
+        raised = "reserved" in str(ex).lower()
+    check(raised, "manifest REFUSES a record carrying a reserved-bit file id",
+          "the tripwire for a corrupt table or a bad mint")
+finally:
+    table.record = saved
 
 sys.exit(LEDGER.verdict())

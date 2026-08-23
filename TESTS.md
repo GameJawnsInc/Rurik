@@ -1402,8 +1402,13 @@ Every one of these, in the order they were written:
   359 live rects LTRB-shut with 88 .data zero-fill records counted apart (the
   tail is MODELLED — a reader past a section's raw size returns zeros, not the
   next section's bytes), and the build is derived 38797 from the hash, never
-  typed. Needs `vault/dat_study` (skips declared without it) and the pinned exe
-  for §7; ~2 min; floor 29),
+  typed. §8 pins **`FILE_ID_RESERVED_BIT` = bit 31** (0x80000000, from
+  CpsData:468/:484): every composite file id clears it (authoring is safe by
+  construction), the raw file-id table DOES carry 25 reserved-bit ids mapping
+  to MFT rows disjoint from the ordinary space (a real second namespace, not
+  hypothetical), and `manifest` refuses a record carrying a reserved-bit id
+  before it becomes a seed. Needs `vault/dat_study` (skips declared without it)
+  and the pinned exe for §7; ~2 min; floor 34),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
