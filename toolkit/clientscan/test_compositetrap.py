@@ -57,8 +57,9 @@ def JOIN(ls):
 # regression guard, the S2/S4/S8 restatements, S5's three readings, the
 # caller map and the CLEAR analyser landed the same day, then 71 for the
 # symmetric R4 window and 75 for S7's ordering check plus the second
-# costume-head row. Set from the run every time; guessed low five times.
-LEDGER = checks.Ledger("composite trap", floor=75)
+# costume-head row, 76 for S6 refusing to discriminate on one slot.
+# Set from the run every time; guessed low five times before that stuck.
+LEDGER = checks.Ledger("composite trap", floor=76)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -494,6 +495,19 @@ check("DOWNSTREAM" in "\n".join(lines),
       "S6's OTHER branch is a result, not a failure: one id repeated across "
       "the armour slots sites the run expansion past this function, which "
       "would move §9.9's reconstruction rather than refute it")
+
+# S6 CANNOT DISCRIMINATE ON ONE SLOT, and a real run made it try. The
+# type-19 head run overrides exactly one armour slot, where "one id repeated"
+# and "one id per component" are the same picture -- and the analyser printed
+# the downstream conclusion anyway before this check existed.
+ONE = {**GOOD_ROWS, 4: (2817, 16, 0)}
+lines, _rc = t._analyse_cache(
+    CSITES, chits(ONE, ovr=[0, 0, 0, 0, 2817, 0, 0, 0, 2817],
+                  ids=[1, 0, 3, 5, 7, 4, 6, 0, 9]))
+check("S6 where the five-record run expands: NO VERDICT" in JOIN(lines),
+      "S6 REFUSES on a single overridden armour slot rather than reading the "
+      "trivial one-distinct-id as evidence of a downstream expansion -- the "
+      "over-claim a live run printed before this check existed")
 
 lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS, ovr=[0] * 9))
 check(rc is None and "no slot carries an override" in "\n".join(lines),

@@ -6222,8 +6222,18 @@ Every one of these, in the order they were written:
   the first live run earned: R4's window is SYMMETRIC because the notify sits
   three bytes before the trap point, so a clear's own fetches land *before*
   its hit, and a forward-only window silently dropped a whole burst's worth.
+  §8 also pins **both costume-head rows** to content and requires them to
+  land on DIFFERENT components (2 vs 1) -- if they ever agreed, the second
+  row would be testing nothing. Two checks exist because live runs caught
+  the analyser over-claiming: S6 now REFUSES to discriminate on a single
+  overridden armour slot (where "one id repeated" and "one id per
+  component" are the same picture, and it printed the downstream
+  conclusion anyway), and S7's body half leans on the observed WRITE ORDER
+  rather than on a blanket hedge -- the dye is copied from another slot's
+  row, so "was the source written first" is a checkable question and both
+  branches are exercised.
   Needs the pinned exe for §§1-2/§6 and the vault for §5, all SKIP-declared;
-  floor 71),
+  floor 76),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

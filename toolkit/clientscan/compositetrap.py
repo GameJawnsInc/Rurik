@@ -945,6 +945,15 @@ def _analyse_cache(sites, hits):
     if not armour_over:
         s6 = ("only the costume slots themselves carry an override -- the run "
               "expansion is DOWNSTREAM of this function")
+    elif len(armour_over) < 2:
+        # EARNED BY A RUN THAT CONCLUDED FROM n=1. With a single overridden
+        # armour slot there is trivially one distinct id, and the branch below
+        # read that as "repeated, so downstream" -- a conclusion the run could
+        # not support. Discriminating needs at least two slots to compare.
+        s6 = (f"NO VERDICT -- only {len(armour_over)} armour slot carries an "
+              f"override ({armour_over}), so 'one id repeated' and 'one id "
+              f"per component' are the same picture. Wear a BODY costume, "
+              f"which covers four")
     elif len(distinct) > 1:
         s6 = (f"the run expands AT REGISTRATION and is visible here: "
               f"{len(distinct)} distinct ids across armour slots "

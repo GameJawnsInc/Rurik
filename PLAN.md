@@ -1623,10 +1623,40 @@ earned: R4's window was forward-only and printed 5 where the timeline shows
 5+1, because the notify sits THREE BYTES before the trap point so a clear's
 own fetches land just before its hit; symmetric now, pinned, and the run's
 verdict is unaffected. `test_compositetrap` 60 -> 71.
+**AND THE STANDALONE TYPE-19 HEAD IS TESTED (§9.15, T1-T4 registered at
+`b10c4c3`).** `costume_head` is record 2654, type 17 -> **component 2**, the
+hair-replace head our armour piece 93 also occupies; record **2817** is type
+19 -> **component 1**, standalone, and NO ARMOUR SLOT HOLDS COMPONENT 1 (our
+five cover 3, 5, 2, 6, 4). `content/items.toml`'s `costume_head_second` is
+that row -- 16 declares over eight captures and 16 wears, every one in slot 8,
+every field agreeing but one flag bit -- and `--costume-head` now takes a
+content key so both run the IDENTICAL path with the record's component as the
+only variable. **T1 CONFIRMED: the registry is SLOT-keyed.** `override` is
+non-zero at 4 and 8 only, the head row goes `93 / type 16 / tint 19` ->
+`2817 / type 16 / tint 0`, and 2817 -> type 19 reaches the resolver four
+times, each right after 93. So the component follows the RECORD wherever it
+points -- a component-1 record lands in the slot a component-2 record held and
+the client does not object, which **closes §9.2's census observation**: wire
+type 45 pairs with record types 17 AND 19 because both are "the head costume
+slot" and the slot does not care which head component the record names. T4's
+control held (no body costume, so the four body slots carry no override), S8's
+null control is **n=5** rather than 1, and the caller attribution matches the
+static read exactly -- one write from `0x0082EA99`, the re-dress's `arg == 8`
+branch, touching CpsBase slot 4 alone. **Two corrections earned**: §9.10's
+"seven distinct type-45 ids in the vault" is wrong -- there are **28**, all
+worn and slot-8-only, 23 of type 17 and 5 of type 19; and **S6 concluded from
+n=1**, reading one overridden armour slot's single distinct id as evidence of
+a downstream expansion, which it now refuses below two slots (§9.11's S6 had
+five and stands). **A third correction strengthens §9.11**: its S7 "body half
+not decisive" was over-hedged -- the dye is copied FROM `m_slotItemData[7]`,
+every run writes slot 7's row BEFORE the body overrides, so "the source was
+never written" was never live and the ordering was in the timeline; the tool
+checks the order now instead of hedging. `test_compositetrap` 71 -> 76.
 **Still open**: what the two wire-ordered instances are (movement excluded,
 operator input the standing candidate), `row+0x08` which is still zero
 everywhere, why record 91 in particular never appears in the reset residue,
-and the standalone type-19 kind of head costume.
+and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
+3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,

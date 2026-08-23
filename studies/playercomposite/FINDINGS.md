@@ -980,8 +980,12 @@ chest*, and wire type 45 carries 17 or 19 because a head costume is named by
 its own head record — of the seven distinct type-45 ids in the vault,
 2654/2784/3673 are member 4 of a run, 2817 and 3350 are standalone type 19
 (component 1, the second head slot), and 3663/1887 are type 17 outside any
-run. **Only the member-4 kind is tested here**; what the type-19 kind does is
-still unmeasured.
+run. ~~**Only the member-4 kind is tested here**; what the type-19 kind does
+is still unmeasured.~~ **TESTED 2026-08-23, §9.15 — the override is
+SLOT-keyed, and a component-1 record lands in the head slot regardless.**
+⚠ **And the count in this paragraph is WRONG**: the vault holds **28**
+distinct type-45 ids, all worn, all slot-8-only — 23 of record type 17 and 5
+of type 19. The seven named here were a sample that reads as a census.
 
 **Reported, not interpreted:** the fetch counts are lopsided — 2806 ×11 and
 2808 ×10 against 2805 ×3 and 2807 ×3, with 2654 ×4. The record site cannot
@@ -1478,3 +1482,96 @@ What §9.11's two wire-ordered instances are (movement refuted, operator input
 the standing candidate); `row+0x08`, still zero everywhere; and why record 91
 in particular never appears in the reset residue, which this run reports
 rather than explains.
+
+## 9.15 The standalone type-19 head: the override is SLOT-keyed, and the component follows the record anywhere (2026-08-23)
+
+§9.10 tested one of wire type 45's kinds and said so. `costume_head` is record
+2654, composite type **17 → component 2** — the hair-replace head our armour
+piece 93 also occupies. The other kind was untested: record **2817** is type
+**19 → component 1**, standalone in no five-record run, and **no armour slot
+holds component 1** (our five cover components 3, 5, 2, 6 and 4). T1–T4
+committed at `b10c4c3` before the run; capture `20260823T192207`, build 38797,
+PASS, zero asserts.
+
+### The row, and why it isolates the variable
+
+`costume_head_second` is measured off **16 declares in 8 captures and 16
+wears, every one in equip slot 8**. Every field agrees across the sixteen
+except `flags`, which takes `0x20001006` thirteen times and `0x20001007`
+three — bit 0 alone — so the modal value is carried. Same wire type 45, same
+equip slot 8, same code path as `costume_head`, so **the record's component is
+the only variable between the two runs.**
+
+### T1: the registry is SLOT-keyed
+
+| | prediction | result |
+|---|---|---|
+| T1 | `override[head]` = 2817 and the head row carries it | **CONFIRMED** |
+| T2 | the head keeps armour 93, component-1 never reaches a slot | refuted |
+| T3 | 2817 reaches the record resolver | **×4**, each right after 93 |
+| T4 | control: no body costume ⇒ the four body slots carry NO override | **PASS** |
+
+The whole burst is eight writes in 10 ms:
+
+```
+slot 4  item 7  record   93  type 16  tint 19    the armour head
+slot 8  item 9  record 2817  type 45  tint  0    the costume's own row
+slot 4  item 7  record 2817  type 16  tint  0    <- component 1 in the head slot
+```
+
+`override = [_, _, 0, 0, 0xB01, 0, 0, 0, 0xB01]` — non-zero at **4 and 8
+only**. So the costume registry keys on the **equip slot**, and the component
+follows the record wherever it points: a component-1 record lands in the slot
+a component-2 record held, and the client does not object.
+
+**That closes §9.2's census observation.** Wire type 45 pairs with record
+types 17 *and* 19 because both are "the head costume slot" and the slot does
+not care which head component the record names. §9.2's "the record is
+authoritative" extends: it is authoritative even when it names a component no
+armour slot ever occupies.
+
+### The rest, with better n than before
+
+- **S4 again**: the head row's type byte stays **16**, the armour's wire type
+  for head, while the record and dye change under it. Carry-through, third
+  run running.
+- **S7 decisive on the dye**: tint **19 → 0** and colours **11 → 0**, both
+  `costume_head_second`'s. Unambiguous despite the tint being 0, because the
+  row demonstrably held 19 first — a transition, not a value that might be an
+  unwritten row.
+- **S8's null control is n=5 now, not 1**: slots 0, 2, 3, 5 and 6 carry a zero
+  override and keep their own type *and* tint. The previous runs dressed every
+  slot in a costume and left only the weapon; this one leaves five.
+- **The caller attribution matches the static read exactly**: seven writes from
+  `CpsApi::SetSlotItem` and **one from `0x0082EA99`** — the re-dress's
+  `arg == 8` branch, which §9.13 read as touching CpsBase slot 4 alone. It
+  touched slot 4 alone.
+
+### Two corrections this arc earned
+
+1. **§9.10's "seven distinct type-45 ids in the vault" is wrong.** There are
+   **28**, all worn, all slot-8-only — 23 of record type 17 and 5 of type 19
+   (2817, 3349, 3350, 3351, 3675). The seven it named were a sample that read
+   as a census.
+2. **S6 concluded from n=1 and the run caught it.** With one overridden armour
+   slot, "one id repeated" and "one id per component" are the same picture,
+   and the analyser printed the downstream conclusion anyway. It refuses below
+   two slots now, and the test pins the refusal. §9.11's S6 result stands —
+   it had five slots.
+
+### Also corrected, and it strengthens §9.11 rather than weakening it
+
+§9.11 called S7's **body half** "not decisive" because `costume_body`'s tint 0
+is what an unwritten row also holds. That was over-hedged. The dye is copied
+*from* `m_slotItemData[7]`, and every live run writes slot 7's own row
+**before** the four body overrides — so "the source was never written" was
+never a live alternative, and the ordering was in the timeline all along. The
+tool now checks that order and says decisive or not on the evidence; both
+branches are exercised in the test.
+
+### Still open
+
+What §9.11's two wire-ordered instances are (movement refuted); `row+0x08`,
+still zero everywhere; why record 91 never appears in the reset residue
+(§9.14); and the **third** kind of type-45 id — record type 17 *outside* any
+run (1887, 3663, and 20 others), which is neither of the two tested here.
