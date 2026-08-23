@@ -4942,6 +4942,37 @@ HERO_SWAP = False
 # -- and flipping the cluster's defaults together is a decision worth making
 # deliberately once the hero rig stops being an experiment.
 HERO_ACTIVATE = False
+# THE ORDERING ARM, opened 2026-08-23 by a REFUTED prediction of my own.
+# studies/heroes 37 measured why the late rig asserts: case 93's first call
+# hands the event to the SkillListContext, which asks "which hero is this
+# agent?" through `ctx[+0x2c]+0x584` (0x0080E390) and gets NULL, so
+# `skillListUser` comes back 0x29 == SKILL_LIST_USERS and
+# GmCtlSkListContext.cpp:574 fires. That array's only writer is 0x0072
+# HeroActivate -- so I predicted --hero-activate would clear it, and the run
+# REFUTED that: the assert fired anyway, because `--hero-activate` sends
+# 0x0072 LAST, after 0x01C2, and case 93 runs synchronously INSIDE 0x01C2's
+# worker. The activation record does not exist yet at lookup time (gamesrv.log
+# of capture 20260823T133542: 0x0074 line 143, 0x01C2 line 149, 0x0072 line
+# 154). This flag moves the activation ahead of the party build so the
+# ordering hypothesis can be tested rather than argued.
+#
+# IT IS AN INVENTED ORDER AND SAYS SO. Retail sends 0x0072 zero times in the
+# whole corpus, so there is no ArenaNet sequence to imitate here -- which is
+# already true of sending 0x0072 at all. Off by default, like every knob in
+# this block, so no existing arm changes.
+#
+# WHAT THE ARM ACTUALLY PRODUCED (studies/heroes 37.1), because a flag whose
+# result is only in a study doc gets re-run by the next session: the reorder
+# works on the wire (capture 20260823T134154, 0x0072 at log line 144, 0x01C2
+# at 150) and the SkillList assert does not appear -- but that run is ZERO
+# EXPOSURE, not a pass: case 93 never fired, and the assert is downstream of
+# case 93. What it did produce is `attribState`, because the hero's
+# attributes and skill bar are sent AFTER 0x01C2, so this flag also moves
+# 0x0072 ahead of THEM. The constraints are mutually unsatisfiable as the
+# pipeline is currently sequenced, and the real fix is to move the WHOLE
+# pipeline (info -> attributes -> skill bar -> activate) ahead of the
+# party-hero-add. This flag is kept as the evidence for that, not as a fix.
+HERO_ACTIVATE_FIRST = False
 # HeroActivate's field 3, and the question the old comment posed ("if field 3
 # really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
 # on 38797: the 0x0072 worker (0x81DA40) stores field 3 at activation-record +8;
@@ -13977,6 +14008,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             _inside = ()
                         elif HERO_POST_COMMIT:
                             _after, _inside = _inside, ()
+                        # THE ORDERING ARM. HeroActivate normally goes LAST;
+                        # here it goes ahead of the party build, because case
+                        # 93 -- which 0x01C2 raises synchronously -- asks the
+                        # agent-keyed activation array who this hero is, and
+                        # that array's only writer is 0x0072. See
+                        # HERO_ACTIVATE_FIRST's comment for the refuted
+                        # prediction that opened this.
+                        if HERO_ACTIVATE and HERO_ACTIVATE_FIRST:
+                            for _hid, _haid, _hdef in hero_slots():
+                                _seq.append(agents.hero_activate(
+                                    HERO_ACTIVATE_ID
+                                    if (HERO_ACTIVATE_ID is not None
+                                        and _haid == HERO_AGENT_ID) else _hid,
+                                    _haid, HERO_INVENTORY, HERO_AI_MODE))
                         _seq.extend(agents.party_build(
                             1, PLAYER_NUMBER, inside_window=_inside))
                         _seq.extend(_after)
@@ -14630,8 +14675,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # charHeroData gate wants. Both outcomes are readouts,
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_ACTIVATE else ()):
+                        for _hid, _haid, _hdef in (
+                                hero_slots()
+                                if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST)
+                                else ()):
                             hsend(*agents.hero_activate(
                                 HERO_ACTIVATE_ID
                                 if (HERO_ACTIVATE_ID is not None
@@ -15668,6 +15715,17 @@ def main():
                          "and enables its commander-slot flag. Opened this arc "
                          "as a refutable diagnostic and turned out to be the "
                          "activation itself.")
+    ap.add_argument("--hero-activate-first", action="store_true",
+                    dest="hero_activate_first",
+                    help="Send 0x0072 HeroActivate BEFORE the party build "
+                         "instead of last. THE ORDERING ARM: case 93 runs "
+                         "synchronously inside 0x01C2's worker and asks the "
+                         "agent-keyed activation array who the hero is; that "
+                         "array's only writer is 0x0072, so sent last it does "
+                         "not exist yet and GmCtlSkListContext:574 asserts "
+                         "(studies/heroes 37). Needs --hero-activate; the "
+                         "order is INVENTED -- retail sends 0x0072 zero "
+                         "times.")
     ap.add_argument("--no-hero-info", action="store_true",
                     help="Drop the leading 0x0074. The route sends it first on "
                          "the hypothesis that it creates the data-cache "
@@ -16567,7 +16625,7 @@ def main():
 
     if a.hero is not None:
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
-        global HERO_BODY_NPC
+        global HERO_BODY_NPC, HERO_ACTIVATE_FIRST
         HERO_IDS = [int(x, 0) for x in str(a.hero).split(",")]
         if len(HERO_IDS) > 7:
             raise SystemExit(
@@ -16588,6 +16646,11 @@ def main():
         HERO_BODY_NPC = a.hero_body_npc
         HERO_SWAP = a.hero_swap
         HERO_ACTIVATE = a.hero_activate
+        HERO_ACTIVATE_FIRST = a.hero_activate_first
+        if HERO_ACTIVATE_FIRST and not HERO_ACTIVATE:
+            raise SystemExit(
+                "--hero-activate-first without --hero-activate sends nothing: "
+                "it moves 0x0072's position, it does not enable it.")
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
         global HERO_BAGS

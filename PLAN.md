@@ -5058,9 +5058,30 @@ had gone stale on four items that were since closed, which is the drift the top 
    corrected, with a new `postcall` bisect site), and **§35.7's unexplained
    4-of-4 vs 0-of-3 site-set asymmetry is EXPLAINED** — every site in the
    0-of-3 set is downstream of the assert, so those runs could never have
-   observed case 93 however often it ran. Still open, and now cheap to aim at:
-   WHY `skillListUser` is out of range. §35.6's prescription stands — fix the
-   assert first, a rig that asserts is not a rig — but its target is named.
+   observed case 93 however often it ran.
+   **AND `skillListUser` IS NOW READ TOO (§37.1), through a REFUTED prediction
+   of mine.** It is 0 for the player, `*lookup(agent)+1` on success, and
+   **`0x29` == `SKILL_LIST_USERS` when the lookup returns NULL** — so 41 is
+   the NOT-FOUND sentinel: the client cannot resolve our hero's agent. The
+   lookup (`0x0080E390`) reads the agent-keyed activation array
+   `ctx[+0x2c]+0x584`, whose only writer is `0x0072 HeroActivate`. I predicted
+   `--hero-activate` would clear the assert; **REFUTED** — that flag sends
+   `0x0072` LAST, after `0x01C2`, and case 93 runs synchronously inside
+   `0x01C2`'s worker, so the record still does not exist when the skill list
+   asks. New opt-in `--hero-activate-first` moves it ahead (an INVENTED order:
+   retail sends `0x0072` zero times); the wire order flips and the SkillList
+   assert disappears, but **that arm is ZERO EXPOSURE and claims nothing** —
+   case 93 never fired, and the assert is downstream of it. It produced
+   `attribState` instead, because the hero's attributes and skill bar are
+   themselves sent AFTER `0x01C2`. **The structural result is three ordering
+   constraints that cannot all hold**: the activation record must precede
+   `0x01C2`; `0x0072` must follow the hero's attributes; the attributes
+   currently follow `0x01C2`. **So the fix is to move the WHOLE hero pipeline
+   (info → attributes → skill bar → activate) ahead of the party-hero-add,
+   preserving relative order** — which is what §35.6c reasoned toward from the
+   other end. Staged, not guessed at. §35.6's prescription stands — fix the
+   assert first, a rig that asserts is not a rig — and its target is now named
+   twice over.
    `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
    (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
    **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at

@@ -3058,3 +3058,66 @@ and the target is named.**
 `--hero 1 --hero-bust-cache [--hero-late 10]`, trap
 `--sites case93,postcall,filter`. Captures `20260823T131154` (inline),
 `20260823T131508`, `20260823T132034`, `20260823T132426` (late).
+
+### 37.1 Why `skillListUser` is out of range — and a REFUTED prediction of mine, then a squeeze (2026-08-23)
+
+§37 named the assert's site; this reads its operand. `0x8D26D0` computes
+`skillListUser` three ways: **0** when the agent is the player
+(`0x80D3E0`'s value), **`*lookup(agent) + 1`** when a lookup succeeds, and
+**`0x29` — which IS `SKILL_LIST_USERS` — when the lookup returns NULL**. So
+41 is not a bad index, it is the *not-found* sentinel, and the assert means
+**the client cannot resolve our hero's agent id to a hero record**. The
+lookup is `0x0080E390`: `ctx[+0x2c] + 0x584`, the **agent-keyed activation
+array** (the 0x24-stride one — not the 0x9c-stride hero-keyed array at
+`+0x594`).
+
+**MY PREDICTION, PRE-REGISTERED AND REFUTED.** That array's only writer is
+`0x0072 HeroActivate`, which is opt-in, so I predicted `--hero-activate`
+would clear the assert. Run (capture `20260823T133542`): **the assert fired
+anyway**, `case93=1 → postcall=0` exactly as before. The reason is in the
+server's own log and I should have read it before predicting: `--hero-activate`
+sends `0x0072` **last** — line 149 `0x01C2`, line 154 `0x0072` — while case 93
+runs *synchronously inside* `0x01C2`'s worker. The record does not exist yet
+when the skill list asks for it. The hypothesis was right about the mechanism
+and wrong about the remedy.
+
+**THE ORDERING ARM, and it produced a SQUEEZE rather than a fix.**
+`--hero-activate-first` (new, opt-in, and the order is INVENTED — retail sends
+`0x0072` zero times) moves the activation ahead of the party build. On the
+wire it worked: capture `20260823T134154`, line 144 `0x0072`, line 150
+`0x01C2`. The SkillList assert did **not** appear — the first late run in
+8 without it — **but this arm has ZERO EXPOSURE and no verdict is claimed
+from it**: `case93` did not fire either, and the SkillList assert is
+downstream of case 93, so the condition under test never occurred. An arm that
+never met its condition has no trials (the rule this project already wrote
+down after the last time).
+
+**What it did produce is a different assert, and its mechanism is legible:**
+`attribState`. The hero's attributes and skill bar are sent AFTER `0x01C2`
+(log lines 151 `0x0037`, 153 `0x003A`, 154 `0x00DA`), so moving `0x0072` ahead
+of the party build also moved it ahead of *those* — activating a hero whose
+attribute state has not arrived.
+
+**The structural finding, which is worth more than either arm:** the hero
+pipeline has ordering constraints in BOTH directions, and as currently
+sequenced they are **mutually unsatisfiable**.
+
+| constraint | source | requires |
+|---|---|---|
+| the agent→hero record must exist before `0x01C2` | §37's call path | `0x0072` **before** the party build |
+| `0x0072` must not precede the hero's attribute state | this run's `attribState` | `0x0072` **after** `0x0037`/`0x003A` |
+| the hero's attributes are sent after `0x01C2` | gamesrv.log 151/153 | — |
+
+Any two can hold; all three cannot. **So the fix is not moving one message —
+it is moving the WHOLE hero pipeline (info → attributes → skill bar →
+activate) ahead of the party-hero-add, preserving relative order.** That is
+precisely what §35.6c's superseded note reasoned toward from the other end
+("defers the whole hero pipeline as one unit, preserving relative order and
+moving only the absolute time"), reached here from the assert side. It is a
+bigger change than a flag flip and is left staged rather than guessed at.
+
+**Reproduction.** `--map 280 --hero 1 --hero-bust-cache --hero-late 10
+--hero-activate [--hero-activate-first]`, trap
+`--sites case93,postcall,filter,create`. Captures `20260823T133542`
+(activate-last, SkillList assert) and `20260823T134154` (activate-first,
+`attribState`, zero exposure).
