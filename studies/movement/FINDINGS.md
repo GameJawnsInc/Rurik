@@ -5938,3 +5938,87 @@ hour to pay: *"before quoting a zero, ask what a non-zero would have looked
 like."* The inverse applies to a positive. I quoted six occurrences as evidence
 for a mechanism without first asking what the substrate that DOES warp would
 show — and it shows zero.
+
+### 2026-08-23 — ★★ THE CHAIN IS FULLY DECODED, AND IT ENDS ON AN INSTRUMENT: `0x0023` IS ARENANET'S OWN MOVEMENT-STATE CHECKSUM (REALFIX-I3)
+
+**Static, pristine 38797, no client run.** The `--xrefs 0x005FC2F0` follow-up the
+entry above called desk work. Every address below is OBSERVED; the labels are
+ArenaNet's own, via `asserts.py --at`.
+
+**The whole mechanism, end to end:**
+
+```
+Map.cpp predicate 0x007081D0 returns 0
+  0084E0E3  push "Client pathing data out of sync with server..."   (UTF-16, VA 0x00B973F8)
+  0084E0EA  call 0x0046EE30          ; Base/Rtl/Log.cpp, level 2
+  0084E0F2  call 0x005FC2F0          ; <- ONE caller image-wide, this one
+
+0x005FC2F0  (AgApi.cpp) -- four instructions, complete:
+  call 0x0047F660 / mov eax,[eax+8] / mov dword [eax+0x1C8], 1 / ret
+
+0x005FD44D  (AgMsg.cpp, inside the 0x0023 handler at 0x005FD3F0):
+  call 0x005FEEA0            ; the checksum, below
+  cmp  eax, [edi+8]          ; against the message's second dword
+  je   epilogue              ; agree -> nothing
+  cmp  dword [esi+0x1C8], 0
+  jne  epilogue              ; THE LATCH -- already warned, stay quiet
+  push [edi+4] / push "Agent %u position out of sync with server" / push 2
+  call 0x0046ED40
+```
+
+**`agentMgr+0x1C8` is a LOG-SPAM LATCH AND NOTHING ELSE.** Its only writer is
+the four-instruction function above; its only reader on this struct is the
+`jne` that skips a `printf`. It changes no movement behaviour, gates no branch
+in the mechanism this arc decoded, and is **not a lever**. That closes the
+"shared module with `0x005FCAA0`" thread the previous entry left open: same
+module, no relationship. (`[ctx+8]` is the agent manager on the neighbouring
+function's own evidence — `0x005FC310` reads `+0x14C` and `+0x154` off it, this
+arc's async array and its count.)
+
+**★ AND THE COMPARED VALUE IS THE FINDING.** `0x005FEEA0` is five instructions
+and a `ret`:
+
+```
+mov eax,[ecx+0xB4] / xor eax,[ecx+0xB0] / xor eax,[ecx+0x80]
+xor eax,[ecx+0x7C] / xor eax,[ecx+0x78] / ret
+```
+
+A raw-dword XOR over **exactly the five fields this arc has spent nine runs
+on**: `+0x78`/`+0x7C` position (the dead-reckoned operand of the match test),
+**`+0x80` the plane word** (REALFIX-F1's whole subject), and `+0xB0`/`+0xB4`
+velocity (what the grant bake writes). **`GAME_SMSG 0x0023` is a movement-state
+checksum message** — `{agent_id, checksum}`, `declared_unpack_size` 10, shape
+`msg_header + dword + dword`, already in `schema/messages.json` and named
+`UNKNOWN_8023` in `authsrv.py:4699`. ArenaNet built a desync detector into the
+protocol and we have been carrying its schema row, unnamed, the whole time.
+
+**REALFIX-I3 — the instrument this hands us, and its price.** A server that
+computes the same XOR over its authoritative copy and sends `0x0023` gets the
+**client's own verdict** on whether its state matches ours, per agent, with **no
+movetap, no breakpoint and no second process** — the cheapest desync witness in
+the arc, and ArenaNet's own. Before anyone builds it, three things are
+UNVERIFIED and two of them can kill it:
+1. **Which copy is `ecx`.** The handler passes `ebx`, and whether that resolves
+   to the SYNC or the ASYNC agent is not read yet. This decides everything: the
+   arc's entire subject is that the two differ.
+2. **It is BIT-EXACT.** The XOR is over raw float dwords, so any difference in
+   any of five fields — a 1-ulp position, a velocity we never modelled — reads
+   as mismatch. It is a "did our writes apply exactly" check, not a "are we
+   close" check, and our server models velocity nowhere near bit-exactly.
+3. **It logs and returns 1.** It is a DIAGNOSTIC: no snap, no correction, no
+   behaviour. Its value is that it makes the client speak, and its output is a
+   log line — which means reading it needs `Gw.log`, not the wire.
+
+**Why the line never fires in our runs, measured rather than assumed:** across
+1,114 gamesrv captures our server has sent `0x0023` **six times, all on
+2026-08-12, all from `PROBE[smsgsweep]`, and all with a zero body**
+(`23000000000000000000` — agent 0, checksum 0). Never in normal play. So the
+per-agent line cannot fire, and the 0-of-31 count in the entry above is
+explained at the source rather than left as an anomaly.
+
+**Corrections this closes.** The previous entry's "the failure branch calls into
+AgApi.cpp, the same module as the gate-free SetPosition route — whether they are
+related is UNVERIFIED" is now **answered: unrelated.** And the withdrawn
+headline two entries up is confirmed wrong a second way — ArenaNet's client does
+have a per-agent position-desync line, it is `0x0023`'s, and it is one we have
+never given it the chance to print.

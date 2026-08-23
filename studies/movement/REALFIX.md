@@ -13,6 +13,12 @@ numbered by candidate. `REALFIX-H<n>` = harness builds. `REALFIX-L<n>` = live ru
 `REALFIX-E` = the admissible event definition. `REALFIX-X<n>` = L2 protocol cells.
 `REALFIX-W<n>` = L2's measured walk facts. `REALFIX-T<n>` = timing/tooling deltas.
 `REALFIX-I<n>` = instrument changes. `REALFIX-F<n>` = fix candidates.
+Minted 2026-08-22/23: **`REALFIX-I2`** = a click-arm exemption from rule 2,
+priced and DEFERRED (L9's pre-registration ruling 1; mandatory only if a run
+aborts on exposure a fourth time). **`REALFIX-I3`** = sending `GAME_SMSG 0x0023`,
+ArenaNet's own movement-state checksum — the client's per-agent desync verdict
+for free, with three UNVERIFIED terms that can kill it (FINDINGS
+§"THE CHAIN IS FULLY DECODED").
 Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 ## REALFIX — the buildable spec
