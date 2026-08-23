@@ -6131,6 +6131,34 @@ Every one of these, in the order they were written:
   unrelated to deferral. §§2-4 need the vault and a 32-bit Windows and SKIP with
   their reason. Floor 14 = the mandatory core (§1+§5+§6); a whole green run is
   39, ~6s),
+  `toolkit/clientscan/test_compositetrap.py` (**the composite pipeline's runtime
+  instrument, checked without a client** — `compositetrap.py` is the probe for
+  playercomposite §4.12 ("nothing here was checked against a running client"),
+  and this is everything about it that can go red at a desk. §1 checks both
+  sites' recorded bytes against the pinned 38797 image (an address typo is
+  otherwise invisible until a run arms on the wrong instruction — and
+  `verify_sites` would still pass, since it compares the same wrong bytes with
+  themselves). §2 requires the sites to DECODE as claimed: the record
+  resolver's own `lea eax,[esi+esi*2]; shl eax,4` gives the stride 48 and its
+  operand gives the base global the capture reads, its `cmp` gives the count
+  global P5 bounds against, and the base lookup's `prof < 0xB` / `type < 0x14`
+  are what make an out-of-table type argument a real signal rather than a
+  decode error — every constant the tool uses is read from the instruction
+  that uses it, not asserted. §§3-4 score the analyser on synthetic hits and
+  break it six ways, each of which MUST redden: the control-silent case
+  (no base-lookup hit ⇒ rc 2, NO verdict, even with perfect record hits —
+  because "it never happened" and "we cannot see it happen" are one picture);
+  an armour index resolving to the wrong composite type (refutes P4, the one
+  place the record-is-authoritative claim is testable live); a base lookup for
+  an ARMOUR type outside step C's table (refutes P1); a type-2 shell alongside
+  type 1 and a type-2-only run (both contest §7's "author against type 1", the
+  strongest result the probe could return); a reserved-bit index (P5, §9.1's
+  namespace); and no armour seen at all (P4 must report NO VERDICT, never a
+  vacuous pass). §5 ties the prediction to the content: `OUR_ARMOUR` must be
+  exactly what `content/items.toml`'s five rows resolve to through the
+  archive's composite table, so editing a content row without editing the
+  prediction goes red here instead of producing a run that cannot fail. Needs
+  the pinned exe for §§1-2 and the vault for §5, both SKIP-declared; floor 18),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

@@ -412,6 +412,11 @@ reachable under *two* different reserved ids. So the ordinary file id and the
 reserved id are two separate reference spaces, and the client's asserts guard
 the ordinary-id code paths against being handed one of the reserved kind.
 
+**⚠ THE "SECOND NAMESPACE" READING IS WRONG AND IS CORRECTED IN §9.4
+(2026-08-23).** The measurements in the paragraph above are all reproducible;
+the *interpretation* is not. Bit 31 is a **pending-replacement rename**, not a
+parallel reference space. Read §9.4 before citing this paragraph.
+
 **For authoring:** every one of the 16,567 composite file ids clears bit 31
 (max 375,810), so assembling a player from the composite table never trips the
 assert. A mint that ever set bit 31 would, and `playerassembly.manifest`
@@ -543,3 +548,100 @@ know every component row sits behind the same one. Authoring a player
 VISUAL today therefore goes through the composite TABLE (pick different
 records) rather than through modified geometry — which §9.2's wearmap work
 is the server half of.
+
+## 9.4 CORRECTION: bit 31 is a PENDING-REPLACEMENT rename, not a second namespace (2026-08-23)
+
+**§9.1's measurements stand; its interpretation does not, and this is my own
+claim from the previous day.** §9.1 read 25 bit-31 ids resolving to MFT rows
+disjoint from every ordinary id's row and concluded "a distinct reference
+namespace", leaving "what the reserved namespace is FOR" open. It is not a
+namespace. **FcArchive renames a row's ids to the bit-31 spelling while a
+content replacement is pending; DnArchive binds the plain id once the
+replacement is installed.** Found by accident — the composite-trap run
+(§9.5) was refused by `session.py`'s content preflight, whose message
+already states this mechanism, and the archives then confirmed it.
+
+**Three witnesses, all reproducible from the vault:**
+
+1. **The plain twin is never bound while the rename stands.** In the study
+   archive, 0 of the 25 bit-31 ids has its plain id bound anywhere. That is
+   exactly why §9.1's rows looked "disjoint from the ordinary id space" — a
+   row mid-rename is by construction not reachable under its plain id. The
+   disjointness was a *consequence* of the state, not evidence of a
+   second space.
+2. **After replacement, the bit vanishes and the plain id appears.** The
+   `run/2026-07-29_221c13772c7a` client archive — which has completed its
+   replacements — carries **0** bit-31 ids, and **16 of the study's 25**
+   reserved ids are now bound under their plain spelling, each at the
+   replacement's NEW row (`0x1B97D`: study row 7982 → base row 177262,
+   a different file, 1,300,044 B vs 1,300,036 B). Not one is still bound
+   under the reserved spelling.
+3. **The "two reserved ids on one row" oddity is the MFT's own shape.** The
+   25 ids cover **16 distinct rows**, nine of which carry two reserved ids
+   apiece — because an MFT row stores two ids and BOTH are renamed together.
+   Nothing about a parallel space; 9×2 + 7×1 = 25 closes exactly.
+
+**What survives §9.1 unchanged:** the bit's VALUE (0x80000000, from
+CpsData:468/:484's `shr eax,0x1f; not; test al,1`), that both routines are
+pure asserts, that all 16,567 composite file ids clear it, and the authoring
+rule — an authored id must keep bit 31 clear. The *reason* is now sharper and
+better: setting bit 31 does not file your row in another space, it marks the
+row as mid-replacement, and the plain id then binds nothing at all. That is a
+worse failure than an assert, because a client would simply not find the file.
+
+**Consequence beyond this arc:** a vault archive's bit-31 population is a
+HEALTH READING. 0 means every replacement has been installed; non-zero means
+that copy is mid-replacement and any map among those ids will not load. Of
+the six loopback run directories, three carry 25–29 such ids today (§9.5).
+
+## 9.5 §4.12's runtime probe is BUILT and ARMED; the run is blocked on archive state (2026-08-23)
+
+`toolkit/clientscan/compositetrap.py` + `test_compositetrap.py` (18 checks,
+no client). The instrument for §4.12 ("nothing here was checked against a
+running client... the cheapest confirmation is a breakpoint on `0x00833420`
+during a character load, logging `(id, record)` pairs"). It re-uses
+`commandertrap.py`'s hardware-breakpoint machinery — DR0..DR3, **nothing
+written into the client**, which matters here because the bytes this arc reads
+are the bytes a patch would mutate.
+
+**Two sites, both re-read from the image this session and both `__cdecl`:**
+`0x008332E0` `f(type, race, prof, *out)` — the base lookup, §2 step C's
+assembly order, and THE CONTROL; and `0x00833420` `f(index) -> s_items +
+index*48` — the record resolver, which the equipment path reaches with
+`ItemData.fileId` unmodified. The record capture reads the resolved record out
+of the **client's own table** (`[0x00BF9804] + index*48`) and reports
+`hdr>>22`, so a hit carries exactly §4.12's `(id, record)` pair.
+
+**Five predictions are registered in the module docstring before any run** —
+P1 base types inside step C's table, P2 the in-world shell is type **1**
+(§7's arg0 answer, whose evidence is six static call sites), P3 prof/race
+constant and in ArenaNet's bounds, **P4 our five armour indices 91/90/94/92/93
+resolve to composite types 15/14/18/16/17** (the archive↔wire↔client-memory
+loop closing on the same five numbers), P5 no index out of range or
+reserved-bit. The analyser's refusals are tested: a silent control yields
+**rc 2 and NO verdict** even with perfect record hits, and six sabotages each
+redden (§4 of the test).
+
+**THE RUN DID NOT HAPPEN, and the blocker is worth more than a green would
+have been.** `session.py`'s content preflight refused both attempts:
+
+| run dir | state of Ascalon City `0x1B97D` |
+|---|---|
+| `2026-07-29_221c13772c7a` | plain id bound at row **177262**, 1,300,044 B — the client installed a REPLACEMENT; the server's study archive still has row 7982, 1,300,036 B. Different files, so the server would path against geometry the client is not drawing. |
+| `…-c2`, `…-probe`, `reskin-roster` | plain id **not bound at all** — row 7982 carries `0x8001B97D`, the bit-31 spelling. Mid-replacement (§9.4). |
+| `2026-08-13…`, `2026-08-20…` | replacement installed, but these are build 38833 and every address above is 38797's. |
+
+So no 38797 loopback client currently has an Ascalon City that matches the
+server's archive. **This is not a defect in the probe** — the preflight is
+doing exactly its job, and the same wall stopped another session's
+cancel-family dry-run the same morning (`main` `1c3ab69`). Unblocking it is an
+archive-state decision (install the replacement into a pristine 38797 copy, or
+point the server at the client's newer row), and it belongs to whoever owns
+the vault's archive state rather than to this arc. The probe is one command
+once a healthy archive exists:
+
+    python toolkit/clientscan/compositetrap.py --wait --seconds 150
+    python toolkit/harness/session.py --keep-open --hold 120 --exe <a 38797 run dir>
+
+Arm the trap FIRST: the composite pipeline runs once at character load, the
+same window that cost the terrain arc its first injection run.

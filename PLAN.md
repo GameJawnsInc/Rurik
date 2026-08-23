@@ -1436,8 +1436,38 @@ atomic-refusal control included; 388 vertices doubled on component 8292).
 shipping modified player geometry still needs the compression-8 encoder or
 the client-compiler route — visual authoring today goes through the
 composite TABLE (record picks), which is what §9.2's wearmap half serves.
-(4) the runtime confirmation
-priced in §4.12 — a breakpoint on `0x00833420` during a character load.
+(4) the runtime confirmation priced in §4.12 — a breakpoint on `0x00833420`
+during a character load. **BUILT AND ARMED 2026-08-23, RUN BLOCKED**
+(`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
+`studies/playercomposite` §9.5): two sites (`0x008332E0` the base lookup and
+control, `0x00833420` the record resolver reading the record out of the
+CLIENT's own table), five predictions registered in the docstring before any
+run — including **P4, our five armour indices 91/90/94/92/93 resolving to
+composite types 15/14/18/16/17**, which closes archive↔wire↔client-memory on
+one set of numbers — and an analyser whose silent-control case returns NO
+verdict, with six sabotages tested red. **`session.py`'s content preflight
+refused both launch attempts**: no 38797 loopback run directory currently
+holds an Ascalon City matching the server's archive (the base copy installed a
+replacement the server does not have; `-c2`/`-probe`/`reskin-roster` are
+mid-replacement with the plain id unbound; the two copies that are healthy are
+38833, where these addresses do not apply). Same wall that stopped another
+session's cancel-family dry-run that morning (`1c3ab69`) — unblocking it is an
+archive-state call, not this arc's.
+**AND THE REFUSAL PAID FOR ITSELF: it corrected §9.1, landed the day before.**
+`FILE_ID_RESERVED_BIT` is **not** a second id namespace — bit 31 is a
+**pending-replacement rename** (FcArchive renames a row's ids; DnArchive binds
+the plain id once the replacement installs). Three witnesses in
+§9.4: 0 of the study archive's 25 reserved ids has a plain twin bound
+anywhere (which is *why* §9.1's rows looked "disjoint"); the run archive that
+completed its replacements carries **0** reserved ids while **16 of those 25**
+plain twins are now bound at the replacement's new row; and the 25 ids cover
+16 rows because an MFT row stores two ids and both are renamed together
+(9×2 + 7×1 = 25). The bit's value, the pure-assert reading and the authoring
+rule all survive — the reason is sharper: a bit-31 id does not land in another
+space, it marks the row mid-replacement and the plain id then binds nothing.
+Practical by-product: **an archive's bit-31 count is a health reading** — 0
+means every replacement is installed, non-zero means that copy cannot load the
+maps among them.
 
 ### The effects DO SOMETHING — five mechanics modelled, one refuted formula, one deliberate lever (2026-08-22)
 

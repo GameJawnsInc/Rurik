@@ -20,8 +20,9 @@ import cpsdata       # noqa: E402
 import playerassembly  # noqa: E402
 import unitassembly  # noqa: E402
 
-# Floor set from a real green run (34 checks, 2026-08-22).
-LEDGER = checks.Ledger("player assembly", floor=34)
+# Floor set from a real green run (35 checks, 2026-08-23 -- 34 until §8 gained
+# FINDINGS §9.4's plain-twin discriminator).
+LEDGER = checks.Ledger("player assembly", floor=35)
 check = checks.adopt(LEDGER)
 
 MONSTER_SHELLS = (116228, 116703, 116377, 116366)   # FINDINGS 5 sabotage 5
@@ -183,15 +184,25 @@ check(not reserved and max(ids) < playerassembly.FILE_ID_RESERVED_BIT,
 raw = archive.file_id_table(ar, raw=True)
 raw_reserved = [i for i in raw if i & playerassembly.FILE_ID_RESERVED_BIT]
 check(raw_reserved,
-      "the raw file-id table carries reserved-bit ids -- a distinct id "
-      "namespace the client's asserts guard the ordinary path against",
+      "the raw file-id table carries reserved-bit ids -- rows FcArchive has "
+      "renamed pending a content replacement (FINDINGS 9.4; 9.1 read these "
+      "as a second namespace and was WRONG)",
       f"{len(raw_reserved)} such ids, max 0x{max(raw_reserved):08X}")
 res_rows = {raw[i] for i in raw_reserved}
 ord_rows = {raw[i] for i in raw if not (i & playerassembly.FILE_ID_RESERVED_BIT)}
 check(all(isinstance(raw[i], int) and raw[i] >= 0 for i in raw_reserved)
       and not (res_rows & ord_rows),
-      "they resolve to real MFT rows DISJOINT from the ordinary id space -- a "
-      "separate namespace, not aliases", f"e.g. row {raw[raw_reserved[0]]}")
+      "they resolve to real MFT rows unreachable from any ordinary id -- "
+      "which is what a PENDING RENAME looks like: the plain id binds nothing "
+      "until DnArchive installs the replacement, and 0 of these 25 has a "
+      "plain twin anywhere in this archive",
+      f"e.g. row {raw[raw_reserved[0]]}")
+plain_twins = [i for i in raw_reserved
+               if (i & ~playerassembly.FILE_ID_RESERVED_BIT) in raw]
+check(not plain_twins,
+      "NOT ONE reserved id has its plain twin bound -- the discriminator "
+      "between 9.1's 'parallel namespace' (twins would coexist) and 9.4's "
+      "'pending rename' (they cannot)", f"twins: {plain_twins}")
 # The authoring guard fires: a manifest whose record carries a reserved-bit
 # file id is refused before it becomes a seed.
 import cpsdata as _cps
