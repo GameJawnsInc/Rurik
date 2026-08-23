@@ -414,6 +414,46 @@ occurrences — and no 45).
 
 ---
 
+## 3e. The cancel-family live capture — predictions registered 2026-08-23, BEFORE the run
+
+Run 2 of the loopback acceptance (`20260823T102742`) moved the failure into
+the client: every cast cancel now fires server-side (two by the movement
+door, two by the `0x0028` door — hold release + bare E2, `Gw.log` clean, no
+pending-lookup failure), the movement grants go out in the same instant
+(0x0025 + 0x0029, `grant_verdict fired`), **and the client plays the
+activation to completion anyway** — while the swing cancels, whose burst
+carries the attack family's stop (property 3), visibly stop on screen. The
+symmetric candidate for casts is property 59 (`skill_stopped`, same trio as
+the screen-proven 60/58, SOURCED dispatch into AvApi) — but it has zero wire
+occurrences, the corpus's one cancel released property 45 instead, and
+**re-reading that cancel's c2s side shows it is not a precedent at all**:
+aligned clocks (offset 271.67 s) put the press mid-run — the skill QUEUED,
+never began, the client was never held, and the "cancel" was a steering
+change. **No cancel of a BEGUN action exists in any capture.** So the
+release burst for a begun cast gets measured, not guessed: shopping-list
+item 5 of `studies/combat/PLAN.md` §3, focused. Plan
+`vault/plans/cancel_family.txt` (9 steps, sha256 `9e8a241c…`).
+
+Predictions, stated first:
+
+- **CASTMECH-P7** — W once, mid-cast, on retail: the client walks on that
+  single press (operator-confirmed stock behaviour), and the server's
+  same-batch answer carries the release burst for a begun cast. WHICH
+  property rides beside the E2 is the question: 59 (structural), 45 (the
+  queued precedent), 8→0, some combination, or none. No prediction is
+  privileged; whatever appears gets wired verbatim.
+- **CASTMECH-P8** — Esc mid-cast: the client sends `0x0028` (as ours does),
+  retail answers it, and the answer's shape tells us what our `0x0028`
+  grant is missing. If retail's client instead sends nothing and
+  self-cancels, the 0x0028 reading needs revisiting.
+- **CASTMECH-P9** — W once mid-windup: one press walks; the answer's stop
+  burst against ours ([8→0, 3] + grants). If retail's differs, the delta
+  names why our client freezes for a press after a stopped swing.
+- **CASTMECH-P10** — the completion control re-witnesses the E5 burst
+  (58, the 8-pulse) on a second account/build for free.
+
+---
+
 ## 4. Canceling: three doors in, one wire shape out
 
 **WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is
