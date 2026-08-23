@@ -2616,10 +2616,15 @@ would land.
    adrenaline, so the run had to swap in the 5-energy Frenzy via `--skills` to press a
    stance at all. **Whether the client greys an uncharged adrenaline skill and swallows
    the keypress is untested**, and that is the cheapest reason to model it.
-3. **Name the enchantment sentinel.** `0x20000`/`0x30000` are an enum in the high word
-   and nothing in this repo names them. The client draws "Enchantment Spell" and a
-   maintained-enchantment tooltip from *somewhere*, so whatever reads that slot is the
-   same kind of anchor `s_attrib`'s accessors were for the item modifiers.
+3. ~~**Name the enchantment sentinel.**~~ **DONE 2026-08-22** (`studies/skills` §13.1,
+   `test_skillsentinel.py`): `0x20000` is **energy upkeep** — the anchor was
+   `GmCtlSkCard.cpp` (the skill card), which reads the duration slot `+0x44`, exact-
+   compares `0x20000`, and asserts ArenaNet's own `hasEnergyUpkeep`. All 27 skills
+   carrying it are Enchantments. The "enum in the high word" reading was half right:
+   `0x30000` is NOT an upkeep flavor (367 skills of 16 types, never read at this slot)
+   and `999999` is never compared — only `0x20000` is a real marker. `effects.py` names
+   it (`DURATION_ENERGY_UPKEEP`, `sentinel_name`); modelling the upkeep DRAIN is a
+   combat mechanic for when maintained enchantments land, not a naming gap.
 4. **How retail REFRESHES an effect is NOT FOUND.** Re-sending the apply does nothing
    (measured under both id choices). `0x0044`-then-`0x0042` would work and there is no
    evidence retail does it. Only becomes live when something needs to extend a running

@@ -1715,16 +1715,52 @@ word, i.e. an enum, not a magnitude; 999,999 is the other spelling of forever.
 
 **Vital Blessing (289) is one of them, and it is on our own enemy's bar**, so
 this refusal fires in every session this server runs. That is deliberate: the
-alternative is putting **36 hours** on the wire as a duration. What the enum
-*means* is **NOT FOUND** — no source in this repo names it, and the module keys
-on the SHAPE (high word set, floor `0x10000`) rather than on the three observed
-values, because it is the shape that is established.
+alternative is putting **36 hours** on the wire as a duration. ~~What the enum
+*means* is **NOT FOUND**~~ — **`0x20000` is now NAMED as energy upkeep, §13.1
+below.** The module still keys on the SHAPE (high word set, floor `0x10000`)
+rather than on the specific values, because the floor is what a server must
+refuse to send as a duration whatever the value means.
 
 **A follow-up with a clean answer available:** the client draws "Enchantment
 Spell" and a maintained-enchantment tooltip from *somewhere*. Whatever reads
 `0x20000` is the same kind of anchor `s_attrib`'s accessors were for the item
 modifiers (`studies/itemmods` §2), and it would name the enum rather than leave
 it as a floor.
+
+### 13.1 The follow-up ran, and `0x20000` is ENERGY UPKEEP — ArenaNet's own word (2026-08-22)
+
+The anchor is where §13 said it would be: the client reads the skill record's
+duration slot and the tooltip control names the value. **OBSERVED, static, no
+client launched.** `GmCtlSkCard.cpp` — the skill card — reads `[esi+0x44]`
+(the duration slot; `esi` is a skill record, confirmed by the same function
+testing its flags at `+0x10`) at `0x008CC4EC` and **exact-compares it to
+`0x20000`** at `0x008CC4EF`. The branch's own assert is ArenaNet's word for
+it: **`!(hasEnergyUpkeep && skillData.healthSacrifice)`** (`GmCtlSkCard:462`,
+`0x008CC501`), with a second witness in `GmCtlSkListEntry.cpp`. So:
+
+- **`0x20000` = energy upkeep** — a maintained enchantment, whose duration
+  slot is free because it lasts until removed and drains energy per second
+  instead. All **27** skills in the full 3,443-row table carrying `0x20000`
+  are type 6 (Enchantment Spell), zero exceptions. This is the marker §13 was
+  after. Its name in the repo is `effects.DURATION_ENERGY_UPKEEP` /
+  `effects.sentinel_name`, and `resolve_duration`'s refusal now names it.
+- **`0x30000` is NOT the other half of an enum.** §13 read "2 and 3 in the
+  high word" from a 30-row corpus subset; the full table has **367** skills of
+  **16 different type codes** carrying `0x30000`, mostly duration-bit-clear, and
+  **none of the image's fifteen `0x30000` compares is fed by a `+0x44` read**.
+  It is the duration slot's default filler for a skill with no fixed duration,
+  not a marker the client branches on here.
+- **`999999` is never compared anywhere in the image** — a "forever" magnitude
+  the arithmetic passes through, confirming §13's "the other spelling of
+  forever" and that it is not an enum value.
+
+The refinement that matters: `0x20000` is a real, client-read marker (name it
+upkeep); `0x30000`/`999999` are not, and the "high-word enum" framing was half
+right. What upkeep MEANS for the server — a per-second energy drain until the
+enchantment is cancelled, not a timed episode — is a mechanic for whenever
+maintained enchantments are modelled, and the sentinel now carries its name to
+that day. `toolkit/clientscan/test_skillsentinel.py` pins all of the above
+against the client's own bytes.
 
 ## 14. `target` (+0x31) is a target-TYPE enum, and the type column corroborates two of its codes
 
@@ -1884,9 +1920,12 @@ a running effect, and nothing does yet.
    sidestep it. Whether the client greys an uncharged adrenaline skill and
    swallows the keypress is untested, and it is the cheapest reason to model
    adrenaline.
-2. **What the enchantment sentinel means** (§13). Vital Blessing refused on
-   every cycle of this run, loudly, exactly as designed — thirteen log lines
-   naming the gap.
+2. ~~**What the enchantment sentinel means** (§13).~~ **ANSWERED, §13.1: it is
+   ENERGY UPKEEP** (`GmCtlSkCard.cpp`'s `hasEnergyUpkeep`). Vital Blessing
+   refused on every cycle of this run, loudly, exactly as designed — and the
+   refusal now names the value. Modelling upkeep (an energy drain until the
+   enchantment is cancelled, not a timed episode) is the remaining work, and it
+   is combat-mechanic work, not a naming gap.
 3. **Whether the effect does anything.** Frenzy's icon appeared; Frenzy's
    *+33% attack speed and double damage taken* are not modelled, and neither is
    Scourge Sacrifice's. The channel is the substrate; the per-skill mechanics

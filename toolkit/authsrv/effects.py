@@ -125,11 +125,43 @@ import math
 OP_EFFECT_APPLY = 0x0042
 OP_EFFECT_REMOVE = 0x0044
 
-# At or above this, the duration slot is not a second count. 0x20000 and
-# 0x30000 are an enum in the high word; 999999 is the other spelling of
-# forever. The floor is 0x10000 rather than any of the three, because what is
-# established is the SHAPE (high word set) and not the specific values.
+# At or above this, the duration slot is not a second count. The floor is
+# 0x10000 rather than any specific value because the SHAPE (high word set) is
+# what a server must refuse to send as a duration -- but the values are now
+# NAMED, from the client's own code (studies/skills 13.1, 2026-08-22):
+#
+#   0x20000  ENERGY UPKEEP. GmCtlSkCard.cpp (the skill-card tooltip) reads the
+#            skill record's duration slot (+0x44) and EXACT-compares it to
+#            0x20000 at 0x008CC4EF; the branch's assert is ArenaNet's own words
+#            -- `!(hasEnergyUpkeep && skillData.healthSacrifice)`
+#            (GmCtlSkCard.cpp:462, 0x008CC50B). It is a skill record: the same
+#            function tests the flags at +0x10. All 27 skills in the full table
+#            that carry it are type 6 (Enchantment Spell) -- a maintained
+#            enchantment, whose duration slot is free because it lasts until
+#            removed. This is the marker the finding was after.
+#   0x30000  NOT an upkeep flavor and NOT read at this slot. 367 skills of every
+#            type carry it (mostly duration-bit-clear), and NONE of the image's
+#            fifteen 0x30000 compares is fed by a +0x44 read -- it is the
+#            duration slot's default filler for a skill with no fixed duration.
+#            The old "2 and 3 are an enum in the high word" reading was half
+#            right: 2 is read, 3 is a default the client never branches on here.
+#   999999   never compared anywhere in the image -- a "forever" magnitude the
+#            arithmetic passes through, not an enum value.
 DURATION_SENTINEL_FLOOR = 0x10000
+DURATION_ENERGY_UPKEEP = 0x20000    # GmCtlSkCard.cpp `hasEnergyUpkeep`
+
+
+def sentinel_name(value):
+    """ArenaNet's name for a duration-slot sentinel, or a generic label.
+
+    Only 0x20000 has a sourced client name (energy upkeep / maintained
+    enchantment); the rest are honestly generic. Kept as a function rather than
+    a dict so the un-named values read as `no fixed duration` rather than as a
+    missing key.
+    """
+    if value == DURATION_ENERGY_UPKEEP:
+        return "energy upkeep (maintained enchantment)"
+    return "no fixed duration"
 
 # The `target` byte at +0x31. Only these two codes are resolved, and the type
 # column is what resolves them rather than a guess: all 199 Attacks are 5, 75
@@ -308,11 +340,13 @@ def resolve_duration(row, rank):
 
     if lo >= DURATION_SENTINEL_FLOOR:
         raise EffectError(
-            f"duration slot holds {lo} (0x{lo:X}), which is a sentinel and not "
-            f"a second count -- 22 skills carry 0x20000, 7 carry 0x30000 and "
-            f"one carries 999999, and 24 of the 30 are enchantments, which is "
-            f"where a 'maintained until removed' marker belongs. Vital "
-            f"Blessing is one of them. Refusing to put 36 hours on the wire.")
+            f"duration slot holds {lo} (0x{lo:X}) = {sentinel_name(lo)}, not a "
+            f"second count. 0x20000 is ENERGY UPKEEP -- GmCtlSkCard.cpp reads "
+            f"this slot and exact-compares 0x20000, asserting `hasEnergyUpkeep` "
+            f"(studies/skills 13.1); all 27 skills carrying it are maintained "
+            f"enchantments, and Vital Blessing is one. Refusing to put an "
+            f"upkeep sentinel on the wire as 36 hours -- modelling upkeep is a "
+            f"resource drain, not a timed episode.")
 
     return float(lo) if lo else None
 

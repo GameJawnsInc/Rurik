@@ -5288,6 +5288,19 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_skillsentinel.py` (**the duration-slot sentinel
+  `0x20000` is ENERGY UPKEEP, in ArenaNet's own word** — studies/skills §13
+  left "what the enum means" NOT FOUND and §13.1 answered it. §1 pins the
+  server-side name (`effects.DURATION_ENERGY_UPKEEP`, `sentinel_name`, and the
+  `resolve_duration` refusal that now names upkeep) with no vault. The static
+  witnesses (pinned exe): the image asserts `hasEnergyUpkeep` in
+  `GmCtlSkCard.cpp` (and `GmCtlSkListEntry.cpp`, a second control), the full
+  assert is `!(hasEnergyUpkeep && skillData.healthSacrifice)`; the bytes by
+  that assert are `mov eax,[esi+0x44]` (the duration slot; esi is a skill
+  record) then `cmp eax,0x20000` — an EXACT compare, so `0x30000` does not
+  match; and in the full 3,443-row table all 27 skills carrying `0x20000` are
+  Enchantments while `0x30000` spans 16 types (a no-duration default, not an
+  upkeep marker). Needs the pinned exe for §2–4, §1 runs bare; floor 11),
   `toolkit/clientscan/test_typenames.py` (**WHAT THE CLIENT CALLS EACH SKILL
   `type_code` — from the client's own switch, not from a wiki**.
   `studies/presearing/MANIFEST.md` §8 named ten of the thirty codes by Rosetta
