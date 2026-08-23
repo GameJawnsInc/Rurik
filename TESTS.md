@@ -3103,6 +3103,36 @@ Every one of these, in the order they were written:
   second interact cancels it, and an agent that leaves the world drops it. Floor
   19, measured — it was written as 18 from a count in the author's head and
   corrected against the run. No vault, no client. ~1 s),
+  `toolkit/authsrv/test_poschecksum.py` (**GAME_SMSG 0x0023, ArenaNet's own
+  movement-state checksum — and the guard is unusual because the message's
+  whole output is a line in the CLIENT'S OWN LOG.** Nothing it does reaches the
+  wire, a capture, or any state this repo reads back, so there is no round trip
+  to assert: every check is either our builder against the client's own
+  arithmetic re-derived from `struct` alone, or a refusal that stops a broken
+  probe reporting a comfortable silence. §1 recomputes the five-dword XOR at
+  `0x005FEEA0` — velocity `+0xB4`/`+0xB0`, plane `+0x80`, position
+  `+0x7C`/`+0x78` — WITHOUT calling the module under test, because a builder
+  compared against itself is not a check, and pins that `-0.0` and `0.0` give
+  different checksums, which is the whole hazard of a bit-exact compare. **§3
+  is the one that matters: it is the positive control's own control.** The
+  `wrong` arm exists so the client's line appears at least once, and its value
+  is that its prediction cannot come true by accident — so the sentinel is
+  asserted non-zero, asserted to change field 2, asserted NOT to touch the
+  agent id (which the client indexes the SYNC array with, and a corrupt one
+  asserts inside the client at `Array.h:587` instead of logging), and its
+  XOR-is-an-involution property is stated so it cannot be applied twice. Were
+  the sentinel ever zero, the positive control would silently become the model
+  arm and a silent run would read as "we match the client bit-exactly" — the
+  strongest claim this arc could make, and false. §4 pins the wire: 10 bytes,
+  opcode first, then id, then checksum, because the handler reads `[edi+4]` and
+  `[edi+8]` and swapping them indexes an array with a checksum. §5 holds the
+  probe OFF by default and requires the model to NAME the assumption it is
+  wrong under. **What it deliberately does not claim:** that field 2 is what a
+  real server would send — retail sends this opcode 0 times in 137 live capture
+  files, so the sender is a RECONSTRUCTION inferred from the client's compare —
+  or that the client agrees with us, which needs a client and is what the probe
+  run is for. Floor 20, read off a real green run and set AT it, zero headroom.
+  No vault, no client. ~1 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from

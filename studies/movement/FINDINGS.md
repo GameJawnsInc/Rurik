@@ -6079,3 +6079,80 @@ RECONSTRUCTION of retail's sender, not an observation of one. **Measured, not as
 (137 capture files across 20 live sessions), so there is nothing to check the
 sender against, so the field-2 semantics stay
 inferred until retail sends one or a probe makes the line fire.
+
+### 2026-08-23 — ★★ REALFIX-I3 IS BUILT AND THE CLIENT SPOKE: 26 of 26 on the positive control, 25 of 26 on the model
+
+**OBSERVED, `ours`, two agent-driven loopback runs**, map 148 default, build
+38797 (`vault/run/2026-07-29_221c13772c7a/Gw.exe`, named explicitly), identical
+scripted walk both arms (`W:5 S:5` x3, ~30 s of movement, no clicks, no aiming),
+each bounded by `--hold` and torn down automatically. Captures
+`20260823T104522` (wrong) and `20260823T104823` (model); harness reports
+`20260823T104456` / `20260823T104757`.
+
+**The readout is the CLIENT'S OWN LOG**, `vault/run/<build>/Gw.log`, which is
+rewritten per run — so each arm's count is that arm's alone.
+
+| arm | `0x0023` sent | `Agent 1 position out of sync with server` logged |
+|---|---|---|
+| **`wrong`** (model XOR `0x5EED0FF5`) | **26** | **26** |
+| **`model`** (parked-at-report) | **26** | **25** |
+| pathing latch `agentMgr+0x1C8` | — | **0 lines, both arms — clear** |
+
+**THE POSITIVE CONTROL PASSED 26 OF 26, EXACTLY 1:1**, and that is the result
+that licenses everything else. It establishes, at a client, all of: the opcode
+is `0x0023`; field 1 is the agent id and field 2 the checksum, in that order
+(the client's `%u` printed **Agent 1**, our `PLAYER_AGENT_ID`); the id resolves
+in the SYNC array without tripping `Array.h:587`; the compare at `0x005FD448`
+runs; the log fires at level 2; and the suppression latch was clear throughout.
+**The message decoded statically on 2026-08-23 does what the decode said it
+does.** First send on the wire: `230001000000f5ef085d` — 10 bytes, opcode,
+agent 1, `0x5D08EFF5`.
+
+**THE MODEL ARM FIRED 25 OF 26, which is what its own banner predicted** ("the
+line appears ANYWAY... our velocity model is not the client's bake"). So **we do
+NOT reproduce the client's five SYNC fields bit-exactly**, and REALFIX-I3 as a
+routine desync monitor would be a smoke alarm that is always on. That is a
+result about OUR MODEL, not about the client and not about the warp.
+
+**★ AND ONE SEND MATCHED, which is the interesting number.** Exactly one of 26
+produced no line, meaning the client's XOR over its own SYNC copy equalled ours
+to the dword on that one occasion — five fields, four of them float bits, all
+five right at once. That is not a coincidence a wrong model produces.
+
+⚠ **WHICH send matched is UNPAIRED and must not be asserted.** The log line
+carries no timestamp, no position and no sequence — only `Agent 1` — so counts
+are all it yields, and nothing here pairs the silence to a send. The strong
+candidate is the FIRST send, at spawn `(9826.0, 8077.0)` plane 0, before any
+grant had ever been baked: that is precisely the domain
+`authsrv.checksum_model` states it is true in ("parked-at-report... TRUE only
+between an arrival and the next bake"), and at spawn the copy is parked with
+zero velocity by construction. **That is an inference from the model's stated
+domain, not a measurement**, and the cheap discriminator is a second model run
+with a walk carrying more stop-bounded legs: if the silence count stays 1 it is
+the spawn, and if it scales with leg starts it is every parked moment.
+
+**What this hands the arc, stated at its real size.** A working, byte-verified
+channel for asking the client whether its authoritative copy matches ours,
+costing one 10-byte message and reading out in a log file. Its value is NOT
+routine monitoring — 25 of 26 says so — it is as a **bit-exactness oracle for a
+model**: any future reconstruction of the client's bake (`grantsim`'s, or a
+server-side one) can be scored against the client itself rather than against our
+own replay, and a run that goes quiet has proven something no offline harness
+can. The one match already shows the oracle can say yes.
+
+**Costs and limits, none of them hidden.** It logs and returns 1 — no snap, no
+correction, no reply, so it cannot fix anything and cannot be read off the wire.
+The compare is integer equality over float bits, so `-0.0` versus `0.0` reads
+like a teleport (pinned in `test_poschecksum.py` §1). The sender is still a
+RECONSTRUCTION: retail sends `0x0023` zero times in 137 live capture files, so
+what a real server would put in field 2 remains inferred from the compare — the
+runs above show the client ACCEPTS our reading, which is evidence for it and not
+proof. And the latch means any run that hears nothing must check for the
+pathing line before claiming a match; both runs above were checked and clear.
+
+**What landed:** `agents.agent_position_checksum` + `agents.CHECKSUM_FIELDS`,
+`authsrv.GAME_SMSG_AGENT_POSITION_CHECKSUM` / `CHECKSUM_PROBE` /
+`CHECKSUM_WRONG_SENTINEL` / `checksum_model` / `_send_position_checksum`, the
+`--checksum-probe {wrong,model}` flag with its prediction printed at startup,
+and `toolkit/authsrv/test_poschecksum.py` (20 checks, floor 20, zero headroom)
+with its `TESTS.md` entry in the same commit.
