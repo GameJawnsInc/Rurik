@@ -5833,7 +5833,15 @@ here. The provenance gate refused exactly as designed; the cure was to
 fast-forward the worktree. **Both are the parallel-session hazard CLAUDE.md
 names, arriving through the vault rather than through git.**
 
-### 2026-08-23 — ★ RETAIL'S OWN CLIENT LOGS THE WARP, against ArenaNet's own server
+### 2026-08-23 — ⚠ WITHDRAWN THE SAME DAY — "retail's own client logs the warp"
+
+> **Do not quote this section's headline. It was tested within the hour and it is
+> WRONG** — the string is a `Map.cpp` pathing-DATA check, absent from all 29
+> loopback logs including warp-heavy ones. The refutation, the count and the
+> decode are in the next section. The text below is kept unedited as the
+> claim that was made.
+
+#### (as written) RETAIL'S OWN CLIENT LOGS THE WARP, against ArenaNet's own server
 
 **OBSERVED, `live`, and found incidentally while verifying the vault deletion —
 this is a calibration datum the whole arc has never had.**
@@ -5864,3 +5872,69 @@ now known to be **not zero**. The cheap follow-up is already in reach — the
 live corpus is six captures deep, and `Gw.log` is one file per run directory:
 count these lines across the live sessions and pair them against the wire, which
 is desk work needing no client run.
+
+### 2026-08-23 — ⚠ COUNTED, AND IT REFUTES THE ENTRY ABOVE: the pathing-desync line is a MAP-DATA check, not the warp
+
+**The count, every surviving client log in the vault, `Gw.log` and every rotated
+`.prev`/`.pre`/`.run` sibling — 31 files:**
+
+| substrate | logs | logs carrying the line | occurrences |
+|---|---|---|---|
+| **live** (`run-live/*`, webgate login lines present) | 2 | **2** | **6** (4 + 2) |
+| **loopback** (`run/*`, `research/*`, our own server) | 29 | **0** | **0** |
+
+Fisher one-sided on logs-carrying, **p = 0.00215**. ⚠ The denominators are logs,
+not sessions: `Gw.log` is rewritten per run, so each file speaks only for the
+last session in its directory, and 29-vs-2 is an artifact of how many run
+directories exist rather than of how much play each substrate saw.
+
+**THE HEADLINE OF THE ENTRY ABOVE IS WITHDRAWN.** It read *"retail's own client
+logs the warp… the phenomenon this arc has spent nine runs on is a named, logged
+condition."* **That does not survive its own first test.** Our loopback runs
+produce the decoded warp constantly — REALFIX-L5 measured 15.66/min, L8 scored
+16 REALFIX-E events in one control arm — and **not one of the 29 loopback logs
+contains the string.** If it were emitted by the resync path, those logs would
+be full of it. The correct reading of the 6-vs-0 split is the opposite of the
+one I published: the line tracks **being connected to ArenaNet**, not warping.
+
+**And the binary says what it actually is.** The string is **UTF-16LE** (an
+ASCII search finds nothing, which is why it had never turned up in a scan) at
+file `0x7963F8` → **VA `0x00B973F8`**, and exactly one instruction stores that
+address:
+
+```
+0084E0DA  call 0x7081D0        ; predicate -- Map.cpp   (asserts Map:2144 `bits`, Map:2191)
+0084E0DF  test eax, eax
+0084E0E1  jne  0x84E0F7        ; NON-ZERO = fine, skip the whole block
+0084E0E3  push 0xB973F8        ; the string
+0084E0E8  push 2               ; log level
+0084E0EA  call 0x46EE30        ; the logger -- Log.cpp
+0084E0F2  call 0x5FC2F0        ; and ONLY on this path -- AgApi.cpp (AgApi:1260)
+```
+
+Module attribution is ArenaNet's own, via `asserts.py --at`: the predicate is
+**`Map.cpp`**, the logger is **`Base/Rtl/Log.cpp`**, the failure-path call is
+**`Engine/Agent/AgApi.cpp`**. It is **not** `0x00605FC0` (the desync test), not
+`0x006022B0` (the snap), and not any of the three message-driven callers this
+arc decoded. A `Map.cpp` predicate is a statement about the **pathing DATA the
+map file carries versus what the server declares** — which is what the string
+says in plain English and what this arc read past.
+
+**What survives, and it is smaller but real:** ArenaNet ships a named condition
+for client/server pathing disagreement, it fires against their own service, and
+its failure branch calls into `AgApi.cpp` — the same module as `0x005FCAA0`, the
+gate-free SetPosition route REALFIX-Q5 has been unable to attribute. **Whether
+those two are related is UNVERIFIED** and `asserts.py --at`'s span is a
+heuristic, so do not read the shared module as a link; the cheap test is
+`--xrefs 0x005FC2F0` and a read of its body, and it is desk work.
+
+**What this costs the arc: nothing.** No rate, no baseline, no candidate moves.
+The implicit assumption the entry above tried to overturn — that our measured
+warp rates are ours — stands untouched, because the one instrument that could
+have contradicted it turns out to be measuring a different thing entirely.
+
+**The lesson is the one this repo already has a rule for**, and it took under an
+hour to pay: *"before quoting a zero, ask what a non-zero would have looked
+like."* The inverse applies to a positive. I quoted six occurrences as evidence
+for a mechanism without first asking what the substrate that DOES warp would
+show — and it shows zero.
