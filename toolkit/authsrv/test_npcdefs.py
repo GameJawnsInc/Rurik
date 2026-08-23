@@ -35,12 +35,18 @@ Three sabotages were run against the extractor and all three fail the suite:
   * the naive join                        -> 2 red checks (section 3)
   * `_f32` reinterpreting instead of      -> 2 red checks (section 4)
     reading the dword's bits
-  * `move_speed` from create field 10     -> `read()` REFUSES, naming the definition
-    instead of field 9                       and both speeds: "definition 1480 has two
-                                             move speeds (1.0, 0.32)". A refusal rather
-                                             than a red check, and recorded here so a
-                                             reader meeting the traceback knows it is
-                                             the guard working rather than a crash.
+
+FIELD 9 IS PER-INSTANCE TOO, and this file used to say otherwise. Until
+2026-08-22 `read()` REFUSED on a second field-9 value ("field 9 is
+single-valued per definition"), which was true only of the three-capture
+subset this test pins and blocked the full 15-capture pool -- so every
+unitassembly/unitmodels figure downstream was a 3-capture number. It is
+false: field 9 is the agent's speed AT THE CREATE TICK, so a snared create
+reports a reduced value. Section 7 pools ALL live captures, shows `read()`
+no longer refuses, and pins the two definitions (159, 114) whose creates
+caught a snare -- base preserved as the max, the reduced state recorded.
+Field 10 stays unread as speed for the reason the module docstring gives
+(it is per-instance and carries unrelated values).
 
 Sections 0-2 and 6 need `vault/captures/live/`; without it they skip and the floor
 takes the run red. ArenaNet's own bytes are the only oracle for any of this.
@@ -67,9 +73,11 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=32)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=40)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
-# named-capture selection, the fourth-capture proof and the mode plumbing
+# named-capture selection, the fourth-capture proof and the mode plumbing;
+# 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
+# pool reads without refusing)
 # (studies/isle/PLAN.md rung 5). Every new check runs whenever the vault does.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
@@ -292,10 +300,11 @@ def main():
     LEDGER.ok(abs(raw - 2.0) < 1e-9 and npcdefs._f32(0x40000000) == raw,
               "and _f32 is that conversion, not a reinterpretation of the field",
               "the wire type is dword and the client's own table says so")
-    LEDGER.ok(defs[1442].move_speed == 12.0,
-              "move_speed comes from create field 9, single-valued per definition",
+    LEDGER.ok(defs[1442].move_speed == 12.0 and not defs[1442].reduced_speeds,
+              "move_speed is create field 9's BASE (max); 1442 is a clean 12.0",
               "1442 is 12.0 in 202 of 202 creates, which reproduces the hand-written "
-              "speed in content/npcs.toml from the opposite direction")
+              "speed in content/npcs.toml -- and it is never snared, so no reduced "
+              "value. Field 9 being per-instance is section 7's ground.")
 
     # ---- 5. what a row refuses to carry --------------------------------------
     print("\n5. the row's shape")
@@ -339,6 +348,59 @@ def main():
     LEDGER.ok(refused,
               "CONTROL: strip `mode` from the health rows and content.py REFUSES them",
               "an unstamped health number is base or base x 0.8 forever")
+
+    # ---- 7. field 9 is per-instance, and the full pool now READS -------------
+    print("\n7. the full live pool: field 9 is instantaneous, and read() no "
+          "longer refuses on a snare")
+    all_caps = npcdefs.live_captures()
+    LEDGER.ok(len(all_caps) > len(caps),
+              "the vault holds more captures than the three keyed here",
+              f"{len(all_caps)} total vs {len(caps)} keyed -- the pool this "
+              f"section proves is readable")
+    # The headline: pooling EVERY live capture no longer raises. Before
+    # 2026-08-22 this refused on definition 159's second field-9 speed.
+    try:
+        pooled, _iv = npcdefs.read(all_caps)
+        pooled_ok = True
+    except npcdefs.NpcDefsError as exc:
+        pooled, pooled_ok = {}, False
+        print(f"   read() refused: {exc}")
+    LEDGER.ok(pooled_ok,
+              "read() pools all live captures WITHOUT refusing on field 9",
+              "the fix: field 9 is instantaneous, so a second value is a snare, "
+              "not a merge conflict")
+    LEDGER.ok(len(pooled) > len(defs),
+              "and the pool resolves far more definitions than the 3-capture "
+              "subset -- what makes the downstream figures stop being "
+              "3-capture numbers", f"{len(pooled)} vs {len(defs)}")
+    # The two definitions whose creates caught a snare, pinned by name.
+    LEDGER.ok(159 in pooled and pooled[159].move_speed == 288.0
+              and pooled[159].reduced_speeds == [144.0],
+              "def 159: base 288, one reduced state 144 = 288 x 0.5 (a snare)",
+              f"speeds={dict(pooled.get(159).speeds) if 159 in pooled else None}")
+    LEDGER.ok(114 in pooled and pooled[114].move_speed == 288.0
+              and pooled[114].reduced_speeds == [230.4],
+              "def 114: base 288, one reduced state 230.4 = 288 x 0.8",
+              f"speeds={dict(pooled.get(114).speeds) if 114 in pooled else None}")
+    # The base is the MAX, not the min or the mode-by-accident: a reduced
+    # value must never become the base.
+    reduced_defs = [i for i, d in pooled.items() if d.reduced_speeds]
+    LEDGER.ok(all(pooled[i].move_speed > max(pooled[i].reduced_speeds)
+                  for i in reduced_defs) and reduced_defs,
+              "every reduced value is strictly BELOW its definition's base -- "
+              "a snare only reduces, and no create exceeds the base",
+              f"{len(reduced_defs)} definitions carry a reduced speed")
+    # The whole family is tiny: field 9 is a base with rare snare exceptions,
+    # not a per-instance free-for-all (which is what field 10 would look like).
+    total_reduced = sum(len(d.reduced_speeds) for d in pooled.values())
+    LEDGER.ok(total_reduced <= 5,
+              "only a handful of definitions are ever seen snared -- field 9 "
+              "reads as a base, not per-instance noise",
+              f"{total_reduced} definitions with any reduced speed")
+    # A row carries its snare states so the fact is on file, not lost.
+    LEDGER.ok(pooled[159].row().get("move_speed_reduced") == [144.0],
+              "and the reduced state reaches the content row as evidence",
+              "move_speed_reduced is on the row only when a snare was seen")
 
     return LEDGER.verdict()
 

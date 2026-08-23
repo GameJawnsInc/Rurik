@@ -4594,15 +4594,25 @@ Every one of these, in the order they were written:
   UNCHANGED under the naive join: agent 43 in the other capture observes 1434 = 8
   independently. The redundancy that makes the finding strong is what made the check
   blind. What catches it is the per-definition event counts plus the rule that no
-  non-hostile definition may carry a health reading. Three sabotages run, three fail —
-  the third by `read()` refusing and naming both speeds rather than averaging. Also:
+  non-hostile definition may carry a health reading. Two sabotages run, both fail
+  (the naive join, and `_f32` reinterpreting a dword's bits). Also:
   six definitions carry an EncString word in the UTF-16 surrogate range and were
   **unsendable by this server until the `string16` fix**. Since 2026-08-16 (Isle
   rung 5) the pins select the three captures BY NAME and the test proves a
   synthetic fourth keyed capture cannot move them — built into the vault and
   removed in a finally — plus the mode plumbing: base+reforged captures refuse
   to pool, a `--mode` contradicting a manifest is refused, and a recorded mode
-  is used with no flag at all),
+  is used with no flag at all. **§7 (2026-08-22) retired a refusal that was
+  wrong**: `read()` used to raise on a definition's second create-field-9 speed
+  ("field 9 is single-valued"), which held only for the three keyed captures and
+  blocked the full 15-capture pool — so every downstream unitassembly/unitmodels
+  figure was a 3-capture number. Field 9 is the agent's speed AT THE CREATE TICK,
+  so a snared create reports a reduced value: 9 of 2,931 creates over 2 of 189
+  definitions, every one a snare fraction of the definition's own base (159: 288
+  and 144; 114: 288 and 230.4), none above it. `move_speed` is now the base (max)
+  and `move_speed_reduced` the snare states; §7 pools ALL live captures, proves
+  `read()` no longer refuses, resolves **262 definitions vs the subset's 54**, and
+  pins 159/114 by name plus the base-is-the-max rule. Floor 32→40),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a

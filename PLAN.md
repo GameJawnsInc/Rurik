@@ -3056,10 +3056,18 @@ node counts.
    `test_playerassembly.py`.
 4. **The wire item-type ↔ composite-type mapping** (§2 step E). Our server picks the wire type; if
    it does not induce the right composite type, every equipped piece lands on the wrong component.
-5. **`npcdefs.py` refuses on the full 14-capture pool** — "definition 159 has two move speeds
-   (288.0, 144.0)", and 144 is exactly half of 288, so field 9 may be an observed instantaneous
-   speed rather than a definition constant. Every `unitassembly`/`unitmodels` figure in the tree is
-   therefore a **3-capture number**. Content-pipeline work, not model work; belongs with R4c.
+5. ~~**`npcdefs.py` refuses on the full 14-capture pool**~~ **FIXED 2026-08-22.** The
+   guess was right: field 9 is the agent's speed AT THE CREATE TICK, not a definition
+   constant. Measured on the full 15-capture pool — 9 of 2,931 creates over 2 of 189
+   definitions carry a value below the definition's base, every one a snare fraction of
+   it (159: 288 and 144 = 288×0.5; 114: 288 and 230.4 = 288×0.8), and no create exceeds
+   its base (the 288/144 pair is even the SAME agent, the reduced create carrying a
+   nonzero status word and a rotated heading). `npcdefs` now records the base as the max
+   field-9 value, the snare states as `move_speed_reduced`, and no longer refuses — so
+   `read()` pools all 15 captures and resolves **262 definitions** where the 3-capture
+   subset gave 54. `test_npcdefs` §7 pins it (floor 32→40). The downstream
+   unitassembly/unitmodels figures are no longer gated at 3 captures; re-pooling those
+   onto the full corpus is the follow-on content work, and it belongs with R4c.
 
 **Cross-arc, and neither side could see it alone: file 15018 — the archivewrite arc's standing
 "unwritable" wall (row 11196, 1,029,564 B in a 1,029,632 B reservation) — is the human male player

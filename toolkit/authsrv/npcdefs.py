@@ -45,7 +45,16 @@ WHAT IT REFUSES TO EMIT, each for a measured reason rather than caution:
   * `allegiance` -- hostility is a fact about a SPAWN, not about a type. Slot 1480 is
     created 49 times `nonc` and 9 times `play` from a byte-identical declaration.
   * create field 10 -- it takes two values inside slots 1420, 1421 and 1343, so it is
-    per-instance. Field 9 (`move_speed`) is single-valued per slot at n = 7..202.
+    per-instance. Field 9 (`move_speed`) is the agent's speed AT THE CREATE TICK, and
+    it is per-instance TOO -- an agent created while snared reports the reduced value.
+    MEASURED on the full 15-capture pool: 9 of 2,931 creates over 2 of 189 definitions
+    carry a value below the definition's base, every one a snare fraction of it (def
+    159: 288 and 144 = 288x0.5; def 114: 288 and 230.4 = 288x0.8), and no create
+    anywhere exceeds its definition's base. So the row's `move_speed` is the BASE (the
+    max observed), the snare states go to `move_speed_reduced`, and a second value does
+    NOT refuse -- the old "single-valued per slot at n = 7..202" was true only of the
+    three-capture subset and blocked the full pool for a fact that is expected. This is
+    why every unitassembly/unitmodels figure had been a 3-capture number.
 
 REFORGED MODE rides on every stat row as `mode`. It scales enemy health and armour
 ~20%, leaves no mark on the wire, and cannot be recovered afterwards, so a capture that
@@ -163,13 +172,43 @@ class Definition:
                                      # definitions (1496/1497) carry TWO bodies each,
                                      # so `model_id` alone under-describes them;
                                      # unitassembly.py (U4) resolves the whole list.
-        self.move_speed = None
+        # Create field 9 is the agent's SPEED AT THE CREATE TICK, not a
+        # per-definition constant -- see `add_create_speed` and the module
+        # docstring's field-9 note. `speeds` is every value observed; the
+        # base run speed is the max (a snare only reduces it, and no boosted
+        # create appears in the corpus).
+        self.speeds = collections.Counter()
         self.attack = None           # (interval, modifier)
         self.health = []             # [(capture, value)]
         self.tokens = set()
         self.creates = 0
         self.captures = set()
         self.connections = set()
+
+    def add_create_speed(self, speed):
+        self.speeds[round(float(speed), 4)] += 1
+
+    @property
+    def move_speed(self):
+        """The base run speed: the MAX field-9 value observed, or None.
+
+        Field 9 is instantaneous, so a definition can carry several values --
+        measured 9 of 2,931 creates over 2 of 189 definitions on the full
+        live pool, every one a snare fraction of the definition's own base
+        (159: 288 and 144 = 288x0.5; 114: 288 and 230.4 = 288x0.8). The base
+        is the max: an agent is created at its base speed unless snared, and
+        no create in the corpus exceeds its definition's base (a speed BOOST
+        would -- 383.04 = 288x1.33 -- and none appears, so max is safe; a
+        future boosted create is the one case that would need the max read
+        replaced, named here rather than discovered from a wrong number).
+        """
+        return max(self.speeds) if self.speeds else None
+
+    @property
+    def reduced_speeds(self):
+        """Field-9 values below the base -- the per-instance snare states."""
+        base = self.move_speed
+        return sorted(s for s in self.speeds if s < base)
 
     # -- the declared half ---------------------------------------------------
     def declare(self, values, capture, connection):
@@ -210,6 +249,11 @@ class Definition:
             row["model_id"] = self.model_id
         if self.move_speed is not None:
             row["move_speed"] = self.move_speed
+            # The snare states this definition was seen in, if any. Recorded
+            # so a reduced create is on file as evidence rather than lost --
+            # 2 of 189 definitions carry these (159, 114).
+            if self.reduced_speeds:
+                row["move_speed_reduced"] = self.reduced_speeds
         if self.attack is not None:
             row["attack_interval"], row["attack_modifier"] = self.attack
         if self.health:
@@ -289,20 +333,18 @@ def read(capture_dirs, codec=None):
                     d = defs.setdefault(index, Definition(index))
                     d.tokens.add(token)
                     d.creates += 1
-                    # field 9 is the type's speed; field 10 is per-instance. MEASURED:
-                    # field 9 is single-valued for every definition at n = 7..202, and
-                    # 1442's 12.0 in 202 of 202 reproduces the hand-written speed in
-                    # content/npcs.toml from the other direction.
-                    speed = round(float(values[9]), 4)
-                    if d.move_speed is None:
-                        d.move_speed = speed
-                    elif d.move_speed != speed:
-                        raise NpcDefsError(
-                            f"definition {index} has two move speeds "
-                            f"({d.move_speed}, {speed}). Field 9 is single-valued per "
-                            f"definition in every capture measured; if that has "
-                            f"changed it is a finding about the field, not a value to "
-                            f"average.")
+                    # Field 9 is the agent's SPEED AT THE CREATE TICK, and it
+                    # is NOT single-valued per definition -- an agent created
+                    # while snared reports the reduced speed. This USED to
+                    # refuse on a second value ("field 9 is single-valued");
+                    # that premise was measured false on the full 15-capture
+                    # pool (def 159: 288 and 144; def 114: 288 and 230.4, both
+                    # snare fractions of the base), so it blocked the pool for
+                    # a fact that is expected. `add_create_speed` records every
+                    # value; `move_speed` returns the base (max) and
+                    # `reduced_speeds` the snare states. Field 10 IS
+                    # per-instance and is deliberately not read as speed.
+                    d.add_create_speed(values[9])
 
             # Pass 2: properties, resolved through the interval map.
             for t, opcode, values in msgs:
