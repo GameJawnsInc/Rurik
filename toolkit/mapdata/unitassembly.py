@@ -369,11 +369,23 @@ class Resolver:
         always read (their chunk-0x1 is part of the closure); model-role
         files are always read (the walk needs their chunks).
         """
+        seeds = [(unit.file_id, ROLE_SHELL)]
+        seeds += [(m, ROLE_BODY) for m in unit.model_ids]
+        return self.resolve_seeds(unit, seeds, deep=deep)
+
+    def resolve_seeds(self, unit, seeds, deep=True):
+        """The same walk from an EXPLICIT seed list of (file_id, role).
+
+        Split out (behaviour-neutrally -- `resolve` above builds the exact
+        queue it always built) so `playerassembly.py` can drive the identical
+        closure from a CpsData manifest instead of a wire unit: the FA5/FAD
+        terminals, the FA6 -> ffna-type-8 -> chunk-0x1 audio hop, the FA8
+        links with the visited set, FAE and the null-slot accounting are all
+        seed-independent; only WHO seeds the queue is monster-specific.
+        `unit` is whatever the caller wants the Resolution to carry.
+        """
         res = Resolution(unit)
-        queue = collections.deque()
-        queue.append((unit.file_id, ROLE_SHELL))
-        for m in unit.model_ids:
-            queue.append((m, ROLE_BODY))
+        queue = collections.deque(seeds)
         walked = set()
 
         def touch(fid, role, read):
