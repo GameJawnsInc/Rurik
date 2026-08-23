@@ -47,11 +47,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 import checks             # noqa: E402
 import compositetrap as t  # noqa: E402
 
-# Floor set from a real green run (18 checks 2026-08-23; 48 after the
-# slot-cache half landed the same day; 49 with the _report
-# regression guard and the S2/S4/S8 restatements the first live
-# run earned).
-LEDGER = checks.Ledger("composite trap", floor=60)
+# Floor set from a real green run, never guessed -- 18 checks 2026-08-23,
+# then 48 / 49 / 52 / 53 / 59 / 60 / 70 as the slot-cache half, the _report
+# regression guard, the S2/S4/S8 restatements, S5's three readings, the
+# caller map and the CLEAR analyser landed the same day.
+LEDGER = checks.Ledger("composite trap", floor=70)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -512,6 +512,84 @@ check(_survived and len(_bulk) > 12,
       f"the first live run of these sites after it had already collected "
       f"everything",
       f"{len(_bulk)} synthetic hits")
+
+# ------------------------------------------------------------ section 7b
+print("== 7b. the CLEAR analyser (R1..R4) and its refusals ==")
+RSITES = [t.SITES["getids"], t.SITES["record"],
+          t.SITES["cache"], t.SITES["clear"]]
+
+
+def rhits(bursts, recs=(), writes=()):
+    """Clear bursts as (t, [slots]), plus record fetches and row writes."""
+    out = []
+    for tt, slots in bursts:
+        for i, s in enumerate(slots):
+            out.append({"slot": 3, "t": tt + i * 0.01, "cap": {
+                "CpsBase": 0x0AB00000, "slot": s, "item id": 0,
+                "file id": 90, "record": 90, "type byte": 4, "dye tint": 19,
+                "dye colors": 11, "row+8": 0, "flags": 0x20001006,
+                "m_slotItemId": list(GOOD_IDS), "override": [0] * 9}})
+    for tt, idx in recs:
+        out.append({"slot": 1, "t": tt, "cap": {
+            "index": idx, "composite type": 14, "record count": 3803}})
+    for tt, s in writes:
+        out.append({"slot": 2, "t": tt, "cap": {
+            "CpsBase": 0x0AB00000, "slot": s, "item id": 4, "file id": 90,
+            "record": 90, "type byte": 4, "dye tint": 19, "dye colors": 11,
+            "row+8": 0, "flags": 0x20001006,
+            "m_slotItemId": list(GOOD_IDS), "override": [0] * 9}})
+    return out
+
+
+GOOD_CLEAR = [(18.6, [2, 3, 4, 5, 6]), (29.6, [3])]
+lines, rc = t._analyse_clear(
+    RSITES, rhits(GOOD_CLEAR, recs=[(18.7, 90), (18.8, 94), (29.7, 90)]))
+blob = "\n".join(lines)
+check(rc == 0 and "a second reset clears FEWER slots (5 -> 1): PASS" in blob,
+      "R1's in-run control: an already-empty slot returns at 0x0082EF40 "
+      "before the notify, so a second reset must clear strictly fewer -- "
+      "which is the shape §9.8 saw from the record side (five, then one)",
+      blob)
+check("R2 every clear carries item id 0: PASS" in blob,
+      "R2 passes when every clear carries item id 0")
+check("R3 a clear is not a write: PASS" in blob,
+      "R3 passes when no row write lands inside a clear burst -- the reading "
+      "that the clear path jumps past BOTH write exits")
+check("R4 what the reset actually re-reads: PASS" in blob
+      and "0x0082EF4B" in blob,
+      "R4 places §9.8's reset-arm fetches on the vtable notify rather than on "
+      "the cache being refilled, and only when writes are absent from the "
+      "same window")
+
+lines, rc = t._analyse_clear(RSITES, rhits([], recs=[(18.7, 90)]))
+check(rc is None and "never fired" in "\n".join(lines)
+      and "NO VERDICT" in "\n".join(lines),
+      "CONTROL SILENT: no clear is NO VERDICT -- 'no reset reached the "
+      "client' and 'the path is not what was read' are the same picture")
+
+lines, rc = t._analyse_clear(
+    RSITES, rhits(GOOD_CLEAR, recs=[(18.7, 90)], writes=[(18.65, 2)]))
+check(rc == 1 and "R3 a clear is not a write: REFUTED" in "\n".join(lines),
+      "R3 SABOTAGE: a row write inside a clear burst refutes the static "
+      "reading of the clear path, and must redden rather than be explained")
+
+lines, rc = t._analyse_clear(RSITES, rhits(GOOD_CLEAR))
+check("R4 what the reset actually re-reads: NOT SEEN" in "\n".join(lines),
+      "R4 with NO record fetch after a clear reports NOT SEEN and says it "
+      "would contradict §9.8's own timeline -- rather than quietly passing "
+      "on an absence")
+
+lines, rc = t._analyse_clear(RSITES, rhits([(18.6, [2, 3, 4, 5, 6])],
+                                           recs=[(18.7, 90)]))
+check("only one clear burst seen" in "\n".join(lines),
+      "and with a single burst it declines the already-empty control instead "
+      "of scoring it")
+
+lines, _rc = t._analyse_clear(
+    [t.SITES["getids"], t.SITES["record"]], rhits(GOOD_CLEAR))
+check(lines == [],
+      "with no clear site ARMED the analyser emits nothing at all, so a run "
+      "that never asked the question does not print a section implying it did")
 
 # ---------------------------------------------------------------- section 8
 print("== 8. the slot tables are authsrv's and content's, not a hand-copy ==")

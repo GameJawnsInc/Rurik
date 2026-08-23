@@ -179,6 +179,40 @@ leaving one off would make a silent path look like an absent one.
       so n is small and the report says so — but without it, "every overridden
       row changed" has nothing to be measured against.
 
+THE RESET ARMS: WHY A NINE-ZERO 0x006E RE-READS RECORDS (R1..R4)
+----------------------------------------------------------------
+§9.8 reported and refused to interpret: the `armor_slots` probe's two RESET
+arms — `0x006E` with nine zeros, which wears nothing — still produced record
+fetches (+18.64 read five indices, +29.67 one). It said the answer needed a
+site inside the cache-build path rather than the resolver. The site exists now
+and has never been pointed at this, because neither §9.11 run drove the probe.
+
+The clear path, read before the run: with `itemId == 0` the writer compares
+`m_slotItemId[slot]` against zero at `0x0082EF35`. An ALREADY-EMPTY slot
+returns at `0x0082EF40` having done nothing. A populated one notifies through
+the vtable (`call [eax+0x10]`, `0x0082EF4B`), zeroes the 16-byte row
+(`0x0082EF5D`), zeroes `m_slotItemId[slot]`, and jumps to `0x0082F101` —
+**past both row-write exits**. So a clear is not a write, and the `cache`
+sites cannot see it. The new `clear` site traps just before the memset, so
+the row being destroyed is still readable.
+
+  R1  The clear fires once per POPULATED slot, and the second reset clears
+      strictly FEWER slots than the first — because the first emptied them
+      and an empty slot returns before the notify. That is an in-run control
+      with no new machinery, and §9.8 saw its shape from the record side
+      (five indices, then one).
+  R2  Every clear carries item id 0. A non-zero one means the site is not the
+      clear path.
+  R3  NO row write lands inside a clear burst. If one does, the reading that
+      the clear jumps past both exits is wrong.
+  R4  Record fetches DO follow the clears, with no row write in the window —
+      which places §9.8's reset-arm fetches on the vtable notify at
+      `0x0082EF4B` rather than on the cache being refilled.
+
+`cachesame` is dropped from this run's site list to make room: it has fired
+**zero times in five runs**, which is a measured zero and is why it can be
+spent rather than a reason to keep spending a debug register on it.
+
 THE TWO EXTRA INSTANCES: A TRIGGER, REGISTERED BEFORE THE RUN THAT TESTS IT
 --------------------------------------------------------------------------
 §9.11 recorded two further CpsBase instances at +93.9 s that index by the WIRE
@@ -463,6 +497,24 @@ def _cap_slotcache(ctx, reader):
     return out
 
 
+def _cap_clear(ctx, reader):
+    """The row a CLEAR is about to zero, read before the memset runs.
+
+    Same frame and the same three arrays as `_cap_slotcache`, so the reader is
+    reused rather than rewritten; only the label differs, because a cleared
+    row and a written row are opposite events and a report that called both
+    "wrote" would be worse than silent.
+    """
+    out = _cap_slotcache(ctx, reader)
+    if "file id" not in out:
+        return out
+    out["VERDICT"] = (
+        f"CLEAR slot {out['slot']} (item id {out['item id']}) -- row held "
+        f"record {out['record']} type {out['type byte']} tint "
+        f"{out['dye tint']} flags 0x{out['flags']:08X}, about to be zeroed")
+    return out
+
+
 SITES = {
     "getids": ct.Site(
         "getids", 0x008332E0, bytes.fromhex("558bec538b5d10"),
@@ -485,8 +537,23 @@ SITES = {
         "the same row written on the RE-SET path -- the slot already held "
         "this item id. Armed beside `cache` so a path that never runs is "
         "reported as never running rather than as absent.", _cap_slotcache),
+    "clear": ct.Site(
+        "clear", 0x0082EF4E, bytes.fromhex("8bceba10000000c1e104"),
+        "the CLEAR path -- itemId 0 into a slot that held one. It does NOT "
+        "reach either row-write exit: it notifies through the vtable, zeroes "
+        "the 16-byte row (0x0082EF5D), zeroes m_slotItemId and jumps past "
+        "both. Trapped just before the memset, so the row it is destroying "
+        "is still readable. This is §9.8's open question -- why a nine-zero "
+        "0x006E re-reads records when it wears nothing.", _cap_clear),
 }
 CACHE_SITES = ("cache", "cachesame")
+CLEAR_SITES = ("clear",)
+#: Vtable VA -> the class, named by ArenaNet's own asserts inside the virtual
+#: at +0x1C (`CpsPlayer:255 ptr`, `CpsPlayer:256 count`). Every instance our
+#: runs have scored carries 0xA96B5C, so the thing being dressed is a
+#: **CpsPlayer** -- and if §9.11's two wire-ordered instances ever reappear,
+#: this field says in one line whether they are the same class or not.
+CPS_VTABLES = {0x00A96B5C: "CpsPlayer"}
 DEFAULT_SITES = ("getids", "record")
 
 
@@ -548,6 +615,83 @@ def _cache_timeline(sites, hits, limit=60):
     return out
 
 
+def _analyse_clear(sites, hits):
+    """Score R1..R4 -- §9.8's reset arms. Returns (lines, rc or None)."""
+    order = [s.name for s in sites]
+    L = []
+    if not any(n in CLEAR_SITES for n in order):
+        return [], None
+    clears = [h for h in hits
+              if order[h["slot"]] in CLEAR_SITES and h.get("cap")
+              and "file id" in h["cap"]]
+    writes = [h for h in hits if order[h["slot"]] in CACHE_SITES
+              and h.get("cap") and "file id" in h["cap"]]
+    recs = [h for h in hits if order[h["slot"]] == "record" and h.get("cap")]
+    if not clears:
+        L.append("R1 CONTROL: the CLEAR path never fired. Either no reset "
+                 "reached the client (run with `--game-args='--probe "
+                 "armor_slots'`) or the path is not what was read -- and "
+                 "those look identical from here, so NO VERDICT on R1..R4.")
+        return L, None
+
+    t0 = min(h.get("t", 0.0) for h in hits)
+    L.append(f"R1 the CLEAR path fires: {len(clears)} time(s)")
+    burst, last = [], None
+    for h in clears:
+        t = h.get("t", 0.0)
+        if last is None or t - last > 2.0:
+            burst.append([])
+        burst[-1].append(h)
+        last = t
+    for b in burst:
+        slots = [h["cap"]["slot"] for h in b]
+        L.append(f"   +{b[0].get('t', 0.0) - t0:7.2f}s  {len(b)} clear(s), "
+                 f"slots {slots}")
+    # R1's own control: a slot with m_slotItemId == 0 returns at 0x0082EF40
+    # before the notify, so a SECOND reset must clear strictly fewer slots
+    # than the first. §9.8 saw exactly that shape from the record side.
+    if len(burst) >= 2:
+        n0, n1 = len(burst[0]), len(burst[1])
+        r1 = ("PASS" if n1 < n0 else
+              f"UNEXPECTED -- the second reset cleared {n1} against the "
+              f"first's {n0}; an already-empty slot should return at "
+              f"0x0082EF40 before the notify")
+        L.append(f"   a second reset clears FEWER slots ({n0} -> {n1}): {r1}")
+    else:
+        L.append("   only one clear burst seen, so the already-empty control "
+                 "did not run -- NO VERDICT on that half")
+
+    ids = {h["cap"]["item id"] for h in clears if "item id" in h["cap"]}
+    r2 = "PASS" if ids == {0} else f"UNEXPECTED {sorted(ids)}"
+    L.append(f"R2 every clear carries item id 0: {r2}")
+
+    in_burst = [h for h in writes
+                if any(abs(h.get("t", 0.0) - c.get("t", 0.0)) < 2.0
+                       for c in clears)]
+    r3 = ("PASS -- no row WRITE lands near a clear, so a reset zeroes rows "
+          "rather than writing them" if not in_burst else
+          f"REFUTED -- {len(in_burst)} row write(s) inside a clear burst; the "
+          f"clear path was read as jumping past both write exits")
+    L.append(f"R3 a clear is not a write: {r3}")
+
+    near = [h for h in recs
+            if any(0.0 <= h.get("t", 0.0) - c.get("t", 0.0) < 2.0
+                   for c in clears)]
+    if near:
+        idx = sorted({h["cap"].get("index") for h in near
+                      if h.get("cap")})
+        r4 = (f"PASS -- {len(near)} record fetch(es) follow a clear within 2 s "
+              f"(indices {idx}), and no row was written in that window, so "
+              f"§9.8's reset-arm fetches come from the vtable notify at "
+              f"0x0082EF4B, not from the cache being refilled")
+    else:
+        r4 = ("NOT SEEN -- no record fetch follows a clear, which contradicts "
+              "§9.8's own timeline and would mean the two runs differ")
+    L.append(f"R4 what the reset actually re-reads: {r4}")
+    bad = bool(in_burst or (ids and ids != {0}))
+    return L, (1 if bad else 0)
+
+
 def _analyse_cache(sites, hits):
     """Score S2..S7 from the slot-cache hits. Returns (lines, rc or None).
 
@@ -578,7 +722,9 @@ def _analyse_cache(sites, hits):
                  f"{cs[-1]['m_slotItemId']}")
         vts = sorted({c["vtable (VA)"] for c in cs if "vtable (VA)" in c})
         if vts:
-            L.append(f"      vtable(s) {[hex(v) for v in vts]}"
+            names = ", ".join(f"0x{v:08X} {CPS_VTABLES.get(v, '<unknown>')}"
+                              for v in vts)
+            L.append(f"      vtable(s) {names}"
                      + ("  <-- MORE THAN ONE CLASS in one instance, which "
                         "should be impossible" if len(vts) > 1 else ""))
         seen_ret = {}
@@ -973,6 +1119,11 @@ def main(argv=None):
     if crc is not None:
         rc = rc or crc
     lines = lines + [""] + clines
+    rlines, rrc = _analyse_clear(sites, trap.hits)
+    if rlines:
+        if rrc is not None:
+            rc = rc or rrc
+        lines = lines + [""] + rlines
     print("\n" + "=" * 72 + "\nPREDICTIONS\n" + "=" * 72)
     for ln in lines:
         print("  " + ln)
