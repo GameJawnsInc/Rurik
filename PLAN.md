@@ -5079,9 +5079,32 @@ had gone stale on four items that were since closed, which is the drift the top 
    currently follow `0x01C2`. **So the fix is to move the WHOLE hero pipeline
    (info → attributes → skill bar → activate) ahead of the party-hero-add,
    preserving relative order** — which is what §35.6c reasoned toward from the
-   other end. Staged, not guessed at. §35.6's prescription stands — fix the
-   assert first, a rig that asserts is not a rig — and its target is now named
-   twice over.
+   other end.
+   ✅ **BUILT AND RUN THE SAME DAY — THE COMMANDER NOW EXISTS (§38).**
+   `--hero-pipeline-first` (opt-in; the default path is byte-identical) sends
+   `0x0074 → 0x0037 → 0x003A → 0x00DA → 0x0072` and only THEN `0x01C2`.
+   **Zero assertions in the run**, and the chain completes for the first time
+   in the arc: `case93=1 → postcall=1 → filter=1 → create=1`. **`filter`'s two
+   operands are EQUAL** (`my_id 1`, `entry+4 owner 1`), so §27.2's branch (b)
+   is refuted at the compare itself and our `0x01C2` demonstrably carries the
+   right owner; `create` files the commander under **key 1** (`scan_key`,
+   msg+0x10, not an agent id). Confirmed by a second instrument that uses no
+   debugger: `commanderpeek` reads `count=1`, `heroCommanderSlot[0] = 0x1`,
+   stable over six samples, with the **0→1 transition caught** across the late
+   window. **So §27's "NO COMMANDER IS EVER CREATED" is overturned by
+   construction** — same client, one send order changed. Five wire hypotheses
+   had been refuted on this question (including my own `--hero-activate`
+   prediction hours earlier); the answer was none of them: the commander path
+   is a **synchronous** consumer of state three other messages install, and it
+   ran before they arrived. §35.6's prescription is satisfied — this arm
+   asserts zero times.
+   **NEXT is a click, not a trace, and it is the owner's**: with the container
+   populated, `GmView:5890` can no longer mean "nothing was created" — it is
+   now the KEY question §26.4 posed and §27 could not test, whether the party
+   button's lookup passes what the slot holds.
+   **Scope**: the order is OURS. Retail sends `0x0072` zero times in the whole
+   corpus, so nothing here reproduces an ArenaNet sequence — only a set of
+   constraints is satisfied; how retail avoids the problem is NOT FOUND.
    `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
    (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
    **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at

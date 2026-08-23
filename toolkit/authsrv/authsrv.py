@@ -4973,6 +4973,23 @@ HERO_ACTIVATE = False
 # pipeline (info -> attributes -> skill bar -> activate) ahead of the
 # party-hero-add. This flag is kept as the evidence for that, not as a fix.
 HERO_ACTIVATE_FIRST = False
+# THE FIX THAT ARM POINTED AT (studies/heroes 37.1's squeeze). Three ordering
+# constraints, any two satisfiable and never all three:
+#
+#   (1) the agent->hero activation record must exist BEFORE 0x01C2, because
+#       case 93 runs synchronously inside its worker and asks for it (37);
+#   (2) 0x0072 must NOT precede the hero's attribute state, or the client
+#       asserts `attribState` (measured, capture 20260823T134154);
+#   (3) the hero's attributes/skill bar are currently sent AFTER 0x01C2.
+#
+# Moving 0x0072 alone (HERO_ACTIVATE_FIRST) satisfies (1) and breaks (2).
+# Moving the WHOLE pipeline satisfies (1) and (2) by fixing (3): the party
+# build is deferred past body/attributes/skill bar/char/activate, and their
+# relative order is untouched. 0x0074 stays first either way.
+#
+# Opt-in, because the resulting order is ours: retail sends 0x0072 zero times
+# in the corpus, so there is no ArenaNet sequence for this pipeline to copy.
+HERO_PIPELINE_FIRST = False
 # HeroActivate's field 3, and the question the old comment posed ("if field 3
 # really is an inventory-table key...") is ANSWERED statically, 2026-08-18, all
 # on 38797: the 0x0072 worker (0x81DA40) stores field 3 at activation-record +8;
@@ -14022,9 +14039,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     if (HERO_ACTIVATE_ID is not None
                                         and _haid == HERO_AGENT_ID) else _hid,
                                     _haid, HERO_INVENTORY, HERO_AI_MODE))
-                        _seq.extend(agents.party_build(
-                            1, PLAYER_NUMBER, inside_window=_inside))
-                        _seq.extend(_after)
+                        # THE PARTY BUILD, and under HERO_PIPELINE_FIRST it is
+                        # DEFERRED past the pipeline below instead of leading
+                        # it -- constraint (3) of the squeeze recorded at
+                        # HERO_PIPELINE_FIRST. Held as a tuple and emitted
+                        # through `hsend` so BOTH rigs stay correct: inline it
+                        # sends after the pipeline's own inline sends, and
+                        # under --hero-late it appends after the pipeline's
+                        # appends. Same order either way, which is the whole
+                        # point of routing it through the same door.
+                        _party = tuple(agents.party_build(
+                            1, PLAYER_NUMBER, inside_window=_inside)) + _after
+                        _party_deferred = ()
+                        if HERO_PIPELINE_FIRST:
+                            _party_deferred = _party
+                        else:
+                            _seq.extend(_party)
                         # THE ROUTER for everything downstream. `hsend` is the
                         # hero pipeline's `send`: inline normally, appended to the
                         # held sequence under --hero-late. It exists so the body,
@@ -14684,6 +14714,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 if (HERO_ACTIVATE_ID is not None
                                     and _haid == HERO_AGENT_ID) else _hid,
                                 _haid, HERO_INVENTORY, HERO_AI_MODE))
+                        # THE DEFERRED PARTY BUILD. Last, so every message the
+                        # commander path reads -- the activation record above
+                        # most of all -- already exists when 0x01C2's worker
+                        # raises case 93 into it.
+                        for _op, _vals, _lbl in _party_deferred:
+                            hsend(_op, _vals, _lbl)
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -15726,6 +15762,17 @@ def main():
                          "(studies/heroes 37). Needs --hero-activate; the "
                          "order is INVENTED -- retail sends 0x0072 zero "
                          "times.")
+    ap.add_argument("--hero-pipeline-first", action="store_true",
+                    dest="hero_pipeline_first",
+                    help="Send the WHOLE hero pipeline (info, body, "
+                         "attributes, skill bar, char, activate) BEFORE the "
+                         "party build, relative order untouched, instead of "
+                         "after it. THE FIX --hero-activate-first pointed at: "
+                         "moving 0x0072 alone satisfies case 93's lookup but "
+                         "puts it ahead of the hero's attribute state and the "
+                         "client asserts `attribState`; moving everything "
+                         "satisfies both (studies/heroes 37.1). The resulting "
+                         "order is OURS -- retail sends 0x0072 zero times.")
     ap.add_argument("--no-hero-info", action="store_true",
                     help="Drop the leading 0x0074. The route sends it first on "
                          "the hypothesis that it creates the data-cache "
@@ -16625,7 +16672,7 @@ def main():
 
     if a.hero is not None:
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
-        global HERO_BODY_NPC, HERO_ACTIVATE_FIRST
+        global HERO_BODY_NPC, HERO_ACTIVATE_FIRST, HERO_PIPELINE_FIRST
         HERO_IDS = [int(x, 0) for x in str(a.hero).split(",")]
         if len(HERO_IDS) > 7:
             raise SystemExit(
@@ -16647,10 +16694,18 @@ def main():
         HERO_SWAP = a.hero_swap
         HERO_ACTIVATE = a.hero_activate
         HERO_ACTIVATE_FIRST = a.hero_activate_first
+        HERO_PIPELINE_FIRST = a.hero_pipeline_first
         if HERO_ACTIVATE_FIRST and not HERO_ACTIVATE:
             raise SystemExit(
                 "--hero-activate-first without --hero-activate sends nothing: "
                 "it moves 0x0072's position, it does not enable it.")
+        if HERO_ACTIVATE_FIRST and HERO_PIPELINE_FIRST:
+            raise SystemExit(
+                "--hero-activate-first and --hero-pipeline-first are two "
+                "different answers to the SAME ordering question and "
+                "combining them measures neither: pipeline-first already puts "
+                "0x0072 ahead of the party build, WITH the attribute state "
+                "the other flag strands it in front of. Pick one arm.")
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
         global HERO_BAGS

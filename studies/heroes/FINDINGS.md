@@ -3121,3 +3121,76 @@ bigger change than a flag flip and is left staged rather than guessed at.
 `--sites case93,postcall,filter,create`. Captures `20260823T133542`
 (activate-last, SkillList assert) and `20260823T134154` (activate-first,
 `attribState`, zero exposure).
+
+## 38. THE COMMANDER EXISTS. The blocker was ORDERING, and the whole chain now runs (2026-08-23)
+
+§37.1's squeeze named a fix rather than a flag flip: move the **whole** hero
+pipeline ahead of the party-hero-add, relative order preserved.
+`--hero-pipeline-first` does that (opt-in; the party build is held as a tuple
+and emitted through the same `hsend` door as the pipeline, so the inline and
+`--hero-late` rigs stay identical to each other). **It works, and every
+pre-registered prediction passed.**
+
+**The wire** (capture `20260823T155459`, zero assertions in the whole run):
+
+    143  0x0074  MERCENARY_INFO(hero 1)
+    144  0x0037  AGENT_ATTRIBUTE_POINTS(hero agent 200)
+    146  0x003A  AGENT_UPDATE_ATTRIBUTES(hero agent 200)
+    147  0x00DA  SKILLBAR_UPDATE(hero agent 200)
+    148  0x0072  HERO_ACTIVATE(hero 1, agent 200)
+    154  0x01C2  PARTY_HERO_ADD(party 1, owner 1, agent 200, key 1)
+
+**The chain, complete for the first time in this arc** (capture
+`20260823T154*`, trap `--sites case93,postcall,filter,create`):
+
+| site | before | now |
+|---|---|---|
+| `case93` `0x004E5DE1` | 1 (late rig only) | **1** |
+| `postcall` `0x004E5DE7` | **0** — the call died in the skill list | **1** — "the first call returned" |
+| `filter` `0x004E5DF2` | **0**, never once in the arc | **1** |
+| `create` `0x00524C40` | **0** | **1** |
+
+**`filter`'s operands, which is the reading §11.1 asked for and §27.2 posed as
+branch (b):** `my_id(eax) = 1`, `entry+4 owner = 1` — **EQUAL**, so it falls
+through into `0x524CC0` rather than rejecting. Our `0x01C2` carries the right
+owner, now proven at the compare itself rather than inferred. `create` then
+files the commander under **key 1** (`0x01C2`'s `scan_key`, msg+0x10 — not an
+agent id).
+
+**Confirmed by a second instrument that uses no debugger at all.**
+`commanderpeek.py` on a fresh run of the same arm, sampled six times over ~60 s:
+
+    container ctx+0x20  cap=7 count=1 alloc=21
+    heroCommanderSlot   ['0x1', '0x0', '0x0', '0x0', '0x0', '0x0', '0x0']
+
+and the transition was caught — a peek taken *before* the late window read
+`count=0`, every peek after it read `count=1`. **§27's headline is overturned
+by construction**: "container ctx+0x20: cap=7 count=0, all seven
+`heroCommanderSlot` entries zero — NO COMMANDER IS EVER CREATED" was true of
+the pipeline as it was ordered, and is false of the same client the moment the
+order is fixed. Nothing about the client changed; one send order did.
+
+**What this closes.** Five hypotheses were refuted by guessing at the wire
+(`inventoryId` §16, `msg+0x10` §19, the party-cache gate §26, the subscriber
+map §28, and my own `--hero-activate` prediction in §37.1). The answer was
+none of them: the commander path is a **synchronous** consumer of state three
+other messages install, and it ran before they arrived. §35.6's prescription —
+"find and fix the assert first, a rig that asserts is not a rig" — is
+satisfied: this arm asserts zero times.
+
+**What it does NOT close, and the next question is now a good one.**
+`commanderpeek`'s own verdict states it: with the container populated, the
+`GmView:5890` assert on the party button can no longer be "nothing was
+created" — it becomes a **key** question, whether the button's lookup passes
+what the slot holds (key 1). §26.4 posed exactly that branch and §27 refuted
+it *because nothing was filed under any key*; something is filed now, so the
+branch is live again on its own merits. That is a click, and clicks are the
+owner's.
+
+**Scope kept honest.** The order this flag sends is **ours** — retail sends
+`0x0072` zero times in the entire corpus, so there is no ArenaNet sequence
+being reproduced here, only a set of constraints being satisfied. The flag is
+opt-in and the default path is byte-for-byte unchanged (with it off the party
+build extends exactly where it always did and the deferred list is empty).
+Whether the *retail* server avoids this problem by ordering, by a different
+message, or by never sending `0x0072` at all is **NOT FOUND**.
