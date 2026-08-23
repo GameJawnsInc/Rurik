@@ -252,7 +252,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 1. **What is `arg0` of the resolver, whose bit 0 picks skeleton type 1 vs type 2?** Two complete twenty-shell sets exist (§1.22): fully animated (seq 220–289) and near-static (seq 10–17) on identical skeletons. Authoring against the wrong one produces a character that cannot animate. Trace `this+0x3E4` back through 0x0082DBB0/0x0082DBA0's callers. **Highest blocker — it is a one-bit decision with a total consequence.**
 2. ~~**The wire item-type ↔ composite-type mapping.**~~ **ANSWERED 2026-08-23, §9.2 — the type induces NOTHING on the composite path** (many-to-many both ways; the record is authoritative; the type feeds the attach classifier, the weapon cache and the UI). `wearmap.py` + `test_wearmap.py` (36 checks).
 3. ~~**`FILE_ID_RESERVED_BIT` (CpsData:484, 0x008334C5).**~~ **MEASURED 2026-08-22, §9.1 — bit 31, and it is a real second id namespace.**
-4. **Whether the twenty type-1 shells and their component sets round-trip through our own writers.** `modelwrite.py`/`skelwrite.py` are proven byte-identical on monster geometry (6846/6846, 14571/14571) but no player component file has ever been walked, let alone re-emitted.
+4. ~~**Whether the twenty type-1 shells and their component sets round-trip through our own writers.**~~ **ANSWERED 2026-08-23, §9.3 — they do, 180/180 by name** (`test_playerwrite.py`), and the premise was stale: the U6/U8 sweeps were archive-wide over flags=515, so every player file had already round-tripped anonymously. The delivery wall stands and now covers the whole set: all 180 rows are compression-8.
 5. **What group 3 is** — armour types 14–19 for all ten professions, no base identity, and unreachable from `CpsPlayer`'s `race < 3` (§1.24). Reserved, heroes, or a fourth armour campaign.
 6. **What component 7 / base type 9 is.** Never worn in 3,225 wear events, present in every home-group profession cell, and the sole occupant of the degenerate blits 2–5 (which declare a real 256×128 atlas for blit 2 and 0×0 for blits 3–5).
 7. **Component 0's sex asymmetry in blit1** (§1.9) — a face component with no female atlas rect needs explaining before the texture path is authored.
@@ -501,3 +501,45 @@ component you mean. The five starter rows pass the full triple check
 (record types 15/14/18/16/17). What `check_wear` refuses is exactly the
 combinations retail never produced — an unprecedented pair is an
 experiment, not content.
+
+## 9.3 The player files round-trip through our writers — and the claim they never had was stale (2026-08-23)
+
+§4.4's unknown, answered — with the correction first, because it is the
+lesson: **"no player component file has ever been walked, let alone
+re-emitted" was false when written.** U6/U8 ran `skelwrite`/`modelwrite`
+over the complete **flags=515** population archive-wide (14,571/14,571 FA1
+chunks, 6,846/6,846 FA0 chunks, 21,420/21,420 containers), and every player
+geometry file is a flags=515 row — so they all round-tripped **anonymously**
+in those sweeps. What was genuinely missing is the JOIN and the named proof,
+now `toolkit/mapdata/test_playerwrite.py` (15 checks):
+
+- **The join.** The 40 identities' closures reference **180 distinct
+  geometry files** (40 shells + 140 components). All 180 resolve to
+  flags=515 ffna rows (the 28-byte no-ffna anomaly row 8316 is not among
+  them), so the sweeps' greens covered them by construction.
+- **The named round trip.** `skelwrite.rebuild_container` re-emits all 40
+  shell containers byte-identically; `modelwrite.rebuild_container` all 140
+  component containers. 180/180.
+- **The partition is total and clean**: every shell is FA1-with-no-FA0
+  (§1's composited ⟺ no-FA0 rule, previously archive-wide, now BY NAME) and
+  every component is FA0-with-no-FA1 — the mesh pieces bring no skeleton;
+  the shell's is the only one in a player's whole geometry set.
+- **The typed layer re-measures §1.22 through different code**: type-1
+  sequence counts span exactly 220..289 and type-2 is nineteen shells in
+  10..17 plus the single 115 outlier — reproduced via the writer-facing
+  decoder, not remembered from this document.
+- **Identity is informative on THESE files**: `scale_sequence_keytimes`
+  fires the U7 seam on shell 15018 itself (seq 16, two keys, doubled,
+  read back from a fresh decode; the inexact-retime refusal is atomic),
+  and `scale_positions` doubles 388 vertices of component 8292 with the
+  scaled coordinates read back from the emitted bytes.
+
+**The boundary this does NOT move, measured rather than assumed: all 180
+rows are compression-8.** The round trip is the WRITERS' half; writing a
+modified player file into an archive still needs a compression-8 encoder or
+the client-compiler delivery route — shell 15018's row 11196 (1,029,564 B in
+a 1,029,632 B reservation) remains the archivewrite arc's wall, and now we
+know every component row sits behind the same one. Authoring a player
+VISUAL today therefore goes through the composite TABLE (pick different
+records) rather than through modified geometry — which §9.2's wearmap work
+is the server half of.

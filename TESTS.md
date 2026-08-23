@@ -1409,6 +1409,28 @@ Every one of these, in the order they were written:
   hypothetical), and `manifest` refuses a record carrying a reserved-bit id
   before it becomes a seed. Needs `vault/dat_study` (skips declared without it)
   and the pinned exe for §7; ~2 min; floor 34),
+  `toolkit/mapdata/test_playerwrite.py` (**the player files round-trip through our
+  writers BY NAME** — playercomposite §4.4's last blocker, answered with its premise
+  corrected: "no player component file has ever been walked" was stale, because the
+  U6/U8 sweeps ran archive-wide over flags=515 and every player file is a flags=515
+  row — this test makes the JOIN and the named proof. §1 collects the 40 identities'
+  closures into 180 distinct geometry files (40 shells, 140 components); §2 pins the
+  population membership — all 180 flags=515 ffna rows, the 28-byte no-ffna anomaly
+  row 8316 absent, shells FA1-with-no-FA0 (the composited⟺no-FA0 rule by name) and
+  components FA0-with-no-FA1 (a player's only skeleton is the shell's); §3 is the
+  named round trip — `skelwrite.rebuild_container` 40/40 and
+  `modelwrite.rebuild_container` 140/140 byte-identical; §4 re-measures FINDINGS
+  §1.22 through the writer-facing decoder (type-1 sequence counts span exactly
+  220..289; type-2 is nineteen in 10..17 plus the single 115 outlier — reproduced,
+  not remembered); §5 makes the identity informative on THESE files: the U7 seam
+  retimes sequence 16 of shell 15018 itself (doubled keys read back from a fresh
+  decode of the emitted bytes; the inexact-retime refusal proven ATOMIC — the
+  representation still encodes the source), and `scale_positions` doubles 388
+  vertices of component 8292 with the coordinates read back. What it deliberately
+  does NOT claim: delivery — all 180 rows are compression-8, so shipping modified
+  player geometry still waits on a compression-8 encoder or the client-compiler
+  route. Needs `vault/dat_study`, skips whole without it; ~3 min (40 closure
+  assemblies dominate); floor 15),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

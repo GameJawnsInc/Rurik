@@ -1421,9 +1421,22 @@ al,1`, both pure asserts (authoring gate, not a runtime filter). Not
 hypothetical: 25 ids in the raw file-id table carry it, mapping to real MFT
 rows disjoint from the ordinary id space — a distinct namespace. All 16,567
 composite ids clear it, so authoring is safe; `playerassembly.manifest`
-refuses a reserved-bit id before it becomes a seed. (3) whether the twenty
-type-1 shells round-trip through `modelwrite.py`/`skelwrite.py` (proven on
-monster geometry, never on a player component); (4) the runtime confirmation
+refuses a reserved-bit id before it becomes a seed. ~~(3) whether the twenty
+type-1 shells round-trip through `modelwrite.py`/`skelwrite.py`~~ **ANSWERED
+2026-08-23** (`studies/playercomposite` §9.3, `test_playerwrite.py` 15
+checks): **they round-trip, 180/180 by name** — the 40 closures' geometry is
+40 FA1-only composited shells + 140 FA0-only components, every row flags=515
+ffna, so the U6/U8 archive-wide sweeps had already covered them ANONYMOUSLY
+(the "never been walked" premise was stale); the named run re-emits every
+container byte-identically, re-measures §1.22's sequence counts through the
+writer-facing decoder (220–289; 10–17 plus the 115 outlier), and fires both
+mutation seams on player files (seq-16 retime on shell 15018 itself,
+atomic-refusal control included; 388 vertices doubled on component 8292).
+**The boundary measured with it: all 180 rows are compression-8**, so
+shipping modified player geometry still needs the compression-8 encoder or
+the client-compiler route — visual authoring today goes through the
+composite TABLE (record picks), which is what §9.2's wearmap half serves.
+(4) the runtime confirmation
 priced in §4.12 — a breakpoint on `0x00833420` during a character load.
 
 ### The effects DO SOMETHING — five mechanics modelled, one refuted formula, one deliberate lever (2026-08-22)
