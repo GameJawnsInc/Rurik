@@ -260,7 +260,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 9. **`ConstColorSkin`/`ConstColorHair` `s_colorInfo[race][prof]`** — static `.rdata`, never dumped, cheap.
 10. **Dye** — `ItemData+0x05/+0x06` → `0x0082DEF0`, unfollowed; possibly team colour rather than dye.
 11. **Composite-id stability across ArenaNet updates.** 588/588 held with a 38797 table against 38833 captures — one crossing, not a guarantee. Anything authored needs a per-row build stamp.
-12. **Nothing here was checked against a running client.** Every claim is static or archive-side. The cheapest confirmation is a breakpoint on `0x00833420` during a character load, logging `(id, record)` pairs.
+12. ~~**Nothing here was checked against a running client.**~~ **DONE 2026-08-23, §9.6 — the breakpoint ran.** `compositetrap.py` on `0x008332E0` + `0x00833420` during a loopback character load: 28 control hits, 44 record hits, four of five pre-registered predictions passed and the fifth was mis-specified by me (it could not tell character-select from in-world, and §7 predicts both). **Our five armour indices resolved to the archive's exact composite types in the client's own memory**, and the client's live record count is the same 3,803 `cpsdata.py` parses off disk.
 
 ---
 
@@ -561,6 +561,18 @@ replacement is installed.** Found by accident — the composite-trap run
 (§9.5) was refused by `session.py`'s content preflight, whose message
 already states this mechanism, and the archives then confirmed it.
 
+**AND THE MECHANISM WAS ALREADY IN THE REPO — this is a REDISCOVERY, credited
+here rather than claimed.** `toolkit/mapdata/bit31.py` and `archive.py`:487
+carry it with the client VAs I did not have: **FcArchive `0x007D7B70`** binds
+`id | 0x80000000` and DELETES the plain name when it requests a replacement;
+**DnArchive `0x004766F0`** re-links the plain id once one is installed. There
+is a whole census tool for the population (`bit31.py --dat <archive> --diff`)
+whose docstring states the same conclusion, and `datwrite.py --relink-plain`
+performs the DnArchive step. §9.1 was written without grepping for the bit
+outside this arc — the repo's own rule ("grep before 'never been tried'"),
+missed. What follows is therefore CORROBORATION of a recorded mechanism from
+independent evidence, which is still worth having, but it is not new.
+
 **Three witnesses, all reproducible from the vault:**
 
 1. **The plain twin is never bound while the rename stands.** In the study
@@ -645,3 +657,75 @@ once a healthy archive exists:
 
 Arm the trap FIRST: the composite pipeline runs once at character load, the
 same window that cost the terrain arc its first injection run.
+
+## 9.6 THE RUN HAPPENED — §4.12 is CLOSED, and four of five predictions passed (2026-08-23)
+
+The archive was repaired and the probe ran. **§4.12's "nothing here was
+checked against a running client" no longer holds.**
+
+**The repair, and it is the supported operation rather than surgery.**
+`datwrite.py --relink-plain 0x1B97D --confirm` on
+`vault/run/2026-07-29_221c13772c7a-probe/Gw.dat` — the DnArchive step with no
+download (§9.4): **one dword** in the file-id table, the row and its bytes
+untouched, journalled (`relink_1B97D.journal`, revertible). Ascalon City now
+binds row 7982, **1,300,036 B crc 0xA0AE500A — byte-identical to the server's
+archive**, which is the whole point: the preflight's complaint was never about
+content, it was that the plain id bound nothing. That copy went from 3 fatal
+findings to 1. The survivor (map 143, whose client file genuinely differs) was
+handled the designed way rather than by editing more archive:
+`session.py --game-args='--map 148'` pins the run, and `served_maps()` narrows
+the preflight to the map actually loaded — the same mechanism a peer session
+added that morning (`main` `1c3ab69`).
+
+**The run**: build 38797, loopback, `--keep-open --hold 110`, verdict **PASS
+(target: map)**, capture `vault/captures/harness/20260823T123900`. Trap armed
+before launch — the composite pipeline runs once per composite built.
+**28 control hits, 44 record hits.**
+
+| # | prediction | result |
+|---|---|---|
+| CONTROL | the base lookup fires | **28 hits** — the instrument is proven |
+| P1 | base types ⊆ step C's table | **PASS** — `[1, 2, 3, 4, 5, 6, 11, 13]` |
+| P2 | the in-world shell is type 1 | **PASS, after the prediction was restated** — see below |
+| P3 | prof/race constant, in bounds | **PASS** — prof 1, race 0, every hit |
+| P4 | our armour → the archive's types | **PASS — all five, exactly** |
+| P5 | indices in range, no bit 31 | **PASS** — 13 distinct, all < 3803 |
+
+**P4 is the headline and it closes the loop.** All five armour indices our
+server declares — **90, 91, 92, 93, 94** — arrived at `0x00833420`, and the
+records read back out of **the client's own table** carry composite types
+**14, 15, 16, 17, 18**: boots, chest, gloves, head, legs. That is
+byte-for-byte what `content/items.toml` + the archive predict and what
+`test_wearmap.py` §4 pins statically. Archive, wire and client memory now
+agree on one set of numbers, and §9.2's "the record is authoritative" is
+confirmed in the one place it could be tested live. Note the shape of the
+confirmation: those armour types (14–18) are **absent from P1's base-type
+list**, because equipment reaches the pipeline through the RECORD resolver by
+index and never through the base lookup by type — exactly the two-path model
+§2 steps C and E describe.
+
+**P2 was mis-specified by me, and the run is what showed it.** As written it
+demanded type 1 and *only* type 1; the run saw **both**, from the same two
+return addresses (`0x008315C0`, `0x0082F7FE`), resolving records 11 (type 1)
+and 12 (type 2). That is not a refutation of §7 — it is §7: a session that
+logs in crosses CHARACTER SELECT, and §7 names `UiChModel`/`GmDoll` as the
+only callers passing `arg0` bit 0 = 1. Two composites were built this run, the
+preview and the world agent. The prediction is now restated in the module
+(type 1 present ⇒ pass; type 2 alongside ⇒ the UI path, reported with the
+order; type 2 with **no** type 1 ⇒ refutation, and `rc` goes non-zero), and
+`test_compositetrap.py` §4 pins both halves. **The lesson is the one this repo
+keeps relearning:** a prediction that cannot tell two known phases apart will
+score a confirmation as a refutation.
+
+**Three free corroborations the run also produced:**
+
+1. **The client's own record count is 3,803** (`0xEDB`, read from
+   `[0x00BF980C]` at every record hit) — exactly what `cpsdata.py` parses off
+   disk in §1.18. Two witnesses, disk and live memory, no shared code.
+2. **Face 11 and hair 13, never 10 or 12** — the sex-keyed pairs of §2 step C,
+   resolving for a sex-0 character. Sex selection confirmed live.
+3. **Type 9 was never asked for.** `playerassembly.manifest` includes it by
+   default (`include_type9`), and this load did not request it. Component 7 /
+   base type 9 is already §4.6's open question ("never worn in 3,225 wear
+   events"); it is now also never *looked up* on a plain character load. That
+   sharpens the question rather than answering it.

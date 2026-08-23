@@ -1436,8 +1436,32 @@ atomic-refusal control included; 388 vertices doubled on component 8292).
 shipping modified player geometry still needs the compression-8 encoder or
 the client-compiler route — visual authoring today goes through the
 composite TABLE (record picks), which is what §9.2's wearmap half serves.
-(4) the runtime confirmation priced in §4.12 — a breakpoint on `0x00833420`
-during a character load. **BUILT AND ARMED 2026-08-23, RUN BLOCKED**
+~~(4) the runtime confirmation priced in §4.12~~ ✅ **RAN 2026-08-23 — §4.12
+IS CLOSED** (`studies/playercomposite` §9.6). The archive was repaired with the
+SUPPORTED operation — `datwrite.py --relink-plain 0x1B97D --confirm` on the
+`-probe` copy, the DnArchive step with no download: **one dword**, row and
+bytes untouched, journalled and revertible, after which Ascalon City binds row
+7982 **byte-identical to the server's archive** (3 fatal findings → 1). The
+survivor was handled the designed way rather than with more surgery —
+`--game-args='--map 148'`, which `served_maps()` narrows the preflight to, the
+mechanism a peer added that morning (`1c3ab69`). Run: 38797, loopback,
+`--hold 110`, verdict **PASS (target: map)**, capture
+`vault/captures/harness/20260823T123900`, **28 control hits / 44 record hits**.
+**P4, the headline, PASSED EXACTLY**: our five armour indices 90/91/92/93/94
+reached `0x00833420` and the records read out of the CLIENT'S OWN TABLE carry
+composite types 14/15/16/17/18 — what `content/items.toml` + the archive
+predict and `test_wearmap.py` §4 pins statically. Archive, wire and client
+memory agree on one set of numbers, so §9.2's "the record is authoritative" is
+confirmed where it matters. P1/P3/P5 passed; **P2 was mis-specified by me** —
+it demanded shell type 1 ONLY, the run saw type 1 *and* type 2, and that is
+§7 rather than against it (a login crosses character select, whose
+`UiChModel`/`GmDoll` are the only bit-0=1 callers). Restated in the module and
+pinned both ways; a type-2-with-no-type-1 run still refutes and returns
+non-zero. Three free corroborations: the client's live record count is **3,803**,
+the same number `cpsdata.py` parses off disk; face **11** / hair **13** confirm
+the sex-keyed pairs live; and **type 9 is never requested** on a plain
+character load, sharpening §4.6's open question. Prior status follows.
+**BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
 `studies/playercomposite` §9.5): two sites (`0x008332E0` the base lookup and
 control, `0x00833420` the record resolver reading the record out of the

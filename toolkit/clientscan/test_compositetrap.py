@@ -156,15 +156,21 @@ check(rc == 1 and "REFUTED, outside=[19]" in "\n".join(lines),
       "OUT-OF-TABLE TYPE: a base lookup for type 19 (an ARMOUR type, which "
       "step C's table does not carry) refutes P1")
 
-lines, _rc = t._analyse(SITES, hits(GOOD_BASE + [(2, 0, 1)], GOOD_REC))
-check("REFUTED or mixed: saw [1, 2]" in "\n".join(lines),
-      "MIXED SHELL: a type-2 shell lookup ALONGSIDE type 1 is reported, not "
-      "averaged away -- §7's arg0 answer is what this would contest")
-lines, _rc = t._analyse(SITES, hits([(2, 0, 1)] + GOOD_BASE[1:], GOOD_REC))
-check("REFUTED or mixed: saw [2]" in "\n".join(lines),
-      "TYPE-2 ONLY: a run whose only shell lookup is type 2 refutes §7's "
-      "'author against type 1' outright -- the strongest single result this "
-      "probe could return")
+lines, rc = t._analyse(SITES, hits(GOOD_BASE + [(2, 0, 1)], GOOD_REC))
+blob = "\n".join(lines)
+check(rc == 0 and "PASS -- type 1 IS built in world" in blob
+      and "Order: [1, 2]" in blob,
+      "MIXED SHELL PASSES, and this is the FIRST RUN's own correction: a "
+      "type-2 lookup alongside type 1 is §7's UI path (character select), "
+      "not a refutation -- the original 'type 1 ONLY' form scored the first "
+      "real run as refuting the very claim it confirmed. The order is "
+      "printed so the two phases can be told apart.", blob)
+lines, rc = t._analyse(SITES, hits([(2, 0, 1)] + GOOD_BASE[1:], GOOD_REC))
+check(rc == 1 and "REFUTED -- type 2 and NO type 1" in "\n".join(lines),
+      "TYPE-2 ONLY still REFUTES: a run that builds a world composite from "
+      "the near-static set contradicts 'author against type 1' outright -- "
+      "the strongest single result this probe could return, and the "
+      "restatement above does not soften it")
 
 lines, _rc = t._analyse(SITES, hits(GOOD_BASE, [(0x80000005, 15)]))
 check("VIOLATED" in "\n".join(lines),

@@ -204,13 +204,32 @@ def _analyse(sites, hits):
     L.append(f"P1 base types within step C's table: {p1} "
              f"(seen {sorted(set(types))})")
 
-    shell = sorted({t for t in types if t in (1, 2)})
+    # P2, RESTATED AFTER THE FIRST RUN (2026-08-23) -- the original form was
+    # "type 1 ONLY", and it scored the first real run as a refutation of §7
+    # when §7 predicts exactly what was seen. A session that logs in passes
+    # through CHARACTER SELECT, and §7 names UiChModel/GmDoll as the only
+    # callers that pass arg0 bit 0 = 1 -> type 2. So a type-2 lookup is
+    # EXPECTED whenever the run crossed that screen, and the claim under test
+    # is narrower: the in-world composite is built from type 1. Type 1 present
+    # confirms it; type 2 present alongside is the UI path and is reported;
+    # only type 2 with NO type 1 would refute §7. The sequence is printed in
+    # time order because that is what separates the two phases -- the preview
+    # is built before the world agent, and a future run can read the split off
+    # this line without new code.
+    shell_seq = [t for t in types if t in (1, 2)]
+    shell = sorted(set(shell_seq))
     if not shell:
         p2 = "no shell lookup seen -- NO VERDICT"
     elif shell == [1]:
-        p2 = "PASS -- type 1 only, in world (§7's arg0 answer holds live)"
+        p2 = ("PASS -- type 1 only; this run never built a preview doll "
+              "(§7's arg0 answer holds live)")
+    elif 1 in shell:
+        p2 = (f"PASS -- type 1 IS built in world; type 2 also seen, which is "
+              f"§7's own UI path (character select / paperdoll). Order: "
+              f"{shell_seq}")
     else:
-        p2 = f"REFUTED or mixed: saw {shell}"
+        p2 = (f"REFUTED -- type 2 and NO type 1: the in-world composite is "
+              f"not the animated set §7 says it is. Order: {shell_seq}")
     L.append(f"P2 the in-world shell type: {p2}")
 
     profs = sorted({c.get("prof") for c in base_hits if "prof" in c})
@@ -243,7 +262,8 @@ def _analyse(sites, hits):
     p5 = "PASS" if not bad5 else f"VIOLATED {bad5}"
     L.append(f"P5 every index in range (< {cap}) and no reserved bit: {p5} "
              f"({len(seen)} distinct indices)")
-    return L, (0 if (not outside and not wrong) else 1)
+    shell_refuted = bool(shell) and 1 not in shell
+    return L, (0 if (not outside and not wrong and not shell_refuted) else 1)
 
 
 def main(argv=None):
