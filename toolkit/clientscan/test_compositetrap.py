@@ -51,7 +51,7 @@ import compositetrap as t  # noqa: E402
 # slot-cache half landed the same day; 49 with the _report
 # regression guard and the S2/S4/S8 restatements the first live
 # run earned).
-LEDGER = checks.Ledger("composite trap", floor=53)
+LEDGER = checks.Ledger("composite trap", floor=59)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -308,10 +308,12 @@ GOOD_ROWS = {0: (39776, 15, 6),                      # the weapon, untouched
 CPS_ITEM = t._by_cps(t.OUR_SLOT_ITEM)
 
 
-def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
+def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=(),
+          flags=None):
     """Synthetic slot-cache hits in the shape HwTrap + _cap_slotcache give."""
     ids = GOOD_IDS if ids is None else ids
     ovr = GOOD_OVR if ovr is None else ovr
+    flags = flags or {}
     out = []
     for slot in sorted(rows):
         rec, tb, tint = rows[slot]
@@ -320,7 +322,7 @@ def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
             "item id": CPS_ITEM.get(slot),
             "file id": rec, "record": rec & 0x7FFFFFFF, "type byte": tb,
             "dye tint": tint, "dye colors": 11, "row+8": 0,
-            "flags": 0x20001006, "m_slotItemId": list(ids),
+            "flags": flags.get(slot, 0x20001006), "m_slotItemId": list(ids),
             "override": list(ovr)}})
     return list(extra) + out
 
@@ -334,10 +336,19 @@ check("S3 REPLACE on the file id: PASS" in blob,
       "question §9.9 and §9.10 both closed on and could not reach")
 check("S4 CARRY-THROUGH on the type byte: PASS" in blob,
       "S4 PASSES when the armour's own wire type survives into the row")
-check("S5 the flag bits: PASS" in blob and "LIMIT, stated" in blob,
-      "S5 passes AND prints its own limit -- our armour and costume rows "
-      "declare the same flags, so this run cannot separate OR from assign, "
-      "and the report says so rather than claiming the stronger result")
+check("S5 the flag bits: PASS" in blob
+      and "NO VERDICT between OR and copy" in blob,
+      "S5 passes on the mask AND refuses the harder half -- with no "
+      "--flags-clear our rows already declare the whole mask, so OR and "
+      "copy-unchanged predict the same dword and the report says so instead "
+      "of claiming the stronger result")
+check("a CONSTANT ASSIGNMENT is refuted independently" in blob
+      and "'0x1000', '0x1000'" in blob,
+      "and it still gets ONE of the three readings for free from the same "
+      "rows: we declare bit 0x1000, which is OUTSIDE the mask, and the built "
+      "row keeps it -- an assignment would have cleared it. This is the "
+      "correction to my own first statement of S5's limit, which said the "
+      "run separated NOTHING")
 check("expands AT REGISTRATION" in blob,
       "S6 reads four distinct override ids as the run expanding at "
       "registration time")
@@ -379,6 +390,35 @@ lines, rc = t._analyse_cache(CSITES, chits(bad7))
 check(rc == 1 and "S7 the dye tint: REFUTED" in "\n".join(lines),
       "S7 SABOTAGE: the head slot keeping the armour tint refutes the dye "
       "replacement in the one slot where the value is unambiguous")
+
+# S5's THREE READINGS, under the flag clear that separates them. Declared
+# 0x00001006; OR predicts 0x20001006, copy predicts 0x00001006, a constant
+# assignment predicts 0x20000006. All three are exercised, because a scorer
+# that can only recognise the answer it expects is not a scorer.
+ARM = [t.CPS_SLOT_OF_WIRE[w] for w in (2, 3, 4, 5, 6)]
+t.FLAGS_CLEAR = 0x20000000
+try:
+    lines, rc = t._analyse_cache(CSITES, chits(
+        GOOD_ROWS, flags={s: 0x20001006 for s in ARM}))
+    check(rc == 0 and "OR, OBSERVED SETTING A BIT" in "\n".join(lines),
+          "S5 OR: with 0x20000000 cleared from what we declared, a built row "
+          "that carries it again is the client putting the bit back -- the "
+          "only shape in which the `or` at 0x0082EFD4 is visible at all, "
+          "since retail composite armour never lacks the mask's other bits")
+
+    lines, rc = t._analyse_cache(CSITES, chits(
+        GOOD_ROWS, flags={s: 0x00001006 for s in ARM}))
+    check(rc == 1 and "COPIED UNCHANGED, the OR REFUTED" in "\n".join(lines),
+          "S5 COPY: a row that keeps the cleared bit clear REFUTES the OR and "
+          "reddens -- the reading the un-cleared run could not rule out")
+
+    lines, rc = t._analyse_cache(CSITES, chits(
+        GOOD_ROWS, flags={s: 0x20000006 for s in ARM}))
+    check(rc == 1 and "CONSTANT ASSIGNMENT" in "\n".join(lines),
+          "S5 ASSIGN: a row that is the mask and nothing else is the third "
+          "reading, and it reddens too")
+finally:
+    t.FLAGS_CLEAR = 0
 
 bad8 = {**GOOD_ROWS, 0: (39776, 15, 99)}
 lines, rc = t._analyse_cache(CSITES, chits(bad8))
@@ -499,6 +539,20 @@ else:
               "and both record tables are the content's masked file ids",
               f"content {recs} / {cost}, module {t.OUR_SLOT_RECORD} / "
               f"{t.OUR_COSTUME_RECORD}")
+        allflags = {s: r["flags"] for s, r in rows.items()}
+        check(allflags == t.OUR_SLOT_FLAGS,
+              "and OUR_SLOT_FLAGS is the content's own flags per slot -- S5 "
+              "scores the built row against what the SERVER declared, so a "
+              "hand-copied value could make OR and copy look alike",
+              f"content says {allflags}, module says {t.OUR_SLOT_FLAGS}")
+        check(all(v | t.COSTUME_FLAG_BITS == v
+                  for s, v in allflags.items() if s in t.OUR_SLOT_RECORD),
+              "and EVERY armour row already contains the override's whole "
+              "mask -- pinned deliberately, because it is the reason S5 needs "
+              "--armour-flags-clear to say anything at all. If a future row "
+              "lacked a mask bit this line reddens and somebody can drop the "
+              "flag",
+              f"{ {hex(v) for s, v in allflags.items() if s in t.OUR_SLOT_RECORD} }")
         alltints = {s: r["dye_tint"] for s, r in rows.items()}
         check(alltints == t.OUR_SLOT_TINT,
               "and OUR_SLOT_TINT is the content's own dye_tint per slot -- "

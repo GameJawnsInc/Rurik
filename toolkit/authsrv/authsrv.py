@@ -1559,6 +1559,36 @@ EQUIP_COSTUME_HEAD = False
 COSTUME_HEAD_ITEM_ID = 9
 COSTUME_HEAD_SLOT = 8
 COSTUME_HEAD_KEY = "costume_head"
+# THE FLAGS PROBE, off by default, and it is a probe INPUT rather than a
+# content claim -- which is why it is a flag and not a row. studies 9.11 read
+# `or edx,0x20000006` at 0x0082EFD4 and watched the built row keep bit
+# 0x1000, which refutes an assignment; but all five of our armour rows already
+# declare the whole mask, so "OR" and "copy the item's flags unchanged"
+# predict the SAME dword and that run could not separate them. Clearing a bit
+# we declare and watching whether the client puts it back does separate them.
+#
+# The bit to clear is not invented either. Across 59 live connections, every
+# one of 107 distinct flag values on a worn composite armour item carries bits
+# 0x2 and 0x4 -- so the OR can never be seen setting those -- while
+# **0x20000000 is CLEAR on 28 of 5,281 wears** (values 0x00110007, 0x00000007,
+# 0x00010007, 0x00104007). Retail ships armour without that bit, so the client
+# demonstrably handles it and this is not a shape it has never met.
+ARMOUR_FLAGS_CLEAR = 0
+
+
+def armour_row(key, slot):
+    """`key`'s content row, with ARMOUR_FLAGS_CLEAR's bits cleared.
+
+    Re-validated after the edit rather than before: a clear that took the
+    composite bit out would otherwise sail past the import-time check and
+    become a mis-render thirty seconds into a run, which is the exact failure
+    that check exists for.
+    """
+    row = agents.item_template(key)
+    if ARMOUR_FLAGS_CLEAR:
+        row = dict(row, flags=row["flags"] & ~ARMOUR_FLAGS_CLEAR)
+        wearmap.check_content_row(slot, row)
+    return row
 # The 0x006E nine-dword array, filled from STARTER_ARMOUR. Position 0 is the
 # weapon and 1 is the offhand; 7 and 8 are the costume slots retail leaves at
 # zero on all thirty-one players observed in one town.
@@ -12357,7 +12387,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             for item_id, key, slot in STARTER_ARMOUR:
                                 send(GAME_SMSG_CREATE_NAMED_ITEM,
                                      agents.named_item(
-                                         item_id, agents.item_template(key)),
+                                         item_id, armour_row(key, slot)),
                                      f"CREATE_NAMED_ITEM({key})")
                                 send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                                      [1, item_id, EQUIPPED_BAG_ID, slot],
@@ -15745,6 +15775,21 @@ def main():
                          "member 4 of a DIFFERENT run, so with both worn "
                          "record 2809 -- the body run's own head member -- "
                          "must stay unfetched.")
+    ap.add_argument("--armour-flags-clear", metavar="HEX",
+                    dest="armour_flags_clear",
+                    help="Clear these bits from every armour row's declared "
+                         "flags before sending. A probe INPUT, not a content "
+                         "claim. 9.11 could not separate the costume "
+                         "override's `or edx,0x20000006` from a plain copy, "
+                         "because all five of our rows already declare the "
+                         "whole mask; clearing a bit and watching whether the "
+                         "client puts it back does separate them. "
+                         "--armour-flags-clear 0x20000000 is the intended "
+                         "value: retail itself wears composite armour with "
+                         "that bit clear on 28 of 5,281 corpus wears, so the "
+                         "shape is one the client already handles. The row is "
+                         "re-validated after the edit, so a clear that took "
+                         "the composite bit out dies here.")
     ap.add_argument("--no-weapon", action="store_true",
                     help="Log in with empty weapon slots, as every session before "
                          "2026-08-06 did. Attacking and weapon skills were both "
@@ -16721,6 +16766,17 @@ def main():
         EQUIP_ARMOUR = False
         print("NO ARMOUR: the character wears nothing and the paper doll's "
               "five armour slots stay empty.")
+
+    if a.armour_flags_clear:
+        global ARMOUR_FLAGS_CLEAR
+        ARMOUR_FLAGS_CLEAR = int(a.armour_flags_clear, 0)
+        for _iid, _k, _s in STARTER_ARMOUR:
+            _r = armour_row(_k, _s)          # raises if the clear is unsafe
+        print(f"ARMOUR FLAGS CLEAR: 0x{ARMOUR_FLAGS_CLEAR:08X} removed from "
+              f"every armour declare -- e.g. {STARTER_ARMOUR[0][1]} goes out "
+              f"as 0x{armour_row(*STARTER_ARMOUR[0][1:])['flags']:08X} "
+              f"instead of "
+              f"0x{agents.item_template(STARTER_ARMOUR[0][1])['flags']:08X}.")
 
     if a.costume_head:
         global EQUIP_COSTUME_HEAD

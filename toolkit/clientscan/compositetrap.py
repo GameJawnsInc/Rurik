@@ -130,11 +130,32 @@ leaving one off would make a silent path look like an absent one.
       printed as a refutation for exactly that reason: the CLAIM held on every
       slot, the INDEXING did not, and one wrong table made five right rows
       look wrong.
-  S5  The flags carry 0x20000006. **Stated with its own limit: this run
-      CANNOT separate the OR from an assignment**, because our armour rows and
-      our costume rows both declare 0x20001006, so both readings predict the
-      same dword. The `or` at 0x0082EFD4 is static evidence only; the
-      discriminator would be an armour row carrying a bit outside 0x20001006.
+  S5  **RESTATED 2026-08-23, and the first form's stated LIMIT was WRONG.** It
+      said the run could not separate the OR from an assignment "because our
+      armour rows and our costume rows both declare 0x20001006" — which
+      conflated two different dwords. `edx` is loaded from the SLOT's own item
+      at `0x0082EFB4`, i.e. the ARMOUR's flags; the costume's flags dword is
+      never read anywhere in this function (its declare is touched only at
+      `0x0082EEF1`, `mov ebx,[eax]`, the file id). So the live readings are
+
+        (a) row.flags = armour.flags | 0x20000006      the OR
+        (b) row.flags = 0x20000006                      a constant assignment
+        (c) row.flags = armour.flags                    copied unchanged
+
+      and **(b) was already REFUTED by the run that stated the limit**: we
+      declare 0x20001006, bit 0x1000 is OUTSIDE the mask, and the built row
+      carries it. The real residual is (a) against (c), and it is invisible
+      only because our rows already contain the whole mask.
+
+      `authsrv --armour-flags-clear 0x20000000` separates them. We then
+      declare 0x00001006, and (a) predicts the row reads **0x20001006** — the
+      client putting the bit back — while (c) predicts **0x00001006**. Tell
+      this tool what the server cleared with `--flags-clear`; without it S5
+      reports the no-op case rather than claiming the stronger result. The bit
+      is retail's own shape, not an invention: across 59 live connections
+      **every** one of 107 distinct flag values on a worn composite armour item
+      carries bits 0x2 and 0x4 (so the OR can never be caught setting those),
+      while 0x20000000 is CLEAR on **28 of 5,281 wears**.
   S6  The override array says WHERE the five-record run expands. Four
       DISTINCT ids at slots 2..5 means the expansion happened at registration
       and is visible here; the same id repeated, or non-zero only at 7/8,
@@ -219,6 +240,15 @@ OUR_SLOT_RECORD = {2: 91, 3: 90, 4: 94, 5: 92, 6: 93}
 OUR_SLOT_TYPE = {0: 15, 2: 7, 3: 4, 4: 19, 5: 13, 6: 16, 7: 44, 8: 45}
 #: ... and the declared dye tint, which S8 says an UNOVERRIDDEN slot keeps.
 OUR_SLOT_TINT = {0: 6, 2: 19, 3: 19, 4: 19, 5: 19, 6: 19, 7: 0, 8: 35}
+#: ... and the declared FLAGS, which S5 compares the built row against. Every
+#: armour row already contains COSTUME_FLAG_BITS, which is exactly why S5
+#: needs `--flags-clear` to say anything.
+OUR_SLOT_FLAGS = {0: 0x22201000, 2: 0x20001006, 3: 0x20001006, 4: 0x20001006,
+                  5: 0x20001006, 6: 0x20001006, 7: 0x20001006, 8: 0x20001006}
+#: What `authsrv --armour-flags-clear` removed from the ARMOUR rows before
+#: sending, if the run used it. Set from the command line; 0 means the server
+#: sent content's own flags and S5 reports the no-op case.
+FLAGS_CLEAR = 0
 
 #: MEASURED 2026-08-23 (§9.11). S2's original form assumed CpsBase indexed by
 #: the WIRE equip slot; the first run refuted that, and this permutation is
@@ -563,13 +593,50 @@ def _analyse_cache(sites, hits):
     s5 = (f"VIOLATED at {bad5}" if bad5 else
           f"PASS -- 0x{COSTUME_FLAG_BITS:08X} present on all of {overridden}")
     L.append(f"S5 the flag bits: {s5}")
-    L.append("   LIMIT, stated: our armour and costume rows both declare "
-             "0x20001006, so an OR and an assignment predict the SAME dword "
-             "here. This run does not separate them; the `or` at 0x0082EFD4 "
-             "is static evidence only.")
+
+    # OR vs COPY, scored against what the SERVER declared.
+    cps_flags = {s: v & ~FLAGS_CLEAR
+                 for s, v in _by_cps(OUR_SLOT_FLAGS).items()}
+    armour_over = [s for s in overridden if s in cps_record]
+    rows5 = {s: (cps_flags[s], final[s]["flags"])
+             for s in armour_over if s in cps_flags}
+    noop = [s for s, (d, _g) in rows5.items() if d | COSTUME_FLAG_BITS == d]
+    or_seen = {s: (d, g) for s, (d, g) in rows5.items()
+               if d | COSTUME_FLAG_BITS != d and g == d | COSTUME_FLAG_BITS}
+    copy_seen = {s: (d, g) for s, (d, g) in rows5.items()
+                 if d | COSTUME_FLAG_BITS != d and g == d}
+    assign_seen = {s: (d, g) for s, (d, g) in rows5.items()
+                   if g == COSTUME_FLAG_BITS and d != COSTUME_FLAG_BITS}
+    kept_outside = {s: (d & ~COSTUME_FLAG_BITS, g & ~COSTUME_FLAG_BITS)
+                    for s, (d, g) in rows5.items()
+                    if d & ~COSTUME_FLAG_BITS}
+    if assign_seen:
+        s5b = (f"CONSTANT ASSIGNMENT -- {assign_seen} (declared, got): the row "
+               f"is the mask and nothing else, so the `or` at 0x0082EFD4 is "
+               f"not what runs")
+    elif or_seen:
+        s5b = (f"**OR, OBSERVED SETTING A BIT** -- {[(s, hex(d), hex(g)) for s, (d, g) in sorted(or_seen.items())]} "
+               f"(slot, declared, built): the client put back a bit we cleared")
+    elif copy_seen:
+        s5b = (f"COPIED UNCHANGED, the OR REFUTED -- "
+               f"{[(s, hex(d), hex(g)) for s, (d, g) in sorted(copy_seen.items())]} "
+               f"(slot, declared, built): a bit the mask names stayed clear")
+    elif noop:
+        s5b = (f"NO VERDICT between OR and copy -- slots {noop} already "
+               f"declare the whole mask, so both readings predict the same "
+               f"dword. Re-run with `authsrv --armour-flags-clear 0x20000000` "
+               f"and this tool's `--flags-clear 0x20000000`")
+    else:
+        s5b = "NO VERDICT -- no armour slot to score"
+    L.append(f"   OR vs COPY (declared flags cleared by "
+             f"0x{FLAGS_CLEAR:08X}): {s5b}")
+    if kept_outside:
+        L.append(f"   and a CONSTANT ASSIGNMENT is refuted independently: "
+                 f"bits OUTSIDE the mask that we declared and the row kept, "
+                 f"{ {s: (hex(d), hex(g)) for s, (d, g) in sorted(kept_outside.items())} } "
+                 f"(declared, built) -- an assignment would have cleared them")
 
     vals = {s: ovr[s] & ~FILE_ID_RESERVED_BIT for s in overridden}
-    armour_over = [s for s in overridden if s in cps_record]
     distinct = sorted({vals[s] for s in armour_over})
     if not armour_over:
         s6 = ("only the costume slots themselves carry an override -- the run "
@@ -625,7 +692,21 @@ def _analyse_cache(sites, hits):
               f"small and is said rather than smoothed")
     L.append(f"S8 the null control (unoverridden slots): {s8}")
 
+    # The PRE-OVERRIDE row, free and reported rather than interpreted: the
+    # armour goes in first on the OTHER branch (0x0082F01C), which ORs
+    # 0x20000000 alone when [ebp+0x10] is non-zero. With --flags-clear it is
+    # the only place that branch's behaviour is visible.
+    firstw = {}
+    for c in inst[best]:
+        firstw.setdefault(c["slot"], c)
+    pre = {s: hex(firstw[s]["flags"]) for s in sorted(armour_over)
+           if firstw[s] is not final.get(s)}
+    if pre and FLAGS_CLEAR:
+        L.append(f"   the PRE-override write on the same slots (the "
+                 f"0x0082F01C branch), reported not interpreted: {pre}")
+
     bad = bool(mis or bad3 or kept or bad4 or bad5 or bad8
+               or assign_seen or copy_seen
                or (head and tints.get(cps_head) != TINT_COSTUME_HEAD))
     return L, (1 if bad else 0)
 
@@ -720,8 +801,16 @@ def main(argv=None):
                     help="wait for a Gw.exe to appear")
     ap.add_argument("--seconds", type=float, default=240.0)
     ap.add_argument("--sites", default=",".join(DEFAULT_SITES))
+    ap.add_argument("--flags-clear", metavar="HEX", dest="flags_clear",
+                    help="what `authsrv --armour-flags-clear` removed from "
+                         "the armour rows this run. S5 needs it to score OR "
+                         "against copy-unchanged; without it S5 says so "
+                         "instead of guessing.")
     ap.add_argument("--out", help="also write the report here")
     a = ap.parse_args(argv)
+    if a.flags_clear:
+        global FLAGS_CLEAR
+        FLAGS_CLEAR = int(a.flags_clear, 0)
 
     want = [s.strip() for s in a.sites.split(",") if s.strip()]
     for n in want:
